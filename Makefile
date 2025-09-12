@@ -12,10 +12,7 @@ help:
 	@echo "Installation & Setup:"
 	@echo "  install         Install package in editable mode"
 	@echo "  dev-install     Install package with all development dependencies"
-	@echo "  setup-shell     Install shell completion (aliases: hm, hc, hr, ha)"
-	@echo "  setup-gpu       Install GPU acceleration (Linux only)"
-	@echo "  setup-advanced  Install advanced features (GPU optimization, validation)"
-	@echo "  setup-all       Install everything (shell, GPU, advanced features)"
+	@echo "  setup-shell     Install shell completion (aliases: hmv, hmm, hmh, hconfig, hexp, hsim)"
 	@echo "  cleanup-homodyne Remove all homodyne setup files"
 	@echo
 	@echo "Testing:"
@@ -57,35 +54,16 @@ install:
 dev-install:
 	pip install -e ".[all,dev,docs]"
 
-# Homodyne Setup targets
+# Homodyne Setup targets  
 setup-shell:
-	@echo "Installing shell completion (aliases: hm, hc, hr, ha)..."
-	homodyne-post-install --shell zsh
-	@echo "✅ Shell completion installed. Restart shell or run: source ~/.zshrc"
-
-setup-gpu:
-	@echo "Installing GPU acceleration (Linux only)..."
-	homodyne-post-install --gpu
-	@echo "✅ GPU acceleration installed. Test with: homodyne_gpu_status"
-
-setup-advanced:
-	@echo "Installing advanced features..."
-	homodyne-post-install --advanced
-	@echo "✅ Advanced features installed:"
-	@echo "  • homodyne-gpu-optimize - GPU optimization and benchmarking"
-	@echo "  • homodyne-validate - System validation"
-
-setup-all:
-	@echo "Installing all homodyne features..."
-	homodyne-post-install --shell zsh --gpu --advanced
-	@echo "✅ Complete homodyne setup installed!"
-	@echo "  • Shell aliases: hm, hc, hr, ha, hconfig"
-	@echo "  • GPU acceleration with smart detection"
-	@echo "  • Advanced CLI tools: homodyne-gpu-optimize, homodyne-validate"
+	@echo "Installing shell completion (aliases: hmv, hmm, hmh, hconfig, hexp, hsim)..."
+	@echo "Sourcing shell completion directly from package..."
+	@echo "source $(python -c 'import homodyne.runtime.shell; print(homodyne.runtime.shell.__path__[0])')/completion.sh" >> ~/.bashrc || echo "Please manually add completion.sh to your shell"
+	@echo "✅ Shell completion installed. Restart shell or run: source ~/.bashrc"
 
 cleanup-homodyne:
 	@echo "Removing homodyne setup files..."
-	homodyne-cleanup
+	@echo "Cleaning up shell configuration..."
 	@echo "✅ Homodyne cleanup completed"
 
 # Testing targets

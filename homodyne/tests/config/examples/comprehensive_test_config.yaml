@@ -1,0 +1,204 @@
+# Comprehensive Test Configuration for Homodyne v2 Enhanced Data Loading
+# ========================================================================
+# 
+# This configuration demonstrates all enhanced data loading features
+# implemented by Subagents 1-4. Use this as a reference for testing
+# and as a starting point for production configurations.
+
+data_loading:
+  # Enhanced Features Control (Subagent coordination)
+  enhanced_features:
+    enable_filtering: true              # Subagent 1: Config-based filtering
+    enable_preprocessing: true          # Subagent 2: Advanced preprocessing  
+    enable_quality_control: true       # Subagent 3: Quality control integration
+    enable_performance_optimization: true # Subagent 4: Performance optimization
+    version: '2.0.0'
+    compatibility_mode: false           # Use v2 features exclusively
+    
+  # Config-Based Filtering System (Subagent 1)
+  filtering:
+    # Q-range filtering
+    q_range:
+      min: 1.0e-4                      # m^-1
+      max: 1.0e-2                      # m^-1  
+      units: 'm^-1'
+      
+    # Quality-based filtering
+    quality_threshold: 0.85             # 0.0-1.0, higher = more stringent
+    
+    # Frame selection beyond basic start/end
+    frame_selection:
+      method: 'adaptive'                # 'auto', 'adaptive', 'manual'
+      start_frame: 0
+      end_frame: -1                     # -1 means last frame
+      quality_based_selection: true
+      min_frames_required: 100
+      
+    # Phi angle filtering integration
+    phi_filtering:
+      enable: true
+      method: 'adaptive'                # 'adaptive', 'manual', 'sectors'
+      angle_range:
+        min: 0.0                        # radians
+        max: 6.28318530718              # 2π radians
+      sectors: 'auto'                   # 'auto', integer, or list of ranges
+      
+    # Advanced filtering options
+    advanced_filters:
+      enable_outlier_detection: true
+      outlier_threshold: 3.0            # Standard deviations
+      enable_statistical_filtering: true
+      statistical_threshold: 2.5
+      enable_correlation_filtering: false
+      
+    # Parallel processing for filtering
+    parallel_processing:
+      enable: true
+      max_threads: 'auto'               # 'auto' or integer
+      chunk_size: 'auto'                # 'auto' or integer
+      
+  # Advanced Preprocessing Pipeline (Subagent 2) 
+  preprocessing:
+    # Multi-stage pipeline configuration
+    pipeline_stages:
+      - 'diagonal_correction'
+      - 'normalization'  
+      - 'noise_reduction'
+      - 'outlier_treatment'
+      
+    # Enhanced diagonal correction
+    diagonal_correction:
+      method: 'statistical'             # 'basic', 'statistical', 'robust'
+      threshold: 2.0                    # Statistical threshold
+      preserve_physics: true            # Maintain g2 >= 1
+      correction_factor: 'auto'         # 'auto' or float
+      
+    # Multiple normalization approaches
+    normalization:
+      method: 'baseline'                # 'baseline', 'statistical', 'physics'
+      preserve_physics: true
+      reference_method: 'first_points'  # 'first_points', 'last_points', 'average'
+      reference_count: 10               # Number of reference points
+      
+    # Noise reduction algorithms
+    noise_reduction:
+      method: 'median'                  # 'median', 'gaussian', 'bilateral'
+      kernel_size: 3                    # Filter kernel size
+      iterations: 1                     # Number of iterations
+      preserve_features: true           # Preserve important features
+      
+    # Outlier detection and treatment  
+    outlier_treatment:
+      method: 'statistical'             # 'statistical', 'isolation_forest'
+      threshold: 3.0                    # Standard deviations
+      replacement_method: 'interpolation' # 'interpolation', 'median', 'removal'
+      
+    # Memory-efficient chunked processing
+    chunked_processing:
+      enable: true
+      chunk_size: 'auto'                # 'auto', 'small', 'medium', 'large', or integer
+      overlap: 0.1                      # Overlap fraction (0.0-0.5)
+      
+    # Parallel processing for preprocessing
+    parallel_processing:
+      enable: true
+      max_threads: 'auto'
+      load_balancing: 'dynamic'         # 'static', 'dynamic'
+      
+    # Complete transformation audit trail
+    audit_trail:
+      enable: true
+      save_intermediate: false          # Save intermediate results for debugging
+      detailed_logging: true
+      reproducibility_seed: 42          # For reproducible results
+      
+  # Data Quality Control Integration (Subagent 3)
+  quality_control:
+    # Progressive quality control system
+    enable_progressive: true
+    enable_auto_repair: true
+    enable_feedback: true               # Feedback to preprocessing
+    
+    # Quality thresholds
+    thresholds:
+      signal_to_noise: 5.0              # Minimum SNR
+      data_completeness: 0.9            # Fraction of valid data points
+      baseline_stability: 0.95          # Baseline stability metric
+      correlation_decay: 0.8            # Proper correlation decay
+      physics_consistency: 0.9          # Physics constraint compliance
+      
+    # Auto-repair and enhancement capabilities  
+    repair_strategies:
+      enable_interpolation: true
+      enable_smoothing: true
+      enable_outlier_correction: true
+      max_repair_fraction: 0.1          # Maximum fraction of data to repair
+      
+    # Progressive quality control stages
+    progressive_stages:
+      - 'basic_validation'              # Raw data validation
+      - 'filtered_validation'           # Post-filtering validation
+      - 'preprocessed_validation'       # Post-preprocessing validation
+      - 'final_validation'              # Final readiness validation
+      
+    # Quality metrics and reporting
+    quality_metrics:
+      enable_detailed_metrics: true
+      save_quality_report: true
+      report_format: 'yaml'             # 'yaml', 'json', 'txt'
+      include_recommendations: true
+      
+  # Performance Optimization (Subagent 4)
+  performance:
+    # Optimization level
+    optimization_level: 'adaptive'      # 'conservative', 'balanced', 'aggressive', 'adaptive'
+    
+    # Memory management strategy
+    memory_strategy: 'balanced'         # 'conservative', 'balanced', 'aggressive'
+    
+    # Multi-level caching system
+    caching:
+      enable_memory_cache: true
+      enable_disk_cache: true
+      cache_directory: 'auto'           # 'auto' or path
+      max_cache_size: '1GB'             # Memory/disk cache limits
+      cache_ttl: 3600                   # Time-to-live in seconds
+      compression:
+        enable: true
+        algorithm: 'zstd'               # 'zstd', 'gzip', 'lzma'
+        level: 3                        # Compression level (1-9)
+        
+    # Parallel processing optimization
+    parallel_processing:
+      enable: true
+      max_threads: 'auto'               # 'auto' or integer
+      thread_affinity: false            # CPU affinity optimization
+      load_balancing: 'dynamic'         # 'static', 'dynamic'
+      
+    # Advanced memory management
+    memory_management:
+      enable_memory_mapping: true       # Memory-mapped I/O for large files
+      chunk_size: 'auto'                # Processing chunk size
+      prefetch_size: 'auto'             # Data prefetch size  
+      gc_frequency: 'adaptive'          # Garbage collection frequency
+      max_memory_usage: '2GB'           # Hard memory limit
+      
+    # I/O optimization
+    io_optimization:
+      enable_async_io: true             # Asynchronous I/O operations
+      buffer_size: 'auto'               # I/O buffer size
+      read_ahead: true                  # Read-ahead caching
+      write_behind: true                # Write-behind caching
+      
+    # Performance monitoring and tuning
+    monitoring:
+      enable_performance_monitoring: true
+      log_performance_metrics: true
+      save_performance_report: false   # Generate performance reports
+      adaptive_tuning: true             # Automatic parameter tuning
+      
+  # Legacy compatibility (for migration testing)
+  legacy:
+    enable_v1_compatibility: false     # Enable v1 compatibility mode
+    v1_parameter_mapping: true         # Map v1 parameters to v2
+    issue_deprecation_warnings: true   # Warn about deprecated parameters

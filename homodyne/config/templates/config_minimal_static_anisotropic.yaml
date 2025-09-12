@@ -1,0 +1,120 @@
+# Homodyne v2 Minimal Configuration: Static Anisotropic Analysis
+# ==============================================================
+# Minimal working configuration for static anisotropic diffusion analysis.
+# 3-parameter model: D₀, α, D_offset with multiple phi angles
+# 
+# This template contains only the REQUIRED sections and parameters
+# needed for multi-angle homodyne analysis to work.
+
+# REQUIRED: Analysis mode specification
+analysis_mode: "static_anisotropic"
+
+# REQUIRED: Core physics parameters for analysis
+analyzer_parameters:
+  # Time step between correlation measurements (seconds)
+  dt: 0.1
+  
+  # Frame range for analysis  
+  start_frame: 1
+  end_frame: 1000
+
+# REQUIRED: Data file locations
+experimental_data:
+  # Path to directory containing data files
+  data_folder_path: "./data/sample/"
+  
+  # HDF5 data file name
+  data_file_name: "your_data.hdf"
+  
+  # Phi angles file (required for anisotropic analysis)
+  phi_angles_path: "./data/phi_angles/"
+  phi_angles_file: "phi_list.txt"
+
+# REQUIRED: Analysis mode settings
+analysis_settings:
+  # Enable static mode (vs laminar flow)
+  static_mode: true
+  
+  # Static submode: "anisotropic" for multi-angle analysis
+  static_submode: "anisotropic"
+
+# REQUIRED: Initial parameter values
+initial_parameters:
+  # Parameter names for 3-parameter static anisotropic model
+  parameter_names: ["D0", "alpha", "D_offset"]
+  
+  # Initial values for optimization
+  values: [1.0e-6, 0.8, 1.0e-8]
+
+# REQUIRED: V2 optimization configuration
+optimization:
+  # Variational Inference (primary method)
+  vi:
+    enabled: true
+    max_iterations: 1000
+    learning_rate: 0.01
+    convergence_tolerance: 1e-6
+  
+  # MCMC sampling (for uncertainty quantification)
+  mcmc:
+    enabled: true
+    num_samples: 2000
+    num_warmup: 1000
+    num_chains: 4
+
+# OPTIONAL: Angle filtering configuration
+optimization_config:
+  angle_filtering:
+    enabled: true
+    # Define target angle ranges for optimization
+    target_ranges:
+      - min_angle: -15.0
+        max_angle: 15.0
+      - min_angle: 165.0
+        max_angle: 195.0
+    # Use all angles if no targets match
+    fallback_to_all_angles: true
+
+# OPTIONAL: Parameter bounds and constraints
+parameter_space:
+  bounds:
+    - name: D0
+      min: 1.0
+      max: 1000000.0
+      type: TruncatedNormal
+      prior_mu: 10000.0
+      prior_sigma: 1000.0
+      unit: Å²/s
+
+    - name: alpha
+      min: -2.0
+      max: 2.0
+      type: Normal
+      prior_mu: -1.5
+      prior_sigma: 0.1
+      unit: dimensionless
+
+    - name: D_offset
+      min: -100
+      max: 100
+      type: Normal
+      prior_mu: 0.0
+      prior_sigma: 10.0
+      unit: Å²/s
+
+# OPTIONAL: Basic logging configuration
+logging:
+  enabled: true
+  level: "INFO"
+  console:
+    enabled: true
+  file:
+    enabled: false
+
+# OPTIONAL: Metadata
+metadata:
+  config_version: "2.0"
+  description: "Minimal static anisotropic configuration"
+  analysis_mode: "static_anisotropic"
+  parameter_count: 3
+  angle_filtering: true

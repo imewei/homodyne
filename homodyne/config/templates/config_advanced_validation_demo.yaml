@@ -1,0 +1,440 @@
+# Advanced Validation Demonstration Configuration
+# ===============================================
+# This configuration demonstrates the enhanced validation capabilities
+# including HPC settings, GPU configuration, and advanced scenarios.
+
+metadata:
+  config_version: 0.7.2
+  description: 'Advanced validation demonstration for production HPC environments'
+  analysis_mode: 'laminar_flow'
+  validation_features:
+    - 'Multi-method workflow validation'
+    - 'HPC cluster configuration validation'
+    - 'GPU hardware detection and memory validation'
+    - 'Large dataset processing validation'
+    - 'Complex phi angle filtering validation'
+    - 'Enhanced physics constraint validation'
+
+# Enhanced logging with validation-specific settings
+logging:
+  enabled: true
+  level: INFO
+  console:
+    enabled: true
+    level: INFO
+    format: detailed
+    colors: true
+  file:
+    enabled: true
+    level: DEBUG
+    path: ~/.homodyne/logs/
+    filename: homodyne_advanced.log
+    max_size_mb: 20
+    backup_count: 10
+  validation_logging:
+    enabled: true
+    level: DEBUG
+    log_hardware_detection: true
+    log_hpc_validation: true
+    log_mode_compatibility: true
+
+# Experimental data configuration
+experimental_data:
+  data_folder_path: ./data/large_dataset_sample/
+  data_file_name: xpcs_large_dataset.hdf
+  phi_angles_path: ./data/phi_angles/
+  phi_angles_file: complex_phi_list.txt
+  cache_file_path: ./data/large_dataset_sample/
+  cache_filename_template: cached_large_c2_{start_frame}_{end_frame}.npz
+  cache_compression: true
+  data_type: float64
+  # Large dataset settings
+  estimated_data_points: 150000000  # 150M points for validation testing
+  frame_optimization: true
+
+# Analysis parameters optimized for large dataset
+analyzer_parameters:
+  temporal:
+    dt: 0.05  # High temporal resolution
+    start_frame: 500
+    end_frame: 50000  # Large frame range
+    frame_description: Large dataset analysis window
+  scattering:
+    wavevector_q: 0.0015
+    q_unit: Å⁻¹
+  geometry:
+    stator_rotor_gap: 2500000  # 250 microns
+    gap_unit: Å
+
+# Initial parameters for laminar flow mode (7 parameters)
+initial_parameters:
+  values: [50000.0, -1.2, 100.0, 0.001, 0.2, 0.0001, 2.5]
+  parameter_names: [D0, alpha, D_offset, gamma_dot_t0, beta, gamma_dot_t_offset, phi0]
+  units: ['Å²/s', 'dimensionless', 'Å²/s', 's⁻¹', 'dimensionless', 's⁻¹', 'degrees']
+
+# Comprehensive optimization configuration for multi-method validation
+optimization_config:
+  # Complex angle filtering for validation testing
+  angle_filtering:
+    enabled: true
+    target_ranges:
+      - min_angle: 0.0
+        max_angle: 15.0
+      - min_angle: 45.0  
+        max_angle: 75.0
+      - min_angle: 105.0
+        max_angle: 135.0
+      - min_angle: 165.0
+        max_angle: 195.0
+      - min_angle: 225.0
+        max_angle: 255.0
+      - min_angle: 285.0
+        max_angle: 315.0
+    fallback_to_all_angles: true
+    validation_mode: true  # Enable detailed angle validation
+  
+  # Classical optimization with enhanced settings
+  classical_optimization:
+    methods: [Nelder-Mead, Gurobi]
+    method_options:
+      Nelder-Mead:
+        maxiter: 4000  # High for laminar flow
+        xatol: 1.0e-06
+        fatol: 1.0e-06
+        adaptive: true
+      Gurobi:
+        max_iterations: 800
+        tolerance: 1.0e-05
+        time_limit: 600  # 10 minutes
+    # Enhanced batch processing for validation
+    batch_processing:
+      enabled: true
+      max_parallel_runs: 6
+      multiple_initial_points: true
+      initial_point_strategy: latin_hypercube
+      num_initial_points: 12
+      convergence_threshold: 0.01
+  
+  # Robust optimization configuration
+  robust_optimization:
+    enabled: true
+    uncertainty_model: wasserstein
+    uncertainty_radius: 0.05
+    n_scenarios: 15
+    regularization_alpha: 0.02
+    enable_caching: true
+    preferred_solver: CLARABEL
+    solver_optimization:
+      enable_warm_starts: true
+      adaptive_solver_selection: true
+      max_iterations: 10000
+      tolerance: 1.0e-06
+  
+  # MCMC sampling with backend validation
+  mcmc_sampling:
+    enabled: true
+    sampler: NUTS
+    draws: 4000
+    tune: 1200
+    thin: 2
+    chains: 4
+    cores: 4
+    target_accept: 0.80
+    max_treedepth: 10
+    return_inferencedata: true
+    backend_specific:
+      cpu_backend:
+        init_strategy: adapt_diag
+        compute_convergence_checks: true
+        progressbar: true
+      gpu_backend:
+        init_strategy: init_to_value
+        chain_method: vectorized
+        progress_bar: true
+        jit_compile: true
+        device_memory_fraction: 0.7  # Conservative for validation
+
+# Enhanced parameter space with physics validation
+parameter_space:
+  bounds:
+    - name: D0
+      min: 1.0
+      max: 1000000.0
+      type: TruncatedNormal
+      prior_mu: 10000.0
+      prior_sigma: 1000.0
+      unit: Å²/s
+      physics_validation: true
+
+    - name: alpha
+      min: -2.0
+      max: 2.0
+      type: Normal
+      prior_mu: -1.5
+      prior_sigma: 0.1
+      unit: dimensionless
+      physics_validation: true
+
+    - name: D_offset
+      min: -100
+      max: 100
+      type: Normal
+      prior_mu: 0.0
+      prior_sigma: 10.0
+      unit: Å²/s
+      physics_validation: true
+    # Additional parameters for laminar_flow mode
+    - name: gamma_dot_t0
+      min: 1.0e-06
+      max: 1.0
+      type: TruncatedNormal
+      prior_mu: 0.001
+      prior_sigma: 0.01
+      unit: s⁻¹
+      physics_validation: true
+
+    - name: beta
+      min: -2.0
+      max: 2.0
+      type: Normal
+      prior_mu: 0.0
+      prior_sigma: 0.1
+      unit: dimensionless
+      physics_validation: true
+
+    - name: gamma_dot_t_offset
+      min: -0.01
+      max: 0.01
+      type: Normal
+      prior_mu: 0.0
+      prior_sigma: 0.001
+      unit: s⁻¹
+      physics_validation: true
+
+    - name: phi0
+      min: -10.0
+      max: 10.0
+      type: Normal
+      prior_mu: 0.0
+      prior_sigma: 5.0
+      unit: degrees
+      physics_validation: true
+
+# Hardware configuration for GPU validation
+hardware:
+  gpu_memory_fraction: 0.75
+  force_cpu: false
+  gpu_validation:
+    enabled: true
+    detect_multiple_gpus: true
+    memory_safety_check: true
+    cuda_compatibility_check: true
+  cpu_optimization:
+    max_threads: 8
+    numa_awareness: true
+
+# HPC cluster configuration for validation testing
+hpc_settings:
+  # PBS Professional configuration
+  pbs:
+    nodes: 2
+    ppn: 24  # 24 cores per node = 48 total
+    mem: 96gb  # 96 GB total memory
+    walltime: '12:00:00'  # 12 hours
+    queue: 'normal'
+    job_name: 'homodyne_laminar_flow'
+    output_file: 'homodyne_job.out'
+    error_file: 'homodyne_job.err'
+    email_notifications: true
+    validation_settings:
+      check_resource_limits: true
+      estimate_queue_time: true
+      validate_node_availability: true
+  
+  # Alternative SLURM configuration (for environments with SLURM)
+  slurm:
+    ntasks: 48
+    cpus-per-task: 1
+    mem-per-cpu: '2G'
+    time: '12:00:00'
+    partition: 'normal'
+    job-name: 'homodyne-laminar'
+    output: 'homodyne-%j.out'
+    error: 'homodyne-%j.err'
+    mail-type: 'END,FAIL'
+    validation_settings:
+      check_partition_limits: true
+      validate_memory_per_cpu: true
+  
+  # Distributed computing settings
+  distributed:
+    mpi:
+      enabled: true
+      processes: 48
+      hostfile: './hostfile'
+      validation_settings:
+        check_mpi_availability: true
+        validate_hostfile: true
+
+# Advanced performance settings for large datasets
+performance_settings:
+  caching:
+    enable_memory_cache: true
+    enable_disk_cache: true
+    cache_size_limit_mb: 2000  # 2 GB cache
+    auto_cleanup: true
+    validation_settings:
+      check_disk_space: true
+      validate_cache_permissions: true
+  
+  parallel_processing:
+    enable_multiprocessing: true
+    chunk_size: auto
+    backend: threading
+    large_dataset_optimization: true
+  
+  memory_management:
+    low_memory_mode: true  # Enabled for large dataset
+    garbage_collection_frequency: 5  # More frequent for large data
+    memory_monitoring: true
+    validation_settings:
+      check_available_memory: true
+      estimate_peak_usage: true
+  
+  numba_optimization:
+    enable_numba: true
+    warmup_numba: true
+    parallel_numba: true
+    cache_numba: true
+    stability_enhancements:
+      enable_kernel_warmup: true
+      warmup_iterations: 5
+      optimize_memory_layout: true
+
+# Advanced chi-squared calculation settings
+advanced_settings:
+  chi_squared_calculation:
+    method: standard
+    minimum_sigma: 1.0e-10
+    moving_window_size: 11
+    variance_method: hybrid_limited_irls
+    performance_optimization:
+      enabled: true
+      numba_jit:
+        enabled: true
+        warmup_on_init: true
+    validation_settings:
+      check_numerical_stability: true
+      validate_variance_estimates: true
+
+# Batch processing configuration for validation
+batch_processing:
+  enabled: true
+  batch_size: 5
+  parallel_jobs: 2
+  output_directory: './batch_results_validation'
+  estimated_output_size_gb: 0.5
+  validation_settings:
+    check_output_directory: true
+    estimate_total_resources: true
+    validate_batch_compatibility: true
+
+# Enhanced validation rules
+validation_rules:
+  data_quality:
+    check_data_range: true
+    correlation_minimum: 0.0
+    correlation_maximum: 10.0
+    check_nan_values: true
+    nan_handling: raise
+    large_dataset_checks: true
+  
+  parameter_validation:
+    check_bounds: true
+    physics_constraints: true
+    correlation_checks: true
+    enhanced_physics_validation: true
+    cross_parameter_validation: true
+  
+  fit_quality:
+    overall_chi_squared:
+      excellent_threshold: 3.0  # Stricter for large datasets
+      acceptable_threshold: 8.0
+      warning_threshold: 15.0
+      critical_threshold: 30.0
+    per_angle_chi_squared:
+      excellent_threshold: 3.0
+      acceptable_threshold: 8.0
+      warning_threshold: 15.0
+      outlier_threshold_multiplier: 2.0
+      max_outlier_fraction: 0.15
+      min_good_angles: 4  # More angles for laminar flow
+  
+  mcmc_convergence:
+    rhat_thresholds:
+      excellent_threshold: 1.01
+      good_threshold: 1.03
+      acceptable_threshold: 1.08
+      critical_threshold: 1.15
+    ess_thresholds:
+      excellent_threshold: 500
+      good_threshold: 300
+      acceptable_threshold: 150
+      minimum_threshold: 100
+  
+  # Advanced validation settings
+  advanced_validation:
+    hpc_validation:
+      enabled: true
+      check_scheduler_availability: true
+      validate_resource_requests: true
+      estimate_job_efficiency: true
+    
+    gpu_validation:
+      enabled: true
+      hardware_detection: true
+      memory_validation: true
+      compatibility_checking: true
+    
+    scenario_validation:
+      large_dataset_checks: true
+      batch_processing_validation: true
+      complex_angle_filtering_validation: true
+      
+    mode_compatibility:
+      enabled: true
+      confidence_thresholds:
+        high: 0.85
+        medium: 0.65
+        low: 0.45
+      transition_analysis: true
+
+# Output settings optimized for validation
+output_settings:
+  results_directory: ./homodyne_advanced_validation_results
+  file_formats:
+    results_format: json
+    save_intermediate: true
+    compression: true
+    precision: float64
+  validation_outputs:
+    save_validation_report: true
+    include_hardware_info: true
+    include_compatibility_analysis: true
+    include_performance_estimates: true
+
+# Example usage documentation
+_validation_examples:
+  _usage: This configuration demonstrates all advanced validation features
+  _test_commands:
+    - 'python -m homodyne.config.parameter_validator config_advanced_validation_demo.yaml'
+    - 'python -m homodyne.config.mode_resolver --analyze-compatibility config_advanced_validation_demo.yaml'
+    - 'python -m homodyne.config.advanced_validators --hpc-check config_advanced_validation_demo.yaml'
+  _expected_validations:
+    - 'Multi-method workflow compatibility (VI → MCMC → Hybrid)'
+    - 'HPC resource allocation efficiency analysis'
+    - 'GPU memory and CUDA compatibility validation'
+    - 'Large dataset processing feasibility check'
+    - 'Complex phi angle filtering coverage analysis'
+    - 'Enhanced physics parameter constraint validation'
+    - 'Mode-data-configuration compatibility assessment'

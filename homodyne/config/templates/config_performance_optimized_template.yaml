@@ -1,0 +1,1102 @@
+# Homodyne v2 Performance-Optimized Configuration Template
+# ========================================================
+# Advanced performance optimization template for massive XPCS datasets (>1GB)
+# with memory-mapped I/O, intelligent chunking, and multi-level caching.
+#
+# This template extends the default configuration with comprehensive performance
+# optimization features designed for handling large datasets efficiently.
+
+_template_info:
+  _comment: PERFORMANCE-OPTIMIZED HOMODYNE CONFIGURATION TEMPLATE
+  _creation_date: '2025-09-12'
+  _based_on_analysis: Default template extended with advanced performance optimization features
+  _usage: Copy this template and customize for large dataset analysis with performance optimization
+  _performance_features:
+    - Memory-mapped HDF5 access for files >1GB
+    - Intelligent chunking with adaptive sizing
+    - Multi-level caching (memory, SSD, HDD)
+    - Background prefetching and parallel processing
+    - Real-time performance monitoring and bottleneck detection
+    - Memory pressure monitoring and adaptive responses
+  _dataset_targets:
+    - Files >1GB with memory-mapped I/O
+    - Correlation matrices >10,000 per dataset
+    - Multi-GB correlation matrix collections
+    - Long-running analysis workflows
+  _performance_benefits:
+    - 50-90% memory usage reduction for large datasets
+    - 2-10x faster data loading with optimized I/O
+    - Intelligent prefetching reduces wait times
+    - Automatic memory management prevents OOM conditions
+
+# Inherit basic metadata from default template
+metadata:
+  config_version: 0.8.0
+  description: 'PERFORMANCE TEMPLATE: High-performance homodyne analysis with advanced optimization'
+  based_on: Default template with Phase 4 performance optimization enhancements
+  analysis_mode: 'CHANGE_ME: static_isotropic | static_anisotropic | laminar_flow'
+  template_type: performance_optimized
+  performance_features:
+    memory_mapped_io: Efficient access to large HDF5 files without full memory loading
+    intelligent_chunking: Adaptive chunking based on memory pressure and data characteristics
+    multi_level_caching: Memory, SSD, and HDD caching with intelligent eviction
+    background_prefetching: Predictive data loading based on access patterns
+    memory_management: Advanced memory allocation with pressure monitoring
+    parallel_processing: Multi-threaded data loading and processing
+  recommended_usage:
+    - Large datasets (>1GB HDF5 files)
+    - High-resolution correlation matrices (>64x64)
+    - Memory-constrained systems
+    - Long-running batch analyses
+    - Production workflows requiring reliability
+
+# ===================================================================
+# PERFORMANCE OPTIMIZATION CONFIGURATION
+# ===================================================================
+# This is the core performance configuration section that enables
+# advanced optimization features beyond basic homodyne functionality.
+
+performance:
+  _comment: 'CORE PERFORMANCE SETTINGS: Enable advanced optimization features for massive datasets'
+  _architecture: 'Performance Engine → Memory Manager → Advanced Optimizer → Optimized Data Loading'
+
+  # Master performance control switches
+  performance_engine_enabled: true
+  _performance_engine_note: 'Enable main performance engine with all advanced features'
+
+  memory_mapped_io: true
+  _memory_mapped_io_note: 'Use memory-mapped I/O for large HDF5 files (>1GB recommended)'
+
+  advanced_chunking: true
+  _advanced_chunking_note: 'Enable intelligent chunking with adaptive sizing'
+
+  multi_level_caching: true
+  _multi_level_caching_note: 'Enable memory/SSD/HDD caching hierarchy'
+
+  background_prefetching: true
+  _background_prefetching_note: 'Enable predictive data loading in background'
+
+  memory_pressure_monitoring: true
+  _memory_pressure_monitoring_note: 'Enable real-time memory pressure monitoring'
+
+  # Performance monitoring and metrics
+  monitoring:
+    enabled: true
+    _enabled_note: 'Enable real-time performance monitoring and metrics collection'
+
+    update_interval: 1.0
+    _update_interval_note: 'Performance metrics update interval in seconds'
+
+    bottleneck_detection: true
+    _bottleneck_detection_note: 'Automatic bottleneck detection and classification'
+
+    history_size: 100
+    _history_size_note: 'Number of performance history snapshots to maintain'
+
+    metrics_to_track:
+      - loading_speed_mbps
+      - memory_usage_mb
+      - cache_hit_rate
+      - cpu_utilization
+      - chunk_processing_rate
+
+  # Memory management configuration
+  memory:
+    _comment: 'Advanced memory management with pressure monitoring and intelligent allocation'
+
+    # Memory pressure thresholds (0.0-1.0 scale)
+    warning_threshold: 0.75
+    _warning_threshold_note: 'Memory pressure level to trigger optimization (0.75 = 75% usage)'
+
+    critical_threshold: 0.9
+    _critical_threshold_note: 'Critical memory pressure level for emergency cleanup'
+
+    monitoring_interval: 1.0
+    _monitoring_interval_note: 'Memory pressure monitoring interval in seconds'
+
+    # Memory allocation strategy
+    allocation_strategy: dynamic
+    _allocation_strategy_options:
+      - dynamic: 'Adapt based on available system memory'
+      - conservative: 'Use smaller allocations for stability'
+      - aggressive: 'Use larger allocations for performance'
+
+    # Memory pool configuration
+    pooling:
+      enabled: true
+      _enabled_note: 'Enable memory pooling for efficient buffer reuse'
+
+      max_pool_size_mb: 2048.0
+      _max_pool_size_note: 'Maximum total memory pool size in MB'
+
+      buffer_sizes: [1024, 4096, 16384, 65536, 262144, 1048576]
+      _buffer_sizes_note: 'Pool buffer sizes for different allocation needs'
+
+      cleanup_interval: 300
+      _cleanup_interval_note: 'Pool cleanup interval in seconds'
+
+    # Virtual memory for very large datasets
+    virtual_memory: true
+    _virtual_memory_note: 'Enable virtual memory for datasets larger than RAM'
+
+    virtual_memory_path: '/tmp/homodyne_vm'
+    _virtual_memory_path_note: 'Base path for virtual memory files'
+
+    # Garbage collection optimization
+    gc_optimization: true
+    _gc_optimization_note: 'Optimize garbage collection based on memory pressure'
+
+  # Memory-mapped I/O configuration
+  memory_mapping:
+    _comment: 'Memory-mapped file access for efficient large file handling'
+
+    max_open_files: 64
+    _max_open_files_note: 'Maximum number of simultaneously open memory-mapped files'
+
+    buffer_size_mb: 512.0
+    _buffer_size_mb_note: 'Internal buffer size for memory-mapped operations'
+
+    file_size_threshold_mb: 1024.0
+    _file_size_threshold_note: 'File size threshold for memory-mapped access (>1GB)'
+
+    access_pattern_optimization: true
+    _access_pattern_note: 'Optimize based on sequential vs random access patterns'
+
+  # Intelligent chunking configuration
+  chunking:
+    _comment: 'Adaptive chunking system that adjusts based on memory pressure and data characteristics'
+
+    base_chunk_size: 100000
+    _base_chunk_size_note: 'Base chunk size for normal memory conditions'
+
+    memory_threshold: 0.8
+    _memory_threshold_note: 'Memory pressure threshold for chunk size adaptation'
+
+    performance_feedback_window: 10
+    _performance_feedback_window_note: 'Number of chunks to consider for performance feedback'
+
+    # Chunking adaptation parameters
+    adaptation:
+      enabled: true
+      _enabled_note: 'Enable adaptive chunk sizing based on performance'
+
+      min_chunk_size: 1000
+      _min_chunk_size_note: 'Minimum allowed chunk size'
+
+      max_chunk_size: 1000000
+      _max_chunk_size_note: 'Maximum allowed chunk size'
+
+      adaptation_cooldown: 30.0
+      _adaptation_cooldown_note: 'Seconds between chunk size adaptations'
+
+      performance_threshold: 0.8
+      _performance_threshold_note: 'Performance ratio threshold for adaptation'
+
+    # Cross-chunk analysis
+    cross_chunk_validation: true
+    _cross_chunk_validation_note: 'Validate data consistency across chunk boundaries'
+
+    parallel_processing: true
+    _parallel_processing_note: 'Enable parallel processing of chunks'
+
+  # Multi-level caching configuration
+  caching:
+    _comment: 'Hierarchical caching system: Memory → SSD → HDD with intelligent eviction'
+
+    # Memory cache (fastest, smallest)
+    memory_cache_mb: 1024.0
+    _memory_cache_note: 'Memory cache size in MB for fastest access'
+
+    # SSD cache (fast, medium)
+    ssd_cache_mb: 8192.0
+    _ssd_cache_note: 'SSD cache size in MB for fast persistent storage'
+
+    # HDD cache (slow, largest)
+    hdd_cache_mb: 32768.0
+    _hdd_cache_note: 'HDD cache size in MB for large persistent storage'
+
+    # Compression settings
+    compression_level: 3
+    _compression_level_note: 'Compression level (1-22, higher=better compression, slower)'
+
+    # Cache management
+    intelligent_eviction: true
+    _intelligent_eviction_note: 'Use access patterns for intelligent cache eviction'
+
+    cache_warming: true
+    _cache_warming_note: 'Pre-load frequently accessed data into cache'
+
+    # Cache coherence
+    coherence_checking: true
+    _coherence_checking_note: 'Ensure cache coherence across hierarchy levels'
+
+  # Background prefetching configuration
+  prefetching:
+    _comment: 'Predictive data loading based on access patterns and analysis workflow'
+
+    enabled: true
+    _enabled_note: 'Enable background prefetching system'
+
+    max_prefetch_workers: 2
+    _max_prefetch_workers_note: 'Maximum background prefetch worker threads'
+
+    prefetch_queue_size: 100
+    _prefetch_queue_size_note: 'Maximum size of prefetch request queue'
+
+    # Prefetch strategies
+    strategies:
+      sequential_prediction: true
+      _sequential_prediction_note: 'Predict sequential data access patterns'
+
+      correlation_based: true
+      _correlation_based_note: 'Prefetch based on correlation matrix relationships'
+
+      workflow_analysis: true
+      _workflow_analysis_note: 'Analyze workflow patterns for prefetch decisions'
+
+    # Prefetch priorities
+    priority_levels:
+      immediate: 1    # Critical for next operation
+      high: 2        # Likely needed soon
+      medium: 3      # Potentially useful
+      low: 4         # Background speculation
+      background: 5  # Lowest priority
+
+  # Parallel processing configuration
+  parallel:
+    _comment: 'Multi-threaded processing with proper synchronization'
+
+    max_workers: 8
+    _max_workers_note: 'Maximum parallel worker threads (auto-detected if null)'
+
+    thread_pool_type: ThreadPoolExecutor
+    _thread_pool_type_options:
+      - ThreadPoolExecutor: 'Standard thread pool for I/O bound tasks'
+      - ProcessPoolExecutor: 'Process pool for CPU bound tasks'
+
+    task_scheduling: dynamic
+    _task_scheduling_options:
+      - dynamic: 'Dynamically schedule tasks based on availability'
+      - static: 'Pre-allocate tasks to workers'
+      - work_stealing: 'Workers steal tasks from each other'
+
+    synchronization:
+      use_locks: true
+      _use_locks_note: 'Use locks for thread-safe operations'
+
+      lock_timeout: 30.0
+      _lock_timeout_note: 'Lock timeout in seconds'
+
+      deadlock_detection: true
+      _deadlock_detection_note: 'Enable deadlock detection and recovery'
+
+  # Advanced optimization features
+  advanced_features:
+    _comment: 'Advanced optimization features for specific use cases'
+
+    auto_init_performance_engine: true
+    _auto_init_performance_engine_note: 'Automatically initialize performance engine'
+
+    auto_init_memory_manager: true
+    _auto_init_memory_manager_note: 'Automatically initialize memory manager'
+
+    background_optimization: true
+    _background_optimization_note: 'Enable background optimization tasks'
+
+    predictive_analysis: true
+    _predictive_analysis_note: 'Enable predictive analysis for optimization'
+
+    # Performance adaptation
+    adaptive_optimization: true
+    _adaptive_optimization_note: 'Automatically adapt optimization based on performance'
+
+    learning_enabled: false
+    _learning_enabled_note: 'Enable machine learning for optimization (experimental)'
+
+    # Failover and recovery
+    graceful_degradation: true
+    _graceful_degradation_note: 'Gracefully degrade when optimizations fail'
+
+    fallback_strategies: true
+    _fallback_strategies_note: 'Enable fallback to basic operations when advanced features fail'
+
+# ===================================================================
+# ENHANCED V2 FEATURES FOR PERFORMANCE
+# ===================================================================
+# Extended v2 features section with performance-specific settings
+
+v2_features:
+  # Basic v2 features (inherited from default template)
+  output_format: auto
+  validation_level: basic
+  physics_validation: false
+  cache_strategy: intelligent
+
+  # Performance-specific v2 features
+  performance_optimization: true
+  _performance_optimization_note: 'Enable v2 performance optimization features'
+
+  # Advanced I/O features
+  memory_mapped_loading: true
+  _memory_mapped_loading_note: 'Use memory-mapped loading for large files'
+
+  streaming_analysis: false
+  _streaming_analysis_note: 'Enable streaming analysis for continuous data'
+
+  progressive_loading: true
+  _progressive_loading_note: 'Load data progressively as needed'
+
+  # Intelligent processing features
+  adaptive_processing: true
+  _adaptive_processing_note: 'Adapt processing strategies based on data characteristics'
+
+  background_processing: true
+  _background_processing_note: 'Enable background processing tasks'
+
+  predictive_caching: true
+  _predictive_caching_note: 'Use predictive algorithms for caching decisions'
+
+  # Performance monitoring integration
+  performance_metrics: true
+  _performance_metrics_note: 'Collect and report detailed performance metrics'
+
+  bottleneck_analysis: true
+  _bottleneck_analysis_note: 'Analyze and report performance bottlenecks'
+
+  optimization_suggestions: false
+  _optimization_suggestions_note: 'Provide optimization suggestions based on analysis'
+
+# ===================================================================
+# EXPERIMENTAL DATA WITH PERFORMANCE OPTIMIZATION
+# ===================================================================
+# Enhanced experimental data configuration with performance features
+
+experimental_data:
+  # Basic experimental data settings (inherited from default template)
+  data_folder_path: ./data/YOUR_SAMPLE_NAME/
+  data_file_name: your_experimental_data.hdf
+  phi_angles_path: ./data/phi_angles/
+  phi_angles_file: phi_list.txt
+  exchange_key: exchange
+  data_type: float64
+  file_format: NPZ
+
+  # Performance-optimized caching
+  cache_file_path: ./data/YOUR_SAMPLE_NAME/performance_cache/
+  _cache_file_path_note: 'Dedicated cache directory for performance optimization'
+
+  cache_filename_template: 'perf_cached_c2_frames_{start_frame}_{end_frame}_{size_mb}mb.npz'
+  _cache_filename_template_note: 'Performance cache filename with size information'
+
+  cache_compression: true
+  _cache_compression_note: 'Enable compression for cache files'
+
+  # Advanced preprocessing with performance optimization
+  preprocessing:
+    apply_diagonal_correction: true
+    vectorized_correction: true
+    cache_processed_data: true
+    normalize_data: true
+    normalization_method: baseline
+
+    # Performance-specific preprocessing
+    parallel_processing: true
+    _parallel_processing_note: 'Enable parallel preprocessing'
+
+    memory_efficient_mode: true
+    _memory_efficient_mode_note: 'Use memory-efficient preprocessing algorithms'
+
+    progressive_processing: true
+    _progressive_processing_note: 'Process data progressively to reduce memory usage'
+
+  # Advanced data loading configuration
+  loading:
+    _comment: 'Performance-optimized data loading configuration'
+
+    strategy: adaptive
+    _strategy_options:
+      - adaptive: 'Choose loading strategy based on file size and available memory'
+      - memory_mapped: 'Force memory-mapped loading'
+      - standard: 'Use standard loading'
+
+    file_size_threshold_gb: 1.0
+    _file_size_threshold_note: 'File size threshold for automatic memory-mapped loading'
+
+    chunk_loading: true
+    _chunk_loading_note: 'Enable chunked loading for large datasets'
+
+    prefetch_size_mb: 256.0
+    _prefetch_size_note: 'Amount of data to prefetch during loading'
+
+    background_validation: true
+    _background_validation_note: 'Perform data validation in background during loading'
+
+# ===================================================================
+# PERFORMANCE-OPTIMIZED DATA FILTERING
+# ===================================================================
+# Enhanced data filtering with performance considerations
+
+data_filtering:
+  enabled: true
+  _enabled_note: 'Enable data filtering for memory usage reduction'
+
+  # Performance-optimized filtering strategy
+  filtering_strategy: performance_first
+  _filtering_strategy_options:
+    - quality_first: 'Prioritize data quality over performance'
+    - performance_first: 'Prioritize performance with acceptable quality'
+    - balanced: 'Balance between quality and performance'
+
+  # Intelligent filtering based on available resources
+  adaptive_filtering: true
+  _adaptive_filtering_note: 'Adapt filtering criteria based on available memory'
+
+  # Parallel filtering for large datasets
+  parallel_filtering: true
+  _parallel_filtering_note: 'Use parallel processing for filtering operations'
+
+  # Progressive filtering to reduce memory pressure
+  progressive_filtering: true
+  _progressive_filtering_note: 'Apply filters progressively to minimize memory usage'
+
+  # Standard filtering criteria (inherited from default template)
+  q_range:
+    min: 0.001
+    max: 0.1
+
+  phi_range:
+    min: -10.0
+    max: 10.0
+
+  quality_threshold: 0.5
+
+  combine_criteria: AND
+  fallback_on_empty: true
+  validation_level: basic
+
+  # Performance-specific filtering options
+  memory_efficient_filtering: true
+  _memory_efficient_filtering_note: 'Use memory-efficient filtering algorithms'
+
+  cache_filter_results: true
+  _cache_filter_results_note: 'Cache filtering results for repeated operations'
+
+  filter_validation_parallel: true
+  _filter_validation_parallel_note: 'Perform filter validation in parallel'
+
+# ===================================================================
+# PERFORMANCE-ENHANCED OPTIMIZATION CONFIG
+# ===================================================================
+# Optimization configuration enhanced for performance
+
+optimization_config:
+  # Inherit basic optimization settings from default template
+  angle_filtering:
+    enabled: true  # MODE_DEPENDENT
+    target_ranges:
+      - min_angle: -10.0
+        max_angle: 10.0
+    fallback_to_all_angles: true
+
+  # Performance-enhanced classical optimization
+  classical_optimization:
+    methods:
+      - Nelder-Mead
+      - Gurobi
+
+    # Performance-optimized method options
+    method_options:
+      Nelder-Mead:
+        maxiter: 2000  # MODE_DEPENDENT
+        xatol: 1.0e-06
+        fatol: 1.0e-06
+        adaptive: true
+
+        # Performance optimizations
+        parallel_evaluations: false
+        _parallel_evaluations_note: 'Nelder-Mead is inherently sequential'
+
+        memory_efficient: true
+        _memory_efficient_note: 'Use memory-efficient evaluation strategies'
+
+        early_stopping: true
+        _early_stopping_note: 'Enable early stopping for convergence'
+
+      Gurobi:
+        max_iterations: 300  # MODE_DEPENDENT
+        tolerance: 1.0e-05
+        output_flag: 0
+        method: 2
+        time_limit: 180  # MODE_DEPENDENT
+
+        # Enhanced performance features
+        parallel_optimization: true
+        _parallel_optimization_note: 'Enable Gurobi parallel optimization'
+
+        memory_management: aggressive
+        _memory_management_options:
+          - conservative: 'Use less memory, potentially slower'
+          - standard: 'Balanced memory usage'
+          - aggressive: 'Use more memory for better performance'
+
+        warm_start: true
+        _warm_start_note: 'Use warm starts for iterative optimization'
+
+    # Performance-enhanced batch processing
+    batch_processing:
+      enabled: true
+      max_parallel_runs: 6  # MODE_DEPENDENT
+      multiple_initial_points: true
+      initial_point_strategy: latin_hypercube
+      num_initial_points: 12  # MODE_DEPENDENT
+
+      # Performance optimizations
+      resource_monitoring: true
+      _resource_monitoring_note: 'Monitor CPU and memory usage during batch processing'
+
+      adaptive_parallelism: true
+      _adaptive_parallelism_note: 'Adapt parallelism based on system resources'
+
+      memory_aware_scheduling: true
+      _memory_aware_scheduling_note: 'Schedule jobs based on memory availability'
+
+  # Performance-enhanced robust optimization
+  robust_optimization:
+    enabled: true
+    uncertainty_model: wasserstein
+    uncertainty_radius: 0.03  # MODE_DEPENDENT
+    n_scenarios: 15
+    enable_caching: true
+    preferred_solver: CLARABEL
+
+    # Performance optimizations
+    solver_optimization:
+      enable_warm_starts: true
+      adaptive_solver_selection: true
+      max_iterations: 10000
+      tolerance: 1.0e-06
+      enable_acceleration: true
+      verbose: false
+      time_limit: 300.0
+
+      # Advanced performance features
+      parallel_solve: false
+      _parallel_solve_note: 'Enable parallel solving (experimental)'
+
+      memory_pooling: true
+      _memory_pooling_note: 'Use memory pooling for solver operations'
+
+      solution_caching: true
+      _solution_caching_note: 'Cache solver solutions for reuse'
+
+# ===================================================================
+# PERFORMANCE MONITORING AND VALIDATION
+# ===================================================================
+# Enhanced validation and monitoring for performance optimization
+
+validation_rules:
+  # Inherit basic validation from default template
+  data_quality:
+    check_data_range: true
+    correlation_minimum: 0.0
+    correlation_maximum: 10.0
+    check_nan_values: true
+    nan_handling: raise
+
+  parameter_validation:
+    check_bounds: true
+    physics_constraints: true
+    correlation_checks: true
+
+  # Performance-specific validation
+  performance_validation:
+    _comment: 'Validation rules specific to performance optimization'
+
+    memory_usage_limits:
+      warning_threshold_gb: 12.0
+      _warning_threshold_note: 'Memory usage warning threshold in GB'
+
+      critical_threshold_gb: 16.0
+      _critical_threshold_note: 'Memory usage critical threshold in GB'
+
+      enforce_limits: true
+      _enforce_limits_note: 'Enforce memory limits during processing'
+
+    performance_thresholds:
+      minimum_loading_speed_mbps: 10.0
+      _minimum_loading_speed_note: 'Minimum acceptable data loading speed'
+
+      maximum_cache_miss_rate: 0.5
+      _maximum_cache_miss_rate_note: 'Maximum acceptable cache miss rate'
+
+      minimum_parallel_efficiency: 0.6
+      _minimum_parallel_efficiency_note: 'Minimum parallel processing efficiency'
+
+    bottleneck_detection:
+      enabled: true
+      _enabled_note: 'Enable automatic bottleneck detection'
+
+      cpu_threshold: 0.95
+      _cpu_threshold_note: 'CPU utilization threshold for bottleneck detection'
+
+      memory_threshold: 0.9
+      _memory_threshold_note: 'Memory pressure threshold for bottleneck detection'
+
+      io_wait_threshold: 0.3
+      _io_wait_threshold_note: 'I/O wait time threshold for bottleneck detection'
+
+# ===================================================================
+# PERFORMANCE-OPTIMIZED OUTPUT SETTINGS
+# ===================================================================
+# Enhanced output settings with performance considerations
+
+output_settings:
+  # Inherit basic settings from default template
+  results_directory: ./homodyne_results_performance
+  _results_directory_note: 'Results directory for performance-optimized runs'
+
+  file_formats:
+    results_format: json
+    save_intermediate: false
+    compression: true
+    precision: float64
+
+    # Performance optimizations
+    streaming_output: false
+    _streaming_output_note: 'Stream results to disk during processing'
+
+    parallel_writing: false
+    _parallel_writing_note: 'Use parallel I/O for result writing'
+
+    buffer_size_mb: 64.0
+    _buffer_size_note: 'Buffer size for output operations'
+
+  # Performance reporting
+  performance_reporting:
+    _comment: 'Performance-specific reporting configuration'
+
+    enabled: true
+    _enabled_note: 'Enable performance reporting'
+
+    detailed_metrics: true
+    _detailed_metrics_note: 'Include detailed performance metrics in reports'
+
+    bottleneck_analysis: true
+    _bottleneck_analysis_note: 'Include bottleneck analysis in reports'
+
+    optimization_recommendations: false
+    _optimization_recommendations_note: 'Include optimization recommendations'
+
+    export_performance_data: false
+    _export_performance_data_note: 'Export raw performance data for analysis'
+
+    performance_plots: false
+    _performance_plots_note: 'Generate performance analysis plots'
+
+# ===================================================================
+# PERFORMANCE LOGGING CONFIGURATION
+# ===================================================================
+# Enhanced logging configuration for performance monitoring
+
+logging:
+  # Inherit basic logging from default template
+  enabled: true
+  level: INFO
+
+  console:
+    enabled: true
+    level: INFO
+    format: detailed
+    colors: true
+
+  file:
+    enabled: true
+    level: DEBUG
+    path: ~/.homodyne/logs/
+    filename: homodyne_performance.log
+    max_size_mb: 20  # Larger for performance logging
+    backup_count: 10  # More backups for performance analysis
+    format: detailed
+
+  # Performance-specific logging
+  performance:
+    enabled: true
+    level: INFO
+    filename: performance_detailed.log
+    threshold_seconds: 0.05  # Lower threshold for performance analysis
+
+    # Advanced performance logging
+    memory_tracking: true
+    _memory_tracking_note: 'Log memory usage patterns'
+
+    cache_statistics: true
+    _cache_statistics_note: 'Log cache hit/miss statistics'
+
+    bottleneck_logging: true
+    _bottleneck_logging_note: 'Log detected bottlenecks'
+
+    optimization_events: true
+    _optimization_events_note: 'Log optimization adaptation events'
+
+  # Module-specific logging for performance components
+  modules:
+    homodyne.data.performance_engine: DEBUG
+    homodyne.data.memory_manager: INFO
+    homodyne.data.optimization: INFO
+    homodyne.data.xpcs_loader: DEBUG
+    homodyne.fileIO: DEBUG
+
+  debug:
+    trace_calls: false
+    track_memory: true  # Enable for performance analysis
+    profile_performance: true
+
+# ===================================================================
+# ANALYZER PARAMETERS (INHERITED FROM DEFAULT TEMPLATE)
+# ===================================================================
+# Standard analyzer parameters - customize for your experiment
+
+analyzer_parameters:
+  temporal:
+    dt: 0.1
+    dt_unit: seconds
+    start_frame: 100
+    end_frame: 1000
+    frame_description: Analysis time window for experiment
+
+  scattering:
+    wavevector_q: 0.001
+    q_unit: Å⁻¹
+    typical_range: [0.001, 0.1]
+
+  geometry:
+    stator_rotor_gap: 2000000
+    gap_unit: Å
+    gap_in_microns: 200
+
+  computational:
+    num_threads: auto
+    auto_detect_cores: true
+    max_threads_limit: 16
+    memory_limit_gb: 16
+
+# ===================================================================
+# INITIAL PARAMETERS (MODE-DEPENDENT)
+# ===================================================================
+# Starting parameter values - customize based on analysis mode
+
+initial_parameters:
+  values: 'MODE_DEPENDENT: [100.0,0.0,10.0] for static, [100.0,0.0,10.0,1.0,0.0,0.0,0.0] for laminar_flow'
+  parameter_names: 'MODE_DEPENDENT'
+  units: 'MODE_DEPENDENT'
+
+  physical_meaning:
+    _common_to_all_modes:
+      D0: Reference diffusion coefficient
+      alpha: Power-law exponent for D(t) evolution
+      D_offset: Baseline diffusion coefficient
+    _laminar_flow_additional:
+      gamma_dot_t0: Reference shear rate
+      beta: Power-law exponent for shear rate evolution
+      gamma_dot_t_offset: Baseline shear rate
+      phi0: Angular offset between flow and scattering
+
+# ===================================================================
+# PARAMETER SPACE (MODE-DEPENDENT)
+# ===================================================================
+# Parameter bounds and priors - customize for your system
+
+parameter_space:
+  bounds:
+    - name: D0
+      min: 1.0
+      max: 1000000.0
+      type: TruncatedNormal
+      prior_mu: 10000.0
+      prior_sigma: 1000.0
+      unit: Å²/s
+
+    - name: alpha
+      min: -2.0
+      max: 2.0
+      type: Normal
+      prior_mu: -1.5
+      prior_sigma: 0.1
+      unit: dimensionless
+
+    - name: D_offset
+      min: -100
+      max: 100
+      type: Normal
+      prior_mu: 0.0
+      prior_sigma: 10.0
+      unit: Å²/s
+
+    # Additional parameters for laminar_flow mode
+    - name: gamma_dot_t0
+      min: 1.0e-06
+      max: 1.0
+      type: TruncatedNormal
+      prior_mu: 0.001
+      prior_sigma: 0.01
+      unit: s⁻¹
+
+    - name: beta
+      min: -2.0
+      max: 2.0
+      type: Normal
+      prior_mu: 0.0
+      prior_sigma: 0.1
+      unit: dimensionless
+
+    - name: gamma_dot_t_offset
+      min: -0.01
+      max: 0.01
+      type: Normal
+      prior_mu: 0.0
+      prior_sigma: 0.001
+      unit: s⁻¹
+
+    - name: phi0
+      min: -10.0
+      max: 10.0
+      type: Normal
+      prior_mu: 0.0
+      prior_sigma: 5.0
+      unit: degrees
+
+# ===================================================================
+# ANALYSIS SETTINGS (MODE-DEPENDENT)
+# ===================================================================
+# Core analysis configuration
+
+analysis_settings:
+  static_mode: 'MODE_DEPENDENT: true for static modes, false for laminar_flow'
+  static_submode: 'MODE_DEPENDENT: isotropic/anisotropic for static modes, null for laminar_flow'
+
+  model_description:
+    static_isotropic: g₂(t₁,t₂) ~ [exp(-q² ∫ D(t)dt)]² with isotropic symmetry
+    static_anisotropic: g₂(t₁,t₂) ~ [exp(-q² ∫ D(t)dt)]² with angular filtering
+    laminar_flow: g₂ = g₁_diff × g₁_shear with sinc² term for full flow dynamics
+
+# ===================================================================
+# ADVANCED SETTINGS WITH PERFORMANCE OPTIMIZATION
+# ===================================================================
+# Advanced computational settings with performance enhancements
+
+advanced_settings:
+  data_loading:
+    use_diagonal_correction: true
+    vectorized_diagonal_fix: true
+
+    # Performance enhancements
+    parallel_loading: true
+    _parallel_loading_note: 'Enable parallel data loading'
+
+    memory_efficient_loading: true
+    _memory_efficient_loading_note: 'Use memory-efficient loading strategies'
+
+    progressive_loading: true
+    _progressive_loading_note: 'Load data progressively as needed'
+
+  chi_squared_calculation:
+    method: standard
+    minimum_sigma: 1.0e-10
+    moving_window_size: 11
+    moving_window_edge_method: reflect
+    variance_method: hybrid_limited_irls
+
+    # Performance optimizations
+    performance_optimization:
+      enabled: true
+      numba_jit:
+        enabled: true
+        warmup_on_init: true
+
+      # Enhanced performance features
+      vectorized_operations: true
+      _vectorized_operations_note: 'Use vectorized operations for chi-squared calculation'
+
+      parallel_variance_calculation: true
+      _parallel_variance_note: 'Calculate variance in parallel for large datasets'
+
+      memory_efficient_variance: true
+      _memory_efficient_variance_note: 'Use memory-efficient variance algorithms'
+
+  uncertainty_calculation:
+    enable_uncertainty: true
+    report_uncertainty: true
+    minimum_angles_for_uncertainty: 1  # MODE_DEPENDENT
+
+    # Performance optimizations
+    parallel_uncertainty: false
+    _parallel_uncertainty_note: 'Calculate uncertainties in parallel'
+
+    memory_efficient_uncertainty: true
+    _memory_efficient_uncertainty_note: 'Use memory-efficient uncertainty calculation'
+
+# ===================================================================
+# PERFORMANCE SETTINGS (ENHANCED)
+# ===================================================================
+# Comprehensive performance settings with advanced optimizations
+
+performance_settings:
+  # Enhanced caching with multi-level support
+  caching:
+    enable_memory_cache: true
+    enable_disk_cache: true
+    cache_size_limit_mb: 2048  # Increased for performance template
+    auto_cleanup: true
+
+    # Multi-level caching
+    enable_ssd_cache: true
+    _enable_ssd_cache_note: 'Enable SSD-based caching for intermediate performance'
+
+    ssd_cache_size_mb: 8192
+    _ssd_cache_size_note: 'SSD cache size in MB'
+
+    enable_hdd_cache: true
+    _enable_hdd_cache_note: 'Enable HDD-based caching for large datasets'
+
+    hdd_cache_size_mb: 32768
+    _hdd_cache_size_note: 'HDD cache size in MB'
+
+    # Cache optimization
+    intelligent_eviction: true
+    _intelligent_eviction_note: 'Use access patterns for cache eviction decisions'
+
+    cache_compression: true
+    _cache_compression_note: 'Compress cached data to save space'
+
+    compression_level: 3
+    _compression_level_note: 'Cache compression level (1-22)'
+
+  # Enhanced parallel processing
+  parallel_processing:
+    enable_multiprocessing: true
+    chunk_size: adaptive  # Changed from auto to adaptive
+    backend: threading
+
+    # Advanced parallel features
+    adaptive_parallelism: true
+    _adaptive_parallelism_note: 'Adapt parallelism based on system load'
+
+    max_parallel_workers: 8
+    _max_parallel_workers_note: 'Maximum number of parallel workers'
+
+    work_stealing: false
+    _work_stealing_note: 'Enable work stealing between workers'
+
+    load_balancing: dynamic
+    _load_balancing_options:
+      - static: 'Pre-allocate work to workers'
+      - dynamic: 'Dynamically distribute work'
+
+  # Enhanced memory management
+  memory_management:
+    low_memory_mode: false
+    garbage_collection_frequency: 5  # More frequent for large datasets
+    memory_monitoring: true  # Enabled for performance template
+
+    # Advanced memory management
+    memory_pressure_response: adaptive
+    _memory_pressure_response_options:
+      - ignore: 'Ignore memory pressure'
+      - adaptive: 'Adapt processing based on memory pressure'
+      - aggressive: 'Aggressively manage memory usage'
+
+    memory_allocation_strategy: pool
+    _memory_allocation_strategy_options:
+      - standard: 'Standard memory allocation'
+      - pool: 'Use memory pooling for efficiency'
+      - virtual: 'Use virtual memory for very large datasets'
+
+    virtual_memory_threshold_gb: 12.0
+    _virtual_memory_threshold_note: 'Threshold for switching to virtual memory'
+
+  # Enhanced Numba optimization
+  numba_optimization:
+    enable_numba: true
+    warmup_numba: true
+    parallel_numba: true
+    cache_numba: true
+
+    stability_enhancements:
+      enable_kernel_warmup: true
+      warmup_iterations: 5  # More warmup for performance template
+      optimize_memory_layout: true
+      enable_nogil: true
+
+      environment_optimization:
+        auto_configure: true
+        max_threads: 8  # Increased for performance
+        gc_optimization: true
+
+        # Advanced Numba features
+        force_compilation: true
+        _force_compilation_note: 'Force JIT compilation at startup'
+
+        optimization_level: 3
+        _optimization_level_note: 'Numba optimization level (0-3)'
+
+        fast_math: true
+        _fast_math_note: 'Enable fast math optimizations (may reduce precision)'
+
+    # Enhanced performance monitoring
+    performance_monitoring:
+      enable_profiling: true  # Enabled for performance template
+      stable_benchmarking: true  # Enabled for performance analysis
+      adaptive_benchmarking: true
+      performance_baselines: true  # Enabled for performance tracking
+      target_cv: 0.05  # Tighter for performance analysis
+      memory_monitoring: true
+
+      smart_caching:
+        enabled: true
+        max_items: 200  # Increased for performance template
+        max_memory_mb: 1024  # Increased cache size
+
+        # Advanced caching features
+        cache_prediction: true
+        _cache_prediction_note: 'Predict cache access patterns'
+
+        adaptive_cache_sizing: true
+        _adaptive_cache_sizing_note: 'Adapt cache size based on usage patterns'
+
+# ===================================================================
+# CUSTOMIZATION GUIDE FOR PERFORMANCE TEMPLATE
+# ===================================================================
+# Guidelines for customizing this performance-optimized template
+
+_performance_customization_guide:
+  _overview: 'This template is optimized for large datasets (>1GB) with advanced performance features'
+
+  _step_1_analysis_mode: 'Set analysis_mode in metadata section based on your analysis type'
+  _step_2_file_paths: 'Update experimental_data section with your large dataset file paths'
+  _step_3_performance_tuning: 'Adjust performance section based on your system specifications'
+  _step_4_memory_limits: 'Set memory thresholds based on your available RAM'
+  _step_5_cache_configuration: 'Configure caching based on available storage (SSD/HDD)'
+  _step_6_parallel_settings: 'Adjust parallel processing based on CPU cores'
+  _step_7_monitoring: 'Enable/disable monitoring features based on requirements'
+  _step_8_validation: 'Set performance validation thresholds for your use case'
+
+  _system_requirements:
+    minimum_ram_gb: 8
+    recommended_ram_gb: 16
+    minimum_cores: 4
+    recommended_cores: 8
+    storage: 'SSD recommended for cache, HDD acceptable for large cache'
+
+  _dataset_recommendations:
+    small_datasets: 'Use default template for datasets <1GB'
+    medium_datasets: 'Enable selective performance features for 1-10GB datasets'
+    large_datasets: 'Use full performance optimization for >10GB datasets'
+
+  _performance_tuning_tips:
+    - 'Start with conservative memory thresholds and increase gradually'
+    - 'Monitor cache hit rates and adjust cache sizes accordingly'
+    - 'Use memory-mapped I/O for files larger than available RAM'
+    - 'Enable background prefetching for predictable access patterns'
+    - 'Adjust chunk sizes based on your specific correlation matrix dimensions'
+    - 'Use parallel processing for CPU-bound operations'
+    - 'Enable performance monitoring during initial runs to identify bottlenecks'

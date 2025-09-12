@@ -1,5 +1,4 @@
 # Run code and experimental data
-data/
 homodyne_analysis_results/
 homodyne_results/
 homodyne_analysis_results.json
@@ -11,6 +10,9 @@ scripts/dev_cleanup/
 
 # Benchmark
 .benchmarks
+
+# Test reports (generated)
+test_reports/
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

@@ -1,0 +1,461 @@
+# Homodyne v2 Enhanced Logging Configuration Template
+# ===================================================
+# Comprehensive configuration template demonstrating the full range of 
+# enhanced logging capabilities including JAX-specific, scientific computing,
+# distributed computing, advanced debugging, and production monitoring features.
+
+_template_info:
+  _comment: ENHANCED LOGGING HOMODYNE CONFIGURATION TEMPLATE - v2 Comprehensive Logging System
+  _creation_date: '2025-09-11'
+  _based_on: config_default_template.yaml with enhanced logging system integration
+  _usage: Copy this template and customize for your specific experimental and monitoring needs
+  _features:
+    - JAX-specific logging and compilation monitoring
+    - Scientific computing contexts with XPCS-specific validation
+    - Distributed computing support for HPC environments
+    - Advanced debugging with error recovery and numerical stability checks
+    - Production monitoring with health checks and alerting
+    - Performance anomaly detection and baseline comparison
+  _new_capabilities:
+    - Real-time JIT compilation tracking
+    - XPCS data validation and physics parameter checking
+    - Multi-node distributed logging coordination
+    - Intelligent error recovery with retry mechanisms
+    - Production health checks and alerting system
+
+metadata:
+  config_version: 0.8.0
+  description: 'Enhanced logging template for comprehensive homodyne scattering analysis'
+  based_on: He et al. PNAS 2024 - Transport coefficient approach
+  analysis_mode: 'static_isotropic'  # static_isotropic | static_anisotropic | laminar_flow
+
+# ===== COMPREHENSIVE LOGGING CONFIGURATION =====
+logging:
+  _comment: Enhanced logging system with JAX, scientific computing, and production monitoring
+  
+  # Core logging settings (backward compatible)
+  enabled: true
+  level: INFO
+  
+  console:
+    enabled: true
+    level: INFO
+    format: detailed
+    colors: true
+    
+  file:
+    enabled: true
+    level: DEBUG
+    path: ~/.homodyne/logs/
+    filename: homodyne.log
+    max_size_mb: 50
+    backup_count: 10
+    format: detailed
+    
+  performance:
+    enabled: true
+    level: INFO
+    filename: performance.log
+    threshold_seconds: 0.1
+    
+  # Module-specific logging levels
+  modules:
+    homodyne.utils.jax_logging: DEBUG
+    homodyne.utils.scientific_logging: INFO
+    homodyne.utils.distributed_logging: INFO
+    homodyne.utils.advanced_debugging: WARNING
+    homodyne.utils.production_monitoring: INFO
+    homodyne.core.jax_backend: INFO
+    homodyne.optimization: INFO
+    homodyne.data: INFO
+    
+  # ===== JAX-SPECIFIC LOGGING =====
+  jax:
+    _comment: JAX compilation and device monitoring
+    enabled: true
+    level: INFO
+    
+    compilation:
+      enabled: true
+      log_threshold_seconds: 0.5
+      track_memory_usage: true
+      log_device_placement: true
+      separate_log_file: true
+      filename: jax_compilation.log
+      
+    memory:
+      enabled: true
+      snapshot_interval_seconds: 30
+      log_threshold_mb: 100
+      track_peak_usage: true
+      alert_on_memory_spikes: true
+      
+    gradients:
+      enabled: true
+      log_gradient_norms: true
+      warn_on_small_gradients: true
+      gradient_norm_threshold: 1e-6
+      log_convergence_metrics: true
+      
+    devices:
+      enabled: true
+      log_device_info_on_startup: true
+      monitor_gpu_utilization: true
+      log_device_memory_stats: true
+      
+  # ===== SCIENTIFIC COMPUTING LOGGING =====
+  scientific:
+    _comment: XPCS and scientific computing specific logging
+    enabled: true
+    level: INFO
+    
+    data_loading:
+      enabled: true
+      validate_data_quality: true
+      log_preprocessing_steps: true
+      warn_on_data_anomalies: true
+      separate_log_file: true
+      filename: data_loading.log
+      
+    physics_validation:
+      enabled: true
+      validate_parameter_bounds: true
+      log_validation_failures: true
+      suggest_parameter_fixes: true
+      physics_parameter_bounds: # DEPRECATED: Use parameter_space section below
+        _deprecated_note: 'Use parameter_space section for proper prior distributions'
+        
+    correlation_computation:
+      enabled: true
+      log_computation_metrics: true
+      track_cache_performance: true
+      monitor_memory_usage: true
+      validate_correlation_properties: true
+      
+    model_fitting:
+      enabled: true
+      track_fitting_progress: true
+      log_convergence_status: true
+      monitor_parameter_evolution: true
+      separate_log_file: true
+      filename: model_fitting.log
+      
+    numerical_stability:
+      enabled: true
+      check_condition_numbers: true
+      warn_on_ill_conditioning: true
+      monitor_gradient_norms: true
+      log_numerical_issues: true
+      
+  # ===== DISTRIBUTED COMPUTING LOGGING =====
+  distributed:
+    _comment: Multi-process and HPC cluster logging
+    enabled: true
+    level: INFO
+    
+    node_coordination:
+      enabled: true
+      log_node_startup: true
+      track_resource_usage: true
+      monitor_inter_node_communication: true
+      
+    resource_monitoring:
+      enabled: true
+      snapshot_interval_seconds: 60
+      monitor_cpu_usage: true
+      monitor_memory_usage: true
+      monitor_disk_usage: true
+      monitor_network_io: true
+      
+    mpi_integration:
+      enabled: true  # Only active if MPI available
+      log_mpi_operations: true
+      track_collective_operations: true
+      monitor_communication_patterns: true
+      
+    job_scheduler:
+      enabled: true  # Auto-detects SLURM/PBS
+      log_job_info_on_startup: true
+      organize_logs_by_job_id: true
+      
+    hierarchical_logging:
+      enabled: true
+      create_node_specific_logs: true
+      aggregate_logs_on_completion: true
+      base_log_directory: ~/.homodyne/distributed_logs/
+      
+  # ===== ADVANCED DEBUGGING =====
+  advanced_debugging:
+    _comment: Error recovery, anomaly detection, and detailed debugging
+    enabled: true
+    level: WARNING
+    
+    error_recovery:
+      enabled: true
+      max_retry_attempts: 3
+      backoff_factor: 2.0
+      log_recovery_attempts: true
+      suggest_error_solutions: true
+      
+    numerical_stability:
+      enabled: true
+      analyze_matrices: true
+      check_condition_numbers: true
+      monitor_dynamic_range: true
+      suggest_stability_fixes: true
+      
+    performance_anomalies:
+      enabled: true
+      statistical_threshold: 2.0  # Standard deviations
+      min_samples_for_detection: 5
+      log_anomalous_operations: true
+      suggest_investigation_steps: true
+      
+    memory_leak_detection:
+      enabled: true
+      monitor_process_memory: true
+      alert_on_memory_growth: true
+      memory_growth_threshold_mb: 100
+      
+    correlation_matrix_debugging:
+      enabled: true
+      validate_correlation_properties: true
+      check_monotonic_decay: true
+      verify_q_vector_consistency: true
+      
+  # ===== PRODUCTION MONITORING =====
+  production:
+    _comment: Health checks, alerting, and production monitoring
+    enabled: false  # Enable in production environments
+    level: INFO
+    
+    health_checks:
+      enabled: true
+      check_interval_minutes: 15
+      checks:
+        system_resources: true
+        disk_space: true
+        memory_usage: true
+        jax_devices: true
+        log_directory: true
+      thresholds:
+        cpu_usage_warning: 85
+        cpu_usage_critical: 95
+        memory_usage_warning: 85
+        memory_usage_critical: 95
+        disk_usage_warning: 85
+        disk_usage_critical: 95
+        
+    alerting:
+      enabled: true
+      alert_levels: [WARNING, ERROR, CRITICAL]
+      
+      email_notifications:
+        enabled: false  # Configure for production
+        smtp_host: smtp.your-domain.com
+        smtp_port: 587
+        username: homodyne-alerts@your-domain.com
+        password: your_password  # Use environment variable
+        recipients:
+          - admin@your-domain.com
+          - scientist@your-domain.com
+        min_level: ERROR
+        
+      webhook_notifications:
+        enabled: false  # Configure for production  
+        webhook_url: https://your-monitoring.com/webhooks/homodyne
+        headers:
+          Authorization: Bearer your_token
+        min_level: WARNING
+        
+    metrics_collection:
+      enabled: true
+      collect_system_metrics: true
+      collect_operation_metrics: true
+      collect_performance_metrics: true
+      retention_hours: 168  # 1 week
+      
+    performance_baselines:
+      enabled: true
+      auto_create_baselines: true
+      baseline_sample_size: 100
+      update_interval_hours: 24
+      deviation_alert_threshold: 3.0
+      
+    dashboard_export:
+      enabled: true
+      export_interval_minutes: 60
+      export_path: ~/.homodyne/monitoring/
+      include_historical_data: true
+      
+  # ===== DEBUG CONFIGURATION =====
+  debug:
+    _comment: Low-level debugging features - use carefully in production
+    
+    trace_calls: false
+    track_memory: false
+    profile_performance: true
+    
+    # Advanced debugging features
+    enable_error_recovery: true
+    enable_numerical_checks: true
+    enable_performance_monitoring: true
+    
+    # JAX debugging
+    jax_debug_mode: false
+    jax_disable_jit: false  # Set true for debugging JIT issues
+    jax_log_compiles: true
+    
+    # Memory debugging
+    memory_profiling: false
+    memory_leak_detection: false
+    gc_monitoring: false
+    
+# ===== EXPERIMENTAL DATA CONFIGURATION =====
+experimental_data:
+  _comment: 'CUSTOMIZE: Update paths and filenames for your experimental data'
+  data_folder_path: ./data/YOUR_SAMPLE_NAME/
+  data_file_name: your_experimental_data.hdf
+  phi_angles_path: ./data/phi_angles/
+  phi_angles_file: phi_list.txt
+  exchange_key: exchange
+  cache_file_path: ./data/YOUR_SAMPLE_NAME/
+  cache_filename_template: cached_c2_frames_{start_frame}_{end_frame}.npz
+  cache_compression: true
+  data_type: float64
+  file_format: NPZ
+  
+  preprocessing:
+    apply_diagonal_correction: true
+    vectorized_correction: true
+    cache_processed_data: true
+    normalize_data: true
+    normalization_method: baseline
+    
+  validation:
+    validate_on_load: true
+    check_data_quality: true
+    warn_on_anomalies: true
+    log_validation_results: true
+
+# ===== ANALYZER PARAMETERS =====
+analyzer_parameters:
+  temporal:
+    dt: 0.1
+    dt_unit: seconds
+    start_frame: 100
+    end_frame: 1000
+    frame_description: Analysis time window for experiment
+    
+  scattering:
+    wavevector_q: 0.001
+    q_unit: Å⁻¹
+    typical_range: [0.001, 0.1]
+    
+  geometry:
+    stator_rotor_gap: 2000000
+    gap_unit: Å
+    gap_in_microns: 200
+    
+  computational:
+    num_threads: auto
+    auto_detect_cores: true
+    max_threads_limit: 16
+    memory_limit_gb: 16
+
+# ===== INITIAL PARAMETERS =====
+initial_parameters:
+  _comment: 'CUSTOMIZE: Starting values for your analysis mode'
+  values: [100.0, 0.0, 10.0]  # For static_isotropic mode
+  parameter_names: [D0, alpha, D_offset]
+
+# ===== PARAMETER SPACE CONFIGURATION =====
+parameter_space:
+  bounds:
+    - name: D0
+      min: 1.0
+      max: 1000000.0
+      type: TruncatedNormal
+      prior_mu: 10000.0
+      prior_sigma: 1000.0
+      unit: Å²/s
+
+    - name: alpha
+      min: -2.0
+      max: 2.0
+      type: Normal
+      prior_mu: -1.5
+      prior_sigma: 0.1
+      unit: dimensionless
+
+    - name: D_offset
+      min: -100
+      max: 100
+      type: Normal
+      prior_mu: 0.0
+      prior_sigma: 10.0
+      unit: Å²/s
+
+    # Additional parameters for laminar_flow mode
+    - name: gamma_dot_t0
+      min: 1.0e-06
+      max: 1.0
+      type: TruncatedNormal
+      prior_mu: 0.001
+      prior_sigma: 0.01
+      unit: s⁻¹
+
+    - name: beta
+      min: -2.0
+      max: 2.0
+      type: Normal
+      prior_mu: 0.0
+      prior_sigma: 0.1
+      unit: dimensionless
+
+    - name: gamma_dot_t_offset
+      min: -0.01
+      max: 0.01
+      type: Normal
+      prior_mu: 0.0
+      prior_sigma: 0.001
+      unit: s⁻¹
+
+    - name: phi0
+      min: -10.0
+      max: 10.0
+      type: Normal
+      prior_mu: 0.0
+      prior_sigma: 5.0
+      unit: degrees
+
+# ===== OPTIMIZATION CONFIGURATION =====  
+optimization_config:
+  _comment: Enhanced optimization with monitoring
+  
+  method_selection:
+    primary_method: variational_inference
+    fallback_methods: [mcmc, hybrid]
+    
+  monitoring:
+    track_convergence: true
+    log_optimization_progress: true
+    monitor_parameter_evolution: true
+    alert_on_convergence_failure: true
+    
+  performance:
+    enable_jax_jit: true
+    use_gpu_if_available: true
+    memory_efficient_mode: true
+    
+# ===== ENVIRONMENT VARIABLES =====
+_environment_overrides:
+  _comment: Environment variables that can override logging settings
+  HOMODYNE_LOG_LEVEL: INFO
+  HOMODYNE_LOG_CONSOLE_ENABLED: 'true'
+  HOMODYNE_LOG_FILE_ENABLED: 'true'
+  HOMODYNE_LOG_JAX_ENABLED: 'true'
+  HOMODYNE_LOG_SCIENTIFIC_ENABLED: 'true'
+  HOMODYNE_LOG_DISTRIBUTED_ENABLED: 'false'
+  HOMODYNE_LOG_PRODUCTION_ENABLED: 'false'
+  HOMODYNE_LOG_DEBUG_ENABLED: 'false'
