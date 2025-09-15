@@ -18,28 +18,31 @@ Key Features:
 import sys
 from pathlib import Path
 
+
 def main() -> int:
     """
     Main entry point for module execution.
-    
+
     Returns:
         Exit code (0 for success, non-zero for error)
     """
     try:
         # Import the CLI main function
         from homodyne.cli.main import main as cli_main
-        
+
         # Execute the CLI with current arguments
         return cli_main()
-        
+
     except ImportError as e:
         print(f"❌ Import error: {e}")
         print("   Ensure homodyne is properly installed with all dependencies")
         return 1
-        
+
     except Exception as e:
         print(f"❌ Unexpected error: {e}")
-        print("   Please report this issue at: https://github.com/your-org/homodyne/issues")
+        print(
+            "   Please report this issue at: https://github.com/your-org/homodyne/issues"
+        )
         return 1
 
 

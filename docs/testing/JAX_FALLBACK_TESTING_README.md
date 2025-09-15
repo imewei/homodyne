@@ -377,7 +377,7 @@ def test_new_fallback_scenario(self):
 
 - **Architecture Documentation**: `CLAUDE.md` - Core system architecture
 - **API Reference**: Module docstrings and type hints
-- **Examples**: `examples/` directory with usage patterns
+- **CLI Usage**: See README.md for command-line usage patterns
 - **Performance Guide**: `docs/performance.md`
 
 ### Getting Help

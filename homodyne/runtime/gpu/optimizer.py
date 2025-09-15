@@ -19,13 +19,14 @@ import os
 import subprocess
 import time
 from pathlib import Path
-from typing import Dict, Any, Optional, List
+from typing import Any, Dict, List, Optional
 
 # JAX imports with fallback
 try:
     import jax
     import jax.numpy as jnp
-    from jax import random, jit
+    from jax import jit, random
+
     JAX_AVAILABLE = True
 except ImportError:
     JAX_AVAILABLE = False
@@ -34,10 +35,11 @@ except ImportError:
 
 logger = logging.getLogger(__name__)
 
+
 class GPUOptimizer:
     """
     Intelligent GPU optimization for VI+JAX and MCMC+JAX methods.
-    
+
     Implements JAX-specific enhancements for
     the unified homodyne model workloads.
     """
@@ -45,7 +47,9 @@ class GPUOptimizer:
     def __init__(self):
         self.gpu_info = {}
         self.optimal_settings = {}
-        self.cache_file = Path.home() / ".cache" / "homodyne" / "gpu_optimization_v2.json"
+        self.cache_file = (
+            Path.home() / ".cache" / "homodyne" / "gpu_optimization_v2.json"
+        )
         self.cache_file.parent.mkdir(parents=True, exist_ok=True)
 
     def detect_gpu_hardware(self) -> Dict[str, Any]:
@@ -136,10 +140,12 @@ class GPUOptimizer:
         self.gpu_info = info
         return info
 
-    def benchmark_jax_workloads(self, matrix_sizes: Optional[List[int]] = None) -> Dict[str, Any]:
+    def benchmark_jax_workloads(
+        self, matrix_sizes: Optional[List[int]] = None
+    ) -> Dict[str, Any]:
         """
         Benchmark JAX operations typical for VI+JAX and MCMC+JAX workloads.
-        
+
         Tests operations similar to those in the unified homodyne model:
         - Matrix operations (parameter covariance)
         - Gradient computations (VI optimization)
@@ -173,70 +179,70 @@ class GPUOptimizer:
 
             if gpu_device:
                 logger.info(f"Benchmarking on device: {gpu_device}")
-                
+
                 for size in matrix_sizes:
                     # Test matrix operations (similar to covariance computations in VI)
                     @jit
                     def matrix_ops(x):
                         return jnp.dot(x, x.T) + jnp.eye(size) * 0.01
-                    
+
                     x = jax.device_put(jnp.ones((size, size)), gpu_device)
-                    
+
                     # Warmup
                     _ = matrix_ops(x).block_until_ready()
-                    
+
                     # Benchmark matrix operations
                     start = time.perf_counter()
                     for _ in range(10):
                         _ = matrix_ops(x).block_until_ready()
                     elapsed = (time.perf_counter() - start) / 10
-                    
+
                     benchmarks["matrix_operations"][size] = {
                         "time_ms": elapsed * 1000,
                         "gflops": (2 * size**3 + size) / (elapsed * 1e9),
                     }
-                    
+
                     # Test gradient computation (similar to VI ELBO gradients)
                     @jit
                     def loss_function(params):
                         return jnp.sum(params**2) + jnp.sum(jnp.sin(params))
-                    
+
                     grad_fn = jit(jax.grad(loss_function))
                     params = jax.device_put(jnp.ones(size), gpu_device)
-                    
+
                     # Warmup
                     _ = grad_fn(params).block_until_ready()
-                    
+
                     # Benchmark gradient computation
                     start = time.perf_counter()
                     for _ in range(10):
                         _ = grad_fn(params).block_until_ready()
                     elapsed = (time.perf_counter() - start) / 10
-                    
+
                     benchmarks["gradient_computation"][size] = {
                         "time_ms": elapsed * 1000,
                         "throughput": size / elapsed,  # params/second
                     }
-                    
+
                     # Test likelihood evaluation (similar to homodyne model)
                     @jit
                     def likelihood_eval(data, theory, sigma):
                         residuals = (data - theory) / sigma
                         return -0.5 * jnp.sum(residuals**2)
-                    
+
                     data = jax.device_put(jnp.ones(size), gpu_device)
                     theory = jax.device_put(jnp.ones(size) * 0.8, gpu_device)
                     sigma = jax.device_put(jnp.ones(size) * 0.1, gpu_device)
-                    
+
                     # Warmup
                     _ = likelihood_eval(data, theory, sigma).block_until_ready()
-                    
+
                     # Benchmark likelihood evaluation
                     start = time.perf_counter()
                     for _ in range(100):  # More iterations for smaller operation
                         _ = likelihood_eval(data, theory, sigma).block_until_ready()
                     elapsed = (time.perf_counter() - start) / 100
-                    
+
                     benchmarks["likelihood_evaluation"][size] = {
                         "time_ms": elapsed * 1000,
                         "evaluations_per_sec": 1.0 / elapsed,
@@ -262,8 +268,12 @@ class GPUOptimizer:
 
                 # Memory bandwidth in GB/s (read + write)
                 bytes_transferred = 2 * x_large.nbytes
-                benchmarks["memory_bandwidth"]["gb_per_sec"] = bytes_transferred / (elapsed * 1e9)
-                benchmarks["memory_bandwidth"]["test_size_mb"] = x_large.nbytes / (1024**2)
+                benchmarks["memory_bandwidth"]["gb_per_sec"] = bytes_transferred / (
+                    elapsed * 1e9
+                )
+                benchmarks["memory_bandwidth"]["test_size_mb"] = x_large.nbytes / (
+                    1024**2
+                )
 
         except Exception as e:
             logger.warning(f"JAX GPU benchmarking failed: {e}")
@@ -273,7 +283,7 @@ class GPUOptimizer:
     def determine_optimal_settings(self) -> Dict[str, Any]:
         """
         Determine optimal settings for VI+JAX and MCMC+JAX workloads.
-        
+
         Considers dataset sizes, memory requirements, and JAX-specific optimizations.
         """
         settings: Dict[str, Any] = {
@@ -291,7 +301,12 @@ class GPUOptimizer:
             settings["dataset_size_recommendations"] = {
                 "small": {"method": "VI+JAX", "batch_size": 10000},
                 "medium": {"method": "VI+JAX", "batch_size": 5000, "chunking": True},
-                "large": {"method": "VI+JAX", "batch_size": 2000, "chunking": True, "warning": "Consider GPU for large datasets"},
+                "large": {
+                    "method": "VI+JAX",
+                    "batch_size": 2000,
+                    "chunking": True,
+                    "warning": "Consider GPU for large datasets",
+                },
             }
             return settings
 
@@ -339,25 +354,27 @@ class GPUOptimizer:
                     settings["jax_settings"]["jax_enable_x64"] = True
                     settings["xla_flags"].append("--xla_gpu_enable_triton=true")
                 elif compute_cap_float >= 7.0:  # Volta/Turing (V100, RTX 20xx)
-                    settings["jax_settings"]["jax_enable_x64"] = False  # Float32 for performance
+                    settings["jax_settings"][
+                        "jax_enable_x64"
+                    ] = False  # Float32 for performance
             except (ValueError, TypeError):
                 # Fallback for invalid compute capability
                 settings["jax_settings"]["jax_enable_x64"] = False
-                
+
             # Dataset size recommendations for GPU
             settings["dataset_size_recommendations"] = {
                 "small": {
-                    "method": "VI+JAX", 
+                    "method": "VI+JAX",
                     "batch_size": settings["vi_batch_size"],
                     "gpu_utilization": "low",
-                    "memory_strategy": "full_memory"
+                    "memory_strategy": "full_memory",
                 },
                 "medium": {
-                    "method": "VI+JAX or MCMC+JAX", 
+                    "method": "VI+JAX or MCMC+JAX",
                     "vi_batch_size": settings["vi_batch_size"],
                     "mcmc_batch_size": settings["mcmc_batch_size"],
                     "gpu_utilization": "medium",
-                    "memory_strategy": "chunked_processing"
+                    "memory_strategy": "chunked_processing",
                 },
                 "large": {
                     "method": "VI+JAX (primary), MCMC+JAX (if needed)",
@@ -365,8 +382,8 @@ class GPUOptimizer:
                     "mcmc_batch_size": settings["mcmc_batch_size"] // 2,
                     "gpu_utilization": "high",
                     "memory_strategy": "streaming_chunks",
-                    "recommendation": "Use VI+JAX for exploration, MCMC+JAX for final analysis"
-                }
+                    "recommendation": "Use VI+JAX for exploration, MCMC+JAX for final analysis",
+                },
             }
 
         self.optimal_settings = settings
@@ -397,10 +414,11 @@ class GPUOptimizer:
 
                 # Check if cache is recent (7 days) and from v2
                 cache_age = time.time() - cache_data.get("timestamp", 0)
-                if (cache_age < 7 * 24 * 3600 and 
-                    cache_data.get("homodyne_version") == "v2" and
-                    cache_data.get("jax_available") == JAX_AVAILABLE):
-                    
+                if (
+                    cache_age < 7 * 24 * 3600
+                    and cache_data.get("homodyne_version") == "v2"
+                    and cache_data.get("jax_available") == JAX_AVAILABLE
+                ):
                     self.gpu_info = cache_data.get("gpu_info", {})
                     self.optimal_settings = cache_data.get("optimal_settings", {})
                     return True
@@ -450,26 +468,38 @@ class GPUOptimizer:
             for i, device in enumerate(self.gpu_info["devices"]):
                 report.append(f"   GPU {i}: {device['name']}")
                 report.append(f"      Memory: {device['memory_mb']:,} MB")
-                report.append(f"      Compute Capability: {device['compute_capability']}")
+                report.append(
+                    f"      Compute Capability: {device['compute_capability']}"
+                )
                 report.append(f"      Driver: {device['driver_version']}")
         else:
             report.append("   No NVIDIA GPU detected")
 
         # CUDA and JAX status
-        report.append(f"\n   CUDA Available: {self.gpu_info.get('cuda_available', False)}")
+        report.append(
+            f"\n   CUDA Available: {self.gpu_info.get('cuda_available', False)}"
+        )
         if self.gpu_info.get("cuda_version"):
             report.append(f"   CUDA Version: {self.gpu_info['cuda_version']}")
-        
+
         report.append(f"   JAX Available: {JAX_AVAILABLE}")
-        report.append(f"   JAX GPU Support: {self.gpu_info.get('jax_gpu_available', False)}")
+        report.append(
+            f"   JAX GPU Support: {self.gpu_info.get('jax_gpu_available', False)}"
+        )
 
         # Optimization recommendations
         report.append("\n⚙️  Optimization Settings:")
         if self.optimal_settings.get("use_gpu"):
             report.append("   ✅ GPU acceleration recommended for VI+JAX and MCMC+JAX")
-            report.append(f"   Memory fraction: {self.optimal_settings['memory_fraction']}")
-            report.append(f"   VI batch size: {self.optimal_settings['vi_batch_size']:,}")
-            report.append(f"   MCMC batch size: {self.optimal_settings['mcmc_batch_size']:,}")
+            report.append(
+                f"   Memory fraction: {self.optimal_settings['memory_fraction']}"
+            )
+            report.append(
+                f"   VI batch size: {self.optimal_settings['vi_batch_size']:,}"
+            )
+            report.append(
+                f"   MCMC batch size: {self.optimal_settings['mcmc_batch_size']:,}"
+            )
         else:
             report.append("   💻 CPU-only mode recommended")
             report.append("   VI+JAX will use CPU with NumPy fallback")
@@ -477,7 +507,9 @@ class GPUOptimizer:
         # Dataset size recommendations
         if "dataset_size_recommendations" in self.optimal_settings:
             report.append("\n📏 Dataset Size Recommendations:")
-            for size_cat, rec in self.optimal_settings["dataset_size_recommendations"].items():
+            for size_cat, rec in self.optimal_settings[
+                "dataset_size_recommendations"
+            ].items():
                 report.append(f"   {size_cat.upper()}:")
                 report.append(f"      Method: {rec['method']}")
                 if "vi_batch_size" in rec:
@@ -489,6 +521,7 @@ class GPUOptimizer:
 
         report.append("\n" + "=" * 70)
         return "\n".join(report)
+
 
 def main():
     """Main function for GPU optimization CLI."""
@@ -507,10 +540,16 @@ Examples:
         """,
     )
 
-    parser.add_argument("--benchmark", action="store_true", help="Run JAX GPU benchmarks")
+    parser.add_argument(
+        "--benchmark", action="store_true", help="Run JAX GPU benchmarks"
+    )
     parser.add_argument("--apply", action="store_true", help="Apply optimal settings")
-    parser.add_argument("--report", action="store_true", help="Generate optimization report")
-    parser.add_argument("--force", action="store_true", help="Force re-detection (ignore cache)")
+    parser.add_argument(
+        "--report", action="store_true", help="Generate optimization report"
+    )
+    parser.add_argument(
+        "--force", action="store_true", help="Force re-detection (ignore cache)"
+    )
 
     args = parser.parse_args()
 
@@ -530,10 +569,14 @@ Examples:
             if benchmarks.get("matrix_operations"):
                 print("\n📊 JAX Benchmark Results:")
                 for size, result in benchmarks["matrix_operations"].items():
-                    print(f"   Matrix {size}x{size}: {result['time_ms']:.2f}ms ({result['gflops']:.1f} GFLOPS)")
+                    print(
+                        f"   Matrix {size}x{size}: {result['time_ms']:.2f}ms ({result['gflops']:.1f} GFLOPS)"
+                    )
 
                 if benchmarks.get("memory_bandwidth", {}).get("gb_per_sec"):
-                    print(f"   Memory Bandwidth: {benchmarks['memory_bandwidth']['gb_per_sec']:.1f} GB/s")
+                    print(
+                        f"   Memory Bandwidth: {benchmarks['memory_bandwidth']['gb_per_sec']:.1f} GB/s"
+                    )
 
         optimizer.determine_optimal_settings()
         optimizer.save_optimization_cache()
@@ -543,6 +586,7 @@ Examples:
 
     if args.report or not any([args.benchmark, args.apply]):
         print(optimizer.generate_report())
+
 
 if __name__ == "__main__":
     main()

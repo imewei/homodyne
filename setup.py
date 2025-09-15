@@ -138,7 +138,6 @@ PACKAGE_DATA = {
     "homodyne": [
         "config/templates/**/*.yaml",
         "config/templates/**/*.json",
-        "data/examples/**/*",
         "docs/**/*.md",
         "tests/data/**/*",
     ]

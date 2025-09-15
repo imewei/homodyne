@@ -8,15 +8,15 @@ optimization methods with enhanced performance.
 Entry point for console script: homodyne [args]
 """
 
-import sys
 import logging
+import sys
 from pathlib import Path
 from typing import Optional
 
-from homodyne.utils.logging import get_logger
 from homodyne.cli.args_parser import create_parser
 from homodyne.cli.commands import dispatch_command
 from homodyne.cli.validators import validate_args
+from homodyne.utils.logging import get_logger
 
 
 def check_python_version() -> None:
@@ -41,13 +41,39 @@ def setup_logging(args) -> None:
         log_level = logging.ERROR
     else:
         log_level = logging.INFO
-    
-    # Configure root logger
-    logging.basicConfig(
-        level=log_level,
-        format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-        datefmt='%Y-%m-%d %H:%M:%S'
-    )
+
+    # Configure handlers list
+    handlers = []
+
+    # Console handler (unless quiet)
+    if not args.quiet:
+        console_handler = logging.StreamHandler()
+        console_handler.setLevel(log_level)
+        console_formatter = logging.Formatter(
+            "%(asctime)s | %(levelname)-5s | %(name)s.%(funcName)s | %(message)s",
+            datefmt="%Y-%m-%d %H:%M:%S",
+        )
+        console_handler.setFormatter(console_formatter)
+        handlers.append(console_handler)
+
+    # File handler (if --log-file specified)
+    if getattr(args, "log_file", False):
+        # Create logs directory in output_dir
+        log_dir = Path(args.output_dir) / "logs"
+        log_dir.mkdir(parents=True, exist_ok=True)
+
+        log_file = log_dir / "homodyne.log"
+        file_handler = logging.FileHandler(log_file)
+        file_handler.setLevel(logging.DEBUG)  # File gets all messages
+        file_formatter = logging.Formatter(
+            "%(asctime)s | %(levelname)-5s | %(name)s.%(funcName)s | %(message)s",
+            datefmt="%Y-%m-%d %H:%M:%S",
+        )
+        file_handler.setFormatter(file_formatter)
+        handlers.append(file_handler)
+
+    # Configure root logger with handlers
+    logging.basicConfig(level=log_level, handlers=handlers, force=True)
 
 
 def print_banner() -> None:
@@ -69,32 +95,38 @@ def print_banner() -> None:
 def main() -> int:
     """
     Main CLI entry point for homodyne scattering analysis.
-    
+
     Provides complete interface for XPCS analysis under nonequilibrium
     conditions with JAX-accelerated optimization methods.
-    
+
     Returns:
         Exit code: 0 for success, 1 for error, 2 for invalid arguments
     """
     try:
         # Check Python version requirement
         check_python_version()
-        
+
         # Create argument parser and parse arguments
         parser = create_parser()
         args = parser.parse_args()
-        
+
         # Setup logging based on arguments
         setup_logging(args)
         logger = get_logger(__name__)
-        
+
         # Print banner unless quiet mode
         if not args.quiet:
             print_banner()
-        
+
         logger.info("Starting Homodyne v2 analysis")
+
+        # Log file logging status
+        if getattr(args, "log_file", False):
+            log_file_path = Path(args.output_dir) / "logs" / "homodyne.log"
+            logger.info(f"📝 File logging enabled: {log_file_path}")
+
         logger.debug(f"Command line arguments: {vars(args)}")
-        
+
         # Validate arguments
         try:
             validate_args(args)
@@ -102,17 +134,17 @@ def main() -> int:
         except ValueError as e:
             logger.error(f"❌ Invalid arguments: {e}")
             return 2
-        
+
         # Dispatch to appropriate command handler
         exit_code = dispatch_command(args)
-        
+
         if exit_code == 0:
             logger.info("✓ Homodyne analysis completed successfully")
         else:
             logger.error(f"❌ Analysis failed with exit code {exit_code}")
-        
+
         return exit_code
-        
+
     except KeyboardInterrupt:
         print("\n\n❌ Analysis interrupted by user", file=sys.stderr)
         return 1
@@ -120,8 +152,9 @@ def main() -> int:
         return e.code if e.code is not None else 1
     except Exception as e:
         print(f"\n❌ Unexpected error: {e}", file=sys.stderr)
-        if '--verbose' in sys.argv or '--debug' in sys.argv:
+        if "--verbose" in sys.argv or "--debug" in sys.argv:
             import traceback
+
             traceback.print_exc()
         return 1
 

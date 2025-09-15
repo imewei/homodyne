@@ -40,7 +40,7 @@ Implements the theoretical framework from [He et al. PNAS 2024](https://doi.org/
 - **Interactive configuration**: `homodyne-config` with guided setup
 - **Flexible logging**: Verbose, quiet, and file-only logging modes
 - **Rich visualizations**: Correlation heatmaps, 3D surfaces, diagnostic plots
-- **Extensive documentation**: Complete user guides, API reference, and examples
+- **Extensive documentation**: Complete user guides, API reference, and tutorials
 
 ---
 
@@ -390,7 +390,7 @@ homodyne-validate 2>/dev/null || echo "✅ Successfully uninstalled"
 ### Complete Documentation
 
 - **Primary Site**: https://homodyne.readthedocs.io/
-- **User Guides**: Installation, quickstart, configuration, examples
+- **User Guides**: Installation, quickstart, configuration, tutorials
 - **Developer Resources**: Architecture, contributing, performance, troubleshooting
 - **API Reference**: Core analysis, optimization methods, utilities
 

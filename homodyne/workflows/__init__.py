@@ -11,19 +11,14 @@ Complete analysis orchestration system coordinating:
 
 Main Components:
 - pipeline.py: Main analysis orchestrator
-- executor.py: Method execution controller  
+- executor.py: Method execution controller
 - results_manager.py: Results handling and export
 - plotting_controller.py: Visualization coordination
 """
 
-from homodyne.workflows.pipeline import AnalysisPipeline
 from homodyne.workflows.executor import MethodExecutor
-from homodyne.workflows.results_manager import ResultsManager
+from homodyne.workflows.pipeline import AnalysisPipeline
 from homodyne.workflows.plotting_controller import PlottingController
+from homodyne.workflows.results_manager import ResultsManager
 
-__all__ = [
-    "AnalysisPipeline",
-    "MethodExecutor", 
-    "ResultsManager",
-    "PlottingController"
-]
+__all__ = ["AnalysisPipeline", "MethodExecutor", "ResultsManager", "PlottingController"]

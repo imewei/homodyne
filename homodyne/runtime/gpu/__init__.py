@@ -15,13 +15,16 @@ This module provides:
 # Handle imports with graceful fallback
 try:
     from homodyne.runtime.gpu.optimizer import GPUOptimizer
+
     OPTIMIZER_AVAILABLE = True
 except ImportError:
     GPUOptimizer = None
     OPTIMIZER_AVAILABLE = False
 
 try:
-    from homodyne.runtime.gpu.wrapper import activate_gpu, setup_gpu_environment
+    from homodyne.runtime.gpu.wrapper import (activate_gpu,
+                                              setup_gpu_environment)
+
     WRAPPER_AVAILABLE = True
 except ImportError:
     activate_gpu = None

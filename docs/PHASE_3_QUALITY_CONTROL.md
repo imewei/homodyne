@@ -378,8 +378,6 @@ homodyne/
 ├── config/templates/v2_yaml/
 │   ├── config_quality_control_template.yaml  # Comprehensive template
 │   └── config_default_template.yaml   # Updated with quality control
-├── examples/
-│   └── quality_control_demo.py        # Demonstration script
 └── docs/
     └── PHASE_3_QUALITY_CONTROL.md     # This documentation
 ```
@@ -393,19 +391,22 @@ homodyne/
 
 ### Quality Control System Testing
 
-Run the demonstration script to test quality control features:
+Test quality control features by enabling them in your configuration:
 
-```bash
-cd /path/to/homodyne
-python examples/quality_control_demo.py
+```yaml
+quality_control:
+  enabled: true
+  reporting:
+    export_detailed_reports: true
+    generate_reports: true
 ```
 
-This demonstrates:
-- Progressive quality validation
-- Auto-repair functionality
-- Quality reporting system
-- Incremental validation performance
-- Integration with existing systems
+Then run your analysis - quality control will demonstrate:
+- Progressive quality validation through all processing stages
+- Auto-repair functionality for common data issues
+- Quality reporting system with JSON export
+- Incremental validation performance optimizations
+- Integration with existing filtering and preprocessing systems
 
 ### Validation Criteria
 

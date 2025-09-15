@@ -1,0 +1,625 @@
+# Homodyne v2.1 Comprehensive Default Configuration Template
+# =========================================================
+# Master reference template containing all available configuration options
+# with comprehensive documentation and examples for all three analysis modes.
+# Includes new discrete numerical integration and mandatory diagonal correction.
+#
+# This template serves as:
+# - Complete reference documentation for all parameters
+# - Starting point for custom configurations
+# - Examples of advanced features and optimizations
+# - Migration guide from v1 to v2 configurations
+#
+# Usage:
+#   1. Copy this template and customize for your analysis
+#   2. Choose one analysis_mode: static_isotropic, static_anisotropic, or laminar_flow
+#   3. Adjust parameters based on your experimental setup
+#   4. Enable/disable optional features as needed
+
+# ==============================================================================
+# METADATA - Template Information and Documentation
+# ==============================================================================
+metadata:
+  config_version: "2.1"
+  description: "Comprehensive Homodyne v2.1 configuration template with discrete integration and mandatory diagonal correction"
+  template_type: "master_reference"
+  created_by: "Homodyne v2.1 Configuration System"
+  created_date: "2025-09-15"
+  major_updates:
+    - "Discrete numerical integration for anomalous diffusion stability"
+    - "Mandatory diagonal correction for data consistency"
+    - "Enhanced support for α ≤ -1 parameter regimes"
+  
+  # Analysis mode documentation
+  supported_modes:
+    static_isotropic: "3-parameter static diffusion analysis (single angle)"
+    static_anisotropic: "3-parameter static diffusion with multi-angle analysis"
+    laminar_flow: "7-parameter nonequilibrium laminar flow analysis"
+  
+  # Feature overview
+  available_features:
+    - "All three analysis modes with proper parameter configurations"
+    - "Discrete numerical integration for anomalous diffusion stability (α ≤ -1)"
+    - "Mandatory diagonal correction for data consistency and accuracy"
+    - "Advanced optimization methods: VI (primary), MCMC, Hybrid pipeline"
+    - "Comprehensive parameter bounds and physics constraints"
+    - "Multi-level performance optimization and caching"
+    - "Quality control with data validation and auto-repair"
+    - "Enhanced logging with scientific computing contexts"
+    - "Phi angle filtering for anisotropic and laminar flow modes"
+    - "HPC and GPU optimization support"
+    - "Advanced preprocessing and data manipulation"
+
+# ==============================================================================
+# CORE ANALYSIS CONFIGURATION
+# ==============================================================================
+
+# REQUIRED: Analysis mode selection (choose ONE)
+analysis_mode: "static_isotropic"  # Options: static_isotropic | static_anisotropic | laminar_flow
+
+# REQUIRED: Core physics parameters for XPCS analysis
+analyzer_parameters:
+  # Time step between correlation measurements (seconds)
+  # Typical values: 0.01-1.0 seconds depending on experiment
+  dt: 0.1
+  
+  # Frame range for analysis
+  # For static modes: 1000-2000 frames typical
+  # For laminar flow: 2000+ frames recommended for better statistics
+  start_frame: 1
+  end_frame: 1000
+  
+  # Alternative nested structure (both formats supported)
+  temporal:
+    dt: 0.1
+    start_frame: 1
+    end_frame: 1000
+    frame_interval: 1  # Skip frames if needed (1 = use all frames)
+  
+  # Scattering parameters
+  scattering:
+    # Wave vector magnitude in Å⁻¹ (sample-dependent)
+    # Typical range: 0.001-0.1 Å⁻¹ for XPCS experiments
+    wavevector_q: 0.0054
+    
+    # Optional: multiple q values for comprehensive analysis
+    # wavevector_q_list: [0.0054, 0.0108, 0.0162]
+  
+  # Geometry parameters (instrumental setup - do not change without good reason)
+  geometry:
+    # Stator-rotor gap in Angstroms (200 microns = 2,000,000 Å)
+    # This is an instrumental parameter specific to your setup
+    stator_rotor_gap: 2000000
+    
+    # Optional: detector distance and geometry
+    # detector_distance: 1000.0  # mm
+    # beam_size: [100, 100]      # microns
+
+# REQUIRED: Analysis mode-specific settings
+analysis_settings:
+  # Static mode flag (true for static_isotropic and static_anisotropic)
+  static_mode: true  # Set to false for laminar_flow
+  
+  # Static submode specification
+  static_submode: "isotropic"  # Options: isotropic | anisotropic
+  
+  # Model description for documentation
+  model_description:
+    type: "static_diffusion"  # static_diffusion | nonequilibrium_laminar_flow
+    parameters: 3             # 3 for static modes, 7 for laminar_flow
+    physics: "D(t) = D₀·t^α + D_offset"  # Physical model equation
+
+# ==============================================================================
+# DATA CONFIGURATION
+# ==============================================================================
+
+# REQUIRED: Experimental data file locations
+experimental_data:
+  # Primary data file path and name
+  data_folder_path: "./data/sample/"
+  data_file_name: "your_xpcs_data.hdf"
+  
+  # Phi angles configuration (required for anisotropic and laminar_flow)
+  phi_angles_path: "./data/phi_angles/"
+  phi_angles_file: "phi_list.txt"
+  
+  # Optional: manual phi angle specification
+  # phi_angles_manual: [0, 45, 90, 135, 180]  # degrees
+  
+  # Data exchange format configuration
+  exchange_key: "exchange"  # HDF5 data exchange key
+  
+  # Caching configuration for performance
+  cache_file_path: "./data/sample/"
+  cache_filename_template: "cached_c2_q{wavevector_q:.4f}_frames_{start_frame}_{end_frame}.npz"
+  cache_compression: true
+  
+  # Data format options
+  data_type: "float64"      # float32 | float64
+  file_format: "HDF5"       # HDF5 | NPZ
+  
+  # Optional: data preprocessing
+  preprocessing:
+    apply_diagonal_correction: false
+    vectorized_correction: true
+    cache_processed_data: true
+    normalize_data: false
+    normalization_method: "baseline"  # baseline | zscore | minmax
+
+# ==============================================================================
+# PARAMETER CONFIGURATION
+# ==============================================================================
+
+# REQUIRED: Initial parameter values (mode-dependent)
+initial_parameters:
+  # Static modes (3 parameters): D₀, α, D_offset
+  # Laminar flow (7 parameters): D₀, α, D_offset, γ̇₀, β, γ̇_offset, φ₀
+  
+  # Parameter names (adjust based on analysis_mode)
+  parameter_names: ["D0", "alpha", "D_offset"]
+  
+  # Initial values for optimization
+  # These should be reasonable estimates based on your system
+  values: [1000.0, -1.2, 0.0]  # Conservative values that typically work
+  
+  # Units for reference
+  units: ["Å²/s", "dimensionless", "Å²/s"]
+  
+  # Optional: specify which parameters to optimize (defaults to all)
+  active_parameters: ["D0", "alpha", "D_offset"]
+  
+  # Example for laminar_flow mode (uncomment and adjust if needed):
+  # parameter_names: ["D0", "alpha", "D_offset", "gamma_dot_0", "beta", "gamma_dot_offset", "phi_0"]
+  # values: [1000.0, -1.2, 0.0, 0.01, 0.5, 0.0, 0.0]
+  # units: ["Å²/s", "dimensionless", "Å²/s", "s⁻¹", "dimensionless", "s⁻¹", "degrees"]
+
+# REQUIRED: Parameter bounds and constraints
+parameter_space:
+  bounds:
+    # Diffusion coefficient D₀ bounds
+    - name: D0
+      min: 1.0
+      max: 100000.0
+      type: TruncatedNormal
+      prior_mu: 1000.0
+      prior_sigma: 500.0
+      unit: "Å²/s"
+      description: "Diffusion coefficient prefactor"
+    
+    # Anomalous exponent α bounds
+    - name: alpha
+      min: -2.0
+      max: 0.0
+      type: Normal
+      prior_mu: -1.2
+      prior_sigma: 0.2
+      unit: "dimensionless"
+      description: "Anomalous diffusion exponent"
+    
+    # Diffusion offset D_offset bounds
+    - name: D_offset
+      min: -1000.0
+      max: 1000.0
+      type: Normal
+      prior_mu: 0.0
+      prior_sigma: 100.0
+      unit: "Å²/s"
+      description: "Diffusion coefficient offset"
+    
+    # Additional parameters for laminar_flow mode (uncomment if needed):
+    # - name: gamma_dot_t0
+    #   min: 1.0e-6
+    #   max: 1.0
+    #   type: TruncatedNormal
+    #   prior_mu: 0.01
+    #   prior_sigma: 0.005
+    #   unit: "s⁻¹"
+    #   description: "Shear rate prefactor"
+    # 
+    # - name: beta
+    #   min: -2.0
+    #   max: 2.0
+    #   type: Normal
+    #   prior_mu: 0.0
+    #   prior_sigma: 0.5
+    #   unit: "dimensionless"
+    #   description: "Shear rate time exponent"
+    # 
+    # - name: gamma_dot_t_offset
+    #   min: -0.1
+    #   max: 0.1
+    #   type: Normal
+    #   prior_mu: 0.0
+    #   prior_sigma: 0.01
+    #   unit: "s⁻¹"
+    #   description: "Shear rate offset"
+    # 
+    # - name: phi0
+    #   min: -180.0
+    #   max: 180.0
+    #   type: Normal
+    #   prior_mu: 0.0
+    #   prior_sigma: 30.0
+    #   unit: "degrees"
+    #   description: "Flow direction angle"
+
+# ==============================================================================
+# OPTIMIZATION CONFIGURATION
+# ==============================================================================
+
+# REQUIRED: Optimization methods and settings
+optimization:
+  # Variational Inference (VI) - Primary optimization method
+  vi:
+    enabled: true
+    max_iterations: 1000      # Increase for complex problems
+    learning_rate: 0.01       # Decrease if optimization is unstable
+    convergence_tolerance: 1e-6
+    batch_size: "auto"        # auto | integer value
+    early_stopping: true
+    patience: 50              # Iterations without improvement before stopping
+  
+  # Markov Chain Monte Carlo (MCMC) - For uncertainty quantification
+  mcmc:
+    enabled: true
+    num_samples: 2000         # Increase for better posterior sampling
+    num_warmup: 1000          # Warmup/burn-in samples
+    num_chains: 4             # Multiple chains for convergence diagnostics
+    target_accept_prob: 0.8   # Target acceptance probability
+    max_treedepth: 10         # Maximum tree depth for NUTS sampler
+  
+  # Hybrid VI→MCMC pipeline - Best of both methods
+  hybrid:
+    enabled: false            # Enable for production-quality results
+    vi_initialization: true   # Use VI results to initialize MCMC
+    vi_samples_for_init: 500  # Number of VI samples for MCMC initialization
+    transition_criterion: "convergence"  # convergence | iteration_limit
+
+# ==============================================================================
+# ANGLE FILTERING CONFIGURATION (for anisotropic and laminar_flow modes)
+# ==============================================================================
+
+# Phi angle filtering for multi-angle analysis
+phi_filtering:
+  enabled: false  # Set to true for static_anisotropic or laminar_flow
+  
+  # Target angle ranges for analysis (in degrees)
+  target_ranges:
+    # Near 0° and 180° for optimal scattering contrast
+    - min_angle: -10.0
+      max_angle: 10.0
+    - min_angle: 170.0
+      max_angle: 190.0
+  
+  # Additional ranges for laminar flow analysis
+  laminar_flow_ranges:
+    - min_angle: -30.0
+      max_angle: 30.0
+    - min_angle: 60.0
+      max_angle: 120.0
+    - min_angle: 150.0
+      max_angle: 210.0
+    - min_angle: 240.0
+      max_angle: 300.0
+  
+  # Fallback behavior if no angles match target ranges
+  fallback_to_all_angles: true
+  
+  # Angle filtering algorithm
+  algorithm: "range_based"    # range_based | statistical | adaptive
+  tolerance: 2.0              # Angular tolerance in degrees
+
+# ==============================================================================
+# NOISE ESTIMATION CONFIGURATION (Hybrid NumPyro Models)
+# ==============================================================================
+
+# Advanced noise standard deviation estimation using hybrid NumPyro models
+# Eliminates the need for pre-computed sigma values in HDF5/NPZ files
+noise_estimation:
+  enabled: false              # Enable hybrid NumPyro noise estimation
+  
+  # Noise model selection
+  model: "hierarchical"       # "hierarchical" | "per_angle" | "adaptive"
+  
+  # Model-specific configurations
+  hierarchical:
+    # Single global noise parameter (fastest, most robust)
+    description: "Single noise parameter for all data"
+    recommended_for: "isotropic data, routine analysis"
+    adam_steps: 300           # Adam optimization steps for noise estimation
+    
+  per_angle:
+    # Independent noise for each phi angle (for anisotropic data)
+    description: "Independent noise for each phi angle"
+    recommended_for: "anisotropic data, multi-angle analysis"  
+    adam_steps: 500           # More steps needed for multi-parameter estimation
+    
+  adaptive:
+    # Heteroscedastic noise scaling with signal strength (most sophisticated)
+    description: "Noise scaling with signal strength: σ = σ_base × (1 + σ_scale × |signal|)"
+    recommended_for: "varying signal quality, advanced analysis"
+    adam_steps: 750           # Most steps needed for complex model
+  
+  # Adam optimization settings for noise estimation
+  adam_config:
+    learning_rate: 0.01       # Adam learning rate
+    convergence_threshold: 1e-6  # Convergence tolerance
+    max_epochs: 1000          # Maximum Adam epochs
+    early_stopping: true      # Enable early stopping
+    
+  # Prior distributions for noise parameters
+  priors:
+    sigma_concentration: 2.0  # Gamma distribution concentration (shape)
+    sigma_rate: 20.0          # Gamma distribution rate (inverse scale)
+    sigma_base_range: [0.001, 1.0]  # Range for base noise (adaptive model)
+    sigma_scale_range: [0.0, 0.5]   # Range for noise scaling (adaptive model)
+  
+  # Posterior sampling for uncertainty quantification
+  posterior_samples: 1000     # Number of posterior samples for VI pipeline
+  
+  # Method-specific behavior
+  method_integration:
+    vi_pipeline: "fast_point_estimates"    # Extract point estimates for VI
+    mcmc_pipeline: "joint_sampling"        # Full joint NUTS sampling
+    hybrid_pipeline: "noise_then_physics"  # Noise estimation → VI → MCMC
+    
+  # Quality control for noise estimation
+  validation:
+    check_convergence: true   # Verify Adam convergence
+    reasonable_range: [1e-4, 1.0]  # Sanity check for estimated noise levels
+    warn_outliers: true       # Warn if noise estimates seem unrealistic
+    
+# ==============================================================================
+# PERFORMANCE OPTIMIZATION
+# ==============================================================================
+
+# Performance optimization settings
+performance:
+  # Master performance control
+  performance_engine_enabled: false  # Enable for large datasets (>1GB)
+  
+  # Memory management
+  memory_optimization:
+    enabled: true
+    max_memory_usage_gb: 8.0
+    chunk_size: 10000         # Data processing chunk size
+    enable_caching: true
+    cache_strategy: "adaptive"  # adaptive | aggressive | conservative
+  
+  # I/O optimization
+  io_optimization:
+    memory_mapped_io: false   # Enable for very large files
+    parallel_loading: true
+    prefetch_buffer_size: 100000
+    compression_level: 6      # 0-9, higher = more compression, slower
+  
+  # Computational optimization
+  computation:
+    enable_jit: true          # JAX JIT compilation
+    gpu_acceleration: "auto"  # auto | force | disable
+    cpu_threads: "auto"       # auto | integer value
+    vectorization_level: "high"  # low | medium | high
+
+# ==============================================================================
+# QUALITY CONTROL AND VALIDATION
+# ==============================================================================
+
+# Data quality control (optional but recommended)
+quality_control:
+  enabled: false              # Enable for production analysis
+  
+  # Progressive validation throughout pipeline
+  progressive_validation:
+    enabled: true
+    validate_loading: true
+    validate_preprocessing: true
+    validate_filtering: true
+  
+  # Auto-repair functionality
+  auto_repair:
+    enabled: true
+    strategy: "conservative"  # conservative | aggressive
+    max_repair_attempts: 3
+    backup_original: true
+  
+  # Quality thresholds
+  thresholds:
+    min_data_points: 1000
+    max_nan_fraction: 0.01
+    min_correlation_range: [0.8, 1.2]
+    max_noise_level: 0.1
+  
+  # Quality reporting
+  reporting:
+    enabled: true
+    export_format: "json"     # json | yaml | html
+    include_plots: false
+    detailed_diagnostics: true
+
+# ==============================================================================
+# LOGGING CONFIGURATION
+# ==============================================================================
+
+# Comprehensive logging system
+logging:
+  enabled: true
+  level: "INFO"               # DEBUG | INFO | WARNING | ERROR
+  
+  # Console output
+  console:
+    enabled: true
+    level: "INFO"
+    format: "detailed"        # simple | detailed | scientific
+    colors: true
+    show_progress: true
+  
+  # File logging
+  file:
+    enabled: false            # Enable for persistent logging
+    level: "DEBUG"
+    path: "~/.homodyne/logs/"
+    filename: "homodyne.log"
+    max_size_mb: 10
+    backup_count: 5
+  
+  # Performance logging
+  performance:
+    enabled: false            # Enable for performance monitoring
+    level: "INFO"
+    filename: "performance.log"
+    threshold_seconds: 0.1    # Log operations slower than this
+  
+  # Module-specific logging levels
+  modules:
+    "homodyne.optimization.variational": "INFO"
+    "homodyne.optimization.mcmc": "INFO"
+    "homodyne.data.xpcs_loader": "INFO"
+    "homodyne.core.fitting": "DEBUG"
+    "jax._src": "WARNING"     # Suppress JAX compilation messages
+  
+  # Scientific computing contexts
+  scientific_contexts:
+    xpcs_validation: true     # Log XPCS-specific validation
+    physics_checks: true     # Log physics constraint validation
+    numerical_stability: true # Log numerical stability warnings
+  
+  # Advanced debugging
+  debugging:
+    error_recovery: true      # Log error recovery attempts
+    detailed_tracebacks: false # Include full tracebacks in logs
+    log_intermediate_results: false # Log intermediate calculation results
+
+# ==============================================================================
+# HARDWARE AND HPC CONFIGURATION
+# ==============================================================================
+
+# Hardware optimization settings
+hardware:
+  # GPU configuration
+  gpu:
+    enabled: "auto"           # auto | force | disable
+    memory_fraction: 0.8      # Fraction of GPU memory to use
+    allow_growth: true        # Allow GPU memory to grow dynamically
+    device_preference: "auto" # auto | cuda | opencl
+  
+  # CPU configuration
+  cpu:
+    num_threads: "auto"       # auto | integer value
+    affinity: "auto"          # auto | list of CPU cores
+    optimization_level: "high" # low | medium | high
+  
+  # HPC cluster settings
+  hpc:
+    distributed_computing: false
+    node_communication: "mpi"  # mpi | nccl
+    load_balancing: "dynamic"  # static | dynamic
+    fault_tolerance: true
+
+# ==============================================================================
+# ADVANCED FEATURES AND EXPERIMENTAL OPTIONS
+# ==============================================================================
+
+# Advanced analysis features
+advanced:
+  # Multi-method workflow
+  multi_method_analysis:
+    enabled: false
+    methods: ["vi", "mcmc"]   # Run multiple methods and compare
+    comparison_metrics: ["chi_squared", "aic", "bic"]
+  
+  # Uncertainty propagation
+  uncertainty_analysis:
+    enabled: false
+    method: "bootstrap"       # bootstrap | bayesian | analytical
+    num_bootstrap_samples: 1000
+    confidence_intervals: [0.68, 0.95]
+  
+  # Model comparison
+  model_comparison:
+    enabled: false
+    compare_modes: ["static_isotropic", "static_anisotropic"]
+    selection_criterion: "aic" # aic | bic | cross_validation
+  
+  # Experimental features (use with caution)
+  experimental:
+    adaptive_sampling: false   # Adaptive MCMC sampling
+    neural_network_surrogate: false # Neural network model surrogates
+    active_learning: false     # Active learning for parameter estimation
+
+# ==============================================================================
+# OUTPUT AND REPORTING
+# ==============================================================================
+
+# Output configuration
+output:
+  # Base output directory
+  base_directory: "./homodyne_results/"
+  
+  # Output formats
+  formats:
+    hdf5: true               # Primary output format
+    json: true               # Human-readable parameter export
+    csv: true                # Tabular data export
+    yaml: false              # Configuration backup
+  
+  # Plotting and visualization
+  plots:
+    enabled: true
+    formats: ["png", "pdf"]  # Output formats for plots
+    dpi: 300                 # Resolution for raster plots
+    style: "publication"     # publication | presentation | notebook
+    
+    # Plot types to generate
+    correlation_function: true
+    fit_quality: true
+    parameter_distributions: true
+    residual_analysis: true
+    convergence_diagnostics: true
+  
+  # Reporting
+  reports:
+    enabled: false           # Generate comprehensive analysis reports
+    format: "html"           # html | pdf | markdown
+    include_methodology: true
+    include_diagnostics: true
+    template: "standard"     # standard | detailed | minimal
+
+# ==============================================================================
+# VALIDATION AND TESTING
+# ==============================================================================
+
+# Configuration validation settings
+validation:
+  strict_mode: false         # Enable strict validation (recommended for production)
+  check_file_existence: true
+  validate_parameter_ranges: true
+  check_mode_compatibility: true
+  warn_about_defaults: true
+  
+  # Test configuration with synthetic data
+  test_configuration:
+    enabled: false           # Enable for configuration testing
+    synthetic_data_size: [100, 100]
+    test_all_methods: true
+    quick_validation: true
+
+# ==============================================================================
+# END OF COMPREHENSIVE CONFIGURATION TEMPLATE
+# ==============================================================================
+
+# This template includes all available options for Homodyne v2.
+# Most users will only need to modify:
+# 1. analysis_mode (choose one of the three modes)
+# 2. analyzer_parameters (adjust for your experiment)
+# 3. experimental_data (point to your data files)
+# 4. initial_parameters (provide reasonable starting values)
+# 5. optimization settings (adjust iterations/convergence as needed)
+#
+# For advanced users:
+# - Enable performance optimization for large datasets
+# - Configure quality control for production analysis
+# - Set up comprehensive logging for debugging
+# - Use advanced features for specialized analysis needs
+#
+# For questions or support, refer to the Homodyne v2 documentation
+# or contact the development team.

@@ -6,7 +6,7 @@ This package contains comprehensive tests for the Homodyne v2 enhanced data load
 
 Test Organization:
 - integration/: End-to-end integration tests
-- performance/: Performance and scalability tests  
+- performance/: Performance and scalability tests
 - robustness/: Edge cases, error handling, stress tests
 - config/: Configuration system tests
 - data/: Test data generators and utilities

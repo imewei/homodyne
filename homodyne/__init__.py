@@ -3,19 +3,19 @@ Homodyne Scattering Analysis Package v2
 ========================================
 
 High-performance Python package for analyzing homodyne scattering in X-ray Photon
-Correlation Spectroscopy (XPCS) under nonequilibrium conditions. 
+Correlation Spectroscopy (XPCS) under nonequilibrium conditions.
 
 Completely rebuilt with JAX-first architecture for modern HPC environments.
 
 Key Features:
 - JAX-powered computation: 10-50x performance improvements with GPU/TPU support
-- Simplified optimization: VI (primary) → MCMC (optional) pipeline  
+- Simplified optimization: VI (primary) → MCMC (optional) pipeline
 - HPC integration: Native PBS Professional and distributed computing
 - Extensible architecture: Plugin system for models and optimizers
 
 Core Analysis Modes:
 - Static Isotropic (3 parameters): D₀, α, D_offset
-- Static Anisotropic (3 parameters): D₀, α, D_offset with angle filtering  
+- Static Anisotropic (3 parameters): D₀, α, D_offset with angle filtering
 - Laminar Flow (7 parameters): + γ̇₀, β, γ̇_offset, φ₀
 
 Optimization Methods:
@@ -40,41 +40,36 @@ Institution: Argonne National Laboratory
 
 # Version information
 __version__ = "2.0.0-alpha"
-__author__ = "Wei Chen, Hongrui He"  
+__author__ = "Wei Chen, Hongrui He"
 __email__ = "wchen@anl.gov"
 __institution__ = "Argonne National Laboratory"
 
-# Core v2 API - New JAX-first implementation
-from homodyne.core.models import DiffusionModel, ShearModel, CombinedModel
-from homodyne.optimization.variational import VariationalInferenceJAX
-from homodyne.optimization.mcmc import MCMCJAXSampler
-from homodyne.optimization.hybrid import HybridOptimizer
-
 # Configuration and workflow management
 from homodyne.config.manager import ConfigManager
-from homodyne.workflows.pipeline import AnalysisPipeline
-
+# Core v2 API - New JAX-first implementation
+from homodyne.core.models import CombinedModel, DiffusionModel, ShearModel
 # Data loading with YAML configuration
 from homodyne.data.xpcs_loader import XPCSDataLoader, load_xpcs_data
-
+from homodyne.optimization.hybrid import HybridOptimizer
+from homodyne.optimization.mcmc import MCMCJAXSampler
+from homodyne.optimization.variational import VariationalInferenceJAX
 # Utilities (preserve existing logging system)
 from homodyne.utils.logging import get_logger
-
+from homodyne.workflows.pipeline import AnalysisPipeline
 
 __all__ = [
     # Core v2 API
-    "DiffusionModel", 
+    "DiffusionModel",
     "ShearModel",
     "CombinedModel",
     "VariationalInferenceJAX",
-    "MCMCJAXSampler", 
+    "MCMCJAXSampler",
     "HybridOptimizer",
     "ConfigManager",
     "AnalysisPipeline",
     "XPCSDataLoader",
     "load_xpcs_data",
     "get_logger",
-    
 ]
 
 # Package metadata

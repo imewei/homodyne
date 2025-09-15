@@ -51,10 +51,8 @@ Enhanced Logging System
 │   ├── enhanced_logging_manager.py    # Enhanced config management (NEW)
 │   └── templates/v2_yaml/
 │       └── config_enhanced_logging_template.yaml (NEW)
-├── Documentation (docs/)
-│   └── enhanced_logging_guide.md      # Comprehensive guide (NEW)
-└── Examples (examples/)
-    └── enhanced_logging_examples.py   # Practical examples (NEW)
+└── Documentation (docs/)
+    └── enhanced_logging_guide.md      # Comprehensive guide (NEW)
 ```
 
 ## 🛠 Installation & Setup
@@ -214,20 +212,17 @@ See [`config_enhanced_logging_template.yaml`](homodyne/config/templates/v2_yaml/
 The system includes comprehensive examples demonstrating all features:
 
 ```bash
-# Run all examples
-python examples/enhanced_logging_examples.py
+# Enable enhanced logging in your analysis
+python -m homodyne --method vi --config your_config.yaml --verbose
 
-# Run specific examples
-python examples/enhanced_logging_examples.py 1  # Basic setup
-python examples/enhanced_logging_examples.py 2  # JAX logging
-python examples/enhanced_logging_examples.py 3  # Scientific contexts
-python examples/enhanced_logging_examples.py 4  # Advanced debugging
-python examples/enhanced_logging_examples.py 5  # Production monitoring
-python examples/enhanced_logging_examples.py 6  # Distributed computing
-python examples/enhanced_logging_examples.py 7  # Complete pipeline
+# Enable file logging
+python -m homodyne --method vi --config your_config.yaml --log-file
 
-# Distributed example with MPI
-mpirun -n 4 python examples/enhanced_logging_examples.py 6
+# Quiet mode (file logging only)
+python -m homodyne --method vi --config your_config.yaml --quiet --log-file
+
+# Distributed analysis with enhanced logging
+mpirun -n 4 python -m homodyne --method mcmc --config distributed_config.yaml
 ```
 
 ## 📈 Monitoring & Dashboards
@@ -322,7 +317,7 @@ mpirun python analysis_pipeline.py
 
 - **[Complete User Guide](docs/enhanced_logging_guide.md)** - Comprehensive documentation with examples
 - **[Configuration Reference](homodyne/config/templates/v2_yaml/config_enhanced_logging_template.yaml)** - Full configuration template
-- **[API Examples](examples/enhanced_logging_examples.py)** - Runnable code examples
+- **[CLI Reference](../../README.md)** - Command-line usage examples
 
 ## 🤝 Contributing
 

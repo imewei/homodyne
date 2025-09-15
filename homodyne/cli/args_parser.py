@@ -17,7 +17,7 @@ from homodyne import __version__
 def create_parser() -> argparse.ArgumentParser:
     """
     Create the main argument parser for Homodyne CLI.
-    
+
     Returns:
         Configured ArgumentParser with all CLI options
     """
@@ -33,6 +33,7 @@ Examples:
   %(prog)s --method hybrid                    # VI → MCMC pipeline (best of both)
   %(prog)s --config my_config.yaml            # Use custom config file
   %(prog)s --output-dir ./results --verbose   # Custom output with debug logging
+  %(prog)s --log-file                         # Save log messages to homodyne_results/logs/homodyne.log
   %(prog)s --quiet                            # File logging only (no console)
   %(prog)s --static-isotropic                 # Force static mode (3 parameters)
   %(prog)s --laminar-flow --method mcmc       # Force laminar flow (7 parameters) with MCMC
@@ -40,6 +41,9 @@ Examples:
   %(prog)s --plot-simulated-data              # Plot theoretical heatmaps
   %(prog)s --plot-simulated-data --contrast 1.5 --offset 0.1  # Custom scaling
   %(prog)s --phi-angles "0,45,90,135"         # Custom phi angles
+  %(prog)s --estimate-noise                   # Automatic noise estimation (no sigma required)
+  %(prog)s --estimate-noise --noise-model per_angle  # Per-angle noise for anisotropic data
+  %(prog)s --method mcmc --estimate-noise     # Full Bayesian with joint noise+physics sampling
 
 Method Performance Characteristics:
   VI:      Fast approximate Bayesian inference (10-100x speedup)
@@ -64,9 +68,7 @@ Homodyne v{__version__} - Wei Chen, Hongrui He (Argonne National Laboratory)
 
     # Version information
     parser.add_argument(
-        "--version", 
-        action="version", 
-        version=f"Homodyne v{__version__}"
+        "--version", action="version", version=f"Homodyne v{__version__}"
     )
 
     # Method selection - ONLY vi, mcmc, hybrid (NO all per global constraints)
@@ -74,7 +76,7 @@ Homodyne v{__version__} - Wei Chen, Hongrui He (Argonne National Laboratory)
         "--method",
         choices=["vi", "mcmc", "hybrid"],
         default="vi",
-        help="Optimization method: vi (fast VI+JAX), mcmc (accurate MCMC+JAX), hybrid (VI→MCMC pipeline) (default: %(default)s)"
+        help="Optimization method: vi (fast VI+JAX), mcmc (accurate MCMC+JAX), hybrid (VI→MCMC pipeline) (default: %(default)s)",
     )
 
     # Configuration and I/O
@@ -82,27 +84,31 @@ Homodyne v{__version__} - Wei Chen, Hongrui He (Argonne National Laboratory)
         "--config",
         type=Path,
         default=Path("./homodyne_config.yaml"),
-        help="Path to configuration file (YAML or JSON) (default: %(default)s)"
+        help="Path to configuration file (YAML or JSON) (default: %(default)s)",
     )
 
     parser.add_argument(
         "--output-dir",
         type=Path,
         default=Path("./homodyne_results"),
-        help="Output directory for results and plots (default: %(default)s)"
+        help="Output directory for results and plots (default: %(default)s)",
     )
 
     # Logging control
     parser.add_argument(
-        "--verbose", 
-        action="store_true", 
-        help="Enable verbose DEBUG logging to console"
+        "--verbose", action="store_true", help="Enable verbose DEBUG logging to console"
     )
 
     parser.add_argument(
         "--quiet",
         action="store_true",
-        help="Disable console logging (file logging remains enabled)"
+        help="Disable console logging (file logging remains enabled)",
+    )
+
+    parser.add_argument(
+        "--log-file",
+        action="store_true",
+        help="Save running log messages to homodyne.log in the results directory",
     )
 
     # Analysis mode selection - mutually exclusive group
@@ -110,30 +116,30 @@ Homodyne v{__version__} - Wei Chen, Hongrui He (Argonne National Laboratory)
     mode_group.add_argument(
         "--static-isotropic",
         action="store_true",
-        help="Force static isotropic analysis (3 parameters, no angle filtering)"
+        help="Force static isotropic analysis (3 parameters, no angle filtering)",
     )
     mode_group.add_argument(
         "--static-anisotropic",
         action="store_true",
-        help="Force static anisotropic analysis (3 parameters + angle filtering)"
+        help="Force static anisotropic analysis (3 parameters + angle filtering)",
     )
     mode_group.add_argument(
         "--laminar-flow",
         action="store_true",
-        help="7 parameters + filtering"  # Exact help string per global constraints
+        help="7 parameters + filtering",  # Exact help string per global constraints
     )
 
     # Data visualization options
     parser.add_argument(
         "--plot-experimental-data",
         action="store_true",
-        help="Generate validation plots of experimental data for quality checking"
+        help="Generate validation plots of experimental data for quality checking",
     )
 
     parser.add_argument(
         "--plot-simulated-data",
         action="store_true",
-        help="Plot theoretical C₂ heatmaps using parameters from config (no experimental data required)"
+        help="Plot theoretical C₂ heatmaps using parameters from config (no experimental data required)",
     )
 
     # Scaling parameters (only valid with --plot-simulated-data)
@@ -141,42 +147,63 @@ Homodyne v{__version__} - Wei Chen, Hongrui He (Argonne National Laboratory)
         "--contrast",
         type=float,
         default=1.0,
-        help="Contrast parameter for scaling: fitted = contrast × theory + offset (default: %(default)s, requires --plot-simulated-data)"
+        help="Contrast parameter for scaling: fitted = contrast × theory + offset (default: %(default)s, requires --plot-simulated-data)",
     )
 
     parser.add_argument(
         "--offset",
         type=float,
         default=0.0,
-        help="Offset parameter for scaling: fitted = contrast × theory + offset (default: %(default)s, requires --plot-simulated-data)"
+        help="Offset parameter for scaling: fitted = contrast × theory + offset (default: %(default)s, requires --plot-simulated-data)",
     )
 
     # Custom phi angles
     parser.add_argument(
         "--phi-angles",
         type=str,
-        help="Comma-separated list of phi angles in degrees (e.g., '0,45,90,135'). Default uses config file values"
+        help="Comma-separated list of phi angles in degrees (e.g., '0,45,90,135'). Default uses config file values",
+    )
+
+    # Cache generation mode
+    parser.add_argument(
+        "--save-cache-data",
+        action="store_true",
+        help="Generate optimized cache data from HDF5 file without analysis (selective q-vector + frame slicing)",
     )
 
     # Dataset optimization control
     parser.add_argument(
         "--disable-dataset-optimization",
         action="store_true",
-        help="Disable automatic dataset size optimization (advanced users only)"
+        help="Disable automatic dataset size optimization (advanced users only)",
     )
 
     # GPU control
     parser.add_argument(
         "--force-cpu",
         action="store_true",
-        help="Force CPU-only processing (disable GPU acceleration)"
+        help="Force CPU-only processing (disable GPU acceleration)",
     )
 
     parser.add_argument(
         "--gpu-memory-fraction",
         type=float,
         default=0.8,
-        help="Fraction of GPU memory to use (0.1-1.0, default: %(default)s)"
+        help="Fraction of GPU memory to use (0.1-1.0, default: %(default)s)",
+    )
+
+    # Noise estimation options
+    parser.add_argument(
+        "--estimate-noise",
+        action="store_true",
+        help="Enable hybrid NumPyro noise estimation instead of requiring sigma in data files",
+    )
+    
+    parser.add_argument(
+        "--noise-model",
+        choices=["hierarchical", "per_angle", "adaptive"],
+        default="hierarchical",
+        help="Noise model for estimation: hierarchical (single global), per_angle (multi-angle), adaptive (heteroscedastic) (default: %(default)s)",
     )
 
     return parser
@@ -188,28 +215,26 @@ def add_development_args(parser: argparse.ArgumentParser) -> None:
     Only available in development builds.
     """
     dev_group = parser.add_argument_group("Development Options")
-    
+
     dev_group.add_argument(
-        "--profile",
-        action="store_true",
-        help="Enable performance profiling"
+        "--profile", action="store_true", help="Enable performance profiling"
     )
-    
+
     dev_group.add_argument(
         "--debug-jax",
         action="store_true",
-        help="Enable JAX debugging and error checking"
+        help="Enable JAX debugging and error checking",
     )
-    
+
     dev_group.add_argument(
         "--save-intermediate",
         action="store_true",
-        help="Save intermediate computation results"
+        help="Save intermediate computation results",
     )
 
 
 if __name__ == "__main__":
     # Quick test of parser
     parser = create_parser()
-    args = parser.parse_args(['--help'] if len(sys.argv) == 1 else sys.argv[1:])
+    args = parser.parse_args(["--help"] if len(sys.argv) == 1 else sys.argv[1:])
     print(f"Parsed args: {vars(args)}")

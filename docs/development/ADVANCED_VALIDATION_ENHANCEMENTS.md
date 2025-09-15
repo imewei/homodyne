@@ -169,9 +169,6 @@ homodyne/config/
 ├── advanced_validators.py         # Specialized validators
 └── templates/v2_yaml/
     └── config_advanced_validation_demo.yaml  # Demo configuration
-
-examples/
-└── advanced_validation_demo.py    # Comprehensive demonstration
 ```
 
 ## 🧪 Testing and Validation
@@ -187,20 +184,26 @@ The comprehensive test configuration (`config_advanced_validation_demo.yaml`) de
 - Complex phi angle filtering (6 ranges covering 180°)
 - Batch processing setup with resource validation
 
-### Demonstration Script
+### Advanced Validation Testing
 
-Run the comprehensive demonstration:
+Test advanced validation features using the homodyne CLI:
 
 ```bash
-python examples/advanced_validation_demo.py
+# Test parameter validation with verbose output
+python -m homodyne --config extreme_params_config.yaml --verbose
+
+# Test mode resolution
+python -m homodyne --laminar-flow --config multi_mode_config.yaml
+
+# Test GPU validation
+python -m homodyne --method vi --config gpu_config.yaml
 ```
 
-This script demonstrates:
+These commands demonstrate:
 1. Parameter validation with extreme values
-2. Mode resolution with different data scenarios  
-3. HPC configuration validation (PBS, SLURM)
-4. GPU hardware detection and validation
-5. Advanced scenario validation (large datasets, batch processing, phi filtering)
+2. Mode resolution with different data scenarios
+3. Hardware detection and GPU validation
+4. Advanced scenario validation (large datasets, batch processing, phi filtering)
 
 ## ⚡ Performance Impact
 
