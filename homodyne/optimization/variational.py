@@ -939,6 +939,7 @@ class VariationalInferenceJAX:
         t1_jax = jnp.array(t1, dtype=jnp.float32)
         t2_jax = jnp.array(t2, dtype=jnp.float32)
         phi_jax = jnp.array(phi, dtype=jnp.float32)
+        logger.debug(f"🔍 DEBUG: phi_jax created with shape: {phi_jax.shape}")
         
         # Ensure scalar parameters are also float32
         q_jax = jnp.float32(q)
@@ -974,7 +975,17 @@ class VariationalInferenceJAX:
 
         # Create theory engine function for JIT compilation
         def theory_g1_func(params, t1, t2, phi, q, L):
-            return self.engine.theory_engine.compute_g1(params, t1, t2, phi, q, L)
+            logger.debug(f"🔍 DEBUG: theory_g1_func called with phi shape: {phi.shape}")
+            try:
+                result = self.engine.theory_engine.compute_g1(params, t1, t2, phi, q, L)
+                logger.debug(f"✅ DEBUG: theory_g1_func result shape: {result.shape}")
+                return result
+            except Exception as e:
+                logger.error(f"❌ DEBUG: theory_g1_func ERROR: {e}")
+                logger.error(f"❌ DEBUG: phi shape when error occurred: {phi.shape}")
+                logger.error(f"❌ DEBUG: params shape: {params.shape}")
+                logger.error(f"❌ DEBUG: t1 shape: {t1.shape}, t2 shape: {t2.shape}")
+                raise
 
         logger.info(f"Starting VI+JAX optimization ({n_iterations} max iterations)")
 
