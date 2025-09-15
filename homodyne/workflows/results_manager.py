@@ -571,9 +571,19 @@ class ResultsManager:
             theory_engine = TheoryEngine(analysis_mode)
 
             # Compute theoretical correlation for each phi angle
-            phi_angles_list = data_dict.get("phi_angles_list", data_dict.get("phi_angles", [0.0]))
-            if not isinstance(phi_angles_list, (list, np.ndarray)):
-                phi_angles_list = [phi_angles_list]
+            phi_angles_raw = data_dict.get("phi_angles_list", data_dict.get("phi_angles", [0.0]))
+
+            # Ensure we have individual phi angles, not nested arrays
+            if isinstance(phi_angles_raw, np.ndarray):
+                phi_angles_list = phi_angles_raw.tolist() if phi_angles_raw.ndim == 1 else phi_angles_raw.flatten().tolist()
+            elif isinstance(phi_angles_raw, list):
+                # Check if list contains arrays instead of individual values
+                if len(phi_angles_raw) > 0 and isinstance(phi_angles_raw[0], np.ndarray):
+                    phi_angles_list = phi_angles_raw[0].tolist() if phi_angles_raw[0].ndim == 1 else phi_angles_raw[0].flatten().tolist()
+                else:
+                    phi_angles_list = phi_angles_raw
+            else:
+                phi_angles_list = [phi_angles_raw]
 
             c2_fitted_list = []
             residuals_list = []
