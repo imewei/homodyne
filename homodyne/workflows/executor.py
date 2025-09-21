@@ -22,11 +22,12 @@ from homodyne.data.optimization import optimize_for_method
 from homodyne.optimization.hybrid import HybridResult, optimize_hybrid
 from homodyne.optimization.mcmc import MCMCResult, fit_mcmc_jax
 from homodyne.optimization.variational import VIResult, fit_vi_jax
+from homodyne.optimization.lsq_wrapper import LSQResult, fit_homodyne_lsq
 from homodyne.utils.logging import get_logger, log_performance
 
 logger = get_logger(__name__)
 
-ResultType = Union[VIResult, MCMCResult, HybridResult]
+ResultType = Union[VIResult, MCMCResult, HybridResult, LSQResult]
 
 
 class MethodExecutor:
@@ -86,6 +87,93 @@ class MethodExecutor:
             logger.warning(f"Hardware setup warning: {e}")
             logger.info("Continuing with default hardware configuration")
 
+    def _log_method_hardware_selection(self, method_name: str) -> Dict[str, Any]:
+        """
+        Log comprehensive hardware selection information for optimization methods.
+
+        Args:
+            method_name: Name of the optimization method ("VI", "MCMC", "LSQ")
+
+        Returns:
+            Dictionary with hardware selection details
+        """
+        hardware_info = {
+            "method": method_name,
+            "force_cpu": self.force_cpu,
+            "jax_available": False,
+            "jax_working": False,
+            "selected_backend": "CPU",
+            "gpu_available": False,
+            "fallback_reason": None,
+        }
+
+        try:
+            # Check JAX availability for each method
+            if method_name == "VI":
+                from homodyne.optimization.variational import JAX_AVAILABLE
+                hardware_info["jax_available"] = JAX_AVAILABLE
+            elif method_name == "MCMC":
+                from homodyne.optimization.mcmc import JAX_AVAILABLE
+                hardware_info["jax_available"] = JAX_AVAILABLE
+            elif method_name == "LSQ":
+                from homodyne.optimization.direct_solver import JAX_AVAILABLE
+                hardware_info["jax_available"] = JAX_AVAILABLE
+
+            # Test JAX functionality if available
+            if hardware_info["jax_available"]:
+                try:
+                    import jax
+                    import jax.numpy as jnp
+                    # Simple test to verify JAX is working
+                    test_array = jnp.array([1.0, 2.0, 3.0])
+                    _ = jnp.sum(test_array)
+                    hardware_info["jax_working"] = True
+
+                    # Check for GPU devices
+                    devices = jax.devices()
+                    gpu_devices = [d for d in devices if 'cuda' in d.platform.lower() or 'gpu' in d.device_kind.lower() or 'nvidia' in d.device_kind.lower()]
+                    hardware_info["gpu_available"] = len(gpu_devices) > 0
+
+                except Exception:
+                    hardware_info["jax_working"] = False
+                    hardware_info["fallback_reason"] = "JAX import/functionality test failed"
+
+        except ImportError:
+            hardware_info["jax_available"] = False
+            hardware_info["fallback_reason"] = f"JAX not available for {method_name}"
+
+        # Determine selected backend
+        if self.force_cpu:
+            hardware_info["selected_backend"] = "CPU (forced)"
+            hardware_info["fallback_reason"] = "User specified --force-cpu"
+        elif not hardware_info["jax_available"]:
+            hardware_info["selected_backend"] = "CPU (NumPy fallback)"
+            if not hardware_info["fallback_reason"]:
+                hardware_info["fallback_reason"] = "JAX not available"
+        elif not hardware_info["jax_working"]:
+            hardware_info["selected_backend"] = "CPU (JAX failed)"
+            if not hardware_info["fallback_reason"]:
+                hardware_info["fallback_reason"] = "JAX functionality test failed"
+        elif hardware_info["gpu_available"]:
+            hardware_info["selected_backend"] = "GPU (JAX accelerated)"
+        else:
+            hardware_info["selected_backend"] = "CPU (JAX accelerated)"
+
+        # Log comprehensive hardware selection information
+        logger.info(f"🔧 {method_name} Hardware Selection:")
+        logger.info(f"   ├─ JAX Available: {'✓' if hardware_info['jax_available'] else '✗'}")
+        logger.info(f"   ├─ JAX Working: {'✓' if hardware_info['jax_working'] else '✗'}")
+        logger.info(f"   ├─ GPU Available: {'✓' if hardware_info['gpu_available'] else '✗'}")
+        logger.info(f"   ├─ Force CPU: {'✓' if hardware_info['force_cpu'] else '✗'}")
+        logger.info(f"   ├─ Selected Backend: {hardware_info['selected_backend']}")
+
+        if hardware_info["fallback_reason"]:
+            logger.info(f"   └─ Fallback Reason: {hardware_info['fallback_reason']}")
+        else:
+            logger.info(f"   └─ Status: Optimal hardware configuration")
+
+        return hardware_info
+
     @log_performance()
     def execute_vi(
         self,
@@ -116,6 +204,10 @@ class MethodExecutor:
         """
         try:
             logger.info("🎲 Starting VI+JAX optimization")
+
+            # Log comprehensive hardware selection for VI
+            hardware_info = self._log_method_hardware_selection("VI")
+
             start_time = time.time()
 
             # Get analysis mode from config
@@ -259,6 +351,10 @@ class MethodExecutor:
         """
         try:
             logger.info("🎰 Starting MCMC+JAX sampling")
+
+            # Log comprehensive hardware selection for MCMC
+            hardware_info = self._log_method_hardware_selection("MCMC")
+
             start_time = time.time()
 
             # Get analysis mode from config
@@ -479,6 +575,128 @@ class MethodExecutor:
             self._log_execution_error("Hybrid", e)
             return None
 
+    @log_performance()
+    def execute_lsq(
+        self,
+        data: np.ndarray,
+        sigma: Optional[np.ndarray],
+        t1: np.ndarray,
+        t2: np.ndarray,
+        phi: np.ndarray,
+        q: float,
+        L: float,
+        estimate_noise: bool = False,
+        noise_model: str = "hierarchical",
+    ) -> Optional[LSQResult]:
+        """
+        Execute Direct Classical Least Squares fitting.
+
+        Fast, non-iterative solution using Normal Equation approach
+        with JAX acceleration when available.
+
+        Args:
+            data: Experimental correlation data
+            sigma: Measurement uncertainties
+            t1, t2: Time grids
+            phi: Angle grid
+            q, L: Experimental parameters
+            estimate_noise: Enable noise estimation from residuals
+            noise_model: Noise model type for estimation
+
+        Returns:
+            LSQ fitting result or None if failed
+        """
+        try:
+            logger.info("⚡ Starting Direct LSQ fitting")
+
+            # Log comprehensive hardware selection for LSQ
+            hardware_info = self._log_method_hardware_selection("LSQ")
+
+            start_time = time.time()
+
+            # Get analysis mode from config
+            analysis_mode = self._get_analysis_mode()
+
+            # Setup method parameters
+            lsq_params = self._get_lsq_parameters()
+
+            # Apply dataset optimization if enabled
+            if not self.disable_dataset_optimization:
+                optimization_config = optimize_for_method(
+                    data, sigma, t1, t2, phi, method="lsq"
+                )
+                dataset_category = optimization_config["dataset_info"].category
+                logger.info(f"Dataset optimization: {dataset_category} dataset")
+
+                # Apply optimized parameters
+                lsq_params.update(
+                    {
+                        "enable_dataset_optimization": True,
+                        "dataset_info": optimization_config["dataset_info"],
+                    }
+                )
+
+            # Add noise estimation parameters if noise estimation is enabled
+            if estimate_noise:
+                noise_params = self._get_noise_estimation_parameters()
+
+                # Apply CLI/config precedence logic and log parameter sources
+                final_noise_model = self._resolve_noise_model_precedence(
+                    cli_model=noise_model,
+                    config_model=noise_params.get("config_noise_model", "hierarchical")
+                )
+
+                # Log parameter sources for user clarity
+                self._log_noise_parameter_sources(noise_params, estimate_noise, final_noise_model)
+
+                # Remove config_noise_model from params to avoid conflicts
+                noise_params.pop("config_noise_model", None)
+
+                # Update lsq_params but don't include noise_model (passed separately)
+                lsq_params.update(noise_params)
+
+                # Use resolved noise model
+                noise_model = final_noise_model
+
+            # Get initial parameters from config if available
+            initial_params_dict = self.config.get("initial_parameters", {})
+            initial_params = initial_params_dict.get("values", None)
+            if initial_params:
+                logger.info(f"Using initial parameters from config: {initial_params}")
+                lsq_params["initial_params"] = initial_params
+
+            # Execute LSQ fitting
+            result = fit_homodyne_lsq(
+                data=data,
+                sigma=sigma,
+                t1=t1,
+                t2=t2,
+                phi=phi,
+                q=q,
+                L=L,
+                analysis_mode=analysis_mode,
+                estimate_noise=estimate_noise,
+                noise_model=noise_model,
+                **lsq_params,
+            )
+
+            # Log results summary
+            execution_time = time.time() - start_time
+            logger.info(f"✓ LSQ fitting completed in {execution_time:.4f}s")
+            logger.info(f"  Contrast: {result.mean_contrast:.4f}")
+            logger.info(f"  Offset: {result.mean_offset:.4f}")
+            logger.info(f"  Chi-squared: {result.chi_squared:.4f}")
+            logger.info(f"  Backend: {result.backend}")
+            if estimate_noise:
+                logger.info(f"  Noise estimated: {result.noise_model} model")
+
+            return result
+
+        except Exception as e:
+            logger.error(f"❌ LSQ execution failed: {e}")
+            self._log_execution_error("LSQ", e)
+            return None
+
     def _get_analysis_mode(self) -> str:
         """
         Get analysis mode from configuration.
@@ -543,6 +761,29 @@ class MethodExecutor:
             # Hybrid-specific parameters
             "use_vi_init": hybrid_config.get("use_vi_init", True),
             "convergence_threshold": hybrid_config.get("convergence_threshold", 0.1),
+        }
+
+    def _get_lsq_parameters(self) -> Dict[str, Any]:
+        """
+        Get LSQ-specific parameters from configuration.
+
+        Returns:
+            LSQ parameter dictionary
+        """
+        lsq_config = self.config.get("optimization", {}).get("lsq", {})
+
+        # Import DirectSolverConfig to get defaults
+        from homodyne.optimization.direct_solver import DirectSolverConfig
+
+        default_config = DirectSolverConfig()
+
+        return {
+            "regularization": lsq_config.get("regularization", default_config.regularization),
+            "condition_threshold": lsq_config.get("condition_threshold", default_config.condition_threshold),
+            "chunk_size_small": lsq_config.get("chunk_size_small", default_config.chunk_size_small),
+            "chunk_size_medium": lsq_config.get("chunk_size_medium", default_config.chunk_size_medium),
+            "chunk_size_large": lsq_config.get("chunk_size_large", default_config.chunk_size_large),
+            "use_parameter_space_bounds": lsq_config.get("use_parameter_space_bounds", default_config.use_parameter_space_bounds),
         }
 
     def _get_noise_estimation_parameters(self) -> Dict[str, Any]:

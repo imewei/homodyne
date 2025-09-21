@@ -595,6 +595,176 @@ class UnifiedHomodyneEngine:
 
 ScaledFittingEngine = UnifiedHomodyneEngine
 
+# Enhanced general N-parameter least squares solvers
+if JAX_AVAILABLE:
+    @jit
+    def solve_least_squares_general_jax(
+        design_matrix: jnp.ndarray,
+        target_vector: jnp.ndarray,
+        regularization: float = 1e-10
+    ) -> jnp.ndarray:
+        """
+        General N-parameter least squares solver using Normal Equation.
+
+        Extends existing solve_least_squares_jax for arbitrary dimensions.
+        Maintains compatibility with existing contrast/offset solver.
+
+        Solves: min ||design_matrix * params - target_vector||²
+        Via: (A^T A + λI) params = A^T b
+
+        Args:
+            design_matrix: Design matrix A, shape (n_samples, n_params)
+            target_vector: Target vector b, shape (n_samples,)
+            regularization: Ridge regularization parameter
+
+        Returns:
+            Solution vector, shape (n_params,)
+        """
+        # Compute Gram matrix
+        gram_matrix = design_matrix.T @ design_matrix
+
+        # Add regularization for numerical stability
+        n_params = gram_matrix.shape[0]
+        gram_matrix_reg = gram_matrix + regularization * jnp.eye(n_params)
+
+        # Compute A^T b
+        design_T_target = design_matrix.T @ target_vector
+
+        # Check condition number for method selection
+        eigenvalues = jnp.linalg.eigvalsh(gram_matrix_reg)
+        condition_number = eigenvalues[-1] / (eigenvalues[0] + 1e-15)
+
+        # Use appropriate solver based on conditioning
+        def cholesky_solve():
+            L = jnp.linalg.cholesky(gram_matrix_reg)
+            z = jax.scipy.linalg.solve_triangular(L, design_T_target, lower=True)
+            return jax.scipy.linalg.solve_triangular(L.T, z, lower=False)
+
+        def svd_solve():
+            return jnp.linalg.lstsq(design_matrix, target_vector, rcond=regularization)[0]
+
+        # Use Cholesky for well-conditioned, SVD for ill-conditioned
+        params = jax.lax.cond(
+            condition_number < 1e10,
+            lambda _: cholesky_solve(),
+            lambda _: svd_solve(),
+            None
+        )
+
+        return params
+
+    @jit
+    def solve_least_squares_chunked_jax(
+        theory_chunks: jnp.ndarray,
+        exp_chunks: jnp.ndarray,
+        chunk_indices: Optional[jnp.ndarray] = None
+    ) -> Tuple[jnp.ndarray, jnp.ndarray]:
+        """
+        Memory-efficient chunked solver for large datasets.
+
+        Extends existing solve_least_squares_jax with chunking support.
+        Maintains model: c2_fitted = c2_theory * contrast + offset
+
+        Args:
+            theory_chunks: Theory values, shape (n_chunks, chunk_size)
+            exp_chunks: Experimental values, shape (n_chunks, chunk_size)
+            chunk_indices: Optional chunk indices for weighted processing
+
+        Returns:
+            Tuple of (contrast, offset)
+        """
+        # Process chunks using scan for memory efficiency
+        def process_chunk(carry, chunk_data):
+            theory_chunk, exp_chunk = chunk_data
+            sum_theory_sq, sum_theory, sum_exp, sum_theory_exp, n_data = carry
+
+            # Accumulate normal equation components
+            chunk_size = theory_chunk.shape[0]
+            sum_theory_sq += jnp.sum(theory_chunk * theory_chunk)
+            sum_theory += jnp.sum(theory_chunk)
+            sum_exp += jnp.sum(exp_chunk)
+            sum_theory_exp += jnp.sum(theory_chunk * exp_chunk)
+            n_data += chunk_size
+
+            return (sum_theory_sq, sum_theory, sum_exp, sum_theory_exp, n_data), None
+
+        # Initialize accumulators
+        carry_init = (0.0, 0.0, 0.0, 0.0, 0)
+
+        # Process all chunks
+        (sum_theory_sq_final, sum_theory_final, sum_exp_final,
+         sum_theory_exp_final, n_data_final), _ = jax.lax.scan(
+            process_chunk, carry_init, (theory_chunks, exp_chunks)
+        )
+
+        # Solve 2x2 system (maintaining existing logic)
+        det = sum_theory_sq_final * n_data_final - sum_theory_final * sum_theory_final
+
+        # Handle singular matrix cases
+        valid_det = jnp.abs(det) > 1e-12
+        safe_det = jnp.where(valid_det, det, 1.0)
+
+        # Solve for contrast and offset
+        contrast = (n_data_final * sum_theory_exp_final -
+                   sum_theory_final * sum_exp_final) / safe_det
+        offset = (sum_theory_sq_final * sum_exp_final -
+                 sum_theory_final * sum_theory_exp_final) / safe_det
+
+        # Apply constraints
+        contrast = jnp.where(valid_det, contrast, 1.0)
+        offset = jnp.where(valid_det, offset, 0.0)
+        contrast = jnp.maximum(contrast, 1e-6)
+
+        return contrast, offset
+
+else:
+    # NumPy fallback versions
+    def solve_least_squares_general_jax(
+        design_matrix: np.ndarray,
+        target_vector: np.ndarray,
+        regularization: float = 1e-10
+    ) -> np.ndarray:
+        """NumPy fallback for general least squares."""
+        # Use numpy.linalg.lstsq as fallback
+        solution, _, _, _ = np.linalg.lstsq(
+            design_matrix, target_vector, rcond=regularization
+        )
+        return solution
+
+    def solve_least_squares_chunked_jax(
+        theory_chunks: np.ndarray,
+        exp_chunks: np.ndarray,
+        chunk_indices: Optional[np.ndarray] = None
+    ) -> Tuple[np.ndarray, np.ndarray]:
+        """NumPy fallback for chunked least squares."""
+        # Accumulate normal equation components
+        sum_theory_sq = 0.0
+        sum_theory = 0.0
+        sum_exp = 0.0
+        sum_theory_exp = 0.0
+        n_data = 0
+
+        for theory_chunk, exp_chunk in zip(theory_chunks, exp_chunks):
+            sum_theory_sq += np.sum(theory_chunk * theory_chunk)
+            sum_theory += np.sum(theory_chunk)
+            sum_exp += np.sum(exp_chunk)
+            sum_theory_exp += np.sum(theory_chunk * exp_chunk)
+            n_data += theory_chunk.shape[0]
+
+        # Solve 2x2 system
+        det = sum_theory_sq * n_data - sum_theory * sum_theory
+
+        if abs(det) > 1e-12:
+            contrast = (n_data * sum_theory_exp - sum_theory * sum_exp) / det
+            offset = (sum_theory_sq * sum_exp - sum_theory * sum_theory_exp) / det
+            contrast = max(contrast, 1e-6)
+        else:
+            contrast = 1.0
+            offset = 0.0
+
+        return contrast, offset
+
+
 # Export main classes
 __all__ = [
     "FitResult",
@@ -603,4 +773,6 @@ __all__ = [
     "UnifiedHomodyneEngine",
     "ScaledFittingEngine",
     "solve_least_squares_jax",
+    "solve_least_squares_general_jax",
+    "solve_least_squares_chunked_jax",
 ]

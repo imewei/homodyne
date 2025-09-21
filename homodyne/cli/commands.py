@@ -74,7 +74,7 @@ def has_analysis_flags(args: argparse.Namespace) -> bool:
         return True
 
     # Check for non-default method selection (indicates explicit analysis intent)
-    if args.method in ["mcmc", "hybrid"]:
+    if args.method in ["mcmc", "hybrid", "lsq"]:
         return True
 
     # If plotting flag is specified, check if it's plotting-only

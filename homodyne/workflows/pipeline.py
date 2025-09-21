@@ -27,11 +27,12 @@ import numpy as np
 from homodyne.optimization.hybrid import HybridResult
 from homodyne.optimization.mcmc import MCMCResult
 from homodyne.optimization.variational import VIResult
+from homodyne.optimization.lsq_wrapper import LSQResult
 from homodyne.utils.logging import get_logger, log_performance
 
 logger = get_logger(__name__)
 
-ResultType = Union[VIResult, MCMCResult, HybridResult]
+ResultType = Union[VIResult, MCMCResult, HybridResult, LSQResult]
 
 
 class AnalysisPipeline:
@@ -336,12 +337,24 @@ class AnalysisPipeline:
                 )
             elif self.args.method == "hybrid":
                 result = self.executor.execute_hybrid(
-                    data=data, 
-                    sigma=sigma, 
-                    t1=t1, 
-                    t2=t2, 
-                    phi=phi_angles, 
-                    q=q, 
+                    data=data,
+                    sigma=sigma,
+                    t1=t1,
+                    t2=t2,
+                    phi=phi_angles,
+                    q=q,
+                    L=L,
+                    estimate_noise=getattr(self.args, 'estimate_noise', False),
+                    noise_model=getattr(self.args, 'noise_model', 'hierarchical')
+                )
+            elif self.args.method == "lsq":
+                result = self.executor.execute_lsq(
+                    data=data,
+                    sigma=sigma,
+                    t1=t1,
+                    t2=t2,
+                    phi=phi_angles,
+                    q=q,
                     L=L,
                     estimate_noise=getattr(self.args, 'estimate_noise', False),
                     noise_model=getattr(self.args, 'noise_model', 'hierarchical')
@@ -809,11 +822,58 @@ class AnalysisPipeline:
         total_time = time.time() - self.start_time
         logger.info(f"Total Time: {total_time:.2f} seconds")
 
-        # Result quality metrics
+        # Result quality metrics - Enhanced chi-square reporting
         if hasattr(result, "chi_squared"):
             logger.info(f"Chi-squared: {result.chi_squared:.4f}")
+
+            # Add detailed fit quality information
+            if hasattr(result, "reduced_chi_squared"):
+                logger.info(f"Reduced Chi-squared: {result.reduced_chi_squared:.6f}")
+
+            if hasattr(result, "degrees_of_freedom"):
+                logger.info(f"Degrees of Freedom: {result.degrees_of_freedom:,}")
+
+                # Calculate and log effective data points and parameters
+                if hasattr(result, "mean_params"):
+                    n_physics_params = len(result.mean_params)
+                    n_scaling_params = 2  # contrast + offset
+                    total_params = n_physics_params + n_scaling_params
+                    data_points = result.degrees_of_freedom + total_params
+
+                    logger.info(f"Data Points: {data_points:,}")
+                    logger.info(f"Parameters Fitted: {total_params} (physics: {n_physics_params}, scaling: {n_scaling_params})")
+
+                    # Provide interpretation of reduced chi-square
+                    if hasattr(result, "reduced_chi_squared") and result.reduced_chi_squared > 0:
+                        if result.reduced_chi_squared < 0.5:
+                            interpretation = "Excellent fit (possibly overfitted)"
+                        elif result.reduced_chi_squared < 1.5:
+                            interpretation = "Good fit"
+                        elif result.reduced_chi_squared < 3.0:
+                            interpretation = "Reasonable fit"
+                        else:
+                            interpretation = "Poor fit - model or data issues"
+                        logger.info(f"Fit Quality: {interpretation}")
+
         if hasattr(result, "final_elbo"):
             logger.info(f"Final ELBO: {result.final_elbo:.4f}")
+
+            # For VI methods, also show ELBO-based model comparison info
+            if hasattr(result, "elbo_history") and len(result.elbo_history) > 1:
+                elbo_improvement = result.final_elbo - result.elbo_history[0]
+                logger.info(f"ELBO Improvement: {elbo_improvement:.4f}")
+
+        # Method-specific quality metrics
+        method_name = self.args.method.upper()
+        if method_name == "LSQ":
+            logger.info("LSQ Method: Direct nonlinear least squares optimization")
+            if hasattr(result, "converged"):
+                status = "✓ Converged" if result.converged else "✗ Failed to converge"
+                logger.info(f"Optimization Status: {status}")
+        elif method_name == "VI":
+            logger.info("VI Method: Variational inference with approximate posterior")
+        elif method_name == "MCMC":
+            logger.info("MCMC Method: Full posterior sampling")
 
         # Parameter estimates (first few)
         if hasattr(result, "mean_params"):

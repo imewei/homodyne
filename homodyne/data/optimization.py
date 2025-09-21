@@ -483,8 +483,11 @@ def optimize_for_method(
         return optimizer.optimize_for_vi_jax(data, sigma, t1, t2, phi)
     elif method.lower() == "mcmc":
         return optimizer.optimize_for_mcmc_jax(data, sigma, t1, t2, phi)
+    elif method.lower() == "lsq":
+        # LSQ can use the same optimization as VI since it's matrix-based
+        return optimizer.optimize_for_vi_jax(data, sigma, t1, t2, phi)
     else:
-        raise ValueError(f"Unknown method: {method}. Use 'vi' or 'mcmc'.")
+        raise ValueError(f"Unknown method: {method}. Use 'vi', 'mcmc', or 'lsq'.")
 
 
 class AdvancedDatasetOptimizer:

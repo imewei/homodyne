@@ -44,16 +44,22 @@ Examples:
   %(prog)s --estimate-noise                   # Automatic noise estimation (no sigma required)
   %(prog)s --estimate-noise --noise-model per_angle  # Per-angle noise for anisotropic data
   %(prog)s --method mcmc --estimate-noise     # Full Bayesian with joint noise+physics sampling
+  %(prog)s --method lsq                       # Direct least squares (fastest, no uncertainty)
+  %(prog)s --method lsq --estimate-noise      # LSQ with automatic noise estimation
+  %(prog)s --method lsq --estimate-noise --noise-model per_angle  # Per-angle noise model
 
 Method Performance Characteristics:
   VI:      Fast approximate Bayesian inference (10-100x speedup)
           Use for: routine analysis, parameter screening, large datasets
-          
-  MCMC:    Full posterior sampling with uncertainty quantification  
+
+  MCMC:    Full posterior sampling with uncertainty quantification
           Use for: publication-quality results, critical analysis
-          
+
   Hybrid:  VI → MCMC pipeline combining speed and accuracy
           Use for: comprehensive analysis requiring both speed and precision
+
+  LSQ:     Direct classical least squares (fastest, no uncertainty)
+          Use for: quick parameter estimation, real-time analysis, large datasets
           
 Physical Models:
   g₂(φ,t₁,t₂) = offset + contrast × [g₁(φ,t₁,t₂)]²
@@ -71,12 +77,12 @@ Homodyne v{__version__} - Wei Chen, Hongrui He (Argonne National Laboratory)
         "--version", action="version", version=f"Homodyne v{__version__}"
     )
 
-    # Method selection - ONLY vi, mcmc, hybrid (NO all per global constraints)
+    # Method selection - ONLY vi, mcmc, hybrid, lsq (NO all per global constraints)
     parser.add_argument(
         "--method",
-        choices=["vi", "mcmc", "hybrid"],
+        choices=["vi", "mcmc", "hybrid", "lsq"],
         default="vi",
-        help="Optimization method: vi (fast VI+JAX), mcmc (accurate MCMC+JAX), hybrid (VI→MCMC pipeline) (default: %(default)s)",
+        help="Optimization method: vi (fast VI+JAX), mcmc (accurate MCMC+JAX), hybrid (VI→MCMC pipeline), lsq (direct least squares) (default: %(default)s)",
     )
 
     # Configuration and I/O

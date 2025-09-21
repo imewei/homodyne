@@ -26,11 +26,12 @@ from scipy.ndimage import gaussian_filter, median_filter, uniform_filter
 from homodyne.optimization.hybrid import HybridResult
 from homodyne.optimization.mcmc import MCMCResult
 from homodyne.optimization.variational import VIResult
+from homodyne.optimization.lsq_wrapper import LSQResult
 from homodyne.utils.logging import get_logger, log_performance
 
 logger = get_logger(__name__)
 
-ResultType = Union[VIResult, MCMCResult, HybridResult]
+ResultType = Union[VIResult, MCMCResult, HybridResult, LSQResult]
 
 
 class PlottingController:
@@ -196,6 +197,8 @@ class PlottingController:
                 self._plot_mcmc_diagnostics(result)
             elif isinstance(result, HybridResult):
                 self._plot_hybrid_diagnostics(result)
+            elif isinstance(result, LSQResult):
+                self._plot_lsq_diagnostics(result)
 
             logger.info("✓ Fit result plots generated")
 
@@ -1221,6 +1224,132 @@ class PlottingController:
 
         except Exception as e:
             logger.warning(f"Hybrid diagnostics plotting failed: {e}")
+
+    def _plot_lsq_diagnostics(self, result: LSQResult) -> None:
+        """Plot LSQ-specific diagnostic plots."""
+        try:
+            fig, axes = plt.subplots(2, 2, figsize=(12, 10))
+
+            # LSQ optimization info
+            lsq_info = [
+                f"Chi-squared: {result.chi_squared:.4f}",
+                f"Reduced χ²: {result.reduced_chi_squared:.4f}",
+                f"Residual Std: {result.residual_std:.6f}",
+                f"Max Residual: {result.max_residual:.6f}",
+                f"DOF: {result.degrees_of_freedom}",
+                f"Converged: {result.converged}",
+                f"Computation Time: {result.computation_time:.2f}s",
+                f"Backend: {result.backend}",
+                f"Dataset Size: {result.dataset_size}",
+            ]
+
+            axes[0, 0].text(
+                0.1,
+                0.9,
+                "\n".join(lsq_info),
+                transform=axes[0, 0].transAxes,
+                fontsize=10,
+                verticalalignment="top",
+                bbox=dict(boxstyle="round", facecolor="lightcoral"),
+            )
+            axes[0, 0].set_xlim(0, 1)
+            axes[0, 0].set_ylim(0, 1)
+            axes[0, 0].set_title("LSQ Fit Quality")
+            axes[0, 0].axis("off")
+
+            # Parameters info
+            param_info = [
+                f"Parameters: {len(result.mean_params)} values",
+                f"Contrast: {result.mean_contrast:.6f}",
+                f"Offset: {result.mean_offset:.6f}",
+                f"Analysis Mode: {result.analysis_mode}",
+                "",
+                "Note: LSQ provides point estimates",
+                "without uncertainties (use VI/MCMC",
+                "for uncertainty quantification)",
+            ]
+
+            axes[0, 1].text(
+                0.1,
+                0.9,
+                "\n".join(param_info),
+                transform=axes[0, 1].transAxes,
+                fontsize=10,
+                verticalalignment="top",
+                bbox=dict(boxstyle="round", facecolor="lightsteelblue"),
+            )
+            axes[0, 1].set_xlim(0, 1)
+            axes[0, 1].set_ylim(0, 1)
+            axes[0, 1].set_title("Parameter Estimates")
+            axes[0, 1].axis("off")
+
+            # Noise estimation info (if enabled)
+            if result.noise_estimated:
+                noise_info = [
+                    f"Noise Estimation: Enabled",
+                    f"Model: {result.noise_model}",
+                    f"Mean σ: {float(np.mean(result.estimated_sigma)):.6f}" if result.estimated_sigma is not None else "σ: N/A",
+                    f"Noise Parameters: {len(result.noise_params) if result.noise_params else 0} params",
+                ]
+            else:
+                noise_info = [
+                    "Noise Estimation: Disabled",
+                    "",
+                    "Using provided uncertainties",
+                    "for weighted least squares fitting",
+                ]
+
+            axes[1, 0].text(
+                0.1,
+                0.9,
+                "\n".join(noise_info),
+                transform=axes[1, 0].transAxes,
+                fontsize=10,
+                verticalalignment="top",
+                bbox=dict(boxstyle="round", facecolor="lightyellow"),
+            )
+            axes[1, 0].set_xlim(0, 1)
+            axes[1, 0].set_ylim(0, 1)
+            axes[1, 0].set_title("Noise Handling")
+            axes[1, 0].axis("off")
+
+            # Performance info
+            performance_info = [
+                f"Direct Matrix Solution",
+                f"No Iterative Optimization",
+                f"Always Converges",
+                f"Fast & Deterministic",
+                "",
+                f"Best for: Initial estimates,",
+                f"rapid parameter screening,",
+                f"and computational efficiency",
+            ]
+
+            axes[1, 1].text(
+                0.1,
+                0.9,
+                "\n".join(performance_info),
+                transform=axes[1, 1].transAxes,
+                fontsize=10,
+                verticalalignment="top",
+                bbox=dict(boxstyle="round", facecolor="lightgreen"),
+            )
+            axes[1, 1].set_xlim(0, 1)
+            axes[1, 1].set_ylim(0, 1)
+            axes[1, 1].set_title("Method Characteristics")
+            axes[1, 1].axis("off")
+
+            plt.suptitle("Direct Least Squares Diagnostics")
+            plt.tight_layout()
+
+            output_file = self.plots_dir / "lsq_diagnostics.png"
+            plt.savefig(output_file)
+            plt.close()
+
+            logger.debug(f"✓ LSQ diagnostics saved: {output_file}")
+
+        except Exception as e:
+            logger.warning(f"LSQ diagnostics plotting failed: {e}")
 
     def _parse_phi_angles(
         self, phi_angles_str: Optional[str], config: Dict[str, Any]

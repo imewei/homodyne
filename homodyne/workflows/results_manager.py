@@ -24,11 +24,12 @@ import numpy as np
 from homodyne.optimization.hybrid import HybridResult
 from homodyne.optimization.mcmc import MCMCResult
 from homodyne.optimization.variational import VIResult
+from homodyne.optimization.lsq_wrapper import LSQResult
 from homodyne.utils.logging import get_logger, log_performance
 
 logger = get_logger(__name__)
 
-ResultType = Union[VIResult, MCMCResult, HybridResult]
+ResultType = Union[VIResult, MCMCResult, HybridResult, LSQResult]
 
 
 class ResultsManager:
@@ -148,6 +149,8 @@ class ResultsManager:
             self._validate_mcmc_results(result)
         elif isinstance(result, HybridResult):
             self._validate_hybrid_results(result)
+        elif isinstance(result, LSQResult):
+            self._validate_lsq_results(result)
 
         logger.debug("✓ Results validation completed")
 
@@ -187,6 +190,33 @@ class ResultsManager:
 
         if not hasattr(result, "recommended_method"):
             logger.warning("Missing method recommendation in hybrid results")
+
+    def _validate_lsq_results(self, result: LSQResult) -> None:
+        """Validate LSQ-specific results."""
+        # Check chi-squared values
+        if hasattr(result, "chi_squared") and result.chi_squared < 0:
+            logger.warning(f"Negative chi-squared value: {result.chi_squared}")
+
+        if hasattr(result, "reduced_chi_squared"):
+            if result.reduced_chi_squared < 0:
+                logger.warning(f"Negative reduced chi-squared: {result.reduced_chi_squared}")
+            elif result.reduced_chi_squared > 10:
+                logger.warning(f"High reduced chi-squared may indicate poor fit: {result.reduced_chi_squared:.3f}")
+
+        # Check residual quality
+        if hasattr(result, "residual_std") and result.residual_std <= 0:
+            logger.warning(f"Invalid residual standard deviation: {result.residual_std}")
+
+        # Validate noise estimation if enabled
+        if result.noise_estimated:
+            if not result.noise_model:
+                logger.warning("Noise estimation enabled but no noise model specified")
+            if result.estimated_sigma is None:
+                logger.warning("Noise estimation enabled but no sigma estimates available")
+
+        # LSQ should always converge (direct solution)
+        if not result.converged:
+            logger.warning("LSQ should always converge - check solver implementation")
 
     def _export_results(self, result: ResultType) -> None:
         """
@@ -229,20 +259,51 @@ class ResultsManager:
         
         def convert_value(value):
             """Convert numpy/JAX arrays and other non-serializable types to Python types."""
+            # Check for large arrays first to avoid memory issues
+            def is_large_array(val):
+                """Check if array is too large for JSON serialization (>100k elements)."""
+                try:
+                    if hasattr(val, 'size'):
+                        return val.size > 100000
+                    elif hasattr(val, 'shape'):
+                        import numpy as np
+                        return np.prod(val.shape) > 100000
+                    return False
+                except:
+                    return False
+
             # Handle specific JAX types like ArrayImpl
             value_type_str = str(type(value))
             if 'ArrayImpl' in value_type_str or 'DeviceArray' in value_type_str:
                 try:
+                    # Check size before conversion to avoid hanging
+                    if is_large_array(value):
+                        return {
+                            "type": "large_array",
+                            "shape": list(value.shape) if hasattr(value, 'shape') else "unknown",
+                            "dtype": str(value.dtype) if hasattr(value, 'dtype') else "unknown",
+                            "size": int(value.size) if hasattr(value, 'size') else "unknown",
+                            "note": "Array too large for JSON serialization"
+                        }
                     return np.asarray(value).tolist()
                 except:
                     try:
                         return float(value) if hasattr(value, '__float__') else str(value)
                     except:
                         return str(value)
-            
+
             # Handle JAX arrays explicitly by converting to numpy first
             if hasattr(value, '__module__') and value.__module__ and 'jax' in value.__module__:
                 try:
+                    # Check size before conversion to avoid hanging
+                    if is_large_array(value):
+                        return {
+                            "type": "large_jax_array",
+                            "shape": list(value.shape) if hasattr(value, 'shape') else "unknown",
+                            "dtype": str(value.dtype) if hasattr(value, 'dtype') else "unknown",
+                            "size": int(value.size) if hasattr(value, 'size') else "unknown",
+                            "note": "JAX array too large for JSON serialization"
+                        }
                     # Convert JAX array to numpy, then to list
                     return np.asarray(value).tolist()
                 except:
@@ -253,9 +314,27 @@ class ResultsManager:
             
             # Handle numpy arrays and other array-like objects
             if isinstance(value, np.ndarray):
+                # Check size before conversion to avoid hanging
+                if is_large_array(value):
+                    return {
+                        "type": "large_numpy_array",
+                        "shape": list(value.shape),
+                        "dtype": str(value.dtype),
+                        "size": int(value.size),
+                        "note": "NumPy array too large for JSON serialization"
+                    }
                 return value.tolist()
             elif hasattr(value, 'tolist') and hasattr(value, 'shape'):  # Array-like with tolist method
                 try:
+                    # Check size before conversion to avoid hanging
+                    if is_large_array(value):
+                        return {
+                            "type": "large_array_like",
+                            "shape": list(value.shape) if hasattr(value, 'shape') else "unknown",
+                            "dtype": str(value.dtype) if hasattr(value, 'dtype') else "unknown",
+                            "size": int(value.size) if hasattr(value, 'size') else "unknown",
+                            "note": "Array-like object too large for JSON serialization"
+                        }
                     return value.tolist()
                 except:
                     # Fallback: convert to numpy first
@@ -265,7 +344,17 @@ class ResultsManager:
                         return str(value)
             elif hasattr(value, '__array__'):  # Array-like objects
                 try:
-                    return np.asarray(value).tolist()
+                    # Create numpy array first to check size
+                    np_array = np.asarray(value)
+                    if is_large_array(np_array):
+                        return {
+                            "type": "large_array_convertible",
+                            "shape": list(np_array.shape) if hasattr(np_array, 'shape') else "unknown",
+                            "dtype": str(np_array.dtype) if hasattr(np_array, 'dtype') else "unknown",
+                            "size": int(np_array.size) if hasattr(np_array, 'size') else "unknown",
+                            "note": "Array-convertible object too large for JSON serialization"
+                        }
+                    return np_array.tolist()
                 except:
                     return str(value)
             elif isinstance(value, (np.integer, np.floating)):
@@ -350,15 +439,17 @@ class ResultsManager:
             # Create parameter DataFrame
             param_names = self._get_parameter_names(result)
 
+            # Handle uncertainties properly - LSQ doesn't provide them
+            if uncertainties is not None and hasattr(uncertainties, '__len__'):
+                uncertainty_values = list(uncertainties[: len(params)])
+            else:
+                uncertainty_values = [np.nan] * len(params)
+
             df = pd.DataFrame(
                 {
                     "parameter": param_names[: len(params)],
                     "value": params,
-                    "uncertainty": (
-                        uncertainties[: len(params)]
-                        if uncertainties is not None
-                        else [np.nan] * len(params)
-                    ),
+                    "uncertainty": uncertainty_values,
                 }
             )
 
@@ -431,6 +522,8 @@ class ResultsManager:
             self._create_mcmc_outputs(result, method_dir)
         elif isinstance(result, HybridResult):
             self._create_hybrid_outputs(result, method_dir)
+        elif isinstance(result, LSQResult):
+            self._create_lsq_outputs(result, method_dir)
 
     def _create_vi_outputs(self, result: VIResult, output_dir: Path) -> None:
         """Create VI-specific outputs."""
@@ -544,6 +637,64 @@ class ResultsManager:
 
         with open(output_dir / "hybrid_summary.json", "w") as f:
             json.dump(hybrid_summary, f, indent=2)
+
+    def _create_lsq_outputs(self, result: LSQResult, output_dir: Path) -> None:
+        """Create LSQ-specific outputs."""
+        import numpy as np
+
+        # Safe conversion for JAX/numpy arrays
+        def safe_convert(value):
+            value_type_str = str(type(value))
+            if 'ArrayImpl' in value_type_str or 'DeviceArray' in value_type_str:
+                try:
+                    return np.asarray(value).tolist()
+                except:
+                    return str(value)
+            elif hasattr(value, '__module__') and value.__module__ and 'jax' in value.__module__:
+                try:
+                    return np.asarray(value).tolist()
+                except:
+                    return str(value)
+            elif hasattr(value, 'tolist'):
+                try:
+                    return value.tolist()
+                except:
+                    return str(value)
+            else:
+                return value
+
+        lsq_summary = {
+            "fit_quality": {
+                "chi_squared": result.chi_squared,
+                "reduced_chi_squared": result.reduced_chi_squared,
+                "residual_std": result.residual_std,
+                "max_residual": result.max_residual,
+                "degrees_of_freedom": result.degrees_of_freedom,
+            },
+            "optimization": {
+                "converged": result.converged,
+                "iterations": result.n_iterations,
+                "computation_time": result.computation_time,
+                "backend": result.backend,
+                "dataset_size": result.dataset_size,
+                "analysis_mode": result.analysis_mode,
+            },
+            "parameters": {
+                "means": safe_convert(result.mean_params),
+                "std_devs": None,  # LSQ doesn't provide uncertainties
+                "contrast": result.mean_contrast,
+                "offset": result.mean_offset,
+            },
+            "noise_estimation": {
+                "estimated": result.noise_estimated,
+                "model": result.noise_model,
+                "estimated_sigma": safe_convert(result.estimated_sigma) if result.estimated_sigma is not None else None,
+                "parameters": result.noise_params,
+            } if result.noise_estimated else None,
+        }
+
+        with open(output_dir / "lsq_summary.json", "w") as f:
+            json.dump(lsq_summary, f, indent=2)
 
     def _compute_fitted_correlation(
         self, result: ResultType, data_dict: Dict[str, Any]
@@ -790,7 +941,7 @@ class ResultsManager:
         param_names = self._get_parameter_names(result)
 
         for i, (name, value) in enumerate(zip(param_names, params)):
-            if uncertainties is not None and i < len(uncertainties):
+            if uncertainties is not None and hasattr(uncertainties, '__len__') and i < len(uncertainties):
                 lines.append(f"  {name}: {value:.6f} ± {uncertainties[i]:.6f}")
             else:
                 lines.append(f"  {name}: {value:.6f}")

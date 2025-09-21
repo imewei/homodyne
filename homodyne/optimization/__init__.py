@@ -87,6 +87,20 @@ except ImportError as e:
     create_dataset_optimizer = None
     DATASET_OPTIMIZATION_AVAILABLE = False
 
+try:
+    from homodyne.optimization.direct_solver import (
+        DirectLeastSquaresSolver,
+        DirectSolverConfig,
+        fit_homodyne_direct
+    )
+    DIRECT_SOLVER_AVAILABLE = True
+except ImportError as e:
+    print(f"Warning: Could not import Direct Solver: {e}")
+    DirectLeastSquaresSolver = None
+    DirectSolverConfig = None
+    fit_homodyne_direct = None
+    DIRECT_SOLVER_AVAILABLE = False
+
 
 # Main API functions (replace all classical methods)
 def fit_homodyne_vi(
@@ -183,6 +197,7 @@ __all__ = [
     # Primary API (replaces all classical methods)
     "fit_homodyne_vi",  # Main VI+JAX fitting function
     "fit_homodyne_mcmc",  # Main MCMC+JAX fitting function
+    "fit_homodyne_direct",  # Direct classical least squares
     # Direct access to VI+JAX
     "VariationalInferenceJAX",
     "VIResult",
@@ -192,6 +207,9 @@ __all__ = [
     "MCMCJAXSampler",
     "MCMCResult",
     "fit_mcmc_jax",
+    # Direct Classical Least Squares
+    "DirectLeastSquaresSolver",
+    "DirectSolverConfig",
     # Dataset optimization
     "DatasetOptimizer",
     "optimize_for_method",
@@ -202,6 +220,7 @@ __all__ = [
     "VI_AVAILABLE",
     "MCMC_AVAILABLE",
     "DATASET_OPTIMIZATION_AVAILABLE",
+    "DIRECT_SOLVER_AVAILABLE",
     "VI_FALLBACK_MODE",
     "MCMC_FALLBACK_MODE",
 ]
