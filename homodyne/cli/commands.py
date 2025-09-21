@@ -108,6 +108,11 @@ def handle_save_cache_data(args: argparse.Namespace) -> int:
         config_manager = CLIConfigManager()
         config = config_manager.create_effective_config(args.config, args)
 
+        # Disable quality control and output creation for cache-only operations
+        config.setdefault("quality_control", {})["enabled"] = False
+        config.setdefault("quality_control", {})["generate_reports"] = False
+        config.setdefault("output", {})["base_directory"] = None
+
         # Get HDF5 file path from configuration
         experimental_data = config.get("experimental_data", {})
         data_folder_path = experimental_data.get("data_folder_path", ".")
@@ -124,8 +129,8 @@ def handle_save_cache_data(args: argparse.Namespace) -> int:
 
         logger.info(f"📁 Loading HDF5 data: {hdf_path}")
 
-        # Initialize data loader
-        data_loader = XPCSDataLoader(config_dict=config)
+        # Initialize data loader (no quality reports for cache generation)
+        data_loader = XPCSDataLoader(config_dict=config, generate_quality_reports=False)
 
         # Check for existing cache file and provide clear messaging
         cache_path = data_loader._generate_cache_path()
@@ -254,8 +259,8 @@ def handle_plot_experimental_data(args: argparse.Namespace) -> int:
         config_manager = CLIConfigManager()
         config = config_manager.create_effective_config(args.config, args)
 
-        # Load experimental data
-        data_loader = XPCSDataLoader(config_dict=config)
+        # Load experimental data (WITH quality reports for --plot-experimental-data)
+        data_loader = XPCSDataLoader(config_dict=config, generate_quality_reports=True)
         data_dict = data_loader.load_experimental_data()
 
         # Initialize plotting controller

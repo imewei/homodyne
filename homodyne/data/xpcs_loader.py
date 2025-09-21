@@ -218,6 +218,7 @@ class XPCSDataLoader:
         config_path: Optional[str] = None,
         config_dict: Optional[Dict] = None,
         configure_logging: bool = True,
+        generate_quality_reports: bool = False,  # Only generate reports when explicitly requested
     ):
         """
         Initialize XPCS data loader with YAML-first configuration.
@@ -226,6 +227,7 @@ class XPCSDataLoader:
             config_path: Path to YAML or JSON configuration file
             config_dict: Configuration dictionary (alternative to config_path)
             configure_logging: Whether to apply logging configuration from config
+            generate_quality_reports: Whether to generate quality reports (default: False)
 
         Raises:
             XPCSDependencyError: If required dependencies are not available
@@ -233,6 +235,9 @@ class XPCSDataLoader:
         """
         # Check for required dependencies
         self._check_dependencies()
+
+        # Store whether to generate quality reports (only for --plot-experimental-data)
+        self.generate_quality_reports = generate_quality_reports
 
         if config_path and config_dict:
             raise ValueError("Provide either config_path or config_dict, not both")
@@ -546,8 +551,9 @@ class XPCSDataLoader:
             )
             quality_results.append(final_validation_result)
 
-            # Generate quality report if enabled
-            if self.v2_config.get("quality_control", {}).get("generate_reports", True):
+            # Generate quality report only when explicitly requested (--plot-experimental-data)
+            # Do NOT generate reports during normal VI/MCMC runs to avoid cluttering
+            if self.generate_quality_reports and self.v2_config.get("quality_control", {}).get("generate_reports", True):
                 quality_report = quality_controller.generate_quality_report(
                     quality_results, self._get_quality_report_path()
                 )

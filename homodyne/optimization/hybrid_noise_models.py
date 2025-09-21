@@ -89,27 +89,42 @@ def create_vi_noise_model(
     
     def vi_noise_model(*args, **kwargs):
         """Noise-only model for fast Adam optimization."""
-        
+
         if noise_type == "hierarchical":
             # Single global noise parameter
-            sigma = sample("sigma", 
+            sigma = sample("sigma",
                           dist.Gamma(concentration=2.0, rate=20.0))
-            
+
             # Simplified likelihood using data residuals
             # Use deviation from mean as proxy for noise level
             data_centered = data - jnp.mean(data)
-            sample("obs", 
-                  dist.Normal(0.0, sigma), 
-                  obs=data_centered.flatten())
+
+            # Subsample for computational efficiency with large datasets
+            data_flat = data_centered.flatten()
+            max_points = 10000  # Use at most 10k points for noise estimation
+            if data_flat.size > max_points:
+                # Random subsample without replacement
+                import jax
+                key = jax.random.PRNGKey(42)
+                indices = jax.random.choice(key, data_flat.size, shape=(max_points,), replace=False)
+                data_subsample = data_flat[indices]
+            else:
+                data_subsample = data_flat
+
+            sample("obs",
+                  dist.Normal(0.0, sigma),
+                  obs=data_subsample)
             
         elif noise_type == "per_angle":
             # Different noise for each phi angle
             n_phi = len(phi)
-            sigma_angles = sample("sigma_angles", 
+            sigma_angles = sample("sigma_angles",
                                  dist.Gamma(concentration=2.0, rate=20.0),
                                  sample_shape=(n_phi,))
-            
-            # Per-angle likelihood
+
+            # Per-angle likelihood with subsampling
+            import jax
+            max_points_per_angle = 500  # Subsample each angle
             for i in range(n_phi):
                 if data.ndim == 3:
                     angle_data = data[i].flatten()
@@ -119,33 +134,56 @@ def create_vi_noise_model(
                     start_idx = i * n_points_per_angle
                     end_idx = (i + 1) * n_points_per_angle
                     angle_data = data.flatten()[start_idx:end_idx]
-                    
+
                 angle_centered = angle_data - jnp.mean(angle_data)
+
+                # Subsample if needed
+                if angle_centered.size > max_points_per_angle:
+                    key = jax.random.PRNGKey(42 + i)
+                    indices = jax.random.choice(key, angle_centered.size,
+                                              shape=(max_points_per_angle,), replace=False)
+                    angle_subsample = angle_centered[indices]
+                else:
+                    angle_subsample = angle_centered
+
                 sample(f"obs_angle_{i}",
                       dist.Normal(0.0, sigma_angles[i]),
-                      obs=angle_centered)
+                      obs=angle_subsample)
             
             
         elif noise_type == "adaptive":
             # Heteroscedastic noise model
             sigma_base = sample("sigma_base",
                                dist.Gamma(concentration=2.0, rate=20.0))
-            sigma_scale = sample("sigma_scale", 
+            sigma_scale = sample("sigma_scale",
                                 dist.Beta(concentration1=2.0, concentration0=5.0))
-            
+
             # Adaptive noise depends on signal strength
             # Use absolute deviation as signal strength proxy
             signal_strength = jnp.abs(data - jnp.mean(data))
             sigma_adaptive = sigma_base * (1.0 + sigma_scale * signal_strength)
-            
+
             # Flatten for likelihood
             data_flat = data.flatten()
             sigma_flat = sigma_adaptive.flatten()
             data_centered = data_flat - jnp.mean(data_flat)
-            
+
+            # Subsample for efficiency
+            max_points = 10000
+            if data_centered.size > max_points:
+                import jax
+                key = jax.random.PRNGKey(42)
+                indices = jax.random.choice(key, data_centered.size,
+                                          shape=(max_points,), replace=False)
+                data_subsample = data_centered[indices]
+                sigma_subsample = sigma_flat[indices]
+            else:
+                data_subsample = data_centered
+                sigma_subsample = sigma_flat
+
             sample("obs",
-                  dist.Normal(0.0, sigma_flat),
-                  obs=data_centered)
+                  dist.Normal(0.0, sigma_subsample),
+                  obs=data_subsample)
             
             
         else:

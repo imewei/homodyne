@@ -43,13 +43,13 @@ class PhysicsConstants:
     TIME_MAX_XPCS = 1e3  # Kilosecond measurements
 
     # Diffusion coefficient ranges (Å²/s)
-    DIFFUSION_MIN = 1e-3  # Very slow diffusion
-    DIFFUSION_MAX = 1e5  # Very fast diffusion (reduced for numerical stability)
+    DIFFUSION_MIN = 1.0  # Realistic minimum for molecular diffusion
+    DIFFUSION_MAX = 1e6  # Extended range for fast colloidal systems
     DIFFUSION_TYPICAL = 100.0
 
     # Shear rate ranges (s⁻¹)
-    SHEAR_RATE_MIN = 1e-4  # Very slow shear
-    SHEAR_RATE_MAX = 1e3  # Very fast shear
+    SHEAR_RATE_MIN = 1e-5  # Very gentle shear flows
+    SHEAR_RATE_MAX = 1.0  # Realistic maximum experimental shear rate
     SHEAR_RATE_TYPICAL = 1.0
 
     # Angular ranges (degrees) - focused range for laminar flow analysis
@@ -127,6 +127,16 @@ def validate_parameters(
     Returns:
         True if all parameters are within bounds, False otherwise
     """
+    # Check if we're dealing with JAX tracers during gradient computation
+    try:
+        # Try to detect JAX tracer objects
+        param_str = str(type(params[0] if hasattr(params, '__getitem__') else params))
+        if 'Tracer' in param_str or 'LinearizeTracer' in param_str:
+            # Skip validation during JAX gradient computation
+            return True
+    except:
+        pass
+
     if len(params) != len(bounds):
         logger.warning(
             f"Parameter count mismatch: got {len(params)}, expected {len(bounds)}"
@@ -134,11 +144,27 @@ def validate_parameters(
         return False
 
     for i, (param, (min_val, max_val)) in enumerate(zip(params, bounds)):
-        if not (min_val - tolerance <= param <= max_val + tolerance):
-            logger.warning(
-                f"Parameter {i} out of bounds: {param} not in [{min_val}, {max_val}]"
-            )
-            return False
+        # Check if param is a JAX tracer
+        try:
+            param_type_str = str(type(param))
+            if 'Tracer' in param_type_str or 'LinearizeTracer' in param_type_str:
+                # Skip validation for JAX tracers
+                continue
+        except:
+            pass
+
+        # Only validate concrete numeric values
+        try:
+            param_val = float(param)
+            if not (min_val - tolerance <= param_val <= max_val + tolerance):
+                logger.warning(
+                    f"Parameter {i} out of bounds: {param_val} not in [{min_val}, {max_val}]"
+                )
+                return False
+        except (TypeError, ValueError):
+            # If we can't convert to float, it's likely a JAX tracer
+            # Skip validation in this case
+            continue
 
     return True
 

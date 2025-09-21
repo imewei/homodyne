@@ -142,8 +142,8 @@ def validate_scaling_parameters(args: argparse.Namespace) -> None:
     Raises:
         ValidationError: If scaling parameters used incorrectly
     """
-    contrast_specified = args.contrast != 1.0
-    offset_specified = args.offset != 0.0
+    contrast_specified = args.contrast != 0.3  # Match actual default from args_parser
+    offset_specified = args.offset != 1.0  # Match actual default from args_parser
 
     if (contrast_specified or offset_specified) and not args.plot_simulated_data:
         raise ValidationError(

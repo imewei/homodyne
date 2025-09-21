@@ -162,6 +162,43 @@ class MethodExecutor:
                 # Use resolved noise model
                 noise_model = final_noise_model
 
+            # Create ParameterSpace and get initial parameters directly from config dict
+            from homodyne.core.fitting import ParameterSpace
+
+            # Get initial parameters directly from the config dictionary
+            initial_params_dict = self.config.get("initial_parameters", {})
+            initial_params = initial_params_dict.get("values", None)
+
+            # Create a simple wrapper that provides get() method for ParameterSpace
+            class ConfigWrapper:
+                def __init__(self, config_dict):
+                    self.config = config_dict
+
+                def get(self, key, default=None):
+                    return self.config.get(key, default)
+
+                def get_parameter_bounds(self, param_names):
+                    """Get parameter bounds from config."""
+                    param_space = self.config.get("parameter_space", {})
+                    bounds_config = param_space.get("bounds", [])
+                    bounds = []
+                    for param_name in param_names:
+                        # Find matching bound config
+                        for bound_spec in bounds_config:
+                            if bound_spec.get("name") == param_name:
+                                bounds.append((bound_spec.get("min", 0.0), bound_spec.get("max", 1.0)))
+                                break
+                        else:
+                            # Default bounds if not found
+                            bounds.append((0.0, 1.0))
+                    return bounds
+
+            config_wrapper = ConfigWrapper(self.config)
+            parameter_space = ParameterSpace(config_manager=config_wrapper)
+
+            if initial_params:
+                logger.info(f"Using initial parameters from config: {initial_params}")
+
             # Execute VI optimization
             result = fit_vi_jax(
                 data=data,
@@ -172,6 +209,7 @@ class MethodExecutor:
                 q=q,
                 L=L,
                 analysis_mode=analysis_mode,
+                parameter_space=parameter_space,
                 estimate_noise=estimate_noise,
                 noise_model=noise_model,
                 **vi_params,
@@ -267,6 +305,40 @@ class MethodExecutor:
                 # Use resolved noise model
                 noise_model = final_noise_model
 
+            # Create ParameterSpace and get initial parameters directly from config dict
+            from homodyne.core.fitting import ParameterSpace
+
+            # Get initial parameters directly from the config dictionary
+            initial_params_dict = self.config.get("initial_parameters", {})
+            initial_params = initial_params_dict.get("values", None)
+
+            # Create a simple wrapper that provides get() method for ParameterSpace
+            class ConfigWrapper:
+                def __init__(self, config_dict):
+                    self.config = config_dict
+
+                def get(self, key, default=None):
+                    return self.config.get(key, default)
+
+                def get_parameter_bounds(self, param_names):
+                    """Get parameter bounds from config."""
+                    param_space = self.config.get("parameter_space", {})
+                    bounds_config = param_space.get("bounds", [])
+                    bounds = []
+                    for param_name in param_names:
+                        # Find matching bound config
+                        for bound_spec in bounds_config:
+                            if bound_spec.get("name") == param_name:
+                                bounds.append((bound_spec.get("min", 0.0), bound_spec.get("max", 1.0)))
+                                break
+                        else:
+                            # Default bounds if not found
+                            bounds.append((0.0, 1.0))
+                    return bounds
+
+            config_wrapper = ConfigWrapper(self.config)
+            parameter_space = ParameterSpace(config_manager=config_wrapper)
+
             # Execute MCMC sampling
             result = fit_mcmc_jax(
                 data=data,
@@ -277,6 +349,7 @@ class MethodExecutor:
                 q=q,
                 L=L,
                 analysis_mode=analysis_mode,
+                parameter_space=parameter_space,
                 estimate_noise=estimate_noise,
                 noise_model=noise_model,
                 **mcmc_params,

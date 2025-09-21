@@ -75,6 +75,7 @@ class TheoryEngine:
         phi: np.ndarray,
         q: float,
         L: float,
+        dt: float = None,
     ) -> np.ndarray:
         """
         Compute g1 correlation function.
@@ -85,6 +86,7 @@ class TheoryEngine:
             phi: Angle grid
             q: Wave vector magnitude
             L: Sample-detector distance
+            dt: Time step (if None, will be estimated from t1)
 
         Returns:
             g1 correlation function
@@ -99,7 +101,7 @@ class TheoryEngine:
             t2 = jnp.asarray(t2)
             phi = jnp.asarray(phi)
 
-        return self.model.compute_g1(params, t1, t2, phi, q, L)
+        return self.model.compute_g1(params, t1, t2, phi, q, L, dt)
 
     @log_performance(threshold=0.01)
     def compute_g2(

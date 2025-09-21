@@ -248,9 +248,9 @@ def create_numpyro_model(
         g1_squared = g1_theory**2
 
         # Apply scaling with hard bounds: c2_fitted = c2_theory * contrast + offset
-        # Apply same hard bounds as VI for consistency: 0 < contrast ≤ 1, 0 < offset ≤ 2
-        contrast_bounded = jnp.clip(contrast, 1e-6, 1.0)
-        offset_bounded = jnp.clip(offset, 1e-6, 2.0)
+        # Apply same hard bounds as VI for consistency: 0.01 ≤ contrast ≤ 1, 0 ≤ offset ≤ 2
+        contrast_bounded = jnp.clip(contrast, 0.01, 1.0)
+        offset_bounded = jnp.clip(offset, 0.0, 2.0)
         theory_fitted = contrast_bounded * g1_squared + offset_bounded
 
         # Likelihood: data ~ Normal(theory_fitted, sigma)
@@ -274,6 +274,7 @@ class MCMCJAXSampler:
         self,
         analysis_mode: str = "laminar_flow",
         parameter_space: Optional[ParameterSpace] = None,
+        config_manager: Optional[Any] = None,
     ):
         """
         Initialize MCMC+JAX sampler.
@@ -281,9 +282,10 @@ class MCMCJAXSampler:
         Args:
             analysis_mode: Analysis mode
             parameter_space: Parameter space with bounds and priors
+            config_manager: Optional configuration manager for bound override
         """
         self.analysis_mode = analysis_mode
-        self.parameter_space = parameter_space or ParameterSpace()
+        self.parameter_space = parameter_space or ParameterSpace(config_manager=config_manager)
         self.engine = UnifiedHomodyneEngine(analysis_mode, parameter_space)
 
         # Check backend availability
@@ -639,9 +641,9 @@ class MCMCJAXSampler:
                 g1_theory = self.engine.theory_engine.compute_g1(
                     physical_params, t1, t2, phi, q, L
                 )
-                # Apply hard bounds for consistency with VI: 0 < contrast ≤ 1, 0 < offset ≤ 2
-                contrast_bounded = np.clip(contrast, 1e-6, 1.0)
-                offset_bounded = np.clip(offset, 1e-6, 2.0)
+                # Apply hard bounds for consistency with VI: 0.01 ≤ contrast ≤ 1, 0 ≤ offset ≤ 2
+                contrast_bounded = np.clip(contrast, 0.01, 1.0)
+                offset_bounded = np.clip(offset, 0.0, 2.0)
                 g2_theory = g1_theory**2 * contrast_bounded + offset_bounded
 
                 residuals = (data - g2_theory) / sigma

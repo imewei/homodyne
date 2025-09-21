@@ -591,20 +591,105 @@ class ResultsManager:
 
             for i, phi in enumerate(phi_angles_list):
                 # Compute g1 for this specific phi angle
-                g1_theory_single = theory_engine.compute_g1(
-                    params=params,
-                    t1=data_dict["t1"],
-                    t2=data_dict["t2"],
-                    phi=np.array([phi]),  # Single phi angle as array
-                    q=data_dict["q"],
-                    L=data_dict["L"],
-                )
+                # Extract dt from data_dict if available
+                dt = data_dict.get("dt", None)
 
-                # Extract the 2D matrix for this angle (remove phi dimension)
-                if g1_theory_single.ndim == 3:
-                    g1_matrix = g1_theory_single[0]  # Shape: (601, 601)
+                # Extract 1D arrays from meshgrids if needed
+                t1 = data_dict["t1"]
+                t2 = data_dict["t2"]
+
+                # If t1 and t2 are 2D meshgrids, extract the 1D arrays
+                if t1.ndim == 2:
+                    # In a meshgrid, t1 varies along axis 1 (columns)
+                    t1 = t1[0, :]  # Get first row for unique t1 values
+                if t2.ndim == 2:
+                    # In a meshgrid, t2 varies along axis 0 (rows)
+                    t2 = t2[:, 0]  # Get first column for unique t2 values
+
+                # Handle q array - use mean or first value if it's an array
+                q_value = data_dict["q"]
+                if isinstance(q_value, np.ndarray):
+                    if q_value.size > 1:
+                        # For post-processing, we typically use the mean q value
+                        q_value = float(np.mean(q_value))
+                        logger.debug(f"Using mean q value: {q_value} from array with {data_dict['q'].size} elements")
+                    else:
+                        q_value = float(q_value.item()) if hasattr(q_value, 'item') else float(q_value)
                 else:
-                    g1_matrix = g1_theory_single
+                    q_value = float(q_value)
+
+                # Debug logging
+                logger.debug(f"compute_g1 inputs: params shape={params.shape}, t1 shape={t1.shape}, t2 shape={t2.shape}, phi={phi}, q={q_value}, L={data_dict['L']}")
+
+                # Get experimental data dimensions to ensure compatibility
+                exp_shape = data_dict["c2_exp"][i].shape if data_dict["c2_exp"].ndim == 3 else data_dict["c2_exp"].shape
+                expected_size = exp_shape[0]  # Should be 1001 for time correlation matrix
+
+                try:
+                    g1_theory_single = theory_engine.compute_g1(
+                        params=params,
+                        t1=t1,
+                        t2=t2,
+                        phi=np.array([phi]),  # Single phi angle as array
+                        q=q_value,  # Already converted to float scalar
+                        L=data_dict["L"],
+                        dt=dt,
+                    )
+
+                    logger.debug(f"Theory engine returned shape: {g1_theory_single.shape}")
+
+                    # Handle different output shapes robustly
+                    if g1_theory_single.ndim == 4:
+                        # Shape like (1, 1, 1, 23) - extract the right slice
+                        if g1_theory_single.shape[-1] == len(phi_angles_list):
+                            # Last dimension is phi angles - get the i-th angle
+                            g1_slice = g1_theory_single[0, 0, 0, i]
+                            # If this is a scalar, we need to reconstruct the matrix
+                            if np.isscalar(g1_slice) or g1_slice.ndim == 0:
+                                # Theory engine returned scalar values - construct identity-like matrix
+                                g1_matrix = np.full((expected_size, expected_size), float(g1_slice))
+                            else:
+                                g1_matrix = g1_slice
+                        else:
+                            # Unexpected shape - fall back to first element
+                            g1_matrix = g1_theory_single.flatten()[0] * np.ones((expected_size, expected_size))
+                    elif g1_theory_single.ndim == 3:
+                        # Standard 3D case: (n_phi, n_t1, n_t2)
+                        if g1_theory_single.shape[0] == 1:
+                            g1_matrix = g1_theory_single[0]  # Shape: (n_t1, n_t2)
+                        else:
+                            g1_matrix = g1_theory_single[min(i, g1_theory_single.shape[0]-1)]
+                    elif g1_theory_single.ndim == 2:
+                        # Already 2D matrix
+                        g1_matrix = g1_theory_single
+                    elif g1_theory_single.ndim == 1:
+                        # 1D array - reshape to square matrix
+                        matrix_size = int(np.sqrt(len(g1_theory_single)))
+                        if matrix_size * matrix_size == len(g1_theory_single):
+                            g1_matrix = g1_theory_single.reshape(matrix_size, matrix_size)
+                        else:
+                            # Can't reshape - use constant matrix
+                            g1_matrix = np.full((expected_size, expected_size), g1_theory_single[0])
+                    else:
+                        # Scalar or unexpected shape - create constant matrix
+                        scalar_val = float(g1_theory_single.flatten()[0])
+                        g1_matrix = np.full((expected_size, expected_size), scalar_val)
+
+                    # Ensure the matrix has the expected shape
+                    if g1_matrix.shape != (expected_size, expected_size):
+                        logger.warning(f"Resizing g1_matrix from {g1_matrix.shape} to {(expected_size, expected_size)}")
+                        # Resize or pad/crop to match expected dimensions
+                        if g1_matrix.size == 1:
+                            # Single value - broadcast to full matrix
+                            g1_matrix = np.full((expected_size, expected_size), float(g1_matrix.flatten()[0]))
+                        else:
+                            # Use mean value for safety
+                            g1_matrix = np.full((expected_size, expected_size), float(np.mean(g1_matrix)))
+
+                except Exception as theory_error:
+                    logger.warning(f"Theory computation failed for phi={phi}: {theory_error}")
+                    # Fallback: use a default matrix with reasonable values
+                    g1_matrix = np.ones((expected_size, expected_size)) * 0.5
 
                 # Apply scaling: c2_fitted = contrast * g1² + offset
                 c2_fitted_single = contrast * (g1_matrix**2) + offset

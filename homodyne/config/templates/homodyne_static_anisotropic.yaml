@@ -170,16 +170,16 @@ parameter_space:
     # Diffusion coefficient D₀ (may have broader range for anisotropic systems)
     - name: D0
       min: 1.0
-      max: 100000.0
+      max: 1000000.0
       type: TruncatedNormal
       prior_mu: 1000.0
       prior_sigma: 1000.0  # Broader prior for anisotropic uncertainty
       unit: "Å²/s"
     
-    # Anomalous exponent α 
+    # Anomalous exponent α
     - name: alpha
-      min: -2.0
-      max: 0.0
+      min: -10.0
+      max: 10.0
       type: Normal
       prior_mu: -1.2
       prior_sigma: 0.3  # Slightly broader prior for anisotropic effects
@@ -187,8 +187,8 @@ parameter_space:
     
     # Diffusion offset D_offset
     - name: D_offset
-      min: -1000.0
-      max: 1000.0
+      min: -100000.0
+      max: 100000.0
       type: Normal
       prior_mu: 0.0
       prior_sigma: 150.0  # Broader prior for potential anisotropic offsets

@@ -64,6 +64,7 @@ class ParameterSpace:
 
     Implements specified parameter ranges and prior distributions
     for both scaling and physical parameters.
+    Supports configuration-based bound override when config_manager is provided.
     """
 
     # Scaling parameters (always present)
@@ -78,7 +79,7 @@ class ParameterSpace:
     D_offset_bounds: Tuple[float, float] = (-100000.0, 100000.0)  # Consistent with physics.py
 
     # Laminar flow parameters (only for laminar_flow mode) - STANDARDIZED VALUES
-    gamma_dot_t0_bounds: Tuple[float, float] = (1e-6, 1.0)
+    gamma_dot_t0_bounds: Tuple[float, float] = (1e-5, 1.0)
     beta_bounds: Tuple[float, float] = (-10.0, 10.0)  # Consistent with physics.py
     gamma_dot_t_offset_bounds: Tuple[float, float] = (-1.0, 1.0)  # Consistent with physics.py
     phi0_bounds: Tuple[float, float] = (-30.0, 30.0)  # Consistent with physics.py
@@ -96,8 +97,38 @@ class ParameterSpace:
     fitted_range: Tuple[float, float] = (0.0, 2.0)
     theory_range: Tuple[float, float] = (0.0, 1.0)
 
+    # Optional configuration manager for bound override
+    config_manager: Optional[Any] = None
+
     def get_param_bounds(self, analysis_mode: str) -> List[Tuple[float, float]]:
-        """Get parameter bounds based on analysis mode."""
+        """Get parameter bounds based on analysis mode with configuration override support."""
+        # Default parameter names based on analysis mode
+        if analysis_mode == "laminar_flow":
+            param_names = ["D0", "alpha", "D_offset", "gamma_dot_0", "beta", "gamma_dot_offset", "phi_0"]
+        else:
+            param_names = ["D0", "alpha", "D_offset"]
+
+        # Try to get bounds from configuration manager first
+        if self.config_manager and hasattr(self.config_manager, 'get_parameter_bounds'):
+            try:
+                config_bounds = self.config_manager.get_parameter_bounds(param_names)
+                if isinstance(config_bounds, list) and len(config_bounds) == len(param_names):
+                    # Convert config bounds to tuple format
+                    bounds = []
+                    for bound in config_bounds:
+                        if isinstance(bound, dict) and 'min' in bound and 'max' in bound:
+                            bounds.append((bound['min'], bound['max']))
+                        else:
+                            # Fallback to default bounds if config bound is malformed
+                            bounds.append(self._get_default_bound_for_param(param_names[len(bounds)]))
+                    logger.info(f"Using configuration bounds for {analysis_mode} mode")
+                    return bounds
+                else:
+                    logger.warning("Configuration bounds format invalid, using default bounds")
+            except Exception as e:
+                logger.warning(f"Failed to get configuration bounds: {e}, using default bounds")
+
+        # Fallback to hardcoded bounds
         bounds = [
             self.D0_bounds,
             self.alpha_bounds,
@@ -115,6 +146,19 @@ class ParameterSpace:
             )
 
         return bounds
+
+    def _get_default_bound_for_param(self, param_name: str) -> Tuple[float, float]:
+        """Get default bound for a specific parameter name."""
+        bound_map = {
+            "D0": self.D0_bounds,
+            "alpha": self.alpha_bounds,
+            "D_offset": self.D_offset_bounds,
+            "gamma_dot_0": self.gamma_dot_t0_bounds,
+            "beta": self.beta_bounds,
+            "gamma_dot_offset": self.gamma_dot_t_offset_bounds,
+            "phi_0": self.phi0_bounds,
+        }
+        return bound_map.get(param_name, (0.0, 1.0))  # Safe fallback
 
     def get_param_priors(self, analysis_mode: str) -> List[Tuple[float, float]]:
         """Get parameter priors based on analysis mode."""

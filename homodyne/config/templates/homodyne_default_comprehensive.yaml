@@ -179,7 +179,7 @@ parameter_space:
     # Diffusion coefficient D₀ bounds
     - name: D0
       min: 1.0
-      max: 100000.0
+      max: 1000000.0
       type: TruncatedNormal
       prior_mu: 1000.0
       prior_sigma: 500.0
@@ -188,8 +188,8 @@ parameter_space:
     
     # Anomalous exponent α bounds
     - name: alpha
-      min: -2.0
-      max: 0.0
+      min: -10.0
+      max: 10.0
       type: Normal
       prior_mu: -1.2
       prior_sigma: 0.2
@@ -198,8 +198,8 @@ parameter_space:
     
     # Diffusion offset D_offset bounds
     - name: D_offset
-      min: -1000.0
-      max: 1000.0
+      min: -100000.0
+      max: 100000.0
       type: Normal
       prior_mu: 0.0
       prior_sigma: 100.0
@@ -208,7 +208,7 @@ parameter_space:
     
     # Additional parameters for laminar_flow mode (uncomment if needed):
     # - name: gamma_dot_t0
-    #   min: 1.0e-6
+    #   min: 1.0e-5
     #   max: 1.0
     #   type: TruncatedNormal
     #   prior_mu: 0.01
@@ -217,8 +217,8 @@ parameter_space:
     #   description: "Shear rate prefactor"
     # 
     # - name: beta
-    #   min: -2.0
-    #   max: 2.0
+    #   min: -10.0
+    #   max: 10.0
     #   type: Normal
     #   prior_mu: 0.0
     #   prior_sigma: 0.5
@@ -226,8 +226,8 @@ parameter_space:
     #   description: "Shear rate time exponent"
     # 
     # - name: gamma_dot_t_offset
-    #   min: -0.1
-    #   max: 0.1
+    #   min: -1.0
+    #   max: 1.0
     #   type: Normal
     #   prior_mu: 0.0
     #   prior_sigma: 0.01
@@ -235,8 +235,8 @@ parameter_space:
     #   description: "Shear rate offset"
     # 
     # - name: phi0
-    #   min: -180.0
-    #   max: 180.0
+    #   min: -30.0
+    #   max: 30.0
     #   type: Normal
     #   prior_mu: 0.0
     #   prior_sigma: 30.0

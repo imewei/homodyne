@@ -552,7 +552,7 @@ dt: 1.0
     def _get_diffusion_parameter_suggestions(self) -> List[FixSuggestion]:
         """Suggestions for diffusion parameter issues."""
         param_info = {
-            "D0": ("Diffusion coefficient", "1e-3 to 1e5", "Å²/s"),
+            "D0": ("Diffusion coefficient", "1.0 to 1e6", "Å²/s"),
             "alpha": ("Anomalous diffusion exponent", "-10.0 to 10.0", "dimensionless"),
             "D_offset": ("Diffusion offset", "-1e5 to 1e5", "Å²/s"),
         }

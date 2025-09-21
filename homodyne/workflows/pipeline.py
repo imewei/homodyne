@@ -223,7 +223,10 @@ class AnalysisPipeline:
             or self.args.plot_simulated_data
             or self._should_generate_plots()
         ):
-            self.plotter = PlottingController(output_dir=Path(self.args.output_dir))
+            self.plotter = PlottingController(
+                output_dir=Path(self.args.output_dir),
+                config=self.config
+            )
 
     def _load_experimental_data(self) -> Optional[Dict[str, Any]]:
         """
@@ -236,7 +239,11 @@ class AnalysisPipeline:
             from homodyne.data.xpcs_loader import XPCSDataLoader
 
             # Initialize data loader
-            self.data_loader = XPCSDataLoader(config_dict=self.config)
+            # Only generate quality reports when --plot-experimental-data is specified
+            self.data_loader = XPCSDataLoader(
+                config_dict=self.config,
+                generate_quality_reports=self.args.plot_experimental_data
+            )
 
             # Load experimental data
             data_dict = self.data_loader.load_experimental_data()

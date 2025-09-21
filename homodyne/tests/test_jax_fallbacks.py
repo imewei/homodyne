@@ -73,13 +73,13 @@ from homodyne.core.numpy_gradients import (DifferentiationConfig,
 
 # Test realistic XPCS parameter ranges
 XPCS_PARAM_RANGES = {
-    "D0": (1e-3, 1e6),  # Diffusion coefficient [Å²/s]
-    "alpha": (-2.0, 2.0),  # Diffusion exponent [-]
-    "D_offset": (0.0, 1e4),  # Diffusion offset [Å²/s]
-    "gamma_dot_0": (1e-4, 1e3),  # Shear rate [s⁻¹]
-    "beta": (-2.0, 2.0),  # Shear exponent [-]
-    "gamma_dot_offset": (0.0, 1e2),  # Shear offset [s⁻¹]
-    "phi0": (-180, 180),  # Angular offset [degrees]
+    "D0": (1.0, 1e6),  # Diffusion coefficient [Å²/s]
+    "alpha": (-10.0, 10.0),  # Diffusion exponent [-]
+    "D_offset": (-1e5, 1e5),  # Diffusion offset [Å²/s]
+    "gamma_dot_0": (1e-5, 1.0),  # Shear rate [s⁻¹]
+    "beta": (-10.0, 10.0),  # Shear exponent [-]
+    "gamma_dot_offset": (-1.0, 1.0),  # Shear offset [s⁻¹]
+    "phi0": (-30.0, 30.0),  # Angular offset [degrees]
 }
 
 REALISTIC_3_PARAM_SETS = [

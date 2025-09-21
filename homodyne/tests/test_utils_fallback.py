@@ -29,7 +29,7 @@ import numpy as np
 # Constants for realistic XPCS testing
 XPCS_REALISTIC_RANGES = {
     "diffusion_coefficients": {
-        "D0_min": 1e-3,  # Å²/s - minimum realistic diffusion
+        "D0_min": 1.0,  # Å²/s - minimum realistic diffusion
         "D0_max": 1e6,  # Å²/s - maximum realistic diffusion
         "D0_typical": 100.0,  # Å²/s - typical experimental value
     },
@@ -151,10 +151,10 @@ LAMINAR_FLOW_CONFIG = XPCSTestConfiguration(
         "phi0",
     ],
     realistic_ranges={
-        "D0": (1e-3, 1e6),
+        "D0": (1.0, 1e6),
         "alpha": (-2.0, 2.0),
         "D_offset": (0.0, 1e4),
-        "gamma_dot_0": (1e-4, 1e3),
+        "gamma_dot_0": (1e-5, 1.0),
         "beta": (-2.0, 2.0),
         "gamma_dot_offset": (0.0, 1e2),
         "phi0": (-180.0, 180.0),
@@ -310,7 +310,7 @@ def generate_realistic_xpcs_data(
             # Phase and sinc calculation
             for j, phi_val in enumerate(phi):
                 phase = (
-                    (q * L / (2 * np.pi))
+                    (0.5 / np.pi) * q * L * dt
                     * np.cos(np.deg2rad(phi0 - phi_val))
                     * shear_integral
                 )

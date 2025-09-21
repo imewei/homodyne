@@ -41,16 +41,18 @@ class PlottingController:
     analysis results, and method-specific diagnostics.
     """
 
-    def __init__(self, output_dir: Path):
+    def __init__(self, output_dir: Path, config: Optional[Dict[str, Any]] = None):
         """
         Initialize plotting controller.
 
         Args:
             output_dir: Output directory for plots
+            config: Optional configuration dictionary
         """
         self.output_dir = Path(output_dir)
         self.plots_dir = self.output_dir / "plots"
         self.plots_dir.mkdir(parents=True, exist_ok=True)
+        self.config = config or {}
 
         # Setup matplotlib for publication-quality plots
         self._setup_matplotlib()
@@ -668,28 +670,93 @@ class PlottingController:
     def _plot_fit_comparison(self, result: ResultType, data: Dict[str, Any]) -> None:
         """Plot comparison between experimental and fitted data."""
         try:
-            # Compute fitted data
-            fitted_data = self._compute_fitted_data(result, data)
+            # Select angles for plotting based on phi filtering configuration
+            angles_to_plot_indices = self._select_angles_for_plotting(data)
+            n_angles = len(angles_to_plot_indices)
 
-            # Create comparison heatmaps
-            n_angles = min(4, len(data["phi_angles_list"]))  # Limit to 4 for visibility
+            if n_angles == 0:
+                logger.warning("No angles selected for plotting fit comparison")
+                return
 
-            fig, axes = plt.subplots(3, n_angles, figsize=(4 * n_angles, 12))
-            if n_angles == 1:
-                axes = axes.reshape(-1, 1)
+            # Create a subset of data for only the angles we'll plot
+            data_subset = data.copy()
+            # Only keep the selected angles for plotting
+            if "c2_exp" in data_subset and hasattr(data_subset["c2_exp"], "shape"):
+                if len(data_subset["c2_exp"].shape) >= 3:
+                    # Convert list to numpy array for proper JAX array indexing
+                    indices_array = np.array(angles_to_plot_indices)
+                    data_subset["c2_exp"] = data_subset["c2_exp"][indices_array]
+            if "phi_angles_list" in data_subset:
+                # Handle both JAX arrays and regular arrays/lists
+                phi_angles = data_subset["phi_angles_list"]
+                if hasattr(phi_angles, '__getitem__'):
+                    try:
+                        # Try direct indexing first
+                        selected_angles = [phi_angles[i] for i in angles_to_plot_indices]
+                    except Exception:
+                        # If that fails, convert to numpy array for indexing
+                        phi_array = np.array(phi_angles)
+                        indices_array = np.array(angles_to_plot_indices)
+                        selected_angles = phi_array[indices_array].tolist()
+                    data_subset["phi_angles_list"] = selected_angles
+
+            # Compute fitted data for the subset
+            fitted_data = self._compute_fitted_data(result, data_subset)
+
+            # Ensure fitted data has the correct shape for plotting
+            # If the arrays don't have enough angles, create placeholder data
+            if fitted_data["c2_fitted"].shape[0] < n_angles:
+                logger.debug(f"Fitted data has shape {fitted_data['c2_fitted'].shape}, expected at least {n_angles} angles")
+                # Create placeholder arrays with the correct shape
+                if len(data_subset["c2_exp"].shape) >= 3:
+                    exp_shape = data_subset["c2_exp"].shape
+                    correct_shape = (n_angles, exp_shape[1], exp_shape[2])
+                    fitted_data["c2_fitted"] = np.zeros(correct_shape)
+                    fitted_data["residuals"] = np.zeros(correct_shape)
+                    logger.warning("Using placeholder data for fit comparison plot due to shape mismatch")
+                else:
+                    # If we can't determine the correct shape, skip the plot
+                    logger.warning("Cannot create fit comparison plot due to data shape issues")
+                    return
+
+            # Use squeeze=False to ensure axes is always 2D array (3, n_angles)
+            fig, axes = plt.subplots(3, n_angles, figsize=(4 * n_angles, 12), squeeze=False)
+
+            # Ensure axes is always 2D array with shape (3, n_angles)
+            if not isinstance(axes, np.ndarray):
+                axes = np.array([[axes]])
+            elif axes.ndim == 1:
+                axes = axes.reshape(-1, 1) if axes.shape[0] == 3 else axes.reshape(1, -1)
+
+            # Debug logging to verify axes shape
+            logger.debug(f"Created subplot axes with shape: {axes.shape} for n_angles: {n_angles}")
+
+            # Get dt value for time scaling (default to 0.1 if not available)
+            dt = 0.1  # Default value
+            if hasattr(data, 'get'):
+                dt = data.get('dt', 0.1)
 
             for i in range(n_angles):
-                phi = data["phi_angles_list"][i]
+                phi = data_subset["phi_angles_list"][i]
 
                 # Experimental data with dynamic color scaling and improved NaN/inf cleaning
-                exp_data = np.array(data["c2_exp"][i])
+                exp_data = np.array(data_subset["c2_exp"][i])
                 exp_data = self._clean_c2_for_visualization(
                     exp_data, method="nan_to_num"
                 )
+
+                # Create extent for proper axis labeling with time in seconds
+                # extent = [left, right, bottom, top]
+                # With origin='lower', y-axis goes from bottom to top normally
+                n_frames = exp_data.shape[0]
+                extent = [0, n_frames * dt, 0, n_frames * dt]  # Normal orientation: t2 from 0 to max
+
                 im1 = axes[0, i].imshow(
                     exp_data,
                     cmap="viridis",
                     aspect="equal",
+                    origin='lower',  # Normal orientation with corrected extent
+                    extent=extent,
                     vmin=exp_data.min(),
                     vmax=exp_data.max(),
                 )
@@ -705,6 +772,8 @@ class PlottingController:
                     fitted_data_single,
                     cmap="viridis",
                     aspect="equal",
+                    origin='lower',  # Normal orientation with corrected extent
+                    extent=extent,
                     vmin=fitted_data_single.min(),
                     vmax=fitted_data_single.max(),
                 )
@@ -720,29 +789,120 @@ class PlottingController:
                     residuals_single,
                     cmap="RdBu_r",
                     aspect="equal",
+                    origin='lower',  # Normal orientation with corrected extent
+                    extent=extent,
                     vmin=residuals_single.min(),
                     vmax=residuals_single.max(),
                 )
                 axes[2, i].set_title(f"Residuals (φ={phi:.1f}°)")
-                axes[2, i].set_xlabel("t₁ index")
+                axes[2, i].set_xlabel("t₁ (s)")  # Changed to show time in seconds
                 plt.colorbar(im3, ax=axes[2, i])
 
                 if i == 0:
-                    axes[0, i].set_ylabel("t₂ index")
-                    axes[1, i].set_ylabel("t₂ index")
-                    axes[2, i].set_ylabel("t₂ index")
+                    axes[0, i].set_ylabel("t₂ (s)")  # Changed to show time in seconds
+                    axes[1, i].set_ylabel("t₂ (s)")
+                    axes[2, i].set_ylabel("t₂ (s)")
 
             plt.suptitle("Experimental vs Fitted Data Comparison")
             plt.tight_layout()
 
             output_file = self.plots_dir / "fit_comparison.png"
-            plt.savefig(output_file)
+            plt.savefig(output_file, dpi=100, bbox_inches='tight')
             plt.close()
 
-            logger.debug(f"✓ Fit comparison saved: {output_file}")
+            logger.info(f"✓ Fit comparison saved: {output_file}")
 
         except Exception as e:
             logger.warning(f"Fit comparison plotting failed: {e}")
+
+    def _select_angles_for_plotting(self, data: Dict[str, Any]) -> List[int]:
+        """
+        Select angles for plotting based on phi filtering configuration.
+
+        Returns indices of angles that match the target ranges from config,
+        or falls back to representative angles if no config is available.
+        """
+        try:
+            phi_angles = data.get("phi_angles_list", [])
+
+            # Get configuration from result or use defaults
+            config = getattr(self, "config", {})
+            phi_filtering = config.get("phi_filtering", {})
+
+            # Default target ranges for XPCS analysis
+            default_ranges = [
+                (-10.0, 10.0),   # Near 0 degrees
+                (170.0, 190.0),  # Near 180 degrees
+                (80.0, 100.0),   # Perpendicular to flow
+                (-100.0, -80.0)  # Other perpendicular direction
+            ]
+
+            # Get target ranges from config or use defaults
+            target_ranges = []
+            if phi_filtering.get("enabled", False):
+                config_ranges = phi_filtering.get("target_ranges", [])
+                for r in config_ranges:
+                    if isinstance(r, dict):
+                        target_ranges.append((r.get("min_angle", -10), r.get("max_angle", 10)))
+                    elif isinstance(r, (tuple, list)) and len(r) == 2:
+                        target_ranges.append(tuple(r))
+
+            if not target_ranges:
+                target_ranges = default_ranges
+
+            logger.debug(f"Selecting angles for plotting from {len(phi_angles)} total angles")
+            logger.debug(f"Using target ranges: {target_ranges}")
+
+            # Find angles that match target ranges
+            selected_indices = []
+            angles_per_range = {}
+
+            for min_angle, max_angle in target_ranges:
+                range_key = f"[{min_angle:.1f}, {max_angle:.1f}]"
+                angles_per_range[range_key] = []
+
+                for i, angle in enumerate(phi_angles):
+                    if min_angle <= angle <= max_angle:
+                        angles_per_range[range_key].append(i)
+
+            # Select up to 4 angles, prioritizing to have at least one from each range
+            max_angles = 4
+            final_indices = []
+
+            # First pass: get one angle from each non-empty range
+            for range_key, indices in angles_per_range.items():
+                if indices and len(final_indices) < max_angles:
+                    # Take the middle angle from each range for best representation
+                    mid_idx = len(indices) // 2
+                    final_indices.append(indices[mid_idx])
+                    logger.debug(f"Selected angle {phi_angles[indices[mid_idx]]:.1f}° from range {range_key}")
+
+            # If we have fewer than 4 angles and some ranges have multiple angles
+            # add more angles from ranges with the most data
+            if len(final_indices) < max_angles:
+                for range_key, indices in sorted(angles_per_range.items(),
+                                                key=lambda x: len(x[1]), reverse=True):
+                    for idx in indices:
+                        if idx not in final_indices and len(final_indices) < max_angles:
+                            final_indices.append(idx)
+                            logger.debug(f"Added additional angle {phi_angles[idx]:.1f}° from range {range_key}")
+
+            # If still no angles selected, fall back to first 4 angles
+            if not final_indices:
+                logger.warning(f"No angles found in target ranges {target_ranges}, using first {max_angles} angles")
+                final_indices = list(range(min(max_angles, len(phi_angles))))
+
+            # Sort indices to maintain order
+            final_indices.sort()
+
+            selected_angles = [phi_angles[i] for i in final_indices]
+            logger.info(f"Selected {len(final_indices)} angles for plotting: {selected_angles}")
+
+            return final_indices
+
+        except Exception as e:
+            logger.warning(f"Error selecting angles for plotting: {e}, falling back to first 4")
+            return list(range(min(4, len(data.get("phi_angles_list", [])))))
 
     def _plot_residual_analysis(self, result: ResultType, data: Dict[str, Any]) -> None:
         """Plot residual analysis diagnostics."""
@@ -1236,9 +1396,9 @@ class PlottingController:
                 # Time integral: ∫γ̇(t')dt' ≈ γ̇(t_avg) * |t₁-t₂|
                 time_integral = gamma_dot_t * dt_diff
 
-                # Sinc prefactor: (q*L)/(2π) * cos(φ₀-φ)
+                # Sinc prefactor: (1/2π) * q * L * dt * cos(φ₀-φ) - CORRECTED WITH dt FACTOR
                 cos_term = np.cos(phi_eff)  # φ_eff = φ₀ - φ in radians
-                sinc_prefactor = (q * L) / (2 * np.pi) * cos_term
+                sinc_prefactor = (0.5 / np.pi) * q * L * dt * cos_term
 
                 # Phase argument for sinc function
                 phase_arg = sinc_prefactor * time_integral

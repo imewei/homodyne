@@ -953,9 +953,9 @@ class ConfigurationValidator:
                 "start_frame": (1, 1e6),
                 "end_frame": (1, 1e6),
                 "stator_rotor_gap": (1.0, 1e9),
-                "D0": (1e-3, 1e8),
-                "alpha": (-5.0, 5.0),
-                "D_offset": (-1e6, 1e6),
+                "D0": (1.0, 1e6),
+                "alpha": (-10.0, 10.0),
+                "D_offset": (-1e5, 1e5),
             },
             "mode_parameter_counts": {
                 "static_isotropic": 3,

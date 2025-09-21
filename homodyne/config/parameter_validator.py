@@ -1533,8 +1533,8 @@ class ParameterValidator:
         return {
             # Diffusion parameters
             "D0": {
-                "min": 1e-3,  # Consistent with physics.py DIFFUSION_MIN
-                "max": 1e5,   # Consistent with physics.py DIFFUSION_MAX
+                "min": 1.0,  # Consistent with physics.py DIFFUSION_MIN
+                "max": 1e6,   # Consistent with physics.py DIFFUSION_MAX
                 "typical_min": 10.0,
                 "typical_max": 10000.0,
                 "units": "Å²/s",
@@ -1558,7 +1558,7 @@ class ParameterValidator:
             },
             # Flow parameters (laminar flow mode)
             "gamma_dot_0": {
-                "min": 1e-6,  # Consistent with typical shear rate bounds
+                "min": 1e-5,  # Consistent with typical shear rate bounds
                 "max": 1.0,   # Consistent with typical shear rate bounds
                 "typical_min": 1e-3,
                 "typical_max": 1e-1,

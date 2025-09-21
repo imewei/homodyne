@@ -610,10 +610,10 @@ class DataValidator:
             Dictionary of parameter constraints
         """
         return {
-            "D0": {"min": 1e-3, "max": 1e5},
+            "D0": {"min": 1.0, "max": 1e6},
             "alpha": {"min": -10.0, "max": 10.0},
             "D_offset": {"min": -1e5, "max": 1e5},
-            "gamma_dot_0": {"min": 1e-4, "max": 1e3},
+            "gamma_dot_0": {"min": 1e-5, "max": 1.0},
             "beta": {"min": -10.0, "max": 10.0},
             "gamma_dot_offset": {"min": -1.0, "max": 1.0},
             "phi_0": {"min": -30.0, "max": 30.0},

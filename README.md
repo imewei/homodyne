@@ -153,6 +153,22 @@ homodyne-gpu-optimize        # Hardware optimization
 **Laminar Flow Mode**: $g_1(t_1,t_2) = g\_{1,\\text{diff}}(t_1,t_2) \\times g\_{1,\\text{shear}}(t_1,t_2)$
 - Additional: $\\dot{\\gamma}\_0$, $\\beta$, $\\dot{\\gamma}\_{\\text{offset}}$ (shear), $\\phi_0$ (angular offset)
 
+### Standardized Physical Parameter Bounds
+
+The package enforces standardized physical bounds for all parameters across all optimization methods:
+
+- **D₀**: [1.0, 1e6] Å²/s - Characteristic diffusion coefficient
+- **α**: [-10, 10] dimensionless - Time-dependent diffusion exponent
+- **D_offset**: [-1e5, 1e5] Å²/s - Diffusion baseline offset
+- **γ̇₀**: [1e-5, 1.0] s⁻¹ - Characteristic shear rate
+- **β**: [-10, 10] dimensionless - Time-dependent shear exponent
+- **γ̇_offset**: [-1.0, 1.0] s⁻¹ - Shear rate baseline offset
+- **φ₀**: [-30°, 30°] degrees - Angular offset between shear direction and scattering vector
+- **contrast**: [0.01, 1.0] dimensionless - Correlation amplitude
+- **offset**: [0.0, 2.0] dimensionless - Correlation baseline
+
+These bounds are physically motivated and ensure stable optimization across all methods (Classical, Robust, MCMC). Bounds can be overridden via configuration files for specialized applications.
+
 ---
 
 ## 🛠️ Configuration & Usage

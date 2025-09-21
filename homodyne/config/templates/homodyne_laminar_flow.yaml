@@ -198,8 +198,8 @@ parameter_space:
   bounds:
     # Diffusion parameters (similar to static modes but potentially broader)
     - name: D0
-      min: 1.0e-3
-      max: 100000.0
+      min: 1.0
+      max: 1000000.0
       type: TruncatedNormal
       prior_mu: 1000.0
       prior_sigma: 1000.0
@@ -226,8 +226,8 @@ parameter_space:
     
     # Shear rate parameters (specific to laminar flow)
     - name: gamma_dot_0
-      min: 1.0e-4
-      max: 1000.0
+      min: 1.0e-5
+      max: 1.0
       type: TruncatedNormal
       prior_mu: 1.0
       prior_sigma: 10.0

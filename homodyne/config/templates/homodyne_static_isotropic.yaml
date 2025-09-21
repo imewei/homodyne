@@ -119,7 +119,7 @@ parameter_space:
     # Diffusion coefficient D₀
     - name: D0
       min: 1.0
-      max: 100000.0
+      max: 1000000.0
       type: TruncatedNormal
       prior_mu: 1000.0
       prior_sigma: 500.0
@@ -127,8 +127,8 @@ parameter_space:
     
     # Anomalous exponent α (typically negative for subdiffusion)
     - name: alpha
-      min: -2.0
-      max: 0.0
+      min: -10.0
+      max: 10.0
       type: Normal
       prior_mu: -1.2
       prior_sigma: 0.2
@@ -136,8 +136,8 @@ parameter_space:
     
     # Diffusion offset D_offset
     - name: D_offset
-      min: -1000.0
-      max: 1000.0
+      min: -100000.0
+      max: 100000.0
       type: Normal
       prior_mu: 0.0
       prior_sigma: 100.0

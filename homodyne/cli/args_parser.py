@@ -146,14 +146,14 @@ Homodyne v{__version__} - Wei Chen, Hongrui He (Argonne National Laboratory)
     parser.add_argument(
         "--contrast",
         type=float,
-        default=1.0,
+        default=0.3,
         help="Contrast parameter for scaling: fitted = contrast × theory + offset (default: %(default)s, requires --plot-simulated-data)",
     )
 
     parser.add_argument(
         "--offset",
         type=float,
-        default=0.0,
+        default=1.0,
         help="Offset parameter for scaling: fitted = contrast × theory + offset (default: %(default)s, requires --plot-simulated-data)",
     )
 

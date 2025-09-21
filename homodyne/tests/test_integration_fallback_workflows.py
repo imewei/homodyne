@@ -408,7 +408,7 @@ class TestWorkflowIntegration:
                             },
                             "gamma_dot_0": {
                                 "value": 1.0,
-                                "bounds": [1e-4, 1e3],
+                                "bounds": [1e-5, 1.0],
                                 "vary": True,
                             },
                             "beta": {"value": 0.0, "bounds": [-2.0, 2.0], "vary": True},

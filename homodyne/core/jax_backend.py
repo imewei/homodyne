@@ -253,8 +253,8 @@ def _calculate_diffusion_coefficient_impl_jax(
     D_t = D0 * power_term + D_offset
 
     # Apply physical bounds: D(t) should be positive and not too large
-    # Hard bounds enforce 1e-3 < D_t < 1e5 for numerical stability (updated to match DIFFUSION_MAX)
-    D_t_bounded = jnp.clip(D_t, 1e-3, 1e5)
+    # Hard bounds enforce 1.0 < D_t < 1e6 for numerical stability (updated to match DIFFUSION_MAX)
+    D_t_bounded = jnp.clip(D_t, 1.0, 1e6)
     
     return D_t_bounded
 
@@ -347,8 +347,10 @@ def _compute_g1_diffusion_core(
     D0, alpha, D_offset = params[0], params[1], params[2]
 
     # Step 1: Extract time array (t1 and t2 should be identical)
+    # Handle both 1D arrays and 2D meshgrids
     if t1.ndim == 2:
-        time_array = t1[:, 0]  # Extract first column if 2D meshgrid
+        # For meshgrid: t1 varies along columns, so extract first row
+        time_array = t1[0, :]  # Extract first row for unique t1 values
     else:
         time_array = t1
 
@@ -429,8 +431,10 @@ def _compute_g1_shear_core(
     )
 
     # Step 1: Extract time array (t1 and t2 should be identical)
+    # Handle both 1D arrays and 2D meshgrids
     if t1.ndim == 2:
-        time_array = t1[:, 0]  # Extract first column if 2D meshgrid
+        # For meshgrid: t1 varies along columns, so extract first row
+        time_array = t1[0, :]  # Extract first row for unique t1 values
     else:
         time_array = t1
 
@@ -440,6 +444,14 @@ def _compute_g1_shear_core(
     # Step 3: Create shear integral matrix using cumulative sums
     # This gives matrix[i,j] = |cumsum[i] - cumsum[j]| ≈ |∫γ̇(t)dt from i to j|
     gamma_integral = _create_time_integral_matrix_impl_jax(gamma_t)
+
+    # Fix phi shape if it has extra dimensions
+    # Handle case where phi might be (1, 1, 1, 23) instead of (23,)
+    if phi.ndim == 4 and phi.shape[:3] == (1, 1, 1):
+        phi = jnp.squeeze(phi, axis=(0, 1, 2))
+    elif phi.ndim > 1:
+        # Flatten any multi-dimensional phi to 1D
+        phi = phi.flatten()
 
     # Step 4: Compute sinc² for each phi angle using pre-computed factor (vectorized)
     n_phi = len(phi)
@@ -575,6 +587,13 @@ def compute_g1_diffusion(
     Returns:
         Diffusion contribution to g1 correlation function
     """
+    # Handle 1D time arrays by creating meshgrids
+    if t1.ndim == 1 and t2.ndim == 1:
+        # Create 2D meshgrids from 1D arrays
+        t2_grid, t1_grid = jnp.meshgrid(t2, t1, indexing='ij')
+        t1 = t1_grid
+        t2 = t2_grid
+
     if dt is None:
         # FALLBACK: Estimate from time array (NOT RECOMMENDED)
         if t1.ndim == 2:
@@ -614,6 +633,13 @@ def compute_g1_shear(
     Returns:
         Shear contribution to g1 correlation function (sinc² values)
     """
+    # Handle 1D time arrays by creating meshgrids
+    if t1.ndim == 1 and t2.ndim == 1:
+        # Create 2D meshgrids from 1D arrays
+        t2_grid, t1_grid = jnp.meshgrid(t2, t1, indexing='ij')
+        t1 = t1_grid
+        t2 = t2_grid
+
     if dt is None:
         # FALLBACK: Estimate from time array (NOT RECOMMENDED)
         if t1.ndim == 2:
@@ -653,6 +679,13 @@ def compute_g1_total(
     Returns:
         Total g1 correlation function with shape (n_phi, n_times, n_times)
     """
+    # Handle 1D time arrays by creating meshgrids
+    if t1.ndim == 1 and t2.ndim == 1:
+        # Create 2D meshgrids from 1D arrays
+        t2_grid, t1_grid = jnp.meshgrid(t2, t1, indexing='ij')
+        t1 = t1_grid
+        t2 = t2_grid
+
     if dt is None:
         # FALLBACK: Estimate from time array (NOT RECOMMENDED)
         if t1.ndim == 2:
@@ -697,6 +730,13 @@ def compute_g2_scaled(
     Returns:
         g2 correlation function with scaled fitting and physical bounds applied
     """
+    # Handle 1D time arrays by creating meshgrids
+    if t1.ndim == 1 and t2.ndim == 1:
+        # Create 2D meshgrids from 1D arrays
+        t2_grid, t1_grid = jnp.meshgrid(t2, t1, indexing='ij')
+        t1 = t1_grid
+        t2 = t2_grid
+
     if dt is None:
         # FALLBACK: Estimate from time array (NOT RECOMMENDED)
         if t1.ndim == 2:

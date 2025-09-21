@@ -78,6 +78,7 @@ class PhysicsModelBase(ABC):
         phi: jnp.ndarray,
         q: float,
         L: float,
+        dt: float = None,
     ) -> jnp.ndarray:
         """Compute g1 correlation function for this model."""
         pass
@@ -138,6 +139,7 @@ class DiffusionModel(PhysicsModelBase):
         phi: jnp.ndarray,
         q: float,
         L: float,
+        dt: float = None,
     ) -> jnp.ndarray:
         """
         Compute diffusion contribution to g1.
@@ -147,12 +149,20 @@ class DiffusionModel(PhysicsModelBase):
         if not self.validate_parameters(params):
             logger.warning("Invalid diffusion parameters - results may be unreliable")
 
-        return compute_g1_diffusion(params, t1, t2, q)
+        # Handle q as array - convert to scalar
+        if hasattr(q, 'shape') and q.shape:
+            # If q is an array, use mean value for scalar computations
+            q_scalar = float(jnp.mean(q))
+            logger.debug(f"DiffusionModel: Converting q array to scalar: {q_scalar:.6f}")
+        else:
+            q_scalar = float(q)
+
+        return compute_g1_diffusion(params, t1, t2, q_scalar, dt)
 
     def get_parameter_bounds(self) -> List[Tuple[float, float]]:
         """Standard bounds for diffusion parameters."""
         return [
-            (1e-3, 1e5),  # D0: 1e-3 to 1e5 Å²/s (consistent with physics.py)
+            (1.0, 1e6),  # D0: 1.0 to 1e6 Å²/s (consistent with physics.py)
             (-10.0, 10.0),  # alpha: -10 to 10 (consistent with physics.py)
             (
                 -1e5,
@@ -197,6 +207,7 @@ class ShearModel(PhysicsModelBase):
         phi: jnp.ndarray,
         q: float,
         L: float,
+        dt: float = None,
     ) -> jnp.ndarray:
         """
         Compute shear contribution to g1.
@@ -206,15 +217,22 @@ class ShearModel(PhysicsModelBase):
         if not self.validate_parameters(params):
             logger.warning("Invalid shear parameters - results may be unreliable")
 
+        # Handle q as array - convert to scalar
+        if hasattr(q, 'shape') and q.shape:
+            # If q is an array, use mean value for scalar computations
+            q_scalar = float(jnp.mean(q))
+            logger.debug(f"ShearModel: Converting q array to scalar: {q_scalar:.6f}")
+        else:
+            q_scalar = float(q)
 
         # Create full parameter array with dummy diffusion parameters
         full_params = jnp.concatenate([jnp.array([100.0, 0.0, 10.0]), params])
-        return compute_g1_shear(full_params, t1, t2, phi, q, L)
+        return compute_g1_shear(full_params, t1, t2, phi, q_scalar, L, dt)
 
     def get_parameter_bounds(self) -> List[Tuple[float, float]]:
         """Standard bounds for shear parameters."""
         return [
-            (1e-4, 1e3),  # gamma_dot_0: 1e-4 to 1e3 s⁻¹ (consistent with physics.py)
+            (1e-5, 1.0),  # gamma_dot_0: 1e-5 to 1.0 s⁻¹ (consistent with physics.py)
             (-10.0, 10.0),  # beta: -10 to 10 (consistent with physics.py)
             (-1.0, 1.0),  # gamma_dot_offset: -1 to 1 s⁻¹ (consistent with physics.py)
             (-30.0, 30.0),  # phi0: -30 to 30 degrees (consistent with physics.py)
@@ -282,6 +300,7 @@ class CombinedModel(PhysicsModelBase):
         phi: jnp.ndarray,
         q: float,
         L: float,
+        dt: float = None,
     ) -> jnp.ndarray:
         """
         Compute total g1 = g1_diffusion × g1_shear.
@@ -291,12 +310,20 @@ class CombinedModel(PhysicsModelBase):
                 "Invalid combined model parameters - results may be unreliable"
             )
 
+        # Handle q as array - convert to scalar
+        if hasattr(q, 'shape') and q.shape:
+            # If q is an array, use mean value for scalar computations
+            q_scalar = float(jnp.mean(q))
+            logger.debug(f"Converting q array to scalar: {q_scalar:.6f}")
+        else:
+            q_scalar = float(q)
+
         if self.analysis_mode.startswith("static"):
             # Static mode: only diffusion, no shear
-            return compute_g1_diffusion(params, t1, t2, q)
+            return compute_g1_diffusion(params, t1, t2, q_scalar, dt)
         else:
             # Laminar flow mode: full model
-            return compute_g1_total(params, t1, t2, phi, q, L)
+            return compute_g1_total(params, t1, t2, phi, q_scalar, L, dt)
 
     @log_calls(include_args=False)
     def compute_g2(
@@ -313,7 +340,14 @@ class CombinedModel(PhysicsModelBase):
         """
         Compute g2 with scaled fitting: g₂ = offset + contrast × [g₁]²
         """
-        return compute_g2_scaled(params, t1, t2, phi, q, L, contrast, offset)
+        # Handle q as array - convert to scalar
+        if hasattr(q, 'shape') and q.shape:
+            # If q is an array, use mean value for scalar computations
+            q_scalar = float(jnp.mean(q))
+        else:
+            q_scalar = float(q)
+
+        return compute_g2_scaled(params, t1, t2, phi, q_scalar, L, contrast, offset)
 
     @log_calls(include_args=False)
     def compute_chi_squared(
