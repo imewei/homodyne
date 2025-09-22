@@ -457,8 +457,8 @@ if JAX_AVAILABLE:
             g1_squared = g1_finite**2
 
             # Apply bounds to scaling parameters to prevent numerical instability
-            contrast_bounded = jnp.clip(contrast_samples[i], 0.01, 1.0)  # Physical bounds: 0.01 ≤ contrast ≤ 1
-            offset_bounded = jnp.clip(offset_samples[i], 0.0, 2.0)      # Physical bounds: 0 ≤ offset ≤ 2
+            contrast_bounded = jnp.clip(contrast_samples[i], 1e-10, 1.0)  # Physical bounds: 1e-10 ≤ contrast ≤ 1
+            offset_bounded = jnp.clip(offset_samples[i], 1e-10, 2.0)      # Physical bounds: 1e-10 ≤ offset ≤ 2
 
             # Check if scaling parameters were clipped (indicates potential issues)
             if jnp.abs(contrast_samples[i] - contrast_bounded) > 1e-6 or jnp.abs(offset_samples[i] - offset_bounded) > 1e-6:
@@ -707,8 +707,8 @@ else:
                     g1_squared = g1_theory**2
 
                     # Apply bounds to scaling parameters to prevent numerical instability
-                    contrast_bounded = jnp.clip(contrast_samples[i], 0.01, 1.0)  # Physical bounds: 0.01 ≤ contrast ≤ 1
-                    offset_bounded = jnp.clip(offset_samples[i], 0.0, 2.0)      # Physical bounds: 0 ≤ offset ≤ 2
+                    contrast_bounded = jnp.clip(contrast_samples[i], 1e-10, 1.0)  # Physical bounds: 1e-10 ≤ contrast ≤ 1
+                    offset_bounded = jnp.clip(offset_samples[i], 1e-10, 2.0)      # Physical bounds: 1e-10 ≤ offset ≤ 2
 
                     # Check if scaling parameters were clipped (indicates potential issues)
                     if jnp.abs(contrast_samples[i] - contrast_bounded) > 1e-6 or jnp.abs(offset_samples[i] - offset_bounded) > 1e-6:
@@ -1834,9 +1834,9 @@ class VariationalInferenceJAX:
 
                         variational_params['param_mu'] = jnp.array(param_mu_bounded)
                 if 'contrast_mu' in variational_params:
-                    variational_params['contrast_mu'] = jnp.clip(variational_params['contrast_mu'], 0.01, 1.0)
+                    variational_params['contrast_mu'] = jnp.clip(variational_params['contrast_mu'], 1e-10, 1.0)
                 if 'offset_mu' in variational_params:
-                    variational_params['offset_mu'] = jnp.clip(variational_params['offset_mu'], 0.0, 2.0)
+                    variational_params['offset_mu'] = jnp.clip(variational_params['offset_mu'], 1e-10, 2.0)
 
                 # Check convergence
                 if iteration > 10 and len(elbo_history) > 5:

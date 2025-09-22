@@ -68,8 +68,8 @@ class ParameterSpace:
     """
 
     # Scaling parameters (always present)
-    contrast_bounds: Tuple[float, float] = (0.01, 1.0)
-    offset_bounds: Tuple[float, float] = (0.0, 2.0)
+    contrast_bounds: Tuple[float, float] = (1e-10, 1.0)
+    offset_bounds: Tuple[float, float] = (1e-10, 2.0)
     contrast_prior: Tuple[float, float] = (0.3, 0.1)  # (mu, sigma) for TruncatedNormal
     offset_prior: Tuple[float, float] = (1.0, 0.1)  # (mu, sigma) for TruncatedNormal
 

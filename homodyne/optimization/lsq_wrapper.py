@@ -183,13 +183,22 @@ def fit_homodyne_lsq(
     # Handle noise estimation
     if estimate_noise:
         logger.info(f"Estimating noise using {noise_model} model")
+        # Calculate the estimated sigma value
+        estimated_sigma_value = float(np.std(data) * 0.1)
+
         if noise_model == "hierarchical":
-            estimated_sigma = np.full_like(data.flatten(), np.std(data) * 0.1)
-            noise_params = {"global_sigma": float(np.std(data) * 0.1)}
+            # Store only the scalar value instead of massive array
+            estimated_sigma = np.array([estimated_sigma_value])  # Single element array
+            noise_params = {"global_sigma": estimated_sigma_value}
         else:
-            estimated_sigma = np.full_like(data.flatten(), np.std(data) * 0.1)
-            noise_params = {"global_sigma": float(np.std(data) * 0.1)}
-        sigma_used = estimated_sigma.reshape(data.shape)
+            # Store only the scalar value instead of massive array
+            estimated_sigma = np.array([estimated_sigma_value])  # Single element array
+            noise_params = {"global_sigma": estimated_sigma_value}
+
+        # Create the sigma array for optimization (same size as data)
+        sigma_used = np.full_like(data, estimated_sigma_value)
+
+        logger.info(f"✓ Estimated noise σ: {estimated_sigma_value:.6f} (stored as single value)")
     else:
         estimated_sigma = None
         noise_params = None
@@ -236,9 +245,9 @@ def fit_homodyne_lsq(
             logger.debug(f"Eval #{eval_counter[0]}: params={params[:3]}..., contrast={contrast:.4f}, offset={offset:.4f}")
 
         # Basic bounds validation
-        if contrast <= 0 or contrast > 10:
+        if contrast < 1e-10 or contrast > 1.0:
             return 1e10
-        if abs(offset) > 100:
+        if offset < 1e-10 or offset > 2.0:
             return 1e10
 
         try:
@@ -423,8 +432,8 @@ def fit_homodyne_lsq(
                     # For other parameters, allow wider range including sign changes
                     bounds.append((param - abs(param) * 10, param + abs(param) * 10))
             # Scaling parameter bounds
-            bounds.append((0.001, 10.0))  # contrast bounds
-            bounds.append((-10.0, 10.0))  # offset bounds
+            bounds.append((1e-10, 1.0))  # contrast bounds
+            bounds.append((1e-10, 2.0))  # offset bounds
 
             result = minimize(
                 chi_square_objective_numpy,

@@ -248,9 +248,9 @@ def create_numpyro_model(
         g1_squared = g1_theory**2
 
         # Apply scaling with hard bounds: c2_fitted = c2_theory * contrast + offset
-        # Apply same hard bounds as VI for consistency: 0.01 ≤ contrast ≤ 1, 0 ≤ offset ≤ 2
-        contrast_bounded = jnp.clip(contrast, 0.01, 1.0)
-        offset_bounded = jnp.clip(offset, 0.0, 2.0)
+        # Apply same hard bounds as VI for consistency: 1e-10 ≤ contrast ≤ 1, 1e-10 ≤ offset ≤ 2
+        contrast_bounded = jnp.clip(contrast, 1e-10, 1.0)
+        offset_bounded = jnp.clip(offset, 1e-10, 2.0)
         theory_fitted = contrast_bounded * g1_squared + offset_bounded
 
         # Likelihood: data ~ Normal(theory_fitted, sigma)
@@ -641,9 +641,9 @@ class MCMCJAXSampler:
                 g1_theory = self.engine.theory_engine.compute_g1(
                     physical_params, t1, t2, phi, q, L
                 )
-                # Apply hard bounds for consistency with VI: 0.01 ≤ contrast ≤ 1, 0 ≤ offset ≤ 2
-                contrast_bounded = np.clip(contrast, 0.01, 1.0)
-                offset_bounded = np.clip(offset, 0.0, 2.0)
+                # Apply hard bounds for consistency with VI: 1e-10 ≤ contrast ≤ 1, 1e-10 ≤ offset ≤ 2
+                contrast_bounded = np.clip(contrast, 1e-10, 1.0)
+                offset_bounded = np.clip(offset, 1e-10, 2.0)
                 g2_theory = g1_theory**2 * contrast_bounded + offset_bounded
 
                 residuals = (data - g2_theory) / sigma

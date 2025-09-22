@@ -81,6 +81,27 @@ except ImportError:
 logger = get_logger(__name__)
 
 
+def safe_safe_print(*args, **kwargs):
+    """Print function that respects file redirection and avoids excessive flushing.
+
+    Only flushes output when writing to an interactive terminal (TTY).
+    When output is redirected to files, avoids flushing to prevent performance issues.
+    """
+    # Extract flush parameter if provided
+    flush = kwargs.get('flush', False)
+
+    # For file redirection, disable automatic flushing
+    if not sys.stdout.isatty():
+        kwargs['flush'] = False
+
+    # Call standard print
+    print(*args, **kwargs)
+
+    # Only manually flush if we're in an interactive terminal and flush was requested
+    if flush and sys.stdout.isatty():
+        sys.stdout.flush()
+
+
 @dataclass
 class ConsoleTheme:
     """Color theme for console output."""
@@ -163,7 +184,7 @@ class ProgressIndicator:
             # Fallback for non-interactive terminals
             if self.total:
                 percent = (self.current / self.total) * 100
-                print(
+                safe_print(
                     f"{self.description}: {percent:.1f}% ({self.current}/{self.total})"
                 )
 
@@ -173,7 +194,7 @@ class ProgressIndicator:
             return
 
         # Clear current line
-        print("\r", end="")
+        safe_print("\r", end="")
 
         if self.style == "bar" and self.total:
             self._render_progress_bar()
@@ -185,7 +206,7 @@ class ProgressIndicator:
             self._render_percentage()
         else:
             # Fallback to simple counter
-            print(f"{self.description}: {self.current}", end="")
+            safe_print(f"{self.description}: {self.current}", end="")
 
         # Only flush for interactive output, not when redirected to files
         # This reduces log file flushing overhead while preserving real-time display
@@ -215,7 +236,7 @@ class ProgressIndicator:
         colored_bar = f"{self.theme.progress_bar}{bar}{self.theme.reset}"
         percent_str = f"{self.theme.progress_percent}{percent:5.1f}%{self.theme.reset}"
 
-        print(
+        safe_print(
             f"{self.description}: {colored_bar} {percent_str} ({self.current}/{self.total}){eta_str}",
             end="",
         )
@@ -226,7 +247,7 @@ class ProgressIndicator:
         spinner = self.spinner_chars[self.spinner_index]
 
         elapsed_str = self._format_time(time.time() - self.start_time)
-        print(
+        safe_print(
             f"{self.theme.spinner}{spinner}{self.theme.reset} {self.description} ({elapsed_str})",
             end="",
         )
@@ -237,12 +258,12 @@ class ProgressIndicator:
         dots = "." * self.dots_count + " " * (self.dots_max - self.dots_count)
 
         elapsed_str = self._format_time(time.time() - self.start_time)
-        print(f"{self.description}{dots} ({elapsed_str})", end="")
+        safe_print(f"{self.description}{dots} ({elapsed_str})", end="")
 
     def _render_percentage(self):
         """Render percentage only."""
         percent = (self.current / self.total) * 100
-        print(
+        safe_print(
             f"{self.description}: {self.theme.progress_percent}{percent:.1f}%{self.theme.reset} ({self.current}/{self.total})",
             end="",
         )
@@ -259,12 +280,12 @@ class ProgressIndicator:
     def finish(self, message: Optional[str] = None):
         """Finish progress indicator."""
         if self.supports_updates:
-            print("\r", end="")  # Clear current line
+            safe_print("\r", end="")  # Clear current line
 
         final_message = message or f"{self.description}: Complete"
         elapsed = self._format_time(time.time() - self.start_time)
 
-        print(f"{self.theme.success}✓{self.theme.reset} {final_message} ({elapsed})")
+        safe_print(f"{self.theme.success}✓{self.theme.reset} {final_message} ({elapsed})")
 
 
 class EnhancedConsoleLogger:
@@ -344,11 +365,11 @@ class EnhancedConsoleLogger:
         lines = str(message).split("\n")
         for i, line in enumerate(lines):
             if i == 0:
-                print(f"{timestamp}{level_str}{indent}{line}")
+                safe_print(f"{timestamp}{level_str}{indent}{line}")
             else:
                 # Subsequent lines get extra indentation
                 extra_indent = " " * (len(level_str) - 3) if self.show_levels else ""
-                print(f"{timestamp}{extra_indent}{indent}  {line}")
+                safe_print(f"{timestamp}{extra_indent}{indent}  {line}")
 
     def error(self, message: str, **kwargs):
         """Log error message."""
@@ -372,19 +393,19 @@ class EnhancedConsoleLogger:
 
     def header(self, text: str, width: int = 60, char: str = "="):
         """Print formatted header."""
-        print()
-        print(self._colorize(char * width, self.theme.header))
+        safe_print()
+        safe_print(self._colorize(char * width, self.theme.header))
         centered = text.center(width)
-        print(self._colorize(centered, self.theme.header))
-        print(self._colorize(char * width, self.theme.header))
-        print()
+        safe_print(self._colorize(centered, self.theme.header))
+        safe_print(self._colorize(char * width, self.theme.header))
+        safe_print()
 
     def section(self, text: str, width: int = 50, char: str = "-"):
         """Print formatted section header."""
-        print()
+        safe_print()
         colored_text = self._colorize(f"📋 {text}", self.theme.section)
-        print(colored_text)
-        print(self._colorize(char * (len(text) + 3), self.theme.section))
+        safe_print(colored_text)
+        safe_print(self._colorize(char * (len(text) + 3), self.theme.section))
 
     def parameter(self, name: str, value: Any, description: Optional[str] = None):
         """Print parameter with formatted name and value."""
@@ -396,16 +417,16 @@ class EnhancedConsoleLogger:
         if description:
             line += f" ({description})"
 
-        print(line)
+        safe_print(line)
 
     def file_path(self, path: Union[str, Path], description: Optional[str] = None):
         """Print file path with special formatting."""
         colored_path = self._colorize(str(path), self.theme.file_path)
 
         if description:
-            print(f"{self.indent_str}📁 {description}: {colored_path}")
+            safe_print(f"{self.indent_str}📁 {description}: {colored_path}")
         else:
-            print(f"{self.indent_str}📁 {colored_path}")
+            safe_print(f"{self.indent_str}📁 {colored_path}")
 
     def validation_result(self, is_valid: bool, message: str):
         """Print validation result with appropriate styling."""
@@ -417,7 +438,7 @@ class EnhancedConsoleLogger:
             color = self.theme.error
 
         colored_message = self._colorize(message, color)
-        print(f"{self.indent_str}{icon} {colored_message}")
+        safe_print(f"{self.indent_str}{icon} {colored_message}")
 
     def progress_update(
         self, step: str, current: int, total: int, details: Optional[str] = None
@@ -433,7 +454,7 @@ class EnhancedConsoleLogger:
         if details:
             line += f" - {details}"
 
-        print(line)
+        safe_print(line)
 
     def create_child_logger(
         self, additional_indent: int = 1
@@ -486,7 +507,7 @@ class ConfigurationProgressTracker:
             estimate = self.operation_estimates.get(op, 5)
             self.logger.info(f"  {i}. {op.replace('_', ' ').title()} (~{estimate}s)")
 
-        print()
+        safe_print()
 
     @contextmanager
     def operation(self, operation_name: str, details: Optional[str] = None):
@@ -545,7 +566,7 @@ class ConfigurationProgressTracker:
         """Print operation summary."""
         total_time = time.time() - self.start_time
 
-        print()
+        safe_print()
         if success:
             self.logger.header("✅ Configuration Processing Complete", char="=")
             self.logger.success(
@@ -592,7 +613,7 @@ class ValidationFeedbackSystem:
         self.logger.section("Configuration Validation")
         self.logger.info(f"Validating configuration: {config_name}")
         self.logger.file_path(config_name)
-        print()
+        safe_print()
 
     def validate_section(
         self, section_name: str, is_valid: bool, details: Optional[str] = None
@@ -650,14 +671,14 @@ class ValidationFeedbackSystem:
             min_val, max_val = expected_range
             line += f" (expected: {min_val} - {max_val})"
 
-        print(line)
+        safe_print(line)
 
     def finish_validation(self) -> Dict[str, Any]:
         """Finish validation and show summary."""
         total_issues = len(self.errors) + len(self.warnings)
         is_valid = len(self.errors) == 0
 
-        print()
+        safe_print()
         self.logger.section("Validation Summary")
 
         if is_valid:
@@ -688,7 +709,7 @@ class ValidationFeedbackSystem:
 
         # Show suggestions if any
         if self.suggestions:
-            print()
+            safe_print()
             self.logger.info(f"💡 {len(self.suggestions)} improvement suggestions:")
             child_logger = self.logger.create_child_logger()
             for suggestion in self.suggestions:
@@ -696,7 +717,7 @@ class ValidationFeedbackSystem:
 
         # Show performance notes if any
         if self.performance_notes:
-            print()
+            safe_print()
             self.logger.info(f"🚀 {len(self.performance_notes)} performance notes:")
             child_logger = self.logger.create_child_logger()
             for note in self.performance_notes:
@@ -726,7 +747,7 @@ class InteractivePromptSystem:
         descriptions: Optional[Dict[str, str]] = None,
     ) -> str:
         """Ask user to choose from options with enhanced formatting."""
-        print()
+        safe_print()
         self.logger.info(prompt)
 
         for i, choice in enumerate(choices, 1):
@@ -739,7 +760,7 @@ class InteractivePromptSystem:
             if desc:
                 line += f" - {desc}"
 
-            print(line)
+            safe_print(line)
 
         while True:
             try:
@@ -763,7 +784,7 @@ class InteractivePromptSystem:
             except ValueError:
                 self.logger.error("Please enter a valid number")
             except KeyboardInterrupt:
-                print()
+                safe_print()
                 self.logger.warning("Operation cancelled by user")
                 raise
 
@@ -787,7 +808,7 @@ class InteractivePromptSystem:
                     self.logger.error("Please enter 'y' for yes or 'n' for no")
 
             except KeyboardInterrupt:
-                print()
+                safe_print()
                 self.logger.warning("Operation cancelled by user")
                 raise
 
@@ -835,14 +856,14 @@ class InteractivePromptSystem:
                 colored_value = self.logger._colorize(
                     str(value), self.logger.theme.success
                 )
-                print(f"  → {colored_value}")
+                safe_print(f"  → {colored_value}")
 
                 return value
 
             except ValueError:
                 self.logger.error(f"Please enter a valid {value_type.__name__}")
             except KeyboardInterrupt:
-                print()
+                safe_print()
                 self.logger.warning("Operation cancelled by user")
                 raise
 
@@ -850,7 +871,7 @@ class InteractivePromptSystem:
         self, action: str, details: Optional[str] = None, default: bool = False
     ) -> bool:
         """Ask for confirmation before performing an action."""
-        print()
+        safe_print()
         self.logger.warning(f"⚠️  About to: {action}")
 
         if details:

@@ -618,9 +618,16 @@ def _compute_g1_total_core(
     # Multiply: g₁_total[phi, i, j] = g₁_diffusion[i, j] × g₁_shear[phi, i, j]
     g1_total = g1_diff_broadcasted * g1_shear
 
-    # Apply physical bounds: 0 < g₁(t) ≤ 1
-    # Use small epsilon to avoid exact zero (which could cause numerical issues)
-    g1_bounded = jnp.clip(g1_total, 1e-10, 1.0)
+    # Apply loose physical bounds to allow natural correlation function behavior
+    # Remove artificial upper bound to prevent fitted data collapse
+    # |g₁|² ∈ [1e-10, ∞) - naturally non-negative with numerical stability
+
+    # Apply positive-only constraint with minimum threshold for numerical stability
+    epsilon = 1e-10
+    g1_bounded = jnp.maximum(g1_total, epsilon)
+
+    # No upper bound - allows unlimited correlation function growth
+    # This removes the previous artificial constraint that caused fitted data collapse
 
     return g1_bounded
 
