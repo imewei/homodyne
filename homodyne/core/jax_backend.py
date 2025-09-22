@@ -545,29 +545,58 @@ def _compute_g1_shear_core(
     gamma_integral = _create_time_integral_matrix_impl_jax(gamma_t)
 
     # Fix phi shape if it has extra dimensions
-    # Handle case where phi might be (1, 1, 1, 23) instead of (23,)
-    if phi.ndim == 4 and phi.shape[:3] == (1, 1, 1):
-        phi = jnp.squeeze(phi, axis=(0, 1, 2))
-    elif phi.ndim > 1:
-        # Flatten any multi-dimensional phi to 1D
-        phi = phi.flatten()
+    # Handle case where phi might be (1, 1, 1, 23) instead of (23,) or other malformed shapes
+    phi = jnp.asarray(phi)  # Ensure it's a JAX array
+
+    # Remove all leading singleton dimensions and flatten to 1D
+    while phi.ndim > 1:
+        if phi.ndim == 4 and phi.shape[:3] == (1, 1, 1):
+            # Handle specific case (1, 1, 1, N) -> (N,)
+            phi = jnp.squeeze(phi, axis=(0, 1, 2))
+        elif phi.ndim > 1:
+            # Handle any other multi-dimensional case by squeezing all singleton dims
+            phi = jnp.squeeze(phi)
+            # If squeezing didn't reduce dimensions, flatten
+            if phi.ndim > 1:
+                phi = phi.flatten()
+                break
 
     # Step 4: Compute sinc² for each phi angle using pre-computed factor (vectorized)
     phi_array = jnp.atleast_1d(phi)
     n_phi = safe_len(phi_array)
     n_times = safe_len(time_array)
 
+    # Debug: Log shapes for troubleshooting broadcasting issues
+    import os
+    if os.environ.get('HOMODYNE_DEBUG_SHAPES') == '1':
+        print(f"DEBUG _compute_g1_shear_core shapes:")
+        print(f"  phi_array.shape: {phi_array.shape}")
+        print(f"  gamma_integral.shape: {gamma_integral.shape}")
+        print(f"  n_phi: {n_phi}, n_times: {n_times}")
+
     # Vectorized computation: compute all phi angles at once
     # angle_diff shape: (n_phi,)
-    angle_diff = jnp.deg2rad(phi0 - phi)
+    angle_diff = jnp.deg2rad(phi0 - phi_array)  # Use phi_array for consistency
     cos_term = jnp.cos(angle_diff)  # shape: (n_phi,)
 
     # Broadcast: prefactor shape (n_phi,), gamma_integral shape (n_times, n_times)
     # Need to expand prefactor to (n_phi, 1, 1) for proper broadcasting
     prefactor = sinc_prefactor * cos_term[:, None, None]  # shape: (n_phi, 1, 1)
 
+    # Ensure gamma_integral has the expected 2D shape
+    if gamma_integral.ndim != 2:
+        raise ValueError(f"gamma_integral should be 2D, got shape {gamma_integral.shape}")
+
     # Compute phase matrix for all phi angles: shape (n_phi, n_times, n_times)
-    phase = prefactor * gamma_integral  # Broadcast: (n_phi, 1, 1) * (n_times, n_times)
+    try:
+        phase = prefactor * gamma_integral  # Broadcast: (n_phi, 1, 1) * (n_times, n_times)
+    except Exception as e:
+        # Enhanced error message for debugging
+        raise ValueError(
+            f"Broadcasting error in _compute_g1_shear_core: "
+            f"prefactor.shape={prefactor.shape}, gamma_integral.shape={gamma_integral.shape}. "
+            f"Original error: {e}"
+        )
 
     # Compute sinc² values: [sinc(Φ)]² for all phi angles
     sinc_val = safe_sinc(phase)
@@ -611,12 +640,20 @@ def _compute_g1_total_core(
 
     # Broadcast diffusion term to match shear dimensions
     # g1_diff needs to be broadcast from (n_times, n_times) to (n_phi, n_times, n_times)
-    phi_array = jnp.atleast_1d(phi)
-    n_phi = safe_len(phi_array)
+    # Use the shape of g1_shear to determine n_phi (more reliable than parsing phi directly)
+    n_phi = g1_shear.shape[0]
     g1_diff_broadcasted = jnp.broadcast_to(g1_diff[None, :, :], (n_phi, g1_diff.shape[0], g1_diff.shape[1]))
 
     # Multiply: g₁_total[phi, i, j] = g₁_diffusion[i, j] × g₁_shear[phi, i, j]
-    g1_total = g1_diff_broadcasted * g1_shear
+    try:
+        g1_total = g1_diff_broadcasted * g1_shear
+    except Exception as e:
+        # Enhanced error message for debugging
+        raise ValueError(
+            f"Broadcasting error in _compute_g1_total_core: "
+            f"g1_diff_broadcasted.shape={g1_diff_broadcasted.shape}, g1_shear.shape={g1_shear.shape}. "
+            f"Original error: {e}"
+        )
 
     # Apply loose physical bounds to allow natural correlation function behavior
     # Remove artificial upper bound to prevent fitted data collapse

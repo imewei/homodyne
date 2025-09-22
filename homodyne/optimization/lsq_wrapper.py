@@ -17,6 +17,7 @@ from homodyne.utils.logging import get_logger
 from homodyne.core.jax_backend import safe_len
 from homodyne.optimization.theory_engine import UnifiedTheoryEngine, create_theory_engine, TheoryComputationConfig
 from homodyne.optimization.base_result import LSQResult
+from homodyne.utils.progress import OptimizationProgress, track_optimization
 
 # Import JAX with proper fallback
 try:
@@ -216,6 +217,7 @@ def fit_homodyne_lsq(
     estimate_noise: bool = False,
     noise_model: str = "hierarchical",
     config: Optional[Dict[str, Any]] = None,
+    max_iterations: Optional[int] = None,
     **kwargs
 ) -> LSQResult:
     """
@@ -241,6 +243,12 @@ def fit_homodyne_lsq(
         LSQResult with fitted parameters and optional noise estimates
     """
     start_time = time.time()
+
+    # Set default max_iterations for LSQ method if not provided
+    if max_iterations is None:
+        max_iterations = kwargs.get('max_iterations', 10000)  # CLI default from args_parser.py
+
+    logger.info(f"LSQ optimization will use max_iterations: {max_iterations}")
 
     # Import optimization libraries
     try:
@@ -318,6 +326,17 @@ def fit_homodyne_lsq(
 
     logger.debug(f"Using dt parameter from configuration: {dt} (LSQ optimization uses correlation matrices, not time arrays)")
 
+    # Initialize progress tracker if enabled
+    show_progress = kwargs.get('show_progress', True)
+    if show_progress:
+        progress_tracker = track_optimization(
+            method="LSQ",
+            total_iterations=max_iterations,
+            dataset_size=len(data_samples)  # Use sampled size for efficiency
+        )
+    else:
+        progress_tracker = None
+
     # Define the chi-square objective function with proper NumPy/JAX boundary
     # Add evaluation counter
     eval_counter = [0]
@@ -356,6 +375,9 @@ def fit_homodyne_lsq(
                     physics_params, data_samples, sample_weights, sample_indices,
                     t1, t2, phi, q, L, contrast, offset, engine, dt
                 )
+                # Update progress tracker
+                if progress_tracker is not None:
+                    progress_tracker.update(loss=chi2)
                 # Log chi2 value for debugging
                 if eval_counter[0] % 10 == 1:
                     logger.debug(f"  -> chi2={chi2:.6f}")
@@ -365,6 +387,9 @@ def fit_homodyne_lsq(
                     physics_params, data_samples, sample_weights, sample_indices,
                     t1, t2, phi, q, L, contrast, offset, engine, dt
                 )
+                # Update progress tracker
+                if progress_tracker is not None:
+                    progress_tracker.update(loss=chi2)
                 if eval_counter[0] % 10 == 1:
                     logger.debug(f"  -> chi2={chi2:.6f}")
                 return float(chi2)
@@ -505,7 +530,7 @@ def fit_homodyne_lsq(
             initial_params,
             method='Nelder-Mead',
             options={
-                'maxiter': 2000,
+                'maxiter': max_iterations,
                 'xatol': 1e-4,
                 'fatol': 1e-4,
                 'disp': True
@@ -542,7 +567,7 @@ def fit_homodyne_lsq(
                 method='L-BFGS-B',
                 bounds=bounds,
                 options={
-                    'maxiter': 1000,
+                    'maxiter': max_iterations,
                     'ftol': 1e-6,  # Relax function tolerance
                     'gtol': 1e-5,  # Add gradient tolerance
                     'disp': True   # Enable verbose output
@@ -563,7 +588,7 @@ def fit_homodyne_lsq(
                     chi_square_objective_numpy,
                     initial_params,
                     method='Powell',
-                    options={'maxiter': 1000, 'disp': True}
+                    options={'maxiter': max_iterations, 'disp': True}
                 )
                 if hasattr(result, 'x'):
                     optimized_params = result.x
@@ -582,6 +607,10 @@ def fit_homodyne_lsq(
         final_chi_sq = chi_square_objective_numpy(initial_params)
         converged = True
         n_iterations = 1
+
+    # Close progress tracker if it was used
+    if progress_tracker is not None:
+        progress_tracker.close()
 
     # Extract optimized parameters
     physics_params = optimized_params[:-2]

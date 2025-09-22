@@ -41,7 +41,7 @@ metadata:
     - "All three analysis modes with proper parameter configurations"
     - "Discrete numerical integration for anomalous diffusion stability (α ≤ -1)"
     - "Mandatory diagonal correction for data consistency and accuracy"
-    - "Advanced optimization methods: VI (primary), MCMC, Hybrid pipeline"
+    - "Advanced optimization methods: LSQ (primary), MCMC, Hybrid LSQ→MCMC pipeline"
     - "Comprehensive parameter bounds and physics constraints"
     - "Multi-level performance optimization and caching"
     - "Quality control with data validation and auto-repair"
@@ -248,15 +248,13 @@ parameter_space:
 
 # REQUIRED: Optimization methods and settings
 optimization:
-  # Variational Inference (VI) - Primary optimization method
-  vi:
+  # Least Squares (LSQ) - Primary optimization method
+  lsq:
     enabled: true
-    max_iterations: 1000      # Increase for complex problems
-    learning_rate: 0.01       # Decrease if optimization is unstable
-    convergence_tolerance: 1e-6
-    batch_size: "auto"        # auto | integer value
-    early_stopping: true
-    patience: 50              # Iterations without improvement before stopping
+    max_iterations: 10000     # Maximum iterations for optimization
+    tolerance: 1e-8           # Convergence tolerance
+    method: "trf"             # Trust Region Reflective algorithm
+    bounds_handling: "clip"   # How to handle parameter bounds
   
   # Markov Chain Monte Carlo (MCMC) - For uncertainty quantification
   mcmc:
@@ -267,11 +265,11 @@ optimization:
     target_accept_prob: 0.8   # Target acceptance probability
     max_treedepth: 10         # Maximum tree depth for NUTS sampler
   
-  # Hybrid VI→MCMC pipeline - Best of both methods
+  # Hybrid LSQ→MCMC pipeline - Best of both methods
   hybrid:
     enabled: false            # Enable for production-quality results
-    vi_initialization: true   # Use VI results to initialize MCMC
-    vi_samples_for_init: 500  # Number of VI samples for MCMC initialization
+    use_lsq_init: true        # Use LSQ results to initialize MCMC
+    convergence_threshold: 0.1  # Agreement threshold for LSQ-MCMC comparison
     transition_criterion: "convergence"  # convergence | iteration_limit
 
 # ==============================================================================
@@ -354,13 +352,13 @@ noise_estimation:
     sigma_scale_range: [0.0, 0.5]   # Range for noise scaling (adaptive model)
   
   # Posterior sampling for uncertainty quantification
-  posterior_samples: 1000     # Number of posterior samples for VI pipeline
-  
+  posterior_samples: 1000     # Number of posterior samples for MCMC pipeline
+
   # Method-specific behavior
   method_integration:
-    vi_pipeline: "fast_point_estimates"    # Extract point estimates for VI
+    lsq_pipeline: "fast_point_estimates"    # Extract point estimates for LSQ
     mcmc_pipeline: "joint_sampling"        # Full joint NUTS sampling
-    hybrid_pipeline: "noise_then_physics"  # Noise estimation → VI → MCMC
+    hybrid_pipeline: "noise_then_physics"  # Noise estimation → LSQ → MCMC
     
   # Quality control for noise estimation
   validation:
@@ -470,7 +468,7 @@ logging:
   
   # Module-specific logging levels
   modules:
-    "homodyne.optimization.variational": "INFO"
+    "homodyne.optimization.lsq_wrapper": "INFO"
     "homodyne.optimization.mcmc": "INFO"
     "homodyne.data.xpcs_loader": "INFO"
     "homodyne.core.fitting": "DEBUG"

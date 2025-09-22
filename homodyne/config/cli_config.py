@@ -84,11 +84,10 @@ class CLIConfigManager:
             "analysis_mode": "auto-detect",
             "data": {"file_path": None, "dataset_optimization": True},
             "optimization": {
-                "vi": {
-                    "n_iterations": 2000,
-                    "learning_rate": 0.01,
-                    "convergence_tol": 1e-6,
-                    "n_elbo_samples": 1,
+                "lsq": {
+                    "max_iterations": 10000,
+                    "tolerance": 1e-8,
+                    "method": "trf",
                 },
                 "mcmc": {
                     "n_samples": 1000,
@@ -96,7 +95,7 @@ class CLIConfigManager:
                     "n_chains": 4,
                     "target_accept_prob": 0.8,
                 },
-                "hybrid": {"use_vi_init": True, "convergence_threshold": 0.1},
+                "hybrid": {"use_lsq_init": True, "convergence_threshold": 0.1},
             },
             "hardware": {"force_cpu": False, "gpu_memory_fraction": 0.8},
             "plotting": {
@@ -168,12 +167,19 @@ class CLIConfigManager:
             if "data" not in overrides:
                 overrides["data"] = {}
             overrides["data"]["custom_phi_angles"] = args.phi_angles
-            
+
         # Output directory - map CLI --output-dir to config output.base_directory
         if hasattr(args, "output_dir") and args.output_dir != Path("./homodyne_results"):
             # Only override if user explicitly provided --output-dir (not default)
             overrides["output"] = {"base_directory": str(args.output_dir)}
             logger.debug(f"CLI output directory override: {args.output_dir}")
+
+        # Backwards compatibility for legacy verbose/quiet arguments
+        # These are no longer CLI arguments but might be referenced in legacy code
+        if not hasattr(args, "verbose"):
+            args.verbose = False  # Default to False for backwards compatibility
+        if not hasattr(args, "quiet"):
+            args.quiet = False    # Default to False for backwards compatibility
 
         logger.debug(f"CLI overrides extracted: {list(overrides.keys())}")
         return overrides
@@ -192,17 +198,30 @@ class CLIConfigManager:
         """
         opt_overrides = {}
 
-        # VI parameters
-        vi_overrides = {}
-        if hasattr(args, "vi_iterations") and args.vi_iterations:
-            vi_overrides["n_iterations"] = args.vi_iterations
-        if hasattr(args, "vi_learning_rate") and args.vi_learning_rate:
-            vi_overrides["learning_rate"] = args.vi_learning_rate
-        if vi_overrides:
-            opt_overrides["vi"] = vi_overrides
+        # Handle --max-iterations for all methods
+        if hasattr(args, "max_iterations") and args.max_iterations is not None:
+            # Apply max_iterations to the appropriate method based on args.method
+            method = getattr(args, "method", "lsq")
+            if method == "lsq":
+                opt_overrides["lsq"] = {"max_iterations": args.max_iterations}
+            elif method == "mcmc":
+                opt_overrides["mcmc"] = {"n_samples": args.max_iterations}
+            elif method == "hybrid":
+                # For hybrid, apply to LSQ phase
+                opt_overrides["lsq"] = {"max_iterations": args.max_iterations}
+            logger.debug(f"Applied --max-iterations={args.max_iterations} to {method} method")
 
-        # MCMC parameters
-        mcmc_overrides = {}
+        # LSQ parameters (specific arguments for backwards compatibility)
+        lsq_overrides = opt_overrides.get("lsq", {})
+        if hasattr(args, "lsq_max_iterations") and args.lsq_max_iterations:
+            lsq_overrides["max_iterations"] = args.lsq_max_iterations
+        if hasattr(args, "lsq_tolerance") and args.lsq_tolerance:
+            lsq_overrides["tolerance"] = args.lsq_tolerance
+        if lsq_overrides:
+            opt_overrides["lsq"] = lsq_overrides
+
+        # MCMC parameters (legacy specific arguments, kept for backwards compatibility)
+        mcmc_overrides = opt_overrides.get("mcmc", {})
         if hasattr(args, "mcmc_samples") and args.mcmc_samples:
             mcmc_overrides["n_samples"] = args.mcmc_samples
         if hasattr(args, "mcmc_warmup") and args.mcmc_warmup:

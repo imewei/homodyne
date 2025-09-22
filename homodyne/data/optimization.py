@@ -386,6 +386,73 @@ class DatasetOptimizer:
 
         return optimization_config
 
+    @log_performance()
+    def optimize_for_lsq(
+        self,
+        data: np.ndarray,
+        sigma: np.ndarray,
+        t1: np.ndarray,
+        t2: np.ndarray,
+        phi: np.ndarray,
+        **kwargs,
+    ) -> Dict[str, Any]:
+        """
+        Optimize data processing specifically for LSQ method.
+
+        LSQ uses intelligent correlation sampling for large datasets
+        to maintain performance while achieving accurate results.
+
+        Args:
+            data, sigma, t1, t2, phi: Input arrays
+            **kwargs: Additional optimization parameters
+
+        Returns:
+            Dictionary with optimized processing configuration
+        """
+        dataset_info = self.analyze_dataset(data, sigma)
+
+        # LSQ-specific strategy: more aggressive sampling for classical optimization
+        strategy = ProcessingStrategy(
+            chunk_size=min(50000, dataset_info.size // 10),  # Larger chunks for LSQ
+            batch_size=1000,  # Smaller batches for scipy optimize
+            memory_limit_mb=self.memory_limit_mb,
+            use_caching=False,  # LSQ doesn't benefit from caching
+            use_compression=False,  # No compression for LSQ
+            parallel_workers=1,  # LSQ is sequential
+            jax_config={} if not JAX_AVAILABLE else {
+                "xla_python_client_mem_fraction": "0.5",
+                "jax_enable_x64": "false",  # LSQ can use float32
+                "jax_platforms": "cpu",  # LSQ primarily CPU-based
+            }
+        )
+
+        optimization_config = {
+            "dataset_info": dataset_info,
+            "strategy": strategy,
+            "sampling_config": None,
+            "preprocessing_time": 0.0,
+        }
+
+        # Setup intelligent sampling for large datasets
+        if dataset_info.size > 100000:  # Use sampling for datasets >100K points
+            start_time = time.time()
+
+            # Create sampling configuration for LSQ
+            sampling_config = {
+                "method": "stratified",  # Use stratified sampling
+                "target_samples": min(10000, dataset_info.size // 100),  # 1% or 10K max
+                "use_correlation_weights": True,
+                "preserve_edges": True,  # Keep edge points for boundary conditions
+            }
+
+            optimization_config["sampling_config"] = sampling_config
+            optimization_config["preprocessing_time"] = time.time() - start_time
+
+            logger.info(f"LSQ optimization: Using {sampling_config['target_samples']:,} samples "
+                       f"from {dataset_info.size:,} total points")
+
+        return optimization_config
+
     def estimate_processing_time(
         self, dataset_info: DatasetInfo, method: str = "vi"
     ) -> Dict[str, float]:
@@ -404,6 +471,8 @@ class DatasetOptimizer:
             base_rate = 50000 if JAX_AVAILABLE else 5000  # VI+JAX vs numpy fallback
         elif method.lower() == "mcmc":
             base_rate = 5000 if JAX_AVAILABLE else 500  # MCMC+JAX vs numpy fallback
+        elif method.lower() == "lsq":
+            base_rate = 100000 if JAX_AVAILABLE else 20000  # LSQ fast with sampling
         else:
             base_rate = 1000
 

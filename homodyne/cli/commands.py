@@ -52,10 +52,8 @@ def dispatch_command(args: argparse.Namespace) -> int:
         return 1
     except Exception as e:
         logger.error(f"❌ Unexpected error in command dispatch: {e}")
-        if args.verbose:
-            import traceback
-
-            traceback.print_exc()
+        import traceback
+        traceback.print_exc()
         return 1
 
 
@@ -183,10 +181,8 @@ def handle_save_cache_data(args: argparse.Namespace) -> int:
         return 1
     except Exception as e:
         logger.error(f"❌ Error generating cache data: {e}")
-        if args.verbose:
-            import traceback
-
-            traceback.print_exc()
+        import traceback
+        traceback.print_exc()
         return 1
 
 
@@ -230,10 +226,8 @@ def handle_plot_simulated_data(args: argparse.Namespace) -> int:
         return 1
     except Exception as e:
         logger.error(f"❌ Error generating simulated plots: {e}")
-        if args.verbose:
-            import traceback
-
-            traceback.print_exc()
+        import traceback
+        traceback.print_exc()
         return 1
 
 
@@ -280,10 +274,8 @@ def handle_plot_experimental_data(args: argparse.Namespace) -> int:
         return 1
     except Exception as e:
         logger.error(f"❌ Error plotting experimental data: {e}")
-        if args.verbose:
-            import traceback
-
-            traceback.print_exc()
+        import traceback
+        traceback.print_exc()
         return 1
 
 
@@ -321,10 +313,8 @@ def handle_analysis_workflow(args: argparse.Namespace) -> int:
         return 1
     except Exception as e:
         logger.error(f"❌ Error in analysis workflow: {e}")
-        if args.verbose:
-            import traceback
-
-            traceback.print_exc()
+        import traceback
+        traceback.print_exc()
         return 1
 
 
@@ -338,9 +328,8 @@ def validate_mutual_exclusions(args: argparse.Namespace) -> None:
     Raises:
         ValidationError: If mutually exclusive args are used together
     """
-    # Verbose and quiet are mutually exclusive
-    if args.verbose and args.quiet:
-        raise ValidationError("Cannot use --verbose and --quiet together")
+    # Note: verbose and quiet arguments have been removed from CLI
+    # Any legacy references are handled via backwards compatibility
 
     # Scaling parameters only with simulated data plotting
     if (args.contrast != 1.0 or args.offset != 0.0) and not args.plot_simulated_data:
@@ -361,11 +350,11 @@ def print_method_info(method: str) -> None:
         method: Selected optimization method
     """
     method_info = {
-        "vi": {
-            "name": "Variational Inference + JAX",
-            "speed": "Fast (10-100x speedup)",
-            "accuracy": "Good approximate posterior",
-            "use_case": "Routine analysis, parameter screening",
+        "lsq": {
+            "name": "Least Squares Optimization",
+            "speed": "Fastest (direct optimization)",
+            "accuracy": "Good parameter estimates",
+            "use_case": "Quick analysis, initial parameter estimation",
         },
         "mcmc": {
             "name": "MCMC + JAX (NumPyro/BlackJAX)",
@@ -374,8 +363,8 @@ def print_method_info(method: str) -> None:
             "use_case": "Publication-quality results",
         },
         "hybrid": {
-            "name": "Hybrid VI → MCMC Pipeline",
-            "speed": "Balanced (VI init + MCMC refinement)",
+            "name": "Hybrid LSQ → MCMC Pipeline",
+            "speed": "Balanced (LSQ init + MCMC refinement)",
             "accuracy": "Best of both approaches",
             "use_case": "Comprehensive analysis",
         },

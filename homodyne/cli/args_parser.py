@@ -27,14 +27,14 @@ def create_parser() -> argparse.ArgumentParser:
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog=f"""
 Examples:
-  %(prog)s                                    # Run with default VI method
-  %(prog)s --method vi                        # Explicit VI optimization  
+  %(prog)s                                    # Run with default LSQ method
+  %(prog)s --method lsq                       # Direct least squares fitting (default)
   %(prog)s --method mcmc                      # MCMC sampling for high accuracy
-  %(prog)s --method hybrid                    # VI → MCMC pipeline (best of both)
+  %(prog)s --method hybrid                    # LSQ → MCMC pipeline (best of both)
   %(prog)s --config my_config.yaml            # Use custom config file
-  %(prog)s --output-dir ./results --verbose   # Custom output with debug logging
+  %(prog)s --output-dir ./results --log-level DEBUG   # Custom output with debug logging
   %(prog)s --log-file                         # Save log messages to homodyne_results/logs/homodyne.log
-  %(prog)s --quiet                            # File logging only (no console)
+  %(prog)s --no-console --log-file            # File logging only (no console output)
   %(prog)s --static-isotropic                 # Force static mode (3 parameters)
   %(prog)s --laminar-flow --method mcmc       # Force laminar flow (7 parameters) with MCMC
   %(prog)s --plot-experimental-data          # Generate data validation plots
@@ -47,19 +47,18 @@ Examples:
   %(prog)s --method lsq                       # Direct least squares (fastest, no uncertainty)
   %(prog)s --method lsq --estimate-noise      # LSQ with automatic noise estimation
   %(prog)s --method lsq --estimate-noise --noise-model per_angle  # Per-angle noise model
+  %(prog)s --method lsq --max-iterations 5000 # LSQ with custom iteration limit
+  %(prog)s --method hybrid --max-iterations 500 # Quick hybrid LSQ→MCMC optimization
 
 Method Performance Characteristics:
-  VI:      Fast approximate Bayesian inference (10-100x speedup)
-          Use for: routine analysis, parameter screening, large datasets
+  LSQ:     Direct classical least squares (fastest, good initial estimates)
+          Use for: quick parameter estimation, real-time analysis, large datasets
 
   MCMC:    Full posterior sampling with uncertainty quantification
           Use for: publication-quality results, critical analysis
 
-  Hybrid:  VI → MCMC pipeline combining speed and accuracy
+  Hybrid:  LSQ → MCMC pipeline combining speed and accuracy
           Use for: comprehensive analysis requiring both speed and precision
-
-  LSQ:     Direct classical least squares (fastest, no uncertainty)
-          Use for: quick parameter estimation, real-time analysis, large datasets
           
 Physical Models:
   g₂(φ,t₁,t₂) = offset + contrast × [g₁(φ,t₁,t₂)]²
@@ -77,12 +76,12 @@ Homodyne v{__version__} - Wei Chen, Hongrui He (Argonne National Laboratory)
         "--version", action="version", version=f"Homodyne v{__version__}"
     )
 
-    # Method selection - ONLY vi, mcmc, hybrid, lsq (NO all per global constraints)
+    # Method selection - ONLY lsq, mcmc, hybrid (NO all per global constraints)
     parser.add_argument(
         "--method",
-        choices=["vi", "mcmc", "hybrid", "lsq"],
-        default="vi",
-        help="Optimization method: vi (fast VI+JAX), mcmc (accurate MCMC+JAX), hybrid (VI→MCMC pipeline), lsq (direct least squares) (default: %(default)s)",
+        choices=["lsq", "mcmc", "hybrid"],
+        default="lsq",
+        help="Optimization method: lsq (direct least squares), mcmc (accurate MCMC+JAX), hybrid (LSQ→MCMC pipeline) (default: %(default)s)",
     )
 
     # Configuration and I/O
@@ -102,13 +101,16 @@ Homodyne v{__version__} - Wei Chen, Hongrui He (Argonne National Laboratory)
 
     # Logging control
     parser.add_argument(
-        "--verbose", action="store_true", help="Enable verbose DEBUG logging to console"
+        "--log-level",
+        choices=["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"],
+        default="INFO",
+        help="Set logging level (default: %(default)s)",
     )
 
     parser.add_argument(
-        "--quiet",
+        "--no-console",
         action="store_true",
-        help="Disable console logging (file logging remains enabled)",
+        help="Disable console logging (file logging remains enabled if --log-file specified)",
     )
 
     parser.add_argument(
@@ -198,13 +200,21 @@ Homodyne v{__version__} - Wei Chen, Hongrui He (Argonne National Laboratory)
         help="Fraction of GPU memory to use (0.1-1.0, default: %(default)s)",
     )
 
+    # Optimization control
+    parser.add_argument(
+        "--max-iterations",
+        type=int,
+        default=None,
+        help="Maximum optimization iterations (method-specific defaults: LSQ=10000, MCMC=2000, Hybrid=1000)",
+    )
+
     # Noise estimation options
     parser.add_argument(
         "--estimate-noise",
         action="store_true",
         help="Enable hybrid NumPyro noise estimation instead of requiring sigma in data files",
     )
-    
+
     parser.add_argument(
         "--noise-model",
         choices=["hierarchical", "per_angle", "adaptive"],

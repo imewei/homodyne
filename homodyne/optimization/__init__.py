@@ -1,54 +1,47 @@
 """
-VI+JAX and MCMC+JAX Only: Streamlined Optimization for Homodyne v2
-===================================================================
+LSQ and MCMC+JAX Optimization for Homodyne v2
+=============================================
 
-Streamlined optimization system using only VI+JAX (primary) and MCMC+JAX
-(high-accuracy) for efficient parameter estimation in homodyne analysis.
+Reliable optimization system using LSQ (primary) and MCMC+JAX
+(high-accuracy) for robust parameter estimation in homodyne analysis.
 
-This module implements the simplified optimization philosophy:
-1. VI+JAX as primary method (10-100x faster, KL divergence minimization)
-2. MCMC+JAX (NumPyro/BlackJAX) as refinement for critical analysis
-3. Unified homodyne model: c2_fitted = c2_theory * contrast + offset
-4. Both methods minimize: Exp - Fitted
+This module implements the streamlined optimization philosophy:
+1. LSQ as primary method (fast, reliable parameter estimation)
+2. MCMC+JAX (NumPyro/BlackJAX) for uncertainty quantification
+3. Hybrid LSQ→MCMC for comprehensive analysis
+4. Unified homodyne model: c2_fitted = c2_theory * contrast + offset
 
 Key Features:
-- Complete removal of classical/robust optimization methods
-- JAX-accelerated computations with automatic differentiation
-- Unified parameter space with specified bounds and priors
+- Robust least squares optimization as foundation
+- JAX-accelerated MCMC for uncertainty quantification
+- Hybrid pipeline combining speed and accuracy
 - CPU-primary, GPU-optional architecture
 - Dataset size-aware optimization strategies
 
 Performance Comparison:
-- VI+JAX: 10-100x faster, good uncertainty quantification
+- LSQ: Fast, reliable parameter estimation
 - MCMC+JAX: Full posterior sampling, highest accuracy
+- Hybrid: Best balance of speed and statistical rigor
 """
 
 # Handle imports with intelligent fallback
 try:
-    from homodyne.optimization.variational import \
-        HAS_NUMPY_GRADIENTS as VI_HAS_NUMPY_GRADIENTS
-    from homodyne.optimization.variational import \
-        JAX_AVAILABLE as VI_JAX_AVAILABLE
-    from homodyne.optimization.variational import \
-        fit_vi_jax  # Primary API function
-    from homodyne.optimization.variational import (VariationalFamilies,
-                                                   VariationalInferenceJAX,
-                                                   VIResult)
-
-    VI_AVAILABLE = True
-    VI_FALLBACK_MODE = (
-        "numpy_gradients"
-        if not VI_JAX_AVAILABLE and VI_HAS_NUMPY_GRADIENTS
-        else ("simple" if not VI_JAX_AVAILABLE else "jax")
-    )
+    from homodyne.optimization.lsq_wrapper import fit_homodyne_lsq
+    LSQ_AVAILABLE = True
 except ImportError as e:
-    print(f"Warning: Could not import VI optimization: {e}")
-    VariationalInferenceJAX = None
-    VIResult = None
-    VariationalFamilies = None
-    fit_vi_jax = None
-    VI_AVAILABLE = False
-    VI_FALLBACK_MODE = "unavailable"
+    print(f"Warning: Could not import LSQ optimization: {e}")
+    fit_homodyne_lsq = None
+    LSQ_AVAILABLE = False
+
+try:
+    from homodyne.optimization.hybrid import fit_hybrid_lsq_mcmc, HybridResult, optimize_hybrid
+    HYBRID_AVAILABLE = True
+except ImportError as e:
+    print(f"Warning: Could not import Hybrid optimization: {e}")
+    fit_hybrid_lsq_mcmc = None
+    HybridResult = None
+    optimize_hybrid = None
+    HYBRID_AVAILABLE = False
 
 try:
     from homodyne.optimization.mcmc import \
@@ -107,50 +100,65 @@ fit_homodyne_direct = None
 DIRECT_SOLVER_AVAILABLE = False
 
 
-# Main API functions (replace all classical methods)
-def fit_homodyne_vi(
+# Main API functions for homodyne optimization
+def fit_homodyne_lsq_api(
     data, sigma, t1, t2, phi, q, L, analysis_mode="laminar_flow", **kwargs
 ):
     """
-    Fit homodyne data using Variational Inference with intelligent fallbacks.
+    Fit homodyne data using Least Squares optimization.
 
-    This is the main fitting function that replaces all classical optimization.
-    Uses KL divergence minimization with unified homodyne model.
-
-    Performance modes (automatic selection):
-    - JAX mode: Full JAX acceleration (fastest, 100x speedup)
-    - NumPy+Gradients mode: Numerical gradients fallback (10-50x slower but accurate)
-    - Simple mode: Least squares approximation (fast but limited accuracy)
+    Fast, reliable parameter estimation using robust least squares methods.
+    This is the primary optimization method for routine homodyne analysis.
 
     Args:
         data, sigma: Experimental data and uncertainties
         t1, t2, phi: Time and angle grids
         q, L: Experimental parameters
         analysis_mode: Analysis mode
-        **kwargs: Additional VI parameters
+        **kwargs: Additional LSQ parameters
 
     Returns:
-        VIResult with optimized parameters and uncertainties
+        LSQResult with fitted parameters and statistics
 
     Raises:
-        ImportError: If no optimization backend is available
+        ImportError: If LSQ optimization is not available
     """
-    if not VI_AVAILABLE:
+    if not LSQ_AVAILABLE:
         raise ImportError(
-            "Variational Inference not available. Please install dependencies:\n"
-            "- For best performance: pip install jax jaxlib\n"
-            "- For fallback mode: homodyne with numpy_gradients module"
+            "LSQ optimization not available. Please install dependencies."
         )
 
-    # Provide user guidance on performance mode
-    if VI_FALLBACK_MODE == "numpy_gradients":
-        print("INFO: Using NumPy+numerical gradients fallback (10-50x slower than JAX)")
-    elif VI_FALLBACK_MODE == "simple":
-        print(
-            "WARNING: Using simple fallback mode - limited accuracy. Consider installing JAX."
+    return fit_homodyne_lsq(data, sigma, t1, t2, phi, q, L, analysis_mode, **kwargs)
+
+
+def fit_homodyne_hybrid(
+    data, sigma, t1, t2, phi, q, L, analysis_mode="laminar_flow", **kwargs
+):
+    """
+    Fit homodyne data using Hybrid LSQ→MCMC optimization.
+
+    Combines LSQ speed with MCMC accuracy for comprehensive analysis.
+    This is the recommended method for publication-quality results.
+
+    Args:
+        data, sigma: Experimental data and uncertainties
+        t1, t2, phi: Time and angle grids
+        q, L: Experimental parameters
+        analysis_mode: Analysis mode
+        **kwargs: Additional hybrid parameters
+
+    Returns:
+        HybridResult with LSQ and MCMC results and recommendations
+
+    Raises:
+        ImportError: If hybrid optimization is not available
+    """
+    if not HYBRID_AVAILABLE:
+        raise ImportError(
+            "Hybrid optimization not available. Please install dependencies."
         )
 
-    return fit_vi_jax(data, sigma, t1, t2, phi, q, L, analysis_mode, **kwargs)
+    return fit_hybrid_lsq_mcmc(data, sigma, t1, t2, phi, q, L, analysis_mode, **kwargs)
 
 
 def fit_homodyne_mcmc(
@@ -199,18 +207,20 @@ def fit_homodyne_mcmc(
 
 
 __all__ = [
-    # Primary API (replaces all classical methods)
-    "fit_homodyne_vi",  # Main VI+JAX fitting function
-    "fit_homodyne_mcmc",  # Main MCMC+JAX fitting function
-    # Direct access to VI+JAX
-    "VariationalInferenceJAX",
-    "VIResult",
-    "VariationalFamilies",
-    "fit_vi_jax",
+    # Primary API (LSQ, MCMC, and Hybrid)
+    "fit_homodyne_lsq_api",  # Main LSQ fitting function
+    "fit_homodyne_mcmc",     # Main MCMC+JAX fitting function
+    "fit_homodyne_hybrid",   # Main Hybrid LSQ→MCMC fitting function
+    # Direct access to LSQ
+    "fit_homodyne_lsq",
     # Direct access to MCMC+JAX
     "MCMCJAXSampler",
     "MCMCResult",
     "fit_mcmc_jax",
+    # Direct access to Hybrid
+    "fit_hybrid_lsq_mcmc",
+    "HybridResult",
+    "optimize_hybrid",
     # Unified result classes (consolidated from base_result.py)
     "BaseOptimizationResult",
     "LSQResult",
@@ -222,10 +232,10 @@ __all__ = [
     "ProcessingStrategy",
     "create_dataset_optimizer",
     # Availability flags and fallback modes
-    "VI_AVAILABLE",
+    "LSQ_AVAILABLE",
+    "HYBRID_AVAILABLE",
     "MCMC_AVAILABLE",
     "DATASET_OPTIMIZATION_AVAILABLE",
     "DIRECT_SOLVER_AVAILABLE",
-    "VI_FALLBACK_MODE",
     "MCMC_FALLBACK_MODE",
 ]

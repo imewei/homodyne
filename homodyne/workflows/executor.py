@@ -2,7 +2,7 @@
 Method Execution Controller for Homodyne v2
 ===========================================
 
-Coordinates execution of different optimization methods (VI, MCMC, Hybrid)
+Coordinates execution of different optimization methods (LSQ, MCMC, Hybrid)
 with unified error handling, dataset optimization, and hardware management.
 
 Key Features:
@@ -19,15 +19,14 @@ from typing import Any, Dict, Optional, Union
 import numpy as np
 
 from homodyne.data.optimization import optimize_for_method
-from homodyne.optimization.hybrid import HybridResult, optimize_hybrid
+from homodyne.optimization.hybrid import HybridResult, fit_hybrid_lsq_mcmc
 from homodyne.optimization.mcmc import MCMCResult, fit_mcmc_jax
-from homodyne.optimization.variational import VIResult, fit_vi_jax
 from homodyne.optimization.lsq_wrapper import LSQResult, fit_homodyne_lsq
 from homodyne.utils.logging import get_logger, log_performance
 
 logger = get_logger(__name__)
 
-ResultType = Union[VIResult, MCMCResult, HybridResult, LSQResult]
+ResultType = Union[LSQResult, MCMCResult, HybridResult]
 
 
 class MethodExecutor:
@@ -92,7 +91,7 @@ class MethodExecutor:
         Log comprehensive hardware selection information for optimization methods.
 
         Args:
-            method_name: Name of the optimization method ("VI", "MCMC", "LSQ")
+            method_name: Name of the optimization method ("LSQ", "MCMC", "Hybrid")
 
         Returns:
             Dictionary with hardware selection details
@@ -109,15 +108,15 @@ class MethodExecutor:
 
         try:
             # Check JAX availability for each method
-            if method_name == "VI":
-                from homodyne.optimization.variational import JAX_AVAILABLE
-                hardware_info["jax_available"] = JAX_AVAILABLE
-            elif method_name == "MCMC":
+            if method_name == "MCMC":
                 from homodyne.optimization.mcmc import JAX_AVAILABLE
                 hardware_info["jax_available"] = JAX_AVAILABLE
             elif method_name == "LSQ":
-                from homodyne.optimization.direct_solver import JAX_AVAILABLE
+                from homodyne.optimization.lsq_wrapper import JAX_AVAILABLE if hasattr(__import__('homodyne.optimization.lsq_wrapper', fromlist=['JAX_AVAILABLE']), 'JAX_AVAILABLE') else True
                 hardware_info["jax_available"] = JAX_AVAILABLE
+            else:
+                # For hybrid method, assume JAX is available
+                hardware_info["jax_available"] = True
 
             # Test JAX functionality if available
             if hardware_info["jax_available"]:
@@ -174,152 +173,6 @@ class MethodExecutor:
 
         return hardware_info
 
-    @log_performance()
-    def execute_vi(
-        self,
-        data: np.ndarray,
-        sigma: Optional[np.ndarray],
-        t1: np.ndarray,
-        t2: np.ndarray,
-        phi: np.ndarray,
-        q: float,
-        L: float,
-        estimate_noise: bool = False,
-        noise_model: str = "hierarchical",
-    ) -> Optional[VIResult]:
-        """
-        Execute Variational Inference optimization.
-
-        Args:
-            data: Experimental correlation data
-            sigma: Measurement uncertainties
-            t1, t2: Time grids
-            phi: Angle grid
-            q, L: Experimental parameters
-            estimate_noise: Enable hybrid NumPyro noise estimation
-            noise_model: Noise model type for estimation
-
-        Returns:
-            VI optimization result or None if failed
-        """
-        try:
-            logger.info("🎲 Starting VI+JAX optimization")
-
-            # Log comprehensive hardware selection for VI
-            hardware_info = self._log_method_hardware_selection("VI")
-
-            start_time = time.time()
-
-            # Get analysis mode from config
-            analysis_mode = self._get_analysis_mode()
-
-            # Setup method parameters
-            vi_params = self._get_vi_parameters()
-
-            # Apply dataset optimization if enabled
-            if not self.disable_dataset_optimization:
-                optimization_config = optimize_for_method(
-                    data, sigma, t1, t2, phi, method="vi"
-                )
-                dataset_category = optimization_config["dataset_info"].category
-                logger.info(f"Dataset optimization: {dataset_category} dataset")
-
-                # Apply optimized parameters
-                vi_params.update(
-                    {
-                        "enable_dataset_optimization": True,
-                        "dataset_info": optimization_config["dataset_info"],
-                    }
-                )
-
-            # Add noise estimation parameters if noise estimation is enabled
-            if estimate_noise:
-                noise_params = self._get_noise_estimation_parameters()
-                
-                # Apply CLI/config precedence logic and log parameter sources
-                final_noise_model = self._resolve_noise_model_precedence(
-                    cli_model=noise_model, 
-                    config_model=noise_params.get("config_noise_model", "hierarchical")
-                )
-                
-                # Log parameter sources for user clarity
-                self._log_noise_parameter_sources(noise_params, estimate_noise, final_noise_model)
-                
-                # Remove config_noise_model from params to avoid conflicts
-                noise_params.pop("config_noise_model", None)
-                
-                # Update vi_params but don't include noise_model (passed separately)
-                vi_params.update(noise_params)
-                
-                # Use resolved noise model
-                noise_model = final_noise_model
-
-            # Create ParameterSpace and get initial parameters directly from config dict
-            from homodyne.core.fitting import ParameterSpace
-
-            # Get initial parameters directly from the config dictionary
-            initial_params_dict = self.config.get("initial_parameters", {})
-            initial_params = initial_params_dict.get("values", None)
-
-            # Create a simple wrapper that provides get() method for ParameterSpace
-            class ConfigWrapper:
-                def __init__(self, config_dict):
-                    self.config = config_dict
-
-                def get(self, key, default=None):
-                    return self.config.get(key, default)
-
-                def get_parameter_bounds(self, param_names):
-                    """Get parameter bounds from config."""
-                    param_space = self.config.get("parameter_space", {})
-                    bounds_config = param_space.get("bounds", [])
-                    bounds = []
-                    for param_name in param_names:
-                        # Find matching bound config
-                        for bound_spec in bounds_config:
-                            if bound_spec.get("name") == param_name:
-                                bounds.append((bound_spec.get("min", 0.0), bound_spec.get("max", 1.0)))
-                                break
-                        else:
-                            # Default bounds if not found
-                            bounds.append((0.0, 1.0))
-                    return bounds
-
-            config_wrapper = ConfigWrapper(self.config)
-            parameter_space = ParameterSpace(config_manager=config_wrapper)
-
-            if initial_params:
-                logger.info(f"Using initial parameters from config: {initial_params}")
-
-            # Execute VI optimization
-            result = fit_vi_jax(
-                data=data,
-                sigma=sigma,
-                t1=t1,
-                t2=t2,
-                phi=phi,
-                q=q,
-                L=L,
-                analysis_mode=analysis_mode,
-                parameter_space=parameter_space,
-                estimate_noise=estimate_noise,
-                noise_model=noise_model,
-                **vi_params,
-            )
-
-            # Log results summary
-            execution_time = time.time() - start_time
-            logger.info(f"✓ VI optimization completed in {execution_time:.2f}s")
-            logger.info(f"  Final ELBO: {result.final_elbo:.4f}")
-            logger.info(f"  Chi-squared: {result.chi_squared:.4f}")
-            logger.info(f"  Converged: {result.converged}")
-
-            return result
-
-        except Exception as e:
-            logger.error(f"❌ VI execution failed: {e}")
-            self._log_execution_error("VI", e)
-            return None
 
     @log_performance()
     def execute_mcmc(
@@ -479,7 +332,7 @@ class MethodExecutor:
         noise_model: str = "hierarchical",
     ) -> Optional[HybridResult]:
         """
-        Execute Hybrid VI→MCMC optimization pipeline.
+        Execute Hybrid LSQ→MCMC optimization pipeline.
 
         Args:
             data: Experimental correlation data
@@ -494,13 +347,13 @@ class MethodExecutor:
             Hybrid optimization result or None if failed
         """
         try:
-            logger.info("🔄 Starting Hybrid VI→MCMC pipeline")
+            logger.info("🔄 Starting Hybrid LSQ→MCMC pipeline")
             start_time = time.time()
 
             # Get analysis mode from config
             analysis_mode = self._get_analysis_mode()
 
-            # Setup hybrid parameters (combines VI and MCMC settings)
+            # Setup hybrid parameters (combines LSQ and MCMC settings)
             hybrid_params = self._get_hybrid_parameters()
 
             # Apply dataset optimization if enabled
@@ -511,7 +364,7 @@ class MethodExecutor:
                     t1,
                     t2,
                     phi,
-                    method="vi",  # Use VI settings for initial phase
+                    method="lsq",  # Use LSQ settings for initial phase
                 )
                 dataset_category = optimization_config["dataset_info"].category
                 logger.info(f"Dataset optimization: {dataset_category} dataset")
@@ -527,27 +380,27 @@ class MethodExecutor:
             # Add noise estimation parameters if noise estimation is enabled
             if estimate_noise:
                 noise_params = self._get_noise_estimation_parameters()
-                
+
                 # Apply CLI/config precedence logic and log parameter sources
                 final_noise_model = self._resolve_noise_model_precedence(
-                    cli_model=noise_model, 
+                    cli_model=noise_model,
                     config_model=noise_params.get("config_noise_model", "hierarchical")
                 )
-                
+
                 # Log parameter sources for user clarity
                 self._log_noise_parameter_sources(noise_params, estimate_noise, final_noise_model)
-                
+
                 # Remove config_noise_model from params to avoid conflicts
                 noise_params.pop("config_noise_model", None)
-                
+
                 # Update hybrid_params but don't include noise_model (passed separately)
                 hybrid_params.update(noise_params)
-                
+
                 # Use resolved noise model
                 noise_model = final_noise_model
 
             # Execute hybrid optimization
-            result = optimize_hybrid(
+            result = fit_hybrid_lsq_mcmc(
                 data=data,
                 sigma=sigma,
                 t1=t1,
@@ -564,9 +417,10 @@ class MethodExecutor:
             # Log results summary
             execution_time = time.time() - start_time
             logger.info(f"✓ Hybrid optimization completed in {execution_time:.2f}s")
-            logger.info(f"  VI Phase: ELBO={result.vi_result.final_elbo:.4f}")
-            logger.info(f"  MCMC Phase: R-hat={np.mean(result.mcmc_result.r_hat):.3f}")
-            logger.info(f"  Recommended method: {result.recommended_method}")
+            logger.info(f"  LSQ Phase: Chi²={result.lsq_result.chi_squared:.4f}")
+            if result.mcmc_result:
+                logger.info(f"  MCMC Phase: R-hat={np.mean(result.mcmc_result.r_hat):.3f}")
+            logger.info(f"  Recommendation: {result.recommendation_source} (quality: {result.quality_score:.3f})")
 
             return result
 
@@ -712,26 +566,6 @@ class MethodExecutor:
         """
         return self.config.get("analysis_mode", "laminar_flow")
 
-    def _get_vi_parameters(self) -> Dict[str, Any]:
-        """
-        Get VI-specific parameters from configuration.
-
-        Returns:
-            VI parameter dictionary
-        """
-        vi_config = self.config.get("optimization", {}).get("vi", {})
-
-        # Extract dt from analyzer_parameters for use by VI
-        analyzer_params = self.config.get("analyzer_parameters", {})
-        dt = analyzer_params.get("dt", 0.1)
-
-        return {
-            "n_iterations": vi_config.get("n_iterations", 2000),
-            "learning_rate": vi_config.get("learning_rate", 0.01),
-            "convergence_tol": vi_config.get("convergence_tol", 1e-6),
-            "n_elbo_samples": vi_config.get("n_elbo_samples", 1),
-            "dt": dt,  # Include dt for VI optimization
-        }
 
     def _get_mcmc_parameters(self) -> Dict[str, Any]:
         """
@@ -762,20 +596,19 @@ class MethodExecutor:
             Hybrid parameter dictionary
         """
         hybrid_config = self.config.get("optimization", {}).get("hybrid", {})
-        vi_params = self._get_vi_parameters()
+        lsq_params = self._get_lsq_parameters()
         mcmc_params = self._get_mcmc_parameters()
 
-        # Combine VI and MCMC parameters for hybrid approach
+        # Combine LSQ and MCMC parameters for hybrid approach
         return {
-            # VI phase parameters
-            "vi_iterations": vi_params["n_iterations"],
-            "vi_learning_rate": vi_params["learning_rate"],
+            # LSQ phase parameters
+            "lsq_max_iterations": lsq_params["max_iterations"],
             # MCMC phase parameters
             "mcmc_samples": mcmc_params["n_samples"],
             "mcmc_warmup": mcmc_params["n_warmup"],
             "mcmc_chains": mcmc_params["n_chains"],
             # Hybrid-specific parameters
-            "use_vi_init": hybrid_config.get("use_vi_init", True),
+            "use_lsq_init": hybrid_config.get("use_lsq_init", True),
             "convergence_threshold": hybrid_config.get("convergence_threshold", 0.1),
         }
 
@@ -939,9 +772,9 @@ def estimate_method_performance(data_size: int, method: str) -> Dict[str, float]
     """
     # Base rates (points per second) from benchmarking
     base_rates = {
-        "vi": 50000,  # Very fast
+        "lsq": 80000,  # Very fast
         "mcmc": 5000,  # Moderate
-        "hybrid": 10000,  # Between VI and MCMC
+        "hybrid": 15000,  # Between LSQ and MCMC
     }
 
     # Size scaling factors

@@ -26,13 +26,12 @@ import numpy as np
 
 from homodyne.optimization.hybrid import HybridResult
 from homodyne.optimization.mcmc import MCMCResult
-from homodyne.optimization.variational import VIResult
 from homodyne.optimization.lsq_wrapper import LSQResult
 from homodyne.utils.logging import get_logger, log_performance
 
 logger = get_logger(__name__)
 
-ResultType = Union[VIResult, MCMCResult, HybridResult, LSQResult]
+ResultType = Union[LSQResult, MCMCResult, HybridResult]
 
 
 class AnalysisPipeline:
@@ -314,14 +313,14 @@ class AnalysisPipeline:
             L = analysis_params["L"]
 
             # Execute method
-            if self.args.method == "vi":
-                result = self.executor.execute_vi(
-                    data=data, 
-                    sigma=sigma, 
-                    t1=t1, 
-                    t2=t2, 
-                    phi=phi_angles, 
-                    q=q, 
+            if self.args.method == "lsq":
+                result = self.executor.execute_lsq(
+                    data=data,
+                    sigma=sigma,
+                    t1=t1,
+                    t2=t2,
+                    phi=phi_angles,
+                    q=q,
                     L=L,
                     estimate_noise=getattr(self.args, 'estimate_noise', False),
                     noise_model=getattr(self.args, 'noise_model', 'hierarchical')
@@ -340,18 +339,6 @@ class AnalysisPipeline:
                 )
             elif self.args.method == "hybrid":
                 result = self.executor.execute_hybrid(
-                    data=data,
-                    sigma=sigma,
-                    t1=t1,
-                    t2=t2,
-                    phi=phi_angles,
-                    q=q,
-                    L=L,
-                    estimate_noise=getattr(self.args, 'estimate_noise', False),
-                    noise_model=getattr(self.args, 'noise_model', 'hierarchical')
-                )
-            elif self.args.method == "lsq":
-                result = self.executor.execute_lsq(
                     data=data,
                     sigma=sigma,
                     t1=t1,
@@ -1014,7 +1001,7 @@ class AnalysisPipeline:
         if hasattr(result, "final_elbo"):
             logger.info(f"Final ELBO: {result.final_elbo:.4f}")
 
-            # For VI methods, also show ELBO-based model comparison info
+            # Show ELBO-based model comparison info if available
             if hasattr(result, "elbo_history") and len(result.elbo_history) > 1:
                 elbo_improvement = result.final_elbo - result.elbo_history[0]
                 logger.info(f"ELBO Improvement: {elbo_improvement:.4f}")
@@ -1026,8 +1013,6 @@ class AnalysisPipeline:
             if hasattr(result, "converged"):
                 status = "✓ Converged" if result.converged else "✗ Failed to converge"
                 logger.info(f"Optimization Status: {status}")
-        elif method_name == "VI":
-            logger.info("VI Method: Variational inference with approximate posterior")
         elif method_name == "MCMC":
             logger.info("MCMC Method: Full posterior sampling")
 

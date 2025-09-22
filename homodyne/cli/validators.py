@@ -34,9 +34,8 @@ def validate_args(args: argparse.Namespace) -> None:
     """
     logger.debug("Starting CLI argument validation")
 
-    # Check for conflicting logging options
-    if args.verbose and args.quiet:
-        raise ValidationError("Cannot use --verbose and --quiet together")
+    # Note: verbose and quiet arguments have been removed from CLI
+    # Any legacy references are handled via backwards compatibility
 
     # Validate configuration file
     validate_config_file(args.config)
@@ -277,14 +276,9 @@ def validate_method_specific_args(args: argparse.Namespace) -> None:
     if args.static_isotropic and args.method == "mcmc":
         logger.info(
             "Using MCMC with static isotropic mode (3 parameters). "
-            "Consider VI for faster analysis of simple models."
+            "Consider LSQ for faster analysis of simple models."
         )
 
-    if args.laminar_flow and args.method == "vi":
-        logger.info(
-            "Using VI with laminar flow mode (7 parameters). "
-            "Consider hybrid method for better uncertainty quantification with complex models."
-        )
 
 
 def validate_file_format(file_path: Path, expected_formats: List[str]) -> None:

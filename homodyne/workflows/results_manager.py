@@ -23,14 +23,13 @@ import numpy as np
 
 from homodyne.optimization.hybrid import HybridResult
 from homodyne.optimization.mcmc import MCMCResult
-from homodyne.optimization.variational import VIResult
 from homodyne.optimization.lsq_wrapper import LSQResult
 from homodyne.utils.logging import get_logger, log_performance
 from homodyne.core.jax_backend import safe_len
 
 logger = get_logger(__name__)
 
-ResultType = Union[VIResult, MCMCResult, HybridResult, LSQResult]
+ResultType = Union[MCMCResult, HybridResult, LSQResult]
 
 
 class ResultsManager:
@@ -144,9 +143,7 @@ class ResultsManager:
                 logger.warning(f"Missing required attribute: {attr}")
 
         # Method-specific validation
-        if isinstance(result, VIResult):
-            self._validate_vi_results(result)
-        elif isinstance(result, MCMCResult):
+        if isinstance(result, MCMCResult):
             self._validate_mcmc_results(result)
         elif isinstance(result, HybridResult):
             self._validate_hybrid_results(result)
@@ -155,20 +152,6 @@ class ResultsManager:
 
         logger.debug("✓ Results validation completed")
 
-    def _validate_vi_results(self, result: VIResult) -> None:
-        """Validate VI-specific results."""
-        if not result.converged:
-            logger.warning("VI optimization did not converge")
-
-        if result.final_elbo > 0:
-            logger.warning(
-                f"Positive ELBO may indicate optimization issues: {result.final_elbo}"
-            )
-
-        if result.kl_divergence < 0:
-            logger.warning(
-                f"Negative KL divergence is unexpected: {result.kl_divergence}"
-            )
 
     def _validate_mcmc_results(self, result: MCMCResult) -> None:
         """Validate MCMC-specific results."""
@@ -518,58 +501,13 @@ class ResultsManager:
         method_dir.mkdir(exist_ok=True)
 
         # Create method-specific summary
-        if isinstance(result, VIResult):
-            self._create_vi_outputs(result, method_dir)
-        elif isinstance(result, MCMCResult):
+        if isinstance(result, MCMCResult):
             self._create_mcmc_outputs(result, method_dir)
         elif isinstance(result, HybridResult):
             self._create_hybrid_outputs(result, method_dir)
         elif isinstance(result, LSQResult):
             self._create_lsq_outputs(result, method_dir)
 
-    def _create_vi_outputs(self, result: VIResult, output_dir: Path) -> None:
-        """Create VI-specific outputs."""
-        import numpy as np
-        
-        # Safe conversion for JAX/numpy arrays
-        def safe_convert(value):
-            value_type_str = str(type(value))
-            if 'ArrayImpl' in value_type_str or 'DeviceArray' in value_type_str:
-                try:
-                    return np.asarray(value).tolist()
-                except:
-                    return str(value)
-            elif hasattr(value, '__module__') and value.__module__ and 'jax' in value.__module__:
-                try:
-                    return np.asarray(value).tolist()
-                except:
-                    return str(value)
-            elif hasattr(value, 'tolist'):
-                try:
-                    return value.tolist()
-                except:
-                    return str(value)
-            else:
-                return value
-        
-        vi_summary = {
-            "optimization": {
-                "final_elbo": result.final_elbo,
-                "kl_divergence": result.kl_divergence,
-                "likelihood": result.likelihood,
-                "converged": result.converged,
-                "iterations": result.n_iterations,
-            },
-            "parameters": {
-                "means": safe_convert(result.mean_params),
-                "std_devs": safe_convert(result.std_params),
-                "contrast": result.mean_contrast,
-                "offset": result.mean_offset,
-            },
-        }
-
-        with open(output_dir / "vi_summary.json", "w") as f:
-            json.dump(vi_summary, f, indent=2)
 
     def _create_mcmc_outputs(self, result: MCMCResult, output_dir: Path) -> None:
         """Create MCMC-specific outputs."""

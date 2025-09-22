@@ -35,18 +35,23 @@ def check_python_version() -> None:
 
 def setup_logging(args) -> None:
     """Configure logging based on CLI arguments."""
-    if args.verbose:
-        log_level = logging.DEBUG
-    elif args.quiet:
-        log_level = logging.ERROR
-    else:
-        log_level = logging.INFO
+    # Map log_level string to logging constants
+    log_level_map = {
+        "DEBUG": logging.DEBUG,
+        "INFO": logging.INFO,
+        "WARNING": logging.WARNING,
+        "ERROR": logging.ERROR,
+        "CRITICAL": logging.CRITICAL
+    }
+
+    # Get log level from args (fallback to INFO if not specified)
+    log_level = log_level_map.get(getattr(args, 'log_level', 'INFO'), logging.INFO)
 
     # Configure handlers list
     handlers = []
 
-    # Console handler (unless quiet)
-    if not args.quiet:
+    # Console handler (unless --no-console)
+    if not getattr(args, 'no_console', False):
         console_handler = logging.StreamHandler()
         console_handler.setLevel(log_level)
         console_formatter = logging.Formatter(
@@ -114,8 +119,8 @@ def main() -> int:
         setup_logging(args)
         logger = get_logger(__name__)
 
-        # Print banner unless quiet mode
-        if not args.quiet:
+        # Print banner unless console output is disabled
+        if not getattr(args, 'no_console', False):
             print_banner()
 
         logger.info("Starting Homodyne v2 analysis")

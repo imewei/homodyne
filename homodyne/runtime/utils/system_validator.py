@@ -673,7 +673,7 @@ Examples:
         """,
     )
 
-    parser.add_argument("--verbose", "-v", action="store_true", help="Verbose output")
+    # Note: --verbose argument removed to avoid conflicts with main CLI\n    # Verbose mode controlled internally via logging level
     parser.add_argument("--json", action="store_true", help="Output results as JSON")
     parser.add_argument(
         "--test",
@@ -683,7 +683,7 @@ Examples:
 
     args = parser.parse_args()
 
-    validator = SystemValidator(verbose=args.verbose)
+    validator = SystemValidator(verbose=True)  # Always verbose for validation tool
 
     if args.test:
         # Run specific test
