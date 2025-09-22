@@ -399,7 +399,7 @@ class SyntheticDataGenerator:
         """Add instrument information"""
         group.create_dataset("detector_name", data=b"Pilatus 1M")
         group.create_dataset("beam_energy", data=8.0)  # keV
-        group.create_dataset("detector_distance", data=5.0)  # meters
+        # Note: Use stator_rotor_gap in configuration for L parameter
         group.create_dataset("pixel_size", data=172e-6)  # meters
 
         group.attrs["facility"] = "Advanced Photon Source"

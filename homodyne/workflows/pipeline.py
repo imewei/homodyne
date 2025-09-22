@@ -304,11 +304,14 @@ class AnalysisPipeline:
             # Extract data components
             data = data_dict["c2_exp"]
             sigma = data_dict.get("c2_std", None)
-            t1 = data_dict["t1"]
-            t2 = data_dict["t2"]
-            phi_angles = data_dict["phi_angles"]
-            q = data_dict["q"]
-            L = data_dict["L"]
+
+            # Construct analysis parameters from configuration (configurable override system)
+            analysis_params = self._construct_analysis_parameters_from_config(data_dict)
+            t1 = analysis_params["t1"]
+            t2 = analysis_params["t2"]
+            phi_angles = analysis_params["phi_angles"]
+            q = analysis_params["q"]
+            L = analysis_params["L"]
 
             # Execute method
             if self.args.method == "vi":
@@ -596,6 +599,138 @@ class AnalysisPipeline:
 
         return matched_indices, matched_angles
 
+    def _construct_analysis_parameters_from_config(self, data_dict: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Construct analysis parameters from configuration with data fallback.
+
+        Implements the configurable parameter override system where parameters
+        are primarily constructed from configuration values, with data fallback
+        when configuration values are not available.
+
+        Args:
+            data_dict: Loaded experimental data for fallback
+
+        Returns:
+            Dictionary with analysis parameters: t1, t2, phi_angles, q, L
+        """
+        logger.info("🔧 Constructing analysis parameters from configuration")
+
+        # Get analyzer parameters from configuration
+        analyzer_params = self.config.get("analyzer_parameters", {})
+
+        # 1. Construct t1/t2 time grids from configuration: dt * (end_frame - start_frame)
+        dt = analyzer_params.get("dt", 0.1)
+        start_frame = analyzer_params.get("start_frame", 1000)
+        end_frame = analyzer_params.get("end_frame", 2000)
+
+        # User's requested formula: t1 = t2 = dt * (end_frame - start_frame)
+        # CRITICAL: Match data dimensions for LSQ compatibility
+        # The data has shape (n_phi, n_t1+1, n_t2+1) where n_t1=n_t2=end_frame-start_frame
+        # Add 1 to match the actual data shape
+        time_range = dt * (end_frame - start_frame)
+        n_points = end_frame - start_frame + 1  # Add 1 to match data shape (1001 not 1000)
+        t1 = np.linspace(0, time_range, n_points)
+        t2 = np.linspace(0, time_range, n_points)
+
+        logger.info(f"✓ Time grids constructed: dt={dt}, frames={start_frame}-{end_frame}, range=[0, {time_range:.1f}], size={n_points}")
+
+        # 2. Extract q parameter from scattering configuration
+        scattering_config = analyzer_params.get("scattering", {})
+        q_config = scattering_config.get("wavevector_q")
+
+        if q_config is not None:
+            q = float(q_config)
+            logger.info(f"✓ q parameter from configuration: {q:.6f}")
+        else:
+            # Fallback to data-loaded value
+            q = data_dict.get("q", 0.0054)
+            logger.warning(f"⚠️ q parameter not in config, using data fallback: {q:.6f}")
+
+        # 3. Extract L parameter from geometry configuration
+        # L is the stator-rotor gap in Angstroms (instrumental setup)
+        geometry_config = analyzer_params.get("geometry", {})
+        stator_gap = geometry_config.get("stator_rotor_gap")
+
+        if stator_gap is not None:
+            # Use stator_rotor_gap directly as L parameter (in Angstroms)
+            # 2000000 Angstroms = 200 microns = instrumental setup
+            L = float(stator_gap)
+            logger.info(f"✓ L parameter from configuration (stator_rotor_gap): {L:.1f} Å")
+        else:
+            # Fallback to data-loaded value or default
+            L = data_dict.get("L", 2000000.0)  # Default to 2000000 Å
+            logger.warning(f"⚠️ L parameter not in config, using fallback: {L:.1f} Å")
+
+        # 4. Extract phi angles - ALWAYS use data's phi angles for LSQ shape compatibility
+        # Configuration phi filtering is for selecting which data to analyze, not for theory
+        phi_angles_from_data = data_dict.get("phi_angles", np.array([0.0]))
+
+        # Check if we should filter/select specific angles
+        phi_filtering_config = self.config.get("phi_filtering", {})
+        if phi_filtering_config.get("enabled", False) and self.args.method != "lsq":
+            # For non-LSQ methods, we can use config-based phi selection
+            target_ranges = phi_filtering_config.get("target_ranges", [])
+            if target_ranges:
+                phi_angles = self._construct_phi_angles_from_ranges(target_ranges)
+                logger.info(f"✓ Phi angles from configuration: {len(phi_angles)} angles (non-LSQ)")
+            else:
+                phi_angles = phi_angles_from_data
+                logger.info(f"✓ Phi angles from data: {len(phi_angles)} angles")
+        else:
+            # For LSQ or when filtering is disabled, use data's phi angles
+            phi_angles = phi_angles_from_data
+            logger.info(f"✓ Using data phi angles for shape compatibility: {len(phi_angles)} angles")
+
+        # Convert to meshgrid format for t1, t2 (required by optimization methods)
+        t1_grid, t2_grid = np.meshgrid(t1, t2, indexing='ij')
+
+        analysis_params = {
+            "t1": t1_grid,
+            "t2": t2_grid,
+            "phi_angles": phi_angles,
+            "q": q,
+            "L": L
+        }
+
+        logger.info(f"📋 Analysis parameters summary:")
+        logger.info(f"   ├─ Time grid: {t1_grid.shape} (range: 0 to {time_range:.1f})")
+        logger.info(f"   ├─ Phi angles: {len(phi_angles)} angles")
+        logger.info(f"   ├─ q: {q:.6f}")
+        logger.info(f"   └─ L: {L:.1f}")
+
+        return analysis_params
+
+    def _construct_phi_angles_from_ranges(self, target_ranges: List[Dict[str, Any]]) -> np.ndarray:
+        """
+        Construct phi angles array from configuration target ranges.
+
+        Args:
+            target_ranges: List of angle range dictionaries with min_angle, max_angle
+
+        Returns:
+            Array of phi angles constructed from ranges
+        """
+        phi_angles = []
+
+        for range_spec in target_ranges:
+            min_angle = range_spec.get("min_angle", 0.0)
+            max_angle = range_spec.get("max_angle", 0.0)
+
+            # Generate a few angles within each range (could be made configurable)
+            n_angles_per_range = 3
+            if min_angle != max_angle:
+                range_angles = np.linspace(min_angle, max_angle, n_angles_per_range)
+                phi_angles.extend(range_angles)
+            else:
+                phi_angles.append(min_angle)
+
+        # Convert to array and remove duplicates
+        phi_angles = np.unique(np.array(phi_angles))
+
+        logger.debug(f"Constructed phi angles from ranges: {phi_angles}")
+
+        return phi_angles
+
     def _transform_data_fields(self, data_dict: Dict[str, Any]) -> Dict[str, Any]:
         """
         Transform data field names from loader format to pipeline format.
@@ -629,9 +764,30 @@ class AnalysisPipeline:
                 f"Mapped phi_angles_list (length={len(data_dict['phi_angles_list'])}) to 'phi_angles'"
             )
 
-        # Add detector distance L as default value (common for XPCS)
-        transformed_dict["L"] = 1000.0  # mm - standard detector distance
-        logger.debug(f"Added detector distance L = {transformed_dict['L']:.1f} mm")
+        # Add L parameter from stator_rotor_gap if available
+        analyzer_params = self.config.get("analyzer_parameters", {})
+        geometry_config = analyzer_params.get("geometry", {})
+        stator_gap = geometry_config.get("stator_rotor_gap")
+
+        if stator_gap is not None:
+            transformed_dict["L"] = float(stator_gap)
+            logger.debug(f"Added L parameter from stator_rotor_gap = {transformed_dict['L']:.1f} Å")
+        else:
+            # Fallback to default
+            transformed_dict["L"] = 2000000.0  # Default 2000000 Å = 200 microns
+            logger.debug(f"Using default L parameter = {transformed_dict['L']:.1f} Å")
+
+        # Add dt parameter from configuration
+        dt = analyzer_params.get("dt", 0.1)
+        transformed_dict["dt"] = float(dt)
+        logger.debug(f"Added dt parameter from configuration = {transformed_dict['dt']}")
+
+        # Add q parameter from configuration if not already present
+        if "q" not in transformed_dict:
+            scattering_config = analyzer_params.get("scattering", {})
+            q_config = scattering_config.get("wavevector_q", 0.0054)  # Default q value
+            transformed_dict["q"] = float(q_config)
+            logger.debug(f"Added q parameter from configuration = {transformed_dict['q']:.6f}")
 
         return transformed_dict
 

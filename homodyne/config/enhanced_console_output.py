@@ -187,7 +187,10 @@ class ProgressIndicator:
             # Fallback to simple counter
             print(f"{self.description}: {self.current}", end="")
 
-        sys.stdout.flush()
+        # Only flush for interactive output, not when redirected to files
+        # This reduces log file flushing overhead while preserving real-time display
+        if sys.stdout.isatty():
+            sys.stdout.flush()
 
     def _render_progress_bar(self):
         """Render progress bar."""

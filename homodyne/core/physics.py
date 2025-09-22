@@ -266,10 +266,11 @@ def validate_experimental_setup(q: float, L: float, wavelength: float = None) ->
         )
         return False
 
-    # Check detector distance (typical range: 10mm to 10m)
-    if not (10.0 <= L <= 10000.0):
+    # Check detector distance (L is in Angstroms)
+    # Typical range: 100,000 Å (10mm) to 100,000,000 Å (10m)
+    if not (1e5 <= L <= 1e8):
         logger.warning(
-            f"Sample-detector distance {L:.1f} mm outside reasonable range [10, 10000]"
+            f"Sample-detector distance {L:.1f} Å outside reasonable range [1e5, 1e8] Å (10mm to 10m)"
         )
         return False
 

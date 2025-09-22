@@ -26,6 +26,7 @@ from homodyne.optimization.mcmc import MCMCResult
 from homodyne.optimization.variational import VIResult
 from homodyne.optimization.lsq_wrapper import LSQResult
 from homodyne.utils.logging import get_logger, log_performance
+from homodyne.core.jax_backend import safe_len
 
 logger = get_logger(__name__)
 
@@ -440,14 +441,15 @@ class ResultsManager:
             param_names = self._get_parameter_names(result)
 
             # Handle uncertainties properly - LSQ doesn't provide them
+            params_len = safe_len(params)
             if uncertainties is not None and hasattr(uncertainties, '__len__'):
-                uncertainty_values = list(uncertainties[: len(params)])
+                uncertainty_values = list(uncertainties[: params_len])
             else:
-                uncertainty_values = [np.nan] * len(params)
+                uncertainty_values = [np.nan] * params_len
 
             df = pd.DataFrame(
                 {
-                    "parameter": param_names[: len(params)],
+                    "parameter": param_names[: params_len],
                     "value": params,
                     "uncertainty": uncertainty_values,
                 }
@@ -740,37 +742,43 @@ class ResultsManager:
             residuals_list = []
             g1_theory_list = []
 
+            # Prepare time arrays once, outside the loop
+            # Extract 1D arrays from meshgrids if needed
+            t1_raw = data_dict["t1"]
+            t2_raw = data_dict["t2"]
+
+            # If t1 and t2 are 2D meshgrids, extract the 1D arrays
+            if t1_raw.ndim == 2:
+                # In a meshgrid, t1 varies along axis 1 (columns)
+                t1_1d = t1_raw[0, :]  # Get first row for unique t1 values
+                t2_1d = t2_raw[:, 0]  # Get first column for unique t2 values
+            else:
+                t1_1d = t1_raw
+                t2_1d = t2_raw
+
+            # Create meshgrids for theory computation
+            # Theory engine needs 2D meshgrids for proper correlation calculation
+            t2_grid, t1_grid = np.meshgrid(t2_1d, t1_1d, indexing='ij')
+
+            # Extract dt from data_dict if available
+            dt = data_dict.get("dt", None)
+
+            # Handle q array - use mean or first value if it's an array
+            q_value = data_dict["q"]
+            if isinstance(q_value, np.ndarray):
+                if q_value.size > 1:
+                    # For post-processing, we typically use the mean q value
+                    q_value = float(np.mean(q_value))
+                    logger.debug(f"Using mean q value: {q_value} from array with {data_dict['q'].size} elements")
+                else:
+                    q_value = float(q_value.item()) if hasattr(q_value, 'item') else float(q_value)
+            else:
+                q_value = float(q_value)
+
             for i, phi in enumerate(phi_angles_list):
                 # Compute g1 for this specific phi angle
-                # Extract dt from data_dict if available
-                dt = data_dict.get("dt", None)
-
-                # Extract 1D arrays from meshgrids if needed
-                t1 = data_dict["t1"]
-                t2 = data_dict["t2"]
-
-                # If t1 and t2 are 2D meshgrids, extract the 1D arrays
-                if t1.ndim == 2:
-                    # In a meshgrid, t1 varies along axis 1 (columns)
-                    t1 = t1[0, :]  # Get first row for unique t1 values
-                if t2.ndim == 2:
-                    # In a meshgrid, t2 varies along axis 0 (rows)
-                    t2 = t2[:, 0]  # Get first column for unique t2 values
-
-                # Handle q array - use mean or first value if it's an array
-                q_value = data_dict["q"]
-                if isinstance(q_value, np.ndarray):
-                    if q_value.size > 1:
-                        # For post-processing, we typically use the mean q value
-                        q_value = float(np.mean(q_value))
-                        logger.debug(f"Using mean q value: {q_value} from array with {data_dict['q'].size} elements")
-                    else:
-                        q_value = float(q_value.item()) if hasattr(q_value, 'item') else float(q_value)
-                else:
-                    q_value = float(q_value)
-
                 # Debug logging
-                logger.debug(f"compute_g1 inputs: params shape={params.shape}, t1 shape={t1.shape}, t2 shape={t2.shape}, phi={phi}, q={q_value}, L={data_dict['L']}")
+                logger.debug(f"compute_g1 inputs: params shape={params.shape}, t1_grid shape={t1_grid.shape}, t2_grid shape={t2_grid.shape}, phi={phi}, q={q_value}, L={data_dict['L']}")
 
                 # Get experimental data dimensions to ensure compatibility
                 exp_shape = data_dict["c2_exp"][i].shape if data_dict["c2_exp"].ndim == 3 else data_dict["c2_exp"].shape
@@ -779,8 +787,8 @@ class ResultsManager:
                 try:
                     g1_theory_single = theory_engine.compute_g1(
                         params=params,
-                        t1=t1,
-                        t2=t2,
+                        t1=t1_grid,
+                        t2=t2_grid,
                         phi=np.array([phi]),  # Single phi angle as array
                         q=q_value,  # Already converted to float scalar
                         L=data_dict["L"],
@@ -791,19 +799,28 @@ class ResultsManager:
 
                     # Handle different output shapes robustly
                     if g1_theory_single.ndim == 4:
-                        # Shape like (1, 1, 1, 23) - extract the right slice
-                        if g1_theory_single.shape[-1] == len(phi_angles_list):
-                            # Last dimension is phi angles - get the i-th angle
-                            g1_slice = g1_theory_single[0, 0, 0, i]
-                            # If this is a scalar, we need to reconstruct the matrix
-                            if np.isscalar(g1_slice) or g1_slice.ndim == 0:
-                                # Theory engine returned scalar values - construct identity-like matrix
-                                g1_matrix = np.full((expected_size, expected_size), float(g1_slice))
-                            else:
-                                g1_matrix = g1_slice
+                        # Shape like (1, n_t2, n_t1, 1) or similar - extract the correlation matrix
+                        # Find which dimensions correspond to time
+                        time_dims = [d for d in range(4) if g1_theory_single.shape[d] > 1]
+                        if len(time_dims) >= 2:
+                            # Extract the 2D time correlation matrix
+                            # Squeeze out singleton dimensions
+                            g1_matrix = np.squeeze(g1_theory_single)
+                            if g1_matrix.ndim > 2:
+                                # Still has extra dims, extract first phi angle's data
+                                if g1_matrix.shape[0] == 1:
+                                    g1_matrix = g1_matrix[0]
+                                elif g1_matrix.ndim == 3 and g1_matrix.shape[-1] == 1:
+                                    g1_matrix = g1_matrix[:, :, 0]
                         else:
-                            # Unexpected shape - fall back to first element
-                            g1_matrix = g1_theory_single.flatten()[0] * np.ones((expected_size, expected_size))
+                            # Unexpected shape - try to extract meaningful data
+                            g1_matrix = np.squeeze(g1_theory_single)
+                            if g1_matrix.ndim < 2:
+                                # Theory returned essentially a scalar - this indicates a problem
+                                logger.warning(f"Theory engine returned scalar-like result, creating diagonal decay matrix")
+                                # Create a diagonal decay matrix as fallback
+                                time_len = len(t1) if t1.ndim == 1 else t1.shape[1]
+                                g1_matrix = np.eye(time_len)
                     elif g1_theory_single.ndim == 3:
                         # Standard 3D case: (n_phi, n_t1, n_t2)
                         if g1_theory_single.shape[0] == 1:
@@ -880,13 +897,21 @@ class ResultsManager:
     def _extract_parameters(self, result: ResultType) -> np.ndarray:
         """Extract parameter values from result."""
         if hasattr(result, "mean_params"):
-            return np.array(result.mean_params)
+            params = np.array(result.mean_params)
+            # Ensure we have a 1D array, not a 0-dimensional array
+            if params.ndim == 0:
+                params = np.array([params.item()])
+            return params
         return np.array([])
 
     def _extract_uncertainties(self, result: ResultType) -> Optional[np.ndarray]:
         """Extract parameter uncertainties from result."""
         if hasattr(result, "std_params"):
-            return np.array(result.std_params)
+            uncertainties = np.array(result.std_params)
+            # Ensure we have a 1D array, not a 0-dimensional array
+            if uncertainties.ndim == 0:
+                uncertainties = np.array([uncertainties.item()])
+            return uncertainties
         return None
 
     def _get_parameter_names(self, result: ResultType) -> list:
@@ -941,7 +966,8 @@ class ResultsManager:
         param_names = self._get_parameter_names(result)
 
         for i, (name, value) in enumerate(zip(param_names, params)):
-            if uncertainties is not None and hasattr(uncertainties, '__len__') and i < len(uncertainties):
+            uncertainties_len = safe_len(uncertainties) if uncertainties is not None else 0
+            if uncertainties is not None and hasattr(uncertainties, '__len__') and i < uncertainties_len:
                 lines.append(f"  {name}: {value:.6f} ± {uncertainties[i]:.6f}")
             else:
                 lines.append(f"  {name}: {value:.6f}")

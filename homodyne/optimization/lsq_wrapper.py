@@ -15,6 +15,19 @@ import time
 from homodyne.core.fitting import FitResult, UnifiedHomodyneEngine
 from homodyne.optimization.direct_solver import DirectLeastSquaresSolver, DirectSolverConfig
 from homodyne.utils.logging import get_logger
+from homodyne.core.jax_backend import safe_len
+
+# Import JAX with proper fallback
+try:
+    import jax
+    import jax.numpy as jnp
+    from jax import jit
+    JAX_AVAILABLE = True
+except ImportError:
+    JAX_AVAILABLE = False
+    jnp = np
+    def jit(f):
+        return f
 
 logger = get_logger(__name__)
 
@@ -190,33 +203,177 @@ def fit_homodyne_lsq(
     else:
         weights = np.ones_like(data_flat)
 
-    # Define the chi-square objective function
-    def chi_square_objective(params):
-        """Compute chi-squared for given parameters."""
+    # CRITICAL FIX: Use configuration dt value directly
+    # During LSQ optimization, t1/t2 are correlation matrices, not time arrays.
+    # Computing dt from correlation matrix differences produces dt=0.0, causing
+    # sinc_prefactor=0 in JAX backend, leading to constant g1=1.0 values.
+    dt = kwargs.get('dt', 0.1)  # Use dt from configuration, fallback to 0.1
+
+    logger.debug(f"Using dt parameter from configuration: {dt} (LSQ optimization uses correlation matrices, not time arrays)")
+
+    # Define the chi-square objective function with proper NumPy/JAX boundary
+    # Add evaluation counter
+    eval_counter = [0]
+
+    def chi_square_objective_numpy(params):
+        """NumPy interface for scipy.optimize - handles all conversions.
+
+        This function is called by scipy.optimize with NumPy arrays.
+        It ensures proper type conversion and handles all boundary logic.
+        """
+        eval_counter[0] += 1
+
+        # Ensure params is always a NumPy 1D array (scipy may pass various types)
+        params = np.atleast_1d(np.asarray(params))
+
+        # Split parameters into physics and scaling
+        physics_params = params[:-2]
+        contrast = float(params[-2])  # Ensure scalar
+        offset = float(params[-1])    # Ensure scalar
+
+        # Log every 10th evaluation for debugging
+        if eval_counter[0] % 10 == 1:
+            logger.debug(f"Eval #{eval_counter[0]}: params={params[:3]}..., contrast={contrast:.4f}, offset={offset:.4f}")
+
+        # Basic bounds validation
+        if contrast <= 0 or contrast > 10:
+            return 1e10
+        if abs(offset) > 100:
+            return 1e10
+
         try:
-            # Split parameters into physics and scaling
-            physics_params = params[:-2]
-            contrast = params[-2]
-            offset = params[-1]
-
-            # Compute theoretical correlation function (g1^2)
-            g1_theory = engine.theory_engine.compute_g1(
-                physics_params, t1, t2, phi, q, L
-            )
-            theory = g1_theory**2
-
-            # Apply scaling: data = theory * contrast + offset
-            theory_scaled = theory.flatten() * contrast + offset
-
-            # Compute weighted chi-squared
-            residuals = data_flat - theory_scaled
-            chi_sq = np.sum(weights * residuals**2)
-
-            return chi_sq
+            # Call the actual computation (JAX or NumPy)
+            if JAX_AVAILABLE:
+                chi2 = compute_chi2_jax(
+                    physics_params, data_flat, weights,
+                    t1, t2, phi, q, L, contrast, offset, engine, dt
+                )
+                # Log chi2 value for debugging
+                if eval_counter[0] % 10 == 1:
+                    logger.debug(f"  -> chi2={chi2:.6f}")
+                return float(chi2)  # Ensure Python float for scipy
+            else:
+                chi2 = compute_chi2_numpy(
+                    physics_params, data_flat, weights,
+                    t1, t2, phi, q, L, contrast, offset, engine, dt
+                )
+                if eval_counter[0] % 10 == 1:
+                    logger.debug(f"  -> chi2={chi2:.6f}")
+                return float(chi2)
 
         except Exception as e:
             logger.debug(f"Objective function evaluation failed: {e}")
-            return 1e10  # Return large value for failed evaluations
+            import traceback
+            logger.debug(f"Traceback: {traceback.format_exc()}")
+            return 1e10
+
+    # Define JAX-optimized computation if available
+    if JAX_AVAILABLE:
+        # Only JIT the chi-squared calculation, not the engine calls
+        @jit
+        def compute_chi2_jax_inner(theory_flat, data_flat, weights):
+            """JAX JIT-compiled chi-squared calculation.
+
+            This function only performs the chi-squared calculation.
+            Theory computation happens outside the JIT boundary.
+            """
+            residuals = (theory_flat - data_flat) * weights
+            return jnp.sum(residuals ** 2)
+
+        def compute_chi2_jax(physics_params, data_flat, weights,
+                             t1, t2, phi, q, L, contrast, offset, engine, dt):
+            """JAX-optimized chi-squared computation.
+
+            Computes theory outside JIT, then uses JIT for chi2 calculation.
+            """
+            # Compute theory outside JIT boundary
+            theory_flat = compute_theory_flat(
+                physics_params, t1, t2, phi, q, L, contrast, offset, engine, dt
+            )
+            # Use JIT-compiled function for chi-squared calculation
+            return compute_chi2_jax_inner(theory_flat, data_flat, weights)
+
+    def compute_theory_flat(physics_params, t1, t2, phi, q, L, contrast, offset, engine, dt=0.1):
+        """Compute flattened theory using the engine.
+
+        This function handles the engine calls and cannot be JIT-compiled.
+        Returns a flattened array of theory values.
+        """
+        # Ensure physics_params is properly shaped
+        physics_params = np.atleast_1d(np.asarray(physics_params))
+
+        # Debug: Log parameters occasionally
+        if eval_counter[0] % 50 == 1:
+            logger.debug(f"compute_theory_flat called with physics_params={physics_params[:3]}...")
+
+        # Process phi array: ensure it's NumPy for safe indexing
+        phi_array = np.atleast_1d(np.asarray(phi))
+        phi_size = len(phi_array)
+
+        # Create time meshgrids if needed for proper correlation computation
+        if t1.ndim == 1 and t2.ndim == 1:
+            t2_grid, t1_grid = np.meshgrid(t2, t1, indexing='ij')
+        else:
+            t1_grid = t1
+            t2_grid = t2
+
+        if phi_size > 1:
+            # Multiple angles: compute g1 for each angle separately
+            g1_list = []
+            for i in range(phi_size):
+                phi_val = float(phi_array[i])  # Safe indexing with NumPy array
+                # Pass phi as single-element array, not scalar
+                g1_single = engine.theory_engine.compute_g1(
+                    params=physics_params, t1=t1_grid, t2=t2_grid,
+                    phi=np.array([phi_val]), q=q, L=L, dt=dt
+                )
+                # Debug: Log g1 shape and values
+                if eval_counter[0] % 50 == 1 and i == 0:
+                    logger.debug(f"  g1_single shape before squeeze: {g1_single.shape}")
+                    logger.debug(f"  g1_single min/max/mean: {np.min(g1_single):.6f}/{np.max(g1_single):.6f}/{np.mean(g1_single):.6f}")
+
+                # Squeeze to remove singleton phi dimension: (1, t1, t2) -> (t1, t2)
+                g1_single = np.squeeze(g1_single, axis=0) if g1_single.shape[0] == 1 else g1_single
+                g1_list.append(g1_single)
+            # Stack along phi dimension and compute g2
+            g1_full = np.stack(g1_list, axis=0)
+            g2_theory = offset + contrast * g1_full ** 2
+        else:
+            # Single angle
+            phi_val = float(phi_array[0])
+            # Pass phi as single-element array, not scalar
+            g1_theory = engine.theory_engine.compute_g1(
+                params=physics_params, t1=t1_grid, t2=t2_grid,
+                phi=np.array([phi_val]), q=q, L=L, dt=dt
+            )
+            # Squeeze to remove singleton phi dimension if present
+            g1_theory = np.squeeze(g1_theory, axis=0) if g1_theory.shape[0] == 1 else g1_theory
+            g2_theory = offset + contrast * g1_theory ** 2
+
+        # Debug: Log g2 statistics before flattening
+        if eval_counter[0] % 50 == 1:
+            logger.debug(f"  g2_theory shape: {g2_theory.shape}")
+            logger.debug(f"  g2_theory min/max/mean: {np.min(g2_theory):.6f}/{np.max(g2_theory):.6f}/{np.mean(g2_theory):.6f}")
+            theory_flat = g2_theory.flatten()
+            logger.debug(f"  theory_flat[:10]: {theory_flat[:10]}")
+            return theory_flat
+
+        # Flatten the theory
+        return g2_theory.flatten()
+
+    def compute_chi2_numpy(physics_params, data_flat, weights,
+                           t1, t2, phi, q, L, contrast, offset, engine, dt):
+        """NumPy chi-squared computation (fallback when JAX not available).
+
+        Computes theory and chi-squared using NumPy.
+        """
+        # Compute theory
+        theory_flat = compute_theory_flat(
+            physics_params, t1, t2, phi, q, L, contrast, offset, engine, dt
+        )
+        # Compute chi-squared
+        residuals = (theory_flat - data_flat) * weights
+        return np.sum(residuals ** 2)
 
     # Set up initial parameters: physics + contrast + offset
     initial_contrast = kwargs.get("initial_contrast", 0.3)
@@ -224,88 +381,95 @@ def fit_homodyne_lsq(
     initial_params = np.concatenate([initial_physics_params, [initial_contrast, initial_offset]])
 
     # Evaluate initial objective value for debugging
-    initial_chi_sq = chi_square_objective(initial_params)
+    initial_chi_sq = chi_square_objective_numpy(initial_params)
     logger.info(f"Initial chi-squared: {initial_chi_sq:.6f}")
     logger.info(f"Initial parameters: physics={initial_physics_params}, contrast={initial_contrast}, offset={initial_offset}")
 
     # Perform optimization
     if SCIPY_AVAILABLE:
-        logger.info("Using SciPy L-BFGS-B optimization")
-        # Set parameter bounds
-        bounds = []
-        # Physics parameter bounds - use reasonable bounds based on typical values
-        for i, param in enumerate(initial_physics_params):
-            if i == 0:  # First parameter (typically viscosity or similar)
-                bounds.append((param * 0.1, param * 10.0))  # Allow 10x range
-            else:
-                # For other parameters, allow wider range including sign changes
-                bounds.append((param - abs(param) * 10, param + abs(param) * 10))
-        # Scaling parameter bounds
-        bounds.append((0.001, 10.0))  # contrast bounds
-        bounds.append((-10.0, 10.0))  # offset bounds
+        logger.info("Using SciPy Nelder-Mead optimization as primary method")
 
-        # Use more reasonable tolerances
+        # Try Nelder-Mead first (doesn't use gradients, more robust for flat regions)
         result = minimize(
-            chi_square_objective,
+            chi_square_objective_numpy,
             initial_params,
-            method='L-BFGS-B',
-            bounds=bounds,
+            method='Nelder-Mead',
             options={
-                'maxiter': 1000,
-                'ftol': 1e-6,  # Relax function tolerance
-                'gtol': 1e-5,  # Add gradient tolerance
-                'disp': True   # Enable verbose output
+                'maxiter': 2000,
+                'xatol': 1e-4,
+                'fatol': 1e-4,
+                'disp': True
             }
         )
 
-        # Check if optimization actually ran
-        if hasattr(result, 'nit') and result.nit == 0:
-            logger.warning("L-BFGS-B converged immediately. Trying Nelder-Mead as fallback...")
-            # Try Nelder-Mead which doesn't use gradients
-            result = minimize(
-                chi_square_objective,
-                initial_params,
-                method='Nelder-Mead',
-                options={
-                    'maxiter': 2000,
-                    'xatol': 1e-4,
-                    'fatol': 1e-4,
-                    'disp': True
-                }
-            )
-            logger.info(f"Nelder-Mead completed with {result.nit} iterations")
-
-        if result.success or (hasattr(result, 'nit') and result.nit > 0):
-            logger.info(f"LSQ optimization completed in {result.nit} iterations")
+        # Check if Nelder-Mead succeeded
+        if result.success and hasattr(result, 'nit') and result.nit > 0:
+            logger.info(f"Nelder-Mead optimization completed successfully in {result.nit} iterations")
             optimized_params = result.x
             final_chi_sq = result.fun
             converged = result.success
             n_iterations = result.nit
         else:
-            logger.warning(f"LSQ optimization failed: {result.message if hasattr(result, 'message') else 'Unknown error'}")
-            # Try one more time with Powell method
-            logger.info("Trying Powell method as final fallback...")
+            # First fallback: L-BFGS-B
+            logger.warning("Nelder-Mead failed or didn't converge. Trying L-BFGS-B as fallback...")
+
+            # Set parameter bounds for L-BFGS-B
+            bounds = []
+            # Physics parameter bounds - use reasonable bounds based on typical values
+            for i, param in enumerate(initial_physics_params):
+                if i == 0:  # First parameter (typically viscosity or similar)
+                    bounds.append((param * 0.1, param * 10.0))  # Allow 10x range
+                else:
+                    # For other parameters, allow wider range including sign changes
+                    bounds.append((param - abs(param) * 10, param + abs(param) * 10))
+            # Scaling parameter bounds
+            bounds.append((0.001, 10.0))  # contrast bounds
+            bounds.append((-10.0, 10.0))  # offset bounds
+
             result = minimize(
-                chi_square_objective,
+                chi_square_objective_numpy,
                 initial_params,
-                method='Powell',
-                options={'maxiter': 1000, 'disp': True}
+                method='L-BFGS-B',
+                bounds=bounds,
+                options={
+                    'maxiter': 1000,
+                    'ftol': 1e-6,  # Relax function tolerance
+                    'gtol': 1e-5,  # Add gradient tolerance
+                    'disp': True   # Enable verbose output
+                }
             )
-            if hasattr(result, 'x'):
+
+            if result.success or (hasattr(result, 'nit') and result.nit > 0):
+                logger.info(f"L-BFGS-B optimization completed in {result.nit} iterations")
                 optimized_params = result.x
                 final_chi_sq = result.fun
                 converged = result.success
-                n_iterations = result.nit if hasattr(result, 'nit') else 1
+                n_iterations = result.nit
             else:
-                optimized_params = initial_params
-                final_chi_sq = chi_square_objective(initial_params)
-                converged = False
-                n_iterations = 0
+                # Second fallback: Powell method
+                logger.warning(f"L-BFGS-B optimization failed: {result.message if hasattr(result, 'message') else 'Unknown error'}")
+                logger.info("Trying Powell method as final fallback...")
+                result = minimize(
+                    chi_square_objective_numpy,
+                    initial_params,
+                    method='Powell',
+                    options={'maxiter': 1000, 'disp': True}
+                )
+                if hasattr(result, 'x'):
+                    optimized_params = result.x
+                    final_chi_sq = result.fun
+                    converged = result.success
+                    n_iterations = result.nit if hasattr(result, 'nit') else 1
+                else:
+                    optimized_params = initial_params
+                    final_chi_sq = chi_square_objective_numpy(initial_params)
+                    converged = False
+                    n_iterations = 0
     else:
         # Fallback: just evaluate at initial parameters
         logger.info("Using initial parameters (no optimization)")
         optimized_params = initial_params
-        final_chi_sq = chi_square_objective(initial_params)
+        final_chi_sq = chi_square_objective_numpy(initial_params)
         converged = True
         n_iterations = 1
 
@@ -315,9 +479,52 @@ def fit_homodyne_lsq(
     offset = optimized_params[-1]
 
     # Compute final statistics
-    g1_final = engine.theory_engine.compute_g1(physics_params, t1, t2, phi, q, L)
+    # Create time meshgrids if needed for proper correlation computation
+    if t1.ndim == 1 and t2.ndim == 1:
+        t2_grid, t1_grid = np.meshgrid(t2, t1, indexing='ij')
+        dt_val = t1[1] - t1[0] if safe_len(t1) > 1 else 1.0
+    else:
+        t1_grid = t1
+        t2_grid = t2
+        # Extract 1D array from grid to calculate dt
+        t1_1d = t1_grid[0, :] if t1_grid.ndim == 2 else t1_grid.flatten()[:min(100, safe_len(t1_grid.flatten()))]
+        dt_val = t1_1d[1] - t1_1d[0] if safe_len(t1_1d) > 1 else 1.0
+
+    # Process phi array: convert to array if scalar, loop through angles if array
+    phi_array = np.atleast_1d(phi)  # Ensure phi is at least 1D array
+    if phi_array.size > 1:
+        # Multiple angles: compute g1 for each angle separately
+        g1_list = []
+        for phi_val in phi_array:
+            g1_single = engine.theory_engine.compute_g1(
+                physics_params, t1_grid, t2_grid, np.array([float(phi_val)]), q, L, dt=dt_val
+            )
+            # Remove extra dimension if present
+            if g1_single.ndim > 2:
+                g1_single = g1_single.squeeze()
+            g1_list.append(g1_single)
+        # Stack results along first dimension
+        g1_final = np.stack(g1_list, axis=0)
+    else:
+        # Single angle
+        phi_val = float(phi_array[0])
+        g1_final = engine.theory_engine.compute_g1(
+            physics_params, t1_grid, t2_grid, np.array([phi_val]), q, L, dt=dt_val
+        )
+        # Ensure proper shape
+        if g1_final.ndim > 2 and g1_final.shape[0] == 1:
+            g1_final = g1_final.squeeze(axis=0)
+
     theory_final = g1_final**2
-    theory_scaled_final = theory_final.flatten() * contrast + offset
+
+    # Ensure theory has proper shape before flattening
+    if theory_final.ndim > 2:
+        # If theory has shape (n_phi, n_t1, n_t2), reshape appropriately
+        theory_final_flat = theory_final.reshape(-1)
+    else:
+        theory_final_flat = theory_final.flatten()
+
+    theory_scaled_final = theory_final_flat * contrast + offset
     residuals_final = data_flat - theory_scaled_final
 
     # Calculate proper degrees of freedom

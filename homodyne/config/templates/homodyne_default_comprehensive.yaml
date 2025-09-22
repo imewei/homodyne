@@ -91,8 +91,7 @@ analyzer_parameters:
     # This is an instrumental parameter specific to your setup
     stator_rotor_gap: 2000000
     
-    # Optional: detector distance and geometry
-    # detector_distance: 1000.0  # mm
+    # Optional: beam geometry
     # beam_size: [100, 100]      # microns
 
 # REQUIRED: Analysis mode-specific settings

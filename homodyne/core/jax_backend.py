@@ -105,6 +105,45 @@ _fallback_stats = {
 jax_available = JAX_AVAILABLE
 numpy_gradients_available = NUMPY_GRADIENTS_AVAILABLE if not JAX_AVAILABLE else False
 
+
+def safe_len(obj):
+    """
+    JAX-safe length function that handles scalars, arrays, and JAX objects.
+
+    Args:
+        obj: Any object that might have a length or shape
+
+    Returns:
+        int: Length of the object, or 1 for scalars
+    """
+    # Handle JAX arrays and numpy arrays with shape attribute
+    if hasattr(obj, 'shape'):
+        if obj.shape == () or len(obj.shape) == 0:
+            # Scalar (0-dimensional array)
+            return 1
+        else:
+            # Array - return first dimension size
+            return obj.shape[0]
+
+    # Handle objects with __len__ method (lists, tuples, etc.)
+    if hasattr(obj, '__len__'):
+        try:
+            return len(obj)
+        except TypeError:
+            # This catches "len() of unsized object" errors
+            return 1
+
+    # Handle scalars (int, float, etc.)
+    if hasattr(obj, '__iter__') and not isinstance(obj, (str, bytes)):
+        # Iterable but not string/bytes
+        try:
+            return len(list(obj))
+        except (TypeError, ValueError):
+            return 1
+
+    # Default case: treat as scalar
+    return 1
+
 if not JAX_AVAILABLE:
     if NUMPY_GRADIENTS_AVAILABLE:
         logger.warning(
@@ -286,20 +325,22 @@ def _calculate_shear_rate_impl_jax(
 def _create_time_integral_matrix_impl_jax(time_dependent_array: jnp.ndarray) -> jnp.ndarray:
     """
     Create time integral matrix using discrete numerical integration.
-    
+
     Follows reference v1 implementation algorithm:
     1. Calculate cumulative sum: cumsum[i] = ∫₀^tᵢ f(t') dt' ≈ dt * sum(f[0:i])
     2. Compute difference matrix: matrix[i,j] = |cumsum[i] - cumsum[j]|
-    
+
     This gives: matrix[i,j] ≈ ∫₀^|tᵢ-tⱼ| f(t') dt'
-    
+
     Args:
         time_dependent_array: f(t) evaluated at discrete time points
-        
+
     Returns:
         Time integral matrix for correlation calculations
     """
-    n = len(time_dependent_array)
+    # Handle scalar input by converting to array
+    time_dependent_array = jnp.atleast_1d(time_dependent_array)
+    n = safe_len(time_dependent_array)
     
     # Step 1: Discrete cumulative integration
     # This approximates ∫₀^tᵢ f(t') dt' using cumulative sum
@@ -346,33 +387,86 @@ def _compute_g1_diffusion_core(
     """
     D0, alpha, D_offset = params[0], params[1], params[2]
 
+    # DEBUG: Log input parameters
+    if jax_available and hasattr(jnp, 'where'):
+        # Use JAX operations for debugging within JIT context
+        pass  # Can't print in JIT context easily
+    else:
+        import numpy as np
+        if hasattr(D0, 'item'):
+            print(f"DEBUG g1_diffusion: D0={D0.item():.6f}, alpha={alpha.item():.6f}, D_offset={D_offset.item():.6f}")
+            print(f"DEBUG g1_diffusion: wavevector_q_squared_half_dt={wavevector_q_squared_half_dt:.6e}")
+        else:
+            print(f"DEBUG g1_diffusion: D0={D0:.6f}, alpha={alpha:.6f}, D_offset={D_offset:.6f}")
+            print(f"DEBUG g1_diffusion: wavevector_q_squared_half_dt={wavevector_q_squared_half_dt:.6e}")
+
     # Step 1: Extract time array (t1 and t2 should be identical)
-    # Handle both 1D arrays and 2D meshgrids
+    # Handle all dimensionality cases: 0D (scalar), 1D arrays, and 2D meshgrids
     if t1.ndim == 2:
         # For meshgrid: t1 varies along columns, so extract first row
         time_array = t1[0, :]  # Extract first row for unique t1 values
+    elif t1.ndim == 0:
+        # Handle 0-dimensional (scalar) input
+        time_array = jnp.atleast_1d(t1)
     else:
-        time_array = t1
+        # Handle 1D and other cases
+        time_array = jnp.atleast_1d(t1)
 
     # Step 2: Calculate D(t) at each time point
     D_t = _calculate_diffusion_coefficient_impl_jax(time_array, D0, alpha, D_offset)
+
+    # DEBUG: Check D_t values
+    if not jax_available or not hasattr(jnp, 'where'):  # Outside JIT
+        import numpy as np
+        if hasattr(D_t, 'min'):
+            print(f"DEBUG g1_diffusion: D_t min={np.min(D_t):.6e}, max={np.max(D_t):.6e}, mean={np.mean(D_t):.6e}")
 
     # Step 3: Create diffusion integral matrix using cumulative sums
     # This gives matrix[i,j] = |cumsum[i] - cumsum[j]| ≈ |∫D(t)dt from i to j|
     D_integral = _create_time_integral_matrix_impl_jax(D_t)
 
+    # DEBUG: Check D_integral values
+    if not jax_available or not hasattr(jnp, 'where'):  # Outside JIT
+        import numpy as np
+        if hasattr(D_integral, 'min'):
+            print(f"DEBUG g1_diffusion: D_integral min={np.min(D_integral):.6e}, max={np.max(D_integral):.6e}, mean={np.mean(D_integral):.6e}")
+
     # Step 4: Compute g1 correlation using pre-computed factor
     # This matches reference: g1 = exp(-wavevector_q_squared_half_dt * D_integral)
     exponent = -wavevector_q_squared_half_dt * D_integral
 
+    # DEBUG: Check exponent values before bounding
+    if not jax_available or not hasattr(jnp, 'where'):  # Outside JIT
+        import numpy as np
+        if hasattr(exponent, 'min'):
+            print(f"DEBUG g1_diffusion: exponent (pre-clip) min={np.min(exponent):.6e}, max={np.max(exponent):.6e}, mean={np.mean(exponent):.6e}")
+
     # Apply bounds to prevent numerical issues
     exponent_bounded = jnp.clip(exponent, -700.0, 0.0)  # Physical bounds
+
+    # DEBUG: Check exponent values after bounding
+    if not jax_available or not hasattr(jnp, 'where'):  # Outside JIT
+        import numpy as np
+        if hasattr(exponent_bounded, 'min'):
+            print(f"DEBUG g1_diffusion: exponent_bounded min={np.min(exponent_bounded):.6e}, max={np.max(exponent_bounded):.6e}")
 
     # Compute exponential with safeguards
     g1_result = safe_exp(exponent_bounded)
 
+    # DEBUG: Check g1_result before final clipping
+    if not jax_available or not hasattr(jnp, 'where'):  # Outside JIT
+        import numpy as np
+        if hasattr(g1_result, 'min'):
+            print(f"DEBUG g1_diffusion: g1_result (pre-clip) min={np.min(g1_result):.6e}, max={np.max(g1_result):.6e}")
+
     # Apply physical bounds: 0 < g1 ≤ 1
     g1_safe = jnp.clip(g1_result, 1e-10, 1.0)
+
+    # DEBUG: Final g1_diffusion result
+    if not jax_available or not hasattr(jnp, 'where'):  # Outside JIT
+        import numpy as np
+        if hasattr(g1_safe, 'min'):
+            print(f"DEBUG g1_diffusion: FINAL min={np.min(g1_safe):.6e}, max={np.max(g1_safe):.6e}")
 
     return g1_safe
 
@@ -413,14 +507,15 @@ def _compute_g1_shear_core(
     Returns:
         Shear contribution to g1 correlation function (sinc² values)
     """
-    if len(params) < 7:  # Static mode - no shear
+    if safe_len(params) < 7:  # Static mode - no shear
         # Return ones for all phi angles and time combinations
-        n_phi = len(phi)
+        phi_array = jnp.atleast_1d(phi)
+        n_phi = safe_len(phi_array)
         if t1.ndim == 2:
             n_times = t1.shape[0]
             return jnp.ones((n_phi, n_times, n_times))
         else:
-            n_times = len(t1)
+            n_times = safe_len(t1)
             return jnp.ones((n_phi, n_times, n_times))
 
     gamma_dot_0, beta, gamma_dot_offset, phi0 = (
@@ -431,12 +526,16 @@ def _compute_g1_shear_core(
     )
 
     # Step 1: Extract time array (t1 and t2 should be identical)
-    # Handle both 1D arrays and 2D meshgrids
+    # Handle all dimensionality cases: 0D (scalar), 1D arrays, and 2D meshgrids
     if t1.ndim == 2:
         # For meshgrid: t1 varies along columns, so extract first row
         time_array = t1[0, :]  # Extract first row for unique t1 values
+    elif t1.ndim == 0:
+        # Handle 0-dimensional (scalar) input
+        time_array = jnp.atleast_1d(t1)
     else:
-        time_array = t1
+        # Handle 1D and other cases
+        time_array = jnp.atleast_1d(t1)
 
     # Step 2: Calculate γ̇(t) at each time point
     gamma_t = _calculate_shear_rate_impl_jax(time_array, gamma_dot_0, beta, gamma_dot_offset)
@@ -454,8 +553,9 @@ def _compute_g1_shear_core(
         phi = phi.flatten()
 
     # Step 4: Compute sinc² for each phi angle using pre-computed factor (vectorized)
-    n_phi = len(phi)
-    n_times = len(time_array)
+    phi_array = jnp.atleast_1d(phi)
+    n_phi = safe_len(phi_array)
+    n_times = safe_len(time_array)
 
     # Vectorized computation: compute all phi angles at once
     # angle_diff shape: (n_phi,)
@@ -511,7 +611,8 @@ def _compute_g1_total_core(
 
     # Broadcast diffusion term to match shear dimensions
     # g1_diff needs to be broadcast from (n_times, n_times) to (n_phi, n_times, n_times)
-    n_phi = len(phi)
+    phi_array = jnp.atleast_1d(phi)
+    n_phi = safe_len(phi_array)
     g1_diff_broadcasted = jnp.broadcast_to(g1_diff[None, :, :], (n_phi, g1_diff.shape[0], g1_diff.shape[1]))
 
     # Multiply: g₁_total[phi, i, j] = g₁_diffusion[i, j] × g₁_shear[phi, i, j]
@@ -600,7 +701,7 @@ def compute_g1_diffusion(
             time_array = t1[:, 0]
         else:
             time_array = t1
-        dt = time_array[1] - time_array[0] if len(time_array) > 1 else 1.0
+        dt = time_array[1] - time_array[0] if safe_len(time_array) > 1 else 1.0
 
     # Compute the pre-computed factor using configuration dt
     wavevector_q_squared_half_dt = 0.5 * (q**2) * dt
@@ -646,7 +747,7 @@ def compute_g1_shear(
             time_array = t1[:, 0]
         else:
             time_array = t1
-        dt = time_array[1] - time_array[0] if len(time_array) > 1 else 1.0
+        dt = time_array[1] - time_array[0] if safe_len(time_array) > 1 else 1.0
 
     # Compute the pre-computed factor using configuration dt
     sinc_prefactor = 0.5 / PI * q * L * dt
@@ -692,13 +793,35 @@ def compute_g1_total(
             time_array = t1[:, 0]
         else:
             time_array = t1
-        dt = time_array[1] - time_array[0] if len(time_array) > 1 else 1.0
+        dt = time_array[1] - time_array[0] if safe_len(time_array) > 1 else 1.0
 
     # Compute the pre-computed factors using configuration dt
     wavevector_q_squared_half_dt = 0.5 * (q**2) * dt
     sinc_prefactor = 0.5 / PI * q * L * dt
 
-    return _compute_g1_total_core(params, t1, t2, phi, wavevector_q_squared_half_dt, sinc_prefactor)
+    # DEBUG: Log input parameters before calling JIT function
+    import os
+    if os.environ.get('HOMODYNE_DEBUG_G1') == '1':
+        import numpy as np
+        params_np = np.asarray(params) if hasattr(params, '__array__') else params
+        print(f"DEBUG compute_g1_total: params shape={params_np.shape}")
+        print(f"DEBUG compute_g1_total: D0={params_np[0]:.6e}, alpha={params_np[1]:.6f}, D_offset={params_np[2]:.6e}")
+        print(f"DEBUG compute_g1_total: gamma_dot_0={params_np[3]:.6e}, beta={params_np[4]:.6f}, gamma_dot_offset={params_np[5]:.6e}")
+        print(f"DEBUG compute_g1_total: phi0={params_np[6]:.6f}")
+        print(f"DEBUG compute_g1_total: q={q:.6e}, L={L:.6e}, dt={dt:.6e}")
+        print(f"DEBUG compute_g1_total: wavevector_q_squared_half_dt={wavevector_q_squared_half_dt:.6e}")
+        print(f"DEBUG compute_g1_total: sinc_prefactor={sinc_prefactor:.6e}")
+
+    result = _compute_g1_total_core(params, t1, t2, phi, wavevector_q_squared_half_dt, sinc_prefactor)
+
+    # DEBUG: Check result
+    if os.environ.get('HOMODYNE_DEBUG_G1') == '1':
+        import numpy as np
+        result_np = np.asarray(result) if hasattr(result, '__array__') else result
+        print(f"DEBUG compute_g1_total: result shape={result_np.shape}")
+        print(f"DEBUG compute_g1_total: result min={np.min(result_np):.6e}, max={np.max(result_np):.6e}, mean={np.mean(result_np):.6e}")
+
+    return result
 
 
 def compute_g2_scaled(
@@ -743,7 +866,7 @@ def compute_g2_scaled(
             time_array = t1[:, 0]
         else:
             time_array = t1
-        dt = time_array[1] - time_array[0] if len(time_array) > 1 else 1.0
+        dt = time_array[1] - time_array[0] if safe_len(time_array) > 1 else 1.0
 
     # Compute the pre-computed factors using configuration dt
     wavevector_q_squared_half_dt = 0.5 * (q**2) * dt

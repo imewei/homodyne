@@ -27,7 +27,8 @@ try:
                                            compute_g1_diffusion,
                                            compute_g1_shear, compute_g1_total,
                                            compute_g2_scaled, jax_available,
-                                           jnp, vectorized_g2_computation)
+                                           jnp, vectorized_g2_computation,
+                                           safe_len)
 except ImportError:
     jax_available = False
     logger = get_logger(__name__)
@@ -274,8 +275,9 @@ class TheoryEngine:
         Returns:
             Cost estimation dictionary
         """
-        n_time_pairs = len(t1) * len(t2)
-        n_angles = len(phi)
+        n_time_pairs = safe_len(t1) * safe_len(t2)
+        phi_array = np.atleast_1d(phi)
+        n_angles = safe_len(phi_array)
         n_total_points = n_time_pairs * n_angles
 
         # Rough performance estimates (operations per point)
@@ -331,9 +333,11 @@ class TheoryEngine:
             logger.warning(
                 f"q = {q:.2e} outside typical range - check experimental setup"
             )
-        if not (10.0 <= L <= 10000.0):
+        # L is in Angstroms - check reasonable range
+        # Typical range: 100,000 Å (10mm) to 100,000,000 Å (10m)
+        if not (1e5 <= L <= 1e8):
             logger.warning(
-                f"L = {L:.1f} mm outside typical range - check experimental setup"
+                f"L = {L:.1f} Å outside typical range [1e5, 1e8] Å (10mm to 10m) - check experimental setup"
             )
 
     def _validate_scaling_parameters(self, contrast: float, offset: float):
@@ -353,7 +357,8 @@ class TheoryEngine:
     ):
         """Validate experimental data inputs."""
         # Shape consistency
-        expected_shape = (len(phi), len(t1), len(t2))
+        phi_array = np.atleast_1d(phi)
+        expected_shape = (safe_len(phi_array), safe_len(t1), safe_len(t2))
         if data.shape != expected_shape:
             raise ValueError(
                 f"Data shape {data.shape} doesn't match expected {expected_shape}"

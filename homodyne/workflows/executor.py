@@ -620,6 +620,12 @@ class MethodExecutor:
             # Setup method parameters
             lsq_params = self._get_lsq_parameters()
 
+            # Extract dt from analyzer_parameters for use by LSQ wrapper
+            analyzer_params = self.config.get("analyzer_parameters", {})
+            dt = analyzer_params.get("dt", 0.1)
+            lsq_params["dt"] = dt
+            logger.debug(f"Using dt={dt} from configuration")
+
             # Apply dataset optimization if enabled
             if not self.disable_dataset_optimization:
                 optimization_config = optimize_for_method(
@@ -715,11 +721,16 @@ class MethodExecutor:
         """
         vi_config = self.config.get("optimization", {}).get("vi", {})
 
+        # Extract dt from analyzer_parameters for use by VI
+        analyzer_params = self.config.get("analyzer_parameters", {})
+        dt = analyzer_params.get("dt", 0.1)
+
         return {
             "n_iterations": vi_config.get("n_iterations", 2000),
             "learning_rate": vi_config.get("learning_rate", 0.01),
             "convergence_tol": vi_config.get("convergence_tol", 1e-6),
             "n_elbo_samples": vi_config.get("n_elbo_samples", 1),
+            "dt": dt,  # Include dt for VI optimization
         }
 
     def _get_mcmc_parameters(self) -> Dict[str, Any]:
@@ -731,11 +742,16 @@ class MethodExecutor:
         """
         mcmc_config = self.config.get("optimization", {}).get("mcmc", {})
 
+        # Extract dt from analyzer_parameters for use by MCMC
+        analyzer_params = self.config.get("analyzer_parameters", {})
+        dt = analyzer_params.get("dt", 0.1)
+
         return {
             "n_samples": mcmc_config.get("n_samples", 1000),
             "n_warmup": mcmc_config.get("n_warmup", 1000),
             "n_chains": mcmc_config.get("n_chains", 4),
             "target_accept_prob": mcmc_config.get("target_accept_prob", 0.8),
+            "dt": dt,  # Include dt for MCMC optimization
         }
 
     def _get_hybrid_parameters(self) -> Dict[str, Any]:

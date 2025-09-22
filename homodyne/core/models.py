@@ -35,6 +35,7 @@ from homodyne.core.jax_backend import (
     jax_available,
     jnp,
     numpy_gradients_available,
+    safe_len,
     validate_backend,
 )
 from homodyne.core.physics import (
@@ -99,9 +100,19 @@ class PhysicsModelBase(ABC):
 
     def get_parameter_dict(self, params: jnp.ndarray) -> Dict[str, float]:
         """Convert parameter array to named dictionary."""
-        if len(params) != self.n_params:
-            raise ValueError(f"Expected {self.n_params} parameters, got {len(params)}")
-        return dict(zip(self.parameter_names, params))
+        # Ensure params is at least 1D to avoid 0D array indexing issues
+        if jax_available and hasattr(params, 'ndim'):
+            # Convert JAX arrays to NumPy for safe indexing
+            params_np = np.atleast_1d(np.asarray(params))
+        else:
+            params_np = np.atleast_1d(params)
+
+        params_len = safe_len(params_np)
+        if params_len != self.n_params:
+            raise ValueError(f"Expected {self.n_params} parameters, got {params_len}")
+
+        # Convert to regular Python floats to avoid JAX scalar issues
+        return {name: float(val) for name, val in zip(self.parameter_names, params_np)}
 
     def __repr__(self) -> str:
         return (
@@ -320,10 +331,19 @@ class CombinedModel(PhysicsModelBase):
 
         if self.analysis_mode.startswith("static"):
             # Static mode: only diffusion, no shear
+            logger.debug(f"CombinedModel.compute_g1: calling compute_g1_diffusion with params.shape={params.shape}")
             return compute_g1_diffusion(params, t1, t2, q_scalar, dt)
         else:
             # Laminar flow mode: full model
-            return compute_g1_total(params, t1, t2, phi, q_scalar, L, dt)
+            logger.debug(f"CombinedModel.compute_g1: calling compute_g1_total with params.shape={params.shape}, t1.shape={t1.shape}, t2.shape={t2.shape}, phi.shape={phi.shape}, q_scalar={q_scalar}, L={L}, dt={dt}")
+            try:
+                result = compute_g1_total(params, t1, t2, phi, q_scalar, L, dt)
+                logger.debug(f"CombinedModel.compute_g1: compute_g1_total completed, result.shape={result.shape}, min={jnp.min(result):.6e}, max={jnp.max(result):.6e}")
+                return result
+            except Exception as e:
+                logger.error(f"CombinedModel.compute_g1: compute_g1_total failed with error: {e}")
+                logger.error(f"CombinedModel.compute_g1: traceback:", exc_info=True)
+                raise
 
     @log_calls(include_args=False)
     def compute_g2(
