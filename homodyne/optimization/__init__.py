@@ -71,6 +71,19 @@ except ImportError as e:
     MCMC_AVAILABLE = False
     MCMC_FALLBACK_MODE = "unavailable"
 
+# Base result classes (always available)
+try:
+    from homodyne.optimization.base_result import (BaseOptimizationResult,
+                                                  LSQResult,
+                                                  create_result)
+    BASE_RESULT_AVAILABLE = True
+except ImportError as e:
+    print(f"Warning: Could not import base result classes: {e}")
+    BaseOptimizationResult = None
+    LSQResult = None
+    create_result = None
+    BASE_RESULT_AVAILABLE = False
+
 try:
     from homodyne.data.optimization import (DatasetInfo, DatasetOptimizer,
                                             ProcessingStrategy,
@@ -87,19 +100,11 @@ except ImportError as e:
     create_dataset_optimizer = None
     DATASET_OPTIMIZATION_AVAILABLE = False
 
-try:
-    from homodyne.optimization.direct_solver import (
-        DirectLeastSquaresSolver,
-        DirectSolverConfig,
-        fit_homodyne_direct
-    )
-    DIRECT_SOLVER_AVAILABLE = True
-except ImportError as e:
-    print(f"Warning: Could not import Direct Solver: {e}")
-    DirectLeastSquaresSolver = None
-    DirectSolverConfig = None
-    fit_homodyne_direct = None
-    DIRECT_SOLVER_AVAILABLE = False
+# Direct solver has been removed - functionality now in lsq_wrapper.py
+DirectLeastSquaresSolver = None
+DirectSolverConfig = None
+fit_homodyne_direct = None
+DIRECT_SOLVER_AVAILABLE = False
 
 
 # Main API functions (replace all classical methods)
@@ -197,7 +202,6 @@ __all__ = [
     # Primary API (replaces all classical methods)
     "fit_homodyne_vi",  # Main VI+JAX fitting function
     "fit_homodyne_mcmc",  # Main MCMC+JAX fitting function
-    "fit_homodyne_direct",  # Direct classical least squares
     # Direct access to VI+JAX
     "VariationalInferenceJAX",
     "VIResult",
@@ -207,9 +211,10 @@ __all__ = [
     "MCMCJAXSampler",
     "MCMCResult",
     "fit_mcmc_jax",
-    # Direct Classical Least Squares
-    "DirectLeastSquaresSolver",
-    "DirectSolverConfig",
+    # Unified result classes (consolidated from base_result.py)
+    "BaseOptimizationResult",
+    "LSQResult",
+    "create_result",
     # Dataset optimization
     "DatasetOptimizer",
     "optimize_for_method",

@@ -13,9 +13,10 @@ import numpy as np
 import time
 
 from homodyne.core.fitting import FitResult, UnifiedHomodyneEngine
-from homodyne.optimization.direct_solver import DirectLeastSquaresSolver, DirectSolverConfig
 from homodyne.utils.logging import get_logger
 from homodyne.core.jax_backend import safe_len
+from homodyne.optimization.theory_engine import UnifiedTheoryEngine, create_theory_engine, TheoryComputationConfig
+from homodyne.optimization.base_result import LSQResult
 
 # Import JAX with proper fallback
 try:
@@ -32,87 +33,175 @@ except ImportError:
 logger = get_logger(__name__)
 
 
-@dataclass
-class LSQResult:
+def create_correlation_samples(t1, t2, data, sigma=None, sampling_config=None):
+    """Create intelligent sampling points for correlation matrix fitting.
+
+    Returns:
+        sample_indices: List of (i, j) indices for sampling
+        sample_weights: Weights for each sample based on error estimates
+        sample_data: Flattened array of sampled data values
+        sample_sigma: Flattened array of uncertainties (if available)
     """
-    Results from Direct Classical Least Squares fitting.
+    n_points = t1.shape[0] if t1.ndim == 1 else t1.shape[0]  # Handle both 1D and 2D time arrays
 
-    Wraps DirectSolverResult with additional fields for CLI compatibility
-    and noise estimation support.
-    """
+    # Default sampling configuration
+    config = sampling_config or {
+        'diagonal_samples': 200,      # Points along diagonal
+        'near_diagonal_width': 10,    # Width of near-diagonal band
+        'cross_sections': 5,           # Number of fixed-τ cross-sections
+        'tau_max_ratio': 0.3,          # Maximum τ as fraction of total time
+        'adaptive_density': True,      # Use error-weighted sampling
+        'min_samples': 2000,
+        'max_samples': 5000
+    }
 
-    # Core fitting results (required fields)
-    mean_params: np.ndarray  # Physical parameters (from direct solver)
-    mean_contrast: float  # Contrast parameter
-    mean_offset: float  # Offset parameter
+    samples = []
 
-    # Fit quality metrics (required fields)
-    chi_squared: float  # Chi-squared value
-    reduced_chi_squared: float  # Reduced chi-squared
-    residual_std: float  # Standard deviation of residuals
-    max_residual: float  # Maximum residual value
-    degrees_of_freedom: int  # Degrees of freedom
+    # 1. Diagonal sampling (τ = 0, most signal)
+    diagonal_idx = np.linspace(0, n_points-1, config['diagonal_samples'], dtype=int)
+    for idx in diagonal_idx:
+        samples.append((idx, idx))
 
-    # Optimization metadata (required fields)
-    converged: bool  # Always True for direct solution
-    n_iterations: int  # Always 1 for direct solution
-    computation_time: float  # Total computation time
-    backend: str  # "JAX" or "NumPy"
-    dataset_size: str  # "SMALL", "MEDIUM", or "LARGE"
-    analysis_mode: str  # Analysis mode used
+    # 2. Near-diagonal band (small τ, high SNR)
+    width = config['near_diagonal_width']
+    for offset in range(1, width+1):
+        step = max(1, offset * 2)  # Sparser sampling for larger offsets
+        for i in range(0, n_points-offset, step):
+            samples.append((i, i+offset))
+            if i != i+offset:  # Exploit symmetry
+                samples.append((i+offset, i))
 
-    # No uncertainties for direct LSQ (optional fields with defaults)
-    std_params: Optional[np.ndarray] = None  # Not available in LSQ
-    std_contrast: Optional[float] = None  # Not available in LSQ
-    std_offset: Optional[float] = None  # Not available in LSQ
+    # 3. Fixed-τ cross-sections (logarithmically spaced)
+    tau_max = int(n_points * config['tau_max_ratio'])
+    if tau_max > 1:
+        tau_values = np.logspace(0, np.log10(tau_max), config['cross_sections'], dtype=int)
+        for tau in tau_values[1:]:  # Skip τ=0 (already in diagonal)
+            step = max(1, tau // 20)  # Adaptive step size
+            for i in range(0, n_points-tau, step):
+                samples.append((i, i+tau))
 
-    # Noise estimation fields (optional fields with defaults)
-    noise_estimated: bool = False  # Whether noise was estimated
-    noise_model: Optional[str] = None  # "hierarchical", "per_angle", "adaptive"
-    estimated_sigma: Optional[np.ndarray] = None  # Estimated noise values
-    noise_params: Optional[Dict[str, Any]] = None  # Additional noise parameters
+    # 4. Error-weighted adaptive sampling (if sigma available)
+    if sigma is not None and config['adaptive_density']:
+        # Add more samples in low-noise regions
+        sigma_flat = sigma.flatten()
+        low_noise_threshold = np.percentile(sigma_flat, 25)
+        low_noise_mask = sigma.reshape(n_points, n_points) < low_noise_threshold
 
-    def get_summary(self) -> Dict[str, Any]:
-        """Get comprehensive LSQ result summary for display."""
-        summary = {
-            "point_estimates": {
-                "parameters": self.mean_params.tolist(),
-                "contrast": self.mean_contrast,
-                "offset": self.mean_offset,
-            },
-            "uncertainties": {
-                "parameters": None,  # LSQ doesn't provide uncertainties
-                "contrast": None,
-                "offset": None,
-                "note": "Direct least squares does not provide uncertainty estimates"
-            },
-            "optimization": {
-                "converged": self.converged,
-                "iterations": self.n_iterations,
-                "computation_time": self.computation_time,
-                "backend": self.backend,
-                "dataset_size": self.dataset_size,
-                "analysis_mode": self.analysis_mode,
-            },
-            "fit_quality": {
-                "chi_squared": self.chi_squared,
-                "reduced_chi_squared": self.reduced_chi_squared,
-                "residual_std": self.residual_std,
-                "max_residual": self.max_residual,
-                "degrees_of_freedom": self.degrees_of_freedom,
-            },
-        }
+        # Random sampling in low-noise regions
+        low_noise_indices = np.argwhere(low_noise_mask)
+        n_adaptive = min(500, len(low_noise_indices))
+        if n_adaptive > 0:
+            np.random.seed(42)  # For reproducibility
+            adaptive_idx = np.random.choice(len(low_noise_indices), n_adaptive, replace=False)
+            for idx in adaptive_idx:
+                samples.append(tuple(low_noise_indices[idx]))
 
-        # Add noise estimation info if available
-        if self.noise_estimated:
-            summary["noise_estimation"] = {
-                "estimated": True,
-                "model": self.noise_model,
-                "mean_sigma": float(np.mean(self.estimated_sigma)) if self.estimated_sigma is not None else None,
-                "parameters": self.noise_params,
-            }
+    # Remove duplicates and limit total samples
+    samples = list(set(samples))
+    if len(samples) > config['max_samples']:
+        samples = samples[:config['max_samples']]
 
-        return summary
+    # Extract data and weights
+    sample_indices = np.array(samples)
+    sample_data = np.array([data[i, j] for i, j in samples])
+
+    # Compute weights based on:
+    # 1. Sampling density (to avoid overweighting dense regions)
+    # 2. Measurement uncertainty (if available)
+    # 3. Physical importance (diagonal > off-diagonal)
+
+    weights = np.ones(len(samples))
+
+    # Density-based weights
+    for idx, (i, j) in enumerate(samples):
+        tau = abs(i - j)
+        if tau == 0:
+            weights[idx] *= 2.0  # Diagonal importance
+        elif tau < width:
+            weights[idx] *= 1.5  # Near-diagonal importance
+        else:
+            # Reduce weight for densely sampled regions
+            density_factor = 1.0 / np.sqrt(1 + tau/10)
+            weights[idx] *= density_factor
+
+    # Error-based weights (if available)
+    if sigma is not None:
+        sample_sigma = np.array([sigma[i, j] for i, j in samples])
+        error_weights = 1.0 / (sample_sigma + 1e-10)
+        error_weights /= np.mean(error_weights)  # Normalize
+        weights *= error_weights
+    else:
+        sample_sigma = None
+
+    # Normalize weights
+    weights /= (np.sum(weights) / len(samples))
+
+    logger.info(f"Created {len(samples)} sampling points from {n_points}x{n_points} matrix")
+    diagonal_count = np.sum([s[0]==s[1] for s in samples])
+    near_diag_count = np.sum([0<abs(s[0]-s[1])<width for s in samples])
+    far_field_count = np.sum([abs(s[0]-s[1])>=width for s in samples])
+    logger.debug(f"Sampling distribution: diagonal={diagonal_count}, "
+                f"near-diagonal={near_diag_count}, "
+                f"far-field={far_field_count}")
+
+    return sample_indices, weights, sample_data, sample_sigma
+
+
+def compute_theory_sampled(physics_params, sample_indices, t1, t2, phi, q, L,
+                          contrast, offset, engine, dt=0.1):
+    """Compute theory ONLY at sampled points - no full matrix computation."""
+
+    physics_params = np.atleast_1d(np.asarray(physics_params))
+    phi_array = np.atleast_1d(np.asarray(phi))
+
+    # Handle both 1D time arrays and 2D grids
+    if t1.ndim == 1 and t2.ndim == 1:
+        # Create time arrays for sampled points only
+        t1_samples = np.array([t1[i] for i, _ in sample_indices])
+        t2_samples = np.array([t2[j] for _, j in sample_indices])
+    else:
+        # Already 2D grids
+        t1_samples = np.array([t1.flat[i * t1.shape[1] + j] for i, j in sample_indices])
+        t2_samples = np.array([t2.flat[i * t2.shape[1] + j] for i, j in sample_indices])
+
+    theory_samples = []
+
+    # Check if engine has vectorized method
+    if hasattr(engine.theory_engine, 'compute_g1_vectorized'):
+        for phi_val in phi_array:
+            # Compute g1 ONLY at sample points using vectorized engine call
+            g1_samples = engine.theory_engine.compute_g1_vectorized(
+                params=physics_params,
+                t1=t1_samples,
+                t2=t2_samples,
+                phi=np.array([phi_val]),
+                q=q, L=L, dt=dt
+            )
+            # Apply correlation function transformation
+            g2_samples = offset + contrast * g1_samples**2
+            theory_samples.extend(g2_samples)
+    else:
+        # Fall back to regular compute_g1 but with sampled meshgrids
+        t2_grid, t1_grid = np.meshgrid(t2_samples, t1_samples, indexing='ij')
+
+        for phi_val in phi_array:
+            g1_samples = engine.theory_engine.compute_g1(
+                params=physics_params, t1=t1_grid, t2=t2_grid,
+                phi=np.array([phi_val]), q=q, L=L, dt=dt
+            )
+            # Squeeze and flatten
+            if g1_samples.shape[0] == 1:
+                g1_samples = np.squeeze(g1_samples, axis=0)
+            g1_flat = g1_samples.flatten()
+
+            # Apply correlation function transformation
+            g2_samples = offset + contrast * g1_flat**2
+            theory_samples.extend(g2_samples)
+
+    return np.array(theory_samples)
+
+
+# Using LSQResult from base_result.py - duplicate class removed
 
 
 def fit_homodyne_lsq(
@@ -126,7 +215,7 @@ def fit_homodyne_lsq(
     analysis_mode: str = "laminar_flow",
     estimate_noise: bool = False,
     noise_model: str = "hierarchical",
-    config: Optional[DirectSolverConfig] = None,
+    config: Optional[Dict[str, Any]] = None,
     **kwargs
 ) -> LSQResult:
     """
@@ -204,13 +293,22 @@ def fit_homodyne_lsq(
         noise_params = None
         sigma_used = sigma
 
-    # Prepare data
-    data_flat = data.flatten()
-    if sigma_used is not None:
-        sigma_flat = sigma_used.flatten()
-        weights = 1.0 / (sigma_flat + 1e-10)
-    else:
-        weights = np.ones_like(data_flat)
+    # Use intelligent sampling strategy instead of full matrix flattening
+    # Get sampling configuration from kwargs if provided
+    sampling_config = kwargs.get('sampling_config', None)
+
+    # Create samples at start of optimization
+    sample_indices, sample_weights, data_samples, sigma_samples = create_correlation_samples(
+        t1, t2, data, sigma_used, sampling_config
+    )
+
+    # Store sampling info for later use
+    sampling_info = {
+        'indices': sample_indices,
+        'weights': sample_weights,
+        'n_samples': len(sample_indices),
+        'full_shape': data.shape
+    }
 
     # CRITICAL FIX: Use configuration dt value directly
     # During LSQ optimization, t1/t2 are correlation matrices, not time arrays.
@@ -229,6 +327,7 @@ def fit_homodyne_lsq(
 
         This function is called by scipy.optimize with NumPy arrays.
         It ensures proper type conversion and handles all boundary logic.
+        Uses intelligent sampling for efficient optimization.
         """
         eval_counter[0] += 1
 
@@ -251,10 +350,10 @@ def fit_homodyne_lsq(
             return 1e10
 
         try:
-            # Call the actual computation (JAX or NumPy)
+            # Call the actual computation using sampled points (JAX or NumPy)
             if JAX_AVAILABLE:
-                chi2 = compute_chi2_jax(
-                    physics_params, data_flat, weights,
+                chi2 = compute_chi2_sampled_jax(
+                    physics_params, data_samples, sample_weights, sample_indices,
                     t1, t2, phi, q, L, contrast, offset, engine, dt
                 )
                 # Log chi2 value for debugging
@@ -262,8 +361,8 @@ def fit_homodyne_lsq(
                     logger.debug(f"  -> chi2={chi2:.6f}")
                 return float(chi2)  # Ensure Python float for scipy
             else:
-                chi2 = compute_chi2_numpy(
-                    physics_params, data_flat, weights,
+                chi2 = compute_chi2_sampled_numpy(
+                    physics_params, data_samples, sample_weights, sample_indices,
                     t1, t2, phi, q, L, contrast, offset, engine, dt
                 )
                 if eval_counter[0] % 10 == 1:
@@ -280,27 +379,28 @@ def fit_homodyne_lsq(
     if JAX_AVAILABLE:
         # Only JIT the chi-squared calculation, not the engine calls
         @jit
-        def compute_chi2_jax_inner(theory_flat, data_flat, weights):
-            """JAX JIT-compiled chi-squared calculation.
+        def compute_chi2_jax_inner(theory_samples, data_samples, sample_weights):
+            """JAX JIT-compiled chi-squared calculation for sampled points.
 
             This function only performs the chi-squared calculation.
             Theory computation happens outside the JIT boundary.
             """
-            residuals = (theory_flat - data_flat) * weights
+            residuals = (theory_samples - data_samples) * sample_weights
             return jnp.sum(residuals ** 2)
 
-        def compute_chi2_jax(physics_params, data_flat, weights,
-                             t1, t2, phi, q, L, contrast, offset, engine, dt):
-            """JAX-optimized chi-squared computation.
+        def compute_chi2_sampled_jax(physics_params, data_samples, sample_weights, sample_indices,
+                                     t1, t2, phi, q, L, contrast, offset, engine, dt):
+            """JAX-optimized chi-squared computation using sampled points.
 
-            Computes theory outside JIT, then uses JIT for chi2 calculation.
+            Computes theory only at sampled points for efficiency.
             """
-            # Compute theory outside JIT boundary
-            theory_flat = compute_theory_flat(
-                physics_params, t1, t2, phi, q, L, contrast, offset, engine, dt
+            # Compute theory at sampled points only
+            theory_samples = compute_theory_sampled(
+                physics_params, sample_indices, t1, t2, phi, q, L,
+                contrast, offset, engine, dt
             )
             # Use JIT-compiled function for chi-squared calculation
-            return compute_chi2_jax_inner(theory_flat, data_flat, weights)
+            return compute_chi2_jax_inner(theory_samples, data_samples, sample_weights)
 
     def compute_theory_flat(physics_params, t1, t2, phi, q, L, contrast, offset, engine, dt=0.1):
         """Compute flattened theory using the engine.
@@ -370,18 +470,19 @@ def fit_homodyne_lsq(
         # Flatten the theory
         return g2_theory.flatten()
 
-    def compute_chi2_numpy(physics_params, data_flat, weights,
-                           t1, t2, phi, q, L, contrast, offset, engine, dt):
-        """NumPy chi-squared computation (fallback when JAX not available).
+    def compute_chi2_sampled_numpy(physics_params, data_samples, sample_weights, sample_indices,
+                                   t1, t2, phi, q, L, contrast, offset, engine, dt):
+        """NumPy chi-squared computation using sampled points.
 
-        Computes theory and chi-squared using NumPy.
+        Computes theory only at sampled points for efficiency.
         """
-        # Compute theory
-        theory_flat = compute_theory_flat(
-            physics_params, t1, t2, phi, q, L, contrast, offset, engine, dt
+        # Compute theory at sampled points only
+        theory_samples = compute_theory_sampled(
+            physics_params, sample_indices, t1, t2, phi, q, L,
+            contrast, offset, engine, dt
         )
         # Compute chi-squared
-        residuals = (theory_flat - data_flat) * weights
+        residuals = (theory_samples - data_samples) * sample_weights
         return np.sum(residuals ** 2)
 
     # Set up initial parameters: physics + contrast + offset
@@ -487,7 +588,15 @@ def fit_homodyne_lsq(
     contrast = optimized_params[-2]
     offset = optimized_params[-1]
 
-    # Compute final statistics
+    # Compute final statistics using sampled points for efficiency
+    logger.info("Computing final statistics from sampled optimization...")
+
+    # Compute final chi-squared on sampled points
+    final_chi_sq_sampled = chi_square_objective_numpy(optimized_params)
+
+    # Now compute full matrices ONLY for visualization purposes
+    logger.info("Computing full correlation matrices for visualization (post-optimization only)...")
+
     # Create time meshgrids if needed for proper correlation computation
     if t1.ndim == 1 and t2.ndim == 1:
         t2_grid, t1_grid = np.meshgrid(t2, t1, indexing='ij')
@@ -524,11 +633,18 @@ def fit_homodyne_lsq(
         if g1_final.ndim > 2 and g1_final.shape[0] == 1:
             g1_final = g1_final.squeeze(axis=0)
 
+    # Compute full fitted g2 matrix for visualization
     theory_final = g1_final**2
+    fitted_g2_full = theory_final * contrast + offset
 
-    # Ensure theory has proper shape before flattening
+    # Store the full fitted data in original matrix shape for visualization
+    if fitted_g2_full.ndim > 2:
+        fitted_g2_matrix = fitted_g2_full  # Keep multi-phi shape
+    else:
+        fitted_g2_matrix = fitted_g2_full.reshape(data.shape)  # Restore original shape
+
+    # Flatten for residual calculation
     if theory_final.ndim > 2:
-        # If theory has shape (n_phi, n_t1, n_t2), reshape appropriately
         theory_final_flat = theory_final.reshape(-1)
     else:
         theory_final_flat = theory_final.flatten()
@@ -559,6 +675,15 @@ def fit_homodyne_lsq(
 
     computation_time = time.time() - start_time
 
+    # Create sampling info dictionary
+    sampling_info_dict = {
+        'sample_indices': sample_indices,
+        'sample_weights': sample_weights,
+        'n_samples': len(sample_indices),
+        'total_points': len(data_flat),
+        'sampling_fraction': len(sample_indices) / len(data_flat)
+    }
+
     # Create LSQResult wrapper
     return LSQResult(
         mean_params=physics_params,
@@ -578,5 +703,7 @@ def fit_homodyne_lsq(
         noise_estimated=estimate_noise,
         noise_model=noise_model if estimate_noise else None,
         estimated_sigma=estimated_sigma,
-        noise_params=noise_params
+        noise_params=noise_params,
+        fitted_g2_matrix=fitted_g2_matrix,
+        sampling_info=sampling_info_dict
     )

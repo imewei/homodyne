@@ -98,89 +98,10 @@ except ImportError:
 
 from homodyne.core.fitting import ParameterSpace, UnifiedHomodyneEngine
 from homodyne.data.optimization import DatasetOptimizer, optimize_for_method
+from homodyne.optimization.base_result import MCMCResult
 from homodyne.utils.logging import log_performance
 
 
-@dataclass
-class MCMCResult:
-    """
-    Results from MCMC+JAX sampling using unified homodyne model.
-
-    Contains posterior samples, convergence diagnostics, and
-    summary statistics for full Bayesian analysis.
-    """
-
-    # Posterior samples
-    samples_params: np.ndarray  # Parameter samples (n_samples, n_params)
-    samples_contrast: np.ndarray  # Contrast samples (n_samples,)
-    samples_offset: np.ndarray  # Offset samples (n_samples,)
-
-    # Summary statistics
-    mean_params: np.ndarray  # Posterior means
-    std_params: np.ndarray  # Posterior standard deviations
-    quantiles_params: np.ndarray  # Parameter quantiles (5%, 50%, 95%)
-    mean_contrast: float  # Contrast posterior mean
-    std_contrast: float  # Contrast posterior std
-    mean_offset: float  # Offset posterior mean
-    std_offset: float  # Offset posterior std
-
-    # MCMC diagnostics
-    acceptance_rate: float  # Overall acceptance rate
-    r_hat: np.ndarray  # Gelman-Rubin convergence diagnostic
-    effective_sample_size: np.ndarray  # Effective sample sizes
-    divergences: int  # Number of divergent transitions
-    converged: bool  # Overall convergence flag
-
-    # Chain metadata
-    n_samples: int  # Total samples (after warmup)
-    n_chains: int  # Number of chains
-    n_warmup: int  # Warmup samples (discarded)
-
-    # Computational metadata
-    computation_time: float  # Total MCMC time (seconds)
-    backend: str  # Backend used ("NumPyro" or "BlackJAX")
-    sampler: str  # MCMC sampler used
-    dataset_size: str  # Dataset size category
-    analysis_mode: str  # Analysis mode used
-
-    def get_summary(self) -> Dict[str, Any]:
-        """Get comprehensive MCMC result summary."""
-        return {
-            "posterior_summary": {
-                "parameters": {
-                    "mean": self.mean_params.tolist(),
-                    "std": self.std_params.tolist(),
-                    "quantiles_5": self.quantiles_params[0, :].tolist(),
-                    "quantiles_50": self.quantiles_params[1, :].tolist(),
-                    "quantiles_95": self.quantiles_params[2, :].tolist(),
-                },
-                "contrast": {
-                    "mean": self.mean_contrast,
-                    "std": self.std_contrast,
-                },
-                "offset": {
-                    "mean": self.mean_offset,
-                    "std": self.std_offset,
-                },
-            },
-            "diagnostics": {
-                "acceptance_rate": self.acceptance_rate,
-                "r_hat": self.r_hat.tolist(),
-                "effective_sample_size": self.effective_sample_size.tolist(),
-                "divergences": self.divergences,
-                "converged": self.converged,
-            },
-            "chain_info": {
-                "n_samples": self.n_samples,
-                "n_chains": self.n_chains,
-                "n_warmup": self.n_warmup,
-                "backend": self.backend,
-                "sampler": self.sampler,
-                "computation_time": self.computation_time,
-                "dataset_size": self.dataset_size,
-                "analysis_mode": self.analysis_mode,
-            },
-        }
 
 
 def create_numpyro_model(
@@ -502,29 +423,33 @@ class MCMCJAXSampler:
         computation_time = time.time() - start_time
 
         result = MCMCResult(
+            # Base class fields
+            mean_params=np.array(mean_params),
+            mean_contrast=mean_contrast,
+            mean_offset=mean_offset,
+            converged=converged,
+            n_iterations=n_samples * n_chains,  # Total iterations
+            computation_time=computation_time,
+            backend="NumPyro",
+            analysis_mode=self.analysis_mode,
+            dataset_size=dataset_size,
+            # Optional base class fields
+            std_params=np.array(std_params),
+            std_contrast=std_contrast,
+            std_offset=std_offset,
+            # MCMC-specific fields
             samples_params=np.array(samples_params),
             samples_contrast=np.array(samples_contrast),
             samples_offset=np.array(samples_offset),
-            mean_params=np.array(mean_params),
-            std_params=np.array(std_params),
             quantiles_params=np.array(quantiles_params),
-            mean_contrast=mean_contrast,
-            std_contrast=std_contrast,
-            mean_offset=mean_offset,
-            std_offset=std_offset,
             acceptance_rate=acceptance_rate,
             r_hat=np.array(r_hat),
             effective_sample_size=np.array(eff_size),
             divergences=divergences,
-            converged=converged,
-            n_samples=n_samples,
             n_chains=n_chains,
             n_warmup=n_warmup,
-            computation_time=computation_time,
-            backend="NumPyro",
+            n_samples=n_samples,
             sampler="NUTS",
-            dataset_size=dataset_size,
-            analysis_mode=self.analysis_mode,
         )
 
         logger.info(
@@ -812,28 +737,33 @@ class MCMCJAXSampler:
         logger.info(f"Max R-hat: {np.max(r_hat):.3f}")
 
         return MCMCResult(
+            # Base class fields
+            mean_params=mean_params,
+            mean_contrast=mean_contrast,
+            mean_offset=mean_offset,
+            converged=converged,
+            n_iterations=n_samples * n_chains,  # Total iterations
+            computation_time=computation_time,
+            backend="NumPy+MH",
+            analysis_mode=self.analysis_mode,
+            dataset_size=dataset_size,
+            # Optional base class fields
+            std_params=std_params,
+            std_contrast=std_contrast,
+            std_offset=std_offset,
+            # MCMC-specific fields
             samples_params=samples_params,
             samples_contrast=samples_contrast,
             samples_offset=samples_offset,
-            mean_params=mean_params,
-            std_params=std_params,
             quantiles_params=quantiles_params,
-            mean_contrast=mean_contrast,
-            std_contrast=std_contrast,
-            mean_offset=mean_offset,
-            std_offset=std_offset,
             acceptance_rate=overall_acceptance_rate,
             r_hat=r_hat,
             effective_sample_size=eff_size,
             divergences=0,  # N/A for Metropolis-Hastings
-            converged=converged,
-            n_samples=n_samples * n_chains,
             n_chains=n_chains,
             n_warmup=n_warmup,
-            computation_time=computation_time,
-            backend="NumPy+MH",
-            dataset_size=dataset_size,
-            analysis_mode=self.analysis_mode,
+            n_samples=n_samples * n_chains,
+            sampler="Metropolis-Hastings",  # Fix: Missing sampler field
         )
 
     def _compute_numpy_r_hat(self, samples_array: np.ndarray) -> np.ndarray:

@@ -24,6 +24,7 @@ from typing import Any, Callable, Dict, List, Optional, Tuple
 
 import numpy as np
 
+from homodyne.optimization.base_result import VIResult
 from homodyne.utils.logging import get_logger
 
 logger = get_logger(__name__)
@@ -223,72 +224,7 @@ from homodyne.data.optimization import DatasetOptimizer, optimize_for_method
 from homodyne.utils.logging import log_performance
 
 
-@dataclass
-class VIResult:
-    """
-    Results from VI+JAX optimization using unified homodyne model.
-
-    Contains both point estimates and uncertainty quantification
-    from the learned variational distribution with specified priors.
-    """
-
-    # Point estimates (means of variational distribution)
-    mean_params: np.ndarray  # Physical parameter means
-    mean_contrast: float  # Contrast mean
-    mean_offset: float  # Offset mean
-
-    # Uncertainty estimates (std of variational distribution)
-    std_params: np.ndarray  # Physical parameter uncertainties
-    std_contrast: float  # Contrast uncertainty
-    std_offset: float  # Offset uncertainty
-
-    # Optimization metrics
-    final_elbo: float  # Evidence Lower BOund (objective)
-    kl_divergence: float  # KL divergence to prior
-    likelihood: float  # Data likelihood term
-    elbo_history: np.ndarray  # ELBO convergence history
-    converged: bool  # Convergence flag
-    n_iterations: int  # Number of VI iterations
-
-    # Fit quality (computed from mean parameters)
-    chi_squared: float  # Chi-squared at MAP estimate
-    reduced_chi_squared: float  # Reduced chi-squared
-
-    # Computational metadata
-    computation_time: float  # Total VI time (seconds)
-    backend: str  # Backend used ("JAX" or "NumPy")
-    dataset_size: str  # Dataset size category
-    analysis_mode: str  # Analysis mode used
-
-    def get_summary(self) -> Dict[str, Any]:
-        """Get comprehensive VI result summary."""
-        return {
-            "point_estimates": {
-                "parameters": self.mean_params.tolist(),
-                "contrast": self.mean_contrast,
-                "offset": self.mean_offset,
-            },
-            "uncertainties": {
-                "parameters": self.std_params.tolist(),
-                "contrast": self.std_contrast,
-                "offset": self.std_offset,
-            },
-            "optimization": {
-                "final_elbo": self.final_elbo,
-                "kl_divergence": self.kl_divergence,
-                "likelihood": self.likelihood,
-                "converged": self.converged,
-                "iterations": self.n_iterations,
-                "computation_time": self.computation_time,
-                "backend": self.backend,
-                "dataset_size": self.dataset_size,
-                "analysis_mode": self.analysis_mode,
-            },
-            "fit_quality": {
-                "chi_squared": self.chi_squared,
-                "reduced_chi_squared": self.reduced_chi_squared,
-            },
-        }
+# Using VIResult from base_result.py - duplicate class removed
 
 
 class VariationalFamilies:
