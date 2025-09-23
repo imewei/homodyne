@@ -33,9 +33,11 @@ try:
     import numpy as np
 
     HAS_NUMPY = True
+    NDArray = np.ndarray
 except ImportError:
     HAS_NUMPY = False
     np = None
+    NDArray = Any  # Fallback type annotation
 
 try:
     import h5py
@@ -403,7 +405,7 @@ class XPCSDataLoader:
         }
 
     def _convert_arrays_to_target_format(
-        self, data: Dict[str, np.ndarray]
+        self, data: Dict[str, NDArray]
     ) -> Dict[str, Any]:
         """
         Convert arrays to target format based on configuration.
@@ -900,7 +902,7 @@ class XPCSDataLoader:
                 "c2_exp": c2_exp,
             }
 
-    def _reconstruct_full_matrix(self, c2_half: np.ndarray) -> np.ndarray:
+    def _reconstruct_full_matrix(self, c2_half: NDArray) -> NDArray:
         """
         Reconstruct full correlation matrix from half matrix (APS storage format).
 
@@ -917,7 +919,7 @@ class XPCSDataLoader:
 
         return c2_full
 
-    def _correct_diagonal(self, c2_mat: np.ndarray) -> np.ndarray:
+    def _correct_diagonal(self, c2_mat: NDArray) -> NDArray:
         """
         Apply diagonal correction to correlation matrix.
 
@@ -951,10 +953,10 @@ class XPCSDataLoader:
 
     def _get_selected_indices(
         self,
-        dqlist: np.ndarray,
-        dphilist: np.ndarray,
-        correlation_matrices: Optional[List[np.ndarray]] = None,
-    ) -> Optional[np.ndarray]:
+        dqlist: NDArray,
+        dphilist: NDArray,
+        correlation_matrices: Optional[List[NDArray]] = None,
+    ) -> Optional[NDArray]:
         """
         Get indices for comprehensive data filtering based on configuration.
 
@@ -1062,8 +1064,8 @@ class XPCSDataLoader:
                 raise XPCSDataFormatError(f"Data filtering failed: {e}")
 
     def _integrate_with_phi_filtering(
-        self, selected_indices: np.ndarray, dphilist: np.ndarray, filtering_result
-    ) -> np.ndarray:
+        self, selected_indices: NDArray, dphilist: NDArray, filtering_result
+    ) -> NDArray:
         """
         Integrate with existing phi filtering system for backward compatibility.
 
@@ -1116,7 +1118,7 @@ class XPCSDataLoader:
             )
             return selected_indices
 
-    def _select_optimal_wavevector(self, dqlist: np.ndarray) -> int:
+    def _select_optimal_wavevector(self, dqlist: NDArray) -> int:
         """
         Select q-vector index closest to config value (no tolerance).
 
@@ -1143,7 +1145,7 @@ class XPCSDataLoader:
 
         return closest_idx
 
-    def _apply_frame_slicing_to_selected_q(self, c2_matrices: np.ndarray) -> np.ndarray:
+    def _apply_frame_slicing_to_selected_q(self, c2_matrices: NDArray) -> NDArray:
         """
         Apply frame slicing to already q-filtered correlation matrices.
 
@@ -1183,7 +1185,7 @@ class XPCSDataLoader:
 
         return c2_exp
 
-    def _calculate_time_arrays(self, matrix_size: int) -> Tuple[np.ndarray, np.ndarray]:
+    def _calculate_time_arrays(self, matrix_size: int) -> Tuple[NDArray, NDArray]:
         """Calculate t1 and t2 time arrays as 2D meshgrids for correlation analysis."""
         dt = self.analyzer_config.get("dt", 1.0)
         start_frame = self.analyzer_config.get("start_frame", 1)

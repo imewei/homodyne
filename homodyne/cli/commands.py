@@ -1,542 +1,362 @@
 """
-Command Routing and Validation for Homodyne v2 CLI
-==================================================
+Command Dispatcher for Homodyne v2 CLI
+======================================
 
-Routes CLI commands to appropriate handlers and manages execution flow.
-Coordinates between configuration, data loading, and analysis execution.
+Handles command execution and coordination between CLI arguments,
+configuration, and optimization methods.
 """
 
-import argparse
-import sys
+import time
 from pathlib import Path
 from typing import Any, Dict, Optional
 
-from homodyne.cli.validators import ValidationError, validate_args
+from homodyne.cli.args_parser import validate_args
 from homodyne.utils.logging import get_logger
 
 logger = get_logger(__name__)
 
+# Import core modules with fallback
+try:
+    from homodyne.config.manager import ConfigManager
+    from homodyne.device import configure_optimal_device
+    from homodyne.data import load_xpcs_data
+    from homodyne.optimization import fit_nlsq_jax, fit_mcmc_jax
+    HAS_CORE_MODULES = True
+except ImportError as e:
+    HAS_CORE_MODULES = False
+    logger.error(f"Core modules not available: {e}")
 
-def dispatch_command(args: argparse.Namespace) -> int:
+
+def dispatch_command(args) -> Dict[str, Any]:
     """
-    Dispatch CLI command to appropriate handler.
+    Dispatch command based on parsed CLI arguments.
 
-    Args:
-        args: Parsed command line arguments
+    Parameters
+    ----------
+    args : argparse.Namespace
+        Parsed command-line arguments
 
-    Returns:
-        Exit code: 0 for success, 1 for error, 2 for invalid arguments
+    Returns
+    -------
+    dict
+        Command execution result with success status and details
     """
+    logger.info("Dispatching homodyne analysis command")
+
+    # Validate arguments
+    if not validate_args(args):
+        return {'success': False, 'error': 'Invalid command-line arguments'}
+
+    if not HAS_CORE_MODULES:
+        return {
+            'success': False,
+            'error': 'Core modules not available. Please check installation.'
+        }
+
     try:
-        logger.debug("Dispatching command based on CLI arguments")
+        # Create output directory
+        args.output_dir.mkdir(parents=True, exist_ok=True)
 
-        # Check for cache generation mode first
-        if args.save_cache_data:
-            return handle_save_cache_data(args)
+        # Configure logging based on args
+        _configure_logging(args)
 
-        # Check for plotting-only modes
-        if args.plot_simulated_data and not has_analysis_flags(args):
-            return handle_plot_simulated_data(args)
+        # Configure device (CPU/GPU)
+        device_config = _configure_device(args)
 
-        if args.plot_experimental_data and not has_analysis_flags(args):
-            return handle_plot_experimental_data(args)
+        # Load configuration
+        config = _load_configuration(args)
 
-        # Main analysis workflow
-        return handle_analysis_workflow(args)
+        # Load data
+        data = _load_data(args, config)
 
-    except ValidationError as e:
-        logger.error(f"❌ Validation error: {e}")
-        return 2
-    except KeyboardInterrupt:
-        logger.info("Analysis interrupted by user")
-        return 1
+        # Run optimization
+        result = _run_optimization(args, config, data)
+
+        # Save results
+        _save_results(args, result, device_config)
+
+        logger.info("Analysis completed successfully")
+        return {
+            'success': True,
+            'result': result,
+            'device_config': device_config,
+            'output_dir': str(args.output_dir)
+        }
+
     except Exception as e:
-        logger.error(f"❌ Unexpected error in command dispatch: {e}")
-        import traceback
-        traceback.print_exc()
-        return 1
+        logger.error(f"Command execution failed: {e}")
+        logger.debug("Full traceback:", exc_info=True)
+        return {
+            'success': False,
+            'error': str(e)
+        }
 
 
-def has_analysis_flags(args: argparse.Namespace) -> bool:
-    """
-    Check if arguments indicate analysis should be performed.
+def _configure_logging(args) -> None:
+    """Configure logging based on CLI arguments."""
+    import logging
 
-    Args:
-        args: Parsed arguments
-
-    Returns:
-        True if analysis should be performed
-    """
-    # Check for explicit analysis mode flags
-    if any([args.static_isotropic, args.static_anisotropic, args.laminar_flow]):
-        return True
-
-    # Check for non-default method selection (indicates explicit analysis intent)
-    if args.method in ["mcmc", "hybrid", "lsq"]:
-        return True
-
-    # If plotting flag is specified, check if it's plotting-only
-    if args.plot_simulated_data or args.plot_experimental_data:
-        return False  # Plotting-only mode
-
-    # Default to analysis if config exists and no plotting flags
-    return args.config.exists()
+    if args.quiet:
+        # Only show errors
+        logging.getLogger('homodyne').setLevel(logging.ERROR)
+    elif args.verbose:
+        # Show debug information
+        logging.getLogger('homodyne').setLevel(logging.DEBUG)
+        logger.debug("Verbose logging enabled")
+    else:
+        # Default: show info and above
+        logging.getLogger('homodyne').setLevel(logging.INFO)
 
 
-def handle_save_cache_data(args: argparse.Namespace) -> int:
-    """
-    Handle cache data generation from HDF5 files.
+def _configure_device(args) -> Dict[str, Any]:
+    """Configure optimal device based on CLI arguments."""
+    logger.info("Configuring computational device...")
 
-    Args:
-        args: CLI arguments
+    device_config = configure_optimal_device(
+        prefer_gpu=not args.force_cpu,
+        gpu_memory_fraction=args.gpu_memory_fraction,
+        force_cpu=args.force_cpu
+    )
 
-    Returns:
-        Exit code
-    """
+    if device_config['configuration_successful']:
+        device_type = device_config['device_type']
+        logger.info(f"✓ Device configured: {device_type.upper()}")
+
+        if device_type == 'gpu':
+            logger.info(f"GPU memory fraction: {args.gpu_memory_fraction:.0%}")
+    else:
+        logger.warning("Device configuration failed, using defaults")
+
+    return device_config
+
+
+def _load_configuration(args) -> ConfigManager:
+    """Load configuration from file or create default."""
+    logger.info(f"Loading configuration from: {args.config}")
+
     try:
-        logger.info("💾 Cache generation mode - selective q-vector + frame slicing")
-
-        # Import required modules
-        import numpy as np
-
-        from homodyne.config.cli_config import CLIConfigManager
-        from homodyne.data.xpcs_loader import XPCSDataLoader
-
-        # Load and process configuration
-        config_manager = CLIConfigManager()
-        config = config_manager.create_effective_config(args.config, args)
-
-        # Disable quality control and output creation for cache-only operations
-        config.setdefault("quality_control", {})["enabled"] = False
-        config.setdefault("quality_control", {})["generate_reports"] = False
-        config.setdefault("output", {})["base_directory"] = None
-
-        # Get HDF5 file path from configuration
-        experimental_data = config.get("experimental_data", {})
-        data_folder_path = experimental_data.get("data_folder_path", ".")
-        data_file_name = experimental_data.get("data_file_name", "")
-
-        if not data_file_name:
-            logger.error("❌ No data file specified in configuration")
-            return 1
-
-        hdf_path = Path(data_folder_path) / data_file_name
-        if not hdf_path.exists():
-            logger.error(f"❌ HDF5 file not found: {hdf_path}")
-            return 1
-
-        logger.info(f"📁 Loading HDF5 data: {hdf_path}")
-
-        # Initialize data loader (no quality reports for cache generation)
-        data_loader = XPCSDataLoader(config_dict=config, generate_quality_reports=False)
-
-        # Check for existing cache file and provide clear messaging
-        cache_path = data_loader._generate_cache_path()
-        cache_existed_before = cache_path.exists()
-
-        if cache_existed_before:
-            cache_size_mb = cache_path.stat().st_size / (1024 * 1024)
-            logger.info(f"⚠️  Cache file already exists: {cache_path}")
-            logger.info(f"📊 Existing cache size: {cache_size_mb:.2f} MB")
-            logger.info(
-                f"🔄 Regenerating cache with selective q-vector optimization..."
-            )
+        # Try to load from file
+        if args.config.exists():
+            config = ConfigManager(str(args.config))
+            logger.info(f"✓ Configuration loaded: {args.config}")
         else:
-            logger.info(f"💾 Generating new optimized cache file: {cache_path}")
+            # Create default configuration
+            logger.info("Configuration file not found, using defaults")
+            config = ConfigManager(config_override=_get_default_config(args))
 
-        # Load data - this will automatically generate optimized cache
-        data_dict = data_loader.load_experimental_data()
+        # Apply CLI overrides
+        _apply_cli_overrides(config, args)
 
-        # Report cache generation results
-        if cache_path.exists():
-            final_cache_size_mb = cache_path.stat().st_size / (1024 * 1024)
+        return config
 
-            # Determine if this was a regeneration or new creation
-            action = "regenerated" if cache_existed_before else "generated"
-            logger.info(f"✅ Optimized cache {action}: {cache_path}")
-            logger.info(f"📊 Final cache size: {final_cache_size_mb:.2f} MB")
-
-            # Report data statistics
-            q_count = len(data_dict.get("wavevector_q_list", []))
-            phi_count = len(data_dict.get("phi_angles_list", []))
-            frame_count = (
-                data_dict.get("c2_exp", np.array([])).shape[-1]
-                if "c2_exp" in data_dict
-                else 0
-            )
-
-            logger.info(f"📈 Data summary:")
-            logger.info(f"   • Q-vectors: {q_count}")
-            logger.info(f"   • Phi angles: {phi_count}")
-            logger.info(f"   • Frames: {frame_count}")
-        else:
-            logger.error("❌ Cache file was not generated")
-            return 1
-
-        logger.info("✓ Cache generation completed successfully")
-        return 0
-
-    except ImportError as e:
-        logger.error(f"❌ Missing dependencies for cache generation: {e}")
-        return 1
     except Exception as e:
-        logger.error(f"❌ Error generating cache data: {e}")
-        import traceback
-        traceback.print_exc()
-        return 1
+        logger.warning(f"Configuration loading failed: {e}, using defaults")
+        return ConfigManager(config_override=_get_default_config(args))
 
 
-def handle_plot_simulated_data(args: argparse.Namespace) -> int:
-    """
-    Handle plotting simulated data without experimental data.
+def _get_default_config(args) -> Dict[str, Any]:
+    """Create default configuration from CLI arguments."""
+    # Determine analysis mode
+    if args.static_mode:
+        analysis_mode = "static_isotropic"
+    elif args.laminar_flow:
+        analysis_mode = "laminar_flow"
+    else:
+        analysis_mode = "auto_detect"
 
-    Args:
-        args: CLI arguments
-
-    Returns:
-        Exit code
-    """
-    try:
-        logger.info("🎨 Plotting simulated data mode")
-
-        # Import plotting controller
-        from homodyne.config.cli_config import CLIConfigManager
-        from homodyne.workflows.plotting_controller import PlottingController
-
-        # Load and process configuration
-        config_manager = CLIConfigManager()
-        config = config_manager.create_effective_config(args.config, args)
-
-        # Initialize plotting controller
-        plotter = PlottingController(args.output_dir)
-
-        # Generate simulated plots
-        plotter.plot_simulated_data(
-            config,
-            contrast=args.contrast,
-            offset=args.offset,
-            phi_angles_str=args.phi_angles,
-        )
-
-        logger.info("✓ Simulated data plots generated successfully")
-        return 0
-
-    except ImportError as e:
-        logger.error(f"❌ Missing dependencies for plotting: {e}")
-        return 1
-    except Exception as e:
-        logger.error(f"❌ Error generating simulated plots: {e}")
-        import traceback
-        traceback.print_exc()
-        return 1
-
-
-def handle_plot_experimental_data(args: argparse.Namespace) -> int:
-    """
-    Handle plotting experimental data for validation.
-
-    Args:
-        args: CLI arguments
-
-    Returns:
-        Exit code
-    """
-    try:
-        logger.info("🎨 Plotting experimental data mode")
-
-        # Import required modules
-        from homodyne.config.cli_config import CLIConfigManager
-        from homodyne.data.xpcs_loader import XPCSDataLoader
-        from homodyne.workflows.plotting_controller import PlottingController
-
-        # Load and process configuration
-        config_manager = CLIConfigManager()
-        config = config_manager.create_effective_config(args.config, args)
-
-        # Load experimental data (WITH quality reports for --plot-experimental-data)
-        data_loader = XPCSDataLoader(config_dict=config, generate_quality_reports=True)
-        data_dict = data_loader.load_experimental_data()
-
-        # Initialize plotting controller
-        plotter = PlottingController(args.output_dir)
-
-        # Generate experimental data plots
-        plotter.plot_experimental_data(data_dict)
-
-        # Generate quality report for standalone experimental data plotting
-        _generate_quality_report_for_standalone_plotting(config, data_dict, args)
-
-        logger.info("✓ Experimental data plots generated successfully")
-        return 0
-
-    except ImportError as e:
-        logger.error(f"❌ Missing dependencies for plotting: {e}")
-        return 1
-    except Exception as e:
-        logger.error(f"❌ Error plotting experimental data: {e}")
-        import traceback
-        traceback.print_exc()
-        return 1
-
-
-def handle_analysis_workflow(args: argparse.Namespace) -> int:
-    """
-    Handle main analysis workflow.
-
-    Args:
-        args: CLI arguments
-
-    Returns:
-        Exit code
-    """
-    try:
-        logger.info(f"🔬 Starting {args.method.upper()} analysis workflow")
-
-        # Import the main analysis pipeline
-        from homodyne.workflows.pipeline import AnalysisPipeline
-
-        # Create and run analysis pipeline
-        pipeline = AnalysisPipeline(args)
-        exit_code = pipeline.run_analysis()
-
-        if exit_code == 0:
-            logger.info("✓ Analysis workflow completed successfully")
-        else:
-            logger.error(f"❌ Analysis workflow failed with exit code {exit_code}")
-
-        return exit_code
-
-    except ImportError as e:
-        logger.error(f"❌ Missing dependencies for analysis: {e}")
-        logger.error("Please ensure all required packages are installed:")
-        logger.error("  pip install 'homodyne[full]'")
-        return 1
-    except Exception as e:
-        logger.error(f"❌ Error in analysis workflow: {e}")
-        import traceback
-        traceback.print_exc()
-        return 1
-
-
-def validate_mutual_exclusions(args: argparse.Namespace) -> None:
-    """
-    Validate mutually exclusive argument combinations.
-
-    Args:
-        args: Parsed arguments
-
-    Raises:
-        ValidationError: If mutually exclusive args are used together
-    """
-    # Note: verbose and quiet arguments have been removed from CLI
-    # Any legacy references are handled via backwards compatibility
-
-    # Scaling parameters only with simulated data plotting
-    if (args.contrast != 1.0 or args.offset != 0.0) and not args.plot_simulated_data:
-        raise ValidationError(
-            "--contrast and --offset can only be used with --plot-simulated-data"
-        )
-
-    # GPU options with force CPU
-    if args.force_cpu and args.gpu_memory_fraction != 0.8:
-        logger.warning("GPU memory fraction ignored when --force-cpu is specified")
-
-
-def print_method_info(method: str) -> None:
-    """
-    Print information about the selected method.
-
-    Args:
-        method: Selected optimization method
-    """
-    method_info = {
-        "lsq": {
-            "name": "Least Squares Optimization",
-            "speed": "Fastest (direct optimization)",
-            "accuracy": "Good parameter estimates",
-            "use_case": "Quick analysis, initial parameter estimation",
+    config = {
+        "metadata": {
+            "config_version": "2.1",
+            "description": "CLI-generated configuration"
         },
-        "mcmc": {
-            "name": "MCMC + JAX (NumPyro/BlackJAX)",
-            "speed": "Slower but thorough",
-            "accuracy": "Full posterior sampling",
-            "use_case": "Publication-quality results",
+        "analysis_mode": analysis_mode,
+        "experimental_data": {
+            "file_path": str(args.data_file) if args.data_file else None
         },
-        "hybrid": {
-            "name": "Hybrid LSQ → MCMC Pipeline",
-            "speed": "Balanced (LSQ init + MCMC refinement)",
-            "accuracy": "Best of both approaches",
-            "use_case": "Comprehensive analysis",
+        "optimization": {
+            "method": args.method,
+            "lsq": {
+                "max_iterations": args.max_iterations,
+                "tolerance": args.tolerance,
+            },
+            "mcmc": {
+                "n_samples": args.n_samples,
+                "n_warmup": args.n_warmup,
+                "n_chains": args.n_chains,
+            }
         },
+        "hardware": {
+            "force_cpu": args.force_cpu,
+            "gpu_memory_fraction": args.gpu_memory_fraction,
+        },
+        "output": {
+            "formats": [args.output_format],
+            "save_plots": args.save_plots,
+            "output_dir": str(args.output_dir)
+        }
     }
 
-    if method in method_info:
-        info = method_info[method]
-        logger.info(f"Selected method: {info['name']}")
-        logger.info(f"  Speed: {info['speed']}")
-        logger.info(f"  Accuracy: {info['accuracy']}")
-        logger.info(f"  Best for: {info['use_case']}")
+    return config
 
 
-def setup_output_directory(output_dir: Path) -> None:
-    """
-    Setup output directory structure.
+def _apply_cli_overrides(config: ConfigManager, args) -> None:
+    """Apply CLI argument overrides to configuration."""
+    if not hasattr(config, 'config') or not config.config:
+        return
 
-    Args:
-        output_dir: Path to output directory
-    """
+    # Override data file if provided
+    if args.data_file:
+        config.config.setdefault('experimental_data', {})
+        config.config['experimental_data']['file_path'] = str(args.data_file)
+
+    # Override analysis mode if specified
+    if args.static_mode:
+        config.config['analysis_mode'] = 'static_isotropic'
+    elif args.laminar_flow:
+        config.config['analysis_mode'] = 'laminar_flow'
+
+    # Override optimization parameters
+    if 'optimization' not in config.config:
+        config.config['optimization'] = {}
+
+    config.config['optimization']['method'] = args.method
+
+    # Override hardware settings
+    if 'hardware' not in config.config:
+        config.config['hardware'] = {}
+
+    config.config['hardware']['force_cpu'] = args.force_cpu
+    config.config['hardware']['gpu_memory_fraction'] = args.gpu_memory_fraction
+
+
+def _load_data(args, config: ConfigManager) -> Dict[str, Any]:
+    """Load experimental data."""
+    logger.info("Loading experimental data...")
+
+    # Get data file path from args or config
+    data_file = None
+    if args.data_file:
+        data_file = str(args.data_file)
+    elif hasattr(config, 'config') and config.config:
+        data_file = config.config.get('experimental_data', {}).get('file_path')
+
+    if not data_file:
+        raise ValueError("No data file specified. Use --data-file or configure in YAML file.")
+
+    # Load data using the data module
     try:
-        output_dir.mkdir(parents=True, exist_ok=True)
-
-        # Create subdirectories for organization
-        subdirs = ["plots", "results", "logs", "configs"]
-        for subdir in subdirs:
-            (output_dir / subdir).mkdir(exist_ok=True)
-
-        logger.debug(f"✓ Output directory structure created: {output_dir}")
-
+        data = load_xpcs_data(data_file)
+        logger.info(f"✓ Data loaded: {len(data.get('c2_exp', []))} data points")
+        return data
     except Exception as e:
-        logger.warning(f"Could not create output directory structure: {e}")
+        raise RuntimeError(f"Failed to load data from {data_file}: {e}")
 
 
-def log_system_info(args: argparse.Namespace) -> None:
-    """
-    Log system and configuration information.
+def _run_optimization(args, config: ConfigManager, data: Dict[str, Any]) -> Any:
+    """Run the specified optimization method."""
+    method = args.method
+    logger.info(f"Running {method.upper()} optimization...")
 
-    Args:
-        args: CLI arguments
-    """
+    start_time = time.perf_counter()
+
     try:
-        import platform
-
-        import homodyne
-
-        logger.debug("=== System Information ===")
-        logger.debug(f"Homodyne version: {homodyne.__version__}")
-        logger.debug(f"Python version: {platform.python_version()}")
-        logger.debug(f"Platform: {platform.platform()}")
-
-        # JAX availability
-        try:
-            import jax
-
-            logger.debug(f"JAX version: {jax.__version__}")
-            logger.debug(f"JAX devices: {jax.devices()}")
-        except ImportError:
-            logger.debug("JAX not available - using NumPy fallback")
-
-        # GPU status
-        if not args.force_cpu:
-            try:
-                from homodyne.runtime.gpu.wrapper import check_gpu_availability
-
-                gpu_info = check_gpu_availability()
-                logger.debug(f"GPU availability: {gpu_info}")
-            except ImportError:
-                logger.debug("GPU detection not available")
-
-        logger.debug("=== Configuration ===")
-        logger.debug(f"Config file: {args.config}")
-        logger.debug(f"Output directory: {args.output_dir}")
-        logger.debug(f"Analysis method: {args.method}")
-
-    except Exception as e:
-        logger.debug(f"Error logging system info: {e}")
-
-
-def _generate_quality_report_for_standalone_plotting(config: dict, data_dict: dict, args) -> None:
-    """
-    Generate quality report for standalone experimental data plotting.
-
-    This function creates quality reports only when --plot-experimental-data
-    is used in standalone mode, ensuring quality_reports folder is only
-    created when needed.
-
-    Args:
-        config: Configuration dictionary
-        data_dict: Data dictionary containing loaded experimental data
-        args: CLI arguments containing data file path
-    """
-    try:
-        import os
-        import time
-        import numpy as np
-        from homodyne.data.quality_controller import DataQualityController, QualityControlResult, QualityControlStage
-
-        logger.info("🔍 Generating quality report for standalone experimental data plotting...")
-
-        # Create quality controller with current config and enable detailed reports
-        # Ensure detailed reports are exported when plotting experimental data
-        if "quality_control" not in config:
-            config["quality_control"] = {}
-        if "reporting" not in config["quality_control"]:
-            config["quality_control"]["reporting"] = {}
-        config["quality_control"]["reporting"]["export_detailed_reports"] = True
-
-        quality_controller = DataQualityController(config)
-
-        # Determine data file path from config or args
-        data_file_path = getattr(args, 'data_file', None)
-        if not data_file_path:
-            # Try to get from config (look in experimental_data section)
-            exp_data = config.get("experimental_data", {})
-            data_file_name = exp_data.get("data_file_name", "")
-            if data_file_name:
-                data_folder = exp_data.get("data_folder_path", "./")
-                data_file_path = os.path.join(data_folder, data_file_name)
-
-        if data_file_path:
-            # Create quality_reports directory only when needed
-            output_dir = os.path.join(os.path.dirname(data_file_path), "quality_reports")
-            os.makedirs(output_dir, exist_ok=True)
-
-            # Create quality metrics for the loaded data
-            from homodyne.data.quality_controller import QualityMetrics
-
-            g2_shape = data_dict.get("g2", np.array([])).shape
-            quality_metrics = QualityMetrics(
-                overall_score=80.0,  # Default reasonable score
-                finite_fraction=1.0,  # Assume data is finite
-                shape_consistency=True,
-                data_range_valid=True,
-                correlation_validity=0.8,
-                time_consistency=True,
-                q_range_validity=0.9,
-                signal_to_noise=5.0,
-                correlation_decay=0.7,
-                symmetry_score=0.8
+        if method == "nlsq":
+            result = fit_nlsq_jax(data, config)
+        elif method == "mcmc":
+            # Convert data format for MCMC if needed
+            mcmc_data = data['c2_exp']
+            result = fit_mcmc_jax(
+                mcmc_data,
+                t1=data.get('t1'),
+                t2=data.get('t2'),
+                phi=data.get('phi_angles_list'),
+                q=data.get('wavevector_q_list', [1.0])[0] if data.get('wavevector_q_list') else 1.0,
+                L=100.0,  # Default sample-detector distance
+                analysis_mode=config.config.get('analysis_mode', 'static_isotropic') if hasattr(config, 'config') else 'static_isotropic',
+                n_samples=args.n_samples,
+                n_warmup=args.n_warmup,
+                n_chains=args.n_chains
             )
-
-            # Create a basic quality assessment result
-            quality_result = QualityControlResult(
-                stage=QualityControlStage.FINAL_DATA,
-                passed=True,
-                metrics=quality_metrics
-            )
-
-            # Generate and save the quality report
-            report = quality_controller.generate_quality_report(
-                [quality_result],
-                output_path=os.path.join(output_dir, f"quality_report_{int(time.time())}.json")
-            )
-
-            logger.info(f"✓ Quality report saved to {output_dir}")
         else:
-            logger.warning("Could not determine data file path for quality report")
+            raise ValueError(f"Unknown optimization method: {method}")
 
-    except ImportError as e:
-        logger.warning(f"Could not generate quality report: {e}")
+        optimization_time = time.perf_counter() - start_time
+        logger.info(f"✓ {method.upper()} optimization completed in {optimization_time:.3f}s")
+
+        return result
+
     except Exception as e:
-        logger.warning(f"Quality report generation failed: {e}")
+        optimization_time = time.perf_counter() - start_time
+        logger.error(f"{method.upper()} optimization failed after {optimization_time:.3f}s: {e}")
+        raise
 
 
-def handle_graceful_shutdown(signum, frame):
-    """
-    Handle graceful shutdown on signal.
+def _save_results(args, result: Any, device_config: Dict[str, Any]) -> None:
+    """Save optimization results to output directory."""
+    logger.info(f"Saving results to: {args.output_dir}")
 
-    Args:
-        signum: Signal number
-        frame: Current stack frame
-    """
-    logger.info("Received shutdown signal - cleaning up...")
-    sys.exit(1)
+    import json
+    import yaml
+    import numpy as np
+
+    # Create results summary
+    results_summary = {
+        'method': args.method,
+        'analysis_mode': getattr(result, 'analysis_mode', 'unknown'),
+        'success': getattr(result, 'success', True),
+        'optimization_time': getattr(result, 'optimization_time', 0.0),
+        'device_config': device_config,
+        'parameters': {},
+        'diagnostics': {}
+    }
+
+    # Extract parameters based on result type
+    if hasattr(result, 'parameters'):
+        results_summary['parameters'] = result.parameters
+    elif hasattr(result, 'mean_params'):
+        # MCMC result format
+        results_summary['parameters'] = {
+            'contrast': result.mean_contrast,
+            'offset': result.mean_offset,
+            'physical_params': result.mean_params.tolist() if hasattr(result.mean_params, 'tolist') else result.mean_params
+        }
+
+    # Extract diagnostics
+    if hasattr(result, 'chi_squared'):
+        results_summary['diagnostics']['chi_squared'] = result.chi_squared
+    if hasattr(result, 'converged'):
+        results_summary['diagnostics']['converged'] = result.converged
+
+    # Save in requested format
+    output_file = args.output_dir / f"homodyne_results.{args.output_format}"
+
+    try:
+        if args.output_format == "yaml":
+            with open(output_file, 'w') as f:
+                yaml.dump(results_summary, f, default_flow_style=False)
+        elif args.output_format == "json":
+            with open(output_file, 'w') as f:
+                json.dump(results_summary, f, indent=2, default=_json_serializer)
+        elif args.output_format == "npz":
+            # Save numpy arrays
+            arrays_to_save = {'results_summary': np.array([results_summary], dtype=object)}
+            if hasattr(result, 'samples_params') and result.samples_params is not None:
+                arrays_to_save['samples_params'] = result.samples_params
+            np.savez(output_file, **arrays_to_save)
+
+        logger.info(f"✓ Results saved: {output_file}")
+
+    except Exception as e:
+        logger.warning(f"Failed to save results: {e}")
+
+
+def _json_serializer(obj):
+    """JSON serializer for numpy arrays and other objects."""
+    if isinstance(obj, np.ndarray):
+        return obj.tolist()
+    elif isinstance(obj, np.integer):
+        return int(obj)
+    elif isinstance(obj, np.floating):
+        return float(obj)
+    else:
+        return str(obj)

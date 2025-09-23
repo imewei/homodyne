@@ -1,6 +1,8 @@
 #!/bin/bash
-# Smart GPU Activation Script with Auto-Optimization
-# Detects hardware and applies optimal settings automatically
+# GPU Activation Script for JAX-based Homodyne v2
+# ===============================================
+# Configures environment for optimal GPU usage with JAX
+# Supports CUDA 12.1+ and system CUDA integration
 
 # Color codes for output
 RED='\033[0;31m'
