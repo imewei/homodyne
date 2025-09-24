@@ -42,10 +42,14 @@ Example Usage:
 
 # Handle imports with graceful fallback for missing dependencies
 try:
-    from homodyne.data.xpcs_loader import (XPCSConfigurationError,
-                                           XPCSDataFormatError, XPCSDataLoader,
-                                           XPCSDependencyError,
-                                           load_xpcs_config, load_xpcs_data)
+    from homodyne.data.xpcs_loader import (
+        XPCSConfigurationError,
+        XPCSDataFormatError,
+        XPCSDataLoader,
+        XPCSDependencyError,
+        load_xpcs_config,
+        load_xpcs_data,
+    )
 
     HAS_XPCS_LOADER = True
     _loader_error = None
@@ -83,11 +87,13 @@ except ImportError:
     HAS_VALIDATION = False
 
 try:
-    from homodyne.data.phi_filtering import (PhiAngleFilter,
-                                             create_anisotropic_ranges,
-                                             create_isotropic_ranges,
-                                             filter_phi_angles,
-                                             filter_phi_angles_jax)
+    from homodyne.data.phi_filtering import (
+        PhiAngleFilter,
+        create_anisotropic_ranges,
+        create_isotropic_ranges,
+        filter_phi_angles,
+        filter_phi_angles_jax,
+    )
 
     HAS_PHI_FILTERING = True
 except ImportError:
@@ -95,21 +101,30 @@ except ImportError:
 
 try:
     from homodyne.data.preprocessing import (
-        NoiseReductionMethod, NormalizationMethod,
-        PreprocessingConfigurationError, PreprocessingError,
-        PreprocessingPipeline, PreprocessingProvenance, PreprocessingResult,
-        PreprocessingStage, create_default_preprocessing_config,
-        preprocess_xpcs_data)
+        NoiseReductionMethod,
+        NormalizationMethod,
+        PreprocessingConfigurationError,
+        PreprocessingError,
+        PreprocessingPipeline,
+        PreprocessingProvenance,
+        PreprocessingResult,
+        PreprocessingStage,
+        create_default_preprocessing_config,
+        preprocess_xpcs_data,
+    )
 
     HAS_PREPROCESSING = True
 except ImportError:
     HAS_PREPROCESSING = False
 
 try:
-    from homodyne.data.optimization import (DatasetInfo, DatasetOptimizer,
-                                            ProcessingStrategy,
-                                            create_dataset_optimizer,
-                                            optimize_for_method)
+    from homodyne.data.optimization import (
+        DatasetInfo,
+        DatasetOptimizer,
+        ProcessingStrategy,
+        create_dataset_optimizer,
+        optimize_for_method,
+    )
 
     HAS_OPTIMIZATION = True
 except ImportError:

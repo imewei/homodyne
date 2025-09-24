@@ -7,7 +7,7 @@ using JAX-accelerated optimization methods for HPC and supercomputer environment
 
 Key Features:
 - JAX-first computational architecture
-- JAXFit trust-region nonlinear least squares (primary optimization)
+- Optimistix trust-region nonlinear least squares (primary optimization)
 - NumPyro/BlackJAX MCMC sampling (secondary optimization)
 - System CUDA integration with jax[local]
 - HPC-optimized for 36/128-core CPU nodes
@@ -44,46 +44,48 @@ except ImportError:
 
 # Core imports with graceful fallback
 try:
-    from homodyne.data import load_xpcs_data, XPCSDataLoader
+    from homodyne.data import XPCSDataLoader, load_xpcs_data
+
     HAS_DATA = True
 except ImportError:
     HAS_DATA = False
 
 try:
     from homodyne.core import (
-        compute_g2_scaled,
-        TheoryEngine,
+        ParameterSpace,
         ScaledFittingEngine,
-        ParameterSpace
+        TheoryEngine,
+        compute_g2_scaled,
     )
+
     HAS_CORE = True
 except ImportError:
     HAS_CORE = False
 
 try:
-    from homodyne.optimization import (
-        fit_nlsq_jax,
-        fit_mcmc_jax,
-        get_optimization_info
-    )
+    from homodyne.optimization import fit_mcmc_jax, fit_nlsq_jax, get_optimization_info
+
     HAS_OPTIMIZATION = True
 except ImportError:
     HAS_OPTIMIZATION = False
 
 try:
     from homodyne.config import ConfigManager
+
     HAS_CONFIG = True
 except ImportError:
     HAS_CONFIG = False
 
 try:
     from homodyne.device import configure_optimal_device, get_device_status
+
     HAS_DEVICE = True
 except ImportError:
     HAS_DEVICE = False
 
 try:
     from homodyne.cli import main as cli_main
+
     HAS_CLI = True
 except ImportError:
     HAS_CLI = False
@@ -103,9 +105,10 @@ __features__ = {
 # Check JAX availability
 try:
     import jax
+
     __features__["jax_acceleration"] = True
     try:
-        gpu_devices = jax.devices('gpu')
+        gpu_devices = jax.devices("gpu")
         __features__["gpu_acceleration"] = len(gpu_devices) > 0
     except:
         __features__["gpu_acceleration"] = False
@@ -121,7 +124,9 @@ if HAS_DATA:
     __all__.extend(["load_xpcs_data", "XPCSDataLoader"])
 
 if HAS_CORE:
-    __all__.extend(["compute_g2_scaled", "TheoryEngine", "ScaledFittingEngine", "ParameterSpace"])
+    __all__.extend(
+        ["compute_g2_scaled", "TheoryEngine", "ScaledFittingEngine", "ParameterSpace"]
+    )
 
 if HAS_OPTIMIZATION:
     __all__.extend(["fit_nlsq_jax", "fit_mcmc_jax", "get_optimization_info"])
@@ -157,19 +162,20 @@ def get_package_info() -> dict:
             "cli": HAS_CLI,
         },
         "dependencies": {},
-        "recommendations": []
+        "recommendations": [],
     }
 
     # Check key dependencies
     dependencies = {
         "jax": False,
-        "jaxfit": False,
+        "optimistix": False,
+        "equinox": False,
         "numpyro": False,
         "blackjax": False,
         "h5py": False,
         "yaml": False,
         "numpy": False,
-        "scipy": False
+        "scipy": False,
     }
 
     for dep in dependencies:
@@ -185,14 +191,20 @@ def get_package_info() -> dict:
     if not dependencies["jax"]:
         info["recommendations"].append("Install JAX for acceleration: pip install jax")
 
-    if not dependencies["jaxfit"]:
-        info["recommendations"].append("Install JAXFit for NLSQ optimization: pip install jaxfit")
+    if not dependencies["optimistix"] or not dependencies["equinox"]:
+        info["recommendations"].append(
+            "Install Optimistix for NLSQ optimization: pip install optimistix equinox"
+        )
 
     if not dependencies["numpyro"] and not dependencies["blackjax"]:
-        info["recommendations"].append("Install NumPyro or BlackJAX for MCMC: pip install numpyro blackjax")
+        info["recommendations"].append(
+            "Install NumPyro or BlackJAX for MCMC: pip install numpyro blackjax"
+        )
 
     if __features__["jax_acceleration"] and not __features__["gpu_acceleration"]:
-        info["recommendations"].append("For GPU acceleration: pip install jax[local] (uses system CUDA)")
+        info["recommendations"].append(
+            "For GPU acceleration: pip install jax[local] (uses system CUDA)"
+        )
 
     if not dependencies["h5py"]:
         info["recommendations"].append("Install h5py for HDF5 data: pip install h5py")
@@ -200,9 +212,13 @@ def get_package_info() -> dict:
     # System recommendations
     if __features__["jax_acceleration"]:
         if __features__["gpu_acceleration"]:
-            info["recommendations"].append("✓ GPU acceleration available - excellent performance expected")
+            info["recommendations"].append(
+                "✓ GPU acceleration available - excellent performance expected"
+            )
         else:
-            info["recommendations"].append("CPU acceleration configured - good performance expected")
+            info["recommendations"].append(
+                "CPU acceleration configured - good performance expected"
+            )
     else:
         info["recommendations"].append("Install JAX for optimal performance")
 
@@ -212,7 +228,9 @@ def get_package_info() -> dict:
 def _check_installation():
     """Check installation status and provide helpful messages."""
     if not HAS_OPTIMIZATION:
-        print("Warning: Optimization modules not available. Core functionality limited.")
+        print(
+            "Warning: Optimization modules not available. Core functionality limited."
+        )
         print("Install with: pip install homodyne[all]")
 
     if not __features__["jax_acceleration"]:
@@ -224,5 +242,6 @@ def _check_installation():
 
 # Run installation check on import (only in interactive mode)
 import sys
-if hasattr(sys, 'ps1'):  # Interactive mode
+
+if hasattr(sys, "ps1"):  # Interactive mode
     _check_installation()

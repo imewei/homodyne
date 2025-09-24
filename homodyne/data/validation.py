@@ -32,7 +32,7 @@ Enhanced Features (v2.1):
 
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any
 
 import numpy as np
 
@@ -47,8 +47,7 @@ except ImportError:
 
 # V2 integration
 try:
-    from homodyne.core.physics import (PhysicsConstants,
-                                       validate_experimental_setup)
+    from homodyne.core.physics import PhysicsConstants, validate_experimental_setup
 
     HAS_PHYSICS = True
 except ImportError:
@@ -87,9 +86,9 @@ class ValidationIssue:
     severity: str  # "error", "warning", "info"
     category: str  # "physics", "data_quality", "statistics", "format"
     message: str
-    parameter: Optional[str] = None
-    value: Optional[Any] = None
-    recommendation: Optional[str] = None
+    parameter: str | None = None
+    value: Any | None = None
+    recommendation: str | None = None
 
 
 @dataclass
@@ -99,13 +98,13 @@ class DataQualityReport:
     is_valid: bool
     validation_level: str
     total_issues: int
-    errors: List[ValidationIssue] = field(default_factory=list)
-    warnings: List[ValidationIssue] = field(default_factory=list)
-    info: List[ValidationIssue] = field(default_factory=list)
+    errors: list[ValidationIssue] = field(default_factory=list)
+    warnings: list[ValidationIssue] = field(default_factory=list)
+    info: list[ValidationIssue] = field(default_factory=list)
 
     # Statistics
-    data_statistics: Dict[str, Any] = field(default_factory=dict)
-    physics_checks: Dict[str, Any] = field(default_factory=dict)
+    data_statistics: dict[str, Any] = field(default_factory=dict)
+    physics_checks: dict[str, Any] = field(default_factory=dict)
     quality_score: float = 0.0
 
     def add_issue(self, issue: ValidationIssue) -> None:
@@ -120,7 +119,7 @@ class DataQualityReport:
 
         self.total_issues += 1
 
-    def get_summary(self) -> Dict[str, Any]:
+    def get_summary(self) -> dict[str, Any]:
         """Get summary of validation results."""
         return {
             "is_valid": self.is_valid,
@@ -136,7 +135,7 @@ class DataQualityReport:
 
 
 def validate_xpcs_data(
-    data: Dict[str, Any], config: Dict[str, Any] = None, validation_level: str = "basic"
+    data: dict[str, Any], config: dict[str, Any] = None, validation_level: str = "basic"
 ) -> DataQualityReport:
     """
     Comprehensive XPCS data validation.
@@ -195,7 +194,7 @@ def validate_xpcs_data(
     return report
 
 
-def _validate_data_structure(data: Dict[str, Any], report: DataQualityReport) -> None:
+def _validate_data_structure(data: dict[str, Any], report: DataQualityReport) -> None:
     """Validate basic data structure and required keys."""
     required_keys = ["wavevector_q_list", "phi_angles_list", "t1", "t2", "c2_exp"]
 
@@ -212,7 +211,7 @@ def _validate_data_structure(data: Dict[str, Any], report: DataQualityReport) ->
             )
 
 
-def _validate_data_integrity(data: Dict[str, Any], report: DataQualityReport) -> None:
+def _validate_data_integrity(data: dict[str, Any], report: DataQualityReport) -> None:
     """Validate data integrity (finite values, reasonable ranges)."""
     for key, value in data.items():
         if isinstance(value, (np.ndarray, list)) or (
@@ -279,7 +278,7 @@ def _validate_data_integrity(data: Dict[str, Any], report: DataQualityReport) ->
                     )
 
 
-def _validate_array_shapes(data: Dict[str, Any], report: DataQualityReport) -> None:
+def _validate_array_shapes(data: dict[str, Any], report: DataQualityReport) -> None:
     """Validate array shape consistency."""
     try:
         q_list = np.asarray(data.get("wavevector_q_list", []))
@@ -334,7 +333,7 @@ def _validate_array_shapes(data: Dict[str, Any], report: DataQualityReport) -> N
 
 
 def _validate_physics_parameters(
-    data: Dict[str, Any], config: Dict[str, Any], report: DataQualityReport
+    data: dict[str, Any], config: dict[str, Any], report: DataQualityReport
 ) -> None:
     """Validate physics parameters against known constraints."""
     if not HAS_PHYSICS:
@@ -428,7 +427,7 @@ def _validate_physics_parameters(
 
 
 def _validate_correlation_matrices(
-    data: Dict[str, Any], report: DataQualityReport
+    data: dict[str, Any], report: DataQualityReport
 ) -> None:
     """Validate correlation matrix properties."""
     try:
@@ -481,7 +480,7 @@ def _validate_correlation_matrices(
 
 
 def _validate_statistical_properties(
-    data: Dict[str, Any], report: DataQualityReport
+    data: dict[str, Any], report: DataQualityReport
 ) -> None:
     """Validate statistical properties of the data."""
     try:
@@ -526,7 +525,7 @@ def _validate_statistical_properties(
         )
 
 
-def _compute_data_statistics(data: Dict[str, Any], report: DataQualityReport) -> None:
+def _compute_data_statistics(data: dict[str, Any], report: DataQualityReport) -> None:
     """Compute comprehensive data statistics."""
     try:
         stats = {}
@@ -597,7 +596,6 @@ def _compute_quality_score(report: DataQualityReport) -> float:
 # Enhanced validation features for quality control integration
 import hashlib
 import time
-from pathlib import Path
 
 
 @dataclass
@@ -608,10 +606,10 @@ class IncrementalValidationCache:
     validation_level: str
     report: DataQualityReport
     timestamp: float
-    component_hashes: Dict[str, str] = field(default_factory=dict)
+    component_hashes: dict[str, str] = field(default_factory=dict)
 
     def is_valid_for_data(
-        self, data: Dict[str, Any], validation_level: str, max_age: float = 3600
+        self, data: dict[str, Any], validation_level: str, max_age: float = 3600
     ) -> bool:
         """Check if cached result is valid for given data."""
         # Check validation level
@@ -628,14 +626,14 @@ class IncrementalValidationCache:
 
 
 # Global cache for incremental validation
-_validation_cache: Dict[str, IncrementalValidationCache] = {}
+_validation_cache: dict[str, IncrementalValidationCache] = {}
 
 
 def validate_xpcs_data_incremental(
-    data: Dict[str, Any],
-    config: Dict[str, Any] = None,
+    data: dict[str, Any],
+    config: dict[str, Any] = None,
     validation_level: str = "basic",
-    previous_report: Optional[DataQualityReport] = None,
+    previous_report: DataQualityReport | None = None,
     force_revalidate: bool = False,
 ) -> DataQualityReport:
     """
@@ -694,10 +692,10 @@ def validate_xpcs_data_incremental(
 
 
 def validate_data_component(
-    data: Dict[str, Any],
+    data: dict[str, Any],
     component_name: str,
     validation_level: str = "basic",
-    config: Dict[str, Any] = None,
+    config: dict[str, Any] = None,
 ) -> DataQualityReport:
     """
     Validate a specific component of XPCS data for selective validation.
@@ -752,7 +750,7 @@ def validate_data_component(
 
 
 def _perform_incremental_validation(
-    data: Dict[str, Any], config: Dict[str, Any], previous_report: DataQualityReport
+    data: dict[str, Any], config: dict[str, Any], previous_report: DataQualityReport
 ) -> DataQualityReport:
     """Perform optimized incremental validation using previous results."""
     logger.debug("Performing incremental validation")
@@ -801,10 +799,10 @@ def _perform_incremental_validation(
 
 
 def _validate_array_component(
-    data: Dict[str, Any],
+    data: dict[str, Any],
     component_name: str,
     report: DataQualityReport,
-    config: Dict[str, Any] = None,
+    config: dict[str, Any] = None,
 ) -> None:
     """Validate array components (q_list, phi_list)."""
     value = data[component_name]
@@ -854,7 +852,7 @@ def _validate_array_component(
 
 
 def _validate_correlation_component(
-    data: Dict[str, Any], report: DataQualityReport
+    data: dict[str, Any], report: DataQualityReport
 ) -> None:
     """Validate correlation matrix component."""
     c2_exp = data.get("c2_exp")
@@ -891,7 +889,7 @@ def _validate_correlation_component(
 
 
 def _validate_time_component(
-    data: Dict[str, Any], component_name: str, report: DataQualityReport
+    data: dict[str, Any], component_name: str, report: DataQualityReport
 ) -> None:
     """Validate time array components."""
     value = data[component_name]
@@ -911,7 +909,7 @@ def _validate_time_component(
         )
 
 
-def _compute_data_hash(data: Dict[str, Any]) -> str:
+def _compute_data_hash(data: dict[str, Any]) -> str:
     """Compute hash of data for caching."""
     hash_data = []
 
@@ -928,15 +926,15 @@ def _compute_data_hash(data: Dict[str, Any]) -> str:
     return hashlib.md5(combined_str.encode()).hexdigest()
 
 
-def _generate_cache_key(data: Dict[str, Any], validation_level: str) -> str:
+def _generate_cache_key(data: dict[str, Any], validation_level: str) -> str:
     """Generate cache key for validation results."""
     data_hash = _compute_data_hash(data)
     return f"{validation_level}:{data_hash}"
 
 
 def _check_validation_cache(
-    cache_key: str, data: Dict[str, Any], validation_level: str
-) -> Optional[DataQualityReport]:
+    cache_key: str, data: dict[str, Any], validation_level: str
+) -> DataQualityReport | None:
     """Check validation cache for existing results."""
     if cache_key in _validation_cache:
         cache_entry = _validation_cache[cache_key]
@@ -946,7 +944,7 @@ def _check_validation_cache(
 
 
 def _cache_validation_result(
-    data: Dict[str, Any], validation_level: str, report: DataQualityReport
+    data: dict[str, Any], validation_level: str, report: DataQualityReport
 ) -> None:
     """Cache validation result for future use."""
     data_hash = _compute_data_hash(data)
@@ -972,8 +970,8 @@ def _cache_validation_result(
 
 
 def _identify_changed_components(
-    data: Dict[str, Any], previous_report: DataQualityReport
-) -> List[str]:
+    data: dict[str, Any], previous_report: DataQualityReport
+) -> list[str]:
     """Identify which data components have changed since last validation."""
     # For now, simple implementation - in production could use more sophisticated change detection
     if (
@@ -1015,7 +1013,7 @@ def clear_validation_cache() -> None:
     logger.debug("Validation cache cleared")
 
 
-def get_cache_stats() -> Dict[str, Any]:
+def get_cache_stats() -> dict[str, Any]:
     """Get validation cache statistics."""
     if not _validation_cache:
         return {"cache_size": 0, "message": "Cache is empty"}

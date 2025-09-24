@@ -26,10 +26,10 @@ Physical Context:
 """
 
 import time
-import warnings
+from collections.abc import Callable
 from dataclasses import dataclass
 from functools import wraps
-from typing import Any, Callable, Dict, List, Optional, Tuple, Union
+from typing import Any
 
 import numpy as np
 
@@ -60,7 +60,7 @@ class DifferentiationConfig:
     """Configuration for numerical differentiation."""
 
     method: str = DifferentiationMethod.ADAPTIVE
-    step_size: Optional[float] = None  # Auto-computed if None
+    step_size: float | None = None  # Auto-computed if None
     relative_step: float = SQRT_EPS
     min_step: float = 1e-15
     max_step: float = 1e-3
@@ -78,11 +78,11 @@ class GradientResult:
 
     gradient: np.ndarray
     step_sizes: np.ndarray
-    error_estimate: Optional[np.ndarray] = None
+    error_estimate: np.ndarray | None = None
     method_used: str = "unknown"
     function_calls: int = 0
     computation_time: float = 0.0
-    warnings: List[str] = None
+    warnings: list[str] = None
 
     def __post_init__(self):
         if self.warnings is None:
@@ -220,7 +220,7 @@ def _backward_difference_single(
 
 def _richardson_extrapolation(
     func: Callable, x: np.ndarray, index: int, h: float, terms: int = 4
-) -> Tuple[float, float]:
+) -> tuple[float, float]:
     """
     Richardson extrapolation for higher-order accuracy.
 
@@ -263,8 +263,8 @@ def _richardson_extrapolation(
 @log_performance(threshold=0.01)
 def numpy_gradient(
     func: Callable,
-    argnums: Union[int, List[int]] = 0,
-    config: Optional[DifferentiationConfig] = None,
+    argnums: int | list[int] = 0,
+    config: DifferentiationConfig | None = None,
 ) -> Callable:
     """
     NumPy-based gradient computation with same interface as JAX grad().
@@ -522,7 +522,7 @@ def _process_parameter_chunk(
     func: Callable,
     x: np.ndarray,
     h: np.ndarray,
-    chunk_indices: List[int],
+    chunk_indices: list[int],
     config: DifferentiationConfig,
 ) -> GradientResult:
     """Process a chunk of parameters for gradient computation."""
@@ -699,8 +699,8 @@ def _finite_difference_gradient(
 @log_performance(threshold=0.1)
 def numpy_hessian(
     func: Callable,
-    argnums: Union[int, List[int]] = 0,
-    config: Optional[DifferentiationConfig] = None,
+    argnums: int | list[int] = 0,
+    config: DifferentiationConfig | None = None,
 ) -> Callable:
     """
     NumPy-based Hessian computation with same interface as JAX hessian().
@@ -843,9 +843,9 @@ def _compute_hessian_finite_diff(
 def validate_gradient_accuracy(
     func: Callable,
     x: np.ndarray,
-    analytical_grad: Optional[np.ndarray] = None,
+    analytical_grad: np.ndarray | None = None,
     tolerance: float = 1e-6,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """
     Validate numerical gradient accuracy against analytical solution.
 

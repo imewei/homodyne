@@ -16,9 +16,9 @@ Physical Models:
 """
 
 import time
-import warnings
 from abc import ABC, abstractmethod
-from typing import Any, Callable, Dict, List, Optional, Tuple, Union
+from collections.abc import Callable
+from typing import Any
 
 import numpy as np
 
@@ -39,8 +39,6 @@ from homodyne.core.jax_backend import (
     validate_backend,
 )
 from homodyne.core.physics import (
-    PhysicsConstants,
-    parameter_bounds,
     validate_parameters,
 )
 from homodyne.utils.logging import get_logger, log_calls
@@ -56,7 +54,7 @@ class PhysicsModelBase(ABC):
     common functionality for parameter management and validation.
     """
 
-    def __init__(self, name: str, parameter_names: List[str]):
+    def __init__(self, name: str, parameter_names: list[str]):
         """
         Initialize base model.
 
@@ -85,7 +83,7 @@ class PhysicsModelBase(ABC):
         pass
 
     @abstractmethod
-    def get_parameter_bounds(self) -> List[Tuple[float, float]]:
+    def get_parameter_bounds(self) -> list[tuple[float, float]]:
         """Get parameter bounds for optimization."""
         pass
 
@@ -98,10 +96,10 @@ class PhysicsModelBase(ABC):
         """Validate parameter values against bounds and constraints."""
         return validate_parameters(params, self.get_parameter_bounds())
 
-    def get_parameter_dict(self, params: jnp.ndarray) -> Dict[str, float]:
+    def get_parameter_dict(self, params: jnp.ndarray) -> dict[str, float]:
         """Convert parameter array to named dictionary."""
         # Ensure params is at least 1D to avoid 0D array indexing issues
-        if jax_available and hasattr(params, 'ndim'):
+        if jax_available and hasattr(params, "ndim"):
             # Convert JAX arrays to NumPy for safe indexing
             params_np = np.atleast_1d(np.asarray(params))
         else:
@@ -112,7 +110,7 @@ class PhysicsModelBase(ABC):
             raise ValueError(f"Expected {self.n_params} parameters, got {params_len}")
 
         # Convert to regular Python floats to avoid JAX scalar issues
-        return {name: float(val) for name, val in zip(self.parameter_names, params_np)}
+        return {name: float(val) for name, val in zip(self.parameter_names, params_np, strict=False)}
 
     def __repr__(self) -> str:
         return (
@@ -161,16 +159,18 @@ class DiffusionModel(PhysicsModelBase):
             logger.warning("Invalid diffusion parameters - results may be unreliable")
 
         # Handle q as array - convert to scalar
-        if hasattr(q, 'shape') and q.shape:
+        if hasattr(q, "shape") and q.shape:
             # If q is an array, use mean value for scalar computations
             q_scalar = float(jnp.mean(q))
-            logger.debug(f"DiffusionModel: Converting q array to scalar: {q_scalar:.6f}")
+            logger.debug(
+                f"DiffusionModel: Converting q array to scalar: {q_scalar:.6f}"
+            )
         else:
             q_scalar = float(q)
 
         return compute_g1_diffusion(params, t1, t2, q_scalar, dt)
 
-    def get_parameter_bounds(self) -> List[Tuple[float, float]]:
+    def get_parameter_bounds(self) -> list[tuple[float, float]]:
         """Standard bounds for diffusion parameters."""
         return [
             (1.0, 1e6),  # D0: 1.0 to 1e6 Å²/s (consistent with physics.py)
@@ -229,7 +229,7 @@ class ShearModel(PhysicsModelBase):
             logger.warning("Invalid shear parameters - results may be unreliable")
 
         # Handle q as array - convert to scalar
-        if hasattr(q, 'shape') and q.shape:
+        if hasattr(q, "shape") and q.shape:
             # If q is an array, use mean value for scalar computations
             q_scalar = float(jnp.mean(q))
             logger.debug(f"ShearModel: Converting q array to scalar: {q_scalar:.6f}")
@@ -240,7 +240,7 @@ class ShearModel(PhysicsModelBase):
         full_params = jnp.concatenate([jnp.array([100.0, 0.0, 10.0]), params])
         return compute_g1_shear(full_params, t1, t2, phi, q_scalar, L, dt)
 
-    def get_parameter_bounds(self) -> List[Tuple[float, float]]:
+    def get_parameter_bounds(self) -> list[tuple[float, float]]:
         """Standard bounds for shear parameters."""
         return [
             (1e-5, 1.0),  # gamma_dot_0: 1e-5 to 1.0 s⁻¹ (consistent with physics.py)
@@ -248,7 +248,6 @@ class ShearModel(PhysicsModelBase):
             (-1.0, 1.0),  # gamma_dot_offset: -1 to 1 s⁻¹ (consistent with physics.py)
             (-30.0, 30.0),  # phi0: -30 to 30 degrees (consistent with physics.py)
         ]
-
 
     def get_default_parameters(self) -> jnp.ndarray:
         """Default values for typical shear flow."""
@@ -322,7 +321,7 @@ class CombinedModel(PhysicsModelBase):
             )
 
         # Handle q as array - convert to scalar
-        if hasattr(q, 'shape') and q.shape:
+        if hasattr(q, "shape") and q.shape:
             # If q is an array, use mean value for scalar computations
             q_scalar = float(jnp.mean(q))
             logger.debug(f"Converting q array to scalar: {q_scalar:.6f}")
@@ -331,18 +330,26 @@ class CombinedModel(PhysicsModelBase):
 
         if self.analysis_mode.startswith("static"):
             # Static mode: only diffusion, no shear
-            logger.debug(f"CombinedModel.compute_g1: calling compute_g1_diffusion with params.shape={params.shape}")
+            logger.debug(
+                f"CombinedModel.compute_g1: calling compute_g1_diffusion with params.shape={params.shape}"
+            )
             return compute_g1_diffusion(params, t1, t2, q_scalar, dt)
         else:
             # Laminar flow mode: full model
-            logger.debug(f"CombinedModel.compute_g1: calling compute_g1_total with params.shape={params.shape}, t1.shape={t1.shape}, t2.shape={t2.shape}, phi.shape={phi.shape}, q_scalar={q_scalar}, L={L}, dt={dt}")
+            logger.debug(
+                f"CombinedModel.compute_g1: calling compute_g1_total with params.shape={params.shape}, t1.shape={t1.shape}, t2.shape={t2.shape}, phi.shape={phi.shape}, q_scalar={q_scalar}, L={L}, dt={dt}"
+            )
             try:
                 result = compute_g1_total(params, t1, t2, phi, q_scalar, L, dt)
-                logger.debug(f"CombinedModel.compute_g1: compute_g1_total completed, result.shape={result.shape}, min={jnp.min(result):.6e}, max={jnp.max(result):.6e}")
+                logger.debug(
+                    f"CombinedModel.compute_g1: compute_g1_total completed, result.shape={result.shape}, min={jnp.min(result):.6e}, max={jnp.max(result):.6e}"
+                )
                 return result
             except Exception as e:
-                logger.error(f"CombinedModel.compute_g1: compute_g1_total failed with error: {e}")
-                logger.error(f"CombinedModel.compute_g1: traceback:", exc_info=True)
+                logger.error(
+                    f"CombinedModel.compute_g1: compute_g1_total failed with error: {e}"
+                )
+                logger.error("CombinedModel.compute_g1: traceback:", exc_info=True)
                 raise
 
     @log_calls(include_args=False)
@@ -361,7 +368,7 @@ class CombinedModel(PhysicsModelBase):
         Compute g2 with scaled fitting: g₂ = offset + contrast × [g₁]²
         """
         # Handle q as array - convert to scalar
-        if hasattr(q, 'shape') and q.shape:
+        if hasattr(q, "shape") and q.shape:
             # If q is an array, use mean value for scalar computations
             q_scalar = float(jnp.mean(q))
         else:
@@ -388,7 +395,7 @@ class CombinedModel(PhysicsModelBase):
             params, data, sigma, t1, t2, phi, q, L, contrast, offset
         )
 
-    def get_parameter_bounds(self) -> List[Tuple[float, float]]:
+    def get_parameter_bounds(self) -> list[tuple[float, float]]:
         """Get bounds appropriate for analysis mode."""
         bounds = self.diffusion_model.get_parameter_bounds()
 
@@ -464,7 +471,7 @@ class CombinedModel(PhysicsModelBase):
         else:
             return "none_available"
 
-    def get_gradient_capabilities(self) -> Dict[str, Any]:
+    def get_gradient_capabilities(self) -> dict[str, Any]:
         """Get comprehensive gradient capability information."""
         backend_info = validate_backend()
         device_info = get_device_info()
@@ -500,7 +507,7 @@ class CombinedModel(PhysicsModelBase):
             ),
         }
 
-    def _generate_backend_summary(self, backend_info: Dict, device_info: Dict) -> str:
+    def _generate_backend_summary(self, backend_info: dict, device_info: dict) -> str:
         """Generate human-readable backend summary."""
         if backend_info["jax_available"]:
             devices = device_info.get("devices", ["unknown"])
@@ -514,8 +521,8 @@ class CombinedModel(PhysicsModelBase):
             return "No differentiation backend available"
 
     def benchmark_gradient_performance(
-        self, test_params: Optional[jnp.ndarray] = None
-    ) -> Dict[str, Any]:
+        self, test_params: jnp.ndarray | None = None
+    ) -> dict[str, Any]:
         """Benchmark gradient computation performance across available methods."""
         if test_params is None:
             test_params = self.get_default_parameters()
@@ -634,12 +641,12 @@ class CombinedModel(PhysicsModelBase):
                         method_info["computation_time"] / best_time
                     )
 
-        logger.info(f"Gradient performance benchmark completed")
+        logger.info("Gradient performance benchmark completed")
         return benchmark_results
 
     def validate_gradient_accuracy(
-        self, test_params: Optional[jnp.ndarray] = None, tolerance: float = 1e-6
-    ) -> Dict[str, Any]:
+        self, test_params: jnp.ndarray | None = None, tolerance: float = 1e-6
+    ) -> dict[str, Any]:
         """Validate gradient accuracy against reference solutions."""
         if test_params is None:
             test_params = self.get_default_parameters()
@@ -726,7 +733,7 @@ class CombinedModel(PhysicsModelBase):
         logger.info("Gradient accuracy validation completed")
         return validation_results
 
-    def get_optimization_recommendations(self) -> List[str]:
+    def get_optimization_recommendations(self) -> list[str]:
         """Get optimization recommendations based on available capabilities."""
         capabilities = self.get_gradient_capabilities()
         recommendations = []
@@ -785,7 +792,7 @@ class CombinedModel(PhysicsModelBase):
 
         return recommendations
 
-    def get_model_info(self) -> Dict:
+    def get_model_info(self) -> dict:
         """Get comprehensive model information with enhanced capabilities."""
         capabilities = self.get_gradient_capabilities()
 
@@ -834,7 +841,7 @@ def create_model(analysis_mode: str) -> CombinedModel:
     return CombinedModel(analysis_mode=analysis_mode)
 
 
-def get_available_models() -> List[str]:
+def get_available_models() -> list[str]:
     """Get list of available analysis modes."""
     return ["static_isotropic", "static_anisotropic", "laminar_flow"]
 

@@ -10,14 +10,15 @@ Hypothesis-based property tests for mathematical invariants and constraints:
 - Edge case behavior
 """
 
-import pytest
+
 import numpy as np
-from typing import Dict, Any, Tuple
+import pytest
 
 # Handle JAX imports
 try:
     import jax
     import jax.numpy as jnp
+
     JAX_AVAILABLE = True
 except ImportError:
     JAX_AVAILABLE = False
@@ -25,8 +26,10 @@ except ImportError:
 
 # Handle Hypothesis imports
 try:
-    from hypothesis import given, strategies as st, assume, settings
+    from hypothesis import assume, given, settings
+    from hypothesis import strategies as st
     from hypothesis.extra.numpy import arrays
+
     HAS_HYPOTHESIS = True
 except ImportError:
     HAS_HYPOTHESIS = False
@@ -36,28 +39,28 @@ except ImportError:
 # Custom strategies for physical parameters
 def physical_parameters():
     """Generate physically reasonable parameter sets."""
-    return st.fixed_dictionaries({
-        'offset': st.floats(min_value=0.5, max_value=2.0),
-        'contrast': st.floats(min_value=0.0, max_value=1.0),
-        'diffusion_coefficient': st.floats(min_value=0.001, max_value=1.0),
-        'shear_rate': st.floats(min_value=0.0, max_value=0.5),
-        'L': st.floats(min_value=0.1, max_value=10.0)
-    })
+    return st.fixed_dictionaries(
+        {
+            "offset": st.floats(min_value=0.5, max_value=2.0),
+            "contrast": st.floats(min_value=0.0, max_value=1.0),
+            "diffusion_coefficient": st.floats(min_value=0.001, max_value=1.0),
+            "shear_rate": st.floats(min_value=0.0, max_value=0.5),
+            "L": st.floats(min_value=0.1, max_value=10.0),
+        }
+    )
 
 
 def time_arrays(min_size=3, max_size=20):
     """Generate time arrays for correlation functions."""
     return st.integers(min_value=min_size, max_value=max_size).flatmap(
-        lambda n: st.just((
-            np.meshgrid(np.arange(n), np.arange(n), indexing='ij')
-        ))
+        lambda n: st.just(np.meshgrid(np.arange(n), np.arange(n), indexing="ij"))
     )
 
 
 def angle_arrays(min_angles=6, max_angles=72):
     """Generate angle arrays."""
     return st.integers(min_value=min_angles, max_value=max_angles).map(
-        lambda n: np.linspace(0, 2*np.pi, n)
+        lambda n: np.linspace(0, 2 * np.pi, n)
     )
 
 
@@ -75,7 +78,7 @@ class TestJAXBackendProperties:
     @given(
         params=physical_parameters(),
         q=q_values(),
-        time_data=time_arrays(min_size=3, max_size=10)
+        time_data=time_arrays(min_size=3, max_size=10),
     )
     @settings(max_examples=50, deadline=None)
     def test_g1_diffusion_physical_bounds(self, params, q, time_data):
@@ -85,7 +88,7 @@ class TestJAXBackendProperties:
         t1, t2 = time_data
         t1 = jnp.array(t1)
         t2 = jnp.array(t2)
-        D = params['diffusion_coefficient']
+        D = params["diffusion_coefficient"]
 
         result = compute_g1_diffusion_jax(t1, t2, q, D)
 
@@ -99,14 +102,16 @@ class TestJAXBackendProperties:
         # Diagonal elements should be 1 (t1 = t2 case)
         diagonal = jnp.diag(result)
         np.testing.assert_array_almost_equal(
-            diagonal, jnp.ones_like(diagonal), decimal=10,
-            err_msg="Diagonal elements should be 1"
+            diagonal,
+            jnp.ones_like(diagonal),
+            decimal=10,
+            err_msg="Diagonal elements should be 1",
         )
 
     @given(
         params=physical_parameters(),
         q=q_values(),
-        angles=angle_arrays(min_angles=6, max_angles=24)
+        angles=angle_arrays(min_angles=6, max_angles=24),
     )
     @settings(max_examples=30, deadline=None)
     def test_g1_shear_physical_bounds(self, params, q, angles):
@@ -118,8 +123,8 @@ class TestJAXBackendProperties:
         t1 = jnp.array([[0, 1], [1, 0]])
         t2 = jnp.array([[0, 1], [1, 0]])
 
-        gamma_dot = params['shear_rate']
-        L = params['L']
+        gamma_dot = params["shear_rate"]
+        L = params["L"]
 
         result = compute_g1_shear_jax(phi, t1, t2, gamma_dot, q, L)
 
@@ -134,15 +139,14 @@ class TestJAXBackendProperties:
         if gamma_dot == 0.0:
             expected = jnp.ones_like(result)
             np.testing.assert_array_almost_equal(
-                result, expected, decimal=8,
-                err_msg="Zero shear should give all ones"
+                result, expected, decimal=8, err_msg="Zero shear should give all ones"
             )
 
     @given(
         params=physical_parameters(),
         q=q_values(),
         time_data=time_arrays(min_size=3, max_size=8),
-        angles=angle_arrays(min_angles=6, max_angles=18)
+        angles=angle_arrays(min_angles=6, max_angles=18),
     )
     @settings(max_examples=30, deadline=None)
     def test_c2_model_physical_bounds(self, params, q, time_data, angles):
@@ -163,18 +167,17 @@ class TestJAXBackendProperties:
         assert jnp.all(jnp.isfinite(result)), "g2 must be finite"
 
         # Diagonal elements should equal offset + contrast
-        expected_diagonal = params['offset'] + params['contrast']
+        expected_diagonal = params["offset"] + params["contrast"]
         for angle_idx in range(result.shape[0]):
             diagonal = jnp.diag(result[angle_idx])
             np.testing.assert_array_almost_equal(
-                diagonal, jnp.full_like(diagonal, expected_diagonal), decimal=6,
-                err_msg=f"Diagonal elements wrong for angle {angle_idx}"
+                diagonal,
+                jnp.full_like(diagonal, expected_diagonal),
+                decimal=6,
+                err_msg=f"Diagonal elements wrong for angle {angle_idx}",
             )
 
-    @given(
-        params=physical_parameters(),
-        time_data=time_arrays(min_size=3, max_size=10)
-    )
+    @given(params=physical_parameters(), time_data=time_arrays(min_size=3, max_size=10))
     @settings(max_examples=20, deadline=None)
     def test_g1_diffusion_symmetry(self, params, time_data):
         """Test g1_diffusion time-reversal symmetry."""
@@ -183,7 +186,7 @@ class TestJAXBackendProperties:
         t1, t2 = time_data
         t1 = jnp.array(t1)
         t2 = jnp.array(t2)
-        D = params['diffusion_coefficient']
+        D = params["diffusion_coefficient"]
         q = 0.01
 
         # Compute g1(t1, t2)
@@ -193,14 +196,16 @@ class TestJAXBackendProperties:
         result2 = compute_g1_diffusion_jax(t2, t1, q, D)
 
         np.testing.assert_array_almost_equal(
-            result1, result2, decimal=10,
-            err_msg="g1_diffusion should be symmetric in t1, t2"
+            result1,
+            result2,
+            decimal=10,
+            err_msg="g1_diffusion should be symmetric in t1, t2",
         )
 
     @given(
         params1=physical_parameters(),
         params2=physical_parameters(),
-        scale=st.floats(min_value=0.1, max_value=10.0)
+        scale=st.floats(min_value=0.1, max_value=10.0),
     )
     @settings(max_examples=20, deadline=None)
     def test_parameter_scaling_properties(self, params1, params2, scale):
@@ -218,24 +223,23 @@ class TestJAXBackendProperties:
 
         # Scale contrast and test linearity
         scaled_params = params1.copy()
-        scaled_params['contrast'] *= scale
+        scaled_params["contrast"] *= scale
 
         result_scaled = compute_c2_model_jax(scaled_params, t1, t2, phi, q)
 
         # The difference should scale linearly with contrast
-        diff1 = result1 - params1['offset']
-        diff_scaled = result_scaled - params1['offset']
+        diff1 = result1 - params1["offset"]
+        diff_scaled = result_scaled - params1["offset"]
 
         expected_scaling = diff1 * scale
         np.testing.assert_array_almost_equal(
-            diff_scaled, expected_scaling, decimal=8,
-            err_msg="Contrast scaling should be linear"
+            diff_scaled,
+            expected_scaling,
+            decimal=8,
+            err_msg="Contrast scaling should be linear",
         )
 
-    @given(
-        params=physical_parameters(),
-        q=q_values()
-    )
+    @given(params=physical_parameters(), q=q_values())
     @settings(max_examples=20, deadline=None)
     def test_diffusion_monotonicity(self, params, q):
         """Test that diffusion decreases monotonically with time."""
@@ -246,14 +250,15 @@ class TestJAXBackendProperties:
         t1_base = jnp.zeros_like(times)
         t2_varying = times
 
-        D = params['diffusion_coefficient']
+        D = params["diffusion_coefficient"]
 
         result = compute_g1_diffusion_jax(t1_base, t2_varying, q, D)
 
         # Should be monotonically decreasing (or at least non-increasing)
         for i in range(len(result) - 1):
-            assert result[i] >= result[i + 1] - 1e-10, \
-                f"g1_diffusion should decrease with time: {result[i]} >= {result[i+1]}"
+            assert (
+                result[i] >= result[i + 1] - 1e-10
+            ), f"g1_diffusion should decrease with time: {result[i]} >= {result[i + 1]}"
 
 
 @pytest.mark.property
@@ -264,7 +269,7 @@ class TestResidualProperties:
     @given(
         params=physical_parameters(),
         noise_scale=st.floats(min_value=0.001, max_value=0.1),
-        q=q_values()
+        q=q_values(),
     )
     @settings(max_examples=20, deadline=None)
     def test_residuals_zero_for_perfect_fit(self, params, noise_scale, q):
@@ -277,7 +282,7 @@ class TestResidualProperties:
         # Simple test case
         t1 = jnp.array([[0, 1, 2], [1, 0, 1], [2, 1, 0]])
         t2 = jnp.array([[0, 1, 2], [1, 0, 1], [2, 1, 0]])
-        phi = jnp.array([0.0, jnp.pi/2, jnp.pi])
+        phi = jnp.array([0.0, jnp.pi / 2, jnp.pi])
 
         # Generate perfect model data
         c2_exp = compute_c2_model_jax(params, t1, t2, phi, q)
@@ -297,7 +302,7 @@ class TestResidualProperties:
     @given(
         params=physical_parameters(),
         offset_scale=st.floats(min_value=0.01, max_value=0.5),
-        noise_scale=st.floats(min_value=0.001, max_value=0.1)
+        noise_scale=st.floats(min_value=0.001, max_value=0.1),
     )
     @settings(max_examples=15, deadline=None)
     def test_chi_squared_properties(self, params, offset_scale, noise_scale):
@@ -305,7 +310,7 @@ class TestResidualProperties:
         if not JAX_AVAILABLE:
             pytest.skip("JAX not available")
 
-        from homodyne.core.jax_backend import compute_c2_model_jax, chi_squared_jax
+        from homodyne.core.jax_backend import chi_squared_jax, compute_c2_model_jax
 
         t1 = jnp.array([[0, 1], [1, 0]])
         t2 = jnp.array([[0, 1], [1, 0]])
@@ -325,22 +330,21 @@ class TestResidualProperties:
         chi2_offset = chi_squared_jax(params, c2_offset, sigma, t1, t2, phi, q)
 
         # Chi-squared should increase with worse fit
-        assert chi2_offset > chi2_perfect, "Imperfect fit should have higher chi-squared"
+        assert (
+            chi2_offset > chi2_perfect
+        ), "Imperfect fit should have higher chi-squared"
 
         # Chi-squared should always be non-negative
         assert chi2_offset >= 0.0, "Chi-squared must be non-negative"
 
-    @given(
-        params=physical_parameters(),
-        scale=st.floats(min_value=0.1, max_value=10.0)
-    )
+    @given(params=physical_parameters(), scale=st.floats(min_value=0.1, max_value=10.0))
     @settings(max_examples=15, deadline=None)
     def test_chi_squared_scaling_with_sigma(self, params, scale):
         """Test chi-squared scaling with uncertainty."""
         if not JAX_AVAILABLE:
             pytest.skip("JAX not available")
 
-        from homodyne.core.jax_backend import compute_c2_model_jax, chi_squared_jax
+        from homodyne.core.jax_backend import chi_squared_jax, compute_c2_model_jax
 
         t1 = jnp.array([[0, 1], [1, 0]])
         t2 = jnp.array([[0, 1], [1, 0]])
@@ -359,12 +363,14 @@ class TestResidualProperties:
         chi2_2 = chi_squared_jax(params, c2_exp, sigma2, t1, t2, phi, q)
 
         # Chi-squared should scale inversely with sigma^2
-        expected_ratio = 1.0 / (scale ** 2)
+        expected_ratio = 1.0 / (scale**2)
         actual_ratio = chi2_2 / (chi2_1 + 1e-12)
 
         np.testing.assert_almost_equal(
-            actual_ratio, expected_ratio, decimal=6,
-            err_msg=f"Chi-squared sigma scaling wrong: {actual_ratio} != {expected_ratio}"
+            actual_ratio,
+            expected_ratio,
+            decimal=6,
+            err_msg=f"Chi-squared sigma scaling wrong: {actual_ratio} != {expected_ratio}",
         )
 
 
@@ -374,7 +380,7 @@ class TestNumericalStabilityProperties:
 
     @given(
         small_values=st.floats(min_value=1e-12, max_value=1e-6),
-        large_values=st.floats(min_value=1e6, max_value=1e12)
+        large_values=st.floats(min_value=1e6, max_value=1e12),
     )
     @settings(max_examples=10, deadline=None)
     def test_extreme_value_stability(self, small_values, large_values):
@@ -391,7 +397,9 @@ class TestNumericalStabilityProperties:
         result_small = compute_g1_diffusion_jax(t1, t2, 0.01, 0.1)
 
         # Should still be finite and within bounds
-        assert jnp.all(jnp.isfinite(result_small)), "Small values should give finite results"
+        assert jnp.all(
+            jnp.isfinite(result_small)
+        ), "Small values should give finite results"
         assert jnp.all(result_small >= 0.0), "Small values should respect bounds"
         assert jnp.all(result_small <= 1.0), "Small values should respect bounds"
 
@@ -403,12 +411,13 @@ class TestNumericalStabilityProperties:
         result_large = compute_g1_diffusion_jax(t1_large, t2_large, 0.01, 0.1)
 
         # Should decay to near zero but remain finite
-        assert jnp.all(jnp.isfinite(result_large)), "Large values should give finite results"
+        assert jnp.all(
+            jnp.isfinite(result_large)
+        ), "Large values should give finite results"
         assert jnp.all(result_large >= 0.0), "Large values should respect bounds"
 
     @given(
-        dimension=st.integers(min_value=2, max_value=50),
-        params=physical_parameters()
+        dimension=st.integers(min_value=2, max_value=50), params=physical_parameters()
     )
     @settings(max_examples=10, deadline=None)
     def test_scaling_with_matrix_size(self, dimension, params):
@@ -419,14 +428,20 @@ class TestNumericalStabilityProperties:
         from homodyne.core.jax_backend import compute_c2_model_jax
 
         # Create matrices of different sizes
-        t1, t2 = jnp.meshgrid(jnp.arange(dimension), jnp.arange(dimension), indexing='ij')
-        phi = jnp.linspace(0, 2*jnp.pi, 8)  # Keep angles reasonable
+        t1, t2 = jnp.meshgrid(
+            jnp.arange(dimension), jnp.arange(dimension), indexing="ij"
+        )
+        phi = jnp.linspace(0, 2 * jnp.pi, 8)  # Keep angles reasonable
 
         result = compute_c2_model_jax(params, t1, t2, phi, 0.01)
 
         # Should maintain numerical stability regardless of size
-        assert jnp.all(jnp.isfinite(result)), f"Size {dimension} should give finite results"
-        assert jnp.all(result >= 1.0 - 1e-10), f"Size {dimension} should respect physical bounds"
+        assert jnp.all(
+            jnp.isfinite(result)
+        ), f"Size {dimension} should give finite results"
+        assert jnp.all(
+            result >= 1.0 - 1e-10
+        ), f"Size {dimension} should respect physical bounds"
 
         # Shape should be correct
         expected_shape = (len(phi), dimension, dimension)
@@ -434,10 +449,10 @@ class TestNumericalStabilityProperties:
 
     @given(
         angles=st.lists(
-            st.floats(min_value=0.0, max_value=2*np.pi),
+            st.floats(min_value=0.0, max_value=2 * np.pi),
             min_size=3,
             max_size=100,
-            unique=True
+            unique=True,
         ).map(lambda x: sorted(x))
     )
     @settings(max_examples=10, deadline=None)

@@ -23,7 +23,7 @@ Performance optimizations:
 
 from dataclasses import dataclass
 from enum import Enum
-from typing import Any, Dict, List, Optional, Tuple, Union
+from typing import Any
 
 import numpy as np
 
@@ -33,7 +33,6 @@ try:
 
     HAS_JAX = True
 except ImportError:
-    import jax.numpy as jnp
 
     HAS_JAX = False
 
@@ -89,14 +88,14 @@ class FilterCriteria(Enum):
 class FilteringResult:
     """Result of data filtering operation."""
 
-    selected_indices: Optional[np.ndarray]
+    selected_indices: np.ndarray | None
     total_available: int
     total_selected: int
-    filters_applied: List[str]
-    filter_statistics: Dict[str, Any]
+    filters_applied: list[str]
+    filter_statistics: dict[str, Any]
     fallback_used: bool
-    warnings: List[str]
-    errors: List[str]
+    warnings: list[str]
+    errors: list[str]
 
 
 class DataFilteringError(Exception):
@@ -113,7 +112,7 @@ class XPCSDataFilter:
     q-range, quality thresholds, and frame-based criteria.
     """
 
-    def __init__(self, config: Optional[Dict[str, Any]] = None):
+    def __init__(self, config: dict[str, Any] | None = None):
         """
         Initialize the data filter.
 
@@ -139,7 +138,7 @@ class XPCSDataFilter:
         self,
         dqlist: np.ndarray,
         dphilist: np.ndarray,
-        correlation_matrices: Optional[List[np.ndarray]] = None,
+        correlation_matrices: list[np.ndarray] | None = None,
     ) -> FilteringResult:
         """
         Apply comprehensive filtering to XPCS data indices.
@@ -244,7 +243,7 @@ class XPCSDataFilter:
 
     def _apply_q_range_filtering(
         self, dqlist: np.ndarray, result: FilteringResult
-    ) -> Optional[np.ndarray]:
+    ) -> np.ndarray | None:
         """Apply q-range filtering based on wavevector values."""
         q_range = self.filtering_config.get("q_range", {})
         if not q_range:
@@ -289,7 +288,7 @@ class XPCSDataFilter:
 
     def _apply_phi_range_filtering(
         self, dphilist: np.ndarray, result: FilteringResult
-    ) -> Optional[np.ndarray]:
+    ) -> np.ndarray | None:
         """Apply phi-range filtering based on angle values."""
         phi_range = self.filtering_config.get("phi_range", {})
         if not phi_range:
@@ -329,8 +328,8 @@ class XPCSDataFilter:
         return mask
 
     def _apply_quality_filtering(
-        self, correlation_matrices: List[np.ndarray], result: FilteringResult
-    ) -> Optional[np.ndarray]:
+        self, correlation_matrices: list[np.ndarray], result: FilteringResult
+    ) -> np.ndarray | None:
         """Apply quality-based filtering using correlation matrix properties."""
         quality_threshold = self.filtering_config.get("quality_threshold")
         if quality_threshold is None:
@@ -378,7 +377,7 @@ class XPCSDataFilter:
 
     def _apply_frame_filtering(
         self, total_count: int, result: FilteringResult
-    ) -> Optional[np.ndarray]:
+    ) -> np.ndarray | None:
         """Apply frame-based filtering beyond basic start/end."""
         frame_filtering = self.filtering_config.get("frame_filtering", {})
         if not frame_filtering:
@@ -457,7 +456,7 @@ class XPCSDataFilter:
             return 0.0
 
     def _combine_filter_masks(
-        self, filter_masks: Dict[str, np.ndarray], result: FilteringResult
+        self, filter_masks: dict[str, np.ndarray], result: FilteringResult
     ) -> np.ndarray:
         """Combine multiple filter masks using specified criteria."""
         if not filter_masks:
@@ -507,7 +506,7 @@ class XPCSDataFilter:
         return result
 
     def _validate_q_range_physics(
-        self, q_min: Optional[float], q_max: Optional[float], result: FilteringResult
+        self, q_min: float | None, q_max: float | None, result: FilteringResult
     ) -> None:
         """Validate q-range against physics constraints."""
         if not HAS_PHYSICS:
@@ -555,9 +554,9 @@ class XPCSDataFilter:
 def apply_data_filtering(
     dqlist: np.ndarray,
     dphilist: np.ndarray,
-    config: Dict[str, Any],
-    correlation_matrices: Optional[List[np.ndarray]] = None,
-) -> Optional[np.ndarray]:
+    config: dict[str, Any],
+    correlation_matrices: list[np.ndarray] | None = None,
+) -> np.ndarray | None:
     """
     Convenience function for applying data filtering.
 

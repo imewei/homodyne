@@ -19,7 +19,7 @@ Key Features:
 """
 
 from dataclasses import dataclass
-from typing import Any, Dict, List, NamedTuple, Optional, Tuple, Union
+from typing import Any
 
 import numpy as np
 
@@ -47,8 +47,11 @@ except ImportError:
 
 
 try:
-    from homodyne.core.physics import (clip_parameters, parameter_bounds,
-                                       validate_parameters)
+    from homodyne.core.physics import (
+        clip_parameters,
+        parameter_bounds,
+        validate_parameters,
+    )
     from homodyne.core.theory import TheoryEngine
 except ImportError:
     logger = get_logger(__name__)
@@ -68,65 +71,93 @@ class ParameterSpace:
     """
 
     # Scaling parameters (always present)
-    contrast_bounds: Tuple[float, float] = (1e-10, 1.0)
-    offset_bounds: Tuple[float, float] = (1e-10, 2.0)
-    contrast_prior: Tuple[float, float] = (0.3, 0.1)  # (mu, sigma) for TruncatedNormal
-    offset_prior: Tuple[float, float] = (1.0, 0.1)  # (mu, sigma) for TruncatedNormal
+    contrast_bounds: tuple[float, float] = (1e-10, 1.0)
+    offset_bounds: tuple[float, float] = (1e-10, 2.0)
+    contrast_prior: tuple[float, float] = (0.3, 0.1)  # (mu, sigma) for TruncatedNormal
+    offset_prior: tuple[float, float] = (1.0, 0.1)  # (mu, sigma) for TruncatedNormal
 
     # Physical parameter bounds (mode-dependent) - STANDARDIZED VALUES
-    D0_bounds: Tuple[float, float] = (1.0, 1000000.0)
-    alpha_bounds: Tuple[float, float] = (-10.0, 10.0)  # Consistent with physics.py
-    D_offset_bounds: Tuple[float, float] = (-100000.0, 100000.0)  # Consistent with physics.py
+    D0_bounds: tuple[float, float] = (1.0, 1000000.0)
+    alpha_bounds: tuple[float, float] = (-10.0, 10.0)  # Consistent with physics.py
+    D_offset_bounds: tuple[float, float] = (
+        -100000.0,
+        100000.0,
+    )  # Consistent with physics.py
 
     # Laminar flow parameters (only for laminar_flow mode) - STANDARDIZED VALUES
-    gamma_dot_t0_bounds: Tuple[float, float] = (1e-5, 1.0)
-    beta_bounds: Tuple[float, float] = (-10.0, 10.0)  # Consistent with physics.py
-    gamma_dot_t_offset_bounds: Tuple[float, float] = (-1.0, 1.0)  # Consistent with physics.py
-    phi0_bounds: Tuple[float, float] = (-30.0, 30.0)  # Consistent with physics.py
+    gamma_dot_t0_bounds: tuple[float, float] = (1e-5, 1.0)
+    beta_bounds: tuple[float, float] = (-10.0, 10.0)  # Consistent with physics.py
+    gamma_dot_t_offset_bounds: tuple[float, float] = (
+        -1.0,
+        1.0,
+    )  # Consistent with physics.py
+    phi0_bounds: tuple[float, float] = (-30.0, 30.0)  # Consistent with physics.py
 
     # Prior means (mu) and standard deviations (sigma) - STANDARDIZED VALUES
-    D0_prior: Tuple[float, float] = (10000.0, 1000.0)
-    alpha_prior: Tuple[float, float] = (-1.5, 0.1)
-    D_offset_prior: Tuple[float, float] = (0.0, 10.0)
-    gamma_dot_t0_prior: Tuple[float, float] = (0.001, 0.01)
-    beta_prior: Tuple[float, float] = (0.0, 0.1)
-    gamma_dot_t_offset_prior: Tuple[float, float] = (0.0, 0.001)
-    phi0_prior: Tuple[float, float] = (0.0, 5.0)
+    D0_prior: tuple[float, float] = (10000.0, 1000.0)
+    alpha_prior: tuple[float, float] = (-1.5, 0.1)
+    D_offset_prior: tuple[float, float] = (0.0, 10.0)
+    gamma_dot_t0_prior: tuple[float, float] = (0.001, 0.01)
+    beta_prior: tuple[float, float] = (0.0, 0.1)
+    gamma_dot_t_offset_prior: tuple[float, float] = (0.0, 0.001)
+    phi0_prior: tuple[float, float] = (0.0, 5.0)
 
     # Data ranges
-    fitted_range: Tuple[float, float] = (0.0, 2.0)
-    theory_range: Tuple[float, float] = (0.0, 1.0)
+    fitted_range: tuple[float, float] = (0.0, 2.0)
+    theory_range: tuple[float, float] = (0.0, 1.0)
 
     # Optional configuration manager for bound override
-    config_manager: Optional[Any] = None
+    config_manager: Any | None = None
 
-    def get_param_bounds(self, analysis_mode: str) -> List[Tuple[float, float]]:
+    def get_param_bounds(self, analysis_mode: str) -> list[tuple[float, float]]:
         """Get parameter bounds based on analysis mode with configuration override support."""
         # Default parameter names based on analysis mode
         if analysis_mode == "laminar_flow":
-            param_names = ["D0", "alpha", "D_offset", "gamma_dot_0", "beta", "gamma_dot_offset", "phi_0"]
+            param_names = [
+                "D0",
+                "alpha",
+                "D_offset",
+                "gamma_dot_0",
+                "beta",
+                "gamma_dot_offset",
+                "phi_0",
+            ]
         else:
             param_names = ["D0", "alpha", "D_offset"]
 
         # Try to get bounds from configuration manager first
-        if self.config_manager and hasattr(self.config_manager, 'get_parameter_bounds'):
+        if self.config_manager and hasattr(self.config_manager, "get_parameter_bounds"):
             try:
                 config_bounds = self.config_manager.get_parameter_bounds(param_names)
-                if isinstance(config_bounds, list) and len(config_bounds) == len(param_names):
+                if isinstance(config_bounds, list) and len(config_bounds) == len(
+                    param_names
+                ):
                     # Convert config bounds to tuple format
                     bounds = []
                     for bound in config_bounds:
-                        if isinstance(bound, dict) and 'min' in bound and 'max' in bound:
-                            bounds.append((bound['min'], bound['max']))
+                        if (
+                            isinstance(bound, dict)
+                            and "min" in bound
+                            and "max" in bound
+                        ):
+                            bounds.append((bound["min"], bound["max"]))
                         else:
                             # Fallback to default bounds if config bound is malformed
-                            bounds.append(self._get_default_bound_for_param(param_names[len(bounds)]))
+                            bounds.append(
+                                self._get_default_bound_for_param(
+                                    param_names[len(bounds)]
+                                )
+                            )
                     logger.info(f"Using configuration bounds for {analysis_mode} mode")
                     return bounds
                 else:
-                    logger.warning("Configuration bounds format invalid, using default bounds")
+                    logger.warning(
+                        "Configuration bounds format invalid, using default bounds"
+                    )
             except Exception as e:
-                logger.warning(f"Failed to get configuration bounds: {e}, using default bounds")
+                logger.warning(
+                    f"Failed to get configuration bounds: {e}, using default bounds"
+                )
 
         # Fallback to hardcoded bounds
         bounds = [
@@ -147,7 +178,7 @@ class ParameterSpace:
 
         return bounds
 
-    def _get_default_bound_for_param(self, param_name: str) -> Tuple[float, float]:
+    def _get_default_bound_for_param(self, param_name: str) -> tuple[float, float]:
         """Get default bound for a specific parameter name."""
         bound_map = {
             "D0": self.D0_bounds,
@@ -160,7 +191,7 @@ class ParameterSpace:
         }
         return bound_map.get(param_name, (0.0, 1.0))  # Safe fallback
 
-    def get_param_priors(self, analysis_mode: str) -> List[Tuple[float, float]]:
+    def get_param_priors(self, analysis_mode: str) -> list[tuple[float, float]]:
         """Get parameter priors based on analysis mode."""
         priors = [
             self.D0_prior,
@@ -220,9 +251,9 @@ class FitResult:
     p_value: float  # P-value (if computed)
 
     # Parameter uncertainties (if computed)
-    param_errors: Optional[np.ndarray] = None
-    contrast_error: Optional[float] = None
-    offset_error: Optional[float] = None
+    param_errors: np.ndarray | None = None
+    contrast_error: float | None = None
+    offset_error: float | None = None
 
     # Additional statistics
     residual_std: float = 0.0  # Standard deviation of residuals
@@ -236,7 +267,7 @@ class FitResult:
     dataset_size: str = "unknown"  # Dataset size category
     analysis_mode: str = "unknown"  # Analysis mode used
 
-    def get_summary(self) -> Dict[str, Any]:
+    def get_summary(self) -> dict[str, Any]:
         """Get comprehensive fit summary."""
         return {
             "parameters": {
@@ -278,7 +309,7 @@ if JAX_AVAILABLE:
     @jit
     def solve_least_squares_jax(
         theory_batch: jnp.ndarray, exp_batch: jnp.ndarray
-    ) -> Tuple[jnp.ndarray, jnp.ndarray]:
+    ) -> tuple[jnp.ndarray, jnp.ndarray]:
         """
         JAX-accelerated batch least squares solver.
 
@@ -330,7 +361,7 @@ else:
 
     def solve_least_squares_jax(
         theory_batch: np.ndarray, exp_batch: np.ndarray
-    ) -> Tuple[np.ndarray, np.ndarray]:
+    ) -> tuple[np.ndarray, np.ndarray]:
         """NumPy fallback for least squares when JAX unavailable."""
         n_angles, n_data = theory_batch.shape
         contrast_batch = np.zeros(n_angles)
@@ -375,7 +406,7 @@ class UnifiedHomodyneEngine:
     def __init__(
         self,
         analysis_mode: str = "laminar_flow",
-        parameter_space: Optional[ParameterSpace] = None,
+        parameter_space: ParameterSpace | None = None,
     ):
         """
         Initialize unified homodyne engine.
@@ -401,7 +432,7 @@ class UnifiedHomodyneEngine:
     @log_performance(threshold=0.1)
     def estimate_scaling_parameters(
         self, data: np.ndarray, theory: np.ndarray, validate_bounds: bool = True
-    ) -> Tuple[float, float]:
+    ) -> tuple[float, float]:
         """
         Estimate contrast and offset using pure least squares.
 
@@ -546,7 +577,7 @@ class UnifiedHomodyneEngine:
     def validate_inputs(
         self,
         data: np.ndarray,
-        sigma: Optional[np.ndarray],
+        sigma: np.ndarray | None,
         t1: np.ndarray,
         t2: np.ndarray,
         phi: np.ndarray,
@@ -571,7 +602,7 @@ class UnifiedHomodyneEngine:
         if not np.all(np.isfinite(data)):
             raise ValueError("Data contains non-finite values")
 
-    def get_parameter_info(self) -> Dict[str, Any]:
+    def get_parameter_info(self) -> dict[str, Any]:
         """Get parameter space information."""
         return {
             "analysis_mode": self.analysis_mode,
@@ -597,11 +628,12 @@ ScaledFittingEngine = UnifiedHomodyneEngine
 
 # Enhanced general N-parameter least squares solvers
 if JAX_AVAILABLE:
+
     @jit
     def solve_least_squares_general_jax(
         design_matrix: jnp.ndarray,
         target_vector: jnp.ndarray,
-        regularization: float = 1e-10
+        regularization: float = 1e-10,
     ) -> jnp.ndarray:
         """
         General N-parameter least squares solver using Normal Equation.
@@ -641,14 +673,16 @@ if JAX_AVAILABLE:
             return jax.scipy.linalg.solve_triangular(L.T, z, lower=False)
 
         def svd_solve():
-            return jnp.linalg.lstsq(design_matrix, target_vector, rcond=regularization)[0]
+            return jnp.linalg.lstsq(design_matrix, target_vector, rcond=regularization)[
+                0
+            ]
 
         # Use Cholesky for well-conditioned, SVD for ill-conditioned
         params = jax.lax.cond(
             condition_number < 1e10,
             lambda _: cholesky_solve(),
             lambda _: svd_solve(),
-            None
+            None,
         )
 
         return params
@@ -657,8 +691,8 @@ if JAX_AVAILABLE:
     def solve_least_squares_chunked_jax(
         theory_chunks: jnp.ndarray,
         exp_chunks: jnp.ndarray,
-        chunk_indices: Optional[jnp.ndarray] = None
-    ) -> Tuple[jnp.ndarray, jnp.ndarray]:
+        chunk_indices: jnp.ndarray | None = None,
+    ) -> tuple[jnp.ndarray, jnp.ndarray]:
         """
         Memory-efficient chunked solver for large datasets.
 
@@ -673,6 +707,7 @@ if JAX_AVAILABLE:
         Returns:
             Tuple of (contrast, offset)
         """
+
         # Process chunks using scan for memory efficiency
         def process_chunk(carry, chunk_data):
             theory_chunk, exp_chunk = chunk_data
@@ -692,10 +727,16 @@ if JAX_AVAILABLE:
         carry_init = (0.0, 0.0, 0.0, 0.0, 0)
 
         # Process all chunks
-        (sum_theory_sq_final, sum_theory_final, sum_exp_final,
-         sum_theory_exp_final, n_data_final), _ = jax.lax.scan(
-            process_chunk, carry_init, (theory_chunks, exp_chunks)
-        )
+        (
+            (
+                sum_theory_sq_final,
+                sum_theory_final,
+                sum_exp_final,
+                sum_theory_exp_final,
+                n_data_final,
+            ),
+            _,
+        ) = jax.lax.scan(process_chunk, carry_init, (theory_chunks, exp_chunks))
 
         # Solve 2x2 system (maintaining existing logic)
         det = sum_theory_sq_final * n_data_final - sum_theory_final * sum_theory_final
@@ -705,10 +746,13 @@ if JAX_AVAILABLE:
         safe_det = jnp.where(valid_det, det, 1.0)
 
         # Solve for contrast and offset
-        contrast = (n_data_final * sum_theory_exp_final -
-                   sum_theory_final * sum_exp_final) / safe_det
-        offset = (sum_theory_sq_final * sum_exp_final -
-                 sum_theory_final * sum_theory_exp_final) / safe_det
+        contrast = (
+            n_data_final * sum_theory_exp_final - sum_theory_final * sum_exp_final
+        ) / safe_det
+        offset = (
+            sum_theory_sq_final * sum_exp_final
+            - sum_theory_final * sum_theory_exp_final
+        ) / safe_det
 
         # Apply constraints
         contrast = jnp.where(valid_det, contrast, 1.0)
@@ -722,7 +766,7 @@ else:
     def solve_least_squares_general_jax(
         design_matrix: np.ndarray,
         target_vector: np.ndarray,
-        regularization: float = 1e-10
+        regularization: float = 1e-10,
     ) -> np.ndarray:
         """NumPy fallback for general least squares."""
         # Use numpy.linalg.lstsq as fallback
@@ -734,8 +778,8 @@ else:
     def solve_least_squares_chunked_jax(
         theory_chunks: np.ndarray,
         exp_chunks: np.ndarray,
-        chunk_indices: Optional[np.ndarray] = None
-    ) -> Tuple[np.ndarray, np.ndarray]:
+        chunk_indices: np.ndarray | None = None,
+    ) -> tuple[np.ndarray, np.ndarray]:
         """NumPy fallback for chunked least squares."""
         # Accumulate normal equation components
         sum_theory_sq = 0.0
@@ -744,7 +788,7 @@ else:
         sum_theory_exp = 0.0
         n_data = 0
 
-        for theory_chunk, exp_chunk in zip(theory_chunks, exp_chunks):
+        for theory_chunk, exp_chunk in zip(theory_chunks, exp_chunks, strict=False):
             sum_theory_sq += np.sum(theory_chunk * theory_chunk)
             sum_theory += np.sum(theory_chunk)
             sum_exp += np.sum(exp_chunk)

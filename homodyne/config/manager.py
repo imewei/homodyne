@@ -9,11 +9,12 @@ ConfigManager while removing complex features not needed for core functionality.
 
 import json
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any
 
 # Handle YAML dependency
 try:
     import yaml
+
     HAS_YAML = True
 except ImportError:
     HAS_YAML = False
@@ -22,12 +23,16 @@ except ImportError:
 # Import minimal logging
 try:
     from homodyne.utils.logging import get_logger
+
     HAS_LOGGING = True
 except ImportError:
     import logging
+
     HAS_LOGGING = False
+
     def get_logger(name):
         return logging.getLogger(name)
+
 
 logger = get_logger(__name__)
 
@@ -52,7 +57,7 @@ class ConfigManager:
     def __init__(
         self,
         config_file: str = "homodyne_config.yaml",
-        config_override: Optional[Dict[str, Any]] = None,
+        config_override: dict[str, Any] | None = None,
     ):
         """
         Initialize configuration manager.
@@ -65,7 +70,7 @@ class ConfigManager:
             Override configuration data instead of loading from file
         """
         self.config_file = config_file
-        self.config: Optional[Dict[str, Any]] = None
+        self.config: dict[str, Any] | None = None
 
         if config_override is not None:
             self.config = config_override.copy()
@@ -93,7 +98,7 @@ class ConfigManager:
             # Determine file format and load accordingly
             file_extension = config_path.suffix.lower()
 
-            with open(config_path, "r", encoding="utf-8") as f:
+            with open(config_path, encoding="utf-8") as f:
                 if file_extension in [".yaml", ".yml"] and HAS_YAML:
                     self.config = yaml.safe_load(f)
                 elif file_extension == ".json":
@@ -117,7 +122,7 @@ class ConfigManager:
                 version = self.config["metadata"].get("config_version", "Unknown")
                 logger.info(f"Configuration version: {version}")
 
-        except (yaml.YAMLError if HAS_YAML else Exception) as e:
+        except yaml.YAMLError if HAS_YAML else Exception as e:
             logger.error(f"YAML parsing error: {e}")
             logger.info("Using default configuration...")
             self.config = self._get_default_config()
@@ -130,7 +135,7 @@ class ConfigManager:
             logger.info("Using default configuration...")
             self.config = self._get_default_config()
 
-    def _get_default_config(self) -> Dict[str, Any]:
+    def _get_default_config(self) -> dict[str, Any]:
         """
         Get default configuration structure.
 
@@ -139,7 +144,7 @@ class ConfigManager:
         return {
             "metadata": {
                 "config_version": "2.1",
-                "description": "Default minimal configuration"
+                "description": "Default minimal configuration",
             },
             "analysis_mode": "static_isotropic",
             "analyzer_parameters": {
@@ -182,7 +187,7 @@ class ConfigManager:
             },
         }
 
-    def get_config(self) -> Dict[str, Any]:
+    def get_config(self) -> dict[str, Any]:
         """
         Get the current configuration dictionary.
 
@@ -204,7 +209,7 @@ class ConfigManager:
         value : Any
             New value to set
         """
-        keys = key.split('.')
+        keys = key.split(".")
         config_ref = self.config
 
         # Navigate to the parent of the target key
@@ -223,7 +228,7 @@ class ConfigManager:
         analysis_mode = self.config.get("analysis_mode", "static_isotropic")
         return "static" in analysis_mode.lower()
 
-    def get_target_angle_ranges(self) -> Dict[str, Any]:
+    def get_target_angle_ranges(self) -> dict[str, Any]:
         """Get angle filtering ranges."""
         if not self.config:
             return {"enabled": False}
@@ -233,7 +238,7 @@ class ConfigManager:
         return angle_filtering
 
 
-def load_xpcs_config(config_path: str) -> Dict[str, Any]:
+def load_xpcs_config(config_path: str) -> dict[str, Any]:
     """
     Load XPCS configuration from file.
 

@@ -18,10 +18,11 @@ try:
     from homodyne.runtime.gpu.activation import (
         GPUActivator,
         activate_gpu,
-        get_gpu_status,
         benchmark_gpu,
-        get_activator
+        get_activator,
+        get_gpu_status,
     )
+
     GPU_AVAILABLE = True
 except ImportError as e:
     GPU_AVAILABLE = False
@@ -41,9 +42,11 @@ except ImportError as e:
         def __init__(self, *args, **kwargs):
             raise ImportError(f"GPUActivator not available: {_import_error}")
 
+
 # Legacy imports for compatibility
 try:
     from homodyne.runtime.gpu.optimizer import GPUOptimizer
+
     OPTIMIZER_AVAILABLE = True
 except ImportError:
     GPUOptimizer = None
@@ -51,6 +54,7 @@ except ImportError:
 
 try:
     from homodyne.runtime.gpu.wrapper import setup_gpu_environment
+
     WRAPPER_AVAILABLE = True
 except ImportError:
     setup_gpu_environment = None

@@ -10,16 +10,17 @@ Comprehensive performance benchmarks for computational kernels:
 - CPU vs GPU performance comparison
 """
 
-import pytest
-import numpy as np
-import time
 import gc
-from typing import Dict, Any, List, Tuple, Optional
+import time
+
+import numpy as np
+import pytest
 
 # Handle JAX imports
 try:
     import jax
     import jax.numpy as jnp
+
     JAX_AVAILABLE = True
 except ImportError:
     JAX_AVAILABLE = False
@@ -28,6 +29,7 @@ except ImportError:
 # Handle benchmark-specific imports
 try:
     import psutil
+
     HAS_PSUTIL = True
 except ImportError:
     HAS_PSUTIL = False
@@ -48,7 +50,7 @@ class TestComputationalBenchmarks:
         results = {}
 
         for size in sizes:
-            t1, t2 = jnp.meshgrid(jnp.arange(size), jnp.arange(size), indexing='ij')
+            t1, t2 = jnp.meshgrid(jnp.arange(size), jnp.arange(size), indexing="ij")
             q = 0.01
             D = 0.1
 
@@ -59,7 +61,7 @@ class TestComputationalBenchmarks:
 
             # Benchmark
             times = []
-            for _ in range(benchmark_config['min_rounds']):
+            for _ in range(benchmark_config["min_rounds"]):
                 start = time.perf_counter()
                 result = compute_g1_diffusion_jax(t1, t2, q, D)
                 result.block_until_ready()
@@ -71,10 +73,10 @@ class TestComputationalBenchmarks:
             elements_per_sec = (size * size) / avg_time
 
             results[size] = {
-                'avg_time': avg_time,
-                'operations_per_sec': operations_per_sec,
-                'elements_per_sec': elements_per_sec,
-                'memory_mb': (size * size * 8) / (1024 * 1024)  # float64
+                "avg_time": avg_time,
+                "operations_per_sec": operations_per_sec,
+                "elements_per_sec": elements_per_sec,
+                "memory_mb": (size * size * 8) / (1024 * 1024),  # float64
             }
 
             # Performance expectations
@@ -84,7 +86,7 @@ class TestComputationalBenchmarks:
         # Check scaling behavior
         if len(results) >= 2:
             sizes_list = sorted(results.keys())
-            times_list = [results[s]['avg_time'] for s in sizes_list]
+            times_list = [results[s]["avg_time"] for s in sizes_list]
 
             # Should scale sub-quadratically for reasonable sizes
             largest_time = times_list[-1]
@@ -93,7 +95,7 @@ class TestComputationalBenchmarks:
             time_ratio = largest_time / smallest_time
 
             # Rough scaling check - should not be worse than O(n^3)
-            expected_max_ratio = size_ratio ** 2.5
+            expected_max_ratio = size_ratio**2.5
             assert time_ratio < expected_max_ratio, f"Poor scaling: {time_ratio:.2f}x"
 
     def test_c2_model_benchmark(self, jax_backend, benchmark_config):
@@ -102,26 +104,28 @@ class TestComputationalBenchmarks:
 
         # Realistic dataset sizes
         test_cases = [
-            {'n_times': 50, 'n_angles': 24},
-            {'n_times': 100, 'n_angles': 36},
-            {'n_times': 200, 'n_angles': 72}
+            {"n_times": 50, "n_angles": 24},
+            {"n_times": 100, "n_angles": 36},
+            {"n_times": 200, "n_angles": 72},
         ]
 
         results = {}
 
         for case in test_cases:
-            n_times = case['n_times']
-            n_angles = case['n_angles']
+            n_times = case["n_times"]
+            n_angles = case["n_angles"]
 
-            t1, t2 = jnp.meshgrid(jnp.arange(n_times), jnp.arange(n_times), indexing='ij')
-            phi = jnp.linspace(0, 2*jnp.pi, n_angles)
+            t1, t2 = jnp.meshgrid(
+                jnp.arange(n_times), jnp.arange(n_times), indexing="ij"
+            )
+            phi = jnp.linspace(0, 2 * jnp.pi, n_angles)
 
             params = {
-                'offset': 1.0,
-                'contrast': 0.4,
-                'diffusion_coefficient': 0.1,
-                'shear_rate': 0.0,
-                'L': 1.0
+                "offset": 1.0,
+                "contrast": 0.4,
+                "diffusion_coefficient": 0.1,
+                "shear_rate": 0.0,
+                "L": 1.0,
             }
             q = 0.01
 
@@ -132,7 +136,7 @@ class TestComputationalBenchmarks:
 
             # Benchmark
             times = []
-            for _ in range(benchmark_config['min_rounds']):
+            for _ in range(benchmark_config["min_rounds"]):
                 start = time.perf_counter()
                 result = compute_c2_model_jax(params, t1, t2, phi, q)
                 result.block_until_ready()
@@ -145,30 +149,32 @@ class TestComputationalBenchmarks:
 
             case_key = f"{n_times}x{n_times}x{n_angles}"
             results[case_key] = {
-                'avg_time': avg_time,
-                'elements_per_sec': elements_per_sec,
-                'total_elements': total_elements
+                "avg_time": avg_time,
+                "elements_per_sec": elements_per_sec,
+                "total_elements": total_elements,
             }
 
             # Performance expectations
             assert avg_time < 10.0, f"Case {case_key}: too slow ({avg_time:.3f}s)"
             assert elements_per_sec > 10000, f"Case {case_key}: too few elements/sec"
 
-    def test_optimization_benchmark(self, jax_backend, synthetic_xpcs_data, test_config, benchmark_config):
+    def test_optimization_benchmark(
+        self, jax_backend, synthetic_xpcs_data, test_config, benchmark_config
+    ):
         """Benchmark NLSQ optimization performance."""
         try:
-            from homodyne.optimization.nlsq import fit_nlsq_jax, JAXFIT_AVAILABLE
+            from homodyne.optimization.nlsq import OPTIMISTIX_AVAILABLE, fit_nlsq_jax
         except ImportError:
             pytest.skip("NLSQ optimization module not available")
 
-        if not JAXFIT_AVAILABLE:
-            pytest.skip("JAXFit not available")
+        if not OPTIMISTIX_AVAILABLE:
+            pytest.skip("Optimistix not available")
 
         data = synthetic_xpcs_data
 
         # Configure for benchmarking
         bench_config = test_config.copy()
-        bench_config['optimization']['lsq']['max_iterations'] = 50
+        bench_config["optimization"]["lsq"]["max_iterations"] = 50
 
         # Warmup
         try:
@@ -182,7 +188,7 @@ class TestComputationalBenchmarks:
         times = []
         successes = []
 
-        for _ in range(max(3, benchmark_config['min_rounds'])):
+        for _ in range(max(3, benchmark_config["min_rounds"])):
             start = time.perf_counter()
             result = fit_nlsq_jax(data, bench_config)
             elapsed = time.perf_counter() - start
@@ -190,7 +196,7 @@ class TestComputationalBenchmarks:
             times.append(elapsed)
             successes.append(result.success)
 
-        successful_times = [t for t, s in zip(times, successes) if s]
+        successful_times = [t for t, s in zip(times, successes, strict=False) if s]
 
         if len(successful_times) == 0:
             pytest.skip("No successful optimizations")
@@ -203,10 +209,12 @@ class TestComputationalBenchmarks:
         assert success_rate >= 0.8, f"Success rate too low: {success_rate:.2f}"
 
         # Report performance metrics
-        data_size = np.prod(data['c2_exp'].shape)
+        data_size = np.prod(data["c2_exp"].shape)
         elements_per_sec = data_size / avg_time
 
-        assert elements_per_sec > 100, f"Processing rate too slow: {elements_per_sec:.0f} elements/sec"
+        assert (
+            elements_per_sec > 100
+        ), f"Processing rate too slow: {elements_per_sec:.0f} elements/sec"
 
     @pytest.mark.skipif(not HAS_PSUTIL, reason="psutil not available")
     def test_memory_usage_benchmark(self, jax_backend):
@@ -224,15 +232,15 @@ class TestComputationalBenchmarks:
             # Force garbage collection
             gc.collect()
 
-            t1, t2 = jnp.meshgrid(jnp.arange(size), jnp.arange(size), indexing='ij')
-            phi = jnp.linspace(0, 2*jnp.pi, 36)
+            t1, t2 = jnp.meshgrid(jnp.arange(size), jnp.arange(size), indexing="ij")
+            phi = jnp.linspace(0, 2 * jnp.pi, 36)
 
             params = {
-                'offset': 1.0,
-                'contrast': 0.4,
-                'diffusion_coefficient': 0.1,
-                'shear_rate': 0.0,
-                'L': 1.0
+                "offset": 1.0,
+                "contrast": 0.4,
+                "diffusion_coefficient": 0.1,
+                "shear_rate": 0.0,
+                "L": 1.0,
             }
 
             # Measure memory before computation
@@ -249,13 +257,17 @@ class TestComputationalBenchmarks:
             expected_data_size = (36 * size * size * 8) / (1024 * 1024)  # float64 MB
 
             memory_results[size] = {
-                'memory_used_mb': memory_used,
-                'expected_data_mb': expected_data_size,
-                'memory_overhead': memory_used / expected_data_size if expected_data_size > 0 else 0
+                "memory_used_mb": memory_used,
+                "expected_data_mb": expected_data_size,
+                "memory_overhead": (
+                    memory_used / expected_data_size if expected_data_size > 0 else 0
+                ),
             }
 
             # Memory should not grow excessively
-            assert memory_used < expected_data_size * 10, f"Memory usage too high for size {size}"
+            assert (
+                memory_used < expected_data_size * 10
+            ), f"Memory usage too high for size {size}"
 
         # Check for memory leaks
         final_memory = process.memory_info().rss / (1024 * 1024)
@@ -274,7 +286,7 @@ class TestDataLoadingBenchmarks:
     def test_synthetic_data_generation_benchmark(self, benchmark_config):
         """Benchmark synthetic data generation for different sizes."""
         sizes = [
-            (50, 24),   # Small
+            (50, 24),  # Small
             (100, 36),  # Medium
             (200, 72),  # Large
         ]
@@ -287,16 +299,14 @@ class TestDataLoadingBenchmarks:
             start_memory = process.memory_info().rss / (1024 * 1024)
 
             times = []
-            for _ in range(benchmark_config['min_rounds']):
+            for _ in range(benchmark_config["min_rounds"]):
                 start = time.perf_counter()
 
                 # Generate synthetic data (similar to fixture)
                 t1, t2 = np.meshgrid(
-                    np.arange(n_times),
-                    np.arange(n_times),
-                    indexing='ij'
+                    np.arange(n_times), np.arange(n_times), indexing="ij"
                 )
-                phi = np.linspace(0, 2*np.pi, n_angles)
+                phi = np.linspace(0, 2 * np.pi, n_angles)
                 tau = np.abs(t1 - t2) + 1e-6
                 c2_exp = 1 + 0.5 * np.exp(-tau / 10.0)
 
@@ -310,15 +320,17 @@ class TestDataLoadingBenchmarks:
             data_size = n_angles * n_times * n_times * 8 / (1024 * 1024)  # MB
 
             results[f"{n_times}x{n_angles}"] = {
-                'avg_time': avg_time,
-                'memory_used_mb': memory_used,
-                'data_size_mb': data_size,
-                'generation_rate_mb_per_sec': data_size / avg_time
+                "avg_time": avg_time,
+                "memory_used_mb": memory_used,
+                "data_size_mb": data_size,
+                "generation_rate_mb_per_sec": data_size / avg_time,
             }
 
             # Performance expectations
             assert avg_time < 5.0, f"Data generation too slow: {avg_time:.3f}s"
-            assert memory_used < data_size * 5, f"Memory usage too high: {memory_used:.1f} MB"
+            assert (
+                memory_used < data_size * 5
+            ), f"Memory usage too high: {memory_used:.1f} MB"
 
     def test_config_loading_benchmark(self, temp_dir, benchmark_config):
         """Benchmark configuration loading performance."""
@@ -329,31 +341,35 @@ class TestDataLoadingBenchmarks:
 
         # Create test config files of different sizes
         base_config = {
-            'analysis_mode': 'static_isotropic',
-            'optimization': {
-                'method': 'nlsq',
-                'lsq': {'max_iterations': 100}
-            }
+            "analysis_mode": "static_isotropic",
+            "optimization": {"method": "nlsq", "lsq": {"max_iterations": 100}},
         }
 
         # Create configs with varying complexity
         configs = {
-            'simple': base_config,
-            'medium': {**base_config, 'extra_params': {f'param_{i}': i for i in range(50)}},
-            'complex': {**base_config, 'extra_params': {f'param_{i}': i for i in range(200)}}
+            "simple": base_config,
+            "medium": {
+                **base_config,
+                "extra_params": {f"param_{i}": i for i in range(50)},
+            },
+            "complex": {
+                **base_config,
+                "extra_params": {f"param_{i}": i for i in range(200)},
+            },
         }
 
         results = {}
 
         for config_name, config_data in configs.items():
             import json
+
             config_file = temp_dir / f"{config_name}_config.json"
-            with open(config_file, 'w') as f:
+            with open(config_file, "w") as f:
                 json.dump(config_data, f)
 
             # Benchmark loading
             times = []
-            for _ in range(max(10, benchmark_config['min_rounds'])):
+            for _ in range(max(10, benchmark_config["min_rounds"])):
                 start = time.perf_counter()
                 loaded_config = load_config_file(str(config_file))
                 elapsed = time.perf_counter() - start
@@ -363,9 +379,9 @@ class TestDataLoadingBenchmarks:
             file_size = config_file.stat().st_size / 1024  # KB
 
             results[config_name] = {
-                'avg_time': avg_time,
-                'file_size_kb': file_size,
-                'load_rate_kb_per_sec': file_size / avg_time
+                "avg_time": avg_time,
+                "file_size_kb": file_size,
+                "load_rate_kb_per_sec": file_size / avg_time,
             }
 
             # Performance expectations
@@ -380,11 +396,12 @@ class TestScalingBenchmarks:
 
     def test_jax_compilation_overhead(self, jax_backend, benchmark_config):
         """Test JAX compilation overhead vs execution time."""
-        from homodyne.core.jax_backend import compute_g1_diffusion_jax
         from jax import jit
 
+        from homodyne.core.jax_backend import compute_g1_diffusion_jax
+
         size = 100
-        t1, t2 = jnp.meshgrid(jnp.arange(size), jnp.arange(size), indexing='ij')
+        t1, t2 = jnp.meshgrid(jnp.arange(size), jnp.arange(size), indexing="ij")
         q = 0.01
         D = 0.1
 
@@ -412,25 +429,30 @@ class TestScalingBenchmarks:
 
         # Report metrics
         assert compilation_time < 10.0, f"Compilation too slow: {compilation_time:.3f}s"
-        assert avg_execution_time < 1.0, f"Execution too slow: {avg_execution_time:.3f}s"
-        assert compilation_overhead < 1000, f"Compilation overhead too high: {compilation_overhead:.1f}x"
+        assert (
+            avg_execution_time < 1.0
+        ), f"Execution too slow: {avg_execution_time:.3f}s"
+        assert (
+            compilation_overhead < 1000
+        ), f"Compilation overhead too high: {compilation_overhead:.1f}x"
 
     def test_vectorization_scaling(self, jax_backend):
         """Test performance scaling with vectorization."""
-        from homodyne.core.jax_backend import compute_c2_model_jax
         from jax import vmap
+
+        from homodyne.core.jax_backend import compute_c2_model_jax
 
         # Base computation
         t1 = jnp.array([[0, 1, 2], [1, 0, 1], [2, 1, 0]])
         t2 = jnp.array([[0, 1, 2], [1, 0, 1], [2, 1, 0]])
-        phi = jnp.array([0.0, jnp.pi/2, jnp.pi])
+        phi = jnp.array([0.0, jnp.pi / 2, jnp.pi])
 
         params = {
-            'offset': 1.0,
-            'contrast': 0.4,
-            'diffusion_coefficient': 0.1,
-            'shear_rate': 0.0,
-            'L': 1.0
+            "offset": 1.0,
+            "contrast": 0.4,
+            "diffusion_coefficient": 0.1,
+            "shear_rate": 0.0,
+            "L": 1.0,
         }
 
         # Test different numbers of q-values
@@ -471,9 +493,9 @@ class TestScalingBenchmarks:
             speedup = avg_sequential / avg_vmap
 
             results[n_q] = {
-                'vmap_time': avg_vmap,
-                'sequential_time': avg_sequential,
-                'speedup': speedup
+                "vmap_time": avg_vmap,
+                "sequential_time": avg_sequential,
+                "speedup": speedup,
             }
 
             # Vectorization should provide some benefit
@@ -489,22 +511,22 @@ class TestScalingBenchmarks:
 
         for size in sizes:
             # Create data
-            t1, t2 = jnp.meshgrid(jnp.arange(size), jnp.arange(size), indexing='ij')
-            phi = jnp.linspace(0, 2*jnp.pi, 24)
+            t1, t2 = jnp.meshgrid(jnp.arange(size), jnp.arange(size), indexing="ij")
+            phi = jnp.linspace(0, 2 * jnp.pi, 24)
 
             params = {
-                'offset': 1.0,
-                'contrast': 0.4,
-                'diffusion_coefficient': 0.1,
-                'shear_rate': 0.0,
-                'L': 1.0
+                "offset": 1.0,
+                "contrast": 0.4,
+                "diffusion_coefficient": 0.1,
+                "shear_rate": 0.0,
+                "L": 1.0,
             }
 
             # Estimate memory usage (rough)
             expected_arrays = [
                 t1,  # input
                 t2,  # input
-                phi, # input
+                phi,  # input
             ]
 
             # Compute result
@@ -522,8 +544,8 @@ class TestScalingBenchmarks:
             memory_ratios = []
 
             for i in range(1, len(memory_usage)):
-                size_ratio = memory_usage[i][0] / memory_usage[i-1][0]
-                memory_ratio = memory_usage[i][1] / memory_usage[i-1][1]
+                size_ratio = memory_usage[i][0] / memory_usage[i - 1][0]
+                memory_ratio = memory_usage[i][1] / memory_usage[i - 1][1]
 
                 size_ratios.append(size_ratio)
                 memory_ratios.append(memory_ratio)
@@ -532,12 +554,13 @@ class TestScalingBenchmarks:
             avg_size_ratio = np.mean(size_ratios)
             avg_memory_ratio = np.mean(memory_ratios)
 
-            expected_memory_scaling = avg_size_ratio ** 2
+            expected_memory_scaling = avg_size_ratio**2
             scaling_factor = avg_memory_ratio / expected_memory_scaling
 
             # Should be close to expected scaling (within factor of 2)
-            assert 0.5 < scaling_factor < 2.0, \
-                f"Memory scaling unexpected: {scaling_factor:.2f} (expected ~1.0)"
+            assert (
+                0.5 < scaling_factor < 2.0
+            ), f"Memory scaling unexpected: {scaling_factor:.2f} (expected ~1.0)"
 
 
 @pytest.mark.performance
@@ -551,17 +574,17 @@ class TestRegressionBenchmarks:
 
         # Standard test case
         data = synthetic_xpcs_data
-        t1 = data['t1']
-        t2 = data['t2']
-        phi = data['phi_angles_list']
-        q = data['wavevector_q_list'][0]
+        t1 = data["t1"]
+        t2 = data["t2"]
+        phi = data["phi_angles_list"]
+        q = data["wavevector_q_list"][0]
 
         params = {
-            'offset': 1.0,
-            'contrast': 0.4,
-            'diffusion_coefficient': 0.1,
-            'shear_rate': 0.0,
-            'L': 1.0
+            "offset": 1.0,
+            "contrast": 0.4,
+            "diffusion_coefficient": 0.1,
+            "shear_rate": 0.0,
+            "L": 1.0,
         }
 
         # Warmup
@@ -583,28 +606,32 @@ class TestRegressionBenchmarks:
 
         # Baseline expectations (these should be updated as hardware/software improves)
         BASELINE_THROUGHPUT = 10000  # elements per second (conservative)
-        BASELINE_MAX_TIME = 5.0      # maximum seconds for standard dataset
+        BASELINE_MAX_TIME = 5.0  # maximum seconds for standard dataset
 
-        assert throughput > BASELINE_THROUGHPUT, \
-            f"Performance regression: {throughput:.0f} < {BASELINE_THROUGHPUT} elements/sec"
-        assert avg_time < BASELINE_MAX_TIME, \
-            f"Performance regression: {avg_time:.3f}s > {BASELINE_MAX_TIME}s"
+        assert (
+            throughput > BASELINE_THROUGHPUT
+        ), f"Performance regression: {throughput:.0f} < {BASELINE_THROUGHPUT} elements/sec"
+        assert (
+            avg_time < BASELINE_MAX_TIME
+        ), f"Performance regression: {avg_time:.3f}s > {BASELINE_MAX_TIME}s"
 
-    def test_optimization_performance_regression(self, synthetic_xpcs_data, test_config):
+    def test_optimization_performance_regression(
+        self, synthetic_xpcs_data, test_config
+    ):
         """Test optimization performance regression."""
         try:
-            from homodyne.optimization.nlsq import fit_nlsq_jax, JAXFIT_AVAILABLE
+            from homodyne.optimization.nlsq import OPTIMISTIX_AVAILABLE, fit_nlsq_jax
         except ImportError:
             pytest.skip("Optimization module not available")
 
-        if not JAXFIT_AVAILABLE:
-            pytest.skip("JAXFit not available")
+        if not OPTIMISTIX_AVAILABLE:
+            pytest.skip("Optimistix not available")
 
         data = synthetic_xpcs_data
 
         # Configure for regression test
         regression_config = test_config.copy()
-        regression_config['optimization']['lsq']['max_iterations'] = 30
+        regression_config["optimization"]["lsq"]["max_iterations"] = 30
 
         # Benchmark optimization
         times = []
@@ -618,7 +645,7 @@ class TestRegressionBenchmarks:
             times.append(elapsed)
             successes.append(result.success)
 
-        successful_times = [t for t, s in zip(times, successes) if s]
+        successful_times = [t for t, s in zip(times, successes, strict=False) if s]
 
         if len(successful_times) == 0:
             pytest.skip("No successful optimizations")
@@ -627,10 +654,12 @@ class TestRegressionBenchmarks:
         success_rate = sum(successes) / len(successes)
 
         # Baseline expectations for optimization
-        BASELINE_OPT_TIME = 20.0     # maximum seconds
+        BASELINE_OPT_TIME = 20.0  # maximum seconds
         BASELINE_SUCCESS_RATE = 0.8  # minimum success rate
 
-        assert avg_time < BASELINE_OPT_TIME, \
-            f"Optimization regression: {avg_time:.3f}s > {BASELINE_OPT_TIME}s"
-        assert success_rate >= BASELINE_SUCCESS_RATE, \
-            f"Success rate regression: {success_rate:.2f} < {BASELINE_SUCCESS_RATE}"
+        assert (
+            avg_time < BASELINE_OPT_TIME
+        ), f"Optimization regression: {avg_time:.3f}s > {BASELINE_OPT_TIME}s"
+        assert (
+            success_rate >= BASELINE_SUCCESS_RATE
+        ), f"Success rate regression: {success_rate:.2f} < {BASELINE_SUCCESS_RATE}"

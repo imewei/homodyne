@@ -19,7 +19,7 @@ import os
 import subprocess
 import time
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 # JAX imports with fallback
 try:
@@ -52,9 +52,9 @@ class GPUOptimizer:
         )
         self.cache_file.parent.mkdir(parents=True, exist_ok=True)
 
-    def detect_gpu_hardware(self) -> Dict[str, Any]:
+    def detect_gpu_hardware(self) -> dict[str, Any]:
         """Detect GPU hardware and JAX integration capabilities."""
-        info: Dict[str, Any] = {
+        info: dict[str, Any] = {
             "available": False,
             "cuda_available": False,
             "devices": [],
@@ -141,8 +141,8 @@ class GPUOptimizer:
         return info
 
     def benchmark_jax_workloads(
-        self, matrix_sizes: Optional[List[int]] = None
-    ) -> Dict[str, Any]:
+        self, matrix_sizes: list[int] | None = None
+    ) -> dict[str, Any]:
         """
         Benchmark JAX operations typical for VI+JAX and MCMC+JAX workloads.
 
@@ -154,7 +154,7 @@ class GPUOptimizer:
         if matrix_sizes is None:
             matrix_sizes = [100, 500, 1000, 2000, 5000]  # Larger sizes for homodyne
 
-        benchmarks: Dict[str, Dict] = {
+        benchmarks: dict[str, dict] = {
             "matrix_operations": {},
             "gradient_computation": {},
             "likelihood_evaluation": {},
@@ -280,13 +280,13 @@ class GPUOptimizer:
 
         return benchmarks
 
-    def determine_optimal_settings(self) -> Dict[str, Any]:
+    def determine_optimal_settings(self) -> dict[str, Any]:
         """
         Determine optimal settings for VI+JAX and MCMC+JAX workloads.
 
         Considers dataset sizes, memory requirements, and JAX-specific optimizations.
         """
-        settings: Dict[str, Any] = {
+        settings: dict[str, Any] = {
             "use_gpu": False,
             "xla_flags": [],
             "jax_settings": {},

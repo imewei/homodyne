@@ -11,17 +11,16 @@ Comprehensive test runner with different test profiles:
 """
 
 import argparse
-import sys
 import subprocess
-import os
+import sys
 from pathlib import Path
-from typing import List, Optional, Dict, Any
+from typing import Any
 
 
 class HomodyneTestRunner:
     """Test runner for Homodyne v2 test suite."""
 
-    def __init__(self, base_dir: Optional[Path] = None):
+    def __init__(self, base_dir: Path | None = None):
         """Initialize test runner."""
         self.base_dir = base_dir or Path(__file__).parent.parent
         self.test_dir = self.base_dir / "tests"
@@ -29,94 +28,118 @@ class HomodyneTestRunner:
     def run_quick_tests(self) -> int:
         """Run quick tests for development."""
         cmd = [
-            "python", "-m", "pytest",
+            "python",
+            "-m",
+            "pytest",
             str(self.test_dir / "unit"),
-            "-m", "not slow",
+            "-m",
+            "not slow",
             "-x",  # Stop on first failure
             "--tb=short",
-            "--durations=5"
+            "--durations=5",
         ]
         return subprocess.call(cmd)
 
     def run_unit_tests(self) -> int:
         """Run unit tests only."""
         cmd = [
-            "python", "-m", "pytest",
+            "python",
+            "-m",
+            "pytest",
             str(self.test_dir / "unit"),
             "--cov=homodyne.core",
             "--cov=homodyne.optimization",
             "--cov=homodyne.data",
-            "--tb=short"
+            "--tb=short",
         ]
         return subprocess.call(cmd)
 
     def run_integration_tests(self) -> int:
         """Run integration tests."""
         cmd = [
-            "python", "-m", "pytest",
+            "python",
+            "-m",
+            "pytest",
             str(self.test_dir / "integration"),
             "--tb=short",
-            "--maxfail=5"
+            "--maxfail=5",
         ]
         return subprocess.call(cmd)
 
     def run_performance_tests(self) -> int:
         """Run performance and benchmark tests."""
         cmd = [
-            "python", "-m", "pytest",
+            "python",
+            "-m",
+            "pytest",
             str(self.test_dir / "performance"),
-            "-m", "performance",
+            "-m",
+            "performance",
             "--benchmark-only",
             "--benchmark-sort=mean",
-            "--benchmark-json=benchmark_results.json"
+            "--benchmark-json=benchmark_results.json",
         ]
         return subprocess.call(cmd)
 
     def run_gpu_tests(self) -> int:
         """Run GPU acceleration tests."""
         cmd = [
-            "python", "-m", "pytest",
+            "python",
+            "-m",
+            "pytest",
             str(self.test_dir / "gpu"),
-            "-m", "gpu",
-            "--tb=short"
+            "-m",
+            "gpu",
+            "--tb=short",
         ]
         return subprocess.call(cmd)
 
     def run_mcmc_tests(self) -> int:
         """Run MCMC statistical tests."""
         cmd = [
-            "python", "-m", "pytest",
+            "python",
+            "-m",
+            "pytest",
             str(self.test_dir / "mcmc"),
-            "-m", "mcmc",
+            "-m",
+            "mcmc",
             "--tb=short",
-            "--maxfail=3"
+            "--maxfail=3",
         ]
         return subprocess.call(cmd)
 
     def run_property_tests(self) -> int:
         """Run property-based tests."""
         cmd = [
-            "python", "-m", "pytest",
+            "python",
+            "-m",
+            "pytest",
             str(self.test_dir / "property"),
-            "-m", "property",
-            "--tb=short"
+            "-m",
+            "property",
+            "--tb=short",
         ]
         return subprocess.call(cmd)
 
     def run_api_tests(self) -> int:
         """Run API compatibility tests."""
         cmd = [
-            "python", "-m", "pytest",
+            "python",
+            "-m",
+            "pytest",
             str(self.test_dir / "api"),
-            "-m", "api",
-            "--tb=short"
+            "-m",
+            "api",
+            "--tb=short",
         ]
         return subprocess.call(cmd)
 
     def run_full_suite(self) -> int:
         """Run complete test suite."""
         cmd = [
-            "python", "-m", "pytest",
+            "python",
+            "-m",
+            "pytest",
             str(self.test_dir),
             "--cov=homodyne",
             "--cov-report=html:htmlcov",
@@ -124,80 +147,96 @@ class HomodyneTestRunner:
             "--cov-fail-under=75",
             "--html=test_report.html",
             "--self-contained-html",
-            "--maxfail=20"
+            "--maxfail=20",
         ]
         return subprocess.call(cmd)
 
     def run_ci_tests(self) -> int:
         """Run tests suitable for CI/CD."""
         cmd = [
-            "python", "-m", "pytest",
+            "python",
+            "-m",
+            "pytest",
             str(self.test_dir),
-            "-m", "not (gpu and requires_gpu)",  # Skip GPU tests in CI
+            "-m",
+            "not (gpu and requires_gpu)",  # Skip GPU tests in CI
             "--cov=homodyne",
             "--cov-report=xml:coverage.xml",
             "--cov-report=term",
             "--junit-xml=test_results.xml",
             "--tb=short",
-            "--maxfail=10"
+            "--maxfail=10",
         ]
         return subprocess.call(cmd)
 
     def run_regression_tests(self) -> int:
         """Run regression tests."""
         cmd = [
-            "python", "-m", "pytest",
+            "python",
+            "-m",
+            "pytest",
             str(self.test_dir / "performance"),
             str(self.test_dir / "integration"),
-            "-m", "not slow",
-            "--tb=short"
+            "-m",
+            "not slow",
+            "--tb=short",
         ]
         return subprocess.call(cmd)
 
-    def run_custom_tests(self, test_args: List[str]) -> int:
+    def run_custom_tests(self, test_args: list[str]) -> int:
         """Run custom test command."""
         cmd = ["python", "-m", "pytest"] + test_args
         return subprocess.call(cmd)
 
-    def check_test_environment(self) -> Dict[str, Any]:
+    def check_test_environment(self) -> dict[str, Any]:
         """Check test environment and dependencies."""
         env_info = {
-            'python_version': sys.version,
-            'test_directory': str(self.test_dir),
-            'dependencies': {}
+            "python_version": sys.version,
+            "test_directory": str(self.test_dir),
+            "dependencies": {},
         }
 
         # Check core dependencies
         dependencies = [
-            'numpy', 'jax', 'pytest', 'hypothesis',
-            'scipy', 'h5py', 'yaml', 'arviz'
+            "numpy",
+            "jax",
+            "pytest",
+            "hypothesis",
+            "scipy",
+            "h5py",
+            "yaml",
+            "arviz",
         ]
 
         for dep in dependencies:
             try:
                 module = __import__(dep)
-                env_info['dependencies'][dep] = getattr(module, '__version__', 'unknown')
+                env_info["dependencies"][dep] = getattr(
+                    module, "__version__", "unknown"
+                )
             except ImportError:
-                env_info['dependencies'][dep] = 'not_installed'
+                env_info["dependencies"][dep] = "not_installed"
 
         # Check JAX backend
         try:
             import jax
-            env_info['jax_backend'] = jax.default_backend()
-            env_info['jax_devices'] = [str(d) for d in jax.devices()]
+
+            env_info["jax_backend"] = jax.default_backend()
+            env_info["jax_devices"] = [str(d) for d in jax.devices()]
         except ImportError:
-            env_info['jax_backend'] = 'not_available'
-            env_info['jax_devices'] = []
+            env_info["jax_backend"] = "not_available"
+            env_info["jax_devices"] = []
 
         # Check GPU availability
         try:
             import jax
-            gpu_devices = jax.devices('gpu')
-            env_info['gpu_available'] = len(gpu_devices) > 0
-            env_info['gpu_devices'] = [str(d) for d in gpu_devices]
+
+            gpu_devices = jax.devices("gpu")
+            env_info["gpu_available"] = len(gpu_devices) > 0
+            env_info["gpu_devices"] = [str(d) for d in gpu_devices]
         except:
-            env_info['gpu_available'] = False
-            env_info['gpu_devices'] = []
+            env_info["gpu_available"] = False
+            env_info["gpu_devices"] = []
 
         return env_info
 
@@ -215,11 +254,11 @@ class HomodyneTestRunner:
         print(f"GPU Available: {env_info.get('gpu_available', False)}")
 
         print("\nDependencies:")
-        for dep, version in env_info['dependencies'].items():
-            status = "✓" if version != 'not_installed' else "✗"
+        for dep, version in env_info["dependencies"].items():
+            status = "✓" if version != "not_installed" else "✗"
             print(f"  {status} {dep}: {version}")
 
-        if env_info.get('gpu_devices'):
+        if env_info.get("gpu_devices"):
             print(f"\nGPU Devices: {env_info['gpu_devices']}")
 
         print("=" * 60)
@@ -232,24 +271,28 @@ def main():
     parser.add_argument(
         "test_type",
         choices=[
-            "quick", "unit", "integration", "performance",
-            "gpu", "mcmc", "property", "api",
-            "full", "ci", "regression", "custom", "env"
+            "quick",
+            "unit",
+            "integration",
+            "performance",
+            "gpu",
+            "mcmc",
+            "property",
+            "api",
+            "full",
+            "ci",
+            "regression",
+            "custom",
+            "env",
         ],
-        help="Type of tests to run"
+        help="Type of tests to run",
     )
 
     parser.add_argument(
-        "test_args",
-        nargs="*",
-        help="Additional test arguments (for custom mode)"
+        "test_args", nargs="*", help="Additional test arguments (for custom mode)"
     )
 
-    parser.add_argument(
-        "--base-dir",
-        type=Path,
-        help="Base directory for tests"
-    )
+    parser.add_argument("--base-dir", type=Path, help="Base directory for tests")
 
     args = parser.parse_args()
 
@@ -272,7 +315,7 @@ def main():
         "full": runner.run_full_suite,
         "ci": runner.run_ci_tests,
         "regression": runner.run_regression_tests,
-        "custom": lambda: runner.run_custom_tests(args.test_args)
+        "custom": lambda: runner.run_custom_tests(args.test_args),
     }
 
     method = test_methods.get(args.test_type)

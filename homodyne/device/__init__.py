@@ -27,11 +27,12 @@ logger = get_logger(__name__)
 # Import device-specific modules with fallback
 try:
     from homodyne.device.cpu import (
+        benchmark_cpu_performance,
         configure_cpu_hpc,
         detect_cpu_info,
         get_optimal_batch_size,
-        benchmark_cpu_performance
     )
+
     HAS_CPU_MODULE = True
 except ImportError as e:
     logger.warning(f"CPU optimization module not available: {e}")
@@ -39,13 +40,14 @@ except ImportError as e:
 
 try:
     from homodyne.device.gpu import (
+        benchmark_gpu_performance,
         configure_system_cuda,
         detect_system_cuda,
         get_gpu_memory_info,
         optimize_gpu_memory,
-        benchmark_gpu_performance,
-        validate_cuda_installation
+        validate_cuda_installation,
     )
+
     HAS_GPU_MODULE = True
 except ImportError as e:
     logger.warning(f"GPU optimization module not available: {e}")
@@ -55,9 +57,9 @@ except ImportError as e:
 def configure_optimal_device(
     prefer_gpu: bool = True,
     gpu_memory_fraction: float = 0.9,
-    cpu_threads: Optional[int] = None,
-    force_cpu: bool = False
-) -> Dict[str, any]:
+    cpu_threads: int | None = None,
+    force_cpu: bool = False,
+) -> dict[str, any]:
     """
     Automatically configure the optimal device for homodyne analysis.
 
@@ -83,12 +85,12 @@ def configure_optimal_device(
     logger.info("Configuring optimal device for homodyne analysis")
 
     config_result = {
-        'device_type': 'unknown',
-        'configuration_successful': False,
-        'performance_ready': False,
-        'recommendations': [],
-        'warnings': [],
-        'device_info': {}
+        "device_type": "unknown",
+        "configuration_successful": False,
+        "performance_ready": False,
+        "recommendations": [],
+        "warnings": [],
+        "device_info": {},
     }
 
     # Force CPU mode if requested
@@ -100,39 +102,41 @@ def configure_optimal_device(
     if prefer_gpu and HAS_GPU_MODULE:
         try:
             logger.info("Attempting GPU configuration...")
-            gpu_config = configure_system_cuda(
-                memory_fraction=gpu_memory_fraction
-            )
+            gpu_config = configure_system_cuda(memory_fraction=gpu_memory_fraction)
 
-            if gpu_config['cuda_configured']:
-                config_result.update({
-                    'device_type': 'gpu',
-                    'configuration_successful': True,
-                    'performance_ready': True,
-                    'device_info': gpu_config,
-                    'recommendations': [
-                        "GPU acceleration configured successfully",
-                        f"Using {gpu_memory_fraction:.0%} of GPU memory"
-                    ]
-                })
+            if gpu_config["cuda_configured"]:
+                config_result.update(
+                    {
+                        "device_type": "gpu",
+                        "configuration_successful": True,
+                        "performance_ready": True,
+                        "device_info": gpu_config,
+                        "recommendations": [
+                            "GPU acceleration configured successfully",
+                            f"Using {gpu_memory_fraction:.0%} of GPU memory",
+                        ],
+                    }
+                )
 
                 logger.info("✓ GPU configuration successful")
                 return config_result
 
             else:
                 logger.info("GPU configuration failed, falling back to CPU")
-                if 'error' in gpu_config:
-                    config_result['warnings'].append(f"GPU setup failed: {gpu_config['error']}")
+                if "error" in gpu_config:
+                    config_result["warnings"].append(
+                        f"GPU setup failed: {gpu_config['error']}"
+                    )
 
         except Exception as e:
             logger.warning(f"GPU configuration attempt failed: {e}")
-            config_result['warnings'].append(f"GPU configuration error: {e}")
+            config_result["warnings"].append(f"GPU configuration error: {e}")
 
     # Configure CPU (either as fallback or primary choice)
     return _configure_cpu_optimal(config_result, cpu_threads)
 
 
-def _configure_cpu_optimal(config_result: Dict, cpu_threads: Optional[int]) -> Dict:
+def _configure_cpu_optimal(config_result: dict, cpu_threads: int | None) -> dict:
     """Configure optimal CPU settings."""
     logger.info("Configuring CPU optimization...")
 
@@ -142,56 +146,64 @@ def _configure_cpu_optimal(config_result: Dict, cpu_threads: Optional[int]) -> D
                 num_threads=cpu_threads,
                 enable_hyperthreading=False,  # Usually better for HPC
                 numa_policy="auto",
-                memory_optimization="standard"
+                memory_optimization="standard",
             )
 
-            config_result.update({
-                'device_type': 'cpu',
-                'configuration_successful': True,
-                'performance_ready': True,
-                'device_info': cpu_config,
-                'recommendations': [
-                    f"CPU optimization configured for {cpu_config['threads_configured']} threads",
-                    "Consider GPU acceleration for larger datasets"
-                ]
-            })
+            config_result.update(
+                {
+                    "device_type": "cpu",
+                    "configuration_successful": True,
+                    "performance_ready": True,
+                    "device_info": cpu_config,
+                    "recommendations": [
+                        f"CPU optimization configured for {cpu_config['threads_configured']} threads",
+                        "Consider GPU acceleration for larger datasets",
+                    ],
+                }
+            )
 
-            logger.info(f"✓ CPU configuration successful with {cpu_config['threads_configured']} threads")
+            logger.info(
+                f"✓ CPU configuration successful with {cpu_config['threads_configured']} threads"
+            )
 
         else:
             # Minimal CPU configuration if module not available
-            import os
             import multiprocessing
+            import os
 
             num_cores = multiprocessing.cpu_count()
-            os.environ['OMP_NUM_THREADS'] = str(num_cores)
-            os.environ['JAX_PLATFORM_NAME'] = 'cpu'
+            os.environ["OMP_NUM_THREADS"] = str(num_cores)
+            os.environ["JAX_PLATFORM_NAME"] = "cpu"
 
-            config_result.update({
-                'device_type': 'cpu',
-                'configuration_successful': True,
-                'performance_ready': False,
-                'recommendations': [
-                    f"Basic CPU configuration with {num_cores} cores",
-                    "Install psutil for advanced CPU optimization"
-                ]
-            })
+            config_result.update(
+                {
+                    "device_type": "cpu",
+                    "configuration_successful": True,
+                    "performance_ready": False,
+                    "recommendations": [
+                        f"Basic CPU configuration with {num_cores} cores",
+                        "Install psutil for advanced CPU optimization",
+                    ],
+                }
+            )
 
             logger.info("✓ Basic CPU configuration completed")
 
     except Exception as e:
         logger.error(f"CPU configuration failed: {e}")
-        config_result.update({
-            'device_type': 'cpu',
-            'configuration_successful': False,
-            'performance_ready': False,
-            'warnings': [f"CPU configuration failed: {e}"]
-        })
+        config_result.update(
+            {
+                "device_type": "cpu",
+                "configuration_successful": False,
+                "performance_ready": False,
+                "warnings": [f"CPU configuration failed: {e}"],
+            }
+        )
 
     return config_result
 
 
-def get_device_status() -> Dict[str, any]:
+def get_device_status() -> dict[str, any]:
     """
     Get current device status and capabilities.
 
@@ -201,58 +213,65 @@ def get_device_status() -> Dict[str, any]:
         Comprehensive device status information
     """
     status = {
-        'timestamp': None,
-        'cpu_info': {},
-        'gpu_info': {},
-        'recommendations': [],
-        'performance_estimate': 'unknown'
+        "timestamp": None,
+        "cpu_info": {},
+        "gpu_info": {},
+        "recommendations": [],
+        "performance_estimate": "unknown",
     }
 
     try:
         import datetime
-        status['timestamp'] = datetime.datetime.now().isoformat()
+
+        status["timestamp"] = datetime.datetime.now().isoformat()
 
         # Get CPU information
         if HAS_CPU_MODULE:
-            status['cpu_info'] = detect_cpu_info()
+            status["cpu_info"] = detect_cpu_info()
         else:
             import multiprocessing
-            status['cpu_info'] = {
-                'logical_cores': multiprocessing.cpu_count(),
-                'optimization_available': False
+
+            status["cpu_info"] = {
+                "logical_cores": multiprocessing.cpu_count(),
+                "optimization_available": False,
             }
 
         # Get GPU information
         if HAS_GPU_MODULE:
-            status['gpu_info'] = detect_system_cuda()
+            status["gpu_info"] = detect_system_cuda()
         else:
-            status['gpu_info'] = {
-                'cuda_available': False,
-                'optimization_available': False
+            status["gpu_info"] = {
+                "cuda_available": False,
+                "optimization_available": False,
             }
 
         # Generate performance estimate
-        if status['gpu_info'].get('cuda_available', False):
-            status['performance_estimate'] = 'high'
-            status['recommendations'].append("GPU acceleration available - excellent performance expected")
-        elif status['cpu_info'].get('physical_cores', 0) >= 16:
-            status['performance_estimate'] = 'medium-high'
-            status['recommendations'].append("Multi-core CPU detected - good performance expected")
+        if status["gpu_info"].get("cuda_available", False):
+            status["performance_estimate"] = "high"
+            status["recommendations"].append(
+                "GPU acceleration available - excellent performance expected"
+            )
+        elif status["cpu_info"].get("physical_cores", 0) >= 16:
+            status["performance_estimate"] = "medium-high"
+            status["recommendations"].append(
+                "Multi-core CPU detected - good performance expected"
+            )
         else:
-            status['performance_estimate'] = 'medium'
-            status['recommendations'].append("Consider upgrading hardware for better performance")
+            status["performance_estimate"] = "medium"
+            status["recommendations"].append(
+                "Consider upgrading hardware for better performance"
+            )
 
     except Exception as e:
         logger.error(f"Device status check failed: {e}")
-        status['error'] = str(e)
+        status["error"] = str(e)
 
     return status
 
 
 def benchmark_device_performance(
-    device_type: Optional[str] = None,
-    test_size: int = 5000
-) -> Dict[str, any]:
+    device_type: str | None = None, test_size: int = 5000
+) -> dict[str, any]:
     """
     Benchmark device performance for optimization planning.
 
@@ -271,43 +290,53 @@ def benchmark_device_performance(
     logger.info(f"Benchmarking device performance (test_size={test_size})")
 
     benchmark_results = {
-        'device_type': device_type or 'auto',
-        'test_size': test_size,
-        'results': {},
-        'recommendations': []
+        "device_type": device_type or "auto",
+        "test_size": test_size,
+        "results": {},
+        "recommendations": [],
     }
 
     try:
         # Benchmark CPU if available or requested
-        if (device_type in [None, 'cpu']) and HAS_CPU_MODULE:
+        if (device_type in [None, "cpu"]) and HAS_CPU_MODULE:
             logger.info("Running CPU benchmark...")
             cpu_results = benchmark_cpu_performance(test_size=test_size)
-            benchmark_results['results']['cpu'] = cpu_results
+            benchmark_results["results"]["cpu"] = cpu_results
 
         # Benchmark GPU if available or requested
-        if (device_type in [None, 'gpu']) and HAS_GPU_MODULE:
+        if (device_type in [None, "gpu"]) and HAS_GPU_MODULE:
             logger.info("Running GPU benchmark...")
             gpu_results = benchmark_gpu_performance(test_sizes=[test_size])
-            benchmark_results['results']['gpu'] = gpu_results
+            benchmark_results["results"]["gpu"] = gpu_results
 
         # Generate recommendations based on results
-        if 'gpu' in benchmark_results['results'] and 'cpu' in benchmark_results['results']:
-            gpu_time = benchmark_results['results']['gpu'].get('test_results', {}).get(test_size, {}).get('mean_time', float('inf'))
-            cpu_time = benchmark_results['results']['cpu'].get('numpy_mean_time', float('inf'))
+        if (
+            "gpu" in benchmark_results["results"]
+            and "cpu" in benchmark_results["results"]
+        ):
+            gpu_time = (
+                benchmark_results["results"]["gpu"]
+                .get("test_results", {})
+                .get(test_size, {})
+                .get("mean_time", float("inf"))
+            )
+            cpu_time = benchmark_results["results"]["cpu"].get(
+                "numpy_mean_time", float("inf")
+            )
 
             if gpu_time < cpu_time:
                 speedup = cpu_time / gpu_time if gpu_time > 0 else 1
-                benchmark_results['recommendations'].append(
+                benchmark_results["recommendations"].append(
                     f"GPU acceleration provides {speedup:.1f}x speedup over CPU"
                 )
             else:
-                benchmark_results['recommendations'].append(
+                benchmark_results["recommendations"].append(
                     "CPU performance competitive with GPU for this problem size"
                 )
 
     except Exception as e:
         logger.error(f"Device benchmarking failed: {e}")
-        benchmark_results['error'] = str(e)
+        benchmark_results["error"] = str(e)
 
     return benchmark_results
 
@@ -316,20 +345,16 @@ def benchmark_device_performance(
 __all__ = [
     # Primary device configuration
     "configure_optimal_device",
-
     # Device information
     "get_device_status",
     "benchmark_device_performance",
-
     # CPU-specific (if available)
     "configure_cpu_hpc" if HAS_CPU_MODULE else None,
     "detect_cpu_info" if HAS_CPU_MODULE else None,
-
     # GPU-specific (if available)
     "configure_system_cuda" if HAS_GPU_MODULE else None,
     "detect_system_cuda" if HAS_GPU_MODULE else None,
     "validate_cuda_installation" if HAS_GPU_MODULE else None,
-
     # Status flags
     "HAS_CPU_MODULE",
     "HAS_GPU_MODULE",

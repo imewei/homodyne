@@ -22,9 +22,9 @@ HPC Environment Support:
 
 import os
 import platform
-import psutil
 import subprocess
-from typing import Dict, Optional, Tuple
+
+import psutil
 
 from homodyne.utils.logging import get_logger
 
@@ -34,13 +34,14 @@ logger = get_logger(__name__)
 try:
     import jax
     import jax.numpy as jnp
+
     JAX_AVAILABLE = True
 except ImportError:
     JAX_AVAILABLE = False
     jax = None
 
 
-def detect_cpu_info() -> Dict[str, any]:
+def detect_cpu_info() -> dict[str, any]:
     """
     Detect CPU architecture and capabilities for optimization.
 
@@ -50,52 +51,54 @@ def detect_cpu_info() -> Dict[str, any]:
         CPU information including cores, architecture, and optimization hints
     """
     info = {
-        'physical_cores': psutil.cpu_count(logical=False),
-        'logical_cores': psutil.cpu_count(logical=True),
-        'architecture': platform.machine(),
-        'processor': platform.processor(),
-        'numa_nodes': 1,  # Default
-        'cpu_brand': 'Unknown',
-        'supports_avx': False,
-        'supports_avx512': False,
-        'optimization_flags': []
+        "physical_cores": psutil.cpu_count(logical=False),
+        "logical_cores": psutil.cpu_count(logical=True),
+        "architecture": platform.machine(),
+        "processor": platform.processor(),
+        "numa_nodes": 1,  # Default
+        "cpu_brand": "Unknown",
+        "supports_avx": False,
+        "supports_avx512": False,
+        "optimization_flags": [],
     }
 
     try:
         # Try to get CPU brand information
         if platform.system() == "Linux":
-            with open('/proc/cpuinfo', 'r') as f:
+            with open("/proc/cpuinfo") as f:
                 cpuinfo = f.read()
-                for line in cpuinfo.split('\n'):
-                    if 'model name' in line:
-                        info['cpu_brand'] = line.split(':')[1].strip()
+                for line in cpuinfo.split("\n"):
+                    if "model name" in line:
+                        info["cpu_brand"] = line.split(":")[1].strip()
                         break
-                    if 'flags' in line or 'Features' in line:
-                        flags = line.split(':')[1].strip().split()
-                        info['supports_avx'] = 'avx' in flags
-                        info['supports_avx512'] = any('avx512' in flag for flag in flags)
+                    if "flags" in line or "Features" in line:
+                        flags = line.split(":")[1].strip().split()
+                        info["supports_avx"] = "avx" in flags
+                        info["supports_avx512"] = any(
+                            "avx512" in flag for flag in flags
+                        )
 
         # Detect NUMA topology
         try:
-            result = subprocess.run(['lscpu'], capture_output=True, text=True)
+            result = subprocess.run(["lscpu"], capture_output=True, text=True)
             if result.returncode == 0:
-                for line in result.stdout.split('\n'):
-                    if 'NUMA node(s):' in line:
-                        info['numa_nodes'] = int(line.split(':')[1].strip())
+                for line in result.stdout.split("\n"):
+                    if "NUMA node(s):" in line:
+                        info["numa_nodes"] = int(line.split(":")[1].strip())
                         break
         except (subprocess.SubprocessError, FileNotFoundError):
             pass
 
         # Set optimization recommendations
-        if 'Intel' in info['cpu_brand']:
-            info['optimization_flags'].append('intel_mkl')
-        elif 'AMD' in info['cpu_brand']:
-            info['optimization_flags'].append('amd_blis')
+        if "Intel" in info["cpu_brand"]:
+            info["optimization_flags"].append("intel_mkl")
+        elif "AMD" in info["cpu_brand"]:
+            info["optimization_flags"].append("amd_blis")
 
-        if info['supports_avx512']:
-            info['optimization_flags'].append('avx512')
-        elif info['supports_avx']:
-            info['optimization_flags'].append('avx2')
+        if info["supports_avx512"]:
+            info["optimization_flags"].append("avx512")
+        elif info["supports_avx"]:
+            info["optimization_flags"].append("avx2")
 
     except Exception as e:
         logger.warning(f"Could not detect full CPU information: {e}")
@@ -104,11 +107,11 @@ def detect_cpu_info() -> Dict[str, any]:
 
 
 def configure_cpu_hpc(
-    num_threads: Optional[int] = None,
+    num_threads: int | None = None,
     enable_hyperthreading: bool = False,
     numa_policy: str = "auto",
-    memory_optimization: str = "standard"
-) -> Dict[str, any]:
+    memory_optimization: str = "standard",
+) -> dict[str, any]:
     """
     Configure JAX and system for HPC CPU optimization.
 
@@ -138,9 +141,9 @@ def configure_cpu_hpc(
     # Determine optimal thread count
     if num_threads is None:
         if enable_hyperthreading:
-            num_threads = cpu_info['logical_cores']
+            num_threads = cpu_info["logical_cores"]
         else:
-            num_threads = cpu_info['physical_cores']
+            num_threads = cpu_info["physical_cores"]
 
         # For HPC environments, often better to leave some cores for system
         if num_threads >= 32:
@@ -148,7 +151,9 @@ def configure_cpu_hpc(
         elif num_threads >= 16:
             num_threads = max(num_threads - 2, 16)  # Reserve 2 cores for system
 
-    logger.info(f"Using {num_threads} threads on {cpu_info['physical_cores']} physical cores")
+    logger.info(
+        f"Using {num_threads} threads on {cpu_info['physical_cores']} physical cores"
+    )
 
     # Configure environment variables for optimal performance
     config_summary = _set_cpu_environment_variables(
@@ -160,109 +165,109 @@ def configure_cpu_hpc(
         jax_config = _configure_jax_cpu(num_threads, cpu_info)
         config_summary.update(jax_config)
 
-    config_summary.update({
-        'cpu_info': cpu_info,
-        'threads_configured': num_threads,
-        'hyperthreading_enabled': enable_hyperthreading,
-        'numa_policy': numa_policy,
-        'memory_optimization': memory_optimization
-    })
+    config_summary.update(
+        {
+            "cpu_info": cpu_info,
+            "threads_configured": num_threads,
+            "hyperthreading_enabled": enable_hyperthreading,
+            "numa_policy": numa_policy,
+            "memory_optimization": memory_optimization,
+        }
+    )
 
-    logger.info(f"HPC CPU configuration completed: {num_threads} threads, "
-               f"{cpu_info['numa_nodes']} NUMA nodes")
+    logger.info(
+        f"HPC CPU configuration completed: {num_threads} threads, "
+        f"{cpu_info['numa_nodes']} NUMA nodes"
+    )
 
     return config_summary
 
 
 def _set_cpu_environment_variables(
-    num_threads: int,
-    cpu_info: Dict,
-    numa_policy: str,
-    memory_optimization: str
-) -> Dict[str, str]:
+    num_threads: int, cpu_info: dict, numa_policy: str, memory_optimization: str
+) -> dict[str, str]:
     """Set environment variables for optimal CPU performance."""
 
     env_vars = {}
 
     # OpenMP configuration
-    os.environ['OMP_NUM_THREADS'] = str(num_threads)
-    os.environ['OMP_PROC_BIND'] = 'true'
-    os.environ['OMP_PLACES'] = 'cores'
-    env_vars['OMP_NUM_THREADS'] = str(num_threads)
+    os.environ["OMP_NUM_THREADS"] = str(num_threads)
+    os.environ["OMP_PROC_BIND"] = "true"
+    os.environ["OMP_PLACES"] = "cores"
+    env_vars["OMP_NUM_THREADS"] = str(num_threads)
 
     # Intel MKL configuration (if Intel CPU)
-    if 'intel' in cpu_info.get('optimization_flags', []):
-        os.environ['MKL_NUM_THREADS'] = str(num_threads)
-        os.environ['MKL_DOMAIN_NUM_THREADS'] = f"MKL_BLAS={num_threads}"
-        env_vars['MKL_NUM_THREADS'] = str(num_threads)
+    if "intel" in cpu_info.get("optimization_flags", []):
+        os.environ["MKL_NUM_THREADS"] = str(num_threads)
+        os.environ["MKL_DOMAIN_NUM_THREADS"] = f"MKL_BLAS={num_threads}"
+        env_vars["MKL_NUM_THREADS"] = str(num_threads)
 
     # BLAS configuration
-    os.environ['OPENBLAS_NUM_THREADS'] = str(num_threads)
-    os.environ['VECLIB_MAXIMUM_THREADS'] = str(num_threads)
-    env_vars['OPENBLAS_NUM_THREADS'] = str(num_threads)
+    os.environ["OPENBLAS_NUM_THREADS"] = str(num_threads)
+    os.environ["VECLIB_MAXIMUM_THREADS"] = str(num_threads)
+    env_vars["OPENBLAS_NUM_THREADS"] = str(num_threads)
 
     # Memory optimization
     if memory_optimization == "aggressive":
-        os.environ['MALLOC_TRIM_THRESHOLD_'] = '65536'
-        os.environ['MALLOC_MMAP_THRESHOLD_'] = '65536'
+        os.environ["MALLOC_TRIM_THRESHOLD_"] = "65536"
+        os.environ["MALLOC_MMAP_THRESHOLD_"] = "65536"
     elif memory_optimization == "standard":
-        os.environ['MALLOC_TRIM_THRESHOLD_'] = '131072'
+        os.environ["MALLOC_TRIM_THRESHOLD_"] = "131072"
 
     # NUMA policy
-    if numa_policy == "local" and cpu_info['numa_nodes'] > 1:
-        os.environ['NUMA_POLICY'] = 'local'
-    elif numa_policy == "interleave" and cpu_info['numa_nodes'] > 1:
-        os.environ['NUMA_POLICY'] = 'interleave'
+    if numa_policy == "local" and cpu_info["numa_nodes"] > 1:
+        os.environ["NUMA_POLICY"] = "local"
+    elif numa_policy == "interleave" and cpu_info["numa_nodes"] > 1:
+        os.environ["NUMA_POLICY"] = "interleave"
 
     return env_vars
 
 
-def _configure_jax_cpu(num_threads: int, cpu_info: Dict) -> Dict[str, any]:
+def _configure_jax_cpu(num_threads: int, cpu_info: dict) -> dict[str, any]:
     """Configure JAX for optimal CPU performance."""
 
     jax_config = {}
 
     try:
         # Force CPU platform
-        os.environ['JAX_PLATFORM_NAME'] = 'cpu'
-        jax_config['platform'] = 'cpu'
+        os.environ["JAX_PLATFORM_NAME"] = "cpu"
+        jax_config["platform"] = "cpu"
 
         # Enable 64-bit precision for scientific computing
-        jax.config.update('jax_enable_x64', True)
-        jax_config['x64_enabled'] = True
+        jax.config.update("jax_enable_x64", True)
+        jax_config["x64_enabled"] = True
 
         # Configure CPU-specific optimizations
-        if cpu_info.get('supports_avx512'):
-            os.environ['XLA_FLAGS'] = (
-                '--xla_cpu_multi_thread_eigen=true '
-                '--xla_cpu_use_thunk_runtime=false '
-                '--xla_cpu_enable_fast_math=true '
-                '--xla_cpu_enable_xla_runtime=false'
+        if cpu_info.get("supports_avx512"):
+            os.environ["XLA_FLAGS"] = (
+                "--xla_cpu_multi_thread_eigen=true "
+                "--xla_cpu_use_thunk_runtime=false "
+                "--xla_cpu_enable_fast_math=true "
+                "--xla_cpu_enable_xla_runtime=false"
             )
-            jax_config['optimizations'] = 'avx512_enabled'
+            jax_config["optimizations"] = "avx512_enabled"
         else:
-            os.environ['XLA_FLAGS'] = (
-                '--xla_cpu_multi_thread_eigen=true '
-                '--xla_cpu_use_thunk_runtime=false'
+            os.environ["XLA_FLAGS"] = (
+                "--xla_cpu_multi_thread_eigen=true --xla_cpu_use_thunk_runtime=false"
             )
-            jax_config['optimizations'] = 'standard'
+            jax_config["optimizations"] = "standard"
 
         # Memory optimization
-        jax.config.update('jax_default_device', jax.devices('cpu')[0])
+        jax.config.update("jax_default_device", jax.devices("cpu")[0])
 
         logger.info("JAX CPU configuration completed successfully")
 
     except Exception as e:
         logger.warning(f"JAX CPU configuration failed: {e}")
-        jax_config['error'] = str(e)
+        jax_config["error"] = str(e)
 
     return jax_config
 
 
 def get_optimal_batch_size(
     data_size: int,
-    available_memory_gb: Optional[float] = None,
-    target_memory_usage: float = 0.7
+    available_memory_gb: float | None = None,
+    target_memory_usage: float = 0.7,
 ) -> int:
     """
     Calculate optimal batch size for CPU processing.
@@ -296,16 +301,17 @@ def get_optimal_batch_size(
     # Ensure batch size is reasonable
     optimal_batch_size = max(min(optimal_batch_size, data_size), 1000)
 
-    logger.info(f"Optimal batch size: {optimal_batch_size} "
-               f"(memory: {available_memory_gb:.1f}GB)")
+    logger.info(
+        f"Optimal batch size: {optimal_batch_size} "
+        f"(memory: {available_memory_gb:.1f}GB)"
+    )
 
     return optimal_batch_size
 
 
 def benchmark_cpu_performance(
-    test_size: int = 10000,
-    num_iterations: int = 5
-) -> Dict[str, float]:
+    test_size: int = 10000, num_iterations: int = 5
+) -> dict[str, float]:
     """
     Benchmark CPU performance for optimization planning.
 
@@ -324,12 +330,10 @@ def benchmark_cpu_performance(
     logger.info(f"Running CPU benchmark with {test_size} data points")
 
     import time
+
     import numpy as np
 
-    results = {
-        'numpy_performance': [],
-        'cpu_info': detect_cpu_info()
-    }
+    results = {"numpy_performance": [], "cpu_info": detect_cpu_info()}
 
     # NumPy benchmark
     for i in range(num_iterations):
@@ -338,20 +342,20 @@ def benchmark_cpu_performance(
         # Simulate typical XPCS computation
         x = np.random.randn(test_size, test_size)
         y = np.fft.fft2(x)
-        z = np.abs(y)**2
+        z = np.abs(y) ** 2
         result = np.sum(z)
 
         end_time = time.perf_counter()
-        results['numpy_performance'].append(end_time - start_time)
+        results["numpy_performance"].append(end_time - start_time)
 
     # JAX benchmark (if available)
     if JAX_AVAILABLE:
-        results['jax_performance'] = []
+        results["jax_performance"] = []
 
         @jax.jit
         def jax_computation(x):
             y = jnp.fft.fft2(x)
-            z = jnp.abs(y)**2
+            z = jnp.abs(y) ** 2
             return jnp.sum(z)
 
         # Warm up JIT
@@ -366,20 +370,22 @@ def benchmark_cpu_performance(
             result.block_until_ready()  # Ensure computation completes
 
             end_time = time.perf_counter()
-            results['jax_performance'].append(end_time - start_time)
+            results["jax_performance"].append(end_time - start_time)
 
     # Calculate statistics
-    results['numpy_mean_time'] = np.mean(results['numpy_performance'])
-    results['numpy_std_time'] = np.std(results['numpy_performance'])
+    results["numpy_mean_time"] = np.mean(results["numpy_performance"])
+    results["numpy_std_time"] = np.std(results["numpy_performance"])
 
     if JAX_AVAILABLE:
-        results['jax_mean_time'] = np.mean(results['jax_performance'])
-        results['jax_std_time'] = np.std(results['jax_performance'])
-        results['jax_speedup'] = results['numpy_mean_time'] / results['jax_mean_time']
+        results["jax_mean_time"] = np.mean(results["jax_performance"])
+        results["jax_std_time"] = np.std(results["jax_performance"])
+        results["jax_speedup"] = results["numpy_mean_time"] / results["jax_mean_time"]
 
     logger.info(f"Benchmark completed. NumPy: {results['numpy_mean_time']:.3f}s avg")
     if JAX_AVAILABLE:
-        logger.info(f"JAX: {results['jax_mean_time']:.3f}s avg "
-                   f"(speedup: {results.get('jax_speedup', 0):.2f}x)")
+        logger.info(
+            f"JAX: {results['jax_mean_time']:.3f}s avg "
+            f"(speedup: {results.get('jax_speedup', 0):.2f}x)"
+        )
 
     return results

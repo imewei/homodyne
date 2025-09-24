@@ -21,15 +21,26 @@ Performance Features:
 """
 
 from homodyne.core.fitting import FitResult, ScaledFittingEngine
-from homodyne.core.jax_backend import (compute_g1_diffusion, compute_g1_shear,
-                                       compute_g2_scaled, gradient_g2,
-                                       hessian_g2, jax_available)
-from homodyne.core.models import (CombinedModel, DiffusionModel,
-                                  PhysicsModelBase, ShearModel)
-from homodyne.core.physics import (PhysicsConstants, parameter_bounds,
-                                   validate_parameters)
-from homodyne.core.theory import (TheoryEngine, compute_chi2_theory,
-                                  compute_g2_theory)
+from homodyne.core.jax_backend import (
+    compute_g1_diffusion,
+    compute_g1_shear,
+    compute_g2_scaled,
+    gradient_g2,
+    hessian_g2,
+    jax_available,
+)
+from homodyne.core.models import (
+    CombinedModel,
+    DiffusionModel,
+    PhysicsModelBase,
+    ShearModel,
+)
+from homodyne.core.physics import (
+    PhysicsConstants,
+    parameter_bounds,
+    validate_parameters,
+)
+from homodyne.core.theory import TheoryEngine, compute_chi2_theory, compute_g2_theory
 
 __all__ = [
     # JAX backend

@@ -10,14 +10,15 @@ Tests for homodyne.core.jax_backend module including:
 - CPU/GPU compatibility
 """
 
-import pytest
+
 import numpy as np
-from typing import Dict, Any
+import pytest
 
 # Handle JAX imports
 try:
     import jax
     import jax.numpy as jnp
+
     JAX_AVAILABLE = True
 except ImportError:
     JAX_AVAILABLE = False
@@ -26,10 +27,9 @@ except ImportError:
 from homodyne.core.jax_backend import (
     compute_g1_diffusion,
     compute_g1_shear,
-    compute_g2_scaled,
-    gradient_g2,
-    hessian_g2,
-    jax_available as BACKEND_JAX_AVAILABLE
+)
+from homodyne.core.jax_backend import (
+    jax_available as BACKEND_JAX_AVAILABLE,
 )
 
 
@@ -67,7 +67,7 @@ class TestJAXBackendCore:
     def test_g1_diffusion_symmetry(self, jax_backend):
         """Test g1 diffusion symmetry properties."""
         n = 5
-        t1, t2 = jnp.meshgrid(jnp.arange(n), jnp.arange(n), indexing='ij')
+        t1, t2 = jnp.meshgrid(jnp.arange(n), jnp.arange(n), indexing="ij")
         q = 0.015
         D = 0.05
         dt = 1.0  # Time step
@@ -81,7 +81,7 @@ class TestJAXBackendCore:
 
     def test_g1_shear_basic(self, jax_backend):
         """Test basic g1 shear computation."""
-        phi = jnp.linspace(0, 2*jnp.pi, 36)
+        phi = jnp.linspace(0, 2 * jnp.pi, 36)
         t1 = jnp.array([[0, 1, 2]])
         t2 = jnp.array([[0], [1], [2]])
         gamma_dot = 0.1
@@ -100,7 +100,7 @@ class TestJAXBackendCore:
 
     def test_g1_shear_no_shear(self, jax_backend):
         """Test g1 shear with zero shear rate."""
-        phi = jnp.linspace(0, 2*jnp.pi, 24)
+        phi = jnp.linspace(0, 2 * jnp.pi, 24)
         t1 = jnp.ones((1, 5))
         t2 = jnp.ones((5, 1))
         gamma_dot = 0.0  # No shear
@@ -117,15 +117,15 @@ class TestJAXBackendCore:
         """Test basic c2 model computation."""
         n_times = 10
         n_angles = 12
-        t1, t2 = jnp.meshgrid(jnp.arange(n_times), jnp.arange(n_times), indexing='ij')
-        phi = jnp.linspace(0, 2*jnp.pi, n_angles)
+        t1, t2 = jnp.meshgrid(jnp.arange(n_times), jnp.arange(n_times), indexing="ij")
+        phi = jnp.linspace(0, 2 * jnp.pi, n_angles)
 
         params = {
-            'offset': 1.0,
-            'contrast': 0.5,
-            'diffusion_coefficient': 0.1,
-            'shear_rate': 0.0,
-            'L': 1.0
+            "offset": 1.0,
+            "contrast": 0.5,
+            "diffusion_coefficient": 0.1,
+            "shear_rate": 0.0,
+            "L": 1.0,
         }
         q = 0.01
 
@@ -141,11 +141,11 @@ class TestJAXBackendCore:
 
         # Test diagonal behavior
         diagonal_elements = result[:, jnp.arange(n_times), jnp.arange(n_times)]
-        expected_diagonal = params['offset'] + params['contrast']
+        expected_diagonal = params["offset"] + params["contrast"]
         np.testing.assert_array_almost_equal(
             diagonal_elements,
             jnp.full_like(diagonal_elements, expected_diagonal),
-            decimal=6
+            decimal=6,
         )
 
     def test_c2_model_parameter_sensitivity(self, jax_backend):
@@ -156,18 +156,18 @@ class TestJAXBackendCore:
         q = 0.01
 
         base_params = {
-            'offset': 1.0,
-            'contrast': 0.3,
-            'diffusion_coefficient': 0.1,
-            'shear_rate': 0.0,
-            'L': 1.0
+            "offset": 1.0,
+            "contrast": 0.3,
+            "diffusion_coefficient": 0.1,
+            "shear_rate": 0.0,
+            "L": 1.0,
         }
 
         # Test offset effect
         base_result = compute_c2_model_jax(base_params, t1, t2, phi, q)
 
         offset_params = base_params.copy()
-        offset_params['offset'] = 1.2
+        offset_params["offset"] = 1.2
         offset_result = compute_c2_model_jax(offset_params, t1, t2, phi, q)
 
         # Offset should shift entire result by 0.2
@@ -177,7 +177,7 @@ class TestJAXBackendCore:
 
         # Test contrast effect
         contrast_params = base_params.copy()
-        contrast_params['contrast'] = 0.6
+        contrast_params["contrast"] = 0.6
         contrast_result = compute_c2_model_jax(contrast_params, t1, t2, phi, q)
 
         # Higher contrast should increase amplitude
@@ -192,11 +192,11 @@ class TestJAXBackendCore:
         q = 0.01
 
         params = {
-            'offset': 1.0,
-            'contrast': 0.4,
-            'diffusion_coefficient': 0.1,
-            'shear_rate': 0.0,
-            'L': 1.0
+            "offset": 1.0,
+            "contrast": 0.4,
+            "diffusion_coefficient": 0.1,
+            "shear_rate": 0.0,
+            "L": 1.0,
         }
 
         # Generate model data
@@ -223,11 +223,11 @@ class TestJAXBackendCore:
         q = 0.01
 
         params = {
-            'offset': 1.0,
-            'contrast': 0.4,
-            'diffusion_coefficient': 0.1,
-            'shear_rate': 0.0,
-            'L': 1.0
+            "offset": 1.0,
+            "contrast": 0.4,
+            "diffusion_coefficient": 0.1,
+            "shear_rate": 0.0,
+            "L": 1.0,
         }
 
         # Perfect fit case
@@ -245,7 +245,9 @@ class TestJAXBackendCore:
 
         # Imperfect fit should have positive chi-squared
         assert chi2_imperfect > 0, "Imperfect fit should have positive chi-squared"
-        assert chi2_imperfect > chi2_perfect, "Imperfect fit should have higher chi-squared"
+        assert (
+            chi2_imperfect > chi2_perfect
+        ), "Imperfect fit should have higher chi-squared"
 
     def test_jax_jit_compilation(self, jax_backend):
         """Test JAX JIT compilation works correctly."""
@@ -256,15 +258,15 @@ class TestJAXBackendCore:
 
         t1 = jnp.array([[0, 1], [1, 0]])
         t2 = jnp.array([[0, 1], [1, 0]])
-        phi = jnp.array([0.0, jnp.pi/2])
+        phi = jnp.array([0.0, jnp.pi / 2])
         q = 0.01
 
         params = {
-            'offset': 1.0,
-            'contrast': 0.3,
-            'diffusion_coefficient': 0.1,
-            'shear_rate': 0.0,
-            'L': 1.0
+            "offset": 1.0,
+            "contrast": 0.3,
+            "diffusion_coefficient": 0.1,
+            "shear_rate": 0.0,
+            "L": 1.0,
         }
 
         # Regular computation
@@ -288,11 +290,11 @@ class TestJAXBackendCore:
         # Create a function that computes chi-squared for gradient testing
         def chi2_fn(param_array):
             params = {
-                'offset': param_array[0],
-                'contrast': param_array[1],
-                'diffusion_coefficient': param_array[2],
-                'shear_rate': 0.0,
-                'L': 1.0
+                "offset": param_array[0],
+                "contrast": param_array[1],
+                "diffusion_coefficient": param_array[2],
+                "shear_rate": 0.0,
+                "L": 1.0,
             }
 
             # Synthetic data
@@ -322,17 +324,16 @@ class TestJAXBackendCore:
         q_values = jnp.array([0.005, 0.01, 0.015])
 
         params = {
-            'offset': 1.0,
-            'contrast': 0.3,
-            'diffusion_coefficient': 0.1,
-            'shear_rate': 0.0,
-            'L': 1.0
+            "offset": 1.0,
+            "contrast": 0.3,
+            "diffusion_coefficient": 0.1,
+            "shear_rate": 0.0,
+            "L": 1.0,
         }
 
         # Vectorized computation
         vmap_c2 = vmap(
-            lambda q: compute_c2_model_jax(params, t1, t2, phi, q),
-            in_axes=0
+            lambda q: compute_c2_model_jax(params, t1, t2, phi, q), in_axes=0
         )
         result_vmap = vmap_c2(q_values)
 
@@ -359,6 +360,7 @@ class TestJAXBackendFallback:
         """Test that fallback functions are available when JAX is not."""
         # This test should always pass since we import fallbacks
         from homodyne.core.jax_backend import compute_c2_model_jax
+
         assert callable(compute_c2_model_jax)
 
     def test_numpy_compatibility(self, numpy_backend):
@@ -369,19 +371,19 @@ class TestJAXBackendFallback:
         q = 0.01
 
         params = {
-            'offset': 1.0,
-            'contrast': 0.3,
-            'diffusion_coefficient': 0.1,
-            'shear_rate': 0.0,
-            'L': 1.0
+            "offset": 1.0,
+            "contrast": 0.3,
+            "diffusion_coefficient": 0.1,
+            "shear_rate": 0.0,
+            "L": 1.0,
         }
 
         # Should work with numpy arrays
         result = compute_c2_model_jax(params, t1, t2, phi, q)
 
         # Test basic properties
-        assert hasattr(result, 'shape')
-        assert hasattr(result, 'dtype')
+        assert hasattr(result, "shape")
+        assert hasattr(result, "dtype")
         assert result.shape == (len(phi), t1.shape[0], t1.shape[1])
 
 
@@ -416,11 +418,11 @@ class TestJAXBackendProperties:
         q = 0.01
 
         base_params = {
-            'offset': 1.0,
-            'contrast': 0.5,
-            'diffusion_coefficient': 0.1,
-            'shear_rate': 0.0,
-            'L': 1.0
+            "offset": 1.0,
+            "contrast": 0.5,
+            "diffusion_coefficient": 0.1,
+            "shear_rate": 0.0,
+            "L": 1.0,
         }
 
         base_result = compute_c2_model_jax(base_params, t1, t2, phi, q)
@@ -428,16 +430,18 @@ class TestJAXBackendProperties:
         # Test linear scaling with contrast
         for scale_factor in [0.5, 2.0, 1.5]:
             scaled_params = base_params.copy()
-            scaled_params['contrast'] *= scale_factor
+            scaled_params["contrast"] *= scale_factor
 
             scaled_result = compute_c2_model_jax(scaled_params, t1, t2, phi, q)
 
             # Check that scaling is correct
-            expected_scaling = (scaled_result - base_params['offset']) / (base_result - base_params['offset'])
+            expected_scaling = (scaled_result - base_params["offset"]) / (
+                base_result - base_params["offset"]
+            )
             np.testing.assert_array_almost_equal(
                 expected_scaling,
                 jnp.full_like(expected_scaling, scale_factor),
-                decimal=6
+                decimal=6,
             )
 
     @pytest.mark.requires_jax
@@ -445,15 +449,15 @@ class TestJAXBackendProperties:
         """Test that residuals have zero mean for perfect fit."""
         t1 = jnp.array([[0, 1, 2], [1, 0, 1], [2, 1, 0]])
         t2 = jnp.array([[0, 1, 2], [1, 0, 1], [2, 1, 0]])
-        phi = jnp.linspace(0, 2*jnp.pi, 8)
+        phi = jnp.linspace(0, 2 * jnp.pi, 8)
         q = 0.01
 
         params = {
-            'offset': 1.0,
-            'contrast': 0.4,
-            'diffusion_coefficient': 0.08,
-            'shear_rate': 0.0,
-            'L': 1.0
+            "offset": 1.0,
+            "contrast": 0.4,
+            "diffusion_coefficient": 0.08,
+            "shear_rate": 0.0,
+            "L": 1.0,
         }
 
         # Generate perfect model data
@@ -465,4 +469,6 @@ class TestJAXBackendProperties:
 
         # Mean residual should be very close to zero
         mean_residual = jnp.mean(residuals)
-        assert abs(mean_residual) < 1e-10, "Mean residual should be zero for perfect fit"
+        assert (
+            abs(mean_residual) < 1e-10
+        ), "Mean residual should be zero for perfect fit"

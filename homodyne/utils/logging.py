@@ -11,7 +11,6 @@ import inspect
 import logging
 import time
 from contextlib import contextmanager
-from typing import Any, Optional
 
 
 class MinimalLogger:
@@ -46,7 +45,7 @@ class MinimalLogger:
         if not root_logger.handlers:
             handler = logging.StreamHandler()
             formatter = logging.Formatter(
-                '%(asctime)s | %(levelname)s | %(name)s | %(message)s'
+                "%(asctime)s | %(levelname)s | %(name)s | %(message)s"
             )
             handler.setFormatter(formatter)
             root_logger.addHandler(handler)
@@ -80,7 +79,7 @@ class MinimalLogger:
 _logger_manager = MinimalLogger()
 
 
-def get_logger(name: Optional[str] = None) -> logging.Logger:
+def get_logger(name: str | None = None) -> logging.Logger:
     """
     Get a logger instance with automatic naming.
 
@@ -105,7 +104,7 @@ def get_logger(name: Optional[str] = None) -> logging.Logger:
 
 
 def log_calls(
-    logger: Optional[logging.Logger] = None,
+    logger: logging.Logger | None = None,
     level: int = logging.DEBUG,
     include_args: bool = False,
     include_result: bool = False,
@@ -159,7 +158,7 @@ def log_calls(
 
 
 def log_performance(
-    logger: Optional[logging.Logger] = None,
+    logger: logging.Logger | None = None,
     level: int = logging.INFO,
     threshold: float = 0.1,
 ):
@@ -187,7 +186,9 @@ def log_performance(
                 duration = time.perf_counter() - start_time
 
                 if duration >= threshold:
-                    logger.log(level, f"Performance: {func_name} completed in {duration:.3f}s")
+                    logger.log(
+                        level, f"Performance: {func_name} completed in {duration:.3f}s"
+                    )
 
                 return result
 
@@ -207,7 +208,7 @@ def log_performance(
 @contextmanager
 def log_operation(
     operation_name: str,
-    logger: Optional[logging.Logger] = None,
+    logger: logging.Logger | None = None,
     level: int = logging.INFO,
 ):
     """

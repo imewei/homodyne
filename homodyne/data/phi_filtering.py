@@ -16,7 +16,7 @@ Based on homodyne_v1_reference/homodyne/analysis/core.py lines 3677-3724
 """
 
 import logging
-from typing import Any, Dict, List, Optional, Tuple, Union
+from typing import Any
 
 import numpy as np
 
@@ -46,7 +46,7 @@ class PhiAngleFilter:
         (170.0, 190.0),  # Near 180 degrees
     ]
 
-    def __init__(self, config: Optional[Dict[str, Any]] = None):
+    def __init__(self, config: dict[str, Any] | None = None):
         """
         Initialize the phi angle filter.
 
@@ -86,10 +86,10 @@ class PhiAngleFilter:
 
     def filter_angles_for_optimization(
         self,
-        phi_angles: Union[List[float], np.ndarray],
-        target_ranges: Optional[List[Tuple[float, float]]] = None,
-        fallback_enabled: Optional[bool] = None,
-    ) -> Tuple[List[int], np.ndarray]:
+        phi_angles: list[float] | np.ndarray,
+        target_ranges: list[tuple[float, float]] | None = None,
+        fallback_enabled: bool | None = None,
+    ) -> tuple[list[int], np.ndarray]:
         """
         Filter phi angles based on target ranges for optimization.
 
@@ -174,7 +174,7 @@ class PhiAngleFilter:
                 logger.error(error_msg)
                 raise ValueError(error_msg)
 
-    def validate_target_ranges(self, target_ranges: List[Tuple[float, float]]) -> bool:
+    def validate_target_ranges(self, target_ranges: list[tuple[float, float]]) -> bool:
         """
         Validate target angle ranges.
 
@@ -198,8 +198,8 @@ class PhiAngleFilter:
         return valid
 
     def get_angle_statistics(
-        self, phi_angles: Union[List[float], np.ndarray]
-    ) -> Dict[str, Any]:
+        self, phi_angles: list[float] | np.ndarray
+    ) -> dict[str, Any]:
         """
         Get statistics about angle distribution relative to target ranges.
 
@@ -243,11 +243,11 @@ class PhiAngleFilter:
 
 
 def filter_phi_angles(
-    phi_angles: Union[List[float], np.ndarray],
-    config: Optional[Dict[str, Any]] = None,
-    target_ranges: Optional[List[Tuple[float, float]]] = None,
-    fallback_enabled: Optional[bool] = None,
-) -> Tuple[List[int], np.ndarray]:
+    phi_angles: list[float] | np.ndarray,
+    config: dict[str, Any] | None = None,
+    target_ranges: list[tuple[float, float]] | None = None,
+    fallback_enabled: bool | None = None,
+) -> tuple[list[int], np.ndarray]:
     """
     Convenience function for filtering phi angles.
 
@@ -275,7 +275,7 @@ def filter_phi_angles(
     )
 
 
-def create_anisotropic_ranges() -> List[Tuple[float, float]]:
+def create_anisotropic_ranges() -> list[tuple[float, float]]:
     """
     Create default target ranges for anisotropic analysis.
 
@@ -296,7 +296,7 @@ def create_anisotropic_ranges() -> List[Tuple[float, float]]:
     ]
 
 
-def create_isotropic_ranges() -> List[Tuple[float, float]]:
+def create_isotropic_ranges() -> list[tuple[float, float]]:
     """
     Create default target ranges for isotropic analysis.
 
@@ -316,9 +316,9 @@ def create_isotropic_ranges() -> List[Tuple[float, float]]:
 if HAS_JAX:
 
     def filter_phi_angles_jax(
-        phi_angles: Union[List[float], np.ndarray],
-        target_ranges: List[Tuple[float, float]],
-    ) -> Tuple[np.ndarray, np.ndarray]:
+        phi_angles: list[float] | np.ndarray,
+        target_ranges: list[tuple[float, float]],
+    ) -> tuple[np.ndarray, np.ndarray]:
         """
         JAX-accelerated version of phi angle filtering.
 

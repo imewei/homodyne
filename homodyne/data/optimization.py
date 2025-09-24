@@ -16,9 +16,9 @@ Key Features:
 
 import time
 from collections import deque
+from collections.abc import Iterator
 from dataclasses import dataclass
-from pathlib import Path
-from typing import Any, Dict, Iterator, List, Optional, Tuple, Union
+from typing import Any, Dict, Optional
 
 import numpy as np
 
@@ -55,7 +55,7 @@ class DatasetInfo:
     recommended_chunk_size: int
     recommended_batch_size: int
     use_progressive_loading: bool
-    compression_ratio: Optional[float] = None
+    compression_ratio: float | None = None
 
 
 @dataclass
@@ -68,7 +68,7 @@ class ProcessingStrategy:
     use_caching: bool
     use_compression: bool
     parallel_workers: int
-    jax_config: Dict[str, Any]
+    jax_config: dict[str, Any]
 
 
 class DatasetOptimizer:
@@ -100,15 +100,15 @@ class DatasetOptimizer:
         self.max_workers = max_workers or self._detect_optimal_workers()
 
         # Strategy cache for repeated operations
-        self._strategy_cache: Dict[int, ProcessingStrategy] = {}
+        self._strategy_cache: dict[int, ProcessingStrategy] = {}
 
-        logger.info(f"Dataset optimizer initialized:")
+        logger.info("Dataset optimizer initialized:")
         logger.info(f"  Memory limit: {memory_limit_mb:.1f} MB")
         logger.info(f"  Compression: {enable_compression}")
         logger.info(f"  Workers: {self.max_workers}")
 
     def analyze_dataset(
-        self, data: np.ndarray, sigma: Optional[np.ndarray] = None
+        self, data: np.ndarray, sigma: np.ndarray | None = None
     ) -> DatasetInfo:
         """
         Analyze dataset characteristics and recommend processing strategy.
@@ -156,7 +156,7 @@ class DatasetOptimizer:
             use_progressive_loading=progressive_loading,
         )
 
-        logger.info(f"Dataset analysis complete:")
+        logger.info("Dataset analysis complete:")
         logger.info(f"  Size: {size:,} points ({category})")
         logger.info(f"  Memory: {memory_usage:.1f} MB")
         logger.info(f"  Chunk size: {chunk_size:,}")
@@ -249,7 +249,7 @@ class DatasetOptimizer:
         t2: np.ndarray,
         phi: np.ndarray,
         chunk_size: int,
-    ) -> Iterator[Tuple[np.ndarray, ...]]:
+    ) -> Iterator[tuple[np.ndarray, ...]]:
         """
         Create memory-efficient chunked iterator for large datasets.
 
@@ -274,7 +274,7 @@ class DatasetOptimizer:
             # Extract chunk with proper indexing
             data_chunk = data[start_idx:end_idx]
             sigma_chunk = sigma[start_idx:end_idx] if sigma is not None else None
-            
+
             # Time arrays are 2D meshgrids - don't chunk them by data indices
             # They should remain constant for all chunks as they represent the time grid
             t1_chunk = t1  # Keep full 2D meshgrid
@@ -301,7 +301,7 @@ class DatasetOptimizer:
         t2: np.ndarray,
         phi: np.ndarray,
         **kwargs,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """
         Optimize data processing specifically for VI+JAX.
 
@@ -348,7 +348,7 @@ class DatasetOptimizer:
         t2: np.ndarray,
         phi: np.ndarray,
         **kwargs,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """
         Optimize data processing specifically for MCMC+JAX.
 
@@ -395,7 +395,7 @@ class DatasetOptimizer:
         t2: np.ndarray,
         phi: np.ndarray,
         **kwargs,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """
         Optimize data processing specifically for LSQ method.
 
@@ -419,11 +419,15 @@ class DatasetOptimizer:
             use_caching=False,  # LSQ doesn't benefit from caching
             use_compression=False,  # No compression for LSQ
             parallel_workers=1,  # LSQ is sequential
-            jax_config={} if not JAX_AVAILABLE else {
-                "xla_python_client_mem_fraction": "0.5",
-                "jax_enable_x64": "false",  # LSQ can use float32
-                "jax_platforms": "cpu",  # LSQ primarily CPU-based
-            }
+            jax_config=(
+                {}
+                if not JAX_AVAILABLE
+                else {
+                    "xla_python_client_mem_fraction": "0.5",
+                    "jax_enable_x64": "false",  # LSQ can use float32
+                    "jax_platforms": "cpu",  # LSQ primarily CPU-based
+                }
+            ),
         )
 
         optimization_config = {
@@ -448,14 +452,16 @@ class DatasetOptimizer:
             optimization_config["sampling_config"] = sampling_config
             optimization_config["preprocessing_time"] = time.time() - start_time
 
-            logger.info(f"LSQ optimization: Using {sampling_config['target_samples']:,} samples "
-                       f"from {dataset_info.size:,} total points")
+            logger.info(
+                f"LSQ optimization: Using {sampling_config['target_samples']:,} samples "
+                f"from {dataset_info.size:,} total points"
+            )
 
         return optimization_config
 
     def estimate_processing_time(
         self, dataset_info: DatasetInfo, method: str = "vi"
-    ) -> Dict[str, float]:
+    ) -> dict[str, float]:
         """
         Estimate processing time for different methods.
 
@@ -495,7 +501,7 @@ class DatasetOptimizer:
         }
 
     def _calculate_memory_usage(
-        self, data: np.ndarray, sigma: Optional[np.ndarray] = None
+        self, data: np.ndarray, sigma: np.ndarray | None = None
     ) -> float:
         """Calculate memory usage in MB."""
         memory_bytes = data.nbytes
@@ -534,7 +540,7 @@ def optimize_for_method(
     phi: np.ndarray,
     method: str = "vi",
     **kwargs,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """
     One-shot optimization for specific method.
 
@@ -574,9 +580,9 @@ class AdvancedDatasetOptimizer:
 
     def __init__(
         self,
-        config: Optional[Dict[str, Any]] = None,
-        performance_engine: Optional[Any] = None,
-        memory_manager: Optional[Any] = None,
+        config: dict[str, Any] | None = None,
+        performance_engine: Any | None = None,
+        memory_manager: Any | None = None,
     ):
         """
         Initialize advanced dataset optimizer.
@@ -671,10 +677,10 @@ class AdvancedDatasetOptimizer:
         t1: np.ndarray,
         t2: np.ndarray,
         phi: np.ndarray,
-        hdf_path: Optional[str] = None,
+        hdf_path: str | None = None,
         method: str = "vi",
         **kwargs,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """
         Optimize processing for massive datasets with advanced features.
 
@@ -825,7 +831,7 @@ class AdvancedDatasetOptimizer:
 
     def _create_advanced_chunking_config(
         self, dataset_info: "DatasetInfo", method: str, **kwargs
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Create advanced chunking configuration beyond basic optimization."""
         chunking_config = {
             "strategy": "adaptive",
@@ -869,7 +875,7 @@ class AdvancedDatasetOptimizer:
 
         return chunking_config
 
-    def _schedule_background_optimization(self, config: Dict[str, Any]) -> None:
+    def _schedule_background_optimization(self, config: dict[str, Any]) -> None:
         """Schedule background optimization tasks."""
         if not self.performance_engine:
             return
@@ -889,7 +895,7 @@ class AdvancedDatasetOptimizer:
         except Exception as e:
             logger.warning(f"Background optimization scheduling failed: {e}")
 
-    def get_optimization_statistics(self) -> Dict[str, Any]:
+    def get_optimization_statistics(self) -> dict[str, Any]:
         """Get comprehensive optimization statistics."""
         stats = {
             "optimization_history": len(self._optimization_history),
@@ -965,7 +971,7 @@ class AdvancedDatasetOptimizer:
 
 # Enhanced convenience functions that use advanced optimization
 def create_advanced_dataset_optimizer(
-    config: Optional[Dict[str, Any]] = None, **kwargs
+    config: dict[str, Any] | None = None, **kwargs
 ) -> AdvancedDatasetOptimizer:
     """Create advanced dataset optimizer with performance engine integration."""
     return AdvancedDatasetOptimizer(config=config, **kwargs)
@@ -978,10 +984,10 @@ def optimize_for_method_advanced(
     t2: np.ndarray,
     phi: np.ndarray,
     method: str = "vi",
-    hdf_path: Optional[str] = None,
-    config: Optional[Dict[str, Any]] = None,
+    hdf_path: str | None = None,
+    config: dict[str, Any] | None = None,
     **kwargs,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """
     Advanced one-shot optimization with performance engine integration.
 

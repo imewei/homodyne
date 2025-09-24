@@ -40,13 +40,11 @@ Institution: Argonne National Laboratory
 
 import hashlib
 import json
-import os
 import time
-import warnings
 from dataclasses import dataclass, field
 from enum import Enum
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Optional, Tuple, Union
+from typing import Any
 
 # Core dependencies
 try:
@@ -66,7 +64,6 @@ try:
 
     HAS_JAX = True
 except ImportError:
-    import numpy as jnp
 
     HAS_JAX = False
     jax_available = False
@@ -169,13 +166,13 @@ class TransformationRecord:
 
     stage: PreprocessingStage
     method: str
-    parameters: Dict[str, Any]
+    parameters: dict[str, Any]
     timestamp: float
     duration: float
-    input_shape: Tuple[int, ...]
-    output_shape: Tuple[int, ...]
-    memory_usage: Optional[float] = None
-    warnings: List[str] = field(default_factory=list)
+    input_shape: tuple[int, ...]
+    output_shape: tuple[int, ...]
+    memory_usage: float | None = None
+    warnings: list[str] = field(default_factory=list)
 
 
 @dataclass
@@ -184,13 +181,13 @@ class PreprocessingProvenance:
 
     pipeline_id: str
     config_hash: str
-    transformations: List[TransformationRecord] = field(default_factory=list)
+    transformations: list[TransformationRecord] = field(default_factory=list)
     total_duration: float = 0.0
     peak_memory_usage: float = 0.0
-    warnings: List[str] = field(default_factory=list)
-    errors: List[str] = field(default_factory=list)
+    warnings: list[str] = field(default_factory=list)
+    errors: list[str] = field(default_factory=list)
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Convert provenance record to dictionary for serialization."""
         return {
             "pipeline_id": self.pipeline_id,
@@ -220,10 +217,10 @@ class PreprocessingProvenance:
 class PreprocessingResult:
     """Result of preprocessing pipeline execution."""
 
-    data: Dict[str, Any]
+    data: dict[str, Any]
     provenance: PreprocessingProvenance
     success: bool = True
-    stage_results: Dict[PreprocessingStage, bool] = field(default_factory=dict)
+    stage_results: dict[PreprocessingStage, bool] = field(default_factory=dict)
 
 
 class PreprocessingPipeline:
@@ -245,7 +242,7 @@ class PreprocessingPipeline:
     """
 
     @log_calls(include_args=False)
-    def __init__(self, config: Dict[str, Any]):
+    def __init__(self, config: dict[str, Any]):
         """
         Initialize preprocessing pipeline with configuration.
 
@@ -272,7 +269,7 @@ class PreprocessingPipeline:
         self.chunk_size = self.preprocessing_config.get("chunk_size", None)
 
         # Initialize caching
-        self.intermediate_cache: Dict[str, Any] = {}
+        self.intermediate_cache: dict[str, Any] = {}
 
         # Generate pipeline ID for this instance
         self.pipeline_id = self._generate_pipeline_id()
@@ -331,7 +328,7 @@ class PreprocessingPipeline:
                 f"Noise reduction method '{noise_method}' requires scipy - falling back to 'none'"
             )
 
-    def _get_enabled_stages(self) -> List[PreprocessingStage]:
+    def _get_enabled_stages(self) -> list[PreprocessingStage]:
         """Get list of enabled preprocessing stages based on configuration."""
         stages_config = self.preprocessing_config.get("stages", {})
         enabled_stages = []
@@ -356,7 +353,7 @@ class PreprocessingPipeline:
         return f"preprocess_{config_hash}_{timestamp}"
 
     @log_performance(threshold=1.0)
-    def process(self, data: Dict[str, Any]) -> PreprocessingResult:
+    def process(self, data: dict[str, Any]) -> PreprocessingResult:
         """
         Execute the full preprocessing pipeline on input data.
 
@@ -447,8 +444,8 @@ class PreprocessingPipeline:
             )
 
     def _execute_stage(
-        self, stage: PreprocessingStage, data: Dict[str, Any]
-    ) -> Tuple[Dict[str, Any], TransformationRecord]:
+        self, stage: PreprocessingStage, data: dict[str, Any]
+    ) -> tuple[dict[str, Any], TransformationRecord]:
         """Execute a single preprocessing stage."""
         stage_start = time.time()
         input_shape = self._get_data_shape(data)
@@ -503,7 +500,7 @@ class PreprocessingPipeline:
 
         return processed_data, transform_record
 
-    def _get_data_shape(self, data: Dict[str, Any]) -> Tuple[int, ...]:
+    def _get_data_shape(self, data: dict[str, Any]) -> tuple[int, ...]:
         """Get representative shape of correlation data for tracking."""
         if "c2_exp" in data:
             return tuple(data["c2_exp"].shape)
@@ -511,8 +508,8 @@ class PreprocessingPipeline:
 
     @log_performance(threshold=0.5)
     def _correct_diagonal_enhanced(
-        self, data: Dict[str, Any], config: Dict[str, Any]
-    ) -> Dict[str, Any]:
+        self, data: dict[str, Any], config: dict[str, Any]
+    ) -> dict[str, Any]:
         """
         Enhanced diagonal correction with multiple statistical methods.
 
@@ -570,7 +567,7 @@ class PreprocessingPipeline:
         return c2_mat
 
     def _statistical_diagonal_correction(
-        self, c2_mat: np.ndarray, config: Dict[str, Any]
+        self, c2_mat: np.ndarray, config: dict[str, Any]
     ) -> np.ndarray:
         """Statistical diagonal correction using robust estimators."""
         c2_corrected = c2_mat.copy()
@@ -617,7 +614,7 @@ class PreprocessingPipeline:
         return c2_corrected
 
     def _interpolation_diagonal_correction(
-        self, c2_mat: np.ndarray, config: Dict[str, Any]
+        self, c2_mat: np.ndarray, config: dict[str, Any]
     ) -> np.ndarray:
         """Interpolation-based diagonal correction."""
         c2_corrected = c2_mat.copy()
@@ -649,8 +646,8 @@ class PreprocessingPipeline:
 
     @log_performance(threshold=0.3)
     def _normalize_data(
-        self, data: Dict[str, Any], config: Dict[str, Any]
-    ) -> Dict[str, Any]:
+        self, data: dict[str, Any], config: dict[str, Any]
+    ) -> dict[str, Any]:
         """
         Apply normalization to correlation data using multiple methods.
         """
@@ -746,8 +743,8 @@ class PreprocessingPipeline:
 
     @log_performance(threshold=0.4)
     def _reduce_noise(
-        self, data: Dict[str, Any], config: Dict[str, Any]
-    ) -> Dict[str, Any]:
+        self, data: dict[str, Any], config: dict[str, Any]
+    ) -> dict[str, Any]:
         """
         Apply noise reduction algorithms to correlation data.
         """
@@ -833,8 +830,8 @@ class PreprocessingPipeline:
         return denoised_data
 
     def _standardize_format(
-        self, data: Dict[str, Any], config: Dict[str, Any]
-    ) -> Dict[str, Any]:
+        self, data: dict[str, Any], config: dict[str, Any]
+    ) -> dict[str, Any]:
         """
         Standardize data format to ensure consistency across APS vs APS-U sources.
         """
@@ -887,8 +884,8 @@ class PreprocessingPipeline:
         return standardized_data
 
     def _validate_output(
-        self, data: Dict[str, Any], config: Dict[str, Any]
-    ) -> Dict[str, Any]:
+        self, data: dict[str, Any], config: dict[str, Any]
+    ) -> dict[str, Any]:
         """
         Validate final data integrity and physics constraints.
         """
@@ -941,7 +938,7 @@ class PreprocessingPipeline:
         return data
 
     def save_provenance(
-        self, provenance: PreprocessingProvenance, filepath: Union[str, Path]
+        self, provenance: PreprocessingProvenance, filepath: str | Path
     ) -> None:
         """
         Save preprocessing provenance to file for reproducibility.
@@ -958,7 +955,7 @@ class PreprocessingPipeline:
 
         logger.info(f"Preprocessing provenance saved to: {filepath}")
 
-    def load_provenance(self, filepath: Union[str, Path]) -> PreprocessingProvenance:
+    def load_provenance(self, filepath: str | Path) -> PreprocessingProvenance:
         """
         Load preprocessing provenance from file.
 
@@ -968,7 +965,7 @@ class PreprocessingPipeline:
         Returns:
             PreprocessingProvenance object
         """
-        with open(filepath, "r") as f:
+        with open(filepath) as f:
             data = json.load(f)
 
         # Reconstruct provenance object
@@ -1002,7 +999,7 @@ class PreprocessingPipeline:
 # Utility functions for easy integration
 
 
-def create_default_preprocessing_config() -> Dict[str, Any]:
+def create_default_preprocessing_config() -> dict[str, Any]:
     """
     Create default preprocessing configuration.
 
@@ -1037,7 +1034,7 @@ def create_default_preprocessing_config() -> Dict[str, Any]:
 
 
 def preprocess_xpcs_data(
-    data: Dict[str, Any], config: Optional[Dict[str, Any]] = None
+    data: dict[str, Any], config: dict[str, Any] | None = None
 ) -> PreprocessingResult:
     """
     Convenience function for preprocessing XPCS data.

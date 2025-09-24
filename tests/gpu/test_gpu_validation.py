@@ -10,15 +10,16 @@ Tests for GPU acceleration functionality including:
 - Error handling and graceful fallbacks
 """
 
-import pytest
-import numpy as np
 import time
-from typing import Dict, Any, Optional, Tuple
+
+import numpy as np
+import pytest
 
 # Handle JAX imports
 try:
     import jax
     import jax.numpy as jnp
+
     JAX_AVAILABLE = True
 except ImportError:
     JAX_AVAILABLE = False
@@ -27,12 +28,13 @@ except ImportError:
 # Handle GPU-specific imports
 try:
     from homodyne.runtime.gpu import (
-        activate_gpu,
-        get_gpu_status,
-        benchmark_gpu,
+        GPU_AVAILABLE,
         GPUActivator,
-        GPU_AVAILABLE
+        activate_gpu,
+        benchmark_gpu,
+        get_gpu_status,
     )
+
     GPU_MODULE_AVAILABLE = True
 except ImportError:
     GPU_MODULE_AVAILABLE = False
@@ -50,23 +52,23 @@ class TestGPUActivation:
 
         # Should return a valid status dictionary
         assert isinstance(status, dict)
-        assert 'jax_available' in status
-        assert 'devices' in status
+        assert "jax_available" in status
+        assert "devices" in status
 
         # JAX availability should be consistent
-        assert status['jax_available'] == JAX_AVAILABLE
+        assert status["jax_available"] == JAX_AVAILABLE
 
         if JAX_AVAILABLE:
-            assert isinstance(status['devices'], list)
-            assert len(status['devices']) >= 0
+            assert isinstance(status["devices"], list)
+            assert len(status["devices"]) >= 0
 
     def test_gpu_activator_initialization(self):
         """Test GPUActivator class initialization."""
         # Should be able to create activator
         activator = GPUActivator(verbose=False)
         assert activator is not None
-        assert hasattr(activator, 'activate')
-        assert hasattr(activator, 'deactivate')
+        assert hasattr(activator, "activate")
+        assert hasattr(activator, "deactivate")
 
     def test_gpu_activation_basic(self):
         """Test basic GPU activation."""
@@ -77,26 +79,26 @@ class TestGPUActivation:
         result = activate_gpu(
             memory_fraction=0.5,
             force_gpu=False,  # Don't fail if no GPU
-            verbose=False
+            verbose=False,
         )
 
         # Should return a result dictionary
         assert isinstance(result, dict)
-        assert 'status' in result or 'success' in result
+        assert "status" in result or "success" in result
 
         # If GPU is available, check activation success
         gpu_devices = []
         try:
-            gpu_devices = jax.devices('gpu')
+            gpu_devices = jax.devices("gpu")
         except:
             pass
 
         if len(gpu_devices) > 0:
             # GPU should activate successfully
-            success = result.get('success', False) or result.get('status') == 'success'
+            success = result.get("success", False) or result.get("status") == "success"
             if success:
-                assert 'device' in result
-                assert 'backend' in result
+                assert "device" in result
+                assert "backend" in result
 
     def test_gpu_memory_configuration(self):
         """Test GPU memory configuration options."""
@@ -107,16 +109,14 @@ class TestGPUActivation:
 
         for mem_frac in memory_fractions:
             result = activate_gpu(
-                memory_fraction=mem_frac,
-                force_gpu=False,
-                verbose=False
+                memory_fraction=mem_frac, force_gpu=False, verbose=False
             )
 
             # Should handle different memory fractions gracefully
             assert isinstance(result, dict)
 
             # If successful, should not error
-            if result.get('success', False):
+            if result.get("success", False):
                 # Memory fraction should be reasonable
                 assert 0.0 < mem_frac <= 1.0
 
@@ -135,14 +135,16 @@ class TestGPUActivation:
         # Test invalid GPU ID
         gpu_devices = []
         try:
-            gpu_devices = jax.devices('gpu')
+            gpu_devices = jax.devices("gpu")
         except:
             pass
 
         if len(gpu_devices) == 0:
             # No GPU available - should handle gracefully
             result = activate_gpu(force_gpu=False)
-            assert result.get('status') in ['cpu_fallback', 'failed'] or not result.get('success', True)
+            assert result.get("status") in ["cpu_fallback", "failed"] or not result.get(
+                "success", True
+            )
         else:
             # Invalid GPU ID should raise error
             with pytest.raises((ValueError, IndexError)):
@@ -179,7 +181,7 @@ class TestGPUPerformance:
         try:
             results = benchmark_gpu()
 
-            if 'error' in results:
+            if "error" in results:
                 pytest.skip(f"GPU benchmark not available: {results['error']}")
 
             # Should return performance metrics
@@ -199,7 +201,7 @@ class TestGPUPerformance:
         # Check if GPU is available
         gpu_devices = []
         try:
-            gpu_devices = jax.devices('gpu')
+            gpu_devices = jax.devices("gpu")
         except:
             pass
 
@@ -238,7 +240,7 @@ class TestGPUPerformance:
         # Check GPU availability
         gpu_devices = []
         try:
-            gpu_devices = jax.devices('gpu')
+            gpu_devices = jax.devices("gpu")
         except:
             pass
 
@@ -253,21 +255,22 @@ class TestGPUPerformance:
         # Test parameters
         t1 = jnp.array([[0, 1, 2], [1, 0, 1], [2, 1, 0]])
         t2 = jnp.array([[0, 1, 2], [1, 0, 1], [2, 1, 0]])
-        phi = jnp.array([0.0, jnp.pi/2, jnp.pi])
+        phi = jnp.array([0.0, jnp.pi / 2, jnp.pi])
         q = 0.01
 
         params = {
-            'offset': 1.0,
-            'contrast': 0.4,
-            'diffusion_coefficient': 0.1,
-            'shear_rate': 0.0,
-            'L': 1.0
+            "offset": 1.0,
+            "contrast": 0.4,
+            "diffusion_coefficient": 0.1,
+            "shear_rate": 0.0,
+            "L": 1.0,
         }
 
         # Force CPU computation
         import os
-        original_platform = os.environ.get('JAX_PLATFORM_NAME', '')
-        os.environ['JAX_PLATFORM_NAME'] = 'cpu'
+
+        original_platform = os.environ.get("JAX_PLATFORM_NAME", "")
+        os.environ["JAX_PLATFORM_NAME"] = "cpu"
 
         try:
             result_cpu = compute_c2_model_jax(params, t1, t2, phi, q)
@@ -275,9 +278,9 @@ class TestGPUPerformance:
         finally:
             # Restore platform setting
             if original_platform:
-                os.environ['JAX_PLATFORM_NAME'] = original_platform
+                os.environ["JAX_PLATFORM_NAME"] = original_platform
             else:
-                os.environ.pop('JAX_PLATFORM_NAME', None)
+                os.environ.pop("JAX_PLATFORM_NAME", None)
 
         # GPU computation (default platform)
         result_gpu = compute_c2_model_jax(params, t1, t2, phi, q)
@@ -285,15 +288,17 @@ class TestGPUPerformance:
 
         # Results should be very close
         np.testing.assert_array_almost_equal(
-            result_cpu, result_gpu, decimal=10,
-            err_msg="CPU and GPU results should be numerically consistent"
+            result_cpu,
+            result_gpu,
+            decimal=10,
+            err_msg="CPU and GPU results should be numerically consistent",
         )
 
     def test_memory_scaling_gpu(self):
         """Test GPU memory scaling behavior."""
         gpu_devices = []
         try:
-            gpu_devices = jax.devices('gpu')
+            gpu_devices = jax.devices("gpu")
         except:
             pass
 
@@ -334,7 +339,7 @@ class TestGPUPerformance:
         """Test optimization acceleration on GPU."""
         gpu_devices = []
         try:
-            gpu_devices = jax.devices('gpu')
+            gpu_devices = jax.devices("gpu")
         except:
             pass
 
@@ -342,29 +347,29 @@ class TestGPUPerformance:
             pytest.skip("No GPU available")
 
         try:
-            from homodyne.optimization.nlsq import fit_nlsq_jax, JAXFIT_AVAILABLE
+            from homodyne.optimization.nlsq import OPTIMISTIX_AVAILABLE, fit_nlsq_jax
         except ImportError:
             pytest.skip("Optimization module not available")
 
-        if not JAXFIT_AVAILABLE:
-            pytest.skip("JAXFit not available")
+        if not OPTIMISTIX_AVAILABLE:
+            pytest.skip("Optimistix not available")
 
         data = synthetic_xpcs_data
 
         # GPU configuration
         gpu_config = {
-            'analysis_mode': 'static_isotropic',
-            'optimization': {
-                'method': 'nlsq',
-                'lsq': {
-                    'max_iterations': 20,  # Keep short for testing
-                    'tolerance': 1e-6
-                }
+            "analysis_mode": "static_isotropic",
+            "optimization": {
+                "method": "nlsq",
+                "lsq": {
+                    "max_iterations": 20,  # Keep short for testing
+                    "tolerance": 1e-6,
+                },
             },
-            'hardware': {
-                'force_cpu': False,  # Allow GPU
-                'gpu_memory_fraction': 0.5
-            }
+            "hardware": {
+                "force_cpu": False,  # Allow GPU
+                "gpu_memory_fraction": 0.5,
+            },
         }
 
         # Try GPU optimization
@@ -378,7 +383,7 @@ class TestGPUPerformance:
                 assert gpu_time < 30.0, f"GPU optimization too slow: {gpu_time:.2f}s"
 
                 # Should have reasonable parameters
-                assert 'offset' in result_gpu.parameters
+                assert "offset" in result_gpu.parameters
                 assert result_gpu.chi_squared >= 0.0
 
         except Exception as e:
@@ -401,11 +406,11 @@ class TestGPUFallback:
         assert isinstance(result, dict)
 
         # Should either succeed or fall back to CPU
-        status = result.get('status', 'unknown')
-        success = result.get('success', False)
+        status = result.get("status", "unknown")
+        success = result.get("success", False)
 
         if not success:
-            assert status in ['cpu_fallback', 'failed'], f"Unexpected status: {status}"
+            assert status in ["cpu_fallback", "failed"], f"Unexpected status: {status}"
 
     def test_fallback_computation_consistency(self, synthetic_xpcs_data):
         """Test that fallback computations are consistent."""
@@ -418,23 +423,24 @@ class TestGPUFallback:
             pytest.skip("JAX not available")
 
         data = synthetic_xpcs_data
-        t1 = jnp.array(data['t1'])
-        t2 = jnp.array(data['t2'])
-        phi = jnp.array(data['phi_angles_list'])
-        q = data['wavevector_q_list'][0]
+        t1 = jnp.array(data["t1"])
+        t2 = jnp.array(data["t2"])
+        phi = jnp.array(data["phi_angles_list"])
+        q = data["wavevector_q_list"][0]
 
         params = {
-            'offset': 1.0,
-            'contrast': 0.4,
-            'diffusion_coefficient': 0.1,
-            'shear_rate': 0.0,
-            'L': 1.0
+            "offset": 1.0,
+            "contrast": 0.4,
+            "diffusion_coefficient": 0.1,
+            "shear_rate": 0.0,
+            "L": 1.0,
         }
 
         # Force CPU execution
         import os
-        original_platform = os.environ.get('JAX_PLATFORM_NAME', '')
-        os.environ['JAX_PLATFORM_NAME'] = 'cpu'
+
+        original_platform = os.environ.get("JAX_PLATFORM_NAME", "")
+        os.environ["JAX_PLATFORM_NAME"] = "cpu"
 
         try:
             result_fallback = compute_c2_model_jax(params, t1, t2, phi, q)
@@ -446,9 +452,9 @@ class TestGPUFallback:
         finally:
             # Restore platform
             if original_platform:
-                os.environ['JAX_PLATFORM_NAME'] = original_platform
+                os.environ["JAX_PLATFORM_NAME"] = original_platform
             else:
-                os.environ.pop('JAX_PLATFORM_NAME', None)
+                os.environ.pop("JAX_PLATFORM_NAME", None)
 
     def test_error_handling_invalid_gpu_config(self):
         """Test error handling with invalid GPU configurations."""
@@ -457,9 +463,9 @@ class TestGPUFallback:
 
         # Test various invalid configurations
         invalid_configs = [
-            {'memory_fraction': -0.1},  # Negative memory
-            {'memory_fraction': 1.5},   # Memory > 1
-            {'gpu_id': -1},             # Negative GPU ID
+            {"memory_fraction": -0.1},  # Negative memory
+            {"memory_fraction": 1.5},  # Memory > 1
+            {"gpu_id": -1},  # Negative GPU ID
         ]
 
         for config in invalid_configs:
@@ -481,7 +487,7 @@ class TestGPUFallback:
             result = activator.activate(memory_fraction=0.3, force_gpu=False)
 
             # Do some computation if GPU is available
-            if result.get('success', False):
+            if result.get("success", False):
                 try:
                     A = jnp.ones((100, 100))
                     B = jnp.dot(A, A)
@@ -504,7 +510,7 @@ class TestGPUIntegration:
         """Test complete GPU-accelerated workflow."""
         gpu_devices = []
         try:
-            gpu_devices = jax.devices('gpu')
+            gpu_devices = jax.devices("gpu")
         except:
             pass
 
@@ -512,51 +518,42 @@ class TestGPUIntegration:
             pytest.skip("No GPU available")
 
         try:
-            from homodyne.optimization.nlsq import fit_nlsq_jax, JAXFIT_AVAILABLE
             from homodyne.tests.factories.data_factory import XPCSDataFactory
+
+            from homodyne.optimization.nlsq import OPTIMISTIX_AVAILABLE, fit_nlsq_jax
         except ImportError:
             pytest.skip("Required modules not available")
 
-        if not JAXFIT_AVAILABLE:
-            pytest.skip("JAXFit not available")
+        if not OPTIMISTIX_AVAILABLE:
+            pytest.skip("Optimistix not available")
 
         # Step 1: Activate GPU
         activation_result = activate_gpu(
-            memory_fraction=0.6,
-            force_gpu=False,
-            verbose=False
+            memory_fraction=0.6, force_gpu=False, verbose=False
         )
 
-        if not activation_result.get('success', False):
+        if not activation_result.get("success", False):
             pytest.skip("GPU activation failed")
 
         # Step 2: Generate test data
         factory = XPCSDataFactory(seed=42)
         data = factory.create_synthetic_correlation_data(
-            n_times=40,
-            n_angles=24,
-            noise_level=0.01
+            n_times=40, n_angles=24, noise_level=0.01
         )
 
         # Step 3: Configure for GPU analysis
         gpu_config = {
-            'analysis_mode': 'static_isotropic',
-            'optimization': {
-                'method': 'nlsq',
-                'lsq': {
-                    'max_iterations': 50,
-                    'tolerance': 1e-6
-                }
+            "analysis_mode": "static_isotropic",
+            "optimization": {
+                "method": "nlsq",
+                "lsq": {"max_iterations": 50, "tolerance": 1e-6},
             },
-            'hardware': {
-                'force_cpu': False,
-                'gpu_memory_fraction': 0.6
+            "hardware": {"force_cpu": False, "gpu_memory_fraction": 0.6},
+            "output": {
+                "directory": str(temp_dir),
+                "save_plots": False,
+                "verbose": False,
             },
-            'output': {
-                'directory': str(temp_dir),
-                'save_plots': False,
-                'verbose': False
-            }
         }
 
         # Step 4: Run optimization
@@ -564,29 +561,30 @@ class TestGPUIntegration:
 
         # Step 5: Validate results
         assert result.success, f"GPU workflow failed: {result.message}"
-        assert hasattr(result, 'parameters')
+        assert hasattr(result, "parameters")
         assert result.chi_squared >= 0.0
         assert result.computation_time > 0.0
 
         # Parameter recovery should be reasonable
-        true_params = data['true_parameters']
+        true_params = data["true_parameters"]
         recovered_params = result.parameters
 
-        for param_name in ['offset', 'contrast']:
+        for param_name in ["offset", "contrast"]:
             if param_name in recovered_params and param_name in true_params:
                 true_val = true_params[param_name]
                 recovered_val = recovered_params[param_name]
                 relative_error = abs(recovered_val - true_val) / (abs(true_val) + 1e-10)
 
                 # Should recover parameters reasonably well
-                assert relative_error < 0.2, \
-                    f"Poor parameter recovery for {param_name}: {relative_error:.3f}"
+                assert (
+                    relative_error < 0.2
+                ), f"Poor parameter recovery for {param_name}: {relative_error:.3f}"
 
     def test_gpu_vs_cpu_workflow_consistency(self, synthetic_xpcs_data):
         """Test consistency between GPU and CPU workflows."""
         gpu_devices = []
         try:
-            gpu_devices = jax.devices('gpu')
+            gpu_devices = jax.devices("gpu")
         except:
             pass
 
@@ -594,36 +592,28 @@ class TestGPUIntegration:
             pytest.skip("No GPU available")
 
         try:
-            from homodyne.optimization.nlsq import fit_nlsq_jax, JAXFIT_AVAILABLE
+            from homodyne.optimization.nlsq import OPTIMISTIX_AVAILABLE, fit_nlsq_jax
         except ImportError:
             pytest.skip("Optimization module not available")
 
-        if not JAXFIT_AVAILABLE:
-            pytest.skip("JAXFit not available")
+        if not OPTIMISTIX_AVAILABLE:
+            pytest.skip("Optimistix not available")
 
         data = synthetic_xpcs_data
 
         # CPU configuration
         cpu_config = {
-            'analysis_mode': 'static_isotropic',
-            'optimization': {
-                'method': 'nlsq',
-                'lsq': {
-                    'max_iterations': 30,
-                    'tolerance': 1e-6
-                }
+            "analysis_mode": "static_isotropic",
+            "optimization": {
+                "method": "nlsq",
+                "lsq": {"max_iterations": 30, "tolerance": 1e-6},
             },
-            'hardware': {
-                'force_cpu': True
-            }
+            "hardware": {"force_cpu": True},
         }
 
         # GPU configuration
         gpu_config = cpu_config.copy()
-        gpu_config['hardware'] = {
-            'force_cpu': False,
-            'gpu_memory_fraction': 0.5
-        }
+        gpu_config["hardware"] = {"force_cpu": False, "gpu_memory_fraction": 0.5}
 
         try:
             # Run both workflows
@@ -644,14 +634,16 @@ class TestGPUIntegration:
 
                     # Should be numerically close
                     relative_diff = abs(cpu_val - gpu_val) / (abs(cpu_val) + 1e-10)
-                    assert relative_diff < 0.01, \
-                        f"CPU/GPU parameter mismatch for {param_name}: {relative_diff:.4f}"
+                    assert (
+                        relative_diff < 0.01
+                    ), f"CPU/GPU parameter mismatch for {param_name}: {relative_diff:.4f}"
 
                 # Chi-squared should be close
                 chi2_diff = abs(result_cpu.chi_squared - result_gpu.chi_squared)
                 chi2_rel_diff = chi2_diff / (result_cpu.chi_squared + 1e-10)
-                assert chi2_rel_diff < 0.05, \
-                    f"CPU/GPU chi-squared mismatch: {chi2_rel_diff:.4f}"
+                assert (
+                    chi2_rel_diff < 0.05
+                ), f"CPU/GPU chi-squared mismatch: {chi2_rel_diff:.4f}"
 
         except Exception as e:
             pytest.skip(f"GPU vs CPU comparison failed: {e}")

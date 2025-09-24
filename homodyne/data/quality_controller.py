@@ -35,15 +35,12 @@ Authors: Homodyne Development Team
 Institution: Argonne National Laboratory
 """
 
-import hashlib
 import json
 import os
 import time
-import warnings
 from dataclasses import dataclass, field
 from enum import Enum
-from pathlib import Path
-from typing import Any, Callable, Dict, List, Optional, Tuple, Union
+from typing import Any
 
 # Core dependencies
 try:
@@ -85,8 +82,12 @@ except ImportError:
 
 # V2 validation system integration
 try:
-    from homodyne.data.validation import (DataQualityReport, ValidationIssue,
-                                          ValidationLevel, validate_xpcs_data)
+    from homodyne.data.validation import (
+        DataQualityReport,
+        ValidationIssue,
+        ValidationLevel,
+        validate_xpcs_data,
+    )
 
     HAS_VALIDATION = True
 except ImportError:
@@ -155,7 +156,7 @@ class QualityMetrics:
     issues_repaired: int = 0
     repair_success_rate: float = 0.0
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Convert metrics to dictionary for reporting."""
         return {
             "overall_score": self.overall_score,
@@ -194,17 +195,17 @@ class QualityControlResult:
     stage: QualityControlStage
     passed: bool
     metrics: QualityMetrics
-    issues: List[ValidationIssue] = field(default_factory=list)
-    repairs_applied: List[str] = field(default_factory=list)
-    recommendations: List[str] = field(default_factory=list)
+    issues: list[ValidationIssue] = field(default_factory=list)
+    repairs_applied: list[str] = field(default_factory=list)
+    recommendations: list[str] = field(default_factory=list)
     processing_time: float = 0.0
 
     # Data tracking
-    data_shape_before: Optional[Tuple] = None
-    data_shape_after: Optional[Tuple] = None
+    data_shape_before: tuple | None = None
+    data_shape_after: tuple | None = None
     data_modified: bool = False
 
-    def get_summary(self) -> Dict[str, Any]:
+    def get_summary(self) -> dict[str, Any]:
         """Get concise summary of quality control result."""
         return {
             "stage": self.stage.value,
@@ -255,7 +256,7 @@ class QualityControlConfig:
     save_quality_history: bool = True
 
     @classmethod
-    def from_config_dict(cls, config: Dict[str, Any]) -> "QualityControlConfig":
+    def from_config_dict(cls, config: dict[str, Any]) -> "QualityControlConfig":
         """Create configuration from dictionary."""
         quality_config = config.get("quality_control", {})
 
@@ -288,11 +289,16 @@ class QualityControlConfig:
             ),
             incremental_validation=quality_config.get("incremental_validation", True),
             parallel_validation=quality_config.get("parallel_validation", False),
-            generate_reports=quality_config.get("reporting", {}).get("generate_reports", quality_config.get("generate_reports", True)),
-            export_detailed_reports=quality_config.get("reporting", {}).get(
-                "export_detailed_reports", quality_config.get("export_detailed_reports", False)
+            generate_reports=quality_config.get("reporting", {}).get(
+                "generate_reports", quality_config.get("generate_reports", True)
             ),
-            save_quality_history=quality_config.get("reporting", {}).get("save_quality_history", quality_config.get("save_quality_history", True)),
+            export_detailed_reports=quality_config.get("reporting", {}).get(
+                "export_detailed_reports",
+                quality_config.get("export_detailed_reports", False),
+            ),
+            save_quality_history=quality_config.get("reporting", {}).get(
+                "save_quality_history", quality_config.get("save_quality_history", True)
+            ),
         )
 
 
@@ -305,7 +311,7 @@ class DataQualityController:
     preprocessing systems.
     """
 
-    def __init__(self, config: Dict[str, Any]):
+    def __init__(self, config: dict[str, Any]):
         """
         Initialize data quality controller.
 
@@ -316,11 +322,11 @@ class DataQualityController:
         self.quality_config = QualityControlConfig.from_config_dict(config)
 
         # Initialize validation cache
-        self._validation_cache: Dict[str, QualityControlResult] = {}
-        self._quality_history: List[QualityControlResult] = []
+        self._validation_cache: dict[str, QualityControlResult] = {}
+        self._quality_history: list[QualityControlResult] = []
 
         # Performance tracking
-        self._stage_timings: Dict[str, float] = {}
+        self._stage_timings: dict[str, float] = {}
 
         logger.info(
             f"DataQualityController initialized with validation_level='{self.quality_config.validation_level}', "
@@ -330,9 +336,9 @@ class DataQualityController:
     @log_performance(threshold=0.1)
     def validate_data_stage(
         self,
-        data: Dict[str, Any],
+        data: dict[str, Any],
         stage: QualityControlStage,
-        previous_result: Optional[QualityControlResult] = None,
+        previous_result: QualityControlResult | None = None,
     ) -> QualityControlResult:
         """
         Validate data at specific pipeline stage with progressive quality control.
@@ -451,7 +457,7 @@ class DataQualityController:
         return True
 
     def _create_minimal_result(
-        self, stage: QualityControlStage, data: Dict[str, Any]
+        self, stage: QualityControlStage, data: dict[str, Any]
     ) -> QualityControlResult:
         """Create minimal validation result when validation is disabled."""
         return QualityControlResult(
@@ -461,7 +467,7 @@ class DataQualityController:
             data_shape_before=self._get_data_shape(data),
         )
 
-    def _get_data_shape(self, data: Dict[str, Any]) -> Tuple:
+    def _get_data_shape(self, data: dict[str, Any]) -> tuple:
         """Get shape summary of data for tracking changes."""
         try:
             c2_exp = data.get("c2_exp", [])
@@ -475,7 +481,7 @@ class DataQualityController:
 
     @log_performance(threshold=0.05)
     def _validate_raw_data(
-        self, data: Dict[str, Any], result: QualityControlResult
+        self, data: dict[str, Any], result: QualityControlResult
     ) -> None:
         """Validate raw data integrity and basic format."""
         logger.debug("Validating raw data stage")
@@ -507,9 +513,9 @@ class DataQualityController:
 
     def _validate_filtered_data(
         self,
-        data: Dict[str, Any],
+        data: dict[str, Any],
         result: QualityControlResult,
-        previous_result: Optional[QualityControlResult],
+        previous_result: QualityControlResult | None,
     ) -> None:
         """Validate that filtering didn't remove too much data or corrupt quality."""
         logger.debug("Validating filtered data stage")
@@ -569,9 +575,9 @@ class DataQualityController:
 
     def _validate_preprocessed_data(
         self,
-        data: Dict[str, Any],
+        data: dict[str, Any],
         result: QualityControlResult,
-        previous_result: Optional[QualityControlResult],
+        previous_result: QualityControlResult | None,
     ) -> None:
         """Validate that preprocessing preserved physics and improved quality."""
         logger.debug("Validating preprocessed data stage")
@@ -619,9 +625,9 @@ class DataQualityController:
 
     def _validate_final_data(
         self,
-        data: Dict[str, Any],
+        data: dict[str, Any],
         result: QualityControlResult,
-        previous_result: Optional[QualityControlResult],
+        previous_result: QualityControlResult | None,
     ) -> None:
         """Comprehensive validation for analysis-ready data."""
         logger.debug("Validating final data stage")
@@ -664,7 +670,7 @@ class DataQualityController:
         )
 
     def _basic_raw_data_validation(
-        self, data: Dict[str, Any], result: QualityControlResult
+        self, data: dict[str, Any], result: QualityControlResult
     ) -> None:
         """Basic data validation fallback when full validation system unavailable."""
         required_keys = ["wavevector_q_list", "phi_angles_list", "t1", "t2", "c2_exp"]
@@ -707,7 +713,7 @@ class DataQualityController:
                     pass
 
     def _basic_data_quality_checks(
-        self, data: Dict[str, Any], result: QualityControlResult
+        self, data: dict[str, Any], result: QualityControlResult
     ) -> None:
         """Basic data quality checks for correlation matrices."""
         c2_exp = data.get("c2_exp", [])
@@ -746,7 +752,7 @@ class DataQualityController:
                 logger.warning("Could not perform basic data quality checks")
 
     def _advanced_data_quality_checks(
-        self, data: Dict[str, Any], result: QualityControlResult
+        self, data: dict[str, Any], result: QualityControlResult
     ) -> None:
         """Advanced quality checks including symmetry and decay analysis."""
         c2_exp = data.get("c2_exp", [])
@@ -798,7 +804,7 @@ class DataQualityController:
             logger.warning("Could not perform advanced data quality checks")
 
     def _comprehensive_quality_assessment(
-        self, data: Dict[str, Any], result: QualityControlResult
+        self, data: dict[str, Any], result: QualityControlResult
     ) -> None:
         """Comprehensive quality assessment for final data."""
         # Combine all previous checks
@@ -838,7 +844,7 @@ class DataQualityController:
             logger.warning(f"Comprehensive quality assessment failed: {e}")
 
     def _check_data_consistency(
-        self, data: Dict[str, Any], result: QualityControlResult
+        self, data: dict[str, Any], result: QualityControlResult
     ) -> None:
         """Check consistency between different data components."""
         try:
@@ -894,7 +900,7 @@ class DataQualityController:
             return False
 
     def _compute_transformation_fidelity(
-        self, current_data: Dict[str, Any], previous_result: QualityControlResult
+        self, current_data: dict[str, Any], previous_result: QualityControlResult
     ) -> float:
         """Compute fidelity of data transformation."""
         try:
@@ -924,7 +930,7 @@ class DataQualityController:
             return 0.5  # Conservative default
 
     def _assess_analysis_readiness(
-        self, data: Dict[str, Any], result: QualityControlResult
+        self, data: dict[str, Any], result: QualityControlResult
     ) -> float:
         """Assess overall readiness for analysis."""
         readiness_factors = []
@@ -966,7 +972,7 @@ class DataQualityController:
 
     @log_performance(threshold=0.1)
     def _apply_auto_repair(
-        self, data: Dict[str, Any], result: QualityControlResult
+        self, data: dict[str, Any], result: QualityControlResult
     ) -> bool:
         """Apply automatic data repair based on detected issues."""
         if self.quality_config.auto_repair == "disabled":
@@ -1031,7 +1037,7 @@ class DataQualityController:
         return data_modified
 
     def _repair_nan_values(
-        self, data: Dict[str, Any], repairs_applied: List[str]
+        self, data: dict[str, Any], repairs_applied: list[str]
     ) -> bool:
         """Repair NaN values in data."""
         data_modified = False
@@ -1071,7 +1077,7 @@ class DataQualityController:
         return data_modified
 
     def _repair_infinite_values(
-        self, data: Dict[str, Any], repairs_applied: List[str]
+        self, data: dict[str, Any], repairs_applied: list[str]
     ) -> bool:
         """Repair infinite values in data."""
         data_modified = False
@@ -1103,7 +1109,7 @@ class DataQualityController:
         return data_modified
 
     def _repair_negative_correlations(
-        self, data: Dict[str, Any], repairs_applied: List[str]
+        self, data: dict[str, Any], repairs_applied: list[str]
     ) -> bool:
         """Repair negative correlation values (aggressive mode only)."""
         data_modified = False
@@ -1126,7 +1132,7 @@ class DataQualityController:
         return data_modified
 
     def _repair_scaling_issues(
-        self, data: Dict[str, Any], repairs_applied: List[str]
+        self, data: dict[str, Any], repairs_applied: list[str]
     ) -> bool:
         """Repair obvious scaling issues in data."""
         data_modified = False
@@ -1161,7 +1167,7 @@ class DataQualityController:
         return data_modified
 
     def _revalidate_after_repair(
-        self, data: Dict[str, Any], result: QualityControlResult
+        self, data: dict[str, Any], result: QualityControlResult
     ) -> None:
         """Re-validate data after applying repairs."""
         logger.debug("Re-validating data after auto-repair")
@@ -1178,7 +1184,7 @@ class DataQualityController:
         result.issues = remaining_issues
 
     def _issue_was_repaired(
-        self, issue: ValidationIssue, repairs_applied: List[str]
+        self, issue: ValidationIssue, repairs_applied: list[str]
     ) -> bool:
         """Check if an issue was addressed by repairs."""
         issue_keywords = {
@@ -1232,7 +1238,7 @@ class DataQualityController:
 
         return max(0.0, min(100.0, final_score))
 
-    def _generate_recommendations(self, result: QualityControlResult) -> List[str]:
+    def _generate_recommendations(self, result: QualityControlResult) -> list[str]:
         """Generate actionable recommendations based on quality assessment."""
         recommendations = []
 
@@ -1283,10 +1289,10 @@ class DataQualityController:
 
     def _check_incremental_cache(
         self,
-        data: Dict[str, Any],
+        data: dict[str, Any],
         stage: QualityControlStage,
         previous_result: QualityControlResult,
-    ) -> Optional[QualityControlResult]:
+    ) -> QualityControlResult | None:
         """Check if incremental validation can use cached results."""
         # Simple cache key based on data shape and stage
         data_shape = self._get_data_shape(data)
@@ -1300,7 +1306,7 @@ class DataQualityController:
 
         return None
 
-    def _cache_result(self, data: Dict[str, Any], result: QualityControlResult) -> None:
+    def _cache_result(self, data: dict[str, Any], result: QualityControlResult) -> None:
         """Cache validation result for future incremental validation."""
         data_shape = self._get_data_shape(data)
         cache_key = f"{result.stage.value}_{hash(str(data_shape))}"
@@ -1334,8 +1340,8 @@ class DataQualityController:
 
     @log_performance(threshold=0.05)
     def generate_quality_report(
-        self, results: List[QualityControlResult], output_path: Optional[str] = None
-    ) -> Dict[str, Any]:
+        self, results: list[QualityControlResult], output_path: str | None = None
+    ) -> dict[str, Any]:
         """
         Generate comprehensive quality assessment report.
 
@@ -1403,8 +1409,8 @@ class DataQualityController:
         return report
 
     def _generate_overall_summary(
-        self, results: List[QualityControlResult]
-    ) -> Dict[str, Any]:
+        self, results: list[QualityControlResult]
+    ) -> dict[str, Any]:
         """Generate overall quality summary from all stages."""
         if not results:
             return {"status": "no_data", "overall_score": 0.0}
@@ -1450,8 +1456,8 @@ class DataQualityController:
         }
 
     def _analyze_quality_evolution(
-        self, results: List[QualityControlResult]
-    ) -> Dict[str, Any]:
+        self, results: list[QualityControlResult]
+    ) -> dict[str, Any]:
         """Analyze how quality evolved through the processing pipeline."""
         if len(results) < 2:
             return {"evolution": "insufficient_data"}
@@ -1460,7 +1466,7 @@ class DataQualityController:
         stages = [result.stage.value for result in results]
 
         evolution_analysis = {
-            "score_progression": dict(zip(stages, scores)),
+            "score_progression": dict(zip(stages, scores, strict=False)),
             "quality_trend": "improving" if scores[-1] > scores[0] else "declining",
             "max_improvement": max(scores) - min(scores),
             "final_vs_initial": scores[-1] - scores[0],
@@ -1483,8 +1489,8 @@ class DataQualityController:
         return evolution_analysis
 
     def _generate_final_recommendations(
-        self, results: List[QualityControlResult]
-    ) -> List[str]:
+        self, results: list[QualityControlResult]
+    ) -> list[str]:
         """Generate final recommendations based on all stage results."""
         recommendations = []
 
@@ -1533,7 +1539,7 @@ class DataQualityController:
 
         return recommendations
 
-    def get_quality_history(self) -> List[Dict[str, Any]]:
+    def get_quality_history(self) -> list[dict[str, Any]]:
         """Get quality control history for analysis."""
         return [result.get_summary() for result in self._quality_history]
 
@@ -1542,7 +1548,7 @@ class DataQualityController:
         self._validation_cache.clear()
         logger.debug("Validation cache cleared")
 
-    def get_performance_stats(self) -> Dict[str, Any]:
+    def get_performance_stats(self) -> dict[str, Any]:
         """Get performance statistics."""
         if not self._quality_history:
             return {"message": "No quality control history available"}
@@ -1562,14 +1568,14 @@ class DataQualityController:
 
 
 # Quality control utility functions for easy integration
-def create_quality_controller(config: Dict[str, Any]) -> DataQualityController:
+def create_quality_controller(config: dict[str, Any]) -> DataQualityController:
     """Convenience function to create quality controller from config."""
     return DataQualityController(config)
 
 
 def validate_data_with_quality_control(
-    data: Dict[str, Any],
-    config: Dict[str, Any],
+    data: dict[str, Any],
+    config: dict[str, Any],
     stage: QualityControlStage = QualityControlStage.FINAL_DATA,
 ) -> QualityControlResult:
     """Convenience function for single-stage quality validation."""

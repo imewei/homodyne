@@ -1,20 +1,20 @@
 """
-Minimal Progress Tracking for JAXFit NLSQ Optimization
-=======================================================
+Minimal Progress Tracking for Optimistix NLSQ Optimization
+==========================================================
 
 Since NumPyro has built-in progress bars for MCMC, this module only provides
-progress tracking for JAXFit NLSQ optimization, which doesn't have native
+progress tracking for Optimistix NLSQ optimization, which doesn't have native
 progress reporting capabilities.
 """
 
 import sys
 import time
-from typing import Callable, Optional
-
+from collections.abc import Callable
 
 # Try to import tqdm with graceful fallback
 try:
     from tqdm import tqdm
+
     TQDM_AVAILABLE = True
 except ImportError:
     TQDM_AVAILABLE = False
@@ -24,10 +24,7 @@ class OptimizationProgress:
     """Minimal progress tracker for NLSQ optimization."""
 
     def __init__(
-        self,
-        max_iterations: int,
-        desc: str = "NLSQ Optimization",
-        verbose: bool = True
+        self, max_iterations: int, desc: str = "NLSQ Optimization", verbose: bool = True
     ):
         """
         Initialize progress tracker.
@@ -75,13 +72,13 @@ class OptimizationProgress:
                 rate = self.eval_count / elapsed if elapsed > 0 else 0
                 eta = (self.max_iterations - self.eval_count) / rate if rate > 0 else 0
 
-                self.pbar.set_postfix({
-                    'eval/s': f"{rate:.1f}",
-                    'eta': f"{eta:.0f}s"
-                })
+                self.pbar.set_postfix({"eval/s": f"{rate:.1f}", "eta": f"{eta:.0f}s"})
         else:
             # Simple text progress (no tqdm)
-            if self.eval_count % self.update_interval == 0 or self.eval_count >= self.max_iterations:
+            if (
+                self.eval_count % self.update_interval == 0
+                or self.eval_count >= self.max_iterations
+            ):
                 elapsed = current_time - self.start_time
                 percent = (self.eval_count / self.max_iterations) * 100
                 rate = self.eval_count / elapsed if elapsed > 0 else 0
@@ -105,13 +102,11 @@ class OptimizationProgress:
             print(f"\n{self.desc} completed:")
             print(f"  Total evaluations: {self.eval_count}")
             print(f"  Time elapsed: {elapsed:.1f}s")
-            print(f"  Average rate: {self.eval_count/elapsed:.1f} eval/s")
+            print(f"  Average rate: {self.eval_count / elapsed:.1f} eval/s")
 
 
 def wrap_objective_with_progress(
-    objective_fn: Callable,
-    max_iterations: int,
-    verbose: bool = True
+    objective_fn: Callable, max_iterations: int, verbose: bool = True
 ) -> tuple[Callable, OptimizationProgress]:
     """
     Wrap an objective function to track evaluation count.

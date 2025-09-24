@@ -22,7 +22,7 @@ import json
 import os
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple, Union
+from typing import Any
 
 # Handle YAML dependency
 try:
@@ -55,9 +55,9 @@ class ConfigValidationResult:
     """Result of configuration validation."""
 
     is_valid: bool
-    errors: List[str]
-    warnings: List[str]
-    missing_optional: List[str]
+    errors: list[str]
+    warnings: list[str]
+    missing_optional: list[str]
 
 
 class XPCSConfigurationError(Exception):
@@ -150,7 +150,7 @@ XPCS_CONFIG_SCHEMA = {
 }
 
 
-def load_yaml_config(config_path: Union[str, Path]) -> Dict[str, Any]:
+def load_yaml_config(config_path: str | Path) -> dict[str, Any]:
     """
     Load YAML configuration file.
 
@@ -172,7 +172,7 @@ def load_yaml_config(config_path: Union[str, Path]) -> Dict[str, Any]:
         raise XPCSConfigurationError(f"Configuration file not found: {config_path}")
 
     try:
-        with open(config_path, "r") as f:
+        with open(config_path) as f:
             config = yaml.safe_load(f)
 
         if config is None:
@@ -187,7 +187,7 @@ def load_yaml_config(config_path: Union[str, Path]) -> Dict[str, Any]:
         )
 
 
-def load_json_config(config_path: Union[str, Path]) -> Dict[str, Any]:
+def load_json_config(config_path: str | Path) -> dict[str, Any]:
     """
     Load JSON configuration file with automatic YAML conversion.
 
@@ -206,7 +206,7 @@ def load_json_config(config_path: Union[str, Path]) -> Dict[str, Any]:
         raise XPCSConfigurationError(f"Configuration file not found: {config_path}")
 
     try:
-        with open(config_path, "r") as f:
+        with open(config_path) as f:
             config = json.load(f)
 
         logger.debug(f"Loaded JSON configuration from: {config_path}")
@@ -220,7 +220,7 @@ def load_json_config(config_path: Union[str, Path]) -> Dict[str, Any]:
 
 
 def validate_config_schema(
-    config: Dict[str, Any], schema: Dict[str, Any] = None
+    config: dict[str, Any], schema: dict[str, Any] = None
 ) -> ConfigValidationResult:
     """
     Validate configuration against schema.
@@ -304,7 +304,7 @@ def validate_config_schema(
     )
 
 
-def _validate_parameter_values(config: Dict[str, Any]) -> List[str]:
+def _validate_parameter_values(config: dict[str, Any]) -> list[str]:
     """Validate specific parameter value constraints."""
     errors = []
 
@@ -417,7 +417,7 @@ def _validate_parameter_values(config: Dict[str, Any]) -> List[str]:
     return errors
 
 
-def _validate_parameter_warnings(config: Dict[str, Any]) -> List[str]:
+def _validate_parameter_warnings(config: dict[str, Any]) -> list[str]:
     """Generate warnings for parameter values that may cause issues."""
     warnings = []
 
@@ -442,8 +442,8 @@ def _validate_parameter_warnings(config: Dict[str, Any]) -> List[str]:
 
 
 def apply_config_defaults(
-    config: Dict[str, Any], schema: Dict[str, Any] = None
-) -> Dict[str, Any]:
+    config: dict[str, Any], schema: dict[str, Any] = None
+) -> dict[str, Any]:
     """
     Apply default values to configuration.
 
@@ -485,8 +485,8 @@ def apply_config_defaults(
 
 
 def migrate_json_to_yaml_config(
-    json_config: Dict[str, Any], yaml_output_path: Optional[Union[str, Path]] = None
-) -> Dict[str, Any]:
+    json_config: dict[str, Any], yaml_output_path: str | Path | None = None
+) -> dict[str, Any]:
     """
     Migrate JSON configuration to YAML format.
 
@@ -517,7 +517,7 @@ def migrate_json_to_yaml_config(
     return yaml_config
 
 
-def save_yaml_config(config: Dict[str, Any], output_path: Union[str, Path]) -> None:
+def save_yaml_config(config: dict[str, Any], output_path: str | Path) -> None:
     """
     Save configuration to YAML file.
 
@@ -549,7 +549,7 @@ def save_yaml_config(config: Dict[str, Any], output_path: Union[str, Path]) -> N
 
 
 def create_example_yaml_config(
-    output_path: Union[str, Path],
+    output_path: str | Path,
     data_folder: str = "/path/to/data",
     data_file: str = "experiment.hdf",
 ) -> None:

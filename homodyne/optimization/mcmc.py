@@ -23,7 +23,7 @@ MCMC Philosophy:
 """
 
 import time
-from typing import Any, Dict, List, Optional, Tuple, Union
+from typing import Any
 
 import numpy as np
 
@@ -45,10 +45,8 @@ except ImportError:
     jnp = np
     # Import numerical gradients for fallback
     try:
-        from homodyne.core.numpy_gradients import (
-            DifferentiationConfig,
-            numpy_gradient
-        )
+        from homodyne.core.numpy_gradients import DifferentiationConfig, numpy_gradient
+
         HAS_NUMPY_GRADIENTS = True
     except ImportError:
         HAS_NUMPY_GRADIENTS = False
@@ -96,8 +94,9 @@ except ImportError:
 # Core homodyne imports
 try:
     from homodyne.core.fitting import ParameterSpace
-    from homodyne.core.theory import TheoryEngine
     from homodyne.core.physics import validate_parameters
+    from homodyne.core.theory import TheoryEngine
+
     HAS_CORE_MODULES = True
 except ImportError:
     HAS_CORE_MODULES = False
@@ -116,12 +115,12 @@ class MCMCResult:
         mean_params: np.ndarray,
         mean_contrast: float,
         mean_offset: float,
-        std_params: Optional[np.ndarray] = None,
-        std_contrast: Optional[float] = None,
-        std_offset: Optional[float] = None,
-        samples_params: Optional[np.ndarray] = None,
-        samples_contrast: Optional[np.ndarray] = None,
-        samples_offset: Optional[np.ndarray] = None,
+        std_params: np.ndarray | None = None,
+        std_contrast: float | None = None,
+        std_offset: float | None = None,
+        samples_params: np.ndarray | None = None,
+        samples_contrast: np.ndarray | None = None,
+        samples_offset: np.ndarray | None = None,
         converged: bool = True,
         n_iterations: int = 0,
         computation_time: float = 0.0,
@@ -132,10 +131,10 @@ class MCMCResult:
         n_warmup: int = 1000,
         n_samples: int = 1000,
         sampler: str = "NUTS",
-        acceptance_rate: Optional[float] = None,
-        r_hat: Optional[Dict[str, float]] = None,
-        effective_sample_size: Optional[Dict[str, float]] = None,
-        **kwargs
+        acceptance_rate: float | None = None,
+        r_hat: dict[str, float] | None = None,
+        effective_sample_size: dict[str, float] | None = None,
+        **kwargs,
     ):
         # Primary results
         self.mean_params = mean_params
@@ -143,7 +142,9 @@ class MCMCResult:
         self.mean_offset = mean_offset
 
         # Uncertainties
-        self.std_params = std_params if std_params is not None else np.zeros_like(mean_params)
+        self.std_params = (
+            std_params if std_params is not None else np.zeros_like(mean_params)
+        )
         self.std_contrast = std_contrast if std_contrast is not None else 0.0
         self.std_offset = std_offset if std_offset is not None else 0.0
 
@@ -173,14 +174,14 @@ class MCMCResult:
 @log_performance(threshold=10.0)
 def fit_mcmc_jax(
     data: np.ndarray,
-    sigma: Optional[np.ndarray] = None,
+    sigma: np.ndarray | None = None,
     t1: np.ndarray = None,
     t2: np.ndarray = None,
     phi: np.ndarray = None,
     q: float = None,
     L: float = None,
     analysis_mode: str = "laminar_flow",
-    parameter_space: Optional[ParameterSpace] = None,
+    parameter_space: ParameterSpace | None = None,
     enable_dataset_optimization: bool = True,
     estimate_noise: bool = False,
     noise_model: str = "hierarchical",
@@ -260,7 +261,9 @@ def fit_mcmc_jax(
 
         # Determine analysis mode
         if analysis_mode not in ["static_isotropic", "laminar_flow"]:
-            logger.warning(f"Unknown analysis mode {analysis_mode}, using static_isotropic")
+            logger.warning(
+                f"Unknown analysis mode {analysis_mode}, using static_isotropic"
+            )
             analysis_mode = "static_isotropic"
 
         logger.info(f"Analysis mode: {analysis_mode}")
@@ -289,27 +292,27 @@ def fit_mcmc_jax(
         logger.info(f"Posterior summary: {len(posterior_summary['samples'])} samples")
 
         return MCMCResult(
-            mean_params=posterior_summary['mean_params'],
-            mean_contrast=posterior_summary['mean_contrast'],
-            mean_offset=posterior_summary['mean_offset'],
-            std_params=posterior_summary['std_params'],
-            std_contrast=posterior_summary['std_contrast'],
-            std_offset=posterior_summary['std_offset'],
-            samples_params=posterior_summary['samples_params'],
-            samples_contrast=posterior_summary['samples_contrast'],
-            samples_offset=posterior_summary['samples_offset'],
-            converged=posterior_summary['converged'],
-            n_iterations=mcmc_config['n_samples'],
+            mean_params=posterior_summary["mean_params"],
+            mean_contrast=posterior_summary["mean_contrast"],
+            mean_offset=posterior_summary["mean_offset"],
+            std_params=posterior_summary["std_params"],
+            std_contrast=posterior_summary["std_contrast"],
+            std_offset=posterior_summary["std_offset"],
+            samples_params=posterior_summary["samples_params"],
+            samples_contrast=posterior_summary["samples_contrast"],
+            samples_offset=posterior_summary["samples_offset"],
+            converged=posterior_summary["converged"],
+            n_iterations=mcmc_config["n_samples"],
             computation_time=computation_time,
             backend="JAX",
             analysis_mode=analysis_mode,
-            n_chains=mcmc_config['n_chains'],
-            n_warmup=mcmc_config['n_warmup'],
-            n_samples=mcmc_config['n_samples'],
+            n_chains=mcmc_config["n_chains"],
+            n_warmup=mcmc_config["n_warmup"],
+            n_samples=mcmc_config["n_samples"],
             sampler="NUTS",
-            acceptance_rate=posterior_summary.get('acceptance_rate'),
-            r_hat=posterior_summary.get('r_hat'),
-            effective_sample_size=posterior_summary.get('ess')
+            acceptance_rate=posterior_summary.get("acceptance_rate"),
+            r_hat=posterior_summary.get("r_hat"),
+            effective_sample_size=posterior_summary.get("ess"),
         )
 
     except Exception as e:
@@ -317,7 +320,7 @@ def fit_mcmc_jax(
         logger.error(f"MCMC sampling failed after {computation_time:.3f}s: {e}")
 
         # Return failed result
-        n_params = 5 if 'static' in analysis_mode else 9
+        n_params = 5 if "static" in analysis_mode else 9
         return MCMCResult(
             mean_params=np.zeros(n_params),
             mean_contrast=0.5,
@@ -326,7 +329,7 @@ def fit_mcmc_jax(
             n_iterations=0,
             computation_time=computation_time,
             backend="JAX",
-            analysis_mode=analysis_mode
+            analysis_mode=analysis_mode,
         )
 
 
@@ -336,9 +339,9 @@ def _validate_mcmc_data(data, t1, t2, phi, q, L):
         raise ValueError("Data cannot be None or empty")
 
     required_arrays = [t1, t2, phi]
-    array_names = ['t1', 't2', 'phi']
+    array_names = ["t1", "t2", "phi"]
 
-    for arr, name in zip(required_arrays, array_names):
+    for arr, name in zip(required_arrays, array_names, strict=False):
         if arr is None:
             raise ValueError(f"{name} cannot be None")
 
@@ -355,15 +358,15 @@ def _estimate_noise(data: np.ndarray) -> np.ndarray:
     return np.maximum(noise_level, min_noise)
 
 
-def _get_mcmc_config(kwargs: Dict[str, Any]) -> Dict[str, Any]:
+def _get_mcmc_config(kwargs: dict[str, Any]) -> dict[str, Any]:
     """Get MCMC configuration with defaults."""
     default_config = {
-        'n_samples': 1000,
-        'n_warmup': 1000,
-        'n_chains': 4,
-        'target_accept_prob': 0.8,
-        'max_tree_depth': 10,
-        'rng_key': 42
+        "n_samples": 1000,
+        "n_warmup": 1000,
+        "n_chains": 4,
+        "target_accept_prob": 0.8,
+        "max_tree_depth": 10,
+        "rng_key": 42,
     }
 
     # Update with provided kwargs
@@ -376,72 +379,153 @@ def _create_numpyro_model(data, sigma, t1, t2, phi, q, L, analysis_mode, param_s
 
     def homodyne_model():
         # Define priors based on analysis mode
-        if 'static' in analysis_mode:
+        if "static" in analysis_mode:
             # Static mode: 5 parameters
-            contrast = sample('contrast', dist.TruncatedNormal(
-                param_space.contrast_prior[0], param_space.contrast_prior[1],
-                low=param_space.contrast_bounds[0], high=param_space.contrast_bounds[1]
-            ))
-            offset = sample('offset', dist.TruncatedNormal(
-                param_space.offset_prior[0], param_space.offset_prior[1],
-                low=param_space.offset_bounds[0], high=param_space.offset_bounds[1]
-            ))
-            D0 = sample('D0', dist.TruncatedNormal(
-                param_space.D0_prior[0], param_space.D0_prior[1],
-                low=param_space.D0_bounds[0], high=param_space.D0_bounds[1]
-            ))
-            alpha = sample('alpha', dist.TruncatedNormal(
-                param_space.alpha_prior[0], param_space.alpha_prior[1],
-                low=param_space.alpha_bounds[0], high=param_space.alpha_bounds[1]
-            ))
-            D_offset = sample('D_offset', dist.TruncatedNormal(
-                param_space.D_offset_prior[0], param_space.D_offset_prior[1],
-                low=param_space.D_offset_bounds[0], high=param_space.D_offset_bounds[1]
-            ))
+            contrast = sample(
+                "contrast",
+                dist.TruncatedNormal(
+                    param_space.contrast_prior[0],
+                    param_space.contrast_prior[1],
+                    low=param_space.contrast_bounds[0],
+                    high=param_space.contrast_bounds[1],
+                ),
+            )
+            offset = sample(
+                "offset",
+                dist.TruncatedNormal(
+                    param_space.offset_prior[0],
+                    param_space.offset_prior[1],
+                    low=param_space.offset_bounds[0],
+                    high=param_space.offset_bounds[1],
+                ),
+            )
+            D0 = sample(
+                "D0",
+                dist.TruncatedNormal(
+                    param_space.D0_prior[0],
+                    param_space.D0_prior[1],
+                    low=param_space.D0_bounds[0],
+                    high=param_space.D0_bounds[1],
+                ),
+            )
+            alpha = sample(
+                "alpha",
+                dist.TruncatedNormal(
+                    param_space.alpha_prior[0],
+                    param_space.alpha_prior[1],
+                    low=param_space.alpha_bounds[0],
+                    high=param_space.alpha_bounds[1],
+                ),
+            )
+            D_offset = sample(
+                "D_offset",
+                dist.TruncatedNormal(
+                    param_space.D_offset_prior[0],
+                    param_space.D_offset_prior[1],
+                    low=param_space.D_offset_bounds[0],
+                    high=param_space.D_offset_bounds[1],
+                ),
+            )
 
             params = jnp.array([contrast, offset, D0, alpha, D_offset])
         else:
             # Laminar flow mode: 9 parameters
             # (Add the additional 4 parameters)
-            contrast = sample('contrast', dist.TruncatedNormal(
-                param_space.contrast_prior[0], param_space.contrast_prior[1],
-                low=param_space.contrast_bounds[0], high=param_space.contrast_bounds[1]
-            ))
-            offset = sample('offset', dist.TruncatedNormal(
-                param_space.offset_prior[0], param_space.offset_prior[1],
-                low=param_space.offset_bounds[0], high=param_space.offset_bounds[1]
-            ))
-            D0 = sample('D0', dist.TruncatedNormal(
-                param_space.D0_prior[0], param_space.D0_prior[1],
-                low=param_space.D0_bounds[0], high=param_space.D0_bounds[1]
-            ))
-            alpha = sample('alpha', dist.TruncatedNormal(
-                param_space.alpha_prior[0], param_space.alpha_prior[1],
-                low=param_space.alpha_bounds[0], high=param_space.alpha_bounds[1]
-            ))
-            D_offset = sample('D_offset', dist.TruncatedNormal(
-                param_space.D_offset_prior[0], param_space.D_offset_prior[1],
-                low=param_space.D_offset_bounds[0], high=param_space.D_offset_bounds[1]
-            ))
-            gamma_dot_t0 = sample('gamma_dot_t0', dist.TruncatedNormal(
-                param_space.gamma_dot_t0_prior[0], param_space.gamma_dot_t0_prior[1],
-                low=param_space.gamma_dot_t0_bounds[0], high=param_space.gamma_dot_t0_bounds[1]
-            ))
-            beta = sample('beta', dist.TruncatedNormal(
-                param_space.beta_prior[0], param_space.beta_prior[1],
-                low=param_space.beta_bounds[0], high=param_space.beta_bounds[1]
-            ))
-            gamma_dot_t_offset = sample('gamma_dot_t_offset', dist.TruncatedNormal(
-                param_space.gamma_dot_t_offset_prior[0], param_space.gamma_dot_t_offset_prior[1],
-                low=param_space.gamma_dot_t_offset_bounds[0], high=param_space.gamma_dot_t_offset_bounds[1]
-            ))
-            phi0 = sample('phi0', dist.TruncatedNormal(
-                param_space.phi0_prior[0], param_space.phi0_prior[1],
-                low=param_space.phi0_bounds[0], high=param_space.phi0_bounds[1]
-            ))
+            contrast = sample(
+                "contrast",
+                dist.TruncatedNormal(
+                    param_space.contrast_prior[0],
+                    param_space.contrast_prior[1],
+                    low=param_space.contrast_bounds[0],
+                    high=param_space.contrast_bounds[1],
+                ),
+            )
+            offset = sample(
+                "offset",
+                dist.TruncatedNormal(
+                    param_space.offset_prior[0],
+                    param_space.offset_prior[1],
+                    low=param_space.offset_bounds[0],
+                    high=param_space.offset_bounds[1],
+                ),
+            )
+            D0 = sample(
+                "D0",
+                dist.TruncatedNormal(
+                    param_space.D0_prior[0],
+                    param_space.D0_prior[1],
+                    low=param_space.D0_bounds[0],
+                    high=param_space.D0_bounds[1],
+                ),
+            )
+            alpha = sample(
+                "alpha",
+                dist.TruncatedNormal(
+                    param_space.alpha_prior[0],
+                    param_space.alpha_prior[1],
+                    low=param_space.alpha_bounds[0],
+                    high=param_space.alpha_bounds[1],
+                ),
+            )
+            D_offset = sample(
+                "D_offset",
+                dist.TruncatedNormal(
+                    param_space.D_offset_prior[0],
+                    param_space.D_offset_prior[1],
+                    low=param_space.D_offset_bounds[0],
+                    high=param_space.D_offset_bounds[1],
+                ),
+            )
+            gamma_dot_t0 = sample(
+                "gamma_dot_t0",
+                dist.TruncatedNormal(
+                    param_space.gamma_dot_t0_prior[0],
+                    param_space.gamma_dot_t0_prior[1],
+                    low=param_space.gamma_dot_t0_bounds[0],
+                    high=param_space.gamma_dot_t0_bounds[1],
+                ),
+            )
+            beta = sample(
+                "beta",
+                dist.TruncatedNormal(
+                    param_space.beta_prior[0],
+                    param_space.beta_prior[1],
+                    low=param_space.beta_bounds[0],
+                    high=param_space.beta_bounds[1],
+                ),
+            )
+            gamma_dot_t_offset = sample(
+                "gamma_dot_t_offset",
+                dist.TruncatedNormal(
+                    param_space.gamma_dot_t_offset_prior[0],
+                    param_space.gamma_dot_t_offset_prior[1],
+                    low=param_space.gamma_dot_t_offset_bounds[0],
+                    high=param_space.gamma_dot_t_offset_bounds[1],
+                ),
+            )
+            phi0 = sample(
+                "phi0",
+                dist.TruncatedNormal(
+                    param_space.phi0_prior[0],
+                    param_space.phi0_prior[1],
+                    low=param_space.phi0_bounds[0],
+                    high=param_space.phi0_bounds[1],
+                ),
+            )
 
-            params = jnp.array([contrast, offset, D0, alpha, D_offset,
-                              gamma_dot_t0, beta, gamma_dot_t_offset, phi0])
+            params = jnp.array(
+                [
+                    contrast,
+                    offset,
+                    D0,
+                    alpha,
+                    D_offset,
+                    gamma_dot_t0,
+                    beta,
+                    gamma_dot_t_offset,
+                    phi0,
+                ]
+            )
 
         # Compute theoretical model (simplified)
         # In real implementation, this would use TheoryEngine
@@ -451,7 +535,7 @@ def _create_numpyro_model(data, sigma, t1, t2, phi, q, L, analysis_mode, param_s
         c2_fitted = contrast * c2_theory + offset
 
         # Likelihood
-        sample('obs', dist.Normal(c2_fitted, sigma), obs=data)
+        sample("obs", dist.Normal(c2_fitted, sigma), obs=data)
 
     return homodyne_model
 
@@ -474,16 +558,16 @@ def _compute_simple_theory(params, t1, t2, phi, q, analysis_mode):
 
 def _run_numpyro_sampling(model, config):
     """Run NumPyro MCMC sampling."""
-    nuts_kernel = NUTS(model, target_accept_prob=config['target_accept_prob'])
+    nuts_kernel = NUTS(model, target_accept_prob=config["target_accept_prob"])
 
     mcmc = MCMC(
         nuts_kernel,
-        num_warmup=config['n_warmup'],
-        num_samples=config['n_samples'],
-        num_chains=config['n_chains']
+        num_warmup=config["n_warmup"],
+        num_samples=config["n_samples"],
+        num_chains=config["n_chains"],
     )
 
-    rng_key = random.PRNGKey(config['rng_key'])
+    rng_key = random.PRNGKey(config["rng_key"])
     mcmc.run(rng_key)
 
     return mcmc
@@ -501,23 +585,36 @@ def _process_posterior_samples(mcmc_result, analysis_mode):
     samples = mcmc_result.get_samples()
 
     # Extract parameter samples
-    if 'static' in analysis_mode:
-        param_names = ['D0', 'alpha', 'D_offset']
-        param_samples = jnp.column_stack([
-            samples['D0'], samples['alpha'], samples['D_offset']
-        ])
+    if "static" in analysis_mode:
+        param_names = ["D0", "alpha", "D_offset"]
+        param_samples = jnp.column_stack(
+            [samples["D0"], samples["alpha"], samples["D_offset"]]
+        )
     else:
-        param_names = ['D0', 'alpha', 'D_offset', 'gamma_dot_t0',
-                      'beta', 'gamma_dot_t_offset', 'phi0']
-        param_samples = jnp.column_stack([
-            samples['D0'], samples['alpha'], samples['D_offset'],
-            samples['gamma_dot_t0'], samples['beta'],
-            samples['gamma_dot_t_offset'], samples['phi0']
-        ])
+        param_names = [
+            "D0",
+            "alpha",
+            "D_offset",
+            "gamma_dot_t0",
+            "beta",
+            "gamma_dot_t_offset",
+            "phi0",
+        ]
+        param_samples = jnp.column_stack(
+            [
+                samples["D0"],
+                samples["alpha"],
+                samples["D_offset"],
+                samples["gamma_dot_t0"],
+                samples["beta"],
+                samples["gamma_dot_t_offset"],
+                samples["phi0"],
+            ]
+        )
 
     # Extract fitting parameter samples
-    contrast_samples = samples['contrast']
-    offset_samples = samples['offset']
+    contrast_samples = samples["contrast"]
+    offset_samples = samples["offset"]
 
     # Compute summary statistics
     mean_params = jnp.mean(param_samples, axis=0)
@@ -528,18 +625,18 @@ def _process_posterior_samples(mcmc_result, analysis_mode):
     std_offset = float(jnp.std(offset_samples))
 
     return {
-        'mean_params': np.array(mean_params),
-        'std_params': np.array(std_params),
-        'mean_contrast': mean_contrast,
-        'std_contrast': std_contrast,
-        'mean_offset': mean_offset,
-        'std_offset': std_offset,
-        'samples_params': np.array(param_samples),
-        'samples_contrast': np.array(contrast_samples),
-        'samples_offset': np.array(offset_samples),
-        'samples': samples,
-        'converged': True,  # Simplified - would check R-hat etc.
-        'acceptance_rate': None,  # Would extract from diagnostics
-        'r_hat': None,  # Would compute convergence diagnostics
-        'ess': None  # Would compute effective sample size
+        "mean_params": np.array(mean_params),
+        "std_params": np.array(std_params),
+        "mean_contrast": mean_contrast,
+        "std_contrast": std_contrast,
+        "mean_offset": mean_offset,
+        "std_offset": std_offset,
+        "samples_params": np.array(param_samples),
+        "samples_contrast": np.array(contrast_samples),
+        "samples_offset": np.array(offset_samples),
+        "samples": samples,
+        "converged": True,  # Simplified - would check R-hat etc.
+        "acceptance_rate": None,  # Would extract from diagnostics
+        "r_hat": None,  # Would compute convergence diagnostics
+        "ess": None,  # Would compute effective sample size
     }

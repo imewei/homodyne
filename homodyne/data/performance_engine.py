@@ -24,22 +24,17 @@ Key Features:
 - Real-time performance metrics and automatic tuning
 """
 
-import gc
 import hashlib
-import mmap
 import os
 import pickle
 import threading
 import time
-import warnings
-import weakref
-from abc import ABC, abstractmethod
 from collections import OrderedDict, deque
 from concurrent.futures import Future, ThreadPoolExecutor, as_completed
 from contextlib import contextmanager
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Callable, Dict, Iterator, List, Optional, Tuple, Union
+from typing import Any
 
 import psutil
 import zstd
@@ -134,7 +129,7 @@ class PerformanceMetrics:
     io_wait_time: float = 0.0
     chunk_processing_rate: float = 0.0  # chunks/second
     parallel_efficiency: float = 0.0  # 0.0-1.0 scale
-    bottleneck_type: Optional[str] = None  # "memory", "io", "cpu", "cache"
+    bottleneck_type: str | None = None  # "memory", "io", "cpu", "cache"
 
     # Performance history for trending
     history_size: int = field(default=100, init=False)
@@ -189,8 +184,8 @@ class ChunkInfo:
     priority: int  # 1=highest, 10=lowest
     access_pattern: str  # "sequential", "random", "predictive"
     estimated_processing_time: float
-    dependencies: List[int] = field(default_factory=list)
-    cache_key: Optional[str] = None
+    dependencies: list[int] = field(default_factory=list)
+    cache_key: str | None = None
 
 
 class MemoryMapManager:
@@ -211,9 +206,9 @@ class MemoryMapManager:
         """
         self.max_open_files = max_open_files
         self.buffer_size_mb = buffer_size_mb
-        self._open_maps: Dict[str, Any] = {}
-        self._access_counts: Dict[str, int] = {}
-        self._last_access: Dict[str, float] = {}
+        self._open_maps: dict[str, Any] = {}
+        self._access_counts: dict[str, int] = {}
+        self._last_access: dict[str, float] = {}
         self._lock = threading.RLock()
 
         logger.info(
@@ -395,7 +390,7 @@ class AdaptiveChunker:
 
         return chunk_size
 
-    def create_chunk_plan(self, total_size: int, chunk_size: int) -> List[ChunkInfo]:
+    def create_chunk_plan(self, total_size: int, chunk_size: int) -> list[ChunkInfo]:
         """
         Create intelligent chunk processing plan.
 
@@ -566,9 +561,9 @@ class MultiLevelCache:
         self._memory_usage_mb = 0.0
 
         # Access statistics for intelligent eviction
-        self._access_counts: Dict[str, int] = {}
-        self._access_times: Dict[str, float] = {}
-        self._access_frequencies: Dict[str, deque] = {}  # For frequency analysis
+        self._access_counts: dict[str, int] = {}
+        self._access_times: dict[str, float] = {}
+        self._access_frequencies: dict[str, deque] = {}  # For frequency analysis
 
         # Cache hierarchy paths
         self._cache_base_path = Path.cwd() / ".homodyne_cache"
@@ -591,7 +586,7 @@ class MultiLevelCache:
             f"ssd={ssd_cache_mb}MB, hdd={hdd_cache_mb}MB, compression={compression_level}"
         )
 
-    def get(self, key: str) -> Optional[Any]:
+    def get(self, key: str) -> Any | None:
         """
         Get item from cache hierarchy (memory -> SSD -> HDD).
 
@@ -883,7 +878,7 @@ class MultiLevelCache:
         except Exception as e:
             logger.warning(f"Error evicting from HDD cache: {e}")
 
-    def get_cache_stats(self) -> Dict[str, Any]:
+    def get_cache_stats(self) -> dict[str, Any]:
         """Get comprehensive cache statistics."""
         with self._lock:
             memory_items = len(self._memory_cache)
@@ -922,7 +917,7 @@ class PerformanceEngine:
     """
 
     @log_calls(include_args=False)
-    def __init__(self, config: Optional[Dict[str, Any]] = None):
+    def __init__(self, config: dict[str, Any] | None = None):
         """
         Initialize performance engine with configuration.
 
@@ -943,7 +938,7 @@ class PerformanceEngine:
         self._monitoring_enabled = self.performance_config.get("monitoring", {}).get(
             "enabled", True
         )
-        self._monitoring_thread: Optional[threading.Thread] = None
+        self._monitoring_thread: threading.Thread | None = None
         self._shutdown_event = threading.Event()
 
         # Prefetching and background loading
@@ -951,7 +946,7 @@ class PerformanceEngine:
             "enabled", True
         )
         self._prefetch_queue: deque = deque(maxlen=100)
-        self._background_executor: Optional[ThreadPoolExecutor] = None
+        self._background_executor: ThreadPoolExecutor | None = None
 
         if self._monitoring_enabled:
             self._start_performance_monitoring()
@@ -1077,8 +1072,8 @@ class PerformanceEngine:
     def load_correlation_matrices_optimized(
         self,
         hdf_path: str,
-        data_keys: List[str],
-        chunk_info: Optional[List[ChunkInfo]] = None,
+        data_keys: list[str],
+        chunk_info: list[ChunkInfo] | None = None,
     ) -> np.ndarray:
         """
         Load correlation matrices with full performance optimization.
@@ -1164,8 +1159,8 @@ class PerformanceEngine:
     def _load_matrices_chunked(
         self,
         hdf_file,
-        data_keys: List[str],
-        chunk_info: Optional[List[ChunkInfo]] = None,
+        data_keys: list[str],
+        chunk_info: list[ChunkInfo] | None = None,
     ) -> np.ndarray:
         """Load correlation matrices using chunked parallel processing."""
         if chunk_info is None:
@@ -1210,7 +1205,7 @@ class PerformanceEngine:
 
         return np.array(all_matrices)
 
-    def _load_matrices_direct(self, hdf_file, data_keys: List[str]) -> np.ndarray:
+    def _load_matrices_direct(self, hdf_file, data_keys: list[str]) -> np.ndarray:
         """Load correlation matrices directly without chunking."""
         matrices = []
 
@@ -1236,8 +1231,8 @@ class PerformanceEngine:
         return np.array(matrices)
 
     def _load_matrix_chunk(
-        self, hdf_file, chunk_keys: List[str], chunk_info: ChunkInfo
-    ) -> List[np.ndarray]:
+        self, hdf_file, chunk_keys: list[str], chunk_info: ChunkInfo
+    ) -> list[np.ndarray]:
         """Load a chunk of correlation matrices."""
         matrices = []
 
@@ -1266,7 +1261,7 @@ class PerformanceEngine:
         c2_full[diag_indices] /= 2
         return c2_full
 
-    def _generate_cache_key(self, hdf_path: str, data_keys: List[str]) -> str:
+    def _generate_cache_key(self, hdf_path: str, data_keys: list[str]) -> str:
         """Generate cache key for correlation matrices."""
         # Use file path, modification time, and hash of data keys
         file_stat = os.stat(hdf_path)
@@ -1280,7 +1275,7 @@ class PerformanceEngine:
         )
 
     def prefetch_data(
-        self, hdf_path: str, data_keys: List[str], priority: int = 5
+        self, hdf_path: str, data_keys: list[str], priority: int = 5
     ) -> Future:
         """
         Schedule data for background prefetching.
@@ -1316,7 +1311,7 @@ class PerformanceEngine:
         return future
 
     def _background_load_data(
-        self, hdf_path: str, data_keys: List[str], cache_key: str, priority: int
+        self, hdf_path: str, data_keys: list[str], cache_key: str, priority: int
     ) -> None:
         """Background data loading for prefetching."""
         try:
@@ -1335,7 +1330,7 @@ class PerformanceEngine:
         except Exception as e:
             logger.warning(f"Background prefetch failed: {e}")
 
-    def get_performance_report(self) -> Dict[str, Any]:
+    def get_performance_report(self) -> dict[str, Any]:
         """Get comprehensive performance report."""
         cache_stats = self.cache.get_cache_stats()
 

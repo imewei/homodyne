@@ -8,14 +8,15 @@ for XPCS data analysis using the homodyne package.
 """
 
 import time
-import numpy as np
 
-# GPU activation
-from homodyne.runtime.gpu import activate_gpu, get_gpu_status
+import numpy as np
 
 # Homodyne imports
 from homodyne.config import ConfigManager
-from homodyne.optimization import fit_nlsq_jax, fit_mcmc_jax
+from homodyne.optimization import fit_mcmc_jax, fit_nlsq_jax
+
+# GPU activation
+from homodyne.runtime.gpu import activate_gpu, get_gpu_status
 
 
 def setup_gpu_environment():
@@ -79,7 +80,7 @@ def run_gpu_optimization(data, config):
     print("-" * 50)
 
     # NLSQ Optimization
-    print("Running JAXFit NLSQ optimization...")
+    print("Running Optimistix NLSQ optimization...")
     start_time = time.perf_counter()
 
     try:

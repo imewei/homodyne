@@ -11,7 +11,7 @@ and ensures parameter values remain within reasonable bounds for stable
 numerical computation.
 """
 
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any
 
 import numpy as np
 
@@ -57,10 +57,12 @@ class PhysicsConstants:
     ANGLE_MAX = 30.0
 
     # Offset parameter bounds
-    DIFFUSION_OFFSET_MIN = -1e5  # Allow negative diffusion offsets for baseline correction
-    DIFFUSION_OFFSET_MAX = 1e5   # Maximum positive diffusion offset
-    SHEAR_OFFSET_MIN = -1.0      # Allow negative shear rate offsets
-    SHEAR_OFFSET_MAX = 1.0       # Maximum positive shear rate offset
+    DIFFUSION_OFFSET_MIN = (
+        -1e5
+    )  # Allow negative diffusion offsets for baseline correction
+    DIFFUSION_OFFSET_MAX = 1e5  # Maximum positive diffusion offset
+    SHEAR_OFFSET_MIN = -1.0  # Allow negative shear rate offsets
+    SHEAR_OFFSET_MAX = 1.0  # Maximum positive shear rate offset
 
     # Numerical stability
     EPS = 1e-12  # Avoid division by zero
@@ -68,13 +70,15 @@ class PhysicsConstants:
     MIN_POSITIVE = 1e-100  # Minimum positive value
 
     # Physical parameter bounds
-    ALPHA_MIN = -10.0  # Minimum diffusion exponent (wider range for extreme anomalous diffusion)
+    ALPHA_MIN = (
+        -10.0
+    )  # Minimum diffusion exponent (wider range for extreme anomalous diffusion)
     ALPHA_MAX = 10.0  # Maximum diffusion exponent
     BETA_MIN = -10.0  # Minimum shear exponent (wider range for extreme time dependence)
     BETA_MAX = 10.0  # Maximum shear exponent
 
 
-def parameter_bounds() -> Dict[str, List[Tuple[float, float]]]:
+def parameter_bounds() -> dict[str, list[tuple[float, float]]]:
     """
     Get standard parameter bounds for all model types.
 
@@ -85,7 +89,10 @@ def parameter_bounds() -> Dict[str, List[Tuple[float, float]]]:
         "diffusion": [
             (PhysicsConstants.DIFFUSION_MIN, PhysicsConstants.DIFFUSION_MAX),  # D0
             (PhysicsConstants.ALPHA_MIN, PhysicsConstants.ALPHA_MAX),  # alpha
-            (PhysicsConstants.DIFFUSION_OFFSET_MIN, PhysicsConstants.DIFFUSION_OFFSET_MAX),  # D_offset
+            (
+                PhysicsConstants.DIFFUSION_OFFSET_MIN,
+                PhysicsConstants.DIFFUSION_OFFSET_MAX,
+            ),  # D_offset
         ],
         "shear": [
             (
@@ -93,28 +100,37 @@ def parameter_bounds() -> Dict[str, List[Tuple[float, float]]]:
                 PhysicsConstants.SHEAR_RATE_MAX,
             ),  # gamma_dot_0
             (PhysicsConstants.BETA_MIN, PhysicsConstants.BETA_MAX),  # beta
-            (PhysicsConstants.SHEAR_OFFSET_MIN, PhysicsConstants.SHEAR_OFFSET_MAX),  # gamma_dot_offset
+            (
+                PhysicsConstants.SHEAR_OFFSET_MIN,
+                PhysicsConstants.SHEAR_OFFSET_MAX,
+            ),  # gamma_dot_offset
             (PhysicsConstants.ANGLE_MIN, PhysicsConstants.ANGLE_MAX),  # phi0
         ],
         "combined": [
             # Diffusion parameters
             (PhysicsConstants.DIFFUSION_MIN, PhysicsConstants.DIFFUSION_MAX),  # D0
             (PhysicsConstants.ALPHA_MIN, PhysicsConstants.ALPHA_MAX),  # alpha
-            (PhysicsConstants.DIFFUSION_OFFSET_MIN, PhysicsConstants.DIFFUSION_OFFSET_MAX),  # D_offset
+            (
+                PhysicsConstants.DIFFUSION_OFFSET_MIN,
+                PhysicsConstants.DIFFUSION_OFFSET_MAX,
+            ),  # D_offset
             # Shear parameters
             (
                 PhysicsConstants.SHEAR_RATE_MIN,
                 PhysicsConstants.SHEAR_RATE_MAX,
             ),  # gamma_dot_0
             (PhysicsConstants.BETA_MIN, PhysicsConstants.BETA_MAX),  # beta
-            (PhysicsConstants.SHEAR_OFFSET_MIN, PhysicsConstants.SHEAR_OFFSET_MAX),  # gamma_dot_offset
+            (
+                PhysicsConstants.SHEAR_OFFSET_MIN,
+                PhysicsConstants.SHEAR_OFFSET_MAX,
+            ),  # gamma_dot_offset
             (PhysicsConstants.ANGLE_MIN, PhysicsConstants.ANGLE_MAX),  # phi0
         ],
     }
 
 
 def validate_parameters(
-    params: np.ndarray, bounds: List[Tuple[float, float]], tolerance: float = 1e-10
+    params: np.ndarray, bounds: list[tuple[float, float]], tolerance: float = 1e-10
 ) -> bool:
     """
     Validate parameter values against bounds with tolerance.
@@ -130,8 +146,8 @@ def validate_parameters(
     # Check if we're dealing with JAX tracers during gradient computation
     try:
         # Try to detect JAX tracer objects
-        param_str = str(type(params[0] if hasattr(params, '__getitem__') else params))
-        if 'Tracer' in param_str or 'LinearizeTracer' in param_str:
+        param_str = str(type(params[0] if hasattr(params, "__getitem__") else params))
+        if "Tracer" in param_str or "LinearizeTracer" in param_str:
             # Skip validation during JAX gradient computation
             return True
     except:
@@ -143,11 +159,11 @@ def validate_parameters(
         )
         return False
 
-    for i, (param, (min_val, max_val)) in enumerate(zip(params, bounds)):
+    for i, (param, (min_val, max_val)) in enumerate(zip(params, bounds, strict=False)):
         # Check if param is a JAX tracer
         try:
             param_type_str = str(type(param))
-            if 'Tracer' in param_type_str or 'LinearizeTracer' in param_type_str:
+            if "Tracer" in param_type_str or "LinearizeTracer" in param_type_str:
                 # Skip validation for JAX tracers
                 continue
         except:
@@ -170,7 +186,7 @@ def validate_parameters(
 
 
 def clip_parameters(
-    params: np.ndarray, bounds: List[Tuple[float, float]]
+    params: np.ndarray, bounds: list[tuple[float, float]]
 ) -> np.ndarray:
     """
     Clip parameters to stay within bounds.
@@ -188,7 +204,7 @@ def clip_parameters(
         )
 
     clipped = np.zeros_like(params)
-    for i, (param, (min_val, max_val)) in enumerate(zip(params, bounds)):
+    for i, (param, (min_val, max_val)) in enumerate(zip(params, bounds, strict=False)):
         clipped[i] = np.clip(param, min_val, max_val)
 
         if abs(clipped[i] - param) > 1e-10:
@@ -310,7 +326,7 @@ def estimate_correlation_time(D0: float, alpha: float, q: float) -> float:
         return base_time * (1.0 + abs(alpha))  # Rough correction
 
 
-def get_parameter_info(model_type: str) -> Dict[str, Any]:
+def get_parameter_info(model_type: str) -> dict[str, Any]:
     """
     Get comprehensive parameter information for a model type.
 

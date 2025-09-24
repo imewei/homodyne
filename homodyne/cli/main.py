@@ -9,8 +9,6 @@ Entry point for console script: homodyne [args]
 """
 
 import sys
-from pathlib import Path
-from typing import Optional
 
 from homodyne.cli.args_parser import create_parser
 from homodyne.cli.commands import dispatch_command
@@ -48,9 +46,10 @@ def main() -> None:
         args = parser.parse_args()
 
         # Configure logging level
-        if hasattr(args, 'verbose') and args.verbose:
+        if hasattr(args, "verbose") and args.verbose:
             import logging
-            logging.getLogger('homodyne').setLevel(logging.DEBUG)
+
+            logging.getLogger("homodyne").setLevel(logging.DEBUG)
 
         # Log startup
         logger.info("Starting homodyne analysis...")
@@ -60,11 +59,13 @@ def main() -> None:
         result = dispatch_command(args)
 
         # Handle result
-        if result and result.get('success', False):
+        if result and result.get("success", False):
             logger.info("Analysis completed successfully")
             sys.exit(0)
         else:
-            error_msg = result.get('error', 'Unknown error') if result else 'Command failed'
+            error_msg = (
+                result.get("error", "Unknown error") if result else "Command failed"
+            )
             logger.error(f"Analysis failed: {error_msg}")
             sys.exit(1)
 

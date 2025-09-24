@@ -14,7 +14,7 @@ The theory engine handles:
 - Performance monitoring and optimization hints
 """
 
-from typing import Any, Dict, List, Optional, Tuple, Union
+from typing import Any
 
 import numpy as np
 
@@ -22,21 +22,27 @@ from homodyne.utils.logging import get_logger, log_performance
 
 # Import with fallback handling
 try:
-    from homodyne.core.jax_backend import (batch_chi_squared,
-                                           compute_chi_squared,
-                                           compute_g1_diffusion,
-                                           compute_g1_shear, compute_g1_total,
-                                           compute_g2_scaled, jax_available,
-                                           jnp, vectorized_g2_computation,
-                                           safe_len)
+    from homodyne.core.jax_backend import (
+        batch_chi_squared,
+        compute_chi_squared,
+        compute_g1_diffusion,
+        compute_g1_shear,
+        compute_g1_total,
+        compute_g2_scaled,
+        jax_available,
+        jnp,
+        safe_len,
+        vectorized_g2_computation,
+    )
 except ImportError:
     jax_available = False
     logger = get_logger(__name__)
     logger.error("Could not import JAX backend - theory computations disabled")
 
-from homodyne.core.models import CombinedModel, create_model
-from homodyne.core.physics import (PhysicsConstants, parameter_bounds,
-                                   validate_parameters)
+from homodyne.core.models import create_model
+from homodyne.core.physics import (
+    PhysicsConstants,
+)
 
 logger = get_logger(__name__)
 
@@ -262,7 +268,7 @@ class TheoryEngine:
 
     def estimate_computation_cost(
         self, t1: np.ndarray, t2: np.ndarray, phi: np.ndarray
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """
         Estimate computational cost for given data dimensions.
 
@@ -376,7 +382,7 @@ class TheoryEngine:
         if np.any(~np.isfinite(sigma)):
             raise ValueError("Uncertainties contain non-finite values")
 
-    def get_model_info(self) -> Dict[str, Any]:
+    def get_model_info(self) -> dict[str, Any]:
         """Get comprehensive model and engine information."""
         info = self.model.get_model_info()
         info.update(

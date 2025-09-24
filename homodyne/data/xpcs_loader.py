@@ -26,7 +26,7 @@ import json
 import os
 import time
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple, Union
+from typing import Any
 
 # Handle optional dependencies with graceful fallback
 try:
@@ -96,8 +96,7 @@ except ImportError:
 
 # Physics validation integration
 try:
-    from homodyne.core.physics import (PhysicsConstants,
-                                       validate_experimental_setup)
+    from homodyne.core.physics import PhysicsConstants, validate_experimental_setup
 
     HAS_PHYSICS_VALIDATION = True
 except ImportError:
@@ -139,7 +138,7 @@ class XPCSConfigurationError(Exception):
     pass
 
 
-def load_xpcs_config(config_path: Union[str, Path]) -> Dict[str, Any]:
+def load_xpcs_config(config_path: str | Path) -> dict[str, Any]:
     """
     Load XPCS configuration from YAML or JSON file.
 
@@ -168,14 +167,14 @@ def load_xpcs_config(config_path: Union[str, Path]) -> Dict[str, Any]:
                 )
 
             # Native YAML loading
-            with open(config_path, "r") as f:
+            with open(config_path) as f:
                 config = yaml.safe_load(f)
             logger.info(f"Loaded YAML configuration: {config_path}")
             return config
 
         elif config_path.suffix.lower() == ".json":
             # JSON loading with structure conversion
-            with open(config_path, "r") as f:
+            with open(config_path) as f:
                 json_config = json.load(f)
 
             logger.info(f"Loaded JSON configuration (converted to YAML): {config_path}")
@@ -217,8 +216,8 @@ class XPCSDataLoader:
     @log_calls(include_args=False)
     def __init__(
         self,
-        config_path: Optional[str] = None,
-        config_dict: Optional[Dict] = None,
+        config_path: str | None = None,
+        config_dict: dict | None = None,
         configure_logging: bool = True,
         generate_quality_reports: bool = False,  # Only generate reports when explicitly requested
     ):
@@ -394,7 +393,7 @@ class XPCSDataLoader:
         """Get output array format from configuration."""
         return self.v2_config.get("output_format", "auto")
 
-    def _should_perform_validation(self) -> Dict[str, bool]:
+    def _should_perform_validation(self) -> dict[str, bool]:
         """Get validation settings from configuration."""
         validation_level = self.v2_config.get("validation_level", "basic")
         return {
@@ -405,8 +404,8 @@ class XPCSDataLoader:
         }
 
     def _convert_arrays_to_target_format(
-        self, data: Dict[str, NDArray]
-    ) -> Dict[str, Any]:
+        self, data: dict[str, NDArray]
+    ) -> dict[str, Any]:
         """
         Convert arrays to target format based on configuration.
 
@@ -438,7 +437,7 @@ class XPCSDataLoader:
         return data  # Keep numpy format
 
     @log_performance(threshold=0.5)
-    def load_experimental_data(self) -> Dict[str, Any]:
+    def load_experimental_data(self) -> dict[str, Any]:
         """
         Load experimental data with priority: cache NPZ → raw HDF → error.
 
@@ -537,7 +536,7 @@ class XPCSDataLoader:
         for i in range(len(data["c2_exp"])):
             c2_corrected = self._correct_diagonal(data["c2_exp"][i])
             c2_exp_corrected.append(c2_corrected)
-        
+
         # Update data with corrected matrices
         if HAS_JAX and isinstance(data["c2_exp"], jnp.ndarray):
             data["c2_exp"] = jnp.array(c2_exp_corrected)
@@ -555,7 +554,9 @@ class XPCSDataLoader:
 
             # Generate quality report only when explicitly requested (--plot-experimental-data)
             # Do NOT generate reports during normal VI/MCMC runs to avoid cluttering
-            if self.generate_quality_reports and self.v2_config.get("quality_control", {}).get("generate_reports", True):
+            if self.generate_quality_reports and self.v2_config.get(
+                "quality_control", {}
+            ).get("generate_reports", True):
                 quality_report = quality_controller.generate_quality_report(
                     quality_results, self._get_quality_report_path()
                 )
@@ -576,7 +577,7 @@ class XPCSDataLoader:
         return data
 
     @log_performance(threshold=0.2)
-    def _load_from_cache(self, cache_path: str) -> Dict[str, Any]:
+    def _load_from_cache(self, cache_path: str) -> dict[str, Any]:
         """Load data from NPZ cache file with q-vector validation."""
         with np.load(cache_path, allow_pickle=True) as data:
             # Validate q-vector compatibility if metadata exists
@@ -594,7 +595,7 @@ class XPCSDataLoader:
             }
 
     @log_performance(threshold=1.0)
-    def _load_from_hdf(self, hdf_path: str) -> Dict[str, Any]:
+    def _load_from_hdf(self, hdf_path: str) -> dict[str, Any]:
         """Load and process data from HDF5 file."""
         # Detect format
         logger.debug("Starting HDF5 format detection")
@@ -641,7 +642,7 @@ class XPCSDataLoader:
                 )
 
     @log_performance(threshold=0.8)
-    def _load_aps_old_format(self, hdf_path: str) -> Dict[str, Any]:
+    def _load_aps_old_format(self, hdf_path: str) -> dict[str, Any]:
         """Load data from APS old format HDF5 file."""
         with h5py.File(hdf_path, "r") as f:
             # Load q and phi lists
@@ -740,7 +741,7 @@ class XPCSDataLoader:
             }
 
     @log_performance(threshold=0.8)
-    def _load_aps_u_format(self, hdf_path: str) -> Dict[str, Any]:
+    def _load_aps_u_format(self, hdf_path: str) -> dict[str, Any]:
         """Load data from APS-U new format HDF5 file using processed_bins mapping."""
         with h5py.File(hdf_path, "r") as f:
             # Load the processed_bins mapping - this tells us which (q,phi) pairs have correlation data
@@ -909,7 +910,7 @@ class XPCSDataLoader:
         Based on pyXPCSViewer's approach:
         c2 = c2_half + c2_half.T
         c2[diag] /= 2
-        
+
         Note: Diagonal correction is now applied post-load for consistent behavior.
         """
         c2_full = c2_half + c2_half.T
@@ -928,7 +929,7 @@ class XPCSDataLoader:
         """
         size = c2_mat.shape[0]
         side_band = c2_mat[(np.arange(size - 1), np.arange(1, size))]
-        
+
         # Create diagonal values using the same array type as input
         if HAS_JAX and hasattr(c2_mat, "device"):  # JAX array
             diag_val = jnp.zeros(size)
@@ -955,8 +956,8 @@ class XPCSDataLoader:
         self,
         dqlist: NDArray,
         dphilist: NDArray,
-        correlation_matrices: Optional[List[NDArray]] = None,
-    ) -> Optional[NDArray]:
+        correlation_matrices: list[NDArray] | None = None,
+    ) -> NDArray | None:
         """
         Get indices for comprehensive data filtering based on configuration.
 
@@ -977,8 +978,7 @@ class XPCSDataLoader:
         """
         try:
             # Import filtering utilities
-            from homodyne.data.filtering_utils import (DataFilteringError,
-                                                       XPCSDataFilter)
+            from homodyne.data.filtering_utils import DataFilteringError, XPCSDataFilter
 
             # Check if filtering is enabled
             filtering_config = self.config.get("data_filtering", {})
@@ -1185,7 +1185,7 @@ class XPCSDataLoader:
 
         return c2_exp
 
-    def _calculate_time_arrays(self, matrix_size: int) -> Tuple[NDArray, NDArray]:
+    def _calculate_time_arrays(self, matrix_size: int) -> tuple[NDArray, NDArray]:
         """Calculate t1 and t2 time arrays as 2D meshgrids for correlation analysis."""
         dt = self.analyzer_config.get("dt", 1.0)
         start_frame = self.analyzer_config.get("start_frame", 1)
@@ -1194,7 +1194,7 @@ class XPCSDataLoader:
         # Create 1D time array from configuration
         time_max = dt * (end_frame - start_frame)
         time_1d = np.linspace(0, time_max, matrix_size)
-        
+
         # Create 2D meshgrids for correlation analysis
         # This ensures dt = |t2 - t1| has meaningful non-zero values
         t1_2d, t2_2d = np.meshgrid(time_1d, time_1d, indexing="ij")
@@ -1202,7 +1202,7 @@ class XPCSDataLoader:
         return t1_2d, t2_2d
 
     @log_performance(threshold=0.3)
-    def _save_to_cache(self, data: Dict[str, Any], cache_path: str) -> None:
+    def _save_to_cache(self, data: dict[str, Any], cache_path: str) -> None:
         """Save processed data to NPZ cache file with q-vector metadata."""
         # Ensure cache directory exists
         os.makedirs(os.path.dirname(cache_path), exist_ok=True)
@@ -1257,7 +1257,7 @@ class XPCSDataLoader:
         )
         logger.debug(f"Q-vector: {actual_q:.6f} ± {q_variance:.6f} Å⁻¹")
 
-    def _validate_cache_q_vector(self, cache_metadata: Dict[str, Any]) -> None:
+    def _validate_cache_q_vector(self, cache_metadata: dict[str, Any]) -> None:
         """Validate that cached q-vector is compatible with current configuration."""
         scattering_config = self.analyzer_config.get("scattering", {})
         current_config_q = scattering_config.get("wavevector_q", 0.0054)
@@ -1308,7 +1308,7 @@ class XPCSDataLoader:
         return Path(cache_folder) / cache_filename
 
     @log_performance(threshold=0.1)
-    def _save_text_files(self, data: Dict[str, Any]) -> None:
+    def _save_text_files(self, data: dict[str, Any]) -> None:
         """Save phi_angles and wavevector_q lists to text files."""
         # Get output directory
         phi_folder = self.exp_config.get("phi_angles_path", "./")
@@ -1348,7 +1348,7 @@ class XPCSDataLoader:
         logger.debug(f"Text files saved: {phi_file}, {q_file}")
 
     def _validate_loaded_data(
-        self, data: Dict[str, Any], validation_settings: Dict[str, bool]
+        self, data: dict[str, Any], validation_settings: dict[str, bool]
     ) -> None:
         """
         Perform validation on loaded data.
@@ -1365,7 +1365,7 @@ class XPCSDataLoader:
                 data, validation_settings.get("comprehensive", False)
             )
 
-    def _perform_physics_validation(self, data: Dict[str, Any]) -> None:
+    def _perform_physics_validation(self, data: dict[str, Any]) -> None:
         """Perform physics-based validation using v2 PhysicsConstants."""
         if not HAS_PHYSICS_VALIDATION:
             logger.warning(
@@ -1398,7 +1398,7 @@ class XPCSDataLoader:
         logger.info("Physics validation completed")
 
     def _perform_data_quality_checks(
-        self, data: Dict[str, Any], comprehensive: bool = False
+        self, data: dict[str, Any], comprehensive: bool = False
     ) -> None:
         """Perform data quality validation."""
         c2_exp = np.array(data["c2_exp"]) if HAS_JAX else data["c2_exp"]
@@ -1438,7 +1438,7 @@ class XPCSDataLoader:
 
         logger.info("Data quality validation completed")
 
-    def _initialize_quality_control(self) -> Optional[Any]:
+    def _initialize_quality_control(self) -> Any | None:
         """Initialize quality control system if enabled."""
         try:
             quality_config = self.config.get("quality_control", {})
@@ -1485,10 +1485,10 @@ class XPCSDataLoader:
     @log_performance(threshold=0.5)
     def _apply_preprocessing_pipeline(
         self,
-        data: Dict[str, Any],
-        quality_controller: Optional[Any] = None,
-        quality_results: Optional[List] = None,
-    ) -> Dict[str, Any]:
+        data: dict[str, Any],
+        quality_controller: Any | None = None,
+        quality_results: list | None = None,
+    ) -> dict[str, Any]:
         """
         Apply preprocessing pipeline to loaded data if enabled.
 
@@ -1515,7 +1515,7 @@ class XPCSDataLoader:
             result = pipeline.process(data)
 
             if result.success:
-                logger.info(f"Preprocessing pipeline completed successfully")
+                logger.info("Preprocessing pipeline completed successfully")
                 logger.info(f"Pipeline stages executed: {len(result.stage_results)}")
 
                 # Log stage results
@@ -1610,7 +1610,7 @@ class XPCSDataLoader:
 
 # Convenience function for simple usage
 @log_performance(threshold=1.0)
-def load_xpcs_data(config_path: str) -> Dict[str, Any]:
+def load_xpcs_data(config_path: str) -> dict[str, Any]:
     """
     Convenience function to load XPCS data from configuration file.
 

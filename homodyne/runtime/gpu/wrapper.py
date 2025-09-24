@@ -15,9 +15,8 @@ Key Features:
 import logging
 import os
 import platform
-import subprocess
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -158,7 +157,7 @@ def activate_gpu(quiet: bool = False) -> bool:
     return success
 
 
-def get_gpu_status() -> Dict[str, Any]:
+def get_gpu_status() -> dict[str, Any]:
     """
     Get current GPU status and configuration.
 
@@ -290,7 +289,7 @@ def ensure_gpu_ready(method: str = "vi") -> bool:
     return True
 
 
-def get_recommended_settings() -> Dict[str, Any]:
+def get_recommended_settings() -> dict[str, Any]:
     """Get recommended settings based on available hardware."""
     try:
         from .optimizer import GPUOptimizer

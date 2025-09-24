@@ -28,14 +28,11 @@ import mmap
 import os
 import threading
 import time
-import warnings
-import weakref
-from abc import ABC, abstractmethod
-from collections import defaultdict, deque
+from collections import deque
+from collections.abc import Callable
 from contextlib import contextmanager
 from dataclasses import dataclass, field
-from typing import (Any, Callable, Dict, Generic, List, Optional, Tuple,
-                    TypeVar, Union)
+from typing import Any, TypeVar
 
 import psutil
 
@@ -181,7 +178,7 @@ class MemoryPool:
         """Get memory usage of this pool in MB."""
         return (len(self.buffers) * self.buffer_size * 8) / (1024 * 1024)
 
-    def get_buffer(self) -> Optional[np.ndarray]:
+    def get_buffer(self) -> np.ndarray | None:
         """Get a buffer from the pool."""
         self.last_access_time = time.time()
 
@@ -232,13 +229,13 @@ class MemoryPressureMonitor:
 
         self.stats = MemoryStats()
         self._monitoring_active = False
-        self._monitoring_thread: Optional[threading.Thread] = None
+        self._monitoring_thread: threading.Thread | None = None
         self._shutdown_event = threading.Event()
 
         # Pressure response callbacks
-        self._warning_callbacks: List[Callable] = []
-        self._critical_callbacks: List[Callable] = []
-        self._recovery_callbacks: List[Callable] = []
+        self._warning_callbacks: list[Callable] = []
+        self._critical_callbacks: list[Callable] = []
+        self._recovery_callbacks: list[Callable] = []
 
         # Pressure history for trend analysis
         self._pressure_history: deque = deque(maxlen=300)  # 5 minutes at 1s intervals
@@ -410,7 +407,7 @@ class AdvancedMemoryManager:
     """
 
     @log_calls(include_args=False)
-    def __init__(self, config: Optional[Dict[str, Any]] = None):
+    def __init__(self, config: dict[str, Any] | None = None):
         """
         Initialize advanced memory manager.
 
@@ -421,7 +418,7 @@ class AdvancedMemoryManager:
         self.memory_config = self.config.get("memory", {})
 
         # Memory pools for different buffer sizes
-        self._pools: Dict[int, MemoryPool] = {}
+        self._pools: dict[int, MemoryPool] = {}
         self._pools_lock = threading.RLock()
 
         # Memory pressure monitoring
@@ -458,7 +455,7 @@ class AdvancedMemoryManager:
         if self.memory_config.get("enable_monitoring", True):
             self.pressure_monitor.start_monitoring()
 
-        logger.info(f"Advanced memory manager initialized")
+        logger.info("Advanced memory manager initialized")
 
     @contextmanager
     def managed_allocation(
@@ -499,7 +496,7 @@ class AdvancedMemoryManager:
                     if self._gc_optimization_enabled:
                         self._optimize_garbage_collection()
 
-    def _get_from_pool(self, size: int) -> Tuple[Optional[np.ndarray], Optional[str]]:
+    def _get_from_pool(self, size: int) -> tuple[np.ndarray | None, str | None]:
         """Get buffer from appropriate memory pool."""
         with self._pools_lock:
             # Find appropriate pool (use next power of 2 for size)
@@ -639,11 +636,11 @@ class AdvancedMemoryManager:
 
         except Exception as e:
             logger.error(f"Virtual memory allocation failed: {e}")
-            raise AllocationError(f"Virtual memory allocation failed") from e
+            raise AllocationError("Virtual memory allocation failed") from e
 
     def _handle_memory_warning(self, stats: MemoryStats) -> None:
         """Handle memory pressure warning."""
-        logger.warning(f"Memory pressure warning - triggering optimization")
+        logger.warning("Memory pressure warning - triggering optimization")
 
         # Trigger garbage collection
         if self._gc_optimization_enabled:
@@ -663,7 +660,7 @@ class AdvancedMemoryManager:
 
     def _handle_memory_critical(self, stats: MemoryStats) -> None:
         """Handle critical memory pressure."""
-        logger.critical(f"Critical memory pressure - performing emergency cleanup")
+        logger.critical("Critical memory pressure - performing emergency cleanup")
 
         self._emergency_memory_cleanup()
 
@@ -747,7 +744,7 @@ class AdvancedMemoryManager:
 
         self._last_gc_time = current_time
 
-    def get_memory_stats(self) -> Dict[str, Any]:
+    def get_memory_stats(self) -> dict[str, Any]:
         """Get comprehensive memory statistics."""
         with self._pools_lock:
             pool_stats = {}

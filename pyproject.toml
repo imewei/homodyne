@@ -1,5 +1,5 @@
 [build-system]
-requires = ["setuptools>=65", "wheel", "setuptools_scm[toml]>=6.2"]
+requires = ["setuptools>=75", "wheel", "setuptools_scm[toml]>=8.1"]
 build-backend = "setuptools.build_meta"
 
 [project]
@@ -42,79 +42,80 @@ requires-python = ">=3.10"
 
 # Core dependencies for JAX-first architecture (2025 latest stable)
 dependencies = [
-    # Core scientific computing (JAX minimum requirements)
-    "numpy>=1.25.0",
-    "scipy>=1.11.0",
+    # Core scientific computing (latest stable 2025)
+    "numpy>=2.0.0,<3.0.0",  # NumPy 2.3.3 latest
+    "scipy>=1.14.0,<2.0.0",  # SciPy 1.16.2 latest
 
     # JAX ecosystem (2025 latest stable versions)
-    "jax>=0.7.2",
-    "jaxlib>=0.7.2",
-    "jaxfit>=0.0.5",  # Corrected version
+    "jax>=0.7.2,<0.8.0",  # JAX 0.7.2 latest stable
+    "jaxlib>=0.7.2,<0.8.0",  # jaxlib 0.7.2 latest stable
+    "optimistix>=0.0.7",  # Optimistix - modern JAX optimization library
+    "equinox>=0.11.11",  # Required by optimistix
 
     # Bayesian inference (2025 latest)
-    "numpyro>=0.19.0",  # Includes built-in progress bars
-    "blackjax>=1.2.5",
+    "numpyro>=0.18.0,<0.20.0",  # NumPyro 0.18.0 latest stable
+    "blackjax>=1.2.0,<2.0.0",  # BlackJAX 1.2.5 latest
 
     # Data handling
-    "h5py>=3.8.0",
-    "pyyaml>=6.0",
+    "h5py>=3.10.0,<4.0.0",  # h5py 3.14.0 latest
+    "pyyaml>=6.0.2",  # PyYAML 6.0.2 latest
 
     # System utilities
-    "psutil>=5.9.0",
+    "psutil>=6.0.0",  # psutil 7.1.0 latest
 
-    # Optional plotting (lightweight)
-    "matplotlib>=3.6.0",
+    # Plotting (latest stable)
+    "matplotlib>=3.8.0,<4.0.0",  # matplotlib 3.10.6 latest
 ]
 
 [project.optional-dependencies]
 # GPU acceleration using system CUDA (recommended for HPC)
 gpu = [
-    "jax[cuda12-local]>=0.7.2",  # Uses system CUDA, avoids conflicts
-    "jaxlib>=0.7.2",
+    "jax[cuda12-local]>=0.7.2,<0.8.0",  # Uses system CUDA, avoids conflicts
+    "jaxlib>=0.7.2,<0.8.0",
 ]
 
 # Alternative: Bundled CUDA (may conflict with HPC environments)
 gpu-bundled = [
-    "jax[cuda12]>=0.7.2",  # Bundles CUDA libraries
-    "jaxlib>=0.7.2",
+    "jax[cuda12]>=0.7.2,<0.8.0",  # Bundles CUDA libraries
+    "jaxlib>=0.7.2,<0.8.0",
 ]
 
 # Future-proofing for CUDA 13
 gpu-cuda13 = [
-    "jax[cuda13-local]>=0.7.2",  # When available
-    "jaxlib>=0.7.2",
+    "jax[cuda13-local]>=0.7.2,<0.8.0",  # When available
+    "jaxlib>=0.7.2,<0.8.0",
 ]
 
 # HPC environment (system CUDA + optimization tools)
 hpc = [
-    "jax[cuda12-local]>=0.7.2",
-    "jaxlib>=0.7.2",
-    "psutil>=5.9.0",
-    "tqdm>=4.65.0",  # Progress bars for NLSQ
+    "jax[cuda12-local]>=0.7.2,<0.8.0",
+    "jaxlib>=0.7.2,<0.8.0",
+    "psutil>=6.0.0",
+    "tqdm>=4.66.0",  # Progress bars for NLSQ
 ]
 
-# Development and testing
+# Development and testing (2025 latest stable)
 dev = [
-    "pytest>=7.0.0",
-    "pytest-cov>=4.0.0",
-    "black>=23.0.0",
-    "ruff>=0.1.0",
-    "mypy>=1.5.0",
-    "pre-commit>=3.0.0",
-    "tqdm>=4.65.0",  # For testing progress features
+    "pytest>=8.3.0,<9.0.0",  # pytest 8.3.3 latest
+    "pytest-cov>=6.0.0,<8.0.0",  # pytest-cov 7.0.0 latest
+    "black>=25.0.0,<26.0.0",  # black 25.9.0 latest (2025 style)
+    "ruff>=0.13.0,<0.14.0",  # ruff 0.13.1 latest
+    "mypy>=1.18.0,<2.0.0",  # mypy 1.18.1 latest
+    "pre-commit>=4.0.0,<5.0.0",  # pre-commit 4.x latest
+    "tqdm>=4.66.0",  # tqdm 4.67.x latest
 ]
 
-# Documentation
+# Documentation (2025 latest stable)
 docs = [
-    "sphinx>=6.0.0",
-    "sphinx-rtd-theme>=1.3.0",
-    "myst-parser>=2.0.0",
+    "sphinx>=8.0.0,<9.0.0",  # sphinx 8.3.0 latest
+    "sphinx-rtd-theme>=3.0.0,<4.0.0",  # sphinx-rtd-theme 3.0.2 latest
+    "myst-parser>=4.0.0,<5.0.0",  # myst-parser 4.0.1 latest
 ]
 
 # Complete installation with all features
 all = [
     "homodyne[hpc,dev,docs]",
-    "tqdm>=4.65.0",
+    "tqdm>=4.66.0",
 ]
 
 [project.urls]
@@ -201,7 +202,8 @@ strict_equality = true
 [[tool.mypy.overrides]]
 module = [
     "jax.*",
-    "jaxfit.*",
+    "optimistix.*",
+    "equinox.*",
     "numpyro.*",
     "blackjax.*",
     "h5py.*",

@@ -2,16 +2,16 @@
 JAX-First Optimization for Homodyne v2
 ======================================
 
-Simplified optimization system using JAXFit NLSQ (primary) and MCMC+JAX
+Simplified optimization system using Optimistix NLSQ (primary) and MCMC+JAX
 (high-accuracy) for robust parameter estimation in homodyne analysis.
 
 This module implements the streamlined optimization philosophy:
-1. JAXFit NLSQ as primary method (fast, reliable parameter estimation)
+1. Optimistix NLSQ as primary method (fast, reliable parameter estimation)
 2. MCMC+JAX (NumPyro/BlackJAX) for uncertainty quantification
 3. Unified homodyne model: c2_fitted = c2_theory * contrast + offset
 
 Key Features:
-- JAXFit trust-region optimization as foundation
+- Optimistix trust-region optimization (Levenberg-Marquardt) as foundation
 - JAX-accelerated MCMC for uncertainty quantification
 - CPU-primary, GPU-optional architecture
 - Dataset size-aware optimization strategies
@@ -23,7 +23,8 @@ Performance Comparison:
 
 # Handle NLSQ imports with intelligent fallback
 try:
-    from homodyne.optimization.nlsq import fit_nlsq_jax, NLSQResult
+    from homodyne.optimization.nlsq import NLSQResult, fit_nlsq_jax
+
     NLSQ_AVAILABLE = True
 except ImportError as e:
     print(f"Warning: Could not import NLSQ optimization: {e}")
@@ -33,9 +34,14 @@ except ImportError as e:
 
 # Handle MCMC imports with intelligent fallback
 try:
-    from homodyne.optimization.mcmc import fit_mcmc_jax, MCMCResult
+    from homodyne.optimization.mcmc import (
+        BLACKJAX_AVAILABLE,
+        NUMPYRO_AVAILABLE,
+        MCMCResult,
+        fit_mcmc_jax,
+    )
     from homodyne.optimization.mcmc import JAX_AVAILABLE as MCMC_JAX_AVAILABLE
-    from homodyne.optimization.mcmc import NUMPYRO_AVAILABLE, BLACKJAX_AVAILABLE
+
     MCMC_AVAILABLE = True
 except ImportError as e:
     print(f"Warning: Could not import MCMC optimization: {e}")
@@ -58,13 +64,11 @@ OPTIMIZATION_STATUS = {
 # Primary API functions
 __all__ = [
     # Primary optimization methods
-    "fit_nlsq_jax",  # JAXFit trust-region (PRIMARY)
+    "fit_nlsq_jax",  # Optimistix trust-region (PRIMARY)
     "fit_mcmc_jax",  # NumPyro/BlackJAX NUTS (SECONDARY)
-
     # Result classes
     "NLSQResult",
     "MCMCResult",
-
     # Status information
     "OPTIMIZATION_STATUS",
     "NLSQ_AVAILABLE",
@@ -85,7 +89,7 @@ def get_optimization_info():
         "status": OPTIMIZATION_STATUS.copy(),
         "primary_method": "nlsq" if NLSQ_AVAILABLE else None,
         "secondary_method": "mcmc" if MCMC_AVAILABLE else None,
-        "recommendations": []
+        "recommendations": [],
     }
 
     if NLSQ_AVAILABLE:
@@ -100,7 +104,7 @@ def get_optimization_info():
 
     if not NLSQ_AVAILABLE and not MCMC_AVAILABLE:
         info["recommendations"].append(
-            "Install JAXFit and NumPyro/BlackJAX for optimization capabilities"
+            "Install Optimistix and NumPyro/BlackJAX for optimization capabilities"
         )
 
     return info

@@ -10,10 +10,10 @@ Tests for API stability and backward compatibility:
 - Version compatibility checks
 """
 
-import pytest
-import inspect
 import importlib
-from typing import Dict, Any, List, Set, Optional, Callable
+import inspect
+
+import pytest
 
 
 @pytest.mark.api
@@ -24,10 +24,11 @@ class TestPublicAPIStability:
         """Test main package import structure."""
         # Should be able to import main package
         import homodyne
-        assert hasattr(homodyne, '__version__')
+
+        assert hasattr(homodyne, "__version__")
 
         # Check for expected main modules
-        expected_modules = ['core', 'data', 'optimization', 'config']
+        expected_modules = ["core", "data", "optimization", "config"]
         for module_name in expected_modules:
             try:
                 module = getattr(homodyne, module_name)
@@ -35,7 +36,7 @@ class TestPublicAPIStability:
             except AttributeError:
                 # Module might not be exposed at top level - try importing directly
                 try:
-                    importlib.import_module(f'homodyne.{module_name}')
+                    importlib.import_module(f"homodyne.{module_name}")
                 except ImportError:
                     pytest.fail(f"Module homodyne.{module_name} not importable")
 
@@ -43,11 +44,11 @@ class TestPublicAPIStability:
         """Test core API function availability."""
         try:
             from homodyne.core.jax_backend import (
+                chi_squared_jax,
                 compute_c2_model_jax,
                 compute_g1_diffusion_jax,
                 compute_g1_shear_jax,
                 residuals_jax,
-                chi_squared_jax
             )
 
             # All should be callable
@@ -56,7 +57,7 @@ class TestPublicAPIStability:
                 compute_g1_diffusion_jax,
                 compute_g1_shear_jax,
                 residuals_jax,
-                chi_squared_jax
+                chi_squared_jax,
             ]
 
             for func in core_functions:
@@ -69,6 +70,7 @@ class TestPublicAPIStability:
         """Test optimization API function availability."""
         try:
             from homodyne.optimization.nlsq import fit_nlsq_jax
+
             assert callable(fit_nlsq_jax), "fit_nlsq_jax not callable"
 
             # Check function signature
@@ -76,7 +78,7 @@ class TestPublicAPIStability:
             params = list(sig.parameters.keys())
 
             # Should have expected parameters
-            expected_params = ['data', 'config']
+            expected_params = ["data", "config"]
             for param in expected_params:
                 assert param in params, f"Missing parameter {param} in fit_nlsq_jax"
 
@@ -85,6 +87,7 @@ class TestPublicAPIStability:
 
         try:
             from homodyne.optimization.mcmc import fit_mcmc_jax
+
             assert callable(fit_mcmc_jax), "fit_mcmc_jax not callable"
 
         except ImportError:
@@ -94,7 +97,7 @@ class TestPublicAPIStability:
     def test_data_api_functions(self):
         """Test data loading API function availability."""
         try:
-            from homodyne.data.xpcs_loader import load_xpcs_data, XPCSLoader
+            from homodyne.data.xpcs_loader import XPCSLoader, load_xpcs_data
 
             assert callable(load_xpcs_data), "load_xpcs_data not callable"
             assert inspect.isclass(XPCSLoader), "XPCSLoader not a class"
@@ -102,7 +105,7 @@ class TestPublicAPIStability:
             # Check load_xpcs_data signature
             sig = inspect.signature(load_xpcs_data)
             params = list(sig.parameters.keys())
-            assert 'config' in params, "Missing config parameter in load_xpcs_data"
+            assert "config" in params, "Missing config parameter in load_xpcs_data"
 
         except ImportError as e:
             pytest.skip(f"Data functions not available: {e}")
@@ -115,10 +118,11 @@ class TestPublicAPIStability:
             assert inspect.isclass(ConfigManager), "ConfigManager not a class"
 
             # Should have expected methods
-            expected_methods = ['get_config', 'update_config']
+            expected_methods = ["get_config", "update_config"]
             for method_name in expected_methods:
-                assert hasattr(ConfigManager, method_name), \
-                    f"ConfigManager missing method {method_name}"
+                assert hasattr(
+                    ConfigManager, method_name
+                ), f"ConfigManager missing method {method_name}"
 
         except ImportError as e:
             pytest.skip(f"Config functions not available: {e}")
@@ -126,11 +130,7 @@ class TestPublicAPIStability:
     def test_gpu_api_functions(self):
         """Test GPU API function availability."""
         try:
-            from homodyne.runtime.gpu import (
-                activate_gpu,
-                get_gpu_status,
-                GPUActivator
-            )
+            from homodyne.runtime.gpu import GPUActivator, activate_gpu, get_gpu_status
 
             assert callable(activate_gpu), "activate_gpu not callable"
             assert callable(get_gpu_status), "get_gpu_status not callable"
@@ -154,11 +154,12 @@ class TestFunctionSignatures:
             params = list(sig.parameters.keys())
 
             # Expected parameters (order matters for positional args)
-            expected_params = ['params', 't1', 't2', 'phi', 'q']
+            expected_params = ["params", "t1", "t2", "phi", "q"]
             for i, expected_param in enumerate(expected_params):
                 assert i < len(params), f"Missing parameter {expected_param}"
-                assert params[i] == expected_param, \
-                    f"Parameter order changed: expected {expected_param}, got {params[i]}"
+                assert (
+                    params[i] == expected_param
+                ), f"Parameter order changed: expected {expected_param}, got {params[i]}"
 
         except ImportError:
             pytest.skip("Core functions not available")
@@ -172,8 +173,12 @@ class TestFunctionSignatures:
             params = list(sig.parameters.keys())
 
             # Should have data and config as first parameters
-            assert params[0] == 'data', f"First parameter should be 'data', got {params[0]}"
-            assert params[1] == 'config', f"Second parameter should be 'config', got {params[1]}"
+            assert (
+                params[0] == "data"
+            ), f"First parameter should be 'data', got {params[0]}"
+            assert (
+                params[1] == "config"
+            ), f"Second parameter should be 'config', got {params[1]}"
 
         except ImportError:
             pytest.skip("Optimization functions not available")
@@ -187,7 +192,7 @@ class TestFunctionSignatures:
             params = list(sig.parameters.keys())
 
             # Should have config as parameter
-            assert 'config' in params, "load_xpcs_data should have config parameter"
+            assert "config" in params, "load_xpcs_data should have config parameter"
 
         except ImportError:
             pytest.skip("Data loader not available")
@@ -201,7 +206,7 @@ class TestFunctionSignatures:
             params = list(sig.parameters.keys())
 
             # Expected GPU activation parameters
-            expected_params = ['memory_fraction', 'force_gpu', 'gpu_id', 'verbose']
+            expected_params = ["memory_fraction", "force_gpu", "gpu_id", "verbose"]
             for param in expected_params:
                 assert param in params, f"Missing parameter {param} in activate_gpu"
 
@@ -216,12 +221,16 @@ class TestReturnTypes:
     def test_optimization_return_types(self, synthetic_xpcs_data, test_config):
         """Test optimization return types are consistent."""
         try:
-            from homodyne.optimization.nlsq import fit_nlsq_jax, NLSQResult, JAXFIT_AVAILABLE
+            from homodyne.optimization.nlsq import (
+                OPTIMISTIX_AVAILABLE,
+                NLSQResult,
+                fit_nlsq_jax,
+            )
         except ImportError:
             pytest.skip("Optimization module not available")
 
-        if not JAXFIT_AVAILABLE:
-            pytest.skip("JAXFit not available")
+        if not OPTIMISTIX_AVAILABLE:
+            pytest.skip("Optimistix not available")
 
         data = synthetic_xpcs_data
         config = test_config
@@ -230,10 +239,12 @@ class TestReturnTypes:
             result = fit_nlsq_jax(data, config)
 
             # Should return NLSQResult or compatible object
-            assert hasattr(result, 'parameters'), "Result missing parameters attribute"
-            assert hasattr(result, 'chi_squared'), "Result missing chi_squared attribute"
-            assert hasattr(result, 'success'), "Result missing success attribute"
-            assert hasattr(result, 'message'), "Result missing message attribute"
+            assert hasattr(result, "parameters"), "Result missing parameters attribute"
+            assert hasattr(
+                result, "chi_squared"
+            ), "Result missing chi_squared attribute"
+            assert hasattr(result, "success"), "Result missing success attribute"
+            assert hasattr(result, "message"), "Result missing message attribute"
 
             # Type checking
             assert isinstance(result.parameters, dict), "Parameters should be dict"
@@ -249,20 +260,20 @@ class TestReturnTypes:
         data = synthetic_xpcs_data
 
         # Required keys
-        required_keys = ['t1', 't2', 'phi_angles_list', 'c2_exp', 'wavevector_q_list']
+        required_keys = ["t1", "t2", "phi_angles_list", "c2_exp", "wavevector_q_list"]
         for key in required_keys:
             assert key in data, f"Missing required key {key}"
 
         # Types should be array-like
-        import numpy as np
+
         for key in required_keys:
-            assert hasattr(data[key], 'shape'), f"{key} should be array-like"
-            assert hasattr(data[key], 'dtype'), f"{key} should have dtype"
+            assert hasattr(data[key], "shape"), f"{key} should be array-like"
+            assert hasattr(data[key], "dtype"), f"{key} should have dtype"
 
     def test_gpu_return_types(self):
         """Test GPU function return types are consistent."""
         try:
-            from homodyne.runtime.gpu import get_gpu_status, activate_gpu
+            from homodyne.runtime.gpu import activate_gpu, get_gpu_status
         except ImportError:
             pytest.skip("GPU module not available")
 
@@ -271,8 +282,8 @@ class TestReturnTypes:
         assert isinstance(status, dict), "GPU status should be dict"
 
         # Required keys
-        assert 'jax_available' in status, "Missing jax_available in GPU status"
-        assert 'devices' in status, "Missing devices in GPU status"
+        assert "jax_available" in status, "Missing jax_available in GPU status"
+        assert "devices" in status, "Missing devices in GPU status"
 
         # GPU activation should return dict
         result = activate_gpu(force_gpu=False, verbose=False)
@@ -293,8 +304,8 @@ class TestErrorHandling:
         # Invalid data should raise appropriate errors
         invalid_data_cases = [
             {},  # Empty dict
-            {'t1': None},  # None values
-            {'t1': [[0, 1]], 't2': [[0, 1]]},  # Missing required keys
+            {"t1": None},  # None values
+            {"t1": [[0, 1]], "t2": [[0, 1]]},  # Missing required keys
         ]
 
         for invalid_data in invalid_data_cases:
@@ -311,7 +322,7 @@ class TestErrorHandling:
         # Invalid configs should raise appropriate errors
         invalid_configs = [
             {},  # Empty config
-            {'data_file': '/nonexistent/file.h5'},  # Nonexistent file
+            {"data_file": "/nonexistent/file.h5"},  # Nonexistent file
         ]
 
         for invalid_config in invalid_configs:
@@ -349,14 +360,17 @@ class TestDeprecationWarnings:
             try:
                 import homodyne
                 from homodyne.core import jax_backend
-                from homodyne.optimization import nlsq
                 from homodyne.data import xpcs_loader
+                from homodyne.optimization import nlsq
             except ImportError:
                 pass  # Modules might not be available
 
             # Check for unexpected deprecation warnings
-            deprecation_warnings = [warning for warning in w
-                                  if issubclass(warning.category, DeprecationWarning)]
+            deprecation_warnings = [
+                warning
+                for warning in w
+                if issubclass(warning.category, DeprecationWarning)
+            ]
 
             # Should not have deprecation warnings during normal import
             if deprecation_warnings:
@@ -367,9 +381,9 @@ class TestDeprecationWarnings:
         """Test backward compatibility imports still work."""
         # Test that common import patterns still work
         import_patterns = [
-            'from homodyne.core.jax_backend import compute_c2_model_jax',
-            'from homodyne.optimization.nlsq import fit_nlsq_jax',
-            'from homodyne.data.xpcs_loader import load_xpcs_data',
+            "from homodyne.core.jax_backend import compute_c2_model_jax",
+            "from homodyne.optimization.nlsq import fit_nlsq_jax",
+            "from homodyne.data.xpcs_loader import load_xpcs_data",
         ]
 
         for import_pattern in import_patterns:
@@ -389,14 +403,15 @@ class TestVersionCompatibility:
         """Test version information is available."""
         try:
             import homodyne
-            assert hasattr(homodyne, '__version__'), "Package should have __version__"
+
+            assert hasattr(homodyne, "__version__"), "Package should have __version__"
 
             version = homodyne.__version__
             assert isinstance(version, str), "Version should be string"
             assert len(version) > 0, "Version should not be empty"
 
             # Should follow semantic versioning pattern (roughly)
-            parts = version.split('.')
+            parts = version.split(".")
             assert len(parts) >= 2, "Version should have at least major.minor"
 
         except ImportError:
@@ -415,15 +430,15 @@ class TestVersionCompatibility:
     def test_dependency_version_compatibility(self):
         """Test dependency version compatibility."""
         try:
-            import numpy as np
             import jax
+            import numpy as np
 
             # NumPy should be reasonably recent
-            np_version = tuple(map(int, np.__version__.split('.')[:2]))
+            np_version = tuple(map(int, np.__version__.split(".")[:2]))
             assert np_version >= (1, 21), f"NumPy too old: {np.__version__}"
 
             # JAX should be recent
-            jax_version = tuple(map(int, jax.__version__.split('.')[:2]))
+            jax_version = tuple(map(int, jax.__version__.split(".")[:2]))
             assert jax_version >= (0, 4), f"JAX too old: {jax.__version__}"
 
         except ImportError:
@@ -433,8 +448,8 @@ class TestVersionCompatibility:
         """Test graceful handling of optional dependencies."""
         # Should handle missing optional dependencies gracefully
         optional_modules = [
-            'homodyne.optimization.mcmc',
-            'homodyne.runtime.gpu',
+            "homodyne.optimization.mcmc",
+            "homodyne.runtime.gpu",
         ]
 
         for module_name in optional_modules:
@@ -455,12 +470,12 @@ class TestDocumentationCompatibility:
         """Test basic usage example from documentation."""
         try:
             # This should match the basic example in documentation
-            from homodyne.optimization.nlsq import fit_nlsq_jax, JAXFIT_AVAILABLE
+            from homodyne.optimization.nlsq import OPTIMISTIX_AVAILABLE, fit_nlsq_jax
         except ImportError:
             pytest.skip("Required modules not available")
 
-        if not JAXFIT_AVAILABLE:
-            pytest.skip("JAXFit not available")
+        if not OPTIMISTIX_AVAILABLE:
+            pytest.skip("Optimistix not available")
 
         data = synthetic_xpcs_data
         config = test_config
@@ -470,12 +485,12 @@ class TestDocumentationCompatibility:
             result = fit_nlsq_jax(data, config)
 
             # Should have expected structure
-            assert hasattr(result, 'success')
-            assert hasattr(result, 'parameters')
+            assert hasattr(result, "success")
+            assert hasattr(result, "parameters")
 
             # Should work as documented
             if result.success:
-                assert 'offset' in result.parameters
+                assert "offset" in result.parameters
                 assert result.chi_squared >= 0.0
 
         except Exception as e:
