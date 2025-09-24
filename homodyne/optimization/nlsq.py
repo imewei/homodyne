@@ -217,6 +217,10 @@ def fit_nlsq_jax(
         # Process results
         final_params = _array_to_params(result.x, analysis_mode)
 
+        # Convert JAX arrays to Python floats for final output
+        final_params = {k: float(v) if hasattr(v, 'item') else float(v)
+                       for k, v in final_params.items()}
+
         # Calculate parameter errors (from covariance if available)
         param_errors = _calculate_parameter_errors(result, analysis_mode)
 
@@ -312,6 +316,12 @@ def _create_residual_function(
 ) -> callable:
     """Create residual function for Optimistix least squares."""
 
+    # Extract q and L as concrete scalars OUTSIDE the residual function
+    # This prevents JAX tracing issues
+    q_list = data.get("wavevector_q_list", [0.0054])
+    q_scalar = float(q_list[0]) if len(q_list) > 0 else 0.0054
+    L_scalar = 100.0  # Default sample-detector distance
+
     def residual_fn(params_array):
         """Residual function: returns residuals vector."""
         params_dict = _array_to_params(params_array, analysis_mode)
@@ -347,17 +357,14 @@ def _create_residual_function(
                 ]
             )
 
-        # Compute theoretical correlation (fix bug: use compute_g2 not compute_g2_theory)
-        q = data["wavevector_q_list"][0] if len(data["wavevector_q_list"]) > 0 else 1.0
-        L = 100.0  # Default sample-detector distance
-
+        # Use pre-extracted concrete scalars (extracted outside to avoid JAX tracing)
         c2_theory = theory_engine.compute_g2(
             params_array_physical,
             data["t1"],
             data["t2"],
             data["phi_angles_list"],
-            q,
-            L,
+            q_scalar,  # Use pre-extracted scalar
+            L_scalar,  # Use pre-extracted scalar
             contrast,
             offset,
         )
@@ -424,25 +431,27 @@ def _params_to_array(params: dict[str, float], analysis_mode: str) -> jnp.ndarra
 
 def _array_to_params(array: jnp.ndarray, analysis_mode: str) -> dict[str, float]:
     """Convert parameter array to dictionary."""
+    # Don't convert to float here - let JAX handle the types
+    # This prevents JAX tracing errors when called inside JIT-compiled functions
     if "static" in analysis_mode.lower():
         return {
-            "contrast": float(array[0]),
-            "offset": float(array[1]),
-            "D0": float(array[2]),
-            "alpha": float(array[3]),
-            "D_offset": float(array[4]),
+            "contrast": array[0],
+            "offset": array[1],
+            "D0": array[2],
+            "alpha": array[3],
+            "D_offset": array[4],
         }
     else:
         return {
-            "contrast": float(array[0]),
-            "offset": float(array[1]),
-            "D0": float(array[2]),
-            "alpha": float(array[3]),
-            "D_offset": float(array[4]),
-            "gamma_dot_t0": float(array[5]),
-            "beta": float(array[6]),
-            "gamma_dot_t_offset": float(array[7]),
-            "phi0": float(array[8]),
+            "contrast": array[0],
+            "offset": array[1],
+            "D0": array[2],
+            "alpha": array[3],
+            "D_offset": array[4],
+            "gamma_dot_t0": array[5],
+            "beta": array[6],
+            "gamma_dot_t_offset": array[7],
+            "phi0": array[8],
         }
 
 

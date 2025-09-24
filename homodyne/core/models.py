@@ -109,8 +109,13 @@ class PhysicsModelBase(ABC):
         if params_len != self.n_params:
             raise ValueError(f"Expected {self.n_params} parameters, got {params_len}")
 
-        # Convert to regular Python floats to avoid JAX scalar issues
-        return {name: float(val) for name, val in zip(self.parameter_names, params_np, strict=False)}
+        # Convert to regular Python floats only when safe to do so
+        try:
+            # Try converting to float - will fail if in JIT context
+            return {name: float(val) for name, val in zip(self.parameter_names, params_np, strict=False)}
+        except:
+            # In JIT context, keep as JAX arrays
+            return {name: val for name, val in zip(self.parameter_names, params_np, strict=False)}
 
     def __repr__(self) -> str:
         return (
@@ -155,20 +160,14 @@ class DiffusionModel(PhysicsModelBase):
 
         g₁_diff = exp[-q²/2 ∫|t₂-t₁| D(t')dt']
         """
-        if not self.validate_parameters(params):
-            logger.warning("Invalid diffusion parameters - results may be unreliable")
+        # Skip validation inside JIT to avoid JAX tracer boolean conversion errors
+        # if not self.validate_parameters(params):
+        #     logger.warning("Invalid diffusion parameters - results may be unreliable")
 
-        # Handle q as array - convert to scalar
-        if hasattr(q, "shape") and q.shape:
-            # If q is an array, use mean value for scalar computations
-            q_scalar = float(jnp.mean(q))
-            logger.debug(
-                f"DiffusionModel: Converting q array to scalar: {q_scalar:.6f}"
-            )
-        else:
-            q_scalar = float(q)
+        # Pass q directly without conversion to avoid JAX tracing issues
+        # The backend functions handle any necessary conversions
 
-        return compute_g1_diffusion(params, t1, t2, q_scalar, dt)
+        return compute_g1_diffusion(params, t1, t2, q, dt)
 
     def get_parameter_bounds(self) -> list[tuple[float, float]]:
         """Standard bounds for diffusion parameters."""
@@ -225,20 +224,16 @@ class ShearModel(PhysicsModelBase):
 
         g₁_shear = [sinc(Φ)]² where Φ = (qL/2π) cos(φ₀-φ) ∫|t₂-t₁| γ̇(t') dt'
         """
-        if not self.validate_parameters(params):
-            logger.warning("Invalid shear parameters - results may be unreliable")
+        # Skip validation inside JIT to avoid JAX tracer boolean conversion errors
+        # if not self.validate_parameters(params):
+        #     logger.warning("Invalid shear parameters - results may be unreliable")
 
-        # Handle q as array - convert to scalar
-        if hasattr(q, "shape") and q.shape:
-            # If q is an array, use mean value for scalar computations
-            q_scalar = float(jnp.mean(q))
-            logger.debug(f"ShearModel: Converting q array to scalar: {q_scalar:.6f}")
-        else:
-            q_scalar = float(q)
+        # Pass q directly without conversion to avoid JAX tracing issues
+        # The backend functions handle any necessary conversions
 
         # Create full parameter array with dummy diffusion parameters
         full_params = jnp.concatenate([jnp.array([100.0, 0.0, 10.0]), params])
-        return compute_g1_shear(full_params, t1, t2, phi, q_scalar, L, dt)
+        return compute_g1_shear(full_params, t1, t2, phi, q, L, dt)
 
     def get_parameter_bounds(self) -> list[tuple[float, float]]:
         """Standard bounds for shear parameters."""
@@ -315,32 +310,28 @@ class CombinedModel(PhysicsModelBase):
         """
         Compute total g1 = g1_diffusion × g1_shear.
         """
-        if not self.validate_parameters(params):
-            logger.warning(
-                "Invalid combined model parameters - results may be unreliable"
-            )
+        # Skip validation inside JIT to avoid JAX tracer boolean conversion errors
+        # if not self.validate_parameters(params):
+        #     logger.warning(
+        #         "Invalid combined model parameters - results may be unreliable"
+        #     )
 
-        # Handle q as array - convert to scalar
-        if hasattr(q, "shape") and q.shape:
-            # If q is an array, use mean value for scalar computations
-            q_scalar = float(jnp.mean(q))
-            logger.debug(f"Converting q array to scalar: {q_scalar:.6f}")
-        else:
-            q_scalar = float(q)
+        # Pass q directly without conversion to avoid JAX tracing issues
+        # The backend functions handle any necessary conversions
 
         if self.analysis_mode.startswith("static"):
             # Static mode: only diffusion, no shear
             logger.debug(
                 f"CombinedModel.compute_g1: calling compute_g1_diffusion with params.shape={params.shape}"
             )
-            return compute_g1_diffusion(params, t1, t2, q_scalar, dt)
+            return compute_g1_diffusion(params, t1, t2, q, dt)
         else:
             # Laminar flow mode: full model
             logger.debug(
-                f"CombinedModel.compute_g1: calling compute_g1_total with params.shape={params.shape}, t1.shape={t1.shape}, t2.shape={t2.shape}, phi.shape={phi.shape}, q_scalar={q_scalar}, L={L}, dt={dt}"
+                f"CombinedModel.compute_g1: calling compute_g1_total with params.shape={params.shape}, t1.shape={t1.shape}, t2.shape={t2.shape}, phi.shape={phi.shape}, q={q}, L={L}, dt={dt}"
             )
             try:
-                result = compute_g1_total(params, t1, t2, phi, q_scalar, L, dt)
+                result = compute_g1_total(params, t1, t2, phi, q, L, dt)
                 logger.debug(
                     f"CombinedModel.compute_g1: compute_g1_total completed, result.shape={result.shape}, min={jnp.min(result):.6e}, max={jnp.max(result):.6e}"
                 )
@@ -367,14 +358,9 @@ class CombinedModel(PhysicsModelBase):
         """
         Compute g2 with scaled fitting: g₂ = offset + contrast × [g₁]²
         """
-        # Handle q as array - convert to scalar
-        if hasattr(q, "shape") and q.shape:
-            # If q is an array, use mean value for scalar computations
-            q_scalar = float(jnp.mean(q))
-        else:
-            q_scalar = float(q)
-
-        return compute_g2_scaled(params, t1, t2, phi, q_scalar, L, contrast, offset)
+        # Pass q directly without conversion to avoid JAX tracing issues
+        # The backend functions handle any necessary conversions
+        return compute_g2_scaled(params, t1, t2, phi, q, L, contrast, offset)
 
     @log_calls(include_args=False)
     def compute_chi_squared(

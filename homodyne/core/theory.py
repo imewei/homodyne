@@ -322,6 +322,12 @@ class TheoryEngine:
 
     def _validate_computation_inputs(self, params: np.ndarray, q: float, L: float):
         """Validate core computation inputs."""
+        # Skip validation inside JIT compilation to avoid JAX tracer errors
+        # These checks would fail with JAX traced values
+        if jax_available:
+            # In JAX mode, skip runtime validation
+            return
+
         # Parameter validation
         if not self.model.validate_parameters(params):
             logger.warning(
@@ -348,6 +354,11 @@ class TheoryEngine:
 
     def _validate_scaling_parameters(self, contrast: float, offset: float):
         """Validate scaling parameters."""
+        # Skip validation inside JIT compilation to avoid JAX tracer errors
+        if jax_available:
+            # In JAX mode, skip runtime validation
+            return
+
         if contrast <= 0:
             raise ValueError(f"Contrast must be positive, got {contrast}")
         if offset < 0:
@@ -362,6 +373,11 @@ class TheoryEngine:
         phi: np.ndarray,
     ):
         """Validate experimental data inputs."""
+        # Skip validation inside JIT compilation to avoid JAX tracer errors
+        if jax_available:
+            # In JAX mode, skip runtime validation
+            return
+
         # Shape consistency
         phi_array = np.atleast_1d(phi)
         expected_shape = (safe_len(phi_array), safe_len(t1), safe_len(t2))

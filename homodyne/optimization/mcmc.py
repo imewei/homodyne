@@ -540,20 +540,28 @@ def _create_numpyro_model(data, sigma, t1, t2, phi, q, L, analysis_mode, param_s
     return homodyne_model
 
 
-@jit
 def _compute_simple_theory(params, t1, t2, phi, q, analysis_mode):
     """Simplified theoretical model computation."""
     # This is a placeholder - in real implementation would use core.theory
     # For now, return a simple exponential decay
-    D0 = params[2]
-    alpha = params[3]
+
+    # Extract D0 and alpha from params array
+    # params array structure: [contrast, offset, D0, alpha, D_offset, ...]
+    # But we pass physical params only, so: [D0, alpha, D_offset, ...]
+    D0 = params[0]
+    alpha = params[1]
 
     # Simple diffusion model
-    tau = (t1 + t2) / 2
-    g1 = jnp.exp(-D0 * q**2 * tau**alpha)
+    tau = jnp.abs(t2 - t1)  # Use absolute time difference
+    # Avoid division by zero and negative values
+    tau_safe = jnp.maximum(tau, 1e-10)
+    g1 = jnp.exp(-D0 * q**2 * tau_safe**jnp.abs(alpha))
     c2_theory = 1 + g1**2
 
     return c2_theory
+
+# JIT compile with static analysis_mode argument
+_compute_simple_theory = jit(_compute_simple_theory, static_argnums=(5,))
 
 
 def _run_numpyro_sampling(model, config):
