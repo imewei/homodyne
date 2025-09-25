@@ -17,7 +17,7 @@ This rebuild achieves **~70% complexity reduction** while maintaining **100% API
 - **`core/`** - Validated physics models and JAX backend (7 files preserved)
 
 ### New Components
-- **`optimization/`** - JAX-first optimization with JAXFit NLSQ + NumPyro/BlackJAX MCMC
+- **`optimization/`** - JAX-first optimization with Optimistix NLSQ + NumPyro/BlackJAX MCMC
 - **`device/`** - HPC/GPU optimization with system CUDA integration
 - **`config/`** - Streamlined YAML-only configuration system
 - **`utils/`** - Minimal logging with preserved API signatures
@@ -26,7 +26,7 @@ This rebuild achieves **~70% complexity reduction** while maintaining **100% API
 ## Key Features
 
 ### JAX-First Computational Engine
-- **Primary**: JAXFit trust-region nonlinear least squares
+- **Primary**: Optimistix trust-region nonlinear least squares
 - **Secondary**: NumPyro/BlackJAX NUTS sampling for uncertainty quantification
 - **Core Equation**: `c₂(φ,t₁,t₂) = 1 + contrast × [c₁(φ,t₁,t₂)]²`
 
@@ -46,14 +46,14 @@ This rebuild achieves **~70% complexity reduction** while maintaining **100% API
 ```bash
 # Latest 2025 stable versions
 pip install numpy>=1.25 scipy>=1.11 jax==0.7.2 jaxlib==0.7.2 \
-            jaxfit==0.0.5 numpyro==0.19.0 h5py pyyaml
+            optimistix>=0.0.7 equinox>=0.11.11 numpyro==0.19.0 h5py pyyaml
 ```
 
 ### GPU Acceleration with System CUDA (Recommended for HPC)
 ```bash
 # Requires pre-installed CUDA 12.1-12.9 on Linux
 pip install --upgrade "jax[cuda12-local]==0.7.2" jaxlib==0.7.2 \
-            jaxfit==0.0.5 numpyro==0.19.0 blackjax==1.2.5 \
+            optimistix>=0.0.7 equinox>=0.11.11 numpyro==0.19.0 blackjax==1.2.5 \
             h5py pyyaml psutil tqdm
 ```
 
@@ -67,7 +67,7 @@ module load cudnn/9.8
 pip install homodyne[hpc]
 # Or manually:
 pip install --upgrade "jax[cuda12-local]==0.7.2" jaxlib==0.7.2 \
-            jaxfit==0.0.5 numpyro==0.19.0 blackjax==1.2.5 \
+            optimistix>=0.0.7 equinox>=0.11.11 numpyro==0.19.0 blackjax==1.2.5 \
             h5py pyyaml psutil tqdm matplotlib
 ```
 
@@ -81,7 +81,7 @@ pip install homodyne[dev]
 
 ### Command Line Interface
 ```bash
-# JAXFit NLSQ optimization (default)
+# Optimistix NLSQ optimization (default)
 homodyne --method nlsq --config config.yaml
 
 # MCMC sampling for uncertainty quantification
@@ -104,7 +104,7 @@ from homodyne.config import ConfigManager
 data = load_xpcs_data("config.yaml")
 config = ConfigManager("config.yaml")
 
-# Primary: JAXFit NLSQ optimization
+# Primary: Optimistix NLSQ optimization
 result = fit_nlsq_jax(data, config)
 print(f"Parameters: {result.parameters}")
 
@@ -196,7 +196,8 @@ hardware:
 - `scipy>=1.11.0` - Scientific computing (JAX minimum)
 - `jax>=0.7.2` - JAX acceleration framework
 - `jaxlib>=0.7.2` - JAX XLA library (must match JAX version)
-- `jaxfit>=0.0.5` - Trust-region optimization for NLSQ
+- `optimistix>=0.0.7` - Trust-region optimization for NLSQ
+- `equinox>=0.11.11` - JAX neural network library (required by Optimistix)
 - `numpyro>=0.19.0` - MCMC with built-in progress bars
 - `h5py>=3.8.0` - HDF5 file support
 - `pyyaml>=6.0` - YAML configuration
@@ -270,7 +271,7 @@ export LD_LIBRARY_PATH=/usr/local/cuda-12/lib64:$LD_LIBRARY_PATH
 
 # 4. Install homodyne with system CUDA
 pip install --upgrade "jax[cuda12-local]==0.7.2" jaxlib==0.7.2 \
-            jaxfit==0.0.5 numpyro==0.19.0 h5py pyyaml
+            optimistix>=0.0.7 equinox>=0.11.11 numpyro==0.19.0 h5py pyyaml
 
 # 5. Verify GPU detection
 python -c "import jax; print(jax.devices())"

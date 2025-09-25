@@ -145,7 +145,7 @@ def fit_nlsq_jax(
     Raises
     ------
     ImportError
-        If JAXFit is not available
+        If Optimistix is not available
     ValueError
         If data validation fails
     """

@@ -27,7 +27,7 @@ def create_parser() -> argparse.ArgumentParser:
         epilog=f"""
 Examples:
   %(prog)s                                    # Run with default NLSQ method
-  %(prog)s --method nlsq                      # JAXFit nonlinear least squares (default)
+  %(prog)s --method nlsq                      # Optimistix nonlinear least squares (default)
   %(prog)s --method mcmc                      # MCMC sampling for uncertainty quantification
   %(prog)s --config my_config.yaml            # Use custom config file
   %(prog)s --output-dir ./results             # Custom output directory
@@ -35,7 +35,7 @@ Examples:
   %(prog)s --verbose                          # Enable verbose logging
 
 Optimization Methods:
-  nlsq:    JAXFit trust-region nonlinear least squares (PRIMARY)
+  nlsq:    Optimistix trust-region nonlinear least squares (PRIMARY)
           Use for: Fast, reliable parameter estimation
 
   mcmc:    NumPyro/BlackJAX NUTS sampling (SECONDARY)
@@ -61,7 +61,7 @@ Homodyne v{__version__} - JAX-First Architecture
         "--method",
         choices=["nlsq", "mcmc"],
         default="nlsq",
-        help="Optimization method: nlsq (JAXFit trust-region), mcmc (NumPyro/BlackJAX NUTS) (default: %(default)s)",
+        help="Optimization method: nlsq (Optimistix trust-region), mcmc (NumPyro/BlackJAX NUTS) (default: %(default)s)",
     )
 
     # Configuration and I/O
