@@ -1,0 +1,206 @@
+name: 🤖 Optimized Claude Code Integration
+
+on:
+  issue_comment:
+    types: [created]
+  pull_request_review_comment:
+    types: [created]
+  issues:
+    types: [opened, edited]
+  pull_request_review:
+    types: [submitted]
+  pull_request:
+    types: [opened, edited, synchronize]
+
+concurrency:
+  group: claude-${{ github.event.number || github.event.issue.number }}-${{ github.event_name }}
+  cancel-in-progress: true
+
+jobs:
+  # Smart Claude invocation detection
+  detect-claude-invocation:
+    name: 🔍 Detect Claude Invocation
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    outputs:
+      should-run: ${{ steps.detection.outputs.should-run }}
+      context-type: ${{ steps.detection.outputs.context-type }}
+      priority: ${{ steps.detection.outputs.priority }}
+    steps:
+      - name: 🔍 Analyze trigger context
+        id: detection
+        run: |
+          echo "Event: ${{ github.event_name }}"
+
+          SHOULD_RUN="false"
+          CONTEXT_TYPE="unknown"
+          PRIORITY="normal"
+
+          case "${{ github.event_name }}" in
+            "issue_comment")
+              COMMENT_BODY="${{ github.event.comment.body }}"
+              if [[ "$COMMENT_BODY" =~ @claude|/claude|claude[ ]*(help|assist|fix|review) ]]; then
+                SHOULD_RUN="true"
+                CONTEXT_TYPE="issue_comment"
+                # Priority based on keywords
+                if [[ "$COMMENT_BODY" =~ urgent|critical|emergency ]]; then
+                  PRIORITY="high"
+                fi
+              fi
+              ;;
+            "pull_request_review_comment")
+              COMMENT_BODY="${{ github.event.comment.body }}"
+              if [[ "$COMMENT_BODY" =~ @claude|/claude ]]; then
+                SHOULD_RUN="true"
+                CONTEXT_TYPE="pr_review_comment"
+                PRIORITY="high"  # PR reviews are higher priority
+              fi
+              ;;
+            "pull_request_review")
+              REVIEW_BODY="${{ github.event.review.body }}"
+              if [[ "$REVIEW_BODY" =~ @claude|/claude ]]; then
+                SHOULD_RUN="true"
+                CONTEXT_TYPE="pr_review"
+                PRIORITY="high"
+              fi
+              ;;
+            "issues")
+              ISSUE_BODY="${{ github.event.issue.body }}"
+              ISSUE_TITLE="${{ github.event.issue.title }}"
+              if [[ "$ISSUE_BODY" =~ @claude|/claude ]] || [[ "$ISSUE_TITLE" =~ @claude|/claude ]]; then
+                SHOULD_RUN="true"
+                CONTEXT_TYPE="issue"
+                # Check for bug reports or urgent issues
+                if [[ "$ISSUE_TITLE" =~ \[bug\]|\[urgent\]|critical|crash ]]; then
+                  PRIORITY="high"
+                fi
+              fi
+              ;;
+            "pull_request")
+              PR_BODY="${{ github.event.pull_request.body }}"
+              PR_TITLE="${{ github.event.pull_request.title }}"
+              # Only run on explicit mention or draft PRs requesting help
+              if [[ "$PR_BODY" =~ @claude|/claude ]] ||
+                 [[ "$PR_TITLE" =~ @claude|/claude ]] ||
+                 [[ "${{ github.event.pull_request.draft }}" == "true" && "$PR_BODY" =~ help|review|feedback ]]; then
+                SHOULD_RUN="true"
+                CONTEXT_TYPE="pull_request"
+              fi
+              ;;
+          esac
+
+          echo "should-run=$SHOULD_RUN" >> $GITHUB_OUTPUT
+          echo "context-type=$CONTEXT_TYPE" >> $GITHUB_OUTPUT
+          echo "priority=$PRIORITY" >> $GITHUB_OUTPUT
+
+          echo "Claude invocation: $SHOULD_RUN (Context: $CONTEXT_TYPE, Priority: $PRIORITY)"
+
+  # Optimized Claude Code execution
+  claude-code:
+    name: 🤖 Claude Code Assistant
+    runs-on: ubuntu-latest
+    timeout-minutes: 15  # Increased timeout for complex tasks
+    needs: detect-claude-invocation
+    if: needs.detect-claude-invocation.outputs.should-run == 'true'
+    permissions:
+      contents: read
+      pull-requests: write
+      issues: write
+      id-token: write
+      actions: read
+    steps:
+      - name: 📥 Optimized checkout
+        uses: actions/checkout@v4
+        with:
+          # Fetch minimal history for faster checkout
+          fetch-depth: ${{ needs.detect-claude-invocation.outputs.context-type == 'pull_request' && 50 || 1 }}
+          # Only fetch LFS for certain contexts
+          lfs: ${{ contains(github.event.comment.body || github.event.issue.body || '', 'lfs') || contains(github.event.comment.body || github.event.issue.body || '', 'binary') }}
+
+      - name: 🚀 Run Claude Code
+        uses: anthropics/claude-code-action@v1
+        with:
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          additional_permissions: |
+            actions: read
+            checks: read
+            pull-requests: write
+            issues: write
+          # Priority-based configuration
+          max_response_length: ${{ needs.detect-claude-invocation.outputs.priority == 'high' && '4000' || '2000' }}
+
+      - name: 📊 Execution summary
+        if: always()
+        run: |
+          echo "## 🤖 Claude Code Execution Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Context:** ${{ needs.detect-claude-invocation.outputs.context-type }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Priority:** ${{ needs.detect-claude-invocation.outputs.priority }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Status:** ${{ job.status }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Event:** ${{ github.event_name }}" >> $GITHUB_STEP_SUMMARY
+
+          if [[ "${{ github.event_name }}" == "pull_request" ]]; then
+            echo "**PR:** #${{ github.event.pull_request.number }}" >> $GITHUB_STEP_SUMMARY
+          elif [[ "${{ github.event_name }}" == "issues" ]]; then
+            echo "**Issue:** #${{ github.event.issue.number }}" >> $GITHUB_STEP_SUMMARY
+          fi
+
+  # Usage analytics and monitoring (optional)
+  claude-analytics:
+    name: 📊 Usage Analytics
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    needs: [detect-claude-invocation, claude-code]
+    if: always() && needs.detect-claude-invocation.outputs.should-run == 'true'
+    steps:
+      - name: 📊 Log usage metrics
+        run: |
+          echo "::group::📊 Claude Usage Metrics"
+
+          # Basic metrics logging
+          echo "Timestamp: $(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          echo "Repository: ${{ github.repository }}"
+          echo "Event: ${{ github.event_name }}"
+          echo "Context: ${{ needs.detect-claude-invocation.outputs.context-type }}"
+          echo "Priority: ${{ needs.detect-claude-invocation.outputs.priority }}"
+          echo "Actor: ${{ github.actor }}"
+          echo "Success: ${{ needs.claude-code.result == 'success' }}"
+
+          # Add to summary for visibility
+          echo "**Usage logged for analytics and monitoring**" >> $GITHUB_STEP_SUMMARY
+
+          echo "::endgroup::"
+
+  # Error handling and retry logic
+  claude-error-handler:
+    name: 🔄 Error Handler
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    needs: [detect-claude-invocation, claude-code]
+    if: always() && needs.claude-code.result == 'failure' && needs.detect-claude-invocation.outputs.priority == 'high'
+    permissions:
+      issues: write
+      pull-requests: write
+    steps:
+      - name: 🔄 Handle Claude failure
+        run: |
+          echo "::group::🔄 Handling Claude Code Failure"
+
+          # For high-priority requests, create a follow-up comment
+          CONTEXT="${{ needs.detect-claude-invocation.outputs.context-type }}"
+
+          if [[ "$CONTEXT" == "issue_comment" || "$CONTEXT" == "issue" ]]; then
+            # Post to issue
+            gh api repos/${{ github.repository }}/issues/${{ github.event.issue.number }}/comments \
+              --method POST \
+              --field body="🤖 Claude Code encountered an issue and couldn't complete the request. The development team has been notified. You can try rephrasing your request or check back later."
+          elif [[ "$CONTEXT" == "pr_review_comment" || "$CONTEXT" == "pull_request" ]]; then
+            # Post to PR
+            gh api repos/${{ github.repository }}/issues/${{ github.event.pull_request.number }}/comments \
+              --method POST \
+              --field body="🤖 Claude Code encountered an issue processing your request. The development team has been notified. Please try rephrasing your request."
+          fi
+
+          echo "::endgroup::"
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

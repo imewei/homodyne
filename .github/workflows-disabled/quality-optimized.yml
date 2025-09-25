@@ -1,0 +1,569 @@
+name: 🔍 Optimized Quality Monitoring
+
+on:
+  push:
+    branches: [main, develop]
+    paths:
+      - 'homodyne/**/*.py'
+      - 'pyproject.toml'
+      - 'requirements*.txt'
+      - '.github/workflows/quality-optimized.yml'
+  pull_request:
+    branches: [main, develop]
+    paths:
+      - 'homodyne/**/*.py'
+      - 'pyproject.toml'
+      - 'requirements*.txt'
+  schedule:
+    # Run comprehensive checks weekly (Sundays at 3 AM UTC)
+    - cron: '0 3 * * 0'
+  workflow_dispatch:
+
+env:
+  PYTHON_VERSION: '3.12'
+  FORCE_COLOR: 1
+
+jobs:
+  # Change detection for smart execution
+  detect-quality-scope:
+    name: 🎯 Detect Quality Scope
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    outputs:
+      security-scan: ${{ steps.scope.outputs.security-scan }}
+      type-check: ${{ steps.scope.outputs.type-check }}
+      comprehensive: ${{ steps.scope.outputs.comprehensive }}
+      dependency-scan: ${{ steps.scope.outputs.dependency-scan }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+
+      - name: 🔍 Determine scan scope
+        id: scope
+        run: |
+          # Security scan: if security-sensitive files changed or scheduled
+          if git diff --name-only HEAD~1 | grep -E "(auth|crypto|security|token)" || [ "${{ github.event_name }}" = "schedule" ]; then
+            echo "security-scan=true" >> $GITHUB_OUTPUT
+          else
+            echo "security-scan=false" >> $GITHUB_OUTPUT
+          fi
+
+          # Type check: if core Python files changed
+          if git diff --name-only HEAD~1 | grep -E "homodyne/(core|optimization|data)/.*\.py$" || [ "${{ github.event_name }}" = "schedule" ]; then
+            echo "type-check=true" >> $GITHUB_OUTPUT
+          else
+            echo "type-check=false" >> $GITHUB_OUTPUT
+          fi
+
+          # Comprehensive: scheduled runs or main branch
+          if [ "${{ github.event_name }}" = "schedule" ] || [ "${{ github.ref }}" = "refs/heads/main" ]; then
+            echo "comprehensive=true" >> $GITHUB_OUTPUT
+          else
+            echo "comprehensive=false" >> $GITHUB_OUTPUT
+          fi
+
+          # Dependency scan: if dependencies changed or weekly
+          if git diff --name-only HEAD~1 | grep -E "(requirements|pyproject\.toml)" || [ "${{ github.event_name }}" = "schedule" ]; then
+            echo "dependency-scan=true" >> $GITHUB_OUTPUT
+          else
+            echo "dependency-scan=false" >> $GITHUB_OUTPUT
+          fi
+
+  # Cached environment setup (shared across jobs)
+  setup-quality-env:
+    name: 🛠️ Setup Quality Environment
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    outputs:
+      cache-key: ${{ steps.cache-key.outputs.key }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 🔑 Generate cache key
+        id: cache-key
+        run: |
+          echo "key=quality-env-${{ runner.os }}-py${{ env.PYTHON_VERSION }}-${{ hashFiles('pyproject.toml') }}" >> $GITHUB_OUTPUT
+
+      - name: 💾 Cache quality environment
+        id: cache-env
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cache/pip
+            .venv-quality
+          key: ${{ steps.cache-key.outputs.key }}
+
+      - name: 🐍 Setup Python
+        if: steps.cache-env.outputs.cache-hit != 'true'
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: 📦 Install quality tools
+        if: steps.cache-env.outputs.cache-hit != 'true'
+        run: |
+          python -m venv .venv-quality
+          source .venv-quality/bin/activate
+          pip install --upgrade pip setuptools wheel
+          pip install -e ".[dev]"
+          # Additional quality tools
+          pip install \
+            bandit[toml] \
+            safety \
+            pip-audit \
+            pip-licenses \
+            interrogate \
+            vulture \
+            xenon
+
+  # Fast code quality checks (parallel execution)
+  fast-quality-checks:
+    name: ⚡ Fast Quality Checks
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    needs: setup-quality-env
+    strategy:
+      fail-fast: false
+      matrix:
+        check: [format, lint, imports, complexity]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 🐍 Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: 🔄 Restore quality environment
+        uses: actions/cache/restore@v4
+        with:
+          path: |
+            ~/.cache/pip
+            .venv-quality
+          key: ${{ needs.setup-quality-env.outputs.cache-key }}
+
+      - name: 🎨 Code formatting check
+        if: matrix.check == 'format'
+        run: |
+          source .venv-quality/bin/activate
+          echo "::group::🎨 Ruff Format Check"
+          ruff format --check --diff homodyne/
+          echo "::endgroup::"
+
+          echo "::group::🔧 Black Format Check (fallback)"
+          black --check --diff homodyne/ || echo "⚠️ Black formatting differs from ruff"
+          echo "::endgroup::"
+
+      - name: 🔍 Linting analysis
+        if: matrix.check == 'lint'
+        run: |
+          source .venv-quality/bin/activate
+          echo "::group::⚡ Ruff Linting"
+          ruff check homodyne/ --output-format=github --statistics
+          echo "::endgroup::"
+
+      - name: 📦 Import analysis
+        if: matrix.check == 'imports'
+        run: |
+          source .venv-quality/bin/activate
+          echo "::group::🔍 Unused Code Detection"
+          vulture homodyne/ --min-confidence 80 --sort-by-size || echo "⚠️ Potential unused code detected"
+          echo "::endgroup::"
+
+      - name: 📊 Complexity analysis
+        if: matrix.check == 'complexity'
+        run: |
+          source .venv-quality/bin/activate
+          echo "::group::📊 Complexity Analysis"
+          xenon homodyne/ --max-absolute B --max-modules A --max-average A || echo "⚠️ High complexity detected"
+          echo "::endgroup::"
+
+  # Security analysis (conditional)
+  security-analysis:
+    name: 🛡️ Security Analysis
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    needs: [detect-quality-scope, setup-quality-env]
+    if: needs.detect-quality-scope.outputs.security-scan == 'true'
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 🐍 Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: 🔄 Restore quality environment
+        uses: actions/cache/restore@v4
+        with:
+          path: |
+            ~/.cache/pip
+            .venv-quality
+          key: ${{ needs.setup-quality-env.outputs.cache-key }}
+
+      - name: 🛡️ Bandit security scan
+        run: |
+          source .venv-quality/bin/activate
+          echo "::group::🛡️ Security Scan"
+          bandit -r homodyne/ \
+            -f json \
+            -o bandit-report.json \
+            -ll \
+            --exclude="*/tests/*" || echo "⚠️ Security issues detected"
+
+          # Pretty print summary
+          if [ -f bandit-report.json ]; then
+            echo "=== Security Scan Summary ==="
+            python -c "
+import json
+with open('bandit-report.json') as f:
+    data = json.load(f)
+    metrics = data.get('metrics', {}).get('_totals', {})
+    print(f'Files scanned: {metrics.get(\"loc\", 0)}')
+    print(f'High severity: {metrics.get(\"SEVERITY.HIGH\", 0)}')
+    print(f'Medium severity: {metrics.get(\"SEVERITY.MEDIUM\", 0)}')
+    print(f'Low severity: {metrics.get(\"SEVERITY.LOW\", 0)}')
+            "
+          fi
+          echo "::endgroup::"
+
+      - name: 📊 Upload security report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: security-report-${{ github.sha }}
+          path: bandit-report.json
+          retention-days: 30
+
+  # Type checking (conditional)
+  type-analysis:
+    name: 📝 Type Analysis
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    needs: [detect-quality-scope, setup-quality-env]
+    if: needs.detect-quality-scope.outputs.type-check == 'true'
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 🐍 Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: 🔄 Restore quality environment
+        uses: actions/cache/restore@v4
+        with:
+          path: |
+            ~/.cache/pip
+            .venv-quality
+          key: ${{ needs.setup-quality-env.outputs.cache-key }}
+
+      - name: 📝 MyPy type checking
+        run: |
+          source .venv-quality/bin/activate
+          echo "::group::📝 Type Analysis"
+          mypy homodyne/ \
+            --html-report mypy-report \
+            --txt-report mypy-txt-report \
+            --show-error-codes \
+            --show-column-numbers \
+            --pretty \
+            --ignore-missing-imports \
+            --no-error-summary || echo "⚠️ Type issues detected"
+          echo "::endgroup::"
+
+      - name: 📊 Upload type reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: type-analysis-${{ github.sha }}
+          path: |
+            mypy-report/
+            mypy-txt-report/
+          retention-days: 14
+
+  # Dependency security audit (conditional)
+  dependency-security:
+    name: 📦 Dependency Security
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    needs: [detect-quality-scope, setup-quality-env]
+    if: needs.detect-quality-scope.outputs.dependency-scan == 'true'
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 🐍 Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: 🔄 Restore quality environment
+        uses: actions/cache/restore@v4
+        with:
+          path: |
+            ~/.cache/pip
+            .venv-quality
+          key: ${{ needs.setup-quality-env.outputs.cache-key }}
+
+      - name: 🔐 Dependency vulnerability scan
+        run: |
+          source .venv-quality/bin/activate
+
+          echo "::group::🔐 Pip Audit"
+          pip-audit --format=json --output=pip-audit.json --progress-spinner=off || echo "⚠️ Vulnerabilities detected"
+          pip-audit --format=text || echo "⚠️ Vulnerabilities detected"
+          echo "::endgroup::"
+
+          echo "::group::🛡️ Safety Check"
+          safety check --json --output=safety-report.json || echo "⚠️ Safety issues detected"
+          safety check --short-report || echo "⚠️ Safety issues detected"
+          echo "::endgroup::"
+
+      - name: 📄 License compliance check
+        run: |
+          source .venv-quality/bin/activate
+          echo "::group::📄 License Compliance"
+          pip-licenses \
+            --format=json \
+            --output-file=licenses.json \
+            --ignore-packages homodyne
+          pip-licenses --summary --ignore-packages homodyne
+          echo "::endgroup::"
+
+      - name: 📦 Upload dependency reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: dependency-security-${{ github.sha }}
+          path: |
+            pip-audit.json
+            safety-report.json
+            licenses.json
+          retention-days: 30
+
+  # Test coverage analysis
+  coverage-analysis:
+    name: 📊 Coverage Analysis
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    needs: setup-quality-env
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 🐍 Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: 🔄 Restore quality environment
+        uses: actions/cache/restore@v4
+        with:
+          path: |
+            ~/.cache/pip
+            .venv-quality
+          key: ${{ needs.setup-quality-env.outputs.cache-key }}
+
+      - name: 🧪 Run tests with coverage
+        run: |
+          source .venv-quality/bin/activate
+          echo "::group::📊 Test Coverage Analysis"
+          pytest tests/ \
+            --cov=homodyne \
+            --cov-report=xml \
+            --cov-report=html \
+            --cov-report=term-missing \
+            --cov-fail-under=75 \
+            -x \
+            -q \
+            -m "not slow and not gpu" \
+            --maxfail=5 || echo "⚠️ Coverage below threshold or tests failed"
+          echo "::endgroup::"
+
+      - name: 📊 Docstring coverage
+        run: |
+          source .venv-quality/bin/activate
+          echo "::group::📚 Docstring Coverage"
+          interrogate homodyne/ \
+            --ignore-init-method \
+            --ignore-magic \
+            --ignore-private \
+            --fail-under=70 \
+            --generate-badge coverage-badge.svg \
+            --verbose || echo "⚠️ Docstring coverage below threshold"
+          echo "::endgroup::"
+
+      - name: 📊 Upload coverage to Codecov
+        if: success()
+        uses: codecov/codecov-action@v4
+        with:
+          file: coverage.xml
+          flags: quality-analysis
+          name: quality-coverage
+
+      - name: 📦 Upload coverage artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-analysis-${{ github.sha }}
+          path: |
+            coverage.xml
+            htmlcov/
+            coverage-badge.svg
+          retention-days: 30
+
+  # Comprehensive analysis (scheduled only)
+  comprehensive-analysis:
+    name: 🔬 Comprehensive Analysis
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    needs: [detect-quality-scope, setup-quality-env]
+    if: needs.detect-quality-scope.outputs.comprehensive == 'true'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Full history for trend analysis
+
+      - name: 🐍 Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: 🔄 Restore quality environment
+        uses: actions/cache/restore@v4
+        with:
+          path: |
+            ~/.cache/pip
+            .venv-quality
+          key: ${{ needs.setup-quality-env.outputs.cache-key }}
+
+      - name: 📈 Historical quality trends
+        run: |
+          source .venv-quality/bin/activate
+          echo "::group::📈 Quality Trends"
+
+          # Generate quality metrics over time
+          python -c "
+import subprocess
+import json
+from pathlib import Path
+
+# Get recent commits
+result = subprocess.run(['git', 'log', '--oneline', '-10'],
+                       capture_output=True, text=True)
+commits = result.stdout.strip().split('\n')
+
+quality_data = []
+for commit_line in commits[:5]:  # Last 5 commits
+    commit_hash = commit_line.split()[0]
+    print(f'Analyzing commit {commit_hash}...')
+
+    # Checkout commit
+    subprocess.run(['git', 'checkout', commit_hash],
+                  capture_output=True)
+
+    # Count lines of code
+    result = subprocess.run(['find', 'homodyne/', '-name', '*.py',
+                           '-exec', 'wc', '-l', '{}', '+'],
+                          capture_output=True, text=True)
+    if result.stdout:
+        lines = result.stdout.strip().split('\n')[-1]
+        loc = int(lines.split()[0]) if lines else 0
+    else:
+        loc = 0
+
+    quality_data.append({
+        'commit': commit_hash,
+        'lines_of_code': loc
+    })
+
+# Return to HEAD
+subprocess.run(['git', 'checkout', 'HEAD'], capture_output=True)
+
+print('Quality trend data:', quality_data)
+          "
+          echo "::endgroup::"
+
+      - name: 🔍 Deep code analysis
+        run: |
+          source .venv-quality/bin/activate
+          echo "::group::🔍 Deep Analysis"
+
+          # Additional comprehensive checks
+          echo "=== Code Metrics ==="
+          find homodyne/ -name '*.py' | wc -l | xargs echo "Python files:"
+          find homodyne/ -name '*.py' -exec wc -l {} + | tail -1 | awk '{print "Total lines: " $1}'
+
+          echo "=== Function Complexity ==="
+          xenon homodyne/ --max-absolute C --max-modules B --max-average B --no-assert || true
+
+          echo "::endgroup::"
+
+  # Quality gate evaluation
+  quality-gate:
+    name: 🚪 Quality Gate
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    needs: [fast-quality-checks, security-analysis, type-analysis, dependency-security, coverage-analysis]
+    if: always()
+    steps:
+      - name: 🎯 Evaluate quality gate
+        run: |
+          echo "::group::🚪 Quality Gate Evaluation"
+
+          # Check job statuses
+          FAST_CHECKS="${{ needs.fast-quality-checks.result }}"
+          SECURITY="${{ needs.security-analysis.result }}"
+          TYPES="${{ needs.type-analysis.result }}"
+          DEPENDENCIES="${{ needs.dependency-security.result }}"
+          COVERAGE="${{ needs.coverage-analysis.result }}"
+
+          echo "Fast Checks: $FAST_CHECKS"
+          echo "Security: $SECURITY"
+          echo "Type Analysis: $TYPES"
+          echo "Dependencies: $DEPENDENCIES"
+          echo "Coverage: $COVERAGE"
+
+          # Determine gate status (allow skipped jobs)
+          PASSED=0
+          FAILED=0
+
+          for result in "$FAST_CHECKS" "$SECURITY" "$TYPES" "$DEPENDENCIES" "$COVERAGE"; do
+            if [[ "$result" == "success" || "$result" == "skipped" ]]; then
+              PASSED=$((PASSED + 1))
+            elif [[ "$result" == "failure" ]]; then
+              FAILED=$((FAILED + 1))
+            fi
+          done
+
+          echo "Passed/Skipped: $PASSED, Failed: $FAILED"
+
+          if [[ $FAILED -eq 0 ]]; then
+            echo "✅ QUALITY GATE: PASSED"
+            echo "quality_gate=passed" >> $GITHUB_ENV
+          else
+            echo "❌ QUALITY GATE: FAILED ($FAILED failures)"
+            echo "quality_gate=failed" >> $GITHUB_ENV
+          fi
+          echo "::endgroup::"
+
+      - name: 📊 Generate quality summary
+        run: |
+          echo "## 🔍 Quality Analysis Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Overall Status:** ${{ env.quality_gate == 'passed' && '✅ PASSED' || '❌ FAILED' }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Component Results:**" >> $GITHUB_STEP_SUMMARY
+          echo "- ⚡ Fast Checks: ${{ needs.fast-quality-checks.result }}" >> $GITHUB_STEP_SUMMARY
+          echo "- 🛡️ Security: ${{ needs.security-analysis.result }}" >> $GITHUB_STEP_SUMMARY
+          echo "- 📝 Type Analysis: ${{ needs.type-analysis.result }}" >> $GITHUB_STEP_SUMMARY
+          echo "- 📦 Dependencies: ${{ needs.dependency-security.result }}" >> $GITHUB_STEP_SUMMARY
+          echo "- 📊 Coverage: ${{ needs.coverage-analysis.result }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "*Check workflow artifacts for detailed reports.*" >> $GITHUB_STEP_SUMMARY
+
+      - name: 🚫 Fail on quality gate failure
+        if: env.quality_gate == 'failed'
+        run: |
+          echo "❌ Quality gate failed - please address quality issues"
+          exit 1

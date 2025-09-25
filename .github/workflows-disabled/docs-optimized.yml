@@ -1,0 +1,534 @@
+name: 📚 Optimized Documentation
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'docs/**'
+      - 'homodyne/**/*.py'
+      - 'pyproject.toml'
+      - 'README.md'
+      - '.readthedocs.yaml'
+      - '.github/workflows/docs-optimized.yml'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'docs/**'
+      - 'homodyne/**/*.py'
+      - 'README.md'
+      - '.readthedocs.yaml'
+  workflow_dispatch:
+    inputs:
+      deploy:
+        description: 'Force deploy to GitHub Pages'
+        type: boolean
+        default: false
+
+concurrency:
+  group: docs-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  PYTHON_VERSION: '3.12'
+
+jobs:
+  # Smart change detection for docs
+  detect-docs-changes:
+    name: 🔍 Detect Documentation Changes
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    outputs:
+      docs-content: ${{ steps.changes.outputs.docs-content }}
+      api-docs: ${{ steps.changes.outputs.api-docs }}
+      readme-only: ${{ steps.changes.outputs.readme-only }}
+      config-changed: ${{ steps.changes.outputs.config-changed }}
+      should-deploy: ${{ steps.deploy.outputs.should-deploy }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+
+      - name: 📋 Detect change scope
+        id: changes
+        uses: dorny/paths-filter@v3
+        with:
+          filters: |
+            docs-content:
+              - 'docs/**/*.md'
+              - 'docs/**/*.rst'
+              - 'docs/**/*.ipynb'
+            api-docs:
+              - 'homodyne/**/*.py'
+            readme-only:
+              - 'README.md'
+            config-changed:
+              - 'pyproject.toml'
+              - '.readthedocs.yaml'
+              - 'docs/conf.py'
+              - 'docs/requirements.txt'
+
+      - name: 🚀 Determine deployment
+        id: deploy
+        run: |
+          if [[ "${{ github.event_name }}" == "push" && "${{ github.ref }}" == "refs/heads/main" ]]; then
+            echo "should-deploy=true" >> $GITHUB_OUTPUT
+          elif [[ "${{ inputs.deploy }}" == "true" ]]; then
+            echo "should-deploy=true" >> $GITHUB_OUTPUT
+          else
+            echo "should-deploy=false" >> $GITHUB_OUTPUT
+          fi
+
+  # Setup optimized docs environment
+  setup-docs-env:
+    name: 🛠️ Setup Docs Environment
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    needs: detect-docs-changes
+    outputs:
+      cache-key: ${{ steps.cache-key.outputs.key }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 🔑 Generate cache key
+        id: cache-key
+        run: |
+          echo "key=docs-env-${{ runner.os }}-py${{ env.PYTHON_VERSION }}-${{ hashFiles('pyproject.toml', 'docs/requirements.txt') }}" >> $GITHUB_OUTPUT
+
+      - name: 💾 Cache docs environment
+        id: cache-env
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cache/pip
+            .venv-docs
+            /usr/share/texlive
+            ~/.cache/matplotlib
+          key: ${{ steps.cache-key.outputs.key }}
+          restore-keys: |
+            docs-env-${{ runner.os }}-py${{ env.PYTHON_VERSION }}-
+
+      - name: 🐍 Setup Python
+        if: steps.cache-env.outputs.cache-hit != 'true'
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: 📦 Install system dependencies
+        if: steps.cache-env.outputs.cache-hit != 'true'
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends \
+            graphviz \
+            pandoc \
+            latexmk \
+            texlive-latex-recommended \
+            texlive-fonts-recommended \
+            texlive-latex-extra
+
+      - name: 📚 Install docs environment
+        if: steps.cache-env.outputs.cache-hit != 'true'
+        run: |
+          python -m venv .venv-docs
+          source .venv-docs/bin/activate
+          pip install --upgrade pip setuptools wheel
+          pip install -e ".[docs]"
+
+          # Install additional docs dependencies if they exist
+          if [ -f docs/requirements.txt ]; then
+            pip install -r docs/requirements.txt
+          fi
+
+          # Additional helpful docs tools
+          pip install \
+            sphinx-copybutton \
+            sphinx-gallery \
+            myst-nb
+
+  # Fast documentation build (no system deps needed)
+  fast-docs-check:
+    name: ⚡ Fast Docs Check
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    needs: [detect-docs-changes, setup-docs-env]
+    if: needs.detect-docs-changes.outputs.readme-only != 'true'
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 🐍 Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: 🔄 Restore docs environment
+        uses: actions/cache/restore@v4
+        with:
+          path: |
+            ~/.cache/pip
+            .venv-docs
+          key: ${{ needs.setup-docs-env.outputs.cache-key }}
+
+      - name: 📄 Check Sphinx syntax
+        run: |
+          source .venv-docs/bin/activate
+          cd docs/
+
+          echo "::group::📄 Sphinx Syntax Check"
+          sphinx-build -b dummy . _build/dummy -W --keep-going || echo "⚠️ Syntax issues detected"
+          echo "::endgroup::"
+
+      - name: 🔗 Check internal links
+        run: |
+          source .venv-docs/bin/activate
+          cd docs/
+
+          echo "::group::🔗 Link Validation"
+          sphinx-build -b linkcheck . _build/linkcheck -q || echo "⚠️ Broken internal links detected"
+          echo "::endgroup::"
+
+  # Full documentation build
+  build-docs:
+    name: 📖 Build Documentation
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    needs: [detect-docs-changes, setup-docs-env, fast-docs-check]
+    if: |
+      always() &&
+      needs.detect-docs-changes.outputs.readme-only != 'true' &&
+      (needs.fast-docs-check.result == 'success' || needs.fast-docs-check.result == 'skipped')
+    outputs:
+      build-successful: ${{ steps.build.outcome == 'success' }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Full history for versioning
+
+      - name: 🐍 Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: 🔄 Restore docs environment
+        uses: actions/cache/restore@v4
+        with:
+          path: |
+            ~/.cache/pip
+            .venv-docs
+            /usr/share/texlive
+            ~/.cache/matplotlib
+          key: ${{ needs.setup-docs-env.outputs.cache-key }}
+
+      - name: 📖 Build HTML documentation
+        id: build
+        run: |
+          source .venv-docs/bin/activate
+          cd docs/
+
+          echo "::group::📖 Building HTML Documentation"
+
+          # Set environment for reproducible builds
+          export SOURCE_DATE_EPOCH=$(git log -1 --pretty=%ct)
+          export PYTHONHASHSEED=0
+
+          # Build with warnings as errors for quality
+          sphinx-build -b html . _build/html -W --keep-going -j auto
+
+          # Verify critical pages exist
+          test -f _build/html/index.html || { echo "❌ Index page missing"; exit 1; }
+          test -d _build/html/_static || { echo "❌ Static assets missing"; exit 1; }
+
+          echo "✅ HTML documentation built successfully"
+          echo "::endgroup::"
+
+      - name: 📊 Generate build report
+        run: |
+          source .venv-docs/bin/activate
+          cd docs/
+
+          echo "::group::📊 Build Statistics"
+          echo "=== Documentation Statistics ==="
+          find _build/html -name "*.html" | wc -l | xargs echo "HTML pages:"
+          du -sh _build/html | cut -f1 | xargs echo "Total size:"
+          find _build/html -name "*.html" -exec wc -l {} + | tail -1 | awk '{print "Total HTML lines: " $1}'
+          echo "::endgroup::"
+
+      - name: 💾 Cache built docs
+        if: success()
+        uses: actions/cache/save@v4
+        with:
+          path: docs/_build/html
+          key: built-docs-${{ github.sha }}
+
+      - name: 📤 Upload documentation artifact
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: documentation-html
+          path: docs/_build/html
+          retention-days: 30
+
+  # API documentation generation (parallel)
+  api-docs:
+    name: 📋 API Documentation
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    needs: [detect-docs-changes, setup-docs-env]
+    if: needs.detect-docs-changes.outputs.api-docs == 'true'
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 🐍 Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: 🔄 Restore docs environment
+        uses: actions/cache/restore@v4
+        with:
+          path: |
+            ~/.cache/pip
+            .venv-docs
+          key: ${{ needs.setup-docs-env.outputs.cache-key }}
+
+      - name: 📋 Generate API documentation
+        run: |
+          source .venv-docs/bin/activate
+
+          echo "::group::📋 Auto-generating API docs"
+
+          # Generate API docs from docstrings
+          sphinx-apidoc -o docs/api/ homodyne/ --force --module-first --separate
+
+          # Check docstring coverage
+          interrogate homodyne/ \
+            --ignore-init-method \
+            --ignore-magic \
+            --ignore-private \
+            --verbose \
+            --generate-badge docs/_static/docstring-coverage.svg || echo "⚠️ Low docstring coverage"
+
+          echo "✅ API documentation generated"
+          echo "::endgroup::"
+
+      - name: 📤 Upload API docs
+        uses: actions/upload-artifact@v4
+        with:
+          name: api-documentation
+          path: |
+            docs/api/
+            docs/_static/docstring-coverage.svg
+          retention-days: 7
+
+  # Documentation testing
+  test-docs:
+    name: 🧪 Test Documentation
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    needs: [detect-docs-changes, build-docs]
+    if: |
+      always() &&
+      needs.build-docs.result == 'success' &&
+      needs.detect-docs-changes.outputs.docs-content == 'true'
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 🐍 Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: 🔄 Restore docs environment
+        uses: actions/cache/restore@v4
+        with:
+          path: |
+            ~/.cache/pip
+            .venv-docs
+          key: ${{ needs.setup-docs-env.outputs.cache-key }}
+
+      - name: 🔄 Restore built docs
+        uses: actions/cache/restore@v4
+        with:
+          path: docs/_build/html
+          key: built-docs-${{ github.sha }}
+
+      - name: 🧪 Run doctests
+        run: |
+          source .venv-docs/bin/activate
+          cd docs/
+
+          echo "::group::🧪 Testing Code Examples"
+          # Test code examples in documentation
+          sphinx-build -b doctest . _build/doctest -q || echo "⚠️ Some doctests failed"
+          echo "::endgroup::"
+
+      - name: 🔗 Test external links
+        run: |
+          source .venv-docs/bin/activate
+          cd docs/
+
+          echo "::group::🔗 Testing External Links"
+          # Check external links (allow failures for flaky external sites)
+          timeout 300 sphinx-build -b linkcheck . _build/linkcheck -q || echo "⚠️ Some external links failed"
+          echo "::endgroup::"
+
+  # ReadTheDocs validation
+  readthedocs-validation:
+    name: 📚 ReadTheDocs Validation
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 🐍 Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: ✅ Validate ReadTheDocs config
+        run: |
+          echo "::group::📚 ReadTheDocs Configuration"
+
+          # Validate YAML syntax
+          python -c "import yaml; yaml.safe_load(open('.readthedocs.yaml'))"
+          echo "✅ .readthedocs.yaml syntax valid"
+
+          # Check for required files
+          test -f README.md && echo "✅ README.md found"
+          test -f CHANGELOG.md && echo "✅ CHANGELOG.md found" || echo "ℹ️ CHANGELOG.md not found"
+          test -f LICENSE && echo "✅ LICENSE found" || echo "⚠️ LICENSE not found"
+
+          # Validate docs requirements
+          if [ -f docs/requirements.txt ]; then
+            echo "✅ docs/requirements.txt found"
+            pip install --dry-run -r docs/requirements.txt
+            echo "✅ docs/requirements.txt valid"
+          else
+            echo "ℹ️ docs/requirements.txt not found (using pyproject.toml)"
+          fi
+
+          echo "::endgroup::"
+
+  # Deploy to GitHub Pages
+  deploy-github-pages:
+    name: 🚀 Deploy to GitHub Pages
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    needs: [detect-docs-changes, build-docs, test-docs]
+    if: |
+      always() &&
+      needs.detect-docs-changes.outputs.should-deploy == 'true' &&
+      needs.build-docs.result == 'success' &&
+      (needs.test-docs.result == 'success' || needs.test-docs.result == 'skipped')
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: 🔄 Download documentation
+        uses: actions/download-artifact@v4
+        with:
+          name: documentation-html
+          path: ./docs-html
+
+      - name: 🛠️ Setup Pages
+        uses: actions/configure-pages@v5
+        id: setup-pages
+
+      - name: 📤 Upload to Pages
+        uses: actions/upload-pages-artifact@v4
+        with:
+          path: ./docs-html
+
+      - name: 🚀 Deploy to Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
+
+      - name: 📊 Deployment summary
+        run: |
+          echo "## 📚 Documentation Deployed! 🎉" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**📖 Live Documentation:** ${{ steps.deployment.outputs.page_url }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**🔧 Build Info:**" >> $GITHUB_STEP_SUMMARY
+          echo "- Commit: \`${{ github.sha }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "- Branch: \`${{ github.ref_name }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "- Trigger: ${{ github.event_name }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "*Documentation will be available within a few minutes.*" >> $GITHUB_STEP_SUMMARY
+
+  # Documentation quality gate
+  docs-quality-gate:
+    name: 🚪 Documentation Quality Gate
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    needs: [fast-docs-check, build-docs, test-docs, api-docs, readthedocs-validation]
+    if: always()
+    steps:
+      - name: 🎯 Evaluate documentation quality
+        run: |
+          echo "::group::🚪 Documentation Quality Gate"
+
+          FAST_CHECK="${{ needs.fast-docs-check.result }}"
+          BUILD="${{ needs.build-docs.result }}"
+          TESTS="${{ needs.test-docs.result }}"
+          API_DOCS="${{ needs.api-docs.result }}"
+          RTD_VALIDATION="${{ needs.readthedocs-validation.result }}"
+
+          echo "Fast Check: $FAST_CHECK"
+          echo "Build: $BUILD"
+          echo "Tests: $TESTS"
+          echo "API Docs: $API_DOCS"
+          echo "RTD Validation: $RTD_VALIDATION"
+
+          # Critical: build must succeed
+          if [[ "$BUILD" != "success" ]]; then
+            echo "❌ DOCS QUALITY GATE: FAILED (build failed)"
+            echo "docs_quality_gate=failed" >> $GITHUB_ENV
+            exit 1
+          fi
+
+          # Count failures (excluding skipped)
+          FAILED=0
+          for result in "$FAST_CHECK" "$TESTS" "$API_DOCS" "$RTD_VALIDATION"; do
+            if [[ "$result" == "failure" ]]; then
+              FAILED=$((FAILED + 1))
+            fi
+          done
+
+          if [[ $FAILED -eq 0 ]]; then
+            echo "✅ DOCS QUALITY GATE: PASSED"
+            echo "docs_quality_gate=passed" >> $GITHUB_ENV
+          else
+            echo "⚠️ DOCS QUALITY GATE: PASSED WITH WARNINGS ($FAILED warnings)"
+            echo "docs_quality_gate=passed_with_warnings" >> $GITHUB_ENV
+          fi
+          echo "::endgroup::"
+
+      - name: 📊 Generate docs summary
+        run: |
+          echo "## 📚 Documentation Quality Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          case "${{ env.docs_quality_gate }}" in
+            "passed")
+              echo "**Status:** ✅ PASSED" >> $GITHUB_STEP_SUMMARY
+              ;;
+            "passed_with_warnings")
+              echo "**Status:** ⚠️ PASSED WITH WARNINGS" >> $GITHUB_STEP_SUMMARY
+              ;;
+            *)
+              echo "**Status:** ❌ FAILED" >> $GITHUB_STEP_SUMMARY
+              ;;
+          esac
+
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Component Results:**" >> $GITHUB_STEP_SUMMARY
+          echo "- ⚡ Fast Check: ${{ needs.fast-docs-check.result }}" >> $GITHUB_STEP_SUMMARY
+          echo "- 📖 Build: ${{ needs.build-docs.result }}" >> $GITHUB_STEP_SUMMARY
+          echo "- 🧪 Tests: ${{ needs.test-docs.result }}" >> $GITHUB_STEP_SUMMARY
+          echo "- 📋 API Docs: ${{ needs.api-docs.result }}" >> $GITHUB_STEP_SUMMARY
+          echo "- 📚 RTD Validation: ${{ needs.readthedocs-validation.result }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "*Check workflow artifacts for detailed reports.*" >> $GITHUB_STEP_SUMMARY

@@ -1,0 +1,557 @@
+name: 🚀 Optimized Release
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Release version (e.g., v1.2.3)'
+        required: true
+        type: string
+      prerelease:
+        description: 'Mark as pre-release'
+        required: false
+        default: false
+        type: boolean
+      skip_tests:
+        description: 'Skip comprehensive tests (emergency release)'
+        required: false
+        default: false
+        type: boolean
+
+permissions:
+  contents: write
+  id-token: write  # For trusted publishing to PyPI
+  pages: write     # For docs deployment
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false  # Don't cancel releases
+
+env:
+  PYTHONDONTWRITEBYTECODE: 1
+  PYTHONUNBUFFERED: 1
+  PYTHON_VERSION: '3.12'
+
+jobs:
+  # Pre-flight validation and version extraction
+  validate-release:
+    name: ✅ Validate Release
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      pypi-version: ${{ steps.version.outputs.pypi-version }}
+      is-prerelease: ${{ steps.version.outputs.is-prerelease }}
+      skip-tests: ${{ steps.config.outputs.skip-tests }}
+    steps:
+      - name: 📥 Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Full history for changelog
+
+      - name: 🔍 Extract and validate version
+        id: version
+        run: |
+          # Extract version from tag or input
+          if [[ "${{ github.event_name }}" == "push" ]]; then
+            VERSION="${{ github.ref_name }}"
+          else
+            VERSION="${{ inputs.version }}"
+          fi
+
+          echo "Validating version: $VERSION"
+
+          # Validate version format
+          if [[ ! "$VERSION" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[a-zA-Z0-9\.]+)*$ ]]; then
+            echo "❌ Invalid version format: $VERSION"
+            echo "Expected format: vX.Y.Z or vX.Y.Z-suffix"
+            exit 1
+          fi
+
+          # Extract PyPI version (remove 'v' prefix)
+          PYPI_VERSION="${VERSION#v}"
+
+          # Check if prerelease
+          if [[ "$VERSION" =~ -[a-zA-Z] ]] || [[ "${{ inputs.prerelease }}" == "true" ]]; then
+            IS_PRERELEASE="true"
+          else
+            IS_PRERELEASE="false"
+          fi
+
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "pypi-version=$PYPI_VERSION" >> $GITHUB_OUTPUT
+          echo "is-prerelease=$IS_PRERELEASE" >> $GITHUB_OUTPUT
+
+          echo "✅ Version validated: $VERSION (PyPI: $PYPI_VERSION, Prerelease: $IS_PRERELEASE)"
+
+      - name: ⚙️ Configure release options
+        id: config
+        run: |
+          # Skip tests for emergency releases or if explicitly requested
+          if [[ "${{ inputs.skip_tests }}" == "true" ]]; then
+            echo "skip-tests=true" >> $GITHUB_OUTPUT
+            echo "⚠️ Tests will be skipped (emergency release mode)"
+          else
+            echo "skip-tests=false" >> $GITHUB_OUTPUT
+            echo "✅ Full testing enabled"
+          fi
+
+      - name: 📊 Pre-flight summary
+        run: |
+          echo "## 🚀 Release Configuration" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Version:** ${{ steps.version.outputs.version }}" >> $GITHUB_STEP_SUMMARY
+          echo "**PyPI Version:** ${{ steps.version.outputs.pypi-version }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Prerelease:** ${{ steps.version.outputs.is-prerelease }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Skip Tests:** ${{ steps.config.outputs.skip-tests }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+  # Fast smoke tests (parallel with build)
+  smoke-tests:
+    name: 🧪 Smoke Tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    needs: validate-release
+    if: needs.validate-release.outputs.skip-tests != 'true'
+    steps:
+      - name: 📥 Checkout
+        uses: actions/checkout@v4
+
+      - name: 🐍 Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+          cache-dependency-path: pyproject.toml
+
+      - name: 📦 Quick install and test
+        run: |
+          python -m pip install --upgrade pip build
+          pip install -e ".[test]"
+
+          # Verify basic installation
+          python -c "import homodyne; print('✅ Import successful')"
+
+          # Run fastest critical tests only
+          python -m pytest tests/unit/ \
+            -x --tb=line -q \
+            --maxfail=3 \
+            --timeout=30 \
+            -m "not slow and not gpu and not integration" \
+            --durations=5
+
+          echo "✅ Smoke tests passed"
+
+  # Optimized build process
+  build-release:
+    name: 📦 Build Release
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    needs: validate-release
+    outputs:
+      build-hash: ${{ steps.build.outputs.hash }}
+    steps:
+      - name: 📥 Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: 🐍 Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+
+      - name: 🔧 Install build tools
+        run: |
+          python -m pip install --upgrade pip build twine setuptools wheel
+          pip install -e ".[docs]"  # For complete build
+
+      - name: 📦 Build distributions
+        id: build
+        run: |
+          echo "::group::📦 Building Package"
+
+          # Clean previous builds
+          rm -rf dist/ build/ *.egg-info/
+
+          # Build source and wheel distributions
+          python -m build
+
+          # Verify distributions
+          twine check dist/*
+
+          # Generate hash for integrity
+          cd dist/
+          BUILD_HASH=$(sha256sum * | sha256sum | cut -d' ' -f1)
+          echo "hash=$BUILD_HASH" >> $GITHUB_OUTPUT
+          cd ..
+
+          echo "✅ Build completed successfully"
+          echo "Build hash: $BUILD_HASH"
+          echo "::endgroup::"
+
+          # Verify package can be installed
+          pip install dist/*.whl --force-reinstall
+          python -c "import homodyne; print(f'✅ Package verified: v{homodyne.__version__ if hasattr(homodyne, \"__version__\") else \"dev\"}')"
+
+      - name: 💾 Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: python-distributions
+          path: dist/
+          retention-days: 30
+
+  # Parallel documentation build
+  build-docs:
+    name: 📚 Build Documentation
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    needs: validate-release
+    steps:
+      - name: 📥 Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: 🐍 Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+
+      - name: 📦 Install dependencies
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends \
+            graphviz pandoc latexmk texlive-latex-recommended
+
+          python -m pip install --upgrade pip
+          pip install -e ".[docs]"
+
+      - name: 📖 Build documentation
+        run: |
+          cd docs/
+          echo "::group::📖 Building Documentation"
+
+          # Set reproducible build environment
+          export SOURCE_DATE_EPOCH=$(git log -1 --pretty=%ct)
+
+          # Build HTML docs
+          make clean
+          make html
+
+          # Package documentation
+          tar -czf ../documentation.tar.gz -C _build/html .
+
+          echo "✅ Documentation built successfully"
+          echo "::endgroup::"
+
+      - name: 💾 Upload documentation
+        uses: actions/upload-artifact@v4
+        with:
+          name: documentation
+          path: documentation.tar.gz
+          retention-days: 7
+
+  # Generate changelog and release notes
+  generate-changelog:
+    name: 📝 Generate Changelog
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    needs: validate-release
+    outputs:
+      changelog: ${{ steps.changelog.outputs.changelog }}
+      release-notes: ${{ steps.notes.outputs.notes }}
+    steps:
+      - name: 📥 Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: 📝 Generate changelog
+        id: changelog
+        run: |
+          VERSION="${{ needs.validate-release.outputs.version }}"
+
+          # Get previous tag for comparison
+          PREVIOUS_TAG=$(git describe --tags --abbrev=0 HEAD~1 2>/dev/null || echo "")
+
+          echo "changelog<<EOF" >> $GITHUB_OUTPUT
+          echo "## Changes in $VERSION" >> $GITHUB_OUTPUT
+          echo "" >> $GITHUB_OUTPUT
+
+          if [[ -n "$PREVIOUS_TAG" ]]; then
+            echo "### 🔄 Changes since $PREVIOUS_TAG:" >> $GITHUB_OUTPUT
+            echo "" >> $GITHUB_OUTPUT
+
+            # Categorize commits
+            git log --pretty=format:"- %s (%an)" $PREVIOUS_TAG..HEAD | while IFS= read -r line; do
+              case "$line" in
+                *"feat:"*|*"feature:"*)
+                  echo "✨ $line" >> $GITHUB_OUTPUT
+                  ;;
+                *"fix:"*|*"bug:"*)
+                  echo "🐛 $line" >> $GITHUB_OUTPUT
+                  ;;
+                *"docs:"*|*"doc:"*)
+                  echo "📚 $line" >> $GITHUB_OUTPUT
+                  ;;
+                *"perf:"*|*"performance:"*)
+                  echo "⚡ $line" >> $GITHUB_OUTPUT
+                  ;;
+                *"test:"*|*"tests:"*)
+                  echo "🧪 $line" >> $GITHUB_OUTPUT
+                  ;;
+                *)
+                  echo "$line" >> $GITHUB_OUTPUT
+                  ;;
+              esac
+            done
+          else
+            echo "### 🎉 Initial release" >> $GITHUB_OUTPUT
+            echo "- Complete homodyne analysis package for JAX-based XPCS analysis" >> $GITHUB_OUTPUT
+          fi
+          echo "" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+
+      - name: 📋 Generate release notes
+        id: notes
+        run: |
+          VERSION="${{ needs.validate-release.outputs.version }}"
+          PYPI_VERSION="${{ needs.validate-release.outputs.pypi-version }}"
+
+          echo "notes<<EOF" >> $GITHUB_OUTPUT
+          echo "# 🚀 Homodyne $VERSION" >> $GITHUB_OUTPUT
+          echo "" >> $GITHUB_OUTPUT
+          echo "${{ steps.changelog.outputs.changelog }}" >> $GITHUB_OUTPUT
+          echo "" >> $GITHUB_OUTPUT
+          echo "## 📦 Installation" >> $GITHUB_OUTPUT
+          echo "" >> $GITHUB_OUTPUT
+          echo "\`\`\`bash" >> $GITHUB_OUTPUT
+          echo "pip install homodyne==$PYPI_VERSION" >> $GITHUB_OUTPUT
+          echo "\`\`\`" >> $GITHUB_OUTPUT
+          echo "" >> $GITHUB_OUTPUT
+          echo "## 📊 Release Assets" >> $GITHUB_OUTPUT
+          echo "" >> $GITHUB_OUTPUT
+          echo "- **Source Distribution** (\`.tar.gz\`) - Source code package" >> $GITHUB_OUTPUT
+          echo "- **Wheel Distribution** (\`.whl\`) - Binary package for fast installation" >> $GITHUB_OUTPUT
+          echo "- **Documentation** (\`documentation.tar.gz\`) - Complete documentation archive" >> $GITHUB_OUTPUT
+          echo "" >> $GITHUB_OUTPUT
+          echo "## 🔗 Resources" >> $GITHUB_OUTPUT
+          echo "" >> $GITHUB_OUTPUT
+          echo "- [📖 Documentation](https://homodyne.readthedocs.io)" >> $GITHUB_OUTPUT
+          echo "- [🐛 Report Issues](https://github.com/${{ github.repository }}/issues)" >> $GITHUB_OUTPUT
+          echo "- [💬 Discussions](https://github.com/${{ github.repository }}/discussions)" >> $GITHUB_OUTPUT
+          echo "- [🧑‍💻 Contributing Guide](https://github.com/${{ github.repository }}/blob/main/CONTRIBUTING.md)" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+
+  # Create GitHub release
+  create-release:
+    name: 🏷️ Create GitHub Release
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    needs: [validate-release, build-release, build-docs, generate-changelog]
+    # Skip smoke tests dependency if tests are disabled
+    if: |
+      always() &&
+      needs.validate-release.result == 'success' &&
+      needs.build-release.result == 'success' &&
+      (needs.validate-release.outputs.skip-tests == 'true' || needs.smoke-tests.result == 'success')
+    outputs:
+      release-url: ${{ steps.release.outputs.html_url }}
+    steps:
+      - name: 📥 Download build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: python-distributions
+          path: dist/
+
+      - name: 📚 Download documentation
+        uses: actions/download-artifact@v4
+        with:
+          name: documentation
+          path: ./
+
+      - name: 🏷️ Create release
+        id: release
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: ${{ needs.validate-release.outputs.version }}
+          name: ${{ needs.validate-release.outputs.version }}
+          body: ${{ needs.generate-changelog.outputs.release-notes }}
+          files: |
+            dist/*
+            documentation.tar.gz
+          prerelease: ${{ needs.validate-release.outputs.is-prerelease }}
+          draft: false
+          generate_release_notes: false  # We provide custom notes
+
+      - name: 📊 Release summary
+        run: |
+          echo "## 🏷️ GitHub Release Created! 🎉" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Release URL:** ${{ steps.release.outputs.html_url }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Version:** ${{ needs.validate-release.outputs.version }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Prerelease:** ${{ needs.validate-release.outputs.is-prerelease }}" >> $GITHUB_STEP_SUMMARY
+
+  # Publish to PyPI
+  publish-pypi:
+    name: 📦 Publish to PyPI
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    needs: [validate-release, create-release]
+    environment:
+      name: pypi
+      url: https://pypi.org/project/homodyne/
+    steps:
+      - name: 📥 Download distributions
+        uses: actions/download-artifact@v4
+        with:
+          name: python-distributions
+          path: dist/
+
+      - name: 🔍 Verify distributions
+        run: |
+          echo "::group::🔍 Distribution Verification"
+          ls -la dist/
+          echo "Files to publish:"
+          find dist/ -name "*.whl" -o -name "*.tar.gz" | sort
+          echo "::endgroup::"
+
+      - name: 📦 Publish to PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          print-hash: true
+          verbose: true
+
+      - name: ✅ Verify PyPI publication
+        run: |
+          PYPI_VERSION="${{ needs.validate-release.outputs.pypi-version }}"
+
+          echo "⏳ Waiting for PyPI to update..."
+          sleep 60  # Wait for PyPI to update
+
+          # Verify package is available
+          echo "🔍 Verifying package on PyPI..."
+          pip install --no-cache-dir --index-url https://pypi.org/simple/ homodyne==$PYPI_VERSION
+
+          python -c "
+import homodyne
+print(f'✅ Successfully verified homodyne v{homodyne.__version__ if hasattr(homodyne, \"__version__\") else \"$PYPI_VERSION\"} on PyPI')
+"
+
+  # Deploy documentation (parallel with PyPI)
+  deploy-docs:
+    name: 📚 Deploy Documentation
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    needs: [validate-release, build-docs]
+    if: needs.validate-release.outputs.is-prerelease != 'true'  # Only for stable releases
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: 📚 Download documentation
+        uses: actions/download-artifact@v4
+        with:
+          name: documentation
+          path: ./
+
+      - name: 📦 Extract documentation
+        run: |
+          mkdir -p docs-html
+          tar -xzf documentation.tar.gz -C docs-html
+
+      - name: 🛠️ Setup Pages
+        uses: actions/configure-pages@v5
+
+      - name: 📤 Upload to Pages
+        uses: actions/upload-pages-artifact@v4
+        with:
+          path: docs-html
+
+      - name: 🚀 Deploy to Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
+
+  # Post-release actions and notifications
+  post-release:
+    name: 📋 Post-Release Actions
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    needs: [validate-release, create-release, publish-pypi, deploy-docs]
+    if: always() && needs.create-release.result == 'success'
+    steps:
+      - name: 📊 Generate release summary
+        run: |
+          VERSION="${{ needs.validate-release.outputs.version }}"
+          PYPI_VERSION="${{ needs.validate-release.outputs.pypi-version }}"
+
+          echo "## 🎉 Release $VERSION Published Successfully!" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          echo "### ✅ Completed Actions" >> $GITHUB_STEP_SUMMARY
+          echo "- ✅ Version validation and extraction" >> $GITHUB_STEP_SUMMARY
+          echo "- ✅ Package built and verified (Hash: ${{ needs.build-release.outputs.build-hash }})" >> $GITHUB_STEP_SUMMARY
+          echo "- ✅ Documentation generated and packaged" >> $GITHUB_STEP_SUMMARY
+          echo "- ✅ GitHub release created with changelog" >> $GITHUB_STEP_SUMMARY
+
+          PYPI_STATUS="${{ needs.publish-pypi.result }}"
+          DOCS_STATUS="${{ needs.deploy-docs.result }}"
+
+          if [[ "$PYPI_STATUS" == "success" ]]; then
+            echo "- ✅ Published to PyPI with trusted publishing" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "- ❌ PyPI publication failed" >> $GITHUB_STEP_SUMMARY
+          fi
+
+          if [[ "$DOCS_STATUS" == "success" ]]; then
+            echo "- ✅ Documentation deployed to GitHub Pages" >> $GITHUB_STEP_SUMMARY
+          elif [[ "$DOCS_STATUS" == "skipped" ]]; then
+            echo "- ⏭️ Documentation deployment skipped (prerelease)" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "- ❌ Documentation deployment failed" >> $GITHUB_STEP_SUMMARY
+          fi
+
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### 📦 Installation" >> $GITHUB_STEP_SUMMARY
+          echo "\`\`\`bash" >> $GITHUB_STEP_SUMMARY
+          echo "pip install homodyne==$PYPI_VERSION" >> $GITHUB_STEP_SUMMARY
+          echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          echo "### 🔗 Resources" >> $GITHUB_STEP_SUMMARY
+          echo "- [GitHub Release](${{ needs.create-release.outputs.release-url }})" >> $GITHUB_STEP_SUMMARY
+          echo "- [PyPI Package](https://pypi.org/project/homodyne/$PYPI_VERSION/)" >> $GITHUB_STEP_SUMMARY
+          if [[ "$DOCS_STATUS" == "success" ]]; then
+            echo "- [Documentation](${{ needs.deploy-docs.outputs.page_url }})" >> $GITHUB_STEP_SUMMARY
+          fi
+
+      - name: ❌ Handle failures
+        if: |
+          needs.publish-pypi.result == 'failure' ||
+          needs.deploy-docs.result == 'failure'
+        run: |
+          echo "## ⚠️ Release Completed With Issues" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "The release was created but some post-release actions failed:" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          if [[ "${{ needs.publish-pypi.result }}" == "failure" ]]; then
+            echo "- ❌ **PyPI Publication Failed** - Manual intervention required" >> $GITHUB_STEP_SUMMARY
+          fi
+
+          if [[ "${{ needs.deploy-docs.result }}" == "failure" ]]; then
+            echo "- ❌ **Documentation Deployment Failed** - Check logs and retry" >> $GITHUB_STEP_SUMMARY
+          fi
+
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "Please review the workflow logs and take necessary actions." >> $GITHUB_STEP_SUMMARY
