@@ -62,8 +62,8 @@ except ImportError:
 # Core homodyne imports
 try:
     from homodyne.config.manager import ConfigManager
-    from homodyne.core.fitting import FitResult, ParameterSpace, ScaledFittingEngine
-    from homodyne.core.physics import parameter_bounds, validate_parameters
+    from homodyne.core.fitting import ParameterSpace
+    from homodyne.core.physics import validate_parameters
     from homodyne.core.theory import TheoryEngine
     from homodyne.utils.logging import get_logger, log_performance
 

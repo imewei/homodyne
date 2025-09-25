@@ -30,8 +30,7 @@ Where g₁ = g₁_diffusion × g₁_shear captures:
 try:
     import jax
     import jax.numpy as jnp
-    from jax import grad, hessian, jit, random, vmap
-    from jax.scipy import special
+    from jax import grad, hessian, jit, vmap
 
     JAX_AVAILABLE = True
 except ImportError:
@@ -633,7 +632,7 @@ def _compute_g1_shear_core(
             f"Broadcasting error in _compute_g1_shear_core: "
             f"prefactor.shape={prefactor.shape}, gamma_integral.shape={gamma_integral.shape}. "
             f"Original error: {e}"
-        )
+        ) from e
 
     # Compute sinc² values: [sinc(Φ)]² for all phi angles
     sinc_val = safe_sinc(phase)
@@ -692,7 +691,7 @@ def _compute_g1_total_core(
             f"Broadcasting error in _compute_g1_total_core: "
             f"g1_diff_broadcasted.shape={g1_diff_broadcasted.shape}, g1_shear.shape={g1_shear.shape}. "
             f"Original error: {e}"
-        )
+        ) from e
 
     # Apply loose physical bounds to allow natural correlation function behavior
     # Remove artificial upper bound to prevent fitted data collapse

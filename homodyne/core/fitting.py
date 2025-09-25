@@ -47,11 +47,6 @@ except ImportError:
 
 
 try:
-    from homodyne.core.physics import (
-        clip_parameters,
-        parameter_bounds,
-        validate_parameters,
-    )
     from homodyne.core.theory import TheoryEngine
 except ImportError:
     logger = get_logger(__name__)

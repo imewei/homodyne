@@ -113,7 +113,7 @@ class PhysicsModelBase(ABC):
         try:
             # Try converting to float - will fail if in JIT context
             return {name: float(val) for name, val in zip(self.parameter_names, params_np, strict=False)}
-        except:
+        except (TypeError, ValueError, AttributeError):
             # In JIT context, keep as JAX arrays
             return dict(zip(self.parameter_names, params_np, strict=False))
 

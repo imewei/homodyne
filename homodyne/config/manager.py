@@ -122,16 +122,14 @@ class ConfigManager:
                 version = self.config["metadata"].get("config_version", "Unknown")
                 logger.info(f"Configuration version: {version}")
 
-        except yaml.YAMLError if HAS_YAML else Exception as e:
-            logger.error(f"YAML parsing error: {e}")
-            logger.info("Using default configuration...")
-            self.config = self._get_default_config()
         except json.JSONDecodeError as e:
             logger.error(f"JSON parsing error: {e}")
             logger.info("Using default configuration...")
             self.config = self._get_default_config()
         except Exception as e:
-            logger.error(f"Failed to load configuration: {e}")
+            # Handle YAML errors and other exceptions
+            error_type = "YAML parsing" if HAS_YAML and "yaml" in str(type(e)).lower() else "Configuration parsing"
+            logger.error(f"{error_type} error: {e}")
             logger.info("Using default configuration...")
             self.config = self._get_default_config()
 

@@ -25,7 +25,6 @@ try:
     from homodyne.core.jax_backend import (
         batch_chi_squared,
         compute_chi_squared,
-        compute_g1_diffusion,
         compute_g1_shear,
         compute_g1_total,
         compute_g2_scaled,

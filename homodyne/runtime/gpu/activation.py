@@ -22,7 +22,7 @@ from typing import Any
 try:
     import jax
     import jax.numpy as jnp
-    from jax import default_backend, device_put, devices
+    from jax import default_backend
 
     JAX_AVAILABLE = True
 
@@ -170,7 +170,7 @@ class GPUActivator:
         try:
             gpu_devices = jax.devices("gpu")
             return gpu_devices
-        except:
+        except (RuntimeError, ValueError, AttributeError):
             return []
 
     def _configure_memory(self, memory_fraction: float) -> None:
@@ -208,7 +208,7 @@ class GPUActivator:
                 else:
                     # For newer JAX versions, use environment variables
                     os.environ["JAX_COMPILATION_CACHE_DIR"] = "/tmp/jax_cache"
-            except:
+            except (AttributeError, KeyError, ValueError):
                 # Fallback to environment variables
                 os.environ["JAX_COMPILATION_CACHE_DIR"] = "/tmp/jax_cache"
 
@@ -332,7 +332,7 @@ class GPUActivator:
                 for device in jax.devices("gpu"):
                     if hasattr(device, "_clear_memory"):
                         device._clear_memory()
-            except:
+            except (RuntimeError, AttributeError, ValueError):
                 # If clear_memory doesn't exist or fails, just pass
                 pass
 
@@ -410,7 +410,7 @@ def get_gpu_status() -> dict[str, Any]:
         try:
             status["devices"] = [str(d) for d in jax.devices()]
             status["backend"] = default_backend()
-        except:
+        except (RuntimeError, AttributeError, ValueError):
             pass
 
     # Get CUDA info
@@ -435,7 +435,7 @@ def get_gpu_status() -> dict[str, Any]:
         if result.returncode == 0:
             status["driver_version"] = result.stdout.strip()
 
-    except:
+    except (subprocess.SubprocessError, FileNotFoundError, OSError):
         pass
 
     return status

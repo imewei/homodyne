@@ -33,26 +33,18 @@ logger = get_logger(__name__)
 
 # JAX imports with intelligent fallback
 try:
-    import jax
     import jax.numpy as jnp
     from jax import jit, random
-    from jax.scipy import stats as jstats
 
     JAX_AVAILABLE = True
     HAS_NUMPY_GRADIENTS = False  # Use JAX when available
 except ImportError:
     JAX_AVAILABLE = False
     jnp = np
-    # Import numerical gradients for fallback
-    try:
-        from homodyne.core.numpy_gradients import DifferentiationConfig, numpy_gradient
-
-        HAS_NUMPY_GRADIENTS = True
-    except ImportError:
-        HAS_NUMPY_GRADIENTS = False
-        logger.warning(
-            "Neither JAX nor numpy_gradients available - MCMC will be severely limited"
-        )
+    HAS_NUMPY_GRADIENTS = False
+    logger.warning(
+        "JAX not available - MCMC will use numpy fallback with limited functionality"
+    )
 
     def jit(f):
         return f
@@ -94,8 +86,6 @@ except ImportError:
 # Core homodyne imports
 try:
     from homodyne.core.fitting import ParameterSpace
-    from homodyne.core.physics import validate_parameters
-    from homodyne.core.theory import TheoryEngine
 
     HAS_CORE_MODULES = True
 except ImportError:

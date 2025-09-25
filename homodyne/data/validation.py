@@ -30,6 +30,8 @@ Enhanced Features (v2.1):
 - Integration with DataQualityController for comprehensive quality control
 """
 
+import hashlib
+import time
 from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any
@@ -594,8 +596,6 @@ def _compute_quality_score(report: DataQualityReport) -> float:
 
 
 # Enhanced validation features for quality control integration
-import hashlib
-import time
 
 
 @dataclass

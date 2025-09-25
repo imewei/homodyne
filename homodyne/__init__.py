@@ -36,6 +36,9 @@ Quick Start:
 Authors: Wei Chen, Hongrui He (Argonne National Laboratory)
 """
 
+# Standard library imports
+import sys
+
 # Version handling
 try:
     from homodyne._version import version as __version__
@@ -241,7 +244,5 @@ def _check_installation():
 
 
 # Run installation check on import (only in interactive mode)
-import sys
-
 if hasattr(sys, "ps1"):  # Interactive mode
     _check_installation()

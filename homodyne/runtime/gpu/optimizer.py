@@ -25,7 +25,7 @@ from typing import Any
 try:
     import jax
     import jax.numpy as jnp
-    from jax import jit, random
+    from jax import jit
 
     JAX_AVAILABLE = True
 except ImportError:
