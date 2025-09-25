@@ -115,7 +115,7 @@ class PhysicsModelBase(ABC):
             return {name: float(val) for name, val in zip(self.parameter_names, params_np, strict=False)}
         except:
             # In JIT context, keep as JAX arrays
-            return {name: val for name, val in zip(self.parameter_names, params_np, strict=False)}
+            return dict(zip(self.parameter_names, params_np, strict=False))
 
     def __repr__(self) -> str:
         return (
@@ -461,7 +461,7 @@ class CombinedModel(PhysicsModelBase):
         """Get comprehensive gradient capability information."""
         backend_info = validate_backend()
         device_info = get_device_info()
-        performance_info = get_performance_summary()
+        get_performance_summary()
 
         # Determine best available method
         if backend_info["jax_available"]:

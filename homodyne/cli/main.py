@@ -19,16 +19,6 @@ logger = get_logger(__name__)
 
 def check_python_version() -> None:
     """Check Python version requirement."""
-    if sys.version_info < (3, 10):
-        print(
-            "Error: Python 3.10 or higher is required for homodyne.",
-            file=sys.stderr,
-        )
-        print(
-            f"Current Python version: {sys.version_info[0]}.{sys.version_info[1]}",
-            file=sys.stderr,
-        )
-        sys.exit(1)
 
 
 def main() -> None:

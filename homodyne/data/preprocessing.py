@@ -387,7 +387,7 @@ class PreprocessingPipeline:
                         f"Processing stage {i + 1}/{len(self.enabled_stages)}: {stage.value}"
                     )
 
-                stage_start = time.time()
+                time.time()
 
                 try:
                     processed_data, transform_record = self._execute_stage(
@@ -626,7 +626,7 @@ class PreprocessingPipeline:
             # Get off-diagonal values for interpolation
             if i > 0 and i < size - 1:
                 # Use neighboring off-diagonal values
-                x_points = [i - 1, i + 1]
+                [i - 1, i + 1]
                 y_points = [c2_mat[i - 1, i], c2_mat[i + 1, i]]
 
                 # Simple linear interpolation

@@ -436,7 +436,7 @@ def optimize_gpu_memory(
 
 
 def benchmark_gpu_performance(
-    test_sizes: list[int] = [1000, 5000, 10000], num_iterations: int = 3
+    test_sizes: list[int] = None, num_iterations: int = 3
 ) -> dict[str, any]:
     """
     Benchmark GPU performance for optimization planning.
@@ -453,6 +453,8 @@ def benchmark_gpu_performance(
     dict
         Benchmark results with timing and throughput information
     """
+    if test_sizes is None:
+        test_sizes = [1000, 5000, 10000]
     logger.info("Running GPU performance benchmark")
 
     if not JAX_AVAILABLE:
@@ -491,7 +493,7 @@ def benchmark_gpu_performance(
         _ = benchmark_computation(warm_up_array)
 
         times = []
-        for i in range(num_iterations):
+        for _i in range(num_iterations):
             # Generate test data
             test_array = jnp.array(np.random.randn(test_size, test_size))
 

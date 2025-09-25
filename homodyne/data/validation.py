@@ -281,8 +281,8 @@ def _validate_data_integrity(data: dict[str, Any], report: DataQualityReport) ->
 def _validate_array_shapes(data: dict[str, Any], report: DataQualityReport) -> None:
     """Validate array shape consistency."""
     try:
-        q_list = np.asarray(data.get("wavevector_q_list", []))
-        phi_list = np.asarray(data.get("phi_angles_list", []))
+        np.asarray(data.get("wavevector_q_list", []))
+        np.asarray(data.get("phi_angles_list", []))
         t1 = np.asarray(data.get("t1", []))
         t2 = np.asarray(data.get("t2", []))
         c2_exp = np.asarray(data.get("c2_exp", []))
@@ -575,7 +575,7 @@ def _compute_quality_score(report: DataQualityReport) -> float:
         integrity_bonus += 0.1
 
         # Penalty for non-finite data
-        for key, stats in report.data_statistics.items():
+        for _key, stats in report.data_statistics.items():
             finite_fraction = stats.get("finite_fraction", 0.0)
             if finite_fraction < 1.0:
                 integrity_bonus -= (1.0 - finite_fraction) * 0.1

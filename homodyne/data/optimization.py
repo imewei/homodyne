@@ -933,7 +933,7 @@ class AdvancedDatasetOptimizer:
                 ),
                 "success_rate": sum(h["success"] for h in recent_optimizations)
                 / len(recent_optimizations),
-                "methods_used": list(set(h["method"] for h in recent_optimizations)),
+                "methods_used": list({h["method"] for h in recent_optimizations}),
                 "dataset_sizes_range": {
                     "min": min(h["dataset_size"] for h in recent_optimizations),
                     "max": max(h["dataset_size"] for h in recent_optimizations),

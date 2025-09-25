@@ -55,8 +55,10 @@ try:
 except ImportError:
     HAS_JAX = False
     jnp = np
-    device_put = lambda x: x
-    device_get = lambda x: x
+    def device_put(x):
+        return x
+    def device_get(x):
+        return x
 
 # V2 system integration
 try:
@@ -700,7 +702,7 @@ class AdvancedMemoryManager:
         if HAS_JAX:
             try:
                 # Clear JAX memory
-                for device in jax.devices():
+                for _device in jax.devices():
                     jax.clear_backends()
                 logger.debug("Cleared JAX device memory")
             except Exception as e:

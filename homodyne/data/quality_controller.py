@@ -1194,7 +1194,7 @@ class DataQualityController:
         }
 
         for repair in repairs_applied:
-            for issue_type, keywords in issue_keywords.items():
+            for _issue_type, keywords in issue_keywords.items():
                 if any(keyword.lower() in repair.lower() for keyword in keywords):
                     if any(
                         keyword.lower() in issue.message.lower() for keyword in keywords
@@ -1325,7 +1325,7 @@ class DataQualityController:
         """Extract metrics from existing validation system report."""
         if hasattr(validation_report, "data_statistics"):
             stats = validation_report.data_statistics
-            for key, stat in stats.items():
+            for _key, stat in stats.items():
                 if isinstance(stat, dict) and "finite_fraction" in stat:
                     metrics.finite_fraction = max(
                         metrics.finite_fraction, stat["finite_fraction"]
@@ -1474,7 +1474,7 @@ class DataQualityController:
 
         # Identify quality bottlenecks
         bottlenecks = []
-        for i, result in enumerate(results):
+        for _i, result in enumerate(results):
             if result.metrics.overall_score < self.quality_config.pass_threshold:
                 bottlenecks.append(
                     {
@@ -1562,7 +1562,7 @@ class DataQualityController:
             "min_processing_time": np.min(processing_times),
             "cache_size": len(self._validation_cache),
             "stages_processed": len(
-                set(result.stage.value for result in self._quality_history)
+                {result.stage.value for result in self._quality_history}
             ),
         }
 

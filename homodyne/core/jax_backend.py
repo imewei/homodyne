@@ -340,7 +340,7 @@ def _create_time_integral_matrix_impl_jax(
     """
     # Handle scalar input by converting to array
     time_dependent_array = jnp.atleast_1d(time_dependent_array)
-    n = safe_len(time_dependent_array)
+    safe_len(time_dependent_array)
 
     # Step 1: Discrete cumulative integration
     # This approximates ∫₀^tᵢ f(t') dt' using cumulative sum
@@ -1141,13 +1141,13 @@ def validate_backend() -> dict[str, bool | str | dict]:
         test_q = 0.01
 
         # Test forward computation
-        result = compute_g1_diffusion(test_params, test_t1, test_t2, test_q)
+        compute_g1_diffusion(test_params, test_t1, test_t2, test_q)
         results["test_results"]["forward_computation"] = "success"
 
         # Test gradient computation
         try:
             grad_func = grad(compute_g1_diffusion, argnums=0)
-            grad_result = grad_func(test_params, test_t1, test_t2, test_q)
+            grad_func(test_params, test_t1, test_t2, test_q)
             results["gradient_support"] = True
             results["test_results"]["gradient_computation"] = "success"
 
@@ -1164,7 +1164,7 @@ def validate_backend() -> dict[str, bool | str | dict]:
         # Test hessian computation
         try:
             hess_func = hessian(compute_g1_diffusion, argnums=0)
-            hess_result = hess_func(test_params, test_t1, test_t2, test_q)
+            hess_func(test_params, test_t1, test_t2, test_q)
             results["hessian_support"] = True
             results["test_results"]["hessian_computation"] = "success"
 

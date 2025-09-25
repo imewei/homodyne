@@ -110,7 +110,7 @@ try:
     try:
         gpu_devices = jax.devices("gpu")
         __features__["gpu_acceleration"] = len(gpu_devices) > 0
-    except:
+    except (RuntimeError, AttributeError, ValueError):
         __features__["gpu_acceleration"] = False
 except ImportError:
     __features__["jax_acceleration"] = False

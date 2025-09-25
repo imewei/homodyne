@@ -336,7 +336,7 @@ def benchmark_cpu_performance(
     results = {"numpy_performance": [], "cpu_info": detect_cpu_info()}
 
     # NumPy benchmark
-    for i in range(num_iterations):
+    for _i in range(num_iterations):
         start_time = time.perf_counter()
 
         # Simulate typical XPCS computation
@@ -362,7 +362,7 @@ def benchmark_cpu_performance(
         test_array = jnp.array(np.random.randn(100, 100))
         _ = jax_computation(test_array)
 
-        for i in range(num_iterations):
+        for _i in range(num_iterations):
             start_time = time.perf_counter()
 
             x = jnp.array(np.random.randn(test_size, test_size))

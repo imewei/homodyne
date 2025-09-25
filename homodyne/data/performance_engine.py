@@ -68,10 +68,14 @@ except ImportError:
     HAS_JAX = False
     jax_available = False
     jnp = np
-    jit = lambda f: f
-    vmap = lambda f, **kwargs: f
-    device_put = lambda x: x
-    device_get = lambda x: x
+    def jit(f):
+        return f
+    def vmap(f, **kwargs):
+        return f
+    def device_put(x):
+        return x
+    def device_get(x):
+        return x
 
 # V2 system integration
 try:
@@ -502,7 +506,7 @@ class AdaptiveChunker:
         avg_performance_ratio = np.mean(
             [p["performance_ratio"] for p in successful_chunks]
         )
-        avg_chunk_size = np.mean([p["chunk_size"] for p in successful_chunks])
+        np.mean([p["chunk_size"] for p in successful_chunks])
 
         # Adapt based on performance
         if avg_performance_ratio < 0.8:  # Processing slower than expected

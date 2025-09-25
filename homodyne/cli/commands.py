@@ -9,6 +9,8 @@ configuration, and optimization methods.
 import time
 from typing import Any
 
+import numpy as np
+
 from homodyne.cli.args_parser import validate_args
 from homodyne.utils.logging import get_logger
 
@@ -248,7 +250,7 @@ def _load_data(args, config: ConfigManager) -> dict[str, Any]:
         logger.info(f"✓ Data loaded: {len(data.get('c2_exp', []))} data points")
         return data
     except Exception as e:
-        raise RuntimeError(f"Failed to load data from {data_file}: {e}")
+        raise RuntimeError(f"Failed to load data from {data_file}: {e}") from e
 
 
 def _run_optimization(args, config: ConfigManager, data: dict[str, Any]) -> Any:
