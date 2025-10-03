@@ -1,5 +1,5 @@
 [build-system]
-requires = ["setuptools>=75", "wheel", "setuptools_scm[toml]>=8.1"]
+requires = ["setuptools>=80.0.0", "wheel>=0.45.0", "setuptools_scm[toml]>=8.1"]
 build-backend = "setuptools.build_meta"
 
 [project]
@@ -40,76 +40,76 @@ classifiers = [
 ]
 requires-python = ">=3.10"
 
-# Core dependencies for JAX-first architecture (2025 latest stable)
+# Core dependencies for JAX-first architecture (2025 tested stable versions)
 dependencies = [
-    # Core scientific computing (latest stable 2025)
-    "numpy>=2.0.0,<3.0.0",  # NumPy 2.3.3 latest
-    "scipy>=1.14.0,<2.0.0",  # SciPy 1.16.2 latest
+    # Core scientific computing (2025 tested stable)
+    "numpy>=2.0.0,<3.0.0",  # Tested: NumPy 2.3.3
+    "scipy>=1.14.0,<2.0.0",  # Tested: SciPy 1.16.2
 
-    # JAX ecosystem (2025 latest stable versions)
-    "jax>=0.7.2,<0.8.0",  # JAX 0.7.2 latest stable
-    "jaxlib>=0.7.2,<0.8.0",  # jaxlib 0.7.2 latest stable
-    "optimistix>=0.0.7",  # Optimistix - modern JAX optimization library
-    "equinox>=0.11.11",  # Required by optimistix
+    # JAX ecosystem (2025 stable - must match exactly)
+    "jax==0.7.2",  # JAX 0.7.2 - exact version required
+    "jaxlib==0.7.2",  # jaxlib 0.7.2 - must match JAX version exactly
+    "optimistix>=0.0.7",  # Tested: Optimistix 0.0.10
+    "equinox>=0.11.11",  # Tested: Equinox 0.13.1
 
-    # Bayesian inference (2025 latest)
-    "numpyro>=0.18.0,<0.20.0",  # NumPyro 0.18.0 latest stable
-    "blackjax>=1.2.0,<2.0.0",  # BlackJAX 1.2.5 latest
+    # Bayesian inference (2025 stable)
+    "numpyro>=0.18.0,<0.20.0",  # Tested: NumPyro 0.19.0
+    "blackjax>=1.2.0,<2.0.0",  # Tested: BlackJAX 1.2.5
 
     # Data handling
-    "h5py>=3.10.0,<4.0.0",  # h5py 3.14.0 latest
-    "pyyaml>=6.0.2",  # PyYAML 6.0.2 latest
+    "h5py>=3.10.0,<4.0.0",  # Tested: h5py 3.14.0
+    "pyyaml>=6.0.2",  # Tested: PyYAML 6.0.3
 
     # System utilities
-    "psutil>=6.0.0",  # psutil 7.1.0 latest
+    "psutil>=6.0.0",  # Tested: psutil 7.1.0
 
-    # Plotting (latest stable)
-    "matplotlib>=3.8.0,<4.0.0",  # matplotlib 3.10.6 latest
+    # Plotting (stable)
+    "matplotlib>=3.8.0,<4.0.0",  # Tested: matplotlib 3.10.6
 ]
 
 [project.optional-dependencies]
 # GPU acceleration using system CUDA (recommended for HPC)
 gpu = [
-    "jax[cuda12-local]>=0.7.2,<0.8.0",  # Uses system CUDA, avoids conflicts
-    "jaxlib>=0.7.2,<0.8.0",
+    "jax[cuda12-local]==0.7.2",  # Uses system CUDA, avoids conflicts
+    "jaxlib==0.7.2",  # Must match JAX version exactly
 ]
 
 # Alternative: Bundled CUDA (may conflict with HPC environments)
 gpu-bundled = [
-    "jax[cuda12]>=0.7.2,<0.8.0",  # Bundles CUDA libraries
-    "jaxlib>=0.7.2,<0.8.0",
+    "jax[cuda12]==0.7.2",  # Bundles CUDA libraries
+    "jaxlib==0.7.2",  # Must match JAX version exactly
 ]
 
 # Future-proofing for CUDA 13
 gpu-cuda13 = [
-    "jax[cuda13-local]>=0.7.2,<0.8.0",  # When available
-    "jaxlib>=0.7.2,<0.8.0",
+    "jax[cuda13-local]==0.7.2",  # When available
+    "jaxlib==0.7.2",  # Must match JAX version exactly
 ]
 
 # HPC environment (system CUDA + optimization tools)
 hpc = [
-    "jax[cuda12-local]>=0.7.2,<0.8.0",
-    "jaxlib>=0.7.2,<0.8.0",
+    "jax[cuda12-local]==0.7.2",
+    "jaxlib==0.7.2",
     "psutil>=6.0.0",
-    "tqdm>=4.66.0",  # Progress bars for NLSQ
+    "tqdm>=4.66.0",  # Tested: tqdm 4.67.1
 ]
 
-# Development and testing (2025 latest stable)
+# Development and testing (2025 tested stable)
 dev = [
-    "pytest>=8.3.0,<9.0.0",  # pytest 8.3.3 latest
-    "pytest-cov>=6.0.0,<8.0.0",  # pytest-cov 7.0.0 latest
-    "black>=25.0.0,<26.0.0",  # black 25.9.0 latest (2025 style)
-    "ruff>=0.13.0,<0.14.0",  # ruff 0.13.1 latest
-    "mypy>=1.18.0,<2.0.0",  # mypy 1.18.1 latest
-    "pre-commit>=4.0.0,<5.0.0",  # pre-commit 4.x latest
-    "tqdm>=4.66.0",  # tqdm 4.67.x latest
+    "pytest>=8.3.0,<9.0.0",  # Tested: pytest 8.4.2
+    "pytest-cov>=6.0.0,<8.0.0",  # Tested: pytest-cov 7.0.0
+    "black>=25.0.0,<26.0.0",  # Tested: black 25.9.0
+    "ruff>=0.13.0,<0.14.0",  # Tested: ruff 0.13.3
+    "mypy>=1.18.0,<2.0.0",  # Tested: mypy 1.18.2
+    "pre-commit>=4.0.0,<5.0.0",  # Tested: pre-commit 4.3.0
+    "tqdm>=4.66.0",  # Tested: tqdm 4.67.1
 ]
 
-# Documentation (2025 latest stable)
+# Documentation (2025 tested stable)
 docs = [
-    "sphinx>=8.0.0,<9.0.0",  # sphinx 8.3.0 latest
-    "sphinx-rtd-theme>=3.0.0,<4.0.0",  # sphinx-rtd-theme 3.0.2 latest
-    "myst-parser>=4.0.0,<5.0.0",  # myst-parser 4.0.1 latest
+    "sphinx>=8.0.0,<9.0.0",  # Tested: sphinx 8.2.3
+    "sphinx-rtd-theme>=3.0.0,<4.0.0",  # Tested: sphinx-rtd-theme 3.0.2
+    "myst-parser>=4.0.0,<5.0.0",  # Tested: myst-parser 4.0.1
 ]
 
 # Complete installation with all features

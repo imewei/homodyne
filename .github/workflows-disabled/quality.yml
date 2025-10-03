@@ -1,66 +1,166 @@
-name: Quality Checks
+name: Code Quality
 
 on:
-  # Run only on main branch pushes or manual trigger
   push:
     branches: [main]
-    paths:
-      - 'homodyne/**/*.py'
-      - 'pyproject.toml'
-      - 'requirements*.txt'
-      - '.github/workflows/quality.yml'
+  schedule:
+    # Run weekly on Sundays at 3 AM UTC
+    - cron: '0 3 * * 0'
   workflow_dispatch:
 
 env:
-  PYTHONDONTWRITEBYTECODE: 1
-  PYTHONUNBUFFERED: 1
+  PYTHON_VERSION: '3.12'
 
 jobs:
-  security-scan:
+  security:
     name: Security Scan
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: Setup Python
+      - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: "3.13"
-          cache: "pip"
+          python-version: ${{ env.PYTHON_VERSION }}
 
       - name: Install dependencies
         run: |
-          python -m pip install --upgrade pip
+          pip install --upgrade pip
           pip install -e ".[dev]"
+          pip install bandit[toml] safety pip-audit
 
-      - name: Security checks
+      - name: Run Bandit security scan
         run: |
-          # Check if bandit is available
-          if command -v bandit &> /dev/null; then
-            echo "Running bandit security scan..."
-            bandit -r homodyne/ -ll || echo "⚠️ Bandit scan completed with warnings"
-          else
-            echo "Installing bandit..."
-            pip install bandit
-            bandit -r homodyne/ -ll || echo "⚠️ Bandit scan completed with warnings"
-          fi
-          
-          # Vulnerability check (continue on error)
-          if command -v pip-audit &> /dev/null; then
-            pip-audit --desc || echo "⚠️ Vulnerability scan completed with warnings"
-          else
-            echo "Installing pip-audit..."
-            pip install pip-audit
-            pip-audit --desc || echo "⚠️ Vulnerability scan completed with warnings"
-          fi
+          bandit -r homodyne/ \
+            -f json \
+            -o bandit-report.json \
+            -ll \
+            --exclude="*/tests/*"
+          bandit -r homodyne/ -ll --exclude="*/tests/*" || true
 
-      - name: Upload results
+      - name: Check dependency vulnerabilities
+        run: |
+          pip-audit --format=text || true
+          safety check --short-report || true
+
+      - name: Upload security report
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: security-scan
-          path: |
-            bandit-report.json
+          name: security-report
+          path: bandit-report.json
           retention-days: 30
+
+  type-check:
+    name: Type Checking
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install dependencies
+        run: |
+          pip install --upgrade pip
+          pip install -e ".[dev]"
+
+      - name: Run mypy
+        run: |
+          mypy homodyne/ \
+            --ignore-missing-imports \
+            --show-error-codes \
+            --pretty \
+            || true
+
+  coverage:
+    name: Test Coverage
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install dependencies
+        run: |
+          pip install --upgrade pip
+          pip install -e ".[dev]"
+
+      - name: Run tests with coverage
+        run: |
+          pytest tests/ \
+            --cov=homodyne \
+            --cov-report=xml \
+            --cov-report=html \
+            --cov-report=term-missing \
+            --cov-fail-under=70 \
+            -m "not slow and not gpu" \
+            || true
+
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v4
+        with:
+          file: coverage.xml
+          flags: quality
+          fail_ci_if_error: false
+
+      - name: Upload coverage HTML
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-report
+          path: htmlcov/
+          retention-days: 30
+
+  complexity:
+    name: Code Complexity
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install tools
+        run: |
+          pip install --upgrade pip
+          pip install radon xenon
+
+      - name: Calculate complexity metrics
+        run: |
+          echo "=== Cyclomatic Complexity ==="
+          radon cc homodyne/ -a -nb || true
+
+          echo "=== Maintainability Index ==="
+          radon mi homodyne/ -nb || true
+
+          echo "=== Complexity Check ==="
+          xenon homodyne/ --max-absolute B --max-modules A --max-average A || true
+
+  summary:
+    name: Quality Summary
+    runs-on: ubuntu-latest
+    needs: [security, type-check, coverage, complexity]
+    if: always()
+    steps:
+      - name: Generate summary
+        run: |
+          echo "## 🔍 Code Quality Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Security Scan:** ${{ needs.security.result }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Type Checking:** ${{ needs.type-check.result }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Test Coverage:** ${{ needs.coverage.result }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Code Complexity:** ${{ needs.complexity.result }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "_Quality checks complete. See artifacts for detailed reports._" >> $GITHUB_STEP_SUMMARY

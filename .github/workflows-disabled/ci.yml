@@ -1,4 +1,4 @@
-name: Fast CI
+name: CI
 
 on:
   push:
@@ -8,176 +8,163 @@ on:
   workflow_dispatch:
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
+  group: ci-${{ github.ref }}
   cancel-in-progress: true
 
 env:
+  PYTHON_VERSION: '3.12'
   PYTHONDONTWRITEBYTECODE: 1
   PYTHONUNBUFFERED: 1
-  # Optimize pip installation speed
-  PIP_DISABLE_PIP_VERSION_CHECK: 1
 
 jobs:
-  # Fast single-job CI for most cases
-  fast-ci:
-    name: Fast CI (Python 3.13, Ubuntu)
+  lint:
+    name: Lint & Format
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 5
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: Setup Python
+      - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: "3.13"
-          cache: "pip"
-          cache-dependency-path: |
-            pyproject.toml
-            requirements*.txt
-          cache-dependency-path: |
-            pyproject.toml
-            requirements*.txt
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
 
-      - name: Install dependencies
+      - name: Install linters
         run: |
-          python -m pip install --upgrade pip
-          pip install -e ".[test]"
-          # Install ruff for linting
-          pip install ruff
-          # Verify pytest installation
-          python -m pytest --version
+          pip install --upgrade pip
+          pip install "ruff>=0.13.3" "black>=25.9.0"
 
-      - name: Lint (ruff only)
+      - name: Check formatting
         run: |
-          ruff check homodyne/ --output-format=github
-          ruff format --check homodyne/
+          ruff format --check homodyne/ tests/
+          black --check --diff homodyne/ tests/
 
-      - name: Quick tests
-        run: |
-          python -m pytest homodyne/tests/unit/ -x --tb=line -q \
-            --maxfail=2 --disable-warnings -m "not slow"
+      - name: Lint code
+        run: ruff check homodyne/ tests/ --output-format=github
 
-      - name: Build check
-        run: |
-          python -m pip install build
-          python -m build --wheel
-          pip install dist/*.whl --force-reinstall
-          python -c "import homodyne; print('✅ Package OK')"
-
-  # Extended testing only when needed
-  extended-tests:
-    name: Extended Tests
+  test:
+    name: Test (Python ${{ matrix.python-version }}, ${{ matrix.os }})
     runs-on: ${{ matrix.os }}
-    if: >
-      github.event_name == 'push' && 
-      (github.ref == 'refs/heads/main' || contains(github.event.head_commit.message, '[full-ci]'))
+    timeout-minutes: 15
     strategy:
-      fail-fast: true
-      max-parallel: 3
+      fail-fast: false
       matrix:
+        os: [ubuntu-latest]
+        python-version: ['3.10', '3.11', '3.12']
         include:
-          - os: ubuntu-latest
-            python-version: "3.13"
+          # Test on other platforms with latest Python only
           - os: windows-latest
-            python-version: "3.13"
+            python-version: '3.12'
           - os: macos-latest
-            python-version: "3.13"
-    timeout-minutes: 20
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+            python-version: '3.12'
 
-      - name: Setup Python
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python ${{ matrix.python-version }}
         uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python-version }}
-          cache: "pip"
-          cache-dependency-path: |
-            pyproject.toml
-            requirements*.txt
+          cache: pip
 
-      - name: Install system deps
+      - name: Install dependencies
         run: |
-          if [[ "${{ matrix.os }}" == "ubuntu-latest" ]]; then
-            sudo apt-get update && sudo apt-get install -y build-essential
-          elif [[ "${{ matrix.os }}" == "macos-latest" ]]; then
-            brew install gcc
-          fi
-        shell: bash
+          pip install --upgrade pip
+          pip install -e ".[dev]"
 
-      - name: Install and test
+      - name: Run unit tests
         run: |
-          python -m pip install --upgrade pip
-          pip install -e ".[test]"
-          # Verify pytest installation
-          python -m pytest --version
-          python -m pytest homodyne/tests/unit/ -x --tb=line -q --maxfail=2
+          pytest tests/unit/ \
+            -v \
+            --tb=short \
+            --maxfail=5 \
+            -m "not slow and not gpu" \
+            --cov=homodyne \
+            --cov-report=xml \
+            --cov-report=term
 
-  # Documentation (only when docs change or on main)
-  docs:
-    name: Documentation
+      - name: Run integration tests
+        if: matrix.os == 'ubuntu-latest' && matrix.python-version == '3.12'
+        run: |
+          pytest tests/integration/ \
+            -v \
+            --tb=short \
+            -m "not slow and not gpu"
+
+      - name: Upload coverage
+        if: matrix.os == 'ubuntu-latest' && matrix.python-version == '3.12'
+        uses: codecov/codecov-action@v4
+        with:
+          file: coverage.xml
+          flags: unittests
+          fail_ci_if_error: false
+
+  build:
+    name: Build Package
     runs-on: ubuntu-latest
-    if: >
-      contains(github.event.head_commit.message, 'docs') || 
-      github.ref == 'refs/heads/main'
     timeout-minutes: 10
+    needs: [lint, test]
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Needed for setuptools_scm
 
-      - name: Setup Python
+      - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: "3.13"
-          cache: "pip"
-          cache-dependency-path: |
-            pyproject.toml
-            requirements*.txt
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install build tools
+        run: |
+          pip install --upgrade pip
+          pip install build twine
+
+      - name: Build package
+        run: python -m build
+
+      - name: Check package
+        run: twine check dist/*
+
+      - name: Test installation
+        run: |
+          pip install dist/*.whl
+          python -c "import homodyne; print(f'Homodyne version: {homodyne.__version__}')"
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: dist-${{ github.sha }}
+          path: dist/
+          retention-days: 7
+
+  docs:
+    name: Build Documentation
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: [lint, test]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install dependencies
+        run: |
+          pip install --upgrade pip
+          pip install -e ".[docs]"
 
       - name: Build docs
         run: |
-          python -m pip install --upgrade pip
-          pip install -e ".[docs]"
-          pip install sphinx-copybutton>=0.5.0
-          cd docs && make html
+          cd docs
+          make html
 
-      - name: Upload docs
-        uses: actions/upload-artifact@v4
+      - name: Deploy to GitHub Pages
+        if: success()
+        uses: peaceiris/actions-gh-pages@v4
         with:
-          name: documentation
-          path: docs/_build/html
-          retention-days: 7
-
-  # Deploy docs only on main branch pushes
-  deploy-docs:
-    name: Deploy Docs
-    runs-on: ubuntu-latest
-    needs: docs
-    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
-    permissions:
-      contents: read
-      pages: write
-      id-token: write
-    steps:
-      - name: Download docs
-        uses: actions/download-artifact@v4
-        with:
-          name: documentation
-          path: ./docs
-
-      - name: Setup Pages
-        uses: actions/configure-pages@v5
-        continue-on-error: true
-        id: setup-pages
-
-      - name: Upload to Pages
-        uses: actions/upload-pages-artifact@v4
-        if: steps.setup-pages.outcome == 'success'
-        with:
-          path: ./docs
-
-      - name: Deploy to Pages
-        id: deployment
-        uses: actions/deploy-pages@v4
-        if: steps.setup-pages.outcome == 'success'
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./docs/_build/html
