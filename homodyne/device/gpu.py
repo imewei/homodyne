@@ -310,7 +310,7 @@ def _test_gpu_functionality() -> None:
         logger.debug("GPU functionality test passed")
 
     except Exception as e:
-        raise RuntimeError(f"GPU functionality test failed: {e}")
+        raise RuntimeError(f"GPU functionality test failed: {e}") from e
 
 
 def get_gpu_memory_info() -> dict[str, any]:
@@ -464,8 +464,8 @@ def benchmark_gpu_performance(
         devices = jax.devices("gpu")
         if not devices:
             return {"error": "No GPU devices available for benchmarking"}
-    except:
-        return {"error": "GPU not accessible for benchmarking"}
+    except (RuntimeError, ImportError, Exception) as e:
+        return {"error": f"GPU not accessible for benchmarking: {e}"}
 
     import time
 

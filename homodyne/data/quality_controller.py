@@ -476,7 +476,7 @@ class DataQualityController:
             elif isinstance(c2_exp, (list, tuple)) and len(c2_exp) > 0:
                 return (len(c2_exp), getattr(c2_exp[0], "shape", "unknown"))
             return ("unknown",)
-        except:
+        except (AttributeError, TypeError, IndexError):
             return ("unknown",)
 
     @log_performance(threshold=0.05)
@@ -561,7 +561,7 @@ class DataQualityController:
                                         recommendation="Filtering may not be necessary with current settings",
                                     )
                                 )
-                    except:
+                    except (AttributeError, TypeError, IndexError):
                         logger.warning(
                             "Could not compare data sizes before/after filtering"
                         )
@@ -709,7 +709,7 @@ class DataQualityController:
                                 recommendation="Check data preprocessing and source quality",
                             )
                         )
-                except:
+                except (AttributeError, TypeError, IndexError):
                     pass
 
     def _basic_data_quality_checks(
@@ -748,7 +748,7 @@ class DataQualityController:
                         result.metrics.signal_to_noise = min(
                             snr * 10, 100.0
                         )  # Scale to 0-100
-            except:
+            except (AttributeError, TypeError, IndexError):
                 logger.warning("Could not perform basic data quality checks")
 
     def _advanced_data_quality_checks(
@@ -800,7 +800,7 @@ class DataQualityController:
 
                 if decay_rates:
                     result.metrics.correlation_decay = np.mean(decay_rates) * 100
-        except:
+        except (AttributeError, TypeError, IndexError):
             logger.warning("Could not perform advanced data quality checks")
 
     def _comprehensive_quality_assessment(
@@ -877,7 +877,7 @@ class DataQualityController:
                 result.metrics.time_consistency = t1_shape == t2_shape and (
                     len(c2_shape) == 0 or t1_shape[-1] == c2_shape[-1]
                 )
-        except:
+        except (AttributeError, TypeError, IndexError):
             logger.warning("Could not perform data consistency checks")
 
     def _check_preprocessing_artifacts(self, c2_exp: Any) -> bool:
@@ -896,7 +896,7 @@ class DataQualityController:
                     return False
 
             return True
-        except:
+        except (AttributeError, TypeError, IndexError):
             return False
 
     def _compute_transformation_fidelity(
@@ -926,7 +926,7 @@ class DataQualityController:
                     )
 
             return 0.8  # Default reasonable fidelity
-        except:
+        except (AttributeError, TypeError, IndexError):
             return 0.5  # Conservative default
 
     def _assess_analysis_readiness(
@@ -1071,7 +1071,7 @@ class DataQualityController:
 
                         if data_modified:
                             repairs_applied.append(f"Repaired NaN values in {key}")
-                except:
+                except (AttributeError, TypeError, IndexError):
                     pass
 
         return data_modified
@@ -1103,7 +1103,7 @@ class DataQualityController:
                             data[key] = arr
                             data_modified = True
                             repairs_applied.append(f"Repaired infinite values in {key}")
-                except:
+                except (AttributeError, TypeError, IndexError):
                     pass
 
         return data_modified
@@ -1126,7 +1126,7 @@ class DataQualityController:
                     data["c2_exp"] = arr
                     data_modified = True
                     repairs_applied.append("Repaired negative correlation values")
-            except:
+            except (AttributeError, TypeError, IndexError):
                 pass
 
         return data_modified
@@ -1161,7 +1161,7 @@ class DataQualityController:
                         data["c2_exp"] = arr
                         data_modified = True
                         repairs_applied.append("Applied correlation rescaling (×10)")
-            except:
+            except (AttributeError, TypeError, IndexError):
                 pass
 
         return data_modified

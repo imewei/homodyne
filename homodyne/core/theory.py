@@ -24,14 +24,9 @@ from homodyne.utils.logging import get_logger, log_performance
 try:
     from homodyne.core.jax_backend import (
         batch_chi_squared,
-        compute_chi_squared,
-        compute_g1_shear,
-        compute_g1_total,
-        compute_g2_scaled,
         jax_available,
         jnp,
         safe_len,
-        vectorized_g2_computation,
     )
 except ImportError:
     jax_available = False

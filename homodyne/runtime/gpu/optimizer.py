@@ -183,8 +183,8 @@ class GPUOptimizer:
                 for size in matrix_sizes:
                     # Test matrix operations (similar to covariance computations in VI)
                     @jit
-                    def matrix_ops(x):
-                        return jnp.dot(x, x.T) + jnp.eye(size) * 0.01
+                    def matrix_ops(x, matrix_size=size):
+                        return jnp.dot(x, x.T) + jnp.eye(matrix_size) * 0.01
 
                     x = jax.device_put(jnp.ones((size, size)), gpu_device)
 

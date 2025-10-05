@@ -3,7 +3,6 @@ homodyne_analysis_results/
 homodyne_results/
 homodyne_analysis_results.json
 run.log
-WARP.md
 
 # Development scripts
 scripts/dev_cleanup/
@@ -245,3 +244,4 @@ Thumbs.db
 
 CLAUDE.md
 WARP.md
+.serena/

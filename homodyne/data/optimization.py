@@ -18,7 +18,7 @@ import time
 from collections import deque
 from collections.abc import Iterator
 from dataclasses import dataclass
-from typing import Any, Dict, Optional
+from typing import Any
 
 import numpy as np
 
@@ -26,7 +26,6 @@ from homodyne.utils.logging import get_logger, log_performance
 
 # JAX imports with fallback
 try:
-    import jax
     import jax.numpy as jnp
     from jax import jit, vmap
 
@@ -519,7 +518,7 @@ class DatasetOptimizer:
             import os
 
             return min(os.cpu_count() or 1, 8)  # Cap at 8 workers
-        except:
+        except (OSError, AttributeError):
             return 4  # Safe default
 
 
@@ -847,7 +846,7 @@ class AdvancedDatasetOptimizer:
                 {
                     "chunk_overlap": 0.1,  # 10% overlap for VI stability
                     "dynamic_sizing": True,
-                    "gpu_memory_optimization": HAS_JAX and jax_available,
+                    "gpu_memory_optimization": JAX_AVAILABLE,
                 }
             )
         elif method.lower() == "mcmc":
@@ -1015,9 +1014,8 @@ def optimize_for_method_advanced(
 
 # Import guard for new dependencies
 try:
-    import time
-    from collections import deque
-    from typing import Any, Dict, Optional
+    import time  # noqa: F401 - Already imported globally
+    from collections import deque  # noqa: F401 - Already imported globally
 
     HAS_ADVANCED_DEPS = True
 except ImportError:

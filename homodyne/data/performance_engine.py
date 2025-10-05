@@ -785,7 +785,7 @@ class MultiLevelCache:
                 return len(pickle.dumps(item, protocol=pickle.HIGHEST_PROTOCOL)) / (
                     1024 * 1024
                 )
-            except:
+            except (pickle.PicklingError, TypeError, AttributeError):
                 return 0.1  # Conservative estimate
 
     def _update_access_stats(self, key: str, current_time: float) -> None:
@@ -1158,7 +1158,7 @@ class PerformanceEngine:
 
         except Exception as e:
             logger.error(f"Failed to load correlation matrices: {e}")
-            raise PerformanceEngineError(f"Correlation matrix loading failed: {e}")
+            raise PerformanceEngineError(f"Correlation matrix loading failed: {e}") from e
 
     def _load_matrices_chunked(
         self,

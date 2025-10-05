@@ -18,8 +18,6 @@ Usage:
     config = configure_optimal_device()
 """
 
-from typing import Dict, Optional
-
 from homodyne.utils.logging import get_logger
 
 logger = get_logger(__name__)

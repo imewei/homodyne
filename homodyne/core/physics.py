@@ -150,7 +150,7 @@ def validate_parameters(
         if "Tracer" in param_str or "LinearizeTracer" in param_str:
             # Skip validation during JAX gradient computation
             return True
-    except:
+    except:  # noqa: E722 - JAX tracers raise unpredictable exceptions during type conversion
         pass
 
     if len(params) != len(bounds):
@@ -166,7 +166,7 @@ def validate_parameters(
             if "Tracer" in param_type_str or "LinearizeTracer" in param_type_str:
                 # Skip validation for JAX tracers
                 continue
-        except:
+        except:  # noqa: E722 - JAX tracers raise unpredictable exceptions during type conversion
             pass
 
         # Only validate concrete numeric values

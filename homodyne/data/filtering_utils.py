@@ -29,11 +29,10 @@ import numpy as np
 
 # JAX integration with fallback
 try:
-    import jax.numpy as jnp
+    import jax  # noqa: F401 - Used for availability check
 
     HAS_JAX = True
 except ImportError:
-
     HAS_JAX = False
 
 # V2 logging integration
@@ -237,7 +236,7 @@ class XPCSDataFilter:
                 result.total_selected = total_available
                 result.fallback_used = True
             else:
-                raise DataFilteringError(error_msg)
+                raise DataFilteringError(error_msg) from e
 
         return result
 

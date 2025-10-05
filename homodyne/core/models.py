@@ -621,7 +621,7 @@ class CombinedModel(PhysicsModelBase):
 
             # Calculate performance ratios relative to best method
             best_time = best_method_info["computation_time"]
-            for method_key, method_info in benchmark_results["methods"].items():
+            for _, method_info in benchmark_results["methods"].items():
                 if method_info["success"]:
                     method_info["performance_ratio"] = (
                         method_info["computation_time"] / best_time

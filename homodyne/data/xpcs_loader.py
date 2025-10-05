@@ -193,7 +193,7 @@ def load_xpcs_config(config_path: str | Path) -> dict[str, Any]:
     except (yaml.YAMLError, json.JSONDecodeError) as e:
         raise XPCSConfigurationError(
             f"Failed to parse configuration file {config_path}: {e}"
-        )
+        ) from e
 
 
 class XPCSDataLoader:
@@ -1061,7 +1061,7 @@ class XPCSDataLoader:
                 logger.warning("Falling back to no filtering due to error")
                 return None
             else:
-                raise XPCSDataFormatError(f"Data filtering failed: {e}")
+                raise XPCSDataFormatError(f"Data filtering failed: {e}") from e
 
     def _integrate_with_phi_filtering(
         self, selected_indices: NDArray, dphilist: NDArray, filtering_result
@@ -1586,7 +1586,7 @@ class XPCSDataLoader:
                 )
                 return data
             else:
-                raise XPCSDataFormatError(f"Preprocessing pipeline failed: {e}")
+                raise XPCSDataFormatError(f"Preprocessing pipeline failed: {e}") from e
 
     def _get_provenance_path(self) -> str:
         """Generate path for saving preprocessing provenance."""

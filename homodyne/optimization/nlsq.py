@@ -29,7 +29,6 @@ import numpy as np
 
 # JAX imports with fallback
 try:
-    import jax
     import jax.numpy as jnp
     from jax import grad, jit, vmap
 

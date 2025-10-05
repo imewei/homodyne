@@ -57,7 +57,6 @@ except ImportError:
 
 # JAX integration with fallback
 try:
-    import jax.numpy as jnp
     from jax import jit, lax
 
     from homodyne.core.jax_backend import jax_available
@@ -405,7 +404,7 @@ class PreprocessingPipeline:
                     if self.preprocessing_config.get("abort_on_error", False):
                         raise PreprocessingError(
                             f"Pipeline aborted at stage {stage.value}: {e}"
-                        )
+                        ) from e
                     else:
                         logger.warning(
                             f"Continuing pipeline after stage {stage.value} failure"

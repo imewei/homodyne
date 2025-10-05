@@ -102,7 +102,7 @@ def _validate_function(func: Callable, x: np.ndarray, name: str = "function") ->
         if not np.isfinite(result).all():
             raise NumericalStabilityError(f"{name} returned non-finite values")
     except Exception as e:
-        raise NumericalStabilityError(f"{name} evaluation failed: {e}")
+        raise NumericalStabilityError(f"{name} evaluation failed: {e}") from e
 
 
 def _estimate_optimal_step(

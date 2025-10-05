@@ -184,7 +184,7 @@ def load_yaml_config(config_path: str | Path) -> dict[str, Any]:
     except yaml.YAMLError as e:
         raise XPCSConfigurationError(
             f"Failed to parse YAML configuration {config_path}: {e}"
-        )
+        ) from e
 
 
 def load_json_config(config_path: str | Path) -> dict[str, Any]:
@@ -216,7 +216,7 @@ def load_json_config(config_path: str | Path) -> dict[str, Any]:
     except json.JSONDecodeError as e:
         raise XPCSConfigurationError(
             f"Failed to parse JSON configuration {config_path}: {e}"
-        )
+        ) from e
 
 
 def validate_config_schema(
@@ -545,7 +545,7 @@ def save_yaml_config(config: dict[str, Any], output_path: str | Path) -> None:
     except Exception as e:
         raise XPCSConfigurationError(
             f"Failed to save YAML configuration to {output_path}: {e}"
-        )
+        ) from e
 
 
 def create_example_yaml_config(

@@ -49,7 +49,7 @@ except ImportError:
 
 # V2 integration
 try:
-    from homodyne.core.physics import PhysicsConstants, validate_experimental_setup
+    from homodyne.core.physics import PhysicsConstants
 
     HAS_PHYSICS = True
 except ImportError:
