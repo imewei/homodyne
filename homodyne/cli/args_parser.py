@@ -33,6 +33,12 @@ Examples:
   %(prog)s --output-dir ./results             # Custom output directory
   %(prog)s --force-cpu                        # Force CPU-only computation
   %(prog)s --verbose                          # Enable verbose logging
+  %(prog)s --plot-experimental-data          # Generate data validation plots
+  %(prog)s --plot-simulated-data              # Plot theoretical heatmaps
+  %(prog)s --plot-simulated-data --contrast 0.5 --offset 1.05  # Custom contrast/offset
+  %(prog)s --phi-angles "0,45,90,135"         # Custom phi angles for simulated data
+  %(prog)s --static-mode                      # Force static mode (3 parameters)
+  %(prog)s --laminar-flow --method mcmc       # Force laminar flow (7 parameters) with MCMC
 
 Optimization Methods:
   nlsq:    Optimistix trust-region nonlinear least squares (PRIMARY)
@@ -157,6 +163,39 @@ Homodyne v{__version__} - JAX-First Architecture
         "--save-plots",
         action="store_true",
         help="Save result plots to output directory",
+    )
+
+    parser.add_argument(
+        "--plot-experimental-data",
+        action="store_true",
+        help="Generate validation plots of experimental data for quality checking",
+    )
+
+    parser.add_argument(
+        "--plot-simulated-data",
+        action="store_true",
+        help="Plot theoretical C₂ heatmaps using parameters from config (no experimental data required)",
+    )
+
+    # Simulated data parameters (only valid with --plot-simulated-data)
+    parser.add_argument(
+        "--contrast",
+        type=float,
+        default=0.3,
+        help="Contrast parameter for simulated data: c₂ = 1 + contrast × c₁² (default: %(default)s, requires --plot-simulated-data)",
+    )
+
+    parser.add_argument(
+        "--offset",
+        type=float,
+        default=1.0,
+        help="Offset parameter for simulated data: c₂ = offset + contrast × c₁² (default: %(default)s, requires --plot-simulated-data)",
+    )
+
+    parser.add_argument(
+        "--phi-angles",
+        type=str,
+        help="Comma-separated list of phi angles in degrees (e.g., '0,45,90,135'). Default uses config file values or evenly spaced angles",
     )
 
     parser.add_argument(
