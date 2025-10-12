@@ -62,7 +62,7 @@ except ImportError:
 try:
     from homodyne.config.manager import ConfigManager
     from homodyne.core.fitting import ParameterSpace
-    from homodyne.core.physics import validate_parameters
+    from homodyne.core.physics import validate_parameters, validate_parameters_detailed
     from homodyne.core.theory import TheoryEngine
     from homodyne.utils.logging import get_logger, log_performance
 
@@ -79,6 +79,15 @@ except ImportError:
             return func
 
         return decorator
+
+# Optional ParameterManager import (Phase 4.2)
+try:
+    from homodyne.config.parameter_manager import ParameterManager
+
+    HAS_PARAMETER_MANAGER = True
+except ImportError:
+    HAS_PARAMETER_MANAGER = False
+    ParameterManager = None
 
 
 logger = get_logger(__name__)
@@ -179,10 +188,16 @@ def fit_nlsq_jax(
 
         # Set up initial parameters
         if initial_params is None:
-            initial_params = _get_default_initial_params(analysis_mode)
+            # Try to load from config first
+            initial_params = _load_initial_params_from_config(config, analysis_mode)
+            if initial_params is None:
+                # Fallback to defaults
+                initial_params = _get_default_initial_params(analysis_mode)
+                logger.info("Using default initial parameters")
+            else:
+                logger.info("Using initial parameters from configuration")
 
-        # Validate parameters
-        validate_parameters(initial_params, analysis_mode)
+        # NOTE: Parameter validation happens after array conversion (see below)
 
         # Set up theory engine
         theory_engine = TheoryEngine()
@@ -196,6 +211,25 @@ def fit_nlsq_jax(
         # Convert to JAX arrays
         x0 = _params_to_array(initial_params, analysis_mode)
         lower_bounds, upper_bounds = _bounds_to_arrays(bounds, analysis_mode)
+
+        # Validate initial parameters against bounds with detailed reporting
+        param_names = _get_param_names(analysis_mode)
+        bounds_list = list(zip(lower_bounds.tolist(), upper_bounds.tolist()))
+        validation_result = validate_parameters_detailed(
+            x0, bounds_list, param_names=param_names
+        )
+
+        if not validation_result.valid:
+            logger.warning(
+                f"Initial parameters validation failed: {validation_result.message}"
+            )
+            for violation in validation_result.violations:
+                logger.warning(f"  - {violation}")
+            logger.info("Clipping parameters to valid range")
+            x0 = jnp.clip(x0, lower_bounds, upper_bounds)
+            logger.debug(f"Clipped parameters: {x0}")
+        else:
+            logger.debug(f"✓ {validation_result.message}")
 
         # Configure Optimistix optimizer
         optimizer_config = _get_optimizer_config(config)
@@ -284,6 +318,84 @@ def _get_analysis_mode(config: ConfigManager) -> str:
     if hasattr(config, "config") and config.config:
         return config.config.get("analysis_mode", "static_isotropic")
     return "static_isotropic"
+
+
+def _load_initial_params_from_config(
+    config: ConfigManager, analysis_mode: str
+) -> dict[str, float] | None:
+    """
+    Load initial parameters from configuration file.
+
+    Handles parameter name mapping between config format and code format.
+
+    Parameters
+    ----------
+    config : ConfigManager
+        Configuration manager with initial_parameters section
+    analysis_mode : str
+        Analysis mode (static_isotropic or laminar_flow)
+
+    Returns
+    -------
+    dict or None
+        Dictionary of initial parameters, or None if not found in config
+    """
+    if not hasattr(config, 'config') or not config.config:
+        return None
+
+    config_dict = config.config
+    if 'initial_parameters' not in config_dict:
+        return None
+
+    init_params = config_dict['initial_parameters']
+    if 'parameter_names' not in init_params or 'values' not in init_params:
+        logger.warning("Initial parameters in config missing 'parameter_names' or 'values'")
+        return None
+
+    names = init_params['parameter_names']
+    values = init_params['values']
+
+    if len(names) != len(values):
+        logger.warning(
+            f"Parameter name/value count mismatch: {len(names)} names, {len(values)} values"
+        )
+        return None
+
+    # Map config parameter names to code parameter names
+    NAME_MAP = {
+        'gamma_dot_0': 'gamma_dot_t0',
+        'gamma_dot_offset': 'gamma_dot_t_offset',
+        'phi_0': 'phi0',
+        'D0': 'D0',
+        'alpha': 'alpha',
+        'D_offset': 'D_offset',
+        'beta': 'beta',
+    }
+
+    # Build parameter dictionary with name mapping
+    params = {}
+    for name, value in zip(names, values):
+        mapped_name = NAME_MAP.get(name, name)
+        params[mapped_name] = float(value)
+
+    # Add scaling parameters with defaults
+    # (config typically only includes physical parameters)
+    if 'contrast' not in params:
+        params['contrast'] = 0.5
+    if 'offset' not in params:
+        params['offset'] = 1.0
+
+    # Validate parameter count matches analysis mode
+    expected_count = 5 if "static" in analysis_mode.lower() else 9
+    if len(params) != expected_count:
+        logger.warning(
+            f"Parameter count mismatch for {analysis_mode}: "
+            f"got {len(params)}, expected {expected_count}"
+        )
+        # Don't return None - let validation/clipping handle it
+
+    logger.debug(f"Loaded {len(params)} parameters from config: {list(params.keys())}")
+    return params
 
 
 def _get_default_initial_params(analysis_mode: str) -> dict[str, float]:
@@ -400,6 +512,35 @@ def _get_parameter_bounds(
         )
 
     return bounds
+
+
+def _get_param_names(analysis_mode: str) -> list[str]:
+    """Get parameter names for a given analysis mode.
+
+    Parameters
+    ----------
+    analysis_mode : str
+        Analysis mode (e.g., 'static', 'laminar_flow')
+
+    Returns
+    -------
+    list[str]
+        List of parameter names in the order they appear in the parameter array
+    """
+    if "static" in analysis_mode.lower():
+        return ["contrast", "offset", "D0", "alpha", "D_offset"]
+    else:
+        return [
+            "contrast",
+            "offset",
+            "D0",
+            "alpha",
+            "D_offset",
+            "gamma_dot_t0",
+            "beta",
+            "gamma_dot_t_offset",
+            "phi0",
+        ]
 
 
 def _params_to_array(params: dict[str, float], analysis_mode: str) -> jnp.ndarray:

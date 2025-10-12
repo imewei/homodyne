@@ -1,0 +1,783 @@
+"""
+Parameter Manager for Homodyne v2
+==================================
+
+Centralized parameter management system for handling parameter bounds,
+active parameters, and validation.
+
+This module restores parameter management functionality that was removed
+during the September 2025 refactoring while maintaining compatibility with
+the new architecture.
+"""
+
+from typing import Any, Literal, Optional
+
+import numpy as np
+
+from homodyne.config.types import (
+    LAMINAR_FLOW_PARAM_NAMES,
+    PARAMETER_NAME_MAPPING,
+    SCALING_PARAM_NAMES,
+    STATIC_PARAM_NAMES,
+    AnalysisMode,
+    BoundDict,
+    HomodyneConfig,
+)
+from homodyne.core.physics import ValidationResult, validate_parameters_detailed
+from homodyne.utils.logging import get_logger
+
+logger = get_logger(__name__)
+
+
+# Physical constraint validation severity levels
+class ConstraintSeverity:
+    """Severity levels for physics constraint violations."""
+
+    ERROR = "error"  # Physically impossible
+    WARNING = "warning"  # Unusual but possible
+    INFO = "info"  # Noteworthy but acceptable
+
+
+class ParameterManager:
+    """
+    Centralized parameter management system.
+
+    Handles:
+    - Parameter bounds (with config override support)
+    - Active parameters selection
+    - Parameter validation
+    - Default parameter values
+    - Parameter name mapping
+
+    Parameters
+    ----------
+    config_dict : dict, optional
+        Configuration dictionary. If None, uses hardcoded defaults.
+    analysis_mode : str, optional
+        Analysis mode ('static', 'laminar_flow'). Auto-detected from config if not provided.
+
+    Examples
+    --------
+    >>> pm = ParameterManager(config_dict, analysis_mode="laminar_flow")
+    >>> bounds = pm.get_parameter_bounds(["D0", "alpha", "D_offset"])
+    >>> active = pm.get_active_parameters()
+    """
+
+    def __init__(
+        self,
+        config_dict: Optional[HomodyneConfig | dict[str, Any]] = None,
+        analysis_mode: str = "laminar_flow",
+    ):
+        """Initialize ParameterManager."""
+        self.config_dict: dict[str, Any] = config_dict or {}
+        self.analysis_mode = analysis_mode
+
+        # Performance caching for repeated queries
+        self._bounds_cache: dict[str, list[BoundDict]] = {}
+        self._active_params_cache: Optional[list[str]] = None
+        self._cache_enabled: bool = True
+
+        # Default bounds for all known parameters
+        self._default_bounds: dict[str, BoundDict] = {
+            # Scaling parameters (always included)
+            "contrast": {"min": 0.0, "max": 1.0, "name": "contrast", "type": "Normal"},
+            "offset": {"min": 0.0, "max": 10.0, "name": "offset", "type": "Normal"},
+            # Physical parameters - diffusion
+            "D0": {"min": 1.0, "max": 1e6, "name": "D0", "type": "Normal"},
+            "alpha": {"min": -2.0, "max": 2.0, "name": "alpha", "type": "Normal"},
+            "D_offset": {"min": 0.0, "max": 1e6, "name": "D_offset", "type": "Normal"},
+            # Physical parameters - shear flow
+            "gamma_dot_t0": {"min": 1e-10, "max": 1.0, "name": "gamma_dot_t0", "type": "Normal"},
+            "beta": {"min": -2.0, "max": 2.0, "name": "beta", "type": "Normal"},
+            "gamma_dot_t_offset": {
+                "min": 1e-10,
+                "max": 1.0,
+                "name": "gamma_dot_t_offset",
+                "type": "Normal",
+            },
+            "phi0": {"min": -np.pi, "max": np.pi, "name": "phi0", "type": "Normal"},
+        }
+
+        # Parameter name aliases/mappings (use constant from types)
+        self._param_name_mapping = PARAMETER_NAME_MAPPING
+
+        # Load config bounds if available
+        self._load_config_bounds()
+
+    def _load_config_bounds(self) -> None:
+        """Load parameter bounds from configuration and merge with defaults."""
+        if not self.config_dict:
+            return
+
+        param_space = self.config_dict.get("parameter_space", {})
+        if "bounds" not in param_space:
+            return
+
+        config_bounds = param_space["bounds"]
+        if not isinstance(config_bounds, list):
+            logger.warning("parameter_space.bounds must be a list, ignoring")
+            return
+
+        # Merge config bounds with defaults
+        for bound_dict in config_bounds:
+            if not isinstance(bound_dict, dict):
+                continue
+
+            param_name = bound_dict.get("name")
+            if not param_name:
+                continue
+
+            # Apply name mapping
+            param_name = self._param_name_mapping.get(param_name, param_name)
+
+            # Convert min/max to floats (handles YAML string parsing like "1e5")
+            if "min" in bound_dict:
+                bound_dict["min"] = float(bound_dict["min"])
+            if "max" in bound_dict:
+                bound_dict["max"] = float(bound_dict["max"])
+
+            # Update default bounds with config values
+            if param_name in self._default_bounds:
+                self._default_bounds[param_name].update(bound_dict)
+                # Ensure name is canonical after mapping
+                self._default_bounds[param_name]["name"] = param_name
+            else:
+                # New parameter not in defaults
+                self._default_bounds[param_name] = bound_dict
+
+        logger.debug(
+            f"Loaded bounds from config for {len(config_bounds)} parameters"
+        )
+
+    def validate_physical_constraints(
+        self,
+        params: dict[str, float],
+        severity_level: str = "warning",
+    ) -> ValidationResult:
+        """
+        Validate physics-based parameter constraints beyond simple bounds.
+
+        Checks for physically impossible or unusual parameter values based on
+        theoretical understanding of XPCS and soft matter dynamics.
+
+        Parameters
+        ----------
+        params : dict[str, float]
+            Parameter dictionary with parameter_name: value pairs
+        severity_level : str
+            Minimum severity to report: "error", "warning", or "info"
+            - "error": Only physically impossible values
+            - "warning": Unusual but possible values (default)
+            - "info": All noteworthy observations
+
+        Returns
+        -------
+        ValidationResult
+            Validation result with severity-categorized violations
+
+        Examples
+        --------
+        >>> pm = ParameterManager()
+        >>> params = {"D0": 1000.0, "alpha": 1.5, "gamma_dot_t0": -0.001}
+        >>> result = pm.validate_physical_constraints(params)
+        >>> if not result.valid:
+        ...     print(result.violations)
+        ['alpha = 1.50: strongly superdiffusive (α > 1 is rare, check if intended)',
+         'gamma_dot_t0 = -0.001: negative shear rate (physically impossible)']
+
+        References
+        ----------
+        - Subdiffusion (α < 0): Höfling & Franosch, Rep. Prog. Phys. 76, 046602 (2013)
+        - XPCS theory: He et al., PNAS 121, e2401162121 (2024)
+        """
+        violations = []
+        severity_priority = {"error": 3, "warning": 2, "info": 1}
+        min_priority = severity_priority.get(severity_level, 2)
+
+        def add_violation(param: str, value: float, message: str, severity: str):
+            """Add violation if it meets severity threshold."""
+            if severity_priority[severity] >= min_priority:
+                violations.append(f"{param} = {value:.3e}: {message} [{severity}]")
+
+        # Validate diffusion parameters
+        if "D0" in params:
+            D0 = params["D0"]
+            if D0 <= 0:
+                add_violation(
+                    "D0",
+                    D0,
+                    "non-positive diffusion coefficient (physically impossible)",
+                    ConstraintSeverity.ERROR,
+                )
+            elif D0 > 1e7:
+                add_violation(
+                    "D0",
+                    D0,
+                    "extremely large diffusion coefficient (check units: nm²/s expected)",
+                    ConstraintSeverity.WARNING,
+                )
+
+        if "alpha" in params:
+            alpha = params["alpha"]
+            if alpha < -1.5:
+                add_violation(
+                    "alpha",
+                    alpha,
+                    "very strongly subdiffusive (α < -1.5 extremely rare)",
+                    ConstraintSeverity.WARNING,
+                )
+            elif alpha > 1.0:
+                add_violation(
+                    "alpha",
+                    alpha,
+                    "strongly superdiffusive (α > 1 rare, ballistic/active systems only)",
+                    ConstraintSeverity.WARNING,
+                )
+            elif -0.1 < alpha < 0.1:
+                add_violation(
+                    "alpha",
+                    alpha,
+                    "near-normal diffusion (α ≈ 0, standard Brownian motion)",
+                    ConstraintSeverity.INFO,
+                )
+
+        if "D_offset" in params:
+            D_offset = params["D_offset"]
+            if D_offset < 0:
+                add_violation(
+                    "D_offset",
+                    D_offset,
+                    "negative offset (check if this is intended)",
+                    ConstraintSeverity.WARNING,
+                )
+
+        # Validate shear flow parameters
+        if "gamma_dot_t0" in params:
+            gamma_dot = params["gamma_dot_t0"]
+            if gamma_dot < 0:
+                add_violation(
+                    "gamma_dot_t0",
+                    gamma_dot,
+                    "negative shear rate (physically impossible, use positive value)",
+                    ConstraintSeverity.ERROR,
+                )
+            elif gamma_dot > 1.0:
+                add_violation(
+                    "gamma_dot_t0",
+                    gamma_dot,
+                    "very high shear rate (check units: s⁻¹ expected)",
+                    ConstraintSeverity.WARNING,
+                )
+            elif gamma_dot < 1e-6:
+                add_violation(
+                    "gamma_dot_t0",
+                    gamma_dot,
+                    "very low shear rate (approaching quasi-static limit)",
+                    ConstraintSeverity.INFO,
+                )
+
+        if "beta" in params:
+            beta = params["beta"]
+            if beta < -2.0 or beta > 2.0:
+                add_violation(
+                    "beta",
+                    beta,
+                    "time exponent outside typical range [-2, 2]",
+                    ConstraintSeverity.WARNING,
+                )
+
+        if "gamma_dot_t_offset" in params:
+            offset = params["gamma_dot_t_offset"]
+            if offset < 0:
+                add_violation(
+                    "gamma_dot_t_offset",
+                    offset,
+                    "negative shear rate offset (check if intended)",
+                    ConstraintSeverity.WARNING,
+                )
+
+        if "phi0" in params:
+            phi0 = params["phi0"]
+            if abs(phi0) > np.pi:
+                add_violation(
+                    "phi0",
+                    phi0,
+                    f"flow angle outside [-π, π] (will wrap to {np.arctan2(np.sin(phi0), np.cos(phi0)):.3f})",
+                    ConstraintSeverity.INFO,
+                )
+
+        # Validate scaling parameters
+        if "contrast" in params:
+            contrast = params["contrast"]
+            if contrast <= 0 or contrast > 1.0:
+                add_violation(
+                    "contrast",
+                    contrast,
+                    "contrast outside physical range (0, 1]",
+                    ConstraintSeverity.ERROR,
+                )
+            elif contrast < 0.1:
+                add_violation(
+                    "contrast",
+                    contrast,
+                    "very low contrast (check signal quality)",
+                    ConstraintSeverity.WARNING,
+                )
+
+        if "offset" in params:
+            offset = params["offset"]
+            if offset <= 0:
+                add_violation(
+                    "offset",
+                    offset,
+                    "non-positive baseline (physically impossible)",
+                    ConstraintSeverity.ERROR,
+                )
+
+        # Cross-parameter constraints
+        if "D0" in params and "alpha" in params and "D_offset" in params:
+            # Check if offset dominates (indicates possible overfitting)
+            if params["D_offset"] > 0.5 * params["D0"]:
+                add_violation(
+                    "D_offset",
+                    params["D_offset"],
+                    f"offset is {params['D_offset']/params['D0']:.1%} of D0 (may indicate overfitting)",
+                    ConstraintSeverity.INFO,
+                )
+
+        # Create validation result
+        is_valid = len(violations) == 0
+        if is_valid:
+            message = f"Physics constraints validated successfully ({len(params)} parameters checked)"
+        else:
+            message = f"Physics validation found {len(violations)} issue(s)"
+
+        return ValidationResult(
+            valid=is_valid,
+            violations=violations,
+            parameters_checked=len(params),
+            message=message,
+        )
+
+    def get_parameter_bounds(
+        self, parameter_names: Optional[list[str]] = None
+    ) -> list[BoundDict]:
+        """
+        Get parameter bounds configuration (with caching for performance).
+
+        Parameters
+        ----------
+        parameter_names : list of str, optional
+            List of parameter names to get bounds for. If None, returns bounds
+            for all parameters in the current analysis mode.
+
+        Returns
+        -------
+        list of dict
+            List of bound dictionaries with keys: 'name', 'min', 'max', 'type'
+
+        Examples
+        --------
+        >>> pm = ParameterManager(config_dict)
+        >>> bounds = pm.get_parameter_bounds(["D0", "alpha"])
+        >>> bounds[0]
+        {'min': 1.0, 'max': 1000000.0, 'name': 'D0', 'type': 'Normal'}
+
+        Notes
+        -----
+        Results are cached for performance. Repeated calls with the same
+        parameter_names will return cached results instantly.
+        """
+        if parameter_names is None:
+            # Get all parameters for current mode
+            parameter_names = self.get_all_parameter_names()
+
+        # Create cache key (use tuple for hashability)
+        cache_key = tuple(sorted(parameter_names))
+
+        # Check cache first (if caching enabled)
+        if self._cache_enabled and cache_key in self._bounds_cache:
+            logger.debug(f"Returning cached bounds for {len(parameter_names)} parameters")
+            return self._bounds_cache[cache_key].copy()
+
+        # Apply name mapping
+        mapped_names = [
+            self._param_name_mapping.get(name, name) for name in parameter_names
+        ]
+
+        # Get bounds for each parameter
+        bounds_list = []
+        for name in mapped_names:
+            if name in self._default_bounds:
+                bounds_list.append(self._default_bounds[name].copy())
+            else:
+                # Fallback for unknown parameters
+                logger.warning(
+                    f"Unknown parameter '{name}', using default bounds [0.0, 1.0]"
+                )
+                bounds_list.append({
+                    "min": 0.0,
+                    "max": 1.0,
+                    "name": name,
+                    "type": "Normal",
+                })
+
+        # Cache the result
+        if self._cache_enabled:
+            self._bounds_cache[cache_key] = [b.copy() for b in bounds_list]
+
+        return bounds_list
+
+    def get_active_parameters(self) -> list[str]:
+        """
+        Get list of active (physical) parameters from configuration (cached).
+
+        This returns only the physical parameters (excludes scaling parameters
+        like contrast and offset).
+
+        Returns
+        -------
+        list of str
+            List of parameter names to be optimized. Falls back to mode-appropriate
+            parameters if not specified in config.
+
+        Examples
+        --------
+        >>> pm = ParameterManager(config_dict, "laminar_flow")
+        >>> pm.get_active_parameters()
+        ['D0', 'alpha', 'D_offset', 'gamma_dot_t0', 'beta', 'gamma_dot_t_offset', 'phi0']
+
+        Notes
+        -----
+        Results are cached after first call for performance.
+        """
+        # Check cache first
+        if self._cache_enabled and self._active_params_cache is not None:
+            logger.debug("Returning cached active parameters")
+            return self._active_params_cache.copy()
+
+        # Compute active parameters
+        if not self.config_dict:
+            active_params = self._get_default_active_parameters()
+        else:
+            # Try to get from initial_parameters section
+            initial_params = self.config_dict.get("initial_parameters", {})
+
+            # Check for explicit active_parameters list
+            active_params_config = initial_params.get("active_parameters")
+            if active_params_config and isinstance(active_params_config, list):
+                # Apply name mapping
+                active_params = [
+                    self._param_name_mapping.get(name, name)
+                    for name in active_params_config
+                ]
+            else:
+                # Fall back to parameter_names from initial_parameters
+                param_names = initial_params.get("parameter_names")
+                if param_names and isinstance(param_names, list):
+                    # Apply name mapping
+                    active_params = [
+                        self._param_name_mapping.get(name, name) for name in param_names
+                    ]
+                else:
+                    # Ultimate fallback to mode defaults
+                    active_params = self._get_default_active_parameters()
+
+        # Cache the result
+        if self._cache_enabled:
+            self._active_params_cache = active_params.copy()
+
+        return active_params
+
+    def _get_default_active_parameters(self) -> list[str]:
+        """Get default active parameters based on analysis mode."""
+        if "static" in self.analysis_mode.lower():
+            return STATIC_PARAM_NAMES.copy()
+        else:
+            return LAMINAR_FLOW_PARAM_NAMES.copy()
+
+    def get_all_parameter_names(self) -> list[str]:
+        """
+        Get all parameter names including scaling parameters.
+
+        Returns
+        -------
+        list of str
+            Complete list of parameter names (scaling + physical)
+
+        Examples
+        --------
+        >>> pm = ParameterManager(config_dict, "laminar_flow")
+        >>> pm.get_all_parameter_names()
+        ['contrast', 'offset', 'D0', 'alpha', 'D_offset', 'gamma_dot_t0', 'beta', ...]
+        """
+        # Always include scaling parameters first (use constant from types)
+        all_params = SCALING_PARAM_NAMES.copy()
+        # Add physical parameters
+        all_params.extend(self.get_active_parameters())
+        return all_params
+
+    def get_effective_parameter_count(self) -> int:
+        """
+        Get the effective number of physical parameters (excludes scaling).
+
+        Returns
+        -------
+        int
+            Number of physical parameters used in the analysis:
+            - Static mode: 3 (D0, alpha, D_offset)
+            - Laminar flow mode: 7 (D0, alpha, D_offset, gamma_dot_t0, beta,
+              gamma_dot_t_offset, phi0)
+
+        Examples
+        --------
+        >>> pm = ParameterManager(config_dict, "static")
+        >>> pm.get_effective_parameter_count()
+        3
+        """
+        return len(self.get_active_parameters())
+
+    def get_total_parameter_count(self) -> int:
+        """
+        Get total number of parameters including scaling parameters.
+
+        Returns
+        -------
+        int
+            Total parameter count (scaling + physical)
+
+        Examples
+        --------
+        >>> pm = ParameterManager(config_dict, "laminar_flow")
+        >>> pm.get_total_parameter_count()
+        9
+        """
+        return len(self.get_all_parameter_names())
+
+    def validate_parameters(
+        self,
+        params: np.ndarray,
+        param_names: Optional[list[str]] = None,
+        tolerance: float = 1e-10,
+    ) -> ValidationResult:
+        """
+        Validate parameter values against bounds.
+
+        Parameters
+        ----------
+        params : np.ndarray
+            Parameter array to validate
+        param_names : list of str, optional
+            Parameter names. If None, uses all parameter names for current mode.
+        tolerance : float
+            Tolerance for bounds checking (default: 1e-10)
+
+        Returns
+        -------
+        ValidationResult
+            Detailed validation result
+
+        Examples
+        --------
+        >>> pm = ParameterManager(config_dict)
+        >>> params = np.array([0.5, 1.0, 1000.0, 0.5, 10.0])
+        >>> result = pm.validate_parameters(params, ["contrast", "offset", "D0", "alpha", "D_offset"])
+        >>> if not result.valid:
+        ...     print(result.violations)
+        """
+        if param_names is None:
+            param_names = self.get_all_parameter_names()
+
+        # Get bounds for these parameters
+        bounds_list_dict = self.get_parameter_bounds(param_names)
+
+        # Convert to tuple format for validation
+        bounds_tuples = [
+            (bound_dict["min"], bound_dict["max"]) for bound_dict in bounds_list_dict
+        ]
+
+        # Use the detailed validation from physics module
+        result = validate_parameters_detailed(
+            params, bounds_tuples, param_names=param_names, tolerance=tolerance
+        )
+
+        return result
+
+    def get_bounds_as_tuples(
+        self, parameter_names: Optional[list[str]] = None
+    ) -> list[tuple[float, float]]:
+        """
+        Get parameter bounds as list of (min, max) tuples.
+
+        Convenience method for compatibility with optimization code.
+
+        Parameters
+        ----------
+        parameter_names : list of str, optional
+            Parameter names. If None, uses all parameter names for current mode.
+
+        Returns
+        -------
+        list of tuple
+            List of (min, max) tuples
+
+        Examples
+        --------
+        >>> pm = ParameterManager(config_dict)
+        >>> pm.get_bounds_as_tuples(["D0", "alpha"])
+        [(1.0, 1000000.0), (-2.0, 2.0)]
+        """
+        bounds_dicts = self.get_parameter_bounds(parameter_names)
+        return [(b["min"], b["max"]) for b in bounds_dicts]
+
+    def get_bounds_as_arrays(
+        self, parameter_names: Optional[list[str]] = None
+    ) -> tuple[np.ndarray, np.ndarray]:
+        """
+        Get parameter bounds as separate lower and upper arrays.
+
+        Convenience method for compatibility with optimization code.
+
+        Parameters
+        ----------
+        parameter_names : list of str, optional
+            Parameter names. If None, uses all parameter names for current mode.
+
+        Returns
+        -------
+        lower_bounds : np.ndarray
+            Array of lower bounds
+        upper_bounds : np.ndarray
+            Array of upper bounds
+
+        Examples
+        --------
+        >>> pm = ParameterManager(config_dict)
+        >>> lower, upper = pm.get_bounds_as_arrays(["D0", "alpha"])
+        >>> lower
+        array([1.e+00, -2.e+00])
+        >>> upper
+        array([1.e+06, 2.e+00])
+        """
+        bounds_dicts = self.get_parameter_bounds(parameter_names)
+        lower_bounds = np.array([b["min"] for b in bounds_dicts])
+        upper_bounds = np.array([b["max"] for b in bounds_dicts])
+        return lower_bounds, upper_bounds
+
+    def get_fixed_parameters(self) -> dict[str, float]:
+        """
+        Get parameters that should be held fixed during optimization.
+
+        Returns
+        -------
+        dict[str, float]
+            Dictionary of parameter_name: fixed_value pairs
+
+        Examples
+        --------
+        >>> config = {
+        ...     "initial_parameters": {
+        ...         "fixed_parameters": {"contrast": 0.5, "offset": 1.0}
+        ...     }
+        ... }
+        >>> pm = ParameterManager(config)
+        >>> pm.get_fixed_parameters()
+        {'contrast': 0.5, 'offset': 1.0}
+        """
+        if not self.config_dict:
+            return {}
+
+        initial_params = self.config_dict.get("initial_parameters", {})
+        fixed_params = initial_params.get("fixed_parameters", {})
+
+        if not isinstance(fixed_params, dict):
+            logger.warning("fixed_parameters must be a dict, ignoring")
+            return {}
+
+        return fixed_params
+
+    def is_parameter_active(self, param_name: str) -> bool:
+        """
+        Check if a parameter is active (being optimized).
+
+        Parameters
+        ----------
+        param_name : str
+            Parameter name to check
+
+        Returns
+        -------
+        bool
+            True if parameter is active, False if fixed
+
+        Examples
+        --------
+        >>> pm = ParameterManager(config)
+        >>> pm.is_parameter_active("D0")
+        True
+        >>> pm.is_parameter_active("contrast")  # if fixed
+        False
+        """
+        active_params = self.get_active_parameters()
+        fixed_params = self.get_fixed_parameters()
+
+        # Apply name mapping to input parameter
+        canonical_name = self._param_name_mapping.get(param_name, param_name)
+
+        # Check if parameter is in fixed list (need to check both config and canonical names)
+        is_fixed = False
+        for fixed_name in fixed_params.keys():
+            fixed_canonical = self._param_name_mapping.get(fixed_name, fixed_name)
+            if canonical_name == fixed_canonical or canonical_name == fixed_name:
+                is_fixed = True
+                break
+
+        # Parameter is active if it's in active list and not fixed
+        return canonical_name in active_params and not is_fixed
+
+    def get_optimizable_parameters(self) -> list[str]:
+        """
+        Get list of parameters that should be optimized (active - fixed).
+
+        Returns
+        -------
+        list[str]
+            List of parameter names to optimize (excludes fixed parameters)
+
+        Examples
+        --------
+        >>> config = {
+        ...     "initial_parameters": {
+        ...         "parameter_names": ["D0", "alpha", "D_offset"],
+        ...         "fixed_parameters": {"D_offset": 10.0}
+        ...     }
+        ... }
+        >>> pm = ParameterManager(config)
+        >>> pm.get_optimizable_parameters()
+        ['D0', 'alpha']
+        """
+        active_params = self.get_active_parameters()
+        fixed_params = self.get_fixed_parameters()
+
+        # Map fixed parameter names to canonical names
+        fixed_canonical = set()
+        for fixed_name in fixed_params.keys():
+            canonical = self._param_name_mapping.get(fixed_name, fixed_name)
+            fixed_canonical.add(canonical)
+
+        # Return active parameters that are not fixed
+        return [p for p in active_params if p not in fixed_canonical]
+
+    def __repr__(self) -> str:
+        """String representation."""
+        active_params = self.get_active_parameters()
+        fixed_params = self.get_fixed_parameters()
+        optimizable = len(active_params) - len(fixed_params)
+
+        return (
+            f"ParameterManager(mode={self.analysis_mode}, "
+            f"active_params={len(active_params)}, "
+            f"fixed_params={len(fixed_params)}, "
+            f"optimizable={optimizable}, "
+            f"total_params={self.get_total_parameter_count()})"
+        )

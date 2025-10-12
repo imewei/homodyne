@@ -105,56 +105,54 @@ class ParameterSpace:
     config_manager: Any | None = None
 
     def get_param_bounds(self, analysis_mode: str) -> list[tuple[float, float]]:
-        """Get parameter bounds based on analysis mode with configuration override support."""
-        # Default parameter names based on analysis mode
-        if analysis_mode == "laminar_flow":
-            param_names = [
-                "D0",
-                "alpha",
-                "D_offset",
-                "gamma_dot_0",
-                "beta",
-                "gamma_dot_offset",
-                "phi_0",
-            ]
-        else:
-            param_names = ["D0", "alpha", "D_offset"]
+        """
+        Get parameter bounds based on analysis mode with configuration override support.
 
-        # Try to get bounds from configuration manager first
-        if self.config_manager and hasattr(self.config_manager, "get_parameter_bounds"):
+        Uses ParameterManager for consistent parameter handling and name mapping.
+
+        Parameters
+        ----------
+        analysis_mode : str
+            Analysis mode: "static_isotropic", "static_anisotropic", or "laminar_flow"
+
+        Returns
+        -------
+        list of tuple
+            List of (min, max) bounds tuples for each parameter
+        """
+        # Strategy 1: Use ParameterManager for full integration (Phase 4.2+)
+        if self.config_manager:
             try:
-                config_bounds = self.config_manager.get_parameter_bounds(param_names)
-                if isinstance(config_bounds, list) and len(config_bounds) == len(
-                    param_names
-                ):
-                    # Convert config bounds to tuple format
-                    bounds = []
-                    for bound in config_bounds:
-                        if (
-                            isinstance(bound, dict)
-                            and "min" in bound
-                            and "max" in bound
-                        ):
-                            bounds.append((bound["min"], bound["max"]))
-                        else:
-                            # Fallback to default bounds if config bound is malformed
-                            bounds.append(
-                                self._get_default_bound_for_param(
-                                    param_names[len(bounds)]
-                                )
-                            )
-                    logger.info(f"Using configuration bounds for {analysis_mode} mode")
-                    return bounds
-                else:
-                    logger.warning(
-                        "Configuration bounds format invalid, using default bounds"
-                    )
+                from homodyne.config.parameter_manager import ParameterManager
+
+                # Get config dict from manager
+                config_dict = None
+                if hasattr(self.config_manager, "config"):
+                    config_dict = self.config_manager.config
+                elif isinstance(self.config_manager, dict):
+                    config_dict = self.config_manager
+
+                # Create ParameterManager
+                param_manager = ParameterManager(config_dict, analysis_mode)
+
+                # Get active parameters (physical only, excludes scaling)
+                active_params = param_manager.get_active_parameters()
+
+                # Get bounds as tuples
+                bounds = param_manager.get_bounds_as_tuples(active_params)
+
+                logger.info(
+                    f"Loaded {len(bounds)} parameter bounds from ParameterManager for {analysis_mode} mode"
+                )
+                return bounds
+
             except Exception as e:
                 logger.warning(
-                    f"Failed to get configuration bounds: {e}, using default bounds"
+                    f"Failed to use ParameterManager: {e}, falling back to defaults"
                 )
 
-        # Fallback to hardcoded bounds
+        # Fallback to hardcoded defaults
+        logger.debug(f"Using default hardcoded bounds for {analysis_mode} mode")
         bounds = [
             self.D0_bounds,
             self.alpha_bounds,

@@ -482,3 +482,148 @@ class TestNLSQPerformance:
                 assert (
                     result.chi_squared < 1.0
                 ), "Fast convergence should achieve good fit"
+
+
+@pytest.mark.unit
+class TestParameterHelpers:
+    """Test parameter helper functions (Phase 4.1)."""
+
+    def test_get_param_names_static_mode(self):
+        """Test _get_param_names for static mode."""
+        from homodyne.optimization.nlsq import _get_param_names
+
+        # Test static mode
+        param_names = _get_param_names("static_isotropic")
+        assert param_names == ["contrast", "offset", "D0", "alpha", "D_offset"]
+        assert len(param_names) == 5
+
+    def test_get_param_names_laminar_flow(self):
+        """Test _get_param_names for laminar flow mode."""
+        from homodyne.optimization.nlsq import _get_param_names
+
+        # Test laminar flow mode
+        param_names = _get_param_names("laminar_flow")
+        expected = [
+            "contrast",
+            "offset",
+            "D0",
+            "alpha",
+            "D_offset",
+            "gamma_dot_t0",
+            "beta",
+            "gamma_dot_t_offset",
+            "phi0",
+        ]
+        assert param_names == expected
+        assert len(param_names) == 9
+
+    def test_get_param_names_case_insensitive(self):
+        """Test that analysis_mode matching is case insensitive."""
+        from homodyne.optimization.nlsq import _get_param_names
+
+        # Should work with different cases
+        assert _get_param_names("STATIC") == _get_param_names("static")
+        assert _get_param_names("Static_Isotropic") == _get_param_names(
+            "static_isotropic"
+        )
+
+
+@pytest.mark.unit
+class TestValidationIntegration:
+    """Test validation integration in NLSQ (Phase 4.1)."""
+
+    def test_validation_with_valid_params(self, test_config):
+        """Test that validation passes with valid initial parameters."""
+        from homodyne.optimization.nlsq import _get_param_names
+        from homodyne.core.physics import validate_parameters_detailed
+        import numpy as np
+
+        # Valid laminar flow parameters
+        params = np.array(
+            [
+                0.5,  # contrast
+                1.0,  # offset
+                13930.8,  # D0
+                -0.479,  # alpha
+                49.298,  # D_offset
+                9.65e-4,  # gamma_dot_t0
+                0.5018,  # beta
+                3.13e-5,  # gamma_dot_t_offset
+                8.99e-2,  # phi0
+            ]
+        )
+        bounds = [
+            (0.0, 1.0),
+            (0.0, 10.0),
+            (1.0, 1e6),
+            (-2.0, 2.0),
+            (0.0, 1e6),
+            (1e-10, 1.0),
+            (-2.0, 2.0),
+            (1e-10, 1.0),
+            (-np.pi, np.pi),
+        ]
+        param_names = _get_param_names("laminar_flow")
+
+        result = validate_parameters_detailed(params, bounds, param_names)
+        assert result.valid is True
+        assert result.parameters_checked == 9
+        assert len(result.violations) == 0
+
+    def test_validation_with_out_of_bounds_params(self, test_config):
+        """Test that validation catches out of bounds parameters."""
+        from homodyne.optimization.nlsq import _get_param_names
+        from homodyne.core.physics import validate_parameters_detailed
+        import numpy as np
+
+        # Invalid parameters (contrast > 1.0, D0 too large)
+        params = np.array(
+            [
+                1.5,  # contrast > 1.0 (INVALID)
+                1.0,  # offset
+                2e6,  # D0 > 1e6 (INVALID)
+                -0.479,  # alpha
+                49.298,  # D_offset
+                9.65e-4,  # gamma_dot_t0
+                0.5018,  # beta
+                3.13e-5,  # gamma_dot_t_offset
+                8.99e-2,  # phi0
+            ]
+        )
+        bounds = [
+            (0.0, 1.0),
+            (0.0, 10.0),
+            (1.0, 1e6),
+            (-2.0, 2.0),
+            (0.0, 1e6),
+            (1e-10, 1.0),
+            (-2.0, 2.0),
+            (1e-10, 1.0),
+            (-np.pi, np.pi),
+        ]
+        param_names = _get_param_names("laminar_flow")
+
+        result = validate_parameters_detailed(params, bounds, param_names)
+        assert result.valid is False
+        assert len(result.violations) == 2
+        assert any("contrast" in v for v in result.violations)
+        assert any("D0" in v for v in result.violations)
+
+    def test_validation_error_messages_include_names(self, test_config):
+        """Test that validation error messages include parameter names."""
+        from homodyne.optimization.nlsq import _get_param_names
+        from homodyne.core.physics import validate_parameters_detailed
+        import numpy as np
+
+        # Out of bounds contrast parameter
+        params = np.array([1.5, 1.0, 1000.0, 0.5, 10.0])
+        bounds = [(0.0, 1.0), (0.0, 10.0), (1.0, 1e6), (-2.0, 2.0), (0.0, 1e6)]
+        param_names = _get_param_names("static")
+
+        result = validate_parameters_detailed(params, bounds, param_names)
+        assert result.valid is False
+        assert len(result.violations) == 1
+        violation = result.violations[0]
+        assert "contrast" in violation
+        assert "1.5" in violation
+        assert "above bounds" in violation

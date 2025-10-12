@@ -11,6 +11,7 @@ and ensures parameter values remain within reasonable bounds for stable
 numerical computation.
 """
 
+from dataclasses import dataclass, field
 from typing import Any
 
 import numpy as np
@@ -18,6 +19,40 @@ import numpy as np
 from homodyne.utils.logging import get_logger
 
 logger = get_logger(__name__)
+
+
+@dataclass
+class ValidationResult:
+    """
+    Result of parameter validation with detailed error reporting.
+
+    Provides comprehensive information about parameter validation
+    including which parameters violated bounds and by how much.
+
+    Attributes
+    ----------
+    valid : bool
+        True if all parameters are within bounds
+    violations : list of str
+        List of human-readable violation messages
+    parameters_checked : int
+        Number of parameters validated
+    message : str
+        Summary message about validation result
+    """
+
+    valid: bool
+    violations: list[str] = field(default_factory=list)
+    parameters_checked: int = 0
+    message: str = ""
+
+    def __str__(self) -> str:
+        """String representation for logging."""
+        if self.valid:
+            return f"✓ {self.message}"
+        else:
+            violations_str = "\n  - ".join(self.violations)
+            return f"✗ {self.message}\n  - {violations_str}"
 
 
 class PhysicsConstants:
@@ -129,60 +164,155 @@ def parameter_bounds() -> dict[str, list[tuple[float, float]]]:
     }
 
 
+def validate_parameters_detailed(
+    params: np.ndarray,
+    bounds: list[tuple[float, float]],
+    param_names: list[str] | None = None,
+    tolerance: float = 1e-10,
+) -> ValidationResult:
+    """
+    Validate parameter values against bounds with detailed error reporting.
+
+    This is the enhanced validation function that provides comprehensive
+    information about which parameters violated bounds and by how much.
+
+    Parameters
+    ----------
+    params : np.ndarray
+        Parameter array to validate
+    bounds : list of tuple
+        List of (min, max) tuples for each parameter
+    param_names : list of str, optional
+        Names of parameters for better error messages. If None, uses indices.
+    tolerance : float
+        Tolerance for bounds checking (default: 1e-10)
+
+    Returns
+    -------
+    ValidationResult
+        Detailed validation result with violations list
+
+    Examples
+    --------
+    >>> params = np.array([100.0, -1.5, 10.0])
+    >>> bounds = [(1.0, 1000.0), (-2.0, 2.0), (0.0, 100.0)]
+    >>> result = validate_parameters_detailed(params, bounds, ["D0", "alpha", "D_offset"])
+    >>> if not result.valid:
+    ...     print(result.violations)
+    """
+    violations = []
+
+    # Check if we're dealing with JAX tracers during gradient computation
+    try:
+        param_str = str(type(params[0] if hasattr(params, "__getitem__") else params))
+        if "Tracer" in param_str or "LinearizeTracer" in param_str:
+            # Skip validation during JAX gradient computation
+            return ValidationResult(
+                valid=True,
+                violations=[],
+                parameters_checked=0,
+                message="Skipped validation for JAX tracers",
+            )
+    except:  # noqa: E722
+        pass
+
+    # Check parameter count
+    if len(params) != len(bounds):
+        return ValidationResult(
+            valid=False,
+            violations=[
+                f"Parameter count mismatch: got {len(params)} parameters, "
+                f"expected {len(bounds)} bounds"
+            ],
+            parameters_checked=0,
+            message="Parameter count validation failed",
+        )
+
+    # Use indices if no names provided
+    if param_names is None:
+        param_names = [f"param_{i}" for i in range(len(params))]
+
+    # Validate each parameter
+    validated_count = 0
+    for i, (param, (min_val, max_val)) in enumerate(zip(params, bounds, strict=False)):
+        # Check if param is a JAX tracer
+        try:
+            param_type_str = str(type(param))
+            if "Tracer" in param_type_str or "LinearizeTracer" in param_type_str:
+                continue
+        except:  # noqa: E722
+            pass
+
+        # Validate concrete numeric values
+        try:
+            param_val = float(param)
+            param_name = param_names[i] if i < len(param_names) else f"param_{i}"
+
+            if not (min_val - tolerance <= param_val <= max_val + tolerance):
+                # Calculate violation magnitude
+                if param_val < min_val:
+                    violation_amount = min_val - param_val
+                    direction = "below"
+                else:
+                    violation_amount = param_val - max_val
+                    direction = "above"
+
+                violations.append(
+                    f"{param_name} = {param_val:.6e} is {direction} bounds "
+                    f"[{min_val:.6e}, {max_val:.6e}] by {violation_amount:.6e}"
+                )
+            validated_count += 1
+        except (TypeError, ValueError):
+            # Likely a JAX tracer, skip
+            continue
+
+    # Create result
+    is_valid = len(violations) == 0
+    if is_valid:
+        message = f"Validated {validated_count} parameters successfully"
+    else:
+        message = f"Validation failed: {len(violations)} parameter(s) out of bounds"
+
+    return ValidationResult(
+        valid=is_valid,
+        violations=violations,
+        parameters_checked=validated_count,
+        message=message,
+    )
+
+
 def validate_parameters(
     params: np.ndarray, bounds: list[tuple[float, float]], tolerance: float = 1e-10
 ) -> bool:
     """
     Validate parameter values against bounds with tolerance.
 
-    Args:
-        params: Parameter array to validate
-        bounds: List of (min, max) tuples for each parameter
-        tolerance: Tolerance for bounds checking
+    This is the legacy function that returns just a boolean.
+    For detailed validation, use validate_parameters_detailed().
 
-    Returns:
+    Parameters
+    ----------
+    params : np.ndarray
+        Parameter array to validate
+    bounds : list of tuple
+        List of (min, max) tuples for each parameter
+    tolerance : float
+        Tolerance for bounds checking
+
+    Returns
+    -------
+    bool
         True if all parameters are within bounds, False otherwise
     """
-    # Check if we're dealing with JAX tracers during gradient computation
-    try:
-        # Try to detect JAX tracer objects
-        param_str = str(type(params[0] if hasattr(params, "__getitem__") else params))
-        if "Tracer" in param_str or "LinearizeTracer" in param_str:
-            # Skip validation during JAX gradient computation
-            return True
-    except:  # noqa: E722 - JAX tracers raise unpredictable exceptions during type conversion
-        pass
+    # Use the detailed validation and return just the boolean
+    result = validate_parameters_detailed(params, bounds, None, tolerance)
 
-    if len(params) != len(bounds):
-        logger.warning(
-            f"Parameter count mismatch: got {len(params)}, expected {len(bounds)}"
-        )
-        return False
+    # Log violations if any
+    if not result.valid and result.violations:
+        for violation in result.violations:
+            logger.warning(violation)
 
-    for i, (param, (min_val, max_val)) in enumerate(zip(params, bounds, strict=False)):
-        # Check if param is a JAX tracer
-        try:
-            param_type_str = str(type(param))
-            if "Tracer" in param_type_str or "LinearizeTracer" in param_type_str:
-                # Skip validation for JAX tracers
-                continue
-        except:  # noqa: E722 - JAX tracers raise unpredictable exceptions during type conversion
-            pass
-
-        # Only validate concrete numeric values
-        try:
-            param_val = float(param)
-            if not (min_val - tolerance <= param_val <= max_val + tolerance):
-                logger.warning(
-                    f"Parameter {i} out of bounds: {param_val} not in [{min_val}, {max_val}]"
-                )
-                return False
-        except (TypeError, ValueError):
-            # If we can't convert to float, it's likely a JAX tracer
-            # Skip validation in this case
-            continue
-
-    return True
+    return result.valid
 
 
 def clip_parameters(
