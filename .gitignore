@@ -80,6 +80,7 @@ test_report.html
 bandit_re*.json
 bandit-re*.json
 pip_audit_report.json
+specs/
 
 # Translations
 *.mo
