@@ -41,7 +41,7 @@ metadata:
     - "All three analysis modes with proper parameter configurations"
     - "Discrete numerical integration for anomalous diffusion stability (α ≤ -1)"
     - "Mandatory diagonal correction for data consistency and accuracy"
-    - "Advanced optimization methods: LSQ (primary), MCMC, Hybrid LSQ→MCMC pipeline"
+    - "Advanced optimization methods: NLSQ with error recovery (primary), MCMC, Hybrid NLSQ→MCMC pipeline"
     - "Comprehensive parameter bounds and physics constraints"
     - "Multi-level performance optimization and caching"
     - "Quality control with data validation and auto-repair"
@@ -248,13 +248,16 @@ parameter_space:
 
 # REQUIRED: Optimization methods and settings
 optimization:
-  # Least Squares (LSQ) - Primary optimization method
+  # Least Squares (NLSQ) - Primary optimization method
+  # Uses NLSQ package with trust-region algorithms (TRF/Levenberg-Marquardt)
+  # Includes automatic error recovery with 3-attempt retry strategy
   lsq:
     enabled: true
     max_iterations: 10000     # Maximum iterations for optimization
     tolerance: 1e-8           # Convergence tolerance
     method: "trf"             # Trust Region Reflective algorithm
     bounds_handling: "clip"   # How to handle parameter bounds
+    enable_recovery: true     # Automatic error recovery (recommended for production)
   
   # Markov Chain Monte Carlo (MCMC) - For uncertainty quantification
   mcmc:

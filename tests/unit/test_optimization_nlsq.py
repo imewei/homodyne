@@ -3,11 +3,13 @@ Unit Tests for NLSQ Optimization Module
 =======================================
 
 Tests for homodyne.optimization.nlsq module including:
-- Optimistix trust-region solver
+- NLSQ package trust-region solver (curve_fit/curve_fit_large)
 - Parameter estimation accuracy
 - Convergence behavior
 - Error handling and fallbacks
 - Performance characteristics
+
+Note: These tests have been updated to use the NLSQ package instead of Optimistix.
 """
 
 
@@ -24,7 +26,14 @@ except ImportError:
     JAX_AVAILABLE = False
     jnp = np
 
-from homodyne.optimization.nlsq import OPTIMISTIX_AVAILABLE, NLSQResult, fit_nlsq_jax
+# Check NLSQ package availability
+try:
+    import nlsq
+    NLSQ_AVAILABLE = True
+except ImportError:
+    NLSQ_AVAILABLE = False
+
+from homodyne.optimization.nlsq import NLSQResult, fit_nlsq_jax
 
 
 @pytest.mark.unit
@@ -32,10 +41,14 @@ from homodyne.optimization.nlsq import OPTIMISTIX_AVAILABLE, NLSQResult, fit_nls
 class TestNLSQOptimization:
     """Test NLSQ optimization functionality."""
 
-    def test_optimistix_availability(self):
-        """Test Optimistix availability detection."""
-        # This tests the import detection logic
-        assert isinstance(OPTIMISTIX_AVAILABLE, bool)
+    def test_nlsq_package_availability(self):
+        """Test NLSQ package availability detection."""
+        # This tests that NLSQ package can be imported
+        assert isinstance(NLSQ_AVAILABLE, bool)
+        if NLSQ_AVAILABLE:
+            import nlsq
+            assert hasattr(nlsq, 'curve_fit'), "NLSQ should have curve_fit function"
+            assert hasattr(nlsq, 'curve_fit_large'), "NLSQ should have curve_fit_large function"
 
     def test_nlsq_result_structure(self):
         """Test NLSQResult data structure."""
@@ -58,7 +71,7 @@ class TestNLSQOptimization:
         assert result.n_iterations == 10
         assert result.optimization_time == 0.5
 
-    @pytest.mark.skipif(not OPTIMISTIX_AVAILABLE, reason="Optimistix not available")
+    @pytest.mark.skipif(not NLSQ_AVAILABLE, reason="NLSQ package not available")
     def test_nlsq_synthetic_data_fit(self, synthetic_xpcs_data, test_config):
         """Test NLSQ fitting with synthetic data."""
         data = synthetic_xpcs_data
@@ -92,7 +105,7 @@ class TestNLSQOptimization:
         assert result.n_iterations > 0, "Should have performed some iterations"
         assert result.optimization_time > 0.0, "Should have non-zero optimization time"
 
-    @pytest.mark.skipif(not OPTIMISTIX_AVAILABLE, reason="Optimistix not available")
+    @pytest.mark.skipif(not NLSQ_AVAILABLE, reason="NLSQ package not available")
     def test_nlsq_parameter_recovery(self, test_config):
         """Test parameter recovery with known synthetic data."""
         # Generate data with known parameters
@@ -147,7 +160,7 @@ class TestNLSQOptimization:
                     f"true {true_value:.4f}, error {relative_error:.4f}"
                 )
 
-    @pytest.mark.skipif(not OPTIMISTIX_AVAILABLE, reason="Optimistix not available")
+    @pytest.mark.skipif(not NLSQ_AVAILABLE, reason="NLSQ package not available")
     def test_nlsq_convergence_behavior(self, small_xpcs_data, test_config):
         """Test NLSQ convergence behavior with different tolerances."""
         data = small_xpcs_data
@@ -180,7 +193,7 @@ class TestNLSQOptimization:
             result_tight.n_iterations >= result_loose.n_iterations * 0.5
         ), "Tight tolerance should use reasonable iterations"
 
-    @pytest.mark.skipif(not OPTIMISTIX_AVAILABLE, reason="Optimistix not available")
+    @pytest.mark.skipif(not NLSQ_AVAILABLE, reason="NLSQ package not available")
     def test_nlsq_boundary_conditions(self, synthetic_xpcs_data, test_config):
         """Test NLSQ optimization with boundary conditions."""
         data = synthetic_xpcs_data
@@ -230,7 +243,7 @@ class TestNLSQOptimization:
         with pytest.raises((ValueError, IndexError)):
             fit_nlsq_jax(mismatched_data, test_config)
 
-    @pytest.mark.skipif(not OPTIMISTIX_AVAILABLE, reason="Optimistix not available")
+    @pytest.mark.skipif(not NLSQ_AVAILABLE, reason="NLSQ package not available")
     def test_nlsq_with_shear(self, test_config):
         """Test NLSQ optimization with shear flow."""
         # Generate data with shear
@@ -282,7 +295,7 @@ class TestNLSQOptimization:
                     abs(recovered_shear - params_with_shear["shear_rate"]) < 0.02
                 ), f"Shear rate recovery poor: {recovered_shear} vs {params_with_shear['shear_rate']}"
 
-    @pytest.mark.skipif(not OPTIMISTIX_AVAILABLE, reason="Optimistix not available")
+    @pytest.mark.skipif(not NLSQ_AVAILABLE, reason="NLSQ package not available")
     def test_nlsq_multiple_q_values(self, test_config):
         """Test NLSQ optimization with multiple q-values."""
         n_times = 15
@@ -331,29 +344,27 @@ class TestNLSQOptimization:
 
 @pytest.mark.unit
 class TestNLSQFallback:
-    """Test NLSQ fallback behavior when Optimistix is not available."""
+    """Test NLSQ fallback behavior when NLSQ package is not available."""
 
     def test_fallback_import(self):
-        """Test that module imports work without Optimistix."""
-        # Should be able to import even without Optimistix
+        """Test that module imports work without NLSQ package."""
+        # Should be able to import even without NLSQ package
         from homodyne.optimization.nlsq import fit_nlsq_jax
 
         assert callable(fit_nlsq_jax)
 
-    @pytest.mark.skipif(OPTIMISTIX_AVAILABLE, reason="Optimistix is available")
+    @pytest.mark.skipif(NLSQ_AVAILABLE, reason="NLSQ package is available")
     def test_fallback_behavior(self, synthetic_xpcs_data, test_config):
-        """Test fallback behavior when Optimistix is not available."""
+        """Test fallback behavior when NLSQ package is not available."""
         data = synthetic_xpcs_data
 
-        # This should either work with fallback or raise appropriate error
-        try:
+        # This should raise ImportError when NLSQ is not available
+        with pytest.raises(ImportError) as exc_info:
             result = fit_nlsq_jax(data, test_config)
-            # If it works, validate basic structure
-            assert hasattr(result, "success")
-            assert hasattr(result, "message")
-        except ImportError as e:
-            # Expected when no fallback is available
-            assert "Optimistix" in str(e) or "optimization" in str(e)
+
+        # Error message should mention NLSQ
+        error_msg = str(exc_info.value).lower()
+        assert "nlsq" in error_msg, f"Expected 'nlsq' in error message: {error_msg}"
 
     def test_nlsq_result_serialization(self):
         """Test that NLSQResult can be serialized/deserialized."""
@@ -389,7 +400,7 @@ class TestNLSQFallback:
 
 @pytest.mark.unit
 @pytest.mark.performance
-@pytest.mark.skipif(not OPTIMISTIX_AVAILABLE, reason="Optimistix not available")
+@pytest.mark.skipif(not NLSQ_AVAILABLE, reason="NLSQ package not available")
 class TestNLSQPerformance:
     """Performance tests for NLSQ optimization."""
 

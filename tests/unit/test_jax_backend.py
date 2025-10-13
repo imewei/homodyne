@@ -27,6 +27,10 @@ except ImportError:
 from homodyne.core.jax_backend import (
     compute_g1_diffusion,
     compute_g1_shear,
+    compute_c2_model_jax,
+    residuals_jax,
+    chi_squared_jax,
+    compute_g1_diffusion_jax,
 )
 from homodyne.core.jax_backend import (
     jax_available as BACKEND_JAX_AVAILABLE,

@@ -1193,6 +1193,142 @@ def validate_jax_backend() -> bool:
     return results["jax_available"] and results["gradient_support"]
 
 
+# Legacy function for backward compatibility with old tests
+def compute_c2_model_jax(
+    params: dict,
+    t1: jnp.ndarray,
+    t2: jnp.ndarray,
+    phi: jnp.ndarray,
+    q: float,
+) -> jnp.ndarray:
+    """
+    Legacy wrapper for compute_g2_scaled() - for backward compatibility with old tests.
+
+    This function provides a simplified interface matching the old API signature,
+    using default values for L, contrast, offset, and dt parameters.
+
+    Args:
+        params: Parameter dictionary with keys like 'offset', 'contrast', 'diffusion_coefficient', etc.
+        t1, t2: Time points for correlation calculation
+        phi: Scattering angles
+        q: Scattering wave vector magnitude
+
+    Returns:
+        g2 correlation function
+
+    Note:
+        This is a legacy function for backward compatibility.
+        New code should use compute_g2_scaled() directly with explicit parameters.
+    """
+    # Extract parameters from dict with defaults
+    contrast = params.get("contrast", 0.5)
+    offset = params.get("offset", 1.0)
+    L = params.get("L", 1.0)
+
+    # Convert parameter dict to array format expected by compute_g2_scaled
+    # Old tests use 'diffusion_coefficient', new code uses 'D0'
+    D0 = params.get("diffusion_coefficient", params.get("D0", 1000.0))
+    alpha = params.get("alpha", 0.5)
+    D_offset = params.get("D_offset", 10.0)
+
+    # For static isotropic mode (3 physical parameters)
+    param_array = jnp.array([D0, alpha, D_offset])
+
+    # Estimate dt from time array (legacy behavior)
+    if t1.ndim == 2:
+        time_array = t1[:, 0]
+    else:
+        time_array = t1
+    dt = time_array[1] - time_array[0] if safe_len(time_array) > 1 else 1.0
+
+    # Call new function with explicit parameters
+    return compute_g2_scaled(
+        params=param_array,
+        t1=t1,
+        t2=t2,
+        phi=phi,
+        q=q,
+        L=L,
+        contrast=contrast,
+        offset=offset,
+        dt=dt,
+    )
+
+
+# Legacy aliases for backward compatibility with old tests
+def residuals_jax(
+    params: dict,
+    c2_exp: jnp.ndarray,
+    sigma: jnp.ndarray,
+    t1: jnp.ndarray,
+    t2: jnp.ndarray,
+    phi: jnp.ndarray,
+    q: float,
+) -> jnp.ndarray:
+    """
+    Legacy function: compute residuals (data - model) / sigma.
+
+    Note: This is for backward compatibility with old tests.
+    New code should use compute_chi_squared() directly.
+    """
+    # Generate model prediction using legacy wrapper
+    c2_model = compute_c2_model_jax(params, t1, t2, phi, q)
+
+    # Compute residuals
+    return (c2_exp - c2_model) / (sigma + EPS)
+
+
+def chi_squared_jax(
+    params: dict,
+    c2_exp: jnp.ndarray,
+    sigma: jnp.ndarray,
+    t1: jnp.ndarray,
+    t2: jnp.ndarray,
+    phi: jnp.ndarray,
+    q: float,
+) -> float:
+    """
+    Legacy function: compute chi-squared goodness of fit.
+
+    Note: This is for backward compatibility with old tests.
+    New code should use compute_chi_squared() directly.
+    """
+    residuals = residuals_jax(params, c2_exp, sigma, t1, t2, phi, q)
+    return jnp.sum(residuals**2)
+
+
+def compute_g1_diffusion_jax(
+    t1: jnp.ndarray,
+    t2: jnp.ndarray,
+    q: float,
+    D: float,
+) -> jnp.ndarray:
+    """
+    Legacy function: compute g1 diffusion factor.
+
+    Note: This is for backward compatibility with old tests.
+    New code should use compute_g1_diffusion() directly.
+    """
+    # Call new function with simple parameters
+    # Old function signature: (t1, t2, q, D)
+    # New function signature: (params, t1, t2, q, dt)
+
+    # Create params array [D0, alpha, D_offset] with alpha=0.5 (normal diffusion)
+    params = jnp.array([D, 0.5, 0.0])
+
+    # Estimate dt
+    if t1.ndim == 2:
+        time_array = t1[:, 0]
+    elif t1.ndim == 1:
+        time_array = t1
+    else:
+        time_array = t1.flatten()
+
+    dt = time_array[1] - time_array[0] if safe_len(time_array) > 1 else 1.0
+
+    return compute_g1_diffusion(params, t1, t2, q, dt)
+
+
 def get_device_info() -> dict:
     """Get comprehensive device and backend information."""
     if not JAX_AVAILABLE:
@@ -1316,6 +1452,10 @@ __all__ = [
     "batch_chi_squared",
     "validate_backend",
     "validate_jax_backend",  # Legacy compatibility
+    "compute_c2_model_jax",  # Legacy compatibility for old tests
+    "residuals_jax",  # Legacy compatibility for old tests
+    "chi_squared_jax",  # Legacy compatibility for old tests
+    "compute_g1_diffusion_jax",  # Legacy compatibility for old tests
     "get_device_info",
     "get_performance_summary",  # New performance monitoring
 ]

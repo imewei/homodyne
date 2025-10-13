@@ -41,6 +41,16 @@ except ImportError:
     JAX_AVAILABLE = False
     jnp = np
 
+# Handle NLSQ imports
+try:
+    import nlsq
+    from homodyne.optimization.nlsq import fit_nlsq_jax
+
+    NLSQ_AVAILABLE = True
+except ImportError:
+    NLSQ_AVAILABLE = False
+    fit_nlsq_jax = None
+
 
 @pytest.mark.integration
 @pytest.mark.slow
@@ -53,12 +63,13 @@ class TestEndToEndWorkflows:
             # Import required modules
             from homodyne.config.manager import ConfigManager
             from homodyne.data.xpcs_loader import XPCSLoader
-            from homodyne.optimization.nlsq import OPTIMISTIX_AVAILABLE, fit_nlsq_jax
+            # NLSQ imports now at module level
+            pass
         except ImportError as e:
             pytest.skip(f"Required modules not available: {e}")
 
-        if not OPTIMISTIX_AVAILABLE:
-            pytest.skip("Optimistix not available for optimization")
+        if not NLSQ_AVAILABLE:
+            pytest.skip("NLSQ not available for optimization")
 
         # Step 1: Create synthetic dataset
         n_times = 30
@@ -128,12 +139,13 @@ class TestEndToEndWorkflows:
         """Test workflow with HDF5 data loading."""
         try:
             from homodyne.data.xpcs_loader import load_xpcs_data
-            from homodyne.optimization.nlsq import OPTIMISTIX_AVAILABLE, fit_nlsq_jax
+            # NLSQ imports now at module level
+            pass
         except ImportError as e:
             pytest.skip(f"Required modules not available: {e}")
 
-        if not OPTIMISTIX_AVAILABLE:
-            pytest.skip("Optimistix not available")
+        if not NLSQ_AVAILABLE:
+            pytest.skip("NLSQ not available")
 
         # Create mock HDF5 file
         h5_file = temp_dir / "workflow_test.h5"
@@ -189,12 +201,13 @@ class TestEndToEndWorkflows:
         """Test workflow with YAML configuration."""
         try:
             from homodyne.config.manager import ConfigManager
-            from homodyne.optimization.nlsq import OPTIMISTIX_AVAILABLE, fit_nlsq_jax
+            # NLSQ imports now at module level
+            pass
         except ImportError as e:
             pytest.skip(f"Required modules not available: {e}")
 
-        if not OPTIMISTIX_AVAILABLE:
-            pytest.skip("Optimistix not available")
+        if not NLSQ_AVAILABLE:
+            pytest.skip("NLSQ not available")
 
         # Create YAML configuration
         yaml_config = {
@@ -251,11 +264,12 @@ class TestEndToEndWorkflows:
         """Test workflow with multiple q-values."""
         try:
             from homodyne.core.jax_backend import compute_c2_model_jax
-            from homodyne.optimization.nlsq import OPTIMISTIX_AVAILABLE, fit_nlsq_jax
+            # NLSQ imports now at module level
+            pass
         except ImportError as e:
             pytest.skip(f"Required modules not available: {e}")
 
-        if not OPTIMISTIX_AVAILABLE or not JAX_AVAILABLE:
+        if not NLSQ_AVAILABLE or not JAX_AVAILABLE:
             pytest.skip("Optimistix or JAX not available")
 
         # Generate data with multiple q-values
@@ -313,12 +327,13 @@ class TestEndToEndWorkflows:
     def test_error_propagation_workflow(self, test_config):
         """Test error propagation through workflow."""
         try:
-            from homodyne.optimization.nlsq import OPTIMISTIX_AVAILABLE, fit_nlsq_jax
+            # NLSQ imports now at module level
+            pass
         except ImportError:
             pytest.skip("Optimization module not available")
 
-        if not OPTIMISTIX_AVAILABLE:
-            pytest.skip("Optimistix not available")
+        if not NLSQ_AVAILABLE:
+            pytest.skip("NLSQ not available")
 
         # Test with various error conditions
         error_scenarios = [
@@ -425,12 +440,13 @@ class TestModuleInteraction:
         """Test integration between data loading and optimization."""
         try:
             from homodyne.data.xpcs_loader import XPCSLoader
-            from homodyne.optimization.nlsq import OPTIMISTIX_AVAILABLE, fit_nlsq_jax
+            # NLSQ imports now at module level
+            pass
         except ImportError:
             pytest.skip("Required modules not available")
 
-        if not OPTIMISTIX_AVAILABLE:
-            pytest.skip("Optimistix not available")
+        if not NLSQ_AVAILABLE:
+            pytest.skip("NLSQ not available")
 
         data = synthetic_xpcs_data
 
@@ -458,11 +474,12 @@ class TestModuleInteraction:
         """Test consistency between JAX backend and optimization."""
         try:
             from homodyne.core.jax_backend import chi_squared_jax, compute_c2_model_jax
-            from homodyne.optimization.nlsq import OPTIMISTIX_AVAILABLE, fit_nlsq_jax
+            # NLSQ imports now at module level
+            pass
         except ImportError:
             pytest.skip("Required modules not available")
 
-        if not OPTIMISTIX_AVAILABLE or not JAX_AVAILABLE:
+        if not NLSQ_AVAILABLE or not JAX_AVAILABLE:
             pytest.skip("JAX or Optimistix not available")
 
         data = synthetic_xpcs_data
@@ -592,12 +609,13 @@ class TestCrossplatformCompatibility:
     def test_memory_behavior_consistency(self, synthetic_xpcs_data, test_config):
         """Test consistent memory behavior across platforms."""
         try:
-            from homodyne.optimization.nlsq import OPTIMISTIX_AVAILABLE, fit_nlsq_jax
+            # NLSQ imports now at module level
+            pass
         except ImportError:
             pytest.skip("Optimization module not available")
 
-        if not OPTIMISTIX_AVAILABLE:
-            pytest.skip("Optimistix not available")
+        if not NLSQ_AVAILABLE:
+            pytest.skip("NLSQ not available")
 
         data = synthetic_xpcs_data
 

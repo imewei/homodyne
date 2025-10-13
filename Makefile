@@ -210,6 +210,7 @@ clean-test:
 	rm -rf .benchmarks/
 	rm -f coverage.xml
 	rm -f test-results.xml
+	rm -rf .nlsq_cache/
 
 clean-cache:
 	find . -type d -name '.cache' -exec rm -rf {} + 2>/dev/null || true
@@ -217,6 +218,7 @@ clean-cache:
 	rm -rf .mypy_cache/
 	rm -rf .ruff_cache/
 	rm -rf .pytest_cache/
+	rm -rf .nlsq_cache/
 
 # Documentation targets
 docs:
