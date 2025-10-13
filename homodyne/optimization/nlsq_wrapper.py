@@ -25,8 +25,8 @@ Production Status:
 
 References:
 - NLSQ Package: https://github.com/imewei/NLSQ
-- Validation: See SCIENTIFIC_VALIDATION_REPORT.md
-- Production: See PRODUCTION_READINESS_REPORT.md
+- Validation: See tests/validation/test_scientific_validation.py (T036-T041)
+- Documentation: See CHANGELOG.md and CLAUDE.md for detailed status
 """
 
 from dataclasses import dataclass, field
