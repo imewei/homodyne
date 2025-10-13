@@ -54,6 +54,8 @@ class OptimizationResult:
         device_info: Device used for computation (CPU/GPU details)
         recovery_actions: List of error recovery actions taken
         quality_flag: 'good', 'marginal', 'poor'
+        success: Boolean indicating convergence (backward compatibility)
+        message: Descriptive message about optimization outcome (backward compatibility)
     """
 
     parameters: np.ndarray
@@ -67,6 +69,22 @@ class OptimizationResult:
     device_info: dict[str, Any]
     recovery_actions: list[str] = field(default_factory=list)
     quality_flag: str = "good"
+
+    # Backward compatibility attributes (FR-002)
+    @property
+    def success(self) -> bool:
+        """Return True if optimization converged (backward compatibility)."""
+        return self.convergence_status == 'converged'
+
+    @property
+    def message(self) -> str:
+        """Return descriptive message about optimization outcome."""
+        if self.convergence_status == 'converged':
+            return f"Optimization converged successfully. χ²={self.chi_squared:.6f}"
+        elif self.convergence_status == 'max_iter':
+            return "Optimization stopped: maximum iterations reached"
+        else:
+            return f"Optimization failed: {self.convergence_status}"
 
 
 class NLSQWrapper:

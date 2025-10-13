@@ -69,8 +69,6 @@ except ImportError:
 try:
     from homodyne.config.manager import ConfigManager
     from homodyne.core.fitting import ParameterSpace
-    from homodyne.core.physics import validate_parameters, validate_parameters_detailed
-    from homodyne.core.theory import TheoryEngine
     from homodyne.utils.logging import get_logger, log_performance
 
     HAS_CORE_MODULES = True

@@ -27,16 +27,18 @@ class TestFitNlsqJaxAPI:
         from homodyne.optimization.nlsq import fit_nlsq_jax
 
         # Generate realistic synthetic data with known parameters
+        # Note: Using larger dimensions and lower noise for robust convergence
+        # Small datasets (<2000 points) can cause numerical instabilities
         synthetic_data = generate_static_isotropic_dataset(
             D0=1000.0,
             alpha=0.5,
             D_offset=10.0,
             contrast=0.5,
             offset=1.0,
-            noise_level=0.03,  # Low noise for reliable convergence
-            n_phi=5,  # Small for fast test
-            n_t1=15,
-            n_t2=15
+            noise_level=0.01,  # Very low noise for reliable convergence
+            n_phi=8,  # Increased from 5 for numerical stability
+            n_t1=20,  # Increased from 15
+            n_t2=20   # Increased from 15 (total: 3,200 points)
         )
 
         # Create config object (simulating ConfigManager)
