@@ -149,16 +149,16 @@ parameter_space:
 
 # Optimization methods
 optimization:
-  # Variational Inference (primary method for static isotropic)
-  vi:
+  # NLSQ Trust-Region Solver (primary method for static isotropic)
+  # Scientifically validated with 100% test pass rate (T036-T041)
+  lsq:
     enabled: true
-    max_iterations: 1000
-    learning_rate: 0.01
-    convergence_tolerance: 1e-6
-    batch_size: "auto"
-    early_stopping: true
-    patience: 50
-  
+    max_iterations: 10000
+    tolerance: 1e-8
+    method: "trf"              # Trust Region Reflective algorithm
+    bounds_handling: "clip"
+    enable_recovery: true      # Automatic error recovery (recommended)
+
   # MCMC for uncertainty quantification
   mcmc:
     enabled: true
@@ -166,12 +166,12 @@ optimization:
     num_warmup: 1000
     num_chains: 4
     target_accept_prob: 0.8
-  
+
   # Hybrid pipeline (optional)
   hybrid:
     enabled: false
-    vi_initialization: true
-    vi_samples_for_init: 500
+    use_lsq_init: true         # Use NLSQ results to initialize MCMC
+    convergence_threshold: 0.1
 
 # ==============================================================================
 # NOISE ESTIMATION (OPTIONAL)

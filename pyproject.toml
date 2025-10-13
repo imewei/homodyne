@@ -41,6 +41,9 @@ classifiers = [
 requires-python = ">=3.10"
 
 # Core dependencies for JAX-first architecture (2025 tested stable versions)
+# IMPORTANT: NLSQ package must be installed separately from GitHub
+# Installation: pip install git+https://github.com/imewei/NLSQ.git
+# or clone and install locally: git clone https://github.com/imewei/NLSQ.git && cd NLSQ && pip install .
 dependencies = [
     # Core scientific computing (2025 tested stable)
     "numpy>=2.0.0,<3.0.0",  # Tested: NumPy 2.3.3
@@ -49,8 +52,9 @@ dependencies = [
     # JAX ecosystem (2025 stable - must match exactly)
     "jax==0.7.2",  # JAX 0.7.2 - exact version required
     "jaxlib==0.7.2",  # jaxlib 0.7.2 - must match JAX version exactly
-    "optimistix>=0.0.7",  # Tested: Optimistix 0.0.10
-    "equinox>=0.11.11",  # Tested: Equinox 0.13.1
+    "nlsq>=0.1.0",  # NLSQ trust-region optimizer for JAX-native nonlinear least squares
+                     # Repository: https://github.com/imewei/NLSQ
+                     # Provides Trust Region Reflective (TRF) and Levenberg-Marquardt (LM) algorithms
 
     # Bayesian inference (2025 stable)
     "numpyro>=0.18.0,<0.20.0",  # Tested: NumPyro 0.19.0
@@ -204,8 +208,7 @@ strict_equality = true
 [[tool.mypy.overrides]]
 module = [
     "jax.*",
-    "optimistix.*",
-    "equinox.*",
+    "nlsq.*",
     "numpyro.*",
     "blackjax.*",
     "h5py.*",

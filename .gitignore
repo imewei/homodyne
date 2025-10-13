@@ -1,12 +1,19 @@
 # Analysis and documentation files
 codebase_analysis.md
 DEBUG_REPORT.md
+T042_test_failure_analysis.md
+T043_integration_test_analysis.md
+PRODUCTION_READINESS_REPORT.md
+SCIENTIFIC_VALIDATION_REPORT.md
+DOCUMENTATION_POLISH_SUMMARY.md
+PERFORMANCE_ANALYSIS_REPORT.md
 
 # Run code and experimental data
 homodyne_analysis_results/
 homodyne_results/
 homodyne_analysis_results.json
 run.log
+.nlsq_cache/
 
 # Development scripts
 scripts/dev_cleanup/
@@ -233,6 +240,7 @@ __marimo__/
 .claude/
 agent-os/
 .specify/
+specs/
 
 # OS files
 .DS_Store
