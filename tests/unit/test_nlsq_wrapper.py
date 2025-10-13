@@ -244,19 +244,18 @@ class TestNLSQWrapperErrorRecovery:
         )
 
         # Mock curve_fit to fail first, succeed second
+        from nlsq import curve_fit as real_curve_fit
         call_count = [0]
-        original_curve_fit = None
 
-        def mock_curve_fit_with_retry(f, xdata, ydata, p0, bounds):
+        def mock_curve_fit_with_retry(f, xdata, ydata, p0=None, bounds=None, **kwargs):
             """Mock that fails first time, succeeds second time."""
             call_count[0] += 1
             if call_count[0] == 1:
                 # First call fails
                 raise RuntimeError("Mock convergence failure - max iterations exceeded")
             else:
-                # Second call succeeds - use actual NLSQ
-                from nlsq import curve_fit
-                return curve_fit(f, xdata, ydata, p0=p0, bounds=bounds, method='trf')
+                # Second call succeeds - use actual NLSQ (imported before patching)
+                return real_curve_fit(f, xdata, ydata, p0=p0, bounds=bounds, **kwargs)
 
         # Patch curve_fit to simulate failure then success
         with patch('nlsq.curve_fit', side_effect=mock_curve_fit_with_retry):

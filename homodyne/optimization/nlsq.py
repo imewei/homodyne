@@ -226,7 +226,8 @@ def fit_nlsq_jax(
         data = data_obj
 
     # Create wrapper and run optimization
-    wrapper = NLSQWrapper(enable_large_dataset=True, enable_recovery=False)
+    # Note: enable_recovery=True provides automatic error recovery for production use
+    wrapper = NLSQWrapper(enable_large_dataset=True, enable_recovery=True)
 
     result = wrapper.fit(
         data=data,

@@ -139,6 +139,8 @@ def generate_synthetic_xpcs_data(
         g2_theoretical.append(np.array(g2_phi))
 
     g2_theoretical = np.stack(g2_theoretical, axis=0)
+    # Squeeze out singleton dimensions from compute_g2_scaled (e.g., (5, 1, 15, 15) -> (5, 15, 15))
+    g2_theoretical = np.squeeze(g2_theoretical)
 
     # Add noise
     sigma = np.abs(g2_theoretical) * noise_level + 1e-6  # Avoid zero sigma
