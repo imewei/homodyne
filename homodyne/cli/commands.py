@@ -762,7 +762,7 @@ def _run_optimization(args, config: ConfigManager, data: dict[str, Any]) -> Any:
                     if filtered_data.get("wavevector_q_list")
                     else 1.0
                 ),
-                L=100.0,  # Default sample-detector distance
+                L=2000000.0,  # Default: 200 µm stator-rotor gap (typical rheology-XPCS)
                 analysis_mode=(
                     config.config.get("analysis_mode", "static_isotropic")
                     if hasattr(config, "config")

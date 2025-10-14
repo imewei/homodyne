@@ -33,7 +33,7 @@ Migration from Optimistix:
 - Replaced Optimistix with NLSQ package (github.com/imewei/NLSQ)
 - NLSQWrapper provides unified interface with error recovery
 - Maintains backward API compatibility
-- All Optimistix references removed
+- User-facing Optimistix references removed from public APIs
 
 References:
 - NLSQ Package: https://github.com/imewei/NLSQ
@@ -105,6 +105,8 @@ except ImportError:
     NLSQWrapper = None
     OptimizationResult = None
 
+# Export NLSQ availability for tests and external code
+NLSQ_AVAILABLE = HAS_NLSQ_WRAPPER and JAX_AVAILABLE
 
 logger = get_logger(__name__)
 
@@ -153,15 +155,28 @@ def fit_nlsq_jax(
     Parameters
     ----------
     data : dict
-        XPCS experimental data containing:
-        - 'phi': phi angle array
+        XPCS experimental data. Accepts two formats:
+
+        **Format 1 (CLI/loader format)**:
+        - 'phi_angles_list': phi angle array (mapped to 'phi')
+        - 'c2_exp': experimental correlation data (n_phi, n_t1, n_t2) (mapped to 'g2')
         - 't1': first delay time array
         - 't2': second delay time array
+        - 'wavevector_q_list': q-vector array (first element extracted as scalar 'q')
+        - 'sigma': (optional) uncertainty array, defaults to 0.01 * ones_like(g2)
+        - 'L': (optional) stator-rotor gap (rheology) or sample-detector distance (standard XPCS), defaults to config value or 2000000 Å (200 µm, typical rheology-XPCS gap)
+        - 'dt': (optional) time step, defaults to config value or None
+
+        **Format 2 (Direct format)**:
+        - 'phi': phi angle array
         - 'g2': experimental correlation data (n_phi, n_t1, n_t2)
-        - 'sigma': uncertainty array (same shape as g2)
-        - 'q': wavevector magnitude
-        - 'L': sample-detector distance
-        - 'dt': time step
+        - 't1': first delay time array
+        - 't2': second delay time array
+        - 'q': wavevector magnitude (scalar)
+        - 'sigma': (optional) uncertainty array
+        - 'L': (optional) stator-rotor gap or sample-detector distance [Å]
+        - 'dt': (optional) time step [s]
+
     config : ConfigManager
         Configuration manager with optimization settings
     initial_params : dict, optional
@@ -219,8 +234,80 @@ def fit_nlsq_jax(
             pass
 
         data_obj = DataObject()
+
+        # Map CLI data structure keys to NLSQWrapper expected names
+        # CLI provides: phi_angles_list, c2_exp, wavevector_q_list
+        # NLSQWrapper needs: phi, g2, t1, t2, sigma, q, L, dt (optional)
+        key_mapping = {
+            'phi_angles_list': 'phi',
+            'c2_exp': 'g2',
+        }
+
+        # Apply key mapping and copy all data
         for key, value in data.items():
-            setattr(data_obj, key, value)
+            # Use mapped name if available, otherwise keep original
+            mapped_key = key_mapping.get(key, key)
+            setattr(data_obj, mapped_key, value)
+
+        # Extract scalar q from wavevector_q_list if present
+        if hasattr(data_obj, 'wavevector_q_list'):
+            q_list = np.asarray(data_obj.wavevector_q_list)
+            if q_list.size > 0:
+                data_obj.q = float(q_list[0])  # Take first q-vector
+                logger.debug(f"Extracted q = {data_obj.q:.6f} from wavevector_q_list")
+
+        # Generate default sigma (uncertainty) if missing
+        if not hasattr(data_obj, 'sigma') and hasattr(data_obj, 'g2'):
+            g2_array = np.asarray(data_obj.g2)
+            # Use 1% relative uncertainty as default
+            data_obj.sigma = 0.01 * np.ones_like(g2_array)
+            logger.debug(f"Generated default sigma: shape {data_obj.sigma.shape}")
+
+        # Get characteristic length L from config (stator_rotor_gap or sample_detector_distance)
+        if not hasattr(data_obj, 'L'):
+            # Try to get from config - check multiple possible locations
+            # Priority 1: analyzer_parameters.geometry.stator_rotor_gap (for rheology-XPCS)
+            # Priority 2: experimental_data.geometry.stator_rotor_gap (alternative location)
+            # Priority 3: experimental_data.sample_detector_distance (for standard XPCS)
+            # Priority 4: Default 100.0 (fallback)
+            try:
+                # Try analyzer_parameters.geometry.stator_rotor_gap first
+                analyzer_params = config.config.get('analyzer_parameters', {})
+                geometry = analyzer_params.get('geometry', {})
+
+                if 'stator_rotor_gap' in geometry:
+                    data_obj.L = float(geometry['stator_rotor_gap'])
+                    logger.debug(f"Using stator_rotor_gap L = {data_obj.L:.1f} Å (from config.analyzer_parameters.geometry)")
+                else:
+                    # Try experimental_data.geometry.stator_rotor_gap as alternative
+                    exp_config = config.config.get('experimental_data', {})
+                    exp_geometry = exp_config.get('geometry', {})
+
+                    if 'stator_rotor_gap' in exp_geometry:
+                        data_obj.L = float(exp_geometry['stator_rotor_gap'])
+                        logger.debug(f"Using stator_rotor_gap L = {data_obj.L:.1f} Å (from config.experimental_data.geometry)")
+                    # Fallback to sample_detector_distance
+                    elif 'sample_detector_distance' in exp_config:
+                        data_obj.L = float(exp_config['sample_detector_distance'])
+                        logger.debug(f"Using sample_detector_distance L = {data_obj.L:.1f} Å (from config.experimental_data)")
+                    else:
+                        data_obj.L = 2000000.0  # Default: 200 µm stator-rotor gap (typical rheology-XPCS)
+                        logger.warning(f"No L parameter found in config, using default L = {data_obj.L:.1f} Å (200 µm, typical rheology-XPCS gap)")
+            except (AttributeError, TypeError, ValueError) as e:
+                data_obj.L = 2000000.0  # Default: 200 µm stator-rotor gap (typical rheology-XPCS)
+                logger.warning(f"Error reading L from config: {e}, using default L = {data_obj.L:.1f} Å (200 µm)")
+
+        # Get time step dt from config if available
+        if not hasattr(data_obj, 'dt'):
+            try:
+                exp_config = config.config.get('experimental_data', {})
+                dt_value = exp_config.get('dt')
+                if dt_value is not None:
+                    data_obj.dt = float(dt_value)
+                    logger.debug(f"Using time step dt = {data_obj.dt:.6f}")
+            except (AttributeError, TypeError, ValueError):
+                pass  # dt is optional, no problem if missing
+
         data = data_obj
 
     # Create wrapper and run optimization
@@ -370,13 +457,13 @@ def _get_default_initial_params(analysis_mode: str) -> dict[str, float]:
 def _create_residual_function(
     data: dict[str, Any], theory_engine: Any, analysis_mode: str
 ) -> callable:
-    """Create residual function for Optimistix least squares."""
+    """Create residual function for NLSQ least squares optimization."""
 
     # Extract q and L as concrete scalars OUTSIDE the residual function
     # This prevents JAX tracing issues
     q_list = data.get("wavevector_q_list", [0.0054])
     q_scalar = float(q_list[0]) if len(q_list) > 0 else 0.0054
-    L_scalar = 100.0  # Default sample-detector distance
+    L_scalar = 2000000.0  # Default: 200 µm stator-rotor gap (typical rheology-XPCS)
 
     def residual_fn(params_array):
         """Residual function: returns residuals vector."""
@@ -568,7 +655,7 @@ def _bounds_to_arrays(
 
 
 def _get_optimizer_config(config: ConfigManager) -> dict[str, Any]:
-    """Get Optimistix optimizer configuration from config."""
+    """Get NLSQ optimizer configuration from config."""
     default_config = {
         "method": "levenberg_marquardt",
         "max_iterations": 10000,
@@ -620,7 +707,7 @@ def _calculate_parameter_errors(result: Any, analysis_mode: str) -> dict[str, fl
 
 
 def _calculate_chi_squared(result: Any, data: dict[str, Any]) -> float:
-    """Calculate chi-squared from Optimistix result."""
+    """Calculate chi-squared from NLSQ result."""
     # Calculate final residuals and chi-squared
     if hasattr(result, "x"):
         # TODO: Re-evaluate residuals at final point for accurate chi-squared
@@ -635,12 +722,12 @@ def _calculate_chi_squared(result: Any, data: dict[str, Any]) -> float:
 
 
 def _check_convergence(result: Any) -> bool:
-    """Check if Optimistix optimization converged."""
+    """Check if NLSQ optimization converged."""
     return getattr(result, "success", False)
 
 
 def _get_optimization_message(result: Any) -> str:
-    """Get optimization status message from Optimistix result."""
+    """Get optimization status message from NLSQ result."""
     if hasattr(result, "result_flag") and result.result_flag is not None:
         return str(result.result_flag)
     elif result.success:
@@ -650,7 +737,7 @@ def _get_optimization_message(result: Any) -> str:
 
 
 def _get_iteration_count(result: Any) -> int:
-    """Get iteration count from Optimistix result."""
+    """Get iteration count from NLSQ result."""
     if hasattr(result, "stats") and "num_steps" in result.stats:
         return int(result.stats["num_steps"])
     return 0
