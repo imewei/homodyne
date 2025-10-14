@@ -1324,28 +1324,35 @@ def _plot_simulated_data(
     model = CombinedModel(analysis_mode)
 
     # Get parameters from configuration
-    initial_params = config.get("optimization", {}).get("initial_parameters", {})
+    # Read from top-level initial_parameters (not nested in optimization)
+    initial_params_config = config.get("initial_parameters", {})
+    param_names = initial_params_config.get("parameter_names", [])
+    param_values = initial_params_config.get("values", [])
+
+    # Create dict mapping parameter names to values
+    params_dict = dict(zip(param_names, param_values)) if param_names and param_values else {}
 
     if analysis_mode.startswith("static"):
         # Static mode: 3 parameters
         params = jnp.array(
             [
-                initial_params.get("D0", 100.0),
-                initial_params.get("alpha", -0.5),
-                initial_params.get("D_offset", 0.0),
+                params_dict.get("D0", 100.0),
+                params_dict.get("alpha", -0.5),
+                params_dict.get("D_offset", 0.0),
             ]
         )
     else:
         # Laminar flow: 7 parameters
+        # Use correct parameter names matching config (gamma_dot_0, phi_0 with underscores)
         params = jnp.array(
             [
-                initial_params.get("D0", 100.0),
-                initial_params.get("alpha", -0.5),
-                initial_params.get("D_offset", 0.0),
-                initial_params.get("gamma_dot_t0", 0.01),
-                initial_params.get("beta", 0.5),
-                initial_params.get("gamma_dot_t_offset", 0.0),
-                initial_params.get("phi0", 0.0),
+                params_dict.get("D0", 100.0),
+                params_dict.get("alpha", -0.5),
+                params_dict.get("D_offset", 0.0),
+                params_dict.get("gamma_dot_0", 0.01),
+                params_dict.get("beta", 0.5),
+                params_dict.get("gamma_dot_offset", 0.0),
+                params_dict.get("phi_0", 0.0),
             ]
         )
 
@@ -1356,11 +1363,11 @@ def _plot_simulated_data(
     # Parse phi angles
     if phi_angles_str:
         phi_degrees = np.array([float(x.strip()) for x in phi_angles_str.split(",")])
-        phi = jnp.radians(phi_degrees)
+        phi = phi_degrees  # Keep in degrees (physics code expects degrees)
     else:
         # Default: 8 evenly spaced angles from 0 to 180 degrees
         phi_degrees = np.linspace(0, 180, 8)
-        phi = jnp.radians(phi_degrees)
+        phi = phi_degrees  # Keep in degrees (physics code expects degrees)
 
     logger.debug(f"Using {len(phi)} phi angles: {phi_degrees}")
 
@@ -1416,6 +1423,8 @@ def _plot_simulated_data(
     for _i, phi_val in enumerate(phi):
         phi_array = jnp.array([phi_val])
 
+        logger.debug(f"Computing C₂ for φ={phi_val}° (phi_array={phi_array})")
+
         # Compute g2 for this phi angle (L_angstroms: physics code expects Angstroms)
         c2_phi = model.compute_g2(
             params,
@@ -1429,7 +1438,9 @@ def _plot_simulated_data(
         )
 
         # Extract the 2D array (remove phi dimension)
-        c2_simulated.append(np.array(c2_phi[0]))
+        c2_result = np.array(c2_phi[0])
+        logger.debug(f"  C₂ shape: {c2_result.shape}, range: [{c2_result.min():.4f}, {c2_result.max():.4f}]")
+        c2_simulated.append(c2_result)
 
     c2_simulated = np.array(c2_simulated)  # Shape: (n_phi, n_t, n_t)
 

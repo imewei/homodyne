@@ -259,8 +259,13 @@ def safe_exp(x: jnp.ndarray, max_val: float = 700.0) -> jnp.ndarray:
 
 @jit
 def safe_sinc(x: jnp.ndarray) -> jnp.ndarray:
-    """Safe sinc function with numerical stability at x=0."""
-    return jnp.where(jnp.abs(x) > EPS, jnp.sin(PI * x) / (PI * x), 1.0)
+    """
+    Safe UNNORMALIZED sinc function: sin(x) / x (NOT sin(πx) / (πx)).
+
+    This matches the reference implementation which uses sin(arg) / arg directly.
+    The phase argument already includes all necessary scaling factors.
+    """
+    return jnp.where(jnp.abs(x) > EPS, jnp.sin(x) / x, 1.0)
 
 
 # Discrete numerical integration helpers (following reference v1 implementation)
@@ -414,8 +419,9 @@ def _compute_g1_diffusion_core(
     # Step 1: Extract time array (t1 and t2 should be identical)
     # Handle all dimensionality cases: 0D (scalar), 1D arrays, and 2D meshgrids
     if t1.ndim == 2:
-        # For meshgrid: t1 varies along columns, so extract first row
-        time_array = t1[0, :]  # Extract first row for unique t1 values
+        # For meshgrid with indexing="ij": t1 varies along rows (axis 0), constant along columns
+        # So extract first COLUMN to get unique t1 values
+        time_array = t1[:, 0]  # Extract first column for unique t1 values
     elif t1.ndim == 0:
         # Handle 0-dimensional (scalar) input
         time_array = jnp.atleast_1d(t1)
@@ -536,8 +542,9 @@ def _compute_g1_shear_core(
     Returns:
         Shear contribution to g1 correlation function (sinc² values)
     """
-    if safe_len(params) < 7:  # Static mode - no shear
-        # Return ones for all phi angles and time combinations
+    # Check params length - if < 7, we're in static mode (no shear)
+    if safe_len(params) < 7:
+        # Return ones for all phi angles and time combinations (g1_shear = 1)
         phi_array = jnp.atleast_1d(phi)
         n_phi = safe_len(phi_array)
         if t1.ndim == 2:
@@ -557,8 +564,9 @@ def _compute_g1_shear_core(
     # Step 1: Extract time array (t1 and t2 should be identical)
     # Handle all dimensionality cases: 0D (scalar), 1D arrays, and 2D meshgrids
     if t1.ndim == 2:
-        # For meshgrid: t1 varies along columns, so extract first row
-        time_array = t1[0, :]  # Extract first row for unique t1 values
+        # For meshgrid with indexing="ij": t1 varies along rows (axis 0), constant along columns
+        # So extract first COLUMN to get unique t1 values
+        time_array = t1[:, 0]  # Extract first column for unique t1 values
     elif t1.ndim == 0:
         # Handle 0-dimensional (scalar) input
         time_array = jnp.atleast_1d(t1)
@@ -596,15 +604,6 @@ def _compute_g1_shear_core(
     phi_array = jnp.atleast_1d(phi)
     n_phi = safe_len(phi_array)
     n_times = safe_len(time_array)
-
-    # Debug: Log shapes for troubleshooting broadcasting issues
-    import os
-
-    if os.environ.get("HOMODYNE_DEBUG_SHAPES") == "1":
-        print("DEBUG _compute_g1_shear_core shapes:")
-        print(f"  phi_array.shape: {phi_array.shape}")
-        print(f"  gamma_integral.shape: {gamma_integral.shape}")
-        print(f"  n_phi: {n_phi}, n_times: {n_times}")
 
     # Vectorized computation: compute all phi angles at once
     # angle_diff shape: (n_phi,)
@@ -884,42 +883,9 @@ def compute_g1_total(
     wavevector_q_squared_half_dt = 0.5 * (q**2) * dt
     sinc_prefactor = 0.5 / PI * q * L * dt
 
-    # DEBUG: Log input parameters before calling JIT function
-    import os
-
-    if os.environ.get("HOMODYNE_DEBUG_G1") == "1":
-        import numpy as np
-
-        params_np = np.asarray(params) if hasattr(params, "__array__") else params
-        print(f"DEBUG compute_g1_total: params shape={params_np.shape}")
-        print(
-            f"DEBUG compute_g1_total: D0={params_np[0]:.6e}, alpha={params_np[1]:.6f}, D_offset={params_np[2]:.6e}"
-        )
-        print(
-            f"DEBUG compute_g1_total: gamma_dot_0={params_np[3]:.6e}, beta={params_np[4]:.6f}, gamma_dot_offset={params_np[5]:.6e}"
-        )
-        print(f"DEBUG compute_g1_total: phi0={params_np[6]:.6f}")
-        print(f"DEBUG compute_g1_total: q={q:.6e}, L={L:.6e}, dt={dt:.6e}")
-        print(
-            f"DEBUG compute_g1_total: wavevector_q_squared_half_dt={wavevector_q_squared_half_dt:.6e}"
-        )
-        print(f"DEBUG compute_g1_total: sinc_prefactor={sinc_prefactor:.6e}")
-
-    result = _compute_g1_total_core(
+    return _compute_g1_total_core(
         params, t1, t2, phi, wavevector_q_squared_half_dt, sinc_prefactor
     )
-
-    # DEBUG: Check result
-    if os.environ.get("HOMODYNE_DEBUG_G1") == "1":
-        import numpy as np
-
-        result_np = np.asarray(result) if hasattr(result, "__array__") else result
-        print(f"DEBUG compute_g1_total: result shape={result_np.shape}")
-        print(
-            f"DEBUG compute_g1_total: result min={np.min(result_np):.6e}, max={np.max(result_np):.6e}, mean={np.mean(result_np):.6e}"
-        )
-
-    return result
 
 
 def compute_g2_scaled(
