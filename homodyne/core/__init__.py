@@ -21,10 +21,12 @@ Performance Features:
 """
 
 from homodyne.core.fitting import FitResult, ScaledFittingEngine
+from homodyne.core.homodyne_model import HomodyneModel
 from homodyne.core.jax_backend import (
     compute_g1_diffusion,
     compute_g1_shear,
     compute_g2_scaled,
+    compute_g2_scaled_with_factors,
     gradient_g2,
     hessian_g2,
     jax_available,
@@ -40,6 +42,10 @@ from homodyne.core.physics import (
     parameter_bounds,
     validate_parameters,
 )
+from homodyne.core.physics_factors import (
+    PhysicsFactors,
+    create_physics_factors_from_config_dict,
+)
 from homodyne.core.theory import TheoryEngine, compute_chi2_theory, compute_g2_theory
 
 __all__ = [
@@ -48,6 +54,7 @@ __all__ = [
     "compute_g1_diffusion",
     "compute_g1_shear",
     "compute_g2_scaled",
+    "compute_g2_scaled_with_factors",
     "gradient_g2",
     "hessian_g2",
     # Models
@@ -55,6 +62,7 @@ __all__ = [
     "ShearModel",
     "CombinedModel",
     "PhysicsModelBase",
+    "HomodyneModel",
     # Theory computation
     "TheoryEngine",
     "compute_g2_theory",
@@ -66,4 +74,7 @@ __all__ = [
     "PhysicsConstants",
     "validate_parameters",
     "parameter_bounds",
+    # Physics factors
+    "PhysicsFactors",
+    "create_physics_factors_from_config_dict",
 ]

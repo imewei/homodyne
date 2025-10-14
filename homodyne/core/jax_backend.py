@@ -976,6 +976,59 @@ def compute_g2_scaled(
 
 
 @jit
+def compute_g2_scaled_with_factors(
+    params: jnp.ndarray,
+    t1: jnp.ndarray,
+    t2: jnp.ndarray,
+    phi: jnp.ndarray,
+    wavevector_q_squared_half_dt: float,
+    sinc_prefactor: float,
+    contrast: float,
+    offset: float,
+) -> jnp.ndarray:
+    """
+    JIT-optimized g2 computation using pre-computed physics factors.
+
+    This is the hybrid architecture functional core - accepts pre-computed
+    factors directly, avoiding runtime computation. Suitable for use with
+    HomodyneModel where factors are computed once at initialization.
+
+    Args:
+        params: Physical parameters [D0, alpha, D_offset, gamma_dot_0, beta, gamma_dot_offset, phi0]
+        t1, t2: Time grids for correlation calculation
+        phi: Scattering angles [degrees]
+        wavevector_q_squared_half_dt: Pre-computed factor (0.5 * q² * dt)
+        sinc_prefactor: Pre-computed factor (q * L * dt / 2π)
+        contrast: Contrast parameter (β in literature)
+        offset: Baseline offset
+
+    Returns:
+        g2 correlation function with scaled fitting
+
+    Note:
+        This function is JIT-compiled for maximum performance.
+        Use with HomodyneModel for best results.
+    """
+    # Handle 1D time arrays by creating meshgrids
+    if t1.ndim == 1 and t2.ndim == 1:
+        t2_grid, t1_grid = jnp.meshgrid(t2, t1, indexing="ij")
+        t1 = t1_grid
+        t2 = t2_grid
+
+    # Call core computation with pre-computed factors
+    return _compute_g2_scaled_core(
+        params,
+        t1,
+        t2,
+        phi,
+        wavevector_q_squared_half_dt,
+        sinc_prefactor,
+        contrast,
+        offset,
+    )
+
+
+@jit
 def compute_chi_squared(
     params: jnp.ndarray,
     data: jnp.ndarray,
