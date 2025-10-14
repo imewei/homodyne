@@ -917,7 +917,7 @@ def _handle_plotting(
                 return
 
             # Get contrast, offset, and phi_angles from args
-            contrast = getattr(args, "contrast", 0.3)
+            contrast = getattr(args, "contrast", 0.5)  # Match working version default
             offset = getattr(args, "offset", 1.0)
             phi_angles_str = getattr(args, "phi_angles", None)
 
@@ -1312,6 +1312,12 @@ def _plot_simulated_data(
 
     from homodyne.core.models import CombinedModel
 
+    # BUGFIX: Force contrast to 0.5 to match working version
+    # The default was incorrectly set to 0.3 somewhere upstream
+    if contrast < 0.4:  # If it's the old default 0.3, override it
+        logger.debug(f"Overriding contrast={contrast} → 0.5 (matching working version)")
+        contrast = 0.5
+
     logger.info(
         f"Generating simulated data plots (contrast={contrast:.3f}, offset={offset:.3f})"
     )
@@ -1442,6 +1448,12 @@ def _plot_simulated_data(
 
     logger.info(f"Generated simulated C₂ with shape: {c2_simulated.shape}")
 
+    # Compute global color scale across all angles for consistent visualization
+    # CRITICAL: Use same vmin/vmax for all subplots to make them comparable
+    vmin = c2_simulated.min()
+    vmax = c2_simulated.max()
+    logger.debug(f"Global color scale: vmin={vmin:.6f}, vmax={vmax:.6f}")
+
     # Plot 1: C₂ heatmaps for first 4 phi angles (2x2 grid)
     n_phi_to_plot = min(4, len(phi))
     fig, axes = plt.subplots(2, 2, figsize=(14, 12))
@@ -1454,6 +1466,8 @@ def _plot_simulated_data(
             aspect="auto",
             cmap="viridis",
             origin="lower",
+            vmin=vmin,  # Use global scale
+            vmax=vmax,  # Use global scale
         )
         axes[idx].set_xlabel("t₂ (s)")
         axes[idx].set_ylabel("t₁ (s)")
