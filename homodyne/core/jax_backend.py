@@ -800,12 +800,13 @@ def compute_g1_shear(
     phi: jnp.ndarray,
     q: float,
     L: float,
-    dt: float = None,
+    dt: float,
 ) -> jnp.ndarray:
     """
     Wrapper function that computes g1 shear using configuration dt.
 
-    IMPORTANT: The dt parameter should come from configuration, not be computed.
+    IMPORTANT: The dt parameter MUST come from configuration.
+    No fallback estimation - explicit dt is required for correct physics.
 
     Args:
         params: Physical parameters [D0, alpha, D_offset, gamma_dot_0, beta, gamma_dot_offset, phi0]
@@ -813,11 +814,27 @@ def compute_g1_shear(
         phi: Scattering angles
         q: Scattering wave vector magnitude
         L: Sample-detector distance (stator_rotor_gap)
-        dt: Time step from configuration (REQUIRED for correct physics)
+        dt: Time step from configuration [s] (REQUIRED)
 
     Returns:
         Shear contribution to g1 correlation function (sinc² values)
+
+    Raises:
+        TypeError: If dt is None (no longer accepts None)
+        ValueError: If dt <= 0 or not finite
     """
+    # Validate dt parameter
+    if dt is None:
+        raise TypeError(
+            "dt parameter is required and cannot be None. "
+            "Pass dt explicitly from configuration. "
+            "Fallback estimation has been removed for safety."
+        )
+    if dt <= 0:
+        raise ValueError(f"dt must be positive, got {dt}")
+    if not jnp.isfinite(dt):
+        raise ValueError(f"dt must be finite, got {dt}")
+
     # Handle 1D time arrays by creating meshgrids
     if t1.ndim == 1 and t2.ndim == 1:
         # Create 2D meshgrids from 1D arrays
@@ -825,15 +842,7 @@ def compute_g1_shear(
         t1 = t1_grid
         t2 = t2_grid
 
-    if dt is None:
-        # FALLBACK: Estimate from time array (NOT RECOMMENDED)
-        if t1.ndim == 2:
-            time_array = t1[:, 0]
-        else:
-            time_array = t1
-        dt = time_array[1] - time_array[0] if safe_len(time_array) > 1 else 1.0
-
-    # Compute the pre-computed factor using configuration dt
+    # Compute the physics factor using configuration dt
     sinc_prefactor = 0.5 / PI * q * L * dt
 
     return _compute_g1_shear_core(params, t1, t2, phi, sinc_prefactor)
@@ -846,12 +855,13 @@ def compute_g1_total(
     phi: jnp.ndarray,
     q: float,
     L: float,
-    dt: float = None,
+    dt: float,
 ) -> jnp.ndarray:
     """
     Wrapper function that computes total g1 using configuration dt.
 
-    IMPORTANT: The dt parameter should come from configuration, not be computed.
+    IMPORTANT: The dt parameter MUST come from configuration.
+    No fallback estimation - explicit dt is required for correct physics.
 
     Args:
         params: Physical parameters [D0, alpha, D_offset, gamma_dot_0, beta, gamma_dot_offset, phi0]
@@ -859,11 +869,27 @@ def compute_g1_total(
         phi: Scattering angles
         q: Scattering wave vector magnitude
         L: Sample-detector distance (stator_rotor_gap)
-        dt: Time step from configuration (REQUIRED for correct physics)
+        dt: Time step from configuration [s] (REQUIRED)
 
     Returns:
         Total g1 correlation function with shape (n_phi, n_times, n_times)
+
+    Raises:
+        TypeError: If dt is None (no longer accepts None)
+        ValueError: If dt <= 0 or not finite
     """
+    # Validate dt parameter
+    if dt is None:
+        raise TypeError(
+            "dt parameter is required and cannot be None. "
+            "Pass dt explicitly from configuration. "
+            "Fallback estimation has been removed for safety."
+        )
+    if dt <= 0:
+        raise ValueError(f"dt must be positive, got {dt}")
+    if not jnp.isfinite(dt):
+        raise ValueError(f"dt must be finite, got {dt}")
+
     # Handle 1D time arrays by creating meshgrids
     if t1.ndim == 1 and t2.ndim == 1:
         # Create 2D meshgrids from 1D arrays
@@ -871,15 +897,7 @@ def compute_g1_total(
         t1 = t1_grid
         t2 = t2_grid
 
-    if dt is None:
-        # FALLBACK: Estimate from time array (NOT RECOMMENDED)
-        if t1.ndim == 2:
-            time_array = t1[:, 0]
-        else:
-            time_array = t1
-        dt = time_array[1] - time_array[0] if safe_len(time_array) > 1 else 1.0
-
-    # Compute the pre-computed factors using configuration dt
+    # Compute the physics factors using configuration dt
     wavevector_q_squared_half_dt = 0.5 * (q**2) * dt
     sinc_prefactor = 0.5 / PI * q * L * dt
 
@@ -897,12 +915,13 @@ def compute_g2_scaled(
     L: float,
     contrast: float,
     offset: float,
-    dt: float = None,
+    dt: float,
 ) -> jnp.ndarray:
     """
     Wrapper function that computes g2 using configuration dt.
 
-    IMPORTANT: The dt parameter should come from configuration, not be computed.
+    IMPORTANT: The dt parameter MUST come from configuration.
+    No fallback estimation - explicit dt is required for correct physics.
 
     Args:
         params: Physical parameters [D0, alpha, D_offset, gamma_dot_0, beta, gamma_dot_offset, phi0]
@@ -912,11 +931,27 @@ def compute_g2_scaled(
         L: Sample-detector distance (stator_rotor_gap)
         contrast: Contrast parameter (β in literature)
         offset: Baseline offset
-        dt: Time step from configuration (REQUIRED for correct physics)
+        dt: Time step from configuration [s] (REQUIRED)
 
     Returns:
         g2 correlation function with scaled fitting and physical bounds applied
+
+    Raises:
+        TypeError: If dt is None (no longer accepts None)
+        ValueError: If dt <= 0 or not finite
     """
+    # Validate dt parameter
+    if dt is None:
+        raise TypeError(
+            "dt parameter is required and cannot be None. "
+            "Pass dt explicitly from configuration. "
+            "Fallback estimation has been removed for safety."
+        )
+    if dt <= 0:
+        raise ValueError(f"dt must be positive, got {dt}")
+    if not jnp.isfinite(dt):
+        raise ValueError(f"dt must be finite, got {dt}")
+
     # Handle 1D time arrays by creating meshgrids
     if t1.ndim == 1 and t2.ndim == 1:
         # Create 2D meshgrids from 1D arrays
@@ -924,15 +959,7 @@ def compute_g2_scaled(
         t1 = t1_grid
         t2 = t2_grid
 
-    if dt is None:
-        # FALLBACK: Estimate from time array (NOT RECOMMENDED)
-        if t1.ndim == 2:
-            time_array = t1[:, 0]
-        else:
-            time_array = t1
-        dt = time_array[1] - time_array[0] if safe_len(time_array) > 1 else 1.0
-
-    # Compute the pre-computed factors using configuration dt
+    # Compute the physics factors using configuration dt
     wavevector_q_squared_half_dt = 0.5 * (q**2) * dt
     sinc_prefactor = 0.5 / PI * q * L * dt
 

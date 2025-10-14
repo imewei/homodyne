@@ -354,7 +354,7 @@ class CombinedModel(PhysicsModelBase):
         L: float,
         contrast: float,
         offset: float,
-        dt: float = None,
+        dt: float,
     ) -> jnp.ndarray:
         """
         Compute g2 with scaled fitting: g₂ = offset + contrast × [g₁]²
@@ -375,17 +375,31 @@ class CombinedModel(PhysicsModelBase):
             Contrast parameter (β in literature)
         offset : float
             Baseline offset
-        dt : float, optional
-            Time step from configuration [s]. If not provided, will be estimated
-            from time array spacing (NOT RECOMMENDED for accurate physics).
+        dt : float
+            Time step from configuration [s] (REQUIRED).
+            Fallback estimation has been removed for safety.
 
         Returns
         -------
         jnp.ndarray
             g2 correlation function
+
+        Raises
+        ------
+        TypeError
+            If dt is None (no longer accepts None)
+        ValueError
+            If dt <= 0 or not finite
         """
-        # Pass q directly without conversion to avoid JAX tracing issues
-        # The backend functions handle any necessary conversions
+        # Validate dt before passing to backend
+        if dt is None:
+            raise TypeError(
+                "dt parameter is required and cannot be None. "
+                "Pass dt explicitly from configuration."
+            )
+
+        # Pass to functional backend
+        # The backend functions handle additional validation
         return compute_g2_scaled(params, t1, t2, phi, q, L, contrast, offset, dt)
 
     @log_calls(include_args=False)
