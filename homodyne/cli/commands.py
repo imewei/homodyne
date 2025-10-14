@@ -1371,34 +1371,28 @@ def _plot_simulated_data(
 
     logger.debug(f"Using {len(phi)} phi angles: {phi_degrees}")
 
-    # Generate time arrays matching experimental data
+    # Generate time arrays matching configuration specification
+    # CRITICAL: Simulated data must be independent of experimental data
     analyzer_params = config.get("analyzer_parameters", {})
     dt = analyzer_params.get("dt", 0.1)
     start_frame = analyzer_params.get("start_frame", 1)
     end_frame = analyzer_params.get("end_frame", 8000)
 
-    # Get n_time_points from experimental data if available, otherwise use frame range
-    if data is not None and "c2_exp" in data:
-        c2_exp = data["c2_exp"]
-        n_time_points = c2_exp.shape[-1]  # Use actual experimental data size
-        logger.debug(
-            f"Using n_time_points={n_time_points} from experimental data shape"
-        )
-    else:
-        n_time_points = end_frame - start_frame + 1
-        logger.debug(f"Using n_time_points={n_time_points} calculated from frame range")
+    # Calculate number of time points (inclusive frame counting)
+    # This matches the data loader convention: n = end - start + 1
+    n_time_points = end_frame - start_frame + 1
 
-    # Calculate time_max from frame range (matches data loader logic)
-    time_max = dt * (end_frame - start_frame)
-
-    # Generate time array from 0 to time_max (matches experimental data)
+    # Generate time array: t[i] = dt * i for i = 0, 1, ..., n-1
+    # For linspace(0, T, N): T = dt * (N - 1) to ensure t[i] = dt * i
+    time_max = dt * (n_time_points - 1)
     t_vals = jnp.linspace(0, time_max, n_time_points)
     t1_grid, t2_grid = jnp.meshgrid(t_vals, t_vals, indexing="ij")
 
     logger.debug(
-        f"Time array: dt={dt}, start_frame={start_frame}, end_frame={end_frame}"
+        f"Simulated data time grid: dt={dt}, start_frame={start_frame}, end_frame={end_frame}"
     )
     logger.debug(f"Time range: [0, {time_max:.2f}] seconds with {n_time_points} points")
+    logger.debug(f"Time spacing verification: t[1]-t[0]={float(t_vals[1] - t_vals[0]):.6f} (should equal dt={dt})")
 
     # Get wavevector_q and stator_rotor_gap from correct config sections
     scattering_config = analyzer_params.get("scattering", {})
@@ -1426,6 +1420,7 @@ def _plot_simulated_data(
         logger.debug(f"Computing C₂ for φ={phi_val}° (phi_array={phi_array})")
 
         # Compute g2 for this phi angle (L_angstroms: physics code expects Angstroms)
+        # CRITICAL: Pass dt explicitly to ensure correct physics calculations
         c2_phi = model.compute_g2(
             params,
             t1_grid,
@@ -1435,6 +1430,7 @@ def _plot_simulated_data(
             L_angstroms,
             contrast,
             offset,
+            dt,  # Pass dt from config for accurate physics
         )
 
         # Extract the 2D array (remove phi dimension)

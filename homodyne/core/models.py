@@ -354,13 +354,39 @@ class CombinedModel(PhysicsModelBase):
         L: float,
         contrast: float,
         offset: float,
+        dt: float = None,
     ) -> jnp.ndarray:
         """
         Compute g2 with scaled fitting: g₂ = offset + contrast × [g₁]²
+
+        Parameters
+        ----------
+        params : jnp.ndarray
+            Physical parameters array
+        t1, t2 : jnp.ndarray
+            Time grids for correlation calculation
+        phi : jnp.ndarray
+            Scattering angles in degrees
+        q : float
+            Scattering wave vector magnitude [Å⁻¹]
+        L : float
+            Sample-detector distance (stator_rotor_gap) [Å]
+        contrast : float
+            Contrast parameter (β in literature)
+        offset : float
+            Baseline offset
+        dt : float, optional
+            Time step from configuration [s]. If not provided, will be estimated
+            from time array spacing (NOT RECOMMENDED for accurate physics).
+
+        Returns
+        -------
+        jnp.ndarray
+            g2 correlation function
         """
         # Pass q directly without conversion to avoid JAX tracing issues
         # The backend functions handle any necessary conversions
-        return compute_g2_scaled(params, t1, t2, phi, q, L, contrast, offset)
+        return compute_g2_scaled(params, t1, t2, phi, q, L, contrast, offset, dt)
 
     @log_calls(include_args=False)
     def compute_chi_squared(
