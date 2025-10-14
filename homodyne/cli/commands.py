@@ -1005,8 +1005,11 @@ def _apply_angle_filtering(
         return list(range(len(phi_angles))), phi_angles, c2_exp
 
     # Apply filtering
-    filtered_phi_angles = phi_angles[filtered_indices]
-    filtered_c2_exp = c2_exp[filtered_indices]
+    # Convert list to numpy array for JAX compatibility
+    # (JAX arrays don't accept Python list indexing, see https://github.com/jax-ml/jax/issues/4564)
+    filtered_indices_array = np.array(filtered_indices)
+    filtered_phi_angles = phi_angles[filtered_indices_array]
+    filtered_c2_exp = c2_exp[filtered_indices_array]
 
     return filtered_indices, filtered_phi_angles, filtered_c2_exp
 
