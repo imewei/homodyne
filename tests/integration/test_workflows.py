@@ -270,7 +270,7 @@ class TestEndToEndWorkflows:
             pytest.skip(f"Required modules not available: {e}")
 
         if not NLSQ_AVAILABLE or not JAX_AVAILABLE:
-            pytest.skip("Optimistix or JAX not available")
+            pytest.skip("NLSQ or JAX not available")
 
         # Generate data with multiple q-values
         n_times = 20
@@ -480,7 +480,7 @@ class TestModuleInteraction:
             pytest.skip("Required modules not available")
 
         if not NLSQ_AVAILABLE or not JAX_AVAILABLE:
-            pytest.skip("JAX or Optimistix not available")
+            pytest.skip("JAX or NLSQ not available")
 
         data = synthetic_xpcs_data
 

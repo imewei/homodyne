@@ -4,10 +4,6 @@
 [![Python](https://img.shields.io/badge/Python-3.10%2B-blue)](https://www.python.org/)
 [![DOI](https://zenodo.org/badge/DOI/10.1073/pnas.2401162121.svg)](https://doi.org/10.1073/pnas.2401162121)
 
-> **📢 Homodyne v2.0 Migration Notice**
-> Homodyne v2.0 now uses **NLSQ** (replacing Optimistix) for trust-region optimization. **Good news**: The migration is 99% backward compatible - most existing code works without changes!
-> 📖 **[Read the Migration Guide](docs/MIGRATION_OPTIMISTIX_TO_NLSQ.md)** for details.
-
 **High-performance JAX-first package for X-ray Photon Correlation Spectroscopy (XPCS) analysis**, implementing the theoretical framework from [He et al. PNAS 2024](https://doi.org/10.1073/pnas.2401162121) for characterizing transport properties in flowing soft matter systems through time-dependent intensity correlation functions.
 
 A completely rebuilt homodyne package with JAX-first architecture, optimized for HPC and supercomputer environments.
@@ -274,6 +270,8 @@ This validates:
 - CLI interface is functional
 
 ## Migration from v1
+
+> **Note:** v2.0 uses the NLSQ package for trust-region optimization. For details on the v2.0 release, see [CHANGELOG.md](CHANGELOG.md#200---2025-10-12).
 
 The v2 rebuild maintains full API compatibility for validated components:
 

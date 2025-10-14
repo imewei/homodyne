@@ -8,8 +8,6 @@ Tests for homodyne.optimization.nlsq module including:
 - Convergence behavior
 - Error handling and fallbacks
 - Performance characteristics
-
-Note: These tests have been updated to use the NLSQ package instead of Optimistix.
 """
 
 

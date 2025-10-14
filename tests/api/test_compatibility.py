@@ -222,15 +222,15 @@ class TestReturnTypes:
         """Test optimization return types are consistent."""
         try:
             from homodyne.optimization.nlsq import (
-                OPTIMISTIX_AVAILABLE,
+                NLSQ_AVAILABLE,
                 NLSQResult,
                 fit_nlsq_jax,
             )
         except ImportError:
             pytest.skip("Optimization module not available")
 
-        if not OPTIMISTIX_AVAILABLE:
-            pytest.skip("Optimistix not available")
+        if not NLSQ_AVAILABLE:
+            pytest.skip("NLSQ not available")
 
         data = synthetic_xpcs_data
         config = test_config
@@ -470,12 +470,12 @@ class TestDocumentationCompatibility:
         """Test basic usage example from documentation."""
         try:
             # This should match the basic example in documentation
-            from homodyne.optimization.nlsq import OPTIMISTIX_AVAILABLE, fit_nlsq_jax
+            from homodyne.optimization.nlsq import NLSQ_AVAILABLE, fit_nlsq_jax
         except ImportError:
             pytest.skip("Required modules not available")
 
-        if not OPTIMISTIX_AVAILABLE:
-            pytest.skip("Optimistix not available")
+        if not NLSQ_AVAILABLE:
+            pytest.skip("NLSQ not available")
 
         data = synthetic_xpcs_data
         config = test_config

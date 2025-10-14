@@ -2,16 +2,16 @@
 JAX-First Optimization for Homodyne v2
 ======================================
 
-Simplified optimization system using Optimistix NLSQ (primary) and MCMC+JAX
+Simplified optimization system using NLSQ package (primary) and MCMC+JAX
 (high-accuracy) for robust parameter estimation in homodyne analysis.
 
 This module implements the streamlined optimization philosophy:
-1. Optimistix NLSQ as primary method (fast, reliable parameter estimation)
+1. NLSQ as primary method (fast, reliable parameter estimation)
 2. MCMC+JAX (NumPyro/BlackJAX) for uncertainty quantification
 3. Unified homodyne model: c2_fitted = c2_theory * contrast + offset
 
 Key Features:
-- Optimistix trust-region optimization (Levenberg-Marquardt) as foundation
+- NLSQ trust-region optimization (Levenberg-Marquardt) as foundation
 - JAX-accelerated MCMC for uncertainty quantification
 - CPU-primary, GPU-optional architecture
 - Dataset size-aware optimization strategies
@@ -64,7 +64,7 @@ OPTIMIZATION_STATUS = {
 # Primary API functions
 __all__ = [
     # Primary optimization methods
-    "fit_nlsq_jax",  # Optimistix trust-region (PRIMARY)
+    "fit_nlsq_jax",  # NLSQ trust-region (PRIMARY)
     "fit_mcmc_jax",  # NumPyro/BlackJAX NUTS (SECONDARY)
     # Result classes
     "NLSQResult",
@@ -104,7 +104,7 @@ def get_optimization_info():
 
     if not NLSQ_AVAILABLE and not MCMC_AVAILABLE:
         info["recommendations"].append(
-            "Install Optimistix and NumPyro/BlackJAX for optimization capabilities"
+            "Install NLSQ and NumPyro/BlackJAX for optimization capabilities"
         )
 
     return info

@@ -9,8 +9,11 @@ Focuses on essential commands while maintaining compatibility.
 import argparse
 from pathlib import Path
 
-# Version placeholder - would normally import from main package
-__version__ = "2.1.0"
+# Import version from package (with fallback for development)
+try:
+    from homodyne._version import __version__
+except ImportError:
+    __version__ = "unknown"
 
 
 def create_parser() -> argparse.ArgumentParser:
@@ -27,7 +30,7 @@ def create_parser() -> argparse.ArgumentParser:
         epilog=f"""
 Examples:
   %(prog)s                                    # Run with default NLSQ method
-  %(prog)s --method nlsq                      # Optimistix nonlinear least squares (default)
+  %(prog)s --method nlsq                      # NLSQ trust-region least squares (default)
   %(prog)s --method mcmc                      # MCMC sampling for uncertainty quantification
   %(prog)s --config my_config.yaml            # Use custom config file
   %(prog)s --output-dir ./results             # Custom output directory
@@ -41,7 +44,7 @@ Examples:
   %(prog)s --laminar-flow --method mcmc       # Force laminar flow (7 parameters) with MCMC
 
 Optimization Methods:
-  nlsq:    Optimistix trust-region nonlinear least squares (PRIMARY)
+  nlsq:    NLSQ trust-region nonlinear least squares (PRIMARY)
           Use for: Fast, reliable parameter estimation
 
   mcmc:    NumPyro/BlackJAX NUTS sampling (SECONDARY)
@@ -67,7 +70,7 @@ Homodyne v{__version__} - JAX-First Architecture
         "--method",
         choices=["nlsq", "mcmc"],
         default="nlsq",
-        help="Optimization method: nlsq (Optimistix trust-region), mcmc (NumPyro/BlackJAX NUTS) (default: %(default)s)",
+        help="Optimization method: nlsq (NLSQ trust-region), mcmc (NumPyro/BlackJAX NUTS) (default: %(default)s)",
     )
 
     # Configuration and I/O

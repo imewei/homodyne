@@ -7,7 +7,7 @@ using JAX-accelerated optimization methods for HPC and supercomputer environment
 
 Key Features:
 - JAX-first computational architecture
-- Optimistix trust-region nonlinear least squares (primary optimization)
+- NLSQ trust-region nonlinear least squares (primary optimization)
 - NumPyro/BlackJAX MCMC sampling (secondary optimization)
 - System CUDA integration with jax[local]
 - HPC-optimized for 36/128-core CPU nodes
@@ -171,8 +171,7 @@ def get_package_info() -> dict:
     # Check key dependencies
     dependencies = {
         "jax": False,
-        "optimistix": False,
-        "equinox": False,
+        "nlsq": False,
         "numpyro": False,
         "blackjax": False,
         "h5py": False,
@@ -194,9 +193,9 @@ def get_package_info() -> dict:
     if not dependencies["jax"]:
         info["recommendations"].append("Install JAX for acceleration: pip install jax")
 
-    if not dependencies["optimistix"] or not dependencies["equinox"]:
+    if not dependencies["nlsq"]:
         info["recommendations"].append(
-            "Install Optimistix for NLSQ optimization: pip install optimistix equinox"
+            "Install NLSQ for optimization: pip install nlsq"
         )
 
     if not dependencies["numpyro"] and not dependencies["blackjax"]:

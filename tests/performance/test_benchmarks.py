@@ -163,12 +163,12 @@ class TestComputationalBenchmarks:
     ):
         """Benchmark NLSQ optimization performance."""
         try:
-            from homodyne.optimization.nlsq import OPTIMISTIX_AVAILABLE, fit_nlsq_jax
+            from homodyne.optimization.nlsq import NLSQ_AVAILABLE, fit_nlsq_jax
         except ImportError:
             pytest.skip("NLSQ optimization module not available")
 
-        if not OPTIMISTIX_AVAILABLE:
-            pytest.skip("Optimistix not available")
+        if not NLSQ_AVAILABLE:
+            pytest.skip("NLSQ not available")
 
         data = synthetic_xpcs_data
 
@@ -620,12 +620,12 @@ class TestRegressionBenchmarks:
     ):
         """Test optimization performance regression."""
         try:
-            from homodyne.optimization.nlsq import OPTIMISTIX_AVAILABLE, fit_nlsq_jax
+            from homodyne.optimization.nlsq import NLSQ_AVAILABLE, fit_nlsq_jax
         except ImportError:
             pytest.skip("Optimization module not available")
 
-        if not OPTIMISTIX_AVAILABLE:
-            pytest.skip("Optimistix not available")
+        if not NLSQ_AVAILABLE:
+            pytest.skip("NLSQ not available")
 
         data = synthetic_xpcs_data
 

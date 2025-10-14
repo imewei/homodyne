@@ -347,12 +347,12 @@ class TestGPUPerformance:
             pytest.skip("No GPU available")
 
         try:
-            from homodyne.optimization.nlsq import OPTIMISTIX_AVAILABLE, fit_nlsq_jax
+            from homodyne.optimization.nlsq import NLSQ_AVAILABLE, fit_nlsq_jax
         except ImportError:
             pytest.skip("Optimization module not available")
 
-        if not OPTIMISTIX_AVAILABLE:
-            pytest.skip("Optimistix not available")
+        if not NLSQ_AVAILABLE:
+            pytest.skip("NLSQ not available")
 
         data = synthetic_xpcs_data
 
@@ -520,12 +520,12 @@ class TestGPUIntegration:
         try:
             from homodyne.tests.factories.data_factory import XPCSDataFactory
 
-            from homodyne.optimization.nlsq import OPTIMISTIX_AVAILABLE, fit_nlsq_jax
+            from homodyne.optimization.nlsq import NLSQ_AVAILABLE, fit_nlsq_jax
         except ImportError:
             pytest.skip("Required modules not available")
 
-        if not OPTIMISTIX_AVAILABLE:
-            pytest.skip("Optimistix not available")
+        if not NLSQ_AVAILABLE:
+            pytest.skip("NLSQ not available")
 
         # Step 1: Activate GPU
         activation_result = activate_gpu(
@@ -592,12 +592,12 @@ class TestGPUIntegration:
             pytest.skip("No GPU available")
 
         try:
-            from homodyne.optimization.nlsq import OPTIMISTIX_AVAILABLE, fit_nlsq_jax
+            from homodyne.optimization.nlsq import NLSQ_AVAILABLE, fit_nlsq_jax
         except ImportError:
             pytest.skip("Optimization module not available")
 
-        if not OPTIMISTIX_AVAILABLE:
-            pytest.skip("Optimistix not available")
+        if not NLSQ_AVAILABLE:
+            pytest.skip("NLSQ not available")
 
         data = synthetic_xpcs_data
 

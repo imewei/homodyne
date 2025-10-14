@@ -1,7 +1,7 @@
 # Homodyne Analysis Package - Development Makefile
 # ================================================
-# JAX-accelerated XPCS analysis with Optimistix NLSQ and MCMC
-# Updated: 2025-09-24 - Optimistix integration
+# JAX-accelerated XPCS analysis with NLSQ and MCMC
+# Updated: 2025-10-14 - NLSQ integration
 
 .PHONY: help clean clean-all clean-build clean-pyc clean-test clean-cache install dev test test-all test-unit test-integration test-performance lint format docs build check gpu-check benchmark
 
@@ -77,7 +77,7 @@ install:
 dev:
 	$(PIP) install -e ".[dev,docs]"
 	@echo "✓ Development environment ready"
-	@echo "  Optimistix NLSQ: Ready"
+	@echo "  NLSQ: Ready"
 	@echo "  MCMC (NumPyro): Ready"
 	@$(PYTHON) -c "from homodyne import get_package_info; info = get_package_info(); print('\nDependency Status:'); [print(f'  {k}: ✓' if v else f'  {k}: ✗') for k,v in info['dependencies'].items()]"
 
@@ -100,7 +100,7 @@ deps-check:
 		print(f'  NumPy: ' + ('✓' if deps.get('numpy') else '✗')); \
 		print(f'  SciPy: ' + ('✓' if deps.get('scipy') else '✗')); \
 		print('\nOptimization:'); \
-		print(f'  Optimistix: ' + ('✓' if deps.get('optimistix') else '✗ (NLSQ unavailable)')); \
+		print(f'  NLSQ: ' + ('✓' if deps.get('nlsq') else '✗')); \
 		print(f'  Equinox: ' + ('✓' if deps.get('equinox') else '✗')); \
 		print(f'  NumPyro: ' + ('✓' if deps.get('numpyro') else '✗ (MCMC unavailable)')); \
 		print(f'  BlackJAX: ' + ('✓' if deps.get('blackjax') else '✗')); \
@@ -261,7 +261,7 @@ demo-nlsq:
 			'wavevector_q_list': [0.01], 'phi_angles_list': np.linspace(0, 2*np.pi, 10), \
 			't1': np.linspace(0.1, 1, 10), 't2': np.linspace(0.1, 1, 10)}; \
 		config = ConfigManager(config_override={'analysis_mode': 'static_isotropic'}); \
-		print('Starting Optimistix NLSQ optimization...'); \
+		print('Starting NLSQ optimization...'); \
 		result = fit_nlsq_jax(data, config); \
 		print(f'Result: success={result.success}, method={result.method}'); \
 		print('✓ NLSQ demo completed')"
@@ -307,13 +307,13 @@ stats:
 	@echo "Package size:"
 	@du -sh homodyne/
 
-# Verify Optimistix integration
-verify-optimistix:
-	@echo "Verifying Optimistix Integration..."
-	@echo "==================================="
-	@$(PYTHON) -c "from homodyne.optimization.nlsq import OPTIMISTIX_AVAILABLE; print(f'Optimistix available: {OPTIMISTIX_AVAILABLE}')"
+# Verify NLSQ integration
+verify-nlsq:
+	@echo "Verifying NLSQ Integration..."
+	@echo "=============================="
+	@$(PYTHON) -c "from homodyne.optimization.nlsq import NLSQ_AVAILABLE; print(f'NLSQ available: {NLSQ_AVAILABLE}')"
 	@$(PYTHON) -c "from homodyne.optimization import fit_nlsq_jax; print(f'fit_nlsq_jax imported: ✓')"
-	@$(PYTHON) -c "import optimistix; print(f'Optimistix version: {optimistix.__version__}')" 2>/dev/null || echo "Optimistix version check failed"
-	@echo "✓ Optimistix integration verified"
+	@$(PYTHON) -c "import nlsq; print(f'NLSQ package version: {nlsq.__version__}')" 2>/dev/null || echo "NLSQ version check failed"
+	@echo "✓ NLSQ integration verified"
 
 .DEFAULT_GOAL := help

@@ -1,9 +1,9 @@
 """
-Minimal Progress Tracking for Optimistix NLSQ Optimization
-==========================================================
+Minimal Progress Tracking for NLSQ Optimization
+================================================
 
 Since NumPyro has built-in progress bars for MCMC, this module only provides
-progress tracking for Optimistix NLSQ optimization, which doesn't have native
+progress tracking for NLSQ optimization, which doesn't have native
 progress reporting capabilities.
 """
 

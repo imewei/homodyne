@@ -6,9 +6,6 @@ Validates NLSQ implementation against:
 - Numerical stability and robustness
 - Performance benchmarks
 - Physics-based expectations
-
-This replaces Optimistix parity checks (Optimistix removed from codebase)
-with comprehensive validation against theoretical expectations.
 """
 
 import time
