@@ -211,6 +211,9 @@ clean-test:
 	rm -f coverage.xml
 	rm -f test-results.xml
 	rm -rf .nlsq_cache/
+	rm -rf .hypothesis/
+	rm -rf homodyne_results/
+	rm -f bandit*report.json
 
 clean-cache:
 	find . -type d -name '.cache' -exec rm -rf {} + 2>/dev/null || true
