@@ -214,6 +214,7 @@ clean-test:
 	rm -rf .hypothesis/
 	rm -rf homodyne_results/
 	rm -f bandit*report.json
+	rm -rf .homodyne_cache/
 
 clean-cache:
 	find . -type d -name '.cache' -exec rm -rf {} + 2>/dev/null || true

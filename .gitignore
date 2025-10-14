@@ -82,6 +82,7 @@ bandit_re*.json
 bandit-re*.json
 pip_audit_report.json
 specs/
+.homodyne_cache/
 
 # Translations
 *.mo
