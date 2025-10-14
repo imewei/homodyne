@@ -770,3 +770,104 @@ class ParameterFactory:
         ]
 
         return edge_cases
+
+
+# Convenience functions for angle filtering tests
+def create_angle_filtering_test_data(
+    n_phi: int = 9,
+    n_t1: int = 25,
+    n_t2: int = 25,
+    phi_min: float = 0.0,
+    phi_max: float = 360.0,
+    seed: int | None = 42,
+) -> dict[str, Any]:
+    """Create test data specifically for angle filtering tests.
+
+    Parameters
+    ----------
+    n_phi : int, default=9
+        Number of phi angles
+    n_t1 : int, default=25
+        Number of t1 time points
+    n_t2 : int, default=25
+        Number of t2 time points
+    phi_min : float, default=0.0
+        Minimum phi angle in degrees
+    phi_max : float, default=360.0
+        Maximum phi angle in degrees
+    seed : int, optional
+        Random seed for reproducibility
+
+    Returns
+    -------
+    dict
+        Data dictionary with keys: phi_angles_list, c2_exp, t1, t2, wavevector_q_list
+        Suitable for testing angle filtering functions
+
+    Examples
+    --------
+    >>> data = create_angle_filtering_test_data(n_phi=9)
+    >>> data["phi_angles_list"].shape
+    (9,)
+    >>> data["c2_exp"].shape
+    (9, 25, 25)
+    """
+    factory = XPCSDataFactory(seed=seed)
+
+    # Use factory to generate realistic data
+    # Note: create_synthetic_correlation_data uses n_times and n_angles parameters
+    data = factory.create_synthetic_correlation_data(
+        n_times=n_t1,  # Use n_t1 for number of time points
+        n_angles=n_phi,  # Use n_phi for number of angles
+    )
+
+    return data
+
+
+def create_specific_angles_test_data(
+    phi_angles: list[float],
+    n_t1: int = 25,
+    n_t2: int = 25,
+    seed: int | None = 42,
+) -> dict[str, Any]:
+    """Create test data with specific phi angles for targeted filtering tests.
+
+    Parameters
+    ----------
+    phi_angles : list of float
+        Specific phi angles in degrees
+    n_t1 : int, default=25
+        Number of t1 time points
+    n_t2 : int, default=25
+        Number of t2 time points
+    seed : int, optional
+        Random seed for reproducibility
+
+    Returns
+    -------
+    dict
+        Data dictionary with specified phi angles
+
+    Examples
+    --------
+    >>> # Test with angles that match common experimental values
+    >>> data = create_specific_angles_test_data([-5.8, 0.0, 4.9, 90.0])
+    >>> list(data["phi_angles_list"])
+    [-5.8, 0.0, 4.9, 90.0]
+    """
+    factory = XPCSDataFactory(seed=seed)
+
+    # Create data with specific angles
+    phi_array = np.array(phi_angles)
+    n_phi = len(phi_angles)
+
+    # Generate realistic correlation data
+    data = factory.create_synthetic_correlation_data(
+        n_times=n_t1,
+        n_angles=n_phi,
+    )
+
+    # Override phi_angles with specific values
+    data["phi_angles_list"] = phi_array
+
+    return data

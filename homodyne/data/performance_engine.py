@@ -37,7 +37,6 @@ from pathlib import Path
 from typing import Any
 
 import psutil
-import zstd
 
 # Core dependencies with graceful fallback
 try:
@@ -47,6 +46,15 @@ try:
 except ImportError:
     HAS_NUMPY = False
     np = None
+
+# Optional compression library with fallback
+try:
+    import zstd
+
+    HAS_ZSTD = True
+except ImportError:
+    HAS_ZSTD = False
+    zstd = None
 
 try:
     import h5py
@@ -732,8 +740,11 @@ class MultiLevelCache:
             # Serialize item
             serialized = pickle.dumps(item, protocol=pickle.HIGHEST_PROTOCOL)
 
-            # Compress with zstd
-            compressed = zstd.compress(serialized, self.compression_level)
+            # Compress with zstd if available, otherwise save uncompressed
+            if HAS_ZSTD:
+                compressed = zstd.compress(serialized, self.compression_level)
+            else:
+                compressed = serialized  # Fallback to uncompressed
 
             # Write to disk
             with open(file_path, "wb") as f:
@@ -750,10 +761,13 @@ class MultiLevelCache:
         """Load and decompress item from disk."""
         try:
             with open(file_path, "rb") as f:
-                compressed = f.read()
+                data = f.read()
 
-            # Decompress
-            serialized = zstd.decompress(compressed)
+            # Decompress if zstd available, otherwise data is already uncompressed
+            if HAS_ZSTD:
+                serialized = zstd.decompress(data)
+            else:
+                serialized = data  # Fallback to uncompressed
 
             # Deserialize
             item = pickle.loads(serialized)
