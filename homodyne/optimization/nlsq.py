@@ -263,6 +263,26 @@ def fit_nlsq_jax(
             data_obj.sigma = 0.01 * np.ones_like(g2_array)
             logger.debug(f"Generated default sigma: shape {data_obj.sigma.shape}")
 
+        # Extract 1D time vectors from 2D meshgrids if needed
+        # Data loader returns t1_2d, t2_2d as (N, N) meshgrids, but NLSQWrapper expects 1D vectors
+        if hasattr(data_obj, 't1'):
+            t1 = np.asarray(data_obj.t1)
+            if t1.ndim == 2:
+                # t1_2d[i, j] = time[i] (constant along j), so extract first column
+                data_obj.t1 = t1[:, 0]
+                logger.debug(f"Extracted 1D t1 vector from 2D meshgrid: {t1.shape} → {data_obj.t1.shape}")
+            elif t1.ndim != 1:
+                raise ValueError(f"t1 must be 1D or 2D array, got shape {t1.shape}")
+
+        if hasattr(data_obj, 't2'):
+            t2 = np.asarray(data_obj.t2)
+            if t2.ndim == 2:
+                # t2_2d[i, j] = time[j] (constant along i), so extract first row
+                data_obj.t2 = t2[0, :]
+                logger.debug(f"Extracted 1D t2 vector from 2D meshgrid: {t2.shape} → {data_obj.t2.shape}")
+            elif t2.ndim != 1:
+                raise ValueError(f"t2 must be 1D or 2D array, got shape {t2.shape}")
+
         # Get characteristic length L from config (stator_rotor_gap or sample_detector_distance)
         if not hasattr(data_obj, 'L'):
             # Try to get from config - check multiple possible locations
@@ -300,12 +320,20 @@ def fit_nlsq_jax(
         # Get time step dt from config if available
         if not hasattr(data_obj, 'dt'):
             try:
-                exp_config = config.config.get('experimental_data', {})
-                dt_value = exp_config.get('dt')
+                # Try analyzer_parameters first (preferred location)
+                analyzer_params = config.config.get('analyzer_parameters', {})
+                dt_value = analyzer_params.get('dt')
+
+                # Fallback to experimental_data section
+                if dt_value is None:
+                    exp_config = config.config.get('experimental_data', {})
+                    dt_value = exp_config.get('dt')
+
                 if dt_value is not None:
                     data_obj.dt = float(dt_value)
-                    logger.debug(f"Using time step dt = {data_obj.dt:.6f}")
-            except (AttributeError, TypeError, ValueError):
+                    logger.debug(f"Using time step dt = {data_obj.dt:.6f} s")
+            except (AttributeError, TypeError, ValueError) as e:
+                logger.warning(f"Error reading dt from config: {e}")
                 pass  # dt is optional, no problem if missing
 
         data = data_obj

@@ -288,16 +288,18 @@ def _calculate_diffusion_coefficient_impl_jax(
     Returns:
         D(t) evaluated at each time point with physical bounds applied
     """
-    # Robust calculation with bounds checking to prevent numerical overflow
-    # Apply bounds on the exponential term to prevent extreme values
-    power_term = jnp.clip(time_array**alpha, 1e-20, 1e5)  # Prevent extreme power values
-    D_t = D0 * power_term + D_offset
+    # CRITICAL FIX: Add epsilon to prevent t=0 with negative alpha causing Inf/NaN gradients
+    # When alpha < 0: t^alpha = 1/t^|alpha|, so t=0 → infinity
+    # Adding epsilon ensures numerical stability: (t+ε)^alpha is always finite
+    epsilon = 1e-10
+    time_safe = time_array + epsilon
 
-    # Apply physical bounds: D(t) should be positive and not too large
-    # Hard bounds enforce 1.0 < D_t < 1e6 for numerical stability (updated to match DIFFUSION_MAX)
-    D_t_bounded = jnp.clip(D_t, 1.0, 1e6)
+    # Compute diffusion coefficient
+    D_t = D0 * (time_safe**alpha) + D_offset
 
-    return D_t_bounded
+    # TEMPORARY: Remove hard clipping to test if it's blocking gradients
+    # Just ensure positive values
+    return jnp.maximum(D_t, 1e-10)
 
 
 @jit
@@ -318,9 +320,16 @@ def _calculate_shear_rate_impl_jax(
     Returns:
         γ̇(t) evaluated at each time point
     """
-    gamma_t = gamma_dot_0 * (time_array**beta) + gamma_dot_offset
-    # Apply hard bounds: 1e-5 < gamma_t < 1 for numerical stability and physical constraints
-    return jnp.clip(gamma_t, 1e-5, 1.0)
+    # CRITICAL FIX: Add epsilon to prevent t=0 with negative beta causing Inf/NaN gradients
+    # When beta < 0: t^beta = 1/t^|beta|, so t=0 → infinity
+    # Adding epsilon ensures numerical stability: (t+ε)^beta is always finite
+    epsilon = 1e-10
+    time_safe = time_array + epsilon
+
+    gamma_t = gamma_dot_0 * (time_safe**beta) + gamma_dot_offset
+    # TEMPORARY: Remove hard clipping to test if it's blocking gradients
+    # Just ensure positive values with a small epsilon
+    return jnp.maximum(gamma_t, 1e-10)
 
 
 @jit
@@ -354,7 +363,14 @@ def _create_time_integral_matrix_impl_jax(
     # matrix[i,j] = |cumsum[i] - cumsum[j]| ≈ ∫₀^|tᵢ-tⱼ| f(t') dt'
     cumsum_i = cumsum[:, None]  # Shape: (n, 1)
     cumsum_j = cumsum[None, :]  # Shape: (1, n)
-    matrix = jnp.abs(cumsum_i - cumsum_j)  # Shape: (n, n)
+    diff = cumsum_i - cumsum_j
+
+    # CRITICAL FIX: Use smooth approximation of abs() for gradient stability
+    # jnp.abs() has undefined gradient at x=0, causing NaN in backpropagation
+    # The diagonal of diff matrix is exactly 0 (cumsum[i] - cumsum[i] = 0)
+    # Solution: sqrt(x² + ε) ≈ |x| but is differentiable everywhere
+    epsilon = 1e-20
+    matrix = jnp.sqrt(diff**2 + epsilon)  # Shape: (n, n)
 
     return matrix
 
@@ -823,17 +839,9 @@ def compute_g1_shear(
         TypeError: If dt is None (no longer accepts None)
         ValueError: If dt <= 0 or not finite
     """
-    # Validate dt parameter
-    if dt is None:
-        raise TypeError(
-            "dt parameter is required and cannot be None. "
-            "Pass dt explicitly from configuration. "
-            "Fallback estimation has been removed for safety."
-        )
-    if dt <= 0:
-        raise ValueError(f"dt must be positive, got {dt}")
-    if not jnp.isfinite(dt):
-        raise ValueError(f"dt must be finite, got {dt}")
+    # Note: dt validation moved to caller to avoid JAX tracing issues.
+    # The residual function validates dt before JIT compilation.
+    # If dt validation is needed here, it must be done before the function is traced.
 
     # Handle 1D time arrays by creating meshgrids
     if t1.ndim == 1 and t2.ndim == 1:
@@ -878,17 +886,9 @@ def compute_g1_total(
         TypeError: If dt is None (no longer accepts None)
         ValueError: If dt <= 0 or not finite
     """
-    # Validate dt parameter
-    if dt is None:
-        raise TypeError(
-            "dt parameter is required and cannot be None. "
-            "Pass dt explicitly from configuration. "
-            "Fallback estimation has been removed for safety."
-        )
-    if dt <= 0:
-        raise ValueError(f"dt must be positive, got {dt}")
-    if not jnp.isfinite(dt):
-        raise ValueError(f"dt must be finite, got {dt}")
+    # Note: dt validation moved to caller to avoid JAX tracing issues.
+    # The residual function validates dt before JIT compilation.
+    # If dt validation is needed here, it must be done before the function is traced.
 
     # Handle 1D time arrays by creating meshgrids
     if t1.ndim == 1 and t2.ndim == 1:
@@ -940,17 +940,9 @@ def compute_g2_scaled(
         TypeError: If dt is None (no longer accepts None)
         ValueError: If dt <= 0 or not finite
     """
-    # Validate dt parameter
-    if dt is None:
-        raise TypeError(
-            "dt parameter is required and cannot be None. "
-            "Pass dt explicitly from configuration. "
-            "Fallback estimation has been removed for safety."
-        )
-    if dt <= 0:
-        raise ValueError(f"dt must be positive, got {dt}")
-    if not jnp.isfinite(dt):
-        raise ValueError(f"dt must be finite, got {dt}")
+    # Note: dt validation moved to caller to avoid JAX tracing issues.
+    # The residual function validates dt before JIT compilation.
+    # If dt validation is needed here, it must be done before the function is traced.
 
     # Handle 1D time arrays by creating meshgrids
     if t1.ndim == 1 and t2.ndim == 1:

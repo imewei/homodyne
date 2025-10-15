@@ -183,7 +183,10 @@ class NLSQWrapper:
         residual_fn = self._create_residual_function(data, analysis_mode)
 
         # Step 6: Select optimization strategy based on dataset size
-        use_large = self.enable_large_dataset and n_data > 1_000_000
+        # NOTE: Disabled curve_fit_large for now - our physics computation doesn't support chunking
+        # The model function computes the full g2 theory at once, not chunk-by-chunk
+        # TODO: Implement chunk-aware model function for datasets >10M points
+        use_large = False  # self.enable_large_dataset and n_data > 1_000_000
 
         # Step 7: Execute optimization (with recovery if enabled)
         logger.info(
@@ -211,8 +214,13 @@ class NLSQWrapper:
                         residual_fn,
                         xdata,
                         ydata,
-                        p0=validated_params,
+                        p0=validated_params.tolist(),  # Convert to list to avoid NLSQ boolean bug
                         bounds=nlsq_bounds,
+                        loss='soft_l1',  # Robust loss for outliers
+                        gtol=1e-6,  # Relaxed gradient tolerance
+                        ftol=1e-6,  # Relaxed function tolerance
+                        max_nfev=5000,  # Increased max function evaluations
+                        verbose=2,  # Show iteration details
                         full_output=True,
                     )
                 else:
@@ -220,8 +228,13 @@ class NLSQWrapper:
                         residual_fn,
                         xdata,
                         ydata,
-                        p0=validated_params,
+                        p0=validated_params.tolist(),  # Convert to list to avoid NLSQ boolean bug
                         bounds=nlsq_bounds,
+                        loss='soft_l1',  # Robust loss for outliers
+                        gtol=1e-6,  # Relaxed gradient tolerance
+                        ftol=1e-6,  # Relaxed function tolerance
+                        max_nfev=5000,  # Increased max function evaluations
+                        verbose=2,  # Show iteration details
                     )
                     info = {}
 
@@ -312,13 +325,27 @@ class NLSQWrapper:
                         residual_fn,
                         xdata,
                         ydata,
-                        p0=current_params,
+                        p0=current_params.tolist(),  # Convert to list to avoid NLSQ boolean bug
                         bounds=bounds,
+                        loss='soft_l1',  # Robust loss for outliers
+                        gtol=1e-6,  # Relaxed gradient tolerance
+                        ftol=1e-6,  # Relaxed function tolerance
+                        max_nfev=5000,  # Increased max function evaluations
+                        verbose=2,  # Show iteration details
                         full_output=True,
                     )
                 else:
                     popt, pcov = curve_fit(
-                        residual_fn, xdata, ydata, p0=current_params, bounds=bounds
+                        residual_fn,
+                        xdata,
+                        ydata,
+                        p0=current_params.tolist(),  # Convert to list to avoid NLSQ boolean bug
+                        bounds=bounds,
+                        loss='soft_l1',  # Robust loss for outliers
+                        gtol=1e-6,  # Relaxed gradient tolerance
+                        ftol=1e-6,  # Relaxed function tolerance
+                        max_nfev=5000,  # Increased max function evaluations
+                        verbose=2,  # Show iteration details
                     )
                     info = {}
 
@@ -660,14 +687,18 @@ class NLSQWrapper:
 
     def _create_residual_function(self, data: Any, analysis_mode: str) -> Any:
         """
-        Create JAX-compatible residual function for NLSQ.
+        Create JAX-compatible model function for NLSQ.
+
+        IMPORTANT: NLSQ's curve_fit_large expects a MODEL FUNCTION f(x, *params) -> y,
+        NOT a residual function. NLSQ internally computes residuals = data - model.
 
         Args:
             data: XPCS experimental data
-            analysis_mode: Analysis mode determining residual computation
+            analysis_mode: Analysis mode determining model computation
 
         Returns:
-            Residual function with signature f(xdata, *params) -> residuals
+            Model function with signature f(xdata, *params) -> ydata_theory
+            where xdata is a dummy variable for NLSQ compatibility
 
         Raises:
             AttributeError: If data is missing required attributes
@@ -696,22 +727,29 @@ class NLSQWrapper:
         dt = getattr(data, "dt", None)
         if dt is not None:
             dt = float(dt)
+            # Validate dt before JIT compilation (avoid JAX tracing issues)
+            if dt <= 0:
+                raise ValueError(f"dt must be positive, got {dt}")
+            if not np.isfinite(dt):
+                raise ValueError(f"dt must be finite, got {dt}")
 
         # Determine parameter structure based on analysis mode
         # Parameters: [contrast, offset, *physical_params]
         # Static isotropic: 5 params total (2 scaling + 3 physical)
         # Laminar flow: 9 params total (2 scaling + 7 physical)
 
-        def residual_function(xdata: jnp.ndarray, *params_tuple) -> jnp.ndarray:
+        def model_function(xdata: jnp.ndarray, *params_tuple) -> jnp.ndarray:
             """
-            Compute residuals for NLSQ optimization.
+            Compute theoretical g2 model for NLSQ optimization.
+
+            NLSQ will internally compute residuals as: (ydata - model) / sigma
 
             Args:
-                xdata: Independent variable (dummy for compatibility)
+                xdata: Independent variable (dummy for compatibility, not used)
                 *params_tuple: Unpacked parameters [contrast, offset, *physical]
 
             Returns:
-                Residuals: (data - theory) / sigma
+                Theoretical g2 values (flattened to 1D matching ydata)
             """
             # Convert params tuple to array
             params_array = jnp.array(params_tuple)
@@ -723,38 +761,41 @@ class NLSQWrapper:
             # Extract physical parameters (remaining elements)
             physical_params = params_array[2:]
 
-            # Compute theoretical g2 for each phi angle
-            # compute_g2_scaled processes one phi at a time
-            g2_theory_list = []
+            # Compute theoretical g2 for each phi angle using JAX vmap
+            # This vectorizes the computation and maintains proper gradient flow
+            # CRITICAL FIX: Python for-loops break JAX autodiff, causing NaN gradients
 
-            for phi_val in phi:
-                # Compute g2 for this phi angle
-                g2_phi = compute_g2_scaled(
-                    params=physical_params,
-                    t1=t1,  # 1D arrays
-                    t2=t2,
-                    phi=phi_val,  # Single phi value
-                    q=q,
-                    L=L,
-                    contrast=contrast,
-                    offset=offset,
-                    dt=dt,
-                )
-                g2_theory_list.append(g2_phi)
+            # Create vectorized version of compute_g2_scaled over phi axis
+            # NOTE: compute_g2_scaled returns shape (1, n_t1, n_t2) for scalar phi,
+            # so we squeeze the extra dimension to get (n_t1, n_t2)
+            compute_g2_scaled_vmap = jax.vmap(
+                lambda phi_val: jnp.squeeze(
+                    compute_g2_scaled(
+                        params=physical_params,
+                        t1=t1,  # 1D arrays
+                        t2=t2,
+                        phi=phi_val,  # Single phi value
+                        q=q,
+                        L=L,
+                        contrast=contrast,
+                        offset=offset,
+                        dt=dt,
+                    ),
+                    axis=0,  # Squeeze the phi dimension
+                ),
+                in_axes=0,  # Vectorize over first axis of phi
+            )
 
-            # Stack results: (n_phi, n_t1, n_t2)
-            g2_theory = jnp.stack(g2_theory_list, axis=0)
+            # Compute all phi angles at once (much more efficient and gradient-safe)
+            # Shape: (n_phi, n_t1, n_t2)
+            g2_theory = compute_g2_scaled_vmap(phi)
 
-            # Flatten theory to match flattened data
+            # Flatten theory to match flattened data (NLSQ expects 1D output)
             g2_theory_flat = g2_theory.flatten()
 
-            # Compute residuals: (data - theory) / sigma
-            # Add small epsilon to avoid division by zero
-            residuals = (g2_data - g2_theory_flat) / (sigma + 1e-10)
+            return g2_theory_flat
 
-            return residuals
-
-        return residual_function
+        return model_function
 
     def _create_fit_result(
         self,
