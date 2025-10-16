@@ -937,6 +937,16 @@ def _handle_plotting(
         except Exception as e:
             logger.warning(f"Failed to generate fit comparison plots: {e}")
 
+        # Generate and plot fitted simulations
+        if result is not None and config is not None:
+            try:
+                _generate_and_plot_fitted_simulations(
+                    result, data, config, args.output_dir
+                )
+            except Exception as e:
+                logger.warning(f"Failed to generate fitted simulations: {e}")
+                logger.debug("Fitted simulation error:", exc_info=True)
+
 
 def _apply_angle_filtering(
     phi_angles: np.ndarray, c2_exp: np.ndarray, config: dict[str, Any]
@@ -1131,112 +1141,65 @@ def _plot_experimental_data(data: dict[str, Any], plots_dir) -> None:
     # Handle different data shapes
     if c2_exp.ndim == 3:
         # Data shape: (n_phi, n_t1, n_t2)
-        # Plot up to 3 phi angles (matching working version)
-        from matplotlib import gridspec
-
+        # Save individual heatmap for EACH phi angle
         n_angles = c2_exp.shape[0]
-        n_plot_angles = min(3, n_angles)  # Show up to 3 angles
 
-        # Create figure with 2-column GridSpec layout (heatmap + statistics)
-        fig = plt.figure(figsize=(10, 4 * n_plot_angles))
-        gs = gridspec.GridSpec(n_plot_angles, 2, hspace=0.3, wspace=0.3)
+        logger.info(f"Generating individual C₂ heatmaps for {n_angles} phi angles...")
 
-        for i in range(n_plot_angles):
-            # Plot the first n_plot_angles angles directly
-            # (phi_angles_list is already filtered, so just use first N angles)
-            angle_idx = i
-
+        for angle_idx in range(n_angles):
             # Get actual phi angle value
             phi_deg = (
                 phi_angles_list[angle_idx] if len(phi_angles_list) > angle_idx else 0.0
             )
             angle_data = c2_exp[angle_idx]
 
-            # Calculate statistics
-            mean_val = np.mean(angle_data)
-            std_val = np.std(angle_data)
-            min_val = np.min(angle_data)
-            max_val = np.max(angle_data)
-            diagonal = np.diag(angle_data)
-            diag_mean = np.mean(diagonal)
+            # Create individual figure for this phi angle
+            fig, ax = plt.subplots(figsize=(8, 7))
 
-            # Calculate contrast with proper handling of zero/near-zero min_val
-            if abs(min_val) < 1e-10:  # Near zero
-                if abs(max_val) < 1e-10:  # Both near zero
-                    contrast = 0.0
-                else:
-                    contrast = float("inf")  # Infinite contrast
-            else:
-                contrast = (max_val - min_val) / min_val
-
-            # Format contrast value appropriately
-            if contrast == float("inf"):
-                contrast_str = "∞"
-            elif contrast == 0.0:
-                contrast_str = "0.000"
-            else:
-                contrast_str = f"{contrast:.3f}"
-
-            # 1. C2 heatmap (left panel)
-            ax1 = fig.add_subplot(gs[i, 0])
-            im = ax1.imshow(
+            # Create C2 heatmap
+            im = ax.imshow(
                 angle_data,
                 aspect="equal",
                 cmap="viridis",
                 origin="lower",
                 extent=extent,
             )
-            ax1.set_xlabel(xlabel)
-            ax1.set_ylabel(ylabel)
-            ax1.set_title(f"$g_2(t_1, t_2)$ at φ={phi_deg:.1f}°")
-            plt.colorbar(im, ax=ax1, label="C₂", shrink=0.8)
+            ax.set_xlabel(xlabel, fontsize=11)
+            ax.set_ylabel(ylabel, fontsize=11)
+            ax.set_title(f"Experimental C₂(t₁, t₂) at φ={phi_deg:.1f}°", fontsize=13, fontweight="bold")
 
-            # 2. Statistics panel (right panel)
-            ax2 = fig.add_subplot(gs[i, 1])
-            ax2.axis("off")
+            # Add colorbar
+            cbar = plt.colorbar(im, ax=ax, label="C₂", shrink=0.9)
+            cbar.ax.tick_params(labelsize=9)
 
-            stats_text = f"""Data Statistics (φ={phi_deg:.1f}°):
+            # Calculate and display key statistics on the plot
+            mean_val = np.mean(angle_data)
+            max_val = np.max(angle_data)
+            min_val = np.min(angle_data)
 
-Shape: {angle_data.shape[0]} × {angle_data.shape[1]}
-
-g₂ Values:
-Mean: {mean_val:.4f}
-Std:  {std_val:.4f}
-Min:  {min_val:.4f}
-Max:  {max_val:.4f}
-
-Diagonal mean: {diag_mean:.4f}
-Contrast: {contrast_str}
-
-Validation:
-{"✓" if 1 < mean_val < 2 else "✗"} Mean around 1.0
-{"✓" if diag_mean > mean_val else "✗"} Diagonal enhanced
-{"✓" if contrast > 0.001 else "✗"} Sufficient contrast"""
-
-            ax2.text(
-                0.05,
-                0.95,
-                stats_text,
-                transform=ax2.transAxes,
+            # Add text box with statistics
+            stats_text = (
+                f"Mean: {mean_val:.4f}\n"
+                f"Range: [{min_val:.4f}, {max_val:.4f}]"
+            )
+            ax.text(
+                0.02, 0.98, stats_text,
+                transform=ax.transAxes,
                 fontsize=9,
                 verticalalignment="top",
-                fontfamily="monospace",
-                bbox={"boxstyle": "round", "facecolor": "lightblue", "alpha": 0.7},
+                bbox=dict(boxstyle="round", facecolor="white", alpha=0.8)
             )
 
-        # Overall title
-        plt.suptitle(
-            "Experimental Data Validation: Unknown Sample",
-            fontsize=16,
-            fontweight="bold",
-        )
+            plt.tight_layout()
 
-        # Save with bbox_inches="tight" to handle layout automatically
-        # (no plt.tight_layout() needed - causes warning with suptitle)
-        plt.savefig(
-            plots_dir / "experimental_data_phi_slices.png", dpi=150, bbox_inches="tight"
-        )
-        plt.close()
+            # Save individual file with phi angle in filename
+            filename = f"experimental_data_phi_{phi_deg:.1f}.png"
+            plt.savefig(plots_dir / filename, dpi=150, bbox_inches="tight")
+            plt.close()
+
+            logger.debug(f"  ✓ Saved: {filename}")
+
+        logger.info(f"✓ Generated {n_angles} individual C₂ heatmaps")
 
         # Plot diagonal (t1=t2) for all phi angles
         fig, ax = plt.subplots(figsize=(10, 6))
@@ -1366,16 +1329,36 @@ def _plot_simulated_data(
         f"Using parameters: {dict(zip(model.parameter_names, params, strict=False))}"
     )
 
-    # Parse phi angles
+    # Determine phi angles for theoretical simulation plots
+    # Note: These plots show theoretical behavior with initial parameters,
+    # independent of angle filtering used for optimization
+    #
+    # Priority:
+    # 1. Use CLI-provided phi_angles_str if specified
+    # 2. Use ALL experimental data phi angles (unfiltered) if available
+    # 3. Fall back to default range
     if phi_angles_str:
+        # Use CLI-provided angles (highest priority for explicit control)
         phi_degrees = np.array([float(x.strip()) for x in phi_angles_str.split(",")])
-        phi = phi_degrees  # Keep in degrees (physics code expects degrees)
+        phi = phi_degrees
+        logger.info(f"Using CLI-provided phi angles for theoretical plots: {phi_degrees}")
+    elif data is not None and "phi_angles_list" in data:
+        # Use experimental data's phi angles
+        # Note: May be filtered if angle filtering is enabled in config
+        phi_degrees = np.array(data["phi_angles_list"])
+        phi = phi_degrees
+        logger.info(f"Using experimental data phi angles for theoretical plots: {phi_degrees}")
+        logger.warning(
+            "Theoretical plots using potentially filtered phi angles from experimental data. "
+            "To use all angles, disable phi_filtering in config or provide --phi-angles explicitly."
+        )
     else:
         # Default: 8 evenly spaced angles from 0 to 180 degrees
         phi_degrees = np.linspace(0, 180, 8)
-        phi = phi_degrees  # Keep in degrees (physics code expects degrees)
+        phi = phi_degrees
+        logger.info(f"Using default phi angles for theoretical plots: {phi_degrees}")
 
-    logger.debug(f"Using {len(phi)} phi angles: {phi_degrees}")
+    logger.debug(f"Generating simulated data for {len(phi)} phi angles")
 
     # Generate time arrays matching configuration specification
     # CRITICAL: Simulated data must be independent of experimental data
@@ -1388,16 +1371,17 @@ def _plot_simulated_data(
     # This matches the data loader convention: n = end - start + 1
     n_time_points = end_frame - start_frame + 1
 
-    # Generate time array: t[i] = dt * i for i = 0, 1, ..., n-1
-    # For linspace(0, T, N): T = dt * (N - 1) to ensure t[i] = dt * i
-    time_max = dt * (n_time_points - 1)
-    t_vals = jnp.linspace(0, time_max, n_time_points)
-    t1_grid, t2_grid = jnp.meshgrid(t_vals, t_vals, indexing="ij")
+    # Generate time array starting at t=0 (matches experimental data convention)
+    # The JAX backend handles t=0 singularity internally via epsilon protection
+    # in _calculate_shear_rate_impl_jax() when beta < 0
+    time_max = dt * (end_frame - start_frame)
+    t_vals = np.linspace(0, time_max, n_time_points)
+    t1_grid, t2_grid = np.meshgrid(t_vals, t_vals, indexing="ij")
 
     logger.debug(
         f"Simulated data time grid: dt={dt}, start_frame={start_frame}, end_frame={end_frame}"
     )
-    logger.debug(f"Time range: [0, {time_max:.2f}] seconds with {n_time_points} points")
+    logger.debug(f"Time range: [{float(t_vals[0]):.4f}, {float(t_vals[-1]):.2f}] seconds with {n_time_points} points")
     logger.debug(f"Time spacing verification: t[1]-t[0]={float(t_vals[1] - t_vals[0]):.6f} (should equal dt={dt})")
 
     # Get wavevector_q and stator_rotor_gap from correct config sections
@@ -1454,40 +1438,78 @@ def _plot_simulated_data(
     vmax = c2_simulated.max()
     logger.debug(f"Global color scale: vmin={vmin:.6f}, vmax={vmax:.6f}")
 
-    # Plot 1: C₂ heatmaps for first 4 phi angles (2x2 grid)
-    n_phi_to_plot = min(4, len(phi))
-    fig, axes = plt.subplots(2, 2, figsize=(14, 12))
-    axes = axes.flatten()
+    # Save individual C₂ heatmap for EACH phi angle
+    n_phi = len(phi)
+    logger.info(f"Generating individual simulated C₂ heatmaps for {n_phi} phi angles...")
 
-    for idx in range(n_phi_to_plot):
-        im = axes[idx].imshow(
+    for idx in range(n_phi):
+        # Create individual figure for this phi angle
+        fig, ax = plt.subplots(figsize=(8, 7))
+
+        # Create C2 heatmap
+        # Note: No vmin/vmax for individual plots - auto-scale each plot
+        # for optimal visualization (like experimental plots)
+        im = ax.imshow(
             c2_simulated[idx],
             extent=[t_vals[0], t_vals[-1], t_vals[0], t_vals[-1]],
-            aspect="auto",
+            aspect="equal",
             cmap="viridis",
             origin="lower",
-            vmin=vmin,  # Use global scale
-            vmax=vmax,  # Use global scale
         )
-        axes[idx].set_xlabel("t₂ (s)")
-        axes[idx].set_ylabel("t₁ (s)")
-        axes[idx].set_title(f"Simulated C₂ at φ={phi_degrees[idx]:.1f}°")
-        plt.colorbar(im, ax=axes[idx], label="C₂")
+        ax.set_xlabel("t₂ (s)", fontsize=11)
+        ax.set_ylabel("t₁ (s)", fontsize=11)
+        ax.set_title(
+            f"Simulated C₂(t₁, t₂) at φ={phi_degrees[idx]:.1f}°",
+            fontsize=13,
+            fontweight="bold"
+        )
 
-    # Hide unused subplots
-    for idx in range(n_phi_to_plot, 4):
-        axes[idx].axis("off")
+        # Add colorbar
+        cbar = plt.colorbar(im, ax=ax, label="C₂", shrink=0.9)
+        cbar.ax.tick_params(labelsize=9)
 
-    plt.suptitle(
-        f"Theoretical C₂ Heatmaps\n(contrast={contrast:.3f}, offset={offset:.3f}, mode={analysis_mode})",
-        fontsize=14,
-        fontweight="bold",
-    )
-    plt.tight_layout()
-    plt.savefig(plots_dir / "simulated_data_heatmap.png", dpi=150, bbox_inches="tight")
-    plt.close()
+        # Calculate and display key statistics
+        mean_val = np.mean(c2_simulated[idx])
+        max_val = np.max(c2_simulated[idx])
+        min_val = np.min(c2_simulated[idx])
 
-    logger.info("✓ Generated C₂ heatmap plot: simulated_data_heatmap.png")
+        # Add text box with statistics
+        stats_text = (
+            f"Mean: {mean_val:.4f}\n"
+            f"Range: [{min_val:.4f}, {max_val:.4f}]"
+        )
+        ax.text(
+            0.02, 0.98, stats_text,
+            transform=ax.transAxes,
+            fontsize=9,
+            verticalalignment="top",
+            bbox=dict(boxstyle="round", facecolor="white", alpha=0.8)
+        )
+
+        # Add analysis mode info
+        mode_text = (
+            f"Mode: {analysis_mode}\n"
+            f"Contrast: {contrast:.3f}\n"
+            f"Offset: {offset:.3f}"
+        )
+        ax.text(
+            0.02, 0.02, mode_text,
+            transform=ax.transAxes,
+            fontsize=8,
+            verticalalignment="bottom",
+            bbox=dict(boxstyle="round", facecolor="lightblue", alpha=0.7)
+        )
+
+        plt.tight_layout()
+
+        # Save individual file with phi angle in filename
+        filename = f"simulated_data_phi_{phi_degrees[idx]:.1f}.png"
+        plt.savefig(plots_dir / filename, dpi=150, bbox_inches="tight")
+        plt.close()
+
+        logger.debug(f"  ✓ Saved: {filename}")
+
+    logger.info(f"✓ Generated {n_phi} individual simulated C₂ heatmaps")
 
     # Plot 2: Diagonal (t1=t2) for all phi angles
     fig, ax = plt.subplots(figsize=(10, 6))
@@ -1514,6 +1536,258 @@ def _plot_simulated_data(
     logger.info("✓ Generated diagonal plot: simulated_data_diagonal.png")
 
     logger.info("✓ Simulated data plots generated successfully")
+
+
+def _generate_and_plot_fitted_simulations(
+    result: Any,
+    data: dict[str, Any],
+    config: dict[str, Any],
+    output_dir,
+) -> None:
+    """Generate and plot C2 simulations using fitted parameters from optimization.
+
+    This function generates simulated C2 data using the optimized parameters and
+    saves individual plots for each phi angle in the simulated_data/ subdirectory.
+
+    Parameters
+    ----------
+    result : OptimizationResult
+        Optimization result containing fitted parameters
+    data : dict
+        Experimental data dictionary containing phi_angles_list, t1, t2, c2_exp
+    config : dict
+        Configuration dictionary with analysis_mode and physics parameters
+    output_dir : Path
+        Output directory path (simulated_data/ subdirectory will be created here)
+    """
+    import json
+
+    import jax.numpy as jnp
+    import matplotlib.pyplot as plt
+    import numpy as np
+
+    from homodyne.core.models import CombinedModel
+
+    logger.info("Generating fitted C₂ simulations...")
+
+    # Create simulated_data subdirectory
+    simulated_data_dir = output_dir / "simulated_data"
+    simulated_data_dir.mkdir(parents=True, exist_ok=True)
+
+    # Extract fitted parameters from result
+    if hasattr(result, "parameters"):
+        # NLSQ result format
+        fitted_params_dict = result.parameters
+        contrast = fitted_params_dict.get("contrast", 0.5)
+        offset = fitted_params_dict.get("offset", 1.0)
+        physical_params = fitted_params_dict.get("physical_params", [])
+    elif hasattr(result, "mean_params"):
+        # MCMC result format
+        contrast = result.mean_contrast
+        offset = result.mean_offset
+        physical_params = result.mean_params
+    else:
+        logger.warning("Cannot extract fitted parameters from result")
+        return
+
+    # Convert to JAX array
+    if isinstance(physical_params, list):
+        params = jnp.array(physical_params)
+    elif hasattr(physical_params, "tolist"):
+        params = jnp.array(physical_params.tolist())
+    else:
+        params = jnp.array(physical_params)
+
+    logger.info(f"Using fitted parameters: contrast={contrast:.4f}, offset={offset:.4f}")
+    logger.debug(f"Physical parameters: {params}")
+
+    # Get analysis mode
+    analysis_mode = config.get("analysis_mode", "static_isotropic")
+    logger.info(f"Analysis mode: {analysis_mode}")
+
+    # Create model
+    model = CombinedModel(analysis_mode)
+
+    # Get experimental data structure
+    phi_angles_list = data.get("phi_angles_list", None)
+    t1 = data.get("t1", None)
+    t2 = data.get("t2", None)
+
+    if phi_angles_list is None or t1 is None or t2 is None:
+        logger.warning("Missing experimental data structure (phi_angles_list, t1, t2)")
+        return
+
+    # Convert to JAX arrays
+    t1_grid = jnp.array(t1)
+    t2_grid = jnp.array(t2)
+
+    # Get physics parameters from config
+    analyzer_params = config.get("analyzer_parameters", {})
+    scattering_config = analyzer_params.get("scattering", {})
+    geometry_config = analyzer_params.get("geometry", {})
+    dt = analyzer_params.get("dt", 0.1)
+
+    q = scattering_config.get("wavevector_q", 0.0054)
+    L_angstroms = geometry_config.get("stator_rotor_gap", 2000000)
+
+    logger.debug(
+        f"Physics: q={q:.6f} Å⁻¹, L={L_angstroms:.0f} Å, dt={dt}"
+    )
+
+    # Generate fitted C2 for each phi angle
+    c2_fitted_list = []
+
+    for i, phi_deg in enumerate(phi_angles_list):
+        phi_array = jnp.array([phi_deg])
+
+        logger.debug(f"Generating fitted C₂ for φ={phi_deg:.1f}°")
+
+        # Compute g2 with fitted parameters
+        c2_phi = model.compute_g2(
+            params,
+            t1_grid,
+            t2_grid,
+            phi_array,
+            q,
+            L_angstroms,
+            contrast,
+            offset,
+            dt,
+        )
+
+        # Extract 2D array (remove phi dimension)
+        c2_result = np.array(c2_phi[0])
+        c2_fitted_list.append(c2_result)
+
+        logger.debug(
+            f"  C₂ range: [{c2_result.min():.4f}, {c2_result.max():.4f}]"
+        )
+
+    c2_fitted = np.array(c2_fitted_list)  # Shape: (n_phi, n_t1, n_t2)
+
+    logger.info(f"Generated fitted C₂ with shape: {c2_fitted.shape}")
+
+    # Save fitted C2 data as NPZ
+    npz_file = simulated_data_dir / "c2_fitted_data.npz"
+    np.savez(
+        npz_file,
+        c2_data=c2_fitted,
+        phi_angles=phi_angles_list,
+        t1=t1,
+        t2=t2,
+        initial_params=params,
+        contrast=contrast,
+        offset=offset,
+    )
+    logger.info(f"✓ Saved fitted C₂ data: {npz_file}")
+
+    # Save configuration for fitted simulation
+    config_file = simulated_data_dir / "simulation_config_fitted.json"
+    sim_config = {
+        "command_line_args": {
+            "contrast": float(contrast),
+            "offset": float(offset),
+            "phi_angles": ",".join(f"{x:.1f}" for x in phi_angles_list),
+        },
+        "parameters": {
+            "values": params.tolist() if hasattr(params, "tolist") else list(params),
+            "names": model.parameter_names,
+        },
+        "data_type": "fitted",
+        "analysis_mode": analysis_mode,
+    }
+    with open(config_file, "w") as f:
+        json.dump(sim_config, f, indent=2)
+    logger.info(f"✓ Saved simulation config: {config_file}")
+
+    # Compute global color scale for consistency
+    vmin = c2_fitted.min()
+    vmax = c2_fitted.max()
+
+    # Generate individual plots for each phi angle
+    logger.info(f"Generating individual fitted C₂ plots for {len(phi_angles_list)} angles...")
+
+    # Get time extent for plotting
+    if t1 is not None and t2 is not None:
+        t_min = float(np.min(t1))
+        t_max = float(np.max(t1))
+        extent = [t_min, t_max, t_min, t_max]
+        xlabel = "t₂ (s)"
+        ylabel = "t₁ (s)"
+    else:
+        extent = None
+        xlabel = "t₂ Index"
+        ylabel = "t₁ Index"
+
+    for i, phi_deg in enumerate(phi_angles_list):
+        # Create individual figure
+        fig, ax = plt.subplots(figsize=(8, 7))
+
+        # Create heatmap
+        # Note: No vmin/vmax for individual plots - auto-scale each plot
+        # for optimal visualization (like experimental plots)
+        im = ax.imshow(
+            c2_fitted[i],
+            aspect="equal",
+            cmap="viridis",
+            origin="lower",
+            extent=extent,
+        )
+        ax.set_xlabel(xlabel, fontsize=11)
+        ax.set_ylabel(ylabel, fontsize=11)
+        ax.set_title(
+            f"Fitted C₂(t₁, t₂) at φ={phi_deg:.1f}°",
+            fontsize=13,
+            fontweight="bold"
+        )
+
+        # Add colorbar
+        cbar = plt.colorbar(im, ax=ax, label="C₂", shrink=0.9)
+        cbar.ax.tick_params(labelsize=9)
+
+        # Calculate statistics
+        mean_val = np.mean(c2_fitted[i])
+        max_val = np.max(c2_fitted[i])
+        min_val = np.min(c2_fitted[i])
+
+        # Add statistics box
+        stats_text = (
+            f"Mean: {mean_val:.4f}\n"
+            f"Range: [{min_val:.4f}, {max_val:.4f}]"
+        )
+        ax.text(
+            0.02, 0.98, stats_text,
+            transform=ax.transAxes,
+            fontsize=9,
+            verticalalignment="top",
+            bbox=dict(boxstyle="round", facecolor="white", alpha=0.8)
+        )
+
+        # Add fitting info
+        fit_text = (
+            f"Fitted Parameters\n"
+            f"Contrast: {contrast:.3f}\n"
+            f"Offset: {offset:.3f}"
+        )
+        ax.text(
+            0.02, 0.02, fit_text,
+            transform=ax.transAxes,
+            fontsize=8,
+            verticalalignment="bottom",
+            bbox=dict(boxstyle="round", facecolor="lightgreen", alpha=0.7)
+        )
+
+        plt.tight_layout()
+
+        # Save with correct filename pattern: simulated_c2_fitted_phi_{angle}deg.png
+        filename = f"simulated_c2_fitted_phi_{phi_deg:.1f}deg.png"
+        plt.savefig(simulated_data_dir / filename, dpi=150, bbox_inches="tight")
+        plt.close()
+
+        logger.debug(f"  ✓ Saved: {filename}")
+
+    logger.info(f"✓ Generated {len(phi_angles_list)} individual fitted C₂ plots")
+    logger.info(f"✓ Fitted simulation data saved to: {simulated_data_dir}")
 
 
 def _plot_fit_comparison(result: Any, data: dict[str, Any], plots_dir) -> None:

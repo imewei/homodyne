@@ -320,15 +320,23 @@ def _calculate_shear_rate_impl_jax(
     Returns:
         γ̇(t) evaluated at each time point
     """
-    # CRITICAL FIX: Add epsilon to prevent t=0 with negative beta causing Inf/NaN gradients
+    # CRITICAL FIX: Replace t=0 with dt to prevent singularity when beta < 0
     # When beta < 0: t^beta = 1/t^|beta|, so t=0 → infinity
-    # Adding epsilon ensures numerical stability: (t+ε)^beta is always finite
-    epsilon = 1e-10
-    time_safe = time_array + epsilon
+    # Strategy: Replace only the first element (t=0) with dt, leave others unchanged
+    # This ensures smooth continuity: γ̇(dt), γ̇(dt), γ̇(2dt), ...
+
+    # Infer dt from time grid
+    if safe_len(time_array) > 1:
+        dt = jnp.abs(time_array[1] - time_array[0])
+    else:
+        dt = 1e-3  # Fallback for single time point
+
+    # Replace t=0 with dt: where(time_array == 0, dt, time_array)
+    # This avoids discontinuity since both t[0] and t[1] map to dt
+    time_safe = jnp.where(time_array == 0.0, dt, time_array)
 
     gamma_t = gamma_dot_0 * (time_safe**beta) + gamma_dot_offset
-    # TEMPORARY: Remove hard clipping to test if it's blocking gradients
-    # Just ensure positive values with a small epsilon
+    # Ensure positive values with numerical stability floor
     return jnp.maximum(gamma_t, 1e-10)
 
 
@@ -791,7 +799,8 @@ def compute_g1_diffusion(
     # Handle 1D time arrays by creating meshgrids
     if t1.ndim == 1 and t2.ndim == 1:
         # Create 2D meshgrids from 1D arrays
-        t2_grid, t1_grid = jnp.meshgrid(t2, t1, indexing="ij")
+        # CRITICAL FIX: Must match caller's convention: t1_grid, t2_grid = meshgrid(t, t, 'ij')
+        t1_grid, t2_grid = jnp.meshgrid(t1, t2, indexing="ij")
         t1 = t1_grid
         t2 = t2_grid
 
@@ -846,7 +855,8 @@ def compute_g1_shear(
     # Handle 1D time arrays by creating meshgrids
     if t1.ndim == 1 and t2.ndim == 1:
         # Create 2D meshgrids from 1D arrays
-        t2_grid, t1_grid = jnp.meshgrid(t2, t1, indexing="ij")
+        # CRITICAL FIX: Must match caller's convention: t1_grid, t2_grid = meshgrid(t, t, 'ij')
+        t1_grid, t2_grid = jnp.meshgrid(t1, t2, indexing="ij")
         t1 = t1_grid
         t2 = t2_grid
 
@@ -893,7 +903,8 @@ def compute_g1_total(
     # Handle 1D time arrays by creating meshgrids
     if t1.ndim == 1 and t2.ndim == 1:
         # Create 2D meshgrids from 1D arrays
-        t2_grid, t1_grid = jnp.meshgrid(t2, t1, indexing="ij")
+        # CRITICAL FIX: Must match caller's convention: t1_grid, t2_grid = meshgrid(t, t, 'ij')
+        t1_grid, t2_grid = jnp.meshgrid(t1, t2, indexing="ij")
         t1 = t1_grid
         t2 = t2_grid
 
@@ -947,7 +958,8 @@ def compute_g2_scaled(
     # Handle 1D time arrays by creating meshgrids
     if t1.ndim == 1 and t2.ndim == 1:
         # Create 2D meshgrids from 1D arrays
-        t2_grid, t1_grid = jnp.meshgrid(t2, t1, indexing="ij")
+        # CRITICAL FIX: Must match caller's convention: t1_grid, t2_grid = meshgrid(t, t, 'ij')
+        t1_grid, t2_grid = jnp.meshgrid(t1, t2, indexing="ij")
         t1 = t1_grid
         t2 = t2_grid
 
@@ -1003,7 +1015,8 @@ def compute_g2_scaled_with_factors(
     """
     # Handle 1D time arrays by creating meshgrids
     if t1.ndim == 1 and t2.ndim == 1:
-        t2_grid, t1_grid = jnp.meshgrid(t2, t1, indexing="ij")
+        # CRITICAL FIX: Must match caller's convention: t1_grid, t2_grid = meshgrid(t, t, 'ij')
+        t1_grid, t2_grid = jnp.meshgrid(t1, t2, indexing="ij")
         t1 = t1_grid
         t2 = t2_grid
 
