@@ -26,7 +26,6 @@ validation.
 """
 
 from dataclasses import dataclass
-from typing import Tuple
 
 import numpy as np
 
@@ -108,11 +107,7 @@ class PhysicsFactors:
 
     @classmethod
     def from_config(
-        cls,
-        q: float,
-        L: float,
-        dt: float,
-        validate: bool = True
+        cls, q: float, L: float, dt: float, validate: bool = True
     ) -> "PhysicsFactors":
         """
         Create PhysicsFactors from experimental configuration.
@@ -154,7 +149,7 @@ class PhysicsFactors:
         318.30988618379064
         """
         # Compute derived factors
-        wavevector_q_squared_half_dt = 0.5 * (q ** 2) * dt
+        wavevector_q_squared_half_dt = 0.5 * (q**2) * dt
         sinc_prefactor = 0.5 / np.pi * q * L * dt
 
         # Create instance (validation happens in __post_init__)
@@ -163,7 +158,7 @@ class PhysicsFactors:
             stator_rotor_gap=L,
             dt=dt,
             wavevector_q_squared_half_dt=wavevector_q_squared_half_dt,
-            sinc_prefactor=sinc_prefactor
+            sinc_prefactor=sinc_prefactor,
         )
 
         if validate:
@@ -191,9 +186,7 @@ class PhysicsFactors:
         """
         # Check positivity
         if self.wavevector_q <= 0:
-            raise ValueError(
-                f"wavevector_q must be positive, got {self.wavevector_q}"
-            )
+            raise ValueError(f"wavevector_q must be positive, got {self.wavevector_q}")
         if self.stator_rotor_gap <= 0:
             raise ValueError(
                 f"stator_rotor_gap must be positive, got {self.stator_rotor_gap}"
@@ -203,9 +196,7 @@ class PhysicsFactors:
 
         # Check finiteness
         if not np.isfinite(self.wavevector_q):
-            raise ValueError(
-                f"wavevector_q must be finite, got {self.wavevector_q}"
-            )
+            raise ValueError(f"wavevector_q must be finite, got {self.wavevector_q}")
         if not np.isfinite(self.stator_rotor_gap):
             raise ValueError(
                 f"stator_rotor_gap must be finite, got {self.stator_rotor_gap}"
@@ -228,8 +219,7 @@ class PhysicsFactors:
 
         if self.dt < 1e-3 or self.dt > 1e3:
             logger.warning(
-                f"dt = {self.dt:.6e} s is outside typical "
-                f"XPCS range [10⁻³, 10³] s"
+                f"dt = {self.dt:.6e} s is outside typical " f"XPCS range [10⁻³, 10³] s"
             )
 
         # Check derived factors
@@ -240,11 +230,10 @@ class PhysicsFactors:
             )
         if not np.isfinite(self.sinc_prefactor):
             raise ValueError(
-                "Computed sinc_prefactor is not finite. "
-                "Check q, L, and dt values."
+                "Computed sinc_prefactor is not finite. " "Check q, L, and dt values."
             )
 
-    def to_tuple(self) -> Tuple[float, float]:
+    def to_tuple(self) -> tuple[float, float]:
         """
         Convert to tuple for JIT-compatible function calls.
 
@@ -294,11 +283,11 @@ class PhysicsFactors:
         }
         """
         return {
-            'wavevector_q': self.wavevector_q,
-            'stator_rotor_gap': self.stator_rotor_gap,
-            'dt': self.dt,
-            'wavevector_q_squared_half_dt': self.wavevector_q_squared_half_dt,
-            'sinc_prefactor': self.sinc_prefactor
+            "wavevector_q": self.wavevector_q,
+            "stator_rotor_gap": self.stator_rotor_gap,
+            "dt": self.dt,
+            "wavevector_q_squared_half_dt": self.wavevector_q_squared_half_dt,
+            "sinc_prefactor": self.sinc_prefactor,
         }
 
     def __str__(self) -> str:
@@ -365,10 +354,10 @@ def create_physics_factors_from_config_dict(config: dict) -> PhysicsFactors:
     >>> factors = create_physics_factors_from_config_dict(config)
     """
     try:
-        analyzer_params = config['analyzer_parameters']
-        dt = analyzer_params['temporal']['dt']
-        q = analyzer_params['scattering']['wavevector_q']
-        L = analyzer_params['geometry']['stator_rotor_gap']
+        analyzer_params = config["analyzer_parameters"]
+        dt = analyzer_params["temporal"]["dt"]
+        q = analyzer_params["scattering"]["wavevector_q"]
+        L = analyzer_params["geometry"]["stator_rotor_gap"]
 
         return PhysicsFactors.from_config(q=q, L=L, dt=dt)
 
@@ -381,4 +370,4 @@ def create_physics_factors_from_config_dict(config: dict) -> PhysicsFactors:
         )
 
 
-__all__ = ['PhysicsFactors', 'create_physics_factors_from_config_dict']
+__all__ = ["PhysicsFactors", "create_physics_factors_from_config_dict"]

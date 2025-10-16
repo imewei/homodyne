@@ -266,9 +266,17 @@ def fit_mcmc_jax(
 
         # Create NumPyro model with optional initialization
         model = _create_numpyro_model(
-            data, sigma, t1, t2, phi, q, L, analysis_mode, parameter_space,
+            data,
+            sigma,
+            t1,
+            t2,
+            phi,
+            q,
+            L,
+            analysis_mode,
+            parameter_space,
             initial_params=initial_params,
-            use_simplified=use_simplified_likelihood
+            use_simplified=use_simplified_likelihood,
         )
 
         # Run MCMC sampling
@@ -368,8 +376,19 @@ def _get_mcmc_config(kwargs: dict[str, Any]) -> dict[str, Any]:
     return default_config
 
 
-def _create_numpyro_model(data, sigma, t1, t2, phi, q, L, analysis_mode, param_space,
-                         initial_params=None, use_simplified=True):
+def _create_numpyro_model(
+    data,
+    sigma,
+    t1,
+    t2,
+    phi,
+    q,
+    L,
+    analysis_mode,
+    param_space,
+    initial_params=None,
+    use_simplified=True,
+):
     """Create NumPyro probabilistic model with optional initialization.
 
     Parameters
@@ -574,7 +593,7 @@ def _compute_simple_theory(params, t1, t2, phi, q, analysis_mode):
 
     # Create meshgrids for all combinations
     # XPCS data structure is (n_phi, n_t1, n_t2)
-    t1_mesh, t2_mesh = jnp.meshgrid(t1, t2, indexing='ij')
+    t1_mesh, t2_mesh = jnp.meshgrid(t1, t2, indexing="ij")
 
     # Time delay (absolute difference)
     tau = jnp.abs(t2_mesh - t1_mesh)
@@ -599,6 +618,7 @@ def _compute_simple_theory(params, t1, t2, phi, q, analysis_mode):
     # Flatten to match input data shape
     return c2_theory_full.flatten()
 
+
 # JIT compile with static arguments for maximum performance
 # Static argnums: (5,) for analysis_mode
 _compute_simple_theory_jit = jit(_compute_simple_theory, static_argnums=(5,))
@@ -612,10 +632,13 @@ def _run_numpyro_sampling(model, config):
     if n_chains > 1:
         try:
             import jax
+
             n_devices = jax.local_device_count()
             if n_devices == 1:  # CPU mode
                 numpyro.set_host_device_count(n_chains)
-                logger.info(f"Set host device count to {n_chains} for CPU parallel chains")
+                logger.info(
+                    f"Set host device count to {n_chains} for CPU parallel chains"
+                )
             else:
                 logger.info(f"Using {min(n_chains, n_devices)} parallel devices")
         except Exception as e:

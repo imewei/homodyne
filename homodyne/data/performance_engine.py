@@ -76,14 +76,19 @@ except ImportError:
     HAS_JAX = False
     jax_available = False
     jnp = np
+
     def jit(f):
         return f
+
     def vmap(f, **kwargs):
         return f
+
     def device_put(x):
         return x
+
     def device_get(x):
         return x
+
 
 # V2 system integration
 try:
@@ -1172,7 +1177,9 @@ class PerformanceEngine:
 
         except Exception as e:
             logger.error(f"Failed to load correlation matrices: {e}")
-            raise PerformanceEngineError(f"Correlation matrix loading failed: {e}") from e
+            raise PerformanceEngineError(
+                f"Correlation matrix loading failed: {e}"
+            ) from e
 
     def _load_matrices_chunked(
         self,

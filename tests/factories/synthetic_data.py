@@ -7,9 +7,9 @@ for testing parameter recovery accuracy.
 Uses homodyne physics models to generate realistic data with controllable noise.
 """
 
-import numpy as np
-from typing import Dict, Tuple, Optional
 from dataclasses import dataclass
+
+import numpy as np
 
 
 @dataclass
@@ -28,6 +28,7 @@ class SyntheticXPCSData:
         dt: Time step
         ground_truth_params: True parameter values used to generate data
     """
+
     phi: np.ndarray
     t1: np.ndarray
     t2: np.ndarray
@@ -36,11 +37,11 @@ class SyntheticXPCSData:
     q: float
     L: float
     dt: float
-    ground_truth_params: Dict[str, float]
+    ground_truth_params: dict[str, float]
 
 
 def generate_synthetic_xpcs_data(
-    ground_truth_params: Dict[str, float],
+    ground_truth_params: dict[str, float],
     n_phi: int = 10,
     n_t1: int = 20,
     n_t2: int = 20,
@@ -49,7 +50,7 @@ def generate_synthetic_xpcs_data(
     L: float = 1.0,
     dt: float = 0.1,
     analysis_mode: str = "static_isotropic",
-    random_seed: Optional[int] = 42
+    random_seed: int | None = 42,
 ) -> SyntheticXPCSData:
     """
     Generate synthetic XPCS data with known ground-truth parameters.
@@ -103,22 +104,23 @@ def generate_synthetic_xpcs_data(
         np.random.seed(random_seed)
 
     # Import physics computation here to avoid circular imports
-    from homodyne.core.jax_backend import compute_g2_scaled
     import jax.numpy as jnp
 
+    from homodyne.core.jax_backend import compute_g2_scaled
+
     # Create coordinate arrays
-    phi = np.linspace(0, 2*np.pi, n_phi, endpoint=False)
+    phi = np.linspace(0, 2 * np.pi, n_phi, endpoint=False)
     t1 = np.linspace(0, 1, n_t1)
     t2 = np.linspace(0, 1, n_t2)
 
     # Extract parameters based on analysis mode
-    contrast = ground_truth_params['contrast']
-    offset = ground_truth_params['offset']
+    contrast = ground_truth_params["contrast"]
+    offset = ground_truth_params["offset"]
 
     # Physical parameters (excluding scaling params)
-    param_order = ['D0', 'alpha', 'D_offset']
-    if 'laminar' in analysis_mode.lower():
-        param_order.extend(['gamma_dot_t0', 'beta', 'gamma_dot_offset', 'phi0'])
+    param_order = ["D0", "alpha", "D_offset"]
+    if "laminar" in analysis_mode.lower():
+        param_order.extend(["gamma_dot_t0", "beta", "gamma_dot_offset", "phi0"])
 
     physical_params = jnp.array([ground_truth_params[name] for name in param_order])
 
@@ -134,7 +136,7 @@ def generate_synthetic_xpcs_data(
             L=L,
             contrast=contrast,
             offset=offset,
-            dt=dt
+            dt=dt,
         )
         g2_theoretical.append(np.array(g2_phi))
 
@@ -157,7 +159,7 @@ def generate_synthetic_xpcs_data(
         q=q,
         L=L,
         dt=dt,
-        ground_truth_params=ground_truth_params.copy()
+        ground_truth_params=ground_truth_params.copy(),
     )
 
     return data
@@ -173,7 +175,7 @@ def generate_static_isotropic_dataset(
     n_phi: int = 10,
     n_t1: int = 20,
     n_t2: int = 20,
-    **kwargs
+    **kwargs,
 ) -> SyntheticXPCSData:
     """
     Generate static isotropic synthetic dataset with default parameters.
@@ -203,11 +205,11 @@ def generate_static_isotropic_dataset(
         Static isotropic synthetic data
     """
     params = {
-        'contrast': contrast,
-        'offset': offset,
-        'D0': D0,
-        'alpha': alpha,
-        'D_offset': D_offset
+        "contrast": contrast,
+        "offset": offset,
+        "D0": D0,
+        "alpha": alpha,
+        "D_offset": D_offset,
     }
 
     return generate_synthetic_xpcs_data(
@@ -217,7 +219,7 @@ def generate_static_isotropic_dataset(
         n_t2=n_t2,
         noise_level=noise_level,
         analysis_mode="static_isotropic",
-        **kwargs
+        **kwargs,
     )
 
 
@@ -235,7 +237,7 @@ def generate_laminar_flow_dataset(
     n_phi: int = 15,
     n_t1: int = 20,
     n_t2: int = 20,
-    **kwargs
+    **kwargs,
 ) -> SyntheticXPCSData:
     """
     Generate laminar flow synthetic dataset with default parameters.
@@ -273,15 +275,15 @@ def generate_laminar_flow_dataset(
         Laminar flow synthetic data
     """
     params = {
-        'contrast': contrast,
-        'offset': offset,
-        'D0': D0,
-        'alpha': alpha,
-        'D_offset': D_offset,
-        'gamma_dot_t0': gamma_dot_t0,
-        'beta': beta,
-        'gamma_dot_offset': gamma_dot_offset,
-        'phi0': phi0
+        "contrast": contrast,
+        "offset": offset,
+        "D0": D0,
+        "alpha": alpha,
+        "D_offset": D_offset,
+        "gamma_dot_t0": gamma_dot_t0,
+        "beta": beta,
+        "gamma_dot_offset": gamma_dot_offset,
+        "phi0": phi0,
     }
 
     return generate_synthetic_xpcs_data(
@@ -291,5 +293,5 @@ def generate_laminar_flow_dataset(
         n_t2=n_t2,
         noise_level=noise_level,
         analysis_mode="laminar_flow",
-        **kwargs
+        **kwargs,
     )

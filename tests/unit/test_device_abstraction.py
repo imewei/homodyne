@@ -7,10 +7,11 @@ Tests cover:
 - Same results across devices (within numerical tolerance)
 """
 
-import pytest
-import numpy as np
 import jax
 import jax.numpy as jnp
+import numpy as np
+import pytest
+
 from homodyne.optimization.nlsq_wrapper import NLSQWrapper
 
 
@@ -23,10 +24,11 @@ class TestDeviceAbstraction:
 
         FR-005: Users should not need to write device-specific code.
         """
+
         # Create mock XPCS data
         class MockXPCSData:
             def __init__(self):
-                self.phi = np.array([0.0, np.pi/2])
+                self.phi = np.array([0.0, np.pi / 2])
                 self.t1 = np.linspace(0, 1, 5)
                 self.t2 = np.linspace(0, 1, 5)
                 self.g2 = np.random.rand(2, 5, 5)
@@ -39,8 +41,7 @@ class TestDeviceAbstraction:
 
         # Create residual function (should be device-agnostic)
         residual_fn = wrapper._create_residual_function(
-            mock_data,
-            analysis_mode="static_isotropic"
+            mock_data, analysis_mode="static_isotropic"
         )
 
         # Test parameters
@@ -49,28 +50,28 @@ class TestDeviceAbstraction:
 
         # Get available devices
         devices = jax.devices()
-        cpu_device = jax.devices('cpu')[0]
+        cpu_device = jax.devices("cpu")[0]
 
         # Test on CPU
         with jax.default_device(cpu_device):
             cpu_result = residual_fn(xdata, *params)
 
-        assert cpu_result.shape == (50,), \
-            f"CPU result should have shape (50,), got {cpu_result.shape}"
-        assert not np.any(np.isnan(cpu_result)), \
-            "CPU result should not contain NaN"
+        assert cpu_result.shape == (
+            50,
+        ), f"CPU result should have shape (50,), got {cpu_result.shape}"
+        assert not np.any(np.isnan(cpu_result)), "CPU result should not contain NaN"
 
         # If GPU available, test on GPU
         try:
-            gpu_device = jax.devices('gpu')[0]
+            gpu_device = jax.devices("gpu")[0]
 
             with jax.default_device(gpu_device):
                 gpu_result = residual_fn(xdata, *params)
 
-            assert gpu_result.shape == (50,), \
-                f"GPU result should have shape (50,), got {gpu_result.shape}"
-            assert not np.any(np.isnan(gpu_result)), \
-                "GPU result should not contain NaN"
+            assert gpu_result.shape == (
+                50,
+            ), f"GPU result should have shape (50,), got {gpu_result.shape}"
+            assert not np.any(np.isnan(gpu_result)), "GPU result should not contain NaN"
 
             # Verify CPU and GPU results match (within numerical tolerance)
             np.testing.assert_allclose(
@@ -78,7 +79,7 @@ class TestDeviceAbstraction:
                 gpu_result,
                 rtol=1e-5,
                 atol=1e-6,
-                err_msg="CPU and GPU results should match within tolerance"
+                err_msg="CPU and GPU results should match within tolerance",
             )
 
         except RuntimeError:
@@ -112,6 +113,7 @@ class TestDeviceAbstraction:
 
         FR-005: Complete device abstraction across all operations.
         """
+
         # Create mock data
         class MockXPCSData:
             def __init__(self):
@@ -132,8 +134,10 @@ class TestDeviceAbstraction:
         assert ydata.shape == (4,)
 
         # Test bounds conversion (device-agnostic)
-        bounds = (np.array([0.0, 0.0, 100.0, 0.3, 1.0]),
-                  np.array([1.0, 2.0, 1e5, 1.5, 1000.0]))
+        bounds = (
+            np.array([0.0, 0.0, 100.0, 0.3, 1.0]),
+            np.array([1.0, 2.0, 1e5, 1.5, 1000.0]),
+        )
         nlsq_bounds = wrapper._convert_bounds(bounds)
         assert nlsq_bounds is not None
         assert len(nlsq_bounds) == 2
@@ -145,8 +149,7 @@ class TestDeviceAbstraction:
 
         # Test residual function creation (device-agnostic)
         residual_fn = wrapper._create_residual_function(
-            mock_data,
-            analysis_mode="static_isotropic"
+            mock_data, analysis_mode="static_isotropic"
         )
         assert callable(residual_fn)
 
@@ -159,6 +162,7 @@ class TestDeviceAbstraction:
 
         FR-005: JIT compilation should be device-transparent.
         """
+
         # Create simple mock data
         class MockXPCSData:
             def __init__(self):
@@ -174,8 +178,7 @@ class TestDeviceAbstraction:
         wrapper = NLSQWrapper()
 
         residual_fn = wrapper._create_residual_function(
-            mock_data,
-            analysis_mode="static_isotropic"
+            mock_data, analysis_mode="static_isotropic"
         )
 
         # JIT compile (should work on any device)
@@ -202,7 +205,7 @@ class TestDeviceAbstraction:
         FR-005: Graceful degradation when GPU not available.
         """
         # Force CPU execution
-        cpu_device = jax.devices('cpu')[0]
+        cpu_device = jax.devices("cpu")[0]
 
         class MockXPCSData:
             def __init__(self):
@@ -220,8 +223,7 @@ class TestDeviceAbstraction:
         with jax.default_device(cpu_device):
             # All operations should work on CPU
             residual_fn = wrapper._create_residual_function(
-                mock_data,
-                analysis_mode="static_isotropic"
+                mock_data, analysis_mode="static_isotropic"
             )
 
             xdata = jnp.arange(4, dtype=jnp.float32)

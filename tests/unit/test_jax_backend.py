@@ -10,7 +10,6 @@ Tests for homodyne.core.jax_backend module including:
 - CPU/GPU compatibility
 """
 
-
 import numpy as np
 import pytest
 
@@ -25,12 +24,12 @@ except ImportError:
     jnp = np
 
 from homodyne.core.jax_backend import (
-    compute_g1_diffusion,
-    compute_g1_shear,
-    compute_c2_model_jax,
-    residuals_jax,
     chi_squared_jax,
+    compute_c2_model_jax,
+    compute_g1_diffusion,
     compute_g1_diffusion_jax,
+    compute_g1_shear,
+    residuals_jax,
 )
 from homodyne.core.jax_backend import (
     jax_available as BACKEND_JAX_AVAILABLE,

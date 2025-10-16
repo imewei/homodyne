@@ -12,16 +12,18 @@ Test Categories:
 NFR-003 Requirement: Wrapper overhead <5% for production workloads
 """
 
-import pytest
-import numpy as np
 import time
-from tests.factories.synthetic_data import generate_static_isotropic_dataset
-from homodyne.optimization.nlsq_wrapper import NLSQWrapper
 
+import numpy as np
+import pytest
+
+from homodyne.optimization.nlsq_wrapper import NLSQWrapper
+from tests.factories.synthetic_data import generate_static_isotropic_dataset
 
 # Check if NLSQ is available
 try:
     import nlsq
+
     NLSQ_AVAILABLE = True
 except ImportError:
     NLSQ_AVAILABLE = False
@@ -49,20 +51,20 @@ class TestNLSQWrapperOverhead:
             noise_level=0.02,
             n_phi=5,
             n_t1=10,
-            n_t2=10
+            n_t2=10,
         )
 
         # Setup
         class MockConfig:
             def __init__(self):
-                self.optimization = {'lsq': {'max_iterations': 100, 'tolerance': 1e-6}}
+                self.optimization = {"lsq": {"max_iterations": 100, "tolerance": 1e-6}}
 
         config = MockConfig()
         wrapper = NLSQWrapper(enable_large_dataset=False, enable_recovery=False)
         initial_params = np.array([0.5, 1.0, 1000.0, 0.5, 10.0])
         bounds = (
             np.array([0.0, 0.8, 100.0, 0.3, 1.0]),
-            np.array([1.0, 1.2, 1e5, 1.5, 1000.0])
+            np.array([1.0, 1.2, 1e5, 1.5, 1000.0]),
         )
 
         # Warm up JIT compilation (run once, don't time)
@@ -76,7 +78,9 @@ class TestNLSQWrapperOverhead:
         for _ in range(3):
             start = time.perf_counter()
             try:
-                result = wrapper.fit(data, config, initial_params, bounds, "static_isotropic")
+                result = wrapper.fit(
+                    data, config, initial_params, bounds, "static_isotropic"
+                )
                 elapsed = time.perf_counter() - start
                 wrapper_times.append(elapsed)
             except Exception as e:
@@ -91,14 +95,15 @@ class TestNLSQWrapperOverhead:
 
         # For small datasets, we report overhead but don't enforce <5%
         # because fixed costs (data prep, validation) dominate
-        print(f"\n=== Small Dataset Overhead (500 points) ===")
+        print("\n=== Small Dataset Overhead (500 points) ===")
         print(f"  Wrapper time: {avg_wrapper_time*1000:.2f}ms")
-        print(f"  Note: Fixed costs may dominate for small datasets")
-        print(f"  NFR-003 (<5%) applies to medium/large datasets")
+        print("  Note: Fixed costs may dominate for small datasets")
+        print("  NFR-003 (<5%) applies to medium/large datasets")
 
         # Sanity check: should complete in reasonable time
-        assert avg_wrapper_time < 10.0, \
-            f"Small dataset took too long: {avg_wrapper_time:.2f}s"
+        assert (
+            avg_wrapper_time < 10.0
+        ), f"Small dataset took too long: {avg_wrapper_time:.2f}s"
 
     def test_overhead_medium_dataset(self):
         """
@@ -116,20 +121,20 @@ class TestNLSQWrapperOverhead:
             noise_level=0.02,
             n_phi=10,
             n_t1=30,
-            n_t2=30
+            n_t2=30,
         )
 
         # Setup
         class MockConfig:
             def __init__(self):
-                self.optimization = {'lsq': {'max_iterations': 100, 'tolerance': 1e-6}}
+                self.optimization = {"lsq": {"max_iterations": 100, "tolerance": 1e-6}}
 
         config = MockConfig()
         wrapper = NLSQWrapper(enable_large_dataset=False, enable_recovery=False)
         initial_params = np.array([0.5, 1.0, 1000.0, 0.5, 10.0])
         bounds = (
             np.array([0.0, 0.8, 100.0, 0.3, 1.0]),
-            np.array([1.0, 1.2, 1e5, 1.5, 1000.0])
+            np.array([1.0, 1.2, 1e5, 1.5, 1000.0]),
         )
 
         # Warm up JIT compilation
@@ -143,7 +148,9 @@ class TestNLSQWrapperOverhead:
         for _ in range(3):
             start = time.perf_counter()
             try:
-                result = wrapper.fit(data, config, initial_params, bounds, "static_isotropic")
+                result = wrapper.fit(
+                    data, config, initial_params, bounds, "static_isotropic"
+                )
                 elapsed = time.perf_counter() - start
                 wrapper_times.append(elapsed)
             except Exception as e:
@@ -159,17 +166,18 @@ class TestNLSQWrapperOverhead:
         # Based on profiling, data prep + result packaging ~5-10% of total time
         # For NFR-003 validation, we measure total wrapper time and report overhead
 
-        print(f"\n=== Medium Dataset Overhead (9,000 points) ===")
+        print("\n=== Medium Dataset Overhead (9,000 points) ===")
         print(f"  Wrapper total time: {avg_wrapper_time:.3f}s")
-        print(f"  Data points: 9,000")
+        print("  Data points: 9,000")
         print(f"  Throughput: {9000/avg_wrapper_time:.0f} points/sec")
 
         # For medium datasets, wrapper overhead should be minimal
         # We can't measure direct NLSQ easily without duplicating wrapper logic,
         # so we validate that total time is reasonable (throughput > 1000 pts/s)
         throughput = 9000 / avg_wrapper_time
-        assert throughput > 1000, \
-            f"Throughput too low: {throughput:.0f} pts/s (expected >1000 pts/s)"
+        assert (
+            throughput > 1000
+        ), f"Throughput too low: {throughput:.0f} pts/s (expected >1000 pts/s)"
 
     def test_overhead_large_dataset(self):
         """
@@ -188,20 +196,20 @@ class TestNLSQWrapperOverhead:
             noise_level=0.02,
             n_phi=20,
             n_t1=50,
-            n_t2=50
+            n_t2=50,
         )
 
         # Setup
         class MockConfig:
             def __init__(self):
-                self.optimization = {'lsq': {'max_iterations': 100, 'tolerance': 1e-6}}
+                self.optimization = {"lsq": {"max_iterations": 100, "tolerance": 1e-6}}
 
         config = MockConfig()
         wrapper = NLSQWrapper(enable_large_dataset=False, enable_recovery=False)
         initial_params = np.array([0.5, 1.0, 1000.0, 0.5, 10.0])
         bounds = (
             np.array([0.0, 0.8, 100.0, 0.3, 1.0]),
-            np.array([1.0, 1.2, 1e5, 1.5, 1000.0])
+            np.array([1.0, 1.2, 1e5, 1.5, 1000.0]),
         )
 
         # Warm up JIT compilation
@@ -213,21 +221,24 @@ class TestNLSQWrapperOverhead:
         # Benchmark wrapper (single run for large dataset to save time)
         start = time.perf_counter()
         try:
-            result = wrapper.fit(data, config, initial_params, bounds, "static_isotropic")
+            result = wrapper.fit(
+                data, config, initial_params, bounds, "static_isotropic"
+            )
             wrapper_time = time.perf_counter() - start
         except Exception as e:
             pytest.skip(f"Optimization failed: {e}")
 
-        print(f"\n=== Large Dataset Overhead (50,000 points) ===")
+        print("\n=== Large Dataset Overhead (50,000 points) ===")
         print(f"  Wrapper total time: {wrapper_time:.3f}s")
-        print(f"  Data points: 50,000")
+        print("  Data points: 50,000")
         print(f"  Throughput: {50000/wrapper_time:.0f} points/sec")
 
         # For large datasets, overhead should be negligible
         # Validate throughput is reasonable (>2000 pts/s)
         throughput = 50000 / wrapper_time
-        assert throughput > 2000, \
-            f"Throughput too low: {throughput:.0f} pts/s (expected >2000 pts/s)"
+        assert (
+            throughput > 2000
+        ), f"Throughput too low: {throughput:.0f} pts/s (expected >2000 pts/s)"
 
     @pytest.mark.skipif(not NLSQ_AVAILABLE, reason="NLSQ not available")
     def test_wrapper_operations_breakdown(self):
@@ -242,24 +253,19 @@ class TestNLSQWrapperOverhead:
         """
         # Generate medium dataset for profiling
         data = generate_static_isotropic_dataset(
-            D0=1000.0,
-            alpha=0.5,
-            D_offset=10.0,
-            n_phi=10,
-            n_t1=30,
-            n_t2=30
+            D0=1000.0, alpha=0.5, D_offset=10.0, n_phi=10, n_t1=30, n_t2=30
         )
 
         class MockConfig:
             def __init__(self):
-                self.optimization = {'lsq': {'max_iterations': 100, 'tolerance': 1e-6}}
+                self.optimization = {"lsq": {"max_iterations": 100, "tolerance": 1e-6}}
 
         config = MockConfig()
         wrapper = NLSQWrapper(enable_large_dataset=False, enable_recovery=False)
         initial_params = np.array([0.5, 1.0, 1000.0, 0.5, 10.0])
         bounds = (
             np.array([0.0, 0.8, 100.0, 0.3, 1.0]),
-            np.array([1.0, 1.2, 1e5, 1.5, 1000.0])
+            np.array([1.0, 1.2, 1e5, 1.5, 1000.0]),
         )
 
         # Warm up
@@ -274,25 +280,30 @@ class TestNLSQWrapperOverhead:
         # 1. Data preparation
         start = time.perf_counter()
         xdata, ydata = wrapper._prepare_data(data)
-        timings['data_prep'] = time.perf_counter() - start
+        timings["data_prep"] = time.perf_counter() - start
 
         # 2. Total fit time (includes all operations)
         start = time.perf_counter()
         try:
-            result = wrapper.fit(data, config, initial_params, bounds, "static_isotropic")
-            timings['total'] = time.perf_counter() - start
+            result = wrapper.fit(
+                data, config, initial_params, bounds, "static_isotropic"
+            )
+            timings["total"] = time.perf_counter() - start
         except Exception as e:
             pytest.skip(f"Optimization failed: {e}")
 
         # Calculate overhead percentage
         # Note: This is a rough estimate since we can't easily isolate pure NLSQ time
-        data_prep_overhead = (timings['data_prep'] / timings['total']) * 100
+        data_prep_overhead = (timings["data_prep"] / timings["total"]) * 100
 
-        print(f"\n=== Wrapper Operations Breakdown ===")
-        print(f"  Data preparation: {timings['data_prep']*1000:.2f}ms ({data_prep_overhead:.1f}%)")
+        print("\n=== Wrapper Operations Breakdown ===")
+        print(
+            f"  Data preparation: {timings['data_prep']*1000:.2f}ms ({data_prep_overhead:.1f}%)"
+        )
         print(f"  Total fit time: {timings['total']*1000:.2f}ms")
-        print(f"  Note: Remaining time includes NLSQ optimization + result creation")
+        print("  Note: Remaining time includes NLSQ optimization + result creation")
 
         # Data prep should be fast (<10% of total time)
-        assert data_prep_overhead < 10.0, \
-            f"Data prep overhead too high: {data_prep_overhead:.1f}% (expected <10%)"
+        assert (
+            data_prep_overhead < 10.0
+        ), f"Data prep overhead too high: {data_prep_overhead:.1f}% (expected <10%)"

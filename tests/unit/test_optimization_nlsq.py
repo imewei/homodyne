@@ -10,7 +10,6 @@ Tests for homodyne.optimization.nlsq module including:
 - Performance characteristics
 """
 
-
 import numpy as np
 import pytest
 
@@ -27,6 +26,7 @@ except ImportError:
 # Check NLSQ package availability
 try:
     import nlsq
+
     NLSQ_AVAILABLE = True
 except ImportError:
     NLSQ_AVAILABLE = False
@@ -45,8 +45,11 @@ class TestNLSQOptimization:
         assert isinstance(NLSQ_AVAILABLE, bool)
         if NLSQ_AVAILABLE:
             import nlsq
-            assert hasattr(nlsq, 'curve_fit'), "NLSQ should have curve_fit function"
-            assert hasattr(nlsq, 'curve_fit_large'), "NLSQ should have curve_fit_large function"
+
+            assert hasattr(nlsq, "curve_fit"), "NLSQ should have curve_fit function"
+            assert hasattr(
+                nlsq, "curve_fit_large"
+            ), "NLSQ should have curve_fit_large function"
 
     def test_nlsq_result_structure(self):
         """Test NLSQResult data structure."""
@@ -543,9 +546,10 @@ class TestValidationIntegration:
 
     def test_validation_with_valid_params(self, test_config):
         """Test that validation passes with valid initial parameters."""
-        from homodyne.optimization.nlsq import _get_param_names
-        from homodyne.core.physics import validate_parameters_detailed
         import numpy as np
+
+        from homodyne.core.physics import validate_parameters_detailed
+        from homodyne.optimization.nlsq import _get_param_names
 
         # Valid laminar flow parameters
         params = np.array(
@@ -581,9 +585,10 @@ class TestValidationIntegration:
 
     def test_validation_with_out_of_bounds_params(self, test_config):
         """Test that validation catches out of bounds parameters."""
-        from homodyne.optimization.nlsq import _get_param_names
-        from homodyne.core.physics import validate_parameters_detailed
         import numpy as np
+
+        from homodyne.core.physics import validate_parameters_detailed
+        from homodyne.optimization.nlsq import _get_param_names
 
         # Invalid parameters (contrast > 1.0, D0 too large)
         params = np.array(
@@ -620,9 +625,10 @@ class TestValidationIntegration:
 
     def test_validation_error_messages_include_names(self, test_config):
         """Test that validation error messages include parameter names."""
-        from homodyne.optimization.nlsq import _get_param_names
-        from homodyne.core.physics import validate_parameters_detailed
         import numpy as np
+
+        from homodyne.core.physics import validate_parameters_detailed
+        from homodyne.optimization.nlsq import _get_param_names
 
         # Out of bounds contrast parameter
         params = np.array([1.5, 1.0, 1000.0, 0.5, 10.0])

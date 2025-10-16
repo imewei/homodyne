@@ -239,8 +239,8 @@ def fit_nlsq_jax(
         # CLI provides: phi_angles_list, c2_exp, wavevector_q_list
         # NLSQWrapper needs: phi, g2, t1, t2, sigma, q, L, dt (optional)
         key_mapping = {
-            'phi_angles_list': 'phi',
-            'c2_exp': 'g2',
+            "phi_angles_list": "phi",
+            "c2_exp": "g2",
         }
 
         # Apply key mapping and copy all data
@@ -250,14 +250,14 @@ def fit_nlsq_jax(
             setattr(data_obj, mapped_key, value)
 
         # Extract scalar q from wavevector_q_list if present
-        if hasattr(data_obj, 'wavevector_q_list'):
+        if hasattr(data_obj, "wavevector_q_list"):
             q_list = np.asarray(data_obj.wavevector_q_list)
             if q_list.size > 0:
                 data_obj.q = float(q_list[0])  # Take first q-vector
                 logger.debug(f"Extracted q = {data_obj.q:.6f} from wavevector_q_list")
 
         # Generate default sigma (uncertainty) if missing
-        if not hasattr(data_obj, 'sigma') and hasattr(data_obj, 'g2'):
+        if not hasattr(data_obj, "sigma") and hasattr(data_obj, "g2"):
             g2_array = np.asarray(data_obj.g2)
             # Use 1% relative uncertainty as default
             data_obj.sigma = 0.01 * np.ones_like(g2_array)
@@ -265,26 +265,30 @@ def fit_nlsq_jax(
 
         # Extract 1D time vectors from 2D meshgrids if needed
         # Data loader returns t1_2d, t2_2d as (N, N) meshgrids, but NLSQWrapper expects 1D vectors
-        if hasattr(data_obj, 't1'):
+        if hasattr(data_obj, "t1"):
             t1 = np.asarray(data_obj.t1)
             if t1.ndim == 2:
                 # t1_2d[i, j] = time[i] (constant along j), so extract first column
                 data_obj.t1 = t1[:, 0]
-                logger.debug(f"Extracted 1D t1 vector from 2D meshgrid: {t1.shape} → {data_obj.t1.shape}")
+                logger.debug(
+                    f"Extracted 1D t1 vector from 2D meshgrid: {t1.shape} → {data_obj.t1.shape}"
+                )
             elif t1.ndim != 1:
                 raise ValueError(f"t1 must be 1D or 2D array, got shape {t1.shape}")
 
-        if hasattr(data_obj, 't2'):
+        if hasattr(data_obj, "t2"):
             t2 = np.asarray(data_obj.t2)
             if t2.ndim == 2:
                 # t2_2d[i, j] = time[j] (constant along i), so extract first row
                 data_obj.t2 = t2[0, :]
-                logger.debug(f"Extracted 1D t2 vector from 2D meshgrid: {t2.shape} → {data_obj.t2.shape}")
+                logger.debug(
+                    f"Extracted 1D t2 vector from 2D meshgrid: {t2.shape} → {data_obj.t2.shape}"
+                )
             elif t2.ndim != 1:
                 raise ValueError(f"t2 must be 1D or 2D array, got shape {t2.shape}")
 
         # Get characteristic length L from config (stator_rotor_gap or sample_detector_distance)
-        if not hasattr(data_obj, 'L'):
+        if not hasattr(data_obj, "L"):
             # Try to get from config - check multiple possible locations
             # Priority 1: analyzer_parameters.geometry.stator_rotor_gap (for rheology-XPCS)
             # Priority 2: experimental_data.geometry.stator_rotor_gap (alternative location)
@@ -292,42 +296,52 @@ def fit_nlsq_jax(
             # Priority 4: Default 100.0 (fallback)
             try:
                 # Try analyzer_parameters.geometry.stator_rotor_gap first
-                analyzer_params = config.config.get('analyzer_parameters', {})
-                geometry = analyzer_params.get('geometry', {})
+                analyzer_params = config.config.get("analyzer_parameters", {})
+                geometry = analyzer_params.get("geometry", {})
 
-                if 'stator_rotor_gap' in geometry:
-                    data_obj.L = float(geometry['stator_rotor_gap'])
-                    logger.debug(f"Using stator_rotor_gap L = {data_obj.L:.1f} Å (from config.analyzer_parameters.geometry)")
+                if "stator_rotor_gap" in geometry:
+                    data_obj.L = float(geometry["stator_rotor_gap"])
+                    logger.debug(
+                        f"Using stator_rotor_gap L = {data_obj.L:.1f} Å (from config.analyzer_parameters.geometry)"
+                    )
                 else:
                     # Try experimental_data.geometry.stator_rotor_gap as alternative
-                    exp_config = config.config.get('experimental_data', {})
-                    exp_geometry = exp_config.get('geometry', {})
+                    exp_config = config.config.get("experimental_data", {})
+                    exp_geometry = exp_config.get("geometry", {})
 
-                    if 'stator_rotor_gap' in exp_geometry:
-                        data_obj.L = float(exp_geometry['stator_rotor_gap'])
-                        logger.debug(f"Using stator_rotor_gap L = {data_obj.L:.1f} Å (from config.experimental_data.geometry)")
+                    if "stator_rotor_gap" in exp_geometry:
+                        data_obj.L = float(exp_geometry["stator_rotor_gap"])
+                        logger.debug(
+                            f"Using stator_rotor_gap L = {data_obj.L:.1f} Å (from config.experimental_data.geometry)"
+                        )
                     # Fallback to sample_detector_distance
-                    elif 'sample_detector_distance' in exp_config:
-                        data_obj.L = float(exp_config['sample_detector_distance'])
-                        logger.debug(f"Using sample_detector_distance L = {data_obj.L:.1f} Å (from config.experimental_data)")
+                    elif "sample_detector_distance" in exp_config:
+                        data_obj.L = float(exp_config["sample_detector_distance"])
+                        logger.debug(
+                            f"Using sample_detector_distance L = {data_obj.L:.1f} Å (from config.experimental_data)"
+                        )
                     else:
                         data_obj.L = 2000000.0  # Default: 200 µm stator-rotor gap (typical rheology-XPCS)
-                        logger.warning(f"No L parameter found in config, using default L = {data_obj.L:.1f} Å (200 µm, typical rheology-XPCS gap)")
+                        logger.warning(
+                            f"No L parameter found in config, using default L = {data_obj.L:.1f} Å (200 µm, typical rheology-XPCS gap)"
+                        )
             except (AttributeError, TypeError, ValueError) as e:
                 data_obj.L = 2000000.0  # Default: 200 µm stator-rotor gap (typical rheology-XPCS)
-                logger.warning(f"Error reading L from config: {e}, using default L = {data_obj.L:.1f} Å (200 µm)")
+                logger.warning(
+                    f"Error reading L from config: {e}, using default L = {data_obj.L:.1f} Å (200 µm)"
+                )
 
         # Get time step dt from config if available
-        if not hasattr(data_obj, 'dt'):
+        if not hasattr(data_obj, "dt"):
             try:
                 # Try analyzer_parameters first (preferred location)
-                analyzer_params = config.config.get('analyzer_parameters', {})
-                dt_value = analyzer_params.get('dt')
+                analyzer_params = config.config.get("analyzer_parameters", {})
+                dt_value = analyzer_params.get("dt")
 
                 # Fallback to experimental_data section
                 if dt_value is None:
-                    exp_config = config.config.get('experimental_data', {})
-                    dt_value = exp_config.get('dt')
+                    exp_config = config.config.get("experimental_data", {})
+                    dt_value = exp_config.get("dt")
 
                 if dt_value is not None:
                     data_obj.dt = float(dt_value)

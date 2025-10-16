@@ -5,10 +5,9 @@ Unit Tests for ParameterManager Physics Validation (Phase 4.4)
 Tests for physics-based parameter constraint validation beyond simple bounds.
 """
 
-import numpy as np
 import pytest
 
-from homodyne.config.parameter_manager import ConstraintSeverity, ParameterManager
+from homodyne.config.parameter_manager import ParameterManager
 
 
 class TestPhysicsValidationBasics:

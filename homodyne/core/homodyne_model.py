@@ -32,14 +32,12 @@ Usage Example
 """
 
 from pathlib import Path
-from typing import Optional, Tuple
 
 import numpy as np
 
 from homodyne.core.jax_backend import compute_g2_scaled_with_factors, jnp
 from homodyne.core.models import CombinedModel
 from homodyne.core.physics_factors import (
-    PhysicsFactors,
     create_physics_factors_from_config_dict,
 )
 from homodyne.utils.logging import get_logger
@@ -155,7 +153,7 @@ class HomodyneModel:
         # Create underlying model (for backward compatibility)
         self.model = CombinedModel(analysis_mode=self.analysis_mode)
 
-        logger.info(f"HomodyneModel initialized successfully")
+        logger.info("HomodyneModel initialized successfully")
         logger.info(f"  Analysis mode: {self.analysis_mode}")
         logger.info(f"  Time points: {n_time}")
         logger.info(f"  dt: {self.dt} s")
@@ -279,7 +277,7 @@ class HomodyneModel:
         contrast: float = 0.5,
         offset: float = 1.0,
         generate_plots: bool = True,
-    ) -> Tuple[np.ndarray, Path]:
+    ) -> tuple[np.ndarray, Path]:
         """
         Generate and optionally plot simulated C2 data.
 

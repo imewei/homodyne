@@ -36,7 +36,9 @@ except ImportError:
     JAX_AVAILABLE = False
     jax = None
     jnp = None
-    warnings.warn("JAX not available. GPU activation requires JAX installation.", stacklevel=2)
+    warnings.warn(
+        "JAX not available. GPU activation requires JAX installation.", stacklevel=2
+    )
 
 # Optional imports
 try:

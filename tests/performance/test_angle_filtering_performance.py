@@ -7,7 +7,6 @@ This module validates that angle filtering operations meet performance requireme
 
 import time
 
-import numpy as np
 import pytest
 
 from tests.factories.config_factory import (
@@ -43,9 +42,7 @@ class TestAngleFilteringPerformance:
         elapsed_ms = (end_time - start_time) * 1000
 
         # Assert
-        assert (
-            elapsed_ms < 100
-        ), f"Filtering took {elapsed_ms:.2f}ms, expected < 100ms"
+        assert elapsed_ms < 100, f"Filtering took {elapsed_ms:.2f}ms, expected < 100ms"
 
     def test_filtering_overhead_medium_dataset(self):
         """Verify filtering overhead < 100ms for medium dataset (50 angles)."""
@@ -69,9 +66,7 @@ class TestAngleFilteringPerformance:
         elapsed_ms = (end_time - start_time) * 1000
 
         # Assert
-        assert (
-            elapsed_ms < 100
-        ), f"Filtering took {elapsed_ms:.2f}ms, expected < 100ms"
+        assert elapsed_ms < 100, f"Filtering took {elapsed_ms:.2f}ms, expected < 100ms"
 
     def test_filtering_overhead_large_dataset(self):
         """Verify filtering overhead < 100ms for large dataset (360 angles)."""
@@ -95,9 +90,7 @@ class TestAngleFilteringPerformance:
         elapsed_ms = (end_time - start_time) * 1000
 
         # Assert
-        assert (
-            elapsed_ms < 100
-        ), f"Filtering took {elapsed_ms:.2f}ms, expected < 100ms"
+        assert elapsed_ms < 100, f"Filtering took {elapsed_ms:.2f}ms, expected < 100ms"
 
     def test_filtering_time_complexity(self):
         """Verify O(n) time complexity with respect to number of angles."""
@@ -132,7 +125,7 @@ class TestAngleFilteringPerformance:
 
         # Assert - Time ratio should be roughly proportional to size ratio
         # Allow 3x overhead for small datasets
-        for i, (time_ratio, size_ratio) in enumerate(zip(time_ratios, size_ratios)):
+        for i, (time_ratio, size_ratio) in enumerate(zip(time_ratios, size_ratios, strict=False)):
             assert (
                 time_ratio < size_ratio * 3
             ), f"Step {i}: Time scaled by {time_ratio:.2f}x but size by {size_ratio:.2f}x"

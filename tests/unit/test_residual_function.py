@@ -7,9 +7,10 @@ Tests cover:
 - Integration with homodyne physics models
 """
 
-import pytest
-import numpy as np
 import jax.numpy as jnp
+import numpy as np
+import pytest
+
 from homodyne.optimization.nlsq_wrapper import NLSQWrapper
 
 
@@ -22,10 +23,11 @@ class TestResidualFunctionCreation:
 
         NLSQ expects: f(xdata, *params) -> residuals
         """
+
         # Create mock XPCS data
         class MockXPCSData:
             def __init__(self):
-                self.phi = np.array([0.0, np.pi/2, np.pi])
+                self.phi = np.array([0.0, np.pi / 2, np.pi])
                 self.t1 = np.linspace(0, 1, 10)
                 self.t2 = np.linspace(0, 1, 10)
                 self.g2 = np.random.rand(3, 10, 10)
@@ -38,8 +40,7 @@ class TestResidualFunctionCreation:
 
         # Create residual function
         residual_fn = wrapper._create_residual_function(
-            mock_data,
-            analysis_mode="static_isotropic"
+            mock_data, analysis_mode="static_isotropic"
         )
 
         # Verify it's callable
@@ -55,10 +56,12 @@ class TestResidualFunctionCreation:
         residuals = residual_fn(xdata, *params)
 
         # Verify output shape matches flattened data
-        assert residuals.shape == (300,), \
-            f"Residuals should have shape (300,), got {residuals.shape}"
-        assert isinstance(residuals, (np.ndarray, jnp.ndarray)), \
-            "Residuals should be numpy or JAX array"
+        assert residuals.shape == (
+            300,
+        ), f"Residuals should have shape (300,), got {residuals.shape}"
+        assert isinstance(
+            residuals, (np.ndarray, jnp.ndarray)
+        ), "Residuals should be numpy or JAX array"
 
     def test_residual_computation_correctness(self):
         """
@@ -84,8 +87,7 @@ class TestResidualFunctionCreation:
 
         # Create residual function
         residual_fn = wrapper._create_residual_function(
-            mock_data,
-            analysis_mode="static_isotropic"
+            mock_data, analysis_mode="static_isotropic"
         )
 
         # Call with parameters that should produce g2 ≈ 1.0
@@ -102,7 +104,7 @@ class TestResidualFunctionCreation:
             residuals,
             expected_residuals,
             rtol=0.1,  # Allow 10% relative error due to g1 computation
-            err_msg="Residuals don't match expected (data - theory) / sigma"
+            err_msg="Residuals don't match expected (data - theory) / sigma",
         )
 
     def test_residual_function_jax_jit_compatible(self):
@@ -128,8 +130,7 @@ class TestResidualFunctionCreation:
         wrapper = NLSQWrapper()
 
         residual_fn = wrapper._create_residual_function(
-            mock_data,
-            analysis_mode="static_isotropic"
+            mock_data, analysis_mode="static_isotropic"
         )
 
         # Try to JIT compile (should not raise)
@@ -152,10 +153,11 @@ class TestResidualFunctionCreation:
         Laminar flow: [contrast, offset, D0, alpha, D_offset,
                        gamma_dot_0, beta, gamma_dot_offset, phi0]
         """
+
         # Create mock data
         class MockXPCSData:
             def __init__(self):
-                self.phi = np.array([0.0, np.pi/4, np.pi/2])
+                self.phi = np.array([0.0, np.pi / 4, np.pi / 2])
                 self.t1 = np.linspace(0, 1, 5)
                 self.t2 = np.linspace(0, 1, 5)
                 self.g2 = np.random.rand(3, 5, 5)
@@ -168,35 +170,40 @@ class TestResidualFunctionCreation:
 
         # Create residual function for laminar flow
         residual_fn = wrapper._create_residual_function(
-            mock_data,
-            analysis_mode="laminar_flow"
+            mock_data, analysis_mode="laminar_flow"
         )
 
         # Test with laminar flow parameters (9 total)
         xdata = np.arange(3 * 5 * 5, dtype=np.float64)
-        params = np.array([
-            0.5,      # contrast
-            1.0,      # offset
-            1000.0,   # D0
-            0.5,      # alpha
-            10.0,     # D_offset
-            1e-4,     # gamma_dot_0
-            0.5,      # beta
-            1e-5,     # gamma_dot_offset
-            0.0       # phi0
-        ])
+        params = np.array(
+            [
+                0.5,  # contrast
+                1.0,  # offset
+                1000.0,  # D0
+                0.5,  # alpha
+                10.0,  # D_offset
+                1e-4,  # gamma_dot_0
+                0.5,  # beta
+                1e-5,  # gamma_dot_offset
+                0.0,  # phi0
+            ]
+        )
 
         residuals = residual_fn(xdata, *params)
 
-        assert residuals.shape == (75,), \
-            f"Residuals should have shape (75,), got {residuals.shape}"
-        assert not np.any(np.isnan(residuals)), \
-            "Residuals should not contain NaN values"
-        assert not np.any(np.isinf(residuals)), \
-            "Residuals should not contain Inf values"
+        assert residuals.shape == (
+            75,
+        ), f"Residuals should have shape (75,), got {residuals.shape}"
+        assert not np.any(
+            np.isnan(residuals)
+        ), "Residuals should not contain NaN values"
+        assert not np.any(
+            np.isinf(residuals)
+        ), "Residuals should not contain Inf values"
 
     def test_residual_function_missing_data_attributes(self):
         """Test graceful error handling for missing data attributes."""
+
         class IncompleteData:
             def __init__(self):
                 self.phi = np.array([0.0])
@@ -207,6 +214,5 @@ class TestResidualFunctionCreation:
 
         with pytest.raises((AttributeError, ValueError)):
             wrapper._create_residual_function(
-                IncompleteData(),
-                analysis_mode="static_isotropic"
+                IncompleteData(), analysis_mode="static_isotropic"
             )

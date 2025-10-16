@@ -255,9 +255,7 @@ class TestParameterValidation:
     def test_validate_uses_config_bounds(self):
         """Test that validation uses configuration bounds."""
         config = {
-            "parameter_space": {
-                "bounds": [{"name": "D0", "min": 100.0, "max": 1000.0}]
-            }
+            "parameter_space": {"bounds": [{"name": "D0", "min": 100.0, "max": 1000.0}]}
         }
         pm = ParameterManager(config, "static")
         params = np.array([0.5, 1.0, 50.0, 0.5, 10.0])  # D0 = 50 < 100 (config min)
@@ -489,7 +487,9 @@ class TestCaching:
 
         config = {
             "parameter_space": {
-                "bounds": [{"name": f"param_{i}", "min": 0.0, "max": 1.0} for i in range(50)]
+                "bounds": [
+                    {"name": f"param_{i}", "min": 0.0, "max": 1.0} for i in range(50)
+                ]
             }
         }
         pm = ParameterManager(config, "laminar_flow")

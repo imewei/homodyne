@@ -301,7 +301,9 @@ class TestNLSQErrorRecovery:
 
             # Verify PNG plots were NOT created (plotting failed)
             png_files = list(nlsq_dir.glob("*.png"))
-            assert len(png_files) == 0, "PNG files should not be created if plotting fails"
+            assert (
+                len(png_files) == 0
+            ), "PNG files should not be created if plotting fails"
 
 
 # ==============================================================================
@@ -360,7 +362,9 @@ class TestNLSQPerformance:
             assert len(png_files) == n_angles
 
             # Log performance (informational, no strict requirement for slow test)
-            print(f"\nLarge dataset performance: {elapsed_time:.2f}s for {n_angles} angles × {n_t1}×{n_t2}")
+            print(
+                f"\nLarge dataset performance: {elapsed_time:.2f}s for {n_angles} angles × {n_t1}×{n_t2}"
+            )
 
     def test_save_nlsq_results_device_array_conversion(self):
         """Test conversion of JAX/GPU arrays to NumPy for saving."""

@@ -425,7 +425,9 @@ class TestAngleFilteringEdgeCases:
         # Should match angles at indices 0 (0°), 2 (360°→0°), and 3 (400°→40°)
         assert len(filtered_data["phi_angles_list"]) == 3
         # Check that the matched angles are correct
-        assert 0.0 in filtered_data["phi_angles_list"]  # Both 0° and 360° normalize to 0°
+        assert (
+            0.0 in filtered_data["phi_angles_list"]
+        )  # Both 0° and 360° normalize to 0°
         assert 40.0 in filtered_data["phi_angles_list"]  # 400° normalizes to 40°
 
 
@@ -472,7 +474,9 @@ class TestAngleNormalization:
         assert normalize_angle_to_symmetric_range(-45.0) == pytest.approx(-45.0)
         assert normalize_angle_to_symmetric_range(-90.0) == pytest.approx(-90.0)
         assert normalize_angle_to_symmetric_range(180.0) == pytest.approx(180.0)
-        assert normalize_angle_to_symmetric_range(-180.0) == pytest.approx(180.0)  # -180° → 180°
+        assert normalize_angle_to_symmetric_range(-180.0) == pytest.approx(
+            180.0
+        )  # -180° → 180°
 
     def test_normalize_boundary_cases(self):
         """Test normalization at boundaries (±180°, 0°, 360°)."""
@@ -505,12 +509,15 @@ class TestAngleNormalization:
         # Assert
         # Note: -180° and 180° are equivalent and both normalize to 180°
         assert result_540 == pytest.approx(180.0)
-        assert result_minus_540 == pytest.approx(180.0)  # -540° → 180° (equivalent to -180°)
+        assert result_minus_540 == pytest.approx(
+            180.0
+        )  # -540° → 180° (equivalent to -180°)
         assert result_900 == pytest.approx(180.0)
 
     def test_normalize_array_input(self):
         """Test normalization with NumPy array input."""
         import numpy as np
+
         from homodyne.cli.commands import normalize_angle_to_symmetric_range
 
         # Arrange
@@ -541,6 +548,7 @@ class TestAngleNormalization:
     def test_normalize_array_returns_array(self):
         """Test that array input returns array."""
         import numpy as np
+
         from homodyne.cli.commands import normalize_angle_to_symmetric_range
 
         # Arrange

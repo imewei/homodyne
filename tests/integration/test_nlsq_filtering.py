@@ -8,7 +8,6 @@ and valid optimization results.
 import numpy as np
 import pytest
 
-from homodyne.config.manager import ConfigManager
 from homodyne.optimization.nlsq import fit_nlsq_jax
 from tests.factories.config_factory import (
     create_disabled_filtering_config,
@@ -111,12 +110,14 @@ class TestNLSQWithAngleFiltering:
         # but we verify filtering works and optimization is attempted
         try:
             result = fit_nlsq_jax(filtered_data_obj, config)
-        except Exception as e:
+        except Exception:
             # Optimization failure is OK - we're testing filtering, not convergence
             result = None
 
         # Assert - Dataset size reduction (filtering worked)
-        assert len(filtered_data["phi_angles_list"]) == 3, "Should have 3 filtered angles"
+        assert (
+            len(filtered_data["phi_angles_list"]) == 3
+        ), "Should have 3 filtered angles"
         np.testing.assert_array_almost_equal(
             filtered_data["phi_angles_list"], [85.0, 90.0, 95.0], decimal=1
         )
@@ -290,9 +291,7 @@ class TestNLSQWithAngleFiltering:
         found_angles_msg = any(
             "85" in msg and "90" in msg and "95" in msg for msg in log_messages
         )
-        assert (
-            found_angles_msg
-        ), "Should log selected angles containing 85, 90, and 95"
+        assert found_angles_msg, "Should log selected angles containing 85, 90, and 95"
 
     def test_nlsq_receives_filtered_data_correctly(self):
         """Test that NLSQ receives correctly filtered data structure."""
@@ -350,9 +349,7 @@ class TestNLSQWithAngleFiltering:
 
         # Verify filtered data dimensions
         assert len(filtered_data_obj.phi) == 3, "Should have 3 filtered angles"
-        assert (
-            filtered_data_obj.g2.shape[0] == 3
-        ), "g2 first dimension should be 3"
+        assert filtered_data_obj.g2.shape[0] == 3, "g2 first dimension should be 3"
 
         # Act - Attempt optimization (may not converge, but should accept data structure)
         try:

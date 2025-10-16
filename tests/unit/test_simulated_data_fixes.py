@@ -11,8 +11,6 @@ Tests to validate the critical fixes for simulated data plotting:
 import numpy as np
 import pytest
 
-from homodyne.cli.commands import _plot_simulated_data
-
 
 class TestTimeGridGeneration:
     """Test time grid generation for simulated data plotting."""
@@ -36,9 +34,9 @@ class TestTimeGridGeneration:
         t_vals = np.linspace(0, expected_time_max, n_time_points)
         for i in range(len(t_vals)):
             expected_t = dt * i
-            assert t_vals[i] == pytest.approx(expected_t, abs=1e-10), (
-                f"t[{i}] = {t_vals[i]:.10f} != {expected_t:.10f}"
-            )
+            assert t_vals[i] == pytest.approx(
+                expected_t, abs=1e-10
+            ), f"t[{i}] = {t_vals[i]:.10f} != {expected_t:.10f}"
 
     def test_time_grid_spacing_consistency(self):
         """Test that time grid has consistent spacing equal to dt."""
@@ -71,9 +69,9 @@ class TestTimeGridGeneration:
         """Test that frame counting is inclusive (end - start + 1)."""
         test_cases = [
             (1, 100, 100),  # 1 to 100 inclusive = 100 points
-            (0, 99, 100),   # 0 to 99 inclusive = 100 points
-            (50, 149, 100), # 50 to 149 inclusive = 100 points
-            (1, 1000, 1000), # 1 to 1000 inclusive = 1000 points
+            (0, 99, 100),  # 0 to 99 inclusive = 100 points
+            (50, 149, 100),  # 50 to 149 inclusive = 100 points
+            (1, 1000, 1000),  # 1 to 1000 inclusive = 1000 points
         ]
 
         for start, end, expected_n in test_cases:
@@ -94,7 +92,7 @@ class TestSimulatedDataIndependence:
 
         # Simulate the old buggy behavior
         exp_data_size = 75  # Different from config
-        config_size = 100   # Config-specified size
+        config_size = 100  # Config-specified size
 
         # OLD BUGGY CODE would do:
         # if exp_data is not None:
@@ -120,9 +118,9 @@ class TestSimulatedDataIndependence:
         t_vals_2 = np.linspace(0, time_max, n_points)
 
         # Should be identical
-        assert np.array_equal(t_vals_1, t_vals_2), (
-            "Time grid not deterministic from config"
-        )
+        assert np.array_equal(
+            t_vals_1, t_vals_2
+        ), "Time grid not deterministic from config"
 
 
 class TestDtPropagation:
@@ -147,15 +145,15 @@ class TestDtPropagation:
         assert dt_estimated_correct == pytest.approx(dt_correct, abs=1e-10)
 
         # Verify wrong case produces wrong dt
-        assert dt_estimated_wrong != pytest.approx(dt_correct, abs=1e-10), (
-            "Bug simulation failed: wrong time_max should produce wrong dt estimate"
-        )
+        assert dt_estimated_wrong != pytest.approx(
+            dt_correct, abs=1e-10
+        ), "Bug simulation failed: wrong time_max should produce wrong dt estimate"
 
         # Show the error
         dt_error = abs(dt_estimated_wrong - dt_correct) / dt_correct * 100
-        assert dt_error > 0.5, (
-            f"dt error is {dt_error:.2f}%, should be significant for this test"
-        )
+        assert (
+            dt_error > 0.5
+        ), f"dt error is {dt_error:.2f}%, should be significant for this test"
 
 
 class TestRegressionPrevention:
@@ -181,10 +179,10 @@ class TestRegressionPrevention:
     def test_time_max_formula_correctness(self):
         """Test that time_max uses correct formula with (n-1)."""
         test_cases = [
-            (0.1, 100, 9.9),    # dt=0.1, n=100 -> time_max=9.9
+            (0.1, 100, 9.9),  # dt=0.1, n=100 -> time_max=9.9
             (0.05, 200, 9.95),  # dt=0.05, n=200 -> time_max=9.95
-            (1.0, 50, 49.0),    # dt=1.0, n=50 -> time_max=49.0
-            (0.01, 1000, 9.99), # dt=0.01, n=1000 -> time_max=9.99
+            (1.0, 50, 49.0),  # dt=1.0, n=50 -> time_max=49.0
+            (0.01, 1000, 9.99),  # dt=0.01, n=1000 -> time_max=9.99
         ]
 
         for dt, n, expected_time_max in test_cases:

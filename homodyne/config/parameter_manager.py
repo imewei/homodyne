@@ -10,7 +10,7 @@ during the September 2025 refactoring while maintaining compatibility with
 the new architecture.
 """
 
-from typing import Any, Literal, Optional
+from typing import Any
 
 import numpy as np
 
@@ -19,7 +19,6 @@ from homodyne.config.types import (
     PARAMETER_NAME_MAPPING,
     SCALING_PARAM_NAMES,
     STATIC_PARAM_NAMES,
-    AnalysisMode,
     BoundDict,
     HomodyneConfig,
 )
@@ -65,7 +64,7 @@ class ParameterManager:
 
     def __init__(
         self,
-        config_dict: Optional[HomodyneConfig | dict[str, Any]] = None,
+        config_dict: HomodyneConfig | dict[str, Any] | None = None,
         analysis_mode: str = "laminar_flow",
     ):
         """Initialize ParameterManager."""
@@ -74,7 +73,7 @@ class ParameterManager:
 
         # Performance caching for repeated queries
         self._bounds_cache: dict[str, list[BoundDict]] = {}
-        self._active_params_cache: Optional[list[str]] = None
+        self._active_params_cache: list[str] | None = None
         self._cache_enabled: bool = True
 
         # Default bounds for all known parameters
@@ -87,7 +86,12 @@ class ParameterManager:
             "alpha": {"min": -2.0, "max": 2.0, "name": "alpha", "type": "Normal"},
             "D_offset": {"min": 0.0, "max": 1e6, "name": "D_offset", "type": "Normal"},
             # Physical parameters - shear flow
-            "gamma_dot_t0": {"min": 1e-10, "max": 1.0, "name": "gamma_dot_t0", "type": "Normal"},
+            "gamma_dot_t0": {
+                "min": 1e-10,
+                "max": 1.0,
+                "name": "gamma_dot_t0",
+                "type": "Normal",
+            },
             "beta": {"min": -2.0, "max": 2.0, "name": "beta", "type": "Normal"},
             "gamma_dot_t_offset": {
                 "min": 1e-10,
@@ -145,9 +149,7 @@ class ParameterManager:
                 # New parameter not in defaults
                 self._default_bounds[param_name] = bound_dict
 
-        logger.debug(
-            f"Loaded bounds from config for {len(config_bounds)} parameters"
-        )
+        logger.debug(f"Loaded bounds from config for {len(config_bounds)} parameters")
 
     def validate_physical_constraints(
         self,
@@ -360,7 +362,7 @@ class ParameterManager:
         )
 
     def get_parameter_bounds(
-        self, parameter_names: Optional[list[str]] = None
+        self, parameter_names: list[str] | None = None
     ) -> list[BoundDict]:
         """
         Get parameter bounds configuration (with caching for performance).
@@ -397,7 +399,9 @@ class ParameterManager:
 
         # Check cache first (if caching enabled)
         if self._cache_enabled and cache_key in self._bounds_cache:
-            logger.debug(f"Returning cached bounds for {len(parameter_names)} parameters")
+            logger.debug(
+                f"Returning cached bounds for {len(parameter_names)} parameters"
+            )
             return self._bounds_cache[cache_key].copy()
 
         # Apply name mapping
@@ -415,12 +419,14 @@ class ParameterManager:
                 logger.warning(
                     f"Unknown parameter '{name}', using default bounds [0.0, 1.0]"
                 )
-                bounds_list.append({
-                    "min": 0.0,
-                    "max": 1.0,
-                    "name": name,
-                    "type": "Normal",
-                })
+                bounds_list.append(
+                    {
+                        "min": 0.0,
+                        "max": 1.0,
+                        "name": name,
+                        "type": "Normal",
+                    }
+                )
 
         # Cache the result
         if self._cache_enabled:
@@ -557,7 +563,7 @@ class ParameterManager:
     def validate_parameters(
         self,
         params: np.ndarray,
-        param_names: Optional[list[str]] = None,
+        param_names: list[str] | None = None,
         tolerance: float = 1e-10,
     ) -> ValidationResult:
         """
@@ -604,7 +610,7 @@ class ParameterManager:
         return result
 
     def get_bounds_as_tuples(
-        self, parameter_names: Optional[list[str]] = None
+        self, parameter_names: list[str] | None = None
     ) -> list[tuple[float, float]]:
         """
         Get parameter bounds as list of (min, max) tuples.
@@ -631,7 +637,7 @@ class ParameterManager:
         return [(b["min"], b["max"]) for b in bounds_dicts]
 
     def get_bounds_as_arrays(
-        self, parameter_names: Optional[list[str]] = None
+        self, parameter_names: list[str] | None = None
     ) -> tuple[np.ndarray, np.ndarray]:
         """
         Get parameter bounds as separate lower and upper arrays.

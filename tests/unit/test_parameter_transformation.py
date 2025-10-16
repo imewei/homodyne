@@ -7,9 +7,9 @@ Tests cover:
 - Parameter transformation between homodyne and NLSQ formats
 """
 
-import pytest
 import numpy as np
-import jax.numpy as jnp
+import pytest
+
 from homodyne.optimization.nlsq_wrapper import NLSQWrapper
 
 
@@ -30,7 +30,7 @@ class TestDataFlattening:
         # Mock data object
         class MockXPCSData:
             def __init__(self):
-                self.phi = np.linspace(0, 2*np.pi, n_phi)
+                self.phi = np.linspace(0, 2 * np.pi, n_phi)
                 self.t1 = np.linspace(0, 1, n_t1)
                 self.t2 = np.linspace(0, 1, n_t2)
                 # 3D correlation data
@@ -43,10 +43,12 @@ class TestDataFlattening:
         xdata, ydata = wrapper._prepare_data(mock_data)
 
         # Assertions
-        assert xdata.shape[0] == expected_size, \
-            f"xdata should have {expected_size} elements, got {xdata.shape[0]}"
-        assert ydata.shape[0] == expected_size, \
-            f"ydata should have {expected_size} elements, got {ydata.shape[0]}"
+        assert (
+            xdata.shape[0] == expected_size
+        ), f"xdata should have {expected_size} elements, got {xdata.shape[0]}"
+        assert (
+            ydata.shape[0] == expected_size
+        ), f"ydata should have {expected_size} elements, got {ydata.shape[0]}"
         assert xdata.ndim == 1, f"xdata should be 1D, got {xdata.ndim}D"
         assert ydata.ndim == 1, f"ydata should be 1D, got {ydata.ndim}D"
 
@@ -79,11 +81,12 @@ class TestDataFlattening:
         np.testing.assert_array_equal(
             ydata[:5],
             expected_ydata_start[:5],
-            err_msg="Flattening order doesn't match expected indexing='ij'"
+            err_msg="Flattening order doesn't match expected indexing='ij'",
         )
 
     def test_empty_data_handling(self):
         """Test graceful handling of empty data."""
+
         class MockEmptyData:
             def __init__(self):
                 self.phi = np.array([])
@@ -127,7 +130,7 @@ class TestBoundsFormatConversion:
         """Verify bounds validation checks lower < upper elementwise."""
         # Invalid bounds: some lower > upper
         lower = np.array([0.0, 2.0, 100.0])  # lower[1] = 2.0
-        upper = np.array([1.0, 1.0, 1e5])    # upper[1] = 1.0 (invalid!)
+        upper = np.array([1.0, 1.0, 1e5])  # upper[1] = 1.0 (invalid!)
         invalid_bounds = (lower, upper)
 
         wrapper = NLSQWrapper()

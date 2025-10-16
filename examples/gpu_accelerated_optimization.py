@@ -47,10 +47,10 @@ def setup_gpu_environment():
     result = activate_gpu(
         memory_fraction=0.9,
         force_gpu=False,  # Don't fail if GPU unavailable
-        verbose=True
+        verbose=True,
     )
 
-    return result.get('success', False)
+    return result.get("success", False)
 
 
 def generate_synthetic_data(n_times=100, n_angles=36):
@@ -59,14 +59,10 @@ def generate_synthetic_data(n_times=100, n_angles=36):
     print(f"   Times: {n_times}, Angles: {n_angles}")
 
     # Time arrays
-    t1, t2 = np.meshgrid(
-        np.arange(n_times),
-        np.arange(n_times),
-        indexing='ij'
-    )
+    t1, t2 = np.meshgrid(np.arange(n_times), np.arange(n_times), indexing="ij")
 
     # Angle array
-    phi = np.linspace(0, 2*np.pi, n_angles)
+    phi = np.linspace(0, 2 * np.pi, n_angles)
 
     # Generate synthetic correlation function
     # Simple exponential decay with noise
@@ -77,12 +73,12 @@ def generate_synthetic_data(n_times=100, n_angles=36):
     c2_exp += 0.01 * np.random.randn(*c2_exp.shape)
 
     return {
-        't1': t1,
-        't2': t2,
-        'phi_angles_list': phi,
-        'c2_exp': c2_exp,
-        'wavevector_q_list': np.array([0.01]),  # Single q-value
-        'sigma': np.ones_like(c2_exp) * 0.01
+        "t1": t1,
+        "t2": t2,
+        "phi_angles_list": phi,
+        "c2_exp": c2_exp,
+        "wavevector_q_list": np.array([0.01]),  # Single q-value
+        "sigma": np.ones_like(c2_exp) * 0.01,
     }
 
 
@@ -113,15 +109,15 @@ def run_gpu_optimization(data, config):
 
     try:
         mcmc_result = fit_mcmc_jax(
-            data['sigma'],
-            data['t1'],
-            data['t2'],
-            data['phi_angles_list'],
-            data['wavevector_q_list'][0],
+            data["sigma"],
+            data["t1"],
+            data["t2"],
+            data["phi_angles_list"],
+            data["wavevector_q_list"][0],
             1.0,  # L parameter
-            analysis_mode='static_isotropic',
+            analysis_mode="static_isotropic",
             num_samples=1000,
-            num_warmup=500
+            num_warmup=500,
         )
         mcmc_time = time.perf_counter() - start_time
 
@@ -133,8 +129,8 @@ def run_gpu_optimization(data, config):
         mcmc_time = 0
 
     return {
-        'nlsq': {'result': result, 'time': nlsq_time},
-        'mcmc': {'result': mcmc_result, 'time': mcmc_time}
+        "nlsq": {"result": result, "time": nlsq_time},
+        "mcmc": {"result": mcmc_result, "time": mcmc_time},
     }
 
 
@@ -147,16 +143,15 @@ def compare_cpu_gpu_performance():
     data = generate_synthetic_data(n_times=200, n_angles=72)
 
     # Create config
-    config = ConfigManager(config_override={
-        'analysis_mode': 'static_isotropic',
-        'optimization': {
-            'method': 'nlsq',
-            'lsq': {
-                'max_iterations': 1000,
-                'tolerance': 1e-8
-            }
+    config = ConfigManager(
+        config_override={
+            "analysis_mode": "static_isotropic",
+            "optimization": {
+                "method": "nlsq",
+                "lsq": {"max_iterations": 1000, "tolerance": 1e-8},
+            },
         }
-    })
+    )
 
     # GPU Performance
     gpu_available = setup_gpu_environment()
@@ -164,18 +159,19 @@ def compare_cpu_gpu_performance():
     if gpu_available:
         print("\n🎮 GPU Mode:")
         gpu_results = run_gpu_optimization(data, config)
-        gpu_time = gpu_results['nlsq']['time']
+        gpu_time = gpu_results["nlsq"]["time"]
     else:
         print("⚠️ GPU not available, skipping GPU test")
         gpu_time = None
 
     # Force CPU mode for comparison
     import os
-    os.environ['JAX_PLATFORM_NAME'] = 'cpu'
+
+    os.environ["JAX_PLATFORM_NAME"] = "cpu"
 
     print("\n💻 CPU Mode:")
     cpu_results = run_gpu_optimization(data, config)
-    cpu_time = cpu_results['nlsq']['time']
+    cpu_time = cpu_results["nlsq"]["time"]
 
     # Compare results
     if gpu_time and cpu_time:
@@ -187,9 +183,9 @@ def compare_cpu_gpu_performance():
 
 def main():
     """Main example runner."""
-    print("="*60)
+    print("=" * 60)
     print(" GPU-Accelerated Homodyne v2 Optimization Example")
-    print("="*60)
+    print("=" * 60)
 
     # Set up GPU
     gpu_available = setup_gpu_environment()
@@ -201,28 +197,24 @@ def main():
     data = generate_synthetic_data()
 
     # Create configuration
-    config = ConfigManager(config_override={
-        'analysis_mode': 'static_isotropic',
-        'optimization': {
-            'method': 'nlsq',
-            'lsq': {
-                'max_iterations': 5000,
-                'tolerance': 1e-8
-            }
-        },
-        'hardware': {
-            'force_cpu': False,
-            'gpu_memory_fraction': 0.9
+    config = ConfigManager(
+        config_override={
+            "analysis_mode": "static_isotropic",
+            "optimization": {
+                "method": "nlsq",
+                "lsq": {"max_iterations": 5000, "tolerance": 1e-8},
+            },
+            "hardware": {"force_cpu": False, "gpu_memory_fraction": 0.9},
         }
-    })
+    )
 
     # Run optimization
     results = run_gpu_optimization(data, config)
 
     # Performance comparison (optional)
-    print("\n" + "="*60)
+    print("\n" + "=" * 60)
     response = input("Run CPU vs GPU performance comparison? (y/n): ")
-    if response.lower() == 'y':
+    if response.lower() == "y":
         compare_cpu_gpu_performance()
 
     print("\n✅ Example completed successfully!")

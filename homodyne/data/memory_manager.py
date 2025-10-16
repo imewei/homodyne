@@ -55,10 +55,13 @@ try:
 except ImportError:
     HAS_JAX = False
     jnp = np
+
     def device_put(x):
         return x
+
     def device_get(x):
         return x
+
 
 # V2 system integration
 try:

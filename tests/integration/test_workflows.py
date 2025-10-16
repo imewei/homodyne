@@ -44,6 +44,7 @@ except ImportError:
 # Handle NLSQ imports
 try:
     import nlsq
+
     from homodyne.optimization.nlsq import fit_nlsq_jax
 
     NLSQ_AVAILABLE = True
@@ -63,6 +64,7 @@ class TestEndToEndWorkflows:
             # Import required modules
             from homodyne.config.manager import ConfigManager
             from homodyne.data.xpcs_loader import XPCSLoader
+
             # NLSQ imports now at module level
             pass
         except ImportError as e:
@@ -139,6 +141,7 @@ class TestEndToEndWorkflows:
         """Test workflow with HDF5 data loading."""
         try:
             from homodyne.data.xpcs_loader import load_xpcs_data
+
             # NLSQ imports now at module level
             pass
         except ImportError as e:
@@ -201,6 +204,7 @@ class TestEndToEndWorkflows:
         """Test workflow with YAML configuration."""
         try:
             from homodyne.config.manager import ConfigManager
+
             # NLSQ imports now at module level
             pass
         except ImportError as e:
@@ -264,6 +268,7 @@ class TestEndToEndWorkflows:
         """Test workflow with multiple q-values."""
         try:
             from homodyne.core.jax_backend import compute_c2_model_jax
+
             # NLSQ imports now at module level
             pass
         except ImportError as e:
@@ -440,6 +445,7 @@ class TestModuleInteraction:
         """Test integration between data loading and optimization."""
         try:
             from homodyne.data.xpcs_loader import XPCSLoader
+
             # NLSQ imports now at module level
             pass
         except ImportError:
@@ -474,6 +480,7 @@ class TestModuleInteraction:
         """Test consistency between JAX backend and optimization."""
         try:
             from homodyne.core.jax_backend import chi_squared_jax, compute_c2_model_jax
+
             # NLSQ imports now at module level
             pass
         except ImportError:

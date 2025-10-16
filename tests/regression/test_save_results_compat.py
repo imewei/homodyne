@@ -12,17 +12,7 @@ Test Coverage
 - Breaking change documentation verification
 """
 
-import pytest
-import numpy as np
-from pathlib import Path
-from unittest.mock import Mock, patch
-import tempfile
 
-from tests.factories.optimization_factory import (
-    create_mock_optimization_result,
-    create_mock_config_manager,
-    create_mock_data_dict,
-)
 
 
 # ==============================================================================
@@ -60,6 +50,7 @@ class TestSaveResultsSignature:
     def test_save_results_signature_check(self):
         """Verify _save_results() accepts data and config parameters."""
         import inspect
+
         from homodyne.cli.commands import _save_results
 
         # Get function signature

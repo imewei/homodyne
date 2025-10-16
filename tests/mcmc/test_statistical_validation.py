@@ -10,7 +10,6 @@ Statistical tests for MCMC sampling functionality:
 - Bayesian credible intervals
 """
 
-
 import numpy as np
 import pytest
 

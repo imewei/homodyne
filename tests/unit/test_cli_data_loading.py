@@ -12,15 +12,15 @@ Author: Claude Code (AI Assistant)
 Date: 2025-10-10
 """
 
+from unittest.mock import Mock, patch
+
 import pytest
-from pathlib import Path
-from unittest.mock import Mock, patch, MagicMock
-import tempfile
 import yaml
+
+from homodyne.cli.commands import _load_data
 
 # Import the modules to test
 from homodyne.config.manager import ConfigManager
-from homodyne.cli.commands import _load_data
 
 
 class TestConfigNormalization:
@@ -32,13 +32,9 @@ class TestConfigNormalization:
         config_data = {
             "experimental_data": {
                 "data_folder_path": "./data/sample/",
-                "data_file_name": "test_data.hdf"
+                "data_file_name": "test_data.hdf",
             },
-            "analyzer_parameters": {
-                "dt": 0.1,
-                "start_frame": 1,
-                "end_frame": 100
-            }
+            "analyzer_parameters": {"dt": 0.1, "start_frame": 1, "end_frame": 100},
         }
 
         # Create ConfigManager with override
@@ -57,14 +53,8 @@ class TestConfigNormalization:
         """Test that modern file_path format is not modified."""
         # Create a test config with modern format
         config_data = {
-            "experimental_data": {
-                "file_path": "./data/experiment.hdf"
-            },
-            "analyzer_parameters": {
-                "dt": 0.1,
-                "start_frame": 1,
-                "end_frame": 100
-            }
+            "experimental_data": {"file_path": "./data/experiment.hdf"},
+            "analyzer_parameters": {"dt": 0.1, "start_frame": 1, "end_frame": 100},
         }
 
         # Create ConfigManager with override
@@ -86,7 +76,7 @@ class TestConfigNormalization:
                 "data_folder_path": "./data/",
                 "data_file_name": "test.hdf",
                 "phi_angles_path": "./data/phi/",
-                "phi_angles_file": "angles.txt"
+                "phi_angles_file": "angles.txt",
             }
         }
 
@@ -103,7 +93,7 @@ class TestConfigNormalization:
         config_data = {
             "experimental_data": {
                 "data_folder_path": "/home/user/xpcs/data/",
-                "data_file_name": "experiment_001.hdf"
+                "data_file_name": "experiment_001.hdf",
             }
         }
 
@@ -117,15 +107,15 @@ class TestConfigNormalization:
 class TestDataLoading:
     """Test suite for data loading functionality."""
 
-    @patch('homodyne.cli.commands.XPCSDataLoader')
+    @patch("homodyne.cli.commands.XPCSDataLoader")
     def test_load_data_with_cli_override(self, mock_loader_class):
         """Test loading data with --data-file CLI override."""
         # Mock the loader
         mock_loader = Mock()
         mock_loader.load_experimental_data.return_value = {
-            'c2_exp': Mock(size=1000),
-            't1': Mock(),
-            't2': Mock()
+            "c2_exp": Mock(size=1000),
+            "t1": Mock(),
+            "t2": Mock(),
         }
         mock_loader_class.return_value = mock_loader
 
@@ -135,11 +125,7 @@ class TestDataLoading:
 
         mock_config = Mock()
         mock_config.config = {
-            "analyzer_parameters": {
-                "dt": 0.1,
-                "start_frame": 1,
-                "end_frame": 100
-            }
+            "analyzer_parameters": {"dt": 0.1, "start_frame": 1, "end_frame": 100}
         }
 
         # Call _load_data
@@ -152,17 +138,17 @@ class TestDataLoading:
 
         # Verify data was loaded
         assert result is not None
-        assert 'c2_exp' in result
+        assert "c2_exp" in result
 
-    @patch('homodyne.cli.commands.XPCSDataLoader')
+    @patch("homodyne.cli.commands.XPCSDataLoader")
     def test_load_data_from_config(self, mock_loader_class):
         """Test loading data from configuration file."""
         # Mock the loader
         mock_loader = Mock()
         mock_loader.load_experimental_data.return_value = {
-            'c2_exp': Mock(size=2000),
-            't1': Mock(),
-            't2': Mock()
+            "c2_exp": Mock(size=2000),
+            "t1": Mock(),
+            "t2": Mock(),
         }
         mock_loader_class.return_value = mock_loader
 
@@ -174,13 +160,9 @@ class TestDataLoading:
         mock_config.config = {
             "experimental_data": {
                 "data_folder_path": "./data/",
-                "data_file_name": "config_data.hdf"
+                "data_file_name": "config_data.hdf",
             },
-            "analyzer_parameters": {
-                "dt": 0.1,
-                "start_frame": 1,
-                "end_frame": 200
-            }
+            "analyzer_parameters": {"dt": 0.1, "start_frame": 1, "end_frame": 200},
         }
 
         # Call _load_data
@@ -193,16 +175,14 @@ class TestDataLoading:
 
         # Verify data was loaded
         assert result is not None
-        assert 'c2_exp' in result
+        assert "c2_exp" in result
 
-    @patch('homodyne.cli.commands.XPCSDataLoader')
+    @patch("homodyne.cli.commands.XPCSDataLoader")
     def test_load_data_relative_path(self, mock_loader_class):
         """Test loading data with relative path (edge case)."""
         # Mock the loader
         mock_loader = Mock()
-        mock_loader.load_experimental_data.return_value = {
-            'c2_exp': Mock(size=500)
-        }
+        mock_loader.load_experimental_data.return_value = {"c2_exp": Mock(size=500)}
         mock_loader_class.return_value = mock_loader
 
         # Create mock args with relative path (just filename)
@@ -211,11 +191,7 @@ class TestDataLoading:
 
         mock_config = Mock()
         mock_config.config = {
-            "analyzer_parameters": {
-                "dt": 0.1,
-                "start_frame": 1,
-                "end_frame": 100
-            }
+            "analyzer_parameters": {"dt": 0.1, "start_frame": 1, "end_frame": 100}
         }
 
         # Call _load_data
@@ -241,11 +217,7 @@ class TestDataLoading:
         mock_config = Mock()
         mock_config.config = {
             "experimental_data": {},  # No data file specified
-            "analyzer_parameters": {
-                "dt": 0.1,
-                "start_frame": 1,
-                "end_frame": 100
-            }
+            "analyzer_parameters": {"dt": 0.1, "start_frame": 1, "end_frame": 100},
         }
 
         # Should raise RuntimeError (wraps ValueError) with helpful message
@@ -254,7 +226,7 @@ class TestDataLoading:
 
         assert "No data file specified" in str(exc_info.value)
 
-    @patch('homodyne.cli.commands.XPCSDataLoader')
+    @patch("homodyne.cli.commands.XPCSDataLoader")
     def test_load_data_file_not_found(self, mock_loader_class):
         """Test error handling when data file doesn't exist."""
         # Mock the loader to raise FileNotFoundError
@@ -292,10 +264,7 @@ class TestEdgeCases:
     def test_config_with_none_values(self):
         """Test handling of None values in config."""
         config_data = {
-            "experimental_data": {
-                "data_folder_path": None,
-                "data_file_name": None
-            }
+            "experimental_data": {"data_folder_path": None, "data_file_name": None}
         }
 
         config = ConfigManager(config_override=config_data)
@@ -305,14 +274,12 @@ class TestEdgeCases:
         # Normalization might skip or handle None values
         # This tests for no crash
 
-    @patch('homodyne.cli.commands.XPCSDataLoader')
+    @patch("homodyne.cli.commands.XPCSDataLoader")
     def test_load_data_with_complex_path(self, mock_loader_class):
         """Test loading data with complex path (spaces, special chars)."""
         # Mock the loader
         mock_loader = Mock()
-        mock_loader.load_experimental_data.return_value = {
-            'c2_exp': Mock(size=100)
-        }
+        mock_loader.load_experimental_data.return_value = {"c2_exp": Mock(size=100)}
         mock_loader_class.return_value = mock_loader
 
         # Create mock args with complex path
@@ -337,16 +304,12 @@ class TestIntegrationScenarios:
         config_data = {
             "experimental_data": {
                 "data_folder_path": str(tmp_path),
-                "data_file_name": "test.hdf"
+                "data_file_name": "test.hdf",
             },
-            "analyzer_parameters": {
-                "dt": 0.1,
-                "start_frame": 1,
-                "end_frame": 100
-            }
+            "analyzer_parameters": {"dt": 0.1, "start_frame": 1, "end_frame": 100},
         }
 
-        with open(config_file, 'w') as f:
+        with open(config_file, "w") as f:
             yaml.dump(config_data, f)
 
         # Load config
@@ -363,9 +326,9 @@ class TestIntegrationScenarios:
         config_data = {
             "experimental_data": {
                 "data_folder_path": "./config/",
-                "data_file_name": "config_file.hdf"
+                "data_file_name": "config_file.hdf",
             },
-            "analyzer_parameters": {"dt": 0.1}
+            "analyzer_parameters": {"dt": 0.1},
         }
 
         config = ConfigManager(config_override=config_data)

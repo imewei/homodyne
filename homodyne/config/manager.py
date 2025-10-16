@@ -105,7 +105,7 @@ class ConfigManager:
             file_extension = config_path.suffix.lower()
 
             # Use 8KB buffering for improved I/O performance on large config files
-            with open(config_path, "r", buffering=8192, encoding="utf-8") as f:
+            with open(config_path, buffering=8192, encoding="utf-8") as f:
                 if file_extension in [".yaml", ".yml"] and HAS_YAML:
                     self.config = yaml.safe_load(f)
                 elif file_extension == ".json":
@@ -131,7 +131,8 @@ class ConfigManager:
 
             # Optional validation (can be disabled via environment variable)
             import os
-            if os.environ.get('HOMODYNE_VALIDATE_CONFIG', 'true').lower() == 'true':
+
+            if os.environ.get("HOMODYNE_VALIDATE_CONFIG", "true").lower() == "true":
                 self._validate_config()
 
         except json.JSONDecodeError as e:
@@ -140,7 +141,11 @@ class ConfigManager:
             self.config = self._get_default_config()
         except Exception as e:
             # Handle YAML errors and other exceptions
-            error_type = "YAML parsing" if HAS_YAML and "yaml" in str(type(e)).lower() else "Configuration parsing"
+            error_type = (
+                "YAML parsing"
+                if HAS_YAML and "yaml" in str(type(e)).lower()
+                else "Configuration parsing"
+            )
             logger.error(f"{error_type} error: {e}")
             logger.info("Using default configuration...")
             self.config = self._get_default_config()
@@ -341,16 +346,18 @@ class ConfigManager:
             return
 
         # Check for required sections
-        required_sections = ['analysis_mode']
+        required_sections = ["analysis_mode"]
         for section in required_sections:
             if section not in self.config:
                 logger.warning(f"Missing recommended section: {section}")
 
         # Validate analysis_mode value
-        valid_modes = ['static_isotropic', 'static_anisotropic', 'laminar_flow']
-        mode = self.config.get('analysis_mode', '')
+        valid_modes = ["static_isotropic", "static_anisotropic", "laminar_flow"]
+        mode = self.config.get("analysis_mode", "")
         if mode and mode not in valid_modes:
-            logger.warning(f"Unknown analysis_mode: '{mode}'. Valid modes: {valid_modes}")
+            logger.warning(
+                f"Unknown analysis_mode: '{mode}'. Valid modes: {valid_modes}"
+            )
 
         logger.debug("Configuration validation completed")
 
@@ -392,7 +399,9 @@ class ConfigManager:
 
             # Skip normalization if either value is None
             if folder_path is None or filename is None:
-                logger.debug("Skipping normalization: data_folder_path or data_file_name is None")
+                logger.debug(
+                    "Skipping normalization: data_folder_path or data_file_name is None"
+                )
                 return
 
             folder = Path(folder_path)

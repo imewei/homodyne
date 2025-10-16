@@ -45,7 +45,9 @@ class TestMCMCWithAngleFiltering:
         filtered_data = _apply_angle_filtering_for_optimization(data, config)
 
         # Assert - Dataset size reduction (filtering worked)
-        assert len(filtered_data["phi_angles_list"]) == 3, "Should have 3 filtered angles"
+        assert (
+            len(filtered_data["phi_angles_list"]) == 3
+        ), "Should have 3 filtered angles"
         np.testing.assert_array_almost_equal(
             filtered_data["phi_angles_list"], [85.0, 90.0, 95.0], decimal=1
         )
@@ -187,9 +189,7 @@ class TestMCMCWithAngleFiltering:
         found_angles_msg = any(
             "85" in msg and "90" in msg and "95" in msg for msg in log_messages
         )
-        assert (
-            found_angles_msg
-        ), "Should log selected angles containing 85, 90, and 95"
+        assert found_angles_msg, "Should log selected angles containing 85, 90, and 95"
 
     def test_mcmc_data_arrays_correctly_formatted(self):
         """Test that MCMC receives data arrays in correct format."""

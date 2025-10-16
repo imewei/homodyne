@@ -74,14 +74,14 @@ class OptimizationResult:
     @property
     def success(self) -> bool:
         """Return True if optimization converged (backward compatibility)."""
-        return self.convergence_status == 'converged'
+        return self.convergence_status == "converged"
 
     @property
     def message(self) -> str:
         """Return descriptive message about optimization outcome."""
-        if self.convergence_status == 'converged':
+        if self.convergence_status == "converged":
             return f"Optimization converged successfully. χ²={self.chi_squared:.6f}"
-        elif self.convergence_status == 'max_iter':
+        elif self.convergence_status == "max_iter":
             return "Optimization stopped: maximum iterations reached"
         else:
             return f"Optimization failed: {self.convergence_status}"
@@ -216,7 +216,7 @@ class NLSQWrapper:
                         ydata,
                         p0=validated_params.tolist(),  # Convert to list to avoid NLSQ boolean bug
                         bounds=nlsq_bounds,
-                        loss='soft_l1',  # Robust loss for outliers
+                        loss="soft_l1",  # Robust loss for outliers
                         gtol=1e-6,  # Relaxed gradient tolerance
                         ftol=1e-6,  # Relaxed function tolerance
                         max_nfev=5000,  # Increased max function evaluations
@@ -230,7 +230,7 @@ class NLSQWrapper:
                         ydata,
                         p0=validated_params.tolist(),  # Convert to list to avoid NLSQ boolean bug
                         bounds=nlsq_bounds,
-                        loss='soft_l1',  # Robust loss for outliers
+                        loss="soft_l1",  # Robust loss for outliers
                         gtol=1e-6,  # Relaxed gradient tolerance
                         ftol=1e-6,  # Relaxed function tolerance
                         max_nfev=5000,  # Increased max function evaluations
@@ -327,7 +327,7 @@ class NLSQWrapper:
                         ydata,
                         p0=current_params.tolist(),  # Convert to list to avoid NLSQ boolean bug
                         bounds=bounds,
-                        loss='soft_l1',  # Robust loss for outliers
+                        loss="soft_l1",  # Robust loss for outliers
                         gtol=1e-6,  # Relaxed gradient tolerance
                         ftol=1e-6,  # Relaxed function tolerance
                         max_nfev=5000,  # Increased max function evaluations
@@ -341,7 +341,7 @@ class NLSQWrapper:
                         ydata,
                         p0=current_params.tolist(),  # Convert to list to avoid NLSQ boolean bug
                         bounds=bounds,
-                        loss='soft_l1',  # Robust loss for outliers
+                        loss="soft_l1",  # Robust loss for outliers
                         gtol=1e-6,  # Relaxed gradient tolerance
                         ftol=1e-6,  # Relaxed function tolerance
                         max_nfev=5000,  # Increased max function evaluations

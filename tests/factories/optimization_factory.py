@@ -6,8 +6,8 @@ without running full optimizations, enabling efficient unit testing of
 result saving and visualization functions.
 """
 
-from typing import Optional
 import numpy as np
+
 from homodyne.optimization.nlsq_wrapper import OptimizationResult
 
 
@@ -63,9 +63,7 @@ def create_mock_optimization_result(
             [0.45, 1.02, 1234.5, 0.567, 12.34, 1.23e-4, 0.456, 5.6e-6, 0.123]
         )
         uncertainties = (
-            np.array(
-                [0.012, 0.008, 45.6, 0.012, 1.23, 1.2e-5, 0.023, 1.2e-6, 0.023]
-            )
+            np.array([0.012, 0.008, 45.6, 0.012, 1.23, 1.2e-5, 0.023, 1.2e-6, 0.023])
             if include_uncertainties
             else None
         )
@@ -193,7 +191,9 @@ def create_mock_data_dict(
     c2_base = 1.0 + 0.5 * np.exp(-0.5 * (t1_grid + t2_grid))
 
     # Replicate for all angles with slight variation
-    c2_exp = np.array([c2_base * (1.0 + 0.1 * np.sin(phi * np.pi / 180)) for phi in phi_angles])
+    c2_exp = np.array(
+        [c2_base * (1.0 + 0.1 * np.sin(phi * np.pi / 180)) for phi in phi_angles]
+    )
 
     data = {
         "phi_angles_list": phi_angles,

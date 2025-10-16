@@ -255,9 +255,7 @@ class TestAngleFilteringConsistency:
             np.testing.assert_array_equal(
                 core_c2, plot_c2, err_msg=f"Mismatch at n_phi={n_phi}"
             )
-            assert (
-                core_indices == plot_indices
-            ), f"Index mismatch at n_phi={n_phi}"
+            assert core_indices == plot_indices, f"Index mismatch at n_phi={n_phi}"
 
     def test_consistency_with_overlapping_ranges(self):
         """Verify consistency with overlapping angle ranges."""
