@@ -6,13 +6,28 @@ Handles command execution and coordination between CLI arguments,
 configuration, and optimization methods.
 """
 
+import json
 import time
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 
+import jax.numpy as jnp
+
+# Set matplotlib backend for HPC headless support (must be before pyplot import)
+import matplotlib
 import numpy as np
 
+matplotlib.use("Agg")
+import matplotlib.pyplot as plt
+
 from homodyne.cli.args_parser import validate_args
+from homodyne.config.types import (
+    LAMINAR_FLOW_PARAM_NAMES,
+    SCALING_PARAM_NAMES,
+    STATIC_PARAM_NAMES,
+)
+from homodyne.core.jax_backend import compute_g2_scaled
 from homodyne.utils.logging import get_logger
 
 logger = get_logger(__name__)
@@ -230,8 +245,8 @@ def dispatch_command(args) -> dict[str, Any]:
             # Run optimization
             result = _run_optimization(args, config, data)
 
-            # Save results
-            _save_results(args, result, device_config)
+            # Save results (with data and config for NLSQ comprehensive saving)
+            _save_results(args, result, device_config, data, config)
 
         # Handle plotting options
         # Extract config dictionary from ConfigManager
@@ -790,14 +805,45 @@ def _run_optimization(args, config: ConfigManager, data: dict[str, Any]) -> Any:
         raise
 
 
-def _save_results(args, result: Any, device_config: dict[str, Any]) -> None:
-    """Save optimization results to output directory."""
+def _save_results(
+    args, result: Any, device_config: dict[str, Any], data: dict[str, Any], config: Any
+) -> None:
+    """
+    Save optimization results to output directory.
+
+    Breaking Change (October 2025)
+    -------------------------------
+    Added `data` and `config` parameters to support NLSQ comprehensive saving.
+
+    Parameters
+    ----------
+    args : argparse.Namespace
+        Command-line arguments
+    result : Any
+        Optimization result (OptimizationResult or MCMC result)
+    device_config : dict
+        Device configuration
+    data : dict
+        Experimental data dictionary
+    config : ConfigManager
+        Configuration manager
+    """
     logger.info(f"Saving results to: {args.output_dir}")
 
     import json
 
     import numpy as np
     import yaml
+
+    # Route to appropriate saving method based on optimization method
+    if args.method == "nlsq":
+        # Use comprehensive NLSQ saving (4 files: 3 JSON + 1 NPZ)
+        logger.info("Using comprehensive NLSQ result saving")
+        save_nlsq_results(result, data, config, args.output_dir)
+        # Also save legacy format for backward compatibility if requested
+        if args.output_format != "json":
+            logger.info("Saving legacy results summary for backward compatibility")
+    # For MCMC or other methods, continue with legacy saving format below
 
     # Create results summary
     results_summary = {
@@ -1166,7 +1212,11 @@ def _plot_experimental_data(data: dict[str, Any], plots_dir) -> None:
             )
             ax.set_xlabel(xlabel, fontsize=11)
             ax.set_ylabel(ylabel, fontsize=11)
-            ax.set_title(f"Experimental C₂(t₁, t₂) at φ={phi_deg:.1f}°", fontsize=13, fontweight="bold")
+            ax.set_title(
+                f"Experimental C₂(t₁, t₂) at φ={phi_deg:.1f}°",
+                fontsize=13,
+                fontweight="bold",
+            )
 
             # Add colorbar
             cbar = plt.colorbar(im, ax=ax, label="C₂", shrink=0.9)
@@ -1178,16 +1228,15 @@ def _plot_experimental_data(data: dict[str, Any], plots_dir) -> None:
             min_val = np.min(angle_data)
 
             # Add text box with statistics
-            stats_text = (
-                f"Mean: {mean_val:.4f}\n"
-                f"Range: [{min_val:.4f}, {max_val:.4f}]"
-            )
+            stats_text = f"Mean: {mean_val:.4f}\nRange: [{min_val:.4f}, {max_val:.4f}]"
             ax.text(
-                0.02, 0.98, stats_text,
+                0.02,
+                0.98,
+                stats_text,
                 transform=ax.transAxes,
                 fontsize=9,
                 verticalalignment="top",
-                bbox=dict(boxstyle="round", facecolor="white", alpha=0.8)
+                bbox=dict(boxstyle="round", facecolor="white", alpha=0.8),
             )
 
             plt.tight_layout()
@@ -1299,7 +1348,11 @@ def _plot_simulated_data(
     param_values = initial_params_config.get("values", [])
 
     # Create dict mapping parameter names to values
-    params_dict = dict(zip(param_names, param_values)) if param_names and param_values else {}
+    params_dict = (
+        dict(zip(param_names, param_values, strict=False))
+        if param_names and param_values
+        else {}
+    )
 
     if analysis_mode.startswith("static"):
         # Static mode: 3 parameters
@@ -1341,13 +1394,17 @@ def _plot_simulated_data(
         # Use CLI-provided angles (highest priority for explicit control)
         phi_degrees = np.array([float(x.strip()) for x in phi_angles_str.split(",")])
         phi = phi_degrees
-        logger.info(f"Using CLI-provided phi angles for theoretical plots: {phi_degrees}")
+        logger.info(
+            f"Using CLI-provided phi angles for theoretical plots: {phi_degrees}"
+        )
     elif data is not None and "phi_angles_list" in data:
         # Use experimental data's phi angles
         # Note: May be filtered if angle filtering is enabled in config
         phi_degrees = np.array(data["phi_angles_list"])
         phi = phi_degrees
-        logger.info(f"Using experimental data phi angles for theoretical plots: {phi_degrees}")
+        logger.info(
+            f"Using experimental data phi angles for theoretical plots: {phi_degrees}"
+        )
         logger.warning(
             "Theoretical plots using potentially filtered phi angles from experimental data. "
             "To use all angles, disable phi_filtering in config or provide --phi-angles explicitly."
@@ -1381,8 +1438,12 @@ def _plot_simulated_data(
     logger.debug(
         f"Simulated data time grid: dt={dt}, start_frame={start_frame}, end_frame={end_frame}"
     )
-    logger.debug(f"Time range: [{float(t_vals[0]):.4f}, {float(t_vals[-1]):.2f}] seconds with {n_time_points} points")
-    logger.debug(f"Time spacing verification: t[1]-t[0]={float(t_vals[1] - t_vals[0]):.6f} (should equal dt={dt})")
+    logger.debug(
+        f"Time range: [{float(t_vals[0]):.4f}, {float(t_vals[-1]):.2f}] seconds with {n_time_points} points"
+    )
+    logger.debug(
+        f"Time spacing verification: t[1]-t[0]={float(t_vals[1] - t_vals[0]):.6f} (should equal dt={dt})"
+    )
 
     # Get wavevector_q and stator_rotor_gap from correct config sections
     scattering_config = analyzer_params.get("scattering", {})
@@ -1425,7 +1486,9 @@ def _plot_simulated_data(
 
         # Extract the 2D array (remove phi dimension)
         c2_result = np.array(c2_phi[0])
-        logger.debug(f"  C₂ shape: {c2_result.shape}, range: [{c2_result.min():.4f}, {c2_result.max():.4f}]")
+        logger.debug(
+            f"  C₂ shape: {c2_result.shape}, range: [{c2_result.min():.4f}, {c2_result.max():.4f}]"
+        )
         c2_simulated.append(c2_result)
 
     c2_simulated = np.array(c2_simulated)  # Shape: (n_phi, n_t, n_t)
@@ -1440,7 +1503,9 @@ def _plot_simulated_data(
 
     # Save individual C₂ heatmap for EACH phi angle
     n_phi = len(phi)
-    logger.info(f"Generating individual simulated C₂ heatmaps for {n_phi} phi angles...")
+    logger.info(
+        f"Generating individual simulated C₂ heatmaps for {n_phi} phi angles..."
+    )
 
     for idx in range(n_phi):
         # Create individual figure for this phi angle
@@ -1461,7 +1526,7 @@ def _plot_simulated_data(
         ax.set_title(
             f"Simulated C₂(t₁, t₂) at φ={phi_degrees[idx]:.1f}°",
             fontsize=13,
-            fontweight="bold"
+            fontweight="bold",
         )
 
         # Add colorbar
@@ -1474,30 +1539,29 @@ def _plot_simulated_data(
         min_val = np.min(c2_simulated[idx])
 
         # Add text box with statistics
-        stats_text = (
-            f"Mean: {mean_val:.4f}\n"
-            f"Range: [{min_val:.4f}, {max_val:.4f}]"
-        )
+        stats_text = f"Mean: {mean_val:.4f}\nRange: [{min_val:.4f}, {max_val:.4f}]"
         ax.text(
-            0.02, 0.98, stats_text,
+            0.02,
+            0.98,
+            stats_text,
             transform=ax.transAxes,
             fontsize=9,
             verticalalignment="top",
-            bbox=dict(boxstyle="round", facecolor="white", alpha=0.8)
+            bbox=dict(boxstyle="round", facecolor="white", alpha=0.8),
         )
 
         # Add analysis mode info
         mode_text = (
-            f"Mode: {analysis_mode}\n"
-            f"Contrast: {contrast:.3f}\n"
-            f"Offset: {offset:.3f}"
+            f"Mode: {analysis_mode}\nContrast: {contrast:.3f}\nOffset: {offset:.3f}"
         )
         ax.text(
-            0.02, 0.02, mode_text,
+            0.02,
+            0.02,
+            mode_text,
             transform=ax.transAxes,
             fontsize=8,
             verticalalignment="bottom",
-            bbox=dict(boxstyle="round", facecolor="lightblue", alpha=0.7)
+            bbox=dict(boxstyle="round", facecolor="lightblue", alpha=0.7),
         )
 
         plt.tight_layout()
@@ -1598,7 +1662,9 @@ def _generate_and_plot_fitted_simulations(
     else:
         params = jnp.array(physical_params)
 
-    logger.info(f"Using fitted parameters: contrast={contrast:.4f}, offset={offset:.4f}")
+    logger.info(
+        f"Using fitted parameters: contrast={contrast:.4f}, offset={offset:.4f}"
+    )
     logger.debug(f"Physical parameters: {params}")
 
     # Get analysis mode
@@ -1630,9 +1696,7 @@ def _generate_and_plot_fitted_simulations(
     q = scattering_config.get("wavevector_q", 0.0054)
     L_angstroms = geometry_config.get("stator_rotor_gap", 2000000)
 
-    logger.debug(
-        f"Physics: q={q:.6f} Å⁻¹, L={L_angstroms:.0f} Å, dt={dt}"
-    )
+    logger.debug(f"Physics: q={q:.6f} Å⁻¹, L={L_angstroms:.0f} Å, dt={dt}")
 
     # Generate fitted C2 for each phi angle
     c2_fitted_list = []
@@ -1659,9 +1723,7 @@ def _generate_and_plot_fitted_simulations(
         c2_result = np.array(c2_phi[0])
         c2_fitted_list.append(c2_result)
 
-        logger.debug(
-            f"  C₂ range: [{c2_result.min():.4f}, {c2_result.max():.4f}]"
-        )
+        logger.debug(f"  C₂ range: [{c2_result.min():.4f}, {c2_result.max():.4f}]")
 
     c2_fitted = np.array(c2_fitted_list)  # Shape: (n_phi, n_t1, n_t2)
 
@@ -1705,7 +1767,9 @@ def _generate_and_plot_fitted_simulations(
     vmax = c2_fitted.max()
 
     # Generate individual plots for each phi angle
-    logger.info(f"Generating individual fitted C₂ plots for {len(phi_angles_list)} angles...")
+    logger.info(
+        f"Generating individual fitted C₂ plots for {len(phi_angles_list)} angles..."
+    )
 
     # Get time extent for plotting
     if t1 is not None and t2 is not None:
@@ -1736,9 +1800,7 @@ def _generate_and_plot_fitted_simulations(
         ax.set_xlabel(xlabel, fontsize=11)
         ax.set_ylabel(ylabel, fontsize=11)
         ax.set_title(
-            f"Fitted C₂(t₁, t₂) at φ={phi_deg:.1f}°",
-            fontsize=13,
-            fontweight="bold"
+            f"Fitted C₂(t₁, t₂) at φ={phi_deg:.1f}°", fontsize=13, fontweight="bold"
         )
 
         # Add colorbar
@@ -1751,30 +1813,27 @@ def _generate_and_plot_fitted_simulations(
         min_val = np.min(c2_fitted[i])
 
         # Add statistics box
-        stats_text = (
-            f"Mean: {mean_val:.4f}\n"
-            f"Range: [{min_val:.4f}, {max_val:.4f}]"
-        )
+        stats_text = f"Mean: {mean_val:.4f}\nRange: [{min_val:.4f}, {max_val:.4f}]"
         ax.text(
-            0.02, 0.98, stats_text,
+            0.02,
+            0.98,
+            stats_text,
             transform=ax.transAxes,
             fontsize=9,
             verticalalignment="top",
-            bbox=dict(boxstyle="round", facecolor="white", alpha=0.8)
+            bbox=dict(boxstyle="round", facecolor="white", alpha=0.8),
         )
 
         # Add fitting info
-        fit_text = (
-            f"Fitted Parameters\n"
-            f"Contrast: {contrast:.3f}\n"
-            f"Offset: {offset:.3f}"
-        )
+        fit_text = f"Fitted Parameters\nContrast: {contrast:.3f}\nOffset: {offset:.3f}"
         ax.text(
-            0.02, 0.02, fit_text,
+            0.02,
+            0.02,
+            fit_text,
             transform=ax.transAxes,
             fontsize=8,
             verticalalignment="bottom",
-            bbox=dict(boxstyle="round", facecolor="lightgreen", alpha=0.7)
+            bbox=dict(boxstyle="round", facecolor="lightgreen", alpha=0.7),
         )
 
         plt.tight_layout()
@@ -1830,6 +1889,720 @@ def _plot_fit_comparison(result: Any, data: dict[str, Any], plots_dir) -> None:
     plt.close()
 
     logger.info("Generated basic fit comparison plot")
+
+
+# ==============================================================================
+# NLSQ Result Saving Helper Functions
+# ==============================================================================
+
+
+def _extract_nlsq_metadata(config: Any, data: dict[str, Any]) -> dict[str, Any]:
+    """
+    Extract required metadata for NLSQ theoretical fit computation.
+
+    Implements multi-level fallback hierarchy for robust metadata extraction:
+    - L (characteristic length): stator_rotor_gap → sample_detector_distance → default
+    - dt (time step): analyzer_parameters.dt → experimental_data.dt → None
+    - q (wavevector): from data['wavevector_q_list'][0]
+
+    Parameters
+    ----------
+    config : ConfigManager
+        Configuration manager with analyzer_parameters and experimental_data
+    data : dict[str, Any]
+        Experimental data dictionary with wavevector_q_list
+
+    Returns
+    -------
+    dict[str, Any]
+        Dictionary with keys 'L', 'dt', 'q' (may be None if not found)
+
+    Notes
+    -----
+    Default L = 2000000.0 Å (200 µm, typical rheology-XPCS stator-rotor gap).
+    Missing dt or q will log warnings but not crash - downstream functions
+    must handle None values appropriately.
+
+    Examples
+    --------
+    >>> metadata = _extract_nlsq_metadata(config, data)
+    >>> metadata['L']  # Should be float in Angstroms
+    2000000.0
+    >>> metadata['q']  # Should be float in Å⁻¹
+    0.0123
+    """
+    metadata = {}
+
+    # L (characteristic length) extraction with fallback hierarchy
+    try:
+        analyzer_params = config.config.get("analyzer_parameters", {})
+        geometry = analyzer_params.get("geometry", {})
+
+        if "stator_rotor_gap" in geometry:
+            metadata["L"] = float(geometry["stator_rotor_gap"])
+            logger.debug(f"Using stator_rotor_gap L = {metadata['L']:.1f} Å")
+        else:
+            exp_config = config.config.get("experimental_data", {})
+            exp_geometry = exp_config.get("geometry", {})
+
+            if "stator_rotor_gap" in exp_geometry:
+                metadata["L"] = float(exp_geometry["stator_rotor_gap"])
+                logger.debug("Using L from experimental_data.geometry")
+            elif "sample_detector_distance" in exp_config:
+                metadata["L"] = float(exp_config["sample_detector_distance"])
+                logger.debug(
+                    f"Using sample_detector_distance L = {metadata['L']:.1f} Å"
+                )
+            else:
+                metadata["L"] = 2000000.0  # Default: 200 µm
+                logger.warning(
+                    f"No L parameter found, using default L = {metadata['L']:.1f} Å"
+                )
+    except (AttributeError, TypeError, ValueError) as e:
+        metadata["L"] = 2000000.0
+        logger.warning(f"Error reading L: {e}, using default L = 2000000.0 Å")
+
+    # dt (time step) extraction (optional)
+    try:
+        analyzer_params = config.config.get("analyzer_parameters", {})
+        dt_value = analyzer_params.get("dt")
+
+        if dt_value is None:
+            exp_config = config.config.get("experimental_data", {})
+            dt_value = exp_config.get("dt")
+
+        if dt_value is not None:
+            metadata["dt"] = float(dt_value)
+            logger.debug(f"Using dt = {metadata['dt']:.6f} s")
+        else:
+            metadata["dt"] = None
+            logger.warning("dt not found in config - may need manual specification")
+    except (AttributeError, TypeError, ValueError) as e:
+        metadata["dt"] = None
+        logger.warning(f"Error reading dt: {e}")
+
+    # q (wavevector magnitude) extraction from data
+    try:
+        q_list = np.asarray(data["wavevector_q_list"])
+        if q_list.size > 0:
+            metadata["q"] = float(q_list[0])
+            logger.debug(f"Using q = {metadata['q']:.6f} Å⁻¹")
+        else:
+            metadata["q"] = None
+            logger.warning("Empty wavevector_q_list")
+    except (KeyError, IndexError, TypeError) as e:
+        metadata["q"] = None
+        logger.error(f"Error extracting q: {e}")
+
+    return metadata
+
+
+def _prepare_parameter_data(result: Any, analysis_mode: str) -> dict[str, Any]:
+    """
+    Prepare parameter data dictionary for JSON saving.
+
+    Extracts parameter values and uncertainties from OptimizationResult and
+    organizes them by name according to the analysis mode.
+
+    Parameters
+    ----------
+    result : OptimizationResult
+        NLSQ optimization result with parameters and uncertainties
+    analysis_mode : str
+        "static_isotropic" (5 params) or "laminar_flow" (9 params)
+
+    Returns
+    -------
+    dict[str, Any]
+        Dictionary mapping parameter names to {value, uncertainty} dicts
+
+    Notes
+    -----
+    Parameter order in result.parameters:
+    - Static isotropic: [contrast, offset, D0, alpha, D_offset]
+    - Laminar flow: [contrast, offset, D0, alpha, D_offset,
+                     gamma_dot_t0, beta, gamma_dot_t_offset, phi0]
+
+    Examples
+    --------
+    >>> param_dict = _prepare_parameter_data(result, "laminar_flow")
+    >>> param_dict["D0"]
+    {'value': 1234.5, 'uncertainty': 45.6}
+    >>> param_dict["gamma_dot_t0"]
+    {'value': 0.000123, 'uncertainty': 0.000012}
+    """
+    # Get parameter names for analysis mode
+    if analysis_mode == "static_isotropic":
+        param_names = SCALING_PARAM_NAMES + STATIC_PARAM_NAMES
+    elif analysis_mode == "laminar_flow":
+        param_names = SCALING_PARAM_NAMES + LAMINAR_FLOW_PARAM_NAMES
+    else:
+        raise ValueError(f"Unknown analysis_mode: {analysis_mode}")
+
+    # Extract values and uncertainties
+    param_dict = {}
+    for i, name in enumerate(param_names):
+        param_dict[name] = {
+            "value": float(result.parameters[i]),
+            "uncertainty": (
+                float(result.uncertainties[i])
+                if result.uncertainties is not None
+                else None
+            ),
+        }
+
+    return param_dict
+
+
+def _compute_nlsq_fits(
+    result: Any, data: dict[str, Any], metadata: dict[str, Any]
+) -> dict[str, Any]:
+    """
+    Compute theoretical fits with per-angle least squares scaling.
+
+    Generates theoretical correlation functions using optimized parameters,
+    then applies per-angle scaling (contrast, offset) via least squares fitting
+    to match experimental intensities.
+
+    Parameters
+    ----------
+    result : OptimizationResult
+        NLSQ optimization result with physical parameters
+    data : dict[str, Any]
+        Experimental data with phi_angles_list, c2_exp, t1, t2
+    metadata : dict[str, Any]
+        Metadata with L, dt, q for theoretical computation
+
+    Returns
+    -------
+    dict[str, Any]
+        Dictionary with keys:
+        - 'c2_theoretical_raw': Raw theoretical fits (n_angles, n_t1, n_t2)
+        - 'c2_theoretical_scaled': Scaled fits (n_angles, n_t1, n_t2)
+        - 'per_angle_scaling': Scaling params (n_angles, 2) [contrast, offset]
+        - 'residuals': Exp - scaled fit (n_angles, n_t1, n_t2)
+
+    Notes
+    -----
+    Uses sequential per-angle computation (not vectorized). Each angle calls
+    compute_g2_scaled() independently. Per-angle scaling via np.linalg.lstsq
+    solves: c2_exp = contrast * c2_theory + offset.
+    """
+    phi_angles = np.asarray(data["phi_angles_list"])
+    c2_exp = np.asarray(data["c2_exp"])
+    t1 = np.asarray(data["t1"])
+    t2 = np.asarray(data["t2"])
+
+    # Convert 2D meshgrids to 1D if needed
+    if t1.ndim == 2:
+        t1 = t1[:, 0]  # Extract first column
+    if t2.ndim == 2:
+        t2 = t2[0, :]  # Extract first row
+
+    # Extract physical parameters (skip first 2 which are scaling params)
+    physical_params = result.parameters[2:]
+
+    # Extract metadata with defaults
+    L = metadata["L"]
+    dt = metadata.get("dt")
+    if dt is None:
+        dt = 0.1  # Default time resolution in seconds
+        logger.debug(f"Using default dt = {dt}s (not found in config)")
+    q = metadata["q"]
+
+    if q is None:
+        raise ValueError("q (wavevector) is required but was not found")
+
+    logger.debug(
+        f"Computing theoretical fits for {len(phi_angles)} angles using L={L:.1f} Å, q={q:.6f} Å⁻¹"
+    )
+
+    # Sequential per-angle computation
+    c2_theoretical_raw = []
+    per_angle_scaling = []
+
+    for i, phi_angle in enumerate(phi_angles):
+        # Convert to JAX arrays
+        phi_jax = jnp.array([float(phi_angle)])
+        t1_jax = jnp.array(t1)
+        t2_jax = jnp.array(t2)
+        params_jax = jnp.array(physical_params)
+
+        # Compute theoretical fit (raw, before scaling)
+        g2_theory = compute_g2_scaled(
+            params=params_jax,
+            t1=t1_jax,
+            t2=t2_jax,
+            phi=phi_jax,
+            q=float(q),
+            L=float(L),
+            contrast=1.0,  # Will scale later
+            offset=0.0,
+            dt=float(dt),
+        )
+
+        # Convert to NumPy and squeeze out extra dimension (phi axis)
+        g2_theory_np = np.asarray(g2_theory)
+        if g2_theory_np.ndim == 3:
+            g2_theory_np = g2_theory_np[0]  # Remove phi dimension (size 1)
+        c2_theoretical_raw.append(g2_theory_np)
+
+        # Least squares scaling: c2_exp = contrast * c2_theory + offset
+        # Solve: [c2_theory, ones] @ [contrast, offset] = c2_exp
+        c2_exp_angle = c2_exp[i].flatten()
+        c2_theory_flat = g2_theory_np.flatten()
+
+        # Design matrix: [c2_theory, ones]
+        A = np.column_stack([c2_theory_flat, np.ones_like(c2_theory_flat)])
+        b = c2_exp_angle
+
+        # Least squares solution
+        scaling, residuals_lstsq, rank, s = np.linalg.lstsq(A, b, rcond=None)
+        contrast_fit, offset_fit = scaling
+        per_angle_scaling.append([contrast_fit, offset_fit])
+
+        logger.debug(
+            f"Angle {phi_angle:.1f}°: contrast={contrast_fit:.3f}, offset={offset_fit:.3f}"
+        )
+
+    # Stack arrays
+    c2_theoretical_raw = np.array(c2_theoretical_raw)
+    per_angle_scaling = np.array(per_angle_scaling)
+
+    # Apply per-angle scaling
+    c2_theoretical_scaled = np.zeros_like(c2_theoretical_raw)
+    for i in range(len(phi_angles)):
+        contrast, offset = per_angle_scaling[i]
+        c2_theoretical_scaled[i] = contrast * c2_theoretical_raw[i] + offset
+
+    # Compute residuals
+    residuals = c2_exp - c2_theoretical_scaled
+
+    logger.info(
+        f"Computed theoretical fits for {len(phi_angles)} angles (sequential computation)"
+    )
+
+    return {
+        "c2_theoretical_raw": c2_theoretical_raw,
+        "c2_theoretical_scaled": c2_theoretical_scaled,
+        "per_angle_scaling": per_angle_scaling,
+        "residuals": residuals,
+    }
+
+
+def _save_nlsq_json_files(
+    param_dict: dict[str, Any],
+    analysis_dict: dict[str, Any],
+    convergence_dict: dict[str, Any],
+    output_dir: Path,
+) -> None:
+    """
+    Save 3 JSON files: parameters, analysis results, convergence metrics.
+
+    Parameters
+    ----------
+    param_dict : dict[str, Any]
+        Parameter dictionary with {name: {value, uncertainty}}
+    analysis_dict : dict[str, Any]
+        Analysis results with method, fit_quality, dataset_info, etc.
+    convergence_dict : dict[str, Any]
+        Convergence diagnostics with status, iterations, recovery_actions
+    output_dir : Path
+        Output directory for JSON files
+
+    Returns
+    -------
+    None
+        Files saved to disk
+
+    Notes
+    -----
+    Creates 3 JSON files:
+    - parameters.json: Complete parameter values and uncertainties
+    - analysis_results_nlsq.json: Analysis summary and fit quality
+    - convergence_metrics.json: Convergence diagnostics and device info
+    """
+    # Save parameters.json
+    param_file = output_dir / "parameters.json"
+    with open(param_file, "w") as f:
+        json.dump(param_dict, f, indent=2)
+    logger.debug(f"Saved parameters to {param_file}")
+
+    # Save analysis_results_nlsq.json
+    analysis_file = output_dir / "analysis_results_nlsq.json"
+    with open(analysis_file, "w") as f:
+        json.dump(analysis_dict, f, indent=2)
+    logger.debug(f"Saved analysis results to {analysis_file}")
+
+    # Save convergence_metrics.json
+    convergence_file = output_dir / "convergence_metrics.json"
+    with open(convergence_file, "w") as f:
+        json.dump(convergence_dict, f, indent=2)
+    logger.debug(f"Saved convergence metrics to {convergence_file}")
+
+    logger.info("Saved 3 JSON files (parameters, analysis results, convergence)")
+
+
+def _save_nlsq_npz_file(
+    phi_angles: np.ndarray,
+    c2_exp: np.ndarray,
+    c2_raw: np.ndarray,
+    c2_scaled: np.ndarray,
+    per_angle_scaling: np.ndarray,
+    residuals: np.ndarray,
+    residuals_norm: np.ndarray,
+    t1: np.ndarray,
+    t2: np.ndarray,
+    q: float,
+    output_dir: Path,
+) -> None:
+    """
+    Save NPZ file with 10 arrays: experimental + theoretical + residuals + coordinates.
+
+    Parameters
+    ----------
+    phi_angles : np.ndarray
+        Scattering angles (n_angles,)
+    c2_exp : np.ndarray
+        Experimental correlation data (n_angles, n_t1, n_t2)
+    c2_raw : np.ndarray
+        Raw theoretical fits before scaling (n_angles, n_t1, n_t2)
+    c2_scaled : np.ndarray
+        Scaled theoretical fits (n_angles, n_t1, n_t2)
+    per_angle_scaling : np.ndarray
+        Per-angle scaling parameters (n_angles, 2) [contrast, offset]
+    residuals : np.ndarray
+        Residuals: exp - scaled (n_angles, n_t1, n_t2)
+    residuals_norm : np.ndarray
+        Normalized residuals (n_angles, n_t1, n_t2)
+    t1 : np.ndarray
+        Time array 1 (n_t1,)
+    t2 : np.ndarray
+        Time array 2 (n_t2,)
+    q : float
+        Wavevector magnitude [Å⁻¹]
+    output_dir : Path
+        Output directory
+
+    Returns
+    -------
+    None
+        NPZ file saved to disk
+
+    Notes
+    -----
+    Creates fitted_data.npz with 10 arrays matching classical implementation format.
+    """
+    npz_file = output_dir / "fitted_data.npz"
+
+    np.savez_compressed(
+        npz_file,
+        # Experimental data (2 arrays)
+        phi_angles=phi_angles,
+        c2_exp=c2_exp,
+        # Note: sigma (uncertainties) not included - would need to pass from data if available
+        # Theoretical fits (3 arrays)
+        c2_theoretical_raw=c2_raw,
+        c2_theoretical_scaled=c2_scaled,
+        per_angle_scaling=per_angle_scaling,
+        # Residuals (2 arrays)
+        residuals=residuals,
+        residuals_normalized=residuals_norm,
+        # Coordinate arrays (3 arrays)
+        t1=t1,
+        t2=t2,
+        q=np.array([q]),  # Wrap scalar in array
+    )
+
+    logger.info(f"Saved NPZ file with 10 arrays to {npz_file}")
+
+
+def save_nlsq_results(
+    result: Any, data: dict[str, Any], config: Any, output_dir: Path
+) -> None:
+    """
+    Save complete NLSQ optimization results to structured directory.
+
+    Main orchestrator function that coordinates all helper functions to save:
+    - parameters.json: Parameter values and uncertainties
+    - fitted_data.npz: Experimental + theoretical + residuals
+    - analysis_results_nlsq.json: Analysis summary
+    - convergence_metrics.json: Convergence diagnostics
+
+    Parameters
+    ----------
+    result : OptimizationResult
+        NLSQ optimization result with parameters, uncertainties, chi-squared, etc.
+    data : dict[str, Any]
+        Experimental data with phi_angles_list, c2_exp, t1, t2, wavevector_q_list
+    config : ConfigManager
+        Configuration with analysis_mode and metadata
+    output_dir : Path
+        Output directory (nlsq/ subdirectory will be created)
+
+    Returns
+    -------
+    None
+        All files saved to output_dir/nlsq/
+
+    Raises
+    ------
+    ValueError
+        If required metadata (q) cannot be extracted
+
+    Notes
+    -----
+    Creates nlsq/ subdirectory matching classical/ structure for method comparison.
+    Performs sequential per-angle theoretical fit computation.
+    """
+    # Create nlsq subdirectory
+    nlsq_dir = output_dir / "nlsq"
+    nlsq_dir.mkdir(parents=True, exist_ok=True)
+    logger.info(f"Saving NLSQ results to {nlsq_dir}")
+
+    # Get analysis mode
+    analysis_mode = config.config.get("analysis_mode", "static_isotropic")
+
+    # Step 1: Extract metadata
+    logger.debug("Extracting metadata (L, dt, q)")
+    metadata = _extract_nlsq_metadata(config, data)
+
+    # Step 2: Prepare parameter data
+    logger.debug(f"Preparing parameter data for {analysis_mode} mode")
+    param_dict = _prepare_parameter_data(result, analysis_mode)
+
+    # Add timestamp and convergence info to parameters
+    param_dict_complete = {
+        "timestamp": datetime.now().isoformat(),
+        "analysis_mode": analysis_mode,
+        "chi_squared": float(result.chi_squared),
+        "reduced_chi_squared": float(result.reduced_chi_squared),
+        "convergence_status": result.convergence_status,
+        "parameters": param_dict,
+    }
+
+    # Step 3: Compute theoretical fits with per-angle scaling
+    logger.info("Computing theoretical fits with per-angle scaling")
+    fits_dict = _compute_nlsq_fits(result, data, metadata)
+
+    # Step 4: Prepare analysis results dictionary
+    phi_angles = np.asarray(data["phi_angles_list"])
+    c2_exp = np.asarray(data["c2_exp"])
+    n_angles = len(phi_angles)
+    n_data_points = c2_exp.size
+    n_params = len(result.parameters)
+    degrees_of_freedom = n_data_points - n_params
+
+    analysis_dict = {
+        "method": "nlsq",
+        "timestamp": datetime.now().isoformat(),
+        "analysis_mode": analysis_mode,
+        "fit_quality": {
+            "chi_squared": float(result.chi_squared),
+            "reduced_chi_squared": float(result.reduced_chi_squared),
+            "degrees_of_freedom": degrees_of_freedom,
+            "quality_flag": result.quality_flag,
+        },
+        "dataset_info": {
+            "n_angles": n_angles,
+            "n_time_points": c2_exp.shape[1] * c2_exp.shape[2],
+            "total_data_points": n_data_points,
+            "q_value": float(metadata["q"]),
+        },
+        "optimization_summary": {
+            "convergence_status": result.convergence_status,
+            "iterations": result.iterations,
+            "execution_time": float(result.execution_time),
+        },
+    }
+
+    # Step 5: Prepare convergence metrics dictionary
+    convergence_dict = {
+        "convergence": {
+            "status": result.convergence_status,
+            "iterations": result.iterations,
+            "execution_time": float(result.execution_time),
+            "final_chi_squared": float(result.chi_squared),
+            "chi_squared_reduction": (
+                1.0 - result.reduced_chi_squared
+                if result.reduced_chi_squared < 1.0
+                else 0.0
+            ),
+        },
+        "recovery_actions": result.recovery_actions,
+        "quality_flag": result.quality_flag,
+        "device_info": result.device_info,
+    }
+
+    # Step 6: Save JSON files
+    logger.info("Saving JSON files (parameters, analysis, convergence)")
+    _save_nlsq_json_files(
+        param_dict_complete, analysis_dict, convergence_dict, nlsq_dir
+    )
+
+    # Step 7: Compute normalized residuals
+    # For now, assume uniform uncertainty of 5% (would need sigma from data for real normalization)
+    residuals_norm = fits_dict["residuals"] / (0.05 * c2_exp)
+
+    # Convert time arrays to 1D
+    t1 = np.asarray(data["t1"])
+    t2 = np.asarray(data["t2"])
+    if t1.ndim == 2:
+        t1 = t1[:, 0]
+    if t2.ndim == 2:
+        t2 = t2[0, :]
+
+    # Step 8: Save NPZ file
+    logger.info("Saving NPZ file with all arrays")
+    _save_nlsq_npz_file(
+        phi_angles=phi_angles,
+        c2_exp=c2_exp,
+        c2_raw=fits_dict["c2_theoretical_raw"],
+        c2_scaled=fits_dict["c2_theoretical_scaled"],
+        per_angle_scaling=fits_dict["per_angle_scaling"],
+        residuals=fits_dict["residuals"],
+        residuals_norm=residuals_norm,
+        t1=t1,
+        t2=t2,
+        q=metadata["q"],
+        output_dir=nlsq_dir,
+    )
+
+    logger.info(f"✓ NLSQ results saved successfully to {nlsq_dir}")
+    logger.info("  - 3 JSON files (parameters, analysis results, convergence metrics)")
+    logger.info("  - 1 NPZ file (10 arrays: experimental + theoretical + residuals)")
+
+    # Step 9: Generate plots with graceful degradation
+    try:
+        logger.info("Generating heatmap plots")
+        generate_nlsq_plots(
+            phi_angles=phi_angles,
+            c2_exp=c2_exp,
+            c2_theoretical_scaled=fits_dict["c2_theoretical_scaled"],
+            residuals=fits_dict["residuals"],
+            t1=t1,
+            t2=t2,
+            output_dir=nlsq_dir,
+        )
+        logger.info(f"  - {len(phi_angles)} PNG plots")
+    except Exception as e:
+        logger.warning(f"Plot generation failed (data files still saved): {e}")
+        logger.debug("Plot error details:", exc_info=True)
+
+
+def generate_nlsq_plots(
+    phi_angles: np.ndarray,
+    c2_exp: np.ndarray,
+    c2_theoretical_scaled: np.ndarray,
+    residuals: np.ndarray,
+    t1: np.ndarray,
+    t2: np.ndarray,
+    output_dir: Path,
+) -> None:
+    """
+    Generate 3-panel heatmap plots for NLSQ fit visualization.
+
+    Creates publication-quality PNG plots showing experimental data,
+    theoretical fit, and residuals side-by-side for each scattering angle.
+
+    Parameters
+    ----------
+    phi_angles : np.ndarray
+        Scattering angles in degrees (n_angles,)
+    c2_exp : np.ndarray
+        Experimental correlation data (n_angles, n_t1, n_t2)
+    c2_theoretical_scaled : np.ndarray
+        Scaled theoretical fits (n_angles, n_t1, n_t2)
+    residuals : np.ndarray
+        Residuals: exp - scaled (n_angles, n_t1, n_t2)
+    t1 : np.ndarray
+        Time array 1 in seconds (n_t1,)
+    t2 : np.ndarray
+        Time array 2 in seconds (n_t2,)
+    output_dir : Path
+        Output directory for PNG files
+
+    Returns
+    -------
+    None
+        PNG files saved to disk
+
+    Notes
+    -----
+    - Creates one PNG per angle: c2_heatmaps_phi_{angle:.1f}deg.png
+    - Layout: 3 panels (experimental, fitted, residuals)
+    - Colormaps: viridis (exp, fit), RdBu_r (residuals, symmetric)
+    - Resolution: 300 DPI for publication quality
+    - Residuals use symmetric colormap (vmin=-vmax) for diverging scale
+
+    Examples
+    --------
+    >>> generate_nlsq_plots(
+    ...     phi_angles=np.array([0.0, 45.0, 90.0]),
+    ...     c2_exp=c2_exp,
+    ...     c2_theoretical_scaled=c2_fit,
+    ...     residuals=c2_exp - c2_fit,
+    ...     t1=t1, t2=t2,
+    ...     output_dir=Path("./results/nlsq")
+    ... )
+    """
+    logger.info(f"Generating heatmap plots for {len(phi_angles)} angles")
+
+    for i, phi in enumerate(phi_angles):
+        # Create 3-panel figure
+        fig, axes = plt.subplots(1, 3, figsize=(15, 5))
+
+        # Panel 1: Experimental data
+        im0 = axes[0].imshow(
+            c2_exp[i],
+            origin="lower",
+            aspect="auto",
+            cmap="viridis",
+            extent=[t2[0], t2[-1], t1[0], t1[-1]],
+        )
+        axes[0].set_title(f"Experimental\nφ = {phi:.1f}°")
+        axes[0].set_xlabel("t₂ (s)")
+        axes[0].set_ylabel("t₁ (s)")
+        plt.colorbar(im0, ax=axes[0], label="g₂(t₁,t₂)")
+
+        # Panel 2: Theoretical fit
+        im1 = axes[1].imshow(
+            c2_theoretical_scaled[i],
+            origin="lower",
+            aspect="auto",
+            cmap="viridis",
+            extent=[t2[0], t2[-1], t1[0], t1[-1]],
+        )
+        axes[1].set_title(f"Theoretical Fit\nφ = {phi:.1f}°")
+        axes[1].set_xlabel("t₂ (s)")
+        axes[1].set_ylabel("t₁ (s)")
+        plt.colorbar(im1, ax=axes[1], label="g₂(t₁,t₂)")
+
+        # Panel 3: Residuals (symmetric colormap)
+        residual_max = np.max(np.abs(residuals[i]))
+        im2 = axes[2].imshow(
+            residuals[i],
+            origin="lower",
+            aspect="auto",
+            cmap="RdBu_r",
+            vmin=-residual_max,
+            vmax=residual_max,
+            extent=[t2[0], t2[-1], t1[0], t1[-1]],
+        )
+        axes[2].set_title(f"Residuals\nφ = {phi:.1f}°")
+        axes[2].set_xlabel("t₂ (s)")
+        axes[2].set_ylabel("t₁ (s)")
+        plt.colorbar(im2, ax=axes[2], label="Δg₂")
+
+        # Adjust layout and save
+        plt.tight_layout()
+        plot_file = output_dir / f"c2_heatmaps_phi_{phi:.1f}deg.png"
+        plt.savefig(plot_file, dpi=300, bbox_inches="tight")
+        plt.close(fig)
+
+        logger.debug(f"Saved plot: {plot_file}")
+
+    logger.info(f"✓ Generated {len(phi_angles)} heatmap plots")
 
 
 def _json_serializer(obj):
