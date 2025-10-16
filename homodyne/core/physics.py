@@ -1,5 +1,4 @@
-"""
-Physical Constants and Parameter Validation for Homodyne v2
+"""Physical Constants and Parameter Validation for Homodyne v2
 ===========================================================
 
 Centralized physical constants, parameter bounds, and validation functions
@@ -23,8 +22,7 @@ logger = get_logger(__name__)
 
 @dataclass
 class ValidationResult:
-    """
-    Result of parameter validation with detailed error reporting.
+    """Result of parameter validation with detailed error reporting.
 
     Provides comprehensive information about parameter validation
     including which parameters violated bounds and by how much.
@@ -56,8 +54,7 @@ class ValidationResult:
 
 
 class PhysicsConstants:
-    """
-    Physical constants and reference values for XPCS analysis.
+    """Physical constants and reference values for XPCS analysis.
 
     These values are based on typical synchrotron X-ray scattering
     experiments and provide reasonable defaults for most analyses.
@@ -114,8 +111,7 @@ class PhysicsConstants:
 
 
 def parameter_bounds() -> dict[str, list[tuple[float, float]]]:
-    """
-    Get standard parameter bounds for all model types.
+    """Get standard parameter bounds for all model types.
 
     Returns:
         Dictionary mapping model types to parameter bounds
@@ -170,8 +166,7 @@ def validate_parameters_detailed(
     param_names: list[str] | None = None,
     tolerance: float = 1e-10,
 ) -> ValidationResult:
-    """
-    Validate parameter values against bounds with detailed error reporting.
+    """Validate parameter values against bounds with detailed error reporting.
 
     This is the enhanced validation function that provides comprehensive
     information about which parameters violated bounds and by how much.
@@ -222,7 +217,7 @@ def validate_parameters_detailed(
             valid=False,
             violations=[
                 f"Parameter count mismatch: got {len(params)} parameters, "
-                f"expected {len(bounds)} bounds"
+                f"expected {len(bounds)} bounds",
             ],
             parameters_checked=0,
             message="Parameter count validation failed",
@@ -259,7 +254,7 @@ def validate_parameters_detailed(
 
                 violations.append(
                     f"{param_name} = {param_val:.6e} is {direction} bounds "
-                    f"[{min_val:.6e}, {max_val:.6e}] by {violation_amount:.6e}"
+                    f"[{min_val:.6e}, {max_val:.6e}] by {violation_amount:.6e}",
                 )
             validated_count += 1
         except (TypeError, ValueError):
@@ -282,10 +277,11 @@ def validate_parameters_detailed(
 
 
 def validate_parameters(
-    params: np.ndarray, bounds: list[tuple[float, float]], tolerance: float = 1e-10
+    params: np.ndarray,
+    bounds: list[tuple[float, float]],
+    tolerance: float = 1e-10,
 ) -> bool:
-    """
-    Validate parameter values against bounds with tolerance.
+    """Validate parameter values against bounds with tolerance.
 
     This is the legacy function that returns just a boolean.
     For detailed validation, use validate_parameters_detailed().
@@ -316,10 +312,10 @@ def validate_parameters(
 
 
 def clip_parameters(
-    params: np.ndarray, bounds: list[tuple[float, float]]
+    params: np.ndarray,
+    bounds: list[tuple[float, float]],
 ) -> np.ndarray:
-    """
-    Clip parameters to stay within bounds.
+    """Clip parameters to stay within bounds.
 
     Args:
         params: Parameter array to clip
@@ -330,7 +326,7 @@ def clip_parameters(
     """
     if len(params) != len(bounds):
         raise ValueError(
-            f"Parameter count mismatch: got {len(params)}, expected {len(bounds)}"
+            f"Parameter count mismatch: got {len(params)}, expected {len(bounds)}",
         )
 
     clipped = np.zeros_like(params)
@@ -344,8 +340,7 @@ def clip_parameters(
 
 
 def get_default_parameters(model_type: str) -> np.ndarray:
-    """
-    Get sensible default parameters for a model type.
+    """Get sensible default parameters for a model type.
 
     Args:
         model_type: "diffusion", "shear", or "combined"
@@ -359,7 +354,7 @@ def get_default_parameters(model_type: str) -> np.ndarray:
                 PhysicsConstants.DIFFUSION_TYPICAL,  # D0 = 100 Å²/s
                 0.0,  # alpha = 0 (normal diffusion)
                 PhysicsConstants.DIFFUSION_TYPICAL / 10,  # D_offset = 10 Å²/s
-            ]
+            ],
         ),
         "shear": np.array(
             [
@@ -367,7 +362,7 @@ def get_default_parameters(model_type: str) -> np.ndarray:
                 0.0,  # beta = 0 (constant shear)
                 0.0,  # gamma_dot_offset = 0
                 0.0,  # phi0 = 0 degrees
-            ]
+            ],
         ),
         "combined": np.array(
             [
@@ -380,21 +375,20 @@ def get_default_parameters(model_type: str) -> np.ndarray:
                 0.0,  # beta = 0
                 0.0,  # gamma_dot_offset = 0
                 0.0,  # phi0 = 0 degrees
-            ]
+            ],
         ),
     }
 
     if model_type not in defaults:
         raise ValueError(
-            f"Unknown model type '{model_type}'. Must be one of {list(defaults.keys())}"
+            f"Unknown model type '{model_type}'. Must be one of {list(defaults.keys())}",
         )
 
     return defaults[model_type]
 
 
 def validate_experimental_setup(q: float, L: float, wavelength: float = None) -> bool:
-    """
-    Validate experimental setup parameters for physical reasonableness.
+    """Validate experimental setup parameters for physical reasonableness.
 
     Args:
         q: Scattering wave vector magnitude (Å⁻¹)
@@ -408,7 +402,7 @@ def validate_experimental_setup(q: float, L: float, wavelength: float = None) ->
     if not (PhysicsConstants.Q_MIN_TYPICAL <= q <= PhysicsConstants.Q_MAX_TYPICAL):
         logger.warning(
             f"q-value {q:.2e} Å⁻¹ outside typical range "
-            f"[{PhysicsConstants.Q_MIN_TYPICAL:.2e}, {PhysicsConstants.Q_MAX_TYPICAL:.2e}]"
+            f"[{PhysicsConstants.Q_MIN_TYPICAL:.2e}, {PhysicsConstants.Q_MAX_TYPICAL:.2e}]",
         )
         return False
 
@@ -416,7 +410,7 @@ def validate_experimental_setup(q: float, L: float, wavelength: float = None) ->
     # Typical range: 100,000 Å (10mm) to 100,000,000 Å (10m)
     if not (1e5 <= L <= 1e8):
         logger.warning(
-            f"Sample-detector distance {L:.1f} Å outside reasonable range [1e5, 1e8] Å (10mm to 10m)"
+            f"Sample-detector distance {L:.1f} Å outside reasonable range [1e5, 1e8] Å (10mm to 10m)",
         )
         return False
 
@@ -424,7 +418,7 @@ def validate_experimental_setup(q: float, L: float, wavelength: float = None) ->
     if wavelength is not None:
         if not (0.1 <= wavelength <= 10.0):
             logger.warning(
-                f"X-ray wavelength {wavelength:.2f} Å outside reasonable range [0.1, 10.0]"
+                f"X-ray wavelength {wavelength:.2f} Å outside reasonable range [0.1, 10.0]",
             )
             return False
 
@@ -432,8 +426,7 @@ def validate_experimental_setup(q: float, L: float, wavelength: float = None) ->
 
 
 def estimate_correlation_time(D0: float, alpha: float, q: float) -> float:
-    """
-    Estimate characteristic correlation time for diffusion process.
+    """Estimate characteristic correlation time for diffusion process.
 
     For normal diffusion (alpha=0): τ ≈ 1/(q²D₀)
     For anomalous diffusion: scaling is more complex
@@ -457,8 +450,7 @@ def estimate_correlation_time(D0: float, alpha: float, q: float) -> float:
 
 
 def get_parameter_info(model_type: str) -> dict[str, Any]:
-    """
-    Get comprehensive parameter information for a model type.
+    """Get comprehensive parameter information for a model type.
 
     Args:
         model_type: "diffusion", "shear", or "combined"
@@ -536,7 +528,7 @@ def get_parameter_info(model_type: str) -> dict[str, Any]:
             "bounds": parameter_bounds()[model_type],
             "defaults": get_default_parameters(model_type).tolist(),
             "n_parameters": len(info[model_type]["names"]),
-        }
+        },
     )
 
     return result

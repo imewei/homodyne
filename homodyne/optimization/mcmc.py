@@ -1,5 +1,4 @@
-"""
-MCMC + JAX: High-Accuracy Bayesian Analysis for Homodyne v2
+"""MCMC + JAX: High-Accuracy Bayesian Analysis for Homodyne v2
 ===========================================================
 
 NumPyro/BlackJAX-based MCMC sampling for high-precision parameter estimation
@@ -43,7 +42,7 @@ except ImportError:
     jnp = np
     HAS_NUMPY_GRADIENTS = False
     logger.warning(
-        "JAX not available - MCMC will use numpy fallback with limited functionality"
+        "JAX not available - MCMC will use numpy fallback with limited functionality",
     )
 
     def jit(f):
@@ -93,8 +92,7 @@ except ImportError:
 
 
 class MCMCResult:
-    """
-    MCMC optimization result container.
+    """MCMC optimization result container.
 
     Compatible with existing MCMC result structure while simplifying
     the interface for the new architecture.
@@ -179,8 +177,7 @@ def fit_mcmc_jax(
     use_simplified_likelihood: bool = True,  # Added for performance
     **kwargs,
 ) -> MCMCResult:
-    """
-    High-accuracy fitting using MCMC+JAX sampling with dataset optimization.
+    """High-accuracy fitting using MCMC+JAX sampling with dataset optimization.
 
     Uses NumPyro/BlackJAX for full posterior sampling with unified homodyne model.
     Same likelihood as VI: Exp - (contrast * Theory + offset)
@@ -231,7 +228,7 @@ def fit_mcmc_jax(
     if not NUMPYRO_AVAILABLE and not BLACKJAX_AVAILABLE:
         raise ImportError(
             "NumPyro or BlackJAX is required for MCMC optimization. "
-            "Install with: pip install numpyro blackjax"
+            "Install with: pip install numpyro blackjax",
         )
 
     if not HAS_CORE_MODULES:
@@ -254,7 +251,7 @@ def fit_mcmc_jax(
         # Determine analysis mode
         if analysis_mode not in ["static_isotropic", "laminar_flow"]:
             logger.warning(
-                f"Unknown analysis mode {analysis_mode}, using static_isotropic"
+                f"Unknown analysis mode {analysis_mode}, using static_isotropic",
             )
             analysis_mode = "static_isotropic"
 
@@ -546,7 +543,7 @@ def _create_numpyro_model(
                     beta,
                     gamma_dot_t_offset,
                     phi0,
-                ]
+                ],
             )
 
         # Compute theoretical model using JIT-compiled function
@@ -637,7 +634,7 @@ def _run_numpyro_sampling(model, config):
             if n_devices == 1:  # CPU mode
                 numpyro.set_host_device_count(n_chains)
                 logger.info(
-                    f"Set host device count to {n_chains} for CPU parallel chains"
+                    f"Set host device count to {n_chains} for CPU parallel chains",
                 )
             else:
                 logger.info(f"Using {min(n_chains, n_devices)} parallel devices")
@@ -675,7 +672,7 @@ def _process_posterior_samples(mcmc_result, analysis_mode):
     # Extract parameter samples
     if "static" in analysis_mode:
         param_samples = jnp.column_stack(
-            [samples["D0"], samples["alpha"], samples["D_offset"]]
+            [samples["D0"], samples["alpha"], samples["D_offset"]],
         )
     else:
         param_samples = jnp.column_stack(
@@ -687,7 +684,7 @@ def _process_posterior_samples(mcmc_result, analysis_mode):
                 samples["beta"],
                 samples["gamma_dot_t_offset"],
                 samples["phi0"],
-            ]
+            ],
         )
 
     # Extract fitting parameter samples

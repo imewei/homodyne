@@ -1,5 +1,4 @@
-"""
-Configuration System for XPCS Data Loading
+"""Configuration System for XPCS Data Loading
 ==========================================
 
 YAML-first configuration system with JSON support for XPCS data loading.
@@ -62,8 +61,6 @@ class ConfigValidationResult:
 
 class XPCSConfigurationError(Exception):
     """Raised when XPCS configuration is invalid."""
-
-    pass
 
 
 # Configuration schema definitions
@@ -151,8 +148,7 @@ XPCS_CONFIG_SCHEMA = {
 
 
 def load_yaml_config(config_path: str | Path) -> dict[str, Any]:
-    """
-    Load YAML configuration file.
+    """Load YAML configuration file.
 
     Args:
         config_path: Path to YAML configuration file
@@ -183,13 +179,12 @@ def load_yaml_config(config_path: str | Path) -> dict[str, Any]:
 
     except yaml.YAMLError as e:
         raise XPCSConfigurationError(
-            f"Failed to parse YAML configuration {config_path}: {e}"
+            f"Failed to parse YAML configuration {config_path}: {e}",
         ) from e
 
 
 def load_json_config(config_path: str | Path) -> dict[str, Any]:
-    """
-    Load JSON configuration file with automatic YAML conversion.
+    """Load JSON configuration file with automatic YAML conversion.
 
     Args:
         config_path: Path to JSON configuration file
@@ -215,15 +210,15 @@ def load_json_config(config_path: str | Path) -> dict[str, Any]:
 
     except json.JSONDecodeError as e:
         raise XPCSConfigurationError(
-            f"Failed to parse JSON configuration {config_path}: {e}"
+            f"Failed to parse JSON configuration {config_path}: {e}",
         ) from e
 
 
 def validate_config_schema(
-    config: dict[str, Any], schema: dict[str, Any] = None
+    config: dict[str, Any],
+    schema: dict[str, Any] = None,
 ) -> ConfigValidationResult:
-    """
-    Validate configuration against schema.
+    """Validate configuration against schema.
 
     Args:
         config: Configuration dictionary to validate
@@ -245,7 +240,7 @@ def validate_config_schema(
                 errors.append(f"Missing required configuration section: {section_name}")
             else:
                 warnings.append(
-                    f"Missing optional configuration section: {section_name}"
+                    f"Missing optional configuration section: {section_name}",
                 )
             continue
 
@@ -255,7 +250,7 @@ def validate_config_schema(
         for param_name, param_type in section_schema.get("required", {}).items():
             if param_name not in section_config:
                 errors.append(
-                    f"Missing required parameter: {section_name}.{param_name}"
+                    f"Missing required parameter: {section_name}.{param_name}",
                 )
             else:
                 value = section_config[param_name]
@@ -264,13 +259,13 @@ def validate_config_schema(
                     if not any(isinstance(value, t) for t in param_type):
                         errors.append(
                             f"Parameter {section_name}.{param_name} has wrong type: "
-                            f"expected {param_type}, got {type(value)}"
+                            f"expected {param_type}, got {type(value)}",
                         )
                 else:
                     if not isinstance(value, param_type):
                         errors.append(
                             f"Parameter {section_name}.{param_name} has wrong type: "
-                            f"expected {param_type}, got {type(value)}"
+                            f"expected {param_type}, got {type(value)}",
                         )
 
         # Check optional parameters
@@ -283,13 +278,13 @@ def validate_config_schema(
                     if not any(isinstance(value, t) for t in param_type):
                         warnings.append(
                             f"Parameter {section_name}.{param_name} has unexpected type: "
-                            f"expected {param_type}, got {type(value)}"
+                            f"expected {param_type}, got {type(value)}",
                         )
                 else:
                     if not isinstance(value, param_type):
                         warnings.append(
                             f"Parameter {section_name}.{param_name} has unexpected type: "
-                            f"expected {param_type}, got {type(value)}"
+                            f"expected {param_type}, got {type(value)}",
                         )
 
     # Validate specific parameter values
@@ -330,7 +325,7 @@ def _validate_parameter_values(config: dict[str, Any]) -> list[str]:
     if start_frame is not None and end_frame is not None:
         if start_frame >= end_frame:
             errors.append(
-                f"start_frame ({start_frame}) must be less than end_frame ({end_frame})"
+                f"start_frame ({start_frame}) must be less than end_frame ({end_frame})",
             )
         if start_frame < 1:
             errors.append(f"start_frame ({start_frame}) must be >= 1")
@@ -353,7 +348,7 @@ def _validate_parameter_values(config: dict[str, Any]) -> list[str]:
                 errors.append(f"q_range.max ({q_max}) must be positive")
             if q_min is not None and q_max is not None and q_min >= q_max:
                 errors.append(
-                    f"q_range.min ({q_min}) must be less than q_range.max ({q_max})"
+                    f"q_range.min ({q_min}) must be less than q_range.max ({q_max})",
                 )
 
         # Validate phi_range
@@ -363,15 +358,15 @@ def _validate_parameter_values(config: dict[str, Any]) -> list[str]:
             phi_max = phi_range.get("max")
             if phi_min is not None and phi_max is not None and phi_min >= phi_max:
                 errors.append(
-                    f"phi_range.min ({phi_min}) must be less than phi_range.max ({phi_max})"
+                    f"phi_range.min ({phi_min}) must be less than phi_range.max ({phi_max})",
                 )
             if phi_min is not None and not (-360 <= phi_min <= 360):
                 errors.append(
-                    f"phi_range.min ({phi_min}) should be in range [-360, 360]"
+                    f"phi_range.min ({phi_min}) should be in range [-360, 360]",
                 )
             if phi_max is not None and not (-360 <= phi_max <= 360):
                 errors.append(
-                    f"phi_range.max ({phi_max}) should be in range [-360, 360]"
+                    f"phi_range.max ({phi_max}) should be in range [-360, 360]",
                 )
 
         # Validate quality_threshold
@@ -383,14 +378,14 @@ def _validate_parameter_values(config: dict[str, Any]) -> list[str]:
         combine_criteria = data_filtering.get("combine_criteria", "AND")
         if combine_criteria not in ["AND", "OR"]:
             errors.append(
-                f"combine_criteria must be one of: AND, OR (got: {combine_criteria})"
+                f"combine_criteria must be one of: AND, OR (got: {combine_criteria})",
             )
 
         # Validate validation_level
         validation_level = data_filtering.get("validation_level", "basic")
         if validation_level not in ["basic", "strict"]:
             errors.append(
-                f"data_filtering.validation_level must be one of: basic, strict (got: {validation_level})"
+                f"data_filtering.validation_level must be one of: basic, strict (got: {validation_level})",
             )
 
     # Validate v2_features parameters
@@ -399,19 +394,19 @@ def _validate_parameter_values(config: dict[str, Any]) -> list[str]:
     output_format = v2_features.get("output_format", "auto")
     if output_format not in ["numpy", "jax", "auto"]:
         errors.append(
-            f"output_format must be one of: numpy, jax, auto (got: {output_format})"
+            f"output_format must be one of: numpy, jax, auto (got: {output_format})",
         )
 
     validation_level = v2_features.get("validation_level", "basic")
     if validation_level not in ["none", "basic", "full"]:
         errors.append(
-            f"validation_level must be one of: none, basic, full (got: {validation_level})"
+            f"validation_level must be one of: none, basic, full (got: {validation_level})",
         )
 
     cache_strategy = v2_features.get("cache_strategy", "intelligent")
     if cache_strategy not in ["none", "simple", "intelligent"]:
         errors.append(
-            f"cache_strategy must be one of: none, simple, intelligent (got: {cache_strategy})"
+            f"cache_strategy must be one of: none, simple, intelligent (got: {cache_strategy})",
         )
 
     return errors
@@ -430,7 +425,7 @@ def _validate_parameter_warnings(config: dict[str, Any]) -> list[str]:
 
     if frame_count > 10000:
         warnings.append(
-            f"Large frame range ({frame_count} frames) may result in long processing time"
+            f"Large frame range ({frame_count} frames) may result in long processing time",
         )
 
     # Warn about very small dt values
@@ -442,10 +437,10 @@ def _validate_parameter_warnings(config: dict[str, Any]) -> list[str]:
 
 
 def apply_config_defaults(
-    config: dict[str, Any], schema: dict[str, Any] = None
+    config: dict[str, Any],
+    schema: dict[str, Any] = None,
 ) -> dict[str, Any]:
-    """
-    Apply default values to configuration.
+    """Apply default values to configuration.
 
     Args:
         config: Configuration dictionary
@@ -471,24 +466,24 @@ def apply_config_defaults(
                 # Special handling for cache_file_path default
                 if param_name == "cache_file_path" and default_value is None:
                     data_folder = config_with_defaults.get("experimental_data", {}).get(
-                        "data_folder_path"
+                        "data_folder_path",
                     )
                     if data_folder:
                         section_config[param_name] = data_folder
                 else:
                     section_config[param_name] = default_value
                 logger.debug(
-                    f"Applied default for {section_name}.{param_name}: {default_value}"
+                    f"Applied default for {section_name}.{param_name}: {default_value}",
                 )
 
     return config_with_defaults
 
 
 def migrate_json_to_yaml_config(
-    json_config: dict[str, Any], yaml_output_path: str | Path | None = None
+    json_config: dict[str, Any],
+    yaml_output_path: str | Path | None = None,
 ) -> dict[str, Any]:
-    """
-    Migrate JSON configuration to YAML format.
+    """Migrate JSON configuration to YAML format.
 
     Args:
         json_config: JSON configuration dictionary
@@ -518,8 +513,7 @@ def migrate_json_to_yaml_config(
 
 
 def save_yaml_config(config: dict[str, Any], output_path: str | Path) -> None:
-    """
-    Save configuration to YAML file.
+    """Save configuration to YAML file.
 
     Args:
         config: Configuration dictionary
@@ -544,7 +538,7 @@ def save_yaml_config(config: dict[str, Any], output_path: str | Path) -> None:
 
     except Exception as e:
         raise XPCSConfigurationError(
-            f"Failed to save YAML configuration to {output_path}: {e}"
+            f"Failed to save YAML configuration to {output_path}: {e}",
         ) from e
 
 
@@ -553,8 +547,7 @@ def create_example_yaml_config(
     data_folder: str = "/path/to/data",
     data_file: str = "experiment.hdf",
 ) -> None:
-    """
-    Create an example YAML configuration file.
+    """Create an example YAML configuration file.
 
     Args:
         output_path: Path to save example configuration

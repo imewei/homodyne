@@ -1,5 +1,4 @@
-"""
-Minimal Configuration Management for Homodyne v2
+"""Minimal Configuration Management for Homodyne v2
 ===============================================
 
 Simplified configuration system with preserved API compatibility.
@@ -38,8 +37,7 @@ logger = get_logger(__name__)
 
 
 class ConfigManager:
-    """
-    Minimal configuration manager for homodyne v2 scattering analysis.
+    """Minimal configuration manager for homodyne v2 scattering analysis.
 
     Provides simplified configuration loading with preserved API compatibility.
 
@@ -59,8 +57,7 @@ class ConfigManager:
         config_file: str = "homodyne_config.yaml",
         config_override: dict[str, Any] | None = None,
     ):
-        """
-        Initialize configuration manager.
+        """Initialize configuration manager.
 
         Parameters
         ----------
@@ -85,8 +82,7 @@ class ConfigManager:
         self._normalize_schema()
 
     def load_config(self) -> None:
-        """
-        Load and parse YAML/JSON configuration file.
+        """Load and parse YAML/JSON configuration file.
 
         Supports both YAML and JSON formats with graceful fallback
         to default configuration if loading fails.
@@ -98,7 +94,7 @@ class ConfigManager:
             config_path = Path(self.config_file)
             if not config_path.exists():
                 raise FileNotFoundError(
-                    f"Configuration file not found: {self.config_file}"
+                    f"Configuration file not found: {self.config_file}",
                 )
 
             # Determine file format and load accordingly
@@ -151,8 +147,7 @@ class ConfigManager:
             self.config = self._get_default_config()
 
     def _get_default_config(self) -> dict[str, Any]:
-        """
-        Get default configuration structure.
+        """Get default configuration structure.
 
         Returns minimal configuration that supports basic analysis modes.
         """
@@ -203,8 +198,7 @@ class ConfigManager:
         }
 
     def get_config(self) -> dict[str, Any]:
-        """
-        Get the current configuration dictionary.
+        """Get the current configuration dictionary.
 
         Returns
         -------
@@ -214,8 +208,7 @@ class ConfigManager:
         return self.config
 
     def update_config(self, key: str, value: Any) -> None:
-        """
-        Update a configuration value using dot notation.
+        """Update a configuration value using dot notation.
 
         Parameters
         ----------
@@ -253,8 +246,7 @@ class ConfigManager:
         return angle_filtering
 
     def _get_parameter_manager(self):
-        """
-        Get or create cached ParameterManager.
+        """Get or create cached ParameterManager.
 
         This avoids creating a new ParameterManager on every config access,
         providing ~14x speedup for repeated parameter queries.
@@ -279,10 +271,10 @@ class ConfigManager:
         return self._cached_param_manager
 
     def get_parameter_bounds(
-        self, parameter_names: list[str] | None = None
+        self,
+        parameter_names: list[str] | None = None,
     ) -> list[dict[str, Any]]:
-        """
-        Get parameter bounds from configuration (cached).
+        """Get parameter bounds from configuration (cached).
 
         Uses cached ParameterManager internally for improved performance.
 
@@ -311,8 +303,7 @@ class ConfigManager:
         return self._get_parameter_manager().get_parameter_bounds(parameter_names)
 
     def get_active_parameters(self) -> list[str]:
-        """
-        Get list of active (physical) parameters from configuration (cached).
+        """Get list of active (physical) parameters from configuration (cached).
 
         Uses cached ParameterManager internally for improved performance.
 
@@ -335,8 +326,7 @@ class ConfigManager:
         return self._get_parameter_manager().get_active_parameters()
 
     def _validate_config(self) -> None:
-        """
-        Lightweight configuration validation.
+        """Lightweight configuration validation.
 
         Checks for required sections and valid values.
         Can be disabled by setting HOMODYNE_VALIDATE_CONFIG=false environment variable.
@@ -356,14 +346,13 @@ class ConfigManager:
         mode = self.config.get("analysis_mode", "")
         if mode and mode not in valid_modes:
             logger.warning(
-                f"Unknown analysis_mode: '{mode}'. Valid modes: {valid_modes}"
+                f"Unknown analysis_mode: '{mode}'. Valid modes: {valid_modes}",
             )
 
         logger.debug("Configuration validation completed")
 
     def _normalize_schema(self) -> None:
-        """
-        Normalize configuration schema for backward compatibility.
+        """Normalize configuration schema for backward compatibility.
 
         Handles multiple configuration format versions by converting
         legacy formats to modern standardized formats transparently.
@@ -375,8 +364,7 @@ class ConfigManager:
         # Future: add other normalizations here
 
     def _normalize_experimental_data(self) -> None:
-        """
-        Normalize experimental_data section.
+        """Normalize experimental_data section.
 
         Supports two formats:
         1. Template/Legacy: data_folder_path + data_file_name
@@ -400,7 +388,7 @@ class ConfigManager:
             # Skip normalization if either value is None
             if folder_path is None or filename is None:
                 logger.debug(
-                    "Skipping normalization: data_folder_path or data_file_name is None"
+                    "Skipping normalization: data_folder_path or data_file_name is None",
                 )
                 return
 
@@ -415,7 +403,7 @@ class ConfigManager:
             logger.info(
                 f"Normalized legacy config format:\n"
                 f"   {folder} + {filename}\n"
-                f"   → file_path: {file_path}"
+                f"   → file_path: {file_path}",
             )
 
         # Handle phi angles similarly
@@ -430,8 +418,7 @@ class ConfigManager:
 
 
 def load_xpcs_config(config_path: str) -> dict[str, Any]:
-    """
-    Load XPCS configuration from file.
+    """Load XPCS configuration from file.
 
     Convenience function for loading configuration files.
 

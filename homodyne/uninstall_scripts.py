@@ -1,6 +1,5 @@
 #!/usr/bin/env python3
-"""
-Homodyne Cleanup - Remove Shell Completion and Isolated Backend System
+"""Homodyne Cleanup - Remove Shell Completion and Isolated Backend System
 ======================================================================
 
 This script removes homodyne-related files from virtual environments
@@ -60,7 +59,7 @@ def cleanup_completion_files():
 
     # Fish completion
     fish_files = [
-        venv_path / "share" / "fish" / "vendor_completions.d" / "homodyne.fish"
+        venv_path / "share" / "fish" / "vendor_completions.d" / "homodyne.fish",
     ]
 
     all_completion_files = bash_files + zsh_files + fish_files
@@ -419,10 +418,10 @@ def main():
             # Add confirmation prompt for non-interactive cleanup
             if not args.force:
                 print(
-                    "\n⚠️  This will remove all homodyne shell completion and setup files:"
+                    "\n⚠️  This will remove all homodyne shell completion and setup files:",
                 )
                 print(
-                    "   • Shell completion scripts and aliases (hm, hc, hr, ha, etc.)"
+                    "   • Shell completion scripts and aliases (hm, hc, hr, ha, etc.)",
                 )
                 print("   • GPU acceleration setup and activation scripts")
                 print("   • Advanced features CLI commands")

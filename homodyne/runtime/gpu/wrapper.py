@@ -1,5 +1,4 @@
-"""
-GPU Environment Setup for Homodyne v2
+"""GPU Environment Setup for Homodyne v2
 =====================================
 
 GPU environment setup and activation functions for VI+JAX and MCMC+JAX.
@@ -22,8 +21,7 @@ logger = logging.getLogger(__name__)
 
 
 def setup_gpu_environment(quiet: bool = False) -> bool:
-    """
-    Configure GPU environment for JAX acceleration.
+    """Configure GPU environment for JAX acceleration.
 
     Sets up environment variables for JAX GPU acceleration using:
     - System CUDA installation
@@ -41,7 +39,7 @@ def setup_gpu_environment(quiet: bool = False) -> bool:
         if platform.system() != "Linux":
             if not quiet:
                 print(
-                    f"GPU acceleration requires Linux (detected: {platform.system()})"
+                    f"GPU acceleration requires Linux (detected: {platform.system()})",
                 )
             return False
 
@@ -103,8 +101,7 @@ def setup_gpu_environment(quiet: bool = False) -> bool:
 
 
 def activate_gpu(quiet: bool = False) -> bool:
-    """
-    Activate GPU support for JAX.
+    """Activate GPU support for JAX.
 
     Simplified activation focused on JAX GPU acceleration.
 
@@ -147,7 +144,7 @@ def activate_gpu(quiet: bool = False) -> bool:
 
             except ImportError:
                 print(
-                    "�  JAX not available - install with: pip install jax[cuda12-local]"
+                    "�  JAX not available - install with: pip install jax[cuda12-local]",
                 )
     else:
         if not quiet:
@@ -158,8 +155,7 @@ def activate_gpu(quiet: bool = False) -> bool:
 
 
 def get_gpu_status() -> dict[str, Any]:
-    """
-    Get current GPU status and configuration.
+    """Get current GPU status and configuration.
 
     Returns:
         Dict with GPU status information
@@ -228,8 +224,7 @@ def print_gpu_status():
 
 
 def configure_for_vi_jax(memory_fraction: float = 0.8, enable_x64: bool = False):
-    """
-    Configure environment specifically for VI+JAX workloads.
+    """Configure environment specifically for VI+JAX workloads.
 
     Args:
         memory_fraction: GPU memory fraction to use
@@ -249,8 +244,7 @@ def configure_for_vi_jax(memory_fraction: float = 0.8, enable_x64: bool = False)
 
 
 def configure_for_mcmc_jax(memory_fraction: float = 0.7, enable_x64: bool = True):
-    """
-    Configure environment specifically for MCMC+JAX workloads.
+    """Configure environment specifically for MCMC+JAX workloads.
 
     Args:
         memory_fraction: GPU memory fraction to use (lower for MCMC chains)
@@ -269,8 +263,7 @@ def configure_for_mcmc_jax(memory_fraction: float = 0.7, enable_x64: bool = True
 
 # Convenience functions
 def ensure_gpu_ready(method: str = "vi") -> bool:
-    """
-    Ensure GPU is ready for the specified method.
+    """Ensure GPU is ready for the specified method.
 
     Args:
         method: "vi" for VI+JAX or "mcmc" for MCMC+JAX

@@ -1,5 +1,4 @@
-"""
-Homodyne: JAX-First XPCS Analysis Package
+"""Homodyne: JAX-First XPCS Analysis Package
 ========================================
 
 A high-performance package for X-ray Photon Correlation Spectroscopy (XPCS) analysis
@@ -128,7 +127,7 @@ if HAS_DATA:
 
 if HAS_CORE:
     __all__.extend(
-        ["compute_g2_scaled", "TheoryEngine", "ScaledFittingEngine", "ParameterSpace"]
+        ["compute_g2_scaled", "TheoryEngine", "ScaledFittingEngine", "ParameterSpace"],
     )
 
 if HAS_OPTIMIZATION:
@@ -145,8 +144,7 @@ if HAS_CLI:
 
 
 def get_package_info() -> dict:
-    """
-    Get comprehensive package information and status.
+    """Get comprehensive package information and status.
 
     Returns
     -------
@@ -195,17 +193,17 @@ def get_package_info() -> dict:
 
     if not dependencies["nlsq"]:
         info["recommendations"].append(
-            "Install NLSQ for optimization: pip install nlsq"
+            "Install NLSQ for optimization: pip install nlsq",
         )
 
     if not dependencies["numpyro"] and not dependencies["blackjax"]:
         info["recommendations"].append(
-            "Install NumPyro or BlackJAX for MCMC: pip install numpyro blackjax"
+            "Install NumPyro or BlackJAX for MCMC: pip install numpyro blackjax",
         )
 
     if __features__["jax_acceleration"] and not __features__["gpu_acceleration"]:
         info["recommendations"].append(
-            "For GPU acceleration: pip install jax[local] (uses system CUDA)"
+            "For GPU acceleration: pip install jax[local] (uses system CUDA)",
         )
 
     if not dependencies["h5py"]:
@@ -215,11 +213,11 @@ def get_package_info() -> dict:
     if __features__["jax_acceleration"]:
         if __features__["gpu_acceleration"]:
             info["recommendations"].append(
-                "✓ GPU acceleration available - excellent performance expected"
+                "✓ GPU acceleration available - excellent performance expected",
             )
         else:
             info["recommendations"].append(
-                "CPU acceleration configured - good performance expected"
+                "CPU acceleration configured - good performance expected",
             )
     else:
         info["recommendations"].append("Install JAX for optimal performance")
@@ -231,7 +229,7 @@ def _check_installation():
     """Check installation status and provide helpful messages."""
     if not HAS_OPTIMIZATION:
         print(
-            "Warning: Optimization modules not available. Core functionality limited."
+            "Warning: Optimization modules not available. Core functionality limited.",
         )
         print("Install with: pip install homodyne[all]")
 

@@ -1,6 +1,5 @@
 #!/usr/bin/env python3
-"""
-Homodyne System Validator
+"""Homodyne System Validator
 ==========================
 
 Comprehensive testing and validation system for shell completion,
@@ -51,7 +50,10 @@ class SystemValidator:
         """Run shell command and return success, stdout, stderr."""
         try:
             result = subprocess.run(
-                cmd, capture_output=True, text=True, timeout=timeout
+                cmd,
+                capture_output=True,
+                text=True,
+                timeout=timeout,
             )
             return result.returncode == 0, result.stdout, result.stderr
         except subprocess.TimeoutExpired:
@@ -277,7 +279,7 @@ alias hc-iso >/dev/null 2>&1 && echo "shortcut_alias_works" || echo "shortcut_al
 """
 
                     success, stdout, stderr = self.run_command(
-                        [shell_cmd, "-c", test_script.strip()]
+                        [shell_cmd, "-c", test_script.strip()],
                     )
                     # Count how many alias categories work
                     alias_counts = {
@@ -301,7 +303,7 @@ alias hc-iso >/dev/null 2>&1 && echo "shortcut_alias_works" || echo "shortcut_al
                 if not file_path.exists():
                     # Only warn about files that should definitely exist
                     if "homodyne-completion.sh" in str(
-                        file_path
+                        file_path,
                     ) or "homodyne-advanced-completion.sh" in str(file_path):
                         critical_missing.append(file_path)
                     elif "completion.sh" in str(file_path):  # Main completion source
@@ -309,16 +311,16 @@ alias hc-iso >/dev/null 2>&1 && echo "shortcut_alias_works" || echo "shortcut_al
 
             if critical_missing:
                 warnings.append(
-                    "Run 'homodyne-post-install --shell <your_shell>' to install completion"
+                    "Run 'homodyne-post-install --shell <your_shell>' to install completion",
                 )
             if not alias_test_passed and completion_files:
                 if working_aliases == 0:
                     warnings.append(
-                        "No aliases working - try 'homodyne-post-install --shell zsh' to reinstall"
+                        "No aliases working - try 'homodyne-post-install --shell zsh' to reinstall",
                     )
                 elif working_aliases < 4:
                     warnings.append(
-                        f"Only {working_aliases}/4 alias categories working - may need shell restart"
+                        f"Only {working_aliases}/4 alias categories working - may need shell restart",
                     )
 
             success = len(completion_files) > 0
@@ -434,7 +436,7 @@ alias hc-iso >/dev/null 2>&1 && echo "shortcut_alias_works" || echo "shortcut_al
 
             if critical_gpu_missing and nvidia_available:
                 warnings.append(
-                    "Run 'homodyne-post-install --gpu' to install GPU acceleration"
+                    "Run 'homodyne-post-install --gpu' to install GPU acceleration",
                 )
             if not nvidia_available:
                 warnings.append("NVIDIA drivers not available")
@@ -486,14 +488,14 @@ alias hc-iso >/dev/null 2>&1 && echo "shortcut_alias_works" || echo "shortcut_al
         try:
             # Test if post-install script works
             success, stdout, stderr = self.run_command(
-                ["python", "-c", "from homodyne.post_install import main"]
+                ["python", "-c", "from homodyne.post_install import main"],
             )
 
             post_install_works = success
 
             # Test cleanup script
             success, stdout, stderr = self.run_command(
-                ["python", "-c", "from homodyne.uninstall_scripts import main"]
+                ["python", "-c", "from homodyne.uninstall_scripts import main"],
             )
 
             cleanup_works = success
@@ -629,7 +631,7 @@ alias hc-iso >/dev/null 2>&1 && echo "shortcut_alias_works" || echo "shortcut_al
                 for key, value in result.details.items():
                     if isinstance(value, list | dict):
                         report.append(
-                            f"     {key}: {len(value) if isinstance(value, list) else 'dict'} items"
+                            f"     {key}: {len(value) if isinstance(value, list) else 'dict'} items",
                         )
                     else:
                         report.append(f"     {key}: {value}")
@@ -646,7 +648,7 @@ alias hc-iso >/dev/null 2>&1 && echo "shortcut_alias_works" || echo "shortcut_al
         warnings_count = sum(len(r.warnings or []) for r in self.results)
         if warnings_count > 0:
             report.append(
-                f"   ⚠️  Address {warnings_count} warnings for optimal performance"
+                f"   ⚠️  Address {warnings_count} warnings for optimal performance",
             )
 
         if passed == total:

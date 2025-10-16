@@ -1,5 +1,4 @@
-"""
-Data Loading and Management for Homodyne v2
+"""Data Loading and Management for Homodyne v2
 ==========================================
 
 Comprehensive data loading infrastructure supporting XPCS experimental data
@@ -144,8 +143,7 @@ __features__ = {
 
 
 def get_data_module_info() -> dict:
-    """
-    Get information about data module capabilities.
+    """Get information about data module capabilities.
 
     Returns:
         Dictionary with feature availability and version info
@@ -188,7 +186,7 @@ if HAS_PHI_FILTERING:
             "filter_phi_angles",
             "create_anisotropic_ranges",
             "create_isotropic_ranges",
-        ]
+        ],
     )
 
 if HAS_PREPROCESSING:
@@ -204,7 +202,7 @@ if HAS_PREPROCESSING:
             "PreprocessingConfigurationError",
             "create_default_preprocessing_config",
             "preprocess_xpcs_data",
-        ]
+        ],
     )
 
 if HAS_OPTIMIZATION:
@@ -215,5 +213,5 @@ if HAS_OPTIMIZATION:
             "DatasetInfo",
             "ProcessingStrategy",
             "create_dataset_optimizer",
-        ]
+        ],
     )

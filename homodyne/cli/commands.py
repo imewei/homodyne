@@ -1,5 +1,4 @@
-"""
-Command Dispatcher for Homodyne v2 CLI
+"""Command Dispatcher for Homodyne v2 CLI
 ======================================
 
 Handles command execution and coordination between CLI arguments,
@@ -166,8 +165,7 @@ except ImportError as e:
 
 
 def dispatch_command(args) -> dict[str, Any]:
-    """
-    Dispatch command based on parsed CLI arguments.
+    """Dispatch command based on parsed CLI arguments.
 
     Parameters
     ----------
@@ -215,7 +213,7 @@ def dispatch_command(args) -> dict[str, Any]:
         # Simulated data plotting doesn't need experimental data or optimization
         if plot_sim and not plot_exp and not save_plots:
             logger.info(
-                "Plotting simulated data only (skipping data loading and optimization)"
+                "Plotting simulated data only (skipping data loading and optimization)",
             )
             # Skip data loading for pure simulated data mode
             # Extract config dictionary from ConfigManager
@@ -275,8 +273,7 @@ def dispatch_command(args) -> dict[str, Any]:
 
 
 def _setup_file_logging(args) -> None:
-    """
-    Setup file logging to save analysis logs.
+    """Setup file logging to save analysis logs.
 
     Creates a log file in the output directory to capture the full analysis log.
     """
@@ -322,7 +319,8 @@ def _configure_logging(args) -> None:
     for handler in root_logger.handlers:
         # Only adjust console (StreamHandler), not file handlers
         if isinstance(handler, logging.StreamHandler) and not isinstance(
-            handler, logging.FileHandler
+            handler,
+            logging.FileHandler,
         ):
             if args.quiet:
                 handler.setLevel(logging.ERROR)
@@ -406,7 +404,7 @@ def _get_default_config(args) -> dict[str, Any]:
         },
         "analysis_mode": analysis_mode,
         "experimental_data": {
-            "file_path": str(args.data_file) if args.data_file else None
+            "file_path": str(args.data_file) if args.data_file else None,
         },
         "optimization": {
             "method": args.method,
@@ -465,8 +463,7 @@ def _apply_cli_overrides(config: ConfigManager, args) -> None:
 
 
 def _load_data(args, config: ConfigManager) -> dict[str, Any]:
-    """
-    Load experimental data using XPCSDataLoader.
+    """Load experimental data using XPCSDataLoader.
 
     Uses XPCSDataLoader which properly handles the config format
     (data_folder_path + data_file_name) internally.
@@ -477,7 +474,7 @@ def _load_data(args, config: ConfigManager) -> dict[str, Any]:
     if not HAS_XPCS_LOADER:
         raise RuntimeError(
             "XPCSDataLoader not available. "
-            "Please ensure homodyne.data module is properly installed"
+            "Please ensure homodyne.data module is properly installed",
         )
 
     try:
@@ -492,7 +489,7 @@ def _load_data(args, config: ConfigManager) -> dict[str, Any]:
             if parent_dir == Path.cwd():
                 # File in current directory - be explicit
                 logger.debug(
-                    f"Using current directory for data file: {data_file_path.name}"
+                    f"Using current directory for data file: {data_file_path.name}",
                 )
 
             temp_config = {
@@ -523,7 +520,7 @@ def _load_data(args, config: ConfigManager) -> dict[str, Any]:
                     "Or:\n"
                     "  experimental_data:\n"
                     "    file_path: ./path/to/data/experiment.hdf\n"
-                    "Or use: --data-file path/to/data.hdf"
+                    "Or use: --data-file path/to/data.hdf",
                 )
 
             logger.info("Loading data from configuration")
@@ -550,10 +547,10 @@ def _load_data(args, config: ConfigManager) -> dict[str, Any]:
 
 
 def _apply_angle_filtering_for_optimization(
-    data: dict[str, Any], config: ConfigManager
+    data: dict[str, Any],
+    config: ConfigManager,
 ) -> dict[str, Any]:
-    """
-    Apply angle filtering to data before optimization.
+    """Apply angle filtering to data before optimization.
 
     This function filters phi angles and corresponding C2 data based on the
     phi_filtering configuration before passing data to optimization methods
@@ -621,7 +618,7 @@ def _apply_angle_filtering_for_optimization(
         logger.warning(
             f"Found {len(angles_too_large)} angle(s) with |φ| > 360°: {angles_too_large}. "
             f"This may indicate data loading issues, unit confusion (radians vs degrees), "
-            f"or instrument malfunction. Angles will be normalized to [-180°, 180°] range."
+            f"or instrument malfunction. Angles will be normalized to [-180°, 180°] range.",
         )
 
     # Normalize phi angles to [-180°, 180°] range (flow direction at 0°)
@@ -647,7 +644,7 @@ def _apply_angle_filtering_for_optimization(
     target_ranges = phi_filtering_config.get("target_ranges", [])
     if not target_ranges:
         logger.warning(
-            "Phi filtering enabled but no target_ranges specified, using all angles"
+            "Phi filtering enabled but no target_ranges specified, using all angles",
         )
         # Return data with normalized angles
         normalized_data = data.copy()
@@ -666,11 +663,11 @@ def _apply_angle_filtering_for_optimization(
                 "min_angle": normalized_min,
                 "max_angle": normalized_max,
                 "description": range_spec.get("description", ""),
-            }
+            },
         )
         logger.debug(
             f"Normalized range [{min_angle:.1f}°, {max_angle:.1f}°] → "
-            f"[{normalized_min:.1f}°, {normalized_max:.1f}°]"
+            f"[{normalized_min:.1f}°, {normalized_max:.1f}°]",
         )
     target_ranges = normalized_ranges
 
@@ -691,7 +688,7 @@ def _apply_angle_filtering_for_optimization(
         logger.warning(
             f"Configured angle ranges {target_ranges} do not overlap with "
             f"common XPCS angles {COMMON_XPCS_ANGLES}. Verify your configuration "
-            f"is correct (check for typos in min_angle/max_angle values)."
+            f"is correct (check for typos in min_angle/max_angle values).",
         )
 
     # Create modified config with normalized target_ranges
@@ -703,7 +700,9 @@ def _apply_angle_filtering_for_optimization(
     # Call shared filtering function with performance timing
     start_time = time.perf_counter()
     filtered_indices, filtered_phi_angles, filtered_c2_exp = _apply_angle_filtering(
-        phi_angles, c2_exp, modified_config
+        phi_angles,
+        c2_exp,
+        modified_config,
     )
     elapsed_ms = (time.perf_counter() - start_time) * 1000
     logger.debug(f"Angle filtering completed in {elapsed_ms:.3f}ms")
@@ -719,7 +718,7 @@ def _apply_angle_filtering_for_optimization(
     # Check if all angles matched (no actual filtering)
     if len(filtered_indices) == len(phi_angles):
         logger.debug(
-            f"All {len(phi_angles)} angles matched filter criteria, no reduction"
+            f"All {len(phi_angles)} angles matched filter criteria, no reduction",
         )
         # Return data with normalized angles
         normalized_data = data.copy()
@@ -744,7 +743,7 @@ def _apply_angle_filtering_for_optimization(
     # Log filtering results
     logger.info(
         f"Angle filtering for optimization: {len(filtered_indices)} angles selected "
-        f"from {len(phi_angles)} total angles"
+        f"from {len(phi_angles)} total angles",
     )
     logger.info(f"Selected angles: {filtered_phi_angles}")
 
@@ -792,7 +791,7 @@ def _run_optimization(args, config: ConfigManager, data: dict[str, Any]) -> Any:
 
         optimization_time = time.perf_counter() - start_time
         logger.info(
-            f"✓ {method.upper()} optimization completed in {optimization_time:.3f}s"
+            f"✓ {method.upper()} optimization completed in {optimization_time:.3f}s",
         )
 
         return result
@@ -800,16 +799,19 @@ def _run_optimization(args, config: ConfigManager, data: dict[str, Any]) -> Any:
     except Exception as e:
         optimization_time = time.perf_counter() - start_time
         logger.error(
-            f"{method.upper()} optimization failed after {optimization_time:.3f}s: {e}"
+            f"{method.upper()} optimization failed after {optimization_time:.3f}s: {e}",
         )
         raise
 
 
 def _save_results(
-    args, result: Any, device_config: dict[str, Any], data: dict[str, Any], config: Any
+    args,
+    result: Any,
+    device_config: dict[str, Any],
+    data: dict[str, Any],
+    config: Any,
 ) -> None:
-    """
-    Save optimization results to output directory.
+    """Save optimization results to output directory.
 
     Breaking Change (October 2025)
     -------------------------------
@@ -890,7 +892,7 @@ def _save_results(
         elif args.output_format == "npz":
             # Save numpy arrays
             arrays_to_save = {
-                "results_summary": np.array([results_summary], dtype=object)
+                "results_summary": np.array([results_summary], dtype=object),
             }
             if hasattr(result, "samples_params") and result.samples_params is not None:
                 arrays_to_save["samples_params"] = result.samples_params
@@ -903,10 +905,12 @@ def _save_results(
 
 
 def _handle_plotting(
-    args, result: Any, data: dict[str, Any], config: dict[str, Any] = None
+    args,
+    result: Any,
+    data: dict[str, Any],
+    config: dict[str, Any] = None,
 ) -> None:
-    """
-    Handle plotting options for experimental and simulated data.
+    """Handle plotting options for experimental and simulated data.
 
     Parameters
     ----------
@@ -933,7 +937,7 @@ def _handle_plotting(
     except ImportError:
         logger.warning(
             "Plotting requested but matplotlib not installed. "
-            "Install with: pip install matplotlib"
+            "Install with: pip install matplotlib",
         )
         return
 
@@ -968,7 +972,12 @@ def _handle_plotting(
             phi_angles_str = getattr(args, "phi_angles", None)
 
             _plot_simulated_data(
-                config, contrast, offset, phi_angles_str, plots_dir, data
+                config,
+                contrast,
+                offset,
+                phi_angles_str,
+                plots_dir,
+                data,
             )
             logger.info(f"✓ Simulated data plots saved to: {plots_dir}")
         except Exception as e:
@@ -987,7 +996,10 @@ def _handle_plotting(
         if result is not None and config is not None:
             try:
                 _generate_and_plot_fitted_simulations(
-                    result, data, config, args.output_dir
+                    result,
+                    data,
+                    config,
+                    args.output_dir,
                 )
             except Exception as e:
                 logger.warning(f"Failed to generate fitted simulations: {e}")
@@ -995,10 +1007,11 @@ def _handle_plotting(
 
 
 def _apply_angle_filtering(
-    phi_angles: np.ndarray, c2_exp: np.ndarray, config: dict[str, Any]
+    phi_angles: np.ndarray,
+    c2_exp: np.ndarray,
+    config: dict[str, Any],
 ) -> tuple[list[int], np.ndarray, np.ndarray]:
-    """
-    Core angle filtering logic shared by optimization and plotting.
+    """Core angle filtering logic shared by optimization and plotting.
 
     Filters phi angles and corresponding C2 data based on target_ranges
     specified in configuration. Uses OR logic across ranges: an angle is
@@ -1071,10 +1084,11 @@ def _apply_angle_filtering(
 
 
 def _apply_angle_filtering_for_plot(
-    phi_angles: np.ndarray, c2_exp: np.ndarray, data: dict[str, Any]
+    phi_angles: np.ndarray,
+    c2_exp: np.ndarray,
+    data: dict[str, Any],
 ) -> tuple[list[int], np.ndarray, np.ndarray]:
-    """
-    Apply angle filtering to select specific angles for plotting.
+    """Apply angle filtering to select specific angles for plotting.
 
     This is a wrapper around _apply_angle_filtering() that extracts the
     configuration from the data dictionary and adds plot-specific logging.
@@ -1110,7 +1124,9 @@ def _apply_angle_filtering_for_plot(
 
     # Call shared filtering function
     filtered_indices, filtered_phi_angles, filtered_c2_exp = _apply_angle_filtering(
-        phi_angles, c2_exp, config
+        phi_angles,
+        c2_exp,
+        config,
     )
 
     # Add plot-specific logging
@@ -1120,7 +1136,7 @@ def _apply_angle_filtering_for_plot(
         logger.debug("Phi filtering not enabled, plotting all angles")
     elif not phi_filtering_config.get("target_ranges", []):
         logger.warning(
-            "Phi filtering enabled but no target_ranges specified, plotting all angles"
+            "Phi filtering enabled but no target_ranges specified, plotting all angles",
         )
     elif not filtered_indices or len(filtered_indices) == len(phi_angles):
         if len(filtered_indices) == 0:
@@ -1129,7 +1145,7 @@ def _apply_angle_filtering_for_plot(
     else:
         logger.info(
             f"Angle filtering applied: {len(filtered_indices)} angles selected "
-            f"from {len(phi_angles)} total angles"
+            f"from {len(phi_angles)} total angles",
         )
 
     return filtered_indices, filtered_phi_angles, filtered_c2_exp
@@ -1181,7 +1197,7 @@ def _plot_experimental_data(data: dict[str, Any], plots_dir) -> None:
     c2_exp = filtered_c2_exp
 
     logger.info(
-        f"Plotting {len(filtered_indices)} angles after filtering: {filtered_phi_angles}"
+        f"Plotting {len(filtered_indices)} angles after filtering: {filtered_phi_angles}",
     )
 
     # Handle different data shapes
@@ -1256,7 +1272,7 @@ def _plot_experimental_data(data: dict[str, Any], plots_dir) -> None:
         # Get time values for x-axis if available
         if t1 is not None:
             time_diagonal = np.diag(
-                t1
+                t1,
             )  # Extract diagonal of t1 (which equals t2 on diagonal)
         else:
             time_diagonal = np.arange(c2_exp.shape[-1])
@@ -1272,7 +1288,9 @@ def _plot_experimental_data(data: dict[str, Any], plots_dir) -> None:
         ax.grid(True, alpha=0.3)
         plt.tight_layout()
         plt.savefig(
-            plots_dir / "experimental_data_diagonal.png", dpi=150, bbox_inches="tight"
+            plots_dir / "experimental_data_diagonal.png",
+            dpi=150,
+            bbox_inches="tight",
         )
         plt.close()
 
@@ -1280,7 +1298,11 @@ def _plot_experimental_data(data: dict[str, Any], plots_dir) -> None:
         # 2D data: single correlation matrix
         fig, ax = plt.subplots(figsize=(10, 8))
         im = ax.imshow(
-            c2_exp, aspect="equal", cmap="viridis", origin="lower", extent=extent
+            c2_exp,
+            aspect="equal",
+            cmap="viridis",
+            origin="lower",
+            extent=extent,
         )
         plt.colorbar(im, ax=ax, label="C₂(t₁,t₂)", shrink=0.8)
         ax.set_xlabel(xlabel)
@@ -1331,7 +1353,7 @@ def _plot_simulated_data(
         contrast = 0.5
 
     logger.info(
-        f"Generating simulated data plots (contrast={contrast:.3f}, offset={offset:.3f})"
+        f"Generating simulated data plots (contrast={contrast:.3f}, offset={offset:.3f})",
     )
 
     # Determine analysis mode
@@ -1361,7 +1383,7 @@ def _plot_simulated_data(
                 params_dict.get("D0", 100.0),
                 params_dict.get("alpha", -0.5),
                 params_dict.get("D_offset", 0.0),
-            ]
+            ],
         )
     else:
         # Laminar flow: 7 parameters
@@ -1375,11 +1397,11 @@ def _plot_simulated_data(
                 params_dict.get("beta", 0.5),
                 params_dict.get("gamma_dot_offset", 0.0),
                 params_dict.get("phi_0", 0.0),
-            ]
+            ],
         )
 
     logger.debug(
-        f"Using parameters: {dict(zip(model.parameter_names, params, strict=False))}"
+        f"Using parameters: {dict(zip(model.parameter_names, params, strict=False))}",
     )
 
     # Determine phi angles for theoretical simulation plots
@@ -1395,7 +1417,7 @@ def _plot_simulated_data(
         phi_degrees = np.array([float(x.strip()) for x in phi_angles_str.split(",")])
         phi = phi_degrees
         logger.info(
-            f"Using CLI-provided phi angles for theoretical plots: {phi_degrees}"
+            f"Using CLI-provided phi angles for theoretical plots: {phi_degrees}",
         )
     elif data is not None and "phi_angles_list" in data:
         # Use experimental data's phi angles
@@ -1403,11 +1425,11 @@ def _plot_simulated_data(
         phi_degrees = np.array(data["phi_angles_list"])
         phi = phi_degrees
         logger.info(
-            f"Using experimental data phi angles for theoretical plots: {phi_degrees}"
+            f"Using experimental data phi angles for theoretical plots: {phi_degrees}",
         )
         logger.warning(
             "Theoretical plots using potentially filtered phi angles from experimental data. "
-            "To use all angles, disable phi_filtering in config or provide --phi-angles explicitly."
+            "To use all angles, disable phi_filtering in config or provide --phi-angles explicitly.",
         )
     else:
         # Default: 8 evenly spaced angles from 0 to 180 degrees
@@ -1436,13 +1458,13 @@ def _plot_simulated_data(
     t1_grid, t2_grid = np.meshgrid(t_vals, t_vals, indexing="ij")
 
     logger.debug(
-        f"Simulated data time grid: dt={dt}, start_frame={start_frame}, end_frame={end_frame}"
+        f"Simulated data time grid: dt={dt}, start_frame={start_frame}, end_frame={end_frame}",
     )
     logger.debug(
-        f"Time range: [{float(t_vals[0]):.4f}, {float(t_vals[-1]):.2f}] seconds with {n_time_points} points"
+        f"Time range: [{float(t_vals[0]):.4f}, {float(t_vals[-1]):.2f}] seconds with {n_time_points} points",
     )
     logger.debug(
-        f"Time spacing verification: t[1]-t[0]={float(t_vals[1] - t_vals[0]):.6f} (should equal dt={dt})"
+        f"Time spacing verification: t[1]-t[0]={float(t_vals[1] - t_vals[0]):.6f} (should equal dt={dt})",
     )
 
     # Get wavevector_q and stator_rotor_gap from correct config sections
@@ -1456,10 +1478,10 @@ def _plot_simulated_data(
     L_microns = L_angstroms / 10000.0
 
     logger.info(
-        f"Generating theoretical C₂ with q={q:.6f} Å⁻¹, L={L_microns:.1f} μm ({L_angstroms:.0f} Å)"
+        f"Generating theoretical C₂ with q={q:.6f} Å⁻¹, L={L_microns:.1f} μm ({L_angstroms:.0f} Å)",
     )
     logger.debug(
-        f"Physics parameters: q={q}, L={L_angstroms} (Angstroms - used by physics code)"
+        f"Physics parameters: q={q}, L={L_angstroms} (Angstroms - used by physics code)",
     )
 
     # Generate simulated C₂ for each phi angle
@@ -1487,7 +1509,7 @@ def _plot_simulated_data(
         # Extract the 2D array (remove phi dimension)
         c2_result = np.array(c2_phi[0])
         logger.debug(
-            f"  C₂ shape: {c2_result.shape}, range: [{c2_result.min():.4f}, {c2_result.max():.4f}]"
+            f"  C₂ shape: {c2_result.shape}, range: [{c2_result.min():.4f}, {c2_result.max():.4f}]",
         )
         c2_simulated.append(c2_result)
 
@@ -1504,7 +1526,7 @@ def _plot_simulated_data(
     # Save individual C₂ heatmap for EACH phi angle
     n_phi = len(phi)
     logger.info(
-        f"Generating individual simulated C₂ heatmaps for {n_phi} phi angles..."
+        f"Generating individual simulated C₂ heatmaps for {n_phi} phi angles...",
     )
 
     for idx in range(n_phi):
@@ -1581,7 +1603,11 @@ def _plot_simulated_data(
     for idx in range(min(10, len(phi))):
         diagonal = np.diag(c2_simulated[idx])
         ax.plot(
-            t_vals, diagonal, label=f"φ={phi_degrees[idx]:.1f}°", alpha=0.7, linewidth=2
+            t_vals,
+            diagonal,
+            label=f"φ={phi_degrees[idx]:.1f}°",
+            alpha=0.7,
+            linewidth=2,
         )
 
     ax.set_xlabel("Time t (s)", fontsize=12)
@@ -1663,7 +1689,7 @@ def _generate_and_plot_fitted_simulations(
         params = jnp.array(physical_params)
 
     logger.info(
-        f"Using fitted parameters: contrast={contrast:.4f}, offset={offset:.4f}"
+        f"Using fitted parameters: contrast={contrast:.4f}, offset={offset:.4f}",
     )
     logger.debug(f"Physical parameters: {params}")
 
@@ -1762,13 +1788,10 @@ def _generate_and_plot_fitted_simulations(
         json.dump(sim_config, f, indent=2)
     logger.info(f"✓ Saved simulation config: {config_file}")
 
-    # Compute global color scale for consistency
-    vmin = c2_fitted.min()
-    vmax = c2_fitted.max()
-
     # Generate individual plots for each phi angle
+    # Note: Using auto-scaling per plot for optimal visualization
     logger.info(
-        f"Generating individual fitted C₂ plots for {len(phi_angles_list)} angles..."
+        f"Generating individual fitted C₂ plots for {len(phi_angles_list)} angles...",
     )
 
     # Get time extent for plotting
@@ -1800,7 +1823,9 @@ def _generate_and_plot_fitted_simulations(
         ax.set_xlabel(xlabel, fontsize=11)
         ax.set_ylabel(ylabel, fontsize=11)
         ax.set_title(
-            f"Fitted C₂(t₁, t₂) at φ={phi_deg:.1f}°", fontsize=13, fontweight="bold"
+            f"Fitted C₂(t₁, t₂) at φ={phi_deg:.1f}°",
+            fontsize=13,
+            fontweight="bold",
         )
 
         # Add colorbar
@@ -1897,8 +1922,7 @@ def _plot_fit_comparison(result: Any, data: dict[str, Any], plots_dir) -> None:
 
 
 def _extract_nlsq_metadata(config: Any, data: dict[str, Any]) -> dict[str, Any]:
-    """
-    Extract required metadata for NLSQ theoretical fit computation.
+    """Extract required metadata for NLSQ theoretical fit computation.
 
     Implements multi-level fallback hierarchy for robust metadata extraction:
     - L (characteristic length): stator_rotor_gap → sample_detector_distance → default
@@ -1951,12 +1975,12 @@ def _extract_nlsq_metadata(config: Any, data: dict[str, Any]) -> dict[str, Any]:
             elif "sample_detector_distance" in exp_config:
                 metadata["L"] = float(exp_config["sample_detector_distance"])
                 logger.debug(
-                    f"Using sample_detector_distance L = {metadata['L']:.1f} Å"
+                    f"Using sample_detector_distance L = {metadata['L']:.1f} Å",
                 )
             else:
                 metadata["L"] = 2000000.0  # Default: 200 µm
                 logger.warning(
-                    f"No L parameter found, using default L = {metadata['L']:.1f} Å"
+                    f"No L parameter found, using default L = {metadata['L']:.1f} Å",
                 )
     except (AttributeError, TypeError, ValueError) as e:
         metadata["L"] = 2000000.0
@@ -1998,8 +2022,7 @@ def _extract_nlsq_metadata(config: Any, data: dict[str, Any]) -> dict[str, Any]:
 
 
 def _prepare_parameter_data(result: Any, analysis_mode: str) -> dict[str, Any]:
-    """
-    Prepare parameter data dictionary for JSON saving.
+    """Prepare parameter data dictionary for JSON saving.
 
     Extracts parameter values and uncertainties from OptimizationResult and
     organizes them by name according to the analysis mode.
@@ -2055,10 +2078,11 @@ def _prepare_parameter_data(result: Any, analysis_mode: str) -> dict[str, Any]:
 
 
 def _compute_nlsq_fits(
-    result: Any, data: dict[str, Any], metadata: dict[str, Any]
+    result: Any,
+    data: dict[str, Any],
+    metadata: dict[str, Any],
 ) -> dict[str, Any]:
-    """
-    Compute theoretical fits with per-angle least squares scaling.
+    """Compute theoretical fits with per-angle least squares scaling.
 
     Generates theoretical correlation functions using optimized parameters,
     then applies per-angle scaling (contrast, offset) via least squares fitting
@@ -2114,7 +2138,7 @@ def _compute_nlsq_fits(
         raise ValueError("q (wavevector) is required but was not found")
 
     logger.debug(
-        f"Computing theoretical fits for {len(phi_angles)} angles using L={L:.1f} Å, q={q:.6f} Å⁻¹"
+        f"Computing theoretical fits for {len(phi_angles)} angles using L={L:.1f} Å, q={q:.6f} Å⁻¹",
     )
 
     # Sequential per-angle computation
@@ -2162,7 +2186,7 @@ def _compute_nlsq_fits(
         per_angle_scaling.append([contrast_fit, offset_fit])
 
         logger.debug(
-            f"Angle {phi_angle:.1f}°: contrast={contrast_fit:.3f}, offset={offset_fit:.3f}"
+            f"Angle {phi_angle:.1f}°: contrast={contrast_fit:.3f}, offset={offset_fit:.3f}",
         )
 
     # Stack arrays
@@ -2179,7 +2203,7 @@ def _compute_nlsq_fits(
     residuals = c2_exp - c2_theoretical_scaled
 
     logger.info(
-        f"Computed theoretical fits for {len(phi_angles)} angles (sequential computation)"
+        f"Computed theoretical fits for {len(phi_angles)} angles (sequential computation)",
     )
 
     return {
@@ -2196,8 +2220,7 @@ def _save_nlsq_json_files(
     convergence_dict: dict[str, Any],
     output_dir: Path,
 ) -> None:
-    """
-    Save 3 JSON files: parameters, analysis results, convergence metrics.
+    """Save 3 JSON files: parameters, analysis results, convergence metrics.
 
     Parameters
     ----------
@@ -2256,8 +2279,7 @@ def _save_nlsq_npz_file(
     q: float,
     output_dir: Path,
 ) -> None:
-    """
-    Save NPZ file with 10 arrays: experimental + theoretical + residuals + coordinates.
+    """Save NPZ file with 10 arrays: experimental + theoretical + residuals + coordinates.
 
     Parameters
     ----------
@@ -2318,10 +2340,12 @@ def _save_nlsq_npz_file(
 
 
 def save_nlsq_results(
-    result: Any, data: dict[str, Any], config: Any, output_dir: Path
+    result: Any,
+    data: dict[str, Any],
+    config: Any,
+    output_dir: Path,
 ) -> None:
-    """
-    Save complete NLSQ optimization results to structured directory.
+    """Save complete NLSQ optimization results to structured directory.
 
     Main orchestrator function that coordinates all helper functions to save:
     - parameters.json: Parameter values and uncertainties
@@ -2437,7 +2461,10 @@ def save_nlsq_results(
     # Step 6: Save JSON files
     logger.info("Saving JSON files (parameters, analysis, convergence)")
     _save_nlsq_json_files(
-        param_dict_complete, analysis_dict, convergence_dict, nlsq_dir
+        param_dict_complete,
+        analysis_dict,
+        convergence_dict,
+        nlsq_dir,
     )
 
     # Step 7: Compute normalized residuals
@@ -2499,8 +2526,7 @@ def generate_nlsq_plots(
     t2: np.ndarray,
     output_dir: Path,
 ) -> None:
-    """
-    Generate 3-panel heatmap plots for NLSQ fit visualization.
+    """Generate 3-panel heatmap plots for NLSQ fit visualization.
 
     Creates publication-quality PNG plots showing experimental data,
     theoretical fit, and residuals side-by-side for each scattering angle.

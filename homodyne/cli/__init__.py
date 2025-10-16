@@ -1,5 +1,4 @@
-"""
-Command Line Interface for Homodyne v2
+"""Command Line Interface for Homodyne v2
 ======================================
 
 Simplified CLI for JAX-first homodyne scattering analysis.

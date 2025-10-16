@@ -1,5 +1,4 @@
-"""
-Dataset Size Optimization for Homodyne v2
+"""Dataset Size Optimization for Homodyne v2
 ==========================================
 
 Memory-efficient data processing strategies for different dataset sizes.
@@ -71,8 +70,7 @@ class ProcessingStrategy:
 
 
 class DatasetOptimizer:
-    """
-    Dataset size-aware optimization for VI+JAX and MCMC+JAX.
+    """Dataset size-aware optimization for VI+JAX and MCMC+JAX.
 
     Provides memory-efficient processing strategies based on dataset size:
     - Small (<1M): In-memory processing with full JAX acceleration
@@ -86,8 +84,7 @@ class DatasetOptimizer:
         enable_compression: bool = True,
         max_workers: int = None,
     ):
-        """
-        Initialize dataset optimizer.
+        """Initialize dataset optimizer.
 
         Args:
             memory_limit_mb: Maximum memory usage in MB
@@ -107,10 +104,11 @@ class DatasetOptimizer:
         logger.info(f"  Workers: {self.max_workers}")
 
     def analyze_dataset(
-        self, data: np.ndarray, sigma: np.ndarray | None = None
+        self,
+        data: np.ndarray,
+        sigma: np.ndarray | None = None,
     ) -> DatasetInfo:
-        """
-        Analyze dataset characteristics and recommend processing strategy.
+        """Analyze dataset characteristics and recommend processing strategy.
 
         Args:
             data: Primary data array
@@ -164,10 +162,11 @@ class DatasetOptimizer:
         return dataset_info
 
     def get_processing_strategy(
-        self, dataset_info: DatasetInfo, method: str = "vi"
+        self,
+        dataset_info: DatasetInfo,
+        method: str = "vi",
     ) -> ProcessingStrategy:
-        """
-        Get optimized processing strategy for specific method.
+        """Get optimized processing strategy for specific method.
 
         Args:
             dataset_info: Dataset analysis results
@@ -249,8 +248,7 @@ class DatasetOptimizer:
         phi: np.ndarray,
         chunk_size: int,
     ) -> Iterator[tuple[np.ndarray, ...]]:
-        """
-        Create memory-efficient chunked iterator for large datasets.
+        """Create memory-efficient chunked iterator for large datasets.
 
         Args:
             data, sigma, t1, t2, phi: Input arrays
@@ -263,7 +261,7 @@ class DatasetOptimizer:
         n_chunks = (n_data + chunk_size - 1) // chunk_size
 
         logger.info(
-            f"Creating chunked iterator: {n_chunks} chunks of {chunk_size:,} points"
+            f"Creating chunked iterator: {n_chunks} chunks of {chunk_size:,} points",
         )
 
         for i in range(n_chunks):
@@ -301,8 +299,7 @@ class DatasetOptimizer:
         phi: np.ndarray,
         **kwargs,
     ) -> dict[str, Any]:
-        """
-        Optimize data processing specifically for VI+JAX.
+        """Optimize data processing specifically for VI+JAX.
 
         Args:
             data, sigma, t1, t2, phi: Input arrays
@@ -332,7 +329,12 @@ class DatasetOptimizer:
         if dataset_info.category == "large":
             start_time = time.time()
             optimization_config["chunked_iterator"] = self.create_chunked_iterator(
-                data, sigma, t1, t2, phi, strategy.chunk_size
+                data,
+                sigma,
+                t1,
+                t2,
+                phi,
+                strategy.chunk_size,
             )
             optimization_config["preprocessing_time"] = time.time() - start_time
 
@@ -348,8 +350,7 @@ class DatasetOptimizer:
         phi: np.ndarray,
         **kwargs,
     ) -> dict[str, Any]:
-        """
-        Optimize data processing specifically for MCMC+JAX.
+        """Optimize data processing specifically for MCMC+JAX.
 
         Args:
             data, sigma, t1, t2, phi: Input arrays
@@ -379,7 +380,12 @@ class DatasetOptimizer:
         if dataset_info.category in ["medium", "large"]:
             start_time = time.time()
             optimization_config["chunked_iterator"] = self.create_chunked_iterator(
-                data, sigma, t1, t2, phi, strategy.chunk_size
+                data,
+                sigma,
+                t1,
+                t2,
+                phi,
+                strategy.chunk_size,
             )
             optimization_config["preprocessing_time"] = time.time() - start_time
 
@@ -395,8 +401,7 @@ class DatasetOptimizer:
         phi: np.ndarray,
         **kwargs,
     ) -> dict[str, Any]:
-        """
-        Optimize data processing specifically for LSQ method.
+        """Optimize data processing specifically for LSQ method.
 
         LSQ uses intelligent correlation sampling for large datasets
         to maintain performance while achieving accurate results.
@@ -453,16 +458,17 @@ class DatasetOptimizer:
 
             logger.info(
                 f"LSQ optimization: Using {sampling_config['target_samples']:,} samples "
-                f"from {dataset_info.size:,} total points"
+                f"from {dataset_info.size:,} total points",
             )
 
         return optimization_config
 
     def estimate_processing_time(
-        self, dataset_info: DatasetInfo, method: str = "vi"
+        self,
+        dataset_info: DatasetInfo,
+        method: str = "vi",
     ) -> dict[str, float]:
-        """
-        Estimate processing time for different methods.
+        """Estimate processing time for different methods.
 
         Args:
             dataset_info: Dataset analysis results
@@ -500,7 +506,9 @@ class DatasetOptimizer:
         }
 
     def _calculate_memory_usage(
-        self, data: np.ndarray, sigma: np.ndarray | None = None
+        self,
+        data: np.ndarray,
+        sigma: np.ndarray | None = None,
     ) -> float:
         """Calculate memory usage in MB."""
         memory_bytes = data.nbytes
@@ -540,8 +548,7 @@ def optimize_for_method(
     method: str = "vi",
     **kwargs,
 ) -> dict[str, Any]:
-    """
-    One-shot optimization for specific method.
+    """One-shot optimization for specific method.
 
     Args:
         data, sigma, t1, t2, phi: Input arrays
@@ -565,8 +572,7 @@ def optimize_for_method(
 
 
 class AdvancedDatasetOptimizer:
-    """
-    Advanced dataset optimizer that builds upon DatasetOptimizer with
+    """Advanced dataset optimizer that builds upon DatasetOptimizer with
     performance engine integration, memory-mapped I/O, and intelligent caching.
 
     This class extends the basic optimization.py with advanced features:
@@ -583,8 +589,7 @@ class AdvancedDatasetOptimizer:
         performance_engine: Any | None = None,
         memory_manager: Any | None = None,
     ):
-        """
-        Initialize advanced dataset optimizer.
+        """Initialize advanced dataset optimizer.
 
         Args:
             config: Configuration dictionary with performance settings
@@ -617,17 +622,19 @@ class AdvancedDatasetOptimizer:
 
         # Advanced optimization features
         self._prefetch_enabled = self.config.get("advanced_features", {}).get(
-            "prefetching", True
+            "prefetching",
+            True,
         )
         self._background_optimization = self.config.get("advanced_features", {}).get(
-            "background_optimization", True
+            "background_optimization",
+            True,
         )
 
         # Performance tracking
         self._optimization_history = deque(maxlen=100)
 
         logger.info(
-            "Advanced dataset optimizer initialized with performance engine integration"
+            "Advanced dataset optimizer initialized with performance engine integration",
         )
 
     def _should_init_performance_engine(self) -> bool:
@@ -680,8 +687,7 @@ class AdvancedDatasetOptimizer:
         method: str = "vi",
         **kwargs,
     ) -> dict[str, Any]:
-        """
-        Optimize processing for massive datasets with advanced features.
+        """Optimize processing for massive datasets with advanced features.
 
         This method provides advanced optimization beyond the basic optimizer:
         - Memory-mapped I/O for datasets too large to fit in memory
@@ -704,11 +710,21 @@ class AdvancedDatasetOptimizer:
         # Get basic optimization as foundation
         if method.lower() == "vi":
             basic_config = self.base_optimizer.optimize_for_vi_jax(
-                data, sigma, t1, t2, phi, **kwargs
+                data,
+                sigma,
+                t1,
+                t2,
+                phi,
+                **kwargs,
             )
         else:
             basic_config = self.base_optimizer.optimize_for_mcmc_jax(
-                data, sigma, t1, t2, phi, **kwargs
+                data,
+                sigma,
+                t1,
+                t2,
+                phi,
+                **kwargs,
             )
 
         # Enhance with advanced features
@@ -739,7 +755,7 @@ class AdvancedDatasetOptimizer:
 
             logger.info(
                 f"Memory optimization applied: {workload_type} workload, "
-                f"{dataset_size_gb:.1f}GB dataset"
+                f"{dataset_size_gb:.1f}GB dataset",
             )
 
         # Performance engine optimization
@@ -753,10 +769,12 @@ class AdvancedDatasetOptimizer:
                     chunk_info = None
                     if basic_config["dataset_info"].category in ["medium", "large"]:
                         chunk_size = self.performance_engine.chunker.calculate_optimal_chunk_size(
-                            len(data_keys), data_complexity=1.2
+                            len(data_keys),
+                            data_complexity=1.2,
                         )
                         chunk_info = self.performance_engine.chunker.create_chunk_plan(
-                            len(data_keys), chunk_size
+                            len(data_keys),
+                            chunk_size,
                         )
 
                     advanced_config["advanced_features"]["chunk_plan"] = chunk_info
@@ -767,13 +785,15 @@ class AdvancedDatasetOptimizer:
                     # Schedule prefetching if enabled
                     if self._prefetch_enabled and len(data_keys) > 50:
                         prefetch_future = self.performance_engine.prefetch_data(
-                            hdf_path, data_keys[: len(data_keys) // 2], priority=3
+                            hdf_path,
+                            data_keys[: len(data_keys) // 2],
+                            priority=3,
                         )
                         advanced_config["advanced_features"][
                             "prefetch_future"
                         ] = prefetch_future
                         logger.info(
-                            f"Scheduled prefetching for {len(data_keys) // 2} correlation matrices"
+                            f"Scheduled prefetching for {len(data_keys) // 2} correlation matrices",
                         )
                 else:
                     advanced_config["advanced_features"][
@@ -791,7 +811,9 @@ class AdvancedDatasetOptimizer:
         # Advanced chunking strategy
         if basic_config["dataset_info"].category in ["medium", "large"]:
             advanced_chunking_config = self._create_advanced_chunking_config(
-                basic_config["dataset_info"], method, **kwargs
+                basic_config["dataset_info"],
+                method,
+                **kwargs,
             )
             advanced_config["advanced_features"]["chunking"] = advanced_chunking_config
 
@@ -812,7 +834,7 @@ class AdvancedDatasetOptimizer:
                 "optimization_time": optimization_time,
                 "method": method,
                 "success": True,
-            }
+            },
         )
 
         advanced_config["performance_metrics"] = performance_metrics
@@ -823,13 +845,16 @@ class AdvancedDatasetOptimizer:
 
         logger.info(
             f"Advanced optimization completed in {optimization_time * 1000:.1f}ms: "
-            f"{basic_config['dataset_info'].category} {method.upper()} dataset"
+            f"{basic_config['dataset_info'].category} {method.upper()} dataset",
         )
 
         return advanced_config
 
     def _create_advanced_chunking_config(
-        self, dataset_info: "DatasetInfo", method: str, **kwargs
+        self,
+        dataset_info: "DatasetInfo",
+        method: str,
+        **kwargs,
     ) -> dict[str, Any]:
         """Create advanced chunking configuration beyond basic optimization."""
         chunking_config = {
@@ -847,7 +872,7 @@ class AdvancedDatasetOptimizer:
                     "chunk_overlap": 0.1,  # 10% overlap for VI stability
                     "dynamic_sizing": True,
                     "gpu_memory_optimization": JAX_AVAILABLE,
-                }
+                },
             )
         elif method.lower() == "mcmc":
             chunking_config.update(
@@ -855,14 +880,14 @@ class AdvancedDatasetOptimizer:
                     "chunk_overlap": 0.05,  # 5% overlap for MCMC
                     "conservative_sizing": True,
                     "chain_continuity_preservation": True,
-                }
+                },
             )
 
         # Add performance-based adaptations
         if len(self._optimization_history) > 5:
             recent_performance = self._optimization_history[-5:]
             avg_time = sum(h["optimization_time"] for h in recent_performance) / len(
-                recent_performance
+                recent_performance,
             )
 
             if avg_time > 10.0:  # Slow optimization
@@ -888,7 +913,7 @@ class AdvancedDatasetOptimizer:
             if method == "vi" and dataset_size > 1000000:
                 # VI on large datasets often followed by MCMC refinement
                 logger.debug(
-                    "Scheduling background optimization for potential MCMC follow-up"
+                    "Scheduling background optimization for potential MCMC follow-up",
                 )
 
         except Exception as e:
@@ -928,7 +953,7 @@ class AdvancedDatasetOptimizer:
 
             stats["recent_performance"] = {
                 "avg_optimization_time_ms": np.mean(
-                    [h["optimization_time"] * 1000 for h in recent_optimizations]
+                    [h["optimization_time"] * 1000 for h in recent_optimizations],
                 ),
                 "success_rate": sum(h["success"] for h in recent_optimizations)
                 / len(recent_optimizations),
@@ -970,7 +995,8 @@ class AdvancedDatasetOptimizer:
 
 # Enhanced convenience functions that use advanced optimization
 def create_advanced_dataset_optimizer(
-    config: dict[str, Any] | None = None, **kwargs
+    config: dict[str, Any] | None = None,
+    **kwargs,
 ) -> AdvancedDatasetOptimizer:
     """Create advanced dataset optimizer with performance engine integration."""
     return AdvancedDatasetOptimizer(config=config, **kwargs)
@@ -987,8 +1013,7 @@ def optimize_for_method_advanced(
     config: dict[str, Any] | None = None,
     **kwargs,
 ) -> dict[str, Any]:
-    """
-    Advanced one-shot optimization with performance engine integration.
+    """Advanced one-shot optimization with performance engine integration.
 
     This function provides all the advanced features beyond basic optimization:
     - Memory-mapped I/O for massive datasets
@@ -1008,7 +1033,14 @@ def optimize_for_method_advanced(
     """
     with create_advanced_dataset_optimizer(config) as optimizer:
         return optimizer.optimize_massive_dataset(
-            data, sigma, t1, t2, phi, hdf_path=hdf_path, method=method, **kwargs
+            data,
+            sigma,
+            t1,
+            t2,
+            phi,
+            hdf_path=hdf_path,
+            method=method,
+            **kwargs,
         )
 
 

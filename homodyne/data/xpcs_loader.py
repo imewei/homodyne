@@ -1,5 +1,4 @@
-"""
-XPCS Data Loader for Homodyne v2
+"""XPCS Data Loader for Homodyne v2
 ================================
 
 Enhanced XPCS data loader supporting both APS (old) and APS-U (new) HDF5 formats
@@ -123,24 +122,17 @@ logger = get_logger(__name__)
 class XPCSDataFormatError(Exception):
     """Raised when XPCS data format is not recognized or invalid."""
 
-    pass
-
 
 class XPCSDependencyError(Exception):
     """Raised when required dependencies are not available."""
-
-    pass
 
 
 class XPCSConfigurationError(Exception):
     """Raised when configuration is invalid or missing required parameters."""
 
-    pass
-
 
 def load_xpcs_config(config_path: str | Path) -> dict[str, Any]:
-    """
-    Load XPCS configuration from YAML or JSON file.
+    """Load XPCS configuration from YAML or JSON file.
 
     Primary format: YAML
     JSON support: Automatically converted to YAML format
@@ -163,7 +155,7 @@ def load_xpcs_config(config_path: str | Path) -> dict[str, Any]:
         if config_path.suffix.lower() in [".yaml", ".yml"]:
             if not HAS_YAML:
                 raise XPCSDependencyError(
-                    "PyYAML required for YAML configuration files"
+                    "PyYAML required for YAML configuration files",
                 )
 
             # Native YAML loading
@@ -187,18 +179,17 @@ def load_xpcs_config(config_path: str | Path) -> dict[str, Any]:
         else:
             raise XPCSConfigurationError(
                 f"Unsupported configuration format: {config_path.suffix}. "
-                f"Supported formats: .yaml, .yml, .json"
+                f"Supported formats: .yaml, .yml, .json",
             )
 
     except (yaml.YAMLError, json.JSONDecodeError) as e:
         raise XPCSConfigurationError(
-            f"Failed to parse configuration file {config_path}: {e}"
+            f"Failed to parse configuration file {config_path}: {e}",
         ) from e
 
 
 class XPCSDataLoader:
-    """
-    Enhanced XPCS data loader for Homodyne v2.
+    """Enhanced XPCS data loader for Homodyne v2.
 
     Supports both APS (old) and APS-U (new) formats with YAML-first configuration,
     intelligent caching, and JAX integration.
@@ -221,8 +212,7 @@ class XPCSDataLoader:
         configure_logging: bool = True,
         generate_quality_reports: bool = False,  # Only generate reports when explicitly requested
     ):
-        """
-        Initialize XPCS data loader with YAML-first configuration.
+        """Initialize XPCS data loader with YAML-first configuration.
 
         Args:
             config_path: Path to YAML or JSON configuration file
@@ -265,7 +255,7 @@ class XPCSDataLoader:
         self._validate_configuration()
 
         logger.info(
-            f"XPCS data loader initialized with {len(self.config)} config sections"
+            f"XPCS data loader initialized with {len(self.config)} config sections",
         )
 
     def _check_dependencies(self) -> None:
@@ -280,7 +270,7 @@ class XPCSDataLoader:
         if missing_deps:
             error_msg = f"Missing required dependencies: {', '.join(missing_deps)}. "
             error_msg += "Please install them with: pip install " + " ".join(
-                missing_deps
+                missing_deps,
             )
             logger.error(error_msg)
             raise XPCSDependencyError(error_msg)
@@ -333,7 +323,7 @@ class XPCSDataLoader:
 
         if not HAS_PERFORMANCE_ENGINE:
             logger.warning(
-                "Performance engine not available - falling back to basic optimization"
+                "Performance engine not available - falling back to basic optimization",
             )
             return
 
@@ -371,18 +361,19 @@ class XPCSDataLoader:
         for key in required_exp_data:
             if key not in self.exp_config:
                 raise XPCSConfigurationError(
-                    f"Missing required experimental_data parameter: {key}"
+                    f"Missing required experimental_data parameter: {key}",
                 )
 
         for key in required_analyzer:
             if key not in self.analyzer_config:
                 raise XPCSConfigurationError(
-                    f"Missing required analyzer_parameters parameter: {key}"
+                    f"Missing required analyzer_parameters parameter: {key}",
                 )
 
         # Validate file existence
         data_file_path = os.path.join(
-            self.exp_config["data_folder_path"], self.exp_config["data_file_name"]
+            self.exp_config["data_folder_path"],
+            self.exp_config["data_file_name"],
         )
 
         if not os.path.exists(data_file_path):
@@ -404,10 +395,10 @@ class XPCSDataLoader:
         }
 
     def _convert_arrays_to_target_format(
-        self, data: dict[str, NDArray]
+        self,
+        data: dict[str, NDArray],
     ) -> dict[str, Any]:
-        """
-        Convert arrays to target format based on configuration.
+        """Convert arrays to target format based on configuration.
 
         Args:
             data: Dictionary with numpy arrays
@@ -438,8 +429,7 @@ class XPCSDataLoader:
 
     @log_performance(threshold=0.5)
     def load_experimental_data(self) -> dict[str, Any]:
-        """
-        Load experimental data with priority: cache NPZ → raw HDF → error.
+        """Load experimental data with priority: cache NPZ → raw HDF → error.
 
         Returns:
             Dictionary containing:
@@ -460,7 +450,8 @@ class XPCSDataLoader:
 
         # Construct cache filename
         cache_template = self.exp_config.get(
-            "cache_filename_template", "cached_c2_frames_{start_frame}_{end_frame}.npz"
+            "cache_filename_template",
+            "cached_c2_frames_{start_frame}_{end_frame}.npz",
         )
 
         # Get wavevector_q for cache filename (selective caching support)
@@ -468,7 +459,9 @@ class XPCSDataLoader:
         wavevector_q = scattering_config.get("wavevector_q", 0.0054)
 
         cache_filename = cache_template.format(
-            start_frame=start_frame, end_frame=end_frame, wavevector_q=wavevector_q
+            start_frame=start_frame,
+            end_frame=end_frame,
+            wavevector_q=wavevector_q,
         )
         cache_path = os.path.join(cache_folder, cache_filename)
 
@@ -484,7 +477,7 @@ class XPCSDataLoader:
             hdf_path = os.path.join(data_folder, data_file)
             if not os.path.exists(hdf_path):
                 raise FileNotFoundError(
-                    f"Neither cache file {cache_path} nor HDF file {hdf_path} exists"
+                    f"Neither cache file {cache_path} nor HDF file {hdf_path} exists",
                 )
 
             logger.info(f"Loading raw data from: {hdf_path}")
@@ -505,7 +498,8 @@ class XPCSDataLoader:
         # Stage 1: Raw data validation
         if quality_controller:
             raw_validation_result = quality_controller.validate_data_stage(
-                data, quality_controller.QualityControlStage.RAW_DATA
+                data,
+                quality_controller.QualityControlStage.RAW_DATA,
             )
             quality_results.append(raw_validation_result)
 
@@ -524,7 +518,9 @@ class XPCSDataLoader:
 
         # Apply preprocessing pipeline if enabled with quality control
         data = self._apply_preprocessing_pipeline(
-            data, quality_controller, quality_results
+            data,
+            quality_controller,
+            quality_results,
         )
 
         # Convert to target array format (JAX or numpy)
@@ -555,13 +551,15 @@ class XPCSDataLoader:
             # Generate quality report only when explicitly requested (--plot-experimental-data)
             # Do NOT generate reports during normal VI/MCMC runs to avoid cluttering
             if self.generate_quality_reports and self.v2_config.get(
-                "quality_control", {}
+                "quality_control",
+                {},
             ).get("generate_reports", True):
                 quality_report = quality_controller.generate_quality_report(
-                    quality_results, self._get_quality_report_path()
+                    quality_results,
+                    self._get_quality_report_path(),
                 )
                 logger.info(
-                    f"Quality report generated with overall status: {quality_report['overall_summary']['status']}"
+                    f"Quality report generated with overall status: {quality_report['overall_summary']['status']}",
                 )
 
         # Perform legacy validation if enabled
@@ -571,7 +569,7 @@ class XPCSDataLoader:
 
         logger.info(
             f"Data loaded successfully - shapes: q{data['wavevector_q_list'].shape}, "
-            f"phi{data['phi_angles_list'].shape}, c2{data['c2_exp'].shape}"
+            f"phi{data['phi_angles_list'].shape}, c2{data['c2_exp'].shape}",
         )
 
         return data
@@ -638,7 +636,7 @@ class XPCSDataLoader:
                 available_keys = list(f.keys())
                 raise XPCSDataFormatError(
                     f"Cannot determine HDF5 format - missing expected keys. "
-                    f"Available root keys: {available_keys}"
+                    f"Available root keys: {available_keys}",
                 )
 
     @log_performance(threshold=0.8)
@@ -665,7 +663,9 @@ class XPCSDataLoader:
             # Apply comprehensive data filtering
             logger.debug("Applying comprehensive data filtering")
             selected_indices = self._get_selected_indices(
-                dqlist, dphilist, c2_matrices_for_filtering
+                dqlist,
+                dphilist,
+                c2_matrices_for_filtering,
             )
 
             # Select optimal q-vector (NEW: selective caching approach)
@@ -677,7 +677,7 @@ class XPCSDataLoader:
             # For plotting, we need multiple phi angles, so use a broader q-tolerance
             # or select multiple q-vectors around the target
             logger.debug(
-                f"Finding (q,phi) pairs for APS old format around selected q-vector {selected_q:.6f}"
+                f"Finding (q,phi) pairs for APS old format around selected q-vector {selected_q:.6f}",
             )
 
             # Calculate q-vector tolerance as percentage of selected q-vector
@@ -695,12 +695,12 @@ class XPCSDataLoader:
                 n_desired = min(10, len(closest_indices))
                 q_matching_indices = closest_indices[:n_desired]
                 logger.debug(
-                    f"Expanded selection to {len(q_matching_indices)} closest q-vectors for better phi coverage"
+                    f"Expanded selection to {len(q_matching_indices)} closest q-vectors for better phi coverage",
                 )
 
             logger.debug(
                 f"Selected {len(q_matching_indices)} (q,phi) pairs with q-range: "
-                f"{dqlist[q_matching_indices].min():.6f} - {dqlist[q_matching_indices].max():.6f} Å⁻¹"
+                f"{dqlist[q_matching_indices].min():.6f} - {dqlist[q_matching_indices].max():.6f} Å⁻¹",
             )
 
             # Apply additional phi filtering if enabled, but only to q-matching indices
@@ -708,13 +708,13 @@ class XPCSDataLoader:
                 # Intersect q-matching indices with phi-filtered indices
                 final_indices = np.intersect1d(q_matching_indices, selected_indices)
                 logger.debug(
-                    f"After phi filtering: {len(q_matching_indices)} -> {len(final_indices)} matrices"
+                    f"After phi filtering: {len(q_matching_indices)} -> {len(final_indices)} matrices",
                 )
             else:
                 # No additional filtering - use all phi angles for selected q-vector
                 final_indices = q_matching_indices
                 logger.debug(
-                    f"No phi filtering - using all {len(final_indices)} (q,phi) pairs for APS old format"
+                    f"No phi filtering - using all {len(final_indices)} (q,phi) pairs for APS old format",
                 )
 
             # Extract data for selected indices
@@ -725,7 +725,7 @@ class XPCSDataLoader:
 
             # Apply frame slicing to selected q-vector data
             logger.debug(
-                f"Applying frame slicing to selected q-vector data: shape {c2_matrices_array.shape}"
+                f"Applying frame slicing to selected q-vector data: shape {c2_matrices_array.shape}",
             )
             c2_exp = self._apply_frame_slicing_to_selected_q(c2_matrices_array)
 
@@ -760,7 +760,7 @@ class XPCSDataLoader:
             logger.debug(f"Q range: {q_values.min():.6f} to {q_values.max():.6f} Å⁻¹")
             logger.debug(f"Phi values: {phi_values}")
             logger.debug(
-                f"Processed bins: {len(processed_bins)} correlation matrices available"
+                f"Processed bins: {len(processed_bins)} correlation matrices available",
             )
 
             # The processed_bins represent which (q,phi) combinations have correlation data
@@ -780,16 +780,16 @@ class XPCSDataLoader:
                     phi_val = phi_values[phi_idx]
                     qphi_pairs.append((q_val, phi_val))
                     valid_bin_indices.append(
-                        i
+                        i,
                     )  # Track which correlation matrix this corresponds to
                 else:
                     logger.warning(
-                        f"Invalid bin mapping: processed_bin={processed_bin}, q_idx={q_idx}, phi_idx={phi_idx}"
+                        f"Invalid bin mapping: processed_bin={processed_bin}, q_idx={q_idx}, phi_idx={phi_idx}",
                     )
 
             if len(qphi_pairs) == 0:
                 raise XPCSDataFormatError(
-                    "No valid (q,phi) pairs found from processed_bins mapping"
+                    "No valid (q,phi) pairs found from processed_bins mapping",
                 )
 
             # Convert to arrays for processing
@@ -798,17 +798,17 @@ class XPCSDataLoader:
             filtered_dphilist = qphi_array[:, 1]  # phi values for valid pairs
 
             logger.debug(
-                f"Extracted {len(valid_bin_indices)} valid (q,phi) pairs from processed_bins"
+                f"Extracted {len(valid_bin_indices)} valid (q,phi) pairs from processed_bins",
             )
 
             # Load correlation matrices - only for the valid bins
             corr_group = f["xpcs/twotime/correlation_map"]
             c2_keys = sorted(
-                corr_group.keys()
+                corr_group.keys(),
             )  # Sort alphabetically (which works for c2_00001 format)
 
             logger.debug(
-                f"Loading {len(valid_bin_indices)} correlation matrices corresponding to valid (q,phi) pairs"
+                f"Loading {len(valid_bin_indices)} correlation matrices corresponding to valid (q,phi) pairs",
             )
             c2_matrices_for_filtering = []
 
@@ -822,14 +822,14 @@ class XPCSDataLoader:
                     c2_matrices_for_filtering.append(c2_full)
                 else:
                     logger.warning(
-                        f"Matrix index {bin_idx} exceeds available matrices ({len(c2_keys)})"
+                        f"Matrix index {bin_idx} exceeds available matrices ({len(c2_keys)})",
                     )
 
             # Ensure we have consistent array sizes
             min_count = min(len(c2_matrices_for_filtering), len(filtered_dqlist))
             if len(c2_matrices_for_filtering) != len(filtered_dqlist):
                 logger.warning(
-                    f"Matrix count ({len(c2_matrices_for_filtering)}) != (q,phi) pair count ({len(filtered_dqlist)})"
+                    f"Matrix count ({len(c2_matrices_for_filtering)}) != (q,phi) pair count ({len(filtered_dqlist)})",
                 )
                 c2_matrices_for_filtering = c2_matrices_for_filtering[:min_count]
                 filtered_dqlist = filtered_dqlist[:min_count]
@@ -839,7 +839,9 @@ class XPCSDataLoader:
             # Apply comprehensive data filtering
             logger.debug("Applying comprehensive data filtering")
             selected_indices = self._get_selected_indices(
-                filtered_dqlist, filtered_dphilist, c2_matrices_for_filtering
+                filtered_dqlist,
+                filtered_dphilist,
+                c2_matrices_for_filtering,
             )
 
             # Select optimal q-vector (closest match) from the filtered data
@@ -847,7 +849,7 @@ class XPCSDataLoader:
             selected_q = filtered_dqlist[selected_q_idx]
 
             logger.debug(
-                f"Selected optimal q-vector: {selected_q:.6f} Å⁻¹ (index {selected_q_idx})"
+                f"Selected optimal q-vector: {selected_q:.6f} Å⁻¹ (index {selected_q_idx})",
             )
 
             # Find all (q,phi) pairs matching the selected q-vector
@@ -855,7 +857,7 @@ class XPCSDataLoader:
                 0
             ]
             logger.debug(
-                f"Found {len(q_matching_indices)} (q,phi) pairs matching selected q-vector"
+                f"Found {len(q_matching_indices)} (q,phi) pairs matching selected q-vector",
             )
 
             # If phi filtering was applied, intersect with q-vector selection
@@ -863,19 +865,19 @@ class XPCSDataLoader:
                 # Keep only indices that match both q-vector selection AND phi filtering
                 final_indices = np.intersect1d(q_matching_indices, selected_indices)
                 logger.debug(
-                    f"After intersecting with phi filtering: {len(final_indices)} pairs remain"
+                    f"After intersecting with phi filtering: {len(final_indices)} pairs remain",
                 )
             else:
                 # No phi filtering, use all pairs for selected q-vector
                 final_indices = q_matching_indices
                 logger.debug(
-                    f"No phi filtering applied - using all {len(final_indices)} pairs for selected q-vector"
+                    f"No phi filtering applied - using all {len(final_indices)} pairs for selected q-vector",
                 )
 
             # Extract data for selected indices
             if len(final_indices) == 0:
                 logger.warning(
-                    "No valid indices found, using first available entry as fallback"
+                    "No valid indices found, using first available entry as fallback",
                 )
                 final_indices = [0]
 
@@ -904,8 +906,7 @@ class XPCSDataLoader:
             }
 
     def _reconstruct_full_matrix(self, c2_half: NDArray) -> NDArray:
-        """
-        Reconstruct full correlation matrix from half matrix (APS storage format).
+        """Reconstruct full correlation matrix from half matrix (APS storage format).
 
         Based on pyXPCSViewer's approach:
         c2 = c2_half + c2_half.T
@@ -921,8 +922,7 @@ class XPCSDataLoader:
         return c2_full
 
     def _correct_diagonal(self, c2_mat: NDArray) -> NDArray:
-        """
-        Apply diagonal correction to correlation matrix.
+        """Apply diagonal correction to correlation matrix.
 
         Based on pyXPCSViewer's correct_diagonal_c2 function.
         Handles both JAX and NumPy arrays.
@@ -958,8 +958,7 @@ class XPCSDataLoader:
         dphilist: NDArray,
         correlation_matrices: list[NDArray] | None = None,
     ) -> NDArray | None:
-        """
-        Get indices for comprehensive data filtering based on configuration.
+        """Get indices for comprehensive data filtering based on configuration.
 
         Implements multi-criteria filtering including:
         - Q-range filtering based on wavevector values
@@ -987,7 +986,7 @@ class XPCSDataLoader:
                 return None
 
             logger.info(
-                f"Applying comprehensive data filtering to {len(dqlist)} data points"
+                f"Applying comprehensive data filtering to {len(dqlist)} data points",
             )
 
             # Initialize data filter
@@ -995,7 +994,9 @@ class XPCSDataLoader:
 
             # Apply comprehensive filtering
             filtering_result = data_filter.apply_filtering(
-                dqlist, dphilist, correlation_matrices
+                dqlist,
+                dphilist,
+                correlation_matrices,
             )
 
             # Log filtering statistics
@@ -1005,7 +1006,7 @@ class XPCSDataLoader:
                     if isinstance(stats, dict) and "selected_count" in stats:
                         logger.info(
                             f"  {filter_name}: {stats['selected_count']} selected "
-                            f"({stats.get('selection_fraction', 0.0):.2%})"
+                            f"({stats.get('selection_fraction', 0.0):.2%})",
                         )
 
             # Handle warnings and errors
@@ -1018,7 +1019,7 @@ class XPCSDataLoader:
                     logger.error(f"Data filtering error: {error}")
                 if not filtering_result.fallback_used:
                     raise DataFilteringError(
-                        f"Data filtering failed: {filtering_result.errors}"
+                        f"Data filtering failed: {filtering_result.errors}",
                     )
 
             # Log final result
@@ -1031,7 +1032,7 @@ class XPCSDataLoader:
 
                 logger.info(
                     f"Data filtering completed: {selected_count}/{total_count} "
-                    f"data points selected ({selection_fraction:.2%})"
+                    f"data points selected ({selection_fraction:.2%})",
                 )
 
                 if filtering_result.fallback_used:
@@ -1039,7 +1040,9 @@ class XPCSDataLoader:
 
                 # Additional integration with phi filtering for compatibility
                 selected_indices = self._integrate_with_phi_filtering(
-                    filtering_result.selected_indices, dphilist, filtering_result
+                    filtering_result.selected_indices,
+                    dphilist,
+                    filtering_result,
                 )
 
                 return selected_indices
@@ -1049,7 +1052,7 @@ class XPCSDataLoader:
 
         except ImportError as e:
             logger.warning(
-                f"Filtering utilities not available: {e}. Skipping data filtering."
+                f"Filtering utilities not available: {e}. Skipping data filtering.",
             )
             return None
         except Exception as e:
@@ -1064,10 +1067,12 @@ class XPCSDataLoader:
                 raise XPCSDataFormatError(f"Data filtering failed: {e}") from e
 
     def _integrate_with_phi_filtering(
-        self, selected_indices: NDArray, dphilist: NDArray, filtering_result
+        self,
+        selected_indices: NDArray,
+        dphilist: NDArray,
+        filtering_result,
     ) -> NDArray:
-        """
-        Integrate with existing phi filtering system for backward compatibility.
+        """Integrate with existing phi filtering system for backward compatibility.
 
         This method ensures that the new filtering system works well with
         existing phi angle filtering configurations and provides consistent results.
@@ -1094,7 +1099,7 @@ class XPCSDataLoader:
 
             phi_filter = PhiAngleFilter(self.config)
             phi_indices, filtered_angles = phi_filter.filter_angles_for_optimization(
-                selected_phi_angles
+                selected_phi_angles,
             )
 
             # Map back to original indices
@@ -1102,25 +1107,24 @@ class XPCSDataLoader:
 
             logger.info(
                 f"Legacy phi filtering applied: {len(final_selected_indices)} "
-                f"out of {len(selected_indices)} filtered indices selected"
+                f"out of {len(selected_indices)} filtered indices selected",
             )
 
             return final_selected_indices
 
         except ImportError:
             logger.debug(
-                "Phi filtering system not available - using original selection"
+                "Phi filtering system not available - using original selection",
             )
             return selected_indices
         except Exception as e:
             logger.warning(
-                f"Phi filtering integration failed: {e} - using original selection"
+                f"Phi filtering integration failed: {e} - using original selection",
             )
             return selected_indices
 
     def _select_optimal_wavevector(self, dqlist: NDArray) -> int:
-        """
-        Select q-vector index closest to config value (no tolerance).
+        """Select q-vector index closest to config value (no tolerance).
 
         Args:
             dqlist: Array of available q-vector values
@@ -1140,14 +1144,13 @@ class XPCSDataLoader:
         deviation = abs(selected_q - config_q)
 
         logger.info(
-            f"Selected closest q-vector: {selected_q:.6f} Å⁻¹ (target: {config_q:.6f} Å⁻¹, index: {closest_idx}, deviation: {deviation:.6f} Å⁻¹)"
+            f"Selected closest q-vector: {selected_q:.6f} Å⁻¹ (target: {config_q:.6f} Å⁻¹, index: {closest_idx}, deviation: {deviation:.6f} Å⁻¹)",
         )
 
         return closest_idx
 
     def _apply_frame_slicing_to_selected_q(self, c2_matrices: NDArray) -> NDArray:
-        """
-        Apply frame slicing to already q-filtered correlation matrices.
+        """Apply frame slicing to already q-filtered correlation matrices.
 
         Args:
             c2_matrices: Correlation matrices for selected q-vector, shape (n_phi, full_frames, full_frames)
@@ -1174,10 +1177,10 @@ class XPCSDataLoader:
             c2_exp = c2_matrices[:, start_frame:end_frame, start_frame:end_frame]
             sliced_frames = end_frame - start_frame
             logger.debug(
-                f"Applied frame slicing: [{start_frame}:{end_frame}] -> shape {c2_exp.shape}"
+                f"Applied frame slicing: [{start_frame}:{end_frame}] -> shape {c2_exp.shape}",
             )
             logger.debug(
-                f"Frame reduction: {max_frames}×{max_frames} -> {sliced_frames}×{sliced_frames}"
+                f"Frame reduction: {max_frames}×{max_frames} -> {sliced_frames}×{sliced_frames}",
             )
         else:
             c2_exp = c2_matrices
@@ -1253,7 +1256,7 @@ class XPCSDataLoader:
         file_size_mb = os.path.getsize(cache_path) / (1024 * 1024)
         logger.info(f"Cache saved: {cache_path}")
         logger.info(
-            f"Cache size: {file_size_mb:.2f} MB, Q-vectors: {cache_metadata['q_count']}, Phi angles: {cache_metadata['phi_count']}"
+            f"Cache size: {file_size_mb:.2f} MB, Q-vectors: {cache_metadata['q_count']}, Phi angles: {cache_metadata['phi_count']}",
         )
         logger.debug(f"Q-vector: {actual_q:.6f} ± {q_variance:.6f} Å⁻¹")
 
@@ -1266,20 +1269,20 @@ class XPCSDataLoader:
         # Check if configuration q-vectors match (within floating point precision)
         if abs(current_config_q - cached_config_q) > 1e-8:
             logger.warning(
-                f"Cache q-vector mismatch: current={current_config_q:.6f}, cached={cached_config_q:.6f} Å⁻¹"
+                f"Cache q-vector mismatch: current={current_config_q:.6f}, cached={cached_config_q:.6f} Å⁻¹",
             )
 
         # Check if cache uses selective q-caching (v2.0 feature)
         is_selective = cache_metadata.get("selective_q_caching", False)
         if not is_selective:
             logger.warning(
-                "Loading legacy cache without selective q-vector optimization"
+                "Loading legacy cache without selective q-vector optimization",
             )
         else:
             actual_q = cache_metadata.get("actual_wavevector_q", cached_config_q)
             q_variance = cache_metadata.get("q_variance", 0.0)
             logger.debug(
-                f"Validated selective cache: q={actual_q:.6f} ± {q_variance:.6f} Å⁻¹"
+                f"Validated selective cache: q={actual_q:.6f} ± {q_variance:.6f} Å⁻¹",
             )
 
     def _generate_cache_path(self) -> Path:
@@ -1298,11 +1301,14 @@ class XPCSDataLoader:
 
         # Construct cache filename
         cache_template = self.exp_config.get(
-            "cache_filename_template", "cached_c2_frames_{start_frame}_{end_frame}.npz"
+            "cache_filename_template",
+            "cached_c2_frames_{start_frame}_{end_frame}.npz",
         )
 
         cache_filename = cache_template.format(
-            start_frame=start_frame, end_frame=end_frame, wavevector_q=wavevector_q
+            start_frame=start_frame,
+            end_frame=end_frame,
+            wavevector_q=wavevector_q,
         )
 
         return Path(cache_folder) / cache_filename
@@ -1348,10 +1354,11 @@ class XPCSDataLoader:
         logger.debug(f"Text files saved: {phi_file}, {q_file}")
 
     def _validate_loaded_data(
-        self, data: dict[str, Any], validation_settings: dict[str, bool]
+        self,
+        data: dict[str, Any],
+        validation_settings: dict[str, bool],
     ) -> None:
-        """
-        Perform validation on loaded data.
+        """Perform validation on loaded data.
 
         Args:
             data: Loaded data dictionary
@@ -1362,14 +1369,15 @@ class XPCSDataLoader:
 
         if validation_settings.get("data_quality", False):
             self._perform_data_quality_checks(
-                data, validation_settings.get("comprehensive", False)
+                data,
+                validation_settings.get("comprehensive", False),
             )
 
     def _perform_physics_validation(self, data: dict[str, Any]) -> None:
         """Perform physics-based validation using v2 PhysicsConstants."""
         if not HAS_PHYSICS_VALIDATION:
             logger.warning(
-                "Physics validation requested but v2 physics module not available"
+                "Physics validation requested but v2 physics module not available",
             )
             return
 
@@ -1381,24 +1389,26 @@ class XPCSDataLoader:
         )
         if np.any(q_values < PhysicsConstants.Q_MIN_TYPICAL):
             logger.warning(
-                f"Some q-values below typical range: {PhysicsConstants.Q_MIN_TYPICAL}"
+                f"Some q-values below typical range: {PhysicsConstants.Q_MIN_TYPICAL}",
             )
         if np.any(q_values > PhysicsConstants.Q_MAX_TYPICAL):
             logger.warning(
-                f"Some q-values above typical range: {PhysicsConstants.Q_MAX_TYPICAL}"
+                f"Some q-values above typical range: {PhysicsConstants.Q_MAX_TYPICAL}",
             )
 
         # Validate time parameters
         dt = self.analyzer_config.get("dt", 1.0)
         if dt < PhysicsConstants.TIME_MIN_XPCS:
             logger.warning(
-                f"Time step dt={dt}s below typical XPCS minimum: {PhysicsConstants.TIME_MIN_XPCS}s"
+                f"Time step dt={dt}s below typical XPCS minimum: {PhysicsConstants.TIME_MIN_XPCS}s",
             )
 
         logger.info("Physics validation completed")
 
     def _perform_data_quality_checks(
-        self, data: dict[str, Any], comprehensive: bool = False
+        self,
+        data: dict[str, Any],
+        comprehensive: bool = False,
     ) -> None:
         """Perform data quality validation."""
         c2_exp = np.array(data["c2_exp"]) if HAS_JAX else data["c2_exp"]
@@ -1415,7 +1425,7 @@ class XPCSDataLoader:
         mean_diagonal = np.mean(diagonal_values[:, 0])  # t=0 correlation
         if not (0.5 < mean_diagonal < 2.0):
             logger.warning(
-                f"Unusual t=0 correlation value: {mean_diagonal:.3f} (expected ~1.0)"
+                f"Unusual t=0 correlation value: {mean_diagonal:.3f} (expected ~1.0)",
             )
 
         if comprehensive:
@@ -1433,7 +1443,7 @@ class XPCSDataLoader:
             if decay_rates:
                 mean_decay = np.mean(decay_rates)
                 logger.info(
-                    f"Mean correlation decay over 10 time steps: {mean_decay:.3f}"
+                    f"Mean correlation decay over 10 time steps: {mean_decay:.3f}",
                 )
 
         logger.info("Data quality validation completed")
@@ -1489,8 +1499,7 @@ class XPCSDataLoader:
         quality_controller: Any | None = None,
         quality_results: list | None = None,
     ) -> dict[str, Any]:
-        """
-        Apply preprocessing pipeline to loaded data if enabled.
+        """Apply preprocessing pipeline to loaded data if enabled.
 
         Args:
             data: Raw data loaded from HDF5 files
@@ -1538,7 +1547,7 @@ class XPCSDataLoader:
 
                     if not preprocessing_validation_result.passed:
                         logger.warning(
-                            f"Preprocessing quality validation failed: score={preprocessing_validation_result.metrics.overall_score:.1f}"
+                            f"Preprocessing quality validation failed: score={preprocessing_validation_result.metrics.overall_score:.1f}",
                         )
 
                 # Save provenance if requested
@@ -1562,17 +1571,17 @@ class XPCSDataLoader:
                 # Return original data if fallback is enabled
                 if preprocessing_config.get("fallback_on_failure", True):
                     logger.warning(
-                        "Falling back to original data after preprocessing failure"
+                        "Falling back to original data after preprocessing failure",
                     )
                     return data
                 else:
                     raise XPCSDataFormatError(
-                        "Preprocessing pipeline failed and fallback disabled"
+                        "Preprocessing pipeline failed and fallback disabled",
                     )
 
         except ImportError as e:
             logger.warning(
-                f"Preprocessing pipeline not available: {e}. Using original data."
+                f"Preprocessing pipeline not available: {e}. Using original data.",
             )
             return data
         except Exception as e:
@@ -1582,7 +1591,7 @@ class XPCSDataLoader:
             preprocessing_config = self.config.get("preprocessing", {})
             if preprocessing_config.get("fallback_on_failure", True):
                 logger.warning(
-                    "Falling back to original data after preprocessing error"
+                    "Falling back to original data after preprocessing error",
                 )
                 return data
             else:
@@ -1611,8 +1620,7 @@ class XPCSDataLoader:
 # Convenience function for simple usage
 @log_performance(threshold=1.0)
 def load_xpcs_data(config_path: str) -> dict[str, Any]:
-    """
-    Convenience function to load XPCS data from configuration file.
+    """Convenience function to load XPCS data from configuration file.
 
     Supports both YAML and JSON configuration files with auto-detection.
 

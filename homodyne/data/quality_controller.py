@@ -1,5 +1,4 @@
-"""
-Data Quality Controller for Homodyne v2
+"""Data Quality Controller for Homodyne v2
 =======================================
 
 Comprehensive data quality control system that integrates validation throughout
@@ -269,42 +268,48 @@ class QualityControlConfig:
             excellent_threshold=quality_config.get("excellent_threshold", 85.0),
             enable_raw_validation=quality_config.get("enable_raw_validation", True),
             enable_filtering_validation=quality_config.get(
-                "enable_filtering_validation", True
+                "enable_filtering_validation",
+                True,
             ),
             enable_preprocessing_validation=quality_config.get(
-                "enable_preprocessing_validation", True
+                "enable_preprocessing_validation",
+                True,
             ),
             enable_final_validation=quality_config.get("enable_final_validation", True),
             repair_nan_values=quality_config.get("repair_nan_values", True),
             repair_infinite_values=quality_config.get("repair_infinite_values", True),
             repair_negative_correlations=quality_config.get(
-                "repair_negative_correlations", False
+                "repair_negative_correlations",
+                False,
             ),
             repair_scaling_issues=quality_config.get("repair_scaling_issues", True),
             repair_format_inconsistencies=quality_config.get(
-                "repair_format_inconsistencies", True
+                "repair_format_inconsistencies",
+                True,
             ),
             cache_validation_results=quality_config.get(
-                "cache_validation_results", True
+                "cache_validation_results",
+                True,
             ),
             incremental_validation=quality_config.get("incremental_validation", True),
             parallel_validation=quality_config.get("parallel_validation", False),
             generate_reports=quality_config.get("reporting", {}).get(
-                "generate_reports", quality_config.get("generate_reports", True)
+                "generate_reports",
+                quality_config.get("generate_reports", True),
             ),
             export_detailed_reports=quality_config.get("reporting", {}).get(
                 "export_detailed_reports",
                 quality_config.get("export_detailed_reports", False),
             ),
             save_quality_history=quality_config.get("reporting", {}).get(
-                "save_quality_history", quality_config.get("save_quality_history", True)
+                "save_quality_history",
+                quality_config.get("save_quality_history", True),
             ),
         )
 
 
 class DataQualityController:
-    """
-    Main quality control orchestrator for XPCS data loading pipeline.
+    """Main quality control orchestrator for XPCS data loading pipeline.
 
     Provides comprehensive data quality control with progressive validation,
     auto-repair capabilities, and integration with existing filtering and
@@ -312,8 +317,7 @@ class DataQualityController:
     """
 
     def __init__(self, config: dict[str, Any]):
-        """
-        Initialize data quality controller.
+        """Initialize data quality controller.
 
         Args:
             config: Full configuration dictionary including quality_control section
@@ -330,7 +334,7 @@ class DataQualityController:
 
         logger.info(
             f"DataQualityController initialized with validation_level='{self.quality_config.validation_level}', "
-            f"auto_repair='{self.quality_config.auto_repair}'"
+            f"auto_repair='{self.quality_config.auto_repair}'",
         )
 
     @log_performance(threshold=0.1)
@@ -340,8 +344,7 @@ class DataQualityController:
         stage: QualityControlStage,
         previous_result: QualityControlResult | None = None,
     ) -> QualityControlResult:
-        """
-        Validate data at specific pipeline stage with progressive quality control.
+        """Validate data at specific pipeline stage with progressive quality control.
 
         Args:
             data: Data dictionary to validate
@@ -425,7 +428,7 @@ class DataQualityController:
                 f"score={result.metrics.overall_score:.1f}, "
                 f"passed={result.passed}, "
                 f"issues={len(result.issues)}, "
-                f"repairs={len(result.repairs_applied)}"
+                f"repairs={len(result.repairs_applied)}",
             )
 
             return result
@@ -439,7 +442,7 @@ class DataQualityController:
                     category="validation",
                     message=f"Quality validation failed: {str(e)}",
                     recommendation="Check data format and configuration",
-                )
+                ),
             )
             result.processing_time = time.time() - start_time
             return result
@@ -457,7 +460,9 @@ class DataQualityController:
         return True
 
     def _create_minimal_result(
-        self, stage: QualityControlStage, data: dict[str, Any]
+        self,
+        stage: QualityControlStage,
+        data: dict[str, Any],
     ) -> QualityControlResult:
         """Create minimal validation result when validation is disabled."""
         return QualityControlResult(
@@ -481,7 +486,9 @@ class DataQualityController:
 
     @log_performance(threshold=0.05)
     def _validate_raw_data(
-        self, data: dict[str, Any], result: QualityControlResult
+        self,
+        data: dict[str, Any],
+        result: QualityControlResult,
     ) -> None:
         """Validate raw data integrity and basic format."""
         logger.debug("Validating raw data stage")
@@ -508,7 +515,7 @@ class DataQualityController:
             self._basic_raw_data_validation(data, result)
 
         logger.debug(
-            f"Raw data validation completed: {len(result.issues)} issues found"
+            f"Raw data validation completed: {len(result.issues)} issues found",
         )
 
     def _validate_filtered_data(
@@ -550,7 +557,7 @@ class DataQualityController:
                                         category="data_quality",
                                         message=f"Filtering removed {(1 - retention_fraction) * 100:.1f}% of data",
                                         recommendation="Check filtering criteria - may be too restrictive",
-                                    )
+                                    ),
                                 )
                             elif retention_fraction > 0.95:  # More than 95% retained
                                 result.issues.append(
@@ -559,18 +566,18 @@ class DataQualityController:
                                         category="data_quality",
                                         message=f"Filtering retained {retention_fraction * 100:.1f}% of data",
                                         recommendation="Filtering may not be necessary with current settings",
-                                    )
+                                    ),
                                 )
                     except (AttributeError, TypeError, IndexError):
                         logger.warning(
-                            "Could not compare data sizes before/after filtering"
+                            "Could not compare data sizes before/after filtering",
                         )
 
         # Validate filtered data quality
         self._basic_data_quality_checks(data, result)
 
         logger.debug(
-            f"Filtered data validation completed: filtering_efficiency={result.metrics.filtering_efficiency:.1f}%"
+            f"Filtered data validation completed: filtering_efficiency={result.metrics.filtering_efficiency:.1f}%",
         )
 
     def _validate_preprocessed_data(
@@ -587,7 +594,7 @@ class DataQualityController:
         if hasattr(c2_exp, "shape") or isinstance(c2_exp, (list, tuple)):
             # Check for processing artifacts
             result.metrics.preprocessing_success = self._check_preprocessing_artifacts(
-                c2_exp
+                c2_exp,
             )
 
             if not result.metrics.preprocessing_success:
@@ -597,7 +604,7 @@ class DataQualityController:
                         category="preprocessing",
                         message="Preprocessing introduced artifacts or corrupted data",
                         recommendation="Review preprocessing settings and validate input data",
-                    )
+                    ),
                 )
 
         # Compare with previous stage if available
@@ -613,14 +620,14 @@ class DataQualityController:
                         category="preprocessing",
                         message=f"Preprocessing fidelity low: {result.metrics.transformation_fidelity:.2f}",
                         recommendation="Check preprocessing parameters for excessive modification",
-                    )
+                    ),
                 )
 
         # Advanced quality checks
         self._advanced_data_quality_checks(data, result)
 
         logger.debug(
-            f"Preprocessed data validation completed: fidelity={result.metrics.transformation_fidelity:.2f}"
+            f"Preprocessed data validation completed: fidelity={result.metrics.transformation_fidelity:.2f}",
         )
 
     def _validate_final_data(
@@ -648,7 +655,7 @@ class DataQualityController:
                     if not any(
                         existing.message == issue.message for existing in result.issues
                     )
-                ]
+                ],
             )
 
             # Update metrics with physics validation
@@ -662,15 +669,18 @@ class DataQualityController:
         # Analysis readiness check
         readiness_score = self._assess_analysis_readiness(data, result)
         result.metrics.overall_score = max(
-            result.metrics.overall_score, readiness_score
+            result.metrics.overall_score,
+            readiness_score,
         )
 
         logger.debug(
-            f"Final data validation completed: readiness_score={readiness_score:.1f}"
+            f"Final data validation completed: readiness_score={readiness_score:.1f}",
         )
 
     def _basic_raw_data_validation(
-        self, data: dict[str, Any], result: QualityControlResult
+        self,
+        data: dict[str, Any],
+        result: QualityControlResult,
     ) -> None:
         """Basic data validation fallback when full validation system unavailable."""
         required_keys = ["wavevector_q_list", "phi_angles_list", "t1", "t2", "c2_exp"]
@@ -683,7 +693,7 @@ class DataQualityController:
                         category="format",
                         message=f"Missing required data key: {key}",
                         recommendation="Check data loading process",
-                    )
+                    ),
                 )
 
         # Basic data integrity
@@ -695,7 +705,8 @@ class DataQualityController:
                         np.sum(np.isfinite(arr)) / arr.size if arr.size > 0 else 0.0
                     )
                     result.metrics.finite_fraction = max(
-                        result.metrics.finite_fraction, finite_fraction
+                        result.metrics.finite_fraction,
+                        finite_fraction,
                     )
 
                     if finite_fraction < 0.95:
@@ -707,13 +718,15 @@ class DataQualityController:
                                 category="data_quality",
                                 message=f"Non-finite values in {key}: {(1 - finite_fraction) * 100:.1f}%",
                                 recommendation="Check data preprocessing and source quality",
-                            )
+                            ),
                         )
                 except (AttributeError, TypeError, IndexError):
                     pass
 
     def _basic_data_quality_checks(
-        self, data: dict[str, Any], result: QualityControlResult
+        self,
+        data: dict[str, Any],
+        result: QualityControlResult,
     ) -> None:
         """Basic data quality checks for correlation matrices."""
         c2_exp = data.get("c2_exp", [])
@@ -738,7 +751,7 @@ class DataQualityController:
                                 category="data_quality",
                                 message=f"Unusual correlation values: mean={mean_val:.3f}",
                                 recommendation="Check data normalization and calibration",
-                            )
+                            ),
                         )
 
                     # Signal-to-noise estimation
@@ -746,13 +759,16 @@ class DataQualityController:
                     if mean_val > 0:
                         snr = mean_val / std_val if std_val > 0 else 100.0
                         result.metrics.signal_to_noise = min(
-                            snr * 10, 100.0
+                            snr * 10,
+                            100.0,
                         )  # Scale to 0-100
             except (AttributeError, TypeError, IndexError):
                 logger.warning("Could not perform basic data quality checks")
 
     def _advanced_data_quality_checks(
-        self, data: dict[str, Any], result: QualityControlResult
+        self,
+        data: dict[str, Any],
+        result: QualityControlResult,
     ) -> None:
         """Advanced quality checks including symmetry and decay analysis."""
         c2_exp = data.get("c2_exp", [])
@@ -769,7 +785,8 @@ class DataQualityController:
                         max_val = np.max(np.abs(matrix))
                         if max_val > 0:
                             symmetry_score = max(
-                                0, 100 * (1 - symmetry_error / max_val)
+                                0,
+                                100 * (1 - symmetry_error / max_val),
                             )
                             symmetry_scores.append(symmetry_score)
 
@@ -783,7 +800,7 @@ class DataQualityController:
                                 category="data_quality",
                                 message=f"Poor matrix symmetry: {result.metrics.symmetry_score:.1f}%",
                                 recommendation="Check correlation matrix reconstruction",
-                            )
+                            ),
                         )
 
                 # Correlation decay analysis
@@ -804,7 +821,9 @@ class DataQualityController:
             logger.warning("Could not perform advanced data quality checks")
 
     def _comprehensive_quality_assessment(
-        self, data: dict[str, Any], result: QualityControlResult
+        self,
+        data: dict[str, Any],
+        result: QualityControlResult,
     ) -> None:
         """Comprehensive quality assessment for final data."""
         # Combine all previous checks
@@ -834,7 +853,7 @@ class DataQualityController:
                         category="completeness",
                         message=f"Data completeness: {completeness:.0f}%",
                         recommendation="Ensure all required data components are present",
-                    )
+                    ),
                 )
 
             # Consistency checks
@@ -844,7 +863,9 @@ class DataQualityController:
             logger.warning(f"Comprehensive quality assessment failed: {e}")
 
     def _check_data_consistency(
-        self, data: dict[str, Any], result: QualityControlResult
+        self,
+        data: dict[str, Any],
+        result: QualityControlResult,
     ) -> None:
         """Check consistency between different data components."""
         try:
@@ -871,7 +892,7 @@ class DataQualityController:
                                 category="consistency",
                                 message=f"Time array size {t1_shape[-1]} doesn't match matrix size {matrix_size}",
                                 recommendation="Check time array generation",
-                            )
+                            ),
                         )
 
                 result.metrics.time_consistency = t1_shape == t2_shape and (
@@ -900,7 +921,9 @@ class DataQualityController:
             return False
 
     def _compute_transformation_fidelity(
-        self, current_data: dict[str, Any], previous_result: QualityControlResult
+        self,
+        current_data: dict[str, Any],
+        previous_result: QualityControlResult,
     ) -> float:
         """Compute fidelity of data transformation."""
         try:
@@ -930,7 +953,9 @@ class DataQualityController:
             return 0.5  # Conservative default
 
     def _assess_analysis_readiness(
-        self, data: dict[str, Any], result: QualityControlResult
+        self,
+        data: dict[str, Any],
+        result: QualityControlResult,
     ) -> float:
         """Assess overall readiness for analysis."""
         readiness_factors = []
@@ -938,7 +963,7 @@ class DataQualityController:
         # Data completeness (weight: 0.3)
         required_keys = ["wavevector_q_list", "phi_angles_list", "t1", "t2", "c2_exp"]
         completeness = sum(1 for key in required_keys if key in data) / len(
-            required_keys
+            required_keys,
         )
         readiness_factors.append((completeness * 100, 0.3))
 
@@ -972,14 +997,16 @@ class DataQualityController:
 
     @log_performance(threshold=0.1)
     def _apply_auto_repair(
-        self, data: dict[str, Any], result: QualityControlResult
+        self,
+        data: dict[str, Any],
+        result: QualityControlResult,
     ) -> bool:
         """Apply automatic data repair based on detected issues."""
         if self.quality_config.auto_repair == "disabled":
             return False
 
         logger.info(
-            f"Applying auto-repair with strategy: {self.quality_config.auto_repair}"
+            f"Applying auto-repair with strategy: {self.quality_config.auto_repair}",
         )
         data_modified = False
         repairs_applied = []
@@ -1015,7 +1042,7 @@ class DataQualityController:
                     issue
                     for issue in result.issues
                     if issue.severity in ["error", "warning"]
-                ]
+                ],
             )
             result.metrics.issues_repaired = len(repairs_applied)
 
@@ -1028,7 +1055,7 @@ class DataQualityController:
 
             if repairs_applied:
                 logger.info(
-                    f"Auto-repair completed: {len(repairs_applied)} repairs applied"
+                    f"Auto-repair completed: {len(repairs_applied)} repairs applied",
                 )
 
         except Exception as e:
@@ -1037,7 +1064,9 @@ class DataQualityController:
         return data_modified
 
     def _repair_nan_values(
-        self, data: dict[str, Any], repairs_applied: list[str]
+        self,
+        data: dict[str, Any],
+        repairs_applied: list[str],
     ) -> bool:
         """Repair NaN values in data."""
         data_modified = False
@@ -1077,7 +1106,9 @@ class DataQualityController:
         return data_modified
 
     def _repair_infinite_values(
-        self, data: dict[str, Any], repairs_applied: list[str]
+        self,
+        data: dict[str, Any],
+        repairs_applied: list[str],
     ) -> bool:
         """Repair infinite values in data."""
         data_modified = False
@@ -1109,7 +1140,9 @@ class DataQualityController:
         return data_modified
 
     def _repair_negative_correlations(
-        self, data: dict[str, Any], repairs_applied: list[str]
+        self,
+        data: dict[str, Any],
+        repairs_applied: list[str],
     ) -> bool:
         """Repair negative correlation values (aggressive mode only)."""
         data_modified = False
@@ -1132,7 +1165,9 @@ class DataQualityController:
         return data_modified
 
     def _repair_scaling_issues(
-        self, data: dict[str, Any], repairs_applied: list[str]
+        self,
+        data: dict[str, Any],
+        repairs_applied: list[str],
     ) -> bool:
         """Repair obvious scaling issues in data."""
         data_modified = False
@@ -1167,7 +1202,9 @@ class DataQualityController:
         return data_modified
 
     def _revalidate_after_repair(
-        self, data: dict[str, Any], result: QualityControlResult
+        self,
+        data: dict[str, Any],
+        result: QualityControlResult,
     ) -> None:
         """Re-validate data after applying repairs."""
         logger.debug("Re-validating data after auto-repair")
@@ -1184,7 +1221,9 @@ class DataQualityController:
         result.issues = remaining_issues
 
     def _issue_was_repaired(
-        self, issue: ValidationIssue, repairs_applied: list[str]
+        self,
+        issue: ValidationIssue,
+        repairs_applied: list[str],
     ) -> bool:
         """Check if an issue was addressed by repairs."""
         issue_keywords = {
@@ -1245,22 +1284,22 @@ class DataQualityController:
         # Score-based recommendations
         if result.metrics.overall_score < self.quality_config.pass_threshold:
             recommendations.append(
-                "Data quality below acceptable threshold - review preprocessing settings"
+                "Data quality below acceptable threshold - review preprocessing settings",
             )
 
         if result.metrics.finite_fraction < 0.95:
             recommendations.append(
-                "Consider additional data cleaning to remove non-finite values"
+                "Consider additional data cleaning to remove non-finite values",
             )
 
         if result.metrics.correlation_validity < 70:
             recommendations.append(
-                "Check correlation calculation and normalization procedures"
+                "Check correlation calculation and normalization procedures",
             )
 
         if result.metrics.signal_to_noise < 30:
             recommendations.append(
-                "Consider noise reduction preprocessing or longer acquisition times"
+                "Consider noise reduction preprocessing or longer acquisition times",
             )
 
         if result.metrics.symmetry_score < 80:
@@ -1271,7 +1310,7 @@ class DataQualityController:
 
         if result.metrics.filtering_efficiency > 95:
             recommendations.append(
-                "Filtering criteria may be too permissive - consider tightening"
+                "Filtering criteria may be too permissive - consider tightening",
             )
 
         # Stage-specific recommendations
@@ -1282,7 +1321,7 @@ class DataQualityController:
                 recommendations.append("Good data quality - proceed with analysis")
             elif result.metrics.overall_score >= self.quality_config.pass_threshold:
                 recommendations.append(
-                    "Acceptable data quality - consider additional preprocessing"
+                    "Acceptable data quality - consider additional preprocessing",
                 )
 
         return recommendations
@@ -1320,7 +1359,9 @@ class DataQualityController:
                 del self._validation_cache[key]
 
     def _extract_metrics_from_validation(
-        self, validation_report: Any, metrics: QualityMetrics
+        self,
+        validation_report: Any,
+        metrics: QualityMetrics,
     ) -> None:
         """Extract metrics from existing validation system report."""
         if hasattr(validation_report, "data_statistics"):
@@ -1328,7 +1369,8 @@ class DataQualityController:
             for _key, stat in stats.items():
                 if isinstance(stat, dict) and "finite_fraction" in stat:
                     metrics.finite_fraction = max(
-                        metrics.finite_fraction, stat["finite_fraction"]
+                        metrics.finite_fraction,
+                        stat["finite_fraction"],
                     )
 
         if hasattr(validation_report, "quality_score"):
@@ -1340,10 +1382,11 @@ class DataQualityController:
 
     @log_performance(threshold=0.05)
     def generate_quality_report(
-        self, results: list[QualityControlResult], output_path: str | None = None
+        self,
+        results: list[QualityControlResult],
+        output_path: str | None = None,
     ) -> dict[str, Any]:
-        """
-        Generate comprehensive quality assessment report.
+        """Generate comprehensive quality assessment report.
 
         Args:
             results: List of quality control results from all stages
@@ -1409,7 +1452,8 @@ class DataQualityController:
         return report
 
     def _generate_overall_summary(
-        self, results: list[QualityControlResult]
+        self,
+        results: list[QualityControlResult],
     ) -> dict[str, Any]:
         """Generate overall quality summary from all stages."""
         if not results:
@@ -1456,7 +1500,8 @@ class DataQualityController:
         }
 
     def _analyze_quality_evolution(
-        self, results: list[QualityControlResult]
+        self,
+        results: list[QualityControlResult],
     ) -> dict[str, Any]:
         """Analyze how quality evolved through the processing pipeline."""
         if len(results) < 2:
@@ -1481,7 +1526,7 @@ class DataQualityController:
                         "stage": result.stage.value,
                         "score": result.metrics.overall_score,
                         "main_issues": [issue.category for issue in result.issues[:3]],
-                    }
+                    },
                 )
 
         evolution_analysis["bottlenecks"] = bottlenecks
@@ -1489,7 +1534,8 @@ class DataQualityController:
         return evolution_analysis
 
     def _generate_final_recommendations(
-        self, results: list[QualityControlResult]
+        self,
+        results: list[QualityControlResult],
     ) -> list[str]:
         """Generate final recommendations based on all stage results."""
         recommendations = []
@@ -1505,24 +1551,24 @@ class DataQualityController:
             >= self.quality_config.excellent_threshold
         ):
             recommendations.append(
-                "✓ Excellent data quality achieved - ready for analysis"
+                "✓ Excellent data quality achieved - ready for analysis",
             )
         elif final_result.metrics.overall_score >= self.quality_config.warn_threshold:
             recommendations.append("✓ Good data quality - proceed with confidence")
         elif final_result.metrics.overall_score >= self.quality_config.pass_threshold:
             recommendations.append(
-                "⚠ Acceptable data quality - monitor results carefully"
+                "⚠ Acceptable data quality - monitor results carefully",
             )
         else:
             recommendations.append(
-                "❌ Poor data quality - consider reprocessing or different parameters"
+                "❌ Poor data quality - consider reprocessing or different parameters",
             )
 
         # Process improvement recommendations
         total_repairs = sum(len(result.repairs_applied) for result in results)
         if total_repairs > 0:
             recommendations.append(
-                f"ℹ {total_repairs} automatic repairs were applied - review source data quality"
+                f"ℹ {total_repairs} automatic repairs were applied - review source data quality",
             )
 
         # Stage-specific recommendations
@@ -1534,7 +1580,7 @@ class DataQualityController:
         if bottleneck_stages:
             stage_names = [result.stage.value for result in bottleneck_stages]
             recommendations.append(
-                f"⚠ Quality issues in stages: {', '.join(stage_names)}"
+                f"⚠ Quality issues in stages: {', '.join(stage_names)}",
             )
 
         return recommendations
@@ -1562,7 +1608,7 @@ class DataQualityController:
             "min_processing_time": np.min(processing_times),
             "cache_size": len(self._validation_cache),
             "stages_processed": len(
-                {result.stage.value for result in self._quality_history}
+                {result.stage.value for result in self._quality_history},
             ),
         }
 

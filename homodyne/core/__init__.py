@@ -1,5 +1,4 @@
-"""
-Core Computation Engine for Homodyne v2
+"""Core Computation Engine for Homodyne v2
 ========================================
 
 JAX-first computational backend providing high-performance implementations

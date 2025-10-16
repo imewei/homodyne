@@ -1,5 +1,4 @@
-"""
-HomodyneModel - Hybrid Architecture Wrapper
+"""HomodyneModel - Hybrid Architecture Wrapper
 ============================================
 
 Hybrid architecture combining stateful robustness with functional JIT performance.
@@ -46,8 +45,7 @@ logger = get_logger(__name__)
 
 
 class HomodyneModel:
-    """
-    Hybrid architecture wrapper for homodyne XPCS analysis.
+    """Hybrid architecture wrapper for homodyne XPCS analysis.
 
     This class combines the robustness of stateful object-oriented design
     with the performance of functional JAX programming. It:
@@ -103,8 +101,7 @@ class HomodyneModel:
     """
 
     def __init__(self, config: dict):
-        """
-        Initialize HomodyneModel from configuration dictionary.
+        """Initialize HomodyneModel from configuration dictionary.
 
         Parameters
         ----------
@@ -138,16 +135,21 @@ class HomodyneModel:
         # Create time array
         n_time = self.end_frame - self.start_frame + 1
         self.time_array = jnp.linspace(
-            0, self.dt * (n_time - 1), n_time, dtype=jnp.float64
+            0,
+            self.dt * (n_time - 1),
+            n_time,
+            dtype=jnp.float64,
         )
 
         # Create time grids for correlation calculations
         self.t1_grid, self.t2_grid = jnp.meshgrid(
-            self.time_array, self.time_array, indexing="ij"
+            self.time_array,
+            self.time_array,
+            indexing="ij",
         )
 
         logger.debug(
-            f"Time array: n={n_time}, range=[0, {self.dt * (n_time - 1):.2f}] s"
+            f"Time array: n={n_time}, range=[0, {self.dt * (n_time - 1):.2f}] s",
         )
 
         # Create underlying model (for backward compatibility)
@@ -165,8 +167,7 @@ class HomodyneModel:
         contrast: float = 0.5,
         offset: float = 1.0,
     ) -> np.ndarray:
-        """
-        Compute C2 correlation function using stored configuration.
+        """Compute C2 correlation function using stored configuration.
 
         This high-level method:
         - Uses pre-computed time grids (self.t1_grid, self.t2_grid)
@@ -233,7 +234,7 @@ class HomodyneModel:
         logger.debug(
             f"Computed C2 for {len(phi_angles)} angles, "
             f"shape: {result.shape}, "
-            f"range: [{float(result.min()):.4f}, {float(result.max()):.4f}]"
+            f"range: [{float(result.min()):.4f}, {float(result.max()):.4f}]",
         )
 
         return np.array(result)
@@ -245,8 +246,7 @@ class HomodyneModel:
         contrast: float = 0.5,
         offset: float = 1.0,
     ) -> np.ndarray:
-        """
-        Compute C2 correlation function for a single angle.
+        """Compute C2 correlation function for a single angle.
 
         Convenience method for single-angle calculations.
 
@@ -278,8 +278,7 @@ class HomodyneModel:
         offset: float = 1.0,
         generate_plots: bool = True,
     ) -> tuple[np.ndarray, Path]:
-        """
-        Generate and optionally plot simulated C2 data.
+        """Generate and optionally plot simulated C2 data.
 
         This convenience method:
         1. Computes C2 using stored configuration
@@ -344,7 +343,11 @@ class HomodyneModel:
         if generate_plots:
             try:
                 self._generate_heatmap_plots(
-                    c2_data, phi_angles, output_path, contrast, offset
+                    c2_data,
+                    phi_angles,
+                    output_path,
+                    contrast,
+                    offset,
                 )
             except Exception as e:
                 logger.warning(f"Failed to generate plots: {e}")
@@ -433,7 +436,7 @@ class HomodyneModel:
         except KeyError as e:
             raise KeyError(
                 f"Missing required configuration key: {e}. "
-                f"Expected structure: config['analyzer_parameters'][...]"
+                f"Expected structure: config['analyzer_parameters'][...]",
             )
 
     def _determine_analysis_mode(self, config: dict) -> str:
@@ -456,8 +459,7 @@ class HomodyneModel:
 
     @property
     def config_summary(self) -> dict:
-        """
-        Get configuration summary for logging/debugging.
+        """Get configuration summary for logging/debugging.
 
         Returns
         -------

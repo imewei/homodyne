@@ -1,5 +1,4 @@
-"""
-System CUDA Integration for Homodyne v2
+"""System CUDA Integration for Homodyne v2
 =======================================
 
 GPU acceleration using system CUDA installation with jax[local].
@@ -39,8 +38,7 @@ except ImportError:
 
 
 def detect_system_cuda() -> dict[str, any]:
-    """
-    Detect system CUDA installation and capabilities.
+    """Detect system CUDA installation and capabilities.
 
     Returns
     -------
@@ -63,13 +61,16 @@ def detect_system_cuda() -> dict[str, any]:
     try:
         # Check for CUDA installation
         cuda_info["cuda_home"] = os.environ.get("CUDA_HOME") or os.environ.get(
-            "CUDA_PATH"
+            "CUDA_PATH",
         )
 
         # Try to detect CUDA via nvcc
         try:
             result = subprocess.run(
-                ["nvcc", "--version"], capture_output=True, text=True, timeout=10
+                ["nvcc", "--version"],
+                capture_output=True,
+                text=True,
+                timeout=10,
             )
             if result.returncode == 0:
                 cuda_info["nvcc_available"] = True
@@ -117,7 +118,7 @@ def detect_system_cuda() -> dict[str, any]:
                                         int(parts[1]) if parts[1].isdigit() else 0
                                     ),
                                     "compute_capability": parts[2],
-                                }
+                                },
                             )
 
                 cuda_info["device_count"] = len(cuda_info["devices"])
@@ -161,8 +162,7 @@ def configure_system_cuda(
     memory_fraction: float = 0.9,
     enable_preallocation: bool = False,
 ) -> dict[str, any]:
-    """
-    Configure JAX to use system CUDA installation.
+    """Configure JAX to use system CUDA installation.
 
     Parameters
     ----------
@@ -227,7 +227,7 @@ def configure_system_cuda(
                     logger.info(f"Using GPU device {device_id}: {selected_device}")
                 else:
                     logger.warning(
-                        f"Device ID {device_id} not available, using default"
+                        f"Device ID {device_id} not available, using default",
                     )
 
             # Verify GPU functionality with a simple test
@@ -244,15 +244,15 @@ def configure_system_cuda(
                     },
                     "active_devices": len(devices),
                     "default_device": str(jax.devices()[0]),
-                }
+                },
             )
 
             logger.info(
-                f"✓ System CUDA configured successfully with {len(devices)} device(s)"
+                f"✓ System CUDA configured successfully with {len(devices)} device(s)",
             )
             logger.info(
                 f"Memory fraction: {memory_fraction:.1%}, "
-                f"Preallocation: {'enabled' if enable_preallocation else 'disabled'}"
+                f"Preallocation: {'enabled' if enable_preallocation else 'disabled'}",
             )
 
         except Exception as e:
@@ -277,7 +277,7 @@ def _configure_cpu_fallback(config_summary: dict, error: str | None = None) -> d
             jax.config.update("jax_default_device", jax.devices("cpu")[0])
 
         config_summary.update(
-            {"cuda_configured": False, "fallback_to_cpu": True, "cpu_configured": True}
+            {"cuda_configured": False, "fallback_to_cpu": True, "cpu_configured": True},
         )
 
         if error:
@@ -314,8 +314,7 @@ def _test_gpu_functionality() -> None:
 
 
 def get_gpu_memory_info() -> dict[str, any]:
-    """
-    Get current GPU memory usage information.
+    """Get current GPU memory usage information.
 
     Returns
     -------
@@ -358,7 +357,7 @@ def get_gpu_memory_info() -> dict[str, any]:
                                 "usage_percent": (
                                     (used / total) * 100 if total > 0 else 0
                                 ),
-                            }
+                            },
                         )
 
             # Calculate totals
@@ -383,8 +382,7 @@ def optimize_gpu_memory(
     available_memory_mb: int | None = None,
     safety_factor: float = 0.8,
 ) -> dict[str, int]:
-    """
-    Calculate optimal memory usage strategy for GPU processing.
+    """Calculate optimal memory usage strategy for GPU processing.
 
     Parameters
     ----------
@@ -429,17 +427,17 @@ def optimize_gpu_memory(
 
     logger.info(
         f"GPU memory optimization: batch_size={optimal_batch_size}, "
-        f"chunks={num_chunks}, memory={optimization_strategy['estimated_memory_usage_mb']:.1f}MB"
+        f"chunks={num_chunks}, memory={optimization_strategy['estimated_memory_usage_mb']:.1f}MB",
     )
 
     return optimization_strategy
 
 
 def benchmark_gpu_performance(
-    test_sizes: list[int] = None, num_iterations: int = 3
+    test_sizes: list[int] = None,
+    num_iterations: int = 3,
 ) -> dict[str, any]:
-    """
-    Benchmark GPU performance for optimization planning.
+    """Benchmark GPU performance for optimization planning.
 
     Parameters
     ----------
@@ -520,7 +518,7 @@ def benchmark_gpu_performance(
 
         logger.info(
             f"Size {test_size}: {mean_time:.4f}s ± {std_time:.4f}s "
-            f"({throughput:.0f} ops/sec)"
+            f"({throughput:.0f} ops/sec)",
         )
 
     # Estimate memory bandwidth (rough calculation)
@@ -534,7 +532,7 @@ def benchmark_gpu_performance(
         )  # GB/s
 
     logger.info(
-        f"Benchmark completed. Peak throughput: {results['peak_throughput']:.0f} ops/sec"
+        f"Benchmark completed. Peak throughput: {results['peak_throughput']:.0f} ops/sec",
     )
     logger.info(f"Estimated memory bandwidth: {results['memory_bandwidth']:.1f} GB/s")
 
@@ -542,8 +540,7 @@ def benchmark_gpu_performance(
 
 
 def validate_cuda_installation() -> dict[str, any]:
-    """
-    Validate system CUDA installation for homodyne compatibility.
+    """Validate system CUDA installation for homodyne compatibility.
 
     Returns
     -------
@@ -570,7 +567,7 @@ def validate_cuda_installation() -> dict[str, any]:
         if not validation["cuda_detected"]:
             validation["errors"].append("No CUDA installation detected")
             validation["recommendations"].append(
-                "Install CUDA toolkit or load CUDA module on HPC system"
+                "Install CUDA toolkit or load CUDA module on HPC system",
             )
             return validation
 
@@ -582,7 +579,7 @@ def validate_cuda_installation() -> dict[str, any]:
             else:
                 validation["warnings"].append(
                     f"CUDA {cuda_info['cuda_version']} detected. "
-                    "CUDA 11.0+ recommended for optimal JAX compatibility"
+                    "CUDA 11.0+ recommended for optimal JAX compatibility",
                 )
 
         # Check JAX compatibility
@@ -594,14 +591,14 @@ def validate_cuda_installation() -> dict[str, any]:
                 if not validation["jax_compatible"]:
                     validation["errors"].append("JAX cannot access CUDA devices")
                     validation["recommendations"].append(
-                        "Install jax[local] and ensure system CUDA is in PATH"
+                        "Install jax[local] and ensure system CUDA is in PATH",
                     )
             except Exception as e:
                 validation["errors"].append(f"JAX CUDA test failed: {e}")
         else:
             validation["errors"].append("JAX not available")
             validation["recommendations"].append(
-                "Install JAX with: pip install jax[local]"
+                "Install JAX with: pip install jax[local]",
             )
 
         # Performance validation
@@ -614,17 +611,17 @@ def validate_cuda_installation() -> dict[str, any]:
             else:
                 validation["warnings"].append(
                     f"Only {total_memory_gb:.1f}GB GPU memory available. "
-                    "8GB+ recommended for large datasets"
+                    "8GB+ recommended for large datasets",
                 )
 
         # Generate final recommendations
         if validation["cuda_detected"] and validation["jax_compatible"]:
             validation["recommendations"].append(
-                "System CUDA configuration validated successfully"
+                "System CUDA configuration validated successfully",
             )
         elif validation["cuda_detected"]:
             validation["recommendations"].append(
-                "CUDA detected but JAX integration needs attention"
+                "CUDA detected but JAX integration needs attention",
             )
 
     except Exception as e:

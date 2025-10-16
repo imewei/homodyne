@@ -1,5 +1,4 @@
-"""
-GPU Runtime Support for Homodyne v2
+"""GPU Runtime Support for Homodyne v2
 ===================================
 
 GPU acceleration and optimization support for JAX-based computations.

@@ -1,5 +1,4 @@
-"""
-Advanced Performance Engine for Massive XPCS Datasets - Homodyne v2
+"""Advanced Performance Engine for Massive XPCS Datasets - Homodyne v2
 ===================================================================
 
 High-performance data processing engine for handling massive XPCS datasets (>1GB)
@@ -119,19 +118,13 @@ logger = get_logger(__name__)
 class PerformanceEngineError(Exception):
     """Base exception for performance engine errors."""
 
-    pass
-
 
 class MemoryPressureError(PerformanceEngineError):
     """Raised when memory pressure becomes critical."""
 
-    pass
-
 
 class CacheError(PerformanceEngineError):
     """Raised when cache operations fail."""
-
-    pass
 
 
 @dataclass
@@ -206,16 +199,14 @@ class ChunkInfo:
 
 
 class MemoryMapManager:
-    """
-    Manager for memory-mapped access to large HDF5 files.
+    """Manager for memory-mapped access to large HDF5 files.
 
     Provides efficient access to correlation matrices without loading entire datasets.
     Implements intelligent buffer management and progressive access patterns.
     """
 
     def __init__(self, max_open_files: int = 64, buffer_size_mb: float = 512.0):
-        """
-        Initialize memory map manager.
+        """Initialize memory map manager.
 
         Args:
             max_open_files: Maximum number of simultaneously open memory maps
@@ -230,13 +221,12 @@ class MemoryMapManager:
 
         logger.info(
             f"Memory map manager initialized: max_files={max_open_files}, "
-            f"buffer_size={buffer_size_mb}MB"
+            f"buffer_size={buffer_size_mb}MB",
         )
 
     @contextmanager
     def open_memory_mapped_hdf5(self, file_path: str, mode: str = "r"):
-        """
-        Context manager for memory-mapped HDF5 file access.
+        """Context manager for memory-mapped HDF5 file access.
 
         Args:
             file_path: Path to HDF5 file
@@ -264,7 +254,9 @@ class MemoryMapManager:
             try:
                 # Open with memory mapping
                 hdf_file = h5py.File(
-                    file_path, mode, rdcc_nbytes=int(self.buffer_size_mb * 1024 * 1024)
+                    file_path,
+                    mode,
+                    rdcc_nbytes=int(self.buffer_size_mb * 1024 * 1024),
                 )
                 self._open_maps[file_path] = hdf_file
                 self._access_counts[file_path] = 1
@@ -313,8 +305,7 @@ class MemoryMapManager:
 
 
 class AdaptiveChunker:
-    """
-    Intelligent chunking system that adapts based on memory pressure and data characteristics.
+    """Intelligent chunking system that adapts based on memory pressure and data characteristics.
 
     Provides smart chunk size determination, cross-chunk correlation analysis,
     and adaptive chunking that adjusts based on processing performance feedback.
@@ -326,8 +317,7 @@ class AdaptiveChunker:
         memory_threshold: float = 0.8,
         performance_feedback_window: int = 10,
     ):
-        """
-        Initialize adaptive chunker.
+        """Initialize adaptive chunker.
 
         Args:
             base_chunk_size: Base chunk size for normal conditions
@@ -346,7 +336,7 @@ class AdaptiveChunker:
 
         logger.info(
             f"Adaptive chunker initialized: base_size={base_chunk_size}, "
-            f"memory_threshold={memory_threshold}"
+            f"memory_threshold={memory_threshold}",
         )
 
     def calculate_optimal_chunk_size(
@@ -355,8 +345,7 @@ class AdaptiveChunker:
         data_complexity: float = 1.0,
         available_memory_mb: float = None,
     ) -> int:
-        """
-        Calculate optimal chunk size based on current conditions.
+        """Calculate optimal chunk size based on current conditions.
 
         Args:
             total_size: Total size of data to be chunked
@@ -373,7 +362,8 @@ class AdaptiveChunker:
             memory_pressure = memory_info.percent / 100.0
         else:
             memory_pressure = max(
-                0.0, 1.0 - available_memory_mb / 8192
+                0.0,
+                1.0 - available_memory_mb / 8192,
             )  # Assume 8GB baseline
 
         # Base chunk size adjustment
@@ -382,7 +372,8 @@ class AdaptiveChunker:
         # Adjust for memory pressure
         if memory_pressure > self.memory_threshold:
             memory_factor = max(
-                0.1, 1.0 - (memory_pressure - self.memory_threshold) * 2.0
+                0.1,
+                1.0 - (memory_pressure - self.memory_threshold) * 2.0,
             )
             chunk_size = int(chunk_size * memory_factor)
 
@@ -392,24 +383,25 @@ class AdaptiveChunker:
 
         # Ensure minimum and maximum bounds
         min_chunk_size = max(
-            1000, total_size // 1000
+            1000,
+            total_size // 1000,
         )  # At least 1000 points or 0.1% of total
         max_chunk_size = min(
-            self.base_chunk_size * 4, total_size // 2
+            self.base_chunk_size * 4,
+            total_size // 2,
         )  # At most 4x base or 50% of total
 
         chunk_size = max(min_chunk_size, min(max_chunk_size, chunk_size))
 
         logger.debug(
             f"Calculated optimal chunk size: {chunk_size} "
-            f"(memory_pressure={memory_pressure:.2f}, complexity={data_complexity:.2f})"
+            f"(memory_pressure={memory_pressure:.2f}, complexity={data_complexity:.2f})",
         )
 
         return chunk_size
 
     def create_chunk_plan(self, total_size: int, chunk_size: int) -> list[ChunkInfo]:
-        """
-        Create intelligent chunk processing plan.
+        """Create intelligent chunk processing plan.
 
         Args:
             total_size: Total size of data
@@ -466,16 +458,18 @@ class AdaptiveChunker:
         logger.info(
             f"Created chunk plan: {num_chunks} chunks, "
             f"avg_size={np.mean([c.size for c in chunks]):.0f}, "
-            f"total_memory={sum(c.memory_size_mb for c in chunks):.1f}MB"
+            f"total_memory={sum(c.memory_size_mb for c in chunks):.1f}MB",
         )
 
         return chunks
 
     def update_performance_feedback(
-        self, chunk_info: ChunkInfo, actual_processing_time: float, success: bool = True
+        self,
+        chunk_info: ChunkInfo,
+        actual_processing_time: float,
+        success: bool = True,
     ) -> None:
-        """
-        Update performance feedback for adaptive optimization.
+        """Update performance feedback for adaptive optimization.
 
         Args:
             chunk_info: Information about processed chunk
@@ -483,7 +477,8 @@ class AdaptiveChunker:
             success: Whether processing was successful
         """
         performance_ratio = chunk_info.estimated_processing_time / max(
-            actual_processing_time, 0.001
+            actual_processing_time,
+            0.001,
         )
 
         feedback = {
@@ -517,7 +512,7 @@ class AdaptiveChunker:
             return
 
         avg_performance_ratio = np.mean(
-            [p["performance_ratio"] for p in successful_chunks]
+            [p["performance_ratio"] for p in successful_chunks],
         )
         np.mean([p["chunk_size"] for p in successful_chunks])
 
@@ -527,14 +522,14 @@ class AdaptiveChunker:
             new_optimal_size = int(self._optimal_chunk_size * 0.8)
             logger.info(
                 f"Reducing optimal chunk size: {self._optimal_chunk_size} -> {new_optimal_size} "
-                f"(avg_performance_ratio={avg_performance_ratio:.2f})"
+                f"(avg_performance_ratio={avg_performance_ratio:.2f})",
             )
         elif avg_performance_ratio > 1.2:  # Processing faster than expected
             # Increase chunk size
             new_optimal_size = int(self._optimal_chunk_size * 1.1)
             logger.info(
                 f"Increasing optimal chunk size: {self._optimal_chunk_size} -> {new_optimal_size} "
-                f"(avg_performance_ratio={avg_performance_ratio:.2f})"
+                f"(avg_performance_ratio={avg_performance_ratio:.2f})",
             )
         else:
             return  # No change needed
@@ -545,8 +540,7 @@ class AdaptiveChunker:
 
 
 class MultiLevelCache:
-    """
-    Advanced multi-level caching system with intelligent eviction.
+    """Advanced multi-level caching system with intelligent eviction.
 
     Implements memory cache, SSD cache, and HDD cache with intelligent
     cache coherence management and compressed caching for memory efficiency.
@@ -559,8 +553,7 @@ class MultiLevelCache:
         hdd_cache_mb: float = 32768.0,
         compression_level: int = 3,
     ):
-        """
-        Initialize multi-level cache system.
+        """Initialize multi-level cache system.
 
         Args:
             memory_cache_mb: Memory cache size in MB
@@ -600,12 +593,11 @@ class MultiLevelCache:
 
         logger.info(
             f"Multi-level cache initialized: memory={memory_cache_mb}MB, "
-            f"ssd={ssd_cache_mb}MB, hdd={hdd_cache_mb}MB, compression={compression_level}"
+            f"ssd={ssd_cache_mb}MB, hdd={hdd_cache_mb}MB, compression={compression_level}",
         )
 
     def get(self, key: str) -> Any | None:
-        """
-        Get item from cache hierarchy (memory -> SSD -> HDD).
+        """Get item from cache hierarchy (memory -> SSD -> HDD).
 
         Args:
             key: Cache key
@@ -655,8 +647,7 @@ class MultiLevelCache:
             return None
 
     def put(self, key: str, item: Any, priority: int = 5) -> None:
-        """
-        Put item in cache hierarchy with intelligent placement.
+        """Put item in cache hierarchy with intelligent placement.
 
         Args:
             key: Cache key
@@ -682,7 +673,11 @@ class MultiLevelCache:
                 self._put_hdd(key, item)
 
     def _put_memory(
-        self, key: str, item: Any, current_time: float, priority: int = 5
+        self,
+        key: str,
+        item: Any,
+        current_time: float,
+        priority: int = 5,
     ) -> None:
         """Put item in memory cache with size management."""
         # Calculate item size
@@ -795,7 +790,7 @@ class MultiLevelCache:
             total_size = 0
             for key, value in item.items():
                 total_size += self._estimate_size_mb(key) + self._estimate_size_mb(
-                    value
+                    value,
                 )
             return total_size
         else:
@@ -846,7 +841,8 @@ class MultiLevelCache:
         for key in list(self._memory_cache.keys()):
             # Calculate value score (lower is less valuable)
             recency_score = current_time - self._access_times.get(
-                key, 0
+                key,
+                0,
             )  # Higher = less recent
             frequency_score = 1.0 / (
                 self._get_access_frequency(key) + 0.1
@@ -862,7 +858,7 @@ class MultiLevelCache:
             evicted_size = self._estimate_size_mb(evicted_item)
             self._memory_usage_mb -= evicted_size
             logger.debug(
-                f"Evicted from memory: {least_valuable_key} ({evicted_size:.1f}MB)"
+                f"Evicted from memory: {least_valuable_key} ({evicted_size:.1f}MB)",
             )
 
     def _evict_from_ssd(self) -> None:
@@ -932,8 +928,7 @@ class MultiLevelCache:
 
 
 class PerformanceEngine:
-    """
-    Main performance engine coordinating all optimization components.
+    """Main performance engine coordinating all optimization components.
 
     Orchestrates memory-mapped I/O, intelligent chunking, parallel processing,
     smart prefetching, and multi-level caching for optimal performance.
@@ -941,8 +936,7 @@ class PerformanceEngine:
 
     @log_calls(include_args=False)
     def __init__(self, config: dict[str, Any] | None = None):
-        """
-        Initialize performance engine with configuration.
+        """Initialize performance engine with configuration.
 
         Args:
             config: Performance configuration dictionary
@@ -959,14 +953,16 @@ class PerformanceEngine:
         # Performance monitoring
         self.metrics = PerformanceMetrics()
         self._monitoring_enabled = self.performance_config.get("monitoring", {}).get(
-            "enabled", True
+            "enabled",
+            True,
         )
         self._monitoring_thread: threading.Thread | None = None
         self._shutdown_event = threading.Event()
 
         # Prefetching and background loading
         self._prefetch_enabled = self.performance_config.get("prefetching", {}).get(
-            "enabled", True
+            "enabled",
+            True,
         )
         self._prefetch_queue: deque = deque(maxlen=100)
         self._background_executor: ThreadPoolExecutor | None = None
@@ -995,7 +991,9 @@ class PerformanceEngine:
         feedback_window = chunking_config.get("performance_feedback_window", 10)
 
         self.chunker = AdaptiveChunker(
-            base_chunk_size, memory_threshold, feedback_window
+            base_chunk_size,
+            memory_threshold,
+            feedback_window,
         )
 
     def _init_cache(self) -> None:
@@ -1007,7 +1005,10 @@ class PerformanceEngine:
         compression_level = cache_config.get("compression_level", 3)
 
         self.cache = MultiLevelCache(
-            memory_cache_mb, ssd_cache_mb, hdd_cache_mb, compression_level
+            memory_cache_mb,
+            ssd_cache_mb,
+            hdd_cache_mb,
+            compression_level,
         )
 
     def _init_parallel_executor(self) -> None:
@@ -1016,7 +1017,8 @@ class PerformanceEngine:
         max_workers = parallel_config.get("max_workers", min(os.cpu_count() or 1, 8))
 
         self.executor = ThreadPoolExecutor(
-            max_workers=max_workers, thread_name_prefix="PerformanceEngine"
+            max_workers=max_workers,
+            thread_name_prefix="PerformanceEngine",
         )
 
     def _start_performance_monitoring(self) -> None:
@@ -1032,7 +1034,8 @@ class PerformanceEngine:
     def _start_background_processing(self) -> None:
         """Start background processing for prefetching."""
         self._background_executor = ThreadPoolExecutor(
-            max_workers=2, thread_name_prefix="BackgroundProcessing"
+            max_workers=2,
+            thread_name_prefix="BackgroundProcessing",
         )
         logger.debug("Background processing started")
 
@@ -1069,7 +1072,7 @@ class PerformanceEngine:
                     k
                     for k in self.cache._memory_cache.keys()
                     if k in self.cache._access_counts
-                ]
+                ],
             )
             cache_hit_rate = cache_hits / max(total_requests, 1)
             self.metrics.update(cache_hit_rate=cache_hit_rate)
@@ -1098,8 +1101,7 @@ class PerformanceEngine:
         data_keys: list[str],
         chunk_info: list[ChunkInfo] | None = None,
     ) -> np.ndarray:
-        """
-        Load correlation matrices with full performance optimization.
+        """Load correlation matrices with full performance optimization.
 
         Args:
             hdf_path: Path to HDF5 file
@@ -1132,22 +1134,26 @@ class PerformanceEngine:
                     chunk_info or estimated_memory_mb > 1024
                 ):  # Use chunking for large datasets
                     logger.info(
-                        f"Using chunked processing for {len(data_keys)} correlation matrices"
+                        f"Using chunked processing for {len(data_keys)} correlation matrices",
                     )
                     correlation_matrices = self._load_matrices_chunked(
-                        hdf_file, data_keys, chunk_info
+                        hdf_file,
+                        data_keys,
+                        chunk_info,
                     )
                 else:
                     logger.info(
-                        f"Using direct loading for {len(data_keys)} correlation matrices"
+                        f"Using direct loading for {len(data_keys)} correlation matrices",
                     )
                     correlation_matrices = self._load_matrices_direct(
-                        hdf_file, data_keys
+                        hdf_file,
+                        data_keys,
                     )
 
             # Convert to JAX arrays if available and requested
             output_format = self.config.get("v2_features", {}).get(
-                "output_format", "auto"
+                "output_format",
+                "auto",
             )
             if output_format in ["jax", "auto"] and HAS_JAX and jax_available:
                 correlation_matrices = jnp.array(correlation_matrices)
@@ -1170,7 +1176,7 @@ class PerformanceEngine:
 
             logger.info(
                 f"Loaded {len(data_keys)} correlation matrices in {loading_time:.2f}s "
-                f"({loading_speed:.1f} MB/s)"
+                f"({loading_speed:.1f} MB/s)",
             )
 
             return correlation_matrices
@@ -1178,7 +1184,7 @@ class PerformanceEngine:
         except Exception as e:
             logger.error(f"Failed to load correlation matrices: {e}")
             raise PerformanceEngineError(
-                f"Correlation matrix loading failed: {e}"
+                f"Correlation matrix loading failed: {e}",
             ) from e
 
     def _load_matrices_chunked(
@@ -1202,7 +1208,10 @@ class PerformanceEngine:
             chunk_keys = data_keys[start_idx:end_idx]
 
             future = self.executor.submit(
-                self._load_matrix_chunk, hdf_file, chunk_keys, chunk
+                self._load_matrix_chunk,
+                hdf_file,
+                chunk_keys,
+                chunk,
             )
             future_to_chunk[future] = chunk
 
@@ -1219,7 +1228,9 @@ class PerformanceEngine:
 
                 # Update chunker performance feedback
                 self.chunker.update_performance_feedback(
-                    chunk, chunk_processing_time, success=True
+                    chunk,
+                    chunk_processing_time,
+                    success=True,
                 )
 
             except Exception as e:
@@ -1243,7 +1254,7 @@ class PerformanceEngine:
             c2t_group = hdf_file["xpcs/twotime/correlation_map"]
         else:
             raise PerformanceEngineError(
-                "Cannot determine HDF5 correlation matrix location"
+                "Cannot determine HDF5 correlation matrix location",
             )
 
         for key in data_keys:
@@ -1256,7 +1267,10 @@ class PerformanceEngine:
         return np.array(matrices)
 
     def _load_matrix_chunk(
-        self, hdf_file, chunk_keys: list[str], chunk_info: ChunkInfo
+        self,
+        hdf_file,
+        chunk_keys: list[str],
+        chunk_info: ChunkInfo,
     ) -> list[np.ndarray]:
         """Load a chunk of correlation matrices."""
         matrices = []
@@ -1268,7 +1282,7 @@ class PerformanceEngine:
             c2t_group = hdf_file["xpcs/twotime/correlation_map"]
         else:
             raise PerformanceEngineError(
-                "Cannot determine HDF5 correlation matrix location"
+                "Cannot determine HDF5 correlation matrix location",
             )
 
         for key in chunk_keys:
@@ -1300,10 +1314,12 @@ class PerformanceEngine:
         )
 
     def prefetch_data(
-        self, hdf_path: str, data_keys: list[str], priority: int = 5
+        self,
+        hdf_path: str,
+        data_keys: list[str],
+        priority: int = 5,
     ) -> Future:
-        """
-        Schedule data for background prefetching.
+        """Schedule data for background prefetching.
 
         Args:
             hdf_path: Path to HDF5 file
@@ -1329,27 +1345,36 @@ class PerformanceEngine:
 
         # Schedule for background loading
         future = self._background_executor.submit(
-            self._background_load_data, hdf_path, data_keys, cache_key, priority
+            self._background_load_data,
+            hdf_path,
+            data_keys,
+            cache_key,
+            priority,
         )
 
         logger.debug(f"Scheduled background prefetch for {len(data_keys)} data keys")
         return future
 
     def _background_load_data(
-        self, hdf_path: str, data_keys: list[str], cache_key: str, priority: int
+        self,
+        hdf_path: str,
+        data_keys: list[str],
+        cache_key: str,
+        priority: int,
     ) -> None:
         """Background data loading for prefetching."""
         try:
             # Load data using optimized loading
             correlation_matrices = self.load_correlation_matrices_optimized(
-                hdf_path, data_keys
+                hdf_path,
+                data_keys,
             )
 
             # Cache with specified priority
             self.cache.put(cache_key, correlation_matrices, priority=priority)
 
             logger.debug(
-                f"Background prefetch completed for {len(data_keys)} data keys"
+                f"Background prefetch completed for {len(data_keys)} data keys",
             )
 
         except Exception as e:

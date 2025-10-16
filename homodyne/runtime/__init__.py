@@ -1,5 +1,4 @@
-"""
-Homodyne v2 Runtime Support
+"""Homodyne v2 Runtime Support
 ==========================
 
 Runtime support modules for GPU acceleration and hardware optimization.

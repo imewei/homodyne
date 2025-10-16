@@ -1,6 +1,5 @@
 #!/usr/bin/env python3
-"""
-GPU Wrapper for Homodyne Analysis
+"""GPU Wrapper for Homodyne Analysis
 ==================================
 
 Command-line wrapper that automatically activates GPU support before running homodyne.
@@ -71,8 +70,7 @@ def find_activation_script():
 
 
 def setup_gpu_environment(quiet=False):
-    """
-    Configure GPU environment using system CUDA and cuDNN.
+    """Configure GPU environment using system CUDA and cuDNN.
 
     Sets up environment variables for JAX GPU acceleration using:
     - System CUDA 12.6 at /usr/local/cuda
@@ -92,7 +90,7 @@ def setup_gpu_environment(quiet=False):
         if platform.system() != "Linux":
             if not quiet:
                 print(
-                    f"homodyne-gpu: GPU acceleration requires Linux (detected: {platform.system()})"
+                    f"homodyne-gpu: GPU acceleration requires Linux (detected: {platform.system()})",
                 )
                 print("Falling back to CPU-only mode")
             return False
@@ -200,7 +198,7 @@ def main():
             if method in ["classical", "robust"]:
                 if not quiet_mode:
                     print(
-                        f"homodyne-gpu: GPU acceleration not needed for --method {method}"
+                        f"homodyne-gpu: GPU acceleration not needed for --method {method}",
                     )
                     print("Classical and robust methods run on CPU only")
                     print(f"Use 'homodyne --method {method}' instead")
@@ -211,7 +209,7 @@ def main():
         if not quiet_mode:
             print(f"homodyne-gpu: GPU requires Linux (detected: {platform.system()})")
             print(
-                "System CUDA integration requires Linux with CUDA 12.6+ and cuDNN 9.12+"
+                "System CUDA integration requires Linux with CUDA 12.6+ and cuDNN 9.12+",
             )
             print("Falling back to standard homodyne command (CPU-only)")
             print()
@@ -232,7 +230,7 @@ def main():
                     print(f"✅ JAX {jax.__version__} available for GPU acceleration")
                 except ImportError:
                     print(
-                        "⚠️  JAX not installed - install with: pip install jax[cuda12-local]"
+                        "⚠️  JAX not installed - install with: pip install jax[cuda12-local]",
                     )
 
             # Check if GPU auto-activation is available in virtual environment

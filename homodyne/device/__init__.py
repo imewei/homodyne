@@ -1,5 +1,4 @@
-"""
-Device Optimization Module for Homodyne v2
+"""Device Optimization Module for Homodyne v2
 ===========================================
 
 HPC/GPU device optimization with system CUDA integration.
@@ -58,8 +57,7 @@ def configure_optimal_device(
     cpu_threads: int | None = None,
     force_cpu: bool = False,
 ) -> dict[str, any]:
-    """
-    Automatically configure the optimal device for homodyne analysis.
+    """Automatically configure the optimal device for homodyne analysis.
 
     Attempts GPU configuration first (if available), then falls back to
     optimized CPU configuration for HPC environments.
@@ -113,7 +111,7 @@ def configure_optimal_device(
                             "GPU acceleration configured successfully",
                             f"Using {gpu_memory_fraction:.0%} of GPU memory",
                         ],
-                    }
+                    },
                 )
 
                 logger.info("✓ GPU configuration successful")
@@ -123,7 +121,7 @@ def configure_optimal_device(
                 logger.info("GPU configuration failed, falling back to CPU")
                 if "error" in gpu_config:
                     config_result["warnings"].append(
-                        f"GPU setup failed: {gpu_config['error']}"
+                        f"GPU setup failed: {gpu_config['error']}",
                     )
 
         except Exception as e:
@@ -157,11 +155,11 @@ def _configure_cpu_optimal(config_result: dict, cpu_threads: int | None) -> dict
                         f"CPU optimization configured for {cpu_config['threads_configured']} threads",
                         "Consider GPU acceleration for larger datasets",
                     ],
-                }
+                },
             )
 
             logger.info(
-                f"✓ CPU configuration successful with {cpu_config['threads_configured']} threads"
+                f"✓ CPU configuration successful with {cpu_config['threads_configured']} threads",
             )
 
         else:
@@ -182,7 +180,7 @@ def _configure_cpu_optimal(config_result: dict, cpu_threads: int | None) -> dict
                         f"Basic CPU configuration with {num_cores} cores",
                         "Install psutil for advanced CPU optimization",
                     ],
-                }
+                },
             )
 
             logger.info("✓ Basic CPU configuration completed")
@@ -195,15 +193,14 @@ def _configure_cpu_optimal(config_result: dict, cpu_threads: int | None) -> dict
                 "configuration_successful": False,
                 "performance_ready": False,
                 "warnings": [f"CPU configuration failed: {e}"],
-            }
+            },
         )
 
     return config_result
 
 
 def get_device_status() -> dict[str, any]:
-    """
-    Get current device status and capabilities.
+    """Get current device status and capabilities.
 
     Returns
     -------
@@ -247,17 +244,17 @@ def get_device_status() -> dict[str, any]:
         if status["gpu_info"].get("cuda_available", False):
             status["performance_estimate"] = "high"
             status["recommendations"].append(
-                "GPU acceleration available - excellent performance expected"
+                "GPU acceleration available - excellent performance expected",
             )
         elif status["cpu_info"].get("physical_cores", 0) >= 16:
             status["performance_estimate"] = "medium-high"
             status["recommendations"].append(
-                "Multi-core CPU detected - good performance expected"
+                "Multi-core CPU detected - good performance expected",
             )
         else:
             status["performance_estimate"] = "medium"
             status["recommendations"].append(
-                "Consider upgrading hardware for better performance"
+                "Consider upgrading hardware for better performance",
             )
 
     except Exception as e:
@@ -268,10 +265,10 @@ def get_device_status() -> dict[str, any]:
 
 
 def benchmark_device_performance(
-    device_type: str | None = None, test_size: int = 5000
+    device_type: str | None = None,
+    test_size: int = 5000,
 ) -> dict[str, any]:
-    """
-    Benchmark device performance for optimization planning.
+    """Benchmark device performance for optimization planning.
 
     Parameters
     ----------
@@ -319,17 +316,18 @@ def benchmark_device_performance(
                 .get("mean_time", float("inf"))
             )
             cpu_time = benchmark_results["results"]["cpu"].get(
-                "numpy_mean_time", float("inf")
+                "numpy_mean_time",
+                float("inf"),
             )
 
             if gpu_time < cpu_time:
                 speedup = cpu_time / gpu_time if gpu_time > 0 else 1
                 benchmark_results["recommendations"].append(
-                    f"GPU acceleration provides {speedup:.1f}x speedup over CPU"
+                    f"GPU acceleration provides {speedup:.1f}x speedup over CPU",
                 )
             else:
                 benchmark_results["recommendations"].append(
-                    "CPU performance competitive with GPU for this problem size"
+                    "CPU performance competitive with GPU for this problem size",
                 )
 
     except Exception as e:

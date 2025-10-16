@@ -1,5 +1,4 @@
-"""
-Phi Angle Filtering Module
+"""Phi Angle Filtering Module
 
 This module provides functionality for filtering phi angles based on target ranges,
 implementing the logic from the v1 reference implementation with JAX-first optimizations
@@ -34,8 +33,7 @@ logger = logging.getLogger(__name__)
 
 
 class PhiAngleFilter:
-    """
-    Phi angle filtering utility class for XPCS analysis.
+    """Phi angle filtering utility class for XPCS analysis.
 
     Provides vectorized filtering of phi angles based on configurable target ranges,
     with intelligent fallback behavior when no angles match the specified ranges.
@@ -47,8 +45,7 @@ class PhiAngleFilter:
     ]
 
     def __init__(self, config: dict[str, Any] | None = None):
-        """
-        Initialize the phi angle filter.
+        """Initialize the phi angle filter.
 
         Args:
             config: Optional configuration dictionary containing angle filtering settings
@@ -60,7 +57,8 @@ class PhiAngleFilter:
         """Parse configuration settings for angle filtering."""
         # Get angle filtering configuration
         angle_config = self.config.get("optimization_config", {}).get(
-            "angle_filtering", {}
+            "angle_filtering",
+            {},
         )
 
         # Extract target ranges
@@ -78,10 +76,10 @@ class PhiAngleFilter:
         self.filtering_enabled = angle_config.get("enabled", True)
 
         logger.debug(
-            f"Initialized PhiAngleFilter with target_ranges: {self.target_ranges}"
+            f"Initialized PhiAngleFilter with target_ranges: {self.target_ranges}",
         )
         logger.debug(
-            f"Fallback enabled: {self.fallback_enabled}, Filtering enabled: {self.filtering_enabled}"
+            f"Fallback enabled: {self.fallback_enabled}, Filtering enabled: {self.filtering_enabled}",
         )
 
     def filter_angles_for_optimization(
@@ -90,8 +88,7 @@ class PhiAngleFilter:
         target_ranges: list[tuple[float, float]] | None = None,
         fallback_enabled: bool | None = None,
     ) -> tuple[list[int], np.ndarray]:
-        """
-        Filter phi angles based on target ranges for optimization.
+        """Filter phi angles based on target ranges for optimization.
 
         This method implements the core logic from the v1 reference implementation,
         using vectorized operations for performance.
@@ -126,7 +123,7 @@ class PhiAngleFilter:
         phi_angles_array = np.asarray(phi_angles)
 
         logger.debug(
-            f"Filtering {len(phi_angles_array)} angles with target ranges: {ranges}"
+            f"Filtering {len(phi_angles_array)} angles with target ranges: {ranges}",
         )
 
         # Vectorized range checking for all ranges at once
@@ -147,14 +144,14 @@ class PhiAngleFilter:
             angles_in_range = np.sum(range_mask)
             if angles_in_range > 0:
                 logger.debug(
-                    f"Found {angles_in_range} angles in range [{min_angle}, {max_angle}]"
+                    f"Found {angles_in_range} angles in range [{min_angle}, {max_angle}]",
                 )
 
         # Get indices of matching angles
         optimization_indices = np.flatnonzero(optimization_mask).tolist()
 
         logger.debug(
-            f"Filtering angles for optimization: using {len(optimization_indices)}/{len(phi_angles)} angles"
+            f"Filtering angles for optimization: using {len(optimization_indices)}/{len(phi_angles)} angles",
         )
 
         if optimization_indices:
@@ -175,8 +172,7 @@ class PhiAngleFilter:
                 raise ValueError(error_msg)
 
     def validate_target_ranges(self, target_ranges: list[tuple[float, float]]) -> bool:
-        """
-        Validate target angle ranges.
+        """Validate target angle ranges.
 
         Args:
             target_ranges: List of (min_angle, max_angle) tuples
@@ -188,20 +184,20 @@ class PhiAngleFilter:
         for i, (min_angle, max_angle) in enumerate(target_ranges):
             if min_angle > max_angle:
                 logger.error(
-                    f"Range {i}: min_angle ({min_angle}) > max_angle ({max_angle})"
+                    f"Range {i}: min_angle ({min_angle}) > max_angle ({max_angle})",
                 )
                 valid = False
             if not (-360 <= min_angle <= 360 and -360 <= max_angle <= 360):
                 logger.warning(
-                    f"Range {i}: angles outside typical range [-360, 360]: [{min_angle}, {max_angle}]"
+                    f"Range {i}: angles outside typical range [-360, 360]: [{min_angle}, {max_angle}]",
                 )
         return valid
 
     def get_angle_statistics(
-        self, phi_angles: list[float] | np.ndarray
+        self,
+        phi_angles: list[float] | np.ndarray,
     ) -> dict[str, Any]:
-        """
-        Get statistics about angle distribution relative to target ranges.
+        """Get statistics about angle distribution relative to target ranges.
 
         Args:
             phi_angles: Array or list of phi angles in degrees
@@ -248,8 +244,7 @@ def filter_phi_angles(
     target_ranges: list[tuple[float, float]] | None = None,
     fallback_enabled: bool | None = None,
 ) -> tuple[list[int], np.ndarray]:
-    """
-    Convenience function for filtering phi angles.
+    """Convenience function for filtering phi angles.
 
     This is the main entry point for phi angle filtering, providing a simple
     interface while maintaining all the functionality of the PhiAngleFilter class.
@@ -271,13 +266,14 @@ def filter_phi_angles(
     """
     filter_obj = PhiAngleFilter(config)
     return filter_obj.filter_angles_for_optimization(
-        phi_angles, target_ranges, fallback_enabled
+        phi_angles,
+        target_ranges,
+        fallback_enabled,
     )
 
 
 def create_anisotropic_ranges() -> list[tuple[float, float]]:
-    """
-    Create default target ranges for anisotropic analysis.
+    """Create default target ranges for anisotropic analysis.
 
     Returns anisotropic-optimized ranges that capture key flow directions:
     - Near 0° (flow direction)
@@ -297,8 +293,7 @@ def create_anisotropic_ranges() -> list[tuple[float, float]]:
 
 
 def create_isotropic_ranges() -> list[tuple[float, float]]:
-    """
-    Create default target ranges for isotropic analysis.
+    """Create default target ranges for isotropic analysis.
 
     For isotropic systems, we typically only need a couple of representative
     angles since the system has rotational symmetry.
@@ -319,8 +314,7 @@ if HAS_JAX:
         phi_angles: list[float] | np.ndarray,
         target_ranges: list[tuple[float, float]],
     ) -> tuple[np.ndarray, np.ndarray]:
-        """
-        JAX-accelerated version of phi angle filtering.
+        """JAX-accelerated version of phi angle filtering.
 
         This function uses JAX for potentially faster computation on GPU/TPU,
         but falls back to numpy if JAX is not available.

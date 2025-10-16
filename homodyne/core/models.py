@@ -1,5 +1,4 @@
-"""
-Physical Models for Homodyne v2
+"""Physical Models for Homodyne v2
 ================================
 
 Object-oriented interface to the physical models implemented in the JAX backend.
@@ -47,16 +46,14 @@ logger = get_logger(__name__)
 
 
 class PhysicsModelBase(ABC):
-    """
-    Abstract base class for all physical models.
+    """Abstract base class for all physical models.
 
     Defines the interface that all models must implement and provides
     common functionality for parameter management and validation.
     """
 
     def __init__(self, name: str, parameter_names: list[str]):
-        """
-        Initialize base model.
+        """Initialize base model.
 
         Args:
             name: Model name for identification
@@ -80,17 +77,14 @@ class PhysicsModelBase(ABC):
         dt: float = None,
     ) -> jnp.ndarray:
         """Compute g1 correlation function for this model."""
-        pass
 
     @abstractmethod
     def get_parameter_bounds(self) -> list[tuple[float, float]]:
         """Get parameter bounds for optimization."""
-        pass
 
     @abstractmethod
     def get_default_parameters(self) -> jnp.ndarray:
         """Get default parameter values."""
-        pass
 
     def validate_parameters(self, params: jnp.ndarray) -> bool:
         """Validate parameter values against bounds and constraints."""
@@ -127,8 +121,7 @@ class PhysicsModelBase(ABC):
 
 
 class DiffusionModel(PhysicsModelBase):
-    """
-    Anomalous diffusion model: D(t) = D₀ t^α + D_offset
+    """Anomalous diffusion model: D(t) = D₀ t^α + D_offset
 
     Parameters:
     - D₀: Reference diffusion coefficient [Å²/s]
@@ -144,7 +137,8 @@ class DiffusionModel(PhysicsModelBase):
 
     def __init__(self):
         super().__init__(
-            name="anomalous_diffusion", parameter_names=["D0", "alpha", "D_offset"]
+            name="anomalous_diffusion",
+            parameter_names=["D0", "alpha", "D_offset"],
         )
 
     @log_calls(include_args=False)
@@ -158,8 +152,7 @@ class DiffusionModel(PhysicsModelBase):
         L: float,
         dt: float = None,
     ) -> jnp.ndarray:
-        """
-        Compute diffusion contribution to g1.
+        """Compute diffusion contribution to g1.
 
         g₁_diff = exp[-q²/2 ∫|t₂-t₁| D(t')dt']
         """
@@ -189,8 +182,7 @@ class DiffusionModel(PhysicsModelBase):
 
 
 class ShearModel(PhysicsModelBase):
-    """
-    Time-dependent shear model: γ̇(t) = γ̇₀ t^β + γ̇_offset
+    """Time-dependent shear model: γ̇(t) = γ̇₀ t^β + γ̇_offset
 
     Parameters:
     - γ̇₀: Reference shear rate [s⁻¹]
@@ -222,8 +214,7 @@ class ShearModel(PhysicsModelBase):
         L: float,
         dt: float = None,
     ) -> jnp.ndarray:
-        """
-        Compute shear contribution to g1.
+        """Compute shear contribution to g1.
 
         g₁_shear = [sinc(Φ)]² where Φ = (qL/2π) cos(φ₀-φ) ∫|t₂-t₁| γ̇(t') dt'
         """
@@ -253,8 +244,7 @@ class ShearModel(PhysicsModelBase):
 
 
 class CombinedModel(PhysicsModelBase):
-    """
-    Combined diffusion + shear model for complete homodyne analysis.
+    """Combined diffusion + shear model for complete homodyne analysis.
 
     This is the full model used for laminar flow analysis with both
     anomalous diffusion and time-dependent shear.
@@ -268,8 +258,7 @@ class CombinedModel(PhysicsModelBase):
     """
 
     def __init__(self, analysis_mode: str = "laminar_flow"):
-        """
-        Initialize combined model.
+        """Initialize combined model.
 
         Args:
             analysis_mode: "static_isotropic", "static_anisotropic", or "laminar_flow"
@@ -310,9 +299,7 @@ class CombinedModel(PhysicsModelBase):
         L: float,
         dt: float = None,
     ) -> jnp.ndarray:
-        """
-        Compute total g1 = g1_diffusion × g1_shear.
-        """
+        """Compute total g1 = g1_diffusion × g1_shear."""
         # Skip validation inside JIT to avoid JAX tracer boolean conversion errors
         # if not self.validate_parameters(params):
         #     logger.warning(
@@ -325,23 +312,23 @@ class CombinedModel(PhysicsModelBase):
         if self.analysis_mode.startswith("static"):
             # Static mode: only diffusion, no shear
             logger.debug(
-                f"CombinedModel.compute_g1: calling compute_g1_diffusion with params.shape={params.shape}"
+                f"CombinedModel.compute_g1: calling compute_g1_diffusion with params.shape={params.shape}",
             )
             return compute_g1_diffusion(params, t1, t2, q, dt)
         else:
             # Laminar flow mode: full model
             logger.debug(
-                f"CombinedModel.compute_g1: calling compute_g1_total with params.shape={params.shape}, t1.shape={t1.shape}, t2.shape={t2.shape}, phi.shape={phi.shape}, q={q}, L={L}, dt={dt}"
+                f"CombinedModel.compute_g1: calling compute_g1_total with params.shape={params.shape}, t1.shape={t1.shape}, t2.shape={t2.shape}, phi.shape={phi.shape}, q={q}, L={L}, dt={dt}",
             )
             try:
                 result = compute_g1_total(params, t1, t2, phi, q, L, dt)
                 logger.debug(
-                    f"CombinedModel.compute_g1: compute_g1_total completed, result.shape={result.shape}, min={jnp.min(result):.6e}, max={jnp.max(result):.6e}"
+                    f"CombinedModel.compute_g1: compute_g1_total completed, result.shape={result.shape}, min={jnp.min(result):.6e}, max={jnp.max(result):.6e}",
                 )
                 return result
             except Exception as e:
                 logger.error(
-                    f"CombinedModel.compute_g1: compute_g1_total failed with error: {e}"
+                    f"CombinedModel.compute_g1: compute_g1_total failed with error: {e}",
                 )
                 logger.error("CombinedModel.compute_g1: traceback:", exc_info=True)
                 raise
@@ -359,8 +346,7 @@ class CombinedModel(PhysicsModelBase):
         offset: float,
         dt: float,
     ) -> jnp.ndarray:
-        """
-        Compute g2 with scaled fitting: g₂ = offset + contrast × [g₁]²
+        """Compute g2 with scaled fitting: g₂ = offset + contrast × [g₁]²
 
         Parameters
         ----------
@@ -398,7 +384,7 @@ class CombinedModel(PhysicsModelBase):
         if dt is None:
             raise TypeError(
                 "dt parameter is required and cannot be None. "
-                "Pass dt explicitly from configuration."
+                "Pass dt explicitly from configuration.",
             )
 
         # Pass to functional backend
@@ -421,7 +407,16 @@ class CombinedModel(PhysicsModelBase):
     ) -> float:
         """Compute chi-squared goodness of fit."""
         return compute_chi_squared(
-            params, data, sigma, t1, t2, phi, q, L, contrast, offset
+            params,
+            data,
+            sigma,
+            t1,
+            t2,
+            phi,
+            q,
+            L,
+            contrast,
+            offset,
         )
 
     def get_parameter_bounds(self) -> list[tuple[float, float]]:
@@ -532,7 +527,8 @@ class CombinedModel(PhysicsModelBase):
             "recommendations": backend_info["recommendations"],
             "fallback_stats": backend_info["fallback_stats"],
             "backend_summary": self._generate_backend_summary(
-                backend_info, device_info
+                backend_info,
+                device_info,
             ),
         }
 
@@ -550,7 +546,8 @@ class CombinedModel(PhysicsModelBase):
             return "No differentiation backend available"
 
     def benchmark_gradient_performance(
-        self, test_params: jnp.ndarray | None = None
+        self,
+        test_params: jnp.ndarray | None = None,
     ) -> dict[str, Any]:
         """Benchmark gradient computation performance across available methods."""
         if test_params is None:
@@ -584,7 +581,7 @@ class CombinedModel(PhysicsModelBase):
             methods_to_test.append(("jax_native", "JAX automatic differentiation"))
         if numpy_gradients_available:
             methods_to_test.append(
-                ("numpy_fallback", "NumPy numerical differentiation")
+                ("numpy_fallback", "NumPy numerical differentiation"),
             )
 
         if not methods_to_test:
@@ -674,7 +671,9 @@ class CombinedModel(PhysicsModelBase):
         return benchmark_results
 
     def validate_gradient_accuracy(
-        self, test_params: jnp.ndarray | None = None, tolerance: float = 1e-6
+        self,
+        test_params: jnp.ndarray | None = None,
+        tolerance: float = 1e-6,
     ) -> dict[str, Any]:
         """Validate gradient accuracy against reference solutions."""
         if test_params is None:
@@ -730,15 +729,15 @@ class CombinedModel(PhysicsModelBase):
                 max_grad = float(jnp.max(jnp.abs(gradient)))
                 if max_grad > 1e6:
                     validation_results["recommendations"].append(
-                        "Gradient magnitudes are very large - check parameter scaling"
+                        "Gradient magnitudes are very large - check parameter scaling",
                     )
                 elif max_grad < 1e-10:
                     validation_results["recommendations"].append(
-                        "Gradient magnitudes are very small - may indicate insensitive parameters"
+                        "Gradient magnitudes are very small - may indicate insensitive parameters",
                     )
                 else:
                     validation_results["recommendations"].append(
-                        "Gradient magnitudes appear reasonable for XPCS analysis"
+                        "Gradient magnitudes appear reasonable for XPCS analysis",
                     )
 
             else:
@@ -747,7 +746,7 @@ class CombinedModel(PhysicsModelBase):
                     "error": "No gradient computation backend available",
                 }
                 validation_results["recommendations"].append(
-                    "Install JAX or scipy for gradient-based optimization"
+                    "Install JAX or scipy for gradient-based optimization",
                 )
 
         except Exception as e:
@@ -756,7 +755,7 @@ class CombinedModel(PhysicsModelBase):
                 "error": str(e),
             }
             validation_results["recommendations"].append(
-                f"Gradient computation failed: {str(e)}"
+                f"Gradient computation failed: {str(e)}",
             )
 
         logger.info("Gradient accuracy validation completed")
@@ -769,7 +768,7 @@ class CombinedModel(PhysicsModelBase):
 
         if capabilities["jax_available"]:
             recommendations.append(
-                "✅ JAX available - use gradient-based optimization (BFGS, Adam)"
+                "✅ JAX available - use gradient-based optimization (BFGS, Adam)",
             )
 
             device_info = capabilities["device_info"]
@@ -777,46 +776,46 @@ class CombinedModel(PhysicsModelBase):
                 devices = device_info.get("devices", [])
                 if any("gpu" in str(d).lower() for d in devices):
                     recommendations.append(
-                        "🎯 GPU acceleration available for large-scale optimization"
+                        "🎯 GPU acceleration available for large-scale optimization",
                     )
                 if len(devices) > 1:
                     recommendations.append(
-                        f"🔥 {len(devices)} compute devices available for parallel optimization"
+                        f"🔥 {len(devices)} compute devices available for parallel optimization",
                     )
 
         elif capabilities["numpy_gradients_available"]:
             recommendations.append(
-                "⚠️ Using NumPy gradients - prefer L-BFGS over high-order methods"
+                "⚠️ Using NumPy gradients - prefer L-BFGS over high-order methods",
             )
             recommendations.append(
-                "💡 Consider installing JAX for 10-50x performance improvement"
+                "💡 Consider installing JAX for 10-50x performance improvement",
             )
 
         else:
             recommendations.append(
-                "❌ No gradient support - use gradient-free optimization (Nelder-Mead, Powell)"
+                "❌ No gradient support - use gradient-free optimization (Nelder-Mead, Powell)",
             )
             recommendations.append(
-                "📦 Install scipy for basic optimization: pip install scipy"
+                "📦 Install scipy for basic optimization: pip install scipy",
             )
             recommendations.append(
-                "🚀 Install JAX for advanced optimization: pip install jax"
+                "🚀 Install JAX for advanced optimization: pip install jax",
             )
 
         # Analysis mode specific recommendations
         if self.analysis_mode == "laminar_flow":
             if capabilities["jax_available"]:
                 recommendations.append(
-                    "🧮 Laminar flow mode (7 parameters) - JAX optimization recommended"
+                    "🧮 Laminar flow mode (7 parameters) - JAX optimization recommended",
                 )
             else:
                 recommendations.append(
-                    "⚖️ Laminar flow mode - many parameters, consider staged optimization"
+                    "⚖️ Laminar flow mode - many parameters, consider staged optimization",
                 )
 
         elif self.analysis_mode.startswith("static"):
             recommendations.append(
-                "📊 Static mode (3 parameters) - most optimization methods will work well"
+                "📊 Static mode (3 parameters) - most optimization methods will work well",
             )
 
         return recommendations
@@ -851,8 +850,7 @@ class CombinedModel(PhysicsModelBase):
 
 # Factory functions for easy model creation
 def create_model(analysis_mode: str) -> CombinedModel:
-    """
-    Factory function to create appropriate model for analysis mode.
+    """Factory function to create appropriate model for analysis mode.
 
     Args:
         analysis_mode: "static_isotropic", "static_anisotropic", or "laminar_flow"
@@ -863,7 +861,7 @@ def create_model(analysis_mode: str) -> CombinedModel:
     valid_modes = ["static_isotropic", "static_anisotropic", "laminar_flow"]
     if analysis_mode not in valid_modes:
         raise ValueError(
-            f"Invalid analysis mode '{analysis_mode}'. Must be one of {valid_modes}"
+            f"Invalid analysis mode '{analysis_mode}'. Must be one of {valid_modes}",
         )
 
     logger.info(f"Creating model for analysis mode: {analysis_mode}")

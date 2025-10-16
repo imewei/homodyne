@@ -1,5 +1,4 @@
-"""
-Theory Computation Engine for Homodyne v2
+"""Theory Computation Engine for Homodyne v2
 ==========================================
 
 High-level interface to theoretical calculations for homodyne scattering analysis.
@@ -42,16 +41,14 @@ logger = get_logger(__name__)
 
 
 class TheoryEngine:
-    """
-    High-level interface for theoretical homodyne calculations.
+    """High-level interface for theoretical homodyne calculations.
 
     Manages model selection, parameter validation, and efficient
     computation orchestration for homodyne scattering analysis.
     """
 
     def __init__(self, analysis_mode: str = "laminar_flow"):
-        """
-        Initialize theory engine with specified analysis mode.
+        """Initialize theory engine with specified analysis mode.
 
         Args:
             analysis_mode: "static_isotropic", "static_anisotropic", or "laminar_flow"
@@ -78,8 +75,7 @@ class TheoryEngine:
         L: float,
         dt: float = None,
     ) -> np.ndarray:
-        """
-        Compute g1 correlation function.
+        """Compute g1 correlation function.
 
         Args:
             params: Physical parameters
@@ -116,8 +112,7 @@ class TheoryEngine:
         contrast: float,
         offset: float,
     ) -> np.ndarray:
-        """
-        Compute g2 with scaled fitting: g₂ = offset + contrast × [g₁]²
+        """Compute g2 with scaled fitting: g₂ = offset + contrast × [g₁]²
 
         This is the core equation for homodyne analysis.
 
@@ -160,8 +155,7 @@ class TheoryEngine:
         contrast: float,
         offset: float,
     ) -> float:
-        """
-        Compute chi-squared goodness of fit.
+        """Compute chi-squared goodness of fit.
 
         Args:
             params: Physical parameters
@@ -191,7 +185,16 @@ class TheoryEngine:
             phi = jnp.asarray(phi)
 
         return self.model.compute_chi_squared(
-            params, data, sigma, t1, t2, phi, q, L, contrast, offset
+            params,
+            data,
+            sigma,
+            t1,
+            t2,
+            phi,
+            q,
+            L,
+            contrast,
+            offset,
         )
 
     @log_performance(threshold=0.1)
@@ -208,8 +211,7 @@ class TheoryEngine:
         contrast: float,
         offset: float,
     ) -> np.ndarray:
-        """
-        Compute chi-squared for multiple parameter sets efficiently.
+        """Compute chi-squared for multiple parameter sets efficiently.
 
         Leverages JAX vectorization for optimal performance.
 
@@ -233,7 +235,7 @@ class TheoryEngine:
         n_sets, n_params = params_batch.shape
         if n_params != self.model.n_params:
             raise ValueError(
-                f"Expected {self.model.n_params} parameters, got {n_params}"
+                f"Expected {self.model.n_params} parameters, got {n_params}",
             )
 
         logger.debug(f"Batch computation for {n_sets} parameter sets")
@@ -248,23 +250,43 @@ class TheoryEngine:
             phi = jnp.asarray(phi)
 
             return batch_chi_squared(
-                params_batch, data, sigma, t1, t2, phi, q, L, contrast, offset
+                params_batch,
+                data,
+                sigma,
+                t1,
+                t2,
+                phi,
+                q,
+                L,
+                contrast,
+                offset,
             )
         else:
             # Fallback: loop over parameter sets
             results = []
             for params in params_batch:
                 chi2 = self.compute_chi_squared(
-                    params, data, sigma, t1, t2, phi, q, L, contrast, offset
+                    params,
+                    data,
+                    sigma,
+                    t1,
+                    t2,
+                    phi,
+                    q,
+                    L,
+                    contrast,
+                    offset,
                 )
                 results.append(chi2)
             return np.array(results)
 
     def estimate_computation_cost(
-        self, t1: np.ndarray, t2: np.ndarray, phi: np.ndarray
+        self,
+        t1: np.ndarray,
+        t2: np.ndarray,
+        phi: np.ndarray,
     ) -> dict[str, Any]:
-        """
-        Estimate computational cost for given data dimensions.
+        """Estimate computational cost for given data dimensions.
 
         Helps with performance planning and memory management.
 
@@ -325,7 +347,7 @@ class TheoryEngine:
         # Parameter validation
         if not self.model.validate_parameters(params):
             logger.warning(
-                "Parameters outside recommended bounds - results may be unreliable"
+                "Parameters outside recommended bounds - results may be unreliable",
             )
 
         # Experimental setup validation
@@ -337,13 +359,13 @@ class TheoryEngine:
         # Physical reasonableness checks
         if not (PhysicsConstants.Q_MIN_TYPICAL <= q <= PhysicsConstants.Q_MAX_TYPICAL):
             logger.warning(
-                f"q = {q:.2e} outside typical range - check experimental setup"
+                f"q = {q:.2e} outside typical range - check experimental setup",
             )
         # L is in Angstroms - check reasonable range
         # Typical range: 100,000 Å (10mm) to 100,000,000 Å (10m)
         if not (1e5 <= L <= 1e8):
             logger.warning(
-                f"L = {L:.1f} Å outside typical range [1e5, 1e8] Å (10mm to 10m) - check experimental setup"
+                f"L = {L:.1f} Å outside typical range [1e5, 1e8] Å (10mm to 10m) - check experimental setup",
             )
 
     def _validate_scaling_parameters(self, contrast: float, offset: float):
@@ -377,11 +399,11 @@ class TheoryEngine:
         expected_shape = (safe_len(phi_array), safe_len(t1), safe_len(t2))
         if data.shape != expected_shape:
             raise ValueError(
-                f"Data shape {data.shape} doesn't match expected {expected_shape}"
+                f"Data shape {data.shape} doesn't match expected {expected_shape}",
             )
         if sigma.shape != expected_shape:
             raise ValueError(
-                f"Sigma shape {sigma.shape} doesn't match expected {expected_shape}"
+                f"Sigma shape {sigma.shape} doesn't match expected {expected_shape}",
             )
 
         # Data quality checks
@@ -400,7 +422,7 @@ class TheoryEngine:
                 "theory_engine_version": "2.0",
                 "backend_available": jax_available,
                 "supports_batch_computation": jax_available,
-            }
+            },
         )
         return info
 
@@ -421,8 +443,7 @@ def compute_g2_theory(
     offset: float,
     analysis_mode: str = "laminar_flow",
 ) -> np.ndarray:
-    """
-    Direct computation of g2 theory with minimal overhead.
+    """Direct computation of g2 theory with minimal overhead.
 
     Convenience function for simple theory calculations.
 
@@ -455,8 +476,7 @@ def compute_chi2_theory(
     offset: float,
     analysis_mode: str = "laminar_flow",
 ) -> float:
-    """
-    Direct computation of chi-squared with minimal overhead.
+    """Direct computation of chi-squared with minimal overhead.
 
     Args:
         params: Physical parameters
@@ -474,7 +494,16 @@ def compute_chi2_theory(
     """
     engine = TheoryEngine(analysis_mode)
     return engine.compute_chi_squared(
-        params, data, sigma, t1, t2, phi, q, L, contrast, offset
+        params,
+        data,
+        sigma,
+        t1,
+        t2,
+        phi,
+        q,
+        L,
+        contrast,
+        offset,
     )
 
 

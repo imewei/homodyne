@@ -1,5 +1,4 @@
-"""
-Data Filtering Utilities for XPCS Data Loader
+"""Data Filtering Utilities for XPCS Data Loader
 =============================================
 
 Comprehensive filtering utilities supporting q-range, quality-based, and frame-based filtering
@@ -100,20 +99,16 @@ class FilteringResult:
 class DataFilteringError(Exception):
     """Raised when data filtering encounters an error."""
 
-    pass
-
 
 class XPCSDataFilter:
-    """
-    Comprehensive data filter for XPCS correlation matrices.
+    """Comprehensive data filter for XPCS correlation matrices.
 
     Provides unified filtering based on configuration parameters including
     q-range, quality thresholds, and frame-based criteria.
     """
 
     def __init__(self, config: dict[str, Any] | None = None):
-        """
-        Initialize the data filter.
+        """Initialize the data filter.
 
         Args:
             config: Configuration dictionary containing data_filtering parameters
@@ -124,12 +119,12 @@ class XPCSDataFilter:
         self.validation_level = self.filtering_config.get("validation_level", "basic")
         self.fallback_on_empty = self.filtering_config.get("fallback_on_empty", True)
         self.combine_criteria = FilterCriteria(
-            self.filtering_config.get("combine_criteria", "AND")
+            self.filtering_config.get("combine_criteria", "AND"),
         )
 
         logger.debug(
             f"Initialized XPCSDataFilter - enabled: {self.enabled}, "
-            f"validation_level: {self.validation_level}"
+            f"validation_level: {self.validation_level}",
         )
 
     @log_performance(threshold=0.1)
@@ -139,8 +134,7 @@ class XPCSDataFilter:
         dphilist: np.ndarray,
         correlation_matrices: list[np.ndarray] | None = None,
     ) -> FilteringResult:
-        """
-        Apply comprehensive filtering to XPCS data indices.
+        """Apply comprehensive filtering to XPCS data indices.
 
         Args:
             dqlist: Array of q-values (wavevector magnitudes)
@@ -190,7 +184,8 @@ class XPCSDataFilter:
             # Apply quality-based filtering
             if correlation_matrices is not None:
                 quality_mask = self._apply_quality_filtering(
-                    correlation_matrices, result
+                    correlation_matrices,
+                    result,
                 )
                 if quality_mask is not None:
                     filter_masks["quality"] = quality_mask
@@ -211,7 +206,7 @@ class XPCSDataFilter:
                     result.selected_indices = selected_indices
                     result.total_selected = len(selected_indices)
                     logger.info(
-                        f"Filtering selected {result.total_selected}/{total_available} data points"
+                        f"Filtering selected {result.total_selected}/{total_available} data points",
                     )
                 else:
                     # Handle empty result
@@ -241,7 +236,9 @@ class XPCSDataFilter:
         return result
 
     def _apply_q_range_filtering(
-        self, dqlist: np.ndarray, result: FilteringResult
+        self,
+        dqlist: np.ndarray,
+        result: FilteringResult,
     ) -> np.ndarray | None:
         """Apply q-range filtering based on wavevector values."""
         q_range = self.filtering_config.get("q_range", {})
@@ -276,7 +273,7 @@ class XPCSDataFilter:
         }
 
         logger.debug(
-            f"Q-range filtering: {selected_count}/{len(dqlist)} points selected"
+            f"Q-range filtering: {selected_count}/{len(dqlist)} points selected",
         )
 
         # Physics validation if available
@@ -286,7 +283,9 @@ class XPCSDataFilter:
         return mask
 
     def _apply_phi_range_filtering(
-        self, dphilist: np.ndarray, result: FilteringResult
+        self,
+        dphilist: np.ndarray,
+        result: FilteringResult,
     ) -> np.ndarray | None:
         """Apply phi-range filtering based on angle values."""
         phi_range = self.filtering_config.get("phi_range", {})
@@ -321,13 +320,15 @@ class XPCSDataFilter:
         }
 
         logger.debug(
-            f"Phi-range filtering: {selected_count}/{len(dphilist)} points selected"
+            f"Phi-range filtering: {selected_count}/{len(dphilist)} points selected",
         )
 
         return mask
 
     def _apply_quality_filtering(
-        self, correlation_matrices: list[np.ndarray], result: FilteringResult
+        self,
+        correlation_matrices: list[np.ndarray],
+        result: FilteringResult,
     ) -> np.ndarray | None:
         """Apply quality-based filtering using correlation matrix properties."""
         quality_threshold = self.filtering_config.get("quality_threshold")
@@ -369,13 +370,15 @@ class XPCSDataFilter:
         }
 
         logger.debug(
-            f"Quality filtering: {selected_count}/{len(correlation_matrices)} matrices selected"
+            f"Quality filtering: {selected_count}/{len(correlation_matrices)} matrices selected",
         )
 
         return mask
 
     def _apply_frame_filtering(
-        self, total_count: int, result: FilteringResult
+        self,
+        total_count: int,
+        result: FilteringResult,
     ) -> np.ndarray | None:
         """Apply frame-based filtering beyond basic start/end."""
         frame_filtering = self.filtering_config.get("frame_filtering", {})
@@ -408,8 +411,7 @@ class XPCSDataFilter:
         return mask
 
     def _calculate_matrix_quality_score(self, matrix: np.ndarray) -> float:
-        """
-        Calculate quality score for a correlation matrix.
+        """Calculate quality score for a correlation matrix.
 
         Quality metrics:
         - Finite value fraction
@@ -455,7 +457,9 @@ class XPCSDataFilter:
             return 0.0
 
     def _combine_filter_masks(
-        self, filter_masks: dict[str, np.ndarray], result: FilteringResult
+        self,
+        filter_masks: dict[str, np.ndarray],
+        result: FilteringResult,
     ) -> np.ndarray:
         """Combine multiple filter masks using specified criteria."""
         if not filter_masks:
@@ -486,7 +490,9 @@ class XPCSDataFilter:
         return combined_mask
 
     def _handle_empty_filter_result(
-        self, result: FilteringResult, total_available: int
+        self,
+        result: FilteringResult,
+        total_available: int,
     ) -> FilteringResult:
         """Handle case where filtering results in no selected indices."""
         logger.warning("Filtering resulted in no selected data points")
@@ -505,7 +511,10 @@ class XPCSDataFilter:
         return result
 
     def _validate_q_range_physics(
-        self, q_min: float | None, q_max: float | None, result: FilteringResult
+        self,
+        q_min: float | None,
+        q_max: float | None,
+        result: FilteringResult,
     ) -> None:
         """Validate q-range against physics constraints."""
         if not HAS_PHYSICS:
@@ -516,13 +525,13 @@ class XPCSDataFilter:
         if q_min is not None and q_min < PhysicsConstants.Q_MIN_TYPICAL:
             warnings.append(
                 f"q_min ({q_min:.2e}) below typical XPCS range "
-                f"({PhysicsConstants.Q_MIN_TYPICAL:.2e})"
+                f"({PhysicsConstants.Q_MIN_TYPICAL:.2e})",
             )
 
         if q_max is not None and q_max > PhysicsConstants.Q_MAX_TYPICAL:
             warnings.append(
                 f"q_max ({q_max:.2e}) above typical XPCS range "
-                f"({PhysicsConstants.Q_MAX_TYPICAL:.2e})"
+                f"({PhysicsConstants.Q_MAX_TYPICAL:.2e})",
             )
 
         result.warnings.extend(warnings)
@@ -556,8 +565,7 @@ def apply_data_filtering(
     config: dict[str, Any],
     correlation_matrices: list[np.ndarray] | None = None,
 ) -> np.ndarray | None:
-    """
-    Convenience function for applying data filtering.
+    """Convenience function for applying data filtering.
 
     Args:
         dqlist: Array of q-values

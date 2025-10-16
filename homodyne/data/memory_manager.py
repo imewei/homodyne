@@ -1,5 +1,4 @@
-"""
-Advanced Memory Manager for Homodyne v2 Performance Engine
+"""Advanced Memory Manager for Homodyne v2 Performance Engine
 ==========================================================
 
 Intelligent memory management system for massive XPCS datasets with dynamic allocation,
@@ -91,19 +90,13 @@ T = TypeVar("T")
 class MemoryManagerError(Exception):
     """Base exception for memory manager errors."""
 
-    pass
-
 
 class MemoryPressureError(MemoryManagerError):
     """Raised when memory pressure becomes critical."""
 
-    pass
-
 
 class AllocationError(MemoryManagerError):
     """Raised when memory allocation fails."""
-
-    pass
 
 
 @dataclass
@@ -207,8 +200,7 @@ class MemoryPool:
 
 
 class MemoryPressureMonitor:
-    """
-    Real-time memory pressure monitoring with adaptive responses.
+    """Real-time memory pressure monitoring with adaptive responses.
 
     Monitors system memory usage and triggers appropriate responses
     to prevent out-of-memory conditions.
@@ -220,8 +212,7 @@ class MemoryPressureMonitor:
         critical_threshold: float = 0.9,
         monitoring_interval: float = 1.0,
     ):
-        """
-        Initialize memory pressure monitor.
+        """Initialize memory pressure monitor.
 
         Args:
             warning_threshold: Memory pressure threshold for warnings (0.0-1.0)
@@ -247,7 +238,7 @@ class MemoryPressureMonitor:
 
         logger.info(
             f"Memory pressure monitor initialized: warning={warning_threshold}, "
-            f"critical={critical_threshold}"
+            f"critical={critical_threshold}",
         )
 
     def start_monitoring(self) -> None:
@@ -260,7 +251,9 @@ class MemoryPressureMonitor:
         self._shutdown_event.clear()
 
         self._monitoring_thread = threading.Thread(
-            target=self._monitoring_loop, name="MemoryPressureMonitor", daemon=True
+            target=self._monitoring_loop,
+            name="MemoryPressureMonitor",
+            daemon=True,
         )
         self._monitoring_thread.start()
 
@@ -315,7 +308,7 @@ class MemoryPressureMonitor:
         """Trigger warning-level memory pressure response."""
         logger.warning(
             f"Memory pressure warning: {self.stats.memory_pressure:.1%} "
-            f"(available: {self.stats.available_memory_gb:.1f}GB)"
+            f"(available: {self.stats.available_memory_gb:.1f}GB)",
         )
 
         for callback in self._warning_callbacks:
@@ -328,7 +321,7 @@ class MemoryPressureMonitor:
         """Trigger critical-level memory pressure response."""
         logger.critical(
             f"Critical memory pressure: {self.stats.memory_pressure:.1%} "
-            f"(available: {self.stats.available_memory_gb:.1f}GB)"
+            f"(available: {self.stats.available_memory_gb:.1f}GB)",
         )
 
         for callback in self._critical_callbacks:
@@ -346,26 +339,28 @@ class MemoryPressureMonitor:
                 logger.error(f"Recovery callback failed: {e}")
 
     def register_warning_callback(
-        self, callback: Callable[[MemoryStats], None]
+        self,
+        callback: Callable[[MemoryStats], None],
     ) -> None:
         """Register callback for warning-level memory pressure."""
         self._warning_callbacks.append(callback)
 
     def register_critical_callback(
-        self, callback: Callable[[MemoryStats], None]
+        self,
+        callback: Callable[[MemoryStats], None],
     ) -> None:
         """Register callback for critical-level memory pressure."""
         self._critical_callbacks.append(callback)
 
     def register_recovery_callback(
-        self, callback: Callable[[MemoryStats], None]
+        self,
+        callback: Callable[[MemoryStats], None],
     ) -> None:
         """Register callback for memory pressure recovery."""
         self._recovery_callbacks.append(callback)
 
     def get_pressure_trend(self, window_minutes: int = 5) -> str:
-        """
-        Get memory pressure trend over specified window.
+        """Get memory pressure trend over specified window.
 
         Args:
             window_minutes: Analysis window in minutes
@@ -404,8 +399,7 @@ class MemoryPressureMonitor:
 
 
 class AdvancedMemoryManager:
-    """
-    Advanced memory manager with intelligent allocation strategies.
+    """Advanced memory manager with intelligent allocation strategies.
 
     Provides dynamic memory allocation, pool management, pressure monitoring,
     and optimization strategies for massive XPCS datasets.
@@ -413,8 +407,7 @@ class AdvancedMemoryManager:
 
     @log_calls(include_args=False)
     def __init__(self, config: dict[str, Any] | None = None):
-        """
-        Initialize advanced memory manager.
+        """Initialize advanced memory manager.
 
         Args:
             config: Memory management configuration
@@ -432,7 +425,9 @@ class AdvancedMemoryManager:
         monitoring_interval = self.memory_config.get("monitoring_interval", 1.0)
 
         self.pressure_monitor = MemoryPressureMonitor(
-            warning_threshold, critical_threshold, monitoring_interval
+            warning_threshold,
+            critical_threshold,
+            monitoring_interval,
         )
 
         # Register pressure response callbacks
@@ -453,7 +448,8 @@ class AdvancedMemoryManager:
         # Virtual memory support
         self._virtual_memory_enabled = self.memory_config.get("virtual_memory", True)
         self._virtual_memory_path = self.memory_config.get(
-            "virtual_memory_path", "/tmp/homodyne_vm"
+            "virtual_memory_path",
+            "/tmp/homodyne_vm",
         )
 
         # Start monitoring
@@ -464,10 +460,12 @@ class AdvancedMemoryManager:
 
     @contextmanager
     def managed_allocation(
-        self, size: int, dtype: np.dtype = np.float64, pool_enabled: bool = True
+        self,
+        size: int,
+        dtype: np.dtype = np.float64,
+        pool_enabled: bool = True,
     ):
-        """
-        Context manager for managed memory allocation.
+        """Context manager for managed memory allocation.
 
         Args:
             size: Number of elements to allocate
@@ -514,10 +512,13 @@ class AdvancedMemoryManager:
             # Get or create pool
             if pool_id not in self._pools:
                 max_buffers = max(
-                    4, min(32, int(1024 * 1024 * 1024 / (pool_size * 8)))
+                    4,
+                    min(32, int(1024 * 1024 * 1024 / (pool_size * 8))),
                 )  # ~1GB max per pool
                 self._pools[pool_id] = MemoryPool(
-                    pool_id=pool_id, buffer_size=pool_size, max_buffers=max_buffers
+                    pool_id=pool_id,
+                    buffer_size=pool_size,
+                    max_buffers=max_buffers,
                 )
 
             pool = self._pools[pool_id]
@@ -564,11 +565,11 @@ class AdvancedMemoryManager:
                         "size_mb": buffer_size_mb,
                         "allocation_time_ms": allocation_time * 1000,
                         "success": True,
-                    }
+                    },
                 )
 
             logger.debug(
-                f"Allocated {buffer_size_mb:.1f}MB buffer in {allocation_time * 1000:.1f}ms"
+                f"Allocated {buffer_size_mb:.1f}MB buffer in {allocation_time * 1000:.1f}ms",
             )
             return buffer
 
@@ -583,7 +584,7 @@ class AdvancedMemoryManager:
                         "size_mb": size * np.dtype(dtype).itemsize / (1024 * 1024),
                         "allocation_time_ms": allocation_time * 1000,
                         "success": False,
-                    }
+                    },
                 )
 
             logger.error(f"Memory allocation failed: {size} elements of {dtype}")
@@ -601,7 +602,7 @@ class AdvancedMemoryManager:
                     return self._allocate_virtual_memory(size, dtype)
                 else:
                     raise AllocationError(
-                        f"Failed to allocate {size} elements of {dtype}"
+                        f"Failed to allocate {size} elements of {dtype}",
                     ) from e
 
     def _allocate_virtual_memory(self, size: int, dtype: np.dtype) -> np.ndarray:
@@ -635,7 +636,7 @@ class AdvancedMemoryManager:
             buffer._homodyne_vm_file = vm_file
 
             logger.info(
-                f"Allocated {total_bytes / (1024 * 1024):.1f}MB virtual memory buffer"
+                f"Allocated {total_bytes / (1024 * 1024):.1f}MB virtual memory buffer",
             )
             return buffer
 
@@ -785,7 +786,8 @@ class AdvancedMemoryManager:
                 ) / len(successful_allocations)
 
             allocation_success_rate = len(successful_allocations) / max(
-                len(recent_allocations), 1
+                len(recent_allocations),
+                1,
             )
 
         return {
@@ -816,8 +818,7 @@ class AdvancedMemoryManager:
         }
 
     def optimize_for_workload(self, workload_type: str, dataset_size_gb: float) -> None:
-        """
-        Optimize memory management for specific workload characteristics.
+        """Optimize memory management for specific workload characteristics.
 
         Args:
             workload_type: Type of workload ("streaming", "batch", "interactive")
@@ -825,7 +826,7 @@ class AdvancedMemoryManager:
         """
         logger.info(
             f"Optimizing memory management for {workload_type} workload, "
-            f"dataset size: {dataset_size_gb:.1f}GB"
+            f"dataset size: {dataset_size_gb:.1f}GB",
         )
 
         if workload_type == "streaming":
@@ -864,7 +865,7 @@ class AdvancedMemoryManager:
                             logger.debug(f"Cleaned up virtual memory file: {file}")
                         except Exception as e:
                             logger.warning(
-                                f"Failed to cleanup virtual memory file {file}: {e}"
+                                f"Failed to cleanup virtual memory file {file}: {e}",
                             )
         except Exception as e:
             logger.warning(f"Virtual memory cleanup failed: {e}")

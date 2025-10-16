@@ -1,5 +1,4 @@
-"""
-Production-Grade Numerical Differentiation System for Homodyne v2
+"""Production-Grade Numerical Differentiation System for Homodyne v2
 ================================================================
 
 High-performance NumPy-based numerical differentiation to replace JAX gradients
@@ -92,8 +91,6 @@ class GradientResult:
 class NumericalStabilityError(Exception):
     """Raised when numerical differentiation encounters stability issues."""
 
-    pass
-
 
 def _validate_function(func: Callable, x: np.ndarray, name: str = "function") -> None:
     """Validate that function can be called and returns appropriate values."""
@@ -112,8 +109,7 @@ def _estimate_optimal_step(
     min_step: float = 1e-15,
     max_step: float = 1e-3,
 ) -> np.ndarray:
-    """
-    Estimate optimal step size for each parameter using function curvature.
+    """Estimate optimal step size for each parameter using function curvature.
 
     Uses a heuristic based on the second derivative to balance truncation
     and roundoff errors for finite difference approximations.
@@ -160,10 +156,11 @@ def _estimate_optimal_step(
 
 
 def _complex_step_derivative(
-    func: Callable, x: np.ndarray, h: np.ndarray
+    func: Callable,
+    x: np.ndarray,
+    h: np.ndarray,
 ) -> np.ndarray:
-    """
-    Complex-step differentiation for near machine precision derivatives.
+    """Complex-step differentiation for near machine precision derivatives.
 
     Uses f'(x) ≈ Im(f(x + ih))/h with no subtractive cancellation error.
     Requires function to be analytic (works for most physics functions).
@@ -187,7 +184,10 @@ def _complex_step_derivative(
 
 
 def _central_difference_single(
-    func: Callable, x: np.ndarray, index: int, h: float
+    func: Callable,
+    x: np.ndarray,
+    index: int,
+    h: float,
 ) -> float:
     """Compute central difference for single parameter."""
     x_plus = x.copy()
@@ -199,7 +199,10 @@ def _central_difference_single(
 
 
 def _forward_difference_single(
-    func: Callable, x: np.ndarray, index: int, h: float
+    func: Callable,
+    x: np.ndarray,
+    index: int,
+    h: float,
 ) -> float:
     """Compute forward difference for single parameter."""
     x_plus = x.copy()
@@ -209,7 +212,10 @@ def _forward_difference_single(
 
 
 def _backward_difference_single(
-    func: Callable, x: np.ndarray, index: int, h: float
+    func: Callable,
+    x: np.ndarray,
+    index: int,
+    h: float,
 ) -> float:
     """Compute backward difference for single parameter."""
     x_minus = x.copy()
@@ -219,10 +225,13 @@ def _backward_difference_single(
 
 
 def _richardson_extrapolation(
-    func: Callable, x: np.ndarray, index: int, h: float, terms: int = 4
+    func: Callable,
+    x: np.ndarray,
+    index: int,
+    h: float,
+    terms: int = 4,
 ) -> tuple[float, float]:
-    """
-    Richardson extrapolation for higher-order accuracy.
+    """Richardson extrapolation for higher-order accuracy.
 
     Computes derivative with progressively smaller step sizes and
     extrapolates to h=0 limit to remove leading error terms.
@@ -266,8 +275,7 @@ def numpy_gradient(
     argnums: int | list[int] = 0,
     config: DifferentiationConfig | None = None,
 ) -> Callable:
-    """
-    NumPy-based gradient computation with same interface as JAX grad().
+    """NumPy-based gradient computation with same interface as JAX grad().
 
     Creates a function that computes gradients using advanced numerical
     differentiation methods with automatic method selection and error control.
@@ -306,7 +314,7 @@ def numpy_gradient(
 
         if len(args) <= max(argnums):
             raise ValueError(
-                f"Not enough arguments: need {max(argnums) + 1}, got {len(args)}"
+                f"Not enough arguments: need {max(argnums) + 1}, got {len(args)}",
             )
 
         # Extract parameter arrays for differentiation
@@ -314,7 +322,7 @@ def numpy_gradient(
         total_params = sum(arr.size for arr in param_arrays)
 
         logger.debug(
-            f"Computing gradient for {total_params} parameters using {config.method}"
+            f"Computing gradient for {total_params} parameters using {config.method}",
         )
 
         # Create wrapper function for current args/kwargs
@@ -356,7 +364,7 @@ def numpy_gradient(
 
         logger.debug(
             f"Gradient computation completed in {result.computation_time:.4f}s "
-            f"with {result.function_calls} function evaluations"
+            f"with {result.function_calls} function evaluations",
         )
 
         # Reshape gradient back to original parameter shapes
@@ -376,10 +384,11 @@ def numpy_gradient(
 
 
 def _adaptive_gradient(
-    func: Callable, x: np.ndarray, config: DifferentiationConfig
+    func: Callable,
+    x: np.ndarray,
+    config: DifferentiationConfig,
 ) -> GradientResult:
-    """
-    Adaptive gradient computation with automatic method selection and memory optimization.
+    """Adaptive gradient computation with automatic method selection and memory optimization.
 
     Chooses the best differentiation method based on function characteristics
     and parameter values, with chunked processing for large parameter spaces.
@@ -399,7 +408,11 @@ def _adaptive_gradient(
     # Estimate optimal step sizes
     try:
         h_optimal = _estimate_optimal_step(
-            func, x, config.relative_step, config.min_step, config.max_step
+            func,
+            x,
+            config.relative_step,
+            config.min_step,
+            config.max_step,
         )
     except Exception as e:
         warnings_list.append(f"Step size estimation failed: {e}")
@@ -426,7 +439,11 @@ def _adaptive_gradient(
         for i in range(n_params):
             try:
                 deriv, error_est = _richardson_extrapolation(
-                    func, x, i, h_optimal[i], config.richardson_terms
+                    func,
+                    x,
+                    i,
+                    h_optimal[i],
+                    config.richardson_terms,
                 )
                 gradient[i] = deriv
                 error_estimates[i] = error_est
@@ -435,7 +452,7 @@ def _adaptive_gradient(
 
             except Exception as e:
                 warnings_list.append(
-                    f"Richardson extrapolation failed for param {i}: {e}"
+                    f"Richardson extrapolation failed for param {i}: {e}",
                 )
                 # Final fallback to central differences
                 gradient[i] = _central_difference_single(func, x, i, h_optimal[i])
@@ -453,10 +470,11 @@ def _adaptive_gradient(
 
 
 def _chunked_gradient_computation(
-    func: Callable, x: np.ndarray, config: DifferentiationConfig
+    func: Callable,
+    x: np.ndarray,
+    config: DifferentiationConfig,
 ) -> GradientResult:
-    """
-    Memory-optimized chunked gradient computation for large parameter spaces.
+    """Memory-optimized chunked gradient computation for large parameter spaces.
 
     Processes parameters in chunks to manage memory usage while maintaining
     accuracy. Useful for problems with thousands of parameters.
@@ -466,7 +484,7 @@ def _chunked_gradient_computation(
     n_chunks = (n_params + chunk_size - 1) // chunk_size
 
     logger.info(
-        f"Using chunked computation: {n_params} parameters in {n_chunks} chunks"
+        f"Using chunked computation: {n_params} parameters in {n_chunks} chunks",
     )
 
     gradient = np.zeros_like(x)
@@ -478,7 +496,11 @@ def _chunked_gradient_computation(
     # Estimate step sizes for all parameters (done once)
     try:
         h_optimal = _estimate_optimal_step(
-            func, x, config.relative_step, config.min_step, config.max_step
+            func,
+            x,
+            config.relative_step,
+            config.min_step,
+            config.max_step,
         )
     except Exception as e:
         warnings_list.append(f"Step size estimation failed: {e}")
@@ -491,12 +513,16 @@ def _chunked_gradient_computation(
         chunk_indices = list(range(start_idx, end_idx))
 
         logger.debug(
-            f"Processing chunk {chunk_idx + 1}/{n_chunks}: parameters {start_idx}-{end_idx - 1}"
+            f"Processing chunk {chunk_idx + 1}/{n_chunks}: parameters {start_idx}-{end_idx - 1}",
         )
 
         # Process current chunk
         chunk_result = _process_parameter_chunk(
-            func, x, h_optimal, chunk_indices, config
+            func,
+            x,
+            h_optimal,
+            chunk_indices,
+            config,
         )
 
         # Store results for this chunk
@@ -554,17 +580,24 @@ def _process_parameter_chunk(
             for i, param_idx in enumerate(chunk_indices):
                 try:
                     deriv, error_est = _richardson_extrapolation(
-                        func, x, param_idx, h[param_idx], config.richardson_terms
+                        func,
+                        x,
+                        param_idx,
+                        h[param_idx],
+                        config.richardson_terms,
                     )
                     chunk_gradient[i] = deriv
                     chunk_error_estimates[i] = error_est
                     chunk_function_calls += 2 * config.richardson_terms
                 except Exception as e2:
                     chunk_warnings.append(
-                        f"Richardson failed for param {param_idx}: {e2}"
+                        f"Richardson failed for param {param_idx}: {e2}",
                     )
                     chunk_gradient[i] = _central_difference_single(
-                        func, x, param_idx, h[param_idx]
+                        func,
+                        x,
+                        param_idx,
+                        h[param_idx],
                     )
                     chunk_function_calls += 2
     else:
@@ -574,7 +607,11 @@ def _process_parameter_chunk(
         for i, param_idx in enumerate(chunk_indices):
             try:
                 deriv, error_est = _richardson_extrapolation(
-                    func, x, param_idx, h[param_idx], config.richardson_terms
+                    func,
+                    x,
+                    param_idx,
+                    h[param_idx],
+                    config.richardson_terms,
                 )
                 chunk_gradient[i] = deriv
                 chunk_error_estimates[i] = error_est
@@ -582,7 +619,10 @@ def _process_parameter_chunk(
             except Exception as e:
                 chunk_warnings.append(f"Richardson failed for param {param_idx}: {e}")
                 chunk_gradient[i] = _central_difference_single(
-                    func, x, param_idx, h[param_idx]
+                    func,
+                    x,
+                    param_idx,
+                    h[param_idx],
                 )
                 chunk_function_calls += 2
 
@@ -599,14 +639,20 @@ def _process_parameter_chunk(
 
 
 def _complex_step_gradient(
-    func: Callable, x: np.ndarray, config: DifferentiationConfig
+    func: Callable,
+    x: np.ndarray,
+    config: DifferentiationConfig,
 ) -> GradientResult:
     """Complex-step differentiation for maximum accuracy."""
     if config.step_size is not None:
         h = np.full_like(x, config.step_size)
     else:
         h = _estimate_optimal_step(
-            func, x, config.relative_step, config.min_step, config.max_step
+            func,
+            x,
+            config.relative_step,
+            config.min_step,
+            config.max_step,
         )
 
     gradient = _complex_step_derivative(func, x, h)
@@ -620,14 +666,20 @@ def _complex_step_gradient(
 
 
 def _richardson_gradient(
-    func: Callable, x: np.ndarray, config: DifferentiationConfig
+    func: Callable,
+    x: np.ndarray,
+    config: DifferentiationConfig,
 ) -> GradientResult:
     """Richardson extrapolation for high-order accuracy."""
     if config.step_size is not None:
         h = np.full_like(x, config.step_size)
     else:
         h = _estimate_optimal_step(
-            func, x, config.relative_step, config.min_step, config.max_step
+            func,
+            x,
+            config.relative_step,
+            config.min_step,
+            config.max_step,
         )
 
     n_params = len(x)
@@ -638,13 +690,17 @@ def _richardson_gradient(
     for i in range(n_params):
         try:
             deriv, error_est = _richardson_extrapolation(
-                func, x, i, h[i], config.richardson_terms
+                func,
+                x,
+                i,
+                h[i],
+                config.richardson_terms,
             )
             gradient[i] = deriv
             error_estimates[i] = error_est
         except Exception as e:
             warnings_list.append(
-                f"Richardson extrapolation failed for parameter {i}: {e}"
+                f"Richardson extrapolation failed for parameter {i}: {e}",
             )
             gradient[i] = _central_difference_single(func, x, i, h[i])
             error_estimates[i] = np.inf
@@ -660,14 +716,20 @@ def _richardson_gradient(
 
 
 def _finite_difference_gradient(
-    func: Callable, x: np.ndarray, config: DifferentiationConfig
+    func: Callable,
+    x: np.ndarray,
+    config: DifferentiationConfig,
 ) -> GradientResult:
     """Standard finite difference methods."""
     if config.step_size is not None:
         h = np.full_like(x, config.step_size)
     else:
         h = _estimate_optimal_step(
-            func, x, config.relative_step, config.min_step, config.max_step
+            func,
+            x,
+            config.relative_step,
+            config.min_step,
+            config.max_step,
         )
 
     n_params = len(x)
@@ -702,8 +764,7 @@ def numpy_hessian(
     argnums: int | list[int] = 0,
     config: DifferentiationConfig | None = None,
 ) -> Callable:
-    """
-    NumPy-based Hessian computation with same interface as JAX hessian().
+    """NumPy-based Hessian computation with same interface as JAX hessian().
 
     Computes second derivatives using finite differences of first derivatives
     for memory efficiency and numerical stability.
@@ -771,10 +832,11 @@ def numpy_hessian(
 
 
 def _compute_hessian_finite_diff(
-    func: Callable, x: np.ndarray, config: DifferentiationConfig
+    func: Callable,
+    x: np.ndarray,
+    config: DifferentiationConfig,
 ) -> np.ndarray:
-    """
-    Compute Hessian matrix using finite differences.
+    """Compute Hessian matrix using finite differences.
 
     Uses the standard formula: H_ij = (f(x+h_i+h_j) - f(x+h_i-h_j) - f(x-h_i+h_j) + f(x-h_i-h_j)) / (4*h_i*h_j)
     For diagonal elements: H_ii = (f(x+h_i) - 2*f(x) + f(x-h_i)) / h_i^2
@@ -785,7 +847,11 @@ def _compute_hessian_finite_diff(
     # Estimate optimal step sizes
     try:
         h = _estimate_optimal_step(
-            func, x, config.relative_step, config.min_step, config.max_step
+            func,
+            x,
+            config.relative_step,
+            config.min_step,
+            config.max_step,
         )
     except Exception:
         h = np.full_like(x, DEFAULT_STEP)
@@ -846,8 +912,7 @@ def validate_gradient_accuracy(
     analytical_grad: np.ndarray | None = None,
     tolerance: float = 1e-6,
 ) -> dict[str, Any]:
-    """
-    Validate numerical gradient accuracy against analytical solution.
+    """Validate numerical gradient accuracy against analytical solution.
 
     Args:
         func: Function to test

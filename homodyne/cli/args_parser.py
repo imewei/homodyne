@@ -1,5 +1,4 @@
-"""
-Argument Parser for Homodyne v2 CLI
+"""Argument Parser for Homodyne v2 CLI
 ===================================
 
 Simplified argument parsing system for the minimal CLI interface.
@@ -17,8 +16,7 @@ except ImportError:
 
 
 def create_parser() -> argparse.ArgumentParser:
-    """
-    Create the main argument parser for Homodyne CLI.
+    """Create the main argument parser for Homodyne CLI.
 
     Returns:
         Configured ArgumentParser with essential CLI options
@@ -62,7 +60,9 @@ Homodyne v{__version__} - JAX-First Architecture
 
     # Version information
     parser.add_argument(
-        "--version", action="version", version=f"Homodyne v{__version__}"
+        "--version",
+        action="version",
+        version=f"Homodyne v{__version__}",
     )
 
     # Method selection - JAX-first methods only
@@ -225,8 +225,7 @@ Homodyne v{__version__} - JAX-First Architecture
 
 
 def validate_args(args) -> bool:
-    """
-    Validate parsed command-line arguments.
+    """Validate parsed command-line arguments.
 
     Parameters
     ----------

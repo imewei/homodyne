@@ -1,5 +1,4 @@
-"""
-Minimal logging infrastructure for the homodyne package.
+"""Minimal logging infrastructure for the homodyne package.
 
 Provides simplified logging with preserved API compatibility for the rebuild.
 This module maintains exact function signatures from the original implementation
@@ -45,7 +44,7 @@ class MinimalLogger:
         if not root_logger.handlers:
             handler = logging.StreamHandler()
             formatter = logging.Formatter(
-                "%(asctime)s | %(levelname)s | %(name)s | %(message)s"
+                "%(asctime)s | %(levelname)s | %(name)s | %(message)s",
             )
             handler.setFormatter(formatter)
             root_logger.addHandler(handler)
@@ -80,8 +79,7 @@ _logger_manager = MinimalLogger()
 
 
 def get_logger(name: str | None = None) -> logging.Logger:
-    """
-    Get a logger instance with automatic naming.
+    """Get a logger instance with automatic naming.
 
     Args:
         name: Logger name. If None, uses caller's module name.
@@ -109,8 +107,7 @@ def log_calls(
     include_args: bool = False,
     include_result: bool = False,
 ):
-    """
-    Decorator to log function calls.
+    """Decorator to log function calls.
 
     Args:
         logger: Logger to use. If None, creates one for the module.
@@ -162,8 +159,7 @@ def log_performance(
     level: int = logging.INFO,
     threshold: float = 0.1,
 ):
-    """
-    Decorator to log function performance.
+    """Decorator to log function performance.
 
     Args:
         logger: Logger to use. If None, creates one for the module.
@@ -187,7 +183,8 @@ def log_performance(
 
                 if duration >= threshold:
                     logger.log(
-                        level, f"Performance: {func_name} completed in {duration:.3f}s"
+                        level,
+                        f"Performance: {func_name} completed in {duration:.3f}s",
                     )
 
                 return result
@@ -211,8 +208,7 @@ def log_operation(
     logger: logging.Logger | None = None,
     level: int = logging.INFO,
 ):
-    """
-    Context manager for logging operations.
+    """Context manager for logging operations.
 
     Args:
         operation_name: Name of the operation.

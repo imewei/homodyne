@@ -1,5 +1,4 @@
-"""
-Minimal Progress Tracking for NLSQ Optimization
+"""Minimal Progress Tracking for NLSQ Optimization
 ================================================
 
 Since NumPyro has built-in progress bars for MCMC, this module only provides
@@ -24,10 +23,12 @@ class OptimizationProgress:
     """Minimal progress tracker for NLSQ optimization."""
 
     def __init__(
-        self, max_iterations: int, desc: str = "NLSQ Optimization", verbose: bool = True
+        self,
+        max_iterations: int,
+        desc: str = "NLSQ Optimization",
+        verbose: bool = True,
     ):
-        """
-        Initialize progress tracker.
+        """Initialize progress tracker.
 
         Parameters
         ----------
@@ -86,7 +87,7 @@ class OptimizationProgress:
 
                 sys.stdout.write(
                     f"\r{self.desc}: {percent:5.1f}% [{self.eval_count:6d}/{self.max_iterations}] "
-                    f"| {rate:.1f} eval/s | ETA: {eta:.0f}s"
+                    f"| {rate:.1f} eval/s | ETA: {eta:.0f}s",
                 )
                 sys.stdout.flush()
 
@@ -106,10 +107,11 @@ class OptimizationProgress:
 
 
 def wrap_objective_with_progress(
-    objective_fn: Callable, max_iterations: int, verbose: bool = True
+    objective_fn: Callable,
+    max_iterations: int,
+    verbose: bool = True,
 ) -> tuple[Callable, OptimizationProgress]:
-    """
-    Wrap an objective function to track evaluation count.
+    """Wrap an objective function to track evaluation count.
 
     Parameters
     ----------

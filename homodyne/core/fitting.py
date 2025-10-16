@@ -1,5 +1,4 @@
-"""
-Unified Homodyne Model with JAX-Accelerated Least Squares
+"""Unified Homodyne Model with JAX-Accelerated Least Squares
 =========================================================
 
 Core implementation of the scaled optimization process for homodyne analysis.
@@ -57,8 +56,7 @@ logger = get_logger(__name__)
 
 @dataclass
 class ParameterSpace:
-    """
-    Parameter space definition with bounds and priors.
+    """Parameter space definition with bounds and priors.
 
     Implements specified parameter ranges and prior distributions
     for both scaling and physical parameters.
@@ -105,8 +103,7 @@ class ParameterSpace:
     config_manager: Any | None = None
 
     def get_param_bounds(self, analysis_mode: str) -> list[tuple[float, float]]:
-        """
-        Get parameter bounds based on analysis mode with configuration override support.
+        """Get parameter bounds based on analysis mode with configuration override support.
 
         Uses ParameterManager for consistent parameter handling and name mapping.
 
@@ -142,13 +139,13 @@ class ParameterSpace:
                 bounds = param_manager.get_bounds_as_tuples(active_params)
 
                 logger.info(
-                    f"Loaded {len(bounds)} parameter bounds from ParameterManager for {analysis_mode} mode"
+                    f"Loaded {len(bounds)} parameter bounds from ParameterManager for {analysis_mode} mode",
                 )
                 return bounds
 
             except Exception as e:
                 logger.warning(
-                    f"Failed to use ParameterManager: {e}, falling back to defaults"
+                    f"Failed to use ParameterManager: {e}, falling back to defaults",
                 )
 
         # Fallback to hardcoded defaults
@@ -166,7 +163,7 @@ class ParameterSpace:
                     self.beta_bounds,
                     self.gamma_dot_t_offset_bounds,
                     self.phi0_bounds,
-                ]
+                ],
             )
 
         return bounds
@@ -199,7 +196,7 @@ class ParameterSpace:
                     self.beta_prior,
                     self.gamma_dot_t_offset_prior,
                     self.phi0_prior,
-                ]
+                ],
             )
 
         return priors
@@ -225,8 +222,7 @@ class DatasetSize:
 
 @dataclass
 class FitResult:
-    """
-    Results from unified homodyne model fitting.
+    """Results from unified homodyne model fitting.
 
     Contains both physical and scaling parameters with
     comprehensive fit statistics for VI+JAX or MCMC+JAX.
@@ -301,10 +297,10 @@ if JAX_AVAILABLE:
 
     @jit
     def solve_least_squares_jax(
-        theory_batch: jnp.ndarray, exp_batch: jnp.ndarray
+        theory_batch: jnp.ndarray,
+        exp_batch: jnp.ndarray,
     ) -> tuple[jnp.ndarray, jnp.ndarray]:
-        """
-        JAX-accelerated batch least squares solver.
+        """JAX-accelerated batch least squares solver.
 
         Optimized least squares implementation with JAX acceleration
         with JAX acceleration for GPU/CPU optimization.
@@ -323,7 +319,8 @@ if JAX_AVAILABLE:
 
         # Vectorized computation of normal equation components
         sum_theory_sq = jnp.sum(
-            theory_batch * theory_batch, axis=1
+            theory_batch * theory_batch,
+            axis=1,
         )  # shape: (n_angles,)
         sum_theory = jnp.sum(theory_batch, axis=1)  # shape: (n_angles,)
         sum_exp = jnp.sum(exp_batch, axis=1)  # shape: (n_angles,)
@@ -353,7 +350,8 @@ if JAX_AVAILABLE:
 else:
 
     def solve_least_squares_jax(
-        theory_batch: np.ndarray, exp_batch: np.ndarray
+        theory_batch: np.ndarray,
+        exp_batch: np.ndarray,
     ) -> tuple[np.ndarray, np.ndarray]:
         """NumPy fallback for least squares when JAX unavailable."""
         n_angles, n_data = theory_batch.shape
@@ -388,8 +386,7 @@ else:
 
 
 class UnifiedHomodyneEngine:
-    """
-    Unified homodyne fitting engine with JAX acceleration.
+    """Unified homodyne fitting engine with JAX acceleration.
 
     Implements the scaled optimization approach where physical parameters
     are separated from experimental scaling parameters using pure least
@@ -401,8 +398,7 @@ class UnifiedHomodyneEngine:
         analysis_mode: str = "laminar_flow",
         parameter_space: ParameterSpace | None = None,
     ):
-        """
-        Initialize unified homodyne engine.
+        """Initialize unified homodyne engine.
 
         Args:
             analysis_mode: "static_isotropic", "static_anisotropic", or "laminar_flow"
@@ -419,15 +415,17 @@ class UnifiedHomodyneEngine:
         logger.info(f"Unified homodyne engine initialized for {analysis_mode}")
         logger.info(f"Parameter count: {len(self.param_bounds)} physical + 2 scaling")
         logger.info(
-            f"JAX acceleration: {'enabled' if JAX_AVAILABLE else 'disabled (NumPy fallback)'}"
+            f"JAX acceleration: {'enabled' if JAX_AVAILABLE else 'disabled (NumPy fallback)'}",
         )
 
     @log_performance(threshold=0.1)
     def estimate_scaling_parameters(
-        self, data: np.ndarray, theory: np.ndarray, validate_bounds: bool = True
+        self,
+        data: np.ndarray,
+        theory: np.ndarray,
+        validate_bounds: bool = True,
     ) -> tuple[float, float]:
-        """
-        Estimate contrast and offset using pure least squares.
+        """Estimate contrast and offset using pure least squares.
 
         Uses JAX-accelerated least squares (no outlier handling).
         Both VI and MCMC will handle uncertainty through likelihood.
@@ -474,7 +472,7 @@ class UnifiedHomodyneEngine:
             offset = np.clip(offset, *self.parameter_space.offset_bounds)
 
         logger.debug(
-            f"Scaling parameters: contrast={contrast:.4f}, offset={offset:.4f}"
+            f"Scaling parameters: contrast={contrast:.4f}, offset={offset:.4f}",
         )
 
         return contrast, offset
@@ -493,8 +491,7 @@ class UnifiedHomodyneEngine:
         q: float,
         L: float,
     ) -> float:
-        """
-        Compute likelihood for unified homodyne model.
+        """Compute likelihood for unified homodyne model.
 
         This is the core likelihood function used by both VI+JAX and MCMC+JAX
         to minimize: Exp - (contrast * Theory + offset)
@@ -628,8 +625,7 @@ if JAX_AVAILABLE:
         target_vector: jnp.ndarray,
         regularization: float = 1e-10,
     ) -> jnp.ndarray:
-        """
-        General N-parameter least squares solver using Normal Equation.
+        """General N-parameter least squares solver using Normal Equation.
 
         Extends existing solve_least_squares_jax for arbitrary dimensions.
         Maintains compatibility with existing contrast/offset solver.
@@ -686,8 +682,7 @@ if JAX_AVAILABLE:
         exp_chunks: jnp.ndarray,
         chunk_indices: jnp.ndarray | None = None,
     ) -> tuple[jnp.ndarray, jnp.ndarray]:
-        """
-        Memory-efficient chunked solver for large datasets.
+        """Memory-efficient chunked solver for large datasets.
 
         Extends existing solve_least_squares_jax with chunking support.
         Maintains model: c2_fitted = c2_theory * contrast + offset
@@ -764,7 +759,9 @@ else:
         """NumPy fallback for general least squares."""
         # Use numpy.linalg.lstsq as fallback
         solution, _, _, _ = np.linalg.lstsq(
-            design_matrix, target_vector, rcond=regularization
+            design_matrix,
+            target_vector,
+            rcond=regularization,
         )
         return solution
 

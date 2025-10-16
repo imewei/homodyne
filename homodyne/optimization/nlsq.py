@@ -1,5 +1,4 @@
-"""
-NLSQ: Primary Optimization Method for Homodyne v2
+"""NLSQ: Primary Optimization Method for Homodyne v2
 ==================================================
 
 NLSQ package-based trust-region nonlinear least squares solver for the scaled
@@ -143,8 +142,7 @@ def fit_nlsq_jax(
     config: ConfigManager,
     initial_params: dict[str, float] | None = None,
 ) -> OptimizationResult:
-    """
-    NLSQ trust-region nonlinear least squares optimization (NEW IMPLEMENTATION).
+    """NLSQ trust-region nonlinear least squares optimization (NEW IMPLEMENTATION).
 
     Backward-compatible wrapper around NLSQWrapper that provides the legacy API.
     Uses the NLSQ package (github.com/imewei/NLSQ) for trust-region optimization.
@@ -198,7 +196,7 @@ def fit_nlsq_jax(
     if not HAS_NLSQ_WRAPPER:
         raise ImportError(
             "NLSQWrapper is required for NLSQ optimization. "
-            "Ensure homodyne.optimization.nlsq_wrapper is available."
+            "Ensure homodyne.optimization.nlsq_wrapper is available.",
         )
 
     logger.info("Starting NLSQ optimization via NLSQWrapper")
@@ -271,7 +269,7 @@ def fit_nlsq_jax(
                 # t1_2d[i, j] = time[i] (constant along j), so extract first column
                 data_obj.t1 = t1[:, 0]
                 logger.debug(
-                    f"Extracted 1D t1 vector from 2D meshgrid: {t1.shape} → {data_obj.t1.shape}"
+                    f"Extracted 1D t1 vector from 2D meshgrid: {t1.shape} → {data_obj.t1.shape}",
                 )
             elif t1.ndim != 1:
                 raise ValueError(f"t1 must be 1D or 2D array, got shape {t1.shape}")
@@ -282,7 +280,7 @@ def fit_nlsq_jax(
                 # t2_2d[i, j] = time[j] (constant along i), so extract first row
                 data_obj.t2 = t2[0, :]
                 logger.debug(
-                    f"Extracted 1D t2 vector from 2D meshgrid: {t2.shape} → {data_obj.t2.shape}"
+                    f"Extracted 1D t2 vector from 2D meshgrid: {t2.shape} → {data_obj.t2.shape}",
                 )
             elif t2.ndim != 1:
                 raise ValueError(f"t2 must be 1D or 2D array, got shape {t2.shape}")
@@ -302,7 +300,7 @@ def fit_nlsq_jax(
                 if "stator_rotor_gap" in geometry:
                     data_obj.L = float(geometry["stator_rotor_gap"])
                     logger.debug(
-                        f"Using stator_rotor_gap L = {data_obj.L:.1f} Å (from config.analyzer_parameters.geometry)"
+                        f"Using stator_rotor_gap L = {data_obj.L:.1f} Å (from config.analyzer_parameters.geometry)",
                     )
                 else:
                     # Try experimental_data.geometry.stator_rotor_gap as alternative
@@ -312,23 +310,23 @@ def fit_nlsq_jax(
                     if "stator_rotor_gap" in exp_geometry:
                         data_obj.L = float(exp_geometry["stator_rotor_gap"])
                         logger.debug(
-                            f"Using stator_rotor_gap L = {data_obj.L:.1f} Å (from config.experimental_data.geometry)"
+                            f"Using stator_rotor_gap L = {data_obj.L:.1f} Å (from config.experimental_data.geometry)",
                         )
                     # Fallback to sample_detector_distance
                     elif "sample_detector_distance" in exp_config:
                         data_obj.L = float(exp_config["sample_detector_distance"])
                         logger.debug(
-                            f"Using sample_detector_distance L = {data_obj.L:.1f} Å (from config.experimental_data)"
+                            f"Using sample_detector_distance L = {data_obj.L:.1f} Å (from config.experimental_data)",
                         )
                     else:
                         data_obj.L = 2000000.0  # Default: 200 µm stator-rotor gap (typical rheology-XPCS)
                         logger.warning(
-                            f"No L parameter found in config, using default L = {data_obj.L:.1f} Å (200 µm, typical rheology-XPCS gap)"
+                            f"No L parameter found in config, using default L = {data_obj.L:.1f} Å (200 µm, typical rheology-XPCS gap)",
                         )
             except (AttributeError, TypeError, ValueError) as e:
                 data_obj.L = 2000000.0  # Default: 200 µm stator-rotor gap (typical rheology-XPCS)
                 logger.warning(
-                    f"Error reading L from config: {e}, using default L = {data_obj.L:.1f} Å (200 µm)"
+                    f"Error reading L from config: {e}, using default L = {data_obj.L:.1f} Å (200 µm)",
                 )
 
         # Get time step dt from config if available
@@ -348,7 +346,7 @@ def fit_nlsq_jax(
                     logger.debug(f"Using time step dt = {data_obj.dt:.6f} s")
             except (AttributeError, TypeError, ValueError) as e:
                 logger.warning(f"Error reading dt from config: {e}")
-                pass  # dt is optional, no problem if missing
+                # dt is optional, no problem if missing
 
         data = data_obj
 
@@ -366,7 +364,7 @@ def fit_nlsq_jax(
 
     logger.info(f"NLSQ optimization completed in {result.execution_time:.3f}s")
     logger.info(
-        f"Final χ² = {result.chi_squared:.6f}, reduced χ² = {result.reduced_chi_squared:.6f}"
+        f"Final χ² = {result.chi_squared:.6f}, reduced χ² = {result.reduced_chi_squared:.6f}",
     )
 
     return result
@@ -391,10 +389,10 @@ def _get_analysis_mode(config: ConfigManager) -> str:
 
 
 def _load_initial_params_from_config(
-    config: ConfigManager, analysis_mode: str
+    config: ConfigManager,
+    analysis_mode: str,
 ) -> dict[str, float] | None:
-    """
-    Load initial parameters from configuration file.
+    """Load initial parameters from configuration file.
 
     Handles parameter name mapping between config format and code format.
 
@@ -420,7 +418,7 @@ def _load_initial_params_from_config(
     init_params = config_dict["initial_parameters"]
     if "parameter_names" not in init_params or "values" not in init_params:
         logger.warning(
-            "Initial parameters in config missing 'parameter_names' or 'values'"
+            "Initial parameters in config missing 'parameter_names' or 'values'",
         )
         return None
 
@@ -429,7 +427,7 @@ def _load_initial_params_from_config(
 
     if len(names) != len(values):
         logger.warning(
-            f"Parameter name/value count mismatch: {len(names)} names, {len(values)} values"
+            f"Parameter name/value count mismatch: {len(names)} names, {len(values)} values",
         )
         return None
 
@@ -462,7 +460,7 @@ def _load_initial_params_from_config(
     if len(params) != expected_count:
         logger.warning(
             f"Parameter count mismatch for {analysis_mode}: "
-            f"got {len(params)}, expected {expected_count}"
+            f"got {len(params)}, expected {expected_count}",
         )
         # Don't return None - let validation/clipping handle it
 
@@ -497,7 +495,9 @@ def _get_default_initial_params(analysis_mode: str) -> dict[str, float]:
 
 
 def _create_residual_function(
-    data: dict[str, Any], theory_engine: Any, analysis_mode: str
+    data: dict[str, Any],
+    theory_engine: Any,
+    analysis_mode: str,
 ) -> callable:
     """Create residual function for NLSQ least squares optimization."""
 
@@ -527,7 +527,7 @@ def _create_residual_function(
                     physical_params["D0"],
                     physical_params["alpha"],
                     physical_params["D_offset"],
-                ]
+                ],
             )
         else:
             params_array_physical = jnp.array(
@@ -539,7 +539,7 @@ def _create_residual_function(
                     physical_params["beta"],
                     physical_params["gamma_dot_t_offset"],
                     physical_params["phi0"],
-                ]
+                ],
             )
 
         # Use pre-extracted concrete scalars (extracted outside to avoid JAX tracing)
@@ -562,7 +562,8 @@ def _create_residual_function(
 
 
 def _get_parameter_bounds(
-    analysis_mode: str, param_space: ParameterSpace
+    analysis_mode: str,
+    param_space: ParameterSpace,
 ) -> dict[str, tuple[float, float]]:
     """Get parameter bounds for analysis mode."""
     bounds = {
@@ -580,7 +581,7 @@ def _get_parameter_bounds(
                 "beta": param_space.beta_bounds,
                 "gamma_dot_t_offset": param_space.gamma_dot_t_offset_bounds,
                 "phi0": param_space.phi0_bounds,
-            }
+            },
         )
 
     return bounds
@@ -625,7 +626,7 @@ def _params_to_array(params: dict[str, float], analysis_mode: str) -> jnp.ndarra
                 params["D0"],
                 params["alpha"],
                 params["D_offset"],
-            ]
+            ],
         )
     else:
         return jnp.array(
@@ -639,7 +640,7 @@ def _params_to_array(params: dict[str, float], analysis_mode: str) -> jnp.ndarra
                 params["beta"],
                 params["gamma_dot_t_offset"],
                 params["phi0"],
-            ]
+            ],
         )
 
 
@@ -672,7 +673,8 @@ def _array_to_params(array: jnp.ndarray, analysis_mode: str) -> dict[str, Any]:
 
 
 def _bounds_to_arrays(
-    bounds: dict[str, tuple[float, float]], analysis_mode: str
+    bounds: dict[str, tuple[float, float]],
+    analysis_mode: str,
 ) -> tuple[jnp.ndarray, jnp.ndarray]:
     """Convert bounds dictionary to lower/upper bound arrays."""
     if "static" in analysis_mode.lower():

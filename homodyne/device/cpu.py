@@ -1,5 +1,4 @@
-"""
-HPC CPU Optimization for Homodyne v2
+"""HPC CPU Optimization for Homodyne v2
 ====================================
 
 CPU-primary optimization strategies for high-performance computing environments.
@@ -42,8 +41,7 @@ except ImportError:
 
 
 def detect_cpu_info() -> dict[str, any]:
-    """
-    Detect CPU architecture and capabilities for optimization.
+    """Detect CPU architecture and capabilities for optimization.
 
     Returns
     -------
@@ -112,8 +110,7 @@ def configure_cpu_hpc(
     numa_policy: str = "auto",
     memory_optimization: str = "standard",
 ) -> dict[str, any]:
-    """
-    Configure JAX and system for HPC CPU optimization.
+    """Configure JAX and system for HPC CPU optimization.
 
     Optimizes thread allocation, memory usage, and computational efficiency
     for HPC environments with 36/128-core nodes.
@@ -152,12 +149,15 @@ def configure_cpu_hpc(
             num_threads = max(num_threads - 2, 16)  # Reserve 2 cores for system
 
     logger.info(
-        f"Using {num_threads} threads on {cpu_info['physical_cores']} physical cores"
+        f"Using {num_threads} threads on {cpu_info['physical_cores']} physical cores",
     )
 
     # Configure environment variables for optimal performance
     config_summary = _set_cpu_environment_variables(
-        num_threads, cpu_info, numa_policy, memory_optimization
+        num_threads,
+        cpu_info,
+        numa_policy,
+        memory_optimization,
     )
 
     # Configure JAX for CPU optimization
@@ -172,19 +172,22 @@ def configure_cpu_hpc(
             "hyperthreading_enabled": enable_hyperthreading,
             "numa_policy": numa_policy,
             "memory_optimization": memory_optimization,
-        }
+        },
     )
 
     logger.info(
         f"HPC CPU configuration completed: {num_threads} threads, "
-        f"{cpu_info['numa_nodes']} NUMA nodes"
+        f"{cpu_info['numa_nodes']} NUMA nodes",
     )
 
     return config_summary
 
 
 def _set_cpu_environment_variables(
-    num_threads: int, cpu_info: dict, numa_policy: str, memory_optimization: str
+    num_threads: int,
+    cpu_info: dict,
+    numa_policy: str,
+    memory_optimization: str,
 ) -> dict[str, str]:
     """Set environment variables for optimal CPU performance."""
 
@@ -269,8 +272,7 @@ def get_optimal_batch_size(
     available_memory_gb: float | None = None,
     target_memory_usage: float = 0.7,
 ) -> int:
-    """
-    Calculate optimal batch size for CPU processing.
+    """Calculate optimal batch size for CPU processing.
 
     Parameters
     ----------
@@ -295,7 +297,7 @@ def get_optimal_batch_size(
 
     # Calculate batch size that uses target fraction of memory
     optimal_batch_size = int(
-        (total_memory_mb * target_memory_usage) / memory_per_point_mb
+        (total_memory_mb * target_memory_usage) / memory_per_point_mb,
     )
 
     # Ensure batch size is reasonable
@@ -303,17 +305,17 @@ def get_optimal_batch_size(
 
     logger.info(
         f"Optimal batch size: {optimal_batch_size} "
-        f"(memory: {available_memory_gb:.1f}GB)"
+        f"(memory: {available_memory_gb:.1f}GB)",
     )
 
     return optimal_batch_size
 
 
 def benchmark_cpu_performance(
-    test_size: int = 10000, num_iterations: int = 5
+    test_size: int = 10000,
+    num_iterations: int = 5,
 ) -> dict[str, float]:
-    """
-    Benchmark CPU performance for optimization planning.
+    """Benchmark CPU performance for optimization planning.
 
     Parameters
     ----------
@@ -385,7 +387,7 @@ def benchmark_cpu_performance(
     if JAX_AVAILABLE:
         logger.info(
             f"JAX: {results['jax_mean_time']:.3f}s avg "
-            f"(speedup: {results.get('jax_speedup', 0):.2f}x)"
+            f"(speedup: {results.get('jax_speedup', 0):.2f}x)",
         )
 
     return results

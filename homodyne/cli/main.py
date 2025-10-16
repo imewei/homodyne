@@ -1,5 +1,4 @@
-"""
-Minimal CLI Entry Point for Homodyne v2
+"""Minimal CLI Entry Point for Homodyne v2
 =======================================
 
 Simplified command-line interface for homodyne scattering analysis with
@@ -14,7 +13,8 @@ import sys
 # Disable JAX GPU autotuning BEFORE any JAX imports
 # This prevents hanging issues with gemm_fusion_autotuner
 os.environ.setdefault(
-    "XLA_FLAGS", (" --xla_gpu_autotune_level=0" " --xla_gpu_deterministic_ops=true")
+    "XLA_FLAGS",
+    (" --xla_gpu_autotune_level=0" " --xla_gpu_deterministic_ops=true"),
 )
 
 from homodyne.cli.args_parser import create_parser
@@ -29,8 +29,7 @@ def check_python_version() -> None:
 
 
 def main() -> None:
-    """
-    Main CLI entry point.
+    """Main CLI entry point.
 
     Processes command-line arguments and dispatches to appropriate command handler.
     """

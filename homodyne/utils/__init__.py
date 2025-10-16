@@ -1,5 +1,4 @@
-"""
-Minimal utilities for the homodyne package.
+"""Minimal utilities for the homodyne package.
 
 Essential utility functions with preserved API compatibility.
 """

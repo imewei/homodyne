@@ -1,5 +1,4 @@
-"""
-NLSQ Wrapper for Homodyne Optimization.
+"""NLSQ Wrapper for Homodyne Optimization.
 
 This module provides an adapter layer between homodyne's optimization API
 and the NLSQ package's trust-region nonlinear least squares interface.
@@ -39,8 +38,7 @@ import numpy as np
 
 @dataclass
 class OptimizationResult:
-    """
-    Complete optimization result with fit quality metrics and diagnostics.
+    """Complete optimization result with fit quality metrics and diagnostics.
 
     Attributes:
         parameters: Converged parameter values
@@ -88,8 +86,7 @@ class OptimizationResult:
 
 
 class NLSQWrapper:
-    """
-    Adapter class for NLSQ package integration with homodyne optimization.
+    """Adapter class for NLSQ package integration with homodyne optimization.
 
     This class translates between homodyne's optimization API and the NLSQ
     package's curve_fit interface, handling:
@@ -104,10 +101,11 @@ class NLSQWrapper:
     """
 
     def __init__(
-        self, enable_large_dataset: bool = True, enable_recovery: bool = True
+        self,
+        enable_large_dataset: bool = True,
+        enable_recovery: bool = True,
     ) -> None:
-        """
-        Initialize NLSQWrapper.
+        """Initialize NLSQWrapper.
 
         Args:
             enable_large_dataset: Use curve_fit_large for datasets >1M points
@@ -124,8 +122,7 @@ class NLSQWrapper:
         bounds: tuple[np.ndarray, np.ndarray] | None = None,
         analysis_mode: str = "static_isotropic",
     ) -> OptimizationResult:
-        """
-        Execute NLSQ optimization with automatic strategy selection.
+        """Execute NLSQ optimization with automatic strategy selection.
 
         Args:
             data: XPCS experimental data
@@ -159,7 +156,7 @@ class NLSQWrapper:
         # Step 2: Validate initial parameters
         if initial_params is None:
             raise ValueError(
-                "initial_params must be provided (auto-loading not yet implemented)"
+                "initial_params must be provided (auto-loading not yet implemented)",
             )
 
         validated_params = self._validate_initial_params(initial_params, bounds)
@@ -175,7 +172,7 @@ class NLSQWrapper:
                 raise ValueError(
                     f"Invalid bounds at indices {invalid_indices}: "
                     f"lower >= upper. Bounds must satisfy lower < upper elementwise. "
-                    f"Lower: {lower[invalid_indices]}, Upper: {upper[invalid_indices]}"
+                    f"Lower: {lower[invalid_indices]}, Upper: {upper[invalid_indices]}",
                 )
 
         # Step 5: Create residual function
@@ -190,7 +187,7 @@ class NLSQWrapper:
 
         # Step 7: Execute optimization (with recovery if enabled)
         logger.info(
-            f"Starting optimization ({'curve_fit_large' if use_large else 'curve_fit'})..."
+            f"Starting optimization ({'curve_fit_large' if use_large else 'curve_fit'})...",
         )
 
         if self.enable_recovery:
@@ -256,7 +253,7 @@ class NLSQWrapper:
         execution_time = time.time() - start_time
 
         logger.info(
-            f"Optimization completed in {execution_time:.2f}s, {iterations} iterations"
+            f"Optimization completed in {execution_time:.2f}s, {iterations} iterations",
         )
         if recovery_actions:
             logger.info(f"Recovery actions applied: {len(recovery_actions)}")
@@ -275,7 +272,7 @@ class NLSQWrapper:
 
         logger.info(
             f"Final chi-squared: {result.chi_squared:.4e}, "
-            f"reduced chi-squared: {result.reduced_chi_squared:.4f}"
+            f"reduced chi-squared: {result.reduced_chi_squared:.4f}",
         )
 
         return result
@@ -290,8 +287,7 @@ class NLSQWrapper:
         use_large: bool,
         logger,
     ) -> tuple[np.ndarray, np.ndarray, dict, list[str], str]:
-        """
-        Execute optimization with automatic error recovery (T022-T024).
+        """Execute optimization with automatic error recovery (T022-T024).
 
         Implements intelligent retry strategies:
         - Attempt 1: Original parameters
@@ -359,11 +355,14 @@ class NLSQWrapper:
             except Exception as e:
                 # Diagnose error and determine recovery strategy
                 diagnostic = self._diagnose_error(
-                    error=e, params=current_params, bounds=bounds, attempt=attempt
+                    error=e,
+                    params=current_params,
+                    bounds=bounds,
+                    attempt=attempt,
                 )
 
                 logger.warning(
-                    f"Attempt {attempt + 1} failed: {diagnostic['error_type']}"
+                    f"Attempt {attempt + 1} failed: {diagnostic['error_type']}",
                 )
                 logger.info(f"Diagnostic: {diagnostic['message']}")
 
@@ -399,8 +398,7 @@ class NLSQWrapper:
         bounds: tuple[np.ndarray, np.ndarray] | None,
         attempt: int,
     ) -> dict[str, Any]:
-        """
-        Diagnose optimization error and provide actionable recovery strategy (T023).
+        """Diagnose optimization error and provide actionable recovery strategy (T023).
 
         Args:
             error: Exception raised during optimization
@@ -557,8 +555,7 @@ class NLSQWrapper:
         return diagnostic
 
     def _prepare_data(self, data: Any) -> tuple[np.ndarray, np.ndarray]:
-        """
-        Transform multi-dimensional XPCS data to flattened 1D arrays.
+        """Transform multi-dimensional XPCS data to flattened 1D arrays.
 
         Args:
             data: XPCSData with shape (n_phi, n_t1, n_t2)
@@ -600,10 +597,11 @@ class NLSQWrapper:
         return xdata, ydata
 
     def _validate_initial_params(
-        self, params: np.ndarray, bounds: tuple[np.ndarray, np.ndarray] | None
+        self,
+        params: np.ndarray,
+        bounds: tuple[np.ndarray, np.ndarray] | None,
     ) -> np.ndarray:
-        """
-        Validate initial parameters are within bounds, clip if necessary.
+        """Validate initial parameters are within bounds, clip if necessary.
 
         Args:
             params: Initial parameter guess
@@ -629,7 +627,7 @@ class NLSQWrapper:
         if params.shape != lower.shape or params.shape != upper.shape:
             raise ValueError(
                 f"Parameter shape mismatch: params={params.shape}, "
-                f"lower={lower.shape}, upper={upper.shape}"
+                f"lower={lower.shape}, upper={upper.shape}",
             )
 
         # Clip parameters to bounds
@@ -642,16 +640,16 @@ class NLSQWrapper:
 
             logger = logging.getLogger(__name__)
             logger.warning(
-                f"Initial parameters clipped to bounds at indices {clipped_indices}"
+                f"Initial parameters clipped to bounds at indices {clipped_indices}",
             )
 
         return clipped_params
 
     def _convert_bounds(
-        self, homodyne_bounds: tuple[np.ndarray, np.ndarray] | None
+        self,
+        homodyne_bounds: tuple[np.ndarray, np.ndarray] | None,
     ) -> tuple[np.ndarray, np.ndarray] | None:
-        """
-        Convert homodyne bounds format to NLSQ format.
+        """Convert homodyne bounds format to NLSQ format.
 
         Args:
             homodyne_bounds: (lower_array, upper_array) tuple or None
@@ -678,7 +676,7 @@ class NLSQWrapper:
             invalid_indices = np.where(lower >= upper)[0]
             raise ValueError(
                 f"Invalid bounds: lower >= upper at indices {invalid_indices}. "
-                f"Lower bounds must be strictly less than upper bounds."
+                f"Lower bounds must be strictly less than upper bounds.",
             )
 
         # NLSQ uses the same (lower, upper) tuple format as homodyne
@@ -686,8 +684,7 @@ class NLSQWrapper:
         return (lower, upper)
 
     def _create_residual_function(self, data: Any, analysis_mode: str) -> Any:
-        """
-        Create JAX-compatible model function for NLSQ.
+        """Create JAX-compatible model function for NLSQ.
 
         IMPORTANT: NLSQ's curve_fit_large expects a MODEL FUNCTION f(x, *params) -> y,
         NOT a residual function. NLSQ internally computes residuals = data - model.
@@ -711,15 +708,13 @@ class NLSQWrapper:
         for attr in required_attrs:
             if not hasattr(data, attr):
                 raise AttributeError(
-                    f"Data must have '{attr}' attribute for residual computation"
+                    f"Data must have '{attr}' attribute for residual computation",
                 )
 
         # Extract data attributes and convert to JAX arrays
         phi = jnp.asarray(data.phi)
         t1 = jnp.asarray(data.t1)  # Keep as 1D
         t2 = jnp.asarray(data.t2)  # Keep as 1D
-        g2_data = jnp.asarray(data.g2).flatten()  # Flatten to 1D
-        sigma = jnp.asarray(data.sigma).flatten()  # Flatten to 1D
         q = float(data.q)
         L = float(data.L)
 
@@ -739,8 +734,7 @@ class NLSQWrapper:
         # Laminar flow: 9 params total (2 scaling + 7 physical)
 
         def model_function(xdata: jnp.ndarray, *params_tuple) -> jnp.ndarray:
-            """
-            Compute theoretical g2 model for NLSQ optimization.
+            """Compute theoretical g2 model for NLSQ optimization.
 
             NLSQ will internally compute residuals as: (ydata - model) / sigma
 
@@ -808,8 +802,7 @@ class NLSQWrapper:
         convergence_status: str = "converged",
         recovery_actions: list[str] | None = None,
     ) -> OptimizationResult:
-        """
-        Convert NLSQ output to OptimizationResult.
+        """Convert NLSQ output to OptimizationResult.
 
         Args:
             popt: Optimized parameters

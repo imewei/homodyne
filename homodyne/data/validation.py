@@ -1,5 +1,4 @@
-"""
-Data Validation for XPCS Datasets
+"""Data Validation for XPCS Datasets
 ==================================
 
 Comprehensive data quality validation and physics consistency checks for XPCS data.
@@ -137,10 +136,11 @@ class DataQualityReport:
 
 
 def validate_xpcs_data(
-    data: dict[str, Any], config: dict[str, Any] = None, validation_level: str = "basic"
+    data: dict[str, Any],
+    config: dict[str, Any] = None,
+    validation_level: str = "basic",
 ) -> DataQualityReport:
-    """
-    Comprehensive XPCS data validation.
+    """Comprehensive XPCS data validation.
 
     Args:
         data: XPCS data dictionary with keys:
@@ -154,7 +154,9 @@ def validate_xpcs_data(
     logger.info(f"Starting XPCS data validation (level: {validation_level})")
 
     report = DataQualityReport(
-        is_valid=True, validation_level=validation_level, total_issues=0
+        is_valid=True,
+        validation_level=validation_level,
+        total_issues=0,
     )
 
     if validation_level == "none":
@@ -179,7 +181,7 @@ def validate_xpcs_data(
 
         logger.info(
             f"Validation completed: {len(report.errors)} errors, "
-            f"{len(report.warnings)} warnings, quality_score={report.quality_score:.2f}"
+            f"{len(report.warnings)} warnings, quality_score={report.quality_score:.2f}",
         )
 
     except Exception as e:
@@ -190,7 +192,7 @@ def validate_xpcs_data(
                 category="validation",
                 message=f"Validation process failed: {str(e)}",
                 recommendation="Check data format and try again",
-            )
+            ),
         )
 
     return report
@@ -209,7 +211,7 @@ def _validate_data_structure(data: dict[str, Any], report: DataQualityReport) ->
                     message=f"Missing required data key: {key}",
                     parameter=key,
                     recommendation="Check data loading process",
-                )
+                ),
             )
 
 
@@ -233,7 +235,7 @@ def _validate_data_integrity(data: dict[str, Any], report: DataQualityReport) ->
                         parameter=key,
                         value=non_finite_count,
                         recommendation="Check data preprocessing and file integrity",
-                    )
+                    ),
                 )
 
             # Check for reasonable value ranges based on parameter type
@@ -248,7 +250,7 @@ def _validate_data_integrity(data: dict[str, Any], report: DataQualityReport) ->
                             parameter=key,
                             value=negative_count,
                             recommendation="Check correlation calculation and baseline correction",
-                        )
+                        ),
                     )
 
             elif key in ["wavevector_q_list"]:
@@ -262,7 +264,7 @@ def _validate_data_integrity(data: dict[str, Any], report: DataQualityReport) ->
                             parameter=key,
                             value=non_positive_count,
                             recommendation="Q-values must be positive",
-                        )
+                        ),
                     )
 
             elif key in ["t1", "t2"]:
@@ -276,7 +278,7 @@ def _validate_data_integrity(data: dict[str, Any], report: DataQualityReport) ->
                             parameter=key,
                             value=negative_count,
                             recommendation="Time values must be non-negative",
-                        )
+                        ),
                     )
 
 
@@ -297,7 +299,7 @@ def _validate_array_shapes(data: dict[str, Any], report: DataQualityReport) -> N
                     category="format",
                     message=f"t1 and t2 have inconsistent shapes: {t1.shape} vs {t2.shape}",
                     recommendation="Time arrays must have same shape",
-                )
+                ),
             )
 
         # Check correlation matrix dimensions
@@ -311,7 +313,7 @@ def _validate_array_shapes(data: dict[str, Any], report: DataQualityReport) -> N
                         category="format",
                         message=f"Correlation matrices not square: {matrix_size1} x {matrix_size2}",
                         recommendation="Correlation matrices must be square",
-                    )
+                    ),
                 )
 
             if matrix_size1 != len(t1):
@@ -321,7 +323,7 @@ def _validate_array_shapes(data: dict[str, Any], report: DataQualityReport) -> N
                         category="format",
                         message=f"Matrix size {matrix_size1} doesn't match time array length {len(t1)}",
                         recommendation="Matrix dimensions should match time array length",
-                    )
+                    ),
                 )
 
     except Exception as e:
@@ -330,12 +332,14 @@ def _validate_array_shapes(data: dict[str, Any], report: DataQualityReport) -> N
                 severity="warning",
                 category="validation",
                 message=f"Could not validate array shapes: {str(e)}",
-            )
+            ),
         )
 
 
 def _validate_physics_parameters(
-    data: dict[str, Any], config: dict[str, Any], report: DataQualityReport
+    data: dict[str, Any],
+    config: dict[str, Any],
+    report: DataQualityReport,
 ) -> None:
     """Validate physics parameters against known constraints."""
     if not HAS_PHYSICS:
@@ -345,7 +349,7 @@ def _validate_physics_parameters(
                 category="physics",
                 message="Physics validation unavailable - v2 physics module not found",
                 recommendation="Install v2 physics module for enhanced validation",
-            )
+            ),
         )
         return
 
@@ -365,7 +369,7 @@ def _validate_physics_parameters(
                         parameter="wavevector_q_list",
                         value=q_min,
                         recommendation="Check experimental setup and detector geometry",
-                    )
+                    ),
                 )
 
             if q_max > PhysicsConstants.Q_MAX_TYPICAL:
@@ -377,7 +381,7 @@ def _validate_physics_parameters(
                         parameter="wavevector_q_list",
                         value=q_max,
                         recommendation="Check experimental setup and resolution limits",
-                    )
+                    ),
                 )
 
         # Validate time parameters from config
@@ -395,7 +399,7 @@ def _validate_physics_parameters(
                             parameter="dt",
                             value=dt,
                             recommendation="Check time resolution and detector capabilities",
-                        )
+                        ),
                     )
 
                 if dt > PhysicsConstants.TIME_MAX_XPCS:
@@ -406,7 +410,7 @@ def _validate_physics_parameters(
                             message=f"Time step dt={dt}s above typical XPCS range: {PhysicsConstants.TIME_MAX_XPCS}s",
                             parameter="dt",
                             value=dt,
-                        )
+                        ),
                     )
 
         report.physics_checks = {
@@ -424,12 +428,13 @@ def _validate_physics_parameters(
                 severity="warning",
                 category="physics",
                 message=f"Physics validation failed: {str(e)}",
-            )
+            ),
         )
 
 
 def _validate_correlation_matrices(
-    data: dict[str, Any], report: DataQualityReport
+    data: dict[str, Any],
+    report: DataQualityReport,
 ) -> None:
     """Validate correlation matrix properties."""
     try:
@@ -452,7 +457,7 @@ def _validate_correlation_matrices(
                         message=f"Correlation matrix {i} not symmetric",
                         parameter="c2_exp",
                         recommendation="Check matrix reconstruction process",
-                    )
+                    ),
                 )
 
             # Check diagonal values (should be around 1.0 at t=0)
@@ -468,7 +473,7 @@ def _validate_correlation_matrices(
                         parameter="c2_exp",
                         value=t0_correlation,
                         recommendation="Check normalization and baseline correction",
-                    )
+                    ),
                 )
 
     except Exception as e:
@@ -477,12 +482,13 @@ def _validate_correlation_matrices(
                 severity="warning",
                 category="validation",
                 message=f"Correlation matrix validation failed: {str(e)}",
-            )
+            ),
         )
 
 
 def _validate_statistical_properties(
-    data: dict[str, Any], report: DataQualityReport
+    data: dict[str, Any],
+    report: DataQualityReport,
 ) -> None:
     """Validate statistical properties of the data."""
     try:
@@ -503,7 +509,7 @@ def _validate_statistical_properties(
                     message=f"Unusual mean correlation value: {mean_correlation:.3f}",
                     value=mean_correlation,
                     recommendation="Check data normalization",
-                )
+                ),
             )
 
         # Check for excessive noise
@@ -514,7 +520,7 @@ def _validate_statistical_properties(
                     category="statistics",
                     message=f"High correlation variability: std={std_correlation:.3f}, mean={mean_correlation:.3f}",
                     recommendation="Data may be noisy - consider preprocessing",
-                )
+                ),
             )
 
     except Exception as e:
@@ -523,7 +529,7 @@ def _validate_statistical_properties(
                 severity="warning",
                 category="validation",
                 message=f"Statistical validation failed: {str(e)}",
-            )
+            ),
         )
 
 
@@ -555,8 +561,7 @@ def _compute_data_statistics(data: dict[str, Any], report: DataQualityReport) ->
 
 
 def _compute_quality_score(report: DataQualityReport) -> float:
-    """
-    Compute overall data quality score (0.0 to 1.0).
+    """Compute overall data quality score (0.0 to 1.0).
 
     Factors:
     - Errors significantly reduce score
@@ -609,7 +614,10 @@ class IncrementalValidationCache:
     component_hashes: dict[str, str] = field(default_factory=dict)
 
     def is_valid_for_data(
-        self, data: dict[str, Any], validation_level: str, max_age: float = 3600
+        self,
+        data: dict[str, Any],
+        validation_level: str,
+        max_age: float = 3600,
     ) -> bool:
         """Check if cached result is valid for given data."""
         # Check validation level
@@ -636,8 +644,7 @@ def validate_xpcs_data_incremental(
     previous_report: DataQualityReport | None = None,
     force_revalidate: bool = False,
 ) -> DataQualityReport:
-    """
-    Enhanced XPCS data validation with incremental caching and stage awareness.
+    """Enhanced XPCS data validation with incremental caching and stage awareness.
 
     Args:
         data: XPCS data dictionary
@@ -650,7 +657,7 @@ def validate_xpcs_data_incremental(
         Comprehensive data quality report with incremental optimization
     """
     logger.info(
-        f"Starting incremental XPCS data validation (level: {validation_level})"
+        f"Starting incremental XPCS data validation (level: {validation_level})",
     )
 
     if validation_level == "none":
@@ -685,7 +692,7 @@ def validate_xpcs_data_incremental(
     processing_time = time.time() - start_time
     logger.info(
         f"Incremental validation completed in {processing_time:.3f}s: "
-        f"{len(report.errors)} errors, {len(report.warnings)} warnings"
+        f"{len(report.errors)} errors, {len(report.warnings)} warnings",
     )
 
     return report
@@ -697,8 +704,7 @@ def validate_data_component(
     validation_level: str = "basic",
     config: dict[str, Any] = None,
 ) -> DataQualityReport:
-    """
-    Validate a specific component of XPCS data for selective validation.
+    """Validate a specific component of XPCS data for selective validation.
 
     Args:
         data: Complete XPCS data dictionary
@@ -712,7 +718,9 @@ def validate_data_component(
     logger.debug(f"Validating data component: {component_name}")
 
     report = DataQualityReport(
-        is_valid=True, validation_level=f"{validation_level}_component", total_issues=0
+        is_valid=True,
+        validation_level=f"{validation_level}_component",
+        total_issues=0,
     )
 
     if component_name not in data:
@@ -723,7 +731,7 @@ def validate_data_component(
                 message=f"Required component '{component_name}' not found",
                 parameter=component_name,
                 recommendation="Check data loading and component naming",
-            )
+            ),
         )
         return report
 
@@ -750,7 +758,9 @@ def validate_data_component(
 
 
 def _perform_incremental_validation(
-    data: dict[str, Any], config: dict[str, Any], previous_report: DataQualityReport
+    data: dict[str, Any],
+    config: dict[str, Any],
+    previous_report: DataQualityReport,
 ) -> DataQualityReport:
     """Perform optimized incremental validation using previous results."""
     logger.debug("Performing incremental validation")
@@ -821,7 +831,7 @@ def _validate_array_component(
                     message=f"Non-finite values in {component_name}: {non_finite_count}",
                     parameter=component_name,
                     recommendation="Check data preprocessing",
-                )
+                ),
             )
 
         # Component-specific checks
@@ -834,7 +844,7 @@ def _validate_array_component(
                         message="Non-positive q-values found",
                         parameter=component_name,
                         recommendation="Q-values must be positive",
-                    )
+                    ),
                 )
 
         elif component_name == "phi_angles_list":
@@ -847,12 +857,13 @@ def _validate_array_component(
                         message="Phi angles outside typical range [-360, 360]",
                         parameter=component_name,
                         recommendation="Check angle units and calibration",
-                    )
+                    ),
                 )
 
 
 def _validate_correlation_component(
-    data: dict[str, Any], report: DataQualityReport
+    data: dict[str, Any],
+    report: DataQualityReport,
 ) -> None:
     """Validate correlation matrix component."""
     c2_exp = data.get("c2_exp")
@@ -870,7 +881,7 @@ def _validate_correlation_component(
                 message="Non-finite values in correlation data",
                 parameter="c2_exp",
                 recommendation="Check correlation calculation",
-            )
+            ),
         )
 
     # Check correlation value range
@@ -884,12 +895,14 @@ def _validate_correlation_component(
                     message=f"Unusual correlation values: mean={mean_val:.3f}",
                     parameter="c2_exp",
                     recommendation="Check normalization and baseline",
-                )
+                ),
             )
 
 
 def _validate_time_component(
-    data: dict[str, Any], component_name: str, report: DataQualityReport
+    data: dict[str, Any],
+    component_name: str,
+    report: DataQualityReport,
 ) -> None:
     """Validate time array components."""
     value = data[component_name]
@@ -905,7 +918,7 @@ def _validate_time_component(
                 message=f"Negative time values in {component_name}: {negative_count}",
                 parameter=component_name,
                 recommendation="Time values must be non-negative",
-            )
+            ),
         )
 
 
@@ -933,7 +946,9 @@ def _generate_cache_key(data: dict[str, Any], validation_level: str) -> str:
 
 
 def _check_validation_cache(
-    cache_key: str, data: dict[str, Any], validation_level: str
+    cache_key: str,
+    data: dict[str, Any],
+    validation_level: str,
 ) -> DataQualityReport | None:
     """Check validation cache for existing results."""
     if cache_key in _validation_cache:
@@ -944,7 +959,9 @@ def _check_validation_cache(
 
 
 def _cache_validation_result(
-    data: dict[str, Any], validation_level: str, report: DataQualityReport
+    data: dict[str, Any],
+    validation_level: str,
+    report: DataQualityReport,
 ) -> None:
     """Cache validation result for future use."""
     data_hash = _compute_data_hash(data)
@@ -963,14 +980,16 @@ def _cache_validation_result(
     if len(_validation_cache) > 50:
         # Remove oldest entries
         oldest_keys = sorted(
-            _validation_cache.keys(), key=lambda k: _validation_cache[k].timestamp
+            _validation_cache.keys(),
+            key=lambda k: _validation_cache[k].timestamp,
         )[:10]
         for key in oldest_keys:
             del _validation_cache[key]
 
 
 def _identify_changed_components(
-    data: dict[str, Any], previous_report: DataQualityReport
+    data: dict[str, Any],
+    previous_report: DataQualityReport,
 ) -> list[str]:
     """Identify which data components have changed since last validation."""
     # For now, simple implementation - in production could use more sophisticated change detection

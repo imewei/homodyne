@@ -1,5 +1,4 @@
-"""
-Parameter Manager for Homodyne v2
+"""Parameter Manager for Homodyne v2
 ==================================
 
 Centralized parameter management system for handling parameter bounds,
@@ -38,8 +37,7 @@ class ConstraintSeverity:
 
 
 class ParameterManager:
-    """
-    Centralized parameter management system.
+    """Centralized parameter management system.
 
     Handles:
     - Parameter bounds (with config override support)
@@ -156,8 +154,7 @@ class ParameterManager:
         params: dict[str, float],
         severity_level: str = "warning",
     ) -> ValidationResult:
-        """
-        Validate physics-based parameter constraints beyond simple bounds.
+        """Validate physics-based parameter constraints beyond simple bounds.
 
         Checks for physically impossible or unusual parameter values based on
         theoretical understanding of XPCS and soft matter dynamics.
@@ -362,10 +359,10 @@ class ParameterManager:
         )
 
     def get_parameter_bounds(
-        self, parameter_names: list[str] | None = None
+        self,
+        parameter_names: list[str] | None = None,
     ) -> list[BoundDict]:
-        """
-        Get parameter bounds configuration (with caching for performance).
+        """Get parameter bounds configuration (with caching for performance).
 
         Parameters
         ----------
@@ -400,7 +397,7 @@ class ParameterManager:
         # Check cache first (if caching enabled)
         if self._cache_enabled and cache_key in self._bounds_cache:
             logger.debug(
-                f"Returning cached bounds for {len(parameter_names)} parameters"
+                f"Returning cached bounds for {len(parameter_names)} parameters",
             )
             return self._bounds_cache[cache_key].copy()
 
@@ -417,7 +414,7 @@ class ParameterManager:
             else:
                 # Fallback for unknown parameters
                 logger.warning(
-                    f"Unknown parameter '{name}', using default bounds [0.0, 1.0]"
+                    f"Unknown parameter '{name}', using default bounds [0.0, 1.0]",
                 )
                 bounds_list.append(
                     {
@@ -425,7 +422,7 @@ class ParameterManager:
                         "max": 1.0,
                         "name": name,
                         "type": "Normal",
-                    }
+                    },
                 )
 
         # Cache the result
@@ -435,8 +432,7 @@ class ParameterManager:
         return bounds_list
 
     def get_active_parameters(self) -> list[str]:
-        """
-        Get list of active (physical) parameters from configuration (cached).
+        """Get list of active (physical) parameters from configuration (cached).
 
         This returns only the physical parameters (excludes scaling parameters
         like contrast and offset).
@@ -503,8 +499,7 @@ class ParameterManager:
             return LAMINAR_FLOW_PARAM_NAMES.copy()
 
     def get_all_parameter_names(self) -> list[str]:
-        """
-        Get all parameter names including scaling parameters.
+        """Get all parameter names including scaling parameters.
 
         Returns
         -------
@@ -524,8 +519,7 @@ class ParameterManager:
         return all_params
 
     def get_effective_parameter_count(self) -> int:
-        """
-        Get the effective number of physical parameters (excludes scaling).
+        """Get the effective number of physical parameters (excludes scaling).
 
         Returns
         -------
@@ -544,8 +538,7 @@ class ParameterManager:
         return len(self.get_active_parameters())
 
     def get_total_parameter_count(self) -> int:
-        """
-        Get total number of parameters including scaling parameters.
+        """Get total number of parameters including scaling parameters.
 
         Returns
         -------
@@ -566,8 +559,7 @@ class ParameterManager:
         param_names: list[str] | None = None,
         tolerance: float = 1e-10,
     ) -> ValidationResult:
-        """
-        Validate parameter values against bounds.
+        """Validate parameter values against bounds.
 
         Parameters
         ----------
@@ -604,16 +596,19 @@ class ParameterManager:
 
         # Use the detailed validation from physics module
         result = validate_parameters_detailed(
-            params, bounds_tuples, param_names=param_names, tolerance=tolerance
+            params,
+            bounds_tuples,
+            param_names=param_names,
+            tolerance=tolerance,
         )
 
         return result
 
     def get_bounds_as_tuples(
-        self, parameter_names: list[str] | None = None
+        self,
+        parameter_names: list[str] | None = None,
     ) -> list[tuple[float, float]]:
-        """
-        Get parameter bounds as list of (min, max) tuples.
+        """Get parameter bounds as list of (min, max) tuples.
 
         Convenience method for compatibility with optimization code.
 
@@ -637,10 +632,10 @@ class ParameterManager:
         return [(b["min"], b["max"]) for b in bounds_dicts]
 
     def get_bounds_as_arrays(
-        self, parameter_names: list[str] | None = None
+        self,
+        parameter_names: list[str] | None = None,
     ) -> tuple[np.ndarray, np.ndarray]:
-        """
-        Get parameter bounds as separate lower and upper arrays.
+        """Get parameter bounds as separate lower and upper arrays.
 
         Convenience method for compatibility with optimization code.
 
@@ -671,8 +666,7 @@ class ParameterManager:
         return lower_bounds, upper_bounds
 
     def get_fixed_parameters(self) -> dict[str, float]:
-        """
-        Get parameters that should be held fixed during optimization.
+        """Get parameters that should be held fixed during optimization.
 
         Returns
         -------
@@ -703,8 +697,7 @@ class ParameterManager:
         return fixed_params
 
     def is_parameter_active(self, param_name: str) -> bool:
-        """
-        Check if a parameter is active (being optimized).
+        """Check if a parameter is active (being optimized).
 
         Parameters
         ----------
@@ -742,8 +735,7 @@ class ParameterManager:
         return canonical_name in active_params and not is_fixed
 
     def get_optimizable_parameters(self) -> list[str]:
-        """
-        Get list of parameters that should be optimized (active - fixed).
+        """Get list of parameters that should be optimized (active - fixed).
 
         Returns
         -------

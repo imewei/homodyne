@@ -1,5 +1,4 @@
-"""
-Minimal configuration system for the homodyne package.
+"""Minimal configuration system for the homodyne package.
 
 Provides essential configuration management with preserved API compatibility.
 """

@@ -1,5 +1,4 @@
-"""
-Advanced Data Preprocessing Pipeline for Homodyne v2
+"""Advanced Data Preprocessing Pipeline for Homodyne v2
 ==================================================
 
 Intelligent data transformation system that builds on config-based filtering to provide
@@ -118,13 +117,9 @@ logger = get_logger(__name__)
 class PreprocessingError(Exception):
     """Raised when preprocessing operations fail."""
 
-    pass
-
 
 class PreprocessingConfigurationError(Exception):
     """Raised when preprocessing configuration is invalid."""
-
-    pass
 
 
 class PreprocessingStage(Enum):
@@ -223,8 +218,7 @@ class PreprocessingResult:
 
 
 class PreprocessingPipeline:
-    """
-    Advanced data preprocessing pipeline with configurable transformation stages.
+    """Advanced data preprocessing pipeline with configurable transformation stages.
 
     Provides a flexible, high-performance preprocessing system that transforms
     raw XPCS correlation data through multiple configurable stages while maintaining
@@ -242,8 +236,7 @@ class PreprocessingPipeline:
 
     @log_calls(include_args=False)
     def __init__(self, config: dict[str, Any]):
-        """
-        Initialize preprocessing pipeline with configuration.
+        """Initialize preprocessing pipeline with configuration.
 
         Args:
             config: Configuration dictionary containing preprocessing settings
@@ -260,10 +253,12 @@ class PreprocessingPipeline:
         # Initialize pipeline settings
         self.enabled_stages = self._get_enabled_stages()
         self.cache_intermediates = self.preprocessing_config.get(
-            "cache_intermediates", False
+            "cache_intermediates",
+            False,
         )
         self.progress_reporting = self.preprocessing_config.get(
-            "progress_reporting", True
+            "progress_reporting",
+            True,
         )
         self.chunk_size = self.preprocessing_config.get("chunk_size", None)
 
@@ -274,18 +269,18 @@ class PreprocessingPipeline:
         self.pipeline_id = self._generate_pipeline_id()
 
         logger.info(
-            f"Preprocessing pipeline initialized with {len(self.enabled_stages)} enabled stages"
+            f"Preprocessing pipeline initialized with {len(self.enabled_stages)} enabled stages",
         )
         logger.debug(f"Pipeline ID: {self.pipeline_id}")
         logger.debug(
-            f"Enabled stages: {[stage.value for stage in self.enabled_stages]}"
+            f"Enabled stages: {[stage.value for stage in self.enabled_stages]}",
         )
 
     def _validate_configuration(self) -> None:
         """Validate preprocessing configuration parameters."""
         if not isinstance(self.preprocessing_config, dict):
             raise PreprocessingConfigurationError(
-                "preprocessing configuration must be a dictionary"
+                "preprocessing configuration must be a dictionary",
             )
 
         # Validate stage configurations
@@ -296,7 +291,7 @@ class PreprocessingPipeline:
 
             if not isinstance(stage_config, dict):
                 raise PreprocessingConfigurationError(
-                    f"Stage configuration for {stage_name} must be a dictionary"
+                    f"Stage configuration for {stage_name} must be a dictionary",
                 )
 
         # Validate normalization method
@@ -307,7 +302,7 @@ class PreprocessingPipeline:
         )
         if norm_method not in [m.value for m in NormalizationMethod]:
             raise PreprocessingConfigurationError(
-                f"Unknown normalization method: {norm_method}"
+                f"Unknown normalization method: {norm_method}",
             )
 
         # Validate noise reduction method
@@ -318,13 +313,13 @@ class PreprocessingPipeline:
         )
         if noise_method not in [m.value for m in NoiseReductionMethod]:
             raise PreprocessingConfigurationError(
-                f"Unknown noise reduction method: {noise_method}"
+                f"Unknown noise reduction method: {noise_method}",
             )
 
         # Check required dependencies
         if noise_method in ["wiener", "savgol"] and not HAS_SCIPY:
             logger.warning(
-                f"Noise reduction method '{noise_method}' requires scipy - falling back to 'none'"
+                f"Noise reduction method '{noise_method}' requires scipy - falling back to 'none'",
             )
 
     def _get_enabled_stages(self) -> list[PreprocessingStage]:
@@ -353,8 +348,7 @@ class PreprocessingPipeline:
 
     @log_performance(threshold=1.0)
     def process(self, data: dict[str, Any]) -> PreprocessingResult:
-        """
-        Execute the full preprocessing pipeline on input data.
+        """Execute the full preprocessing pipeline on input data.
 
         Args:
             data: Input data dictionary from XPCS loader
@@ -366,11 +360,12 @@ class PreprocessingPipeline:
 
         # Initialize provenance tracking
         config_hash = hashlib.md5(
-            json.dumps(self.preprocessing_config, sort_keys=True).encode()
+            json.dumps(self.preprocessing_config, sort_keys=True).encode(),
         ).hexdigest()
 
         provenance = PreprocessingProvenance(
-            pipeline_id=self.pipeline_id, config_hash=config_hash
+            pipeline_id=self.pipeline_id,
+            config_hash=config_hash,
         )
 
         logger.info(f"Starting preprocessing pipeline {self.pipeline_id}")
@@ -383,14 +378,15 @@ class PreprocessingPipeline:
             for i, stage in enumerate(self.enabled_stages):
                 if self.progress_reporting:
                     logger.info(
-                        f"Processing stage {i + 1}/{len(self.enabled_stages)}: {stage.value}"
+                        f"Processing stage {i + 1}/{len(self.enabled_stages)}: {stage.value}",
                     )
 
                 time.time()
 
                 try:
                     processed_data, transform_record = self._execute_stage(
-                        stage, processed_data
+                        stage,
+                        processed_data,
                     )
                     stage_results[stage] = True
                     provenance.transformations.append(transform_record)
@@ -403,11 +399,11 @@ class PreprocessingPipeline:
                     # Check if we should continue or abort
                     if self.preprocessing_config.get("abort_on_error", False):
                         raise PreprocessingError(
-                            f"Pipeline aborted at stage {stage.value}: {e}"
+                            f"Pipeline aborted at stage {stage.value}: {e}",
                         ) from e
                     else:
                         logger.warning(
-                            f"Continuing pipeline after stage {stage.value} failure"
+                            f"Continuing pipeline after stage {stage.value} failure",
                         )
 
             # Calculate final metrics
@@ -417,10 +413,10 @@ class PreprocessingPipeline:
             success = any(stage_results.values())
 
             logger.info(
-                f"Preprocessing pipeline completed in {provenance.total_duration:.2f}s"
+                f"Preprocessing pipeline completed in {provenance.total_duration:.2f}s",
             )
             logger.info(
-                f"Successful stages: {sum(stage_results.values())}/{len(stage_results)}"
+                f"Successful stages: {sum(stage_results.values())}/{len(stage_results)}",
             )
 
             return PreprocessingResult(
@@ -443,7 +439,9 @@ class PreprocessingPipeline:
             )
 
     def _execute_stage(
-        self, stage: PreprocessingStage, data: dict[str, Any]
+        self,
+        stage: PreprocessingStage,
+        data: dict[str, Any],
     ) -> tuple[dict[str, Any], TransformationRecord]:
         """Execute a single preprocessing stage."""
         stage_start = time.time()
@@ -478,7 +476,7 @@ class PreprocessingPipeline:
             processed_data = data
             method = "passthrough"
             logger.warning(
-                f"Stage {stage.value} not implemented - passing through data"
+                f"Stage {stage.value} not implemented - passing through data",
             )
 
         # Create transformation record
@@ -507,10 +505,11 @@ class PreprocessingPipeline:
 
     @log_performance(threshold=0.5)
     def _correct_diagonal_enhanced(
-        self, data: dict[str, Any], config: dict[str, Any]
+        self,
+        data: dict[str, Any],
+        config: dict[str, Any],
     ) -> dict[str, Any]:
-        """
-        Enhanced diagonal correction with multiple statistical methods.
+        """Enhanced diagonal correction with multiple statistical methods.
 
         Goes beyond basic diagonal correction to provide statistical methods
         for improving correlation matrix quality.
@@ -531,7 +530,8 @@ class PreprocessingPipeline:
             corrected_data = data.copy()
             for i in range(len(c2_exp)):
                 corrected_data["c2_exp"][i] = self._statistical_diagonal_correction(
-                    c2_exp[i], config
+                    c2_exp[i],
+                    config,
                 )
 
         elif method == "interpolation":
@@ -539,15 +539,17 @@ class PreprocessingPipeline:
             corrected_data = data.copy()
             for i in range(len(c2_exp)):
                 corrected_data["c2_exp"][i] = self._interpolation_diagonal_correction(
-                    c2_exp[i], config
+                    c2_exp[i],
+                    config,
                 )
 
         else:
             logger.warning(
-                f"Unknown diagonal correction method: {method}, using statistical"
+                f"Unknown diagonal correction method: {method}, using statistical",
             )
             return self._correct_diagonal_enhanced(
-                data, {**config, "method": "statistical"}
+                data,
+                {**config, "method": "statistical"},
             )
 
         return corrected_data
@@ -566,7 +568,9 @@ class PreprocessingPipeline:
         return c2_mat
 
     def _statistical_diagonal_correction(
-        self, c2_mat: np.ndarray, config: dict[str, Any]
+        self,
+        c2_mat: np.ndarray,
+        config: dict[str, Any],
     ) -> np.ndarray:
         """Statistical diagonal correction using robust estimators."""
         c2_corrected = c2_mat.copy()
@@ -575,7 +579,8 @@ class PreprocessingPipeline:
         # Parameters
         window_size = config.get("window_size", 3)
         estimator = config.get(
-            "estimator", "median"
+            "estimator",
+            "median",
         )  # 'mean', 'median', 'trimmed_mean'
 
         for i in range(size):
@@ -613,7 +618,9 @@ class PreprocessingPipeline:
         return c2_corrected
 
     def _interpolation_diagonal_correction(
-        self, c2_mat: np.ndarray, config: dict[str, Any]
+        self,
+        c2_mat: np.ndarray,
+        config: dict[str, Any],
     ) -> np.ndarray:
         """Interpolation-based diagonal correction."""
         c2_corrected = c2_mat.copy()
@@ -645,11 +652,11 @@ class PreprocessingPipeline:
 
     @log_performance(threshold=0.3)
     def _normalize_data(
-        self, data: dict[str, Any], config: dict[str, Any]
+        self,
+        data: dict[str, Any],
+        config: dict[str, Any],
     ) -> dict[str, Any]:
-        """
-        Apply normalization to correlation data using multiple methods.
-        """
+        """Apply normalization to correlation data using multiple methods."""
         method = NormalizationMethod(config.get("method", "baseline"))
         c2_exp = data["c2_exp"]
 
@@ -666,7 +673,7 @@ class PreprocessingPipeline:
                     normalized_data["c2_exp"][i] = c2_matrix / baseline
                 else:
                     logger.warning(
-                        f"Zero baseline value at matrix {i}, skipping normalization"
+                        f"Zero baseline value at matrix {i}, skipping normalization",
                     )
 
         elif method == NormalizationMethod.STATISTICAL:
@@ -679,7 +686,7 @@ class PreprocessingPipeline:
                     normalized_data["c2_exp"][i] = (c2_matrix - mean_val) / std_val
                 else:
                     logger.warning(
-                        f"Zero standard deviation at matrix {i}, skipping normalization"
+                        f"Zero standard deviation at matrix {i}, skipping normalization",
                     )
 
         elif method == NormalizationMethod.MINMAX:
@@ -694,7 +701,7 @@ class PreprocessingPipeline:
                     )
                 else:
                     logger.warning(
-                        f"Constant values at matrix {i}, skipping normalization"
+                        f"Constant values at matrix {i}, skipping normalization",
                     )
 
         elif method == NormalizationMethod.ROBUST:
@@ -710,7 +717,7 @@ class PreprocessingPipeline:
                     )
                 else:
                     logger.warning(
-                        f"No variance in percentile range at matrix {i}, skipping normalization"
+                        f"No variance in percentile range at matrix {i}, skipping normalization",
                     )
 
         elif method == NormalizationMethod.PHYSICS_BASED:
@@ -735,18 +742,18 @@ class PreprocessingPipeline:
                         normalized_data["c2_exp"][i] = normalized_matrix
                 else:
                     logger.warning(
-                        f"Zero maximum value at matrix {i}, skipping normalization"
+                        f"Zero maximum value at matrix {i}, skipping normalization",
                     )
 
         return normalized_data
 
     @log_performance(threshold=0.4)
     def _reduce_noise(
-        self, data: dict[str, Any], config: dict[str, Any]
+        self,
+        data: dict[str, Any],
+        config: dict[str, Any],
     ) -> dict[str, Any]:
-        """
-        Apply noise reduction algorithms to correlation data.
-        """
+        """Apply noise reduction algorithms to correlation data."""
         method = NoiseReductionMethod(config.get("method", "none"))
 
         if method == NoiseReductionMethod.NONE:
@@ -763,7 +770,8 @@ class PreprocessingPipeline:
             if HAS_SCIPY:
                 for i in range(len(c2_exp)):
                     denoised_data["c2_exp"][i] = median_filter(
-                        c2_exp[i], size=kernel_size
+                        c2_exp[i],
+                        size=kernel_size,
                     )
             else:
                 logger.warning("Scipy not available for median filtering, skipping")
@@ -786,11 +794,12 @@ class PreprocessingPipeline:
                 for i in range(len(c2_exp)):
                     # Apply Wiener filter
                     denoised_data["c2_exp"][i] = signal.wiener(
-                        c2_exp[i], noise=noise_variance
+                        c2_exp[i],
+                        noise=noise_variance,
                     )
             else:
                 logger.warning(
-                    "Scipy not available for Wiener filtering, falling back to gaussian"
+                    "Scipy not available for Wiener filtering, falling back to gaussian",
                 )
                 return self._reduce_noise(data, {**config, "method": "gaussian"})
 
@@ -809,31 +818,35 @@ class PreprocessingPipeline:
                     for row in range(c2_matrix.shape[0]):
                         if c2_matrix.shape[1] > window_length:
                             filtered_matrix[row, :] = signal.savgol_filter(
-                                c2_matrix[row, :], window_length, polyorder
+                                c2_matrix[row, :],
+                                window_length,
+                                polyorder,
                             )
 
                     # Filter columns
                     for col in range(c2_matrix.shape[1]):
                         if c2_matrix.shape[0] > window_length:
                             filtered_matrix[:, col] = signal.savgol_filter(
-                                filtered_matrix[:, col], window_length, polyorder
+                                filtered_matrix[:, col],
+                                window_length,
+                                polyorder,
                             )
 
                     denoised_data["c2_exp"][i] = filtered_matrix
             else:
                 logger.warning(
-                    "Scipy not available for Savitzky-Golay filtering, falling back to median"
+                    "Scipy not available for Savitzky-Golay filtering, falling back to median",
                 )
                 return self._reduce_noise(data, {**config, "method": "median"})
 
         return denoised_data
 
     def _standardize_format(
-        self, data: dict[str, Any], config: dict[str, Any]
+        self,
+        data: dict[str, Any],
+        config: dict[str, Any],
     ) -> dict[str, Any]:
-        """
-        Standardize data format to ensure consistency across APS vs APS-U sources.
-        """
+        """Standardize data format to ensure consistency across APS vs APS-U sources."""
         logger.debug("Standardizing data format")
 
         standardized_data = data.copy()
@@ -841,12 +854,14 @@ class PreprocessingPipeline:
         # Ensure consistent data types
         if "wavevector_q_list" in data:
             standardized_data["wavevector_q_list"] = np.array(
-                data["wavevector_q_list"], dtype=np.float64
+                data["wavevector_q_list"],
+                dtype=np.float64,
             )
 
         if "phi_angles_list" in data:
             standardized_data["phi_angles_list"] = np.array(
-                data["phi_angles_list"], dtype=np.float64
+                data["phi_angles_list"],
+                dtype=np.float64,
             )
 
         if "t1" in data:
@@ -865,7 +880,7 @@ class PreprocessingPipeline:
             for i, c2_matrix in enumerate(c2_exp):
                 if c2_matrix.shape[0] != c2_matrix.shape[1]:
                     logger.warning(
-                        f"Non-square correlation matrix at index {i}: {c2_matrix.shape}"
+                        f"Non-square correlation matrix at index {i}: {c2_matrix.shape}",
                     )
                     # Could implement automatic padding/truncation here if needed
 
@@ -877,17 +892,17 @@ class PreprocessingPipeline:
             if len(q_list) != len(phi_list) or len(q_list) != len(c2_exp):
                 logger.warning(
                     f"Inconsistent array lengths: q_list={len(q_list)}, "
-                    f"phi_list={len(phi_list)}, c2_exp={len(c2_exp)}"
+                    f"phi_list={len(phi_list)}, c2_exp={len(c2_exp)}",
                 )
 
         return standardized_data
 
     def _validate_output(
-        self, data: dict[str, Any], config: dict[str, Any]
+        self,
+        data: dict[str, Any],
+        config: dict[str, Any],
     ) -> dict[str, Any]:
-        """
-        Validate final data integrity and physics constraints.
-        """
+        """Validate final data integrity and physics constraints."""
         logger.debug("Validating output data integrity")
 
         # Check for required keys
@@ -918,14 +933,14 @@ class PreprocessingPipeline:
                 t0_corr = diagonal[0]
                 if t0_corr <= 0:
                     logger.warning(
-                        f"Non-positive t=0 correlation in matrix {i}: {t0_corr}"
+                        f"Non-positive t=0 correlation in matrix {i}: {t0_corr}",
                     )
 
         # Check time arrays
         t1, t2 = data["t1"], data["t2"]
         if len(t1) != len(t2):
             logger.warning(
-                f"Time arrays have different lengths: t1={len(t1)}, t2={len(t2)}"
+                f"Time arrays have different lengths: t1={len(t1)}, t2={len(t2)}",
             )
 
         # Check for monotonicity in time arrays
@@ -937,10 +952,11 @@ class PreprocessingPipeline:
         return data
 
     def save_provenance(
-        self, provenance: PreprocessingProvenance, filepath: str | Path
+        self,
+        provenance: PreprocessingProvenance,
+        filepath: str | Path,
     ) -> None:
-        """
-        Save preprocessing provenance to file for reproducibility.
+        """Save preprocessing provenance to file for reproducibility.
 
         Args:
             provenance: Provenance record to save
@@ -955,8 +971,7 @@ class PreprocessingPipeline:
         logger.info(f"Preprocessing provenance saved to: {filepath}")
 
     def load_provenance(self, filepath: str | Path) -> PreprocessingProvenance:
-        """
-        Load preprocessing provenance from file.
+        """Load preprocessing provenance from file.
 
         Args:
             filepath: Path to provenance file
@@ -981,7 +996,7 @@ class PreprocessingPipeline:
                     output_shape=tuple(t_data["output_shape"]),
                     memory_usage=t_data.get("memory_usage"),
                     warnings=t_data.get("warnings", []),
-                )
+                ),
             )
 
         return PreprocessingProvenance(
@@ -999,8 +1014,7 @@ class PreprocessingPipeline:
 
 
 def create_default_preprocessing_config() -> dict[str, Any]:
-    """
-    Create default preprocessing configuration.
+    """Create default preprocessing configuration.
 
     Returns:
         Dictionary with default preprocessing settings
@@ -1028,15 +1042,15 @@ def create_default_preprocessing_config() -> dict[str, Any]:
                 "standardize_format": {"enabled": True},
                 "validate_output": {"enabled": True},
             },
-        }
+        },
     }
 
 
 def preprocess_xpcs_data(
-    data: dict[str, Any], config: dict[str, Any] | None = None
+    data: dict[str, Any],
+    config: dict[str, Any] | None = None,
 ) -> PreprocessingResult:
-    """
-    Convenience function for preprocessing XPCS data.
+    """Convenience function for preprocessing XPCS data.
 
     Args:
         data: Input data dictionary from XPCS loader

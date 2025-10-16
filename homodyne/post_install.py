@@ -1,6 +1,5 @@
 #!/usr/bin/env python3
-"""
-Post-installation hook for Homodyne with Optional Shell Completion System
+"""Post-installation hook for Homodyne with Optional Shell Completion System
 ========================================================================
 
 This script provides optional setup for:
@@ -352,7 +351,7 @@ def install_advanced_features():
         missing_files = [f for f in required_files if not f.exists()]
         if missing_files:
             print(
-                f"⚠️  Advanced features files not found: {[f.name for f in missing_files]}"
+                f"⚠️  Advanced features files not found: {[f.name for f in missing_files]}",
             )
             print("   Run from development environment or upgrade to latest version")
             return False
@@ -647,11 +646,15 @@ The script provides optional installation of:
     )
 
     parser.add_argument(
-        "--gpu", action="store_true", help="Install GPU acceleration (Linux only)"
+        "--gpu",
+        action="store_true",
+        help="Install GPU acceleration (Linux only)",
     )
 
     parser.add_argument(
-        "--advanced", action="store_true", help="Install advanced features (Phases 4-6)"
+        "--advanced",
+        action="store_true",
+        help="Install advanced features (Phases 4-6)",
     )
 
     parser.add_argument(

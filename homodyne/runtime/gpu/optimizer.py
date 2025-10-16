@@ -1,5 +1,4 @@
-"""
-GPU Optimizer for Homodyne v2 - VI+JAX and MCMC+JAX
+"""GPU Optimizer for Homodyne v2 - VI+JAX and MCMC+JAX
 ====================================================
 
 Intelligent GPU detection, benchmarking, and optimization system specifically
@@ -37,8 +36,7 @@ logger = logging.getLogger(__name__)
 
 
 class GPUOptimizer:
-    """
-    Intelligent GPU optimization for VI+JAX and MCMC+JAX methods.
+    """Intelligent GPU optimization for VI+JAX and MCMC+JAX methods.
 
     Implements JAX-specific enhancements for
     the unified homodyne model workloads.
@@ -88,7 +86,7 @@ class GPUOptimizer:
                                 "memory_mb": int(parts[1].replace(" MiB", "")),
                                 "compute_capability": parts[2],
                                 "driver_version": parts[3],
-                            }
+                            },
                         )
                         info["compute_capability"].append(parts[2])
                         info["driver_version"] = parts[3]
@@ -141,10 +139,10 @@ class GPUOptimizer:
         return info
 
     def benchmark_jax_workloads(
-        self, matrix_sizes: list[int] | None = None
+        self,
+        matrix_sizes: list[int] | None = None,
     ) -> dict[str, Any]:
-        """
-        Benchmark JAX operations typical for VI+JAX and MCMC+JAX workloads.
+        """Benchmark JAX operations typical for VI+JAX and MCMC+JAX workloads.
 
         Tests operations similar to those in the unified homodyne model:
         - Matrix operations (parameter covariance)
@@ -251,7 +249,8 @@ class GPUOptimizer:
                 # Memory bandwidth test (important for large datasets)
                 large_size = 10000  # Reduced from 20000 to avoid memory issues
                 x_large = jax.device_put(
-                    jnp.ones((large_size, large_size), dtype=jnp.float32), gpu_device
+                    jnp.ones((large_size, large_size), dtype=jnp.float32),
+                    gpu_device,
                 )
 
                 @jit
@@ -281,8 +280,7 @@ class GPUOptimizer:
         return benchmarks
 
     def determine_optimal_settings(self) -> dict[str, Any]:
-        """
-        Determine optimal settings for VI+JAX and MCMC+JAX workloads.
+        """Determine optimal settings for VI+JAX and MCMC+JAX workloads.
 
         Considers dataset sizes, memory requirements, and JAX-specific optimizations.
         """
@@ -447,7 +445,7 @@ class GPUOptimizer:
 
         # Set memory fraction
         os.environ["XLA_PYTHON_CLIENT_MEM_FRACTION"] = str(
-            self.optimal_settings["memory_fraction"]
+            self.optimal_settings["memory_fraction"],
         )
 
         print("✅ JAX GPU optimization applied:")
@@ -469,7 +467,7 @@ class GPUOptimizer:
                 report.append(f"   GPU {i}: {device['name']}")
                 report.append(f"      Memory: {device['memory_mb']:,} MB")
                 report.append(
-                    f"      Compute Capability: {device['compute_capability']}"
+                    f"      Compute Capability: {device['compute_capability']}",
                 )
                 report.append(f"      Driver: {device['driver_version']}")
         else:
@@ -477,14 +475,14 @@ class GPUOptimizer:
 
         # CUDA and JAX status
         report.append(
-            f"\n   CUDA Available: {self.gpu_info.get('cuda_available', False)}"
+            f"\n   CUDA Available: {self.gpu_info.get('cuda_available', False)}",
         )
         if self.gpu_info.get("cuda_version"):
             report.append(f"   CUDA Version: {self.gpu_info['cuda_version']}")
 
         report.append(f"   JAX Available: {JAX_AVAILABLE}")
         report.append(
-            f"   JAX GPU Support: {self.gpu_info.get('jax_gpu_available', False)}"
+            f"   JAX GPU Support: {self.gpu_info.get('jax_gpu_available', False)}",
         )
 
         # Optimization recommendations
@@ -492,13 +490,13 @@ class GPUOptimizer:
         if self.optimal_settings.get("use_gpu"):
             report.append("   ✅ GPU acceleration recommended for VI+JAX and MCMC+JAX")
             report.append(
-                f"   Memory fraction: {self.optimal_settings['memory_fraction']}"
+                f"   Memory fraction: {self.optimal_settings['memory_fraction']}",
             )
             report.append(
-                f"   VI batch size: {self.optimal_settings['vi_batch_size']:,}"
+                f"   VI batch size: {self.optimal_settings['vi_batch_size']:,}",
             )
             report.append(
-                f"   MCMC batch size: {self.optimal_settings['mcmc_batch_size']:,}"
+                f"   MCMC batch size: {self.optimal_settings['mcmc_batch_size']:,}",
             )
         else:
             report.append("   💻 CPU-only mode recommended")
@@ -541,14 +539,20 @@ Examples:
     )
 
     parser.add_argument(
-        "--benchmark", action="store_true", help="Run JAX GPU benchmarks"
+        "--benchmark",
+        action="store_true",
+        help="Run JAX GPU benchmarks",
     )
     parser.add_argument("--apply", action="store_true", help="Apply optimal settings")
     parser.add_argument(
-        "--report", action="store_true", help="Generate optimization report"
+        "--report",
+        action="store_true",
+        help="Generate optimization report",
     )
     parser.add_argument(
-        "--force", action="store_true", help="Force re-detection (ignore cache)"
+        "--force",
+        action="store_true",
+        help="Force re-detection (ignore cache)",
     )
 
     args = parser.parse_args()
@@ -570,12 +574,12 @@ Examples:
                 print("\n📊 JAX Benchmark Results:")
                 for size, result in benchmarks["matrix_operations"].items():
                     print(
-                        f"   Matrix {size}x{size}: {result['time_ms']:.2f}ms ({result['gflops']:.1f} GFLOPS)"
+                        f"   Matrix {size}x{size}: {result['time_ms']:.2f}ms ({result['gflops']:.1f} GFLOPS)",
                     )
 
                 if benchmarks.get("memory_bandwidth", {}).get("gb_per_sec"):
                     print(
-                        f"   Memory Bandwidth: {benchmarks['memory_bandwidth']['gb_per_sec']:.1f} GB/s"
+                        f"   Memory Bandwidth: {benchmarks['memory_bandwidth']['gb_per_sec']:.1f} GB/s",
                     )
 
         optimizer.determine_optimal_settings()

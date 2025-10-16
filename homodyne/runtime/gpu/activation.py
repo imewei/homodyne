@@ -1,5 +1,4 @@
-"""
-GPU Activation and Configuration for JAX
+"""GPU Activation and Configuration for JAX
 =========================================
 
 This module provides GPU setup, validation, and optimization for JAX-based
@@ -37,7 +36,8 @@ except ImportError:
     jax = None
     jnp = None
     warnings.warn(
-        "JAX not available. GPU activation requires JAX installation.", stacklevel=2
+        "JAX not available. GPU activation requires JAX installation.",
+        stacklevel=2,
     )
 
 # Optional imports
@@ -53,8 +53,7 @@ class GPUActivator:
     """GPU activation and configuration for JAX computations."""
 
     def __init__(self, verbose: bool = True):
-        """
-        Initialize GPU activator.
+        """Initialize GPU activator.
 
         Parameters
         ----------
@@ -73,8 +72,7 @@ class GPUActivator:
         force_gpu: bool = False,
         gpu_id: int | None = None,
     ) -> dict[str, Any]:
-        """
-        Activate and configure GPU for JAX.
+        """Activate and configure GPU for JAX.
 
         Parameters
         ----------
@@ -93,7 +91,7 @@ class GPUActivator:
         if not JAX_AVAILABLE:
             if force_gpu:
                 raise RuntimeError(
-                    "JAX is required for GPU activation. Install with: pip install jax[cuda12-local]"
+                    "JAX is required for GPU activation. Install with: pip install jax[cuda12-local]",
                 )
             return {"status": "failed", "reason": "JAX not installed"}
 
@@ -106,7 +104,7 @@ class GPUActivator:
         if not gpu_devices:
             if force_gpu:
                 raise RuntimeError(
-                    "No GPU devices found. Check CUDA installation and drivers."
+                    "No GPU devices found. Check CUDA installation and drivers.",
                 )
             if self.verbose:
                 print("⚠️ No GPU detected, using CPU backend")
@@ -116,7 +114,7 @@ class GPUActivator:
         if gpu_id is not None:
             if gpu_id >= len(gpu_devices):
                 raise ValueError(
-                    f"GPU {gpu_id} not found. Available: 0-{len(gpu_devices) - 1}"
+                    f"GPU {gpu_id} not found. Available: 0-{len(gpu_devices) - 1}",
                 )
             selected_device = gpu_devices[gpu_id]
         else:
@@ -143,7 +141,10 @@ class GPUActivator:
         try:
             # Check CUDA version
             result = subprocess.run(
-                ["nvcc", "--version"], capture_output=True, text=True, check=False
+                ["nvcc", "--version"],
+                capture_output=True,
+                text=True,
+                check=False,
             )
             if result.returncode == 0:
                 for line in result.stdout.split("\n"):
@@ -176,8 +177,7 @@ class GPUActivator:
             return []
 
     def _configure_memory(self, memory_fraction: float) -> None:
-        """
-        Configure GPU memory allocation.
+        """Configure GPU memory allocation.
 
         Parameters
         ----------
@@ -186,7 +186,7 @@ class GPUActivator:
         """
         if not 0.0 < memory_fraction <= 1.0:
             raise ValueError(
-                f"memory_fraction must be in (0, 1], got {memory_fraction}"
+                f"memory_fraction must be in (0, 1], got {memory_fraction}",
             )
 
         # Set XLA memory fraction
@@ -231,8 +231,7 @@ class GPUActivator:
         os.environ["NCCL_ASYNC_ERROR_HANDLING"] = "0"
 
     def _validate_gpu_setup(self, device) -> dict[str, Any]:
-        """
-        Validate GPU setup with test computation.
+        """Validate GPU setup with test computation.
 
         Parameters
         ----------
@@ -291,7 +290,8 @@ class GPUActivator:
                     "memory_free": pynvml.nvmlDeviceGetMemoryInfo(handle).free
                     // (1024**2),  # MB
                     "temperature": pynvml.nvmlDeviceGetTemperature(
-                        handle, pynvml.NVML_TEMPERATURE_GPU
+                        handle,
+                        pynvml.NVML_TEMPERATURE_GPU,
                     ),
                     "power": pynvml.nvmlDeviceGetPowerUsage(handle) / 1000.0,  # Watts
                 }
@@ -318,7 +318,7 @@ class GPUActivator:
                     print(f"\n📊 {gpu_id.upper()} Status:")
                     print(f"  • Model: {info['name']}")
                     print(
-                        f"  • Memory: {info['memory_free']}/{info['memory_total']} MB free"
+                        f"  • Memory: {info['memory_free']}/{info['memory_total']} MB free",
                     )
                     print(f"  • Temperature: {info['temperature']}°C")
                     print(f"  • Power: {info['power']:.1f}W")
@@ -358,8 +358,7 @@ def activate_gpu(
     gpu_id: int | None = None,
     verbose: bool = True,
 ) -> dict[str, Any]:
-    """
-    Convenience function to activate GPU for JAX.
+    """Convenience function to activate GPU for JAX.
 
     Parameters
     ----------
@@ -393,8 +392,7 @@ def activate_gpu(
 
 
 def get_gpu_status() -> dict[str, Any]:
-    """
-    Get current GPU status without activation.
+    """Get current GPU status without activation.
 
     Returns
     -------
@@ -418,7 +416,10 @@ def get_gpu_status() -> dict[str, Any]:
     # Get CUDA info
     try:
         result = subprocess.run(
-            ["nvcc", "--version"], capture_output=True, text=True, check=False
+            ["nvcc", "--version"],
+            capture_output=True,
+            text=True,
+            check=False,
         )
         if result.returncode == 0:
             for line in result.stdout.split("\n"):
@@ -444,8 +445,7 @@ def get_gpu_status() -> dict[str, Any]:
 
 
 def benchmark_gpu() -> dict[str, float]:
-    """
-    Run GPU benchmark tests.
+    """Run GPU benchmark tests.
 
     Returns
     -------

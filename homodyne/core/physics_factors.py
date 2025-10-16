@@ -1,5 +1,4 @@
-"""
-Physics Factors Pre-computation Module
+"""Physics Factors Pre-computation Module
 ========================================
 
 Pre-computes and caches physics factors for efficient XPCS calculations.
@@ -42,8 +41,7 @@ except ImportError:
 
 @dataclass(frozen=True)
 class PhysicsFactors:
-    """
-    Pre-computed physics factors for XPCS correlation calculations.
+    """Pre-computed physics factors for XPCS correlation calculations.
 
     This immutable dataclass stores pre-computed physics factors that depend
     on experimental configuration (q, L, dt) but not on model parameters.
@@ -107,10 +105,13 @@ class PhysicsFactors:
 
     @classmethod
     def from_config(
-        cls, q: float, L: float, dt: float, validate: bool = True
+        cls,
+        q: float,
+        L: float,
+        dt: float,
+        validate: bool = True,
     ) -> "PhysicsFactors":
-        """
-        Create PhysicsFactors from experimental configuration.
+        """Create PhysicsFactors from experimental configuration.
 
         This is the recommended way to create PhysicsFactors instances.
         It computes the derived factors and optionally validates all values.
@@ -171,8 +172,7 @@ class PhysicsFactors:
         return instance
 
     def _validate(self):
-        """
-        Validate physics factors for physical consistency.
+        """Validate physics factors for physical consistency.
 
         Checks:
         1. All values are positive
@@ -189,7 +189,7 @@ class PhysicsFactors:
             raise ValueError(f"wavevector_q must be positive, got {self.wavevector_q}")
         if self.stator_rotor_gap <= 0:
             raise ValueError(
-                f"stator_rotor_gap must be positive, got {self.stator_rotor_gap}"
+                f"stator_rotor_gap must be positive, got {self.stator_rotor_gap}",
             )
         if self.dt <= 0:
             raise ValueError(f"dt must be positive, got {self.dt}")
@@ -199,7 +199,7 @@ class PhysicsFactors:
             raise ValueError(f"wavevector_q must be finite, got {self.wavevector_q}")
         if not np.isfinite(self.stator_rotor_gap):
             raise ValueError(
-                f"stator_rotor_gap must be finite, got {self.stator_rotor_gap}"
+                f"stator_rotor_gap must be finite, got {self.stator_rotor_gap}",
             )
         if not np.isfinite(self.dt):
             raise ValueError(f"dt must be finite, got {self.dt}")
@@ -208,34 +208,33 @@ class PhysicsFactors:
         if self.wavevector_q < 1e-4 or self.wavevector_q > 1.0:
             logger.warning(
                 f"wavevector_q = {self.wavevector_q:.6e} Å⁻¹ is outside typical "
-                f"XPCS range [10⁻⁴, 1] Å⁻¹"
+                f"XPCS range [10⁻⁴, 1] Å⁻¹",
             )
 
         if self.stator_rotor_gap < 1e5 or self.stator_rotor_gap > 1e8:
             logger.warning(
                 f"stator_rotor_gap = {self.stator_rotor_gap:.6e} Å is outside typical "
-                f"range [10⁵, 10⁸] Å (10 μm - 10 mm)"
+                f"range [10⁵, 10⁸] Å (10 μm - 10 mm)",
             )
 
         if self.dt < 1e-3 or self.dt > 1e3:
             logger.warning(
-                f"dt = {self.dt:.6e} s is outside typical " f"XPCS range [10⁻³, 10³] s"
+                f"dt = {self.dt:.6e} s is outside typical " f"XPCS range [10⁻³, 10³] s",
             )
 
         # Check derived factors
         if not np.isfinite(self.wavevector_q_squared_half_dt):
             raise ValueError(
                 "Computed wavevector_q_squared_half_dt is not finite. "
-                "Check q and dt values."
+                "Check q and dt values.",
             )
         if not np.isfinite(self.sinc_prefactor):
             raise ValueError(
-                "Computed sinc_prefactor is not finite. " "Check q, L, and dt values."
+                "Computed sinc_prefactor is not finite. " "Check q, L, and dt values.",
             )
 
     def to_tuple(self) -> tuple[float, float]:
-        """
-        Convert to tuple for JIT-compatible function calls.
+        """Convert to tuple for JIT-compatible function calls.
 
         Returns the two pre-computed factors as a tuple that can be
         unpacked in JIT-compiled functions. This is the recommended
@@ -262,8 +261,7 @@ class PhysicsFactors:
         return (self.wavevector_q_squared_half_dt, self.sinc_prefactor)
 
     def to_dict(self) -> dict:
-        """
-        Convert to dictionary for serialization or inspection.
+        """Convert to dictionary for serialization or inspection.
 
         Returns
         -------
@@ -312,8 +310,7 @@ class PhysicsFactors:
 
 
 def create_physics_factors_from_config_dict(config: dict) -> PhysicsFactors:
-    """
-    Create PhysicsFactors from a homodyne configuration dictionary.
+    """Create PhysicsFactors from a homodyne configuration dictionary.
 
     Convenience function that extracts the necessary parameters from
     a standard homodyne configuration dictionary.
@@ -366,7 +363,7 @@ def create_physics_factors_from_config_dict(config: dict) -> PhysicsFactors:
             f"Missing required configuration key: {e}. "
             f"Expected structure: config['analyzer_parameters']['temporal']['dt'], "
             f"config['analyzer_parameters']['scattering']['wavevector_q'], "
-            f"config['analyzer_parameters']['geometry']['stator_rotor_gap']"
+            f"config['analyzer_parameters']['geometry']['stator_rotor_gap']",
         )
 
 

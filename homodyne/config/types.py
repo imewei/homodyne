@@ -1,5 +1,4 @@
-"""
-Type Definitions for Homodyne Configuration System
+"""Type Definitions for Homodyne Configuration System
 ==================================================
 
 TypedDict definitions for configuration structures and parameter management.
@@ -10,8 +9,7 @@ from typing import Any, Literal, TypedDict
 
 
 class BoundDict(TypedDict, total=False):
-    """
-    Parameter bound specification.
+    """Parameter bound specification.
 
     Attributes
     ----------
@@ -32,8 +30,7 @@ class BoundDict(TypedDict, total=False):
 
 
 class InitialParametersConfig(TypedDict, total=False):
-    """
-    Initial parameters section of configuration.
+    """Initial parameters section of configuration.
 
     Attributes
     ----------
@@ -54,8 +51,7 @@ class InitialParametersConfig(TypedDict, total=False):
 
 
 class ParameterSpaceConfig(TypedDict, total=False):
-    """
-    Parameter space section of configuration.
+    """Parameter space section of configuration.
 
     Attributes
     ----------
@@ -70,8 +66,7 @@ class ParameterSpaceConfig(TypedDict, total=False):
 
 
 class ExperimentalDataConfig(TypedDict, total=False):
-    """
-    Experimental data section of configuration.
+    """Experimental data section of configuration.
 
     Attributes
     ----------
@@ -92,8 +87,7 @@ class ExperimentalDataConfig(TypedDict, total=False):
 
 
 class OptimizationConfig(TypedDict, total=False):
-    """
-    Optimization section of configuration.
+    """Optimization section of configuration.
 
     Attributes
     ----------
@@ -114,8 +108,7 @@ class OptimizationConfig(TypedDict, total=False):
 
 
 class HomodyneConfig(TypedDict, total=False):
-    """
-    Complete homodyne configuration structure.
+    """Complete homodyne configuration structure.
 
     Attributes
     ----------

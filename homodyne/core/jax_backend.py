@@ -1,5 +1,4 @@
-"""
-JAX Computational Backend for Homodyne v2
+"""JAX Computational Backend for Homodyne v2
 ==========================================
 
 High-performance JAX-based implementation of the core mathematical operations
@@ -68,7 +67,7 @@ except ImportError:
             return _create_gradient_fallback(func, argnums)
         else:
             return _create_no_gradient_fallback(
-                func.__name__ if hasattr(func, "__name__") else "function"
+                func.__name__ if hasattr(func, "__name__") else "function",
             )
 
     def hessian(func, argnums=0):
@@ -77,7 +76,7 @@ except ImportError:
             return _create_hessian_fallback(func, argnums)
         else:
             return _create_no_hessian_fallback(
-                func.__name__ if hasattr(func, "__name__") else "function"
+                func.__name__ if hasattr(func, "__name__") else "function",
             )
 
 
@@ -103,8 +102,7 @@ numpy_gradients_available = NUMPY_GRADIENTS_AVAILABLE if not JAX_AVAILABLE else 
 
 
 def safe_len(obj):
-    """
-    JAX-safe length function that handles scalars, arrays, and JAX objects.
+    """JAX-safe length function that handles scalars, arrays, and JAX objects.
 
     Args:
         obj: Any object that might have a length or shape
@@ -146,13 +144,13 @@ if not JAX_AVAILABLE:
         logger.warning(
             "JAX not available - using NumPy gradients fallback.\n"
             "Performance will be 10-50x slower than JAX.\n"
-            "Install JAX for optimal performance: pip install jax"
+            "Install JAX for optimal performance: pip install jax",
         )
     else:
         logger.error(
             "Neither JAX nor NumPy gradients available.\n"
             "Install NumPy gradients: pip install scipy\n"
-            "Or install JAX for optimal performance: pip install jax"
+            "Or install JAX for optimal performance: pip install jax",
         )
 
 
@@ -170,7 +168,7 @@ def _create_gradient_fallback(func: Callable, argnums: int = 0) -> Callable:
             logger.warning(
                 f"Using NumPy gradient fallback for {func_name}. "
                 f"Expected 10-50x performance degradation. "
-                f"Install JAX for optimal performance."
+                f"Install JAX for optimal performance.",
             )
             _performance_warned.add(func_name)
 
@@ -195,7 +193,7 @@ def _create_hessian_fallback(func: Callable, argnums: int = 0) -> Callable:
             logger.warning(
                 f"Using NumPy Hessian fallback for {func_name}. "
                 f"Expected 50-200x performance degradation. "
-                f"Install JAX for optimal performance."
+                f"Install JAX for optimal performance.",
             )
             _performance_warned.add(func_name)
 
@@ -259,8 +257,7 @@ def safe_exp(x: jnp.ndarray, max_val: float = 700.0) -> jnp.ndarray:
 
 @jit
 def safe_sinc(x: jnp.ndarray) -> jnp.ndarray:
-    """
-    Safe UNNORMALIZED sinc function: sin(x) / x (NOT sin(πx) / (πx)).
+    """Safe UNNORMALIZED sinc function: sin(x) / x (NOT sin(πx) / (πx)).
 
     This matches the reference implementation which uses sin(arg) / arg directly.
     The phase argument already includes all necessary scaling factors.
@@ -271,10 +268,12 @@ def safe_sinc(x: jnp.ndarray) -> jnp.ndarray:
 # Discrete numerical integration helpers (following reference v1 implementation)
 @jit
 def _calculate_diffusion_coefficient_impl_jax(
-    time_array: jnp.ndarray, D0: float, alpha: float, D_offset: float
+    time_array: jnp.ndarray,
+    D0: float,
+    alpha: float,
+    D_offset: float,
 ) -> jnp.ndarray:
-    """
-    Calculate time-dependent diffusion coefficient using discrete evaluation.
+    """Calculate time-dependent diffusion coefficient using discrete evaluation.
 
     Follows reference v1 implementation: D_t[i] = D0 * (time_array[i] ** alpha) + D_offset
     Physical constraint: D(t) should be positive and finite
@@ -304,10 +303,12 @@ def _calculate_diffusion_coefficient_impl_jax(
 
 @jit
 def _calculate_shear_rate_impl_jax(
-    time_array: jnp.ndarray, gamma_dot_0: float, beta: float, gamma_dot_offset: float
+    time_array: jnp.ndarray,
+    gamma_dot_0: float,
+    beta: float,
+    gamma_dot_offset: float,
 ) -> jnp.ndarray:
-    """
-    Calculate time-dependent shear rate using discrete evaluation.
+    """Calculate time-dependent shear rate using discrete evaluation.
 
     Follows reference v1 implementation: γ̇_t[i] = γ̇₀ * (time_array[i] ** β) + γ̇_offset
 
@@ -344,8 +345,7 @@ def _calculate_shear_rate_impl_jax(
 def _create_time_integral_matrix_impl_jax(
     time_dependent_array: jnp.ndarray,
 ) -> jnp.ndarray:
-    """
-    Create time integral matrix using discrete numerical integration.
+    """Create time integral matrix using discrete numerical integration.
 
     Follows reference v1 implementation algorithm:
     1. Calculate cumulative sum: cumsum[i] = ∫₀^tᵢ f(t') dt' ≈ dt * sum(f[0:i])
@@ -391,8 +391,7 @@ def _compute_g1_diffusion_core(
     t2: jnp.ndarray,
     wavevector_q_squared_half_dt: float,
 ) -> jnp.ndarray:
-    """
-    Compute diffusion contribution to g1 using reference implementation approach.
+    """Compute diffusion contribution to g1 using reference implementation approach.
 
     Algorithm (following reference v1 exactly):
     1. Extract time array (t1 = t2 = t, same time points)
@@ -427,17 +426,17 @@ def _compute_g1_diffusion_core(
 
         if hasattr(D0, "item"):
             print(
-                f"DEBUG g1_diffusion: D0={D0.item():.6f}, alpha={alpha.item():.6f}, D_offset={D_offset.item():.6f}"
+                f"DEBUG g1_diffusion: D0={D0.item():.6f}, alpha={alpha.item():.6f}, D_offset={D_offset.item():.6f}",
             )
             print(
-                f"DEBUG g1_diffusion: wavevector_q_squared_half_dt={wavevector_q_squared_half_dt:.6e}"
+                f"DEBUG g1_diffusion: wavevector_q_squared_half_dt={wavevector_q_squared_half_dt:.6e}",
             )
         else:
             print(
-                f"DEBUG g1_diffusion: D0={D0:.6f}, alpha={alpha:.6f}, D_offset={D_offset:.6f}"
+                f"DEBUG g1_diffusion: D0={D0:.6f}, alpha={alpha:.6f}, D_offset={D_offset:.6f}",
             )
             print(
-                f"DEBUG g1_diffusion: wavevector_q_squared_half_dt={wavevector_q_squared_half_dt:.6e}"
+                f"DEBUG g1_diffusion: wavevector_q_squared_half_dt={wavevector_q_squared_half_dt:.6e}",
             )
 
     # Step 1: Extract time array (t1 and t2 should be identical)
@@ -462,7 +461,7 @@ def _compute_g1_diffusion_core(
 
         if hasattr(D_t, "min"):
             print(
-                f"DEBUG g1_diffusion: D_t min={np.min(D_t):.6e}, max={np.max(D_t):.6e}, mean={np.mean(D_t):.6e}"
+                f"DEBUG g1_diffusion: D_t min={np.min(D_t):.6e}, max={np.max(D_t):.6e}, mean={np.mean(D_t):.6e}",
             )
 
     # Step 3: Create diffusion integral matrix using cumulative sums
@@ -475,7 +474,7 @@ def _compute_g1_diffusion_core(
 
         if hasattr(D_integral, "min"):
             print(
-                f"DEBUG g1_diffusion: D_integral min={np.min(D_integral):.6e}, max={np.max(D_integral):.6e}, mean={np.mean(D_integral):.6e}"
+                f"DEBUG g1_diffusion: D_integral min={np.min(D_integral):.6e}, max={np.max(D_integral):.6e}, mean={np.mean(D_integral):.6e}",
             )
 
     # Step 4: Compute g1 correlation using pre-computed factor
@@ -488,7 +487,7 @@ def _compute_g1_diffusion_core(
 
         if hasattr(exponent, "min"):
             print(
-                f"DEBUG g1_diffusion: exponent (pre-clip) min={np.min(exponent):.6e}, max={np.max(exponent):.6e}, mean={np.mean(exponent):.6e}"
+                f"DEBUG g1_diffusion: exponent (pre-clip) min={np.min(exponent):.6e}, max={np.max(exponent):.6e}, mean={np.mean(exponent):.6e}",
             )
 
     # Apply bounds to prevent numerical issues
@@ -500,7 +499,7 @@ def _compute_g1_diffusion_core(
 
         if hasattr(exponent_bounded, "min"):
             print(
-                f"DEBUG g1_diffusion: exponent_bounded min={np.min(exponent_bounded):.6e}, max={np.max(exponent_bounded):.6e}"
+                f"DEBUG g1_diffusion: exponent_bounded min={np.min(exponent_bounded):.6e}, max={np.max(exponent_bounded):.6e}",
             )
 
     # Compute exponential with safeguards
@@ -512,7 +511,7 @@ def _compute_g1_diffusion_core(
 
         if hasattr(g1_result, "min"):
             print(
-                f"DEBUG g1_diffusion: g1_result (pre-clip) min={np.min(g1_result):.6e}, max={np.max(g1_result):.6e}"
+                f"DEBUG g1_diffusion: g1_result (pre-clip) min={np.min(g1_result):.6e}, max={np.max(g1_result):.6e}",
             )
 
     # Apply physical bounds: 0 < g1 ≤ 1
@@ -524,7 +523,7 @@ def _compute_g1_diffusion_core(
 
         if hasattr(g1_safe, "min"):
             print(
-                f"DEBUG g1_diffusion: FINAL min={np.min(g1_safe):.6e}, max={np.max(g1_safe):.6e}"
+                f"DEBUG g1_diffusion: FINAL min={np.min(g1_safe):.6e}, max={np.max(g1_safe):.6e}",
             )
 
     return g1_safe
@@ -538,8 +537,7 @@ def _compute_g1_shear_core(
     phi: jnp.ndarray,
     sinc_prefactor: float,
 ) -> jnp.ndarray:
-    """
-    Compute shear contribution to g1 using reference implementation approach.
+    """Compute shear contribution to g1 using reference implementation approach.
 
     Algorithm (following reference v1 exactly):
     1. Extract time array (t1 = t2 = t, same time points)
@@ -600,7 +598,10 @@ def _compute_g1_shear_core(
 
     # Step 2: Calculate γ̇(t) at each time point
     gamma_t = _calculate_shear_rate_impl_jax(
-        time_array, gamma_dot_0, beta, gamma_dot_offset
+        time_array,
+        gamma_dot_0,
+        beta,
+        gamma_dot_offset,
     )
 
     # Step 3: Create shear integral matrix using cumulative sums
@@ -641,7 +642,7 @@ def _compute_g1_shear_core(
     # Ensure gamma_integral has the expected 2D shape
     if gamma_integral.ndim != 2:
         raise ValueError(
-            f"gamma_integral should be 2D, got shape {gamma_integral.shape}"
+            f"gamma_integral should be 2D, got shape {gamma_integral.shape}",
         )
 
     # Compute phase matrix for all phi angles: shape (n_phi, n_times, n_times)
@@ -654,7 +655,7 @@ def _compute_g1_shear_core(
         raise ValueError(
             f"Broadcasting error in _compute_g1_shear_core: "
             f"prefactor.shape={prefactor.shape}, gamma_integral.shape={gamma_integral.shape}. "
-            f"Original error: {e}"
+            f"Original error: {e}",
         ) from e
 
     # Compute sinc² values: [sinc(Φ)]² for all phi angles
@@ -673,8 +674,7 @@ def _compute_g1_total_core(
     wavevector_q_squared_half_dt: float,
     sinc_prefactor: float,
 ) -> jnp.ndarray:
-    """
-    Compute total g1 correlation function as product of diffusion and shear.
+    """Compute total g1 correlation function as product of diffusion and shear.
 
     Following reference implementation:
     g₁_total[phi, i, j] = g₁_diffusion[i, j] × g₁_shear[phi, i, j]
@@ -702,7 +702,8 @@ def _compute_g1_total_core(
     # Use the shape of g1_shear to determine n_phi (more reliable than parsing phi directly)
     n_phi = g1_shear.shape[0]
     g1_diff_broadcasted = jnp.broadcast_to(
-        g1_diff[None, :, :], (n_phi, g1_diff.shape[0], g1_diff.shape[1])
+        g1_diff[None, :, :],
+        (n_phi, g1_diff.shape[0], g1_diff.shape[1]),
     )
 
     # Multiply: g₁_total[phi, i, j] = g₁_diffusion[i, j] × g₁_shear[phi, i, j]
@@ -713,7 +714,7 @@ def _compute_g1_total_core(
         raise ValueError(
             f"Broadcasting error in _compute_g1_total_core: "
             f"g1_diff_broadcasted.shape={g1_diff_broadcasted.shape}, g1_shear.shape={g1_shear.shape}. "
-            f"Original error: {e}"
+            f"Original error: {e}",
         ) from e
 
     # Apply loose physical bounds to allow natural correlation function behavior
@@ -741,8 +742,7 @@ def _compute_g2_scaled_core(
     contrast: float,
     offset: float,
 ) -> jnp.ndarray:
-    """
-    Core scaled optimization: g₂ = offset + contrast × [g₁]²
+    """Core scaled optimization: g₂ = offset + contrast × [g₁]²
 
     This is the central equation for homodyne scattering analysis.
 
@@ -761,7 +761,12 @@ def _compute_g2_scaled_core(
         g2 correlation function with scaled fitting and physical bounds applied
     """
     g1 = _compute_g1_total_core(
-        params, t1, t2, phi, wavevector_q_squared_half_dt, sinc_prefactor
+        params,
+        t1,
+        t2,
+        phi,
+        wavevector_q_squared_half_dt,
+        sinc_prefactor,
     )
     g2 = offset + contrast * g1**2
 
@@ -780,10 +785,13 @@ def _compute_g2_scaled_core(
 
 
 def compute_g1_diffusion(
-    params: jnp.ndarray, t1: jnp.ndarray, t2: jnp.ndarray, q: float, dt: float = None
+    params: jnp.ndarray,
+    t1: jnp.ndarray,
+    t2: jnp.ndarray,
+    q: float,
+    dt: float = None,
 ) -> jnp.ndarray:
-    """
-    Wrapper function that computes g1 diffusion using configuration dt.
+    """Wrapper function that computes g1 diffusion using configuration dt.
 
     IMPORTANT: The dt parameter should come from configuration, not be computed.
 
@@ -827,8 +835,7 @@ def compute_g1_shear(
     L: float,
     dt: float,
 ) -> jnp.ndarray:
-    """
-    Wrapper function that computes g1 shear using configuration dt.
+    """Wrapper function that computes g1 shear using configuration dt.
 
     IMPORTANT: The dt parameter MUST come from configuration.
     No fallback estimation - explicit dt is required for correct physics.
@@ -875,8 +882,7 @@ def compute_g1_total(
     L: float,
     dt: float,
 ) -> jnp.ndarray:
-    """
-    Wrapper function that computes total g1 using configuration dt.
+    """Wrapper function that computes total g1 using configuration dt.
 
     IMPORTANT: The dt parameter MUST come from configuration.
     No fallback estimation - explicit dt is required for correct physics.
@@ -913,7 +919,12 @@ def compute_g1_total(
     sinc_prefactor = 0.5 / PI * q * L * dt
 
     return _compute_g1_total_core(
-        params, t1, t2, phi, wavevector_q_squared_half_dt, sinc_prefactor
+        params,
+        t1,
+        t2,
+        phi,
+        wavevector_q_squared_half_dt,
+        sinc_prefactor,
     )
 
 
@@ -928,8 +939,7 @@ def compute_g2_scaled(
     offset: float,
     dt: float,
 ) -> jnp.ndarray:
-    """
-    Wrapper function that computes g2 using configuration dt.
+    """Wrapper function that computes g2 using configuration dt.
 
     IMPORTANT: The dt parameter MUST come from configuration.
     No fallback estimation - explicit dt is required for correct physics.
@@ -990,8 +1000,7 @@ def compute_g2_scaled_with_factors(
     contrast: float,
     offset: float,
 ) -> jnp.ndarray:
-    """
-    JIT-optimized g2 computation using pre-computed physics factors.
+    """JIT-optimized g2 computation using pre-computed physics factors.
 
     This is the hybrid architecture functional core - accepts pre-computed
     factors directly, avoiding runtime computation. Suitable for use with
@@ -1046,8 +1055,7 @@ def compute_chi_squared(
     contrast: float,
     offset: float,
 ) -> float:
-    """
-    Compute chi-squared goodness of fit.
+    """Compute chi-squared goodness of fit.
 
     χ² = Σᵢ [(data_i - theory_i) / σᵢ]²
 
@@ -1090,8 +1098,7 @@ def vectorized_g2_computation(
     contrast: float,
     offset: float,
 ) -> jnp.ndarray:
-    """
-    Vectorized g2 computation for multiple parameter sets.
+    """Vectorized g2 computation for multiple parameter sets.
 
     Uses JAX vmap for efficient parallel computation.
     """
@@ -1106,7 +1113,8 @@ def vectorized_g2_computation(
 
     # JAX vectorized version
     vectorized_func = vmap(
-        compute_g2_scaled, in_axes=(0, None, None, None, None, None, None, None)
+        compute_g2_scaled,
+        in_axes=(0, None, None, None, None, None, None, None),
     )
     return vectorized_func(params_batch, t1, t2, phi, q, L, contrast, offset)
 
@@ -1124,16 +1132,23 @@ def batch_chi_squared(
     contrast: float,
     offset: float,
 ) -> jnp.ndarray:
-    """
-    Compute chi-squared for multiple parameter sets efficiently.
-    """
+    """Compute chi-squared for multiple parameter sets efficiently."""
     if not JAX_AVAILABLE:
         logger.warning("JAX not available - using slower numpy fallback")
         # Simple loop fallback
         results = []
         for params in params_batch:
             result = compute_chi_squared(
-                params, data, sigma, t1, t2, phi, q, L, contrast, offset
+                params,
+                data,
+                sigma,
+                t1,
+                t2,
+                phi,
+                q,
+                L,
+                contrast,
+                offset,
             )
             results.append(result)
         return jnp.array(results)
@@ -1144,7 +1159,16 @@ def batch_chi_squared(
         in_axes=(0, None, None, None, None, None, None, None, None, None),
     )
     return vectorized_func(
-        params_batch, data, sigma, t1, t2, phi, q, L, contrast, offset
+        params_batch,
+        data,
+        sigma,
+        t1,
+        t2,
+        phi,
+        q,
+        L,
+        contrast,
+        offset,
     )
 
 
@@ -1171,7 +1195,7 @@ def validate_backend() -> dict[str, bool | str | dict]:
         results["backend_type"] = "numpy_fallback"
         results["performance_estimate"] = "degraded (10-50x slower)"
         results["recommendations"].append(
-            "Install JAX for optimal performance: pip install jax"
+            "Install JAX for optimal performance: pip install jax",
         )
     else:
         results["backend_type"] = "none"
@@ -1180,7 +1204,7 @@ def validate_backend() -> dict[str, bool | str | dict]:
             [
                 "Install JAX for optimal performance: pip install jax",
                 "Or install scipy for basic functionality: pip install scipy",
-            ]
+            ],
         )
 
     # Test basic computation
@@ -1252,8 +1276,7 @@ def compute_c2_model_jax(
     phi: jnp.ndarray,
     q: float,
 ) -> jnp.ndarray:
-    """
-    Legacy wrapper for compute_g2_scaled() - for backward compatibility with old tests.
+    """Legacy wrapper for compute_g2_scaled() - for backward compatibility with old tests.
 
     This function provides a simplified interface matching the old API signature,
     using default values for L, contrast, offset, and dt parameters.
@@ -1316,8 +1339,7 @@ def residuals_jax(
     phi: jnp.ndarray,
     q: float,
 ) -> jnp.ndarray:
-    """
-    Legacy function: compute residuals (data - model) / sigma.
+    """Legacy function: compute residuals (data - model) / sigma.
 
     Note: This is for backward compatibility with old tests.
     New code should use compute_chi_squared() directly.
@@ -1338,8 +1360,7 @@ def chi_squared_jax(
     phi: jnp.ndarray,
     q: float,
 ) -> float:
-    """
-    Legacy function: compute chi-squared goodness of fit.
+    """Legacy function: compute chi-squared goodness of fit.
 
     Note: This is for backward compatibility with old tests.
     New code should use compute_chi_squared() directly.
@@ -1354,8 +1375,7 @@ def compute_g1_diffusion_jax(
     q: float,
     D: float,
 ) -> jnp.ndarray:
-    """
-    Legacy function: compute g1 diffusion factor.
+    """Legacy function: compute g1 diffusion factor.
 
     Note: This is for backward compatibility with old tests.
     New code should use compute_g1_diffusion() directly.
@@ -1396,7 +1416,7 @@ def get_device_info() -> dict:
 
         if numpy_gradients_available:
             fallback_info["recommendations"].append(
-                "Install JAX for optimal performance: pip install jax"
+                "Install JAX for optimal performance: pip install jax",
             )
             fallback_info["fallback_stats"] = _fallback_stats.copy()
         else:
@@ -1404,7 +1424,7 @@ def get_device_info() -> dict:
                 [
                     "Install JAX for optimal performance: pip install jax",
                     "Or install scipy for basic functionality: pip install scipy",
-                ]
+                ],
             )
 
         return fallback_info
@@ -1457,12 +1477,12 @@ def _get_performance_recommendations() -> list[str]:
 
     if not JAX_AVAILABLE:
         recommendations.append(
-            "🚀 Install JAX for 10-50x performance improvement: pip install jax"
+            "🚀 Install JAX for 10-50x performance improvement: pip install jax",
         )
 
         if not numpy_gradients_available:
             recommendations.append(
-                "📊 Install scipy for basic numerical differentiation: pip install scipy"
+                "📊 Install scipy for basic numerical differentiation: pip install scipy",
             )
         else:
             recommendations.append("✅ NumPy gradients available as fallback")
@@ -1474,7 +1494,7 @@ def _get_performance_recommendations() -> list[str]:
             devices = jax.devices()
             if len(devices) > 1:
                 recommendations.append(
-                    f"🔥 {len(devices)} compute devices available for parallel processing"
+                    f"🔥 {len(devices)} compute devices available for parallel processing",
                 )
             if any("gpu" in str(d).lower() for d in devices):
                 recommendations.append("🎯 GPU acceleration available")

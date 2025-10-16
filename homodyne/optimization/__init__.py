@@ -1,5 +1,4 @@
-"""
-JAX-First Optimization for Homodyne v2
+"""JAX-First Optimization for Homodyne v2
 ======================================
 
 Simplified optimization system using NLSQ package (primary) and MCMC+JAX
@@ -77,8 +76,7 @@ __all__ = [
 
 
 def get_optimization_info():
-    """
-    Get information about available optimization methods.
+    """Get information about available optimization methods.
 
     Returns
     -------
@@ -94,17 +92,17 @@ def get_optimization_info():
 
     if NLSQ_AVAILABLE:
         info["recommendations"].append(
-            "Use fit_nlsq_jax() for fast, reliable parameter estimation"
+            "Use fit_nlsq_jax() for fast, reliable parameter estimation",
         )
 
     if MCMC_AVAILABLE:
         info["recommendations"].append(
-            "Use fit_mcmc_jax() for uncertainty quantification and publication-quality analysis"
+            "Use fit_mcmc_jax() for uncertainty quantification and publication-quality analysis",
         )
 
     if not NLSQ_AVAILABLE and not MCMC_AVAILABLE:
         info["recommendations"].append(
-            "Install NLSQ and NumPyro/BlackJAX for optimization capabilities"
+            "Install NLSQ and NumPyro/BlackJAX for optimization capabilities",
         )
 
     return info
