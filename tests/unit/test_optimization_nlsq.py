@@ -47,9 +47,9 @@ class TestNLSQOptimization:
             import nlsq
 
             assert hasattr(nlsq, "curve_fit"), "NLSQ should have curve_fit function"
-            assert hasattr(
-                nlsq, "curve_fit_large"
-            ), "NLSQ should have curve_fit_large function"
+            assert hasattr(nlsq, "curve_fit_large"), (
+                "NLSQ should have curve_fit_large function"
+            )
 
     def test_nlsq_result_structure(self):
         """Test NLSQResult data structure."""
@@ -97,9 +97,9 @@ class TestNLSQOptimization:
         assert result.parameters["offset"] <= 2.0, "Offset too high"
         assert result.parameters["contrast"] >= 0.0, "Contrast must be non-negative"
         assert result.parameters["contrast"] <= 1.0, "Contrast too high"
-        assert (
-            result.parameters["diffusion_coefficient"] >= 0.0
-        ), "Diffusion must be non-negative"
+        assert result.parameters["diffusion_coefficient"] >= 0.0, (
+            "Diffusion must be non-negative"
+        )
 
         # Convergence metrics
         assert result.chi_squared >= 0.0, "Chi-squared must be non-negative"
@@ -185,14 +185,14 @@ class TestNLSQOptimization:
         assert result_tight.success, f"Tight tolerance failed: {result_tight.message}"
 
         # Tight tolerance should generally achieve lower chi-squared
-        assert (
-            result_tight.chi_squared <= result_loose.chi_squared * 1.1
-        ), "Tight tolerance should achieve better or similar fit"
+        assert result_tight.chi_squared <= result_loose.chi_squared * 1.1, (
+            "Tight tolerance should achieve better or similar fit"
+        )
 
         # Tight tolerance might use more iterations
-        assert (
-            result_tight.n_iterations >= result_loose.n_iterations * 0.5
-        ), "Tight tolerance should use reasonable iterations"
+        assert result_tight.n_iterations >= result_loose.n_iterations * 0.5, (
+            "Tight tolerance should use reasonable iterations"
+        )
 
     @pytest.mark.skipif(not NLSQ_AVAILABLE, reason="NLSQ package not available")
     def test_nlsq_boundary_conditions(self, synthetic_xpcs_data, test_config):
@@ -215,9 +215,9 @@ class TestNLSQOptimization:
             for param_name, (lower, upper) in bounds.items():
                 if param_name in result.parameters:
                     value = result.parameters[param_name]
-                    assert (
-                        lower <= value <= upper
-                    ), f"Parameter {param_name}={value} outside bounds [{lower}, {upper}]"
+                    assert lower <= value <= upper, (
+                        f"Parameter {param_name}={value} outside bounds [{lower}, {upper}]"
+                    )
 
     def test_nlsq_error_handling(self, test_config):
         """Test NLSQ error handling with invalid data."""
@@ -292,9 +292,9 @@ class TestNLSQOptimization:
             # Check that shear rate is recovered reasonably
             if "shear_rate" in result.parameters:
                 recovered_shear = result.parameters["shear_rate"]
-                assert (
-                    abs(recovered_shear - params_with_shear["shear_rate"]) < 0.02
-                ), f"Shear rate recovery poor: {recovered_shear} vs {params_with_shear['shear_rate']}"
+                assert abs(recovered_shear - params_with_shear["shear_rate"]) < 0.02, (
+                    f"Shear rate recovery poor: {recovered_shear} vs {params_with_shear['shear_rate']}"
+                )
 
     @pytest.mark.skipif(not NLSQ_AVAILABLE, reason="NLSQ package not available")
     def test_nlsq_multiple_q_values(self, test_config):
@@ -423,9 +423,9 @@ class TestNLSQPerformance:
         assert result.success, "Small dataset optimization should succeed"
 
         # Reported time should be consistent
-        assert (
-            abs(result.optimization_time - elapsed_time) < 0.1
-        ), "Reported computation time inconsistent"
+        assert abs(result.optimization_time - elapsed_time) < 0.1, (
+            "Reported computation time inconsistent"
+        )
 
     def test_nlsq_scaling_dataset_size(self, test_config):
         """Test NLSQ timing scaling with dataset size."""
@@ -491,9 +491,9 @@ class TestNLSQPerformance:
 
             # Fast convergence indicator
             if result.n_iterations < 10:
-                assert (
-                    result.chi_squared < 1.0
-                ), "Fast convergence should achieve good fit"
+                assert result.chi_squared < 1.0, (
+                    "Fast convergence should achieve good fit"
+                )
 
 
 @pytest.mark.unit

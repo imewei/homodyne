@@ -477,45 +477,54 @@ def _compute_g1_diffusion_core(
                 f"DEBUG g1_diffusion: D_integral min={np.min(D_integral):.6e}, max={np.max(D_integral):.6e}, mean={np.mean(D_integral):.6e}",
             )
 
-    # Step 4: Compute g1 correlation using pre-computed factor
+    # Step 4: Compute g1 correlation using log-space for numerical stability
     # This matches reference: g1 = exp(-wavevector_q_squared_half_dt * D_integral)
-    exponent = -wavevector_q_squared_half_dt * D_integral
+    #
+    # LOG-SPACE CALCULATION FIX (Oct 2025):
+    # Computing in log-space preserves precision across full dynamic range.
+    # Old approach: clip(g1, 1e-10, 1.0) caused artificial plateaus (~16% of data)
+    # New approach: clip in log-space, then exp() - no artificial plateaus
+    log_g1 = -wavevector_q_squared_half_dt * D_integral
 
-    # DEBUG: Check exponent values before bounding
+    # DEBUG: Check log values before clipping
     if not jax_available or not hasattr(jnp, "where"):  # Outside JIT
         import numpy as np
 
-        if hasattr(exponent, "min"):
+        if hasattr(log_g1, "min"):
             print(
-                f"DEBUG g1_diffusion: exponent (pre-clip) min={np.min(exponent):.6e}, max={np.max(exponent):.6e}, mean={np.mean(exponent):.6e}",
+                f"DEBUG g1_diffusion: log_g1 (pre-clip) min={np.min(log_g1):.6e}, max={np.max(log_g1):.6e}, mean={np.mean(log_g1):.6e}",
             )
 
-    # Apply bounds to prevent numerical issues
-    exponent_bounded = jnp.clip(exponent, -700.0, 0.0)  # Physical bounds
+    # Clip in log-space to prevent numerical overflow/underflow
+    # -700 → exp(-700) ≈ 1e-304 (near machine precision)
+    # 0 → exp(0) = 1.0 (maximum physical value)
+    log_g1_bounded = jnp.clip(log_g1, -700.0, 0.0)
 
-    # DEBUG: Check exponent values after bounding
+    # DEBUG: Check log values after clipping
     if not jax_available or not hasattr(jnp, "where"):  # Outside JIT
         import numpy as np
 
-        if hasattr(exponent_bounded, "min"):
+        if hasattr(log_g1_bounded, "min"):
             print(
-                f"DEBUG g1_diffusion: exponent_bounded min={np.min(exponent_bounded):.6e}, max={np.max(exponent_bounded):.6e}",
+                f"DEBUG g1_diffusion: log_g1_bounded min={np.min(log_g1_bounded):.6e}, max={np.max(log_g1_bounded):.6e}",
             )
 
-    # Compute exponential with safeguards
-    g1_result = safe_exp(exponent_bounded)
+    # Compute exponential with safeguards (safe_exp handles edge cases)
+    g1_result = safe_exp(log_g1_bounded)
 
-    # DEBUG: Check g1_result before final clipping
+    # DEBUG: Check g1_result after exp
     if not jax_available or not hasattr(jnp, "where"):  # Outside JIT
         import numpy as np
 
         if hasattr(g1_result, "min"):
             print(
-                f"DEBUG g1_diffusion: g1_result (pre-clip) min={np.min(g1_result):.6e}, max={np.max(g1_result):.6e}",
+                f"DEBUG g1_diffusion: g1_result min={np.min(g1_result):.6e}, max={np.max(g1_result):.6e}",
             )
 
-    # Apply physical bounds: 0 < g1 ≤ 1
-    g1_safe = jnp.clip(g1_result, 1e-10, 1.0)
+    # Apply ONLY upper bound (g1 ≤ 1.0 is physical constraint)
+    # No lower bound clipping - preserves full precision down to machine epsilon
+    # This eliminates artificial plateaus from overly aggressive clipping
+    g1_safe = jnp.minimum(g1_result, 1.0)
 
     # DEBUG: Final g1_diffusion result
     if not jax_available or not hasattr(jnp, "where"):  # Outside JIT

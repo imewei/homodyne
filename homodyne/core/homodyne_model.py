@@ -36,9 +36,7 @@ import numpy as np
 
 from homodyne.core.jax_backend import compute_g2_scaled_with_factors, jnp
 from homodyne.core.models import CombinedModel
-from homodyne.core.physics_factors import (
-    create_physics_factors_from_config_dict,
-)
+from homodyne.core.physics_factors import create_physics_factors_from_config_dict
 from homodyne.utils.logging import get_logger
 
 logger = get_logger(__name__)

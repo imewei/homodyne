@@ -156,7 +156,7 @@ _homodyne_config_completion() {
 
     # homodyne-config options
     local main_opts="--help -h --mode -m --dataset-size -d --output -o --sample -s --experiment -e --author -a"
-    
+
     case $prev in
         --mode|-m)
             local modes="static_isotropic static_anisotropic laminar_flow"
@@ -248,17 +248,17 @@ if [[ -n "$ZSH_VERSION" ]]; then
             '(--author -a)'{--author,-a}'[Author name]:author:'
             '*:output:_files -g "*.json"'
         )
-        
+
         _arguments -C $args
     }
 
     # Register completion for all homodyne commands
     compdef _homodyne_advanced_zsh homodyne 2>/dev/null || true
     compdef _homodyne_config_zsh homodyne-config 2>/dev/null || true
-    
+
     # Register completion for new method aliases
     compdef _homodyne_advanced_zsh hmv 2>/dev/null || true   # homodyne --method vi
-    compdef _homodyne_advanced_zsh hmm 2>/dev/null || true   # homodyne --method mcmc  
+    compdef _homodyne_advanced_zsh hmm 2>/dev/null || true   # homodyne --method mcmc
     compdef _homodyne_advanced_zsh hmh 2>/dev/null || true   # homodyne --method hybrid
     compdef _homodyne_config_zsh hconfig 2>/dev/null || true # homodyne-config
     compdef _homodyne_advanced_zsh hexp 2>/dev/null || true  # homodyne --plot-experimental-data
@@ -270,7 +270,7 @@ if [[ -n "$BASH_VERSION" ]]; then
     # Register completion for all homodyne commands
     complete -F _homodyne_advanced_completion homodyne 2>/dev/null || true
     complete -F _homodyne_config_completion homodyne-config 2>/dev/null || true
-    
+
     # Register completion for new method aliases
     complete -F _homodyne_advanced_completion hmv 2>/dev/null || true   # homodyne --method vi
     complete -F _homodyne_advanced_completion hmm 2>/dev/null || true   # homodyne --method mcmc

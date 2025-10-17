@@ -340,7 +340,7 @@ class ParameterManager:
                 add_violation(
                     "D_offset",
                     params["D_offset"],
-                    f"offset is {params['D_offset']/params['D0']:.1%} of D0 (may indicate overfitting)",
+                    f"offset is {params['D_offset'] / params['D0']:.1%} of D0 (may indicate overfitting)",
                     ConstraintSeverity.INFO,
                 )
 

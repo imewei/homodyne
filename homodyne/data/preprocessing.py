@@ -62,7 +62,6 @@ try:
 
     HAS_JAX = True
 except ImportError:
-
     HAS_JAX = False
     jax_available = False
 

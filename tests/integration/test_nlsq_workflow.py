@@ -86,9 +86,9 @@ class TestNLSQFullWorkflow:
             assert "chi_squared" in params, "Missing chi_squared"
             assert "parameters" in params, "Missing parameters dict"
             # Static isotropic has 5 parameters
-            assert (
-                len(params["parameters"]) == 5
-            ), f"Expected 5 parameters, got {len(params['parameters'])}"
+            assert len(params["parameters"]) == 5, (
+                f"Expected 5 parameters, got {len(params['parameters'])}"
+            )
             assert "contrast" in params["parameters"]
             assert "offset" in params["parameters"]
             assert "D0" in params["parameters"]
@@ -108,9 +108,9 @@ class TestNLSQFullWorkflow:
             assert "t2" in npz_data, "Missing t2"
             assert "q" in npz_data, "Missing q"
             # Total should be 10 arrays: 2 experimental + 3 theoretical + 2 residuals + 3 coordinates
-            assert (
-                len(npz_data.files) == 10
-            ), f"Expected 10 arrays in NPZ, got {len(npz_data.files)}"
+            assert len(npz_data.files) == 10, (
+                f"Expected 10 arrays in NPZ, got {len(npz_data.files)}"
+            )
 
             # Verify array shapes
             assert npz_data["phi_angles"].shape == (5,), "Wrong phi_angles shape"
@@ -163,9 +163,9 @@ class TestNLSQFullWorkflow:
             with open(param_file_lf) as f:
                 params_lf = json.load(f)
             assert params_lf["analysis_mode"] == "laminar_flow"
-            assert (
-                len(params_lf["parameters"]) == 9
-            ), f"Expected 9 parameters, got {len(params_lf['parameters'])}"
+            assert len(params_lf["parameters"]) == 9, (
+                f"Expected 9 parameters, got {len(params_lf['parameters'])}"
+            )
             assert "gamma_dot_t0" in params_lf["parameters"]
             assert "beta" in params_lf["parameters"]
             assert "gamma_dot_t_offset" in params_lf["parameters"]
@@ -215,9 +215,9 @@ class TestNLSQFullWorkflow:
                 png_file = nlsq_dir / expected_name
                 assert png_file.exists(), f"PNG file not found: {expected_name}"
                 # Verify file is not empty
-                assert (
-                    png_file.stat().st_size > 1000
-                ), f"PNG file too small: {expected_name}"
+                assert png_file.stat().st_size > 1000, (
+                    f"PNG file too small: {expected_name}"
+                )
 
 
 # ==============================================================================
@@ -301,9 +301,9 @@ class TestNLSQErrorRecovery:
 
             # Verify PNG plots were NOT created (plotting failed)
             png_files = list(nlsq_dir.glob("*.png"))
-            assert (
-                len(png_files) == 0
-            ), "PNG files should not be created if plotting fails"
+            assert len(png_files) == 0, (
+                "PNG files should not be created if plotting fails"
+            )
 
 
 # ==============================================================================
@@ -471,18 +471,18 @@ class TestNLSQCLIIntegration:
             # Verify NLSQ directory and files were created
             nlsq_dir = output_dir / "nlsq"
             assert nlsq_dir.exists(), "NLSQ directory not created via routing"
-            assert (
-                nlsq_dir / "parameters.json"
-            ).exists(), "parameters.json not created"
-            assert (
-                nlsq_dir / "fitted_data.npz"
-            ).exists(), "fitted_data.npz not created"
-            assert (
-                nlsq_dir / "analysis_results_nlsq.json"
-            ).exists(), "analysis_results not created"
-            assert (
-                nlsq_dir / "convergence_metrics.json"
-            ).exists(), "convergence_metrics not created"
+            assert (nlsq_dir / "parameters.json").exists(), (
+                "parameters.json not created"
+            )
+            assert (nlsq_dir / "fitted_data.npz").exists(), (
+                "fitted_data.npz not created"
+            )
+            assert (nlsq_dir / "analysis_results_nlsq.json").exists(), (
+                "analysis_results not created"
+            )
+            assert (nlsq_dir / "convergence_metrics.json").exists(), (
+                "convergence_metrics not created"
+            )
 
     def test_save_results_routing_mcmc(self):
         """Test that _save_results() uses legacy format for MCMC method."""
@@ -522,9 +522,9 @@ class TestNLSQCLIIntegration:
             assert legacy_file.exists(), "Legacy results file not created for MCMC"
             # Verify nlsq directory was NOT created
             nlsq_dir = output_dir / "nlsq"
-            assert (
-                not nlsq_dir.exists()
-            ), "NLSQ directory should not be created for MCMC"
+            assert not nlsq_dir.exists(), (
+                "NLSQ directory should not be created for MCMC"
+            )
 
     @pytest.mark.slow
     def test_cli_end_to_end_nlsq(self):

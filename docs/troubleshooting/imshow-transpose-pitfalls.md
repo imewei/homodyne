@@ -2,12 +2,15 @@
 
 **Problem**: Two-time correlation C2(t1, t2) displays with wrong diagonal orientation
 
-This guide explains a common pitfall when plotting two-time correlation matrices with matplotlib's `imshow()` and how to fix it.
+This guide explains a common pitfall when plotting two-time correlation matrices with
+matplotlib's `imshow()` and how to fix it.
 
 ## The Problem
 
 ### Symptom
+
 Yellow correlation strip (diagonal) oriented **incorrectly**:
+
 - **Wrong**: Diagonal from top-left to bottom-right
 - **Correct**: Diagonal from bottom-left to top-right
 
@@ -27,6 +30,7 @@ t2 ↑                                   t2 ↑
 ## Root Cause
 
 ### Data Structure
+
 ```python
 # HDF5 storage and memory layout:
 c2_exp.shape = (n_phi, n_t1, n_t2)  # e.g., (23, 1001, 1001)
@@ -36,17 +40,20 @@ t1_2d, t2_2d = np.meshgrid(time_1d, time_1d, indexing="ij")
 ```
 
 With `indexing="ij"` (matrix indexing):
+
 - `t1_2d[i, j] = time_1d[i]` → rows represent t1 index
 - `t2_2d[i, j] = time_1d[j]` → columns represent t2 index
 - **Data**: `c2[i, j]` = correlation at (t1[i], t2[j])
 
 ### matplotlib imshow() Behavior
 
-**Key Insight**: `imshow(array)` interprets `array[row, col]` as pixel at position **(x=col, y=row)**
+**Key Insight**: `imshow(array)` interprets `array[row, col]` as pixel at position
+**(x=col, y=row)**
 
 For our data structure `c2[t1_idx, t2_idx]`:
 
 **Without transpose**:
+
 ```python
 ax.imshow(c2, origin='lower')
 # array[row, col] → c2[t1_idx, t2_idx]
@@ -55,6 +62,7 @@ ax.imshow(c2, origin='lower')
 ```
 
 **With transpose**:
+
 ```python
 ax.imshow(c2.T, origin='lower')
 # array[row, col] → c2.T[t2_idx, t1_idx] = c2[t1_idx, t2_idx]
@@ -97,7 +105,9 @@ extent = [x_min, x_max, y_min, y_max]
 ```
 
 With `.T` transpose:
-- **x-range** `[t1[0], t1[-1]]` maps to **columns** (which are t1 values after transpose)
+
+- **x-range** `[t1[0], t1[-1]]` maps to **columns** (which are t1 values after
+  transpose)
 - **y-range** `[t2[0], t2[-1]]` maps to **rows** (which are t2 values after transpose)
 - Perfect alignment! ✓
 
@@ -105,19 +115,23 @@ With `.T` transpose:
 
 ### Expected Behavior for C2(t1, t2)
 
-**Physics**: Two-time correlation function shows how system evolves between times t1 and t2
+**Physics**: Two-time correlation function shows how system evolves between times t1 and
+t2
 
 **Key features**:
+
 - **Maximum correlation** when t1 ≈ t2 (diagonal line)
 - **Decorrelation** as |t2 - t1| increases (away from diagonal)
 - **Visual signature**: Bright yellow/green strip from (0,0) to (tmax, tmax)
 
 **Coordinate system**:
+
 - **x-axis (horizontal)**: t1 (first measurement time)
 - **y-axis (vertical)**: t2 (second measurement time)
 - **Diagonal**: t1 = t2 (simultaneous measurements → perfect correlation)
 
 With `origin='lower'`:
+
 - Point (0,0) at **bottom-left** corner
 - Diagonal extends to **top-right** corner ✓
 - Matches standard mathematical convention
@@ -153,6 +167,7 @@ Is your data indexed as data[x_index, y_index]?
 ### Common Cases
 
 **Case 1: meshgrid with indexing='ij'** (our case)
+
 ```python
 # Data: c2[t1_idx, t2_idx]
 # Want: x=t1, y=t2
@@ -162,6 +177,7 @@ ax.imshow(c2.T, ...)  # ✓ Transpose needed
 ```
 
 **Case 2: meshgrid with indexing='xy'** (default)
+
 ```python
 # Data: c2[t2_idx, t1_idx]  # Already transposed!
 # Want: x=t1, y=t2
@@ -171,6 +187,7 @@ ax.imshow(c2, ...)  # ✓ No transpose needed
 ```
 
 **Case 3: Manual array creation**
+
 ```python
 # Data: c2[i, j] where i=x_index, j=y_index
 # Want: x on horizontal axis
@@ -210,7 +227,8 @@ ax2.set_ylabel('Row index')
 plt.show()
 ```
 
-Expected result: Both show diagonal from bottom-left to top-right (because identity matrix is symmetric). But for non-symmetric data, you'll see the difference!
+Expected result: Both show diagonal from bottom-left to top-right (because identity
+matrix is symmetric). But for non-symmetric data, you'll see the difference!
 
 ### Asymmetric Test
 
@@ -269,6 +287,7 @@ im = ax.imshow(
 ### Historical Context
 
 Prior to October 17, 2025 fix, 4 plotting functions were missing `.T`:
+
 - Experimental C2 individual plots
 - Experimental C2 single matrix
 - Simulated C2 plots (also had swapped axis labels)
@@ -279,6 +298,7 @@ Only the 3-panel matplotlib comparison plots were correct (added `.T` in earlier
 ## Advanced: origin='lower' vs origin='upper'
 
 ### origin='lower' (recommended for scientific data)
+
 ```python
 ax.imshow(data, origin='lower')
 # (0, 0) at bottom-left corner
@@ -287,6 +307,7 @@ ax.imshow(data, origin='lower')
 ```
 
 ### origin='upper' (image processing default)
+
 ```python
 ax.imshow(data, origin='upper')
 # (0, 0) at top-left corner
@@ -294,20 +315,23 @@ ax.imshow(data, origin='upper')
 # Natural for photographs, but confusing for scientific data
 ```
 
-**Homodyne uses** `origin='lower'` for all C2 plots to match mathematical physics convention.
+**Homodyne uses** `origin='lower'` for all C2 plots to match mathematical physics
+convention.
 
 ## Summary
 
 ### Key Takeaways
 
-1. **Always transpose** when data is indexed as `data[x_index, y_index]` but you want x on horizontal axis
-2. **Use** `origin='lower'` for scientific data (mathematical convention)
-3. **Validate** by checking diagonal orientation after plotting
-4. **Test** with asymmetric matrices to verify transpose direction
+1. **Always transpose** when data is indexed as `data[x_index, y_index]` but you want x
+   on horizontal axis
+1. **Use** `origin='lower'` for scientific data (mathematical convention)
+1. **Validate** by checking diagonal orientation after plotting
+1. **Test** with asymmetric matrices to verify transpose direction
 
 ### One-Line Rule
 
-> **If meshgrid uses `indexing='ij'` and you want x=horizontal, y=vertical, then use `.T`**
+> **If meshgrid uses `indexing='ij'` and you want x=horizontal, y=vertical, then use
+> `.T`**
 
 ### Fix Template
 
@@ -325,10 +349,12 @@ ax.set_ylabel('y_label')
 
 - **Full fix report**: `docs/archive/2025-10-nlsq-integration/PLOTTING_TRANSPOSE_FIX.md`
 - **Fixed files**: `homodyne/cli/commands.py` (4 locations, Oct 17 2025)
-- **Matplotlib docs**: https://matplotlib.org/stable/api/_as_gen/matplotlib.pyplot.imshow.html
-- **NumPy meshgrid**: https://numpy.org/doc/stable/reference/generated/numpy.meshgrid.html
+- **Matplotlib docs**:
+  https://matplotlib.org/stable/api/\_as_gen/matplotlib.pyplot.imshow.html
+- **NumPy meshgrid**:
+  https://numpy.org/doc/stable/reference/generated/numpy.meshgrid.html
 
----
+______________________________________________________________________
 
-**Last Updated**: November 17, 2025
-**Applies to**: homodyne v2.x with matplotlib >= 3.8.0
+**Last Updated**: November 17, 2025 **Applies to**: homodyne v2.x with matplotlib >=
+3.8.0

@@ -45,9 +45,9 @@ class TestMCMCWithAngleFiltering:
         filtered_data = _apply_angle_filtering_for_optimization(data, config)
 
         # Assert - Dataset size reduction (filtering worked)
-        assert (
-            len(filtered_data["phi_angles_list"]) == 3
-        ), "Should have 3 filtered angles"
+        assert len(filtered_data["phi_angles_list"]) == 3, (
+            "Should have 3 filtered angles"
+        )
         np.testing.assert_array_almost_equal(
             filtered_data["phi_angles_list"], [85.0, 90.0, 95.0], decimal=1
         )
@@ -99,9 +99,9 @@ class TestMCMCWithAngleFiltering:
         filtered_data = _apply_angle_filtering_for_optimization(data, config)
 
         # Assert - All 9 angles used (no filtering)
-        assert (
-            len(filtered_data["phi_angles_list"]) == 9
-        ), "Should use all 9 angles when disabled"
+        assert len(filtered_data["phi_angles_list"]) == 9, (
+            "Should use all 9 angles when disabled"
+        )
         np.testing.assert_array_almost_equal(
             filtered_data["phi_angles_list"], angles, decimal=1
         )

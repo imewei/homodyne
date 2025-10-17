@@ -3,12 +3,7 @@
 Essential utility functions with preserved API compatibility.
 """
 
-from homodyne.utils.logging import (
-    get_logger,
-    log_calls,
-    log_operation,
-    log_performance,
-)
+from homodyne.utils.logging import get_logger, log_calls, log_operation, log_performance
 
 __all__ = [
     "get_logger",

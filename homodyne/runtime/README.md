@@ -1,8 +1,9 @@
 # Homodyne Runtime System
 
-**Advanced shell completion, smart GPU acceleration, and comprehensive system validation for the homodyne analysis package.**
+**Advanced shell completion, smart GPU acceleration, and comprehensive system validation
+for the homodyne analysis package.**
 
----
+______________________________________________________________________
 
 ## 📁 System Architecture
 
@@ -37,14 +38,16 @@ homodyne-post-install --shell zsh
 ### Installed Components
 
 1. **🔧 Smart Shell Completion** - Context-aware completion with caching
-2. **⚡ Isolated GPU Backend** - Pure NumPyro/JAX backend completely separated from PyMC
-3. **📝 Unified Aliases** - Isolated CPU shortcuts (`hm`, `hc`, `hr`, `ha`) + isolated GPU shortcuts (`hgm`, `hga`)
-4. **🛠️ Advanced Tools** - GPU optimization, system validation, benchmarking
-5. **📋 Environment Integration** - Auto-activation in conda/mamba/venv
+1. **⚡ Isolated GPU Backend** - Pure NumPyro/JAX backend completely separated from PyMC
+1. **📝 Unified Aliases** - Isolated CPU shortcuts (`hm`, `hc`, `hr`, `ha`) + isolated
+   GPU shortcuts (`hgm`, `hga`)
+1. **🛠️ Advanced Tools** - GPU optimization, system validation, benchmarking
+1. **📋 Environment Integration** - Auto-activation in conda/mamba/venv
 
 ## 🔧 Shell Completion System
 
 ### Key Features
+
 - **Context-Aware**: Suggests methods based on config file analysis
 - **Intelligent Caching**: 5-minute TTL cache for file discovery
 - **Smart Parameters**: Common values for angles, contrast, output directories
@@ -69,25 +72,28 @@ homodyne_build
 ### Smart Completion Logic
 
 | Config Mode | Suggested Methods | Reasoning |
-|-------------|------------------|-----------|
-| `static_isotropic` | `classical robust` | Optimized for static analysis |
-| `static_anisotropic` | `classical robust` | CPU-optimized methods |
-| `laminar_flow` | `mcmc robust all` | Benefits from GPU acceleration |
+|-------------|------------------|-----------| | `static_isotropic` | `classical robust`
+| Optimized for static analysis | | `static_anisotropic` | `classical robust` |
+CPU-optimized methods | | `laminar_flow` | `mcmc robust all` | Benefits from GPU
+acceleration |
 
 ## ⚡ Isolated MCMC Backend System
 
 ### Completely Isolated Backend Architecture
 
-The homodyne package features **completely separated MCMC implementations** to prevent PyTensor/JAX conflicts:
+The homodyne package features **completely separated MCMC implementations** to prevent
+PyTensor/JAX conflicts:
 
 | Command | Backend | Implementation | Isolation | Use Case |
-|---------|---------|----------------|-----------|----------|
-| `homodyne` | **Pure PyMC CPU** | `mcmc_cpu_backend.py` | No JAX imports | Cross-platform, reliable |
-| `homodyne-gpu` | **Pure NumPyro GPU** | `mcmc_gpu_backend.py` | No PyMC imports | High-performance, Linux + CUDA |
+|---------|---------|----------------|-----------|----------| | `homodyne` | **Pure PyMC
+CPU** | `mcmc_cpu_backend.py` | No JAX imports | Cross-platform, reliable | |
+`homodyne-gpu` | **Pure NumPyro GPU** | `mcmc_gpu_backend.py` | No PyMC imports |
+High-performance, Linux + CUDA |
 
 ### Smart GPU Detection
 
 **Key Features:**
+
 - **Platform Detection**: Linux-only with automatic CPU fallback
 - **CUDA Discovery**: Searches system and conda installations
 - **Hardware Analysis**: GPU memory and capability detection
@@ -98,10 +104,9 @@ The homodyne package features **completely separated MCMC implementations** to p
 Memory-based optimization applied automatically:
 
 | GPU Memory | Memory Fraction | Batch Size | XLA Optimizations |
-|------------|-----------------|------------|-------------------|
-| < 4GB | 70% | Conservative | Basic flags |
-| 4-8GB | 80% | Standard | Standard optimizations |
-| > 8GB | 90% | Aggressive | Advanced XLA features |
+|------------|-----------------|------------|-------------------| | < 4GB | 70% |
+Conservative | Basic flags | | 4-8GB | 80% | Standard | Standard optimizations | | > 8GB
+| 90% | Aggressive | Advanced XLA features |
 
 ### GPU Commands
 
@@ -122,6 +127,7 @@ homodyne-gpu-optimize    # Detect hardware, apply optimal settings
 ### Isolated Backend Selection Logic
 
 **`homodyne` Command (Isolated PyMC CPU Backend):**
+
 - Backend Wrapper: `mcmc_cpu_backend.py` - completely isolated from JAX
 - Environment: `HOMODYNE_GPU_INTENT` not set or `false`
 - Platform: Linux, Windows, macOS (identical behavior)
@@ -129,6 +135,7 @@ homodyne-gpu-optimize    # Detect hardware, apply optimal settings
 - Use Cases: Development, testing, cross-platform compatibility, CPU-only systems
 
 **`homodyne-gpu` Command (Isolated NumPyro GPU Backend):**
+
 - Backend Wrapper: `mcmc_gpu_backend.py` - completely isolated from PyMC
 - Environment: `HOMODYNE_GPU_INTENT=true` (auto-set by wrapper)
 - Platform: Linux with CUDA (JAX CPU fallback if no GPU), macOS/Windows (JAX CPU mode)
@@ -154,8 +161,8 @@ homodyne-gpu-optimize --profile aggressive
 ### Optimization Features
 
 1. **Hardware Detection**: GPU memory, CUDA compatibility, driver validation
-2. **Performance Benchmarking**: Matrix operations, memory bandwidth, JAX compilation
-3. **Auto-Configuration**: XLA flags, memory tuning, batch size optimization
+1. **Performance Benchmarking**: Matrix operations, memory bandwidth, JAX compilation
+1. **Auto-Configuration**: XLA flags, memory tuning, batch size optimization
 
 ### Custom Configuration
 
@@ -204,10 +211,11 @@ homodyne-validate --json
 ### Test Categories
 
 1. **Environment Detection**: Platform, Python version, virtual environment, shell type
-2. **Installation Verification**: Commands, help output, module imports, version consistency
-3. **Shell Completion**: Files, activation scripts, aliases, cache system
-4. **GPU Setup** (Linux): Hardware detection, CUDA, JAX devices, driver compatibility
-5. **Integration Testing**: Cross-component functionality, environment propagation
+1. **Installation Verification**: Commands, help output, module imports, version
+   consistency
+1. **Shell Completion**: Files, activation scripts, aliases, cache system
+1. **GPU Setup** (Linux): Hardware detection, CUDA, JAX devices, driver compatibility
+1. **Integration Testing**: Cross-component functionality, environment propagation
 
 ### Sample Output
 
@@ -315,6 +323,7 @@ export JAX_TRACE_LEVEL=2    # Detailed JAX tracing
 ### Common Issues
 
 #### Shell Completion Not Working
+
 ```bash
 # Check installation
 ls -la $CONDA_PREFIX/etc/conda/activate.d/homodyne-*
@@ -328,6 +337,7 @@ conda deactivate && conda activate your-env
 ```
 
 #### MCMC Backend Problems
+
 ```bash
 # Check current backend
 python3 -c "
@@ -342,6 +352,7 @@ homodyne-gpu --method mcmc                          # NumPyro GPU
 ```
 
 #### GPU Activation Issues
+
 ```bash
 # Comprehensive diagnostics
 gpu-status
@@ -355,6 +366,7 @@ echo $LD_LIBRARY_PATH               # Check library paths
 ```
 
 #### Performance Issues
+
 ```bash
 # GPU optimization
 homodyne-gpu-optimize --benchmark --apply
@@ -410,12 +422,12 @@ ENTRYPOINT ["homodyne"]
 ## 📦 Environment Support
 
 | Environment | Shell Completion | GPU Setup | Auto-Activation | Advanced Tools |
-|-------------|------------------|-----------|-----------------|----------------|
-| **Conda** | ✅ Full support | ✅ Automatic | ✅ On activate | ✅ All features |
-| **Mamba** | ✅ Full support | ✅ Automatic | ✅ On activate | ✅ All features |
-| **venv** | ✅ Manual setup | ✅ Manual setup | 🔶 Manual sourcing | ✅ All features |
-| **virtualenv** | ✅ Manual setup | ✅ Manual setup | 🔶 Manual sourcing | ✅ All features |
-| **System Python** | 🔶 User-wide | 🔶 User-wide | 🔴 Not recommended | 🔶 Limited |
+|-------------|------------------|-----------|-----------------|----------------| |
+**Conda** | ✅ Full support | ✅ Automatic | ✅ On activate | ✅ All features | | **Mamba**
+| ✅ Full support | ✅ Automatic | ✅ On activate | ✅ All features | | **venv** | ✅ Manual
+setup | ✅ Manual setup | 🔶 Manual sourcing | ✅ All features | | **virtualenv** | ✅
+Manual setup | ✅ Manual setup | 🔶 Manual sourcing | ✅ All features | | **System Python**
+| 🔶 User-wide | 🔶 User-wide | 🔴 Not recommended | 🔶 Limited |
 
 ## 🧹 Uninstallation
 
@@ -434,7 +446,9 @@ homodyne-validate 2>/dev/null || echo "✅ Successfully uninstalled"
 
 ### Why Cleanup Order Matters
 
-**Always run cleanup first** - the smart removal system is part of the homodyne package and provides:
+**Always run cleanup first** - the smart removal system is part of the homodyne package
+and provides:
+
 - Intelligent component detection
 - Safe file removal with dry-run preview
 - Cross-platform compatibility
@@ -452,6 +466,7 @@ which homodyne-validate 2>/dev/null || echo "✅ Tools removed"
 find "$CONDA_PREFIX" -name "*homodyne*" 2>/dev/null || echo "✅ Files cleaned"
 ```
 
----
+______________________________________________________________________
 
-*This runtime system provides intelligent automation, cross-platform compatibility, and performance optimization for homodyne analysis workflows.*
+*This runtime system provides intelligent automation, cross-platform compatibility, and
+performance optimization for homodyne analysis workflows.*

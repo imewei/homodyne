@@ -16,7 +16,6 @@ Move the workflow files back to `.github/workflows/`:
 mv .github/workflows-disabled/*.yml .github/workflows/
 ```
 
----
+______________________________________________________________________
 
-**Status:** Temporarily disabled
-**Date:** October 2025
+**Status:** Temporarily disabled **Date:** October 2025

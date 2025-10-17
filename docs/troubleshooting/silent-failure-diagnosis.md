@@ -1,8 +1,10 @@
 # Diagnosing Silent Optimization Failures
 
-**Symptom**: Optimization completes with 0 iterations, parameters unchanged, identity covariance matrix
+**Symptom**: Optimization completes with 0 iterations, parameters unchanged, identity
+covariance matrix
 
-This guide provides a systematic approach to diagnosing optimization failures that complete without errors but produce incorrect results.
+This guide provides a systematic approach to diagnosing optimization failures that
+complete without errors but produce incorrect results.
 
 ## Quick Diagnosis Checklist
 
@@ -15,6 +17,7 @@ This guide provides a systematic approach to diagnosing optimization failures th
 ## Common Symptoms
 
 ### 1. Identity Covariance Matrix
+
 ```json
 {
   "parameters": {
@@ -24,15 +27,19 @@ This guide provides a systematic approach to diagnosing optimization failures th
   }
 }
 ```
+
 **All uncertainties = 1.0** indicates fallback behavior, not real uncertainty estimates.
 
 ### 2. Zero Iterations
+
 ```
 INFO: Optimization completed in 2.62s, 0 iterations
 ```
+
 Real optimization should take minutes and show iteration progress.
 
 ### 3. Parameters Unchanged
+
 Initial and final parameters are identical, suggesting no optimization occurred.
 
 ## Diagnostic Approach
@@ -79,7 +86,8 @@ data_small = {
 result = nlsq_wrapper.fit(data_small, config)
 ```
 
-If small dataset works but large fails → large-dataset-specific issue (memory, chunking, etc.)
+If small dataset works but large fails → large-dataset-specific issue (memory, chunking,
+etc.)
 
 ### Step 3: Check API Compatibility
 
@@ -124,12 +132,15 @@ result = nlsq_wrapper.fit(
 
 **Symptom**: Fast completion (seconds), identity covariance, 0 iterations
 
-**Cause**: Internal chunking failure causing LargeDatasetFitter to return incomplete result object:
+**Cause**: Internal chunking failure causing LargeDatasetFitter to return incomplete
+result object:
+
 - Missing `result.popt` attribute
 - Missing `result.pcov` attribute
 - curve_fit_large falls back to identity matrix
 
 **Diagnosis**:
+
 ```python
 # Add diagnostic logging:
 popt, pcov = curve_fit_large(...)
@@ -145,6 +156,7 @@ if np.allclose(pcov, np.eye(len(popt))):
 **Symptom**: Shape mismatch errors in logs, all chunks fail
 
 **Cause**: Model function ignores `xdata` chunk size:
+
 ```python
 # ❌ WRONG: Returns fixed size regardless of xdata
 def model_function(xdata, *params):
@@ -159,6 +171,7 @@ def model_function(xdata, *params):
 ```
 
 **Diagnosis**:
+
 - Look for "shape mismatch" in logs
 - Check if model output size matches ydata chunk size
 - Test with NLSQ shape validation (available in v0.1.4+)
@@ -170,6 +183,7 @@ def model_function(xdata, *params):
 **Symptom**: `ValueError: not enough values to unpack (expected 3, got 2)`
 
 **Cause**: Using curve_fit unpacking pattern with curve_fit_large:
+
 ```python
 # ❌ WRONG for curve_fit_large:
 popt, pcov, info = curve_fit_large(...)  # Returns only 2 values!
@@ -179,7 +193,8 @@ popt, pcov = curve_fit_large(...)
 info = {}  # Create manually if needed
 ```
 
-**Fix**: Use 2-value unpacking for curve_fit_large, create empty info dict for compatibility
+**Fix**: Use 2-value unpacking for curve_fit_large, create empty info dict for
+compatibility
 
 ### 4. Immediate Convergence (Rare)
 
@@ -188,6 +203,7 @@ info = {}  # Create manually if needed
 **Cause**: Initial parameters accidentally optimal (or data/model mismatch)
 
 **Diagnosis**:
+
 ```python
 # Perturb initial parameters and check chi-squared
 import numpy as np
@@ -204,6 +220,7 @@ else:
 ```
 
 **Fix**:
+
 - Try different initial guess
 - Verify data quality
 - Check parameter bounds aren't too tight
@@ -213,12 +230,14 @@ else:
 ### For curve_fit_large Fallback:
 
 1. **Switch to standard curve_fit** (if memory allows):
+
    ```python
    # In nlsq_wrapper.py:
    use_large = False  # Force curve_fit instead
    ```
 
-2. **Reduce dataset size** via angle filtering:
+1. **Reduce dataset size** via angle filtering:
+
    ```yaml
    phi_filtering:
      enabled: true
@@ -227,7 +246,8 @@ else:
          max_angle: 10.0
    ```
 
-3. **Enable NLSQ sampling** (for >100M points):
+1. **Enable NLSQ sampling** (for >100M points):
+
    ```python
    curve_fit_large(..., sampling_fraction=0.1)  # Use 10% of data
    ```
@@ -235,6 +255,7 @@ else:
 ### For Model Chunking Issues:
 
 1. **Add shape validation** before optimization:
+
    ```python
    # Test model output size
    test_xdata = jnp.arange(100)
@@ -242,7 +263,8 @@ else:
    assert test_output.shape[0] == 100, "Model must respect xdata size"
    ```
 
-2. **Fix model indexing**:
+1. **Fix model indexing**:
+
    ```python
    def model_function(xdata, *params):
        full_output = compute_theory(params)
@@ -252,12 +274,14 @@ else:
 ### For API Incompatibility:
 
 1. **Check NLSQ API version**:
+
    ```python
    import nlsq
    print(nlsq.__version__)  # Ensure >= 0.1.3
    ```
 
-2. **Use correct unpacking**:
+1. **Use correct unpacking**:
+
    ```python
    if use_large:
        popt, pcov = curve_fit_large(...)
@@ -269,16 +293,19 @@ else:
 ## Prevention Best Practices
 
 1. **Always validate model function** before optimization:
+
    - Test with small dataset first
    - Verify output shape matches input
    - Check gradient is non-zero
 
-2. **Enable verbose logging**:
+1. **Enable verbose logging**:
+
    ```python
    result = optimizer.fit(data, config, verbose=2)
    ```
 
-3. **Check result quality**:
+1. **Check result quality**:
+
    ```python
    # After optimization:
    if np.allclose(pcov, np.eye(len(popt))):
@@ -291,7 +318,8 @@ else:
        logger.warning("Parameters unchanged - no optimization occurred")
    ```
 
-4. **Use NLSQ best practices**:
+1. **Use NLSQ best practices**:
+
    - Import nlsq before JAX (for automatic x64)
    - Enable XLA preallocation
    - Set appropriate memory limits
@@ -299,7 +327,8 @@ else:
 
 ## References
 
-- **Full diagnostic report**: `docs/archive/2025-10-nlsq-integration/NLSQ_0_ITERATIONS_DIAGNOSIS.md`
+- **Full diagnostic report**:
+  `docs/archive/2025-10-nlsq-integration/NLSQ_0_ITERATIONS_DIAGNOSIS.md`
 - **Fix implementation**: Search git log for "Oct 17, 2025"
 - **NLSQ documentation**: https://nlsq.readthedocs.io/en/latest/
 - **Related guide**: `silent-failure-diagnosis.md` (this file)
@@ -325,7 +354,6 @@ homodyne --config config.yaml --method nlsq --verbose --output-dir test_verbose
 python check_results.py test_verbose/nlsq/parameters.json
 ```
 
----
+______________________________________________________________________
 
-**Last Updated**: November 17, 2025
-**Applies to**: homodyne v2.x with NLSQ >= 0.1.3
+**Last Updated**: November 17, 2025 **Applies to**: homodyne v2.x with NLSQ >= 0.1.3

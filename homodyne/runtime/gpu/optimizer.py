@@ -352,9 +352,9 @@ class GPUOptimizer:
                     settings["jax_settings"]["jax_enable_x64"] = True
                     settings["xla_flags"].append("--xla_gpu_enable_triton=true")
                 elif compute_cap_float >= 7.0:  # Volta/Turing (V100, RTX 20xx)
-                    settings["jax_settings"][
-                        "jax_enable_x64"
-                    ] = False  # Float32 for performance
+                    settings["jax_settings"]["jax_enable_x64"] = (
+                        False  # Float32 for performance
+                    )
             except (ValueError, TypeError):
                 # Fallback for invalid compute capability
                 settings["jax_settings"]["jax_enable_x64"] = False

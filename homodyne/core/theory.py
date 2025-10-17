@@ -33,9 +33,7 @@ except ImportError:
     logger.error("Could not import JAX backend - theory computations disabled")
 
 from homodyne.core.models import create_model
-from homodyne.core.physics import (
-    PhysicsConstants,
-)
+from homodyne.core.physics import PhysicsConstants
 
 logger = get_logger(__name__)
 

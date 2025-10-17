@@ -1,27 +1,29 @@
 # Integration Testing Guide: Homodyne + NLSQ Fixes
 
-**Date:** October 17, 2025
-**Status:** ✅ **READY FOR INTEGRATION TESTING**
+**Date:** October 17, 2025 **Status:** ✅ **READY FOR INTEGRATION TESTING**
 
----
+______________________________________________________________________
 
 ## Overview
 
-This guide provides step-by-step instructions for testing the combined homodyne model fix and NLSQ shape validation improvement with the 23M point C020 dataset.
+This guide provides step-by-step instructions for testing the combined homodyne model
+fix and NLSQ shape validation improvement with the 23M point C020 dataset.
 
 **Two Fixes Implemented:**
 
 1. **Homodyne Fix:** Model function now respects xdata indices for chunking
+
    - File: `homodyne/optimization/nlsq_wrapper.py`
    - Lines: 922-923
    - Change: `indices = xdata.astype(jnp.int32); return g2_theory_flat[indices]`
 
-2. **NLSQ Improvement:** Shape validation catches incompatible models early
+1. **NLSQ Improvement:** Shape validation catches incompatible models early
+
    - File: `nlsq/large_dataset.py`
    - Lines: 839-945
    - Purpose: Detect shape mismatches before processing all chunks
 
----
+______________________________________________________________________
 
 ## Pre-Test Checklist
 
@@ -33,6 +35,7 @@ grep -A 5 "CRITICAL FIX for curve_fit_large" homodyne/optimization/nlsq_wrapper.
 ```
 
 **Expected output:**
+
 ```python
 # CRITICAL FIX for curve_fit_large chunking:
 # xdata contains indices into the flattened array.
@@ -50,6 +53,7 @@ grep -A 3 "SHAPE VALIDATION" nlsq/large_dataset.py | head -5
 ```
 
 **Expected output:**
+
 ```python
 # ========== SHAPE VALIDATION ==========
 # Validate that model function respects input size before processing all chunks.
@@ -73,7 +77,7 @@ python3 -m ruff check nlsq/large_dataset.py
 
 **Expected:** All checks pass (no violations).
 
----
+______________________________________________________________________
 
 ## Test 1: Shape Validation Detection (Expected to PASS)
 
@@ -100,38 +104,45 @@ INFO: Fitting dataset using 24 chunks
 ```
 
 **Key Success Indicators:**
+
 1. ✅ Validation message appears early in logs
-2. ✅ Validation passes (shape (100,) matches)
-3. ✅ Chunking proceeds (24 chunks)
-4. ✅ No shape mismatch errors
+1. ✅ Validation passes (shape (100,) matches)
+1. ✅ Chunking proceeds (24 chunks)
+1. ✅ No shape mismatch errors
 
 ### Expected Results
 
 **Timing:**
+
 - **Duration:** 5-10 minutes (actual optimization)
 - **NOT:** 2.6 seconds (indicates failure)
 
 **Parameters:**
+
 - **Values:** Different from initial parameters
 - **NOT:** Unchanged from initial values
 
 **Uncertainties:**
+
 - **Values:** Varied (e.g., 0.001 to 100.0)
 - **NOT:** All = 1.0 (identity matrix)
 
 **Convergence:**
+
 - **Iterations:** > 0 (should show actual iterations)
 - **NOT:** 0 iterations
 
 **Chi-squared:**
+
 - **Value:** Reduced chi-squared ≈ 1.0-1.5
 - **Behavior:** Improves during optimization
 
----
+______________________________________________________________________
 
 ## Test 2: Parameter Verification
 
-**Purpose:** Verify optimized parameters are physically meaningful and uncertainties are computed.
+**Purpose:** Verify optimized parameters are physically meaningful and uncertainties are
+computed.
 
 ### Check Results
 
@@ -208,13 +219,14 @@ Parameters have varied uncertainties, indicating successful optimization.
 ```
 
 **FAIL Criteria:**
+
 ```
 ======================================================================
 ❌ FAIL: All uncertainties = 1.0 (identity matrix)
 This indicates the fix did NOT work correctly.
 ```
 
----
+______________________________________________________________________
 
 ## Test 3: Log File Analysis
 
@@ -264,12 +276,13 @@ INFO: Chunked fit completed with 100.0% success rate
 ```
 
 **Success Indicators:**
+
 - ✅ Execution time: 5-10 minutes (not seconds)
 - ✅ Iterations: > 0 (not 0)
 - ✅ Chunk processing: 24 chunks, high success rate
 - ✅ Chi-squared improvement: final < initial
 
----
+______________________________________________________________________
 
 ## Test 4: Timing Comparison
 
@@ -278,6 +291,7 @@ INFO: Chunked fit completed with 100.0% success rate
 ### Reference Timings
 
 **Before Fix (Broken):**
+
 ```
 Duration: 2.62 seconds
 Iterations: 0
@@ -286,6 +300,7 @@ Status: ❌ Silent failure
 ```
 
 **After Fix (Working):**
+
 ```
 Duration: 5-10 minutes
 Iterations: 10-20
@@ -318,7 +333,7 @@ else
 fi
 ```
 
----
+______________________________________________________________________
 
 ## Test 5: Comparison with Broken Version (Optional)
 
@@ -326,7 +341,8 @@ fi
 
 ### Run with Broken Model (Temporarily Revert Fix)
 
-**⚠️ WARNING:** This is destructive testing. Only do this if you want to see the failure mode.
+**⚠️ WARNING:** This is destructive testing. Only do this if you want to see the failure
+mode.
 
 ```bash
 # Backup the fix
@@ -351,6 +367,7 @@ cp homodyne/optimization/nlsq_wrapper.py.FIXED homodyne/optimization/nlsq_wrappe
 ### Expected Behavior (Broken Version)
 
 **With NLSQ shape validation:**
+
 ```
 ERROR: Model function validation failed:
 Model function SHAPE MISMATCH detected!
@@ -365,37 +382,43 @@ ERROR: Model output must match ydata size.
 ```
 
 **Result:** ✅ **Shape validation catches the bug immediately**
+
 - Fails fast (within seconds)
 - Clear error message
 - Fix instructions provided
 
 **Without NLSQ shape validation (old NLSQ):**
+
 ```
 INFO: Optimization completed in 2.62s, 0 iterations
 INFO: Final chi-squared: 2.4484e+07
 ```
 
 **Result:** ❌ **Silent failure**
+
 - Appears successful
 - Identity covariance matrix
 - No error messages
 
----
+______________________________________________________________________
 
 ## Troubleshooting
 
 ### Issue 1: Shape Validation Fails
 
 **Error:**
+
 ```
 ERROR: Model function SHAPE MISMATCH detected!
 ```
 
 **Diagnosis:**
+
 - Homodyne fix not applied correctly
 - Check lines 922-923 in nlsq_wrapper.py
 
 **Fix:**
+
 ```bash
 cd /home/wei/Documents/GitHub/homodyne
 grep -A 2 "indices = xdata.astype" homodyne/optimization/nlsq_wrapper.py
@@ -405,27 +428,32 @@ grep -A 2 "indices = xdata.astype" homodyne/optimization/nlsq_wrapper.py
 ### Issue 2: Still Getting 0 Iterations
 
 **Symptoms:**
-- Completes in <30 seconds
+
+- Completes in \<30 seconds
 - 0 iterations
 - All uncertainties = 1.0
 
 **Diagnosis:**
+
 - Homodyne fix not applied or reverted
 - Using old homodyne installation
 
 **Fix:**
+
 1. Verify homodyne fix is applied (see Issue 1)
-2. Reinstall homodyne: `pip install -e /home/wei/Documents/GitHub/homodyne`
-3. Confirm using correct environment: `which homodyne`
+1. Reinstall homodyne: `pip install -e /home/wei/Documents/GitHub/homodyne`
+1. Confirm using correct environment: `which homodyne`
 
 ### Issue 3: Parameters Unchanged
 
 **Symptoms:**
+
 - Optimization completes
 - Parameters exactly match initial values
 - Some uncertainties ≠ 1.0 (so not identity matrix)
 
 **Diagnosis:**
+
 - Different issue (not the chunking bug)
 - Possible causes:
   - Initial guess already optimal
@@ -433,21 +461,25 @@ grep -A 2 "indices = xdata.astype" homodyne/optimization/nlsq_wrapper.py
   - Bounds too tight
 
 **Fix:**
+
 1. Check initial chi-squared vs final chi-squared (should improve)
-2. Try different initial parameters
-3. Review parameter bounds in config
+1. Try different initial parameters
+1. Review parameter bounds in config
 
 ### Issue 4: NLSQ Shape Validation Not Running
 
 **Symptoms:**
+
 - No "Validating model function" message in logs
 - Running old NLSQ version
 
 **Diagnosis:**
+
 - NLSQ improvement not applied
 - Using system NLSQ instead of local version
 
 **Fix:**
+
 ```bash
 # Verify NLSQ improvement
 cd /home/wei/Documents/GitHub/NLSQ
@@ -461,23 +493,21 @@ python3 -c "import nlsq; print(nlsq.__file__)"
 # Should show: /home/wei/Documents/GitHub/NLSQ/nlsq/__init__.py
 ```
 
----
+______________________________________________________________________
 
 ## Success Criteria Summary
 
 | Check | Success Criteria | Failure Indicator |
-|-------|-----------------|-------------------|
-| **Validation** | "✓ Model validation passed" in logs | Shape mismatch error |
-| **Timing** | 5-10 minutes (300-600s) | <30 seconds |
-| **Iterations** | >0 (typically 10-20) | 0 iterations |
-| **Parameters** | Changed from initial values | Unchanged from initial |
-| **Uncertainties** | Varied (not all 1.0) | All = 1.0 |
-| **Chi-squared** | Reduced chi² ≈ 1.0-1.5 | Unchanged or suspiciously good |
-| **Chunks** | 24 chunks, >90% success rate | High failure rate |
+|-------|-----------------|-------------------| | **Validation** | "✓ Model validation
+passed" in logs | Shape mismatch error | | **Timing** | 5-10 minutes (300-600s) | \<30
+seconds | | **Iterations** | >0 (typically 10-20) | 0 iterations | | **Parameters** |
+Changed from initial values | Unchanged from initial | | **Uncertainties** | Varied (not
+all 1.0) | All = 1.0 | | **Chi-squared** | Reduced chi² ≈ 1.0-1.5 | Unchanged or
+suspiciously good | | **Chunks** | 24 chunks, >90% success rate | High failure rate |
 
 **Overall Success:** ALL checks must pass.
 
----
+______________________________________________________________________
 
 ## Next Steps After Successful Testing
 
@@ -561,23 +591,26 @@ EOF
 ### 3. Update Documentation
 
 Consider updating:
+
 - Homodyne README.md with known issues section
 - NLSQ README.md with chunking-compatible model guidelines
 - Both CHANGELOGs with this fix
 
----
+______________________________________________________________________
 
 ## Contact and Support
 
 **Issue Reports:**
+
 - Homodyne: `/home/wei/Documents/GitHub/homodyne/issues`
 - NLSQ: `/home/wei/Documents/GitHub/NLSQ/issues`
 
 **Documentation:**
+
 - Homodyne fix: `NLSQ_FIX_COMPLETE.md`
 - NLSQ improvement: `NLSQ_IMPROVEMENTS_COMPLETE.md`
 - Test scripts: `test_nlsq_chunking_fix.py`
 
----
+______________________________________________________________________
 
 *End of Integration Testing Guide*

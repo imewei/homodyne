@@ -12,7 +12,6 @@ Key features:
 
 import logging
 from pathlib import Path
-from typing import Optional
 
 import datashader as ds
 import datashader.transfer_functions as tf
@@ -80,8 +79,8 @@ class DatashaderRenderer:
         x_coords: np.ndarray,
         y_coords: np.ndarray,
         cmap: str = "viridis",
-        vmin: Optional[float] = None,
-        vmax: Optional[float] = None,
+        vmin: float | None = None,
+        vmax: float | None = None,
     ) -> Image.Image:
         """Rasterize 2D gridded data to PIL Image using Datashader.
 
@@ -224,7 +223,7 @@ def plot_c2_heatmap_fast(
     t2: np.ndarray,
     output_path: Path,
     title: str = "",
-    phi_angle: Optional[float] = None,
+    phi_angle: float | None = None,
     cmap: str = "viridis",
     width: int = 800,
     height: int = 800,

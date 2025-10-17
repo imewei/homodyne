@@ -376,9 +376,9 @@ class TestUtils:
         assert hasattr(arr, "shape"), "Object is not array-like"
 
         if expected_shape is not None:
-            assert (
-                arr.shape == expected_shape
-            ), f"Shape mismatch: {arr.shape} != {expected_shape}"
+            assert arr.shape == expected_shape, (
+                f"Shape mismatch: {arr.shape} != {expected_shape}"
+            )
 
         if dtype is not None:
             assert arr.dtype == dtype, f"Dtype mismatch: {arr.dtype} != {dtype}"
@@ -393,9 +393,9 @@ class TestUtils:
             for key, expected_val in expected_params.items():
                 if key in result.parameters:
                     actual_val = result.parameters[key]
-                    assert (
-                        abs(actual_val - expected_val) < tolerance
-                    ), f"Parameter {key}: {actual_val} != {expected_val} ± {tolerance}"
+                    assert abs(actual_val - expected_val) < tolerance, (
+                        f"Parameter {key}: {actual_val} != {expected_val} ± {tolerance}"
+                    )
 
 
 @pytest.fixture

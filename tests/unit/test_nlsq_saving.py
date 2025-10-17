@@ -595,9 +595,9 @@ class TestGenerateNLSQPlots:
             for phi in phi_angles:
                 png_file = output_dir / f"c2_heatmaps_phi_{phi:.1f}deg.png"
                 assert png_file.exists(), f"PNG file not created for phi={phi}"
-                assert (
-                    png_file.stat().st_size > 1000
-                ), f"PNG file too small for phi={phi}"
+                assert png_file.stat().st_size > 1000, (
+                    f"PNG file too small for phi={phi}"
+                )
 
             # Verify correct number of files
             png_files = list(output_dir.glob("*.png"))
@@ -647,13 +647,13 @@ class TestGenerateNLSQPlots:
                         vmin = kwargs["vmin"]
                         vmax = kwargs["vmax"]
                         # Verify symmetric: vmin = -vmax
-                        assert (
-                            vmin == -vmax
-                        ), f"Residuals colormap not symmetric: vmin={vmin}, vmax={vmax}"
+                        assert vmin == -vmax, (
+                            f"Residuals colormap not symmetric: vmin={vmin}, vmax={vmax}"
+                        )
                         # Verify vmax is positive
-                        assert (
-                            vmax > 0
-                        ), f"Residuals vmax should be positive, got {vmax}"
+                        assert vmax > 0, (
+                            f"Residuals vmax should be positive, got {vmax}"
+                        )
                     # Verify diverging colormap (RdBu_r)
                     if "cmap" in kwargs:
                         assert "RdBu" in str(kwargs["cmap"])

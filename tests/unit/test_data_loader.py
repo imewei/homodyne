@@ -30,12 +30,8 @@ try:
 except ImportError:
     HAS_YAML = False
 
-from homodyne.data.xpcs_loader import (
-    HAS_H5PY as LOADER_HAS_H5PY,
-)
-from homodyne.data.xpcs_loader import (
-    HAS_YAML as LOADER_HAS_YAML,
-)
+from homodyne.data.xpcs_loader import HAS_H5PY as LOADER_HAS_H5PY
+from homodyne.data.xpcs_loader import HAS_YAML as LOADER_HAS_YAML
 from homodyne.data.xpcs_loader import (
     XPCSConfigurationError,
     XPCSDataLoader,
@@ -420,9 +416,9 @@ class TestXPCSDataLoading:
                 for angle in range(corrected_c2.shape[0]):
                     diagonal = np.diag(corrected_c2[angle])
                     # Diagonal should be closer to neighboring values
-                    assert np.all(
-                        diagonal > 0.8
-                    ), "Diagonal correction should improve values"
+                    assert np.all(diagonal > 0.8), (
+                        "Diagonal correction should improve values"
+                    )
 
         except (KeyError, ValueError) as e:
             pytest.skip(f"Diagonal correction test failed: {e}")
@@ -504,20 +500,20 @@ class TestXPCSDataLoaderProperties:
         n_times_t1, n_times_t2 = data["t1"].shape
 
         expected_shape = (n_angles, n_times_t1, n_times_t2)
-        assert (
-            data["c2_exp"].shape == expected_shape
-        ), f"c2_exp shape mismatch: {data['c2_exp'].shape} vs {expected_shape}"
+        assert data["c2_exp"].shape == expected_shape, (
+            f"c2_exp shape mismatch: {data['c2_exp'].shape} vs {expected_shape}"
+        )
 
         # Sigma should match c2_exp
         if "sigma" in data:
-            assert (
-                data["sigma"].shape == data["c2_exp"].shape
-            ), "sigma should match c2_exp shape"
+            assert data["sigma"].shape == data["c2_exp"].shape, (
+                "sigma should match c2_exp shape"
+            )
 
         # Physical constraints
-        assert np.all(
-            data["c2_exp"] >= 0.8
-        ), "Correlation should be close to or above 1.0"
+        assert np.all(data["c2_exp"] >= 0.8), (
+            "Correlation should be close to or above 1.0"
+        )
         assert np.all(np.isfinite(data["c2_exp"])), "Correlation should be finite"
 
         # q-values should be positive
@@ -525,9 +521,9 @@ class TestXPCSDataLoaderProperties:
 
         # Angles should be in [0, 2π] range
         phi = data["phi_angles_list"]
-        assert np.all(phi >= 0) and np.all(
-            phi <= 2 * np.pi + 1e-6
-        ), "Angles should be in [0, 2π]"
+        assert np.all(phi >= 0) and np.all(phi <= 2 * np.pi + 1e-6), (
+            "Angles should be in [0, 2π]"
+        )
 
     def test_symmetry_properties(self, synthetic_xpcs_data):
         """Test symmetry properties of loaded data."""

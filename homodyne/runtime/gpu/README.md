@@ -2,13 +2,17 @@
 
 ## Overview
 
-This module provides GPU acceleration support for JAX-based computations in the Homodyne v2 package. It offers automatic GPU detection, memory management, and performance optimization for NVIDIA GPUs with CUDA 12.1+.
+This module provides GPU acceleration support for JAX-based computations in the Homodyne
+v2 package. It offers automatic GPU detection, memory management, and performance
+optimization for NVIDIA GPUs with CUDA 12.1+.
 
 ## Features
 
-- 🚀 **Automatic GPU Detection**: Detects available NVIDIA GPUs and configures JAX accordingly
+- 🚀 **Automatic GPU Detection**: Detects available NVIDIA GPUs and configures JAX
+  accordingly
 - 💾 **Memory Management**: Configurable GPU memory allocation with preallocation support
-- ⚡ **Performance Optimization**: XLA flags and CUDA optimizations for maximum performance
+- ⚡ **Performance Optimization**: XLA flags and CUDA optimizations for maximum
+  performance
 - 🔧 **Multi-GPU Support**: Select specific GPUs in multi-GPU systems
 - 🔄 **Graceful Fallback**: Automatic CPU fallback when GPU is unavailable
 - 📊 **Benchmarking**: Built-in performance benchmarks for GPU capabilities
@@ -94,10 +98,11 @@ source /path/to/homodyne/runtime/gpu/activation.sh
 ```
 
 This script will:
+
 1. Detect CUDA installation
-2. Set environment variables
-3. Configure JAX for GPU usage
-4. Verify GPU detection
+1. Set environment variables
+1. Configure JAX for GPU usage
+1. Verify GPU detection
 
 ### Manual Environment Variables
 
@@ -142,17 +147,20 @@ print(f"Optimized parameters: {result.parameters}")
 ## Performance Tips
 
 ### Memory Management
+
 - Set `memory_fraction` based on your dataset size
 - Use 0.8-0.9 for dedicated GPU systems
 - Use 0.5-0.7 for shared GPU environments
 
 ### Optimization Strategies
+
 1. **Large Datasets**: Use higher memory fraction
-2. **Multiple Runs**: Enable compilation cache
-3. **Batch Processing**: Process multiple datasets together
-4. **Mixed Precision**: Use float32 or bfloat16 for speed
+1. **Multiple Runs**: Enable compilation cache
+1. **Batch Processing**: Process multiple datasets together
+1. **Mixed Precision**: Use float32 or bfloat16 for speed
 
 ### Common Performance Gains
+
 - Matrix operations: 10-50x speedup
 - FFT operations: 20-100x speedup
 - NLSQ optimization: 5-20x speedup
@@ -189,11 +197,13 @@ for device in jax.devices('gpu'):
 ### CUDA Version Mismatch
 
 Ensure CUDA 12.1+ is installed:
+
 ```bash
 nvcc --version  # Should show 12.1 or higher
 ```
 
 If using system CUDA:
+
 ```bash
 pip install "jax[cuda12-local]"  # Uses system CUDA
 ```
@@ -201,16 +211,19 @@ pip install "jax[cuda12-local]"  # Uses system CUDA
 ### Performance Issues
 
 1. Check GPU utilization:
+
 ```bash
 nvidia-smi
 ```
 
 2. Monitor during computation:
+
 ```bash
 watch -n 1 nvidia-smi
 ```
 
 3. Verify XLA compilation:
+
 ```python
 import os
 os.environ["XLA_FLAGS"] = "--xla_dump_to=/tmp/xla_dump"
@@ -221,25 +234,31 @@ os.environ["XLA_FLAGS"] = "--xla_dump_to=/tmp/xla_dump"
 ### Main Functions
 
 - `activate_gpu(memory_fraction=0.9, force_gpu=False, gpu_id=None, verbose=True)`
+
   - Activates GPU with specified settings
   - Returns status dictionary
 
 - `get_gpu_status()`
+
   - Returns current GPU configuration and availability
 
 - `benchmark_gpu()`
+
   - Runs performance benchmarks
   - Returns benchmark scores
 
 ### GPUActivator Class
 
 - `GPUActivator(verbose=True)`
+
   - Main class for GPU management
 
 - `activate(memory_fraction, force_gpu, gpu_id)`
+
   - Activate GPU with configuration
 
 - `deactivate()`
+
   - Cleanup GPU resources
 
 ## Examples
@@ -249,14 +268,16 @@ See `/examples/gpu_accelerated_optimization.py` for a complete example.
 ## Support
 
 For issues or questions:
+
 1. Check JAX installation: `pip show jax jaxlib`
-2. Verify CUDA: `nvidia-smi`
-3. Test with example script
-4. Report issues with full error messages
+1. Verify CUDA: `nvidia-smi`
+1. Test with example script
+1. Report issues with full error messages
 
 ## Performance Benchmarks
 
 Typical performance on NVIDIA RTX 4090:
+
 - Matrix Multiply (4000x4000): ~25 TFLOPS
 - FFT (16384 points): ~14,000 ops/sec
 - NLSQ Optimization: 10-20x faster than CPU

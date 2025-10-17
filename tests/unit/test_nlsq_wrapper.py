@@ -68,32 +68,32 @@ class TestNLSQWrapperFit:
         )
 
         # Assertions
-        assert isinstance(
-            result, OptimizationResult
-        ), "Result should be OptimizationResult instance"
-        assert result.parameters.shape == (
-            5,
-        ), f"Should have 5 parameters, got {result.parameters.shape}"
-        assert result.uncertainties.shape == (
-            5,
-        ), "Uncertainties shape should match parameters"
+        assert isinstance(result, OptimizationResult), (
+            "Result should be OptimizationResult instance"
+        )
+        assert result.parameters.shape == (5,), (
+            f"Should have 5 parameters, got {result.parameters.shape}"
+        )
+        assert result.uncertainties.shape == (5,), (
+            "Uncertainties shape should match parameters"
+        )
         assert result.covariance.shape == (5, 5), "Covariance should be 5x5 matrix"
         assert result.chi_squared >= 0, "Chi-squared should be non-negative"
-        assert (
-            result.reduced_chi_squared >= 0
-        ), "Reduced chi-squared should be non-negative"
+        assert result.reduced_chi_squared >= 0, (
+            "Reduced chi-squared should be non-negative"
+        )
         assert result.convergence_status in [
             "converged",
             "max_iter",
             "failed",
         ], f"Invalid convergence status: {result.convergence_status}"
-        assert (
-            result.iterations >= 0
-        ), "Iterations should be non-negative (may be 0 if NLSQ doesn't report)"
+        assert result.iterations >= 0, (
+            "Iterations should be non-negative (may be 0 if NLSQ doesn't report)"
+        )
         assert result.execution_time > 0, "Execution time should be positive"
-        assert (
-            "device" in result.device_info or "platform" in result.device_info
-        ), "Device info should contain device information"
+        assert "device" in result.device_info or "platform" in result.device_info, (
+            "Device info should contain device information"
+        )
         assert result.quality_flag in [
             "good",
             "marginal",
@@ -102,12 +102,12 @@ class TestNLSQWrapperFit:
 
         # Acceptance criteria (relaxed for noisy synthetic data)
         # Chi-squared ~500 is reasonable for 300 data points with sigma=0.1 noise
-        assert (
-            result.chi_squared < 1000.0
-        ), f"Chi-squared should be reasonable, got {result.chi_squared}"
-        assert (
-            result.reduced_chi_squared < 5.0
-        ), f"Reduced chi-squared should be <5.0, got {result.reduced_chi_squared}"
+        assert result.chi_squared < 1000.0, (
+            f"Chi-squared should be reasonable, got {result.chi_squared}"
+        )
+        assert result.reduced_chi_squared < 5.0, (
+            f"Reduced chi-squared should be <5.0, got {result.reduced_chi_squared}"
+        )
 
     def test_laminar_flow_fit_large_dataset(self):
         """
@@ -161,9 +161,9 @@ class TestNLSQWrapperFit:
 
         # Assertions
         assert isinstance(result, OptimizationResult)
-        assert result.parameters.shape == (
-            9,
-        ), f"Laminar flow should have 9 parameters, got {result.parameters.shape}"
+        assert result.parameters.shape == (9,), (
+            f"Laminar flow should have 9 parameters, got {result.parameters.shape}"
+        )
         assert result.convergence_status in ["converged", "max_iter", "failed"]
         assert result.iterations >= 0, "Iterations should be non-negative"
 
@@ -288,13 +288,15 @@ class TestNLSQWrapperErrorRecovery:
 
         # Assertions
         assert isinstance(result, OptimizationResult)
-        assert (
-            len(result.recovery_actions) > 0
-        ), "Recovery actions should be recorded when retry occurs"
+        assert len(result.recovery_actions) > 0, (
+            "Recovery actions should be recorded when retry occurs"
+        )
         assert any(
             "perturb" in action.lower() or "retry" in action.lower()
             for action in result.recovery_actions
-        ), f"Recovery actions should mention perturbation/retry: {result.recovery_actions}"
+        ), (
+            f"Recovery actions should mention perturbation/retry: {result.recovery_actions}"
+        )
         assert result.convergence_status in [
             "converged",
             "converged_with_recovery",
@@ -412,17 +414,17 @@ class TestNLSQWrapperErrorRecovery:
         )
 
         # Assertions
-        assert isinstance(
-            result, OptimizationResult
-        ), "Should return result even with bounds violations (clipping applied)"
+        assert isinstance(result, OptimizationResult), (
+            "Should return result even with bounds violations (clipping applied)"
+        )
 
         # Verify the result is valid
-        assert (
-            result.parameters[0] <= 1.0
-        ), f"Contrast should be clipped to max bound (1.0), got {result.parameters[0]}"
-        assert (
-            result.parameters[1] >= 0.8
-        ), f"Offset should be clipped to min bound (0.8), got {result.parameters[1]}"
+        assert result.parameters[0] <= 1.0, (
+            f"Contrast should be clipped to max bound (1.0), got {result.parameters[0]}"
+        )
+        assert result.parameters[1] >= 0.8, (
+            f"Offset should be clipped to min bound (0.8), got {result.parameters[1]}"
+        )
 
         print("\n✅ T022b bounds test passed: Clipping handled gracefully")
         print(f"Original params: {violating_params}")

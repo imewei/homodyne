@@ -14,7 +14,7 @@ import sys
 # This prevents hanging issues with gemm_fusion_autotuner
 os.environ.setdefault(
     "XLA_FLAGS",
-    (" --xla_gpu_autotune_level=0" " --xla_gpu_deterministic_ops=true"),
+    (" --xla_gpu_autotune_level=0 --xla_gpu_deterministic_ops=true"),
 )
 
 from homodyne.cli.args_parser import create_parser

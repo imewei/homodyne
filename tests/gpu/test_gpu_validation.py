@@ -576,9 +576,9 @@ class TestGPUIntegration:
                 relative_error = abs(recovered_val - true_val) / (abs(true_val) + 1e-10)
 
                 # Should recover parameters reasonably well
-                assert (
-                    relative_error < 0.2
-                ), f"Poor parameter recovery for {param_name}: {relative_error:.3f}"
+                assert relative_error < 0.2, (
+                    f"Poor parameter recovery for {param_name}: {relative_error:.3f}"
+                )
 
     def test_gpu_vs_cpu_workflow_consistency(self, synthetic_xpcs_data):
         """Test consistency between GPU and CPU workflows."""
@@ -634,16 +634,16 @@ class TestGPUIntegration:
 
                     # Should be numerically close
                     relative_diff = abs(cpu_val - gpu_val) / (abs(cpu_val) + 1e-10)
-                    assert (
-                        relative_diff < 0.01
-                    ), f"CPU/GPU parameter mismatch for {param_name}: {relative_diff:.4f}"
+                    assert relative_diff < 0.01, (
+                        f"CPU/GPU parameter mismatch for {param_name}: {relative_diff:.4f}"
+                    )
 
                 # Chi-squared should be close
                 chi2_diff = abs(result_cpu.chi_squared - result_gpu.chi_squared)
                 chi2_rel_diff = chi2_diff / (result_cpu.chi_squared + 1e-10)
-                assert (
-                    chi2_rel_diff < 0.05
-                ), f"CPU/GPU chi-squared mismatch: {chi2_rel_diff:.4f}"
+                assert chi2_rel_diff < 0.05, (
+                    f"CPU/GPU chi-squared mismatch: {chi2_rel_diff:.4f}"
+                )
 
         except Exception as e:
             pytest.skip(f"GPU vs CPU comparison failed: {e}")

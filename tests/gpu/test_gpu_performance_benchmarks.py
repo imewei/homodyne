@@ -76,9 +76,9 @@ class TestGPUPerformanceBenchmarks:
             pytest.skip(f"Optimization failed: {e}")
 
         # Verify device_info reports GPU
-        assert (
-            "device" in result.device_info or "platform" in result.device_info
-        ), "device_info should contain device information"
+        assert "device" in result.device_info or "platform" in result.device_info, (
+            "device_info should contain device information"
+        )
 
         print("\n=== US2.1 GPU Detection ===")
         print(f"  Device info: {result.device_info}")
@@ -184,9 +184,9 @@ class TestGPUPerformanceBenchmarks:
         # we accept 2x speedup as passing (overhead dominates for smaller datasets)
         min_speedup = 2.0 if n_points < 1_000_000 else 3.0
 
-        assert (
-            speedup >= min_speedup
-        ), f"GPU speedup {speedup:.2f}x does not meet {min_speedup}x minimum (US2 acceptance)"
+        assert speedup >= min_speedup, (
+            f"GPU speedup {speedup:.2f}x does not meet {min_speedup}x minimum (US2 acceptance)"
+        )
 
         print(f"  ✅ GPU speedup {speedup:.2f}x exceeds {min_speedup}x threshold")
 
@@ -294,9 +294,9 @@ class TestGPUPerformanceBenchmarks:
         # For more sophisticated GPU selection (by available memory),
         # would need to query CUDA memory stats before optimization
         default_device = jax.devices()[0]
-        assert (
-            default_device.platform == "gpu"
-        ), f"Expected GPU device, got {default_device.platform}"
+        assert default_device.platform == "gpu", (
+            f"Expected GPU device, got {default_device.platform}"
+        )
 
         print(f"  ✅ GPU selection working (JAX default: {default_device})")
         print("  Note: Advanced multi-GPU selection (by memory) requires CUDA queries")

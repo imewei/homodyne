@@ -37,9 +37,7 @@ from homodyne.core.jax_backend import (
     safe_len,
     validate_backend,
 )
-from homodyne.core.physics import (
-    validate_parameters,
-)
+from homodyne.core.physics import validate_parameters
 from homodyne.utils.logging import get_logger, log_calls
 
 logger = get_logger(__name__)

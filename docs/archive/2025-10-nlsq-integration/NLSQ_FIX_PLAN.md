@@ -1,10 +1,10 @@
 # NLSQ Chunking Fix Plan
 
-**Date:** October 17, 2025
-**Issue:** curve_fit_large returns identity covariance because all chunks fail silently
-**Root Cause:** Model function returns fixed 23M output regardless of chunk size → shape mismatch
+**Date:** October 17, 2025 **Issue:** curve_fit_large returns identity covariance
+because all chunks fail silently **Root Cause:** Model function returns fixed 23M output
+regardless of chunk size → shape mismatch
 
----
+______________________________________________________________________
 
 ## Root Cause Analysis
 
@@ -13,6 +13,7 @@
 **Location:** `homodyne/optimization/nlsq_wrapper.py` lines 862-916 (`model_function`)
 
 **Problem:**
+
 ```python
 def model_function(xdata: jnp.ndarray, *params_tuple) -> jnp.ndarray:
     # Model ignores xdata and always computes full output
@@ -21,8 +22,9 @@ def model_function(xdata: jnp.ndarray, *params_tuple) -> jnp.ndarray:
     return g2_theory_flat                     # ❌ WRONG SIZE
 ```
 
-**When curve_fit_large chunks:**
--Input: `x_chunk` (1M indices), `y_chunk` (1M data points)
+**When curve_fit_large chunks:** -Input: `x_chunk` (1M indices), `y_chunk` (1M data
+points)
+
 - Model called: `model(x_chunk, *params)`
 - Model returns: 23M points (ignores x_chunk size)
 - Residual computation: `y_chunk - model_output` → (1M,) - (23M,) → **Shape mismatch!**
@@ -31,18 +33,20 @@ def model_function(xdata: jnp.ndarray, *params_tuple) -> jnp.ndarray:
 ### Why It Happens
 
 `curve_fit_large` → `LargeDatasetFitter._fit_chunked()` → processes data in chunks:
-1. Creates chunks: `(x_chunk, y_chunk, chunk_idx)` via `DataChunker.create_chunks()`
-2. Calls `curve_fit(f, x_chunk, y_chunk, ...)` for each chunk
-3. Expects `f(x_chunk, *params)` to return array matching `y_chunk.shape`
-4. Our model returns fixed 23M array → **FAILS**
 
----
+1. Creates chunks: `(x_chunk, y_chunk, chunk_idx)` via `DataChunker.create_chunks()`
+1. Calls `curve_fit(f, x_chunk, y_chunk, ...)` for each chunk
+1. Expects `f(x_chunk, *params)` to return array matching `y_chunk.shape`
+1. Our model returns fixed 23M array → **FAILS**
+
+______________________________________________________________________
 
 ## The Fix
 
 ### Solution: Make model function respect xdata indices
 
 **Change model_function to:**
+
 ```python
 def model_function(xdata: jnp.ndarray, *params_tuple) -> jnp.ndarray:
     """Compute theoretical g2 model for NLSQ optimization.
@@ -89,10 +93,11 @@ def model_function(xdata: jnp.ndarray, *params_tuple) -> jnp.ndarray:
 ### Key Changes
 
 1. **Line 914 (new):** `indices = xdata.astype(jnp.int32)`
-2. **Line 915 (new):** `return g2_theory_flat[indices]` instead of `return g2_theory_flat`
-3. **Added docstring note** about respecting xdata size for chunking
+1. **Line 915 (new):** `return g2_theory_flat[indices]` instead of
+   `return g2_theory_flat`
+1. **Added docstring note** about respecting xdata size for chunking
 
----
+______________________________________________________________________
 
 ## Implementation
 
@@ -103,6 +108,7 @@ def model_function(xdata: jnp.ndarray, *params_tuple) -> jnp.ndarray:
 ### Exact Code Changes
 
 **BEFORE (line 913-916):**
+
 ```python
     # Flatten theory to match flattened data (NLSQ expects 1D output)
     g2_theory_flat = g2_theory.flatten()
@@ -111,6 +117,7 @@ def model_function(xdata: jnp.ndarray, *params_tuple) -> jnp.ndarray:
 ```
 
 **AFTER:**
+
 ```python
     # Flatten theory to match flattened data (NLSQ expects 1D output)
     g2_theory_flat = g2_theory.flatten()
@@ -125,7 +132,7 @@ def model_function(xdata: jnp.ndarray, *params_tuple) -> jnp.ndarray:
     return g2_theory_flat[indices]
 ```
 
----
+______________________________________________________________________
 
 ## Testing Plan
 
@@ -213,11 +220,12 @@ else:
     print("❌ Fix failed. Still using identity matrix.")
 ```
 
----
+______________________________________________________________________
 
 ## Expected Behavior After Fix
 
 ### Before Fix:
+
 - ❌ All chunks fail silently due to shape mismatch
 - ❌ success_rate = 0%
 - ❌ Fallback to identity covariance (all uncertainties = 1.0)
@@ -225,6 +233,7 @@ else:
 - ❌ Fast execution (2.6s - no real optimization)
 
 ### After Fix:
+
 - ✅ Chunks process successfully
 - ✅ success_rate > 50%
 - ✅ Proper covariance matrix computed
@@ -233,7 +242,7 @@ else:
 - ✅ Slower execution (5-10 min - actual optimization running)
 - ✅ Log shows chunk progress (if NLSQ logging connected)
 
----
+______________________________________________________________________
 
 ## Memory Considerations
 
@@ -242,21 +251,25 @@ else:
 **Answer:** Partially, but acceptable:
 
 1. **Forward pass:** Still computes 23M points (no memory savings)
+
    - Unavoidable given our data structure (all phi angles coupled)
    - JAX handles this efficiently with GPU memory
 
-2. **Jacobian computation:** NLSQ chunks this (memory savings!)
+1. **Jacobian computation:** NLSQ chunks this (memory savings!)
+
    - Jacobian size: 23M × 9 params = 207M elements = ~1.7GB
    - Chunking reduces peak memory by processing 1M points at a time
    - This is the PRIMARY memory bottleneck NLSQ solves
 
-3. **Net benefit:** Major memory savings from Jacobian chunking outweigh forward pass overhead
+1. **Net benefit:** Major memory savings from Jacobian chunking outweigh forward pass
+   overhead
 
 **Alternative (if memory still issues):**
+
 - Reduce dataset size via phi angle filtering (23M → 8M)
 - Enable NLSQ sampling for datasets > 100M points
 
----
+______________________________________________________________________
 
 ## Validation Checklist
 
@@ -272,7 +285,7 @@ After implementing fix:
 - [ ] Chi-squared is reasonable (< 2 × data points)
 - [ ] Execution time is realistic (5-10 min, not 2.6s)
 
----
+______________________________________________________________________
 
 ## Alternative Fixes (if primary fix insufficient)
 
@@ -309,17 +322,15 @@ Temporarily disable chunking to verify non-chunked path works:
 use_large = False  # Force curve_fit instead of curve_fit_large
 ```
 
----
+______________________________________________________________________
 
 ## Sign-Off
 
-**Diagnosed By:** Claude Code
-**Root Cause:** Model ignores xdata size, returns fixed 23M array
-**Fix:** Index model output by xdata to respect chunk size
-**Files Modified:** `homodyne/optimization/nlsq_wrapper.py` (2 lines changed)
-**Testing:** 3-stage validation plan provided
-**Status:** ✅ Ready for implementation and testing
+**Diagnosed By:** Claude Code **Root Cause:** Model ignores xdata size, returns fixed
+23M array **Fix:** Index model output by xdata to respect chunk size **Files Modified:**
+`homodyne/optimization/nlsq_wrapper.py` (2 lines changed) **Testing:** 3-stage
+validation plan provided **Status:** ✅ Ready for implementation and testing
 
----
+______________________________________________________________________
 
 *End of Fix Plan*

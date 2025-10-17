@@ -23,7 +23,7 @@ repos:
 
   # Python code formatting
   - repo: https://github.com/psf/black
-    rev: 25.9.0  # Updated to match local: black 25.9.0
+    rev: 25.9.0 # Updated to match local: black 25.9.0
     hooks:
       - id: black
         name: black
@@ -64,7 +64,7 @@ repos:
 
   # Modern linting and formatting
   - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.13.3  # Updated to match local: ruff 0.13.3
+    rev: v0.13.3 # Updated to match local: ruff 0.13.3
     hooks:
       - id: ruff
         name: ruff
@@ -104,7 +104,7 @@ repos:
 
   # Type checking
   - repo: https://github.com/pre-commit/mirrors-mypy
-    rev: v1.18.2  # Updated to match local: mypy 1.18.2
+    rev: v1.18.2 # Updated to match local: mypy 1.18.2
     hooks:
       - id: mypy
         name: mypy
@@ -139,7 +139,7 @@ repos:
           - |
             import ast
             import sys
-            
+
             def check_numerical_stability(filename):
                 with open(filename, 'r') as f:
                     try:
@@ -152,7 +152,7 @@ repos:
                                     print(f"Warning: Division operation found in {filename}:{node.lineno}")
                     except SyntaxError:
                         pass
-            
+
             for filename in sys.argv[1:]:
                 check_numerical_stability(filename)
         files: ^homodyne/(core|analysis|optimization)/.*\.py$
@@ -168,7 +168,7 @@ repos:
           - |
             import ast
             import sys
-            
+
             def check_docstrings(filename):
                 with open(filename, 'r') as f:
                     try:
@@ -182,7 +182,7 @@ repos:
                             print(f"Warning: {len(missing_docs)} functions missing docstrings in {filename}")
                     except SyntaxError:
                         pass
-            
+
             for filename in sys.argv[1:]:
                 check_docstrings(filename)
         files: ^homodyne/(core|analysis|optimization)/.*\.py$
@@ -240,7 +240,7 @@ repos:
 
 # Global configuration
 default_language_version:
-  python: python3.12  # Updated to match local: Python 3.12.3
+  python: python3.12 # Updated to match local: Python 3.12.3
 
 # Exclude certain directories and files
 exclude: |

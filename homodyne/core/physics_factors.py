@@ -219,7 +219,7 @@ class PhysicsFactors:
 
         if self.dt < 1e-3 or self.dt > 1e3:
             logger.warning(
-                f"dt = {self.dt:.6e} s is outside typical " f"XPCS range [10⁻³, 10³] s",
+                f"dt = {self.dt:.6e} s is outside typical XPCS range [10⁻³, 10³] s",
             )
 
         # Check derived factors
@@ -230,7 +230,7 @@ class PhysicsFactors:
             )
         if not np.isfinite(self.sinc_prefactor):
             raise ValueError(
-                "Computed sinc_prefactor is not finite. " "Check q, L, and dt values.",
+                "Computed sinc_prefactor is not finite. Check q, L, and dt values.",
             )
 
     def to_tuple(self) -> tuple[float, float]:
