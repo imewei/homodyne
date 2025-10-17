@@ -54,16 +54,16 @@ analysis_mode: "static_anisotropic"
 analyzer_parameters:
   # Time step between correlation measurements (seconds)
   dt: 0.1
-  
+
   # Frame range for analysis (may need more frames for multi-angle statistics)
   start_frame: 1
   end_frame: 1000
-  
+
   # Scattering parameters
   scattering:
     # Wave vector magnitude in Å⁻¹ (sample-dependent)
     wavevector_q: 0.0054
-  
+
   # Geometry parameters (instrumental setup)
   geometry:
     # Stator-rotor gap in Angstroms (200 microns instrumental parameter)
@@ -74,7 +74,7 @@ analysis_settings:
   # Static mode enabled for anisotropic analysis
   static_mode: true
   static_submode: "anisotropic"
-  
+
   model_description:
     type: "static_diffusion"
     parameters: 3
@@ -89,16 +89,16 @@ experimental_data:
   # Primary data location
   data_folder_path: "./data/sample/"
   data_file_name: "your_xpcs_data.hdf"
-  
+
   # Phi angles (REQUIRED for anisotropic analysis)
   phi_angles_path: "./data/phi_angles/"
   phi_angles_file: "phi_list.txt"
-  
+
   # Caching for performance (angle-specific caching)
   cache_file_path: "./data/sample/"
   cache_filename_template: "cached_c2_aniso_q{wavevector_q:.4f}_frames_{start_frame}_{end_frame}.npz"
   cache_compression: true
-  
+
   # Data format
   data_type: "float64"
   file_format: "HDF5"
@@ -111,7 +111,7 @@ experimental_data:
 # Advanced phi angle filtering for anisotropic analysis
 phi_filtering:
   enabled: true
-  
+
   # Target angle ranges for optimal anisotropic scattering analysis
   # These ranges are optimized for detecting anisotropic diffusion patterns
   target_ranges:
@@ -119,12 +119,12 @@ phi_filtering:
     - min_angle: -10.0
       max_angle: 10.0
       description: "Parallel to primary axis"
-    
+
     # Near 180° - antiparallel to anisotropy axis
     - min_angle: 170.0
       max_angle: 190.0
       description: "Antiparallel to primary axis"
-    
+
     # Optional: perpendicular angles for comprehensive analysis
     # Uncomment if your system shows perpendicular anisotropy effects
     # - min_angle: 85.0
@@ -133,18 +133,18 @@ phi_filtering:
     # - min_angle: 265.0
     #   max_angle: 275.0
     #   description: "Perpendicular axis 2"
-  
+
   # Fallback behavior if no angles match target ranges
   fallback_to_all_angles: true
-  
+
   # Filtering algorithm settings
   algorithm: "range_based"
-  tolerance: 2.0  # Angular tolerance in degrees
-  
+  tolerance: 2.0 # Angular tolerance in degrees
+
   # Quality control for angle selection
   quality_control:
     min_angles_required: 2
-    max_angle_spread: 20.0  # Maximum spread within a range
+    max_angle_spread: 20.0 # Maximum spread within a range
     validate_coverage: true
 
 # ==============================================================================
@@ -155,12 +155,12 @@ phi_filtering:
 initial_parameters:
   # 3-parameter model: D₀, α, D_offset (same as isotropic)
   parameter_names: ["D0", "alpha", "D_offset"]
-  
+
   # Starting values for optimization
   # Note: Anisotropic systems may show different parameter values
   # compared to isotropic analysis of the same system
   values: [1000.0, -1.2, 0.0]
-  
+
   # Parameter units for reference
   units: ["Å²/s", "dimensionless", "Å²/s"]
 
@@ -173,25 +173,25 @@ parameter_space:
       max: 1000000.0
       type: TruncatedNormal
       prior_mu: 1000.0
-      prior_sigma: 1000.0  # Broader prior for anisotropic uncertainty
+      prior_sigma: 1000.0 # Broader prior for anisotropic uncertainty
       unit: "Å²/s"
-    
+
     # Anomalous exponent α
     - name: alpha
       min: -10.0
       max: 10.0
       type: Normal
       prior_mu: -1.2
-      prior_sigma: 0.3  # Slightly broader prior for anisotropic effects
+      prior_sigma: 0.3 # Slightly broader prior for anisotropic effects
       unit: "dimensionless"
-    
+
     # Diffusion offset D_offset
     - name: D_offset
       min: -100000.0
       max: 100000.0
       type: Normal
       prior_mu: 0.0
-      prior_sigma: 150.0  # Broader prior for potential anisotropic offsets
+      prior_sigma: 150.0 # Broader prior for potential anisotropic offsets
       unit: "Å²/s"
 
 # ==============================================================================
@@ -203,24 +203,24 @@ optimization:
   # Variational Inference (may need more iterations for multi-angle data)
   vi:
     enabled: true
-    max_iterations: 1500  # Increased for multi-angle complexity
-    learning_rate: 0.008  # Slightly reduced for stability
+    max_iterations: 1500 # Increased for multi-angle complexity
+    learning_rate: 0.008 # Slightly reduced for stability
     convergence_tolerance: 1e-6
     batch_size: "auto"
     early_stopping: true
-    patience: 75  # Increased patience for multi-angle convergence
-  
+    patience: 75 # Increased patience for multi-angle convergence
+
   # MCMC for uncertainty quantification (important for anisotropic analysis)
   mcmc:
     enabled: true
-    num_samples: 3000  # Increased for better posterior sampling
-    num_warmup: 1500   # Increased warmup for multi-angle adaptation
+    num_samples: 3000 # Increased for better posterior sampling
+    num_warmup: 1500 # Increased warmup for multi-angle adaptation
     num_chains: 4
     target_accept_prob: 0.8
-  
+
   # Hybrid pipeline (recommended for anisotropic analysis)
   hybrid:
-    enabled: false  # Enable for production-quality anisotropic analysis
+    enabled: false # Enable for production-quality anisotropic analysis
     vi_initialization: true
     vi_samples_for_init: 750
 
@@ -230,30 +230,30 @@ optimization:
 
 # Optional hybrid NumPyro noise estimation for multi-angle analysis
 noise_estimation:
-  enabled: false              # Set to true to enable automatic noise estimation
-  model: "per_angle"          # Use per-angle noise (optimal for anisotropic data)
-  
+  enabled: false # Set to true to enable automatic noise estimation
+  model: "per_angle" # Use per-angle noise (optimal for anisotropic data)
+
   # Adam optimization settings for multi-angle noise estimation
   adam_config:
     learning_rate: 0.01
-    max_epochs: 500           # More steps needed for per-angle estimation
+    max_epochs: 500 # More steps needed for per-angle estimation
     convergence_threshold: 1e-6
-    early_stopping: true      # Enable early stopping for efficiency
-  
+    early_stopping: true # Enable early stopping for efficiency
+
   # Posterior sampling for uncertainty quantification
-  posterior_samples: 1200     # Higher count for per-angle uncertainty estimates
-  
+  posterior_samples: 1200 # Higher count for per-angle uncertainty estimates
+
   # Quality control for multi-angle noise estimation
   validation:
-    check_convergence: true   # Verify optimization convergence
-    reasonable_range: [1e-4, 1.0]  # Expected noise range for each angle
-    warn_outliers: true       # Warn about unusual per-angle estimates
-  
+    check_convergence: true # Verify optimization convergence
+    reasonable_range: [1e-4, 1.0] # Expected noise range for each angle
+    warn_outliers: true # Warn about unusual per-angle estimates
+
   # Per-angle model settings
   per_angle:
-    min_angles_required: 2    # Minimum angles needed for analysis
-    validate_coverage: true   # Ensure proper angle coverage
-  
+    min_angles_required: 2 # Minimum angles needed for analysis
+    validate_coverage: true # Ensure proper angle coverage
+
   # Usage Examples:
   # homodyne --method vi --estimate-noise config.yaml data.h5
   # homodyne --method vi --estimate-noise --noise-model per_angle config.yaml data.h5
@@ -267,35 +267,44 @@ noise_estimation:
 performance:
   memory_optimization:
     enabled: true
-    max_memory_usage_gb: 6.0  # Increased for multi-angle processing
-    chunk_size: 8000  # Smaller chunks for angle-dependent processing
+    max_memory_usage_gb: 6.0 # Increased for multi-angle processing
+    chunk_size: 8000 # Smaller chunks for angle-dependent processing
     enable_caching: true
     cache_strategy: "adaptive"
-  
+
   computation:
     enable_jit: true
     gpu_acceleration: "auto"
     cpu_threads: "auto"
-    vectorization_level: "high"  # Important for multi-angle processing
+    vectorization_level: "high" # Important for multi-angle processing
+
+  # Intelligent time subsampling for large datasets (Layer 1 protection)
+  subsampling:
+    enabled: true # Enable adaptive subsampling for large datasets
+    trigger_threshold_points: 50000000 # 50M - only subsample if exceeded
+    max_reduction_factor: 4 # Maximum 4x reduction (conservative for XPCS)
+    method: "logarithmic" # logarithmic | linear | adaptive
+    target_points: null # Auto-calculated (or set explicit value)
+    preserve_edges: true # Ensure t_min and t_max are included
 
 # Enhanced logging for anisotropic analysis
 logging:
   enabled: true
   level: "INFO"
-  
+
   console:
     enabled: true
     level: "INFO"
-    format: "detailed"  # More detailed for multi-angle debugging
+    format: "detailed" # More detailed for multi-angle debugging
     colors: true
     show_progress: true
-  
+
   file:
-    enabled: false  # Enable for detailed anisotropic analysis logging
+    enabled: false # Enable for detailed anisotropic analysis logging
     level: "DEBUG"
     path: "./logs/"
     filename: "homodyne_anisotropic.log"
-  
+
   # Module-specific logging for angle processing
   modules:
     "homodyne.data.phi_filtering": "INFO"
@@ -308,14 +317,14 @@ logging:
 
 # Quality control specific to anisotropic analysis
 quality_control:
-  enabled: false  # Enable for production anisotropic analysis
-  
+  enabled: false # Enable for production anisotropic analysis
+
   # Angle-specific quality checks
   angle_quality:
     validate_angle_coverage: true
     min_angles_per_range: 1
     check_angle_distribution: true
-  
+
   # Multi-angle data validation
   multi_angle_validation:
     check_correlation_consistency: true
@@ -329,27 +338,47 @@ quality_control:
 # Enhanced output for multi-angle analysis
 output:
   base_directory: "./homodyne_results/"
-  
+
   formats:
     hdf5: true
     json: true
     csv: true
-  
+
   plots:
     enabled: true
     formats: ["png"]
     dpi: 300
     style: "publication"
-    
+
+    # Rendering mode selection (hybrid plotting system)
+    # IMPORTANT: Controls speed vs quality tradeoff for C2 heatmap plots
+    preview_mode:
+      false # false = publication quality (matplotlib, slower)
+      # true = fast preview (Datashader, 5-10x faster)
+
+    # Datashader configuration (used when preview_mode: true)
+    datashader:
+      canvas_width: 1200 # Rendering resolution in pixels (increased from 800)
+      canvas_height: 1200 # Higher values = more detail, larger files
+      gpu_acceleration: true # Use GPU if CuPy available
+
+    # Matplotlib configuration (used when preview_mode: false)
+    matplotlib:
+      interpolation: "bilinear" # none | bilinear | bicubic
+      use_tight_layout: true
+      savefig_kwargs:
+        bbox_inches: "tight"
+        pad_inches: 0.1
+
     # Essential plots for anisotropic analysis
     correlation_function: true
     fit_quality: true
     parameter_distributions: true
     residual_analysis: true
-    
+
     # Anisotropic-specific plots
-    angle_coverage: true  # Show which angles were used
-    angle_correlation: true  # Correlation quality vs angle
+    angle_coverage: true # Show which angles were used
+    angle_correlation: true # Correlation quality vs angle
 
 # ==============================================================================
 # VALIDATION
@@ -361,13 +390,12 @@ validation:
   check_file_existence: true
   validate_parameter_ranges: true
   check_mode_compatibility: true
-  
+
   # Anisotropic-specific validation
   angle_validation:
     require_multiple_angles: true
     min_angle_count: 2
     validate_angle_ranges: true
-
 # ==============================================================================
 # USAGE NOTES
 # ==============================================================================

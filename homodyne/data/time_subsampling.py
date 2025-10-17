@@ -32,6 +32,257 @@ import numpy as np
 logger = logging.getLogger(__name__)
 
 
+def validate_subsampling_config(config: dict[str, Any]) -> dict[str, Any]:
+    """Validate and sanitize subsampling configuration parameters.
+
+    This function ensures all configuration values are within acceptable ranges
+    to prevent runtime errors and maintain XPCS data quality. Invalid values
+    are corrected with warnings logged.
+
+    Parameters
+    ----------
+    config : dict
+        Raw subsampling configuration from YAML
+
+    Returns
+    -------
+    dict
+        Validated and sanitized configuration
+
+    Examples
+    --------
+    >>> config = {"trigger_threshold_points": -1000, "max_reduction_factor": 100}
+    >>> validated = validate_subsampling_config(config)
+    >>> validated["trigger_threshold_points"]
+    50000000  # Reset to default
+    >>> validated["max_reduction_factor"]
+    10  # Clamped to maximum
+
+    Notes
+    -----
+    **Validation Rules:**
+    - trigger_threshold_points: Must be >= 1M (minimum meaningful dataset)
+    - max_reduction_factor: Clamped to [2, 10] (preserve XPCS accuracy)
+    - method: Must be one of {"logarithmic", "linear", "adaptive"}
+    - target_points: If set, must be >= 50 (minimum for correlation structure)
+    """
+    validated = {}
+
+    # Validate trigger threshold (minimum 1M points)
+    threshold = config.get("trigger_threshold_points", 50_000_000)
+    if threshold < 1_000_000:
+        logger.warning(
+            f"Invalid trigger_threshold_points={threshold:,} (must be >= 1M). "
+            f"Using default: 50,000,000"
+        )
+        validated["trigger_threshold_points"] = 50_000_000
+    else:
+        validated["trigger_threshold_points"] = int(threshold)
+
+    # Validate max_reduction_factor (2-10x range)
+    max_factor = config.get("max_reduction_factor", 4)
+    if not isinstance(max_factor, (int, float)) or not 2 <= max_factor <= 10:
+        logger.warning(
+            f"Invalid max_reduction_factor={max_factor} (must be in [2, 10]). "
+            f"Using default: 4"
+        )
+        validated["max_reduction_factor"] = 4
+    else:
+        validated["max_reduction_factor"] = int(np.clip(max_factor, 2, 10))
+
+    # Validate method
+    method = config.get("method", "logarithmic")
+    valid_methods = {"logarithmic", "linear", "adaptive"}
+    if method not in valid_methods:
+        logger.warning(
+            f"Invalid method='{method}' (must be one of {valid_methods}). "
+            f"Using default: 'logarithmic'"
+        )
+        validated["method"] = "logarithmic"
+    else:
+        validated["method"] = method
+
+    # Validate target_points (if explicitly set)
+    target_points = config.get("target_points")
+    if target_points is not None:
+        if not isinstance(target_points, (int, float)) or target_points < 50:
+            logger.warning(
+                f"Invalid target_points={target_points} (must be >= 50). "
+                f"Switching to automatic calculation."
+            )
+            validated["target_points"] = None
+        else:
+            validated["target_points"] = int(target_points)
+    else:
+        validated["target_points"] = None
+
+    # Validate preserve_edges (boolean)
+    preserve_edges = config.get("preserve_edges", True)
+    validated["preserve_edges"] = bool(preserve_edges)
+
+    # Validate enabled flag
+    validated["enabled"] = bool(config.get("enabled", False))
+
+    return validated
+
+
+def should_apply_subsampling(
+    data: dict[str, Any],
+    trigger_threshold: int = 50_000_000,
+) -> tuple[bool, int, int, int]:
+    """Determine if subsampling should be applied based on dataset size.
+
+    This function analyzes the dataset size and decides whether intelligent
+    subsampling is needed to keep memory usage manageable while preserving
+    correlation structure.
+
+    Parameters
+    ----------
+    data : dict
+        Data dictionary containing 't1', 't2', and 'c2_exp' arrays
+    trigger_threshold : int, default 50,000,000
+        Total points threshold above which subsampling is triggered
+
+    Returns
+    -------
+    tuple[bool, int, int, int]
+        (should_subsample, total_points, n_time_points, n_angles)
+        - should_subsample: True if dataset exceeds threshold
+        - total_points: Total number of data points in dataset
+        - n_time_points: Number of time points per dimension
+        - n_angles: Number of phi angles
+
+    Examples
+    --------
+    >>> # Check if 23M dataset needs subsampling (threshold: 50M)
+    >>> should_sub, total, n_t, n_phi = should_apply_subsampling(data)
+    >>> should_sub
+    False  # 23M < 50M, no subsampling needed
+    """
+    c2_exp = np.asarray(data.get("c2_exp", []))
+
+    if c2_exp.size == 0:
+        return False, 0, 0, 0
+
+    # Extract dimensions
+    if c2_exp.ndim == 3:  # (n_phi, n_t1, n_t2)
+        n_angles, n_t1, n_t2 = c2_exp.shape
+        n_time_points = n_t1  # Assume square grid
+    elif c2_exp.ndim == 2:  # (n_t1, n_t2)
+        n_t1, n_t2 = c2_exp.shape
+        n_angles = 1
+        n_time_points = n_t1
+    else:
+        logger.warning(f"Unexpected c2_exp dimensions: {c2_exp.ndim}")
+        return False, 0, 0, 0
+
+    total_points = n_angles * n_t1 * n_t2
+
+    # Decision: subsample if total exceeds threshold
+    should_subsample = total_points > trigger_threshold
+
+    logger.debug(
+        f"Dataset size check: {total_points:,} points "
+        f"({'>' if should_subsample else '<='} {trigger_threshold:,} threshold)"
+    )
+
+    return should_subsample, total_points, n_time_points, n_angles
+
+
+def compute_adaptive_target_points(
+    n_time_points: int,
+    n_angles: int,
+    total_points: int,
+    trigger_threshold: int = 50_000_000,
+    min_reduction_factor: int = 2,
+    max_reduction_factor: int = 4,
+) -> tuple[int, int]:
+    """Compute optimal target time points to keep dataset under memory limit.
+
+    This function calculates the minimum reduction factor needed to bring
+    the dataset size below the threshold, then computes the corresponding
+    target number of time points per dimension. Uses conservative 2-4x
+    reduction to preserve XPCS correlation accuracy.
+
+    Algorithm:
+    1. If dataset < threshold: no reduction (factor = 1)
+    2. Else: compute factor = total / threshold, capped at [2, 4]
+    3. Target points = n_time_points / sqrt(factor)
+       - This maintains 2D grid structure: (N, N) → (N/√r, N/√r)
+       - Total reduction = N² → N²/r (factor r)
+
+    Parameters
+    ----------
+    n_time_points : int
+        Current number of time points per dimension (e.g., 1001)
+    n_angles : int
+        Number of phi angles in dataset
+    total_points : int
+        Total data points (n_angles × n_time_points²)
+    trigger_threshold : int, default 50,000,000
+        Target maximum dataset size (50M points)
+    min_reduction_factor : int, default 2
+        Minimum reduction factor (2x)
+    max_reduction_factor : int, default 4
+        Maximum reduction factor (4x, accuracy preservation limit)
+
+    Returns
+    -------
+    tuple[int, int]
+        (target_points, reduction_factor)
+        - target_points: Number of time points per dimension after subsampling
+        - reduction_factor: Actual reduction factor applied (1, 2, or 4)
+
+    Examples
+    --------
+    >>> # 23M dataset (below 50M threshold)
+    >>> compute_adaptive_target_points(1001, 23, 23_046_023, 50_000_000)
+    (1001, 1)  # No reduction needed
+
+    >>> # 100M dataset (needs 2x reduction)
+    >>> compute_adaptive_target_points(1500, 43, 96_750_000, 50_000_000)
+    (1061, 2)  # 1500 / sqrt(2) ≈ 1061
+
+    >>> # 500M dataset (needs 4x reduction, capped)
+    >>> compute_adaptive_target_points(2236, 100, 500_000_000, 50_000_000)
+    (1118, 4)  # 2236 / sqrt(4) = 1118
+
+    Notes
+    -----
+    The sqrt(factor) approach for 2D grids is critical:
+    - Linear reduction: 1000 → 500 = 2x reduction in each dimension = 4x total
+    - Our approach: 1000 / sqrt(2) ≈ 707 = sqrt(2)x reduction per dim = 2x total
+    """
+    # No reduction needed if below threshold
+    if total_points <= trigger_threshold:
+        logger.debug(
+            f"Dataset ({total_points:,} points) below threshold "
+            f"({trigger_threshold:,}), no subsampling needed"
+        )
+        return n_time_points, 1
+
+    # Calculate required reduction factor (clamped to [min, max])
+    raw_factor = total_points / trigger_threshold
+    reduction_factor = int(
+        np.clip(raw_factor, min_reduction_factor, max_reduction_factor)
+    )
+
+    # Compute target points: divide by sqrt(factor) to maintain 2D structure
+    # Example: 1001 / sqrt(4) = 1001 / 2.0 = 500.5 → 500 points
+    target_points = int(n_time_points / np.sqrt(reduction_factor))
+
+    # Ensure target is reasonable (at least 50 points for correlation structure)
+    target_points = max(target_points, 50)
+
+    logger.info(
+        f"Adaptive subsampling: {n_time_points} → {target_points} points "
+        f"(reduction factor: {reduction_factor}x, "
+        f"dataset: {total_points:,} → ~{total_points // reduction_factor:,} points)"
+    )
+
+    return target_points, reduction_factor
+
+
 def subsample_time_grid(
     data: dict[str, Any],
     method: Literal["logarithmic", "linear", "adaptive"] = "logarithmic",
@@ -342,4 +593,7 @@ def _create_adaptive_indices(
 
 __all__ = [
     "subsample_time_grid",
+    "should_apply_subsampling",
+    "compute_adaptive_target_points",
+    "validate_subsampling_config",
 ]

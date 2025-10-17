@@ -31,15 +31,117 @@ References:
 from dataclasses import dataclass, field
 from typing import Any
 
+import jax
+import jax.numpy as jnp
+import numpy as np
+
 # ruff: noqa: I001
 # Import order is INTENTIONAL: nlsq must be imported BEFORE JAX
 # This enables automatic x64 (double precision) configuration per NLSQ best practices
 # Reference: https://nlsq.readthedocs.io/en/latest/guides/advanced_features.html
 from nlsq import curve_fit, curve_fit_large
 
-import jax
-import jax.numpy as jnp
-import numpy as np
+
+def create_xpcs_memory_config(
+    dataset_size: int,
+    memory_limit_gb: float = 8.0,
+    enable_sampling: bool = True,
+) -> Any:
+    """Create NLSQ memory configuration optimized for XPCS correlation data.
+
+    This function creates a conservative LDMemoryConfig for the NLSQ large
+    dataset fitter that preserves XPCS temporal correlation structure.
+    Unlike NLSQ's default aggressive 10x downsampling (100M → 10M), this
+    uses physics-aware conservative settings:
+
+    - Higher sampling threshold: 150M (vs default 100M)
+    - Minimal reduction: 2x (vs default 10x)
+    - Uniform sampling: preserves time ordering (vs stratified random)
+
+    **Design Rationale:**
+
+    XPCS correlation functions C2(t1, t2) have critical requirements:
+    1. Time structure matters: Random sampling destroys correlations
+    2. Minimal downsampling: 2-4x maximum to preserve physics
+    3. Uniform sampling: Maintains time ordering better than stratified
+
+    This configuration serves as Layer 2 (fallback) protection after
+    homodyne's Layer 1 physics-aware logarithmic subsampling.
+
+    Parameters
+    ----------
+    dataset_size : int
+        Total number of data points in the dataset
+    memory_limit_gb : float, default 8.0
+        Available memory in gigabytes
+    enable_sampling : bool, default True
+        Whether to enable NLSQ's internal sampling for >150M datasets
+
+    Returns
+    -------
+    LDMemoryConfig
+        Configured memory manager for NLSQ large dataset fitter
+
+    Examples
+    --------
+    >>> # 23M dataset - no NLSQ sampling
+    >>> config = create_xpcs_memory_config(23_000_000)
+    >>> # sampling_threshold=150M, no sampling triggered
+
+    >>> # 200M dataset - conservative 2x sampling
+    >>> config = create_xpcs_memory_config(200_000_000)
+    >>> # 200M > 150M threshold → sample to 200M/2 = 100M
+
+    >>> # 500M dataset - still conservative 2x
+    >>> config = create_xpcs_memory_config(500_000_000)
+    >>> # 500M > 150M threshold → sample to 500M/2 = 250M
+
+    Notes
+    -----
+    **Two-Layer Defense Strategy:**
+
+    Layer 1 (Homodyne): Physics-aware logarithmic subsampling
+    - Trigger: 50M total points
+    - Method: Logarithmic time grid (dense at short times)
+    - Reduction: 2-4x adaptive
+
+    Layer 2 (NLSQ): Memory fallback with minimal impact
+    - Trigger: 150M total points (after Layer 1)
+    - Method: Uniform sampling (preserves time ordering)
+    - Reduction: 2x maximum (conservative)
+
+    **Why This Works:**
+    - Most datasets handled by Layer 1 (physics-aware)
+    - Layer 2 only for extreme cases (>150M after subsampling)
+    - Combined protection: 2x × 2x = 4x maximum (vs NLSQ default 10x)
+
+    References
+    ----------
+    NLSQ Documentation: https://nlsq.readthedocs.io/en/latest/guides/large_datasets.html
+    """
+    try:
+        from nlsq import LDMemoryConfig
+    except ImportError as e:
+        raise ImportError(
+            "NLSQ package required for large dataset handling. "
+            "Install with: pip install nlsq"
+        ) from e
+
+    # Conservative configuration for XPCS data
+    config = LDMemoryConfig(
+        memory_limit_gb=memory_limit_gb,
+        enable_sampling=enable_sampling,
+        # XPCS-specific: higher threshold (150M vs default 100M)
+        sampling_threshold=150_000_000,
+        # XPCS-specific: minimal reduction (2x vs default 10x)
+        # Preserve correlation structure by limiting downsampling
+        max_sampled_size=max(dataset_size // 2, 10_000_000),
+        # XPCS-specific: uniform sampling preserves time ordering
+        # (vs default "stratified" which uses random sampling)
+        sampling_strategy="uniform",
+    )
+
+    return config
 
 
 @dataclass
@@ -213,6 +315,21 @@ class NLSQWrapper:
         # Our physics computation is fully compatible - no changes needed to model function.
         use_large = self.enable_large_dataset and n_data > 1_000_000
 
+        # Step 6a: Create XPCS-optimized memory config for large datasets
+        # This provides Layer 2 (fallback) protection with conservative 2x reduction
+        # Layer 1 (physics-aware homodyne subsampling) happens before this point
+        memory_config = None
+        if use_large:
+            memory_config = create_xpcs_memory_config(
+                dataset_size=n_data,
+                memory_limit_gb=8.0,  # TODO: Get from config
+                enable_sampling=True,
+            )
+            logger.debug(
+                "Created XPCS memory config: "
+                "threshold=150M, max_reduction=2x, strategy=uniform"
+            )
+
         # Step 7: Execute optimization (with recovery if enabled)
         logger.info(
             f"Starting optimization ({'curve_fit_large' if use_large else 'curve_fit'})...",
@@ -228,6 +345,7 @@ class NLSQWrapper:
                     initial_params=validated_params,
                     bounds=nlsq_bounds,
                     use_large=use_large,
+                    memory_config=memory_config,
                     logger=logger,
                 )
             )
@@ -241,6 +359,7 @@ class NLSQWrapper:
                         ydata,
                         p0=validated_params.tolist(),  # Convert to list to avoid NLSQ boolean bug
                         bounds=nlsq_bounds,
+                        config=memory_config,  # XPCS-optimized memory config
                         loss="soft_l1",  # Robust loss for outliers
                         gtol=1e-6,  # Relaxed gradient tolerance
                         ftol=1e-6,  # Relaxed function tolerance
@@ -313,6 +432,7 @@ class NLSQWrapper:
         initial_params: np.ndarray,
         bounds: tuple[np.ndarray, np.ndarray] | None,
         use_large: bool,
+        memory_config: Any,
         logger,
     ) -> tuple[np.ndarray, np.ndarray, dict, list[str], str]:
         """Execute optimization with automatic error recovery (T022-T024).
@@ -402,12 +522,12 @@ class NLSQWrapper:
                         ydata,
                         p0=current_params.tolist(),  # Convert to list to avoid NLSQ boolean bug
                         bounds=bounds,
+                        config=memory_config,  # XPCS-optimized memory config
                         loss="soft_l1",  # Robust loss for outliers
                         gtol=1e-6,  # Relaxed gradient tolerance
                         ftol=1e-6,  # Relaxed function tolerance
                         max_nfev=5000,  # Increased max function evaluations
                         verbose=2,  # Show iteration details
-                        memory_limit_gb=memory_limit,  # NLSQ memory management
                         show_progress=True,  # Monitor chunking progress
                     )
                     # Create empty info dict for consistency with curve_fit path

@@ -18,25 +18,25 @@ import matplotlib
 import numpy as np
 
 matplotlib.use("Agg")
-import matplotlib.pyplot as plt
+import matplotlib.pyplot as plt  # noqa: E402
 
-# Import Datashader backend for fast plotting (optional)
+# Check if Datashader backend is available (actual import done lazily)
 try:
-    from homodyne.viz.datashader_backend import plot_c2_comparison_fast
+    import homodyne.viz.datashader_backend  # noqa: F401
 
     DATASHADER_AVAILABLE = True
 except ImportError:
     DATASHADER_AVAILABLE = False
     # Will log warning later when plotting is attempted
 
-from homodyne.cli.args_parser import validate_args
-from homodyne.config.types import (
+from homodyne.cli.args_parser import validate_args  # noqa: E402
+from homodyne.config.types import (  # noqa: E402
     LAMINAR_FLOW_PARAM_NAMES,
     SCALING_PARAM_NAMES,
     STATIC_PARAM_NAMES,
 )
-from homodyne.core.jax_backend import compute_g2_scaled
-from homodyne.utils.logging import get_logger
+from homodyne.core.jax_backend import compute_g2_scaled  # noqa: E402
+from homodyne.utils.logging import get_logger  # noqa: E402
 
 logger = get_logger(__name__)
 
@@ -769,20 +769,83 @@ def _run_optimization(args, config: ConfigManager, data: dict[str, Any]) -> Any:
     # Apply angle filtering before optimization (if configured)
     filtered_data = _apply_angle_filtering_for_optimization(data, config)
 
-    # Apply time subsampling if configured (reduces dataset size for GPU memory)
-    optimization_perf = config.config.get("optimization_performance", {})
-    time_sub_config = optimization_perf.get("time_subsampling", {})
+    # Apply intelligent time subsampling if configured (reduces dataset size for GPU memory)
+    # This implements Layer 1 (physics-aware) protection with 2-4x conservative reduction
+    perf_config = config.config.get("performance", {})
+    subsample_config = perf_config.get("subsampling", {})
 
-    if time_sub_config.get("enabled", False):
-        from homodyne.data.time_subsampling import subsample_time_grid
+    # BACKWARD COMPATIBILITY: Support old config path (v2.1 and earlier)
+    if not subsample_config:
+        old_perf = config.config.get("optimization_performance", {})
+        old_config = old_perf.get("time_subsampling", {})
+        if old_config:
+            logger.warning(
+                "DEPRECATED: Config path 'optimization_performance.time_subsampling' is deprecated and will be "
+                "removed in v3.0. Please migrate to 'performance.subsampling' in your configuration file."
+            )
+            subsample_config = old_config
 
-        logger.info("Time subsampling enabled for memory optimization")
-        filtered_data = subsample_time_grid(
-            filtered_data,
-            method=time_sub_config.get("method", "logarithmic"),
-            target_points=time_sub_config.get("target_points", 150),
-            preserve_edges=time_sub_config.get("preserve_edges", True),
+    if subsample_config.get("enabled", False):
+        from homodyne.data.time_subsampling import (
+            compute_adaptive_target_points,
+            should_apply_subsampling,
+            subsample_time_grid,
+            validate_subsampling_config,
         )
+
+        # Validate configuration parameters
+        subsample_config = validate_subsampling_config(subsample_config)
+
+        # Check if subsampling is needed based on dataset size
+        trigger_threshold = subsample_config.get("trigger_threshold_points", 50_000_000)
+        should_subsample, total_points, n_time_points, n_angles = (
+            should_apply_subsampling(
+                filtered_data,
+                trigger_threshold=trigger_threshold,
+            )
+        )
+
+        if should_subsample:
+            logger.info(
+                f"Dataset size ({total_points:,} points) exceeds threshold "
+                f"({trigger_threshold:,}), applying adaptive subsampling..."
+            )
+
+            # Compute optimal target_points (unless explicitly overridden in config)
+            explicit_target = subsample_config.get("target_points")
+            if explicit_target is not None:
+                target_points = explicit_target
+                logger.info(
+                    f"Using explicit target_points={target_points} from configuration"
+                )
+            else:
+                target_points, reduction_factor = compute_adaptive_target_points(
+                    n_time_points=n_time_points,
+                    n_angles=n_angles,
+                    total_points=total_points,
+                    trigger_threshold=trigger_threshold,
+                    min_reduction_factor=2,
+                    max_reduction_factor=subsample_config.get(
+                        "max_reduction_factor", 4
+                    ),
+                )
+                logger.info(
+                    f"Adaptive subsampling: {n_time_points} → {target_points} points "
+                    f"(reduction factor: {reduction_factor}x)"
+                )
+
+            # Apply subsampling with optimal target
+            filtered_data = subsample_time_grid(
+                filtered_data,
+                method=subsample_config.get("method", "logarithmic"),
+                target_points=target_points,
+                preserve_edges=subsample_config.get("preserve_edges", True),
+            )
+        else:
+            logger.info(
+                f"Dataset size ({total_points:,} points) below threshold "
+                f"({trigger_threshold:,}), no subsampling needed"
+            )
     else:
         logger.debug("Time subsampling not enabled")
 
@@ -2593,6 +2656,7 @@ def save_nlsq_results(
             t1=t1,
             t2=t2,
             output_dir=nlsq_dir,
+            config=config,  # Pass config for preview_mode setting
         )
         logger.info(f"  - {len(phi_angles)} PNG plots")
     except Exception as e:
@@ -2608,18 +2672,25 @@ def generate_nlsq_plots(
     t1: np.ndarray,
     t2: np.ndarray,
     output_dir: Path,
+    config: Any = None,
     use_datashader: bool = True,
     parallel: bool = True,
 ) -> None:
     """Generate 3-panel heatmap plots for NLSQ fit visualization.
 
-    Creates publication-quality PNG plots showing experimental data,
-    theoretical fit, and residuals side-by-side for each scattering angle.
+    **Hybrid Rendering Approach:**
+    - **Preview mode (preview_mode: true)**: Datashader backend, 5-10x faster
+    - **Publication mode (preview_mode: false)**: Matplotlib backend, high quality
+
+    Mode selection priority:
+    1. Config file: output.plots.preview_mode
+    2. Legacy parameter: use_datashader (backward compatible)
+    3. Default: Publication mode (matplotlib)
 
     Performance:
-        - Matplotlib: ~150-300ms per plot
-        - Datashader: ~30-60ms per plot (5-10x speedup)
-        - Datashader + parallel (8 cores): ~4-8ms per plot (20-40x speedup)
+        - Publication (matplotlib): ~150-300ms per plot
+        - Preview (Datashader): ~30-60ms per plot (5-10x speedup)
+        - Preview + parallel (8 cores): ~4-8ms per plot (20-40x speedup)
 
     Parameters
     ----------
@@ -2637,9 +2708,10 @@ def generate_nlsq_plots(
         Time array 2 in seconds (n_t2,)
     output_dir : Path
         Output directory for PNG files
+    config : ConfigManager or dict, optional
+        Configuration object/dict containing output.plots.preview_mode setting
     use_datashader : bool, default=True
-        Use Datashader backend for fast rendering (5-10x speedup).
-        Falls back to matplotlib if Datashader unavailable.
+        Legacy parameter for backward compatibility. Overridden by config.
     parallel : bool, default=True
         Generate plots in parallel using multiprocessing (Nx speedup, N=cores).
         Recommended for multiple angles.
@@ -2655,28 +2727,55 @@ def generate_nlsq_plots(
     - Layout: 3 panels (experimental, fitted, residuals)
     - Colormaps: viridis (exp, fit), RdBu_r (residuals, symmetric)
     - Resolution: 300 DPI for publication quality
-    - Residuals use symmetric colormap (vmin=-vmax) for diverging scale
-    - Datashader backend automatically uses GPU if CuPy available
+    - Datashader canvas: 1200×1200 pixels (configurable via output.plots.datashader.canvas_width)
+    - Matplotlib interpolation: bilinear (configurable via output.plots.matplotlib.interpolation)
 
     Examples
     --------
-    >>> # Fast rendering with Datashader + parallel
+    >>> # Publication mode (default, matplotlib)
     >>> generate_nlsq_plots(
-    ...     phi_angles=np.array([0.0, 45.0, 90.0]),
-    ...     c2_exp=c2_exp,
-    ...     c2_theoretical_scaled=c2_fit,
-    ...     residuals=c2_exp - c2_fit,
-    ...     t1=t1, t2=t2,
+    ...     phi_angles, c2_exp, c2_fit, residuals, t1, t2,
     ...     output_dir=Path("./results/nlsq"),
-    ...     use_datashader=True,
-    ...     parallel=True
+    ...     config=config_manager,  # preview_mode: false
+    ... )
+
+    >>> # Preview mode (fast, Datashader)
+    >>> generate_nlsq_plots(
+    ...     phi_angles, c2_exp, c2_fit, residuals, t1, t2,
+    ...     output_dir=Path("./results/nlsq"),
+    ...     config=config_manager,  # preview_mode: true
+    ...     parallel=True,
     ... )
     """
     logger.info(f"Generating heatmap plots for {len(phi_angles)} angles")
 
-    # Select backend
-    if use_datashader and DATASHADER_AVAILABLE:
-        logger.info("Using Datashader backend (fast rendering)")
+    # Determine rendering mode from config (priority: config > use_datashader legacy param)
+    preview_mode = use_datashader  # Default to legacy parameter
+    width = 1200
+    height = 1200
+
+    if config is not None:
+        # Extract config dict if ConfigManager object
+        config_dict = config.config if hasattr(config, "config") else config
+
+        # Read preview_mode from config (output.plots.preview_mode)
+        output_config = config_dict.get("output", {})
+        plots_config = output_config.get("plots", {})
+        preview_mode = plots_config.get("preview_mode", preview_mode)
+
+        # Read Datashader canvas resolution
+        datashader_config = plots_config.get("datashader", {})
+        width = datashader_config.get("canvas_width", width)
+        height = datashader_config.get("canvas_height", height)
+
+        logger.debug(
+            f"Plot config: preview_mode={preview_mode}, "
+            f"canvas={width}×{height}, parallel={parallel}",
+        )
+
+    # Select backend based on mode
+    if preview_mode and DATASHADER_AVAILABLE:
+        logger.info("Using Datashader backend (preview mode, fast rendering)")
         _generate_plots_datashader(
             phi_angles,
             c2_exp,
@@ -2686,16 +2785,18 @@ def generate_nlsq_plots(
             t2,
             output_dir,
             parallel=parallel,
+            width=1200,
+            height=1200,
         )
     else:
-        if use_datashader and not DATASHADER_AVAILABLE:
+        if preview_mode and not DATASHADER_AVAILABLE:
             logger.warning(
-                "Datashader requested but not available. "
+                "Preview mode (Datashader) requested but Datashader not available. "
                 "Install with: pip install datashader xarray colorcet"
             )
-            logger.info("Falling back to matplotlib backend (slower)")
+            logger.info("Falling back to matplotlib backend (publication quality)")
         else:
-            logger.info("Using matplotlib backend")
+            logger.info("Using matplotlib backend (publication quality)")
 
         _generate_plots_matplotlib(
             phi_angles,
@@ -2741,7 +2842,7 @@ def _plot_single_angle_datashader(args):
     """Plot single angle for parallel processing (picklable module-level function).
 
     Args:
-        args: Tuple of (i, phi_angles, c2_exp, c2_fit, residuals, t1, t2, output_dir)
+        args: Tuple of (i, phi_angles, c2_exp, c2_fit, residuals, t1, t2, output_dir, width, height)
 
     Returns:
         Path to generated plot file
@@ -2760,11 +2861,11 @@ def _plot_single_angle_datashader(args):
     # Lazy import to ensure environment variables take effect
     from homodyne.viz.datashader_backend import plot_c2_comparison_fast
 
-    i, phi_angles, c2_exp, c2_fit, residuals, t1, t2, output_dir = args
+    i, phi_angles, c2_exp, c2_fit, residuals, t1, t2, output_dir, width, height = args
     phi = phi_angles[i]
     output_file = output_dir / f"c2_heatmaps_phi_{phi:.1f}deg.png"
 
-    # Use Datashader fast plotting
+    # Use Datashader fast plotting with higher resolution
     plot_c2_comparison_fast(
         c2_exp,
         c2_fit,
@@ -2773,6 +2874,8 @@ def _plot_single_angle_datashader(args):
         t2,
         output_file,
         phi_angle=phi,
+        width=width,
+        height=height,
     )
 
     return output_file
@@ -2787,11 +2890,21 @@ def _generate_plots_datashader(
     t2: np.ndarray,
     output_dir: Path,
     parallel: bool = True,
+    width: int = 1200,
+    height: int = 1200,
 ) -> None:
     """Generate plots using Datashader backend with optional parallelization.
 
     IMPORTANT: Uses 'spawn' multiprocessing method to avoid JAX deadlock.
     JAX is multithreaded, and fork() + threading = deadlock on Linux.
+
+    Parameters
+    ----------
+    width : int, default=1200
+        Datashader canvas width in pixels. Higher values preserve more detail
+        but increase file size. Recommended: 1200-1500 for publication quality.
+    height : int, default=1200
+        Datashader canvas height in pixels.
     """
     import multiprocessing
 
@@ -2815,6 +2928,8 @@ def _generate_plots_datashader(
                 t1,
                 t2,
                 output_dir,
+                width,
+                height,
             )
             for i in range(len(phi_angles))
         ]
@@ -2849,6 +2964,8 @@ def _generate_plots_datashader(
                     t1,
                     t2,
                     output_dir,
+                    width,
+                    height,
                 )
                 _plot_single_angle_datashader(args)
 
@@ -2867,6 +2984,8 @@ def _generate_plots_datashader(
                 t1,
                 t2,
                 output_dir,
+                width,
+                height,
             )
             _plot_single_angle_datashader(args)
 

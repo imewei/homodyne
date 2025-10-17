@@ -60,16 +60,16 @@ analysis_mode: "laminar_flow"
 analyzer_parameters:
   # Time step between correlation measurements (seconds)
   dt: 0.1
-  
+
   # Extended frame range for laminar flow (more data needed for 7 parameters)
   start_frame: 1
-  end_frame: 2000  # Increased for better statistics in 7-parameter fits
-  
+  end_frame: 2000 # Increased for better statistics in 7-parameter fits
+
   # Scattering parameters
   scattering:
     # Wave vector magnitude in Å⁻¹ (sample-dependent)
     wavevector_q: 0.0054
-  
+
   # Geometry parameters (instrumental setup)
   geometry:
     # Stator-rotor gap in Angstroms (200 microns instrumental parameter)
@@ -79,7 +79,7 @@ analyzer_parameters:
 analysis_settings:
   # Static mode disabled for nonequilibrium laminar flow
   static_mode: false
-  
+
   model_description:
     type: "nonequilibrium_laminar_flow"
     parameters: 7
@@ -94,16 +94,16 @@ experimental_data:
   # Primary data location
   data_folder_path: "./data/sample/"
   data_file_name: "your_xpcs_data.hdf"
-  
+
   # Phi angles (REQUIRED for laminar flow analysis)
   phi_angles_path: "./data/phi_angles/"
   phi_angles_file: "phi_list.txt"
-  
+
   # Caching for performance (laminar-flow-specific caching)
   cache_file_path: "./data/sample/"
   cache_filename_template: "cached_c2_laminar_q{wavevector_q:.4f}_frames_{start_frame}_{end_frame}.npz"
   cache_compression: true
-  
+
   # Data format
   data_type: "float64"
   file_format: "HDF5"
@@ -116,7 +116,7 @@ experimental_data:
 # Comprehensive phi angle filtering for laminar flow analysis
 phi_filtering:
   enabled: true
-  
+
   # Extensive target angle ranges for flow characterization
   # These ranges provide comprehensive coverage for flow direction determination
   target_ranges:
@@ -124,50 +124,50 @@ phi_filtering:
     - min_angle: -20.0
       max_angle: 20.0
       description: "Primary flow direction"
-    
+
     - min_angle: 160.0
       max_angle: 200.0
       description: "Opposite flow direction"
-    
+
     # Perpendicular to flow (cross-flow effects)
     - min_angle: 70.0
       max_angle: 110.0
       description: "Perpendicular to flow 1"
-    
+
     - min_angle: 250.0
       max_angle: 290.0
       description: "Perpendicular to flow 2"
-    
+
     # Diagonal directions (45° angles for complete flow characterization)
     - min_angle: 35.0
       max_angle: 55.0
       description: "Diagonal flow component 1"
-    
+
     - min_angle: 125.0
       max_angle: 145.0
       description: "Diagonal flow component 2"
-    
+
     - min_angle: 215.0
       max_angle: 235.0
       description: "Diagonal flow component 3"
-    
+
     - min_angle: 305.0
       max_angle: 325.0
       description: "Diagonal flow component 4"
-  
+
   # Fallback behavior (important for laminar flow)
   fallback_to_all_angles: true
-  
+
   # Advanced filtering settings
   algorithm: "range_based"
-  tolerance: 3.0  # Slightly larger tolerance for flow analysis
-  
+  tolerance: 3.0 # Slightly larger tolerance for flow analysis
+
   # Quality control for comprehensive angle coverage
   quality_control:
-    min_angles_required: 4  # Need good angular coverage for flow
+    min_angles_required: 4 # Need good angular coverage for flow
     max_angle_spread: 25.0
     validate_coverage: true
-    require_orthogonal_angles: true  # Ensure perpendicular coverage
+    require_orthogonal_angles: true # Ensure perpendicular coverage
 
 # ==============================================================================
 # PARAMETER CONFIGURATION (7-PARAMETER MODEL)
@@ -176,8 +176,17 @@ phi_filtering:
 # Initial parameter values for 7-parameter laminar flow model
 initial_parameters:
   # 7-parameter model: [D₀, α, D_offset, γ̇₀, β, γ̇_offset, φ₀]
-  parameter_names: ["D0", "alpha", "D_offset", "gamma_dot_0", "beta", "gamma_dot_offset", "phi_0"]
-  
+  parameter_names:
+    [
+      "D0",
+      "alpha",
+      "D_offset",
+      "gamma_dot_0",
+      "beta",
+      "gamma_dot_offset",
+      "phi_0",
+    ]
+
   # Starting values for optimization (CUSTOMIZE BASED ON YOUR SYSTEM)
   # Diffusion parameters (similar to static modes)
   # D₀: diffusion coefficient prefactor (Å²/s)
@@ -189,9 +198,10 @@ initial_parameters:
   # γ̇_offset: shear rate offset (s⁻¹)
   # φ₀: flow direction angle (degrees)
   values: [1000.0, -1.2, 0.0, 0.01, 0.0, 0.0, 0.0]
-  
+
   # Parameter units for reference
-  units: ["Å²/s", "dimensionless", "Å²/s", "s⁻¹", "dimensionless", "s⁻¹", "degrees"]
+  units:
+    ["Å²/s", "dimensionless", "Å²/s", "s⁻¹", "dimensionless", "s⁻¹", "degrees"]
 
 # Comprehensive parameter bounds for 7-parameter model
 parameter_space:
@@ -223,7 +233,7 @@ parameter_space:
       prior_sigma: 200.0
       unit: "Å²/s"
       description: "Diffusion coefficient offset"
-    
+
     # Shear rate parameters (specific to laminar flow)
     - name: gamma_dot_0
       min: 1.0e-5
@@ -233,7 +243,7 @@ parameter_space:
       prior_sigma: 10.0
       unit: "s⁻¹"
       description: "Shear rate prefactor"
-    
+
     - name: beta
       min: -10.0
       max: 10.0
@@ -242,7 +252,7 @@ parameter_space:
       prior_sigma: 0.5
       unit: "dimensionless"
       description: "Shear rate time exponent"
-    
+
     - name: gamma_dot_offset
       min: -1.0
       max: 1.0
@@ -251,7 +261,7 @@ parameter_space:
       prior_sigma: 1.0
       unit: "s⁻¹"
       description: "Shear rate offset"
-    
+
     - name: phi_0
       min: -30.0
       max: 30.0
@@ -270,69 +280,69 @@ optimization:
   # Variational Inference (conservative settings for 7-parameter stability)
   vi:
     enabled: true
-    max_iterations: 2000  # Increased for 7-parameter convergence
-    learning_rate: 0.005  # Reduced for stability with many parameters
-    convergence_tolerance: 1e-7  # Tighter convergence for precision
+    max_iterations: 2000 # Increased for 7-parameter convergence
+    learning_rate: 0.005 # Reduced for stability with many parameters
+    convergence_tolerance: 1e-7 # Tighter convergence for precision
     batch_size: "auto"
     early_stopping: true
-    patience: 100  # Increased patience for complex parameter space
-    
+    patience: 100 # Increased patience for complex parameter space
+
     # VI-specific settings for high-dimensional parameter space
     initialization_strategy: "prior_sampling"
     variational_family: "mean_field_gaussian"
-  
+
   # MCMC (essential for 7-parameter uncertainty quantification)
   mcmc:
     enabled: true
-    num_samples: 4000  # Increased for high-dimensional posterior sampling
-    num_warmup: 2000   # Extended warmup for 7-parameter adaptation
+    num_samples: 4000 # Increased for high-dimensional posterior sampling
+    num_warmup: 2000 # Extended warmup for 7-parameter adaptation
     num_chains: 4
-    target_accept_prob: 0.75  # Slightly reduced for high-dimensional sampling
-    max_treedepth: 12  # Increased for complex parameter correlations
-    
+    target_accept_prob: 0.75 # Slightly reduced for high-dimensional sampling
+    max_treedepth: 12 # Increased for complex parameter correlations
+
     # Advanced MCMC settings for laminar flow
     adaptation_window: 100
     step_size_adaptation: true
     mass_matrix_adaptation: true
-  
+
   # Hybrid pipeline (RECOMMENDED for laminar flow analysis)
   hybrid:
-    enabled: true  # Enable for production laminar flow analysis
+    enabled: true # Enable for production laminar flow analysis
     vi_initialization: true
-    vi_samples_for_init: 1000  # More VI samples for better MCMC initialization
+    vi_samples_for_init: 1000 # More VI samples for better MCMC initialization
     transition_criterion: "convergence"
 
 # ==============================================================================
-# NOISE ESTIMATION (OPTIONAL) 
+# NOISE ESTIMATION (OPTIONAL)
 # ==============================================================================
 
 # Optional hybrid NumPyro noise estimation for complex 7-parameter analysis
 noise_estimation:
-  enabled: false              # Set to true to enable automatic noise estimation
-  model: "adaptive"           # Use adaptive heteroscedastic noise (optimal for complex flow data)
-  
+  enabled: false # Set to true to enable automatic noise estimation
+  model: "adaptive" # Use adaptive heteroscedastic noise (optimal for complex flow data)
+
   # Adam optimization settings for sophisticated noise models
   adam_config:
     learning_rate: 0.01
-    max_epochs: 750           # More steps for complex adaptive model
+    max_epochs: 750 # More steps for complex adaptive model
     convergence_threshold: 1e-6
-    early_stopping: true      # Enable early stopping with longer patience for complex models
-    
+    early_stopping: true # Enable early stopping with longer patience for complex models
+
   # Posterior sampling for sophisticated uncertainty quantification
-  posterior_samples: 1800     # Higher count for complex adaptive model uncertainty
-    
+  posterior_samples: 1800 # Higher count for complex adaptive model uncertainty
+
   # Adaptive model settings for varying signal quality in flow experiments
   adaptive:
-    base_noise_range: [0.001, 0.1]      # Range for base noise level
-    scaling_range: [0.0, 0.5]           # Range for signal-dependent scaling
-    validate_heteroscedasticity: true   # Check if adaptive model is needed
-    
+    base_noise_range: [0.001, 0.1] # Range for base noise level
+    scaling_range: [0.0, 0.5] # Range for signal-dependent scaling
+    validate_heteroscedasticity: true # Check if adaptive model is needed
+
   # Enhanced validation for complex analysis
   validation:
     check_convergence: true
-    reasonable_range: [1e-4, 0.5]       # Conservative range for flow experiments
+    reasonable_range: [1e-4, 0.5] # Conservative range for flow experiments
     warn_outliers: true
-    
+
   # Usage for different methods:
   # homodyne --method vi --estimate-noise --noise-model adaptive config.yaml data.h5
   # homodyne --method mcmc --estimate-noise config.yaml data.h5  (joint sampling)
@@ -347,29 +357,45 @@ performance:
   # Enhanced memory management
   memory_optimization:
     enabled: true
-    max_memory_usage_gb: 8.0  # Increased for 7-parameter complexity
-    chunk_size: 5000  # Smaller chunks for complex parameter space
+    max_memory_usage_gb: 8.0 # Increased for 7-parameter complexity
+    chunk_size: 5000 # Smaller chunks for complex parameter space
     enable_caching: true
-    cache_strategy: "aggressive"  # Aggressive caching for repeated 7-param fits
-  
+    cache_strategy: "aggressive" # Aggressive caching for repeated 7-param fits
+
   # I/O optimization for large datasets
   io_optimization:
-    memory_mapped_io: false  # Enable for very large laminar flow datasets
+    memory_mapped_io: false # Enable for very large laminar flow datasets
     parallel_loading: true
     prefetch_buffer_size: 200000
-    compression_level: 8  # Higher compression for large laminar flow data
-  
+    compression_level: 8 # Higher compression for large laminar flow data
+
   # Computational optimization
   computation:
     enable_jit: true
     gpu_acceleration: "auto"
     cpu_threads: "auto"
     vectorization_level: "high"
-    
+
     # Advanced computational settings for 7-parameter model
-    numerical_precision: "float64"  # High precision for complex fits
+    numerical_precision: "float64" # High precision for complex fits
     gradient_clipping: true
     gradient_clip_value: 1.0
+
+  # Intelligent time subsampling for large datasets (Layer 1 protection)
+  # Automatically reduces dataset size for >50M points with physics-aware sampling
+  subsampling:
+    enabled: true # Enable adaptive subsampling for large datasets
+    trigger_threshold_points: 50000000 # 50M - only subsample if exceeded
+    max_reduction_factor: 4 # Maximum 4x reduction (conservative for XPCS)
+    method: "logarithmic" # logarithmic | linear | adaptive
+    target_points: null # Auto-calculated (or set explicit value)
+    preserve_edges: true # Ensure t_min and t_max are included
+
+    # How it works:
+    # - 23M dataset: No subsampling (below 50M threshold)
+    # - 100M dataset: 2x reduction (adaptive)
+    # - 500M dataset: 4x reduction (capped at max)
+    # Layer 2 (NLSQ fallback): Triggers at 150M with uniform sampling
 
 # ==============================================================================
 # QUALITY CONTROL AND VALIDATION
@@ -377,8 +403,8 @@ performance:
 
 # Advanced quality control for laminar flow analysis
 quality_control:
-  enabled: true  # Recommended for 7-parameter analysis
-  
+  enabled: true # Recommended for 7-parameter analysis
+
   # Progressive validation
   progressive_validation:
     enabled: true
@@ -386,30 +412,30 @@ quality_control:
     validate_preprocessing: true
     validate_filtering: true
     validate_parameter_bounds: true
-  
+
   # Auto-repair with conservative strategy for complex analysis
   auto_repair:
     enabled: true
     strategy: "conservative"
     max_repair_attempts: 5
     backup_original: true
-  
+
   # Enhanced quality thresholds for laminar flow
   thresholds:
-    min_data_points: 2000  # More data needed for 7-parameter fits
-    max_nan_fraction: 0.005  # Stricter for complex analysis
+    min_data_points: 2000 # More data needed for 7-parameter fits
+    max_nan_fraction: 0.005 # Stricter for complex analysis
     min_correlation_range: [0.9, 1.1]
     max_noise_level: 0.05
-    
+
     # Laminar-flow-specific thresholds
-    min_angle_coverage: 4  # Need good angular coverage
-    min_time_range: 500    # Need sufficient time evolution
-  
+    min_angle_coverage: 4 # Need good angular coverage
+    min_time_range: 500 # Need sufficient time evolution
+
   # Comprehensive quality reporting
   reporting:
     enabled: true
     export_format: "json"
-    export_detailed_reports: true  # Enable JSON file generation
+    export_detailed_reports: true # Enable JSON file generation
     include_plots: true
     detailed_diagnostics: true
     laminar_flow_diagnostics: true
@@ -422,29 +448,29 @@ quality_control:
 logging:
   enabled: true
   level: "INFO"
-  
+
   console:
     enabled: true
     level: "INFO"
     format: "detailed"
     colors: true
     show_progress: true
-  
+
   file:
-    enabled: true  # Recommended for laminar flow analysis
+    enabled: true # Recommended for laminar flow analysis
     level: "DEBUG"
     path: "./logs/"
     filename: "homodyne_laminar_flow.log"
-    max_size_mb: 50  # Larger log files for complex analysis
+    max_size_mb: 50 # Larger log files for complex analysis
     backup_count: 10
-  
+
   # Performance logging (important for 7-parameter optimization)
   performance:
     enabled: true
     level: "INFO"
     filename: "laminar_flow_performance.log"
     threshold_seconds: 0.1
-  
+
   # Module-specific logging for laminar flow components
   modules:
     "homodyne.optimization.mcmc": "INFO"
@@ -452,7 +478,7 @@ logging:
     "homodyne.data.phi_filtering": "INFO"
     "homodyne.core.models": "INFO"
     "jax._src": "WARNING"
-  
+
   # Advanced logging contexts
   scientific_contexts:
     laminar_flow_physics: true
@@ -467,33 +493,53 @@ logging:
 # Enhanced output for laminar flow analysis
 output:
   base_directory: "./homodyne_results/"
-  
+
   formats:
     hdf5: true
     json: true
     csv: true
-    yaml: true  # Include config backup for complex analysis
-  
+    yaml: true # Include config backup for complex analysis
+
   plots:
     enabled: true
-    formats: ["png", "pdf"]  # Include PDF for publication quality
+    formats: ["png", "pdf"] # Include PDF for publication quality
     dpi: 300
     style: "publication"
-    
+
+    # Rendering mode selection (hybrid plotting system)
+    # IMPORTANT: Controls speed vs quality tradeoff for C2 heatmap plots
+    preview_mode:
+      false # false = publication quality (matplotlib, slower)
+      # true = fast preview (Datashader, 5-10x faster)
+
+    # Datashader configuration (used when preview_mode: true)
+    datashader:
+      canvas_width: 1200 # Rendering resolution in pixels (increased from 800)
+      canvas_height: 1200 # Higher values = more detail, larger files
+      gpu_acceleration: true # Use GPU if CuPy available
+
+    # Matplotlib configuration (used when preview_mode: false)
+    matplotlib:
+      interpolation: "bilinear" # none | bilinear | bicubic
+      use_tight_layout: true
+      savefig_kwargs:
+        bbox_inches: "tight"
+        pad_inches: 0.1
+
     # Essential plots for laminar flow analysis
     correlation_function: true
     fit_quality: true
     parameter_distributions: true
     residual_analysis: true
     convergence_diagnostics: true
-    
+
     # Laminar-flow-specific plots
     shear_rate_evolution: true
     flow_direction_analysis: true
     parameter_correlations: true
     angle_dependence: true
     time_evolution: true
-  
+
   # Comprehensive reporting for laminar flow
   reports:
     enabled: true
@@ -509,12 +555,12 @@ output:
 
 # Comprehensive validation for laminar flow analysis
 validation:
-  strict_mode: true  # Recommended for complex 7-parameter analysis
+  strict_mode: true # Recommended for complex 7-parameter analysis
   check_file_existence: true
   validate_parameter_ranges: true
   check_mode_compatibility: true
   warn_about_defaults: true
-  
+
   # Laminar-flow-specific validation
   laminar_flow_validation:
     require_extensive_data: true
@@ -522,13 +568,12 @@ validation:
     min_angle_coverage: 4
     validate_shear_parameters: true
     check_flow_consistency: true
-  
+
   # Advanced validation features
   advanced_validation:
     parameter_identifiability: true
     correlation_structure: true
     physical_constraints: true
-
 # ==============================================================================
 # USAGE NOTES FOR LAMINAR FLOW ANALYSIS
 # ==============================================================================
