@@ -31,6 +31,12 @@ References:
 from dataclasses import dataclass, field
 from typing import Any
 
+# ruff: noqa: I001
+# Import order is INTENTIONAL: nlsq must be imported BEFORE JAX
+# This enables automatic x64 (double precision) configuration per NLSQ best practices
+# Reference: https://nlsq.readthedocs.io/en/latest/guides/advanced_features.html
+from nlsq import curve_fit, curve_fit_large
+
 import jax
 import jax.numpy as jnp
 import numpy as np
@@ -140,7 +146,7 @@ class NLSQWrapper:
         import logging
         import time
 
-        from nlsq import curve_fit, curve_fit_large
+        # nlsq imported at module level (line 36) for automatic x64 configuration
 
         logger = logging.getLogger(__name__)
 
@@ -152,6 +158,23 @@ class NLSQWrapper:
         xdata, ydata = self._prepare_data(data)
         n_data = len(ydata)
         logger.info(f"Data prepared: {n_data} points")
+
+        # Check for very large datasets that may cause GPU OOM
+        if n_data > 10_000_000:
+            logger.warning(
+                f"VERY LARGE DATASET: {n_data:,} points detected!\n"
+                f"  Estimated Jacobian size: ~{n_data * 9 * 8 / 1e9:.2f} GB\n"
+                f"  Using curve_fit_large() with automatic chunking\n"
+                f"  Recommendations if OOM occurs:\n"
+                f"    1. Switch to CPU: XLA_FLAGS='--xla_force_host_platform_device_count=8'\n"
+                f"    2. Enable phi angle filtering to reduce dataset size\n"
+                f"    3. Reduce time points via config (frames or subsampling)"
+            )
+        elif n_data > 1_000_000:
+            logger.info(
+                f"Large dataset: {n_data:,} points detected. Using curve_fit_large() for optimization.\n"
+                f"  GPU memory will be managed automatically with chunking."
+            )
 
         # Step 2: Validate initial parameters
         if initial_params is None:
@@ -180,10 +203,15 @@ class NLSQWrapper:
         residual_fn = self._create_residual_function(data, analysis_mode)
 
         # Step 6: Select optimization strategy based on dataset size
-        # NOTE: Disabled curve_fit_large for now - our physics computation doesn't support chunking
-        # The model function computes the full g2 theory at once, not chunk-by-chunk
-        # TODO: Implement chunk-aware model function for datasets >10M points
-        use_large = False  # self.enable_large_dataset and n_data > 1_000_000
+        # Following NLSQ best practices (https://nlsq.readthedocs.io/en/latest/guides/large_datasets.html):
+        # - < 1M points: Use curve_fit()
+        # - 1M - 10M points: Use curve_fit_large() with defaults
+        # - 10M - 100M points: Use curve_fit_large() with chunking (our case: 23M)
+        # - > 100M points: Use sampling/streaming
+        #
+        # IMPORTANT: curve_fit_large chunks the JACOBIAN computation, not the model forward pass.
+        # Our physics computation is fully compatible - no changes needed to model function.
+        use_large = self.enable_large_dataset and n_data > 1_000_000
 
         # Step 7: Execute optimization (with recovery if enabled)
         logger.info(
@@ -306,7 +334,7 @@ class NLSQWrapper:
         Returns:
             (popt, pcov, info, recovery_actions, convergence_status)
         """
-        from nlsq import curve_fit, curve_fit_large
+        # nlsq imported at module level (line 36) for automatic x64 configuration
 
         recovery_actions = []
         max_retries = 3
@@ -317,7 +345,58 @@ class NLSQWrapper:
                 logger.info(f"Optimization attempt {attempt + 1}/{max_retries}")
 
                 if use_large:
-                    popt, pcov, info = curve_fit_large(
+                    # Configure memory limits per NLSQ best practices
+                    # Detect GPU memory and set appropriate limits
+                    import jax
+
+                    is_gpu = jax.devices()[0].platform == "gpu"
+
+                    # Query GPU memory if available
+                    if is_gpu:
+                        try:
+                            # Get GPU memory in GB
+                            import subprocess
+
+                            result = subprocess.run(
+                                [
+                                    "nvidia-smi",
+                                    "--query-gpu=memory.total",
+                                    "--format=csv,noheader,nounits",
+                                ],
+                                capture_output=True,
+                                text=True,
+                                timeout=2,
+                            )
+                            gpu_memory_mb = float(result.stdout.strip())
+                            gpu_memory_gb = gpu_memory_mb / 1024
+
+                            # Use 50% of GPU memory for NLSQ (safe, leaves room for compilation)
+                            # For 16 GB GPU: 8 GB limit (plenty of headroom)
+                            # For 8 GB GPU: 4 GB limit (conservative)
+                            memory_limit = max(2.0, gpu_memory_gb * 0.5)
+
+                            logger.info(
+                                f"Detected GPU with {gpu_memory_gb:.1f} GB VRAM, "
+                                f"using {memory_limit:.1f} GB for NLSQ",
+                            )
+                        except Exception as e:
+                            # Fallback to conservative 2GB if detection fails
+                            memory_limit = 2.0
+                            logger.debug(
+                                f"GPU memory detection failed, using default 2GB: {e}",
+                            )
+                    else:
+                        # CPU: 8GB (generous for system RAM)
+                        memory_limit = 8.0
+
+                    logger.info(
+                        f"Using curve_fit_large with {memory_limit:.1f}GB memory limit "
+                        f"({'GPU' if is_gpu else 'CPU'} mode)",
+                    )
+
+                    # Note: curve_fit_large returns only (popt, pcov), not (popt, pcov, info)
+                    # It doesn't support full_output=True like curve_fit does
+                    popt, pcov = curve_fit_large(
                         residual_fn,
                         xdata,
                         ydata,
@@ -328,8 +407,11 @@ class NLSQWrapper:
                         ftol=1e-6,  # Relaxed function tolerance
                         max_nfev=5000,  # Increased max function evaluations
                         verbose=2,  # Show iteration details
-                        full_output=True,
+                        memory_limit_gb=memory_limit,  # NLSQ memory management
+                        show_progress=True,  # Monitor chunking progress
                     )
+                    # Create empty info dict for consistency with curve_fit path
+                    info = {}
                 else:
                     popt, pcov = curve_fit(
                         residual_fn,
@@ -366,9 +448,23 @@ class NLSQWrapper:
                 )
                 logger.info(f"Diagnostic: {diagnostic['message']}")
 
+                # Check if this is an unrecoverable error (e.g., OOM)
+                recovery_strategy = diagnostic["recovery_strategy"]
+                if recovery_strategy.get("action") == "no_recovery_available":
+                    # Unrecoverable error - fail immediately with detailed guidance
+                    error_msg = (
+                        f"Optimization failed: {diagnostic['error_type']} (unrecoverable)\n"
+                        f"Diagnostic: {diagnostic['message']}\n"
+                        f"Suggestions:\n"
+                    )
+                    for suggestion in diagnostic["suggestions"]:
+                        error_msg += f"  - {suggestion}\n"
+
+                    logger.error(error_msg)
+                    raise RuntimeError(error_msg) from e
+
                 if attempt < max_retries - 1:
                     # Apply recovery strategy
-                    recovery_strategy = diagnostic["recovery_strategy"]
                     recovery_actions.append(recovery_strategy["action"])
 
                     logger.info(f"Applying recovery: {recovery_strategy['action']}")
@@ -421,7 +517,37 @@ class NLSQWrapper:
         }
 
         # Analyze error and determine recovery strategy
-        if "convergence" in error_str or "max" in error_str or "iteration" in error_str:
+        # Check for GPU out-of-memory errors first (most critical)
+        if "resource_exhausted" in error_str or "out of memory" in error_str:
+            # GPU/CPU memory exhaustion - parameter perturbation won't help
+            diagnostic["error_type"] = "out_of_memory"
+            diagnostic["suggestions"] = [
+                "Dataset too large for available GPU memory",
+                "IMMEDIATE FIX: Run with CPU (slower but more RAM):",
+                "  XLA_FLAGS='--xla_force_host_platform_device_count=8' homodyne ...",
+                "ALTERNATIVE: Reduce dataset size:",
+                "  - Enable phi angle filtering in config (reduce angles from 23 to 8-12)",
+                "  - Reduce time points via subsampling (1001×1001 → 200×200)",
+                "  - Use smaller time window in config (frames: 1000-2000 → 1000-1500)",
+                "ADVANCED: Reduce GPU memory fraction in config:",
+                "  device.memory_fraction: 0.9 → 0.5",
+                "NOTE: curve_fit_large() is disabled - residual function not chunk-aware",
+            ]
+
+            # No parameter recovery will help OOM - need architectural change
+            diagnostic["recovery_strategy"] = {
+                "action": "no_recovery_available",
+                "reason": "Memory exhaustion requires data reduction or CPU execution",
+                "suggested_actions": [
+                    "switch_to_cpu",
+                    "enable_angle_filtering",
+                    "reduce_time_points",
+                ],
+            }
+
+        elif (
+            "convergence" in error_str or "max" in error_str or "iteration" in error_str
+        ):
             # Convergence failure
             diagnostic["error_type"] = "convergence_failure"
             diagnostic["suggestions"] = [
@@ -736,14 +862,20 @@ class NLSQWrapper:
         def model_function(xdata: jnp.ndarray, *params_tuple) -> jnp.ndarray:
             """Compute theoretical g2 model for NLSQ optimization.
 
+            IMPORTANT: xdata contains indices into the flattened data array.
+            This function MUST respect xdata size for curve_fit_large chunking.
+            When curve_fit_large chunks the data, xdata will be a subset of indices.
+
             NLSQ will internally compute residuals as: (ydata - model) / sigma
 
             Args:
-                xdata: Independent variable (dummy for compatibility, not used)
+                xdata: Array of indices into flattened g2 array.
+                       Full dataset: [0, 1, ..., n-1]
+                       Chunked: [0, 1, ..., chunk_size-1] (subset)
                 *params_tuple: Unpacked parameters [contrast, offset, *physical]
 
             Returns:
-                Theoretical g2 values (flattened to 1D matching ydata)
+                Theoretical g2 values at requested indices (size matches xdata)
             """
             # Convert params tuple to array
             params_array = jnp.array(params_tuple)
@@ -787,7 +919,14 @@ class NLSQWrapper:
             # Flatten theory to match flattened data (NLSQ expects 1D output)
             g2_theory_flat = g2_theory.flatten()
 
-            return g2_theory_flat
+            # CRITICAL FIX for curve_fit_large chunking:
+            # xdata contains indices into the flattened array.
+            # When curve_fit_large chunks the data, it passes subset indices.
+            # We must return only those requested points to match ydata chunk size.
+            # For full dataset: xdata = [0, 1, ..., n-1] returns all points
+            # For chunk: xdata = [0, 1, ..., chunk_size-1] returns subset
+            indices = xdata.astype(jnp.int32)
+            return g2_theory_flat[indices]
 
         return model_function
 

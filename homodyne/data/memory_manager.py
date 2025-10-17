@@ -233,6 +233,10 @@ class MemoryPressureMonitor:
         self._critical_callbacks: list[Callable] = []
         self._recovery_callbacks: list[Callable] = []
 
+        # Pressure state tracking to prevent duplicate logs
+        self._last_pressure_state: str = "normal"  # "normal", "warning", "critical"
+        self._recovery_logged: bool = False  # Track if recovery was already logged
+
         # Pressure history for trend analysis
         self._pressure_history: deque = deque(maxlen=300)  # 5 minutes at 1s intervals
 
@@ -296,13 +300,28 @@ class MemoryPressureMonitor:
     def _check_pressure_levels(self) -> None:
         """Check memory pressure levels and trigger responses."""
         current_pressure = self.stats.memory_pressure
+        new_state = "normal"
 
         if current_pressure >= self.critical_threshold:
+            new_state = "critical"
             self._trigger_critical_response()
+            self._recovery_logged = False  # Reset recovery flag
         elif current_pressure >= self.warning_threshold:
+            new_state = "warning"
             self._trigger_warning_response()
+            self._recovery_logged = False  # Reset recovery flag
         elif current_pressure < self.warning_threshold * 0.8:  # Recovery threshold
-            self._trigger_recovery_response()
+            new_state = "normal"
+            # Only trigger recovery callback on state transition (not every cycle)
+            if (
+                self._last_pressure_state in ("warning", "critical")
+                and not self._recovery_logged
+            ):
+                self._trigger_recovery_response()
+                self._recovery_logged = True
+
+        # Update state
+        self._last_pressure_state = new_state
 
     def _trigger_warning_response(self) -> None:
         """Trigger warning-level memory pressure response."""

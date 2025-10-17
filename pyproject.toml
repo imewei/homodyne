@@ -69,6 +69,11 @@ dependencies = [
 
     # Plotting (stable)
     "matplotlib>=3.8.0,<4.0.0",  # Tested: matplotlib 3.10.6
+
+    # Fast visualization (optional - graceful degradation if unavailable)
+    "datashader>=0.16.0",  # Fast heatmap rasterization (5-10x speedup)
+    "xarray>=2024.1.0",  # Required by Datashader for coordinate-aware data
+    "colorcet>=3.0.0",  # Perceptually uniform colormaps
 ]
 
 [project.optional-dependencies]

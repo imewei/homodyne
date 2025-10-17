@@ -264,6 +264,93 @@ def get_device_status() -> dict[str, any]:
     return status
 
 
+def is_gpu_active() -> bool:
+    """Check if JAX is currently configured to use GPU.
+
+    Returns
+    -------
+    bool
+        True if GPU is active, False otherwise
+    """
+    try:
+        import jax
+
+        devices = jax.devices()
+        return len(devices) > 0 and devices[0].platform == "gpu"
+    except Exception:
+        return False
+
+
+def switch_to_cpu(num_threads: int | None = None) -> dict[str, any]:
+    """Dynamically switch JAX from GPU to CPU execution.
+
+    This function reconfigures JAX to use CPU instead of GPU, useful for
+    recovering from GPU out-of-memory errors during optimization.
+
+    Parameters
+    ----------
+    num_threads : int, optional
+        Number of CPU threads to use. If None, auto-detects optimal count.
+
+    Returns
+    -------
+    dict
+        CPU configuration result
+
+    Notes
+    -----
+    This function should be called before retrying failed GPU operations.
+    JAX device allocation is persistent within a Python session, so this
+    provides a way to switch devices without restarting.
+    """
+    logger.info("Switching from GPU to CPU execution...")
+
+    try:
+        import os
+
+        import jax
+
+        # Force JAX to use CPU
+        jax.config.update("jax_platform_name", "cpu")
+
+        # Configure CPU threading
+        if num_threads is None:
+            import multiprocessing
+
+            num_threads = multiprocessing.cpu_count()
+
+        os.environ["OMP_NUM_THREADS"] = str(num_threads)
+        os.environ["XLA_FLAGS"] = (
+            f"--xla_force_host_platform_device_count={num_threads}"
+        )
+
+        # Verify switch
+        devices = jax.devices()
+        if devices[0].platform == "cpu":
+            logger.info(
+                f"✓ Successfully switched to CPU with {num_threads} threads",
+            )
+            return {
+                "success": True,
+                "device_type": "cpu",
+                "num_threads": num_threads,
+                "devices": str(devices),
+            }
+        else:
+            logger.warning(
+                f"CPU switch may not be complete - device platform: {devices[0].platform}",
+            )
+            return {
+                "success": False,
+                "device_type": devices[0].platform,
+                "warning": "Switch initiated but device still shows as GPU",
+            }
+
+    except Exception as e:
+        logger.error(f"Failed to switch to CPU: {e}")
+        return {"success": False, "error": str(e)}
+
+
 def benchmark_device_performance(
     device_type: str | None = None,
     test_size: int = 5000,
@@ -344,6 +431,9 @@ __all__ = [
     # Device information
     "get_device_status",
     "benchmark_device_performance",
+    # Device switching utilities
+    "is_gpu_active",
+    "switch_to_cpu",
     # CPU-specific (if available)
     "configure_cpu_hpc" if HAS_CPU_MODULE else None,
     "detect_cpu_info" if HAS_CPU_MODULE else None,

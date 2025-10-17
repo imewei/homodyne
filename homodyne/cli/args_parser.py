@@ -180,6 +180,20 @@ Homodyne v{__version__} - JAX-First Architecture
         help="Plot theoretical C₂ heatmaps using parameters from config (no experimental data required)",
     )
 
+    parser.add_argument(
+        "--plotting-backend",
+        type=str,
+        choices=["auto", "matplotlib", "datashader"],
+        default="auto",
+        help="Plotting backend: auto (use Datashader if available), matplotlib (slower), datashader (5-10x faster, requires datashader package) (default: %(default)s)",
+    )
+
+    parser.add_argument(
+        "--parallel-plots",
+        action="store_true",
+        help="Generate plots in parallel using multiprocessing (faster for multiple angles, requires Datashader backend)",
+    )
+
     # Simulated data parameters (only valid with --plot-simulated-data)
     parser.add_argument(
         "--contrast",

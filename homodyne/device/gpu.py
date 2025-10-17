@@ -159,8 +159,8 @@ def detect_system_cuda() -> dict[str, any]:
 
 def configure_system_cuda(
     device_id: int | None = None,
-    memory_fraction: float = 0.9,
-    enable_preallocation: bool = False,
+    memory_fraction: float = 0.8,
+    enable_preallocation: bool = True,
 ) -> dict[str, any]:
     """Configure JAX to use system CUDA installation.
 
@@ -168,10 +168,12 @@ def configure_system_cuda(
     ----------
     device_id : int, optional
         Specific GPU device ID to use. If None, uses default device.
-    memory_fraction : float, default 0.9
+    memory_fraction : float, default 0.8
         Fraction of GPU memory to allocate (0.1 to 1.0)
-    enable_preallocation : bool, default False
-        Whether to preallocate GPU memory
+        Reduced from 0.9 to 0.8 for better stability per NLSQ recommendations
+    enable_preallocation : bool, default True
+        Whether to preallocate GPU memory (enabled per NLSQ performance guide)
+        Reference: https://nlsq.readthedocs.io/en/latest/guides/performance_guide.html
 
     Returns
     -------
@@ -212,6 +214,10 @@ def configure_system_cuda(
             os.environ["XLA_PYTHON_CLIENT_PREALLOCATE"] = "true"
         else:
             os.environ["XLA_PYTHON_CLIENT_PREALLOCATE"] = "false"
+
+        # Disable traceback filtering for better error debugging (NLSQ recommendation)
+        # Reference: https://nlsq.readthedocs.io/en/latest/guides/performance_guide.html
+        jax.config.update("jax_traceback_filtering", "off")
 
         # Try to initialize JAX with GPU
         try:

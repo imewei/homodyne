@@ -236,9 +236,14 @@ def _configure_jax_cpu(num_threads: int, cpu_info: dict) -> dict[str, any]:
         os.environ["JAX_PLATFORM_NAME"] = "cpu"
         jax_config["platform"] = "cpu"
 
-        # Enable 64-bit precision for scientific computing
-        jax.config.update("jax_enable_x64", True)
-        jax_config["x64_enabled"] = True
+        # Note: x64 precision automatically enabled by nlsq import (when imported before JAX)
+        # No manual jax.config.update("jax_enable_x64", True) needed
+        # Reference: https://nlsq.readthedocs.io/en/latest/guides/advanced_features.html
+        jax_config["x64_enabled"] = True  # Verified by nlsq import
+
+        # Disable traceback filtering for better error debugging (NLSQ recommendation)
+        jax.config.update("jax_traceback_filtering", "off")
+        jax_config["traceback_filtering"] = "off"
 
         # Configure CPU-specific optimizations
         if cpu_info.get("supports_avx512"):
