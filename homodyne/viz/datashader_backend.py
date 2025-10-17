@@ -98,13 +98,13 @@ class DatashaderRenderer:
         ----------
         data : np.ndarray
             2D array to rasterize, shape (n_y, n_x)
-            Typically C2 correlation data: (n_t1, n_t2)
+            For C2 data: pass c2.T to swap axes for correct display
         x_coords : np.ndarray
-            X-axis coordinates, shape (n_x,)
-            Typically t2 time array
+            X-axis (horizontal) coordinates, shape (n_x,)
+            For C2 data: pass t1 time array
         y_coords : np.ndarray
-            Y-axis coordinates, shape (n_y,)
-            Typically t1 time array
+            Y-axis (vertical) coordinates, shape (n_y,)
+            For C2 data: pass t2 time array
         cmap : str, default='viridis'
             Colormap name. Supported:
             - 'viridis', 'plasma', 'inferno', 'magma' (matplotlib perceptually uniform)
@@ -280,13 +280,18 @@ def plot_c2_heatmap_fast(
     # Create Datashader renderer
     renderer = DatashaderRenderer(width=width, height=height)
 
-    # Transpose data because it's structured as c2[t1_index, t2_index] with indexing="ij"
-    # but we want x-axis=t1, y-axis=t2 for display
+    # Transpose to match matplotlib convention: c2[t1_idx, t2_idx] → c2.T for correct axes
+    # After transpose: dim 0=t2, dim 1=t1, matching x=t1 (horizontal), y=t2 (vertical)
     # Rasterize with Datashader (FAST!)
     img_pil = renderer.rasterize_heatmap(c2_data.T, t1, t2, cmap=cmap)
 
     # Convert PIL to numpy array for matplotlib display
     img_array = np.array(img_pil)
+
+    # CRITICAL: Flip vertically to match origin='lower'
+    # Datashader produces images with y=0 at top (image convention)
+    # matplotlib origin='lower' expects y=0 at bottom (math convention)
+    img_array = np.flipud(img_array)
 
     # Use matplotlib for layout and annotations (minimal overhead)
     fig, ax = plt.subplots(figsize=(8, 7), dpi=100)
@@ -370,8 +375,8 @@ def plot_c2_comparison_fast(
     # Create renderer
     renderer = DatashaderRenderer(width=width, height=height)
 
-    # Transpose data because it's structured as c2[t1_index, t2_index] with indexing="ij"
-    # but we want x-axis=t1, y-axis=t2 for display
+    # Transpose to match matplotlib convention: c2[t1_idx, t2_idx] → c2.T for correct axes
+    # After transpose: dim 0=t2, dim 1=t1, matching x=t1 (horizontal), y=t2 (vertical)
     # Rasterize all three panels using Datashader for speed
     img_exp = renderer.rasterize_heatmap(c2_exp.T, t1, t2, cmap="viridis")
     img_fit = renderer.rasterize_heatmap(c2_fit.T, t1, t2, cmap="viridis")
@@ -391,6 +396,13 @@ def plot_c2_comparison_fast(
     img_exp_array = np.array(img_exp)
     img_fit_array = np.array(img_fit)
     img_res_array = np.array(img_res)
+
+    # CRITICAL: Flip vertically to match origin='lower'
+    # Datashader produces images with y=0 at top (image convention)
+    # matplotlib origin='lower' expects y=0 at bottom (math convention)
+    img_exp_array = np.flipud(img_exp_array)
+    img_fit_array = np.flipud(img_fit_array)
+    img_res_array = np.flipud(img_res_array)
 
     # Create 3-panel matplotlib layout
     fig, axes = plt.subplots(1, 3, figsize=(15, 5))
