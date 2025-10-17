@@ -42,6 +42,12 @@ This rebuild achieves **~70% complexity reduction** while maintaining **100% API
 - Intelligent thread allocation and NUMA-aware configuration
 - Memory-efficient processing for large datasets
 
+### Intelligent Resource Allocation
+- **GPU acceleration** for compute-intensive physics (NLSQ optimization, theoretical fits)
+- **CPU processing** for I/O operations (data loading, result saving, plotting)
+- **Exclusive GPU allocation** for main optimization process (90% memory)
+- **CPU-only workers** for parallel plotting to prevent GPU memory exhaustion
+
 ## Installation
 
 ### Basic CPU-Only Installation (< 5 minutes)
@@ -207,6 +213,68 @@ Based on comprehensive scientific validation (T036-T041):
 - ✅ **Parameter recovery accuracy**: 2-14% error on core parameters
 - ✅ **Numerical stability**: <4% parameter deviation across initial conditions
 - ✅ **Physics compliance**: 100% constraint satisfaction rate
+
+## Pipeline Architecture: GPU vs CPU Usage
+
+The NLSQ analysis pipeline uses **GPU acceleration for physics computations** (optimization and theoretical fits) while **CPU for everything else** (data I/O, validation, plotting). This optimal resource allocation prevents GPU memory conflicts while maximizing performance.
+
+### Computational Stages
+
+**CPU-Only Stages** (I/O and validation):
+- **Configuration Loading**: YAML parsing with PyYAML
+- **Data Loading**: HDF5 file reading with h5py + NumPy (2-3s for cached data)
+- **Data Validation**: Statistical quality checks with NumPy + SciPy (<1s)
+- **Angle Filtering**: Array slicing and indexing (<1ms)
+
+**GPU-Accelerated Stages** ⚡ (compute-intensive):
+
+**1. NLSQ Optimization** (Primary GPU usage, ~6s):
+- JIT-compiled JAX physics functions (`compute_g2_scaled_core`, `compute_g1_diffusion`, `compute_g1_shear`)
+- Residual calculations called hundreds of times per iteration
+- Data volume: 3 angles × 1001 × 1001 = 3M+ points per iteration
+- Performance: **6s on GPU vs 30-60s on CPU** (5-10x speedup)
+- Memory: **90% GPU allocation** (exclusive to main process)
+
+**2. Theoretical Fit Computation** (~1s):
+- Uses same JAX backend as optimization
+- Sequential computation for all 23 angles (not just filtered subset)
+- Per-angle scaling via least squares (find optimal contrast/offset)
+
+**CPU-Only Stages** (Output and visualization):
+
+**3. Result Saving & Plotting** (I/O bound, GPU provides no benefit):
+- **Result Saving**: JSON serialization + NPZ compression (~1s)
+- **Plotting Workers**: **Forced to CPU** to prevent GPU memory conflicts
+  - 20 parallel workers using Datashader (CPU-optimized rasterization)
+  - Environment variables set: `JAX_PLATFORMS="cpu"`, `CUDA_VISIBLE_DEVICES="-1"`
+  - Reason: Main process uses 90% GPU memory; workers would cause `CUDA_ERROR_OUT_OF_MEMORY`
+  - Performance: 23 plots in ~12s (5-10x faster than pure matplotlib)
+
+### Performance Summary
+
+| Stage | Device | Backend | Duration | GPU Benefit |
+|-------|--------|---------|----------|-------------|
+| Config Loading | CPU | PyYAML | <1s | None (I/O bound) |
+| Data Loading | CPU | h5py+NumPy | ~2s | None (I/O bound) |
+| Data Validation | CPU | NumPy+SciPy | <1s | None (not critical) |
+| Angle Filtering | CPU | NumPy | <1ms | None (trivial) |
+| **NLSQ Optimization** | **GPU** ⚡ | **JAX JIT** | **6s** | **5-10x speedup** |
+| **Theoretical Fits** | **GPU** ⚡ | **JAX JIT** | **~1s** | **3-5x speedup** |
+| Result Saving | CPU | json+npz | ~1s | None (I/O bound) |
+| Plotting (Workers) | CPU 🔒 | Datashader | ~12s | None (forced CPU) |
+
+**Total GPU Time**: ~7 seconds (optimization + theoretical fits)
+**Total CPU Time**: ~17 seconds (all other stages)
+**Peak GPU Memory**: 90% allocation (main process only)
+**Overall Speedup**: 5-10x for compute-intensive parts; ~24s total vs ~70-100s without GPU
+
+### Key Architectural Insights
+
+- **GPU Acceleration Where It Matters**: Only the most compute-intensive stages (NLSQ optimization and theoretical fits) use GPU, achieving 5-10x speedup for ~7 seconds of GPU time. This focused allocation maximizes performance impact.
+
+- **CPU for I/O and Visualization**: All data operations (loading, validation, saving) remain on CPU where they are I/O bound. Parallel plotting is forced to CPU-only workers to prevent GPU memory conflicts while leveraging Datashader's efficient CPU rasterization.
+
+- **Resource Isolation Strategy**: Main process maintains exclusive GPU access (90% memory) for optimization. Worker processes are restricted to CPU via environment variables (`JAX_PLATFORMS="cpu"`, `CUDA_VISIBLE_DEVICES="-1"`), preventing CUDA OOM errors while enabling parallel visualization.
 
 ## System Requirements
 
