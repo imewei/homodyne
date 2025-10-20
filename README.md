@@ -1,6 +1,6 @@
 # Homodyne v2: JAX-First XPCS Analysis
 
-[![License: BSD-3](https://img.shields.io/badge/License-BSD%203--Clause-blue.svg)](LICENSE)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Python](https://img.shields.io/badge/Python-3.10%2B-blue)](https://www.python.org/)
 [![DOI](https://zenodo.org/badge/DOI/10.1073/pnas.2401162121.svg)](https://doi.org/10.1073/pnas.2401162121)
 
@@ -587,7 +587,7 @@ testing:
 
 ## License
 
-BSD-3-Clause
+MIT License - see [LICENSE](LICENSE) file for details.
 
 ## Citation
 
