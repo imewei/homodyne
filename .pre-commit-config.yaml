@@ -64,7 +64,7 @@ repos:
 
   # Modern linting and formatting
   - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.13.3 # Updated to match local: ruff 0.13.3
+    rev: v0.14.1 # Updated to match local: ruff 0.14.1
     hooks:
       - id: ruff
         name: ruff

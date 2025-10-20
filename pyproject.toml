@@ -7,7 +7,7 @@ name = "homodyne"
 dynamic = ["version"]
 description = "JAX-first homodyne scattering analysis for XPCS under nonequilibrium conditions"
 readme = "README.md"
-license = {text = "BSD-3-Clause"}
+license = {text = "MIT"}
 authors = [
     {name = "Wei Chen", email = "weichen@anl.gov"},
     {name = "Hongrui He", email = "hhe@anl.gov"},
@@ -28,7 +28,7 @@ keywords = [
 classifiers = [
     "Development Status :: 4 - Beta",
     "Intended Audience :: Science/Research",
-    "License :: OSI Approved :: BSD License",
+    "License :: OSI Approved :: MIT License",
     "Operating System :: OS Independent",
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3.10",
@@ -46,12 +46,12 @@ requires-python = ">=3.10"
 # or clone and install locally: git clone https://github.com/imewei/NLSQ.git && cd NLSQ && pip install .
 dependencies = [
     # Core scientific computing (2025 tested stable)
-    "numpy>=2.0.0,<3.0.0",  # Tested: NumPy 2.3.3
+    "numpy>=2.0.0,<3.0.0",  # Tested: NumPy 2.3.4
     "scipy>=1.14.0,<2.0.0",  # Tested: SciPy 1.16.2
 
     # JAX ecosystem (2025 stable - must match exactly)
-    "jax==0.7.2",  # JAX 0.7.2 - exact version required
-    "jaxlib==0.7.2",  # jaxlib 0.7.2 - must match JAX version exactly
+    "jax==0.8.0",  # JAX 0.8.0 - exact version required
+    "jaxlib==0.8.0",  # jaxlib 0.8.0 - must match JAX version exactly
     "nlsq>=0.1.0",  # NLSQ trust-region optimizer for JAX-native nonlinear least squares
                      # Repository: https://github.com/imewei/NLSQ
                      # Provides Trust Region Reflective (TRF) and Levenberg-Marquardt (LM) algorithms
@@ -61,14 +61,14 @@ dependencies = [
     "blackjax>=1.2.0,<2.0.0",  # Tested: BlackJAX 1.2.5
 
     # Data handling
-    "h5py>=3.10.0,<4.0.0",  # Tested: h5py 3.14.0
+    "h5py>=3.10.0,<4.0.0",  # Tested: h5py 3.15.1
     "pyyaml>=6.0.2",  # Tested: PyYAML 6.0.3
 
     # System utilities
-    "psutil>=6.0.0",  # Tested: psutil 7.1.0
+    "psutil>=6.0.0",  # Tested: psutil 7.1.1
 
     # Plotting (stable)
-    "matplotlib>=3.8.0,<4.0.0",  # Tested: matplotlib 3.10.6
+    "matplotlib>=3.8.0,<4.0.0",  # Tested: matplotlib 3.10.7
 
     # Fast visualization (optional - graceful degradation if unavailable)
     "datashader>=0.16.0",  # Fast heatmap rasterization (5-10x speedup)
@@ -79,26 +79,26 @@ dependencies = [
 [project.optional-dependencies]
 # GPU acceleration using system CUDA (recommended for HPC)
 gpu = [
-    "jax[cuda12-local]==0.7.2",  # Uses system CUDA, avoids conflicts
-    "jaxlib==0.7.2",  # Must match JAX version exactly
+    "jax[cuda12-local]==0.8.0",  # Uses system CUDA, avoids conflicts
+    "jaxlib==0.8.0",  # Must match JAX version exactly
 ]
 
 # Alternative: Bundled CUDA (may conflict with HPC environments)
 gpu-bundled = [
-    "jax[cuda12]==0.7.2",  # Bundles CUDA libraries
-    "jaxlib==0.7.2",  # Must match JAX version exactly
+    "jax[cuda12]==0.8.0",  # Bundles CUDA libraries
+    "jaxlib==0.8.0",  # Must match JAX version exactly
 ]
 
 # Future-proofing for CUDA 13
 gpu-cuda13 = [
-    "jax[cuda13-local]==0.7.2",  # When available
-    "jaxlib==0.7.2",  # Must match JAX version exactly
+    "jax[cuda13-local]==0.8.0",  # When available
+    "jaxlib==0.8.0",  # Must match JAX version exactly
 ]
 
 # HPC environment (system CUDA + optimization tools)
 hpc = [
-    "jax[cuda12-local]==0.7.2",
-    "jaxlib==0.7.2",
+    "jax[cuda12-local]==0.8.0",
+    "jaxlib==0.8.0",
     "psutil>=6.0.0",
     "tqdm>=4.66.0",  # Tested: tqdm 4.67.1
 ]
@@ -108,7 +108,7 @@ dev = [
     "pytest>=8.3.0,<9.0.0",  # Tested: pytest 8.4.2
     "pytest-cov>=6.0.0,<8.0.0",  # Tested: pytest-cov 7.0.0
     "black>=25.0.0,<26.0.0",  # Tested: black 25.9.0
-    "ruff>=0.13.0,<0.14.0",  # Tested: ruff 0.13.3
+    "ruff>=0.13.0,<0.15.0",  # Tested: ruff 0.14.1
     "mypy>=1.18.0,<2.0.0",  # Tested: mypy 1.18.2
     "pre-commit>=4.0.0,<5.0.0",  # Tested: pre-commit 4.3.0
     "tqdm>=4.66.0",  # Tested: tqdm 4.67.1
