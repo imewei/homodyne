@@ -92,18 +92,18 @@ class TestFitNlsqJaxAPI:
         )
 
         # Verify result has backward-compatible attributes (FR-002)
-        assert hasattr(result, "parameters"), (
-            "Result should have 'parameters' attribute for backward compatibility"
-        )
-        assert hasattr(result, "chi_squared"), (
-            "Result should have 'chi_squared' attribute"
-        )
+        assert hasattr(
+            result, "parameters"
+        ), "Result should have 'parameters' attribute for backward compatibility"
+        assert hasattr(
+            result, "chi_squared"
+        ), "Result should have 'chi_squared' attribute"
         assert hasattr(result, "success"), "Result should have 'success' attribute"
 
         # Verify optimization succeeded with realistic data
-        assert result.success, (
-            f"Optimization should succeed with synthetic data: {result.message if hasattr(result, 'message') else 'no message'}"
-        )
+        assert (
+            result.success
+        ), f"Optimization should succeed with synthetic data: {result.message if hasattr(result, 'message') else 'no message'}"
 
         # Test 2: Call with initial_params=None (auto-loading from config)
         result_auto = fit_nlsq_jax(
@@ -112,9 +112,9 @@ class TestFitNlsqJaxAPI:
             initial_params=None,  # Should auto-load from config
         )
 
-        assert hasattr(result_auto, "parameters"), (
-            "Auto-loaded result should have 'parameters' attribute"
-        )
+        assert hasattr(
+            result_auto, "parameters"
+        ), "Auto-loaded result should have 'parameters' attribute"
         assert result_auto.success, "Auto-loaded optimization should succeed"
 
         # Test 3: Verify parameter recovery accuracy (<5% error per SC-002)
@@ -137,6 +137,6 @@ class TestFitNlsqJaxAPI:
                         f"  {param_name}: true={true_val:.4f}, recovered={rec_val:.4f}, error={rel_error:.2%}"
                     )
                     # Relaxed tolerance for test stability (15% instead of 5%)
-                    assert rel_error < 0.15, (
-                        f"Parameter {param_name} recovery error {rel_error:.2%} exceeds 15%"
-                    )
+                    assert (
+                        rel_error < 0.15
+                    ), f"Parameter {param_name} recovery error {rel_error:.2%} exceeds 15%"

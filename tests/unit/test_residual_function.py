@@ -56,12 +56,12 @@ class TestResidualFunctionCreation:
         residuals = residual_fn(xdata, *params)
 
         # Verify output shape matches flattened data
-        assert residuals.shape == (300,), (
-            f"Residuals should have shape (300,), got {residuals.shape}"
-        )
-        assert isinstance(residuals, (np.ndarray, jnp.ndarray)), (
-            "Residuals should be numpy or JAX array"
-        )
+        assert residuals.shape == (
+            300,
+        ), f"Residuals should have shape (300,), got {residuals.shape}"
+        assert isinstance(
+            residuals, (np.ndarray, jnp.ndarray)
+        ), "Residuals should be numpy or JAX array"
 
     def test_residual_computation_correctness(self):
         """
@@ -191,15 +191,15 @@ class TestResidualFunctionCreation:
 
         residuals = residual_fn(xdata, *params)
 
-        assert residuals.shape == (75,), (
-            f"Residuals should have shape (75,), got {residuals.shape}"
-        )
-        assert not np.any(np.isnan(residuals)), (
-            "Residuals should not contain NaN values"
-        )
-        assert not np.any(np.isinf(residuals)), (
-            "Residuals should not contain Inf values"
-        )
+        assert residuals.shape == (
+            75,
+        ), f"Residuals should have shape (75,), got {residuals.shape}"
+        assert not np.any(
+            np.isnan(residuals)
+        ), "Residuals should not contain NaN values"
+        assert not np.any(
+            np.isinf(residuals)
+        ), "Residuals should not contain Inf values"
 
     def test_residual_function_missing_data_attributes(self):
         """Test graceful error handling for missing data attributes."""

@@ -126,9 +126,9 @@ class TestComputeAdaptiveTargetPoints:
 
         assert factor == 2, f"Expected 2x reduction, got {factor}x"
         expected_target = int(1500 / np.sqrt(2))  # ≈ 1061
-        assert abs(target - expected_target) <= 1, (
-            f"Expected ~{expected_target} points, got {target}"
-        )
+        assert (
+            abs(target - expected_target) <= 1
+        ), f"Expected ~{expected_target} points, got {target}"
 
     def test_500M_dataset_4x_reduction_capped(self):
         """500M dataset should get factor=4 (capped at max)."""
@@ -142,9 +142,9 @@ class TestComputeAdaptiveTargetPoints:
 
         assert factor == 4, f"Expected 4x reduction (capped), got {factor}x"
         expected_target = int(2236 / np.sqrt(4))  # = 1118
-        assert target == expected_target, (
-            f"Expected {expected_target} points, got {target}"
-        )
+        assert (
+            target == expected_target
+        ), f"Expected {expected_target} points, got {target}"
 
     def test_minimum_target_points(self):
         """Target points should never go below 50 (minimum for correlation structure)."""
@@ -172,9 +172,9 @@ class TestComputeAdaptiveTargetPoints:
                 max_reduction_factor=4,
             )
 
-            assert 2 <= factor <= 4, (
-                f"Factor {factor} out of [2, 4] range for {total_points:,} points"
-            )
+            assert (
+                2 <= factor <= 4
+            ), f"Factor {factor} out of [2, 4] range for {total_points:,} points"
 
 
 class TestValidateSubsamplingConfig:

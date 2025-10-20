@@ -115,9 +115,9 @@ class TestNLSQWithAngleFiltering:
             result = None
 
         # Assert - Dataset size reduction (filtering worked)
-        assert len(filtered_data["phi_angles_list"]) == 3, (
-            "Should have 3 filtered angles"
-        )
+        assert (
+            len(filtered_data["phi_angles_list"]) == 3
+        ), "Should have 3 filtered angles"
         np.testing.assert_array_almost_equal(
             filtered_data["phi_angles_list"], [85.0, 90.0, 95.0], decimal=1
         )
@@ -126,9 +126,9 @@ class TestNLSQWithAngleFiltering:
         assert filtered_data["c2_exp"].shape[0] == 3, "C2 first dimension should be 3"
 
         # Assert - Other dimensions preserved
-        assert "wavevector_q_list" in filtered_data, (
-            "wavevector_q_list should be preserved"
-        )
+        assert (
+            "wavevector_q_list" in filtered_data
+        ), "wavevector_q_list should be preserved"
         assert "t1" in filtered_data, "t1 should be preserved"
         assert "t2" in filtered_data, "t2 should be preserved"
 
@@ -201,9 +201,9 @@ class TestNLSQWithAngleFiltering:
             result = None
 
         # Assert - All 9 angles used (no filtering)
-        assert len(filtered_data["phi_angles_list"]) == 9, (
-            "Should use all 9 angles when disabled"
-        )
+        assert (
+            len(filtered_data["phi_angles_list"]) == 9
+        ), "Should use all 9 angles when disabled"
         np.testing.assert_array_almost_equal(
             filtered_data["phi_angles_list"], angles, decimal=1
         )

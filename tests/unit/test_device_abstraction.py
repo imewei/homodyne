@@ -56,9 +56,9 @@ class TestDeviceAbstraction:
         with jax.default_device(cpu_device):
             cpu_result = residual_fn(xdata, *params)
 
-        assert cpu_result.shape == (50,), (
-            f"CPU result should have shape (50,), got {cpu_result.shape}"
-        )
+        assert cpu_result.shape == (
+            50,
+        ), f"CPU result should have shape (50,), got {cpu_result.shape}"
         assert not np.any(np.isnan(cpu_result)), "CPU result should not contain NaN"
 
         # If GPU available, test on GPU
@@ -68,9 +68,9 @@ class TestDeviceAbstraction:
             with jax.default_device(gpu_device):
                 gpu_result = residual_fn(xdata, *params)
 
-            assert gpu_result.shape == (50,), (
-                f"GPU result should have shape (50,), got {gpu_result.shape}"
-            )
+            assert gpu_result.shape == (
+                50,
+            ), f"GPU result should have shape (50,), got {gpu_result.shape}"
             assert not np.any(np.isnan(gpu_result)), "GPU result should not contain NaN"
 
             # Verify CPU and GPU results match (within numerical tolerance)

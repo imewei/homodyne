@@ -43,12 +43,12 @@ class TestDataFlattening:
         xdata, ydata = wrapper._prepare_data(mock_data)
 
         # Assertions
-        assert xdata.shape[0] == expected_size, (
-            f"xdata should have {expected_size} elements, got {xdata.shape[0]}"
-        )
-        assert ydata.shape[0] == expected_size, (
-            f"ydata should have {expected_size} elements, got {ydata.shape[0]}"
-        )
+        assert (
+            xdata.shape[0] == expected_size
+        ), f"xdata should have {expected_size} elements, got {xdata.shape[0]}"
+        assert (
+            ydata.shape[0] == expected_size
+        ), f"ydata should have {expected_size} elements, got {ydata.shape[0]}"
         assert xdata.ndim == 1, f"xdata should be 1D, got {xdata.ndim}D"
         assert ydata.ndim == 1, f"ydata should be 1D, got {ydata.ndim}D"
 

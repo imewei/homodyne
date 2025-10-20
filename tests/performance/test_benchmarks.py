@@ -212,9 +212,9 @@ class TestComputationalBenchmarks:
         data_size = np.prod(data["c2_exp"].shape)
         elements_per_sec = data_size / avg_time
 
-        assert elements_per_sec > 100, (
-            f"Processing rate too slow: {elements_per_sec:.0f} elements/sec"
-        )
+        assert (
+            elements_per_sec > 100
+        ), f"Processing rate too slow: {elements_per_sec:.0f} elements/sec"
 
     @pytest.mark.skipif(not HAS_PSUTIL, reason="psutil not available")
     def test_memory_usage_benchmark(self, jax_backend):
@@ -265,9 +265,9 @@ class TestComputationalBenchmarks:
             }
 
             # Memory should not grow excessively
-            assert memory_used < expected_data_size * 10, (
-                f"Memory usage too high for size {size}"
-            )
+            assert (
+                memory_used < expected_data_size * 10
+            ), f"Memory usage too high for size {size}"
 
         # Check for memory leaks
         final_memory = process.memory_info().rss / (1024 * 1024)
@@ -328,9 +328,9 @@ class TestDataLoadingBenchmarks:
 
             # Performance expectations
             assert avg_time < 5.0, f"Data generation too slow: {avg_time:.3f}s"
-            assert memory_used < data_size * 5, (
-                f"Memory usage too high: {memory_used:.1f} MB"
-            )
+            assert (
+                memory_used < data_size * 5
+            ), f"Memory usage too high: {memory_used:.1f} MB"
 
     def test_config_loading_benchmark(self, temp_dir, benchmark_config):
         """Benchmark configuration loading performance."""
@@ -429,12 +429,12 @@ class TestScalingBenchmarks:
 
         # Report metrics
         assert compilation_time < 10.0, f"Compilation too slow: {compilation_time:.3f}s"
-        assert avg_execution_time < 1.0, (
-            f"Execution too slow: {avg_execution_time:.3f}s"
-        )
-        assert compilation_overhead < 1000, (
-            f"Compilation overhead too high: {compilation_overhead:.1f}x"
-        )
+        assert (
+            avg_execution_time < 1.0
+        ), f"Execution too slow: {avg_execution_time:.3f}s"
+        assert (
+            compilation_overhead < 1000
+        ), f"Compilation overhead too high: {compilation_overhead:.1f}x"
 
     def test_vectorization_scaling(self, jax_backend):
         """Test performance scaling with vectorization."""
@@ -558,9 +558,9 @@ class TestScalingBenchmarks:
             scaling_factor = avg_memory_ratio / expected_memory_scaling
 
             # Should be close to expected scaling (within factor of 2)
-            assert 0.5 < scaling_factor < 2.0, (
-                f"Memory scaling unexpected: {scaling_factor:.2f} (expected ~1.0)"
-            )
+            assert (
+                0.5 < scaling_factor < 2.0
+            ), f"Memory scaling unexpected: {scaling_factor:.2f} (expected ~1.0)"
 
 
 @pytest.mark.performance
@@ -608,12 +608,12 @@ class TestRegressionBenchmarks:
         BASELINE_THROUGHPUT = 10000  # elements per second (conservative)
         BASELINE_MAX_TIME = 5.0  # maximum seconds for standard dataset
 
-        assert throughput > BASELINE_THROUGHPUT, (
-            f"Performance regression: {throughput:.0f} < {BASELINE_THROUGHPUT} elements/sec"
-        )
-        assert avg_time < BASELINE_MAX_TIME, (
-            f"Performance regression: {avg_time:.3f}s > {BASELINE_MAX_TIME}s"
-        )
+        assert (
+            throughput > BASELINE_THROUGHPUT
+        ), f"Performance regression: {throughput:.0f} < {BASELINE_THROUGHPUT} elements/sec"
+        assert (
+            avg_time < BASELINE_MAX_TIME
+        ), f"Performance regression: {avg_time:.3f}s > {BASELINE_MAX_TIME}s"
 
     def test_optimization_performance_regression(
         self, synthetic_xpcs_data, test_config
@@ -657,9 +657,9 @@ class TestRegressionBenchmarks:
         BASELINE_OPT_TIME = 20.0  # maximum seconds
         BASELINE_SUCCESS_RATE = 0.8  # minimum success rate
 
-        assert avg_time < BASELINE_OPT_TIME, (
-            f"Optimization regression: {avg_time:.3f}s > {BASELINE_OPT_TIME}s"
-        )
-        assert success_rate >= BASELINE_SUCCESS_RATE, (
-            f"Success rate regression: {success_rate:.2f} < {BASELINE_SUCCESS_RATE}"
-        )
+        assert (
+            avg_time < BASELINE_OPT_TIME
+        ), f"Optimization regression: {avg_time:.3f}s > {BASELINE_OPT_TIME}s"
+        assert (
+            success_rate >= BASELINE_SUCCESS_RATE
+        ), f"Success rate regression: {success_rate:.2f} < {BASELINE_SUCCESS_RATE}"

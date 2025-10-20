@@ -111,22 +111,22 @@ class TestParameterRecoveryAccuracy:
 
         # Check core parameters with stricter tolerance
         for name in core_params:
-            assert relative_errors[name] < tolerance_pct, (
-                f"{name} recovery error {relative_errors[name]:.2f}% exceeds {tolerance_pct}%"
-            )
+            assert (
+                relative_errors[name] < tolerance_pct
+            ), f"{name} recovery error {relative_errors[name]:.2f}% exceeds {tolerance_pct}%"
 
         # D_offset can be less constrained - check it separately with relaxed tolerance
-        assert relative_errors["D_offset"] < 250.0, (
-            f"D_offset recovery error {relative_errors['D_offset']:.2f}% exceeds 250%"
-        )
+        assert (
+            relative_errors["D_offset"] < 250.0
+        ), f"D_offset recovery error {relative_errors['D_offset']:.2f}% exceeds 250%"
 
         # Additional checks
-        assert result.convergence_status == "converged", (
-            "Optimization should converge for synthetic data"
-        )
-        assert result.reduced_chi_squared < 5.0, (
-            f"Reduced chi-squared {result.reduced_chi_squared:.2f} should be reasonable"
-        )
+        assert (
+            result.convergence_status == "converged"
+        ), "Optimization should converge for synthetic data"
+        assert (
+            result.reduced_chi_squared < 5.0
+        ), f"Reduced chi-squared {result.reduced_chi_squared:.2f} should be reasonable"
 
     @pytest.mark.slow
     @pytest.mark.skip(
@@ -237,19 +237,19 @@ class TestParameterRecoveryAccuracy:
 
         # Check core parameters with standard tolerance
         for name in core_params:
-            assert relative_errors[name] < tolerance_pct, (
-                f"{name} recovery error {relative_errors[name]:.2f}% exceeds {tolerance_pct}%"
-            )
+            assert (
+                relative_errors[name] < tolerance_pct
+            ), f"{name} recovery error {relative_errors[name]:.2f}% exceeds {tolerance_pct}%"
 
         # Less sensitive parameters get very relaxed tolerance
         less_sensitive = ["D_offset", "gamma_dot_offset", "phi0"]
         relaxed_tolerance = 300.0  # Very relaxed for poorly constrained parameters
         for name in less_sensitive:
-            assert relative_errors[name] < relaxed_tolerance, (
-                f"{name} recovery error {relative_errors[name]:.2f}% exceeds {relaxed_tolerance}%"
-            )
+            assert (
+                relative_errors[name] < relaxed_tolerance
+            ), f"{name} recovery error {relative_errors[name]:.2f}% exceeds {relaxed_tolerance}%"
 
         # Additional checks
-        assert result.convergence_status == "converged", (
-            "Optimization should converge for synthetic data"
-        )
+        assert (
+            result.convergence_status == "converged"
+        ), "Optimization should converge for synthetic data"

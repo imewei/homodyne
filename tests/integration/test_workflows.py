@@ -325,9 +325,9 @@ class TestEndToEndWorkflows:
             recovered_D = result.parameters["diffusion_coefficient"]
 
             # Should recover approximately correct diffusion coefficient
-            assert 0.05 <= recovered_D <= 0.2, (
-                f"Diffusion coefficient recovery poor: {recovered_D}"
-            )
+            assert (
+                0.05 <= recovered_D <= 0.2
+            ), f"Diffusion coefficient recovery poor: {recovered_D}"
 
     def test_error_propagation_workflow(self, test_config):
         """Test error propagation through workflow."""
@@ -532,15 +532,15 @@ class TestModuleInteraction:
             chi2_diff = abs(float(backend_chi2) - result.chi_squared)
             relative_diff = chi2_diff / (result.chi_squared + 1e-10)
 
-            assert relative_diff < 0.1, (
-                f"Chi-squared inconsistency: {relative_diff:.3f}"
-            )
+            assert (
+                relative_diff < 0.1
+            ), f"Chi-squared inconsistency: {relative_diff:.3f}"
 
             # Model should have reasonable values
             assert jnp.all(jnp.isfinite(model_result)), "Model result should be finite"
-            assert jnp.all(model_result >= 0.8), (
-                "Model should have reasonable correlation values"
-            )
+            assert jnp.all(
+                model_result >= 0.8
+            ), "Model should have reasonable correlation values"
 
 
 @pytest.mark.integration
@@ -609,9 +609,9 @@ class TestCrossplatformCompatibility:
 
         # Test symmetry (should be exact)
         symmetry_diff = jnp.max(jnp.abs(result - result.T))
-        assert symmetry_diff < 1e-14, (
-            f"Symmetry precision inconsistent: {symmetry_diff}"
-        )
+        assert (
+            symmetry_diff < 1e-14
+        ), f"Symmetry precision inconsistent: {symmetry_diff}"
 
     def test_memory_behavior_consistency(self, synthetic_xpcs_data, test_config):
         """Test consistent memory behavior across platforms."""
@@ -651,6 +651,6 @@ class TestCrossplatformCompatibility:
 
                 # Should have low variability (not exact due to numerical precision)
                 relative_std = value_std / (abs(value_mean) + 1e-10)
-                assert relative_std < 0.01, (
-                    f"Parameter {key} inconsistent across runs: {relative_std:.4f}"
-                )
+                assert (
+                    relative_std < 0.01
+                ), f"Parameter {key} inconsistent across runs: {relative_std:.4f}"

@@ -126,9 +126,8 @@ class TestMCMCConvergence:
     def test_mcmc_parameter_recovery(self):
         """Test MCMC parameter recovery with known synthetic data."""
         try:
-            from homodyne.tests.factories.data_factory import XPCSDataFactory
-
             from homodyne.optimization.mcmc import NUMPYRO_AVAILABLE, fit_mcmc_jax
+            from homodyne.tests.factories.data_factory import XPCSDataFactory
         except ImportError:
             pytest.skip("Required modules not available")
 
@@ -220,14 +219,14 @@ class TestMCMCConvergence:
             for param_name, param_samples in samples.items():
                 if isinstance(param_samples, np.ndarray) and param_samples.ndim >= 1:
                     # Basic convergence checks
-                    assert len(param_samples) > 100, (
-                        f"Not enough samples for {param_name}"
-                    )
+                    assert (
+                        len(param_samples) > 100
+                    ), f"Not enough samples for {param_name}"
 
                     # Check for finite values
-                    assert np.all(np.isfinite(param_samples)), (
-                        f"Non-finite samples for {param_name}"
-                    )
+                    assert np.all(
+                        np.isfinite(param_samples)
+                    ), f"Non-finite samples for {param_name}"
 
                     # Check for reasonable variation (not stuck)
                     param_std = np.std(param_samples)
@@ -239,9 +238,9 @@ class TestMCMCConvergence:
                         autocorr_1 = np.corrcoef(param_samples[:-1], param_samples[1:])[
                             0, 1
                         ]
-                        assert autocorr_1 < 0.9, (
-                            f"High autocorrelation for {param_name}: {autocorr_1:.3f}"
-                        )
+                        assert (
+                            autocorr_1 < 0.9
+                        ), f"High autocorrelation for {param_name}: {autocorr_1:.3f}"
 
         except Exception as e:
             pytest.skip(f"MCMC convergence diagnostics failed: {e}")
@@ -311,9 +310,9 @@ class TestMCMCConvergence:
                     rhat = az.rhat(inference_data)
                     for param_name in rhat.data_vars:
                         rhat_value = float(rhat[param_name].values)
-                        assert rhat_value < 1.1, (
-                            f"High R-hat for {param_name}: {rhat_value}"
-                        )
+                        assert (
+                            rhat_value < 1.1
+                        ), f"High R-hat for {param_name}: {rhat_value}"
 
             except Exception as e:
                 pytest.skip(f"ArviZ diagnostics failed: {e}")
@@ -381,16 +380,16 @@ class TestMCMCStatisticalProperties:
                     outlier_fraction = outliers / len(param_samples)
 
                     # Should not have too many outliers
-                    assert outlier_fraction < 0.1, (
-                        f"Too many outliers for {param_name}: {outlier_fraction:.3f}"
-                    )
+                    assert (
+                        outlier_fraction < 0.1
+                    ), f"Too many outliers for {param_name}: {outlier_fraction:.3f}"
 
                     # Check for finite variance
                     param_var = np.var(param_samples)
                     assert param_var > 0, f"Zero variance for {param_name}"
-                    assert np.isfinite(param_var), (
-                        f"Non-finite variance for {param_name}"
-                    )
+                    assert np.isfinite(
+                        param_var
+                    ), f"Non-finite variance for {param_name}"
 
         except Exception as e:
             pytest.skip(f"Posterior distribution test failed: {e}")
@@ -398,9 +397,8 @@ class TestMCMCStatisticalProperties:
     def test_credible_intervals(self):
         """Test Bayesian credible intervals."""
         try:
-            from homodyne.tests.factories.data_factory import XPCSDataFactory
-
             from homodyne.optimization.mcmc import NUMPYRO_AVAILABLE, fit_mcmc_jax
+            from homodyne.tests.factories.data_factory import XPCSDataFactory
         except ImportError:
             pytest.skip("Required modules not available")
 
@@ -467,9 +465,9 @@ class TestMCMCStatisticalProperties:
                     # Relative CI width should be reasonable
                     mean_value = np.mean(param_samples)
                     relative_width = ci_width / abs(mean_value + 1e-10)
-                    assert relative_width < 2.0, (
-                        f"CI too wide for {param_name}: {relative_width:.3f}"
-                    )
+                    assert (
+                        relative_width < 2.0
+                    ), f"CI too wide for {param_name}: {relative_width:.3f}"
 
         except Exception as e:
             pytest.skip(f"Credible intervals test failed: {e}")
@@ -570,9 +568,9 @@ class TestMCMCStatisticalProperties:
                     standardized_diff = mean_diff / (pooled_std + 1e-10)
 
                     # Should not have strong trend (< 2 standard deviations)
-                    assert standardized_diff < 2.0, (
-                        f"Strong trend in {param_name}: {standardized_diff:.3f}"
-                    )
+                    assert (
+                        standardized_diff < 2.0
+                    ), f"Strong trend in {param_name}: {standardized_diff:.3f}"
 
                     # Check for reasonable acceptance (not too stuck)
                     # Count number of unique values
@@ -580,9 +578,9 @@ class TestMCMCStatisticalProperties:
                     unique_fraction = unique_values / len(param_samples)
 
                     # Should have reasonable diversity (not stuck at few values)
-                    assert unique_fraction > 0.1, (
-                        f"Poor mixing for {param_name}: {unique_fraction:.3f}"
-                    )
+                    assert (
+                        unique_fraction > 0.1
+                    ), f"Poor mixing for {param_name}: {unique_fraction:.3f}"
 
         except Exception as e:
             pytest.skip(f"Chain mixing test failed: {e}")
@@ -595,9 +593,8 @@ class TestMCMCEdgeCases:
     def test_mcmc_high_noise_data(self):
         """Test MCMC with high noise data."""
         try:
-            from homodyne.tests.factories.data_factory import XPCSDataFactory
-
             from homodyne.optimization.mcmc import NUMPYRO_AVAILABLE, fit_mcmc_jax
+            from homodyne.tests.factories.data_factory import XPCSDataFactory
         except ImportError:
             pytest.skip("Required modules not available")
 
@@ -628,9 +625,9 @@ class TestMCMCEdgeCases:
             # Samples should be finite
             for param_name, param_samples in result.samples.items():
                 if isinstance(param_samples, np.ndarray):
-                    assert np.all(np.isfinite(param_samples)), (
-                        f"Non-finite samples for {param_name} with high noise"
-                    )
+                    assert np.all(
+                        np.isfinite(param_samples)
+                    ), f"Non-finite samples for {param_name} with high noise"
 
         except Exception as e:
             pytest.skip(f"High noise MCMC test failed: {e}")
@@ -638,9 +635,8 @@ class TestMCMCEdgeCases:
     def test_mcmc_low_contrast_data(self):
         """Test MCMC with low contrast data."""
         try:
-            from homodyne.tests.factories.data_factory import XPCSDataFactory
-
             from homodyne.optimization.mcmc import NUMPYRO_AVAILABLE, fit_mcmc_jax
+            from homodyne.tests.factories.data_factory import XPCSDataFactory
         except ImportError:
             pytest.skip("Required modules not available")
 
@@ -670,9 +666,9 @@ class TestMCMCEdgeCases:
             # Contrast should be recovered as low but positive
             if "contrast" in result.mean_params:
                 recovered_contrast = result.mean_params["contrast"]
-                assert 0.0 <= recovered_contrast <= 0.2, (
-                    f"Unexpected contrast recovery: {recovered_contrast}"
-                )
+                assert (
+                    0.0 <= recovered_contrast <= 0.2
+                ), f"Unexpected contrast recovery: {recovered_contrast}"
 
         except Exception as e:
             pytest.skip(f"Low contrast MCMC test failed: {e}")
@@ -680,9 +676,8 @@ class TestMCMCEdgeCases:
     def test_mcmc_small_dataset(self):
         """Test MCMC with very small dataset."""
         try:
-            from homodyne.tests.factories.data_factory import XPCSDataFactory
-
             from homodyne.optimization.mcmc import NUMPYRO_AVAILABLE, fit_mcmc_jax
+            from homodyne.tests.factories.data_factory import XPCSDataFactory
         except ImportError:
             pytest.skip("Required modules not available")
 
@@ -715,9 +710,9 @@ class TestMCMCEdgeCases:
 
             # Parameters should still be reasonable
             for param_name, param_value in result.mean_params.items():
-                assert np.isfinite(param_value), (
-                    f"Non-finite parameter {param_name} with small dataset"
-                )
+                assert np.isfinite(
+                    param_value
+                ), f"Non-finite parameter {param_name} with small dataset"
 
         except Exception as e:
             pytest.skip(f"Small dataset MCMC test failed: {e}")
