@@ -56,14 +56,14 @@ def create_xpcs_memory_config(
 
     - Higher sampling threshold: 150M (vs default 100M)
     - Minimal reduction: 2x (vs default 10x)
-    - Uniform sampling: preserves time ordering (vs stratified random)
+    - Uses NLSQ's default sampling behavior
 
     **Design Rationale:**
 
     XPCS correlation functions C2(t1, t2) have critical requirements:
-    1. Time structure matters: Random sampling destroys correlations
+    1. Time structure matters: Careful sampling needed to preserve correlations
     2. Minimal downsampling: 2-4x maximum to preserve physics
-    3. Uniform sampling: Maintains time ordering better than stratified
+    3. Conservative thresholds: Only trigger on very large datasets (>150M)
 
     This configuration serves as Layer 2 (fallback) protection after
     homodyne's Layer 1 physics-aware logarithmic subsampling.
@@ -107,7 +107,7 @@ def create_xpcs_memory_config(
 
     Layer 2 (NLSQ): Memory fallback with minimal impact
     - Trigger: 150M total points (after Layer 1)
-    - Method: Uniform sampling (preserves time ordering)
+    - Method: NLSQ default sampling with conservative limits
     - Reduction: 2x maximum (conservative)
 
     **Why This Works:**
@@ -136,9 +136,6 @@ def create_xpcs_memory_config(
         # XPCS-specific: minimal reduction (2x vs default 10x)
         # Preserve correlation structure by limiting downsampling
         max_sampled_size=max(dataset_size // 2, 10_000_000),
-        # XPCS-specific: uniform sampling preserves time ordering
-        # (vs default "stratified" which uses random sampling)
-        sampling_strategy="uniform",
     )
 
     return config
