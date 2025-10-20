@@ -372,6 +372,56 @@ def _configure_device(args) -> dict[str, Any]:
     return device_config
 
 
+def _check_deprecated_config(config: "ConfigManager") -> None:
+    """Check for deprecated configuration sections and warn user.
+
+    Warns about:
+    - performance.subsampling (removed in v3.0)
+    - optimization_performance.time_subsampling (deprecated in v2.1)
+
+    Parameters
+    ----------
+    config : ConfigManager
+        Configuration object to check
+    """
+    warnings_issued = []
+
+    # Check for deprecated performance.subsampling
+    if "performance" in config.config:
+        perf = config.config["performance"]
+        if "subsampling" in perf:
+            warnings_issued.append(
+                "⚠️  DEPRECATED CONFIG: 'performance.subsampling'\n"
+                "   This section is no longer used (removed in v3.0).\n"
+                "   NLSQ now handles large datasets automatically.\n"
+                "   Please remove this section from your configuration file."
+            )
+
+    # Check for old optimization_performance path
+    if "optimization_performance" in config.config:
+        old_perf = config.config["optimization_performance"]
+        if "time_subsampling" in old_perf:
+            warnings_issued.append(
+                "⚠️  DEPRECATED CONFIG: 'optimization_performance.time_subsampling'\n"
+                "   This path was deprecated in v2.1 and removed in v3.0.\n"
+                "   Please remove this section from your configuration file."
+            )
+
+    # Issue all warnings at once for visibility
+    if warnings_issued:
+        logger.warning(
+            "\n" + "="*70 + "\n"
+            "DEPRECATED CONFIGURATION DETECTED\n"
+            + "="*70 + "\n"
+            + "\n\n".join(warnings_issued) + "\n"
+            + "="*70 + "\n"
+            "Migration: NLSQ v3.0+ uses native large dataset handling.\n"
+            "Simply remove the deprecated sections - no replacement needed.\n"
+            "See: https://nlsq.readthedocs.io/en/latest/guides/large_datasets.html\n"
+            + "="*70
+        )
+
+
 def _load_configuration(args) -> ConfigManager:
     """Load configuration from file or create default."""
     logger.info(f"Loading configuration from: {args.config}")
@@ -388,6 +438,9 @@ def _load_configuration(args) -> ConfigManager:
 
         # Apply CLI overrides
         _apply_cli_overrides(config, args)
+
+        # Check for deprecated configuration sections
+        _check_deprecated_config(config)
 
         return config
 
@@ -769,85 +822,8 @@ def _run_optimization(args, config: ConfigManager, data: dict[str, Any]) -> Any:
     # Apply angle filtering before optimization (if configured)
     filtered_data = _apply_angle_filtering_for_optimization(data, config)
 
-    # Apply intelligent time subsampling if configured (reduces dataset size for GPU memory)
-    # This implements Layer 1 (physics-aware) protection with 2-4x conservative reduction
-    perf_config = config.config.get("performance", {})
-    subsample_config = perf_config.get("subsampling", {})
-
-    # BACKWARD COMPATIBILITY: Support old config path (v2.1 and earlier)
-    if not subsample_config:
-        old_perf = config.config.get("optimization_performance", {})
-        old_config = old_perf.get("time_subsampling", {})
-        if old_config:
-            logger.warning(
-                "DEPRECATED: Config path 'optimization_performance.time_subsampling' is deprecated and will be "
-                "removed in v3.0. Please migrate to 'performance.subsampling' in your configuration file."
-            )
-            subsample_config = old_config
-
-    if subsample_config.get("enabled", False):
-        from homodyne.data.time_subsampling import (
-            compute_adaptive_target_points,
-            should_apply_subsampling,
-            subsample_time_grid,
-            validate_subsampling_config,
-        )
-
-        # Validate configuration parameters
-        subsample_config = validate_subsampling_config(subsample_config)
-
-        # Check if subsampling is needed based on dataset size
-        trigger_threshold = subsample_config.get("trigger_threshold_points", 50_000_000)
-        should_subsample, total_points, n_time_points, n_angles = (
-            should_apply_subsampling(
-                filtered_data,
-                trigger_threshold=trigger_threshold,
-            )
-        )
-
-        if should_subsample:
-            logger.info(
-                f"Dataset size ({total_points:,} points) exceeds threshold "
-                f"({trigger_threshold:,}), applying adaptive subsampling..."
-            )
-
-            # Compute optimal target_points (unless explicitly overridden in config)
-            explicit_target = subsample_config.get("target_points")
-            if explicit_target is not None:
-                target_points = explicit_target
-                logger.info(
-                    f"Using explicit target_points={target_points} from configuration"
-                )
-            else:
-                target_points, reduction_factor = compute_adaptive_target_points(
-                    n_time_points=n_time_points,
-                    n_angles=n_angles,
-                    total_points=total_points,
-                    trigger_threshold=trigger_threshold,
-                    min_reduction_factor=2,
-                    max_reduction_factor=subsample_config.get(
-                        "max_reduction_factor", 4
-                    ),
-                )
-                logger.info(
-                    f"Adaptive subsampling: {n_time_points} → {target_points} points "
-                    f"(reduction factor: {reduction_factor}x)"
-                )
-
-            # Apply subsampling with optimal target
-            filtered_data = subsample_time_grid(
-                filtered_data,
-                method=subsample_config.get("method", "logarithmic"),
-                target_points=target_points,
-                preserve_edges=subsample_config.get("preserve_edges", True),
-            )
-        else:
-            logger.info(
-                f"Dataset size ({total_points:,} points) below threshold "
-                f"({trigger_threshold:,}), no subsampling needed"
-            )
-    else:
-        logger.debug("Time subsampling not enabled")
+    # NLSQ will handle large datasets natively via streaming optimization
+    logger.debug("Using NLSQ native large dataset handling")
 
     try:
         if method == "nlsq":

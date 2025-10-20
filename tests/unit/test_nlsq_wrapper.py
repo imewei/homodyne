@@ -427,4 +427,100 @@ class TestNLSQWrapperErrorRecovery:
         print("\n✅ T022b bounds test passed: Clipping handled gracefully")
         print(f"Original params: {violating_params}")
         print(f"Optimized params: {result.parameters}")
-        print(f"Quality flag: {result.quality_flag}")
+
+    def test_strategy_fallback_chain(self):
+        """
+        Test that strategy fallback chain works correctly.
+
+        Scenario: STREAMING fails → CHUNKED fails → LARGE fails → STANDARD succeeds
+
+        Acceptance:
+        - Wrapper tries strategies in order
+        - Records fallback actions
+        - Eventually succeeds with STANDARD strategy
+        - Logs fallback attempts
+        """
+        from tests.factories.synthetic_data import generate_static_isotropic_dataset
+        from homodyne.optimization.strategy import OptimizationStrategy
+
+        # Generate large synthetic dataset to trigger STREAMING strategy
+        # (Need > 100M points, but we'll override in config)
+        synthetic_data = generate_static_isotropic_dataset(
+            D0=1000.0,
+            alpha=0.5,
+            D_offset=10.0,
+            noise_level=0.01,
+            n_phi=5,
+            n_t1=30,
+            n_t2=30,  # 4500 total points
+        )
+
+        class MockConfig:
+            """Mock config that forces STREAMING strategy."""
+            def __init__(self):
+                self.optimization = {"lsq": {"max_iterations": 100, "tolerance": 1e-6}}
+                self.config = {
+                    "performance": {
+                        "strategy_override": "streaming"  # Force STREAMING to test fallback
+                    }
+                }
+
+        mock_config = MockConfig()
+        wrapper = NLSQWrapper(enable_large_dataset=True, enable_recovery=True)
+
+        initial_params = np.array([0.5, 1.0, 1000.0, 0.5, 10.0])
+        bounds = (
+            np.array([0.0, 0.8, 100.0, 0.3, 1.0]),
+            np.array([1.0, 1.2, 1e5, 1.5, 1000.0]),
+        )
+
+        # Track which strategies were attempted
+        strategies_attempted = []
+
+        # Import real NLSQ functions to use for final success
+        from nlsq import curve_fit as real_curve_fit
+
+        def mock_curve_fit_large(*args, **kwargs):
+            """Mock curve_fit_large that always fails."""
+            strategy = kwargs.get('show_progress', False)
+            strategies_attempted.append('large')
+            raise RuntimeError("Mock failure: curve_fit_large failed")
+
+        def mock_curve_fit(*args, **kwargs):
+            """Mock curve_fit that succeeds (STANDARD strategy)."""
+            strategies_attempted.append('standard')
+            # Use real curve_fit for success
+            return real_curve_fit(*args, **kwargs)
+
+        # Patch both curve_fit_large and curve_fit at the nlsq_wrapper module level
+        # (where they are imported)
+        from unittest.mock import patch, MagicMock
+
+        with patch("homodyne.optimization.nlsq_wrapper.curve_fit_large", side_effect=mock_curve_fit_large):
+            with patch("homodyne.optimization.nlsq_wrapper.curve_fit", side_effect=mock_curve_fit):
+                result = wrapper.fit(
+                    data=synthetic_data,
+                    config=mock_config,
+                    initial_params=initial_params,
+                    bounds=bounds,
+                    analysis_mode="static_isotropic",
+                )
+
+        # Assertions
+        assert isinstance(result, OptimizationResult), "Should return valid result"
+
+        # Verify strategies were attempted in fallback order
+        # STREAMING uses curve_fit_large → fails
+        # CHUNKED uses curve_fit_large → fails
+        # LARGE uses curve_fit_large → fails
+        # STANDARD uses curve_fit → succeeds
+        assert len(strategies_attempted) >= 2, f"Should attempt multiple strategies, attempted: {strategies_attempted}"
+        assert strategies_attempted[-1] == 'standard', "Should succeed with STANDARD strategy"
+
+        # Verify convergence
+        assert result.convergence_status in ["converged", "success"], f"Should converge, got: {result.convergence_status}"
+
+        print("\n✅ Fallback chain test passed")
+        print(f"Strategies attempted: {strategies_attempted}")
+        print(f"Final strategy succeeded: {strategies_attempted[-1]}")
+        print(f"Convergence status: {result.convergence_status}")

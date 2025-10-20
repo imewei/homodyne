@@ -381,22 +381,6 @@ performance:
     gradient_clipping: true
     gradient_clip_value: 1.0
 
-  # Intelligent time subsampling for large datasets (Layer 1 protection)
-  # Automatically reduces dataset size for >50M points with physics-aware sampling
-  subsampling:
-    enabled: true # Enable adaptive subsampling for large datasets
-    trigger_threshold_points: 50000000 # 50M - only subsample if exceeded
-    max_reduction_factor: 4 # Maximum 4x reduction (conservative for XPCS)
-    method: "logarithmic" # logarithmic | linear | adaptive
-    target_points: null # Auto-calculated (or set explicit value)
-    preserve_edges: true # Ensure t_min and t_max are included
-
-    # How it works:
-    # - 23M dataset: No subsampling (below 50M threshold)
-    # - 100M dataset: 2x reduction (adaptive)
-    # - 500M dataset: 4x reduction (capped at max)
-    # Layer 2 (NLSQ fallback): Triggers at 150M with uniform sampling
-
 # ==============================================================================
 # QUALITY CONTROL AND VALIDATION
 # ==============================================================================

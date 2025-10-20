@@ -41,104 +41,11 @@ import numpy as np
 # Reference: https://nlsq.readthedocs.io/en/latest/guides/advanced_features.html
 from nlsq import curve_fit, curve_fit_large
 
-
-def create_xpcs_memory_config(
-    dataset_size: int,
-    memory_limit_gb: float = 8.0,
-    enable_sampling: bool = True,
-) -> Any:
-    """Create NLSQ memory configuration optimized for XPCS correlation data.
-
-    This function creates a conservative LDMemoryConfig for the NLSQ large
-    dataset fitter that preserves XPCS temporal correlation structure.
-    Unlike NLSQ's default aggressive 10x downsampling (100M → 10M), this
-    uses physics-aware conservative settings:
-
-    - Higher sampling threshold: 150M (vs default 100M)
-    - Minimal reduction: 2x (vs default 10x)
-    - Uses NLSQ's default sampling behavior
-
-    **Design Rationale:**
-
-    XPCS correlation functions C2(t1, t2) have critical requirements:
-    1. Time structure matters: Careful sampling needed to preserve correlations
-    2. Minimal downsampling: 2-4x maximum to preserve physics
-    3. Conservative thresholds: Only trigger on very large datasets (>150M)
-
-    This configuration serves as Layer 2 (fallback) protection after
-    homodyne's Layer 1 physics-aware logarithmic subsampling.
-
-    Parameters
-    ----------
-    dataset_size : int
-        Total number of data points in the dataset
-    memory_limit_gb : float, default 8.0
-        Available memory in gigabytes
-    enable_sampling : bool, default True
-        Whether to enable NLSQ's internal sampling for >150M datasets
-
-    Returns
-    -------
-    LDMemoryConfig
-        Configured memory manager for NLSQ large dataset fitter
-
-    Examples
-    --------
-    >>> # 23M dataset - no NLSQ sampling
-    >>> config = create_xpcs_memory_config(23_000_000)
-    >>> # sampling_threshold=150M, no sampling triggered
-
-    >>> # 200M dataset - conservative 2x sampling
-    >>> config = create_xpcs_memory_config(200_000_000)
-    >>> # 200M > 150M threshold → sample to 200M/2 = 100M
-
-    >>> # 500M dataset - still conservative 2x
-    >>> config = create_xpcs_memory_config(500_000_000)
-    >>> # 500M > 150M threshold → sample to 500M/2 = 250M
-
-    Notes
-    -----
-    **Two-Layer Defense Strategy:**
-
-    Layer 1 (Homodyne): Physics-aware logarithmic subsampling
-    - Trigger: 50M total points
-    - Method: Logarithmic time grid (dense at short times)
-    - Reduction: 2-4x adaptive
-
-    Layer 2 (NLSQ): Memory fallback with minimal impact
-    - Trigger: 150M total points (after Layer 1)
-    - Method: NLSQ default sampling with conservative limits
-    - Reduction: 2x maximum (conservative)
-
-    **Why This Works:**
-    - Most datasets handled by Layer 1 (physics-aware)
-    - Layer 2 only for extreme cases (>150M after subsampling)
-    - Combined protection: 2x × 2x = 4x maximum (vs NLSQ default 10x)
-
-    References
-    ----------
-    NLSQ Documentation: https://nlsq.readthedocs.io/en/latest/guides/large_datasets.html
-    """
-    try:
-        from nlsq import LDMemoryConfig
-    except ImportError as e:
-        raise ImportError(
-            "NLSQ package required for large dataset handling. "
-            "Install with: pip install nlsq"
-        ) from e
-
-    # Conservative configuration for XPCS data
-    config = LDMemoryConfig(
-        memory_limit_gb=memory_limit_gb,
-        enable_sampling=enable_sampling,
-        # XPCS-specific: higher threshold (150M vs default 100M)
-        sampling_threshold=150_000_000,
-        # XPCS-specific: minimal reduction (2x vs default 10x)
-        # Preserve correlation structure by limiting downsampling
-        max_sampled_size=max(dataset_size // 2, 10_000_000),
-    )
-
-    return config
+from homodyne.optimization.strategy import (
+    DatasetSizeStrategy,
+    OptimizationStrategy,
+    estimate_memory_requirements,
+)
 
 
 @dataclass
@@ -218,6 +125,26 @@ class NLSQWrapper:
         """
         self.enable_large_dataset = enable_large_dataset
         self.enable_recovery = enable_recovery
+
+    def _get_fallback_strategy(self, current_strategy: OptimizationStrategy) -> OptimizationStrategy | None:
+        """Get fallback strategy when current strategy fails.
+
+        Implements degradation chain:
+        STREAMING → CHUNKED → LARGE → STANDARD → None
+
+        Args:
+            current_strategy: Strategy that failed
+
+        Returns:
+            Next strategy to try, or None if no fallback available
+        """
+        fallback_chain = {
+            OptimizationStrategy.STREAMING: OptimizationStrategy.CHUNKED,
+            OptimizationStrategy.CHUNKED: OptimizationStrategy.LARGE,
+            OptimizationStrategy.LARGE: OptimizationStrategy.STANDARD,
+            OptimizationStrategy.STANDARD: None,  # No further fallback
+        }
+        return fallback_chain.get(current_strategy)
 
     def fit(
         self,
@@ -301,91 +228,153 @@ class NLSQWrapper:
         logger.info("Creating residual function...")
         residual_fn = self._create_residual_function(data, analysis_mode)
 
-        # Step 6: Select optimization strategy based on dataset size
-        # Following NLSQ best practices (https://nlsq.readthedocs.io/en/latest/guides/large_datasets.html):
-        # - < 1M points: Use curve_fit()
-        # - 1M - 10M points: Use curve_fit_large() with defaults
-        # - 10M - 100M points: Use curve_fit_large() with chunking (our case: 23M)
-        # - > 100M points: Use sampling/streaming
-        #
-        # IMPORTANT: curve_fit_large chunks the JACOBIAN computation, not the model forward pass.
-        # Our physics computation is fully compatible - no changes needed to model function.
-        use_large = self.enable_large_dataset and n_data > 1_000_000
+        # Step 6: Select optimization strategy using intelligent strategy selector
+        # Following NLSQ best practices: estimate memory first, then select strategy
+        # Reference: https://nlsq.readthedocs.io/en/latest/guides/large_datasets.html
+        n_parameters = len(validated_params)
+        memory_stats = estimate_memory_requirements(n_data, n_parameters)
 
-        # Step 6a: Create XPCS-optimized memory config for large datasets
-        # This provides Layer 2 (fallback) protection with conservative 2x reduction
-        # Layer 1 (physics-aware homodyne subsampling) happens before this point
-        memory_config = None
-        if use_large:
-            memory_config = create_xpcs_memory_config(
-                dataset_size=n_data,
-                memory_limit_gb=8.0,  # TODO: Get from config
-                enable_sampling=True,
-            )
-            logger.debug(
-                "Created XPCS memory config: "
-                "threshold=150M, max_reduction=2x, strategy=uniform"
-            )
-
-        # Step 7: Execute optimization (with recovery if enabled)
         logger.info(
-            f"Starting optimization ({'curve_fit_large' if use_large else 'curve_fit'})...",
+            f"Memory estimate: {memory_stats['total_memory_estimate_gb']:.2f} GB required, "
+            f"{memory_stats['available_memory_gb']:.2f} GB available"
         )
 
-        if self.enable_recovery:
-            # Execute with automatic error recovery (T022-T024)
-            popt, pcov, info, recovery_actions, convergence_status = (
-                self._execute_with_recovery(
-                    residual_fn=residual_fn,
-                    xdata=xdata,
-                    ydata=ydata,
-                    initial_params=validated_params,
-                    bounds=nlsq_bounds,
-                    use_large=use_large,
-                    memory_config=memory_config,
-                    logger=logger,
-                )
+        if not memory_stats['memory_safe']:
+            logger.warning(
+                f"Memory usage may be high ({memory_stats['total_memory_estimate_gb']:.2f} GB). "
+                f"Using memory-efficient strategy."
             )
-        else:
-            # Execute without recovery (original behavior)
+
+        # Extract strategy configuration from config object
+        # Supports optional overrides: strategy_override, memory_limit_gb, enable_progress
+        strategy_config = {}
+        if config is not None and hasattr(config, 'config'):
+            perf_config = config.config.get('performance', {})
+
+            # Extract strategy override (e.g., "standard", "large", "chunked", "streaming")
+            if 'strategy_override' in perf_config:
+                strategy_config['strategy_override'] = perf_config['strategy_override']
+
+            # Extract custom memory limit (GB)
+            if 'memory_limit_gb' in perf_config:
+                strategy_config['memory_limit_gb'] = perf_config['memory_limit_gb']
+
+            # Extract progress bar preference
+            if 'enable_progress' in perf_config:
+                strategy_config['enable_progress'] = perf_config['enable_progress']
+
+        # Select strategy based on dataset size and memory
+        strategy_selector = DatasetSizeStrategy(config=strategy_config)
+        strategy = strategy_selector.select_strategy(
+            n_points=n_data,
+            n_parameters=n_parameters,
+            check_memory=True,
+        )
+
+        strategy_info = strategy_selector.get_strategy_info(strategy)
+        logger.info(
+            f"Selected {strategy_info['name']} strategy for {n_data:,} points\n"
+            f"  Use case: {strategy_info['use_case']}\n"
+            f"  NLSQ function: {strategy_info['nlsq_function']}\n"
+            f"  Progress bars: {'Yes' if strategy_info['supports_progress'] else 'No'}"
+        )
+
+        # Step 7: Execute optimization with strategy fallback
+        # Try selected strategy first, then fallback to simpler strategies if needed
+        current_strategy = strategy
+        strategy_attempts = []
+        last_error = None
+
+        while current_strategy is not None:
             try:
-                if use_large:
-                    popt, pcov, info = curve_fit_large(
-                        residual_fn,
-                        xdata,
-                        ydata,
-                        p0=validated_params.tolist(),  # Convert to list to avoid NLSQ boolean bug
-                        bounds=nlsq_bounds,
-                        config=memory_config,  # XPCS-optimized memory config
-                        loss="soft_l1",  # Robust loss for outliers
-                        gtol=1e-6,  # Relaxed gradient tolerance
-                        ftol=1e-6,  # Relaxed function tolerance
-                        max_nfev=5000,  # Increased max function evaluations
-                        verbose=2,  # Show iteration details
-                        full_output=True,
+                strategy_info = strategy_selector.get_strategy_info(current_strategy)
+                logger.info(f"Attempting optimization with {current_strategy.value} strategy...")
+
+                if self.enable_recovery:
+                    # Execute with automatic error recovery (T022-T024)
+                    popt, pcov, info, recovery_actions, convergence_status = (
+                        self._execute_with_recovery(
+                            residual_fn=residual_fn,
+                            xdata=xdata,
+                            ydata=ydata,
+                            initial_params=validated_params,
+                            bounds=nlsq_bounds,
+                            strategy=current_strategy,
+                            logger=logger,
+                        )
                     )
                 else:
-                    popt, pcov = curve_fit(
-                        residual_fn,
-                        xdata,
-                        ydata,
-                        p0=validated_params.tolist(),  # Convert to list to avoid NLSQ boolean bug
-                        bounds=nlsq_bounds,
-                        loss="soft_l1",  # Robust loss for outliers
-                        gtol=1e-6,  # Relaxed gradient tolerance
-                        ftol=1e-6,  # Relaxed function tolerance
-                        max_nfev=5000,  # Increased max function evaluations
-                        verbose=2,  # Show iteration details
-                    )
-                    info = {}
+                    # Execute without recovery (original behavior)
+                    use_large = current_strategy != OptimizationStrategy.STANDARD
 
-                recovery_actions = []
-                convergence_status = "converged"
+                    if use_large:
+                        # Use curve_fit_large for LARGE, CHUNKED, STREAMING strategies
+                        popt, pcov, info = curve_fit_large(
+                            residual_fn,
+                            xdata,
+                            ydata,
+                            p0=validated_params.tolist(),
+                            bounds=nlsq_bounds,
+                            loss="soft_l1",
+                            gtol=1e-6,
+                            ftol=1e-6,
+                            max_nfev=5000,
+                            verbose=2,
+                            full_output=True,
+                            show_progress=strategy_info['supports_progress'],
+                        )
+                    else:
+                        # Use standard curve_fit for small datasets
+                        popt, pcov = curve_fit(
+                            residual_fn,
+                            xdata,
+                            ydata,
+                            p0=validated_params.tolist(),
+                            bounds=nlsq_bounds,
+                            loss="soft_l1",
+                            gtol=1e-6,
+                            ftol=1e-6,
+                            max_nfev=5000,
+                            verbose=2,
+                        )
+                        info = {}
+
+                    recovery_actions = []
+                    convergence_status = "converged"
+
+                # Success! Record which strategy worked
+                if strategy_attempts:
+                    recovery_actions.append(f"strategy_fallback_to_{current_strategy.value}")
+                    logger.info(
+                        f"Successfully optimized with fallback strategy: {current_strategy.value}\n"
+                        f"  Previous attempts: {[s.value for s in strategy_attempts]}"
+                    )
+                break  # Exit fallback loop on success
 
             except Exception as e:
-                execution_time = time.time() - start_time
-                logger.error(f"Optimization failed after {execution_time:.2f}s: {e}")
-                raise
+                last_error = e
+                strategy_attempts.append(current_strategy)
+
+                # Try fallback strategy
+                fallback_strategy = self._get_fallback_strategy(current_strategy)
+
+                if fallback_strategy is not None:
+                    logger.warning(
+                        f"Strategy {current_strategy.value} failed: {str(e)[:100]}\n"
+                        f"  Attempting fallback to {fallback_strategy.value} strategy..."
+                    )
+                    current_strategy = fallback_strategy
+                else:
+                    # No more fallbacks available
+                    execution_time = time.time() - start_time
+                    logger.error(
+                        f"All strategies failed after {execution_time:.2f}s\n"
+                        f"  Attempted: {[s.value for s in strategy_attempts]}\n"
+                        f"  Final error: {e}"
+                    )
+                    raise RuntimeError(
+                        f"Optimization failed with all strategies: {[s.value for s in strategy_attempts]}"
+                    ) from e
 
         # Compute final residuals
         final_residuals = residual_fn(xdata, *popt)
@@ -428,14 +417,13 @@ class NLSQWrapper:
         ydata: np.ndarray,
         initial_params: np.ndarray,
         bounds: tuple[np.ndarray, np.ndarray] | None,
-        use_large: bool,
-        memory_config: Any,
+        strategy: OptimizationStrategy,
         logger,
     ) -> tuple[np.ndarray, np.ndarray, dict, list[str], str]:
         """Execute optimization with automatic error recovery (T022-T024).
 
         Implements intelligent retry strategies:
-        - Attempt 1: Original parameters
+        - Attempt 1: Original parameters with selected strategy
         - Attempt 2: Perturbed parameters (±10%)
         - Attempt 3: Relaxed convergence tolerance
         - Final failure: Comprehensive diagnostics
@@ -445,7 +433,7 @@ class NLSQWrapper:
             xdata, ydata: Data arrays
             initial_params: Initial parameter guess
             bounds: Parameter bounds tuple
-            use_large: Use curve_fit_large
+            strategy: Optimization strategy to use
             logger: Logger instance
 
         Returns:
@@ -457,59 +445,22 @@ class NLSQWrapper:
         max_retries = 3
         current_params = initial_params.copy()
 
+        # Determine if we should use large dataset functions
+        use_large = strategy != OptimizationStrategy.STANDARD
+        show_progress = strategy in [
+            OptimizationStrategy.LARGE,
+            OptimizationStrategy.CHUNKED,
+            OptimizationStrategy.STREAMING,
+        ]
+
         for attempt in range(max_retries):
             try:
-                logger.info(f"Optimization attempt {attempt + 1}/{max_retries}")
+                logger.info(f"Optimization attempt {attempt + 1}/{max_retries} ({strategy.value} strategy)")
 
                 if use_large:
-                    # Configure memory limits per NLSQ best practices
-                    # Detect GPU memory and set appropriate limits
-                    import jax
-
-                    is_gpu = jax.devices()[0].platform == "gpu"
-
-                    # Query GPU memory if available
-                    if is_gpu:
-                        try:
-                            # Get GPU memory in GB
-                            import subprocess
-
-                            result = subprocess.run(
-                                [
-                                    "nvidia-smi",
-                                    "--query-gpu=memory.total",
-                                    "--format=csv,noheader,nounits",
-                                ],
-                                capture_output=True,
-                                text=True,
-                                timeout=2,
-                            )
-                            gpu_memory_mb = float(result.stdout.strip())
-                            gpu_memory_gb = gpu_memory_mb / 1024
-
-                            # Use 50% of GPU memory for NLSQ (safe, leaves room for compilation)
-                            # For 16 GB GPU: 8 GB limit (plenty of headroom)
-                            # For 8 GB GPU: 4 GB limit (conservative)
-                            memory_limit = max(2.0, gpu_memory_gb * 0.5)
-
-                            logger.info(
-                                f"Detected GPU with {gpu_memory_gb:.1f} GB VRAM, "
-                                f"using {memory_limit:.1f} GB for NLSQ",
-                            )
-                        except Exception as e:
-                            # Fallback to conservative 2GB if detection fails
-                            memory_limit = 2.0
-                            logger.debug(
-                                f"GPU memory detection failed, using default 2GB: {e}",
-                            )
-                    else:
-                        # CPU: 8GB (generous for system RAM)
-                        memory_limit = 8.0
-
-                    logger.info(
-                        f"Using curve_fit_large with {memory_limit:.1f}GB memory limit "
-                        f"({'GPU' if is_gpu else 'CPU'} mode)",
-                    )
+                    # Use curve_fit_large for LARGE, CHUNKED, STREAMING strategies
+                    # NLSQ handles memory management automatically via psutil
+                    logger.debug("Using curve_fit_large with NLSQ automatic memory management")
 
                     # Note: curve_fit_large returns only (popt, pcov), not (popt, pcov, info)
                     # It doesn't support full_output=True like curve_fit does
@@ -519,17 +470,17 @@ class NLSQWrapper:
                         ydata,
                         p0=current_params.tolist(),  # Convert to list to avoid NLSQ boolean bug
                         bounds=bounds,
-                        config=memory_config,  # XPCS-optimized memory config
                         loss="soft_l1",  # Robust loss for outliers
                         gtol=1e-6,  # Relaxed gradient tolerance
                         ftol=1e-6,  # Relaxed function tolerance
                         max_nfev=5000,  # Increased max function evaluations
                         verbose=2,  # Show iteration details
-                        show_progress=True,  # Monitor chunking progress
+                        show_progress=show_progress,  # Enable progress for large datasets
                     )
                     # Create empty info dict for consistency with curve_fit path
                     info = {}
                 else:
+                    # Use standard curve_fit for small datasets
                     popt, pcov = curve_fit(
                         residual_fn,
                         xdata,
@@ -543,6 +494,37 @@ class NLSQWrapper:
                         verbose=2,  # Show iteration details
                     )
                     info = {}
+
+                # Validate result: Check for NLSQ streaming bug (returns p0 instead of best_params)
+                # This bug can occur when streaming optimization fails internally
+                params_unchanged = np.allclose(popt, current_params, rtol=1e-10)
+                identity_covariance = np.allclose(pcov, np.eye(len(popt)), rtol=1e-10)
+
+                if params_unchanged or identity_covariance:
+                    # Possible bug: parameters unchanged or identity covariance matrix
+                    logger.warning(
+                        f"Potential optimization failure detected:\n"
+                        f"  Parameters unchanged: {params_unchanged}\n"
+                        f"  Identity covariance: {identity_covariance}\n"
+                        f"  This may indicate NLSQ streaming bug or failed optimization"
+                    )
+
+                    if attempt < max_retries - 1:
+                        # Retry with different strategy or parameters
+                        recovery_actions.append("detected_parameter_stagnation")
+                        logger.info("Retrying with perturbed parameters...")
+                        # Perturb parameters by 5% for next attempt
+                        perturbation = 0.05 * current_params * np.random.uniform(-1, 1, size=len(current_params))
+                        current_params = current_params + perturbation
+                        if bounds is not None:
+                            # Clip to bounds
+                            current_params = np.clip(current_params, bounds[0], bounds[1])
+                        continue  # Retry optimization
+                    else:
+                        logger.error(
+                            "Optimization returned unchanged parameters after all retries. "
+                            "This may indicate a bug in NLSQ or an intractable problem."
+                        )
 
                 # Success!
                 convergence_status = (

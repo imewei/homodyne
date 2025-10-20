@@ -278,15 +278,6 @@ performance:
     cpu_threads: "auto"
     vectorization_level: "high" # Important for multi-angle processing
 
-  # Intelligent time subsampling for large datasets (Layer 1 protection)
-  subsampling:
-    enabled: true # Enable adaptive subsampling for large datasets
-    trigger_threshold_points: 50000000 # 50M - only subsample if exceeded
-    max_reduction_factor: 4 # Maximum 4x reduction (conservative for XPCS)
-    method: "logarithmic" # logarithmic | linear | adaptive
-    target_points: null # Auto-calculated (or set explicit value)
-    preserve_edges: true # Ensure t_min and t_max are included
-
 # Enhanced logging for anisotropic analysis
 logging:
   enabled: true

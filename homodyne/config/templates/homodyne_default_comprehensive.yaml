@@ -400,21 +400,19 @@ performance:
     cpu_threads: "auto" # auto | integer value
     vectorization_level: "high" # low | medium | high
 
-  # Intelligent time subsampling for large datasets (Layer 1 protection)
-  # Automatically reduces dataset size for >50M points with physics-aware sampling
-  subsampling:
-    enabled: true # Enable adaptive subsampling for large datasets
-    trigger_threshold_points: 50000000 # 50M - only subsample if exceeded
-    max_reduction_factor: 4 # Maximum 4x reduction (conservative for XPCS)
-    method: "logarithmic" # logarithmic | linear | adaptive
-    target_points: null # Auto-calculated (or set explicit value)
-    preserve_edges: true # Ensure t_min and t_max are included
-
-    # How it works:
-    # - 23M dataset: No subsampling (below 50M threshold)
-    # - 100M dataset: 2x reduction (adaptive)
-    # - 500M dataset: 4x reduction (capped at max)
-    # Layer 2 (NLSQ fallback): Triggers at 150M with uniform sampling
+  # NLSQ Optimization Strategy (Optional Advanced Settings)
+  # NLSQ automatically selects optimal strategy based on dataset size and available memory.
+  # These settings allow manual overrides for special cases.
+  #
+  # Default strategy selection (automatic):
+  #   < 1M points     → STANDARD (curve_fit)
+  #   1M-10M points   → LARGE (curve_fit_large)
+  #   10M-100M points → CHUNKED (curve_fit_large with progress)
+  #   > 100M points   → STREAMING (unlimited data)
+  #
+  # strategy_override: "large"  # Force specific strategy: standard | large | chunked | streaming
+  # memory_limit_gb: 16.0        # Custom memory limit (GB) for strategy selection
+  # enable_progress: true        # Show progress bars for long optimizations (default: true)
 
 # ==============================================================================
 # QUALITY CONTROL AND VALIDATION
