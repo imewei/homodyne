@@ -1,7 +1,7 @@
 # Homodyne v2: JAX-First XPCS Analysis
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
-[![Python](https://img.shields.io/badge/Python-3.10%2B-blue)](https://www.python.org/)
+[![Python](https://img.shields.io/badge/Python-3.12%2B-blue)](https://www.python.org/)
 [![DOI](https://zenodo.org/badge/DOI/10.1073/pnas.2401162121.svg)](https://doi.org/10.1073/pnas.2401162121)
 
 **High-performance JAX-first package for X-ray Photon Correlation Spectroscopy (XPCS)
@@ -62,28 +62,68 @@ compatibility** for all validated components:
 - **Exclusive GPU allocation** for main optimization process (90% memory)
 - **CPU-only workers** for parallel plotting to prevent GPU memory exhaustion
 
-## Installation
+## Platform Support
 
-### Basic CPU-Only Installation (< 5 minutes)
+### CPU-Only (All Platforms) ✅
+
+- **Linux**: Full support
+- **macOS**: Full support
+- **Windows**: Full support
+- **Python**: 3.12+
+
+Default installation provides CPU-only JAX, which works on all platforms:
 
 ```bash
-# Latest 2025 stable versions
-pip install numpy>=2.0.0 scipy>=1.14.0 jax==0.7.2 jaxlib==0.7.2 \
-            nlsq>=0.1.0 numpyro==0.19.0 h5py pyyaml
+pip install homodyne
 ```
 
-**NLSQ Package**: The package uses the **NLSQ** trust-region optimizer from
-[github.com/imewei/NLSQ](https://github.com/imewei/NLSQ) for JAX-native nonlinear least
-squares optimization. NLSQ provides GPU-accelerated curve fitting with automatic
-differentiation via JAX.
+### GPU Acceleration (Linux Only) ⚡
 
-### GPU Acceleration with System CUDA (Recommended for HPC)
+- **Supported**: Linux x86_64 or aarch64 **only**
+- **Not supported**: Windows, macOS
+- **Requirements**:
+  - NVIDIA GPU with CUDA Compute Capability 6.0+
+  - CUDA 12.1-12.9 (pre-installed on system)
+  - NVIDIA driver >= 525
+
+## Installation
+
+### Quick Install (CPU-Only, All Platforms)
 
 ```bash
-# Requires pre-installed CUDA 12.1-12.9 on Linux
-pip install --upgrade "jax[cuda12-local]==0.7.2" jaxlib==0.7.2 \
-            nlsq>=0.1.0 numpyro==0.19.0 blackjax==1.2.5 \
-            h5py pyyaml psutil tqdm
+# Works on Linux, macOS, Windows
+pip install homodyne
+```
+
+This installs homodyne with CPU-only JAX (suitable for development and small datasets).
+
+### GPU Installation (Linux Only)
+
+For GPU-accelerated computation on Linux systems with CUDA 12+:
+
+```bash
+# Step 1: Install JAX with CUDA support
+pip install jax[cuda12-local]==0.8.0 jaxlib==0.8.0
+
+# Step 2: Install homodyne
+pip install homodyne
+```
+
+**Why two steps?** JAX with CUDA support is Linux-specific and must be installed separately to avoid dependency conflicts on other platforms.
+
+### Development Installation
+
+```bash
+# CPU-only (all platforms)
+pip install homodyne[dev]
+
+# Or from source
+git clone https://github.com/your-org/homodyne.git
+cd homodyne
+pip install -e ".[dev]"
+
+# For GPU support on Linux: run this first
+pip install jax[cuda12-local]==0.8.0 jaxlib==0.8.0
 ```
 
 ### HPC Environment Setup
@@ -93,19 +133,19 @@ pip install --upgrade "jax[cuda12-local]==0.7.2" jaxlib==0.7.2 \
 module load cuda/12.2
 module load cudnn/9.8
 
-# Then install with system CUDA integration
-pip install homodyne[hpc]
-# Or manually:
-pip install --upgrade "jax[cuda12-local]==0.7.2" jaxlib==0.7.2 \
-            nlsq>=0.1.0 numpyro==0.19.0 blackjax==1.2.5 \
-            h5py pyyaml psutil tqdm matplotlib
+# Install JAX with CUDA support
+pip install jax[cuda12-local]==0.8.0 jaxlib==0.8.0
+
+# Install homodyne
+pip install homodyne[dev]
 ```
 
-### Development
+### Makefile Shortcuts (Development)
 
 ```bash
-pip install homodyne[dev]
-# Or: pip install -e ".[dev]"
+make dev               # Install dev environment (CPU-only)
+make install-jax-gpu   # Install JAX with GPU support (Linux only)
+make gpu-check         # Verify GPU setup
 ```
 
 ## Quick Start

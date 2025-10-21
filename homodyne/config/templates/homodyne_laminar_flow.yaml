@@ -1,4 +1,4 @@
-# Homodyne v2.1 Laminar Flow Configuration Template
+# Homodyne Laminar Flow Configuration Template
 # =================================================
 # Advanced configuration for 7-parameter nonequilibrium laminar flow analysis.
 # Model: Complete nonequilibrium XPCS with time-dependent diffusion and shear
@@ -29,7 +29,7 @@
 # TEMPLATE METADATA
 # ==============================================================================
 metadata:
-  config_version: "2.1"
+  config_version: "2.0.0"
   description: "Nonequilibrium laminar flow analysis - 7 parameter model with discrete integration"
   analysis_mode: "laminar_flow"
   parameter_count: 7

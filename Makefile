@@ -1,9 +1,9 @@
 # Homodyne Analysis Package - Development Makefile
 # ================================================
 # JAX-accelerated XPCS analysis with NLSQ and MCMC
-# Updated: 2025-10-14 - NLSQ integration
+# Updated: 2025-10-21 - Cross-platform JAX support
 
-.PHONY: help clean clean-all clean-build clean-pyc clean-test clean-cache install dev test test-all test-unit test-integration test-performance lint format docs build check gpu-check benchmark
+.PHONY: help clean clean-all clean-build clean-pyc clean-test clean-cache install dev test test-all test-unit test-integration test-performance lint format docs build check gpu-check benchmark install-jax-gpu
 
 # Variables
 PYTHON := python
@@ -12,18 +12,31 @@ PYTEST := pytest
 RUFF := ruff
 BLACK := black
 
+# Platform detection
+UNAME_S := $(shell uname -s 2>/dev/null || echo "Windows")
+ifeq ($(UNAME_S),Linux)
+    PLATFORM := linux
+    JAX_GPU_CMD := pip install --upgrade jax[cuda12-local]==0.8.0 jaxlib==0.8.0
+else ifeq ($(UNAME_S),Darwin)
+    PLATFORM := macos
+    JAX_GPU_CMD := @echo "GPU acceleration not available on macOS (CPU-only)"
+else
+    PLATFORM := windows
+    JAX_GPU_CMD := @echo "GPU acceleration not available on Windows (CPU-only)"
+endif
+
 # Default target
 help:
 	@echo "Homodyne Analysis Package - Development Commands"
 	@echo "================================================"
 	@echo
 	@echo "Installation & Setup:"
-	@echo "  install         Install package in production mode"
-	@echo "  dev             Install package with development dependencies"
-	@echo "  install-gpu     Install with GPU acceleration support"
-	@echo "  install-hpc     Install for HPC environments"
+	@echo "  install         Install package in production mode (CPU-only)"
+	@echo "  dev             Install package with development dependencies (CPU-only)"
+	@echo "  install-jax-gpu Install JAX with GPU support (Linux + CUDA 12+ only)"
 	@echo "  deps-check      Check all dependencies status"
 	@echo "  gpu-check       Check GPU availability and CUDA setup"
+	@echo "  Platform: $(PLATFORM)"
 	@echo
 	@echo "Testing:"
 	@echo "  test            Run core unit tests"
@@ -73,22 +86,33 @@ help:
 # Installation targets
 install:
 	$(PIP) install -e .
+	@echo "✓ Package installed (CPU-only)"
+	@echo "  For GPU support on Linux: make install-jax-gpu"
 
 dev:
 	$(PIP) install -e ".[dev,docs]"
-	@echo "✓ Development environment ready"
+	@echo "✓ Development environment ready (CPU-only)"
+	@echo "  Platform: $(PLATFORM)"
 	@echo "  NLSQ: Ready"
 	@echo "  MCMC (NumPyro): Ready"
+	@echo "  For GPU support on Linux: make install-jax-gpu"
 	@$(PYTHON) -c "from homodyne import get_package_info; info = get_package_info(); print('\nDependency Status:'); [print(f'  {k}: ✓' if v else f'  {k}: ✗') for k,v in info['dependencies'].items()]"
 
-install-gpu:
-	$(PIP) install -e ".[gpu]"
-	@echo "✓ GPU acceleration installed"
+install-jax-gpu:
+	@echo "Installing JAX with GPU support..."
+	@echo "Platform: $(PLATFORM)"
+ifeq ($(PLATFORM),linux)
+	@echo "Uninstalling CPU version..."
+	$(PIP) uninstall -y jax jaxlib || true
+	@echo "Installing CUDA version (requires CUDA 12.1-12.9)..."
+	$(JAX_GPU_CMD)
+	@echo "✓ JAX GPU support installed"
 	@$(MAKE) gpu-check
-
-install-hpc:
-	$(PIP) install -e ".[hpc]"
-	@echo "✓ HPC environment configured"
+else
+	@echo "✗ GPU acceleration only available on Linux with CUDA 12+"
+	@echo "  Current platform: $(PLATFORM)"
+	@echo "  Keeping CPU-only installation"
+endif
 
 deps-check:
 	@echo "Checking Homodyne Dependencies..."

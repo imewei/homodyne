@@ -1,4 +1,4 @@
-# Homodyne v2.1 Static Anisotropic Configuration Template
+# Homodyne Static Anisotropic Configuration Template
 # ======================================================
 # Optimized configuration for 3-parameter static anisotropic diffusion analysis.
 # Model: Same physics as isotropic but analyzed across multiple phi angles
@@ -27,7 +27,7 @@
 # TEMPLATE METADATA
 # ==============================================================================
 metadata:
-  config_version: "2.1"
+  config_version: "2.0.0"
   description: "Static anisotropic diffusion analysis - 3 parameter multi-angle model with discrete integration"
   analysis_mode: "static_anisotropic"
   parameter_count: 3

@@ -11,12 +11,16 @@ Consolidated CI/CD workflows for the Homodyne project.
 **Jobs:**
 
 - Lint & format (ruff + black)
-- Test on Python 3.10, 3.11, 3.12
-- Test on Ubuntu, Windows, macOS
+- **Test CPU (multi-platform):** Ubuntu, Windows, macOS with Python 3.12 (CPU-only JAX)
+- **Test GPU (disabled):** Linux with CUDA support (requires self-hosted runner)
 - Build package
 - Deploy documentation (main branch only)
 
 **Duration:** ~10-15 minutes
+
+**Platform Support:**
+- All tests run on CPU-only JAX (cross-platform compatible)
+- GPU tests available but disabled by default (requires CUDA-enabled runner)
 
 ______________________________________________________________________
 

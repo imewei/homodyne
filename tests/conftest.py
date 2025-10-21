@@ -6,6 +6,7 @@ Shared fixtures, configuration, and test utilities for the entire test suite.
 """
 
 import os
+import sys
 import tempfile
 from pathlib import Path
 
@@ -40,6 +41,64 @@ except ImportError:
 
 
 # ============================================================================
+# Platform and GPU Detection
+# ============================================================================
+
+
+def is_linux():
+    """Check if running on Linux."""
+    return sys.platform.startswith("linux")
+
+
+def is_macos():
+    """Check if running on macOS."""
+    return sys.platform == "darwin"
+
+
+def is_windows():
+    """Check if running on Windows."""
+    return sys.platform == "win32"
+
+
+def is_cuda_available():
+    """Check if CUDA GPU is available."""
+    if not JAX_AVAILABLE:
+        return False
+    try:
+        gpu_devices = [d for d in jax.devices() if "gpu" in str(d).lower() or "cuda" in str(d).lower()]
+        return len(gpu_devices) > 0
+    except Exception:
+        return False
+
+
+def is_gpu_compatible():
+    """Check if platform supports GPU acceleration (Linux + CUDA 12+)."""
+    return is_linux() and is_cuda_available()
+
+
+# Skip decorators for platform-specific tests
+skip_if_not_linux = pytest.mark.skipif(
+    not is_linux(),
+    reason="Test requires Linux OS"
+)
+
+skip_if_no_gpu = pytest.mark.skipif(
+    not is_gpu_compatible(),
+    reason="GPU tests require Linux + CUDA 12+ GPU"
+)
+
+skip_if_windows = pytest.mark.skipif(
+    is_windows(),
+    reason="Test not supported on Windows"
+)
+
+skip_if_macos = pytest.mark.skipif(
+    is_macos(),
+    reason="Test not supported on macOS"
+)
+
+
+# ============================================================================
 # Pytest Configuration
 # ============================================================================
 
@@ -49,12 +108,13 @@ def pytest_configure(config):
     config.addinivalue_line("markers", "unit: Unit tests for individual components")
     config.addinivalue_line("markers", "integration: Integration tests for workflows")
     config.addinivalue_line("markers", "performance: Performance and benchmark tests")
-    config.addinivalue_line("markers", "gpu: GPU acceleration tests")
+    config.addinivalue_line("markers", "gpu: GPU acceleration tests (requires Linux + CUDA 12+)")
     config.addinivalue_line("markers", "mcmc: MCMC statistical tests")
     config.addinivalue_line("markers", "property: Property-based tests")
     config.addinivalue_line("markers", "slow: Slow tests (> 5 seconds)")
     config.addinivalue_line("markers", "requires_jax: Requires JAX installation")
-    config.addinivalue_line("markers", "requires_gpu: Requires GPU hardware")
+    config.addinivalue_line("markers", "requires_gpu: Requires GPU hardware (Linux + CUDA 12+)")
+    config.addinivalue_line("markers", "linux: Requires Linux OS")
 
 
 def pytest_collection_modifyitems(config, items):
@@ -281,15 +341,21 @@ def mock_yaml_config(temp_dir):
 
 @pytest.fixture
 def gpu_available():
-    """Check if GPU is available for testing."""
-    if not JAX_AVAILABLE:
-        return False
+    """Check if GPU is available for testing (Linux + CUDA 12+ only)."""
+    return is_gpu_compatible()
 
-    try:
-        gpu_devices = jax.devices("gpu")
-        return len(gpu_devices) > 0
-    except:
-        return False
+
+@pytest.fixture
+def platform_info():
+    """Get current platform information."""
+    return {
+        "is_linux": is_linux(),
+        "is_macos": is_macos(),
+        "is_windows": is_windows(),
+        "has_gpu": is_cuda_available(),
+        "gpu_compatible": is_gpu_compatible(),
+        "platform": sys.platform,
+    }
 
 
 @pytest.fixture
