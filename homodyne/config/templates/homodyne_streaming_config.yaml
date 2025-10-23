@@ -1,0 +1,547 @@
+# Homodyne Streaming Configuration Template
+# =================================================
+# Configuration for large-scale XPCS analysis with StreamingOptimizer support.
+# Designed for datasets > 100M points with constant memory usage and fault tolerance.
+#
+# Version: 3.0+ (NLSQ API Alignment)
+# NLSQ Version: 0.1.5+
+#
+# Key Features:
+# - StreamingOptimizer for unlimited dataset sizes
+# - Checkpoint/resume capability for fault tolerance
+# - Batch-level error recovery and diagnostics
+# - Constant memory usage (~2 GB regardless of dataset size)
+# - Automatic batch size optimization based on available memory
+#
+# Usage:
+#   1. For datasets > 100M points (STREAMING mode auto-selected)
+#   2. Long-running optimizations requiring fault tolerance
+#   3. Production pipelines on HPC systems with job time limits
+#   4. Memory-constrained environments
+#
+# Run: homodyne --config this_file.yaml
+
+# ==============================================================================
+# TEMPLATE METADATA
+# ==============================================================================
+metadata:
+  config_version: "3.0.0"
+  description: "Large-scale XPCS analysis with StreamingOptimizer"
+  analysis_mode: "static_isotropic"  # Can be changed to laminar_flow
+  parameter_count: 5  # 5 for static_isotropic, 9 for laminar_flow
+  dataset_size: "100M+ points"
+  streaming_mode: true
+  recommended_use: "Datasets > 100M points, HPC environments, fault-tolerant pipelines"
+  template_type: "production_ready"
+  complexity: "high"
+  key_features:
+    - "StreamingOptimizer with constant memory usage"
+    - "Checkpoint/resume for fault tolerance"
+    - "Automatic batch size optimization"
+    - "Batch-level error recovery"
+    - "Real-time progress tracking"
+    - "Best parameter tracking across batches"
+
+# ==============================================================================
+# CORE ANALYSIS CONFIGURATION
+# ==============================================================================
+
+# Analysis mode: 5-parameter static isotropic model
+# Change to "laminar_flow" for 9-parameter flow analysis
+analysis_mode: "static_isotropic"
+
+# Core physics parameters
+analyzer_parameters:
+  # Time step between correlation measurements (seconds)
+  dt: 0.1
+
+  # Frame range for analysis
+  start_frame: 1
+  end_frame: 5000  # Large dataset for streaming demonstration
+
+  # Scattering parameters
+  scattering:
+    # Wave vector magnitude in Å⁻¹ (sample-dependent)
+    wavevector_q: 0.0054
+
+  # Geometry parameters (instrumental setup)
+  geometry:
+    # Stator-rotor gap in Angstroms (instrumental parameter)
+    stator_rotor_gap: 2000000
+
+# Analysis mode settings
+analysis_settings:
+  # Static mode enabled for isotropic analysis
+  static_mode: true
+
+  model_description:
+    type: "static_isotropic"
+    parameters: 5
+    physics: "Anomalous diffusion with offset"
+
+# ==============================================================================
+# DATA CONFIGURATION
+# ==============================================================================
+
+# Experimental data file paths (CUSTOMIZE THESE PATHS)
+experimental_data:
+  # Primary data location
+  # Modern format: Use file_path directly
+  file_path: "./data/large_dataset.hdf"
+
+  # Legacy format (also supported):
+  # data_folder_path: "./data/sample/"
+  # data_file_name: "large_dataset.hdf"
+
+  # Phi angles (required for some analysis modes)
+  phi_angles_path: "./data/phi_angles/"
+  phi_angles_file: "phi_list.txt"
+
+  # Caching for performance
+  cache_file_path: "./data/cache/"
+  cache_filename_template: "cached_c2_q{wavevector_q:.4f}_frames_{start_frame}_{end_frame}.npz"
+  cache_compression: true
+
+  # Data format
+  data_type: "float64"
+  file_format: "HDF5"
+  exchange_key: "exchange"
+
+# ==============================================================================
+# PHI ANGLE FILTERING CONFIGURATION
+# ==============================================================================
+
+# Optional angle filtering (disable for full analysis)
+phi_filtering:
+  enabled: false  # Set true to enable filtering
+
+  # Target angle ranges (if enabled)
+  target_ranges:
+    - min_angle: -10.0
+      max_angle: 10.0
+      description: "Near 0 degrees"
+
+  # Fallback behavior
+  fallback_to_all_angles: true
+
+  # Filtering algorithm
+  algorithm: "range_based"
+  tolerance: 2.0
+
+# ==============================================================================
+# PARAMETER CONFIGURATION (5-PARAMETER STATIC ISOTROPIC)
+# ==============================================================================
+
+# Initial parameter values for 5-parameter static isotropic model
+initial_parameters:
+  # 5-parameter model: [contrast, offset, D₀, α, D_offset]
+  # Note: contrast and offset are scaling parameters, not optimized in some contexts
+  parameter_names: ["D0", "alpha", "D_offset"]
+
+  # Starting values for optimization (CUSTOMIZE BASED ON YOUR SYSTEM)
+  # D₀: diffusion coefficient prefactor (Å²/s)
+  # α: anomalous diffusion exponent (dimensionless)
+  # D_offset: diffusion coefficient offset (Å²/s)
+  values: [1000.0, -1.2, 0.0]
+
+  # Parameter units for reference
+  units: ["Å²/s", "dimensionless", "Å²/s"]
+
+# Parameter bounds for optimization
+parameter_space:
+  bounds:
+    # Diffusion coefficient prefactor
+    - name: D0
+      min: 1.0
+      max: 100000.0
+      type: TruncatedNormal
+      prior_mu: 1000.0
+      prior_sigma: 1000.0
+      unit: "Å²/s"
+      description: "Diffusion coefficient prefactor"
+
+    # Anomalous diffusion exponent
+    - name: alpha
+      min: -2.0
+      max: 0.5
+      type: Normal
+      prior_mu: -1.2
+      prior_sigma: 0.3
+      unit: "dimensionless"
+      description: "Anomalous diffusion exponent"
+
+    # Diffusion coefficient offset
+    - name: D_offset
+      min: -10000.0
+      max: 10000.0
+      type: Normal
+      prior_mu: 0.0
+      prior_sigma: 200.0
+      unit: "Å²/s"
+      description: "Diffusion coefficient offset"
+
+# ==============================================================================
+# OPTIMIZATION CONFIGURATION (NLSQ WITH STREAMING)
+# ==============================================================================
+
+# NLSQ optimization (recommended for large datasets)
+optimization:
+  # Primary method: NLSQ (trust-region least squares)
+  nlsq:
+    enabled: true
+    method: "trf"  # Trust-region reflective (recommended)
+    max_iterations: 100
+    ftol: 1e-8
+    xtol: 1e-8
+    gtol: 1e-8
+
+  # ========================================================================
+  # STREAMING CONFIGURATION (NEW IN V3.0)
+  # ========================================================================
+  # Automatically enabled for datasets > 100M points
+  # Provides:
+  # - Constant memory usage (~2 GB regardless of dataset size)
+  # - Checkpoint/resume capability
+  # - Batch-level fault tolerance
+  # - Real-time progress tracking
+  # ========================================================================
+
+  streaming:
+    # ======================================================================
+    # CHECKPOINT SETTINGS (Recommended for production)
+    # ======================================================================
+    # Enable checkpoint/resume for fault tolerance
+    enable_checkpoints: true
+
+    # Checkpoint storage directory (created if doesn't exist)
+    # Recommendation: Use local scratch on HPC for fast I/O
+    checkpoint_dir: "./checkpoints"
+
+    # Checkpoint save frequency (number of batches between saves)
+    # Guidelines:
+    #   - 5-10:  High fault tolerance, ~2% overhead
+    #   - 10-20: Balanced (recommended for most users)
+    #   - 50+:   Minimal overhead, coarse resume granularity
+    checkpoint_frequency: 10
+
+    # Resume from existing checkpoint if available
+    # Set to false to force restart from beginning
+    resume_from_checkpoint: true
+
+    # Number of recent checkpoints to keep (older ones deleted automatically)
+    # Recommendation: 3 checkpoints provide good fault tolerance
+    keep_last_checkpoints: 3
+
+    # ======================================================================
+    # FAULT TOLERANCE SETTINGS
+    # ======================================================================
+    # Enable batch-level error recovery
+    # Applies recovery strategies when individual batches fail
+    enable_fault_tolerance: true
+
+    # Validate for NaN/Inf at 3 critical points:
+    # 1. After gradient computation
+    # 2. After parameter update
+    # 3. After loss calculation
+    # Note: Can disable for ~0.5% speedup via fast_mode
+    validate_numerics: true
+
+    # Minimum batch success rate required (0.0 to 1.0)
+    # Optimization fails if success rate falls below this threshold
+    # Recommendation: 0.5 (50%) allows for some batch failures
+    min_success_rate: 0.5
+
+    # Maximum retry attempts per failed batch
+    # Each retry applies a different recovery strategy:
+    #   Attempt 0: Perturb parameters (5% noise)
+    #   Attempt 1: Reduce step size (0.5x)
+    #   Attempt 2: Tighten bounds (0.9x range)
+    max_retries_per_batch: 2
+
+    # ======================================================================
+    # ADVANCED BATCH PROCESSING SETTINGS
+    # ======================================================================
+    # Batch size (points per batch)
+    # Leave commented for automatic optimization based on available memory
+    # Automatic algorithm:
+    #   - Target: 10% of available RAM
+    #   - Accounts for Jacobian memory (n_points × n_parameters)
+    #   - Bounded: 1,000 to 100,000 points
+    #   - Rounded to nearest 1,000
+    # Typical automatic batch sizes:
+    #   - 1 GB RAM  → 10,000 points
+    #   - 8 GB RAM  → 50,000 points
+    #   - 32 GB RAM → 100,000 points (capped)
+    # batch_size: 50000  # Uncomment to override automatic sizing
+
+    # Maximum epochs (passes through entire dataset)
+    # Typically 1 epoch is sufficient for XPCS data
+    max_epochs: 1
+
+# ==============================================================================
+# PERFORMANCE OPTIMIZATION (STREAMING-SPECIFIC)
+# ==============================================================================
+
+performance:
+  # ========================================================================
+  # STRATEGY SELECTION (Automatic by default)
+  # ========================================================================
+  # Homodyne automatically selects optimization strategy based on dataset size:
+  #   < 1M points:      STANDARD (curve_fit)
+  #   1M-10M points:    LARGE (curve_fit_large)
+  #   10M-100M points:  CHUNKED (curve_fit_large with progress)
+  #   > 100M points:    STREAMING (StreamingOptimizer)
+  #
+  # Override automatic selection (advanced users only):
+  # strategy_override: "streaming"  # Force specific strategy
+  #   Options: 'standard' | 'large' | 'chunked' | 'streaming'
+
+  # ========================================================================
+  # MEMORY MANAGEMENT
+  # ========================================================================
+  # Custom memory limit for batch sizing (GB)
+  # Leave commented for automatic detection via psutil
+  # Use on shared HPC nodes to respect job allocation:
+  #   Example: SLURM allocates 32 GB → set to 25.6 GB (80% for safety)
+  # memory_limit_gb: 25.6  # Uncomment to override automatic detection
+
+  # Enable progress bars for long-running optimizations
+  # Shows real-time progress for CHUNKED and STREAMING modes
+  enable_progress: true
+
+  # ========================================================================
+  # FAST MODE (Production optimization)
+  # ========================================================================
+  # Fast mode disables numerical validation for <1% overhead
+  # Trade-offs:
+  #   - Enabled (default): ~0.5% overhead, early NaN/Inf detection
+  #   - Fast mode: <0.1% overhead, no validation
+  # Recommendation: Enable fast mode only for production with validated data
+  # Set via Python API: NLSQWrapper(fast_mode=True)
+  # Cannot be set in config file (API-level setting)
+
+  # ========================================================================
+  # MEMORY OPTIMIZATION (Advanced)
+  # ========================================================================
+  memory_optimization:
+    enabled: true
+    max_memory_usage_gb: 16.0  # Maximum memory for optimization
+    chunk_size: 10000  # Chunk size for data processing
+    enable_caching: true  # Enable result caching
+    cache_strategy: "moderate"  # moderate | aggressive
+
+  # ========================================================================
+  # I/O OPTIMIZATION
+  # ========================================================================
+  io_optimization:
+    memory_mapped_io: false  # Enable for very large files (> 100 GB)
+    parallel_loading: true  # Parallel data loading
+    prefetch_buffer_size: 100000
+    compression_level: 6  # HDF5 compression (0-9)
+
+  # ========================================================================
+  # COMPUTATIONAL OPTIMIZATION
+  # ========================================================================
+  computation:
+    enable_jit: true  # JAX JIT compilation (recommended)
+    gpu_acceleration: "auto"  # Auto-detect GPU availability
+    cpu_threads: "auto"  # Auto-detect optimal thread count
+    vectorization_level: "high"  # High-level vectorization
+    numerical_precision: "float64"  # High precision for XPCS
+
+# ==============================================================================
+# QUALITY CONTROL AND VALIDATION
+# ==============================================================================
+
+quality_control:
+  enabled: true
+
+  # Progressive validation
+  progressive_validation:
+    enabled: true
+    validate_loading: true
+    validate_preprocessing: true
+    validate_parameter_bounds: true
+
+  # Auto-repair
+  auto_repair:
+    enabled: true
+    strategy: "conservative"
+    max_repair_attempts: 3
+
+  # Quality thresholds
+  thresholds:
+    min_data_points: 1000
+    max_nan_fraction: 0.01
+    min_correlation_range: [0.9, 1.1]
+
+  # Quality reporting
+  reporting:
+    enabled: true
+    export_format: "json"
+    include_plots: false  # Disable for large-scale processing
+
+# ==============================================================================
+# LOGGING CONFIGURATION
+# ==============================================================================
+
+logging:
+  enabled: true
+  level: "INFO"
+
+  console:
+    enabled: true
+    level: "INFO"
+    format: "detailed"
+    colors: true
+    show_progress: true  # Show progress bars
+
+  file:
+    enabled: true
+    level: "DEBUG"
+    path: "./logs/"
+    filename: "homodyne_streaming.log"
+    max_size_mb: 100  # Larger log files for long-running jobs
+    backup_count: 5
+
+  # Performance logging (useful for benchmarking)
+  performance:
+    enabled: true
+    level: "INFO"
+    filename: "streaming_performance.log"
+    threshold_seconds: 0.1  # Log operations > 100ms
+
+  # Module-specific logging
+  modules:
+    "homodyne.optimization.nlsq_wrapper": "INFO"
+    "homodyne.optimization.streaming_optimizer": "INFO"
+    "homodyne.optimization.checkpoint_manager": "INFO"
+    "homodyne.optimization.batch_statistics": "DEBUG"
+    "jax._src": "WARNING"  # Suppress JAX internal logs
+
+# ==============================================================================
+# OUTPUT CONFIGURATION
+# ==============================================================================
+
+output:
+  base_directory: "./homodyne_results/"
+
+  formats:
+    hdf5: true  # Efficient for large results
+    json: true  # Human-readable metadata
+    csv: false  # Disable for large datasets
+    yaml: true  # Save config backup
+
+  plots:
+    enabled: true
+    formats: ["png"]  # PNG only for large-scale processing
+    dpi: 150  # Lower DPI for faster saving
+    style: "publication"
+
+    # Rendering mode
+    preview_mode: true  # Use Datashader for fast rendering
+
+    # Datashader configuration (when preview_mode: true)
+    datashader:
+      canvas_width: 1200
+      canvas_height: 1200
+      gpu_acceleration: true  # Use GPU if CuPy available
+
+    # Essential plots only (disable extras for large-scale)
+    correlation_function: true
+    fit_quality: true
+    parameter_distributions: false  # Disable for speed
+    residual_analysis: false
+    convergence_diagnostics: true
+
+  # Reports
+  reports:
+    enabled: true
+    format: "html"
+    include_methodology: false  # Minimal reporting for speed
+    include_diagnostics: true  # Include streaming diagnostics
+
+# ==============================================================================
+# VALIDATION
+# ==============================================================================
+
+validation:
+  strict_mode: true
+  check_file_existence: true
+  validate_parameter_ranges: true
+  check_mode_compatibility: true
+
+# ==============================================================================
+# USAGE NOTES FOR STREAMING OPTIMIZATION
+# ==============================================================================
+#
+# QUICK START:
+# 1. Update experimental_data.file_path to your large dataset (> 100M points)
+# 2. Adjust initial_parameters.values based on expected physics
+# 3. Ensure checkpoint_dir has sufficient disk space (typically < 100 MB)
+# 4. Run: homodyne --config this_file.yaml
+# 5. STREAMING mode will be automatically selected for large datasets
+#
+# CHECKPOINT/RESUME WORKFLOW:
+# 1. Initial run:
+#    homodyne --config streaming_config.yaml
+#    → Saves checkpoints every 10 batches to ./checkpoints/
+#
+# 2. If interrupted (e.g., HPC job time limit, CTRL+C):
+#    Checkpoints saved: batch_0010.h5, batch_0020.h5, batch_0030.h5
+#
+# 3. Resume automatically on next run:
+#    homodyne --config streaming_config.yaml
+#    → Detects latest checkpoint (batch_0030.h5)
+#    → Resumes from batch 30
+#    → Continues to completion
+#
+# PERFORMANCE TUNING:
+# - Memory: Adjust performance.memory_limit_gb for shared HPC nodes
+# - Speed: Enable fast_mode via API for production (~0.5% faster)
+# - Checkpoints: Increase checkpoint_frequency to 20-50 for minimal overhead
+# - Batch size: Override automatic sizing only for GPU memory constraints
+#
+# MONITORING PROGRESS:
+# - Console: Real-time progress bars show batch completion and success rate
+# - Logs: Check logs/streaming_performance.log for timing details
+# - Diagnostics: result.streaming_diagnostics contains batch statistics
+#
+# BATCH STATISTICS (Available after optimization):
+# - batch_success_rate: Fraction of successful batches (target > 0.9)
+# - failed_batch_indices: List of batches that failed (investigate if many)
+# - error_type_distribution: Count of each error type (NaN, convergence, etc.)
+# - average_iterations_per_batch: Typical iterations (helps tune max_iterations)
+# - total_batches_processed: Total batches (= n_points / batch_size)
+#
+# TROUBLESHOOTING:
+# - Memory errors: Reduce memory_limit_gb or disable caching
+# - Low success rate: Tighten parameter bounds or adjust initial values
+# - Slow checkpoints: Use SSD for checkpoint_dir or reduce checkpoint_frequency
+# - NaN/Inf errors: Check model function, tighten bounds, or disable validate_numerics
+#
+# HPC BEST PRACTICES:
+# 1. Use local scratch for checkpoints (/scratch/$SLURM_JOB_ID/checkpoints)
+# 2. Set memory_limit_gb to 80% of SLURM allocation (leave headroom)
+# 3. Match cpu_threads to SLURM cpus-per-task
+# 4. Copy final results to permanent storage after job completes
+# 5. Enable checkpoint/resume for jobs near time limits
+#
+# PERFORMANCE TARGETS (Specification):
+# ✅ Constant memory: < 2 GB regardless of dataset size
+# ✅ Checkpoint save time: < 2 seconds
+# ✅ Fault tolerance overhead: < 5% total runtime
+# ✅ Fast mode overhead: < 1% total runtime
+# ✅ Batch success rate: > 90% for typical datasets
+#
+# MIGRATION FROM V2.0:
+# - Remove performance.subsampling section (deprecated in v3.0)
+# - NLSQ now handles large datasets natively (no subsampling needed)
+# - Streaming configuration is new in v3.0 (optional but recommended)
+# - Results are 100% backward compatible (better, actually - uses full data)
+#
+# See documentation:
+# - StreamingOptimizer Usage: /docs/guides/streaming_optimizer_usage.md
+# - Performance Tuning: /docs/guides/performance_tuning.md
+# - Migration Guide: /docs/migration/v2_to_v3_migration.md
+# - API Reference: /docs/api/optimization.md
