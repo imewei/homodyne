@@ -276,8 +276,8 @@ class TestNLSQWrapperErrorRecovery:
                 # Second call succeeds - use actual NLSQ (imported before patching)
                 return real_curve_fit(f, xdata, ydata, p0=p0, bounds=bounds, **kwargs)
 
-        # Patch curve_fit to simulate failure then success
-        with patch("nlsq.curve_fit", side_effect=mock_curve_fit_with_retry):
+        # Patch curve_fit in the nlsq_wrapper module namespace (since it's imported at module level)
+        with patch("homodyne.optimization.nlsq_wrapper.curve_fit", side_effect=mock_curve_fit_with_retry):
             result = wrapper.fit(
                 data=synthetic_data,
                 config=mock_config,
@@ -338,12 +338,13 @@ class TestNLSQWrapperErrorRecovery:
         )
 
         # Mock to always fail to test error diagnostics
-        def mock_curve_fit_always_fail(f, xdata, ydata, p0, bounds):
+        def mock_curve_fit_always_fail(f, xdata, ydata, p0, bounds, **kwargs):
             raise RuntimeError(
                 "Convergence failure: maximum iterations (5) reached without convergence"
             )
 
-        with patch("nlsq.curve_fit", side_effect=mock_curve_fit_always_fail):
+        # Patch in the nlsq_wrapper module namespace
+        with patch("homodyne.optimization.nlsq_wrapper.curve_fit", side_effect=mock_curve_fit_always_fail):
             with pytest.raises(Exception) as exc_info:
                 wrapper.fit(
                     data=synthetic_data,
