@@ -305,6 +305,154 @@ class DatasetSizeStrategy:
         memory = psutil.virtual_memory()
         return memory.available / (1024**3)
 
+    def build_streaming_config(
+        self,
+        n_points: int,
+        n_parameters: int = 9,
+        checkpoint_config: Optional[dict[str, Any]] = None,
+    ) -> dict[str, Any]:
+        """Build optimized StreamingOptimizer configuration.
+
+        Creates configuration for NLSQ StreamingOptimizer with optimal batch size,
+        checkpoint settings, and fault tolerance based on dataset size and available memory.
+
+        Parameters
+        ----------
+        n_points : int
+            Total number of data points
+        n_parameters : int, optional
+            Number of parameters to optimize (default: 9)
+        checkpoint_config : dict, optional
+            Checkpoint configuration override. Keys:
+            - enable_checkpoints: bool
+            - checkpoint_dir: str
+            - checkpoint_frequency: int
+            - resume_from_checkpoint: bool
+            - keep_last_checkpoints: int
+            - enable_fault_tolerance: bool
+            - max_retries_per_batch: int
+            - min_success_rate: float
+
+        Returns
+        -------
+        dict
+            StreamingOptimizer configuration with keys:
+            - batch_size: Optimal batch size based on memory
+            - max_epochs: Number of epochs (default: 10)
+            - enable_checkpoints: Whether to enable checkpointing
+            - checkpoint_dir: Directory for checkpoints
+            - checkpoint_frequency: Save every N batches
+            - resume_from_checkpoint: Auto-resume from latest
+            - enable_fault_tolerance: Enable validation and retry
+            - validate_numerics: Enable NaN/Inf checks
+            - min_success_rate: Minimum batch success rate
+            - max_retries_per_batch: Maximum retry attempts
+
+        Examples
+        --------
+        >>> selector = DatasetSizeStrategy()
+        >>> config = selector.build_streaming_config(
+        ...     n_points=200_000_000,
+        ...     n_parameters=9
+        ... )
+        >>> print(config['batch_size'])
+        10000
+        """
+        checkpoint_config = checkpoint_config or {}
+
+        # Calculate optimal batch size based on available memory
+        available_gb = self._get_available_memory_gb()
+        batch_size = self._calculate_optimal_batch_size(
+            available_gb, n_parameters
+        )
+
+        # Extract checkpoint settings with defaults
+        enable_checkpoints = checkpoint_config.get('enable_checkpoints', False)
+        checkpoint_dir = checkpoint_config.get('checkpoint_dir', './checkpoints')
+        checkpoint_frequency = checkpoint_config.get('checkpoint_frequency', 10)
+        resume_from_checkpoint = checkpoint_config.get('resume_from_checkpoint', True)
+        keep_last_n = checkpoint_config.get('keep_last_checkpoints', 3)
+
+        # Extract fault tolerance settings
+        enable_fault_tolerance = checkpoint_config.get('enable_fault_tolerance', True)
+        max_retries_per_batch = checkpoint_config.get('max_retries_per_batch', 2)
+        min_success_rate = checkpoint_config.get('min_success_rate', 0.5)
+
+        logger.info(
+            f"Building streaming config for {n_points:,} points: "
+            f"batch_size={batch_size:,}, checkpoints={'enabled' if enable_checkpoints else 'disabled'}"
+        )
+
+        return {
+            # Batch processing
+            "batch_size": batch_size,
+            "max_epochs": 10,
+
+            # Checkpoint management
+            "enable_checkpoints": enable_checkpoints,
+            "checkpoint_dir": checkpoint_dir,
+            "checkpoint_frequency": checkpoint_frequency if enable_checkpoints else 0,
+            "resume_from_checkpoint": resume_from_checkpoint,
+            "keep_last_checkpoints": keep_last_n,
+
+            # Fault tolerance
+            "enable_fault_tolerance": enable_fault_tolerance,
+            "validate_numerics": enable_fault_tolerance,
+            "min_success_rate": min_success_rate,
+            "max_retries_per_batch": max_retries_per_batch,
+        }
+
+    def _calculate_optimal_batch_size(
+        self,
+        available_memory_gb: float,
+        n_parameters: int,
+    ) -> int:
+        """Calculate optimal batch size based on available memory.
+
+        Parameters
+        ----------
+        available_memory_gb : float
+            Available system memory in GB
+        n_parameters : int
+            Number of parameters to optimize
+
+        Returns
+        -------
+        int
+            Optimal batch size (bounded between 1,000 and 100,000)
+
+        Notes
+        -----
+        Batch size is calculated to use ~10% of available memory to leave
+        headroom for other operations. Typical batch sizes:
+        - 1 GB available → 10,000 points
+        - 8 GB available → 50,000 points
+        - 32 GB available → 100,000 points (capped)
+        """
+        bytes_per_float = 8  # float64
+        target_memory_gb = available_memory_gb * 0.1  # Use 10% of available
+
+        # Estimate points per GB: data + Jacobian
+        memory_per_point = bytes_per_float * (1 + n_parameters)
+        target_bytes = target_memory_gb * (1024**3)
+        batch_size = int(target_bytes / memory_per_point)
+
+        # Bound between min and max
+        MIN_BATCH_SIZE = 1_000
+        MAX_BATCH_SIZE = 100_000
+        batch_size = max(MIN_BATCH_SIZE, min(batch_size, MAX_BATCH_SIZE))
+
+        # Round to nearest 1000 for cleaner numbers
+        batch_size = round(batch_size / 1000) * 1000
+
+        logger.debug(
+            f"Calculated batch size: {batch_size:,} points "
+            f"(available memory: {available_memory_gb:.1f} GB, "
+            f"parameters: {n_parameters})"
+        )
+
+        return batch_size
+
     def get_strategy_info(self, strategy: OptimizationStrategy) -> dict[str, Any]:
         """Get information about a specific strategy.
 

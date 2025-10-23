@@ -41,10 +41,29 @@ import numpy as np
 # Reference: https://nlsq.readthedocs.io/en/latest/guides/advanced_features.html
 from nlsq import curve_fit, curve_fit_large
 
+# Try importing StreamingOptimizer (available in NLSQ >= 0.1.5)
+try:
+    from nlsq import StreamingOptimizer, StreamingConfig
+    STREAMING_AVAILABLE = True
+except ImportError:
+    STREAMING_AVAILABLE = False
+    StreamingOptimizer = None
+    StreamingConfig = None
+
 from homodyne.optimization.strategy import (
     DatasetSizeStrategy,
     OptimizationStrategy,
     estimate_memory_requirements,
+)
+from homodyne.optimization.batch_statistics import BatchStatistics
+from homodyne.optimization.recovery_strategies import RecoveryStrategyApplicator
+from homodyne.optimization.numerical_validation import NumericalValidator
+from homodyne.optimization.checkpoint_manager import CheckpointManager
+from homodyne.optimization.exceptions import (
+    NLSQOptimizationError,
+    NLSQConvergenceError,
+    NLSQNumericalError,
+    NLSQCheckpointError,
 )
 
 
@@ -64,6 +83,7 @@ class OptimizationResult:
         device_info: Device used for computation (CPU/GPU details)
         recovery_actions: List of error recovery actions taken
         quality_flag: 'good', 'marginal', 'poor'
+        streaming_diagnostics: Enhanced diagnostics for streaming optimization (Task 5.4)
         success: Boolean indicating convergence (backward compatibility)
         message: Descriptive message about optimization outcome (backward compatibility)
     """
@@ -79,6 +99,7 @@ class OptimizationResult:
     device_info: dict[str, Any]
     recovery_actions: list[str] = field(default_factory=list)
     quality_flag: str = "good"
+    streaming_diagnostics: dict[str, Any] | None = None  # Task 5.4: Enhanced streaming diagnostics
 
     # Backward compatibility attributes (FR-002)
     @property
@@ -116,15 +137,168 @@ class NLSQWrapper:
         self,
         enable_large_dataset: bool = True,
         enable_recovery: bool = True,
+        enable_numerical_validation: bool = True,
+        max_retries: int = 2,
+        fast_mode: bool = False,
     ) -> None:
         """Initialize NLSQWrapper.
 
         Args:
             enable_large_dataset: Use curve_fit_large for datasets >1M points
             enable_recovery: Enable automatic error recovery strategies
+            enable_numerical_validation: Enable NaN/Inf validation at 3 critical points
+            max_retries: Maximum retry attempts per batch (default: 2)
+            fast_mode: Disable non-essential checks for < 1% overhead (Task 5.5)
         """
         self.enable_large_dataset = enable_large_dataset
         self.enable_recovery = enable_recovery
+        self.enable_numerical_validation = enable_numerical_validation and not fast_mode
+        self.max_retries = max_retries
+        self.fast_mode = fast_mode
+
+        # Initialize streaming optimization components
+        self.batch_statistics = BatchStatistics(max_size=100)
+        self.recovery_applicator = RecoveryStrategyApplicator(max_retries=max_retries)
+        self.numerical_validator = NumericalValidator(enable_validation=enable_numerical_validation and not fast_mode)
+
+        # Best parameter tracking
+        self.best_params = None
+        self.best_loss = float('inf')
+        self.best_batch_idx = -1
+
+    @staticmethod
+    def _handle_nlsq_result(
+        result: Any,
+        strategy: OptimizationStrategy,
+    ) -> tuple[np.ndarray, np.ndarray, dict]:
+        """Normalize NLSQ return values to consistent format.
+
+        NLSQ v0.1.5 has inconsistent return types across different functions:
+        - curve_fit: Returns tuple (popt, pcov) OR CurveFitResult object
+        - curve_fit_large: Returns tuple (popt, pcov) OR OptimizeResult object
+        - StreamingOptimizer.fit: Returns dict with 'x', 'pcov', 'streaming_diagnostics'
+
+        This function normalizes all these formats to a consistent tuple:
+        (popt, pcov, info)
+
+        Args:
+            result: Return value from NLSQ optimization call
+            strategy: Optimization strategy used (for logging/diagnostics)
+
+        Returns:
+            tuple: (popt, pcov, info) where:
+                - popt: np.ndarray of optimized parameters
+                - pcov: np.ndarray covariance matrix
+                - info: dict with additional information (empty if not available)
+
+        Raises:
+            TypeError: If result format is unrecognized
+
+        Examples:
+            >>> # Handle tuple (popt, pcov)
+            >>> popt, pcov, info = _handle_nlsq_result((params, cov), OptimizationStrategy.STANDARD)
+            >>> assert info == {}
+
+            >>> # Handle tuple (popt, pcov, info)
+            >>> result = (params, cov, {'nfev': 100})
+            >>> popt, pcov, info = _handle_nlsq_result(result, OptimizationStrategy.STANDARD)
+            >>> assert 'nfev' in info
+
+            >>> # Handle CurveFitResult object
+            >>> from nlsq import CurveFitResult
+            >>> result = CurveFitResult(popt=params, pcov=cov, info={'nfev': 100})
+            >>> popt, pcov, info = _handle_nlsq_result(result, OptimizationStrategy.STANDARD)
+
+            >>> # Handle StreamingOptimizer dict
+            >>> result = {'x': params, 'streaming_diagnostics': {...}}
+            >>> popt, pcov, info = _handle_nlsq_result(result, OptimizationStrategy.STREAMING)
+            >>> assert 'streaming_diagnostics' in info
+
+        Notes:
+            - For STREAMING strategy, pcov is computed from streaming diagnostics if available
+            - Missing info dicts are replaced with empty dicts for consistency
+            - All outputs are converted to numpy arrays for type consistency
+        """
+        import logging
+
+        logger = logging.getLogger(__name__)
+
+        # Case 1: Dict (from StreamingOptimizer)
+        if isinstance(result, dict):
+            popt = np.asarray(result.get('x', result.get('popt')))
+            pcov = np.asarray(result.get('pcov', np.eye(len(popt))))  # Identity if missing
+            info = {
+                'streaming_diagnostics': result.get('streaming_diagnostics', {}),
+                'success': result.get('success', True),
+                'message': result.get('message', ''),
+                'best_loss': result.get('best_loss', None),
+                'final_epoch': result.get('final_epoch', None),
+            }
+            logger.debug(f"Normalized StreamingOptimizer dict result (strategy: {strategy.value})")
+            return popt, pcov, info
+
+        # Case 2: Tuple with 2 or 3 elements
+        if isinstance(result, tuple):
+            if len(result) == 2:
+                # (popt, pcov) - most common case
+                popt, pcov = result
+                info = {}
+                logger.debug(f"Normalized (popt, pcov) tuple (strategy: {strategy.value})")
+            elif len(result) == 3:
+                # (popt, pcov, info) - from curve_fit with full_output=True
+                popt, pcov, info = result
+                # Ensure info is a dict
+                if not isinstance(info, dict):
+                    logger.warning(f"Info object is not a dict: {type(info)}. Converting to dict.")
+                    info = {'raw_info': info}
+                logger.debug(f"Normalized (popt, pcov, info) tuple (strategy: {strategy.value})")
+            else:
+                raise TypeError(
+                    f"Unexpected tuple length: {len(result)}. "
+                    f"Expected 2 (popt, pcov) or 3 (popt, pcov, info). "
+                    f"Got: {result}"
+                )
+            return np.asarray(popt), np.asarray(pcov), info
+
+        # Case 3: Object with attributes (CurveFitResult, OptimizeResult, etc.)
+        if hasattr(result, 'x') or hasattr(result, 'popt'):
+            # Extract popt
+            popt = getattr(result, 'x', getattr(result, 'popt', None))
+            if popt is None:
+                raise AttributeError(
+                    f"Result object has neither 'x' nor 'popt' attribute. "
+                    f"Available attributes: {dir(result)}"
+                )
+
+            # Extract pcov
+            pcov = getattr(result, 'pcov', None)
+            if pcov is None:
+                # No covariance available, create identity matrix
+                logger.warning(f"No pcov attribute in result object. Using identity matrix.")
+                pcov = np.eye(len(popt))
+
+            # Extract info dict
+            info = {}
+            # Common attributes to extract
+            for attr in ['message', 'success', 'nfev', 'njev', 'fun', 'jac', 'optimality']:
+                if hasattr(result, attr):
+                    info[attr] = getattr(result, attr)
+
+            # Check for 'info' attribute (some objects nest additional info)
+            if hasattr(result, 'info') and isinstance(result.info, dict):
+                info.update(result.info)
+
+            logger.debug(
+                f"Normalized object result (type: {type(result).__name__}, strategy: {strategy.value})"
+            )
+            return np.asarray(popt), np.asarray(pcov), info
+
+        # Case 4: Unrecognized format
+        raise TypeError(
+            f"Unrecognized NLSQ result format: {type(result)}. "
+            f"Expected tuple, dict, or object with 'x'/'popt' attributes. "
+            f"Available attributes: {dir(result) if hasattr(result, '__dict__') else 'N/A'}"
+        )
 
     def _get_fallback_strategy(self, current_strategy: OptimizationStrategy) -> OptimizationStrategy | None:
         """Get fallback strategy when current strategy fails.
@@ -290,7 +464,32 @@ class NLSQWrapper:
                 strategy_info = strategy_selector.get_strategy_info(current_strategy)
                 logger.info(f"Attempting optimization with {current_strategy.value} strategy...")
 
-                if self.enable_recovery:
+                # Special handling for STREAMING strategy
+                if current_strategy == OptimizationStrategy.STREAMING and STREAMING_AVAILABLE:
+                    logger.info("Using NLSQ StreamingOptimizer for unlimited dataset size...")
+
+                    # Extract checkpoint configuration from config
+                    checkpoint_config = None
+                    if hasattr(config, 'get_config_dict'):
+                        config_dict = config.get_config_dict()
+                        checkpoint_config = config_dict.get('optimization', {}).get('streaming', {})
+                    elif isinstance(config, dict):
+                        checkpoint_config = config.get('optimization', {}).get('streaming', {})
+
+                    popt, pcov, info = self._fit_with_streaming_optimizer(
+                        residual_fn=residual_fn,
+                        xdata=xdata,
+                        ydata=ydata,
+                        initial_params=validated_params,
+                        bounds=nlsq_bounds,
+                        logger=logger,
+                        checkpoint_config=checkpoint_config,
+                    )
+                    # StreamingOptimizer handles recovery internally
+                    recovery_actions = info.get('recovery_actions', [])
+                    convergence_status = "converged" if info.get('success', True) else "partial"
+
+                elif self.enable_recovery:
                     # Execute with automatic error recovery (T022-T024)
                     popt, pcov, info, recovery_actions, convergence_status = (
                         self._execute_with_recovery(
@@ -366,15 +565,24 @@ class NLSQWrapper:
                     current_strategy = fallback_strategy
                 else:
                     # No more fallbacks available
+                    # Preserve detailed diagnostic error message if available
                     execution_time = time.time() - start_time
                     logger.error(
                         f"All strategies failed after {execution_time:.2f}s\n"
                         f"  Attempted: {[s.value for s in strategy_attempts]}\n"
                         f"  Final error: {e}"
                     )
-                    raise RuntimeError(
-                        f"Optimization failed with all strategies: {[s.value for s in strategy_attempts]}"
-                    ) from e
+
+                    # If the last error was a RuntimeError with detailed diagnostics, preserve it
+                    # Otherwise create a generic error message
+                    if isinstance(e, RuntimeError) and ("Recovery actions" in str(e) or "Suggestions" in str(e)):
+                        # Detailed diagnostics are already in the error message - re-raise as-is
+                        raise
+                    else:
+                        # Create generic fallback error
+                        raise RuntimeError(
+                            f"Optimization failed with all strategies: {[s.value for s in strategy_attempts]}"
+                        ) from e
 
         # Compute final residuals
         final_residuals = residual_fn(xdata, *popt)
@@ -391,7 +599,14 @@ class NLSQWrapper:
         if recovery_actions:
             logger.info(f"Recovery actions applied: {len(recovery_actions)}")
 
-        # Step 9: Create result
+        # Task 5.3 & 5.4: Extract streaming diagnostics from info if available
+        streaming_diagnostics = None
+        if 'batch_statistics' in info:
+            streaming_diagnostics = info['batch_statistics']
+        elif 'streaming_diagnostics' in info:
+            streaming_diagnostics = info['streaming_diagnostics']
+
+        # Step 9: Create result with streaming diagnostics
         result = self._create_fit_result(
             popt=popt,
             pcov=pcov,
@@ -401,6 +616,7 @@ class NLSQWrapper:
             execution_time=execution_time,
             convergence_status=convergence_status,
             recovery_actions=recovery_actions,
+            streaming_diagnostics=streaming_diagnostics,  # Task 5.4
         )
 
         logger.info(
@@ -1029,6 +1245,294 @@ class NLSQWrapper:
 
         return model_function
 
+    def _update_best_parameters(
+        self,
+        params: np.ndarray,
+        loss: float,
+        batch_idx: int,
+        logger: Any,
+    ) -> None:
+        """Update best parameters if current loss is better.
+
+        Parameters
+        ----------
+        params : np.ndarray
+            Current parameter values
+        loss : float
+            Current loss value
+        batch_idx : int
+            Current batch index
+        logger : logging.Logger
+            Logger instance for reporting
+        """
+        if loss < self.best_loss:
+            self.best_params = params.copy()
+            self.best_loss = loss
+            self.best_batch_idx = batch_idx
+            logger.info(
+                f"New best loss: {loss:.6e} at batch {batch_idx} "
+                f"(improved from {self.best_loss:.6e})"
+            )
+
+    def _fit_with_streaming_optimizer(
+        self,
+        residual_fn: Any,
+        xdata: np.ndarray,
+        ydata: np.ndarray,
+        initial_params: np.ndarray,
+        bounds: tuple[np.ndarray, np.ndarray] | None,
+        logger: Any,
+        checkpoint_config: dict | None = None,
+    ) -> tuple[np.ndarray, np.ndarray, dict]:
+        """Fit using NLSQ StreamingOptimizer for unlimited dataset sizes.
+
+        This method uses NLSQ's StreamingOptimizer with integrated:
+        - Numerical validation at 3 critical points
+        - Adaptive retry strategies
+        - Best parameter tracking
+        - Batch statistics
+        - Checkpoint save/resume (optional)
+
+        Parameters
+        ----------
+        residual_fn : callable
+            Residual function
+        xdata : np.ndarray
+            Independent variable data
+        ydata : np.ndarray
+            Dependent variable data
+        initial_params : np.ndarray
+            Initial parameter guess
+        bounds : tuple of np.ndarray or None
+            Parameter bounds (lower, upper)
+        logger : logging.Logger
+            Logger instance
+        checkpoint_config : dict, optional
+            Checkpoint configuration with keys:
+            - enable_checkpoints: bool (default: False)
+            - checkpoint_dir: str (default: "./checkpoints")
+            - checkpoint_frequency: int (default: 10)
+            - resume_from_checkpoint: bool (default: True)
+            - keep_last_checkpoints: int (default: 3)
+
+        Returns
+        -------
+        popt : np.ndarray
+            Optimized parameters (best found)
+        pcov : np.ndarray
+            Covariance matrix
+        info : dict
+            Optimization information including batch_statistics
+
+        Raises
+        ------
+        RuntimeError
+            If StreamingOptimizer is not available in NLSQ version
+        NLSQOptimizationError
+            If optimization fails after all recovery attempts
+        """
+        if not STREAMING_AVAILABLE:
+            raise RuntimeError(
+                "StreamingOptimizer not available. "
+                "Please upgrade NLSQ to version >= 0.1.5: pip install --upgrade nlsq"
+            )
+
+        logger.info("Initializing NLSQ StreamingOptimizer for unlimited dataset size...")
+
+        # Parse checkpoint configuration
+        checkpoint_config = checkpoint_config or {}
+        enable_checkpoints = checkpoint_config.get('enable_checkpoints', False)
+        checkpoint_dir = checkpoint_config.get('checkpoint_dir', './checkpoints')
+        checkpoint_frequency = checkpoint_config.get('checkpoint_frequency', 10)
+        resume_from_checkpoint = checkpoint_config.get('resume_from_checkpoint', True)
+        keep_last_n = checkpoint_config.get('keep_last_checkpoints', 3)
+
+        # Initialize CheckpointManager if enabled
+        checkpoint_manager = None
+        if enable_checkpoints:
+            from pathlib import Path
+            checkpoint_manager = CheckpointManager(
+                checkpoint_dir=Path(checkpoint_dir),
+                checkpoint_frequency=checkpoint_frequency,
+                keep_last_n=keep_last_n,
+                enable_compression=True,
+            )
+            logger.info(f"Checkpoint management enabled: {checkpoint_dir}")
+
+        # Check for existing checkpoint and resume if available
+        start_from_checkpoint = False
+        checkpoint_data = None
+        if checkpoint_manager and resume_from_checkpoint:
+            latest_checkpoint = checkpoint_manager.find_latest_checkpoint()
+            if latest_checkpoint:
+                logger.info(f"Found existing checkpoint: {latest_checkpoint}")
+                try:
+                    checkpoint_data = checkpoint_manager.load_checkpoint(latest_checkpoint)
+                    initial_params = checkpoint_data['parameters']
+                    logger.info(
+                        f"Resuming from batch {checkpoint_data['batch_idx']} "
+                        f"(loss: {checkpoint_data['loss']:.6e})"
+                    )
+                    start_from_checkpoint = True
+                except NLSQCheckpointError as e:
+                    logger.warning(f"Failed to load checkpoint: {e}. Starting from scratch.")
+                    checkpoint_data = None
+
+        # Task 5.2: Use build_streaming_config() from DatasetSizeStrategy for optimal configuration
+        # This provides intelligent batch sizing based on available memory and parameter count
+        n_data = len(ydata)
+        n_parameters = len(initial_params)
+
+        # Get checkpoint configuration for strategy selector
+        checkpoint_strategy_config = {
+            'checkpoint_dir': checkpoint_dir if enable_checkpoints else None,
+            'checkpoint_frequency': checkpoint_frequency if enable_checkpoints else 0,
+            'enable_checkpoints': enable_checkpoints,
+        } if enable_checkpoints else None
+
+        # Build optimal streaming configuration using strategy selector
+        from homodyne.optimization.strategy import DatasetSizeStrategy
+
+        strategy_selector = DatasetSizeStrategy()
+        streaming_config_dict = strategy_selector.build_streaming_config(
+            n_points=n_data,
+            n_parameters=n_parameters,
+            checkpoint_config=checkpoint_strategy_config,
+        )
+
+        logger.info(
+            f"Streaming configuration: batch_size={streaming_config_dict['batch_size']:,}, "
+            f"max_epochs={streaming_config_dict.get('max_epochs', 10)}"
+        )
+
+        # Create StreamingConfig for NLSQ
+        # Note: NLSQ's StreamingOptimizer handles optimizer state checkpointing internally
+        # Homodyne's CheckpointManager handles homodyne-specific state separately
+        nlsq_checkpoint_dir = None
+        if enable_checkpoints:
+            # NLSQ uses separate checkpoint directory for optimizer state
+            from pathlib import Path
+            nlsq_checkpoint_dir = str(Path(checkpoint_dir) / "nlsq_optimizer_state")
+
+        config = StreamingConfig(
+            batch_size=streaming_config_dict['batch_size'],
+            max_epochs=streaming_config_dict.get('max_epochs', 10),
+            enable_fault_tolerance=streaming_config_dict.get('enable_fault_tolerance', True),
+            validate_numerics=streaming_config_dict.get('validate_numerics', self.enable_numerical_validation),
+            min_success_rate=streaming_config_dict.get('min_success_rate', 0.5),
+            max_retries_per_batch=streaming_config_dict.get('max_retries_per_batch', self.max_retries),
+            checkpoint_dir=nlsq_checkpoint_dir,  # NLSQ's optimizer checkpoints
+            checkpoint_frequency=checkpoint_frequency if enable_checkpoints else 0,
+            resume_from_checkpoint=start_from_checkpoint,
+        )
+
+        # Initialize StreamingOptimizer
+        optimizer = StreamingOptimizer(config=config)
+
+        # Reset best parameter tracking
+        self.best_params = None
+        self.best_loss = float('inf')
+        self.best_batch_idx = -1
+
+        # Define enhanced progress callback with checkpoint saving
+        def progress_callback(batch_idx: int, total_batches: int, current_loss: float, current_params: np.ndarray | None = None):
+            logger.info(
+                f"Batch {batch_idx + 1}/{total_batches} | Loss: {current_loss:.6e}"
+            )
+
+            # Update best parameters
+            self._update_best_parameters(
+                params=current_params,
+                loss=current_loss,
+                batch_idx=batch_idx,
+                logger=logger,
+            )
+
+            # Save checkpoint if enabled and at checkpoint frequency
+            if checkpoint_manager and batch_idx % checkpoint_frequency == 0:
+                try:
+                    # Get current parameters (use best if current not available)
+                    params_to_save = current_params if current_params is not None else self.best_params
+                    if params_to_save is None:
+                        params_to_save = initial_params  # Fallback to initial
+
+                    # Prepare metadata
+                    metadata = {
+                        'batch_statistics': self.batch_statistics.get_statistics(),
+                        'best_loss': self.best_loss,
+                        'best_batch_idx': self.best_batch_idx,
+                        'total_batches': total_batches,
+                    }
+
+                    # Save homodyne-specific checkpoint
+                    checkpoint_path = checkpoint_manager.save_checkpoint(
+                        batch_idx=batch_idx,
+                        parameters=params_to_save,
+                        optimizer_state={'loss': current_loss},  # Minimal state
+                        loss=current_loss,
+                        metadata=metadata,
+                    )
+                    logger.info(f"Saved checkpoint: {checkpoint_path.name}")
+
+                    # Periodic cleanup (every 10 checkpoint intervals)
+                    if batch_idx % (checkpoint_frequency * 10) == 0:
+                        deleted = checkpoint_manager.cleanup_old_checkpoints()
+                        if deleted:
+                            logger.info(f"Cleaned up {len(deleted)} old checkpoints")
+
+                except Exception as e:
+                    logger.warning(f"Failed to save checkpoint: {e}")
+
+        try:
+            # Prepare data as tuple for StreamingOptimizer
+            data_source = (xdata, ydata)
+
+            # Call StreamingOptimizer.fit()
+            logger.info("Starting streaming optimization...")
+            result = optimizer.fit(
+                data_source=data_source,
+                func=residual_fn,
+                p0=initial_params,
+                bounds=bounds,
+                callback=progress_callback,
+                verbose=2,
+            )
+
+            # Use unified result handler to normalize output
+            popt, pcov, info = self._handle_nlsq_result(result, OptimizationStrategy.STREAMING)
+
+            # Add batch statistics to info
+            batch_stats = self.batch_statistics.get_statistics()
+            info['batch_statistics'] = batch_stats
+
+            # Add checkpoint information to info
+            if checkpoint_manager:
+                info['checkpoint_enabled'] = True
+                info['checkpoint_dir'] = str(checkpoint_manager.checkpoint_dir)
+                info['resumed_from_checkpoint'] = start_from_checkpoint
+                if checkpoint_data:
+                    info['resume_batch_idx'] = checkpoint_data['batch_idx']
+                    info['resume_loss'] = checkpoint_data['loss']
+
+            logger.info(
+                f"Streaming optimization complete. "
+                f"Success rate: {batch_stats['success_rate']:.1%}, "
+                f"Best loss: {self.best_loss:.6e}"
+            )
+
+            return popt, pcov, info
+
+        except Exception as e:
+            logger.error(f"StreamingOptimizer failed: {e}")
+            # Re-raise as NLSQ exception
+            if isinstance(e, NLSQOptimizationError):
+                raise
+            else:
+                raise NLSQOptimizationError(
+                    f"StreamingOptimizer failed: {str(e)}",
+                    error_context={'original_error': type(e).__name__}
+                ) from e
+
     def _create_fit_result(
         self,
         popt: np.ndarray,
@@ -1039,6 +1543,7 @@ class NLSQWrapper:
         execution_time: float,
         convergence_status: str = "converged",
         recovery_actions: list[str] | None = None,
+        streaming_diagnostics: dict[str, Any] | None = None,
     ) -> OptimizationResult:
         """Convert NLSQ output to OptimizationResult.
 
@@ -1051,6 +1556,7 @@ class NLSQWrapper:
             execution_time: Execution time in seconds
             convergence_status: Convergence status string
             recovery_actions: List of recovery actions taken
+            streaming_diagnostics: Enhanced diagnostics for streaming optimization (Task 5.4)
 
         Returns:
             Complete OptimizationResult dataclass
@@ -1091,6 +1597,28 @@ class NLSQWrapper:
         else:
             quality_flag = "poor"
 
+        # Task 5.4: Build enhanced streaming diagnostics if batch statistics available
+        enhanced_streaming_diagnostics = None
+        if streaming_diagnostics is not None:
+            # Start with provided diagnostics
+            enhanced_streaming_diagnostics = streaming_diagnostics.copy()
+
+            # Add batch statistics if available
+            if hasattr(self, 'batch_statistics') and self.batch_statistics.total_batches > 0:
+                batch_stats = self.batch_statistics.get_statistics()
+
+                # Extract key metrics for enhanced diagnostics
+                enhanced_streaming_diagnostics.update({
+                    'batch_success_rate': batch_stats['success_rate'],
+                    'failed_batch_indices': [
+                        b['batch_idx'] for b in batch_stats['recent_batches']
+                        if not b['success']
+                    ],
+                    'error_type_distribution': batch_stats['error_distribution'],
+                    'average_iterations_per_batch': batch_stats['average_iterations'],
+                    'total_batches_processed': batch_stats['total_batches'],
+                })
+
         # Create result
         result = OptimizationResult(
             parameters=popt,
@@ -1104,6 +1632,7 @@ class NLSQWrapper:
             device_info=device_info,
             recovery_actions=recovery_actions or [],
             quality_flag=quality_flag,
+            streaming_diagnostics=enhanced_streaming_diagnostics,  # Task 5.4
         )
 
         return result

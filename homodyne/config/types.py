@@ -86,6 +86,42 @@ class ExperimentalDataConfig(TypedDict, total=False):
     phi_angles_file: str
 
 
+class StreamingConfig(TypedDict, total=False):
+    """Streaming optimization configuration.
+
+    Configuration for NLSQ StreamingOptimizer with checkpoint management
+    and fault tolerance for unlimited dataset sizes.
+
+    Attributes
+    ----------
+    enable_checkpoints : bool
+        Enable checkpoint save/resume functionality
+    checkpoint_dir : str
+        Directory for checkpoint files
+    checkpoint_frequency : int
+        Save checkpoint every N batches
+    resume_from_checkpoint : bool
+        Auto-detect and resume from latest checkpoint
+    keep_last_checkpoints : int
+        Number of recent checkpoints to keep (older ones deleted)
+    enable_fault_tolerance : bool
+        Enable numerical validation and error recovery
+    max_retries_per_batch : int
+        Maximum retry attempts per failed batch
+    min_success_rate : float
+        Minimum batch success rate (0.0-1.0) before failing optimization
+    """
+
+    enable_checkpoints: bool
+    checkpoint_dir: str
+    checkpoint_frequency: int
+    resume_from_checkpoint: bool
+    keep_last_checkpoints: int
+    enable_fault_tolerance: bool
+    max_retries_per_batch: int
+    min_success_rate: float
+
+
 class OptimizationConfig(TypedDict, total=False):
     """Optimization section of configuration.
 
@@ -99,12 +135,15 @@ class OptimizationConfig(TypedDict, total=False):
         MCMC-specific settings
     angle_filtering : dict, optional
         Angle filtering settings
+    streaming : StreamingConfig, optional
+        Streaming optimization settings (checkpoint management, fault tolerance)
     """
 
     method: Literal["nlsq", "mcmc"]
     lsq: dict[str, Any]
     mcmc: dict[str, Any]
     angle_filtering: dict[str, Any]
+    streaming: StreamingConfig
 
 
 class HomodyneConfig(TypedDict, total=False):
