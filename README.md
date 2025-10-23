@@ -97,19 +97,83 @@ pip install homodyne
 
 This installs homodyne with CPU-only JAX (suitable for development and small datasets).
 
-### GPU Installation (Linux Only)
+### GPU Installation (Linux Only) ⚡
+
+**Performance Impact**: 20-100x speedup for large datasets (>1M points)
+
+#### Option 1: Quick Install via Makefile (Recommended)
+
+From the homodyne repository:
+
+```bash
+git clone https://github.com/your-org/homodyne.git
+cd homodyne
+make install-jax-gpu  # Automatically handles uninstall + GPU install
+```
+
+This single command:
+- Uninstalls CPU-only JAX
+- Installs GPU-enabled JAX with CUDA 12 support
+- Verifies GPU detection
+
+#### Option 2: Manual Installation
 
 For GPU-accelerated computation on Linux systems with CUDA 12+:
 
 ```bash
-# Step 1: Install JAX with CUDA support
+# Step 1: Uninstall CPU-only version
+pip uninstall -y jax jaxlib
+
+# Step 2: Install JAX with CUDA support
 pip install jax[cuda12-local]==0.8.0 jaxlib==0.8.0
 
-# Step 2: Install homodyne
-pip install homodyne
+# Step 3: Verify GPU detection
+python -c "import jax; print('Devices:', jax.devices())"
+# Should show: [cuda(id=0)] instead of [CpuDevice(id=0)]
 ```
 
-**Why two steps?** JAX with CUDA support is Linux-specific and must be installed separately to avoid dependency conflicts on other platforms.
+**Why separate installation?** JAX with CUDA support is Linux-specific and requires system CUDA 12.1-12.9 pre-installed. Separating the installation avoids dependency conflicts on macOS/Windows.
+
+#### GPU Troubleshooting
+
+**Issue**: Warning "An NVIDIA GPU may be present... but a CUDA-enabled jaxlib is not installed"
+
+**Solution**:
+```bash
+# 1. Check GPU hardware
+nvidia-smi  # Should show your GPU
+
+# 2. Check CUDA version
+nvcc --version  # Should show CUDA 12.1-12.9
+
+# 3. Reinstall JAX with GPU support
+pip uninstall -y jax jaxlib
+pip install jax[cuda12-local]==0.8.0 jaxlib==0.8.0
+
+# 4. Verify JAX detects GPU
+python -c "import jax; print(jax.devices())"
+# Expected: [cuda(id=0)]
+# If still showing [CpuDevice(id=0)], check CUDA installation
+```
+
+**Issue**: ImportError or CUDA library not found
+
+**Solution**:
+```bash
+# Set CUDA library path (add to ~/.bashrc for permanent fix)
+export LD_LIBRARY_PATH=/usr/local/cuda/lib64:$LD_LIBRARY_PATH
+
+# Or use homodyne's activation script
+source homodyne/runtime/gpu/activation.sh
+```
+
+**Issue**: Out of memory errors during optimization
+
+**Solution**: Reduce GPU memory fraction in config:
+```yaml
+performance:
+  gpu_memory_fraction: 0.7  # Reduce from default 0.9
+```
 
 ### Development Installation
 

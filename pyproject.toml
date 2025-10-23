@@ -38,18 +38,32 @@ classifiers = [
 ]
 requires-python = ">=3.12"
 
-# Core dependencies for JAX-first architecture (2025 tested stable versions)
+# ============================================================================
+# GPU ACCELERATION (20-100x speedup for large datasets)
+# ============================================================================
+# Default: CPU-only JAX (works on ALL platforms: Linux, macOS, Windows)
 #
-# GPU ACCELERATION NOTE:
-# =====================
-# Default installation provides CPU-only JAX (works on all platforms: Linux, macOS, Windows).
+# For GPU acceleration (Linux + CUDA 12.1-12.9 ONLY):
 #
-# For GPU acceleration on Linux with CUDA 12+:
-#   1. Uninstall CPU version: pip uninstall jax jaxlib
-#   2. Install CUDA version: pip install jax[cuda12-local]==0.8.0 jaxlib==0.8.0
-#   3. Install homodyne: pip install homodyne
+#   Quick install (from homodyne repository):
+#     make install-jax-gpu
 #
-# See README.md for detailed GPU installation instructions.
+#   Manual install:
+#     pip uninstall -y jax jaxlib
+#     pip install jax[cuda12-local]==0.8.0 jaxlib==0.8.0
+#
+#   Platform support:
+#     ✅ Linux + NVIDIA GPU + CUDA 12.1-12.9: Full GPU acceleration
+#     ❌ macOS: CPU-only (Apple Silicon/Intel, no NVIDIA GPU support)
+#     ❌ Windows: CPU-only (CUDA support experimental/unstable)
+#
+#   Requirements:
+#     - System CUDA 12.1-12.9 pre-installed (not bundled)
+#     - NVIDIA driver >= 525
+#     - Linux x86_64 or aarch64
+#
+# See README.md for detailed GPU installation guide
+# ============================================================================
 dependencies = [
     # Core scientific computing (2025 tested stable)
     "numpy>=2.0.0,<3.0.0",  # Tested: NumPy 2.3.4
