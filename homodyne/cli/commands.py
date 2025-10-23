@@ -2189,6 +2189,54 @@ def _prepare_parameter_data(result: Any, analysis_mode: str) -> dict[str, Any]:
     return param_dict
 
 
+def _apply_diagonal_correction_to_c2(c2_mat: np.ndarray) -> np.ndarray:
+    """Apply diagonal correction to correlation matrix.
+
+    Matches the diagonal correction applied to experimental data in xpcs_loader.py.
+    Replaces diagonal values with average of adjacent off-diagonal values.
+
+    Based on pyXPCSViewer's correct_diagonal_c2 function.
+
+    Parameters
+    ----------
+    c2_mat : np.ndarray
+        Correlation matrix with shape (n_times, n_times)
+
+    Returns
+    -------
+    np.ndarray
+        Correlation matrix with corrected diagonal
+
+    Notes
+    -----
+    This correction:
+    - Removes systematic artifacts in diagonal C2(t,t) values
+    - Ensures fitted data matches experimental data processing
+    - Fixes constant diagonal issue in theoretical model
+
+    Reference: homodyne/data/xpcs_loader.py lines 925-953
+    """
+    size = c2_mat.shape[0]
+
+    # Extract side band (one off-diagonal: i,i+1 elements)
+    side_band = c2_mat[(np.arange(size - 1), np.arange(1, size))]
+
+    # Create diagonal values as average of adjacent off-diagonal elements
+    diag_val = np.zeros(size)
+    diag_val[:-1] += side_band  # Upper side
+    diag_val[1:] += side_band   # Lower side (same as upper for symmetric matrix)
+
+    # Normalization: edge elements averaged once, interior elements averaged twice
+    norm = np.ones(size)
+    norm[1:-1] = 2
+
+    # Create corrected matrix (copy to avoid modifying input)
+    c2_corrected = c2_mat.copy()
+    c2_corrected[np.diag_indices(size)] = diag_val / norm
+
+    return c2_corrected
+
+
 def _compute_nlsq_fits(
     result: Any,
     data: dict[str, Any],
@@ -2252,6 +2300,7 @@ def _compute_nlsq_fits(
     logger.debug(
         f"Computing theoretical fits for {len(phi_angles)} angles using L={L:.1f} Å, q={q:.6f} Å⁻¹",
     )
+    logger.info("Diagonal correction will be applied to theoretical fits to match experimental data processing")
 
     # Sequential per-angle computation
     c2_theoretical_raw = []
@@ -2281,6 +2330,11 @@ def _compute_nlsq_fits(
         g2_theory_np = np.asarray(g2_theory)
         if g2_theory_np.ndim == 3:
             g2_theory_np = g2_theory_np[0]  # Remove phi dimension (size 1)
+
+        # Apply diagonal correction to match experimental data processing
+        # This fixes the constant diagonal issue in theoretical model (g1(t,t) = 1 always)
+        g2_theory_np = _apply_diagonal_correction_to_c2(g2_theory_np)
+
         c2_theoretical_raw.append(g2_theory_np)
 
         # Least squares scaling: c2_exp = contrast * c2_theory + offset
@@ -2315,7 +2369,7 @@ def _compute_nlsq_fits(
     residuals = c2_exp - c2_theoretical_scaled
 
     logger.info(
-        f"Computed theoretical fits for {len(phi_angles)} angles (sequential computation)",
+        f"Computed theoretical fits for {len(phi_angles)} angles (sequential computation, diagonal corrected)",
     )
 
     return {
