@@ -1,0 +1,80 @@
+/* Custom CSS for Homodyne documentation */
+
+/* Improve code block styling */
+div.highlight {
+    border-radius: 4px;
+    margin: 1em 0;
+}
+
+/* Improve admonition styling */
+.admonition {
+    border-radius: 4px;
+    padding: 12px;
+    margin: 1em 0;
+}
+
+.admonition .admonition-title {
+    font-weight: bold;
+    margin-bottom: 0.5em;
+}
+
+/* Improve table styling */
+table.docutils {
+    border-collapse: collapse;
+    margin: 1em 0;
+}
+
+table.docutils th {
+    background-color: #f0f0f0;
+    font-weight: bold;
+}
+
+table.docutils td,
+table.docutils th {
+    padding: 8px;
+    border: 1px solid #e1e4e5;
+}
+
+/* Improve parameter list styling */
+dl.field-list dt {
+    font-weight: bold;
+}
+
+/* Math equation styling */
+div.math {
+    overflow-x: auto;
+    margin: 1em 0;
+}
+
+/* Improve inline code styling */
+code.literal {
+    background-color: #f5f5f5;
+    padding: 2px 4px;
+    border-radius: 3px;
+    font-size: 90%;
+}
+
+/* Header anchor links */
+a.headerlink {
+    color: #c0c0c0;
+    font-size: 0.8em;
+    padding: 0 4px;
+    text-decoration: none;
+}
+
+a.headerlink:hover {
+    color: #606060;
+}
+
+/* Improve version notice styling */
+.version-notice {
+    background-color: #e7f2fa;
+    border-left: 4px solid #2980b9;
+    padding: 12px;
+    margin: 1em 0;
+}
+
+/* Cross-reference styling */
+.reference.internal {
+    font-weight: 500;
+}

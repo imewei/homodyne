@@ -8,7 +8,7 @@ list of recovery actions to attempt.
 import numpy as np
 from typing import Any
 
-from .exceptions import (
+from homodyne.optimization.exceptions import (
     NLSQConvergenceError,
     NLSQNumericalError,
 )

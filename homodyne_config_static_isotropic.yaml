@@ -1,0 +1,66 @@
+
+# ==============================================================================
+# STATIC ISOTROPIC NLSQ OPTIMIZATION EXAMPLE
+# ==============================================================================
+#
+# Parameter count: 3 physical + 2 per angle = 3 + 2n
+# Example: 3 angles → 3 + 2×3 = 9 total parameters
+#
+
+experimental_data:
+  file_path: "./data/sample/experiment.hdf"
+
+parameter_space:
+  model: "static_isotropic"
+
+  bounds:
+    # Diffusion coefficient D₀ [Å²/s]
+    - name: D0
+      min: 100.0
+      max: 1e5
+
+    # Anomalous diffusion exponent α [dimensionless]
+    # 0 = normal, <1 = subdiffusion, >1 = superdiffusion
+    - name: alpha
+      min: 0.0
+      max: 2.0
+
+    # Diffusion offset [Å²/s]
+    - name: D_offset
+      min: -100.0
+      max: 100.0
+
+initial_parameters:
+  parameter_names:
+    - D0
+    - alpha
+    - D_offset
+
+  # Optional: optimize only subset
+  active_parameters:
+    - D0
+    - alpha
+
+  # Optional: fix specific parameters
+  fixed_parameters:
+    D_offset: 10.0
+
+optimization:
+  method: "nlsq"
+
+  nlsq:
+    max_iterations: 100
+    tolerance: 1e-8
+    trust_region_scale: 1.0
+
+phi_filtering:
+  enabled: false
+
+performance:
+  strategy_override: null
+  enable_progress: true
+  device:
+    preferred_device: "auto"
+
+output:
+  directory: "./results_static_isotropic"

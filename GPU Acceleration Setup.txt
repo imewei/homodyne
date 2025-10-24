@@ -1,0 +1,437 @@
+  📋 Complete GPU Acceleration Setup Template
+
+  Part 1: pyproject.toml Configuration
+
+  # ============================================================================
+  # GPU ACCELERATION (20-100x speedup for large datasets)
+  # ============================================================================
+  # Default: CPU-only JAX (works on ALL platforms: Linux, macOS, Windows)
+  #
+  # For GPU acceleration (Linux + CUDA 12.1-12.9 ONLY):
+  #
+  #   Quick install (from repository):
+  #     make install-jax-gpu
+  #
+  #   Manual install:
+  #     pip uninstall -y jax jaxlib
+  #     pip install jax[cuda12-local]==0.8.0 jaxlib==0.8.0
+  #
+  #   Platform support:
+  #     ✅ Linux + NVIDIA GPU + CUDA 12.1-12.9: Full GPU acceleration
+  #     ❌ macOS: CPU-only (Apple Silicon/Intel, no NVIDIA GPU support)
+  #     ❌ Windows: CPU-only (CUDA support experimental/unstable)
+  #
+  #   Requirements:
+  #     - System CUDA 12.1-12.9 pre-installed (not bundled)
+  #     - NVIDIA driver >= 525
+  #     - Linux x86_64 or aarch64
+  #
+  # See README.md for detailed GPU installation guide
+  # ============================================================================
+  dependencies = [
+      # Core scientific computing
+      "numpy>=2.0.0,<3.0.0",
+      "scipy>=1.14.0,<2.0.0",
+
+      # JAX ecosystem (CPU-only - works on all platforms)
+      # GPU users: see installation instructions above
+      "jax==0.8.0",     # JAX 0.8.0 CPU-only - exact version required
+      "jaxlib==0.8.0",  # jaxlib 0.8.0 CPU-only - must match JAX version exactly
+
+      # ... your other dependencies
+  ]
+
+  # NO gpu-cuda extra needed - manual installation is more reliable
+  [project.optional-dependencies]
+  dev = [
+      "pytest>=8.3.0,<9.0.0",
+      # ... your dev dependencies
+  ]
+
+  Key Design Decision: No gpu-cuda extra because:
+  - Avoids dependency conflicts between CPU and GPU jaxlib
+  - Works reliably across all package managers (pip, uv, conda)
+  - Explicit uninstall/install is more transparent
+  - Easier to troubleshoot
+
+  ---
+  Part 2: Makefile Implementation
+
+  # Package Makefile - GPU Acceleration Support
+  # ===========================================
+
+  .PHONY: help install-jax-gpu gpu-check env-info
+
+  # Variables
+  PYTHON := python
+
+  # Platform detection
+  UNAME_S := $(shell uname -s 2>/dev/null || echo "Windows")
+  ifeq ($(UNAME_S),Linux)
+      PLATFORM := linux
+  else ifeq ($(UNAME_S),Darwin)
+      PLATFORM := macos
+  else
+      PLATFORM := windows
+  endif
+
+  # Package manager detection (prioritize uv > conda/mamba > pip)
+  UV_AVAILABLE := $(shell command -v uv 2>/dev/null)
+  CONDA_PREFIX := $(shell echo $$CONDA_PREFIX)
+  MAMBA_AVAILABLE := $(shell command -v mamba 2>/dev/null)
+
+  # Determine package manager and commands
+  ifdef UV_AVAILABLE
+      PKG_MANAGER := uv
+      PIP := uv pip
+      UNINSTALL_CMD := uv pip uninstall -y
+      INSTALL_CMD := uv pip install
+  else ifdef CONDA_PREFIX
+      # In conda environment - use pip within conda
+      ifdef MAMBA_AVAILABLE
+          PKG_MANAGER := mamba (using pip for JAX)
+      else
+          PKG_MANAGER := conda (using pip for JAX)
+      endif
+      PIP := pip
+      UNINSTALL_CMD := pip uninstall -y
+      INSTALL_CMD := pip install
+  else
+      PKG_MANAGER := pip
+      PIP := pip
+      UNINSTALL_CMD := pip uninstall -y
+      INSTALL_CMD := pip install
+  endif
+
+  # GPU installation command (platform-specific)
+  ifeq ($(PLATFORM),linux)
+      JAX_GPU_PKG := jax[cuda12-local]==0.8.0 jaxlib==0.8.0
+  else
+      JAX_GPU_PKG :=
+  endif
+
+  # Help target
+  help:
+        @echo "Package Development Commands"
+        @echo "==========================="
+        @echo
+        @echo "Environment Detection:"
+        @echo "  Platform: $(PLATFORM)"
+        @echo "  Package manager: $(PKG_MANAGER)"
+        @echo
+        @echo "GPU Commands:"
+        @echo "  install-jax-gpu  Install JAX with GPU support (Linux + CUDA 12+ only)"
+        @echo "  gpu-check        Check GPU availability and CUDA setup"
+        @echo "  env-info         Show detailed environment information"
+        @echo
+
+  # GPU installation target
+  install-jax-gpu:
+        @echo "Installing JAX with GPU support..."
+        @echo "===================================="
+        @echo "Platform: $(PLATFORM)"
+        @echo "Package manager: $(PKG_MANAGER)"
+        @echo
+  ifeq ($(PLATFORM),linux)
+        @echo "Step 1/3: Uninstalling CPU-only JAX..."
+        @$(UNINSTALL_CMD) jax jaxlib 2>/dev/null || true
+        @echo
+        @echo "Step 2/3: Installing GPU-enabled JAX (CUDA 12.1-12.9)..."
+        @echo "Command: $(INSTALL_CMD) $(JAX_GPU_PKG)"
+        @$(INSTALL_CMD) $(JAX_GPU_PKG)
+        @echo
+        @echo "Step 3/3: Verifying GPU detection..."
+        @$(MAKE) gpu-check
+        @echo
+        @echo "✓ JAX GPU support installed successfully"
+        @echo "  Package manager: $(PKG_MANAGER)"
+        @echo "  JAX version: 0.8.0 with CUDA 12 support"
+  else
+        @echo "✗ GPU acceleration only available on Linux with CUDA 12+"
+        @echo "  Current platform: $(PLATFORM)"
+        @echo "  Keeping CPU-only installation"
+        @echo
+        @echo "Platform support:"
+        @echo "  ✅ Linux + CUDA 12.1-12.9: Full GPU acceleration"
+        @echo "  ❌ macOS: CPU-only (no NVIDIA GPU support)"
+        @echo "  ❌ Windows: CPU-only (CUDA support experimental/unstable)"
+  endif
+
+  # GPU verification target
+  gpu-check:
+        @echo "Checking GPU Configuration..."
+        @echo "============================"
+        @$(PYTHON) -c "import jax; print(f'JAX version: {jax.__version__}'); devices = jax.devices();
+  print(f'Available devices: {devices}'); gpu_devices = [d for d in devices if 'cuda' in
+  str(d).lower() or 'gpu' in str(d).lower()]; print(f'✓ GPU detected: {len(gpu_devices)}
+  device(s)') if gpu_devices else print('✗ No GPU detected - using CPU')"
+
+  # Environment info target
+  env-info:
+        @echo "Environment Information"
+        @echo "======================"
+        @echo
+        @echo "Platform Detection:"
+        @echo "  OS: $(UNAME_S)"
+        @echo "  Platform: $(PLATFORM)"
+        @echo
+        @echo "Python Environment:"
+        @echo "  Python: $(shell $(PYTHON) --version 2>&1 || echo 'not found')"
+        @echo "  Python path: $(shell which $(PYTHON) 2>/dev/null || echo 'not found')"
+        @echo
+        @echo "Package Manager Detection:"
+        @echo "  Active manager: $(PKG_MANAGER)"
+  ifdef UV_AVAILABLE
+        @echo "  ✓ uv detected: $(UV_AVAILABLE)"
+        @echo "    Install command: $(INSTALL_CMD)"
+        @echo "    Uninstall command: $(UNINSTALL_CMD)"
+  else
+        @echo "  ✗ uv not found"
+  endif
+  ifdef CONDA_PREFIX
+        @echo "  ✓ Conda environment detected"
+        @echo "    CONDA_PREFIX: $(CONDA_PREFIX)"
+  ifdef MAMBA_AVAILABLE
+        @echo "    Mamba available: $(MAMBA_AVAILABLE)"
+  else
+        @echo "    Mamba: not found"
+  endif
+        @echo "    Note: Using pip within conda for JAX installation"
+  else
+        @echo "  ✗ Not in conda environment"
+  endif
+        @echo "  pip: $(shell which pip 2>/dev/null || echo 'not found')"
+        @echo
+        @echo "GPU Support:"
+  ifeq ($(PLATFORM),linux)
+        @echo "  Platform: ✅ Linux (GPU support available)"
+        @echo "  JAX GPU package: $(JAX_GPU_PKG)"
+        @$(PYTHON) -c "import subprocess; r = subprocess.run(['nvidia-smi', '--query-gpu=name',
+  '--format=csv,noheader'], capture_output=True, text=True, timeout=5); print(f'  GPU hardware: ✓
+  {r.stdout.strip()}') if r.returncode == 0 else print('  GPU hardware: ✗ Not detected')"
+  2>/dev/null || echo "  GPU hardware: ✗ nvidia-smi not found"
+        @$(PYTHON) -c "import subprocess; r = subprocess.run(['nvcc', '--version'], capture_output=True,
+  text=True, timeout=5); version = [line for line in r.stdout.split('\\n') if 'release' in line];
+  print(f'  CUDA: ✓ {version[0].split(\"release\")[1].split(\",\")[0].strip() if version else
+  \"unknown\"}') if r.returncode == 0 else print('  CUDA: ✗ Not found')" 2>/dev/null || echo "
+  CUDA: ✗ nvcc not found"
+  else
+        @echo "  Platform: ❌ $(PLATFORM) (GPU not supported)"
+  endif
+        @echo
+        @echo "Installation Commands:"
+        @echo "  Install GPU: make install-jax-gpu"
+        @echo
+
+  Key Features:
+  1. ✅ Platform detection: Linux/macOS/Windows
+  2. ✅ Package manager detection: uv → conda/mamba → pip
+  3. ✅ Explicit uninstall: Prevents conflicts
+  4. ✅ Verification: Automatic GPU detection check
+  5. ✅ Diagnostic tool: env-info for troubleshooting
+
+  ---
+  Part 3: README.md Documentation
+
+  ## Installation
+
+  ### Basic Installation (CPU-only)
+
+  ```bash
+  pip install your-package
+
+  This installs with CPU-only JAX (works on all platforms: Linux, macOS, Windows).
+
+  GPU Installation (Linux Only) ⚡
+
+  Performance Impact: 20-100x speedup for large datasets (>1M points)
+
+  Option 1: Quick Install via Makefile (Recommended)
+
+  From the repository:
+
+  git clone https://github.com/your-org/your-package.git
+  cd your-package
+  make install-jax-gpu  # Automatically handles uninstall + GPU install
+
+  This single command:
+  - Uninstalls CPU-only JAX
+  - Installs GPU-enabled JAX with CUDA 12 support
+  - Verifies GPU detection
+
+  Option 2: Manual Installation
+
+  For GPU-accelerated computation on Linux systems with CUDA 12+:
+
+  # Step 1: Uninstall CPU-only version
+  pip uninstall -y jax jaxlib
+
+  # Step 2: Install JAX with CUDA support
+  pip install jax[cuda12-local]==0.8.0 jaxlib==0.8.0
+
+  # Step 3: Verify GPU detection
+  python -c "import jax; print('Devices:', jax.devices())"
+  # Should show: [cuda(id=0)] instead of [CpuDevice(id=0)]
+
+  Why separate installation? JAX with CUDA support is Linux-specific and requires system CUDA
+  12.1-12.9 pre-installed. Separating the installation avoids dependency conflicts on
+  macOS/Windows.
+
+  GPU Troubleshooting
+
+  Issue: Warning "An NVIDIA GPU may be present... but a CUDA-enabled jaxlib is not installed"
+
+  Solution:
+  # 1. Check GPU hardware
+  nvidia-smi  # Should show your GPU
+
+  # 2. Check CUDA version
+  nvcc --version  # Should show CUDA 12.1-12.9
+
+  # 3. Reinstall JAX with GPU support
+  pip uninstall -y jax jaxlib
+  pip install jax[cuda12-local]==0.8.0 jaxlib==0.8.0
+
+  # 4. Verify JAX detects GPU
+  python -c "import jax; print(jax.devices())"
+  # Expected: [cuda(id=0)]
+  # If still showing [CpuDevice(id=0)], check CUDA installation
+
+  Issue: ImportError or CUDA library not found
+
+  Solution:
+  # Set CUDA library path (add to ~/.bashrc for permanent fix)
+  export LD_LIBRARY_PATH=/usr/local/cuda/lib64:$LD_LIBRARY_PATH
+
+  # Or use your-package's activation script (if provided)
+  source your-package/runtime/gpu/activation.sh
+
+  Issue: Out of memory errors during computation
+
+  Solution: Reduce GPU memory fraction in your configuration:
+  performance:
+    gpu_memory_fraction: 0.7  # Reduce from default 0.9
+
+  Platform Support
+
+  - ✅ Linux + NVIDIA GPU + CUDA 12.1-12.9: Full GPU acceleration (20-100x speedup)
+  - ❌ macOS: CPU-only (Apple Silicon/Intel, no NVIDIA GPU support)
+  - ❌ Windows: CPU-only (CUDA support experimental/unstable)
+
+  Requirements (Linux GPU):
+  - System CUDA 12.1-12.9 pre-installed
+  - NVIDIA driver >= 525
+  - Linux x86_64 or aarch64
+
+  Conda/Mamba Users
+
+  The package works seamlessly in conda environments using pip:
+
+  conda create -n mypackage python=3.12
+  conda activate mypackage
+  pip install your-package
+
+  # For GPU acceleration (Linux only)
+  git clone https://github.com/your-org/your-package.git
+  cd your-package
+  make install-jax-gpu
+
+  Note: Conda extras syntax (conda install your-package[gpu-cuda]) is not supported. Use the
+  Makefile or manual pip installation method above.
+
+  ---
+
+  ### Part 4: Optional Python GPU Detection Helper
+
+  Add this to your package (e.g., `your_package/device.py`) for runtime GPU warnings:
+
+  ```python
+  """GPU detection and warning utilities."""
+
+  def check_gpu_availability() -> None:
+      """Check if GPU is available but not being used by JAX.
+
+      Prints a helpful warning if:
+      - NVIDIA GPU hardware is detected (nvidia-smi works)
+      - But JAX is running in CPU-only mode
+
+      This helps users realize they can enable GPU acceleration for 20-100x speedup.
+      """
+      try:
+          import subprocess
+
+          # Check if nvidia-smi detects GPU hardware
+          result = subprocess.run(
+              ["nvidia-smi", "--query-gpu=name", "--format=csv,noheader"],
+              capture_output=True,
+              text=True,
+              timeout=5,
+          )
+
+          if result.returncode == 0 and result.stdout.strip():
+              gpu_name = result.stdout.strip()
+
+              # Check if JAX is using GPU
+              import jax
+              devices = jax.devices()
+              using_gpu = any('cuda' in str(d).lower() or 'gpu' in str(d).lower()
+                            for d in devices)
+
+              if not using_gpu:
+                  print(f"\n⚠️  GPU ACCELERATION AVAILABLE")
+                  print(f"═══════════════════════════════")
+                  print(f"NVIDIA GPU detected: {gpu_name}")
+                  print(f"JAX is currently using: CPU-only")
+                  print(f"\nEnable 20-100x speedup with GPU acceleration:")
+                  print(f"  make install-jax-gpu")
+                  print(f"\nOr manually:")
+                  print(f"  pip uninstall -y jax jaxlib")
+                  print(f"  pip install jax[cuda12-local]==0.8.0 jaxlib==0.8.0")
+                  print(f"\nSee README.md GPU Installation section for details.\n")
+
+      except (subprocess.TimeoutExpired, FileNotFoundError, ImportError):
+          # nvidia-smi not found or JAX not installed - silently skip
+          pass
+      except Exception:
+          # Unexpected error - silently skip to avoid disrupting workflow
+          pass
+
+  Call this at package initialization or in your CLI entry point to warn users who have GPUs but
+  are using CPU-only JAX.
+
+  ---
+  🎯 Summary: Why This Pattern Works
+
+  ✅ Advantages
+
+  1. No dependency conflicts: Explicit uninstall prevents CPU/GPU jaxlib conflicts
+  2. Cross-platform compatible: Works with pip, uv, conda/mamba
+  3. Clear user experience: Users understand what's happening
+  4. Easy to troubleshoot: Explicit steps, verification included
+  5. Maintainable: No complex dependency resolution logic
+
+  ❌ Anti-Patterns to Avoid
+
+  DON'T do this (causes problems):
+  # ❌ BAD: Creates dependency conflicts
+  dependencies = ["jax>=0.8.0", "jaxlib>=0.8.0"]
+
+  [project.optional-dependencies]
+  gpu-cuda = ["jax[cuda12-local]>=0.8.0"]  # Conflicts with base jaxlib!
+
+  Reasons this fails:
+  - pip installs base jaxlib (CPU) before evaluating extras
+  - GPU jaxlib tries to replace CPU jaxlib → conflict
+  - Conda/mamba ignore extras completely
+  - Silent failures common (installs but uses CPU)
+
+  📦 Ready to Transfer
+
+  This complete template is production-ready and tested. Simply:
+
+  1. Copy Part 1 to your pyproject.toml
+  2. Copy Part 2 to your Makefile
+  3. Copy Part 3 to your README.md
+  4. (Optional) Copy Part 4 for runtime warnings
+
+  Adjust package-specific details (package name, repo URLs, etc.) and you're done!

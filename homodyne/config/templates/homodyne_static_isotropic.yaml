@@ -1,323 +1,176 @@
-# Homodyne Static Isotropic Configuration Template
-# ===================================================
-# Optimized configuration for 3-parameter static isotropic diffusion analysis.
-# Model: g₂(t) = offset + contrast × [g₁(t)]² where g₁(t) = exp(-∫D(t)·q²·dt)
-# Physics: D(t) = D₀·t^α + D_offset (3 parameters: D₀, α, D_offset)
-# Integration: Discrete numerical integration for stability with α ≤ -1
+# ==============================================================================
+# HOMODYNE STATIC ISOTROPIC CONFIGURATION
+# ==============================================================================
+# Optimized for static isotropic systems
 #
-# This template is production-ready and includes:
-# - Essential parameters only (clean and focused)
-# - Physically reasonable default values
-# - Discrete numerical integration for anomalous diffusion stability
-# - Mandatory diagonal correction for data consistency
-# - Optimized VI settings for fast convergence
-# - Basic logging and caching for performance
-# - Proper instrumental parameters (stator_rotor_gap preserved)
+# PARAMETER COUNT: 3 physical + 2 per angle
+# Example: 3 angles → 3 + 2×3 = 9 total parameters
 #
-# Usage:
-#   1. Update experimental_data paths to point to your files
-#   2. Adjust initial_parameters values based on your system
-#   3. Modify time range (start_frame, end_frame) as needed
-#   4. Run: homodyne --method vi --config this_file.yaml
-
-# ==============================================================================
-# TEMPLATE METADATA
-# ==============================================================================
-metadata:
-  config_version: "2.0.0"
-  description: "Static isotropic diffusion analysis - 3 parameter model with discrete integration"
-  analysis_mode: "static_isotropic"
-  parameter_count: 3
-  physics_model: "D(t) = D₀·t^α + D_offset (discrete numerical integration)"
-  integration_method: "discrete_numerical"
-  diagonal_correction: "mandatory"
-  recommended_use: "Single-angle XPCS diffusion analysis with anomalous diffusion support"
-  template_type: "production_ready"
-
-# ==============================================================================
-# CORE ANALYSIS CONFIGURATION
+# Physical parameters:
+#   - D₀: Initial diffusion coefficient [Å²/s]
+#   - α: Power-law exponent [dimensionless]
+#   - D_offset: Offset in diffusion [Å²/s]
+#
+# Per-angle scaling: [contrast, offset] for each phi angle
+#
+# VERSION: 2.0.0
+# UPDATED: 2025-10-24
 # ==============================================================================
 
-# Analysis mode: 3-parameter static isotropic model
-analysis_mode: "static_isotropic"
-
-# Core physics parameters
-analyzer_parameters:
-  # Time step between correlation measurements (seconds)
-  dt: 0.1
-
-  # Frame range for analysis (adjust based on your experiment)
-  start_frame: 1
-  end_frame: 1000
-
-  # Scattering parameters
-  scattering:
-    # Wave vector magnitude in Å⁻¹ (sample-dependent)
-    wavevector_q: 0.0054
-
-  # Geometry parameters (instrumental setup)
-  geometry:
-    # Stator-rotor gap in Angstroms (200 microns instrumental parameter)
-    stator_rotor_gap: 2000000
-
-# Analysis mode settings
-analysis_settings:
-  # Static mode enabled for isotropic analysis
-  static_mode: true
-  static_submode: "isotropic"
-
-  model_description:
-    type: "static_diffusion"
-    parameters: 3
-    physics: "Single-angle anomalous diffusion"
-
 # ==============================================================================
-# DATA CONFIGURATION
+# EXPERIMENTAL DATA
 # ==============================================================================
-
-# Experimental data file paths (CUSTOMIZE THESE PATHS)
 experimental_data:
-  # Primary data location
-  data_folder_path: "./data/sample/"
-  data_file_name: "your_xpcs_data.hdf"
-
-  # Phi angles (auto-detected for isotropic mode)
-  phi_angles_path: "./data/phi_angles/"
-  phi_angles_file: "phi_list.txt"
-
-  # Caching for performance
-  cache_file_path: "./data/sample/"
-  cache_filename_template: "cached_c2_q{wavevector_q:.4f}_frames_{start_frame}_{end_frame}.npz"
-  cache_compression: true
-
-  # Data format
-  data_type: "float64"
-  file_format: "HDF5"
-  exchange_key: "exchange"
+  file_path: "./data/sample/experiment.hdf"
 
 # ==============================================================================
-# PARAMETER CONFIGURATION
+# PARAMETER SPACE - Static Isotropic Model (3 Physical Parameters)
 # ==============================================================================
+parameter_space:
+  model: "static_isotropic"
 
-# Initial parameter values (CUSTOMIZE BASED ON YOUR SYSTEM)
+  bounds:
+    # Diffusion coefficient D₀ [Å²/s]
+    - name: D0
+      min: 100.0
+      max: 1e5
+
+    # Anomalous exponent α [dimensionless]
+    # 0 = normal diffusion, <1 = subdiffusion, >1 = superdiffusion
+    - name: alpha
+      min: 0.0
+      max: 2.0
+
+    # Diffusion offset D_offset [Å²/s]
+    - name: D_offset
+      min: -100.0
+      max: 100.0
+
+# ==============================================================================
+# INITIAL PARAMETERS
+# ==============================================================================
 initial_parameters:
   # 3-parameter model: D₀, α, D_offset
-  parameter_names: ["D0", "alpha", "D_offset"]
-
-  # Starting values for optimization (adjust based on your system)
-  # D₀: diffusion coefficient prefactor (Å²/s)
-  # α: anomalous exponent (dimensionless, typically negative)
-  # D_offset: diffusion coefficient offset (Å²/s)
-  values: [1000.0, -1.2, 0.0]
-
-  # Parameter units for reference
-  units: ["Å²/s", "dimensionless", "Å²/s"]
-
-# Parameter bounds and constraints
-parameter_space:
-  bounds:
-    # Diffusion coefficient D₀
-    - name: D0
-      min: 1.0
-      max: 1000000.0
-      type: TruncatedNormal
-      prior_mu: 1000.0
-      prior_sigma: 500.0
-      unit: "Å²/s"
-
-    # Anomalous exponent α (typically negative for subdiffusion)
-    - name: alpha
-      min: -10.0
-      max: 10.0
-      type: Normal
-      prior_mu: -1.2
-      prior_sigma: 0.2
-      unit: "dimensionless"
-
-    # Diffusion offset D_offset
-    - name: D_offset
-      min: -100000.0
-      max: 100000.0
-      type: Normal
-      prior_mu: 0.0
-      prior_sigma: 100.0
-      unit: "Å²/s"
+  parameter_names:
+    - D0
+    - alpha
+    - D_offset
 
 # ==============================================================================
-# OPTIMIZATION CONFIGURATION
+# OPTIMIZATION METHODS
 # ==============================================================================
-
-# Optimization methods
 optimization:
-  # NLSQ Trust-Region Solver (primary method for static isotropic)
-  # Scientifically validated with 100% test pass rate (T036-T041)
-  lsq:
-    enabled: true
-    max_iterations: 10000
+  method: "nlsq"
+
+  # NLSQ Trust-Region Solver
+  nlsq:
+    max_iterations: 100
     tolerance: 1e-8
-    method: "trf" # Trust Region Reflective algorithm
-    bounds_handling: "clip"
-    enable_recovery: true # Automatic error recovery (recommended)
+    trust_region_scale: 1.0
 
-  # MCMC for uncertainty quantification
+  # MCMC Uncertainty Quantification
   mcmc:
-    enabled: true
-    num_samples: 2000
     num_warmup: 1000
+    num_samples: 2000
     num_chains: 4
-    target_accept_prob: 0.8
+    progress_bar: true
+    backend: "numpyro"
 
-  # Hybrid pipeline (optional)
-  hybrid:
-    enabled: false
-    use_lsq_init: true # Use NLSQ results to initialize MCMC
-    convergence_threshold: 0.1
+  # Streaming Optimization (for large datasets >100M points)
+  streaming:
+    enable_checkpoints: true
+    checkpoint_dir: "./checkpoints"
+    checkpoint_frequency: 10
+    resume_from_checkpoint: true
+    keep_last_checkpoints: 3
+    enable_fault_tolerance: true
+    max_retries_per_batch: 2
+    min_success_rate: 0.5
 
-# ==============================================================================
-# NOISE ESTIMATION (OPTIONAL)
-# ==============================================================================
-
-# Optional hybrid NumPyro noise estimation - eliminates need for sigma in data files
-noise_estimation:
-  enabled: false # Set to true to enable automatic noise estimation
-  model: "hierarchical" # Use single global noise parameter (optimal for isotropic data)
-
-  # Adam optimization settings for noise estimation
-  adam_config:
-    learning_rate: 0.01
-    max_epochs: 300 # Fast convergence for single parameter
-    convergence_threshold: 1e-6
-    early_stopping: true # Enable early stopping for efficiency
-
-  # Posterior sampling for uncertainty quantification
-  posterior_samples: 1000 # Number of samples for uncertainty estimates
-
-  # Quality control
-  validation:
-    check_convergence: true # Verify optimization convergence
-    reasonable_range: [1e-4, 1.0] # Expected noise range
-    warn_outliers: true # Warn about unusual estimates
-
-  # Usage Examples:
-  # homodyne --method vi --estimate-noise config.yaml data.h5
-  # homodyne --method mcmc --estimate-noise --noise-model hierarchical config.yaml data.h5
+  # CMC for Large Multi-Angle Datasets (>1M points)
+  cmc:
+    enable: false
+    backend: "jax"
+    diagonal_correction: true
 
 # ==============================================================================
-# PERFORMANCE AND LOGGING
+# PHI ANGLE FILTERING (Optional)
 # ==============================================================================
+phi_filtering:
+  enabled: false
+  # Uncomment to enable angle filtering:
+  # target_ranges:
+  #   - min_angle: -10.0
+  #     max_angle: 10.0
+  #     description: "Near 0 degrees"
 
-# Basic performance optimization
+# ==============================================================================
+# PERFORMANCE
+# ==============================================================================
 performance:
-  memory_optimization:
-    enabled: true
-    max_memory_usage_gb: 4.0
-    chunk_size: 10000
-    enable_caching: true
+  strategy_override: null                 # Automatic strategy selection
+  memory_limit_gb: null                   # Auto-detect
+  enable_progress: true                   # Show progress bars
 
-  computation:
-    enable_jit: true
-    gpu_acceleration: "auto"
-    cpu_threads: "auto"
+  device:
+    preferred_device: "auto"              # Auto GPU/CPU selection
+    gpu_memory_fraction: 0.9
 
-# Essential logging
+# ==============================================================================
+# VISUALIZATION
+# ==============================================================================
+plotting:
+  save_plots: true
+  show_plots: false
+  format: "png"
+  dpi: 300
+
+# ==============================================================================
+# LOGGING
+# ==============================================================================
 logging:
-  enabled: true
   level: "INFO"
-
-  console:
-    enabled: true
-    level: "INFO"
-    format: "simple"
-    colors: true
-    show_progress: true
-
-  file:
-    enabled: false # Enable if you want persistent logging
-    level: "DEBUG"
-    path: "./logs/"
-    filename: "homodyne_isotropic.log"
-
-  # Suppress verbose JAX compilation messages
-  modules:
-    "jax._src": "WARNING"
+  console_output: true
+  file_output: true
 
 # ==============================================================================
-# OUTPUT CONFIGURATION
+# OUTPUT
 # ==============================================================================
-
-# Output settings
 output:
-  base_directory: "./homodyne_results/"
+  directory: "./results"
 
-  formats:
-    hdf5: true
-    json: true
-    csv: true
-
-  plots:
-    enabled: true
-    formats: ["png"]
-    dpi: 300
-    style: "publication"
-
-    # Rendering mode selection (hybrid plotting system)
-    # IMPORTANT: Controls speed vs quality tradeoff for C2 heatmap plots
-    preview_mode:
-      false # false = publication quality (matplotlib, slower)
-      # true = fast preview (Datashader, 5-10x faster)
-
-    # Datashader configuration (used when preview_mode: true)
-    datashader:
-      canvas_width: 1200 # Rendering resolution in pixels (increased from 800)
-      canvas_height: 1200 # Higher values = more detail, larger files
-      gpu_acceleration: true # Use GPU if CuPy available
-
-    # Matplotlib configuration (used when preview_mode: false)
-    matplotlib:
-      interpolation: "bilinear" # none | bilinear | bicubic
-      use_tight_layout: true
-      savefig_kwargs:
-        bbox_inches: "tight"
-        pad_inches: 0.1
-
-    # Essential plots for isotropic analysis
-    correlation_function: true
-    fit_quality: true
-    parameter_distributions: true
-    residual_analysis: true
-
-# ==============================================================================
-# VALIDATION
-# ==============================================================================
-
-# Basic validation
-validation:
-  strict_mode: false
-  check_file_existence: true
-  validate_parameter_ranges: true
-  warn_about_defaults: false
 # ==============================================================================
 # USAGE NOTES
 # ==============================================================================
 #
 # QUICK START:
-# 1. Update paths in experimental_data section
-# 2. Adjust initial_parameters.values for your system
-# 3. Modify time range (start_frame, end_frame) if needed
-# 4. Run: homodyne --method vi --config this_file.yaml
+# 1. Update experimental_data.file_path to your data file
+# 2. Adjust parameter bounds if needed
+# 3. Run: homodyne --config this_file.yaml --method nlsq
 #
 # PARAMETER GUIDANCE:
-# - D₀ (1-50000): Start with 1000, adjust based on particle size
-# - α (-2 to 0): Start with -1.2, negative values indicate subdiffusion
-# - D_offset (-1000 to 1000): Start with 0, represents baseline diffusion
+# - D₀: Typically 100-10000 for colloidal systems
+# - α: Negative for subdiffusion (0 to -2), positive for superdiffusion (0 to 2)
+# - D_offset: Usually small or zero
 #
-# PERFORMANCE TIPS:
-# - Start with 1000 iterations, increase if not converged
-# - Use VI for routine analysis, add MCMC for uncertainty quantification
-# - Enable caching for repeated analysis of the same dataset
+# OPTIMIZATION METHODS:
+# - nlsq: Fast, deterministic (recommended for initial analysis)
+# - mcmc: Slower, provides uncertainties (recommended for publication)
 #
-# TROUBLESHOOTING:
-# - If optimization fails: reduce learning_rate to 0.005
-# - If convergence is slow: increase max_iterations to 2000
-# - If memory issues: reduce chunk_size to 5000
-# - If infinite chi-squared: check that data files exist and are readable
+# DATASET SIZE HANDLING:
+# - < 1M points: Automatic STANDARD strategy
+# - 1M-10M: Automatic LARGE strategy
+# - 10M-100M: Automatic CHUNKED strategy
+# - > 100M: Automatic STREAMING strategy
+#
+# PARAMETER COUNT:
+# - 3 physical parameters (D₀, α, D_offset)
+# - + 2 scaling parameters per filtered phi angle (contrast, offset)
+# - Total = 3 + 2 × (number of angles)
+# - Example: 3 angles → 3 + 6 = 9 parameters
+#
+# PLATFORM SUPPORT:
+# - CPU: Linux, macOS, Windows
+# - GPU: Linux only (CUDA 12.1-12.9)
+#
+# ==============================================================================

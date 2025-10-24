@@ -1,0 +1,175 @@
+name: Documentation
+
+on:
+  push:
+    branches:
+      - main
+      - develop
+    paths:
+      - 'docs/**'
+      - 'homodyne/**'
+      - '.github/workflows/docs.yml'
+      - 'pyproject.toml'
+  pull_request:
+    branches:
+      - main
+      - develop
+    paths:
+      - 'docs/**'
+      - 'homodyne/**'
+      - '.github/workflows/docs.yml'
+      - 'pyproject.toml'
+  workflow_dispatch:
+
+concurrency:
+  group: docs-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-22.04
+    name: Build Documentation
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: 'pip'
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential
+
+      - name: Install package in development mode
+        run: |
+          pip install --upgrade pip setuptools wheel
+          pip install -e .
+
+      - name: Install documentation dependencies
+        run: |
+          pip install -r docs/requirements.txt
+
+      - name: Build documentation with Sphinx
+        run: |
+          cd docs
+          make clean
+          make html
+
+      - name: Run link checker
+        continue-on-error: true
+        run: |
+          cd docs
+          make linkcheck
+
+      - name: Upload HTML build artifacts
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: documentation-html
+          path: docs/_build/html/
+          retention-days: 7
+
+      - name: Upload linkcheck results
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: linkcheck-results
+          path: docs/_build/linkcheck/
+          retention-days: 7
+
+      - name: Check build quality
+        run: |
+          if [ -f "docs/_build/html/index.html" ]; then
+            echo "✓ Documentation built successfully"
+            echo "✓ index.html generated"
+          else
+            echo "✗ Documentation build failed: index.html not found"
+            exit 1
+          fi
+
+      - name: Generate build report
+        if: always()
+        run: |
+          echo "## Documentation Build Report" > /tmp/build_report.md
+          echo "" >> /tmp/build_report.md
+          echo "**Build Status:** ${{ job.status }}" >> /tmp/build_report.md
+          echo "**Build Time:** $(date -u +'%Y-%m-%d %H:%M:%S UTC')" >> /tmp/build_report.md
+          echo "**Python Version:** 3.12" >> /tmp/build_report.md
+          echo "" >> /tmp/build_report.md
+
+          if [ -f "docs/_build/linkcheck/output.txt" ]; then
+            echo "**Link Check Results:**" >> /tmp/build_report.md
+            wc -l docs/_build/linkcheck/output.txt | awk '{print "- Total checks: " $1}' >> /tmp/build_report.md
+          fi
+
+      - name: Comment PR with build status
+        if: github.event_name == 'pull_request'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const status = '${{ job.status }}' === 'success' ? '✓' : '✗';
+            const message = `${status} **Documentation Build** - Build ${{ job.status }} | [View HTML](#)`;
+
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: message
+            });
+
+  deploy-preview:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-22.04
+    name: Deploy Preview
+    needs: build
+
+    steps:
+      - name: Download HTML artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: documentation-html
+          path: html
+
+      - name: Upload to Surge for preview
+        run: |
+          npm install -g surge
+          export DOMAIN=$(echo "pr-${{ github.event.pull_request.number }}-homodyne-docs-$(echo ${{ github.event.pull_request.head.sha }} | cut -c1-7).surge.sh" | tr '[:upper:]' '[:lower:]')
+          surge ./html $DOMAIN --token ${{ secrets.SURGE_TOKEN }}
+        continue-on-error: true
+
+  lint-docs:
+    runs-on: ubuntu-22.04
+    name: Lint Documentation
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: 'pip'
+
+      - name: Install linting tools
+        run: |
+          pip install pylint pydocstyle
+
+      - name: Lint docstrings
+        continue-on-error: true
+        run: |
+          pydocstyle homodyne --convention=google
+
+      - name: Check for documentation coverage
+        continue-on-error: true
+        run: |
+          pip install coverage docstr-coverage
+          docstr-coverage homodyne -v

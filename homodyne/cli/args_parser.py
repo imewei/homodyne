@@ -29,7 +29,10 @@ def create_parser() -> argparse.ArgumentParser:
 Examples:
   %(prog)s                                    # Run with default NLSQ method
   %(prog)s --method nlsq                      # NLSQ trust-region least squares (default)
-  %(prog)s --method mcmc                      # MCMC sampling for uncertainty quantification
+  %(prog)s --method mcmc                      # MCMC with automatic NUTS/CMC selection
+  %(prog)s --method auto                      # Auto-select NUTS or CMC (same as mcmc)
+  %(prog)s --method nuts                      # Force standard NUTS (for datasets < 500k points)
+  %(prog)s --method cmc                       # Force CMC (for datasets > 500k points)
   %(prog)s --config my_config.yaml            # Use custom config file
   %(prog)s --output-dir ./results             # Custom output directory
   %(prog)s --force-cpu                        # Force CPU-only computation
@@ -41,12 +44,28 @@ Examples:
   %(prog)s --static-mode                      # Force static mode (3 parameters)
   %(prog)s --laminar-flow --method mcmc       # Force laminar flow (7 parameters) with MCMC
 
+CMC Examples:
+  %(prog)s --method cmc --cmc-num-shards 20                    # CMC with 20 shards
+  %(prog)s --method cmc --cmc-backend multiprocessing          # CMC with multiprocessing backend
+  %(prog)s --method cmc --cmc-plot-diagnostics                 # CMC with diagnostic plots
+  %(prog)s --method cmc --cmc-num-shards 16 --cmc-backend pjit # CMC on multi-GPU system
+
 Optimization Methods:
   nlsq:    NLSQ trust-region nonlinear least squares (PRIMARY)
           Use for: Fast, reliable parameter estimation
 
-  mcmc:    NumPyro/BlackJAX NUTS sampling (SECONDARY)
+  mcmc:    Alias for 'auto' - automatic NUTS/CMC selection (SECONDARY)
           Use for: Uncertainty quantification, publication-quality analysis
+
+  auto:    Automatic selection between NUTS and CMC based on dataset size
+          < 500k points → NUTS (single-device MCMC)
+          > 500k points → CMC (distributed MCMC with data sharding)
+
+  nuts:    Force standard NUTS MCMC (NumPyro/BlackJAX)
+          Use for: Datasets < 500k points, when CMC overhead is unnecessary
+
+  cmc:     Force Consensus Monte Carlo (distributed Bayesian inference)
+          Use for: Large datasets (> 500k points), multi-GPU/HPC systems
 
 Physical Model:
   c₂(φ,t₁,t₂) = 1 + contrast × [c₁(φ,t₁,t₂)]²
@@ -68,9 +87,13 @@ Homodyne v{__version__} - JAX-First Architecture
     # Method selection - JAX-first methods only
     parser.add_argument(
         "--method",
-        choices=["nlsq", "mcmc"],
+        choices=["nlsq", "mcmc", "nuts", "cmc", "auto"],
         default="nlsq",
-        help="Optimization method: nlsq (NLSQ trust-region), mcmc (NumPyro/BlackJAX NUTS) (default: %(default)s)",
+        help=(
+            "Optimization method: nlsq (NLSQ trust-region), mcmc (alias for auto), "
+            "auto (automatic NUTS/CMC selection), nuts (force NUTS), cmc (force CMC) "
+            "(default: %(default)s)"
+        ),
     )
 
     # Configuration and I/O
@@ -159,6 +182,28 @@ Homodyne v{__version__} - JAX-First Architecture
         type=int,
         default=4,
         help="Number of MCMC chains (default: %(default)s)",
+    )
+
+    # CMC-specific options
+    cmc_group = parser.add_argument_group("Consensus Monte Carlo (CMC) Options")
+    cmc_group.add_argument(
+        "--cmc-num-shards",
+        type=int,
+        default=None,
+        help="Number of data shards for CMC (overrides config, default: auto-detect based on dataset size)",
+    )
+
+    cmc_group.add_argument(
+        "--cmc-backend",
+        choices=["auto", "pjit", "multiprocessing", "pbs"],
+        default=None,
+        help="CMC backend for parallel execution (overrides config, default: auto-detect based on hardware)",
+    )
+
+    cmc_group.add_argument(
+        "--cmc-plot-diagnostics",
+        action="store_true",
+        help="Generate CMC diagnostic plots (per-shard convergence, between-shard consistency)",
     )
 
     # Output options
@@ -277,6 +322,26 @@ def validate_args(args) -> bool:
     if args.n_samples <= 0 or args.n_warmup <= 0 or args.n_chains <= 0:
         print("Error: MCMC parameters (samples, warmup, chains) must be positive")
         return False
+
+    # Validate CMC parameters
+    if args.cmc_num_shards is not None and args.cmc_num_shards <= 0:
+        print("Error: CMC num_shards must be positive")
+        return False
+
+    # Warn if CMC arguments provided with non-MCMC method
+    if args.method not in ["mcmc", "auto", "nuts", "cmc"]:
+        if args.cmc_num_shards is not None:
+            print(
+                f"Warning: --cmc-num-shards ignored (not applicable for method={args.method})"
+            )
+        if args.cmc_backend is not None:
+            print(
+                f"Warning: --cmc-backend ignored (not applicable for method={args.method})"
+            )
+        if args.cmc_plot_diagnostics:
+            print(
+                f"Warning: --cmc-plot-diagnostics ignored (not applicable for method={args.method})"
+            )
 
     # Check config file exists if provided and not default
     if args.config != Path("./homodyne_config.yaml") and not args.config.exists():

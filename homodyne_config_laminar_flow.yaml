@@ -1,0 +1,107 @@
+
+# ==============================================================================
+# LAMINAR FLOW NLSQ OPTIMIZATION EXAMPLE
+# ==============================================================================
+#
+# Parameter count: 7 physical + 2 per angle range = 7 + 2m
+# Example with 2 angle ranges: 7 + 2×2 = 11 total parameters
+#
+# Physical parameters:
+#   - D₀: Diffusion coefficient [Å²/s]
+#   - α: Diffusion power-law exponent [dimensionless]
+#   - D_offset: Diffusion offset [Å²/s]
+#   - γ̇₀: Initial shear rate [s⁻¹]
+#   - β: Shear power-law exponent [dimensionless]
+#   - γ̇_offset: Shear rate offset [s⁻¹]
+#   - φ₀: Initial angle [degrees]
+#
+
+experimental_data:
+  file_path: "./data/sample/experiment.hdf"
+
+parameter_space:
+  model: "laminar_flow"
+
+  bounds:
+    # Diffusion parameters
+    - name: D0
+      min: 100.0
+      max: 1e5
+
+    - name: alpha
+      min: 0.0
+      max: 2.0
+
+    - name: D_offset
+      min: -100.0
+      max: 100.0
+
+    # Flow parameters
+    - name: gamma_dot_0    # Maps to gamma_dot_t0 in code
+      min: 1e-6
+      max: 0.5
+
+    - name: beta
+      min: 0.0
+      max: 2.0
+
+    - name: gamma_dot_offset
+      min: -0.1
+      max: 0.1
+
+    - name: phi_0          # Maps to phi0 in code
+      min: -180.0
+      max: 180.0
+
+initial_parameters:
+  parameter_names:
+    - D0
+    - alpha
+    - D_offset
+    - gamma_dot_0
+    - beta
+    - gamma_dot_offset
+    - phi_0
+
+  # Optimize critical flow parameters
+  active_parameters:
+    - D0
+    - gamma_dot_0
+    - beta
+    - phi_0
+
+optimization:
+  method: "nlsq"
+
+  nlsq:
+    max_iterations: 150
+    tolerance: 1e-8
+    trust_region_scale: 1.0
+
+# Angle filtering: reduces parameter count
+phi_filtering:
+  enabled: true
+
+  target_ranges:
+    # Near-parallel to flow direction
+    - min_angle: -10.0
+      max_angle: 10.0
+      description: "Parallel to flow (0°)"
+
+    # Near-perpendicular to flow direction
+    - min_angle: 85.0
+      max_angle: 95.0
+      description: "Perpendicular to flow (90°)"
+
+  # With 2 filtered ranges:
+  # Total parameters = 7 + 2*2 = 11
+  # vs. without filtering: 7 + 2*n_all_angles (potentially 7+2*10=27)
+
+performance:
+  strategy_override: null
+  enable_progress: true
+  device:
+    preferred_device: "auto"
+
+output:
+  directory: "./results_laminar_flow"

@@ -14,7 +14,7 @@ import jax.numpy as jnp
 import numpy as np
 from typing import Any
 
-from .exceptions import NLSQNumericalError
+from homodyne.optimization.exceptions import NLSQNumericalError
 
 
 class NumericalValidator:

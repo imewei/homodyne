@@ -1,0 +1,430 @@
+# Homodyne Consensus Monte Carlo Configuration Template
+# =================================================
+# Configuration for large-scale Bayesian XPCS analysis with Consensus Monte Carlo (CMC).
+# Designed for datasets > 500k points requiring full Bayesian uncertainty quantification.
+#
+# Version: 3.0+ (Consensus Monte Carlo Support)
+#
+# Key Features:
+# - Consensus Monte Carlo for unlimited dataset Bayesian inference
+# - Data sharding with stratified, random, or contiguous strategies
+# - Hardware-adaptive backend selection (pjit, multiprocessing, PBS)
+# - SVI-based initialization for improved convergence
+# - Weighted Gaussian product for subposterior combination
+# - Checkpoint/resume capability for fault tolerance
+# - Per-shard convergence diagnostics and validation
+#
+# Usage:
+#   1. For datasets > 500k points requiring Bayesian uncertainty quantification
+#   2. When standard MCMC NUTS is memory-limited or too slow
+#   3. On multi-GPU systems, HPC clusters, or high-core-count workstations
+#   4. Production pipelines requiring fault-tolerant Bayesian inference
+#
+# Run: homodyne --config this_file.yaml --method cmc
+
+# ==============================================================================
+# TEMPLATE METADATA
+# ==============================================================================
+metadata:
+  config_version: "3.0.0"
+  description: "Large-scale Bayesian XPCS analysis with Consensus Monte Carlo"
+  analysis_mode: "static_isotropic"  # Can be changed to laminar_flow
+  parameter_count: 5  # 5 for static_isotropic, 9 for laminar_flow
+  dataset_size: "500k+ points"
+  cmc_enabled: true
+  recommended_use: "Datasets > 500k points, multi-GPU systems, HPC clusters, Bayesian uncertainty quantification"
+  template_type: "production_ready"
+  complexity: "high"
+  key_features:
+    - "Consensus Monte Carlo for scalable Bayesian inference"
+    - "Hardware-adaptive backend selection"
+    - "SVI initialization for improved convergence"
+    - "Stratified data sharding for representative subposteriors"
+    - "Weighted Gaussian product for posterior combination"
+    - "Checkpoint/resume for fault tolerance"
+    - "Per-shard convergence diagnostics"
+
+# ==============================================================================
+# CORE ANALYSIS CONFIGURATION
+# ==============================================================================
+
+# Analysis mode: 5-parameter static isotropic model
+# Change to "laminar_flow" for 9-parameter flow analysis
+analysis_mode: "static_isotropic"
+
+# Core physics parameters
+analyzer_parameters:
+  # Time step between correlation measurements (seconds)
+  dt: 0.1
+
+  # Frame range for analysis
+  start_frame: 1
+  end_frame: 5000  # Large dataset for CMC demonstration
+
+  # Scattering parameters
+  scattering:
+    # Wave vector magnitude in Å⁻¹ (sample-dependent)
+    wavevector_q: 0.0054
+
+  # Geometry parameters (instrumental setup)
+  geometry:
+    # Stator-rotor gap in Angstroms (instrumental parameter)
+    stator_rotor_gap: 2000000
+
+# Analysis mode settings
+analysis_settings:
+  # Static mode enabled for isotropic analysis
+  static_mode: true
+
+  model_description:
+    type: "static_isotropic"
+    parameters: 5
+    physics: "Anomalous diffusion with offset"
+
+# ==============================================================================
+# DATA CONFIGURATION
+# ==============================================================================
+
+# Experimental data file paths (CUSTOMIZE THESE PATHS)
+experimental_data:
+  # Primary data location
+  # Modern format: Use file_path directly
+  file_path: "./data/large_dataset.hdf"
+
+  # Legacy format (also supported):
+  # data_folder_path: "./data/sample/"
+  # data_file_name: "large_dataset.hdf"
+
+  # Phi angles (required for some analysis modes)
+  phi_angles_path: "./data/phi_angles/"
+  phi_angles_file: "phi_list.txt"
+
+  # Caching for performance
+  cache_enabled: true
+  cache_directory: "./cache/"
+
+# ==============================================================================
+# PARAMETER SPACE CONFIGURATION
+# ==============================================================================
+
+# Parameter bounds (static_isotropic mode: 5 parameters)
+# For laminar_flow mode, add: gamma_dot_0, beta, gamma_dot_offset, phi_0
+parameter_space:
+  bounds:
+    # Anomalous diffusion coefficient (nm²/s^α)
+    - name: D0
+      min: 1.0
+      max: 1000000.0
+      type: Normal
+
+    # Anomalous diffusion exponent (dimensionless)
+    - name: alpha
+      min: 0.01
+      max: 2.0
+      type: Normal
+
+    # Diffusion offset (nm²/s)
+    - name: D_offset
+      min: 0.0
+      max: 10000.0
+      type: Normal
+
+# Initial parameter values
+initial_parameters:
+  # Parameters to optimize
+  parameter_names:
+    - D0
+    - alpha
+    - D_offset
+
+  # Initial guesses (optional - will use midpoint of bounds if not provided)
+  values:
+    - 10000.0    # D0
+    - 0.8        # alpha
+    - 100.0      # D_offset
+
+# ==============================================================================
+# OPTIMIZATION CONFIGURATION - CMC SETTINGS
+# ==============================================================================
+
+optimization:
+  # Method selection (cmc, auto, nuts)
+  # - cmc: Force Consensus Monte Carlo
+  # - auto: Automatic selection based on dataset size and hardware
+  # - nuts: Force standard NUTS MCMC (for datasets < 500k points)
+  method: cmc
+
+  # Standard MCMC configuration (applies to per-shard MCMC in CMC mode)
+  mcmc:
+    # NUTS sampler configuration
+    num_chains: 4
+    num_warmup: 500   # Per-shard warmup (reduced from standard 1000)
+    num_samples: 2000 # Per-shard samples
+    target_accept_prob: 0.8
+    max_tree_depth: 10
+
+    # Method selection (memory-based or manual)
+    method_selection:
+      type: memory_based  # Options: memory_based, manual
+      memory_threshold_pct: 80  # Use CMC if estimated memory > 80% available
+      min_points_for_cmc: 500000  # Never use CMC below this threshold
+
+  # ===========================================================================
+  # CONSENSUS MONTE CARLO (CMC) CONFIGURATION
+  # ===========================================================================
+  cmc:
+    # Enable CMC (auto-detection based on dataset size and hardware)
+    # - true: Always use CMC
+    # - false: Never use CMC (use standard NUTS)
+    # - auto: Use CMC if dataset > min_points_for_cmc (recommended)
+    enable: auto
+
+    # Minimum dataset size to trigger CMC
+    # Below this threshold, standard NUTS is used regardless of hardware
+    min_points_for_cmc: 500000
+
+    # -------------------------------------------------------------------------
+    # DATA SHARDING CONFIGURATION
+    # -------------------------------------------------------------------------
+    sharding:
+      # Sharding strategy for data partitioning
+      # - stratified: Stratified sampling across (t1, t2, phi) dimensions (RECOMMENDED)
+      #   Ensures each shard is representative of full dataset
+      #   Best for heterogeneous data distributions
+      # - random: Random permutation before sharding
+      #   Simpler, faster, good for homogeneous data
+      # - contiguous: Split data into contiguous blocks
+      #   Fastest, but assumes data is already shuffled
+      strategy: stratified
+
+      # Number of shards (auto-detection based on hardware)
+      # - auto: Automatically determine based on dataset size and available memory
+      # - <integer>: Manual specification (advanced users only)
+      # Auto-detection logic:
+      #   - GPU: 1M points per shard (fits in 16GB GPU memory)
+      #   - CPU: 2M points per shard (uses available system memory)
+      #   - Cluster: Scales to available nodes * cores_per_node
+      num_shards: auto
+
+      # Maximum points per shard (auto-detection based on hardware)
+      # Override only if you know your hardware constraints
+      # - auto: Use hardware-adaptive defaults
+      # - <integer>: Manual specification (e.g., 1000000 for 1M points per shard)
+      max_points_per_shard: auto
+
+    # -------------------------------------------------------------------------
+    # INITIALIZATION STRATEGY
+    # -------------------------------------------------------------------------
+    initialization:
+      # Initialization method for NUTS inverse mass matrix
+      # - svi: Use Stochastic Variational Inference (RECOMMENDED)
+      #   Runs SVI on full dataset to estimate inverse mass matrix
+      #   Improves per-shard MCMC convergence (faster warmup, better ESS)
+      #   Overhead: ~30-60 seconds for 1M-10M points
+      # - nlsq: Use NLSQ optimization results
+      #   Fast initialization from existing NLSQ fit
+      #   Requires NLSQ to converge successfully
+      # - identity: Use identity matrix
+      #   Fallback option, slowest convergence
+      method: svi
+
+      # SVI configuration (used when method=svi)
+      svi_steps: 5000  # Number of optimization steps
+      svi_learning_rate: 0.001  # Adam learning rate
+      svi_rank: 5  # Low-rank approximation rank (1-10)
+
+      # Fallback behavior if SVI fails
+      fallback_to_identity: true
+
+    # -------------------------------------------------------------------------
+    # BACKEND SELECTION
+    # -------------------------------------------------------------------------
+    backend:
+      # Backend type for parallel MCMC execution
+      # - auto: Automatic selection based on hardware (RECOMMENDED)
+      #   - Multi-node cluster → pbs or slurm
+      #   - Multi-GPU → pjit
+      #   - CPU-only → multiprocessing
+      # - pjit: JAX pjit backend (GPU/CPU, sequential or parallel)
+      # - multiprocessing: Python multiprocessing (CPU-only, parallel)
+      # - pbs: PBS job array backend (HPC clusters)
+      # - slurm: Slurm job array backend (HPC clusters) [Phase 2]
+      name: auto
+
+      # Checkpoint configuration
+      enable_checkpoints: true
+      checkpoint_frequency: 10  # Save checkpoint every N shards
+      checkpoint_dir: "./checkpoints/cmc"
+      keep_last_checkpoints: 3  # Keep last 3 checkpoints
+      resume_from_checkpoint: true  # Auto-resume from latest checkpoint
+
+    # -------------------------------------------------------------------------
+    # SUBPOSTERIOR COMBINATION
+    # -------------------------------------------------------------------------
+    combination:
+      # Combination method for aggregating subposteriors
+      # - weighted_gaussian: Weighted Gaussian product (RECOMMENDED)
+      #   Optimal for Gaussian-like posteriors
+      #   Uses covariance weighting for better accuracy
+      # - simple_average: Simple averaging of samples
+      #   More robust to non-Gaussian posteriors
+      #   Less statistically efficient
+      # - auto: Weighted Gaussian with fallback to simple average
+      method: weighted_gaussian
+
+      # Validation configuration
+      validate_results: true  # Validate combined posterior quality
+      min_success_rate: 0.90  # Minimum fraction of shards that must converge
+
+    # -------------------------------------------------------------------------
+    # PER-SHARD MCMC CONFIGURATION
+    # -------------------------------------------------------------------------
+    per_shard_mcmc:
+      # Reduced warmup for per-shard efficiency
+      # Standard MCMC: 1000 warmup, CMC per-shard: 500 warmup
+      # Justification: SVI initialization provides good starting point
+      num_warmup: 500
+
+      # Number of samples per shard
+      num_samples: 2000
+
+      # Number of chains per shard
+      # Recommendation: 1 chain per shard (parallelism across shards)
+      # Multi-chain per shard increases shard runtime but improves diagnostics
+      num_chains: 1
+
+      # Subsampling if shard still too large
+      # - auto: Automatically subsample if shard > max_points_per_shard
+      # - null: No subsampling (fail if shard too large)
+      # - <integer>: Subsample to this many points
+      subsample_size: auto
+
+    # -------------------------------------------------------------------------
+    # CONVERGENCE VALIDATION
+    # -------------------------------------------------------------------------
+    validation:
+      # Strict mode: Fail optimization if validation criteria not met
+      # - true: Raise error on validation failure (production pipelines)
+      # - false: Log warnings but continue (exploratory analysis)
+      strict_mode: true
+
+      # Minimum per-shard convergence criteria
+      min_per_shard_ess: 100  # Minimum effective sample size per parameter
+      max_per_shard_rhat: 1.1  # Maximum R-hat per parameter
+
+      # Between-shard consistency criteria
+      max_between_shard_kl: 2.0  # Maximum KL divergence between shard posteriors
+
+      # Overall success rate
+      min_success_rate: 0.90  # At least 90% of shards must converge
+
+# ==============================================================================
+# PBS-SPECIFIC CONFIGURATION (only used if backend=pbs)
+# ==============================================================================
+pbs:
+  # PBS project name (required for cluster accounting)
+  project_name: "your_project_name"
+
+  # Walltime per shard job (format: HH:MM:SS)
+  walltime: "02:00:00"  # 2 hours per shard
+
+  # Queue name
+  queue: "batch"
+
+  # Resource allocation per shard
+  nodes_per_shard: 1  # 1 node per shard (typical)
+  cores_per_node: 36  # Physical cores per node (check your cluster)
+
+  # Email notifications
+  email_notifications: false
+  email_address: "your_email@example.com"
+
+  # PBS working directory (optional, defaults to current directory)
+  work_directory: null
+
+# ==============================================================================
+# PERFORMANCE CONFIGURATION
+# ==============================================================================
+performance:
+  # Device configuration
+  device: auto  # Options: auto, gpu, cpu
+
+  # Progress tracking
+  enable_progress: true  # Show progress bars during CMC execution
+
+  # Memory management
+  memory_limit_gb: auto  # Auto-detect available memory
+
+# ==============================================================================
+# OUTPUT CONFIGURATION
+# ==============================================================================
+output:
+  # Output directory for results
+  directory: "./results/cmc_analysis"
+
+  # Save CMC-specific diagnostics
+  save_per_shard_diagnostics: true
+  save_combined_posterior: true
+  save_convergence_metrics: true
+
+  # Plotting configuration
+  generate_plots: true
+  plot_format: "png"  # Options: png, pdf, svg
+  plot_dpi: 300
+
+  # Logging configuration
+  log_level: "INFO"  # Options: DEBUG, INFO, WARNING, ERROR
+  log_file: null  # Auto-generate timestamped log file
+  console_output: true
+
+# ==============================================================================
+# ADVANCED CONFIGURATION (optional, use defaults unless you know what you're doing)
+# ==============================================================================
+advanced:
+  # Numerical stability
+  use_64bit: false  # Use 64-bit precision (slower but more accurate)
+
+  # JAX configuration
+  jax_enable_x64: false  # Enable 64-bit mode in JAX
+  jax_platform: null  # Override JAX platform (gpu, cpu)
+
+  # Parallel execution tuning
+  max_parallel_shards: auto  # Maximum shards to run in parallel
+
+# ==============================================================================
+# NOTES AND RECOMMENDATIONS
+# ==============================================================================
+#
+# 1. **When to use CMC:**
+#    - Dataset > 500k points and standard MCMC is too slow/memory-limited
+#    - Production pipelines requiring Bayesian uncertainty quantification at scale
+#    - Multi-GPU or HPC cluster environments
+#
+# 2. **Optimal configuration:**
+#    - sharding.strategy: stratified (most robust)
+#    - initialization.method: svi (best convergence)
+#    - combination.method: weighted_gaussian (most accurate)
+#    - backend.name: auto (hardware-adaptive)
+#
+# 3. **Hardware recommendations:**
+#    - Single GPU: 4-8 shards (1M points each), sequential execution
+#    - Multi-GPU: 16-32 shards, parallel pjit execution
+#    - CPU workstation: 8-16 shards (2M points each), multiprocessing
+#    - HPC cluster: 32-128 shards, PBS job array
+#
+# 4. **Troubleshooting:**
+#    - Low ESS per shard: Increase num_warmup or num_samples
+#    - High between-shard KL: Check data quality, try stratified sharding
+#    - Low success rate: Check convergence diagnostics, adjust validation criteria
+#    - Memory errors: Reduce max_points_per_shard or increase num_shards
+#
+# 5. **Performance tuning:**
+#    - SVI overhead: ~30-60s for 1M-10M points (one-time cost)
+#    - Per-shard MCMC: ~5-10 min for 1M points (500 warmup, 2000 samples)
+#    - Combination: ~10-30s for 32-128 shards
+#    - Total: 1-2 hours for 50M points on 8-GPU system
+#
+# For more information, see documentation:
+# - CMC User Guide: docs/guides/consensus_monte_carlo.md
+# - Hardware Configuration: docs/guides/hardware_configuration.md
+# - Troubleshooting: docs/troubleshooting/cmc_diagnostics.md

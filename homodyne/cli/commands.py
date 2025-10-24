@@ -815,6 +815,12 @@ def _apply_angle_filtering_for_optimization(
 def _run_optimization(args, config: ConfigManager, data: dict[str, Any]) -> Any:
     """Run the specified optimization method."""
     method = args.method
+
+    # Normalize method aliases: mcmc → auto
+    if method == "mcmc":
+        method = "auto"
+        logger.debug("Method 'mcmc' is an alias for 'auto' (automatic NUTS/CMC selection)")
+
     logger.info(f"Running {method.upper()} optimization...")
 
     start_time = time.perf_counter()
@@ -870,7 +876,46 @@ def _run_optimization(args, config: ConfigManager, data: dict[str, Any]) -> Any:
                 else:
                     # Not an OOM error, re-raise
                     raise nlsq_error
-        elif method == "mcmc":
+        elif method in ["auto", "nuts", "cmc"]:
+            # MCMC/CMC methods: auto, nuts, cmc
+            # Get CMC configuration from config file
+            cmc_config = config.get_cmc_config()
+
+            # Apply CLI overrides to CMC configuration
+            if args.cmc_num_shards is not None:
+                logger.info(
+                    f"Overriding CMC num_shards from CLI: {args.cmc_num_shards}",
+                )
+                cmc_config.setdefault("sharding", {})["num_shards"] = (
+                    args.cmc_num_shards
+                )
+
+            if args.cmc_backend is not None:
+                logger.info(f"Overriding CMC backend from CLI: {args.cmc_backend}")
+                cmc_config.setdefault("backend", {})["name"] = args.cmc_backend
+
+            # Log CMC configuration being used
+            logger.info(f"MCMC method: {method}")
+            if method == "auto":
+                logger.info(
+                    "Automatic method selection: NUTS (<500k points) or CMC (>500k points)",
+                )
+            elif method == "nuts":
+                logger.info("Forcing standard NUTS MCMC (single-device execution)")
+            elif method == "cmc":
+                logger.info(
+                    "Forcing Consensus Monte Carlo (distributed Bayesian inference)"
+                )
+
+            # Log key CMC parameters
+            sharding = cmc_config.get("sharding", {})
+            backend = cmc_config.get("backend", {})
+            logger.debug(
+                f"CMC sharding: strategy={sharding.get('strategy', 'auto')}, "
+                f"num_shards={sharding.get('num_shards', 'auto')}, "
+                f"backend={backend.get('name', 'auto')}",
+            )
+
             # Convert data format for MCMC if needed
             mcmc_data = filtered_data["c2_exp"]
             result = fit_mcmc_jax(
@@ -892,7 +937,22 @@ def _run_optimization(args, config: ConfigManager, data: dict[str, Any]) -> Any:
                 n_samples=args.n_samples,
                 n_warmup=args.n_warmup,
                 n_chains=args.n_chains,
+                method=method,  # Pass method to fit_mcmc_jax for auto/nuts/cmc selection
+                cmc_config=cmc_config,  # Pass CMC configuration
             )
+
+            # Generate CMC diagnostic plots if requested
+            if args.cmc_plot_diagnostics:
+                if hasattr(result, "is_cmc_result") and result.is_cmc_result():
+                    logger.info("Generating CMC diagnostic plots...")
+                    _generate_cmc_diagnostic_plots(
+                        result, args.output_dir, config.config.get("analysis_mode")
+                    )
+                else:
+                    logger.warning(
+                        "CMC diagnostic plots requested but result is not a CMC result "
+                        "(use --method cmc or ensure dataset is large enough for auto-selection)"
+                    )
         else:
             raise ValueError(f"Unknown optimization method: {method}")
 
@@ -909,6 +969,74 @@ def _run_optimization(args, config: ConfigManager, data: dict[str, Any]) -> Any:
             f"{method.upper()} optimization failed after {optimization_time:.3f}s: {e}",
         )
         raise
+
+
+def _generate_cmc_diagnostic_plots(
+    result: Any, output_dir: Path, analysis_mode: str
+) -> None:
+    """Generate CMC diagnostic plots.
+
+    This function generates diagnostic visualizations for Consensus Monte Carlo results:
+    - Per-shard convergence diagnostics (R-hat, ESS, acceptance rate)
+    - Between-shard KL divergence heatmap
+    - Combined posterior parameter distributions
+
+    Note: This is a placeholder implementation. Full visualization functionality
+    will be added when Task Group 11 (Visualization) is complete.
+
+    Parameters
+    ----------
+    result : Any
+        MCMC result object with CMC diagnostics (must be a CMC result)
+    output_dir : Path
+        Output directory for saving plots
+    analysis_mode : str
+        Analysis mode (static_isotropic or laminar_flow)
+    """
+    # Check if result is a CMC result
+    if not (hasattr(result, "is_cmc_result") and result.is_cmc_result()):
+        logger.warning(
+            "Result is not a CMC result - skipping diagnostic plots"
+        )
+        return
+
+    # Check if result has CMC diagnostics
+    if not hasattr(result, "cmc_diagnostics") or result.cmc_diagnostics is None:
+        logger.warning(
+            "CMC diagnostics not available in result - skipping diagnostic plots"
+        )
+        return
+
+    try:
+        # Create diagnostics subdirectory
+        diag_dir = output_dir / "cmc_diagnostics"
+        diag_dir.mkdir(parents=True, exist_ok=True)
+
+        # Save diagnostic data as JSON for now (visualization to be implemented)
+        diag_data = {
+            "per_shard_diagnostics": result.cmc_diagnostics.get(
+                "per_shard_diagnostics", []
+            ),
+            "between_shard_kl": result.cmc_diagnostics.get("kl_matrix", []),
+            "success_rate": result.cmc_diagnostics.get("success_rate", 0.0),
+            "combined_diagnostics": result.cmc_diagnostics.get(
+                "combined_diagnostics", {}
+            ),
+        }
+
+        import json
+
+        diag_file = diag_dir / "cmc_diagnostics.json"
+        with open(diag_file, "w") as f:
+            json.dump(diag_data, f, indent=2, default=str)
+
+        logger.info(f"CMC diagnostic data saved to: {diag_file}")
+        logger.info(
+            "Note: Graphical diagnostic plots will be available after Task Group 11 (Visualization) is complete"
+        )
+
+    except Exception as e:
+        logger.warning(f"Failed to generate CMC diagnostic plots: {e}")
 
 
 def _save_results(

@@ -1,0 +1,293 @@
+# ==============================================================================
+# HOMODYNE MASTER CONFIGURATION TEMPLATE
+# ==============================================================================
+# Comprehensive annotated reference covering ALL parameters and optimization
+# methods. Use this as a reference when customizing configurations.
+#
+# For quick starts, see:
+# - homodyne_static_isotropic.yaml (3+2n parameters)
+# - homodyne_laminar_flow.yaml (7+2n parameters)
+#
+# VERSION: 2.0.0
+# UPDATED: 2025-10-24
+# ==============================================================================
+
+# ==============================================================================
+# EXPERIMENTAL DATA
+# ==============================================================================
+experimental_data:
+  # Data file path (absolute or relative)
+  file_path: "./data/sample/experiment.hdf"
+  # RECOMMENDATION: Use absolute paths for reproducibility
+
+# ==============================================================================
+# PARAMETER SPACE - Physical Model Configuration
+# ==============================================================================
+parameter_space:
+  # Model selection: static_isotropic | laminar_flow
+  model: "laminar_flow"
+  # RECOMMENDATION: Choose based on system (static vs. flowing)
+
+  bounds:
+    # -------------------------------------------------------------------------
+    # DIFFUSION PARAMETERS (REQUIRED for all models)
+    # -------------------------------------------------------------------------
+    - name: D0
+      min: 100.0                          # Lower bound [Å²/s]
+      max: 1e5                            # Upper bound [Å²/s]
+      # RECOMMENDATION: Start with 100-100k range, refine based on system
+      # Physical meaning: Diffusion coefficient prefactor
+
+    - name: alpha
+      min: 0.0                            # Power-law exponent
+      max: 2.0
+      # RECOMMENDATION: 0-2 covers most physical systems
+      # Physical meaning: Anomalous diffusion exponent (0=normal, <1=subdiffusion, >1=superdiffusion)
+
+    - name: D_offset
+      min: -100.0                         # Can be negative
+      max: 100.0
+      # RECOMMENDATION: Allow negative values for physical flexibility
+      # Physical meaning: Baseline diffusion offset [Å²/s]
+
+    # -------------------------------------------------------------------------
+    # FLOW PARAMETERS (REQUIRED for laminar_flow model only)
+    # -------------------------------------------------------------------------
+    - name: gamma_dot_0                   # Maps to gamma_dot_t0 in code
+      min: 1e-6                           # Initial shear rate [s⁻¹]
+      max: 0.5
+      # RECOMMENDATION: Adjust based on experimental shear rates
+      # Physical meaning: Shear rate prefactor
+
+    - name: beta
+      min: 0.0                            # Shear power-law exponent
+      max: 2.0
+      # RECOMMENDATION: 0 for constant shear, >0 for time-dependent shear
+      # Physical meaning: Shear rate time exponent
+
+    - name: gamma_dot_offset
+      min: -0.1
+      max: 0.1
+      # RECOMMENDATION: Start with 0, adjust if baseline shear present
+      # Physical meaning: Baseline shear rate [s⁻¹]
+
+    - name: phi_0                         # Maps to phi0 in code
+      min: -180.0                         # Initial angle [degrees]
+      max: 180.0
+      # NOTE: Automatically normalized to [-180, 180] range
+      # Physical meaning: Initial angle between flow and scattering vector
+
+# ==============================================================================
+# INITIAL PARAMETERS
+# ==============================================================================
+initial_parameters:
+  # -------------------------------------------------------------------------
+  # PARAMETER COUNT EXPLANATION:
+  # -------------------------------------------------------------------------
+  # Static Isotropic: 3 physical + 2 × (number of filtered phi angles)
+  #   - Physical: [D₀, α, D_offset]
+  #   - Per-angle: [contrast, offset] for each phi angle
+  #   - Example: 3 angles → 3 + 2×3 = 9 total parameters
+  #
+  # Laminar Flow: 7 physical + 2 × (number of filtered phi angles)
+  #   - Physical: [D₀, α, D_offset, γ̇₀, β, γ̇_offset, φ₀]
+  #   - Per-angle: [contrast, offset] for each phi angle
+  #   - Example: 3 angles → 7 + 2×3 = 13 total parameters
+  # -------------------------------------------------------------------------
+
+  # Parameters to optimize (adjust based on model)
+  parameter_names:
+    - D0
+    - alpha
+    - D_offset
+    - gamma_dot_0                         # Laminar flow only
+    - beta                                # Laminar flow only
+    - gamma_dot_offset                    # Laminar flow only
+    - phi_0                               # Laminar flow only
+
+  # Optional: Specify active subset for optimization
+  active_parameters:
+    - D0
+    - alpha
+    - gamma_dot_0
+    # RECOMMENDATION: Start with critical parameters, add complexity gradually
+
+  # Optional: Fix specific parameters
+  fixed_parameters:
+    D_offset: 10.0
+    # RECOMMENDATION: Fix parameters with known values
+
+# ==============================================================================
+# OPTIMIZATION METHODS
+# ==============================================================================
+optimization:
+  # Method selection: nlsq | mcmc
+  method: "nlsq"
+  # RECOMMENDATION: NLSQ for primary analysis, MCMC for uncertainty quantification
+
+  # -------------------------------------------------------------------------
+  # NLSQ - Trust-Region Nonlinear Least Squares (Primary Method)
+  # -------------------------------------------------------------------------
+  nlsq:
+    max_iterations: 100                   # Maximum iterations
+    tolerance: 1e-8                       # Convergence tolerance
+    trust_region_scale: 1.0               # Trust region scaling
+    # RECOMMENDATION: Defaults work for most cases
+    # Automatic strategy selection based on dataset size:
+    #   < 1M points     → STANDARD (curve_fit)
+    #   1M-10M points   → LARGE (curve_fit_large)
+    #   10M-100M points → CHUNKED (curve_fit_large with progress)
+    #   > 100M points   → STREAMING (unlimited data)
+
+  # -------------------------------------------------------------------------
+  # MCMC - Markov Chain Monte Carlo (Uncertainty Quantification)
+  # -------------------------------------------------------------------------
+  mcmc:
+    num_warmup: 1000                      # NUTS warmup samples
+    num_samples: 2000                     # Posterior samples
+    num_chains: 4                         # Parallel chains
+    progress_bar: true                    # Show progress
+    backend: "numpyro"                    # numpyro | blackjax
+    # RECOMMENDATION: 4 chains for robust convergence diagnostics
+    # NumPyro is primary backend with progress bar support
+
+  # -------------------------------------------------------------------------
+  # STREAMING - For Unlimited Datasets (>100M points)
+  # -------------------------------------------------------------------------
+  streaming:
+    # Automatic for large datasets (>100M points)
+    enable_checkpoints: true              # Enable HDF5 checkpoints
+    checkpoint_dir: "./checkpoints"       # Checkpoint directory
+    checkpoint_frequency: 10              # Save every N batches
+    resume_from_checkpoint: true          # Resume from last checkpoint
+    keep_last_checkpoints: 3              # Keep last N checkpoints
+    enable_fault_tolerance: true          # Enable error recovery
+    max_retries_per_batch: 2              # Retry attempts per batch
+    min_success_rate: 0.5                 # Minimum successful batch rate
+    # RECOMMENDATION: Enable for datasets >10M points
+    # Provides constant memory footprint regardless of dataset size
+
+  # -------------------------------------------------------------------------
+  # CMC - Covariance Matrix Combination (Large Multi-Angle Datasets)
+  # -------------------------------------------------------------------------
+  cmc:
+    # Parallel optimization across angles with covariance combination
+    enable: false                         # Enable CMC
+    backend: "jax"                        # jax | numpy
+    diagonal_correction: true             # Apply diagonal correction
+    # RECOMMENDATION: Enable for datasets >1M points with multiple angles
+    # JAX backend provides GPU acceleration
+
+# ==============================================================================
+# PHI ANGLE FILTERING
+# ==============================================================================
+phi_filtering:
+  # Angular selection before optimization
+  enabled: false                          # Enable angle filtering
+  target_ranges:
+    - min_angle: -10.0                    # Range 1: near 0°
+      max_angle: 10.0
+      description: "Near 0 degrees (parallel to flow)"
+    - min_angle: 85.0                     # Range 2: near 90°
+      max_angle: 95.0
+      description: "Near 90 degrees (perpendicular to flow)"
+  # RECOMMENDATION: Filter angles to reduce parameter count (3+2n or 7+2n)
+  # All angles normalized to [-180°, 180°] range with wrap-aware checking
+
+# ==============================================================================
+# PERFORMANCE OPTIMIZATION
+# ==============================================================================
+performance:
+  # Strategy selection (automatic by default)
+  strategy_override: null                 # Force: standard | large | chunked | streaming
+  memory_limit_gb: null                   # Custom memory limit (auto-detect if null)
+  enable_progress: true                   # Show progress bars
+  # RECOMMENDATION: Leave strategy_override as null for automatic selection
+  # NLSQ automatically selects optimal strategy based on dataset size
+
+  device:
+    # Device selection (automatic by default)
+    preferred_device: "auto"              # auto | cpu | gpu
+    gpu_memory_fraction: 0.9              # GPU memory limit
+    # RECOMMENDATION: auto for transparent GPU/CPU selection
+    # GPU support: Linux only with CUDA 12.1-12.9
+    # CPU-only: All platforms (Linux, macOS, Windows)
+
+# ==============================================================================
+# VISUALIZATION
+# ==============================================================================
+plotting:
+  # Visualization options
+  save_plots: true                        # Save plots to output directory
+  show_plots: false                       # Display plots interactively
+  format: "png"                           # png | pdf | svg
+  dpi: 300                                # Resolution
+  # RECOMMENDATION: save_plots=true for batch processing
+
+# ==============================================================================
+# LOGGING
+# ==============================================================================
+logging:
+  # Logging configuration
+  level: "INFO"                           # DEBUG | INFO | WARNING | ERROR
+  console_output: true                    # Log to console
+  file_output: true                       # Log to file
+  # RECOMMENDATION: INFO for normal use, DEBUG for troubleshooting
+  # Dual logging streams: file (all messages) and console (level-based)
+
+# ==============================================================================
+# OUTPUT
+# ==============================================================================
+output:
+  # Output directory for results
+  directory: "./results"                  # Output path
+  # RECOMMENDATION: Use timestamped subdirectories for multiple runs
+  # Output files:
+  #   - nlsq/parameters.json (parameter values + uncertainties)
+  #   - nlsq/fitted_data.npz (experimental + theoretical + residuals)
+  #   - nlsq/analysis_results_nlsq.json (fit quality + dataset info)
+  #   - nlsq/convergence_metrics.json (convergence + recovery actions)
+
+# ==============================================================================
+# ADVANCED CONFIGURATION NOTES
+# ==============================================================================
+#
+# PARAMETER COUNTING (CRITICAL):
+# --------------------------------
+# The total parameter count depends on the physical model AND the number of
+# filtered phi angles:
+#
+# Static Isotropic: 3 + 2n parameters
+#   - 3 physical parameters: [D₀, α, D_offset]
+#   - 2n scaling parameters: [contrast, offset] × n angles
+#   - Example: 3 filtered angles → 3 + 2×3 = 9 total parameters
+#
+# Laminar Flow: 7 + 2n parameters
+#   - 7 physical parameters: [D₀, α, D_offset, γ̇₀, β, γ̇_offset, φ₀]
+#   - 2n scaling parameters: [contrast, offset] × n angles
+#   - Example: 3 filtered angles → 7 + 2×3 = 13 total parameters
+#
+# OPTIMIZATION METHOD SELECTION:
+# -------------------------------
+# - NLSQ: Fast, deterministic, good for initial parameter estimates
+# - MCMC: Slower, provides full posterior distributions and uncertainties
+# - STREAMING: For very large datasets (>100M points), constant memory
+# - CMC: For large multi-angle datasets, parallel optimization with combination
+#
+# PLATFORM SUPPORT:
+# -----------------
+# - CPU: Linux, macOS, Windows (full support)
+# - GPU: Linux only (CUDA 12.1-12.9)
+# - Installation: `pip install homodyne` (CPU-only default)
+# - GPU upgrade: `pip install jax[cuda12-local]==0.8.0 jaxlib==0.8.0`
+#
+# CONFIGURATION VALIDATION:
+# -------------------------
+# - Parameter names automatically mapped (gamma_dot_0 → gamma_dot_t0, phi_0 → phi0)
+# - Physics-based constraints validated with 3 severity levels (ERROR, WARNING, INFO)
+# - Type-safe configuration with TypedDict validation
+# - Deprecated configurations generate warnings
+#
+# ==============================================================================
+# END OF MASTER TEMPLATE
+# ==============================================================================

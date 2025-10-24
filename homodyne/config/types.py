@@ -122,26 +122,208 @@ class StreamingConfig(TypedDict, total=False):
     min_success_rate: float
 
 
+class CMCShardingConfig(TypedDict, total=False):
+    """CMC data sharding configuration.
+
+    Configuration for data partitioning strategy in Consensus Monte Carlo.
+
+    Attributes
+    ----------
+    strategy : str
+        Sharding strategy: "stratified", "random", or "contiguous"
+    num_shards : int | str
+        Number of shards or "auto" for automatic detection
+    max_points_per_shard : int | str
+        Maximum points per shard or "auto" for hardware-adaptive sizing
+    """
+
+    strategy: str
+    num_shards: int | str
+    max_points_per_shard: int | str
+
+
+class CMCInitializationConfig(TypedDict, total=False):
+    """CMC initialization configuration.
+
+    Configuration for NUTS inverse mass matrix initialization.
+
+    Attributes
+    ----------
+    method : str
+        Initialization method: "svi", "nlsq", or "identity"
+    svi_steps : int
+        Number of SVI optimization steps
+    svi_learning_rate : float
+        Adam learning rate for SVI
+    svi_rank : int
+        Low-rank approximation rank (1-10)
+    fallback_to_identity : bool
+        Use identity matrix if SVI fails
+    """
+
+    method: str
+    svi_steps: int
+    svi_learning_rate: float
+    svi_rank: int
+    fallback_to_identity: bool
+
+
+class CMCBackendConfig(TypedDict, total=False):
+    """CMC backend configuration.
+
+    Configuration for parallel execution backend selection.
+
+    Attributes
+    ----------
+    name : str
+        Backend name: "auto", "pjit", "multiprocessing", "pbs", or "slurm"
+    enable_checkpoints : bool
+        Enable checkpoint functionality
+    checkpoint_frequency : int
+        Save checkpoint every N shards
+    checkpoint_dir : str
+        Directory for checkpoint files
+    keep_last_checkpoints : int
+        Number of recent checkpoints to keep
+    resume_from_checkpoint : bool
+        Auto-resume from latest checkpoint
+    """
+
+    name: str
+    enable_checkpoints: bool
+    checkpoint_frequency: int
+    checkpoint_dir: str
+    keep_last_checkpoints: int
+    resume_from_checkpoint: bool
+
+
+class CMCCombinationConfig(TypedDict, total=False):
+    """CMC subposterior combination configuration.
+
+    Configuration for aggregating subposteriors from shards.
+
+    Attributes
+    ----------
+    method : str
+        Combination method: "weighted_gaussian", "simple_average", or "auto"
+    validate_results : bool
+        Validate combined posterior quality
+    min_success_rate : float
+        Minimum fraction of shards that must converge (0.0-1.0)
+    """
+
+    method: str
+    validate_results: bool
+    min_success_rate: float
+
+
+class CMCPerShardMCMCConfig(TypedDict, total=False):
+    """CMC per-shard MCMC configuration.
+
+    Configuration for MCMC parameters on each data shard.
+
+    Attributes
+    ----------
+    num_warmup : int
+        Number of warmup steps per shard
+    num_samples : int
+        Number of samples per shard
+    num_chains : int
+        Number of chains per shard
+    subsample_size : int | str
+        Subsample size or "auto" for automatic subsampling
+    """
+
+    num_warmup: int
+    num_samples: int
+    num_chains: int
+    subsample_size: int | str
+
+
+class CMCValidationConfig(TypedDict, total=False):
+    """CMC convergence validation configuration.
+
+    Configuration for validating convergence criteria.
+
+    Attributes
+    ----------
+    strict_mode : bool
+        Fail optimization if validation criteria not met
+    min_per_shard_ess : float
+        Minimum effective sample size per parameter per shard
+    max_per_shard_rhat : float
+        Maximum R-hat per parameter per shard
+    max_between_shard_kl : float
+        Maximum KL divergence between shard posteriors
+    min_success_rate : float
+        Minimum fraction of shards that must converge (0.0-1.0)
+    """
+
+    strict_mode: bool
+    min_per_shard_ess: float
+    max_per_shard_rhat: float
+    max_between_shard_kl: float
+    min_success_rate: float
+
+
+class CMCConfig(TypedDict, total=False):
+    """Complete CMC (Consensus Monte Carlo) configuration.
+
+    Configuration for large-scale Bayesian inference using Consensus Monte Carlo.
+
+    Attributes
+    ----------
+    enable : bool | str
+        Enable CMC: True, False, or "auto" for automatic detection
+    min_points_for_cmc : int
+        Minimum dataset size to trigger CMC
+    sharding : CMCShardingConfig
+        Data sharding configuration
+    initialization : CMCInitializationConfig
+        Initialization strategy configuration
+    backend : CMCBackendConfig
+        Backend selection configuration
+    combination : CMCCombinationConfig
+        Subposterior combination configuration
+    per_shard_mcmc : CMCPerShardMCMCConfig
+        Per-shard MCMC configuration
+    validation : CMCValidationConfig
+        Convergence validation configuration
+    """
+
+    enable: bool | str
+    min_points_for_cmc: int
+    sharding: CMCShardingConfig
+    initialization: CMCInitializationConfig
+    backend: CMCBackendConfig
+    combination: CMCCombinationConfig
+    per_shard_mcmc: CMCPerShardMCMCConfig
+    validation: CMCValidationConfig
+
+
 class OptimizationConfig(TypedDict, total=False):
     """Optimization section of configuration.
 
     Attributes
     ----------
     method : str
-        Optimization method ("nlsq", "mcmc")
+        Optimization method ("nlsq", "mcmc", "cmc", "auto")
     lsq : dict, optional
         NLSQ-specific settings
     mcmc : dict, optional
         MCMC-specific settings
+    cmc : CMCConfig, optional
+        Consensus Monte Carlo settings for large-scale Bayesian inference
     angle_filtering : dict, optional
         Angle filtering settings
     streaming : StreamingConfig, optional
         Streaming optimization settings (checkpoint management, fault tolerance)
     """
 
-    method: Literal["nlsq", "mcmc"]
+    method: Literal["nlsq", "mcmc", "cmc", "auto"]
     lsq: dict[str, Any]
     mcmc: dict[str, Any]
+    cmc: CMCConfig
     angle_filtering: dict[str, Any]
     streaming: StreamingConfig
 

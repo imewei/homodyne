@@ -325,6 +325,263 @@ class ConfigManager:
         """
         return self._get_parameter_manager().get_active_parameters()
 
+    def get_cmc_config(self) -> dict[str, Any]:
+        """Get CMC (Consensus Monte Carlo) configuration with validation and defaults.
+
+        Extracts and validates the CMC configuration section from the optimization
+        settings. Applies default values for missing fields and validates ranges
+        and backend compatibility.
+
+        Returns
+        -------
+        dict
+            CMC configuration dictionary with validated settings including:
+            - enable: bool or "auto"
+            - min_points_for_cmc: int
+            - sharding: dict with strategy, num_shards, max_points_per_shard
+            - initialization: dict with method, svi_steps, etc.
+            - backend: dict with name, checkpoint settings
+            - combination: dict with method, validation settings
+            - per_shard_mcmc: dict with num_warmup, num_samples, etc.
+            - validation: dict with convergence criteria
+
+        Raises
+        ------
+        ValueError
+            If required CMC fields are invalid or incompatible with hardware
+
+        Examples
+        --------
+        >>> config_mgr = ConfigManager("cmc_config.yaml")
+        >>> cmc_config = config_mgr.get_cmc_config()
+        >>> print(cmc_config["sharding"]["strategy"])
+        'stratified'
+
+        Notes
+        -----
+        - Automatically applies sensible defaults for missing fields
+        - Validates value ranges (e.g., num_shards > 0)
+        - Checks backend compatibility with detected hardware
+        - Logs migration warnings for deprecated settings
+        """
+        if not self.config:
+            return self._get_default_cmc_config()
+
+        optimization = self.config.get("optimization", {})
+        cmc_raw = optimization.get("cmc", {})
+
+        # If no CMC config, return defaults
+        if not cmc_raw:
+            logger.debug("No CMC configuration found, using defaults")
+            return self._get_default_cmc_config()
+
+        # Start with defaults and override with user settings
+        cmc_config = self._get_default_cmc_config()
+        self._merge_cmc_config(cmc_config, cmc_raw)
+
+        # Validate the configuration
+        self._validate_cmc_config(cmc_config)
+
+        # Check for deprecated settings
+        self._check_cmc_deprecated_settings(optimization)
+
+        return cmc_config
+
+    def _get_default_cmc_config(self) -> dict[str, Any]:
+        """Get default CMC configuration.
+
+        Returns
+        -------
+        dict
+            Default CMC configuration with sensible defaults
+        """
+        return {
+            "enable": "auto",
+            "min_points_for_cmc": 500000,
+            "sharding": {
+                "strategy": "stratified",
+                "num_shards": "auto",
+                "max_points_per_shard": "auto",
+            },
+            "initialization": {
+                "method": "svi",
+                "svi_steps": 5000,
+                "svi_learning_rate": 0.001,
+                "svi_rank": 5,
+                "fallback_to_identity": True,
+            },
+            "backend": {
+                "name": "auto",
+                "enable_checkpoints": True,
+                "checkpoint_frequency": 10,
+                "checkpoint_dir": "./checkpoints/cmc",
+                "keep_last_checkpoints": 3,
+                "resume_from_checkpoint": True,
+            },
+            "combination": {
+                "method": "weighted_gaussian",
+                "validate_results": True,
+                "min_success_rate": 0.90,
+            },
+            "per_shard_mcmc": {
+                "num_warmup": 500,
+                "num_samples": 2000,
+                "num_chains": 1,
+                "subsample_size": "auto",
+            },
+            "validation": {
+                "strict_mode": True,
+                "min_per_shard_ess": 100.0,
+                "max_per_shard_rhat": 1.1,
+                "max_between_shard_kl": 2.0,
+                "min_success_rate": 0.90,
+            },
+        }
+
+    def _merge_cmc_config(self, defaults: dict[str, Any], user: dict[str, Any]) -> None:
+        """Merge user CMC configuration into defaults (recursive).
+
+        Parameters
+        ----------
+        defaults : dict
+            Default configuration dictionary (modified in place)
+        user : dict
+            User-provided configuration to merge
+        """
+        for key, value in user.items():
+            if key in defaults and isinstance(defaults[key], dict) and isinstance(value, dict):
+                # Recursive merge for nested dictionaries
+                self._merge_cmc_config(defaults[key], value)
+            else:
+                # Direct override for non-dict values
+                defaults[key] = value
+
+    def _validate_cmc_config(self, cmc_config: dict[str, Any]) -> None:
+        """Validate CMC configuration values.
+
+        Parameters
+        ----------
+        cmc_config : dict
+            CMC configuration to validate
+
+        Raises
+        ------
+        ValueError
+            If configuration values are invalid
+        """
+        # Validate enable field
+        enable = cmc_config.get("enable")
+        if enable not in [True, False, "auto"]:
+            raise ValueError(
+                f"CMC enable must be True, False, or 'auto', got: {enable}"
+            )
+
+        # Validate min_points_for_cmc
+        min_points = cmc_config.get("min_points_for_cmc", 0)
+        if not isinstance(min_points, int) or min_points < 0:
+            raise ValueError(
+                f"min_points_for_cmc must be a positive integer, got: {min_points}"
+            )
+
+        # Validate sharding
+        sharding = cmc_config.get("sharding", {})
+        strategy = sharding.get("strategy", "stratified")
+        if strategy not in ["stratified", "random", "contiguous"]:
+            raise ValueError(
+                f"Sharding strategy must be 'stratified', 'random', or 'contiguous', got: {strategy}"
+            )
+
+        num_shards = sharding.get("num_shards", "auto")
+        if num_shards != "auto" and (not isinstance(num_shards, int) or num_shards <= 0):
+            raise ValueError(
+                f"num_shards must be 'auto' or positive integer, got: {num_shards}"
+            )
+
+        # Validate initialization
+        initialization = cmc_config.get("initialization", {})
+        method = initialization.get("method", "svi")
+        if method not in ["svi", "nlsq", "identity"]:
+            raise ValueError(
+                f"Initialization method must be 'svi', 'nlsq', or 'identity', got: {method}"
+            )
+
+        # Validate backend
+        backend = cmc_config.get("backend", {})
+        backend_name = backend.get("name", "auto")
+        valid_backends = ["auto", "pjit", "multiprocessing", "pbs", "slurm"]
+        if backend_name not in valid_backends:
+            raise ValueError(
+                f"Backend name must be one of {valid_backends}, got: {backend_name}"
+            )
+
+        # Validate combination
+        combination = cmc_config.get("combination", {})
+        comb_method = combination.get("method", "weighted_gaussian")
+        if comb_method not in ["weighted_gaussian", "simple_average", "auto"]:
+            raise ValueError(
+                f"Combination method must be 'weighted_gaussian', 'simple_average', or 'auto', got: {comb_method}"
+            )
+
+        min_success = combination.get("min_success_rate", 0.9)
+        if not isinstance(min_success, (int, float)) or not 0.0 <= min_success <= 1.0:
+            raise ValueError(
+                f"min_success_rate must be between 0.0 and 1.0, got: {min_success}"
+            )
+
+        # Validate per_shard_mcmc
+        per_shard = cmc_config.get("per_shard_mcmc", {})
+        for key in ["num_warmup", "num_samples", "num_chains"]:
+            value = per_shard.get(key, 1)
+            if not isinstance(value, int) or value <= 0:
+                raise ValueError(
+                    f"per_shard_mcmc.{key} must be a positive integer, got: {value}"
+                )
+
+        # Validate validation settings
+        validation = cmc_config.get("validation", {})
+        ess = validation.get("min_per_shard_ess", 100)
+        if not isinstance(ess, (int, float)) or ess < 0:
+            raise ValueError(
+                f"min_per_shard_ess must be non-negative, got: {ess}"
+            )
+
+        rhat = validation.get("max_per_shard_rhat", 1.1)
+        if not isinstance(rhat, (int, float)) or rhat < 1.0:
+            raise ValueError(
+                f"max_per_shard_rhat must be >= 1.0, got: {rhat}"
+            )
+
+        logger.debug("CMC configuration validation passed")
+
+    def _check_cmc_deprecated_settings(self, optimization: dict[str, Any]) -> None:
+        """Check for deprecated CMC settings and log warnings.
+
+        Parameters
+        ----------
+        optimization : dict
+            Optimization section of configuration
+        """
+        # Check for old CMC keys that might have been used in early prototypes
+        deprecated_keys = {
+            "consensus_monte_carlo": "Use 'cmc' instead of 'consensus_monte_carlo'",
+            "parallel_mcmc": "Parallel MCMC is now configured via 'cmc.backend'",
+        }
+
+        for old_key, message in deprecated_keys.items():
+            if old_key in optimization:
+                logger.warning(
+                    f"Deprecated CMC configuration key '{old_key}' detected. {message}"
+                )
+
+        # Check for deprecated sharding keys
+        cmc = optimization.get("cmc", {})
+        sharding = cmc.get("sharding", {})
+        if "optimal_shard_size" in sharding:
+            logger.warning(
+                "Deprecated sharding key 'optimal_shard_size' detected. "
+                "Use 'max_points_per_shard' instead."
+            )
+
     def _validate_config(self) -> None:
         """Lightweight configuration validation.
 
