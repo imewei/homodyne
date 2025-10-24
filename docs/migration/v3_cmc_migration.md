@@ -498,9 +498,9 @@ optimization:
 
 **Documentation:**
 
-- User Guide: `docs/user_guide/cmc_guide.md`
-- API Reference: `docs/api/cmc_api.md`
-- Developer Guide: `docs/developer_guide/cmc_architecture.md`
+- User Guide: `docs/user-guide/cmc_guide.md`
+- API Reference: `docs/api-reference/cmc_api.md`
+- Developer Guide: `docs/developer-guide/cmc_architecture.md`
 - Troubleshooting: `docs/troubleshooting/cmc_troubleshooting.md`
 
 **Getting Help:**

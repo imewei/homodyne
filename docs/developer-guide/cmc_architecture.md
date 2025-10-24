@@ -1607,7 +1607,7 @@ advanced:
 
 **Further Reading:**
 
-- **User Guide**: `docs/user_guide/cmc_guide.md`
-- **API Reference**: `docs/api/cmc_api.md`
+- **User Guide**: `docs/user-guide/cmc_guide.md`
+- **API Reference**: `docs/api-reference/cmc_api.md`
 - **Troubleshooting**: `docs/troubleshooting/cmc_troubleshooting.md`
 - **Migration Guide**: `docs/migration/v3_cmc_migration.md`

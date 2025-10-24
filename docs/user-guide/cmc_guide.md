@@ -1187,7 +1187,7 @@ Combine 8 intermediates → Final posterior
 - Maximum KL divergence: 2.0
 
 For more information:
-- **API Reference**: `docs/api/cmc_api.md`
-- **Developer Guide**: `docs/developer_guide/cmc_architecture.md`
+- **API Reference**: `docs/api-reference/cmc_api.md`
+- **Developer Guide**: `docs/developer-guide/cmc_architecture.md`
 - **Troubleshooting**: `docs/troubleshooting/cmc_troubleshooting.md`
 - **Migration Guide**: `docs/migration/v3_cmc_migration.md`

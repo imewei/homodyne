@@ -848,6 +848,6 @@ if result.is_cmc_result():
 5. **Low ESS** → Increase `num_samples` or improve initialization
 
 For detailed information, see:
-- User Guide: `docs/user_guide/cmc_guide.md`
-- API Reference: `docs/api/cmc_api.md`
+- User Guide: `docs/user-guide/cmc_guide.md`
+- API Reference: `docs/api-reference/cmc_api.md`
 - Migration Guide: `docs/migration/v3_cmc_migration.md`

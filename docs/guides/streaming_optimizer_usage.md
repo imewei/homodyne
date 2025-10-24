@@ -669,7 +669,7 @@ Streaming mode maintains high throughput:
 
 - **NLSQ Documentation:** https://nlsq.readthedocs.io/en/latest/guides/large_datasets.html
 - **Homodyne Migration Guide:** `/docs/migration/v2_to_v3_migration.md`
-- **API Documentation:** `/docs/api/optimization.md`
+- **API Documentation:** `/docs/api-reference/optimization.md`
 - **Performance Tuning Guide:** `/docs/guides/performance_tuning.md`
 
 ---

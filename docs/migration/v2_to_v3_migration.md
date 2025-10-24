@@ -704,7 +704,7 @@ NLSQ now handles large datasets natively.
 
 1. **Documentation:**
    - StreamingOptimizer Usage: `/docs/guides/streaming_optimizer_usage.md`
-   - API Reference: `/docs/api/optimization.md`
+   - API Reference: `/docs/api-reference/optimization.md`
    - Performance Tuning: `/docs/guides/performance_tuning.md`
 
 2. **Community:**

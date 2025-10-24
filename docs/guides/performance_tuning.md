@@ -816,7 +816,7 @@ STREAMING :  135.2s,   1.78 GB
 ## References
 
 - **StreamingOptimizer Usage:** `/docs/guides/streaming_optimizer_usage.md`
-- **API Reference:** `/docs/api/optimization.md`
+- **API Reference:** `/docs/api-reference/optimization.md`
 - **Migration Guide:** `/docs/migration/v2_to_v3_migration.md`
 - **NLSQ Performance Guide:** https://nlsq.readthedocs.io/en/latest/guides/performance_guide.html
 
