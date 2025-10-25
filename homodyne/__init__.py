@@ -42,7 +42,7 @@ import sys
 try:
     from homodyne._version import version as __version__
 except ImportError:
-    __version__ = "2.1.0-dev"
+    __version__ = "2.0.0-dev"
 
 # Core imports with graceful fallback
 try:

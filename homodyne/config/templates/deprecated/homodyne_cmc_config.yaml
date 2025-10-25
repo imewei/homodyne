@@ -3,7 +3,7 @@
 # Configuration for large-scale Bayesian XPCS analysis with Consensus Monte Carlo (CMC).
 # Designed for datasets > 500k points requiring full Bayesian uncertainty quantification.
 #
-# Version: 3.0+ (Consensus Monte Carlo Support)
+# Version: 2.0+ (Consensus Monte Carlo Support)
 #
 # Key Features:
 # - Consensus Monte Carlo for unlimited dataset Bayesian inference
@@ -26,7 +26,7 @@
 # TEMPLATE METADATA
 # ==============================================================================
 metadata:
-  config_version: "3.0.0"
+  config_version: "2.0.0"
   description: "Large-scale Bayesian XPCS analysis with Consensus Monte Carlo"
   analysis_mode: "static_isotropic"  # Can be changed to laminar_flow
   parameter_count: 5  # 5 for static_isotropic, 9 for laminar_flow

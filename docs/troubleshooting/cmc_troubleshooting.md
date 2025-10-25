@@ -1,6 +1,6 @@
 # Consensus Monte Carlo Troubleshooting Guide
 
-**Version:** 3.0+
+**Version:** 2.0+
 **Last Updated:** 2025-10-24
 
 ---
@@ -787,7 +787,7 @@ if result.is_cmc_result():
 
 ```markdown
 **Environment:**
-- homodyne version: 3.0.0
+- homodyne version: 2.0.0
 - Platform: Linux, Python 3.12
 - JAX: 0.8.0 (GPU)
 - Hardware: NVIDIA A100 80GB
