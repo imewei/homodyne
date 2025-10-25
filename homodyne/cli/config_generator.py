@@ -12,11 +12,18 @@ Usage:
 """
 
 import argparse
+import shutil
 import sys
 from pathlib import Path
 from typing import Any, Dict, Optional
 
 import yaml
+
+try:
+    from ruamel.yaml import YAML
+    HAS_RUAMEL = True
+except ImportError:
+    HAS_RUAMEL = False
 
 from homodyne.config.manager import ConfigManager
 
@@ -120,7 +127,7 @@ def get_template_path(mode: str) -> Path:
     """
     # Map mode to template filename
     template_map = {
-        "static": "homodyne_static_isotropic.yaml",
+        "static": "homodyne_static.yaml",
         "laminar_flow": "homodyne_laminar_flow.yaml",
     }
 
@@ -176,14 +183,13 @@ def generate_config(mode: str, output_path: Path, force: bool = False) -> Dict[s
     # Get template
     template_path = get_template_path(mode)
 
-    # Load template
+    # Copy template directly to preserve all comments and formatting
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copy2(template_path, output_path)
+
+    # Load config for return value (without modifying file)
     with open(template_path, "r") as f:
         config = yaml.safe_load(f)
-
-    # Write to output
-    output_path.parent.mkdir(parents=True, exist_ok=True)
-    with open(output_path, "w") as f:
-        yaml.dump(config, f, default_flow_style=False, sort_keys=False)
 
     print(f"✓ Generated {mode} configuration: {output_path}")
     print(f"  Template: {template_path.name}")
@@ -193,6 +199,7 @@ def generate_config(mode: str, output_path: Path, force: bool = False) -> Dict[s
     print(f"  2. Update data file path")
     print(f"  3. Adjust parameters and bounds")
     print(f"  4. Run analysis: homodyne --config {output_path}")
+    print(f"\nNote: All template comments and instructions are preserved.")
 
     return config
 
@@ -250,20 +257,6 @@ def interactive_builder() -> Dict[str, Any]:
         input("Output directory (default: './output'): ").strip() or "./output"
     )
 
-    # Load template
-    template_path = get_template_path(mode)
-    with open(template_path, "r") as f:
-        config = yaml.safe_load(f)
-
-    # Customize configuration
-    config["experimental_data"]["file_path"] = data_file
-
-    if "output" not in config:
-        config["output"] = {}
-    config["output"]["output_folder"] = output_dir
-    config["output"]["sample_name"] = sample_name
-    config["output"]["experiment_id"] = experiment_id
-
     # Output path
     print()
     suggested_filename = f"homodyne_{mode}_{sample_name}.yaml"
@@ -278,12 +271,66 @@ def interactive_builder() -> Dict[str, Any]:
         overwrite = input(f"\n⚠ File exists: {output_path}\nOverwrite? [y/N]: ").strip().lower()
         if overwrite != "y":
             print("Configuration not saved.")
-            return config
+            # Still load and return config for reference
+            template_path = get_template_path(mode)
+            with open(template_path, "r") as f:
+                return yaml.safe_load(f)
 
-    # Save configuration
+    # Get template
+    template_path = get_template_path(mode)
+
+    # Save configuration with comment preservation
     output_path.parent.mkdir(parents=True, exist_ok=True)
-    with open(output_path, "w") as f:
-        yaml.dump(config, f, default_flow_style=False, sort_keys=False)
+
+    if HAS_RUAMEL:
+        # Use ruamel.yaml to preserve comments while modifying values
+        yaml_handler = YAML()
+        yaml_handler.preserve_quotes = True
+        yaml_handler.width = 4096  # Prevent line wrapping
+
+        with open(template_path, "r") as f:
+            config = yaml_handler.load(f)
+
+        # Customize configuration
+        config["experimental_data"]["file_path"] = data_file
+
+        if "output" not in config:
+            config["output"] = {}
+        config["output"]["output_folder"] = output_dir
+        config["output"]["sample_name"] = sample_name
+        config["output"]["experiment_id"] = experiment_id
+
+        with open(output_path, "w") as f:
+            yaml_handler.dump(config, f)
+    else:
+        # Fallback: use text replacement to preserve comments
+        with open(template_path, "r") as f:
+            content = f.read()
+
+        # Replace key values using simple text substitution
+        content = content.replace(
+            'file_path: "./data/sample/experiment.hdf"',
+            f'file_path: "{data_file}"'
+        )
+        content = content.replace(
+            'directory: "./results"',
+            f'directory: "{output_dir}"'
+        )
+
+        # Add sample name and experiment_id if not present
+        if "sample_name:" not in content:
+            # Insert after directory line in output section
+            content = content.replace(
+                f'directory: "{output_dir}"',
+                f'directory: "{output_dir}"\n  sample_name: "{sample_name}"\n  experiment_id: "{experiment_id}"'
+            )
+
+        with open(output_path, "w") as f:
+            f.write(content)
+
+        # Load config for return value
+        with open(template_path, "r") as f:
+            config = yaml.safe_load(f)
 
     print()
     print("=" * 70)
@@ -302,6 +349,7 @@ def interactive_builder() -> Dict[str, Any]:
     print(f"  2. Validate: homodyne-config --validate {output_path}")
     print(f"  3. Run analysis: homodyne --config {output_path}")
     print()
+    print("Note: All template comments and instructions are preserved.")
 
     return config
 
