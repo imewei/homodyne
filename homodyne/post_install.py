@@ -74,46 +74,36 @@ def create_unified_zsh_completion(venv_path):
 
     completion_file = zsh_dir / "homodyne-completion.zsh"
     completion_content = """#!/usr/bin/env zsh
-# Homodyne Zsh aliases (simplified)
+# Homodyne Zsh aliases
 
 # Only load if not already loaded
 if [[ -z "$_HOMODYNE_ZSH_COMPLETION_LOADED" ]]; then
     export _HOMODYNE_ZSH_COMPLETION_LOADED=1
 
-    # Define aliases
-    alias hm='homodyne --method mcmc'
-    alias hc='homodyne --method classical'
-    alias hr='homodyne --method robust'
-    alias ha='homodyne --method all'
+    # Base command aliases
+    alias hm='homodyne'
     alias hconfig='homodyne-config'
+
+    # Method aliases (hm- prefix)
+    alias hm-nlsq='homodyne --method nlsq'    # NLSQ trust-region optimization (primary)
+    alias hm-mcmc='homodyne --method mcmc'    # Alias for auto (NUTS/CMC based on dataset size)
+    alias hm-auto='homodyne --method auto'    # Auto-select NUTS (<500k) or CMC (>500k)
+    alias hm-nuts='homodyne --method nuts'    # Standard NUTS MCMC
+    alias hm-cmc='homodyne --method cmc'      # Consensus Monte Carlo for large datasets
+
+    # Config mode aliases (hc- prefix)
+    alias hc-stat='homodyne-config --mode static'         # Generate static mode config
+    alias hc-flow='homodyne-config --mode laminar_flow'   # Generate laminar_flow mode config
 
     # Plotting shortcuts
     alias hexp='homodyne --plot-experimental-data'
     alias hsim='homodyne --plot-simulated-data'
 
-    # homodyne-config shortcuts
-    alias hc-iso='homodyne-config --mode static_isotropic'
-    alias hc-aniso='homodyne-config --mode static_anisotropic'
-    alias hc-flow='homodyne-config --mode laminar_flow'
-
-    # Dataset-specific homodyne-config shortcuts
-    alias hconfig-small='homodyne-config --dataset-size small'
-    alias hconfig-large='homodyne-config --dataset-size large'
-    alias hc-small='homodyne-config --dataset-size small'
-    alias hc-large='homodyne-config --dataset-size large'
-
-    # Linux GPU aliases (only for GPU-compatible methods)
-    if [[ "$(uname -s)" == "Linux" ]] && command -v homodyne-gpu >/dev/null 2>&1; then
-        alias hgm='homodyne-gpu --method mcmc'    # GPU-accelerated MCMC with NumPyro
-        alias hga='homodyne-gpu --method all'     # GPU-accelerated full analysis
-        # Note: classical and robust methods run CPU-only, use hc/hr instead
-    fi
-
     # GPU status function
     homodyne_gpu_status() {
         if [[ "$(uname -s)" == "Linux" ]]; then
             echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-            echo "🚀 Homodyne GPU Status (Isolated Backend Architecture)"
+            echo "🚀 Homodyne GPU Status (JAX Device Detection)"
             echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 
             # Hardware detection
@@ -124,24 +114,23 @@ if [[ -z "$_HOMODYNE_ZSH_COMPLETION_LOADED" ]]; then
                 echo "❌ No NVIDIA GPU detected"
             fi
 
+            # JAX device detection
+            echo ""
+            echo "🔧 JAX Device Configuration:"
+            python3 -c "import jax; devices = jax.devices(); gpu_count = len([d for d in devices if 'cuda' in str(d).lower() or 'gpu' in str(d).lower()]); print(f'   JAX version: {jax.__version__}'); print(f'   Devices: {devices}'); print(f'   GPU acceleration: {\"✅ Active\" if gpu_count > 0 else \"❌ CPU-only\"}')"
+
             # Environment status
             echo ""
-            echo "🔧 Environment Configuration:"
-            echo "   HOMODYNE_GPU_INTENT: ${HOMODYNE_GPU_INTENT:-false} (backend selection)"
-            echo "   JAX_PLATFORMS: ${JAX_PLATFORMS:-auto-detect} (NumPyro backend only)"
-            echo "   JAX_ENABLE_X64: ${JAX_ENABLE_X64:-not set} (NumPyro backend only)"
-
-            # Backend routing info
+            echo "📊 GPU Acceleration:"
+            echo "   All homodyne methods use automatic JAX device detection"
+            echo "   GPU acceleration works transparently if:"
+            echo "   • Linux platform with NVIDIA GPU"
+            echo "   • CUDA 12.1-12.9 installed"
+            echo "   • jax[cuda12-local] installed"
             echo ""
-            echo "📊 Isolated MCMC Backends:"
-            echo "   homodyne        → Pure PyMC CPU (isolated from JAX)"
-            echo "   homodyne-gpu    → Pure NumPyro GPU/JAX (isolated from PyMC)"
-            echo ""
-            echo "🔒 Backend Isolation:"
-            echo "   • CPU backend: No JAX imports, pure PyTensor CPU mode"
-            echo "   • GPU backend: No PyMC imports, pure NumPyro+JAX implementation"
-            echo "   • Complete namespace separation prevents conflicts"
-            echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+            echo "Install GPU support:"
+            echo "   pip install jax[cuda12-local]==0.8.0 jaxlib==0.8.0"
+            echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
         else
             echo "GPU status only available on Linux"
         fi
@@ -150,36 +139,112 @@ if [[ -z "$_HOMODYNE_ZSH_COMPLETION_LOADED" ]]; then
     # Helper function
     homodyne_help() {
         echo "Homodyne command shortcuts:"
-        echo "  hm  = homodyne --method mcmc"
-        echo "  hc  = homodyne --method classical"
-        echo "  hr  = homodyne --method robust"
-        echo "  ha  = homodyne --method all"
+        echo "  hm       = homodyne"
+        echo "  hconfig  = homodyne-config"
         echo ""
-        echo "Configuration shortcuts:"
-        echo "  hconfig = homodyne-config"
-        echo "  hc-iso  = homodyne-config --mode static_isotropic"
-        echo "  hc-aniso = homodyne-config --mode static_anisotropic"
-        echo "  hc-flow = homodyne-config --mode laminar_flow"
+        echo "Method shortcuts (hm- prefix):"
+        echo "  hm-nlsq  = homodyne --method nlsq  # NLSQ trust-region (primary)"
+        echo "  hm-mcmc  = homodyne --method mcmc  # Alias for auto"
+        echo "  hm-auto  = homodyne --method auto  # Auto NUTS/CMC"
+        echo "  hm-nuts  = homodyne --method nuts  # Standard NUTS MCMC"
+        echo "  hm-cmc   = homodyne --method cmc   # Consensus Monte Carlo"
         echo ""
-        echo "Dataset-specific config shortcuts:"
-        echo "  hconfig-small = homodyne-config --dataset-size small"
-        echo "  hconfig-large = homodyne-config --dataset-size large"
-        echo "  hc-small = homodyne-config --dataset-size small"
-        echo "  hc-large = homodyne-config --dataset-size large"
-
-        if [[ "$(uname -s)" == "Linux" ]] && command -v homodyne-gpu >/dev/null 2>&1; then
-            echo ""
-            echo "GPU shortcuts (NumPyro + JAX, Linux only):"
-            echo "  hgm = homodyne-gpu --method mcmc  # GPU-accelerated MCMC"
-            echo "  hga = homodyne-gpu --method all   # GPU-accelerated full analysis"
-            echo ""
-            echo "Note: classical/robust methods run CPU-only (use hc/hr)"
-        fi
+        echo "Config mode shortcuts (hc- prefix):"
+        echo "  hc-stat  = homodyne-config --mode static"
+        echo "  hc-flow  = homodyne-config --mode laminar_flow"
+        echo ""
+        echo "Plotting shortcuts:"
+        echo "  hexp     = homodyne --plot-experimental-data"
+        echo "  hsim     = homodyne --plot-simulated-data"
     }
 fi"""
 
     completion_file.write_text(completion_content)
     return completion_file
+
+
+def create_activation_scripts(venv_path):
+    """Create activation scripts for non-conda environments (uv, venv, virtualenv).
+
+    These scripts allow users to easily activate homodyne completion by adding
+    to their shell rc file: source $VIRTUAL_ENV/bin/homodyne-activate
+
+    Parameters
+    ----------
+    venv_path : Path
+        Path to virtual environment
+
+    Returns
+    -------
+    list[Path]
+        List of created activation script paths
+    """
+    bin_dir = venv_path / "bin"
+    bin_dir.mkdir(parents=True, exist_ok=True)
+
+    created_scripts = []
+
+    # Bash/Zsh activation script
+    bash_activate = bin_dir / "homodyne-activate"
+    bash_content = f"""#!/bin/bash
+# Homodyne Shell Completion Activation
+#
+# Usage:
+#   Add to ~/.bashrc or ~/.zshrc:
+#     source $VIRTUAL_ENV/bin/homodyne-activate
+#
+# Or source manually each session:
+#     source {bin_dir}/homodyne-activate
+
+if [[ -z "$VIRTUAL_ENV" ]]; then
+    echo "⚠️  VIRTUAL_ENV not set. Please activate your virtual environment first."
+    return 1
+fi
+
+# Source the completion file if it exists
+if [[ -f "$VIRTUAL_ENV/etc/zsh/homodyne-completion.zsh" ]]; then
+    source "$VIRTUAL_ENV/etc/zsh/homodyne-completion.zsh"
+    echo "✅ Homodyne completion activated (hm, hconfig, hm-nlsq, hm-mcmc, etc.)"
+else
+    echo "⚠️  Homodyne completion file not found. Run: homodyne-post-install"
+    return 1
+fi
+"""
+    bash_activate.write_text(bash_content)
+    bash_activate.chmod(0o755)
+    created_scripts.append(bash_activate)
+
+    # Fish activation script
+    fish_activate = bin_dir / "homodyne-activate.fish"
+    fish_content = f"""#!/usr/bin/env fish
+# Homodyne Shell Completion Activation (Fish)
+#
+# Usage:
+#   Add to ~/.config/fish/config.fish:
+#     source $VIRTUAL_ENV/bin/homodyne-activate.fish
+#
+# Or source manually each session:
+#     source {bin_dir}/homodyne-activate.fish
+
+if not set -q VIRTUAL_ENV
+    echo "⚠️  VIRTUAL_ENV not set. Please activate your virtual environment first."
+    exit 1
+end
+
+# Source the completion file if it exists
+if test -f "$VIRTUAL_ENV/etc/zsh/homodyne-completion.zsh"
+    source "$VIRTUAL_ENV/etc/zsh/homodyne-completion.zsh"
+    echo "✅ Homodyne completion activated (hm, hconfig, hm-nlsq, hm-mcmc, etc.)"
+else
+    echo "⚠️  Homodyne completion file not found. Run: homodyne-post-install"
+    exit 1
+end
+"""
+    fish_activate.write_text(fish_content)
+    fish_activate.chmod(0o755)
+    created_scripts.append(fish_activate)
+
+    return created_scripts
 
 
 def install_shell_completion(shell_type=None, force=False):
@@ -194,8 +259,11 @@ def install_shell_completion(shell_type=None, force=False):
         # Create unified zsh completion (works for most shells)
         create_unified_zsh_completion(venv_path)
 
-        # Create conda activation script for conda/mamba environments
-        if is_conda_environment(venv_path):
+        # Environment-specific setup
+        is_conda = is_conda_environment(venv_path)
+
+        if is_conda:
+            # Create conda activation script (automatic on conda activate)
             activate_dir = venv_path / "etc" / "conda" / "activate.d"
             activate_dir.mkdir(parents=True, exist_ok=True)
 
@@ -211,12 +279,28 @@ fi
             completion_script.write_text(completion_content)
             completion_script.chmod(0o755)
 
-        print("✅ Shell completion installed")
-        print("   • CPU aliases: hm, hc, hr, ha, hconfig")
-        print("   • Plotting: hexp, hsim")
-        print("   • Config: hc-iso, hc-aniso, hc-flow")
-        print("   • Dataset config: hconfig-small, hconfig-large, hc-small, hc-large")
-        print("   • GPU aliases: hgm, hga (NumPyro GPU, Linux only)")
+            print("✅ Shell completion installed (conda/mamba)")
+            print("   • Auto-activated on environment activation")
+            print("   • Aliases: hm, hconfig, hm-nlsq, hm-mcmc, hm-auto, hm-nuts, hm-cmc")
+            print("   • Config: hc-stat, hc-flow")
+            print("   • Plotting: hexp, hsim")
+        else:
+            # Create activation scripts for uv/venv/virtualenv
+            created_scripts = create_activation_scripts(venv_path)
+
+            print("✅ Shell completion installed (uv/venv/virtualenv)")
+            print("   • Aliases: hm, hconfig, hm-nlsq, hm-mcmc, hm-auto, hm-nuts, hm-cmc")
+            print("   • Config: hc-stat, hc-flow")
+            print("   • Plotting: hexp, hsim")
+            print()
+            print("📋 To activate completion, add to your shell RC file:")
+            print("   Bash/Zsh: source $VIRTUAL_ENV/bin/homodyne-activate")
+            print("   Fish:     source $VIRTUAL_ENV/bin/homodyne-activate.fish")
+            print()
+            print("Or source manually each session:")
+            for script in created_scripts:
+                print(f"   source {script}")
+
         return True
 
     except Exception as e:
@@ -491,28 +575,31 @@ def interactive_setup():
 def show_installation_summary(interactive_results=None):
     """Show installation summary with available commands."""
     print("\n🚀 Quick Start Commands:")
-    print("   homodyne --method mcmc --config config.json")
-    print("   homodyne-config --mode static_isotropic -o my_config.json")
-
-    if is_linux():
-        print("   homodyne-gpu --method mcmc --config config.json  # GPU-accelerated")
+    print("   homodyne --method nlsq --config config.yaml")
+    print("   homodyne --method auto --config config.yaml  # Auto NUTS/CMC")
+    print("   homodyne-config --mode static -o my_config.yaml")
 
     print("\n⚡ Available Shortcuts (after shell restart):")
-    print("   hm  = homodyne --method mcmc")
-    print("   hc  = homodyne --method classical")
-    print("   hr  = homodyne --method robust")
-    print("   ha  = homodyne --method all")
-
-    if is_linux():
-        print("   hgm = homodyne-gpu --method mcmc  # NumPyro GPU-accelerated")
-        print("   hga = homodyne-gpu --method all   # NumPyro GPU-accelerated")
+    print("   Base commands:")
+    print("     hm       = homodyne")
+    print("     hconfig  = homodyne-config")
+    print("\n   Method shortcuts (hm- prefix):")
+    print("     hm-nlsq  = homodyne --method nlsq  # NLSQ trust-region (primary)")
+    print("     hm-mcmc  = homodyne --method mcmc  # Alias for auto")
+    print("     hm-auto  = homodyne --method auto  # Auto NUTS/CMC")
+    print("     hm-nuts  = homodyne --method nuts  # Standard NUTS MCMC")
+    print("     hm-cmc   = homodyne --method cmc   # Consensus Monte Carlo")
+    print("\n   Config mode shortcuts (hc- prefix):")
+    print("     hc-stat  = homodyne-config --mode static")
+    print("     hc-flow  = homodyne-config --mode laminar_flow")
 
     print("\n📖 Help:")
     print("   homodyne --help")
+    print("   homodyne-config --help")
     print("   homodyne_help               # View all shortcuts")
 
     if is_linux():
-        print("   homodyne_gpu_status         # Check GPU status")
+        print("   homodyne_gpu_status         # Check JAX GPU status")
 
 
 def main():

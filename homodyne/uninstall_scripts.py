@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
-"""Homodyne Cleanup - Remove Shell Completion and Isolated Backend System
-======================================================================
+"""Homodyne Cleanup - Remove Shell Completion System
+====================================================
 
 This script removes homodyne-related files from virtual environments
 that were installed by homodyne-post-install but are not automatically
@@ -8,17 +8,18 @@ tracked by pip uninstall.
 
 Removes:
 - Shell completion scripts (bash, zsh, fish)
-- Isolated GPU backend setup files (NumPyro + JAX)
-- Isolated CPU backend configuration (PyMC)
-- Conda activation scripts
+- Activation scripts (homodyne-activate)
+- GPU acceleration setup files (JAX with CUDA support)
+- Conda activation hooks
 - Environment aliases and shortcuts
 
-Supports: conda, mamba, venv, virtualenv
-Architecture: Isolated CPU (PyMC) and GPU (NumPyro) backends
+Supports: conda, mamba, uv, venv, virtualenv
+Architecture: JAX-first with automatic GPU detection
 
 Usage:
     homodyne-cleanup
     homodyne-cleanup --interactive
+    homodyne-cleanup --dry-run
 """
 
 import argparse
@@ -97,23 +98,23 @@ def cleanup_gpu_files():
 
 
 def cleanup_advanced_features():
-    """Remove advanced features CLI commands."""
+    """Remove advanced features CLI commands and activation scripts."""
     venv_path = Path(sys.prefix)
     removed_files = []
 
-    # Advanced features CLI commands and old activation scripts
+    # Advanced features CLI commands and activation scripts
     cli_commands = [
         venv_path / "bin" / "homodyne-gpu-optimize",
         venv_path / "bin" / "homodyne-validate",
-        venv_path / "bin" / "homodyne-activate",
-        venv_path / "bin" / "homodyne-activate.fish",
+        venv_path / "bin" / "homodyne-activate",           # Bash/Zsh activation
+        venv_path / "bin" / "homodyne-activate.fish",      # Fish activation
     ]
 
     for file_path in cli_commands:
         if file_path.exists():
             try:
                 file_path.unlink()
-                removed_files.append(("Advanced features", file_path.name))
+                removed_files.append(("Activation/CLI", file_path.name))
             except Exception as e:
                 print(f"   ⚠️  Failed to remove {file_path.name}: {e}")
 
@@ -170,24 +171,25 @@ def interactive_cleanup():
         # GPU setup (Linux only)
         remove_gpu = False
         if platform.system() == "Linux":
-            print("\n2. Isolated GPU Backend Setup (NumPyro + JAX)")
-            print("   - Removes isolated NumPyro GPU backend configuration")
-            print("   - Removes CUDA activation scripts and HOMODYNE_GPU_INTENT setup")
-            print("   - Cleans JAX GPU environment isolation")
+            print("\n2. GPU Acceleration Setup (JAX with CUDA)")
+            print("   - Removes GPU activation scripts")
+            print("   - Removes CUDA environment configuration")
+            print("   - GPU works automatically via JAX device detection")
 
             remove_gpu = (
-                input("   Remove isolated GPU backend setup? [y/N]: ")
+                input("   Remove GPU setup files? [y/N]: ")
                 .lower()
                 .startswith("y")
             )
 
         # Advanced features
-        print("\n3. Advanced Features")
+        print("\n3. Advanced Features & Activation Scripts")
         print("   - Removes homodyne-gpu-optimize CLI command")
         print("   - Removes homodyne-validate CLI command")
+        print("   - Removes homodyne-activate scripts (for uv/venv/virtualenv)")
 
         remove_advanced = (
-            input("   Remove advanced features? [y/N]: ").lower().startswith("y")
+            input("   Remove advanced features & activation scripts? [y/N]: ").lower().startswith("y")
         )
 
         # Old system files
@@ -225,7 +227,7 @@ def cleanup_all_files():
     is_venv = is_virtual_environment()
 
     print("═" * 70)
-    print("🧹 Homodyne Cleanup - Shell Completion & Isolated Backend System")
+    print("🧹 Homodyne Cleanup - Shell Completion System")
     print("═" * 70)
     print(f"🖥️  Platform: {system}")
     print(f"📦 Environment: {'Virtual Environment' if is_venv else 'System Python'}")
@@ -289,7 +291,7 @@ def show_dry_run():
     is_venv = is_virtual_environment()
 
     print("═" * 70)
-    print("🧹 Homodyne Cleanup - DRY RUN (no files will be removed)")
+    print("🧹 Homodyne Cleanup - DRY RUN")
     print("═" * 70)
     print(f"🖥️  Platform: {system}")
     print(f"📦 Environment: {'Virtual Environment' if is_venv else 'System Python'}")
@@ -421,13 +423,14 @@ def main():
                     "\n⚠️  This will remove all homodyne shell completion and setup files:",
                 )
                 print(
-                    "   • Shell completion scripts and aliases (hm, hc, hr, ha, etc.)",
+                    "   • Shell completion scripts and aliases (hm, hconfig, hm-nlsq, etc.)",
                 )
-                print("   • GPU acceleration setup and activation scripts")
+                print("   • Activation scripts (homodyne-activate)")
+                print("   • GPU acceleration setup files")
                 print("   • Advanced features CLI commands")
                 print("   • All conda activation hooks")
                 print("\n💡 To restore these files later, run:")
-                print("   homodyne-post-install --shell zsh --gpu --advanced")
+                print("   homodyne-post-install --interactive")
                 print()
 
                 try:
@@ -451,16 +454,16 @@ def main():
             if not args.interactive:
                 print("\n💡 What was cleaned:")
                 print("   ├─ Shell completion scripts (bash/zsh/fish)")
-                print("   ├─ Isolated GPU backend setup (NumPyro + JAX)")
-                print("   ├─ Isolated CPU backend configuration (PyMC)")
-                print("   ├─ Conda activation scripts")
+                print("   ├─ Activation scripts (homodyne-activate)")
+                print("   ├─ GPU acceleration setup (JAX with CUDA)")
+                print("   ├─ Conda activation hooks")
                 print("   └─ Legacy system files")
             print("\n🔄 Next steps:")
             print("   • Restart your shell session")
             print("   • Or reactivate your virtual environment")
-            print("   • Run 'pip uninstall homodyne-analysis' to complete removal")
+            print("   • Run 'pip uninstall homodyne' to complete removal")
             print("\n🔧 To restore shell completion and setup files:")
-            print("   homodyne-post-install --shell zsh --gpu --advanced")
+            print("   homodyne-post-install --interactive")
         else:
             print("⚠️  Cleanup had some issues")
             print("\n💡 Troubleshooting:")
@@ -484,7 +487,7 @@ def parse_args():
     """Parse command line arguments."""
     parser = argparse.ArgumentParser(
         prog="homodyne-cleanup",
-        description="Remove Homodyne shell completion and isolated backend system",
+        description="Remove Homodyne shell completion system files",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
@@ -494,17 +497,19 @@ Examples:
   homodyne-cleanup --dry-run         # Show what would be removed
 
 This script removes homodyne-related files that were installed by
-homodyne-post-install. Run this BEFORE 'pip uninstall'.
+homodyne-post-install. Run this BEFORE 'pip uninstall homodyne'.
 
 IMPORTANT: To restore files after cleanup, run:
-  homodyne-post-install --shell zsh --gpu --advanced
+  homodyne-post-install --interactive
 
 Files removed:
   • Shell completion scripts (bash/zsh/fish)
-  • Isolated GPU backend setup (NumPyro + JAX)
-  • Isolated CPU backend configuration (PyMC)
-  • Conda activation scripts
+  • Activation scripts (homodyne-activate)
+  • GPU acceleration setup (JAX with CUDA)
+  • Conda activation hooks
   • Legacy system files
+
+Supports: conda, mamba, uv, venv, virtualenv
         """,
     )
 

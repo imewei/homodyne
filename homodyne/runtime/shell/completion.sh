@@ -43,7 +43,7 @@ _homodyne_get_recent_configs() {
 # Smart method completion based on config mode
 _homodyne_smart_method_completion() {
     local config_file="$1"
-    local methods="vi mcmc hybrid"
+    local methods="nlsq mcmc auto nuts cmc"
 
     # If config file exists, try to detect mode and suggest appropriate methods
     if [[ -f "$config_file" ]] && command -v python3 >/dev/null 2>&1; then
@@ -57,9 +57,9 @@ try:
             config = json.load(f)
         mode = config.get('mode', '')
         if 'static' in mode:
-            print('vi hybrid')
+            print('nlsq auto')
         elif 'laminar' in mode:
-            print('mcmc hybrid')
+            print('mcmc auto cmc')
         else:
             print('$methods')
 except:
@@ -126,6 +126,18 @@ _homodyne_advanced_completion() {
             COMPREPLY=($(compgen -W "$values" -- "$cur"))
             return 0
             ;;
+        --cmc-num-shards)
+            # Common shard counts for CMC
+            local counts="4 8 10 16 20 32"
+            COMPREPLY=($(compgen -W "$counts" -- "$cur"))
+            return 0
+            ;;
+        --cmc-backend)
+            # CMC backend options
+            local backends="auto pjit multiprocessing pbs"
+            COMPREPLY=($(compgen -W "$backends" -- "$cur"))
+            return 0
+            ;;
     esac
 
     # Check for incompatible options
@@ -155,35 +167,28 @@ _homodyne_config_completion() {
     prev="${COMP_WORDS[COMP_CWORD-1]}"
 
     # homodyne-config options
-    local main_opts="--help -h --mode -m --dataset-size -d --output -o --sample -s --experiment -e --author -a"
+    local main_opts="--help -h --mode -m --output -o --interactive -i --validate -v --force -f"
 
     case $prev in
         --mode|-m)
-            local modes="static_isotropic static_anisotropic laminar_flow"
+            # Updated modes: static (generic) and laminar_flow
+            local modes="static laminar_flow"
             COMPREPLY=($(compgen -W "$modes" -- "$cur"))
             return 0
             ;;
-        --dataset-size|-d)
-            local sizes="small standard large"
-            COMPREPLY=($(compgen -W "$sizes" -- "$cur"))
-            return 0
-            ;;
         --output|-o)
-            # Suggest common config file names
-            local suggestions="config.json my_config.json homodyne_config.json analysis_config.json"
+            # Suggest common YAML config file names
+            local suggestions="config.yaml homodyne_config.yaml my_config.yaml analysis_config.yaml"
             COMPREPLY=($(compgen -W "$suggestions" -- "$cur"))
-            # Also add general file completion
-            COMPREPLY+=($(compgen -f -X '!*.json' -- "$cur"))
+            # Also add general YAML file completion
+            COMPREPLY+=($(compgen -f -X '!*.yaml' -- "$cur"))
+            COMPREPLY+=($(compgen -f -X '!*.yml' -- "$cur"))
             return 0
             ;;
-        --sample|-s)
-            # Common sample naming patterns
-            local samples="sample_01 protein_sample collagen_gel microgel_sample"
-            COMPREPLY=($(compgen -W "$samples" -- "$cur"))
-            return 0
-            ;;
-        --experiment|-e|--author|-a)
-            # No specific completion, just return
+        --validate|-v)
+            # Complete with existing YAML files for validation
+            COMPREPLY=($(compgen -f -X '!*.yaml' -- "$cur"))
+            COMPREPLY+=($(compgen -f -X '!*.yml' -- "$cur"))
             return 0
             ;;
     esac
@@ -191,8 +196,9 @@ _homodyne_config_completion() {
     if [[ $cur == -* ]]; then
         COMPREPLY=($(compgen -W "$main_opts" -- "$cur"))
     else
-        # Default to JSON file completion for output
-        COMPREPLY=($(compgen -f -X '!*.json' -- "$cur"))
+        # Default to YAML file completion for output
+        COMPREPLY=($(compgen -f -X '!*.yaml' -- "$cur"))
+        COMPREPLY+=($(compgen -f -X '!*.yml' -- "$cur"))
     fi
 }
 
@@ -222,7 +228,7 @@ if [[ -n "$ZSH_VERSION" ]]; then
 
         case $state in
             methods)
-                local methods="vi mcmc hybrid"
+                local methods="nlsq mcmc auto nuts cmc"
                 _values 'method' ${(z)methods}
                 ;;
             configs)
@@ -240,13 +246,12 @@ if [[ -n "$ZSH_VERSION" ]]; then
         local -a args
         args=(
             '(--help -h)'{--help,-h}'[Show help message]'
-            '(--mode -m)'{--mode,-m}'[Analysis mode]:mode:(static_isotropic static_anisotropic laminar_flow)'
-            '(--dataset-size -d)'{--dataset-size,-d}'[Dataset size optimization]:size:(small standard large)'
-            '(--output -o)'{--output,-o}'[Output configuration file]:file:_files -g "*.json"'
-            '(--sample -s)'{--sample,-s}'[Sample name]:sample:'
-            '(--experiment -e)'{--experiment,-e}'[Experiment description]:experiment:'
-            '(--author -a)'{--author,-a}'[Author name]:author:'
-            '*:output:_files -g "*.json"'
+            '(--mode -m)'{--mode,-m}'[Analysis mode]:mode:(static laminar_flow)'
+            '(--output -o)'{--output,-o}'[Output configuration file]:file:_files -g "*.yaml"'
+            '(--interactive -i)'{--interactive,-i}'[Interactive configuration builder]'
+            '(--validate -v)'{--validate,-v}'[Validate configuration file]:file:_files -g "*.yaml"'
+            '(--force -f)'{--force,-f}'[Force overwrite existing file]'
+            '*:output:_files -g "*.yaml"'
         )
 
         _arguments -C $args
@@ -256,13 +261,22 @@ if [[ -n "$ZSH_VERSION" ]]; then
     compdef _homodyne_advanced_zsh homodyne 2>/dev/null || true
     compdef _homodyne_config_zsh homodyne-config 2>/dev/null || true
 
-    # Register completion for new method aliases
-    compdef _homodyne_advanced_zsh hmv 2>/dev/null || true   # homodyne --method vi
-    compdef _homodyne_advanced_zsh hmm 2>/dev/null || true   # homodyne --method mcmc
-    compdef _homodyne_advanced_zsh hmh 2>/dev/null || true   # homodyne --method hybrid
-    compdef _homodyne_config_zsh hconfig 2>/dev/null || true # homodyne-config
-    compdef _homodyne_advanced_zsh hexp 2>/dev/null || true  # homodyne --plot-experimental-data
-    compdef _homodyne_advanced_zsh hsim 2>/dev/null || true  # homodyne --plot-simulated-data
+    # Register completion for method aliases (hm- prefix)
+    compdef _homodyne_advanced_zsh hm 2>/dev/null || true         # homodyne
+    compdef _homodyne_advanced_zsh hm-nlsq 2>/dev/null || true    # homodyne --method nlsq
+    compdef _homodyne_advanced_zsh hm-mcmc 2>/dev/null || true    # homodyne --method mcmc
+    compdef _homodyne_advanced_zsh hm-auto 2>/dev/null || true    # homodyne --method auto
+    compdef _homodyne_advanced_zsh hm-nuts 2>/dev/null || true    # homodyne --method nuts
+    compdef _homodyne_advanced_zsh hm-cmc 2>/dev/null || true     # homodyne --method cmc
+
+    # Register completion for config aliases (hc- prefix)
+    compdef _homodyne_config_zsh hconfig 2>/dev/null || true      # homodyne-config
+    compdef _homodyne_config_zsh hc-stat 2>/dev/null || true      # homodyne-config --mode static
+    compdef _homodyne_config_zsh hc-flow 2>/dev/null || true      # homodyne-config --mode laminar_flow
+
+    # Register completion for utility aliases
+    compdef _homodyne_advanced_zsh hexp 2>/dev/null || true       # homodyne --plot-experimental-data
+    compdef _homodyne_advanced_zsh hsim 2>/dev/null || true       # homodyne --plot-simulated-data
 fi
 
 # Register bash completion
@@ -271,24 +285,45 @@ if [[ -n "$BASH_VERSION" ]]; then
     complete -F _homodyne_advanced_completion homodyne 2>/dev/null || true
     complete -F _homodyne_config_completion homodyne-config 2>/dev/null || true
 
-    # Register completion for new method aliases
-    complete -F _homodyne_advanced_completion hmv 2>/dev/null || true   # homodyne --method vi
-    complete -F _homodyne_advanced_completion hmm 2>/dev/null || true   # homodyne --method mcmc
-    complete -F _homodyne_advanced_completion hmh 2>/dev/null || true   # homodyne --method hybrid
-    complete -F _homodyne_config_completion hconfig 2>/dev/null || true # homodyne-config
-    complete -F _homodyne_advanced_completion hexp 2>/dev/null || true  # homodyne --plot-experimental-data
-    complete -F _homodyne_advanced_completion hsim 2>/dev/null || true  # homodyne --plot-simulated-data
+    # Register completion for method aliases (hm- prefix)
+    complete -F _homodyne_advanced_completion hm 2>/dev/null || true         # homodyne
+    complete -F _homodyne_advanced_completion hm-nlsq 2>/dev/null || true    # homodyne --method nlsq
+    complete -F _homodyne_advanced_completion hm-mcmc 2>/dev/null || true    # homodyne --method mcmc
+    complete -F _homodyne_advanced_completion hm-auto 2>/dev/null || true    # homodyne --method auto
+    complete -F _homodyne_advanced_completion hm-nuts 2>/dev/null || true    # homodyne --method nuts
+    complete -F _homodyne_advanced_completion hm-cmc 2>/dev/null || true     # homodyne --method cmc
+
+    # Register completion for config aliases (hc- prefix)
+    complete -F _homodyne_config_completion hconfig 2>/dev/null || true      # homodyne-config
+    complete -F _homodyne_config_completion hc-stat 2>/dev/null || true      # homodyne-config --mode static
+    complete -F _homodyne_config_completion hc-flow 2>/dev/null || true      # homodyne-config --mode laminar_flow
+
+    # Register completion for utility aliases
+    complete -F _homodyne_advanced_completion hexp 2>/dev/null || true       # homodyne --plot-experimental-data
+    complete -F _homodyne_advanced_completion hsim 2>/dev/null || true       # homodyne --plot-simulated-data
 fi
 
 # Define aliases for convenience
-# These aliases provide quick access to different analysis methods
+# These aliases provide quick access to different analysis methods and configurations
 if [[ -n "$BASH_VERSION" ]] || [[ -n "$ZSH_VERSION" ]]; then
-    alias hmv='homodyne --method vi'        # Fast VI analysis
-    alias hmm='homodyne --method mcmc'      # Accurate MCMC analysis
-    alias hmh='homodyne --method hybrid'    # Balanced VI→MCMC pipeline
-    alias hconfig='homodyne-config'         # Configuration generator
-    alias hexp='homodyne --plot-experimental-data'   # Plot experimental data
-    alias hsim='homodyne --plot-simulated-data'      # Plot simulated data
+    # Base command aliases
+    alias hm='homodyne'                            # Homodyne base command
+    alias hconfig='homodyne-config'                # Configuration generator
+
+    # Method aliases (hm- prefix)
+    alias hm-nlsq='homodyne --method nlsq'         # NLSQ trust-region optimization (primary)
+    alias hm-mcmc='homodyne --method mcmc'         # Alias for auto (NUTS/CMC based on dataset size)
+    alias hm-auto='homodyne --method auto'         # Auto-select NUTS (<500k) or CMC (>500k)
+    alias hm-nuts='homodyne --method nuts'         # Standard NUTS MCMC
+    alias hm-cmc='homodyne --method cmc'           # Consensus Monte Carlo for large datasets
+
+    # Config mode aliases (hc- prefix)
+    alias hc-stat='homodyne-config --mode static'         # Generate static mode config
+    alias hc-flow='homodyne-config --mode laminar_flow'   # Generate laminar_flow mode config
+
+    # Utility aliases
+    alias hexp='homodyne --plot-experimental-data'        # Plot experimental data
+    alias hsim='homodyne --plot-simulated-data'           # Plot simulated data
 fi
 
 # Quick command builder function
@@ -303,7 +338,7 @@ homodyne_build() {
 
     # Select method
     PS3="Select analysis method: "
-    select m in "vi" "mcmc" "hybrid" "skip"; do
+    select m in "nlsq" "mcmc" "auto" "nuts" "cmc" "skip"; do
         [[ -n "$m" ]] && [[ "$m" != "skip" ]] && method="--method $m"
         break
     done
@@ -328,7 +363,7 @@ homodyne_build() {
         [[ -n "$c" ]] && config="--config $c"
     fi
 
-    # No GPU options needed - homodyne handles GPU automatically
+    # No GPU options needed - homodyne handles GPU automatically via JAX
 
     # Build and show command
     echo ""
