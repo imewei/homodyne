@@ -30,6 +30,10 @@ class ValidationResult:
     details: dict[str, Any] | None = None
     execution_time: float = 0.0
     warnings: list[str] | None = None
+    # Enhanced fields for v3.0
+    severity: str = "info"  # "critical", "warning", "info"
+    remediation: list[str] | None = None  # Suggested fixes
+    error_code: str | None = None  # For programmatic handling
 
 
 class SystemValidator:
@@ -556,10 +560,741 @@ alias hc-iso >/dev/null 2>&1 && echo "shortcut_alias_works" || echo "shortcut_al
                 execution_time=execution_time,
             )
 
+    def test_dependency_versions(self) -> ValidationResult:
+        """Test that all required dependencies have correct versions."""
+        start_time = time.perf_counter()
+
+        try:
+            from importlib.metadata import version
+
+            # Required versions per CLAUDE.md v3.0
+            requirements = {
+                "jax": {"operator": "==", "version": "0.8.0"},
+                "jaxlib": {"operator": "==", "version": "0.8.0"},
+                "nlsq": {"operator": ">=", "version": "0.1.0"},
+                "numpyro": {
+                    "operator": ">=",
+                    "version": "0.18.0",
+                    "upper": "0.20.0",
+                },
+                "numpy": {"operator": ">=", "version": "2.0.0", "upper": "3.0.0"},
+                "scipy": {"operator": ">=", "version": "1.14.0"},
+                "h5py": {"operator": ">=", "version": "3.10.0"},
+                "pyyaml": {"operator": ">=", "version": "6.0.0"},
+                "matplotlib": {"operator": ">=", "version": "3.8.0"},
+            }
+
+            results = {}
+            warnings = []
+            errors = []
+            remediation = []
+
+            for package, constraints in requirements.items():
+                try:
+                    installed_version = version(package)
+                    results[package] = installed_version
+
+                    # Parse versions for comparison
+                    from packaging.version import parse as parse_version
+
+                    installed = parse_version(installed_version)
+                    required = parse_version(constraints["version"])
+
+                    # Check version constraints
+                    operator = constraints["operator"]
+                    if operator == "==":
+                        if installed != required:
+                            errors.append(
+                                f"{package}: expected {constraints['version']}, "
+                                f"found {installed_version}",
+                            )
+                    elif operator == ">=":
+                        if installed < required:
+                            errors.append(
+                                f"{package}: expected >={constraints['version']}, "
+                                f"found {installed_version}",
+                            )
+                        # Check upper bound if specified
+                        if "upper" in constraints:
+                            upper = parse_version(constraints["upper"])
+                            if installed >= upper:
+                                warnings.append(
+                                    f"{package}: version {installed_version} may be "
+                                    f"incompatible (expected <{constraints['upper']})",
+                                )
+
+                except Exception as e:
+                    errors.append(f"{package}: not installed or version check failed")
+                    results[package] = "NOT INSTALLED"
+
+            # CRITICAL: Check JAX/jaxlib version match
+            if "jax" in results and "jaxlib" in results:
+                if results["jax"] != results["jaxlib"]:
+                    errors.append(
+                        f"JAX/jaxlib version mismatch: jax={results['jax']}, "
+                        f"jaxlib={results['jaxlib']}. These must match exactly!",
+                    )
+                    remediation.append(
+                        "pip install jax==0.8.0 jaxlib==0.8.0  # Fix version mismatch",
+                    )
+
+            # Add general remediation if errors found
+            if errors and not remediation:
+                remediation.append(
+                    "pip install jax==0.8.0 jaxlib==0.8.0 nlsq>=0.1.0",
+                )
+                remediation.append("pip install 'numpyro>=0.18.0,<0.20.0'")
+                remediation.append("pip install 'numpy>=2.0.0,<3.0.0'")
+
+            execution_time = time.perf_counter() - start_time
+            success = len(errors) == 0
+
+            message = f"Validated {len(results)} packages"
+            if errors:
+                message = f"Found {len(errors)} version issues"
+
+            return ValidationResult(
+                name="Dependency Versions",
+                success=success,
+                message=message,
+                details=results,
+                execution_time=execution_time,
+                warnings=warnings if warnings else None,
+                severity="critical" if errors else "info",
+                remediation=remediation if remediation else None,
+                error_code="EDEP_001" if errors else None,
+            )
+
+        except Exception as e:
+            execution_time = time.perf_counter() - start_time
+            return ValidationResult(
+                name="Dependency Versions",
+                success=False,
+                message=f"Version check failed: {e}",
+                execution_time=execution_time,
+                severity="critical",
+                error_code="EDEP_000",
+            )
+
+    def test_jax_installation(self) -> ValidationResult:
+        """Test JAX installation and platform compatibility."""
+        start_time = time.perf_counter()
+
+        try:
+            import jax
+            import jax.numpy as jnp
+
+            # Ensure environment_info is populated
+            if not self.environment_info:
+                self.test_environment_detection()
+
+            platform = self.environment_info.get("platform", "Unknown")
+            warnings = []
+            remediation = []
+            details = {}
+
+            # Test 1: JAX imports successfully
+            details["jax_version"] = jax.__version__
+            details["jax_import"] = "success"
+
+            # Test 2: Enumerate devices
+            try:
+                devices = jax.devices()
+                cpu_devices = [d for d in devices if "cpu" in str(d).lower()]
+                gpu_devices = [
+                    d
+                    for d in devices
+                    if "gpu" in str(d).lower() or "cuda" in str(d).lower()
+                ]
+
+                details["total_devices"] = len(devices)
+                details["cpu_devices"] = len(cpu_devices)
+                details["gpu_devices"] = len(gpu_devices)
+                details["devices"] = [str(d) for d in devices]
+
+            except Exception as e:
+                details["device_enumeration_error"] = str(e)
+                warnings.append(f"Device enumeration failed: {e}")
+
+            # Test 3: Platform-specific validation
+            if platform not in ["Linux", "Darwin", "Windows"]:
+                warnings.append(f"Unknown platform: {platform}")
+
+            # macOS/Windows GPU warning
+            if platform in ["Darwin", "Windows"] and details.get("gpu_devices", 0) > 0:
+                warnings.append(
+                    f"GPU devices detected on {platform}, but GPU acceleration "
+                    "is only supported on Linux. Homodyne will use CPU-only mode.",
+                )
+                remediation.append(
+                    "For GPU support, use Linux with CUDA 12.1-12.9 installed",
+                )
+
+            # Linux without GPU - informational
+            if platform == "Linux" and details.get("gpu_devices", 0) == 0:
+                warnings.append(
+                    "No GPU devices detected on Linux. Running in CPU-only mode.",
+                )
+                remediation.append(
+                    "For GPU support: pip install jax[cuda12-local]==0.8.0 jaxlib==0.8.0",
+                )
+
+            # Test 4: CUDA version detection (if GPU available)
+            if details.get("gpu_devices", 0) > 0 and platform == "Linux":
+                cuda_version = None
+                for device_str in details.get("devices", []):
+                    # Try to extract CUDA version from device string
+                    if "cuda" in device_str.lower():
+                        # Device string format varies, try to extract version
+                        import re
+
+                        match = re.search(r"cuda[:\s]*(\d+\.\d+)", device_str, re.I)
+                        if match:
+                            cuda_version = match.group(1)
+                            break
+
+                if cuda_version:
+                    details["cuda_version"] = cuda_version
+                    # Validate CUDA version (12.1-12.9 supported)
+                    try:
+                        cuda_major = int(float(cuda_version))
+                        if cuda_major != 12:
+                            warnings.append(
+                                f"CUDA {cuda_version} detected. "
+                                "Homodyne requires CUDA 12.1-12.9 for GPU support.",
+                            )
+                    except ValueError:
+                        pass
+
+            # Test 5: Test JIT compilation
+            try:
+
+                @jax.jit
+                def test_fn(x):
+                    return x**2
+
+                result = test_fn(jnp.array([1.0, 2.0, 3.0]))
+                expected = jnp.array([1.0, 4.0, 9.0])
+
+                if jnp.allclose(result, expected):
+                    details["jit_compilation"] = "success"
+                else:
+                    details["jit_compilation"] = "failed"
+                    warnings.append("JIT compilation produced incorrect results")
+
+            except Exception as e:
+                details["jit_compilation"] = "failed"
+                warnings.append(f"JIT compilation test failed: {e}")
+
+            execution_time = time.perf_counter() - start_time
+
+            # Build message
+            message = f"JAX {jax.__version__}: "
+            if details.get("cpu_devices", 0) > 0:
+                message += f"{details['cpu_devices']} CPU device(s)"
+            if details.get("gpu_devices", 0) > 0:
+                message += f", {details['gpu_devices']} GPU device(s)"
+            if details.get("jit_compilation") == "success":
+                message += ", JIT works"
+
+            return ValidationResult(
+                name="JAX Installation",
+                success=True,
+                message=message,
+                details=details,
+                execution_time=execution_time,
+                warnings=warnings if warnings else None,
+                severity="info" if not warnings else "warning",
+                remediation=remediation if remediation else None,
+            )
+
+        except ImportError as e:
+            execution_time = time.perf_counter() - start_time
+            return ValidationResult(
+                name="JAX Installation",
+                success=False,
+                message=f"JAX not installed: {e}",
+                execution_time=execution_time,
+                severity="critical",
+                remediation=[
+                    "pip install jax==0.8.0 jaxlib==0.8.0  # CPU-only (all platforms)",
+                    "pip install jax[cuda12-local]==0.8.0  # GPU (Linux only, after CPU install)",
+                ],
+                error_code="EJAX_001",
+            )
+        except Exception as e:
+            execution_time = time.perf_counter() - start_time
+            return ValidationResult(
+                name="JAX Installation",
+                success=False,
+                message=f"JAX validation failed: {e}",
+                execution_time=execution_time,
+                severity="critical",
+                error_code="EJAX_000",
+            )
+
+    def test_nlsq_integration(self) -> ValidationResult:
+        """Test NLSQ optimization engine integration."""
+        start_time = time.perf_counter()
+
+        try:
+            import nlsq
+
+            warnings = []
+            remediation = []
+            details = {}
+
+            # Test 1: NLSQ version check
+            try:
+                nlsq_version = nlsq.__version__
+                details["nlsq_version"] = nlsq_version
+
+                from packaging.version import parse as parse_version
+
+                installed = parse_version(nlsq_version)
+                required = parse_version("0.1.0")
+
+                if installed < required:
+                    warnings.append(
+                        f"NLSQ version {nlsq_version} is below recommended "
+                        f"minimum 0.1.0",
+                    )
+                    remediation.append("pip install --upgrade nlsq>=0.1.0")
+
+                details["version_check"] = "pass" if installed >= required else "warning"
+
+            except AttributeError:
+                details["nlsq_version"] = "unknown"
+                warnings.append("Could not determine NLSQ version")
+
+            # Test 2: Core NLSQ functions import
+            try:
+                from nlsq import curve_fit, curve_fit_large
+
+                details["core_functions"] = "available"
+            except ImportError as e:
+                details["core_functions"] = "missing"
+                warnings.append(f"NLSQ core functions not available: {e}")
+                remediation.append("pip install --upgrade nlsq>=0.1.0")
+
+            # Test 3: StreamingOptimizer availability (v0.1.5+ feature)
+            streaming_available = False
+            try:
+                from nlsq.streaming import StreamingOptimizer
+
+                details["streaming_optimizer"] = "available"
+                streaming_available = True
+            except ImportError:
+                details["streaming_optimizer"] = "not available"
+                # Only warn if version is recent enough to expect it
+                if "nlsq_version" in details:
+                    try:
+                        version = parse_version(details["nlsq_version"])
+                        if version >= parse_version("0.1.5"):
+                            warnings.append(
+                                "StreamingOptimizer not available despite recent "
+                                "NLSQ version",
+                            )
+                    except Exception:
+                        pass
+
+            # Test 4: Homodyne NLSQ integration
+            homodyne_integration_ok = True
+            try:
+                from homodyne.optimization.nlsq_wrapper import NLSQWrapper
+
+                details["nlsq_wrapper"] = "available"
+            except ImportError as e:
+                details["nlsq_wrapper"] = "missing"
+                warnings.append(f"Homodyne NLSQWrapper not available: {e}")
+                homodyne_integration_ok = False
+
+            # Test 5: Strategy selection logic
+            try:
+                from homodyne.optimization.strategy import build_streaming_config
+
+                details["strategy_selection"] = "available"
+            except ImportError as e:
+                details["strategy_selection"] = "missing"
+                warnings.append(f"Strategy selection not available: {e}")
+                homodyne_integration_ok = False
+
+            # Test 6: Checkpoint manager (if streaming available)
+            if streaming_available:
+                try:
+                    from homodyne.optimization.checkpoint_manager import (
+                        CheckpointManager,
+                    )
+
+                    details["checkpoint_manager"] = "available"
+                except ImportError:
+                    details["checkpoint_manager"] = "missing"
+                    warnings.append(
+                        "CheckpointManager not available (needed for streaming)",
+                    )
+
+            execution_time = time.perf_counter() - start_time
+
+            # Build message
+            message = f"NLSQ {details.get('nlsq_version', 'unknown')}"
+            if streaming_available:
+                message += " with StreamingOptimizer"
+            if homodyne_integration_ok:
+                message += ", homodyne integration OK"
+
+            # Success if basic imports work
+            success = details.get("core_functions") == "available"
+
+            return ValidationResult(
+                name="NLSQ Integration",
+                success=success,
+                message=message,
+                details=details,
+                execution_time=execution_time,
+                warnings=warnings if warnings else None,
+                severity="warning" if warnings else "info",
+                remediation=remediation if remediation else None,
+            )
+
+        except ImportError as e:
+            execution_time = time.perf_counter() - start_time
+            return ValidationResult(
+                name="NLSQ Integration",
+                success=False,
+                message=f"NLSQ not installed: {e}",
+                execution_time=execution_time,
+                severity="critical",
+                remediation=[
+                    "pip install nlsq>=0.1.0  # Required for optimization",
+                    "pip install nlsq>=0.1.5  # Recommended for streaming support",
+                ],
+                error_code="ENLSQ_001",
+            )
+        except Exception as e:
+            execution_time = time.perf_counter() - start_time
+            return ValidationResult(
+                name="NLSQ Integration",
+                success=False,
+                message=f"NLSQ validation failed: {e}",
+                execution_time=execution_time,
+                severity="critical",
+                error_code="ENLSQ_000",
+            )
+
+    def test_config_system(self) -> ValidationResult:
+        """Test configuration system functionality."""
+        start_time = time.perf_counter()
+
+        try:
+            warnings = []
+            remediation = []
+            details = {}
+
+            # Test 1: ConfigManager import
+            try:
+                from homodyne.config.manager import ConfigManager
+
+                details["config_manager"] = "available"
+            except ImportError as e:
+                details["config_manager"] = "missing"
+                return ValidationResult(
+                    name="Config System",
+                    success=False,
+                    message=f"ConfigManager not available: {e}",
+                    execution_time=time.perf_counter() - start_time,
+                    severity="critical",
+                    error_code="ECONFIG_001",
+                )
+
+            # Test 2: ParameterManager import
+            try:
+                from homodyne.config.parameter_manager import ParameterManager
+
+                details["parameter_manager"] = "available"
+            except ImportError as e:
+                details["parameter_manager"] = "missing"
+                warnings.append(f"ParameterManager not available: {e}")
+
+            # Test 3: Check template directory exists
+            try:
+                import homodyne
+
+                homodyne_path = Path(homodyne.__file__).parent
+                template_dir = homodyne_path / "config" / "templates"
+
+                if template_dir.exists():
+                    details["template_directory"] = str(template_dir)
+                    details["template_dir_exists"] = True
+
+                    # Count template files
+                    template_files = list(template_dir.glob("*.yaml"))
+                    details["template_count"] = len(template_files)
+                    details["template_files"] = [f.name for f in template_files]
+
+                    # Expected templates per CLAUDE.md
+                    expected_templates = [
+                        "homodyne_streaming_config.yaml",
+                    ]
+
+                    missing_templates = [
+                        t for t in expected_templates if t not in details["template_files"]
+                    ]
+                    if missing_templates:
+                        warnings.append(
+                            f"Missing expected templates: {', '.join(missing_templates)}",
+                        )
+                else:
+                    details["template_dir_exists"] = False
+                    warnings.append(f"Template directory not found: {template_dir}")
+
+            except Exception as e:
+                details["template_check_error"] = str(e)
+                warnings.append(f"Template directory check failed: {e}")
+
+            # Test 4: Try loading a template config (if available)
+            config_load_ok = False
+            if details.get("template_count", 0) > 0:
+                try:
+                    # Try to load the first template
+                    template_file = template_dir / details["template_files"][0]
+                    config_mgr = ConfigManager(str(template_file))
+                    details["template_load_test"] = "success"
+                    config_load_ok = True
+
+                    # Test parameter bounds retrieval
+                    try:
+                        bounds = config_mgr.get_parameter_bounds()
+                        details["parameter_bounds_retrieval"] = "success"
+                    except Exception as e:
+                        details["parameter_bounds_retrieval"] = "failed"
+                        warnings.append(f"Parameter bounds retrieval failed: {e}")
+
+                except Exception as e:
+                    details["template_load_test"] = "failed"
+                    warnings.append(f"Template loading failed: {e}")
+
+            # Test 5: Check for deprecated config paths
+            deprecated_paths = [
+                "performance.subsampling",
+                "optimization_performance.time_subsampling",
+            ]
+            details["deprecated_paths_checked"] = deprecated_paths
+
+            execution_time = time.perf_counter() - start_time
+
+            # Build message
+            message = "ConfigManager available"
+            if details.get("template_count", 0) > 0:
+                message += f", {details['template_count']} template(s) found"
+            if config_load_ok:
+                message += ", config loading works"
+
+            success = (
+                details.get("config_manager") == "available"
+                and details.get("template_dir_exists", False)
+            )
+
+            return ValidationResult(
+                name="Config System",
+                success=success,
+                message=message,
+                details=details,
+                execution_time=execution_time,
+                warnings=warnings if warnings else None,
+                severity="warning" if warnings else "info",
+                remediation=remediation if remediation else None,
+            )
+
+        except Exception as e:
+            execution_time = time.perf_counter() - start_time
+            return ValidationResult(
+                name="Config System",
+                success=False,
+                message=f"Config system validation failed: {e}",
+                execution_time=execution_time,
+                severity="critical",
+                error_code="ECONFIG_000",
+            )
+
+    def test_data_pipeline(self) -> ValidationResult:
+        """Test data loading pipeline functionality."""
+        start_time = time.perf_counter()
+
+        try:
+            warnings = []
+            remediation = []
+            details = {}
+
+            # Test 1: h5py import and functionality
+            try:
+                import h5py
+
+                details["h5py_version"] = h5py.__version__
+                details["h5py_import"] = "success"
+
+                # Test basic HDF5 operations (create temp file)
+                import tempfile
+
+                try:
+                    with tempfile.NamedTemporaryFile(
+                        suffix=".hdf5",
+                        delete=True,
+                    ) as tmp:
+                        with h5py.File(tmp.name, "w") as f:
+                            f.create_dataset("test", data=[1, 2, 3])
+                        with h5py.File(tmp.name, "r") as f:
+                            _ = f["test"][:]
+                        details["hdf5_readwrite"] = "success"
+                except Exception as e:
+                    details["hdf5_readwrite"] = "failed"
+                    warnings.append(f"HDF5 file operations failed: {e}")
+
+            except ImportError as e:
+                details["h5py_import"] = "missing"
+                return ValidationResult(
+                    name="Data Pipeline",
+                    success=False,
+                    message=f"h5py not installed: {e}",
+                    execution_time=time.perf_counter() - start_time,
+                    severity="critical",
+                    remediation=["pip install h5py>=3.10.0"],
+                    error_code="EDATA_001",
+                )
+
+            # Test 2: XPCSDataLoader import
+            try:
+                from homodyne.data.xpcs_loader import XPCSDataLoader
+
+                details["xpcs_dataloader"] = "available"
+            except ImportError as e:
+                details["xpcs_dataloader"] = "missing"
+                warnings.append(f"XPCSDataLoader not available: {e}")
+
+            # Test 3: Phi filtering import
+            try:
+                from homodyne.data.phi_filtering import normalize_angle_to_symmetric_range
+
+                details["phi_filtering"] = "available"
+
+                # Test angle normalization function
+                try:
+                    test_angle = normalize_angle_to_symmetric_range(270.0)
+                    if abs(test_angle - (-90.0)) < 1e-6:
+                        details["phi_filtering_test"] = "success"
+                    else:
+                        details["phi_filtering_test"] = "unexpected_result"
+                        warnings.append(
+                            f"Phi filtering test produced unexpected result: {test_angle}",
+                        )
+                except Exception as e:
+                    details["phi_filtering_test"] = "failed"
+                    warnings.append(f"Phi filtering test failed: {e}")
+
+            except ImportError as e:
+                details["phi_filtering"] = "missing"
+                warnings.append(f"Phi filtering not available: {e}")
+
+            # Test 4: Memory manager import
+            try:
+                from homodyne.data.memory_manager import estimate_memory_usage
+
+                details["memory_manager"] = "available"
+            except ImportError as e:
+                details["memory_manager"] = "missing"
+                warnings.append(f"Memory manager not available: {e}")
+
+            # Test 5: Data preprocessing import
+            try:
+                from homodyne.data.preprocessing import preprocess_data
+
+                details["preprocessing"] = "available"
+            except ImportError as e:
+                details["preprocessing"] = "missing"
+                warnings.append(f"Data preprocessing not available: {e}")
+
+            # Test 6: Check for example data files (optional)
+            try:
+                import homodyne
+
+                homodyne_path = Path(homodyne.__file__).parent.parent
+                examples_dir = homodyne_path / "examples"
+                tests_dir = homodyne_path / "tests"
+
+                test_data_locations = []
+                if examples_dir.exists():
+                    hdf5_files = list(examples_dir.rglob("*.hdf5")) + list(
+                        examples_dir.rglob("*.hdf"),
+                    )
+                    if hdf5_files:
+                        test_data_locations.append(f"examples/ ({len(hdf5_files)} files)")
+
+                if tests_dir.exists():
+                    hdf5_files = list(tests_dir.rglob("*.hdf5")) + list(
+                        tests_dir.rglob("*.hdf"),
+                    )
+                    if hdf5_files:
+                        test_data_locations.append(f"tests/ ({len(hdf5_files)} files)")
+
+                if test_data_locations:
+                    details["test_data_available"] = ", ".join(test_data_locations)
+                else:
+                    details["test_data_available"] = "none found"
+
+            except Exception as e:
+                details["test_data_check_error"] = str(e)
+
+            execution_time = time.perf_counter() - start_time
+
+            # Build message
+            message = f"h5py {details.get('h5py_version', 'unknown')}"
+            components = []
+            if details.get("xpcs_dataloader") == "available":
+                components.append("XPCSDataLoader")
+            if details.get("phi_filtering") == "available":
+                components.append("phi filtering")
+            if details.get("memory_manager") == "available":
+                components.append("memory manager")
+
+            if components:
+                message += f", {', '.join(components)} available"
+
+            success = (
+                details.get("h5py_import") == "success"
+                and details.get("hdf5_readwrite") == "success"
+                and details.get("xpcs_dataloader") == "available"
+            )
+
+            return ValidationResult(
+                name="Data Pipeline",
+                success=success,
+                message=message,
+                details=details,
+                execution_time=execution_time,
+                warnings=warnings if warnings else None,
+                severity="warning" if warnings else "info",
+                remediation=remediation if remediation else None,
+            )
+
+        except Exception as e:
+            execution_time = time.perf_counter() - start_time
+            return ValidationResult(
+                name="Data Pipeline",
+                success=False,
+                message=f"Data pipeline validation failed: {e}",
+                execution_time=execution_time,
+                severity="critical",
+                error_code="EDATA_000",
+            )
+
     def run_all_tests(self) -> dict[str, ValidationResult]:
         """Run all system tests."""
         tests = [
             self.test_environment_detection,
+            self.test_dependency_versions,
+            self.test_jax_installation,
+            self.test_nlsq_integration,
+            self.test_config_system,
+            self.test_data_pipeline,
             self.test_homodyne_installation,
             self.test_shell_completion,
             self.test_gpu_setup,
@@ -583,6 +1318,78 @@ alias hc-iso >/dev/null 2>&1 && echo "shortcut_alias_works" || echo "shortcut_al
 
         return results
 
+    def run_quick_tests(self) -> dict[str, ValidationResult]:
+        """Run quick critical tests only (for fast CI/CD feedback)."""
+        # Quick tests: only run critical dependency and JAX validation
+        # Skips: homodyne installation, shell completion, GPU setup, integration
+        quick_tests = [
+            self.test_environment_detection,
+            self.test_dependency_versions,
+            self.test_jax_installation,
+        ]
+
+        results = {}
+
+        for test_func in quick_tests:
+            self.log(f"Running {test_func.__name__}...")
+            result = test_func()
+            results[result.name] = result
+            self.results.append(result)
+
+            status = "✅ PASS" if result.success else "❌ FAIL"
+            self.log(f"{status}: {result.name} - {result.message}")
+
+            if result.warnings:
+                for warning in result.warnings:
+                    self.log(f"⚠️  WARNING: {warning}")
+
+        return results
+
+    def calculate_health_score(self) -> int:
+        """Calculate overall system health score (0-100)."""
+        if not self.results:
+            return 0
+
+        # Weight factors for different test categories
+        weights = {
+            "Environment Detection": 5,
+            "Dependency Versions": 20,
+            "JAX Installation": 20,
+            "NLSQ Integration": 15,
+            "Config System": 10,
+            "Data Pipeline": 10,
+            "Homodyne Installation": 10,
+            "Shell Completion": 5,
+            "GPU Setup": 3,
+            "Integration": 2,
+        }
+
+        total_weight = 0
+        earned_score = 0
+
+        for result in self.results:
+            weight = weights.get(result.name, 5)
+            total_weight += weight
+
+            if result.success:
+                # Full points for success
+                earned_score += weight
+            elif result.warnings and not result.success:
+                # Partial credit if test "passed" but has warnings
+                earned_score += weight * 0.5
+            # else: 0 points for failure
+
+            # Deduct points for warnings even on success
+            if result.warnings:
+                warning_penalty = min(len(result.warnings) * 2, weight * 0.2)
+                earned_score -= warning_penalty
+
+        if total_weight == 0:
+            return 0
+
+        score = int((earned_score / total_weight) * 100)
+        return max(0, min(100, score))  # Clamp to 0-100
+
     def generate_report(self) -> str:
         """Generate comprehensive validation report."""
         if not self.results:
@@ -595,10 +1402,16 @@ alias hc-iso >/dev/null 2>&1 && echo "shortcut_alias_works" || echo "shortcut_al
         report.append("🔍 HOMODYNE SYSTEM VALIDATION REPORT")
         report.append("=" * 80)
 
+        # Health Score
+        health_score = self.calculate_health_score()
+        health_emoji = "🟢" if health_score >= 90 else "🟡" if health_score >= 70 else "🟠" if health_score >= 50 else "🔴"
+        health_status = "Excellent" if health_score >= 90 else "Good" if health_score >= 70 else "Fair" if health_score >= 50 else "Poor"
+        report.append(f"\n{health_emoji} Health Score: {health_score}/100 ({health_status})")
+
         # Summary
         passed = sum(1 for r in self.results if r.success)
         total = len(self.results)
-        report.append(f"\n📊 Summary: {passed}/{total} tests passed")
+        report.append(f"📊 Summary: {passed}/{total} tests passed")
 
         if passed == total:
             report.append("🎉 All systems operational!")
@@ -625,6 +1438,11 @@ alias hc-iso >/dev/null 2>&1 && echo "shortcut_alias_works" || echo "shortcut_al
                 report.append("   Warnings:")
                 for warning in result.warnings:
                     report.append(f"     ⚠️  {warning}")
+
+            if result.remediation:
+                report.append("   Remediation:")
+                for fix in result.remediation:
+                    report.append(f"     🔧 {fix}")
 
             if result.details and self.verbose:
                 report.append("   Details:")
@@ -678,8 +1496,24 @@ Examples:
     # Note: --verbose argument removed to avoid conflicts with main CLI\n    # Verbose mode controlled internally via logging level
     parser.add_argument("--json", action="store_true", help="Output results as JSON")
     parser.add_argument(
+        "--quick",
+        action="store_true",
+        help="Run quick validation (critical tests only for fast CI/CD)",
+    )
+    parser.add_argument(
         "--test",
-        choices=["env", "install", "completion", "gpu", "integration"],
+        choices=[
+            "env",
+            "deps",
+            "jax",
+            "nlsq",
+            "config",
+            "data",
+            "install",
+            "completion",
+            "gpu",
+            "integration",
+        ],
         help="Run specific test only",
     )
 
@@ -691,6 +1525,11 @@ Examples:
         # Run specific test
         test_map = {
             "env": validator.test_environment_detection,
+            "deps": validator.test_dependency_versions,
+            "jax": validator.test_jax_installation,
+            "nlsq": validator.test_nlsq_integration,
+            "config": validator.test_config_system,
+            "data": validator.test_data_pipeline,
             "install": validator.test_homodyne_installation,
             "completion": validator.test_shell_completion,
             "gpu": validator.test_gpu_setup,
@@ -707,8 +1546,24 @@ Examples:
             if result.warnings:
                 for warning in result.warnings:
                     print(f"⚠️  {warning}")
+            if result.remediation:
+                print("\n🔧 Remediation:")
+                for fix in result.remediation:
+                    print(f"   {fix}")
 
         sys.exit(0 if result.success else 1)
+    elif args.quick:
+        # Run quick tests only
+        results = validator.run_quick_tests()
+
+        if args.json:
+            json_results = {name: asdict(result) for name, result in results.items()}
+            print(json.dumps(json_results, indent=2))
+        else:
+            print(validator.generate_report())
+
+        # Exit with error code if any test failed
+        sys.exit(0 if all(r.success for r in results.values()) else 1)
     else:
         # Run all tests
         results = validator.run_all_tests()
