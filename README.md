@@ -345,6 +345,66 @@ The notebook covers:
 - Parameter uncertainty quantification
 - Error recovery demonstration
 
+## Shell Completion & CLI Tools
+
+Homodyne provides four CLI commands and intelligent shell completion for faster workflows.
+
+### Available Commands
+
+- **`homodyne`** - Run XPCS analysis (NLSQ/MCMC)
+- **`homodyne-config`** - Generate and validate configuration files
+- **`homodyne-post-install`** - Install shell completion (bash/zsh/fish)
+- **`homodyne-cleanup`** - Remove shell completion scripts
+
+### Quick Shell Completion Setup
+
+Install intelligent tab completion with aliases:
+
+```bash
+# Interactive setup (recommended)
+homodyne-post-install --interactive
+
+# Or quick one-liner
+homodyne-post-install --shell $(basename $SHELL)
+```
+
+**Conda/Mamba users:** Completion auto-activates with your environment - no extra setup needed!
+
+**uv/venv/virtualenv users:** Add activation to your shell RC file:
+
+```bash
+# Add to ~/.bashrc or ~/.zshrc
+echo 'source $VIRTUAL_ENV/bin/homodyne-activate' >> ~/.bashrc
+source ~/.bashrc
+```
+
+**Supported shells:** bash, zsh, fish (PowerShell not supported)
+
+### Convenient Aliases
+
+After installing completion, use short aliases:
+
+```bash
+hm-nlsq --config config.yaml           # homodyne --method nlsq
+hm-mcmc --config config.yaml           # homodyne --method mcmc
+hm-auto --config large_dataset.yaml   # Auto-select NUTS/CMC
+
+hc-stat --output static.yaml           # homodyne-config --mode static
+hc-flow --output flow.yaml             # homodyne-config --mode laminar_flow
+
+hconfig --validate my_config.yaml      # homodyne-config --validate
+```
+
+**Smart completion examples:**
+
+```bash
+homodyne --config <TAB>        # Shows *.yaml files
+homodyne --method <TAB>        # Shows: nlsq, mcmc, auto, nuts, cmc
+hm-nlsq --<TAB>                # Shows all available options
+```
+
+**See documentation:** [Shell Completion Guide](https://homodyne.readthedocs.io/en/latest/user-guide/shell-completion.html)
+
 ## Analysis Modes
 
 ### Static Isotropic (3 parameters)
