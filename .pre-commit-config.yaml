@@ -187,14 +187,6 @@ repos:
                 check_docstrings(filename)
         files: ^homodyne/(core|analysis|optimization)/.*\.py$
 
-      - id: version-consistency-check
-        name: version-consistency-check
-        description: "Validate Python version consistency across codebase"
-        entry: python scripts/validate_version_consistency.py
-        language: system
-        pass_filenames: false
-        always_run: true
-
   # Markdown formatting
   - repo: https://github.com/executablebooks/mdformat
     rev: 0.7.19

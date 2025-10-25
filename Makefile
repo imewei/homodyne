@@ -346,10 +346,10 @@ clean-test:
 clean-cache:
 	find . -type d -name '.cache' -exec rm -rf {} + 2>/dev/null || true
 	find . -type d -name '*.egg-info' -exec rm -rf {} + 2>/dev/null || true
-	rm -rf .mypy_cache/
-	rm -rf .ruff_cache/
-	rm -rf .pytest_cache/
-	rm -rf .nlsq_cache/
+	find . -type d -name '.nlsq_cache' -exec rm -rf {} + 2>/dev/null || true
+	find . -type d -name '.mypy_cache' -exec rm -rf {} + 2>/dev/null || true
+	find . -type d -name '.ruff_cache' -exec rm -rf {} + 2>/dev/null || true
+	find . -type d -name '.pytest_cache' -exec rm -rf {} + 2>/dev/null || true
 
 # Documentation targets
 docs:

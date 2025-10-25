@@ -242,11 +242,8 @@ def main():
                 )
                 if venv_config_dir.exists():
                     print(f"✅ Virtual environment GPU integration: {venv_config_dir}")
-                else:
-                    print("💡 Tip: Install virtual environment integration:")
-                    print("   python scripts/install_gpu_autoload.py")
             except (IndexError, AttributeError):
-                print("⚠️  Virtual environment detection failed")
+                pass  # Virtual environment detection is optional
 
     # Set GPU intent flag to signal that user explicitly wants GPU acceleration
     os.environ["HOMODYNE_GPU_INTENT"] = "true"
