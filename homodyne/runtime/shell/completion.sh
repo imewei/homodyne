@@ -214,7 +214,7 @@ if [[ -n "$ZSH_VERSION" ]]; then
             '--verbose[Enable verbose logging]'
             '--quiet[Disable console logging]'
             '(--static-isotropic --static-anisotropic --laminar-flow)--static-isotropic[Static isotropic mode]'
-            '(--static-isotropic --static-anisotropic --laminar-flow)--static-anisotropic[Static anisotropic mode]'
+            '(--static-isotropic --static-anisotropic --laminar-flow)--static-anisotropic[static mode]'
             '(--static-isotropic --static-anisotropic --laminar-flow)--laminar-flow[Laminar flow mode]'
             '--plot-experimental-data[Plot experimental data]'
             '--plot-simulated-data[Plot simulated data]'

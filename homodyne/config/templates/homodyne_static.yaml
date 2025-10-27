@@ -1,11 +1,11 @@
 # ==============================================================================
-# HOMODYNE MASTER CONFIGURATION TEMPLATE
+# HOMODYNE STATIC DIFFUSION CONFIGURATION TEMPLATE
 # ==============================================================================
-# Comprehensive reference template containing ALL configuration parameters
-# for all analysis modes, optimization methods, and advanced features.
+# Comprehensive production-ready template for static diffusion analysis.
+# 3-parameter model: D(t,φ) = D₀·t^α + D_offset
 #
-# This template includes EVERYTHING supported by homodyne v2.0.0.
-# Use homodyne_static.yaml or homodyne_laminar_flow.yaml for simpler starts.
+# Use for: Equilibrium systems, pure diffusion, anomalous diffusion
+# Parameter count: 3 physical + 2 × N_angles scaling = 3 + 2N total
 #
 # VERSION: 2.0.0
 # UPDATED: 2025-10-25
@@ -17,32 +17,30 @@
 # Template metadata describing analysis configuration
 metadata:
   config_version: "2.0.0"                     # Configuration file format version
-  description: "Master template - comprehensive reference for all parameters"
-  analysis_mode: "laminar_flow"               # Options: "static" | "laminar_flow"
-  parameter_count: 7                          # 3 for static, 7 for laminar_flow
+  description: "Static diffusion analysis - 3-parameter model for equilibrium systems"
+  analysis_mode: "static"                     # Static diffusion mode
+  parameter_count: 3                          # D₀, α, D_offset
 
   # Physics model description
-  physics_model: "D(t,φ) = D₀·t^α + D_offset + shear_effects(γ̇(t),φ)"
-  shear_model: "γ̇(t) = γ̇₀·t^β + γ̇_offset"   # For laminar_flow mode only
+  physics_model: "D(t,φ) = D₀·t^α + D_offset"  # No shear effects (equilibrium)
 
   # Integration and correction methods
   integration_method: "discrete_numerical"    # Discrete numerical integration for stability
   diagonal_correction: "mandatory"            # Diagonal correction for consistency
 
   # Template classification
-  recommended_use: "Comprehensive parameter reference for all analysis types"
-  template_type: "reference"                  # Options: "reference" | "production_ready" | "example"
+  recommended_use: "Equilibrium XPCS systems with pure diffusion and anomalous diffusion"
+  template_type: "production_ready"           # Production-ready template
   complexity: "comprehensive"                 # All features documented
 
   # Key features of this configuration
   key_features:
-    - "Complete parameter documentation for static and laminar_flow modes"
+    - "3-parameter static diffusion model"
+    - "Multi-angle correlation analysis with phi filtering"
     - "All optimization methods (NLSQ, MCMC, Streaming, CMC)"
-    - "Advanced phi angle filtering with quality control"
-    - "Noise estimation with multiple models"
-    - "Comprehensive validation and quality control"
-    - "Platform-specific performance optimization"
-    - "Complete CMC configuration for large-scale inference"
+    - "Discrete numerical integration for anomalous diffusion"
+    - "Comprehensive quality control and validation"
+    - "Noise estimation for improved fitting"
 
   # Optional: Generation metadata (filled by homodyne-config)
   generated_at: null                          # ISO timestamp when config generated
@@ -52,7 +50,7 @@ metadata:
 # ANALYSIS MODE (Required)
 # ==============================================================================
 # Primary analysis mode selection
-analysis_mode: "laminar_flow"                 # Options: "static" | "laminar_flow"
+analysis_mode: "static"                       # Static diffusion (equilibrium)
 
 # ==============================================================================
 # ANALYZER PARAMETERS (Required)
@@ -79,13 +77,13 @@ analyzer_parameters:
 # ==============================================================================
 # Analysis mode-specific settings and model description
 analysis_settings:
-  static_mode: false                          # true for static analysis, false for laminar_flow
+  static_mode: true                           # Static diffusion (no flow)
 
   # Model description for documentation
   model_description:
-    type: "nonequilibrium_laminar_flow"       # Options: "static_diffusion" | "nonequilibrium_laminar_flow"
-    parameters: 7                             # 3 for static, 7 for laminar_flow
-    physics: "Time-dependent diffusion and shear with flow direction"  # Physics description
+    type: "static_diffusion"                  # Static diffusion model
+    parameters: 3                             # D₀, α, D_offset
+    physics: "Equilibrium anomalous diffusion with time-dependent coefficient"
 
 # ==============================================================================
 # EXPERIMENTAL DATA (Required)
@@ -105,7 +103,7 @@ experimental_data:
 
   # Caching for performance (saves processed C2 data)
   cache_file_path: "./data/sample/"           # Cache directory
-  cache_filename_template: "cached_c2_q{wavevector_q:.4f}_frames_{start_frame}_{end_frame}.npz"  # Template with placeholders
+  cache_filename_template: "cached_c2_static_q{wavevector_q:.4f}_frames_{start_frame}_{end_frame}.npz"
   cache_compression: true                     # Enable compression for cache files
 
   # Data format specifications
@@ -117,31 +115,32 @@ experimental_data:
 # PHI ANGLE FILTERING
 # ==============================================================================
 # Advanced phi angle filtering for optimal scattering analysis
+# For static diffusion: typically use angles parallel (0°) and antiparallel (180°)
+# to detect anisotropic effects or verify isotropic behavior
 phi_filtering:
   enabled: true                               # Enable angle filtering to reduce parameter count
 
   # Target angle ranges (all angles normalized to [-180°, 180°])
   # Angles are checked with wrap-aware logic (e.g., [170°, -170°] works correctly)
   target_ranges:
-    # Range 1: Near 0° (parallel to flow for laminar_flow, or parallel to anisotropy axis)
+    # Range 1: Near 0° (parallel to potential anisotropy axis)
     - min_angle: -10.0                        # Minimum angle [degrees]
       max_angle: 10.0                         # Maximum angle [degrees]
-      description: "Parallel to flow/primary axis"
+      description: "Parallel to primary axis"
 
-    # Range 2: Near 90° (perpendicular to flow)
-    - min_angle: 85.0
-      max_angle: 95.0
-      description: "Perpendicular to flow"
+    # Range 2: Near 180° (antiparallel to anisotropy axis)
+    - min_angle: 170.0
+      max_angle: -170.0                       # Wraps correctly: 170° to -170° = [170°, 190°]
+      description: "Antiparallel to primary axis"
 
-    # Range 3: Near 180° (antiparallel)
-    # - min_angle: 170.0
-    #   max_angle: 190.0
-    #   description: "Antiparallel to primary axis"
-
-    # Range 4: Near -90° (perpendicular, opposite side)
+    # Optional: Perpendicular angles for comprehensive anisotropic analysis
+    # Uncomment if your system shows perpendicular anisotropic effects
+    # - min_angle: 85.0
+    #   max_angle: 95.0
+    #   description: "Perpendicular axis 1"
     # - min_angle: -95.0
     #   max_angle: -85.0
-    #   description: "Perpendicular (opposite side)"
+    #   description: "Perpendicular axis 2"
 
   # Fallback behavior
   fallback_to_all_angles: true                # Use all angles if no angles match target ranges
@@ -155,71 +154,54 @@ phi_filtering:
     min_angles_required: 1                    # Minimum number of angles required for analysis
     max_angle_spread: 36.0                    # Maximum spread within a single range [degrees]
     validate_coverage: true                   # Validate that angles adequately cover target ranges
-    require_orthogonal_angles: true           # Require angles in perpendicular directions (for laminar_flow)
+    require_orthogonal_angles: false          # Not required for static (use true for anisotropic analysis)
 
 # ==============================================================================
 # INITIAL PARAMETERS (Required)
 # ==============================================================================
 # Starting parameter values for optimization
 #
-# PARAMETER COUNT:
-# ----------------
-# Total parameters = Physical parameters + Scaling parameters per angle
-#
-# Static (3 physical):
-#   Physical: [D₀, α, D_offset]
-#   Per-angle scaling: [contrast, offset] × N angles
-#   Total: 3 + 2N (e.g., 3 angles → 9 parameters)
-#
-# Laminar Flow (7 physical):
-#   Physical: [D₀, α, D_offset, γ̇₀, β, γ̇_offset, φ₀]
-#   Per-angle scaling: [contrast, offset] × N angles
-#   Total: 7 + 2N (e.g., 3 angles → 13 parameters)
+# PARAMETER COUNT (Static):
+# -------------------------
+# Physical parameters: 3 [D₀, α, D_offset]
+# Per-angle scaling: 2 × N_angles [contrast, offset]
+# Total: 3 + 2N (e.g., 3 angles → 9 parameters)
 #
 initial_parameters:
-  # Parameter names to optimize
-  # For static mode, use: ["D0", "alpha", "D_offset"]
-  # For laminar_flow mode, use all 7 parameters below
+  # Parameter names to optimize (3 parameters for static mode)
   parameter_names:
     - D0                                      # Diffusion coefficient prefactor
     - alpha                                   # Anomalous diffusion exponent
     - D_offset                                # Baseline diffusion
-    - gamma_dot_0                             # Initial shear rate (maps to gamma_dot_t0 in code)
-    - beta                                    # Shear rate exponent
-    - gamma_dot_offset                        # Baseline shear rate (maps to gamma_dot_t_offset)
-    - phi_0                                   # Initial angle (maps to phi0 in code)
 
   # Optional: Initial values (if not provided, uses mid-point of bounds)
-  values: null                                # List of floats matching parameter_names order
+  values: null                                # List of 3 floats matching parameter_names order
+  # Example: [1000.0, -1.2, 0.0]
 
   # Optional: Units for documentation
   units:                                      # Parameter units (for reference)
     - "Å²/s"                                  # D0
     - "dimensionless"                         # alpha
     - "Å²/s"                                  # D_offset
-    - "s⁻¹"                                   # gamma_dot_0
-    - "dimensionless"                         # beta
-    - "s⁻¹"                                   # gamma_dot_offset
-    - "degrees"                               # phi_0
 
   # Optional: Optimize only a subset of parameters (rest held at initial values)
   active_parameters: null                     # List of parameter names to actively optimize
-  # Example: ["D0", "alpha", "gamma_dot_0"]
+  # Example: ["D0", "alpha"]  # Fix D_offset
 
   # Optional: Fix specific parameters at given values
   fixed_parameters: null                      # Dict mapping parameter names to fixed values
-  # Example: {"D_offset": 10.0, "beta": 0.0}
+  # Example: {"D_offset": 0.0}  # Assume no offset
 
 # ==============================================================================
 # PARAMETER SPACE (Required)
 # ==============================================================================
-# Parameter bounds and constraints
+# Parameter bounds and constraints for static diffusion model
 parameter_space:
-  model: "laminar_flow"                       # Options: "static" | "laminar_flow"
+  model: "static"                             # Static diffusion mode
 
   bounds:
     # -------------------------------------------------------------------------
-    # DIFFUSION PARAMETERS (Required for all models)
+    # DIFFUSION PARAMETERS (3 parameters for static mode)
     # -------------------------------------------------------------------------
     - name: D0
       min: 100.0                              # Minimum diffusion coefficient [Å²/s]
@@ -240,7 +222,7 @@ parameter_space:
       unit: "dimensionless"
       # Physical meaning: Anomalous diffusion exponent
       # 0 = normal diffusion, <0 = subdiffusion, >0 = superdiffusion
-      # Typical range: -2 to 2 for most systems
+      # Typical range: -2 to 2 for equilibrium systems
 
     - name: D_offset
       min: -100000.0                          # Minimum baseline diffusion [Å²/s]
@@ -251,49 +233,6 @@ parameter_space:
       unit: "Å²/s"
       # Physical meaning: Constant diffusion contribution (can be negative)
       # Typical range: -100 to 100 for most systems
-
-    # -------------------------------------------------------------------------
-    # FLOW PARAMETERS (Required for laminar_flow mode only)
-    # -------------------------------------------------------------------------
-    - name: gamma_dot_0                       # Maps to gamma_dot_t0 in code
-      min: 1e-6                               # Minimum initial shear rate [s⁻¹]
-      max: 0.5                                # Maximum initial shear rate [s⁻¹]
-      type: TruncatedNormal
-      prior_mu: 0.01                          # Prior mean
-      prior_sigma: 0.1                        # Prior std dev
-      unit: "s⁻¹"
-      # Physical meaning: Shear rate prefactor in γ̇(t) = γ̇₀·t^β + γ̇_offset
-      # Adjust based on experimental shear rates
-
-    - name: beta
-      min: -2.0                               # Minimum shear exponent
-      max: 2.0                                # Maximum shear exponent
-      type: Normal
-      prior_mu: 0.0                           # Prior mean
-      prior_sigma: 0.5                        # Prior std dev
-      unit: "dimensionless"
-      # Physical meaning: Shear rate time evolution exponent
-      # 0 = constant shear, >0 = increasing shear, <0 = decreasing shear
-
-    - name: gamma_dot_offset
-      min: -0.1                               # Minimum baseline shear [s⁻¹]
-      max: 0.1                                # Maximum baseline shear [s⁻¹]
-      type: Normal
-      prior_mu: 0.0                           # Prior mean
-      prior_sigma: 0.02                       # Prior std dev
-      unit: "s⁻¹"
-      # Physical meaning: Constant shear contribution
-      # Typically small or zero
-
-    - name: phi_0                             # Maps to phi0 in code
-      min: -180.0                             # Minimum initial angle [degrees]
-      max: 180.0                              # Maximum initial angle [degrees]
-      type: Normal
-      prior_mu: 0.0                           # Prior mean
-      prior_sigma: 30.0                       # Prior std dev
-      unit: "degrees"
-      # Physical meaning: Angle between flow direction and scattering vector
-      # Automatically normalized to [-180°, 180°]
 
   # Optional: Prior distributions for Bayesian methods
   priors: null                                # Advanced prior specifications (rarely needed)
@@ -325,6 +264,7 @@ optimization:
   # ---------------------------------------------------------------------------
   # Provides full posterior distributions and uncertainty estimates
   # Uses NumPyro or BlackJAX with NUTS sampler
+  # For static mode with 3 parameters: faster convergence than laminar_flow
   mcmc:
     num_warmup: 1000                          # NUTS warmup/adaptation samples
     num_samples: 2000                         # Posterior samples per chain
@@ -501,7 +441,7 @@ logging:
     enabled: false                            # Log to file
     level: "DEBUG"                            # File log level
     path: "./logs/"                           # Log directory
-    filename: "homodyne_analysis.log"         # Log file name
+    filename: "homodyne_static_analysis.log"  # Log file name
     max_size_mb: 10                           # Maximum log file size before rotation
     backup_count: 5                           # Number of backup log files to keep
 
@@ -605,156 +545,95 @@ validation:
 
   # Angle validation
   angle_validation:
-    require_multiple_angles: false            # Require multiple phi angles (true for anisotropic analysis)
+    require_multiple_angles: false            # Not required for static (can analyze single angle)
     min_angle_count: 1                        # Minimum number of angles required
     validate_angle_ranges: true               # Validate angle ranges are physically meaningful
 
 # ==============================================================================
-# CONFIGURATION NOTES AND USAGE GUIDANCE
+# STATIC DIFFUSION - USAGE NOTES
 # ==============================================================================
 #
-# PARAMETER NAME MAPPING:
-# -----------------------
-# Config → Code mappings (automatic):
-#   gamma_dot_0        → gamma_dot_t0
-#   gamma_dot_offset   → gamma_dot_t_offset
-#   phi_0              → phi0
+# QUICK START:
+# ------------
+# 1. Update experimental_data paths to your HDF5 file
+# 2. Adjust phi_filtering target_ranges based on your system
+# 3. Run: homodyne --config this_file.yaml --method nlsq
+# 4. For uncertainties: homodyne --config this_file.yaml --method mcmc
 #
-# ANALYSIS MODES:
-# ---------------
-# static:
-#   - 3 physical parameters: [D₀, α, D_offset]
-#   - Per-angle scaling: [contrast, offset] × N angles
-#   - Total: 3 + 2N parameters (e.g., 3 angles → 9 parameters)
-#   - Use for: Equilibrium systems, pure diffusion
+# STATIC DIFFUSION PHYSICS:
+# -------------------------
+# Model: D(t,φ) = D₀·t^α + D_offset
 #
-# laminar_flow:
-#   - 7 physical parameters: [D₀, α, D_offset, γ̇₀, β, γ̇_offset, φ₀]
-#   - Per-angle scaling: [contrast, offset] × N angles
-#   - Total: 7 + 2N parameters (e.g., 3 angles → 13 parameters)
-#   - Use for: Systems under shear flow, nonequilibrium dynamics
+# Parameters:
+#   D₀: Diffusion coefficient prefactor (magnitude)
+#   α: Anomalous diffusion exponent (0=normal, <0=sub, >0=super)
+#   D_offset: Baseline/constant diffusion contribution
+#
+# Typical values:
+#   D₀: 100-10000 Å²/s for colloidal systems
+#   α: -2 to 2 for equilibrium systems
+#   D_offset: Usually small (-100 to 100 Å²/s)
+#
+# PARAMETER COUNTING:
+# -------------------
+# Total = 3 physical + 2 × N_angles scaling
+# Example with 3 filtered angles: 3 + 2×3 = 9 parameters
+#   Physical: [D₀, α, D_offset]
+#   Scaling: [contrast₁, offset₁, contrast₂, offset₂, contrast₃, offset₃]
+#
+# ANGLE FILTERING FOR STATIC:
+# ----------------------------
+# Recommended ranges:
+#   - 0° (parallel): Detect primary anisotropy axis
+#   - 180° (antiparallel): Verify symmetric behavior
+#   - Optional 90° (perpendicular): Full anisotropic characterization
+#
+# Use fallback_to_all_angles: true if anisotropy direction unknown
 #
 # OPTIMIZATION METHOD SELECTION:
 # -------------------------------
-# NLSQ (Recommended for initial analysis):
-#   - Fast, deterministic point estimates
-#   - Automatic strategy based on dataset size
-#   - Good for parameter estimation and exploration
-#   - Runtime: seconds to minutes
+# NLSQ (Recommended first):
+#   - Fast: ~seconds to minutes
+#   - Deterministic point estimates
+#   - Good for exploration and initial fit
 #
-# MCMC (Recommended for publication):
+# MCMC (For publication):
+#   - Slower: ~minutes to hours
 #   - Full posterior distributions
-#   - Uncertainty quantification with credible intervals
-#   - Convergence diagnostics (R-hat, ESS)
-#   - Runtime: minutes to hours
-#   - Use after NLSQ for refined uncertainties
+#   - Uncertainty quantification
+#   - Use after NLSQ to refine uncertainties
 #
-# CMC (For large-scale Bayesian inference):
-#   - Parallelizes MCMC across data shards
-#   - Handles > 1M points with Bayesian UQ
-#   - Combines subposteriors with covariance weighting
-#   - Requires significant computational resources
-#   - Runtime: hours to days
+# CMC (Large datasets > 1M points):
+#   - Parallelizes MCMC across shards
+#   - Full Bayesian UQ for big data
+#   - Requires HPC resources
 #
-# Streaming (Automatic for large datasets):
+# Streaming (Automatic for >100M points):
 #   - Constant memory footprint
 #   - Checkpoint/resume capability
-#   - Handles > 100M points without memory errors
-#   - Automatic fallback when other methods run out of memory
 #
 # DATASET SIZE HANDLING:
 # ----------------------
-# Automatic strategy selection (NLSQ):
-#   < 1M points     → STANDARD (curve_fit)
-#   1M-10M points   → LARGE (curve_fit_large)
-#   10M-100M points → CHUNKED (progress tracking)
-#   > 100M points   → STREAMING (checkpointing)
+# NLSQ automatic strategy selection:
+#   < 1M points     → STANDARD
+#   1M-10M points   → LARGE
+#   10M-100M points → CHUNKED
+#   > 100M points   → STREAMING
 #
 # PLATFORM SUPPORT:
 # -----------------
 # CPU: Linux, macOS, Windows (full support)
-# GPU: Linux only (CUDA 12.1-12.9 required)
+# GPU: Linux only (CUDA 12.1-12.9)
 #
 # Installation:
-#   CPU-only (default):
-#     pip install homodyne
+#   CPU: pip install homodyne
+#   GPU (Linux): pip install jax[cuda12-local]==0.8.0 jaxlib==0.8.0 && pip install homodyne
 #
-#   GPU (Linux only):
-#     module load cuda/12.2  # or other CUDA 12.x version
-#     pip install jax[cuda12-local]==0.8.0 jaxlib==0.8.0
-#     pip install homodyne
-#
-# JAX/jaxlib MUST be version 0.8.0 (exact match required)
-#
-# ANGLE FILTERING:
-# ----------------
-# - Reduces parameter count (fewer angles = fewer scaling parameters)
-# - All angles normalized to [-180°, 180°] range
-# - Wrap-aware range checking (e.g., [170°, -170°] spans 20°, not 340°)
-# - Recommended ranges:
-#     Static: 0° and 180° (parallel and antiparallel)
-#     Laminar flow: 0° and 90° (parallel and perpendicular to flow)
-#
-# BOUNDS OVERRIDE:
-# ----------------
-# Template bounds are physically reasonable defaults for typical XPCS systems.
-# Code permits wider ranges (e.g., D0: 1-1e6 vs template: 100-1e5).
-# Override template bounds via parameter_space.bounds if your system requires it.
-#
-# OUTPUT FILES:
-# -------------
-# results/
-#   ├── nlsq/
-#   │   ├── parameters.json              # Fitted parameters + uncertainties
-#   │   ├── fitted_data.npz              # Experimental + theoretical data + residuals
-#   │   ├── analysis_results_nlsq.json   # Fit quality metrics + dataset info
-#   │   └── convergence_metrics.json     # Optimization convergence + recovery actions
-#   ├── mcmc/
-#   │   ├── parameters.json              # Posterior means + credible intervals
-#   │   ├── samples.npz                  # Full posterior samples
-#   │   ├── diagnostics.json             # R-hat, ESS, divergences
-#   │   └── trace_plots.png              # MCMC trace plots
-#   ├── cmc/
-#   │   ├── combined_posterior.json      # Combined posterior from all shards
-#   │   ├── per_shard_results.json       # Individual shard results
-#   │   └── validation_metrics.json      # Between-shard convergence metrics
-#   └── homodyne_results.json            # Legacy format (backward compatible)
-#
-# QUICK START WORKFLOWS:
-# ----------------------
-# 1. Static diffusion analysis:
-#    - Copy homodyne_static.yaml
-#    - Update experimental_data paths
-#    - Run: homodyne --config config.yaml --method nlsq
-#
-# 2. Laminar flow analysis:
-#    - Copy homodyne_laminar_flow.yaml
-#    - Update paths and phi_filtering ranges
-#    - Run: homodyne --config config.yaml --method nlsq
-#    - For uncertainties: homodyne --config config.yaml --method mcmc
-#
-# 3. Large dataset (>100M points):
-#    - NLSQ automatically uses streaming
-#    - Enable checkpointing: optimization.streaming.enable_checkpoints: true
-#    - Monitor progress in checkpoint_dir
-#
-# 4. Large-scale Bayesian inference:
-#    - Set optimization.method: "cmc"
-#    - Configure cmc.sharding for your dataset size
-#    - Use cmc.backend_config for HPC systems (PBS/SLURM)
-#
-# VALIDATION AND TESTING:
-# -----------------------
-# Validate configuration:
-#   homodyne-config --validate config.yaml
-#
-# System health check:
-#   python -m homodyne.runtime.utils.system_validator
-#   python -m homodyne.runtime.utils.system_validator --quick
-#
-# Test with example data:
-#   homodyne --config homodyne_static.yaml --plot-experimental-data
+# VALIDATION:
+# -----------
+# homodyne-config --validate this_file.yaml
+# python -m homodyne.runtime.utils.system_validator --quick
 #
 # ==============================================================================
-# END OF MASTER TEMPLATE
+# END OF STATIC DIFFUSION TEMPLATE
 # ==============================================================================
