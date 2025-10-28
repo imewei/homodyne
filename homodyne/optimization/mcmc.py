@@ -422,7 +422,8 @@ def fit_mcmc_jax(
         coordinator = CMCCoordinator(cmc_config)
 
         # Prepare NLSQ params from initial_params
-        nlsq_params = initial_params if initial_params is not None else {}
+        # Pass None instead of {} to let SVI fallback logic work correctly
+        nlsq_params = initial_params if initial_params is not None else None
 
         # Run CMC pipeline
         result = coordinator.run_cmc(

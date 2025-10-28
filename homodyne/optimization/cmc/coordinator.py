@@ -189,7 +189,7 @@ class CMCCoordinator:
         q: float,
         L: float,
         analysis_mode: str,
-        nlsq_params: Dict[str, float],
+        nlsq_params: Optional[Dict[str, float]] = None,
         model_fn: Optional[Callable] = None,
     ) -> MCMCResult:
         """Run complete CMC pipeline.
@@ -391,14 +391,25 @@ class CMCCoordinator:
             # Check if SVI succeeded
             if inv_mass_matrix is None:
                 logger.warning("SVI initialization failed, using identity mass matrix")
-                num_params = len(nlsq_params)
+                # Use init_params returned from SVI fallback
+                num_params = len(init_params)
                 inv_mass_matrix = jnp.eye(num_params)
             else:
                 logger.info("✓ SVI initialization completed successfully")
         else:
             logger.info("SVI disabled, using identity mass matrix")
-            init_params = nlsq_params
-            num_params = len(nlsq_params)
+            # When SVI is disabled, use NLSQ params or infer from analysis_mode
+            if nlsq_params is not None:
+                init_params = nlsq_params
+                num_params = len(nlsq_params)
+            else:
+                # Infer from analysis_mode
+                num_params = 9 if analysis_mode == 'laminar_flow' else 5
+                param_names = ['contrast', 'offset', 'D0', 'alpha', 'D_offset']
+                if analysis_mode == 'laminar_flow':
+                    param_names.extend(['gamma_dot_t0', 'beta', 'gamma_dot_offset', 'phi0'])
+                init_params = {name: 0.0 for name in param_names[:num_params]}
+                logger.warning(f"No NLSQ params provided, using {num_params} zero-initialized params for {analysis_mode}")
             inv_mass_matrix = jnp.eye(num_params)
 
         # =====================================================================

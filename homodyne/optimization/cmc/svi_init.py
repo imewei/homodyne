@@ -567,7 +567,8 @@ def _fallback_to_identity_matrix(
     # Infer number of parameters from pooled data
     # This is a rough estimate - actual parameter count determined by model
     # Assume standard parameter counts: 5 or 9
-    if init_params:
+    # Check explicitly for None to avoid empty dict {} being treated as falsy
+    if init_params is not None and len(init_params) > 0:
         num_params = len(init_params)
         fallback_params = init_params.copy()
     else:
