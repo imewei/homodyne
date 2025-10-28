@@ -256,7 +256,11 @@ class CMCCoordinator:
         if len(data) == 0:
             raise ValueError("Cannot run CMC on empty dataset")
 
-        logger.info(f"Starting CMC pipeline for {len(data)} data points")
+        # Get total dataset size (handles multi-dimensional arrays correctly)
+        dataset_size = data.size if hasattr(data, 'size') else len(data)
+        num_samples = data.shape[0] if hasattr(data, 'shape') and data.ndim > 1 else dataset_size
+
+        logger.info(f"Starting CMC pipeline for {num_samples} samples ({dataset_size:,} total data points)")
         logger.info(f"Analysis mode: {analysis_mode}")
         pipeline_start_time = time.time()
 
@@ -267,32 +271,63 @@ class CMCCoordinator:
         logger.info("STEP 1: Creating data shards")
         logger.info("=" * 70)
 
-        num_shards = self._calculate_num_shards(len(data))
+        num_shards = self._calculate_num_shards(dataset_size)
         logger.info(
             f"Calculated optimal number of shards: {num_shards} "
-            f"(~{len(data) // num_shards:,} points/shard)"
+            f"(~{dataset_size // num_shards:,} points/shard)"
         )
 
         strategy = self.config.get('cmc', {}).get('sharding', {}).get('strategy', 'stratified')
         min_shard_size = self.config.get('cmc', {}).get('sharding', {}).get('min_shard_size', 10_000)
 
+        # Flatten multi-dimensional data for sharding
+        # Sharding functions expect 1D arrays: data (N,), t1 (N,), t2 (N,), phi (N,)
+        # Input data shape: (n_phi, n_t1, n_t2) → flatten to (n_phi * n_t1 * n_t2,)
+        # Note: t1 and t2 are already 2D meshgrids from data loader
+        if hasattr(data, 'ndim') and data.ndim > 1:
+            logger.info(f"Flattening multi-dimensional data from shape {data.shape} for sharding")
+
+            # Flatten data (preserves phi-major ordering: all points from phi[0], then phi[1], etc.)
+            data_flat = data.flatten()
+
+            # Calculate points per phi angle
+            points_per_phi = data.shape[1] * data.shape[2] if data.ndim == 3 else data.shape[1]
+
+            # t1 and t2 are already 2D meshgrids (n_t1, n_t2) from data loader
+            # Flatten each meshgrid once, then tile for each phi angle
+            t1_pattern = t1.flatten()  # (n_t1 * n_t2,) = (1,002,001,)
+            t2_pattern = t2.flatten()  # (n_t1 * n_t2,) = (1,002,001,)
+            t1_flat = np.tile(t1_pattern, num_samples)  # (n_phi * n_t1 * n_t2,) = (23,046,023,)
+            t2_flat = np.tile(t2_pattern, num_samples)  # (n_phi * n_t1 * n_t2,) = (23,046,023,)
+
+            # Replicate phi values for each (t1, t2) pair
+            phi_flat = np.repeat(phi, points_per_phi)  # (n_phi * n_t1 * n_t2,) = (23,046,023,)
+
+            logger.info(f"Flattened arrays: data={data_flat.shape}, t1={t1_flat.shape}, t2={t2_flat.shape}, phi={phi_flat.shape}")
+        else:
+            # Data already 1D, use as-is
+            data_flat = data
+            t1_flat = t1
+            t2_flat = t2
+            phi_flat = phi
+
         shards = shard_data_stratified(
-            data=data,
-            t1=t1,
-            t2=t2,
-            phi=phi,
+            data=data_flat,
+            t1=t1_flat,
+            t2=t2_flat,
+            phi=phi_flat,
             num_shards=num_shards,
             q=q,
             L=L,
         )
 
         # Validate shards (pass min_shard_size from config)
-        is_valid, shard_diagnostics = validate_shards(shards, len(data), min_shard_size=min_shard_size)
+        is_valid, shard_diagnostics = validate_shards(shards, dataset_size, min_shard_size=min_shard_size)
         if not is_valid:
             raise RuntimeError(f"Shard validation failed: {shard_diagnostics}")
 
         logger.info(f"✓ Created {len(shards)} shards using {strategy} strategy")
-        logger.info(f"  Shard sizes: {[len(s['data']) for s in shards]}")
+        logger.info(f"  Shard sizes: {[s['shard_size'] for s in shards]} data points per shard")
 
         # =====================================================================
         # Step 2: SVI initialization
@@ -311,19 +346,46 @@ class CMCCoordinator:
 
             # Import model function if not provided
             if model_fn is None:
-                from homodyne.optimization.mcmc import create_numpyro_model
-                model_fn = create_numpyro_model(analysis_mode)
+                from homodyne.optimization.mcmc import _create_numpyro_model, _estimate_noise
+                from homodyne.core.fitting import ParameterSpace
+
+                # Add q and L to pooled_data (required by model)
+                pooled_data['q'] = q
+                pooled_data['L'] = L
+
+                # Estimate sigma if not present
+                if 'sigma' not in pooled_data:
+                    pooled_data['sigma'] = _estimate_noise(pooled_data['data'])
+                    logger.debug("Estimated sigma for pooled data")
+
+                # Create parameter space
+                parameter_space = ParameterSpace()
+
+                # Create model function with pooled data
+                model_fn = _create_numpyro_model(
+                    pooled_data['data'],
+                    pooled_data['sigma'],
+                    pooled_data['t1'],
+                    pooled_data['t2'],
+                    pooled_data['phi'],
+                    q,
+                    L,
+                    analysis_mode,
+                    parameter_space,
+                    initial_params=nlsq_params,
+                )
+                logger.debug("Created NumPyro model function for SVI")
 
             # Run SVI initialization
             svi_steps = self.config.get('cmc', {}).get('initialization', {}).get('svi_steps', 5000)
-            timeout = self.config.get('cmc', {}).get('initialization', {}).get('svi_timeout', 900)  # 15 min
+            timeout_seconds = self.config.get('cmc', {}).get('initialization', {}).get('svi_timeout', 900)  # 15 min default
 
             init_params, inv_mass_matrix = run_svi_initialization(
                 model_fn=model_fn,
                 pooled_data=pooled_data,
                 init_params=nlsq_params,
                 num_steps=svi_steps,
-                timeout=timeout,
+                timeout_minutes=timeout_seconds / 60.0,
             )
 
             # Check if SVI succeeded

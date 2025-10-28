@@ -313,24 +313,24 @@ def should_use_cmc(
     num_samples: int,
     hardware_config: HardwareConfig,
     dataset_size: Optional[int] = None,
-    memory_threshold_pct: float = 0.4,
-    min_samples_for_cmc: int = 20,
+    memory_threshold_pct: float = 0.30,
+    min_samples_for_cmc: int = 15,
 ) -> bool:
     """Determine if CMC should be used based on samples AND/OR dataset size.
 
     CMC serves TWO distinct purposes requiring different triggering conditions:
 
     **Use Case 1: Parallelism** (many independent samples)
-    - Trigger: num_samples >= min_samples_for_cmc (default: 20)
+    - Trigger: num_samples >= min_samples_for_cmc (default: 15)
     - Sharding: Split samples (phi angles) across shards
     - Benefit: Parallel MCMC chains on multi-core CPU, faster convergence
-    - Example: 50 phi angles on 14-core CPU → ~3x speedup via parallelization
+    - Example: 20 phi angles on 14-core CPU → ~1.4x speedup via parallelization
 
     **Use Case 2: Memory Management** (few samples, huge data)
-    - Trigger: dataset_size causes estimated memory > threshold
+    - Trigger: dataset_size causes estimated memory > threshold (default: 30%)
     - Sharding: Keep all samples in each shard, split data points
     - Benefit: Avoid OOM errors, enable large dataset analysis
-    - Example: 2 phi × 100M points → 4 shards × 2 phi × 25M points each
+    - Example: 5 phi × 10M points → CMC triggered (75% memory) → avoid OOM
 
     Decision Logic (OR condition)
     ------------------------------
@@ -347,12 +347,14 @@ def should_use_cmc(
     dataset_size : int, optional
         Total number of data points (for memory estimation)
         If None, only sample-based decision is used
-    memory_threshold_pct : float, default 0.4
-        Use CMC if estimated memory > this fraction of available (0.4 = 40%)
+    memory_threshold_pct : float, default 0.30
+        Use CMC if estimated memory > this fraction of available (0.30 = 30%)
         Conservative threshold to prevent OOM in production use
-    min_samples_for_cmc : int, default 20
+        Calibrated for 16 GB GPUs with safety margin for OS/driver overhead
+    min_samples_for_cmc : int, default 15
         Minimum samples for parallelism-mode CMC
         Optimized for multi-core CPU workloads (14+ cores)
+        15 samples / 14 cores = 1.07 samples/core (acceptable minimum)
 
     Returns
     -------
@@ -362,23 +364,29 @@ def should_use_cmc(
     Examples
     --------
     >>> hw = detect_hardware()
-    >>> # Case 1: Very few samples, small data → NUTS
-    >>> should_use_cmc(10, hw, dataset_size=1_000_000)
+    >>> # Case 1: Few samples, small data → NUTS (both fail)
+    >>> should_use_cmc(10, hw, dataset_size=5_000_000)
     False
 
-    >>> # Case 2: Moderate samples → CMC (parallelism on multi-core CPU)
-    >>> should_use_cmc(23, hw, dataset_size=50_000_000)
+    >>> # Case 2: Moderate samples → CMC (parallelism, 23 ≥ 15)
+    >>> should_use_cmc(23, hw, dataset_size=23_000_000)
     True
 
-    >>> # Case 3: Few samples, HUGE data → CMC (memory management)
-    >>> should_use_cmc(2, hw, dataset_size=200_000_000)
+    >>> # Case 3: Few samples, HUGE data → CMC (memory > 30%)
+    >>> should_use_cmc(5, hw, dataset_size=50_000_000)
+    True
+
+    >>> # Case 4: Borderline → CMC (20 samples triggers parallelism)
+    >>> should_use_cmc(20, hw, dataset_size=10_000_000)
     True
 
     Notes
     -----
     - For typical XPCS: 2-100 phi angles, 1M-100M+ points per angle
-    - Memory estimate: dataset_size × 8 bytes × 6 (data + gradients + MCMC state)
+    - Memory estimate: dataset_size × 8 bytes × 30 (empirically calibrated)
+      Components: data + gradients (9 params) + NUTS tree + JAX overhead + MCMC state
     - CMC sharding strategy adapts based on which condition triggered it
+    - Calibration: 23M points → ~12-14 GB actual NUTS memory usage on GPU
     """
     # Step 1: Check minimum sample threshold for parallelism-based CMC
     use_cmc_for_parallelism = num_samples >= min_samples_for_cmc
@@ -394,8 +402,10 @@ def should_use_cmc(
     # Even with few samples, large datasets need CMC to avoid OOM
     if dataset_size is not None:
         # Estimate memory requirement for MCMC
-        # Formula: dataset_size × 8 bytes/float × 6 (data + gradients + MCMC state overhead)
-        estimated_memory_gb = (dataset_size * 8 * 6) / 1e9
+        # Formula: dataset_size × 8 bytes/float × 30 (data + gradients + NUTS tree + JAX overhead + MCMC state)
+        # Multiplier calibrated empirically: 23M points → ~12-14 GB actual usage
+        # Components: data (1x) + gradients for 9 params (9x) + NUTS trajectory storage (15x) + overhead (5x)
+        estimated_memory_gb = (dataset_size * 8 * 30) / 1e9
         available_memory_gb = hardware_config.memory_per_device_gb
         memory_fraction = estimated_memory_gb / available_memory_gb
 

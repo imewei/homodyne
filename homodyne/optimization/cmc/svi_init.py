@@ -113,13 +113,24 @@ def pool_samples_from_shards(
         indices = rng.choice(n_points, size=sample_size, replace=False)
 
         # Pool samples for each array field
-        for key in ["data", "sigma", "t1", "t2", "phi"]:
+        # Required keys: data, t1, t2, phi
+        # Optional keys: sigma (only if provided in shards)
+        required_keys = ["data", "t1", "t2", "phi"]
+        optional_keys = ["sigma"]
+
+        for key in required_keys:
             if key not in shard:
                 raise KeyError(f"Shard {i} missing required key '{key}'")
-
             if key not in pooled_arrays:
                 pooled_arrays[key] = []
             pooled_arrays[key].append(shard[key][indices])
+
+        # Handle optional sigma
+        for key in optional_keys:
+            if key in shard:
+                if key not in pooled_arrays:
+                    pooled_arrays[key] = []
+                pooled_arrays[key].append(shard[key][indices])
 
         total_sampled += sample_size
 
@@ -276,13 +287,9 @@ def run_svi_initialization(
         logger.debug("SVI object created successfully")
 
         # Initialize SVI state
-        # NumPyro SVI requires passing model arguments to init/update
+        # Closure-based models don't require runtime arguments (data is already captured)
         rng_key = jax.random.PRNGKey(42)
-        # Unpack pooled_data to pass as model arguments
-        model_args = _extract_model_args(pooled_data)
-        logger.debug(f"Model args: {len(model_args)} arguments, types: {[type(x) for x in model_args]}")
-        logger.debug(f"Calling svi.init(rng_key, *model_args)...")
-        svi_state = svi.init(rng_key, *model_args)
+        svi_state = svi.init(rng_key)
         logger.debug("SVI initialized successfully")
 
         # Run SVI optimization with progress tracking
@@ -297,7 +304,7 @@ def run_svi_initialization(
                 )
 
             # Update SVI state
-            svi_state, loss = svi.update(svi_state, *model_args)
+            svi_state, loss = svi.update(svi_state)
             losses.append(loss)
 
             # Log progress every 1000 steps

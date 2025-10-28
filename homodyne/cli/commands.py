@@ -914,7 +914,7 @@ def _run_optimization(args, config: ConfigManager, data: dict[str, Any]) -> Any:
             logger.info(f"MCMC method: {method}")
             if method == "auto":
                 logger.info(
-                    "Automatic method selection: CMC if (samples >= 20) OR (memory > 40%), else NUTS",
+                    "Automatic method selection: CMC if (samples >= 15) OR (memory > 30%), else NUTS",
                 )
             elif method == "nuts":
                 logger.info("Forcing standard NUTS MCMC (single-device execution)")
