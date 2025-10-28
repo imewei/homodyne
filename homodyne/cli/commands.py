@@ -962,44 +962,32 @@ def _run_optimization(args, config: ConfigManager, data: dict[str, Any]) -> Any:
                 try:
                     # Run NLSQ on the same data
                     nlsq_result = fit_nlsq_jax(
-                        mcmc_data,
-                        t1=filtered_data.get("t1"),
-                        t2=filtered_data.get("t2"),
-                        phi=filtered_data.get("phi_angles_list"),
-                        q=(
-                            filtered_data.get("wavevector_q_list", [1.0])[0]
-                            if filtered_data.get("wavevector_q_list") is not None
-                            else 1.0
-                        ),
-                        L=2000000.0,
-                        analysis_mode=(
-                            config.config.get("analysis_mode", "static_isotropic")
-                            if hasattr(config, "config")
-                            else "static_isotropic"
-                        ),
+                        data=filtered_data,
+                        config=config,
                     )
 
                     # Extract parameters from NLSQ result
-                    # Map NLSQResult fields to initial_params dict
+                    # OptimizationResult.parameters contains all fitted parameters as np.ndarray
+                    # Order: [contrast, offset, D0, alpha, D_offset, ...]
+                    # For laminar_flow: [..., gamma_dot_t0, beta, gamma_dot_t_offset, phi0]
                     analysis_mode_str = (
                         config.config.get("analysis_mode", "static_isotropic")
                         if hasattr(config, "config")
                         else "static_isotropic"
                     )
 
-                    initial_params = {
-                        "contrast": float(nlsq_result.mean_contrast),
-                        "offset": float(nlsq_result.mean_offset),
-                    }
-
-                    # Add physics parameters based on analysis mode
-                    param_names = ['D0', 'alpha', 'D_offset']
+                    # Define parameter names based on analysis mode
                     if analysis_mode_str == "laminar_flow":
-                        param_names.extend(['gamma_dot_t0', 'beta', 'gamma_dot_t_offset', 'phi0'])
+                        param_names = ['contrast', 'offset', 'D0', 'alpha', 'D_offset',
+                                      'gamma_dot_t0', 'beta', 'gamma_dot_t_offset', 'phi0']
+                    else:  # static_isotropic
+                        param_names = ['contrast', 'offset', 'D0', 'alpha', 'D_offset']
 
+                    # Map NLSQ parameters to dict
+                    initial_params = {}
                     for i, param_name in enumerate(param_names):
-                        if i < len(nlsq_result.mean_params):
-                            initial_params[param_name] = float(nlsq_result.mean_params[i])
+                        if i < len(nlsq_result.parameters):
+                            initial_params[param_name] = float(nlsq_result.parameters[i])
 
                     logger.info(f"✓ NLSQ initialization complete: {len(initial_params)} parameters")
                     logger.debug(f"Initial params: {initial_params}")
