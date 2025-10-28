@@ -22,7 +22,7 @@ import os
 
 # Suppress JAX TPU initialization warnings before importing JAX
 # TPU backend is not available on standard systems and creates noise
-os.environ.setdefault("JAX_PLATFORMS", "cpu,gpu")  # Exclude TPU from platform list
+# IMPORTANT: Don't set JAX_PLATFORMS - let JAX auto-select optimal backend
 
 # Suppress JAX INFO-level logs for backend initialization
 logging.getLogger("jax._src.xla_bridge").setLevel(logging.WARNING)

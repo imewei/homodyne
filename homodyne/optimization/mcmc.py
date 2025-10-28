@@ -333,8 +333,11 @@ def fit_mcmc_jax(
     # Validate input data
     _validate_mcmc_data(data, t1, t2, phi, q, L)
 
+    # Get total dataset size (handles both 1D and multi-dimensional arrays)
+    dataset_size = data.size if hasattr(data, 'size') else len(data)
+
     logger.info("Starting MCMC+JAX sampling")
-    logger.info(f"Dataset size: {len(data):,} points")
+    logger.info(f"Dataset size: {dataset_size:,} points")
     logger.info(f"Analysis mode: {analysis_mode}")
 
     # Step 1: Detect hardware configuration
@@ -350,33 +353,33 @@ def fit_mcmc_jax(
     # Step 2: Determine actual method to use
     if method == 'auto':
         if hardware_config is not None:
-            use_cmc = should_use_cmc(len(data), hardware_config)
+            use_cmc = should_use_cmc(dataset_size, hardware_config)
             actual_method = 'cmc' if use_cmc else 'nuts'
             logger.info(
                 f"Automatic method selection: {actual_method.upper()} "
-                f"(dataset_size={len(data):,}, platform={hardware_config.platform})"
+                f"(dataset_size={dataset_size:,}, platform={hardware_config.platform})"
             )
         else:
             # Fallback: Simple threshold-based selection
-            use_cmc = len(data) > 1_000_000
+            use_cmc = dataset_size > 1_000_000
             actual_method = 'cmc' if use_cmc else 'nuts'
             logger.info(
                 f"Automatic method selection (fallback): {actual_method.upper()} "
-                f"(dataset_size={len(data):,})"
+                f"(dataset_size={dataset_size:,})"
             )
     else:
         actual_method = method
         logger.info(f"Using user-specified method: {actual_method.upper()}")
 
     # Step 3: Log warnings for suboptimal method choices
-    if actual_method == 'cmc' and len(data) < 500_000:
+    if actual_method == 'cmc' and dataset_size < 500_000:
         logger.warning(
-            f"Using CMC on small dataset ({len(data):,} points). "
+            f"Using CMC on small dataset ({dataset_size:,} points). "
             f"CMC adds overhead; consider using method='nuts' for <500k points."
         )
-    elif actual_method == 'nuts' and len(data) > 5_000_000:
+    elif actual_method == 'nuts' and dataset_size > 5_000_000:
         logger.warning(
-            f"Using standard NUTS on large dataset ({len(data):,} points). "
+            f"Using standard NUTS on large dataset ({dataset_size:,} points). "
             f"Risk of OOM errors; consider using method='cmc' for >5M points."
         )
 
