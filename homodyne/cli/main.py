@@ -114,10 +114,9 @@ def main() -> None:
         logger.info("Starting homodyne analysis...")
         logger.debug(f"Arguments: {vars(args)}")
 
-        # Check GPU availability (warn if GPU present but not enabled)
-        check_gpu_availability()
-
-        # Dispatch command
+        # Dispatch command (device configuration happens inside dispatch_command)
+        # Note: GPU status is checked and logged during device configuration,
+        # not here at startup, to avoid premature/inaccurate warnings
         result = dispatch_command(args)
 
         # Handle result

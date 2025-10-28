@@ -376,9 +376,16 @@ def plot_c2_comparison_fast(
 
     # Transpose to match matplotlib convention: c2[t1_idx, t2_idx] → c2.T for correct axes
     # After transpose: dim 0=t2, dim 1=t1, matching x=t1 (horizontal), y=t2 (vertical)
+
+    # CRITICAL: Use SHARED color normalization for experimental and theoretical panels
+    # Without this, each panel auto-normalizes to its own range, making visual comparison impossible
+    # E.g., exp=[1.0,1.2] and fit=[1.1,1.5] would both span full colormap but represent different values
+    vmin_shared = min(c2_exp.min(), c2_fit.min())
+    vmax_shared = max(c2_exp.max(), c2_fit.max())
+
     # Rasterize all three panels using Datashader for speed
-    img_exp = renderer.rasterize_heatmap(c2_exp.T, t1, t2, cmap="viridis")
-    img_fit = renderer.rasterize_heatmap(c2_fit.T, t1, t2, cmap="viridis")
+    img_exp = renderer.rasterize_heatmap(c2_exp.T, t1, t2, cmap="viridis", vmin=vmin_shared, vmax=vmax_shared)
+    img_fit = renderer.rasterize_heatmap(c2_fit.T, t1, t2, cmap="viridis", vmin=vmin_shared, vmax=vmax_shared)
 
     # Symmetric colormap for residuals (diverging)
     res_max = np.abs(residuals).max()
@@ -418,8 +425,9 @@ def plot_c2_comparison_fast(
     from matplotlib.cm import ScalarMappable
     from matplotlib.colors import Normalize
 
-    norm_exp = Normalize(vmin=c2_exp.min(), vmax=c2_exp.max())
-    sm_exp = ScalarMappable(cmap=cm.get_cmap("viridis"), norm=norm_exp)
+    # Use SHARED normalization for both experimental and fit colorbars
+    norm_shared = Normalize(vmin=vmin_shared, vmax=vmax_shared)
+    sm_exp = ScalarMappable(cmap=cm.get_cmap("viridis"), norm=norm_shared)
     sm_exp.set_array([])
     cbar0 = plt.colorbar(sm_exp, ax=axes[0], label="C₂(t₁,t₂)")
     cbar0.ax.tick_params(labelsize=8)
@@ -430,9 +438,8 @@ def plot_c2_comparison_fast(
     axes[1].set_xlabel("t₁ (s)", fontsize=10)
     axes[1].set_ylabel("t₂ (s)", fontsize=10)
 
-    # Add colorbar for fit panel
-    norm_fit = Normalize(vmin=c2_fit.min(), vmax=c2_fit.max())
-    sm_fit = ScalarMappable(cmap=cm.get_cmap("viridis"), norm=norm_fit)
+    # Add colorbar for fit panel (same normalization as experimental)
+    sm_fit = ScalarMappable(cmap=cm.get_cmap("viridis"), norm=norm_shared)
     sm_fit.set_array([])
     cbar1 = plt.colorbar(sm_fit, ax=axes[1], label="C₂(t₁,t₂)")
     cbar1.ax.tick_params(labelsize=8)

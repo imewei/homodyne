@@ -163,11 +163,11 @@ fi"""
     return completion_file
 
 
-def create_activation_scripts(venv_path):
-    """Create activation scripts for non-conda environments (uv, venv, virtualenv).
+def integrate_with_venv_activate(venv_path):
+    """Integrate homodyne completion with virtual environment's activate scripts.
 
-    These scripts allow users to easily activate homodyne completion by adding
-    to their shell rc file: source $VIRTUAL_ENV/bin/homodyne-activate
+    This modifies the venv's own activate scripts (not user's global shell configs)
+    so completion is automatically available when the environment is activated.
 
     Parameters
     ----------
@@ -177,78 +177,79 @@ def create_activation_scripts(venv_path):
     Returns
     -------
     list[Path]
-        List of created activation script paths
+        List of modified activation script paths
     """
     bin_dir = venv_path / "bin"
-    bin_dir.mkdir(parents=True, exist_ok=True)
+    modified_scripts = []
 
-    created_scripts = []
+    # Bash/Zsh activation integration
+    bash_activate = bin_dir / "activate"
+    if bash_activate.exists():
+        try:
+            content = bash_activate.read_text()
 
-    # Bash/Zsh activation script
-    bash_activate = bin_dir / "homodyne-activate"
-    bash_content = f"""#!/bin/bash
-# Homodyne Shell Completion Activation
-#
-# Usage:
-#   Add to ~/.bashrc or ~/.zshrc:
-#     source $VIRTUAL_ENV/bin/homodyne-activate
-#
-# Or source manually each session:
-#     source {bin_dir}/homodyne-activate
-
-if [[ -z "$VIRTUAL_ENV" ]]; then
-    echo "⚠️  VIRTUAL_ENV not set. Please activate your virtual environment first."
-    return 1
-fi
-
-# Source the completion file if it exists
+            # Check if already integrated
+            if "homodyne-completion" not in content:
+                # Append homodyne completion sourcing
+                completion_code = """
+# Homodyne shell completion (auto-added by homodyne-post-install)
 if [[ -f "$VIRTUAL_ENV/etc/zsh/homodyne-completion.zsh" ]]; then
     source "$VIRTUAL_ENV/etc/zsh/homodyne-completion.zsh"
-    echo "✅ Homodyne completion activated (hm, hconfig, hm-nlsq, hm-mcmc, etc.)"
-else
-    echo "⚠️  Homodyne completion file not found. Run: homodyne-post-install"
-    return 1
 fi
 """
-    bash_activate.write_text(bash_content)
-    bash_activate.chmod(0o755)
-    created_scripts.append(bash_activate)
+                with bash_activate.open("a") as f:
+                    f.write(completion_code)
 
-    # Fish activation script
-    fish_activate = bin_dir / "homodyne-activate.fish"
-    fish_content = f"""#!/usr/bin/env fish
-# Homodyne Shell Completion Activation (Fish)
-#
-# Usage:
-#   Add to ~/.config/fish/config.fish:
-#     source $VIRTUAL_ENV/bin/homodyne-activate.fish
-#
-# Or source manually each session:
-#     source {bin_dir}/homodyne-activate.fish
+                modified_scripts.append(bash_activate)
+                print(f"   ✅ Integrated with {bash_activate.name}")
+            else:
+                print(f"   ℹ️  Already integrated with {bash_activate.name}")
 
-if not set -q VIRTUAL_ENV
-    echo "⚠️  VIRTUAL_ENV not set. Please activate your virtual environment first."
-    exit 1
-end
+        except Exception as e:
+            print(f"   ⚠️  Could not integrate with {bash_activate.name}: {e}")
 
-# Source the completion file if it exists
+    # Fish activation integration
+    fish_activate = bin_dir / "activate.fish"
+    if fish_activate.exists():
+        try:
+            content = fish_activate.read_text()
+
+            # Check if already integrated
+            if "homodyne-completion" not in content:
+                # Append homodyne completion sourcing
+                completion_code = """
+# Homodyne shell completion (auto-added by homodyne-post-install)
 if test -f "$VIRTUAL_ENV/etc/zsh/homodyne-completion.zsh"
     source "$VIRTUAL_ENV/etc/zsh/homodyne-completion.zsh"
-    echo "✅ Homodyne completion activated (hm, hconfig, hm-nlsq, hm-mcmc, etc.)"
-else
-    echo "⚠️  Homodyne completion file not found. Run: homodyne-post-install"
-    exit 1
 end
 """
-    fish_activate.write_text(fish_content)
-    fish_activate.chmod(0o755)
-    created_scripts.append(fish_activate)
+                with fish_activate.open("a") as f:
+                    f.write(completion_code)
 
-    return created_scripts
+                modified_scripts.append(fish_activate)
+                print(f"   ✅ Integrated with {fish_activate.name}")
+            else:
+                print(f"   ℹ️  Already integrated with {fish_activate.name}")
+
+        except Exception as e:
+            print(f"   ⚠️  Could not integrate with {fish_activate.name}: {e}")
+
+    return modified_scripts
 
 
 def install_shell_completion(shell_type=None, force=False):
-    """Install unified shell completion system."""
+    """Install unified shell completion system.
+
+    Integrates completion directly into the virtual environment's activate scripts.
+    Does NOT modify user's global shell configuration files (~/.bashrc, ~/.zshrc).
+
+    Parameters
+    ----------
+    shell_type : str, optional
+        Shell type (bash, zsh, fish). Auto-detected if not provided.
+    force : bool, default False
+        Force installation even if not in virtual environment
+    """
     if not is_virtual_environment() and not force:
         print("⚠️  Shell completion recommended only in virtual environments")
         return False
@@ -275,6 +276,11 @@ def install_shell_completion(shell_type=None, force=False):
 if [[ -n "$ZSH_VERSION" ]] && [[ -f "{venv_path}/etc/zsh/homodyne-completion.zsh" ]]; then
     source "{venv_path}/etc/zsh/homodyne-completion.zsh"
 fi
+
+# Bash completion
+if [[ -n "$BASH_VERSION" ]] && [[ -f "{venv_path}/etc/zsh/homodyne-completion.zsh" ]]; then
+    source "{venv_path}/etc/zsh/homodyne-completion.zsh"
+fi
 """
             completion_script.write_text(completion_content)
             completion_script.chmod(0o755)
@@ -284,22 +290,23 @@ fi
             print("   • Aliases: hm, hconfig, hm-nlsq, hm-mcmc, hm-auto, hm-nuts, hm-cmc")
             print("   • Config: hc-stat, hc-flow")
             print("   • Plotting: hexp, hsim")
+            print()
+            print("📋 Completion activates automatically when you activate this environment")
         else:
-            # Create activation scripts for uv/venv/virtualenv
-            created_scripts = create_activation_scripts(venv_path)
+            # Integrate with venv/uv/virtualenv activation scripts
+            modified_scripts = integrate_with_venv_activate(venv_path)
 
             print("✅ Shell completion installed (uv/venv/virtualenv)")
             print("   • Aliases: hm, hconfig, hm-nlsq, hm-mcmc, hm-auto, hm-nuts, hm-cmc")
             print("   • Config: hc-stat, hc-flow")
             print("   • Plotting: hexp, hsim")
             print()
-            print("📋 To activate completion, add to your shell RC file:")
-            print("   Bash/Zsh: source $VIRTUAL_ENV/bin/homodyne-activate")
-            print("   Fish:     source $VIRTUAL_ENV/bin/homodyne-activate.fish")
+            print("📋 Completion activates automatically when you activate this environment")
+            print(f"   Modified: {', '.join(s.name for s in modified_scripts)}")
             print()
-            print("Or source manually each session:")
-            for script in created_scripts:
-                print(f"   source {script}")
+            print("💡 To test:")
+            print("   1. Deactivate and reactivate this environment")
+            print("   2. Try: hm --help")
 
         return True
 
@@ -503,7 +510,7 @@ def interactive_setup():
     # Shell completion
     print("1. Shell Completion (bash/zsh/fish)")
     print("   - Adds tab completion for homodyne commands")
-    print("   - Adds convenient aliases (hm, hc, hr, ha)")
+    print("   - Adds convenient aliases (hm, hconfig, hm-nlsq, hm-mcmc)")
     print("   - Safe: doesn't interfere with system commands")
 
     install_completion = (
