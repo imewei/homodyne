@@ -381,9 +381,16 @@ optimization:
 
     # Initialization strategy for inverse mass matrix
     initialization:
-      method: "svi"                           # Options: "svi" | "nlsq" | "identity"
-      svi_steps: 1000                         # Number of SVI optimization steps
-      svi_learning_rate: 0.01                 # Adam learning rate for SVI
+      run_nlsq_init: true                     # Run NLSQ pre-optimization before SVI (RECOMMENDED: true)
+                                              # Provides 2-10x faster SVI convergence
+      use_svi: true                           # Enable SVI for mass matrix estimation
+      svi_steps: 5000                         # Number of SVI optimization steps (5000 recommended)
+      svi_timeout: null                       # SVI timeout in seconds (null = adaptive timeout)
+                                              # Adaptive: ~53 min for 4600 samples × 5000 steps without init
+                                              #          ~27 min with NLSQ init (50% faster)
+                                              # Manual override: 3600 (60 min) for large datasets
+      samples_per_shard: 200                  # Samples to pool from each shard for SVI
+      svi_learning_rate: 0.001                # Adam learning rate for SVI
       svi_rank: 5                             # Low-rank approximation rank (1-10)
       fallback_to_identity: true              # Use identity matrix if SVI fails
 

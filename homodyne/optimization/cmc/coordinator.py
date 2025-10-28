@@ -378,7 +378,24 @@ class CMCCoordinator:
 
             # Run SVI initialization
             svi_steps = self.config.get('cmc', {}).get('initialization', {}).get('svi_steps', 5000)
-            timeout_seconds = self.config.get('cmc', {}).get('initialization', {}).get('svi_timeout', 900)  # 15 min default
+
+            # Calculate adaptive timeout based on dataset size
+            timeout_seconds = self.config.get('cmc', {}).get('initialization', {}).get('svi_timeout')
+            if timeout_seconds is None:
+                # Use adaptive timeout calculation
+                timeout_seconds = self._calculate_adaptive_svi_timeout(
+                    pooled_size=len(pooled_data['data']),
+                    svi_steps=svi_steps,
+                    has_init_params=(nlsq_params is not None and len(nlsq_params) > 0)
+                )
+                logger.info(
+                    f"Using adaptive SVI timeout: {timeout_seconds/60:.1f} minutes "
+                    f"(pooled_size={len(pooled_data['data'])}, "
+                    f"svi_steps={svi_steps}, "
+                    f"has_init_params={nlsq_params is not None and len(nlsq_params) > 0})"
+                )
+            else:
+                logger.info(f"Using configured SVI timeout: {timeout_seconds/60:.1f} minutes")
 
             init_params, inv_mass_matrix = run_svi_initialization(
                 model_fn=model_fn,
@@ -541,6 +558,57 @@ class CMCCoordinator:
             target_shard_size_cpu=target_shard_size_cpu,
             min_shard_size=min_shard_size,
         )
+
+    def _calculate_adaptive_svi_timeout(
+        self,
+        pooled_size: int,
+        svi_steps: int,
+        has_init_params: bool = False,
+        base_timeout: int = 900
+    ) -> int:
+        """Calculate adaptive SVI timeout based on dataset characteristics.
+
+        Formula:
+        - Base timeout: 900s (15 min) for small datasets
+        - Scaling factor: (pooled_size * svi_steps / 10000)
+        - Init params bonus: Reduce by 50% if NLSQ init provided
+        - Cap: Maximum 7200s (2 hours)
+
+        Examples
+        --------
+        - 1,000 samples × 5,000 steps, no init: ~1,400s (23 min)
+        - 4,600 samples × 5,000 steps, no init: ~3,200s (53 min)
+        - 4,600 samples × 5,000 steps, with init: ~1,600s (27 min) [50% faster]
+        - 10,000 samples × 5,000 steps, no init: capped at 7,200s (2 hours)
+
+        Parameters
+        ----------
+        pooled_size : int
+            Number of pooled samples for SVI
+        svi_steps : int
+            Number of SVI optimization steps
+        has_init_params : bool, default False
+            Whether NLSQ initialization parameters are provided
+        base_timeout : int, default 900
+            Base timeout in seconds
+
+        Returns
+        -------
+        int
+            Adaptive timeout in seconds
+        """
+        # Calculate base adaptive timeout
+        adaptive_time = base_timeout + (pooled_size * svi_steps / 10000)
+
+        # Apply 50% reduction if we have good initialization
+        if has_init_params:
+            adaptive_time = adaptive_time * 0.5
+            logger.debug("SVI timeout reduced 50% due to NLSQ initialization")
+
+        # Cap at 2 hours to prevent excessively long waits
+        adaptive_time = min(adaptive_time, 7200)
+
+        return int(adaptive_time)
 
     def _get_mcmc_config(self) -> Dict[str, Any]:
         """Extract MCMC configuration parameters.
