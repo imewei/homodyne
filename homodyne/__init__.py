@@ -36,7 +36,17 @@ Authors: Wei Chen, Hongrui He (Argonne National Laboratory)
 """
 
 # Standard library imports
+import logging
+import os
 import sys
+
+# Suppress JAX TPU backend warnings before any JAX imports
+# TPU is not available on standard systems and creates log noise
+os.environ.setdefault("JAX_PLATFORMS", "cpu,gpu")  # Exclude TPU platform
+
+# Suppress JAX backend initialization INFO messages
+logging.getLogger("jax._src.xla_bridge").setLevel(logging.WARNING)
+logging.getLogger("jax._src.compiler").setLevel(logging.WARNING)
 
 # Version handling
 try:

@@ -17,6 +17,17 @@ Usage:
     config = configure_optimal_device()
 """
 
+import logging
+import os
+
+# Suppress JAX TPU initialization warnings before importing JAX
+# TPU backend is not available on standard systems and creates noise
+os.environ.setdefault("JAX_PLATFORMS", "cpu,gpu")  # Exclude TPU from platform list
+
+# Suppress JAX INFO-level logs for backend initialization
+logging.getLogger("jax._src.xla_bridge").setLevel(logging.WARNING)
+logging.getLogger("jax._src.compiler").setLevel(logging.WARNING)
+
 from homodyne.utils.logging import get_logger
 
 logger = get_logger(__name__)
