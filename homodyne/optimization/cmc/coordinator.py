@@ -148,7 +148,20 @@ class CMCCoordinator:
         )
 
         # Step 2: Select backend
-        user_override = config.get('backend', {}).get('type')
+        # Handle both config schemas:
+        # - New schema: backend="jax" (string) + backend_config={name: "auto"} (dict)
+        # - Old schema: backend={name: "auto"} (dict only)
+        backend_value = config.get('backend', {})
+        if isinstance(backend_value, str):
+            # New schema: computational backend is string, parallel backend in backend_config
+            backend_config = config.get('backend_config', {})
+            user_override = backend_config.get('name') if backend_config else None
+        elif isinstance(backend_value, dict):
+            # Old schema: backend is dict with 'name' field for parallel execution
+            user_override = backend_value.get('name')
+        else:
+            user_override = None
+
         self.backend = select_backend(self.hardware_config, user_override=user_override)
         logger.info(f"Selected backend: {self.backend.get_backend_name()}")
 
