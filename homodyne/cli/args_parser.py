@@ -166,22 +166,22 @@ Homodyne v{__version__} - JAX-First Architecture
     mcmc_group.add_argument(
         "--n-samples",
         type=int,
-        default=1000,
-        help="Number of MCMC samples (default: %(default)s)",
+        default=None,
+        help="Number of MCMC samples (default: from config or 1000)",
     )
 
     mcmc_group.add_argument(
         "--n-warmup",
         type=int,
-        default=1000,
-        help="Number of MCMC warmup samples (default: %(default)s)",
+        default=None,
+        help="Number of MCMC warmup samples (default: from config or 500)",
     )
 
     mcmc_group.add_argument(
         "--n-chains",
         type=int,
-        default=4,
-        help="Number of MCMC chains (default: %(default)s)",
+        default=None,
+        help="Number of MCMC chains (default: from config or 4)",
     )
 
     # CMC-specific options
@@ -319,8 +319,15 @@ def validate_args(args) -> bool:
         print("Error: Tolerance must be positive")
         return False
 
-    if args.n_samples <= 0 or args.n_warmup <= 0 or args.n_chains <= 0:
-        print("Error: MCMC parameters (samples, warmup, chains) must be positive")
+    # Validate MCMC parameters if provided via CLI
+    if args.n_samples is not None and args.n_samples <= 0:
+        print("Error: MCMC samples must be positive")
+        return False
+    if args.n_warmup is not None and args.n_warmup <= 0:
+        print("Error: MCMC warmup must be positive")
+        return False
+    if args.n_chains is not None and args.n_chains <= 0:
+        print("Error: MCMC chains must be positive")
         return False
 
     # Validate CMC parameters
