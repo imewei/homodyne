@@ -92,10 +92,14 @@ except ImportError:
 # Core homodyne imports
 try:
     from homodyne.core.fitting import ParameterSpace
+    from homodyne.core.jax_backend import compute_g1_diffusion, compute_g1_total
 
     HAS_CORE_MODULES = True
 except ImportError:
     HAS_CORE_MODULES = False
+    # Fallback if jax_backend not available
+    compute_g1_diffusion = None
+    compute_g1_total = None
 
 # Import extended MCMCResult with CMC support
 # This provides backward compatibility while supporting CMC
@@ -655,6 +659,7 @@ def _create_numpyro_model(
     param_space,
     initial_params=None,
     use_simplified=True,
+    dt=None,
 ):
     """Create NumPyro probabilistic model with optional initialization.
 
@@ -822,9 +827,9 @@ def _create_numpyro_model(
                 ],
             )
 
-        # Compute theoretical model using JIT-compiled function
-        # Pass full params array for proper indexing
-        c2_theory = _compute_simple_theory_jit(params, t1, t2, phi, q, analysis_mode)
+        # Compute theoretical model using JIT-compiled function with proper physics
+        # Pass full params array for proper indexing, plus L and dt for correct physics
+        c2_theory = _compute_simple_theory_jit(params, t1, t2, phi, q, analysis_mode, L, dt)
 
         # Scaled model: c2_fitted = contrast * c2_theory + offset
         c2_fitted = contrast * c2_theory + offset
@@ -835,61 +840,98 @@ def _create_numpyro_model(
     return homodyne_model
 
 
-def _compute_simple_theory(params, t1, t2, phi, q, analysis_mode):
-    """Optimized theoretical model computation for MCMC.
+def _compute_simple_theory(params, t1, t2, phi, q, analysis_mode, L=None, dt=None):
+    """Compute theoretical c2 using proper physics from core.jax_backend.
 
-    Uses simplified calculations for initial MCMC testing.
-    For production, integrate with TheoryEngine.
+    Uses the SAME physics as NLSQ to ensure consistency between methods.
+    For laminar_flow: includes diffusion + shear effects via compute_g1_total().
+    For static: uses diffusion-only via compute_g1_diffusion().
 
     Parameters
     ----------
     params : array
         Full parameter array [contrast, offset, D0, alpha, D_offset, ...]
     t1, t2 : arrays
-        Flattened time delay arrays (already matched to data points)
+        Time delay arrays
     phi : array
-        Flattened angle array (already matched to data points)
+        Angle array (required for laminar_flow)
     q : scalar
         Wavevector magnitude
     analysis_mode : str
-        Analysis mode string
+        Analysis mode: 'static_isotropic' or 'laminar_flow'
+    L : float, optional
+        Sample-detector distance for laminar_flow mode [Å]
+    dt : float, optional
+        Time step [s] - estimated from t1 if not provided
 
     Returns
     -------
     array
-        Theoretical c2 values, flattened to match data shape
+        Theoretical c2 values
 
     Notes
     -----
-    Input arrays t1, t2, phi must all have the same length and correspond
-    to the flattened data structure.
+    This function now uses the proper physics from core.jax_backend to match
+    NLSQ optimization, fixing the NaN ELBO issue caused by physics mismatch.
     """
+    # Estimate dt from time array if not provided
+    if dt is None:
+        if t1.ndim == 2:
+            time_array = t1[:, 0] if t1.shape[1] > 0 else t1[0, :]
+        else:
+            time_array = t1
+        # Estimate from first two unique time points
+        unique_times = jnp.unique(time_array)
+        if len(unique_times) > 1:
+            dt = float(unique_times[1] - unique_times[0])
+        else:
+            dt = 1.0  # Fallback
+        logger.debug(f"Estimated dt = {dt:.6f} s for MCMC model")
+
     # Extract physical parameters (skip contrast and offset at indices 0,1)
-    D0 = params[2]
-    alpha = params[3]
-    D_offset = params[4] if len(params) > 4 else 0.0
+    # params = [contrast, offset, D0, alpha, D_offset, ...]
+    phys_params = params[2:]  # Physical parameters only
 
-    # Time delay (absolute difference) - already flattened arrays
-    tau = jnp.abs(t2 - t1)
-    tau_safe = jnp.maximum(tau, 1e-10)  # Avoid division by zero
+    # Compute g1 using proper physics from core.jax_backend
+    if "laminar" in analysis_mode.lower():
+        # Laminar flow: use full physics (diffusion + shear)
+        if compute_g1_total is None:
+            raise ImportError("compute_g1_total not available from core.jax_backend")
+        if L is None:
+            L = 2000000.0  # Default: 200 µm in Angstroms
+            logger.debug(f"Using default L = {L:.1f} Å for laminar_flow model")
 
-    # Effective diffusion coefficient
-    effective_D = D0 + D_offset
+        g1 = compute_g1_total(
+            phys_params,  # [D0, alpha, D_offset, gamma_dot_t0, beta, gamma_dot_t_offset, phi0]
+            t1,
+            t2,
+            phi,
+            q,
+            L,
+            dt,
+        )
+    else:
+        # Static mode: use diffusion-only physics
+        if compute_g1_diffusion is None:
+            raise ImportError("compute_g1_diffusion not available from core.jax_backend")
 
-    # Simple diffusion model: g1(tau) = exp(-D*q^2*tau^|alpha|)
-    q_squared = q * q
-    exponent = -effective_D * q_squared * jnp.power(tau_safe, jnp.abs(alpha))
-    g1 = jnp.exp(exponent)
+        g1 = compute_g1_diffusion(
+            phys_params,  # [D0, alpha, D_offset]
+            t1,
+            t2,
+            q,
+            dt,
+        )
 
     # g2 theory: c2 = 1 + |g1|^2
     c2_theory = 1.0 + g1 * g1
 
-    # Return flattened array matching input data shape
     return c2_theory
 
 
 # JIT compile with static arguments for maximum performance
 # Static argnums: (5,) for analysis_mode
+# Note: L and dt are optional float args, not static
 _compute_simple_theory_jit = jit(_compute_simple_theory, static_argnums=(5,))
 
 

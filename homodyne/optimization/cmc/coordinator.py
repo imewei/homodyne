@@ -361,6 +361,22 @@ class CMCCoordinator:
                 # Create parameter space
                 parameter_space = ParameterSpace()
 
+                # Extract dt from pooled data or estimate from t1
+                dt = pooled_data.get('dt')
+                if dt is None:
+                    # Estimate from time array
+                    t1_arr = pooled_data['t1']
+                    if t1_arr.ndim == 2:
+                        time_array = t1_arr[:, 0] if t1_arr.shape[1] > 0 else t1_arr[0, :]
+                    else:
+                        time_array = t1_arr
+                    unique_times = jnp.unique(time_array)
+                    if len(unique_times) > 1:
+                        dt = float(unique_times[1] - unique_times[0])
+                    else:
+                        dt = 1.0
+                    logger.debug(f"Estimated dt = {dt:.6f} s for CMC model")
+
                 # Create model function with pooled data
                 model_fn = _create_numpyro_model(
                     pooled_data['data'],
@@ -373,6 +389,7 @@ class CMCCoordinator:
                     analysis_mode,
                     parameter_space,
                     initial_params=nlsq_params,
+                    dt=dt,
                 )
                 logger.debug("Created NumPyro model function for SVI")
 
