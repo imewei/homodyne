@@ -1231,6 +1231,14 @@ class NLSQWrapper:
             # Shape: (n_phi, n_t1, n_t2)
             g2_theory = compute_g2_scaled_vmap(phi)
 
+            # CRITICAL: Apply diagonal correction to match experimental data preprocessing
+            # The experimental data is diagonal-corrected in xpcs_loader.py:530-540.
+            # We MUST apply the same correction to theoretical model to prevent mismatch.
+            # Without this, NLSQ fails silently with 0 iterations.
+            from homodyne.core.jax_backend import apply_diagonal_correction
+            apply_diagonal_vmap = jax.vmap(apply_diagonal_correction, in_axes=0)
+            g2_theory = apply_diagonal_vmap(g2_theory)
+
             # Flatten theory to match flattened data (NLSQ expects 1D output)
             g2_theory_flat = g2_theory.flatten()
 

@@ -495,7 +495,11 @@ def _get_default_config(args) -> dict[str, Any]:
 
 
 def _apply_cli_overrides(config: ConfigManager, args) -> None:
-    """Apply CLI argument overrides to configuration."""
+    """Apply CLI argument overrides to configuration.
+
+    Implements precedence: CLI args > Config file > Code defaults
+    For MCMC parameters, config uses 'num_*' prefix, args use 'n_*' prefix
+    """
     if not hasattr(config, "config") or not config.config:
         return
 
@@ -515,6 +519,18 @@ def _apply_cli_overrides(config: ConfigManager, args) -> None:
         config.config["optimization"] = {}
 
     config.config["optimization"]["method"] = args.method
+
+    # Load MCMC parameters from config if not provided via CLI
+    # Config uses 'num_samples' etc., args use 'n_samples' etc.
+    mcmc_config = config.config.get("optimization", {}).get("mcmc", {})
+
+    # Code defaults from homodyne/optimization/mcmc.py:_get_mcmc_config
+    if args.n_samples is None:
+        args.n_samples = mcmc_config.get("num_samples", 1000)
+    if args.n_warmup is None:
+        args.n_warmup = mcmc_config.get("num_warmup", 500)
+    if args.n_chains is None:
+        args.n_chains = mcmc_config.get("num_chains", 4)
 
     # Override hardware settings
     if "hardware" not in config.config:
@@ -910,10 +926,22 @@ def _run_optimization(args, config: ConfigManager, data: dict[str, Any]) -> Any:
             # Log key CMC parameters
             sharding = cmc_config.get("sharding", {})
             backend = cmc_config.get("backend", {})
+
+            # Handle both old dict schema (backend={name: ...}) and new string schema (backend="jax")
+            if isinstance(backend, str):
+                # New schema: backend is computational backend string
+                backend_str = backend
+                backend_config = cmc_config.get("backend_config", {})
+                parallel_backend = backend_config.get("name", "auto") if backend_config else "auto"
+                backend_display = f"{backend_str}/{parallel_backend}"
+            else:
+                # Old schema: backend is dict with name for parallel execution
+                backend_display = backend.get("name", "auto")
+
             logger.debug(
                 f"CMC sharding: strategy={sharding.get('strategy', 'auto')}, "
                 f"num_shards={sharding.get('num_shards', 'auto')}, "
-                f"backend={backend.get('name', 'auto')}",
+                f"backend={backend_display}",
             )
 
             # Convert data format for MCMC if needed
@@ -925,7 +953,7 @@ def _run_optimization(args, config: ConfigManager, data: dict[str, Any]) -> Any:
                 phi=filtered_data.get("phi_angles_list"),
                 q=(
                     filtered_data.get("wavevector_q_list", [1.0])[0]
-                    if filtered_data.get("wavevector_q_list")
+                    if filtered_data.get("wavevector_q_list") is not None
                     else 1.0
                 ),
                 L=2000000.0,  # Default: 200 µm stator-rotor gap (typical rheology-XPCS)
@@ -2461,7 +2489,14 @@ def _compute_nlsq_fits(
 
         # Apply diagonal correction to match experimental data processing
         # This fixes the constant diagonal issue in theoretical model (g1(t,t) = 1 always)
+        diag_before = np.diag(g2_theory_np).copy()
         g2_theory_np = _apply_diagonal_correction_to_c2(g2_theory_np)
+        diag_after = np.diag(g2_theory_np).copy()
+
+        logger.debug(
+            f"Angle {phi_angle:.1f}°: Diagonal correction - before: [{diag_before[0]:.3f}, {diag_before[1]:.3f}, ..., {diag_before[-1]:.3f}], "
+            f"after: [{diag_after[0]:.3f}, {diag_after[1]:.3f}, ..., {diag_after[-1]:.3f}]"
+        )
 
         c2_theoretical_raw.append(g2_theory_np)
 
