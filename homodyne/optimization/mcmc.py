@@ -13,8 +13,8 @@ Key Features:
 - JAX acceleration for both CPU and GPU
 - Comprehensive convergence diagnostics
 - Can be initialized from VI results for efficiency
-- Automatic method selection: NUTS vs CMC based on dataset size
-- Consensus Monte Carlo (CMC) for large datasets (>500k points)
+- Automatic method selection: NUTS vs CMC based on dual criteria
+- Consensus Monte Carlo (CMC) for many samples (>=100) OR large memory footprint
 
 MCMC Philosophy:
 - Gold standard for uncertainty quantification
@@ -202,9 +202,9 @@ def fit_mcmc_jax(
 
     Method Selection Strategy
     -------------------------
-    - **'auto'** (default): Automatically select based on dataset size
-        - Small datasets (<500k points): Use standard NUTS
-        - Large datasets (>500k points): Use CMC with automatic sharding
+    - **'auto'** (default): Automatically select using dual-criteria OR logic
+        - CMC if: (num_samples >= 100) OR (estimated_memory > threshold)
+        - NUTS otherwise (faster for few samples with manageable memory)
         - Hardware-adaptive: Considers GPU memory, CPU cores, cluster environment
     - **'nuts'**: Force standard NUTS MCMC
         - Single-device execution
@@ -309,9 +309,9 @@ def fit_mcmc_jax(
 
     Notes
     -----
-    - CMC is automatically enabled for datasets >500k points (hardware-dependent)
+    - CMC is automatically enabled based on dual criteria: (samples >= 100) OR (memory > threshold)
     - method='auto' is recommended for all use cases
-    - CMC adds ~10-20% overhead but enables unlimited dataset sizes
+    - CMC adds ~10-20% overhead but enables parallelism and unlimited dataset sizes
     - Backward compatible: Existing code continues to work without changes
     """
 
@@ -384,15 +384,15 @@ def fit_mcmc_jax(
         logger.info(f"Using user-specified method: {actual_method.upper()}")
 
     # Step 3: Log warnings for suboptimal method choices
-    if actual_method == 'cmc' and dataset_size < 500_000:
+    if actual_method == 'cmc' and num_samples < 100:
         logger.warning(
-            f"Using CMC on small dataset ({dataset_size:,} points). "
-            f"CMC adds overhead; consider using method='nuts' for <500k points."
+            f"Using CMC with few samples ({num_samples} samples). "
+            f"CMC adds overhead; consider method='nuts' for <100 samples if memory permits."
         )
-    elif actual_method == 'nuts' and dataset_size > 5_000_000:
+    elif actual_method == 'nuts' and num_samples > 500:
         logger.warning(
-            f"Using standard NUTS on large dataset ({dataset_size:,} points). "
-            f"Risk of OOM errors; consider using method='cmc' for >5M points."
+            f"Using NUTS with many samples ({num_samples:,} samples). "
+            f"CMC may be faster through parallelization; consider method='auto' or method='cmc'."
         )
 
     # Step 4: Execute selected method
