@@ -912,11 +912,18 @@ def _run_numpyro_sampling(model, config):
             import jax
 
             n_devices = jax.local_device_count()
-            if n_devices == 1:  # CPU mode
+            # Check actual platform - single GPU also has n_devices=1
+            platform = jax.devices()[0].platform if jax.devices() else "cpu"
+
+            if platform == "cpu" and n_devices == 1:
+                # CPU mode: use host device count for parallel chains
                 numpyro.set_host_device_count(n_chains)
                 logger.info(
                     f"Set host device count to {n_chains} for CPU parallel chains",
                 )
+            elif platform == "gpu":
+                # GPU mode: use available GPU devices
+                logger.info(f"Using GPU with {n_chains} chains on {n_devices} device(s)")
             else:
                 logger.info(f"Using {min(n_chains, n_devices)} parallel devices")
         except Exception as e:

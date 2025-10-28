@@ -165,9 +165,20 @@ def detect_hardware() -> HardwareConfig:
     logger.info("Detecting hardware configuration for CMC...")
 
     # Step 1: Detect JAX devices
+    # Use the actual active backend, not just first device in list
+    # When JAX_PLATFORMS="cpu,gpu", devices[0] may be CPU even if GPU is active
     try:
-        devices = jax.devices()
-        platform = devices[0].platform if devices else "cpu"
+        # Try new API first (JAX 0.8.0+), fall back to legacy API
+        try:
+            from jax.extend import backend as jax_backend
+            backend = jax_backend.get_backend()
+        except (ImportError, AttributeError):
+            # Legacy API for JAX < 0.8.0
+            from jax.lib import xla_bridge
+            backend = xla_bridge.get_backend()
+
+        platform = backend.platform
+        devices = backend.devices()
         num_devices = len(devices)
         logger.info(f"JAX devices detected: {num_devices} {platform} device(s)")
     except Exception as e:
