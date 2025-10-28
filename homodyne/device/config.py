@@ -313,18 +313,18 @@ def should_use_cmc(
     num_samples: int,
     hardware_config: HardwareConfig,
     dataset_size: Optional[int] = None,
-    memory_threshold_pct: float = 0.5,
-    min_samples_for_cmc: int = 100,
+    memory_threshold_pct: float = 0.4,
+    min_samples_for_cmc: int = 20,
 ) -> bool:
     """Determine if CMC should be used based on samples AND/OR dataset size.
 
     CMC serves TWO distinct purposes requiring different triggering conditions:
 
     **Use Case 1: Parallelism** (many independent samples)
-    - Trigger: num_samples >= min_samples_for_cmc (default: 100)
+    - Trigger: num_samples >= min_samples_for_cmc (default: 20)
     - Sharding: Split samples (phi angles) across shards
-    - Benefit: Parallel MCMC chains, faster convergence
-    - Example: 200 phi angles → 10 shards × 20 angles each
+    - Benefit: Parallel MCMC chains on multi-core CPU, faster convergence
+    - Example: 50 phi angles on 14-core CPU → ~3x speedup via parallelization
 
     **Use Case 2: Memory Management** (few samples, huge data)
     - Trigger: dataset_size causes estimated memory > threshold
@@ -347,10 +347,12 @@ def should_use_cmc(
     dataset_size : int, optional
         Total number of data points (for memory estimation)
         If None, only sample-based decision is used
-    memory_threshold_pct : float, default 0.5
-        Use CMC if estimated memory > this fraction of available (0.5 = 50%)
-    min_samples_for_cmc : int, default 100
+    memory_threshold_pct : float, default 0.4
+        Use CMC if estimated memory > this fraction of available (0.4 = 40%)
+        Conservative threshold to prevent OOM in production use
+    min_samples_for_cmc : int, default 20
         Minimum samples for parallelism-mode CMC
+        Optimized for multi-core CPU workloads (14+ cores)
 
     Returns
     -------
@@ -360,15 +362,15 @@ def should_use_cmc(
     Examples
     --------
     >>> hw = detect_hardware()
-    >>> # Case 1: Few samples, small data → NUTS
-    >>> should_use_cmc(23, hw, dataset_size=1_000_000)
+    >>> # Case 1: Very few samples, small data → NUTS
+    >>> should_use_cmc(10, hw, dataset_size=1_000_000)
     False
 
-    >>> # Case 2: Many samples → CMC (parallelism)
-    >>> should_use_cmc(200, hw, dataset_size=50_000_000)
+    >>> # Case 2: Moderate samples → CMC (parallelism on multi-core CPU)
+    >>> should_use_cmc(23, hw, dataset_size=50_000_000)
     True
 
-    >>> # Case 3: Few samples, HUGE data → CMC (memory)
+    >>> # Case 3: Few samples, HUGE data → CMC (memory management)
     >>> should_use_cmc(2, hw, dataset_size=200_000_000)
     True
 

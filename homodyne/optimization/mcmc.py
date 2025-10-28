@@ -384,15 +384,15 @@ def fit_mcmc_jax(
         logger.info(f"Using user-specified method: {actual_method.upper()}")
 
     # Step 3: Log warnings for suboptimal method choices
-    if actual_method == 'cmc' and num_samples < 100:
+    if actual_method == 'cmc' and num_samples < 20:
         logger.warning(
-            f"Using CMC with few samples ({num_samples} samples). "
-            f"CMC adds overhead; consider method='nuts' for <100 samples if memory permits."
+            f"Using CMC with very few samples ({num_samples} samples). "
+            f"CMC adds 10-20% overhead; consider method='nuts' for <20 samples if memory permits."
         )
-    elif actual_method == 'nuts' and num_samples > 500:
+    elif actual_method == 'nuts' and num_samples > 100:
         logger.warning(
             f"Using NUTS with many samples ({num_samples:,} samples). "
-            f"CMC may be faster through parallelization; consider method='auto' or method='cmc'."
+            f"CMC may be 2-5x faster via parallelization on multi-core CPU; consider method='auto' or method='cmc'."
         )
 
     # Step 4: Execute selected method
