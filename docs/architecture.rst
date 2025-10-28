@@ -107,21 +107,21 @@ CMC (Consensus Monte Carlo)
 
 **Triggering Conditions** (OR logic) - Optimized October 2025:
 
-1. **Parallelism**: ``num_samples >= 20`` (optimized for multi-core CPU, 14+ cores)
-2. **Memory**: ``dataset_size`` exceeds 40% of available memory (conservative OOM prevention)
+1. **Parallelism**: ``num_samples >= 15`` (optimized for multi-core CPU, 14+ cores, 1.07 samples/core minimum)
+2. **Memory**: ``dataset_size`` exceeds 30% of available memory (conservative OOM prevention with safety margin)
 
 **Example 1: Sample-based parallelism**::
 
    # 23 phi angles on 14-core CPU → CMC for parallelism
    use_cmc = should_use_cmc(num_samples=23, hw, dataset_size=50_000_000)
-   # Result: True (num_samples >= 20)
+   # Result: True (num_samples >= 15)
    # Speedup: ~1.4x via CPU parallelization
 
 **Example 2: Memory-based triggering**::
 
-   # 2 phi × 100M each = 200M total
-   # Memory: 9.6 GB = 60% of 16 GB → CMC triggered (exceeds 40%)
-   use_cmc = should_use_cmc(num_samples=2, hw, dataset_size=200_000_000)
+   # 5 phi × 10M each = 50M total
+   # Memory: 50M × 8 × 30 = 12 GB = 75% of 16 GB → CMC triggered (exceeds 30%)
+   use_cmc = should_use_cmc(num_samples=5, hw, dataset_size=50_000_000)
    # Result: True (memory threshold exceeded)
 
 **Implementation**:
@@ -179,10 +179,10 @@ Method Selection (Automatic)
 ::
 
    Dataset Analysis
-   ├─ num_samples >= 20?  # Optimized for multi-core CPU parallelism
+   ├─ num_samples >= 15?  # Optimized for multi-core CPU parallelism (1.07 samples/core)
    │  ├─ YES → CMC (parallelism mode)
    │  └─ NO → Check memory
-   │     ├─ dataset_size > 40% memory?  # Conservative OOM prevention
+   │     ├─ dataset_size > 30% memory?  # Conservative OOM prevention with safety margin
    │     │  ├─ YES → CMC (memory mode)
    │     │  └─ NO → NUTS
    │     └─ dataset_size unknown?
@@ -247,16 +247,18 @@ Changelog
 
 **Major Changes**:
 
-- ✅ **Optimized CMC thresholds** for CPU parallelism:
+- ✅ **Optimized CMC thresholds** for CPU parallelism and OOM prevention:
 
-  - Sample threshold: 100 → **20** (captures parallelism on multi-core CPU)
-  - Memory threshold: 0.50 → **0.40** (more conservative OOM prevention)
-  - Impact: 23-sample experiments on 14-core CPU now trigger CMC for ~1.4x speedup
+  - Sample threshold: 100 → **15** (optimized for multi-core CPU, 1.07 samples/core minimum)
+  - Memory threshold: 0.50 → **0.30** (conservative OOM prevention with safety margin)
+  - Memory multiplier: 6x → **30x** (empirically calibrated from real OOM failure)
+  - Impact: 23-sample experiments on 14-core CPU trigger CMC for ~1.4x speedup
+  - OOM prevention: 23M points correctly triggers CMC (34.5% > 30% threshold)
 
 - ✅ **Dual-criteria OR logic implementation**:
 
-  - Parallelism mode: Many samples (>= 20) → split samples across shards
-  - Memory mode: Large datasets (> 40% memory) → split data across shards
+  - Parallelism mode: Many samples (>= 15) → split samples across shards
+  - Memory mode: Large datasets (> 30% memory) → split data across shards
   - Automatic mode selection based on hardware and data characteristics
 
 - ✅ **Documentation updates**:
