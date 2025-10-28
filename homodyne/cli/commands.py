@@ -1108,7 +1108,14 @@ def _save_results(
         # Also save legacy format for backward compatibility if requested
         if args.output_format != "json":
             logger.info("Saving legacy results summary for backward compatibility")
-    # For MCMC or other methods, continue with legacy saving format below
+    elif args.method in ["auto", "nuts", "cmc", "mcmc"]:
+        # Use comprehensive MCMC/CMC saving (4 files: 3 JSON + 1 NPZ + plots)
+        logger.info("Using comprehensive MCMC result saving")
+        save_mcmc_results(result, data, config, args.output_dir)
+        # Also save legacy format for backward compatibility if requested
+        if args.output_format != "json":
+            logger.info("Saving legacy results summary for backward compatibility")
+    # For other methods, continue with legacy saving format below
 
     # Create results summary
     results_summary = {
@@ -3000,6 +3007,677 @@ def generate_nlsq_plots(
             t2,
             output_dir,
         )
+
+
+# ============================================================================
+# MCMC/CMC Result Saving Functions
+# ============================================================================
+
+
+def save_mcmc_results(
+    result: Any,
+    data: dict[str, Any],
+    config: Any,
+    output_dir: Path,
+) -> None:
+    """Save MCMC/CMC results with comprehensive diagnostics.
+
+    Creates method-specific directory (mcmc/ or cmc/) and saves:
+    1. parameters.json: Posterior mean ± std for each parameter
+    2. analysis_results_mcmc.json: Sampling summary and diagnostics
+    3. samples.npz: Full posterior samples, r_hat, ess
+    4. diagnostics.json: Convergence metrics
+    5. fitted_data.npz: Experimental + theoretical data (optional)
+    6. c2_heatmaps_phi_*.png: Comparison plots using posterior mean
+    7. trace_plots.png: MCMC diagnostic plots (future)
+
+    Parameters
+    ----------
+    result : MCMCResult
+        MCMC/CMC optimization result with posterior samples and diagnostics
+    data : dict
+        Experimental data dictionary containing c2_exp, phi_angles_list, t1, t2, q
+    config : ConfigManager
+        Configuration manager with analysis settings
+    output_dir : Path
+        Base output directory (method-specific subdirectory will be created)
+
+    Notes
+    -----
+    This function follows the same structure as save_nlsq_results() for consistency.
+    It reuses plotting functions from NLSQ for heatmap generation.
+
+    Examples
+    --------
+    >>> from pathlib import Path
+    >>> result = fit_mcmc_jax(data, ...)
+    >>> save_mcmc_results(result, data, config, Path("homodyne_results"))
+    # Creates: homodyne_results/mcmc/parameters.json, samples.npz, etc.
+    """
+    import json
+
+    import numpy as np
+
+    # Determine method name (mcmc or cmc)
+    method_name = (
+        "cmc"
+        if (hasattr(result, "is_cmc_result") and result.is_cmc_result())
+        else "mcmc"
+    )
+
+    # Create method-specific directory
+    method_dir = output_dir / method_name
+    method_dir.mkdir(parents=True, exist_ok=True)
+
+    logger.info(f"Saving {method_name.upper()} results to: {method_dir}")
+
+    # Step 1: Save parameters.json with posterior statistics
+    try:
+        param_dict = _create_mcmc_parameters_dict(result)
+        param_file = method_dir / "parameters.json"
+        with open(param_file, "w") as f:
+            json.dump(param_dict, f, indent=2)
+        logger.debug(f"Saved parameters to {param_file}")
+    except Exception as e:
+        logger.warning(f"Failed to save parameters.json: {e}")
+        logger.debug("Parameter saving error:", exc_info=True)
+
+    # Step 2: Save samples.npz with full posterior
+    try:
+        samples_file = method_dir / "samples.npz"
+        save_dict = {}
+
+        # Combine samples from separate attributes (samples_params, samples_contrast, samples_offset)
+        if hasattr(result, "samples_params") and result.samples_params is not None:
+            samples_list = [result.samples_params]
+
+            if hasattr(result, "samples_contrast") and result.samples_contrast is not None:
+                # Reshape to (n_samples, 1) if needed
+                contrast_samples = result.samples_contrast
+                if contrast_samples.ndim == 1:
+                    contrast_samples = contrast_samples[:, np.newaxis]
+                samples_list.insert(0, contrast_samples)
+
+            if hasattr(result, "samples_offset") and result.samples_offset is not None:
+                # Reshape to (n_samples, 1) if needed
+                offset_samples = result.samples_offset
+                if offset_samples.ndim == 1:
+                    offset_samples = offset_samples[:, np.newaxis]
+                samples_list.insert(1 if hasattr(result, "samples_contrast") else 0, offset_samples)
+
+            # Concatenate all samples
+            save_dict["samples"] = np.concatenate(samples_list, axis=1)
+
+        # Add optional diagnostics if available
+        if hasattr(result, "log_prob") and result.log_prob is not None:
+            save_dict["log_prob"] = result.log_prob
+        if hasattr(result, "r_hat") and result.r_hat is not None:
+            # Convert dict to array if needed
+            if isinstance(result.r_hat, dict):
+                save_dict["r_hat"] = np.array(list(result.r_hat.values()))
+            else:
+                save_dict["r_hat"] = result.r_hat
+        if hasattr(result, "effective_sample_size") and result.effective_sample_size is not None:
+            # Convert dict to array if needed
+            if isinstance(result.effective_sample_size, dict):
+                save_dict["ess"] = np.array(list(result.effective_sample_size.values()))
+            else:
+                save_dict["ess"] = result.effective_sample_size
+        if hasattr(result, "acceptance_rate") and result.acceptance_rate is not None:
+            save_dict["acceptance_rate"] = np.array([result.acceptance_rate])
+
+        if save_dict:  # Only save if we have data
+            np.savez_compressed(samples_file, **save_dict)
+            logger.debug(f"Saved posterior samples to {samples_file}")
+    except Exception as e:
+        logger.warning(f"Failed to save samples.npz: {e}")
+        logger.debug("Samples saving error:", exc_info=True)
+
+    # Step 3: Save analysis_results_mcmc.json
+    try:
+        analysis_dict = _create_mcmc_analysis_dict(result, data, method_name)
+        analysis_file = method_dir / f"analysis_results_{method_name}.json"
+        with open(analysis_file, "w") as f:
+            json.dump(analysis_dict, f, indent=2)
+        logger.debug(f"Saved analysis results to {analysis_file}")
+    except Exception as e:
+        logger.warning(f"Failed to save analysis_results_{method_name}.json: {e}")
+        logger.debug("Analysis results saving error:", exc_info=True)
+
+    # Step 4: Save diagnostics.json
+    try:
+        diagnostics_dict = _create_mcmc_diagnostics_dict(result)
+        diagnostics_file = method_dir / "diagnostics.json"
+        with open(diagnostics_file, "w") as f:
+            json.dump(diagnostics_dict, f, indent=2)
+        logger.debug(f"Saved diagnostics to {diagnostics_file}")
+    except Exception as e:
+        logger.warning(f"Failed to save diagnostics.json: {e}")
+        logger.debug("Diagnostics saving error:", exc_info=True)
+
+    # Step 4b: Save shard_diagnostics.json for CMC results
+    if method_name == "cmc" and hasattr(result, "per_shard_diagnostics") and result.per_shard_diagnostics:
+        try:
+            shard_diag_file = method_dir / "shard_diagnostics.json"
+            with open(shard_diag_file, "w") as f:
+                json.dump(result.per_shard_diagnostics, f, indent=2, default=str)
+            logger.debug(f"Saved per-shard diagnostics to {shard_diag_file}")
+        except Exception as e:
+            logger.warning(f"Failed to save shard_diagnostics.json: {e}")
+            logger.debug("Shard diagnostics saving error:", exc_info=True)
+
+    # Step 5: Generate heatmap plots (reuse NLSQ plotting)
+    try:
+        logger.info("Generating comparison heatmap plots")
+
+        # Compute theoretical C2 using posterior mean parameters
+        c2_theoretical_scaled = _compute_theoretical_c2_from_mcmc(result, data, config)
+
+        # Calculate residuals
+        c2_exp = data["c2_exp"]
+        residuals = c2_exp - c2_theoretical_scaled
+
+        # Convert time arrays
+        t1 = np.asarray(data["t1"])
+        t2 = np.asarray(data["t2"])
+        if t1.ndim == 2:
+            t1 = t1[:, 0]
+        if t2.ndim == 2:
+            t2 = t2[0, :]
+
+        # Generate plots using NLSQ plotting function
+        generate_nlsq_plots(
+            phi_angles=data["phi_angles_list"],
+            c2_exp=c2_exp,
+            c2_theoretical_scaled=c2_theoretical_scaled,
+            residuals=residuals,
+            t1=t1,
+            t2=t2,
+            output_dir=method_dir,
+            config=config,
+        )
+        logger.info(f"  - {len(data['phi_angles_list'])} PNG heatmap plots")
+    except Exception as e:
+        logger.warning(f"Heatmap plot generation failed (data files still saved): {e}")
+        logger.debug("Plot error details:", exc_info=True)
+
+    logger.info(f"✓ {method_name.upper()} results saved successfully to {method_dir}")
+    if method_name == "cmc" and hasattr(result, "per_shard_diagnostics") and result.per_shard_diagnostics:
+        logger.info("  - 4 JSON files (parameters, analysis results, diagnostics, shard diagnostics)")
+    else:
+        logger.info("  - 3 JSON files (parameters, analysis results, diagnostics)")
+    logger.info("  - 1 NPZ file (posterior samples)")
+
+
+def _create_mcmc_parameters_dict(result: Any) -> dict:
+    """Create parameters dictionary with posterior statistics.
+
+    Parameters
+    ----------
+    result : MCMCResult
+        MCMC result with posterior samples and statistics
+
+    Returns
+    -------
+    dict
+        Structured parameter dictionary with posterior mean ± std
+    """
+    import numpy as np
+    from datetime import datetime
+
+    param_dict = {
+        "timestamp": datetime.now().isoformat(),
+        "analysis_mode": getattr(result, "analysis_mode", "unknown"),
+        "method": "cmc" if (hasattr(result, "is_cmc_result") and result.is_cmc_result()) else "mcmc",
+        "sampling_summary": {
+            "n_samples": getattr(result, "n_samples", 0),
+            "n_warmup": getattr(result, "n_warmup", 0),
+            "n_chains": getattr(result, "n_chains", 1),
+            "total_samples": getattr(result, "n_samples", 0) * getattr(result, "n_chains", 1),
+            "computation_time": getattr(result, "computation_time", 0.0),
+        },
+        "convergence": {},
+        "parameters": {},
+    }
+
+    # Add convergence diagnostics if available
+    if hasattr(result, "r_hat") and result.r_hat is not None:
+        # r_hat can be either dict or array
+        if isinstance(result.r_hat, dict):
+            # Filter out None values
+            r_hat_values = [v for v in result.r_hat.values() if v is not None]
+            if r_hat_values:
+                param_dict["convergence"]["all_chains_converged"] = bool(all(v < 1.1 for v in r_hat_values))
+                param_dict["convergence"]["min_r_hat"] = float(min(r_hat_values))
+                param_dict["convergence"]["max_r_hat"] = float(max(r_hat_values))
+        else:
+            r_hat = np.asarray(result.r_hat)
+            param_dict["convergence"]["all_chains_converged"] = bool(np.all(r_hat < 1.1))
+            param_dict["convergence"]["min_r_hat"] = float(np.min(r_hat))
+            param_dict["convergence"]["max_r_hat"] = float(np.max(r_hat))
+
+    if hasattr(result, "effective_sample_size") and result.effective_sample_size is not None:
+        # ESS can be either dict or array (attribute name is effective_sample_size, not ess)
+        if isinstance(result.effective_sample_size, dict):
+            # Filter out None values
+            ess_values = [v for v in result.effective_sample_size.values() if v is not None]
+            if ess_values:
+                param_dict["convergence"]["min_ess"] = float(min(ess_values))
+        else:
+            ess = np.asarray(result.effective_sample_size)
+            param_dict["convergence"]["min_ess"] = float(np.min(ess))
+
+    if hasattr(result, "acceptance_rate") and result.acceptance_rate is not None:
+        param_dict["convergence"]["acceptance_rate"] = float(result.acceptance_rate)
+
+    # Add scaling parameters (contrast, offset)
+    if hasattr(result, "mean_contrast"):
+        param_dict["parameters"]["contrast"] = {
+            "mean": float(result.mean_contrast),
+            "std": float(getattr(result, "std_contrast", 0.0)),
+        }
+
+    if hasattr(result, "mean_offset"):
+        param_dict["parameters"]["offset"] = {
+            "mean": float(result.mean_offset),
+            "std": float(getattr(result, "std_offset", 0.0)),
+        }
+
+    # Add physical parameters
+    if hasattr(result, "mean_params") and result.mean_params is not None:
+        analysis_mode = getattr(result, "analysis_mode", "static_isotropic")
+        param_names = _get_parameter_names(analysis_mode)
+
+        mean_params = np.asarray(result.mean_params)
+        std_params = np.asarray(getattr(result, "std_params", np.zeros_like(mean_params)))
+
+        for i, name in enumerate(param_names):
+            if i < len(mean_params):
+                param_dict["parameters"][name] = {
+                    "mean": float(mean_params[i]),
+                    "std": float(std_params[i]) if i < len(std_params) else 0.0,
+                }
+
+    return param_dict
+
+
+def _create_mcmc_analysis_dict(
+    result: Any,
+    data: dict[str, Any],
+    method_name: str,
+) -> dict:
+    """Create analysis results dictionary for MCMC/CMC.
+
+    Parameters
+    ----------
+    result : MCMCResult
+        MCMC result with diagnostics
+    data : dict
+        Experimental data dictionary
+    method_name : str
+        "mcmc" or "cmc"
+
+    Returns
+    -------
+    dict
+        Analysis summary dictionary
+    """
+    import numpy as np
+    from datetime import datetime
+
+    # Get dataset dimensions
+    c2_exp = data.get("c2_exp", [])
+    n_angles = len(data.get("phi_angles_list", []))
+    n_time_points = c2_exp.shape[1] * c2_exp.shape[2] if hasattr(c2_exp, "shape") and len(c2_exp.shape) >= 3 else 0
+    total_data_points = c2_exp.size if hasattr(c2_exp, "size") else 0
+
+    # Determine sampling quality
+    quality_flag = "unknown"
+    warnings = []
+    recommendations = []
+
+    if hasattr(result, "r_hat") and result.r_hat is not None:
+        # r_hat can be either dict or array
+        if isinstance(result.r_hat, dict):
+            # Filter out None values
+            r_hat_values = [v for v in result.r_hat.values() if v is not None]
+            max_r_hat = max(r_hat_values) if r_hat_values else None
+        else:
+            r_hat = np.asarray(result.r_hat)
+            max_r_hat = np.max(r_hat)
+
+        if max_r_hat is not None:
+            if max_r_hat < 1.05:
+                quality_flag = "good"
+            elif max_r_hat < 1.1:
+                quality_flag = "acceptable"
+                warnings.append(f"Some parameters have R-hat between 1.05-1.1 (max={max_r_hat:.3f})")
+            else:
+                quality_flag = "poor"
+                warnings.append(f"Convergence issues detected (max R-hat={max_r_hat:.3f})")
+                recommendations.append("Consider increasing n_warmup or n_samples")
+
+    if hasattr(result, "effective_sample_size") and result.effective_sample_size is not None:
+        # ESS can be either dict or array
+        if isinstance(result.effective_sample_size, dict):
+            # Filter out None values
+            ess_values = [v for v in result.effective_sample_size.values() if v is not None]
+            min_ess = min(ess_values) if ess_values else None
+        else:
+            ess = np.asarray(result.effective_sample_size)
+            min_ess = np.min(ess)
+
+        if min_ess is not None and min_ess < 400:
+            warnings.append(f"Low effective sample size (min ESS={min_ess:.0f})")
+            recommendations.append("Consider increasing n_samples for better posterior estimates")
+
+    analysis_dict = {
+        "method": method_name,
+        "timestamp": datetime.now().isoformat(),
+        "analysis_mode": getattr(result, "analysis_mode", "unknown"),
+        "sampling_quality": {
+            "convergence_status": "converged" if quality_flag in ["good", "acceptable"] else "not_converged",
+            "quality_flag": quality_flag,
+            "warnings": warnings,
+            "recommendations": recommendations,
+        },
+        "dataset_info": {
+            "n_angles": n_angles,
+            "n_time_points": n_time_points,
+            "total_data_points": total_data_points,
+            "q_value": float(data.get("wavevector_q_list", [0.0])[0]) if data.get("wavevector_q_list") is not None else 0.0,
+        },
+        "sampling_summary": {
+            "n_samples": getattr(result, "n_samples", 0),
+            "n_warmup": getattr(result, "n_warmup", 0),
+            "n_chains": getattr(result, "n_chains", 1),
+            "execution_time": float(getattr(result, "computation_time", 0.0)),
+        },
+    }
+
+    return analysis_dict
+
+
+def _create_mcmc_diagnostics_dict(result: Any) -> dict:
+    """Create diagnostics dictionary for MCMC/CMC.
+
+    Parameters
+    ----------
+    result : MCMCResult
+        MCMC result with convergence diagnostics
+
+    Returns
+    -------
+    dict
+        Diagnostics dictionary with convergence metrics
+    """
+    import numpy as np
+
+    diagnostics_dict = {
+        "convergence": {},
+        "sampling_efficiency": {},
+        "posterior_checks": {},
+    }
+
+    # Convergence diagnostics
+    if hasattr(result, "r_hat") and result.r_hat is not None:
+        # r_hat can be either dict or array
+        if isinstance(result.r_hat, dict):
+            # Filter out None values
+            r_hat_values = [v for v in result.r_hat.values() if v is not None]
+            if r_hat_values:
+                diagnostics_dict["convergence"]["all_chains_converged"] = bool(all(v < 1.1 for v in r_hat_values))
+                diagnostics_dict["convergence"]["r_hat_threshold"] = 1.1
+
+            # Add per-parameter diagnostics using dict keys (only for non-None values)
+            per_param = []
+            for param_name, r_hat_val in result.r_hat.items():
+                # Skip None values
+                if r_hat_val is None:
+                    continue
+
+                ess_val = None
+                if hasattr(result, "effective_sample_size") and isinstance(result.effective_sample_size, dict):
+                    ess_val = result.effective_sample_size.get(param_name, None)
+
+                per_param.append({
+                    "name": param_name,
+                    "r_hat": float(r_hat_val),
+                    "ess": float(ess_val) if ess_val is not None else 0.0,
+                    "converged": bool(r_hat_val < 1.1),
+                })
+            if per_param:
+                diagnostics_dict["convergence"]["per_parameter_diagnostics"] = per_param
+        else:
+            r_hat = np.asarray(result.r_hat)
+            diagnostics_dict["convergence"]["all_chains_converged"] = bool(np.all(r_hat < 1.1))
+            diagnostics_dict["convergence"]["r_hat_threshold"] = 1.1
+
+            # Get parameter names if available
+            analysis_mode = getattr(result, "analysis_mode", "static_isotropic")
+            param_names = _get_parameter_names(analysis_mode)
+
+            # Add per-parameter diagnostics
+            per_param = []
+            ess_array = np.asarray(result.effective_sample_size) if (
+                hasattr(result, "effective_sample_size") and
+                result.effective_sample_size is not None and
+                not isinstance(result.effective_sample_size, dict)
+            ) else None
+
+            for i, name in enumerate(param_names):
+                if i < len(r_hat):
+                    ess_val = ess_array[i] if (ess_array is not None and i < len(ess_array)) else 0.0
+                    per_param.append({
+                        "name": name,
+                        "r_hat": float(r_hat[i]),
+                        "ess": float(ess_val),
+                        "converged": bool(r_hat[i] < 1.1),
+                    })
+
+            diagnostics_dict["convergence"]["per_parameter_diagnostics"] = per_param
+
+    if hasattr(result, "effective_sample_size") and result.effective_sample_size is not None:
+        diagnostics_dict["convergence"]["ess_threshold"] = 400
+
+    # Sampling efficiency
+    if hasattr(result, "acceptance_rate") and result.acceptance_rate is not None:
+        diagnostics_dict["sampling_efficiency"]["acceptance_rate"] = float(result.acceptance_rate)
+        diagnostics_dict["sampling_efficiency"]["target_acceptance"] = 0.80
+
+    if hasattr(result, "divergences"):
+        diagnostics_dict["sampling_efficiency"]["divergences"] = int(result.divergences)
+
+    if hasattr(result, "tree_depth_warnings"):
+        diagnostics_dict["sampling_efficiency"]["tree_depth_warnings"] = int(result.tree_depth_warnings)
+
+    # Posterior checks
+    if hasattr(result, "ess") and hasattr(result, "n_samples"):
+        ess = np.asarray(result.ess)
+        total_samples = result.n_samples * getattr(result, "n_chains", 1)
+        if total_samples > 0:
+            ess_ratio = float(np.mean(ess) / total_samples)
+            diagnostics_dict["posterior_checks"]["effective_sample_size_ratio"] = ess_ratio
+
+    # CMC-specific diagnostics
+    if hasattr(result, "is_cmc_result") and result.is_cmc_result():
+        diagnostics_dict["cmc_specific"] = {}
+
+        # Per-shard diagnostics summary
+        if hasattr(result, "per_shard_diagnostics") and result.per_shard_diagnostics:
+            per_shard = result.per_shard_diagnostics
+
+            # Extract acceptance rates
+            acceptance_rates = []
+            converged_shards = 0
+
+            for shard in per_shard:
+                if isinstance(shard, dict):
+                    if shard.get("acceptance_rate") is not None:
+                        acceptance_rates.append(float(shard["acceptance_rate"]))
+                    if shard.get("converged", False):
+                        converged_shards += 1
+
+            shard_summary = {
+                "num_shards": len(per_shard),
+                "shards_converged": converged_shards,
+                "convergence_rate": float(converged_shards / len(per_shard)) if len(per_shard) > 0 else 0.0,
+            }
+
+            # Add acceptance rate statistics if available
+            if acceptance_rates:
+                shard_summary["acceptance_rate_stats"] = {
+                    "mean": float(np.mean(acceptance_rates)),
+                    "min": float(np.min(acceptance_rates)),
+                    "max": float(np.max(acceptance_rates)),
+                    "std": float(np.std(acceptance_rates)),
+                }
+
+            diagnostics_dict["cmc_specific"]["shard_summary"] = shard_summary
+
+        # Overall CMC diagnostics
+        if hasattr(result, "cmc_diagnostics") and result.cmc_diagnostics:
+            cmc_diag = result.cmc_diagnostics
+
+            # Extract key metrics safely
+            overall_metrics = {}
+
+            if isinstance(cmc_diag, dict):
+                if "combination_success" in cmc_diag:
+                    overall_metrics["combination_success"] = bool(cmc_diag["combination_success"])
+                if "n_shards_converged" in cmc_diag:
+                    overall_metrics["n_shards_converged"] = int(cmc_diag["n_shards_converged"])
+                if "n_shards_total" in cmc_diag:
+                    overall_metrics["n_shards_total"] = int(cmc_diag["n_shards_total"])
+                if "weighted_product_std" in cmc_diag:
+                    overall_metrics["weighted_product_std"] = float(cmc_diag["weighted_product_std"])
+                if "combination_time" in cmc_diag:
+                    overall_metrics["combination_time"] = float(cmc_diag["combination_time"])
+                if "success_rate" in cmc_diag:
+                    overall_metrics["success_rate"] = float(cmc_diag["success_rate"])
+
+                # Include full diagnostics if available
+                diagnostics_dict["cmc_specific"]["overall_diagnostics"] = overall_metrics
+
+        # Combination method
+        if hasattr(result, "combination_method") and result.combination_method:
+            diagnostics_dict["cmc_specific"]["combination_method"] = str(result.combination_method)
+
+        # Number of shards
+        if hasattr(result, "num_shards") and result.num_shards:
+            diagnostics_dict["cmc_specific"]["num_shards"] = int(result.num_shards)
+
+    return diagnostics_dict
+
+
+def _get_parameter_names(analysis_mode: str) -> list[str]:
+    """Get parameter names for given analysis mode.
+
+    Parameters
+    ----------
+    analysis_mode : str
+        Analysis mode ("static_isotropic" or "laminar_flow")
+
+    Returns
+    -------
+    list[str]
+        List of parameter names
+
+    Raises
+    ------
+    ValueError
+        If analysis mode is unknown
+    """
+    if analysis_mode == "static_isotropic":
+        return ["D0", "alpha", "D_offset"]
+    elif analysis_mode == "laminar_flow":
+        return ["D0", "alpha", "D_offset", "gamma_dot_t0", "beta", "gamma_dot_t_offset", "phi0"]
+    else:
+        logger.warning(f"Unknown analysis mode: {analysis_mode}, assuming static_isotropic")
+        return ["D0", "alpha", "D_offset"]
+
+
+def _compute_theoretical_c2_from_mcmc(
+    result: Any,
+    data: dict[str, Any],
+    config: Any,
+) -> np.ndarray:
+    """Compute theoretical C2 using MCMC posterior mean parameters.
+
+    Parameters
+    ----------
+    result : MCMCResult
+        MCMC result with posterior mean parameters
+    data : dict
+        Experimental data dictionary
+    config : ConfigManager
+        Configuration manager
+
+    Returns
+    -------
+    np.ndarray
+        Theoretical C2 with shape (n_angles, n_t1, n_t2)
+    """
+    import jax.numpy as jnp
+    import numpy as np
+
+    from homodyne.core.jax_backend import compute_g2_scaled
+
+    # Extract parameters from MCMC result
+    contrast = getattr(result, "mean_contrast", 0.5)
+    offset = getattr(result, "mean_offset", 1.0)
+    mean_params = np.asarray(result.mean_params)
+
+    # Get data arrays
+    phi_angles = np.asarray(data["phi_angles_list"])
+    t1 = np.asarray(data["t1"])
+    t2 = np.asarray(data["t2"])
+    q_val = data.get("wavevector_q_list", [1.0])[0]
+
+    # Convert to 1D if needed
+    if t1.ndim == 2:
+        t1 = t1[:, 0]
+    if t2.ndim == 2:
+        t2 = t2[0, :]
+
+    # Get analysis mode
+    config_dict = config.get_config() if hasattr(config, "get_config") else config
+    analysis_mode = config_dict.get("analysis_mode", "static_isotropic")
+
+    # Get L parameter (stator-rotor gap)
+    L = config_dict.get("model_params", {}).get("L", 2000000.0)
+
+    # Get dt parameter (required for correct physics)
+    dt = config_dict.get("acquisition", {}).get("dt", 1e-8)
+
+    # Compute theoretical C2 for all angles
+    c2_theoretical_list = []
+
+    for phi in phi_angles:
+        # Convert parameters to JAX arrays
+        params_jax = jnp.array(mean_params)
+
+        # Compute G2 for this angle
+        c2_theoretical = compute_g2_scaled(
+            params=params_jax,
+            t1=jnp.array(t1),
+            t2=jnp.array(t2),
+            phi=jnp.array([phi]),  # Single angle as array
+            q=q_val,
+            L=L,
+            contrast=contrast,
+            offset=offset,
+            dt=dt,
+        )
+
+        # Extract result for this single angle
+        c2_theoretical_np = np.array(c2_theoretical[0])  # First angle
+        c2_theoretical_list.append(c2_theoretical_np)
+
+    # Stack all angles
+    c2_theoretical_scaled = np.array(c2_theoretical_list)
+
+    return c2_theoretical_scaled
 
 
 def _worker_init_cpu_only():
