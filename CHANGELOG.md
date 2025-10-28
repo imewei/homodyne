@@ -11,6 +11,26 @@ ______________________________________________________________________
 
 ### Added
 
+#### **Architecture Documentation**
+
+- ✅ **Comprehensive Architecture Documentation** - New architecture documentation section in Sphinx
+  - `docs/architecture.rst` - Central architecture documentation hub
+  - `docs/architecture/README.md` - Navigation and overview
+  - `docs/architecture/cmc-dual-mode-strategy.md` - CMC design (3,500+ words)
+  - `docs/architecture/cmc-decision-quick-reference.md` - Quick CMC reference
+  - `docs/architecture/nuts-chain-parallelization.md` - NUTS chains (4,000+ words)
+  - `docs/architecture/nuts-chain-parallelization-quick-reference.md` - Quick NUTS reference
+- ✅ **Integrated into Sphinx** - New "Architecture" section in documentation
+- ✅ **Cross-References Added** - Updated CMC and MCMC advanced topics to link to architecture docs
+- ✅ **Built HTML Documentation** - All architecture pages successfully built and accessible
+
+**Topics Covered**:
+- CMC dual-criteria decision logic (parallelism OR memory)
+- NUTS chain parallelization (CPU parallel, GPU sequential, multi-GPU parallel)
+- Platform-specific execution modes and performance characteristics
+- Convergence diagnostics (R-hat, ESS, divergences)
+- Configuration presets and troubleshooting guides
+
 #### **NLSQ Result Saving**
 
 - ✅ **Comprehensive NLSQ Result Saving** - New `save_nlsq_results()` function saves 4

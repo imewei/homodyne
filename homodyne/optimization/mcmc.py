@@ -336,8 +336,16 @@ def fit_mcmc_jax(
     # Get total dataset size (handles both 1D and multi-dimensional arrays)
     dataset_size = data.size if hasattr(data, 'size') else len(data)
 
+    # Get number of independent samples for CMC decision
+    # For multi-dimensional XPCS data (n_phi, n_t1, n_t2), each phi angle is one sample
+    # For 1D data, num_samples equals dataset_size
+    if hasattr(data, 'shape') and hasattr(data, 'ndim'):
+        num_samples = data.shape[0] if data.ndim > 1 else dataset_size
+    else:
+        num_samples = dataset_size
+
     logger.info("Starting MCMC+JAX sampling")
-    logger.info(f"Dataset size: {dataset_size:,} points")
+    logger.info(f"Dataset size: {dataset_size:,} data points ({num_samples} independent samples)")
     logger.info(f"Analysis mode: {analysis_mode}")
 
     # Step 1: Detect hardware configuration
@@ -353,19 +361,23 @@ def fit_mcmc_jax(
     # Step 2: Determine actual method to use
     if method == 'auto':
         if hardware_config is not None:
-            use_cmc = should_use_cmc(dataset_size, hardware_config)
+            # CMC decision based on TWO criteria (OR logic):
+            # 1. Parallelism: num_samples >= threshold (e.g., 100)
+            # 2. Memory: dataset_size causes estimated memory > threshold
+            use_cmc = should_use_cmc(num_samples, hardware_config, dataset_size=dataset_size)
             actual_method = 'cmc' if use_cmc else 'nuts'
             logger.info(
                 f"Automatic method selection: {actual_method.upper()} "
-                f"(dataset_size={dataset_size:,}, platform={hardware_config.platform})"
+                f"(num_samples={num_samples:,}, dataset_size={dataset_size:,}, "
+                f"platform={hardware_config.platform})"
             )
         else:
-            # Fallback: Simple threshold-based selection
-            use_cmc = dataset_size > 1_000_000
+            # Fallback: Simple threshold-based selection using num_samples
+            use_cmc = num_samples > 500
             actual_method = 'cmc' if use_cmc else 'nuts'
             logger.info(
                 f"Automatic method selection (fallback): {actual_method.upper()} "
-                f"(dataset_size={dataset_size:,})"
+                f"(num_samples={num_samples:,})"
             )
     else:
         actual_method = method

@@ -111,7 +111,8 @@ def select_backend(
         Detected hardware configuration from detect_hardware()
     user_override : str, optional
         Force specific backend by name (e.g., 'pjit', 'multiprocessing', 'pbs')
-        Overrides automatic selection
+        Use 'auto' or None for automatic hardware-based selection (default)
+        Overrides automatic selection when set to specific backend name
 
     Returns
     -------
@@ -146,11 +147,15 @@ def select_backend(
     - Selection can be overridden for testing and debugging
     """
     # Handle user override
-    if user_override:
+    if user_override and user_override.lower() != 'auto':
         logger.info(f"User override: forcing '{user_override}' backend")
         backend = get_backend_by_name(user_override)
         _validate_backend_compatibility(backend, hardware_config)
         return backend
+
+    # Log when 'auto' is explicitly requested
+    if user_override and user_override.lower() == 'auto':
+        logger.info("Backend set to 'auto', using automatic hardware-based selection")
 
     # Auto-selection based on hardware
     logger.info("Auto-selecting CMC backend based on hardware configuration...")

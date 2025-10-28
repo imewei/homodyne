@@ -310,41 +310,47 @@ def detect_hardware() -> HardwareConfig:
 
 
 def should_use_cmc(
-    dataset_size: int,
+    num_samples: int,
     hardware_config: HardwareConfig,
-    memory_threshold_pct: float = 0.8,
-    min_points_for_cmc: int = 500_000,
+    dataset_size: Optional[int] = None,
+    memory_threshold_pct: float = 0.5,
+    min_samples_for_cmc: int = 100,
 ) -> bool:
-    """Determine if CMC should be used for a given dataset.
+    """Determine if CMC should be used based on samples AND/OR dataset size.
 
-    This function implements hardware-adaptive decision logic to determine
-    when Consensus Monte Carlo is beneficial compared to standard NUTS MCMC.
+    CMC serves TWO distinct purposes requiring different triggering conditions:
 
-    Decision Logic
-    --------------
-    1. **Minimum Threshold**: Never use CMC below min_points_for_cmc
-       - Default: 500k points (CMC overhead not worth it for smaller datasets)
+    **Use Case 1: Parallelism** (many independent samples)
+    - Trigger: num_samples >= min_samples_for_cmc (default: 100)
+    - Sharding: Split samples (phi angles) across shards
+    - Benefit: Parallel MCMC chains, faster convergence
+    - Example: 200 phi angles → 10 shards × 20 angles each
 
-    2. **Memory-Based Threshold**: Use CMC if estimated memory exceeds
-       threshold percentage of available memory
-       - Estimate: dataset_size * 8 bytes/float64 * 3 arrays * 2x MCMC overhead
-       - Default threshold: 80% of available memory
+    **Use Case 2: Memory Management** (few samples, huge data)
+    - Trigger: dataset_size causes estimated memory > threshold
+    - Sharding: Keep all samples in each shard, split data points
+    - Benefit: Avoid OOM errors, enable large dataset analysis
+    - Example: 2 phi × 100M points → 4 shards × 2 phi × 25M points each
 
-    3. **Hardware-Specific Fallback Thresholds**:
-       - GPU 16GB: 1M points
-       - GPU 80GB: 10M points
-       - CPU: 20M points
+    Decision Logic (OR condition)
+    ------------------------------
+    Use CMC if:
+    1. num_samples >= min_samples_for_cmc (parallelism mode), OR
+    2. estimated_memory_gb > threshold × available_memory (memory mode)
 
     Parameters
     ----------
-    dataset_size : int
-        Number of data points in the dataset
+    num_samples : int
+        Number of independent samples (e.g., phi angles in XPCS)
     hardware_config : HardwareConfig
-        Detected hardware configuration from detect_hardware()
-    memory_threshold_pct : float, default 0.8
-        Memory usage threshold as percentage (0.8 = 80%)
-    min_points_for_cmc : int, default 500_000
-        Minimum dataset size to consider CMC
+        Detected hardware configuration
+    dataset_size : int, optional
+        Total number of data points (for memory estimation)
+        If None, only sample-based decision is used
+    memory_threshold_pct : float, default 0.5
+        Use CMC if estimated memory > this fraction of available (0.5 = 50%)
+    min_samples_for_cmc : int, default 100
+        Minimum samples for parallelism-mode CMC
 
     Returns
     -------
@@ -354,79 +360,60 @@ def should_use_cmc(
     Examples
     --------
     >>> hw = detect_hardware()
-    >>> should_use_cmc(100_000, hw)
-    False  # Below minimum threshold
-    >>> should_use_cmc(5_000_000, hw)
-    True   # Exceeds memory or hardware threshold
+    >>> # Case 1: Few samples, small data → NUTS
+    >>> should_use_cmc(23, hw, dataset_size=1_000_000)
+    False
+
+    >>> # Case 2: Many samples → CMC (parallelism)
+    >>> should_use_cmc(200, hw, dataset_size=50_000_000)
+    True
+
+    >>> # Case 3: Few samples, HUGE data → CMC (memory)
+    >>> should_use_cmc(2, hw, dataset_size=200_000_000)
+    True
 
     Notes
     -----
-    - Conservative defaults favor robustness over performance
-    - Users can override thresholds via configuration
-    - Memory estimation is approximate (actual usage varies)
-    - Fallback thresholds ensure consistent behavior across hardware
+    - For typical XPCS: 2-100 phi angles, 1M-100M+ points per angle
+    - Memory estimate: dataset_size × 8 bytes × 6 (data + gradients + MCMC state)
+    - CMC sharding strategy adapts based on which condition triggered it
     """
-    # Step 1: Check minimum threshold
-    if dataset_size < min_points_for_cmc:
-        logger.debug(
-            f"Dataset size {dataset_size:,} < min_points_for_cmc "
-            f"({min_points_for_cmc:,}). Using standard NUTS."
-        )
-        return False
+    # Step 1: Check minimum sample threshold for parallelism-based CMC
+    use_cmc_for_parallelism = num_samples >= min_samples_for_cmc
 
-    # Step 2: Estimate memory usage
-    # Assumptions:
-    # - 8 bytes per float64
-    # - 3 arrays: data, t1, t2
-    # - 2x overhead for MCMC (samples, gradients, etc.)
-    estimated_memory_gb = (dataset_size * 8 * 3 * 2) / 1e9
-
-    # Check if estimated memory exceeds threshold
-    available_memory = hardware_config.memory_per_device_gb
-    memory_fraction = estimated_memory_gb / available_memory
-
-    if memory_fraction > memory_threshold_pct:
+    if use_cmc_for_parallelism:
         logger.info(
-            f"Dataset requires ~{estimated_memory_gb:.2f} GB "
-            f"({memory_fraction:.1%} of {available_memory:.2f} GB available). "
-            f"Using CMC."
+            f"Sample count {num_samples:,} >= min_samples_for_cmc ({min_samples_for_cmc:,}). "
+            f"Using CMC for sample-level parallelization."
         )
         return True
 
-    # Step 3: Hardware-specific fallback thresholds
-    if hardware_config.platform == "gpu":
-        if hardware_config.memory_per_device_gb <= 20:
-            # 16GB GPU: Use CMC above 1M points
-            threshold = 1_000_000
-            if dataset_size > threshold:
-                logger.info(
-                    f"Dataset size {dataset_size:,} > {threshold:,} "
-                    f"(16GB GPU threshold). Using CMC."
-                )
-                return True
-        else:
-            # 80GB GPU: Use CMC above 10M points
-            threshold = 10_000_000
-            if dataset_size > threshold:
-                logger.info(
-                    f"Dataset size {dataset_size:,} > {threshold:,} "
-                    f"(80GB GPU threshold). Using CMC."
-                )
-                return True
-    else:
-        # CPU: Use CMC above 20M points
-        threshold = 20_000_000
-        if dataset_size > threshold:
+    # Step 2: Check if dataset size requires CMC for memory management
+    # Even with few samples, large datasets need CMC to avoid OOM
+    if dataset_size is not None:
+        # Estimate memory requirement for MCMC
+        # Formula: dataset_size × 8 bytes/float × 6 (data + gradients + MCMC state overhead)
+        estimated_memory_gb = (dataset_size * 8 * 6) / 1e9
+        available_memory_gb = hardware_config.memory_per_device_gb
+        memory_fraction = estimated_memory_gb / available_memory_gb
+
+        if memory_fraction > memory_threshold_pct:
             logger.info(
-                f"Dataset size {dataset_size:,} > {threshold:,} "
-                f"(CPU threshold). Using CMC."
+                f"Dataset requires ~{estimated_memory_gb:.2f} GB "
+                f"({memory_fraction:.1%} of {available_memory_gb:.2f} GB available). "
+                f"Using CMC for memory-efficient data sharding."
             )
             return True
+        else:
+            logger.debug(
+                f"Memory requirement: {estimated_memory_gb:.2f} GB "
+                f"({memory_fraction:.1%} of {available_memory_gb:.2f} GB) - within NUTS capacity"
+            )
 
     # Default: Use standard NUTS
     logger.debug(
-        f"Dataset size {dataset_size:,} within standard NUTS capacity. "
-        f"Memory fraction: {memory_fraction:.1%}"
+        f"Sample count {num_samples:,} within standard NUTS capacity. "
+        f"Using single-chain NUTS (faster for small sample counts)."
     )
     return False
 
