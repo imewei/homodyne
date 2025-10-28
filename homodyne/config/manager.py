@@ -505,14 +505,36 @@ class ConfigManager:
                 f"Initialization method must be 'svi', 'nlsq', or 'identity', got: {method}"
             )
 
-        # Validate backend
+        # Validate backend (handle both old dict schema and new string schema)
         backend = cmc_config.get("backend", {})
-        backend_name = backend.get("name", "auto")
-        valid_backends = ["auto", "pjit", "multiprocessing", "pbs", "slurm"]
-        if backend_name not in valid_backends:
-            raise ValueError(
-                f"Backend name must be one of {valid_backends}, got: {backend_name}"
-            )
+
+        # Handle new schema: backend is a string ("jax" or "numpy") for computational backend
+        # vs old schema: backend is a dict with name key for parallel execution backend
+        if isinstance(backend, str):
+            # New schema: computational backend as string
+            valid_computational_backends = ["jax", "numpy"]
+            if backend not in valid_computational_backends:
+                raise ValueError(
+                    f"Computational backend must be one of {valid_computational_backends}, got: {backend}"
+                )
+
+            # Check for new backend_config field (parallel execution)
+            backend_config = cmc_config.get("backend_config", {})
+            if backend_config:
+                backend_name = backend_config.get("name", "auto")
+                valid_parallel_backends = ["auto", "pjit", "multiprocessing", "pbs", "slurm"]
+                if backend_name not in valid_parallel_backends:
+                    raise ValueError(
+                        f"Parallel execution backend must be one of {valid_parallel_backends}, got: {backend_name}"
+                    )
+        else:
+            # Old schema: backend is dict with name for parallel execution
+            backend_name = backend.get("name", "auto")
+            valid_backends = ["auto", "pjit", "multiprocessing", "pbs", "slurm"]
+            if backend_name not in valid_backends:
+                raise ValueError(
+                    f"Backend name must be one of {valid_backends}, got: {backend_name}"
+                )
 
         # Validate combination
         combination = cmc_config.get("combination", {})
