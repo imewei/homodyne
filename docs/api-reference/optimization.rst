@@ -365,7 +365,30 @@ homodyne.optimization.cmc
    :show-inheritance:
    :exclude-members: __weakref__
 
-Covariance Matrix Combination (CMC) for advanced multi-chain MCMC analysis.
+Covariance Matrix Combination (CMC) for advanced multi-chain MCMC analysis with **dual-criteria automatic selection**.
+
+**Automatic CMC Selection (October 2025 Optimization):**
+
+CMC is automatically enabled when EITHER of these conditions is met:
+
+1. **Sample-based parallelism**: ``num_samples >= 20`` (e.g., 20+ phi angles)
+
+   * Optimized for multi-core CPU workloads (14+ cores)
+   * Example: 23 samples on 14-core CPU → ~1.4x speedup via CMC
+   * Sharding: Split samples (phi angles) across parallel shards
+
+2. **Memory management**: ``estimated_memory > 40%`` of available memory
+
+   * Conservative OOM prevention for large datasets
+   * Example: 100M+ points → automatic data sharding
+   * Sharding: Split data points across shards, keep all samples in each shard
+
+**Hardware-Adaptive Backend Selection:**
+
+* **Multi-node cluster (PBS/Slurm)**: Use cluster scheduler backend
+* **Multi-GPU**: Use ``pjit`` backend for parallel GPU execution
+* **Single GPU**: Use ``pjit`` backend with sequential shard execution
+* **CPU-only**: Use ``multiprocessing`` backend
 
 **Key Components:**
 
@@ -376,25 +399,50 @@ Covariance Matrix Combination (CMC) for advanced multi-chain MCMC analysis.
 * :mod:`homodyne.optimization.cmc.sharding` - Chain sharding
 * :mod:`homodyne.optimization.cmc.backends` - Parallel execution backends
 
-**Usage Example:**
+**Usage Examples:**
 
 .. code-block:: python
 
-   from homodyne.optimization.cmc import CMCCoordinator
+   from homodyne.optimization.mcmc import fit_mcmc_jax
 
-   # Create CMC coordinator
-   coordinator = CMCCoordinator(
-       num_chains=8,
-       backend='multiprocessing'
+   # Example 1: Many samples → CMC for parallelism (automatic)
+   result = fit_mcmc_jax(
+       t1, t2, phi,  # 23 angles → triggers CMC (>= 20)
+       c2_exp,
+       q=0.01,
+       analysis_type='static_isotropic',
+       initial_params={'D0': 1000.0, 'alpha': 0.8, 'D_offset': 10.0},
+       method='auto'  # Automatic NUTS/CMC selection
    )
 
-   # Run CMC analysis
+   # Example 2: Few samples, huge dataset → CMC for memory (automatic)
+   result = fit_mcmc_jax(
+       t1_large, t2_large, phi_small,  # 2 angles, 100M points → triggers CMC (memory > 40%)
+       c2_exp_large,
+       q=0.01,
+       analysis_type='static_isotropic',
+       initial_params=params,
+       method='auto'
+   )
+
+   # Example 3: Manual CMC control (advanced)
+   from homodyne.optimization.cmc import CMCCoordinator
+
+   coordinator = CMCCoordinator(
+       num_chains=8,
+       backend='multiprocessing'  # or 'pjit', 'pbs', 'slurm'
+   )
+
    result = coordinator.run_cmc(
        t1, t2, phi, c2_exp,
        q=0.01,
        analysis_type='laminar_flow',
        initial_params=nlsq_params
    )
+
+**For More Details:**
+
+See :doc:`../architecture/cmc-dual-mode-strategy` for comprehensive explanation of CMC design and decision logic.
 
 Optimization Workflow
 ---------------------

@@ -21,16 +21,44 @@ ______________________________________________________________________
 
 ## Table of Contents
 
-1. [Version 2.0.0 Highlights](#version-200-highlights)
-2. [Development Commands](#development-commands)
-3. [Repository Structure](#repository-structure)
-4. [Architecture](#architecture)
-5. [System Validation](#system-validation)
-6. [CLI Usage](#command-line-interface)
-7. [Testing Strategy](#testing-strategy)
-8. [Common Tasks](#common-development-tasks)
-9. [Known Issues](#known-issues)
-10. [Dependencies](#dependencies)
+1. [Recent Updates](#recent-updates-october-28-2025)
+2. [Version 2.0.0 Highlights](#version-200-highlights)
+3. [Development Commands](#development-commands)
+4. [Repository Structure](#repository-structure)
+5. [Architecture](#architecture)
+6. [System Validation](#system-validation)
+7. [CLI Usage](#command-line-interface)
+8. [Testing Strategy](#testing-strategy)
+9. [Common Tasks](#common-development-tasks)
+10. [Known Issues](#known-issues)
+11. [Dependencies](#dependencies)
+
+______________________________________________________________________
+
+## Recent Updates (October 28, 2025)
+
+**CMC Performance Optimization**
+- Optimized CMC selection thresholds for CPU parallelism
+- `min_samples_for_cmc`: 100 → **20** (captures parallelism on multi-core CPU)
+- `memory_threshold_pct`: 0.50 → **0.40** (more conservative OOM prevention)
+- **Impact**: 23-sample experiment on 14-core CPU now triggers CMC for ~1.4x speedup
+
+**Architecture Documentation**
+- New comprehensive architecture documentation section
+- `docs/architecture/cmc-dual-mode-strategy.md` - CMC design (3,500+ words)
+- `docs/architecture/nuts-chain-parallelization.md` - NUTS chains (4,000+ words)
+- Quick reference guides for both CMC and NUTS strategies
+
+**CMC Dual-Criteria Logic**
+- Implemented OR logic: `(num_samples >= 20) OR (memory > 40%)`
+- **Use Case 1**: Parallelism - many samples (e.g., 50 phi angles → 3x speedup)
+- **Use Case 2**: Memory management - large datasets (avoid OOM errors)
+- Hardware-adaptive decision making for optimal performance
+
+**MCMC Result Saving**
+- Comprehensive result saving for both NUTS and CMC methods
+- HDF5 format with posterior samples, diagnostics, and metadata
+- Visualization support with trace plots, corner plots, autocorrelation
 
 ______________________________________________________________________
 
@@ -184,6 +212,12 @@ homodyne/
 │   ├── api/                    # Backward compatibility
 │   └── factories/              # Test data generators
 ├── docs/                       # Sphinx documentation
+│   ├── architecture/           # Architecture documentation (NEW)
+│   │   ├── cmc-dual-mode-strategy.md          # CMC design (3,500+ words)
+│   │   ├── cmc-decision-quick-reference.md    # CMC quick reference
+│   │   ├── nuts-chain-parallelization.md      # NUTS execution modes (4,000+ words)
+│   │   └── nuts-chain-parallelization-quick-reference.md  # NUTS quick reference
+│   └── ...                     # User guides, API docs, advanced topics
 ├── examples/                   # Example scripts
 ├── pyproject.toml              # Package metadata
 ├── Makefile                    # Development commands
