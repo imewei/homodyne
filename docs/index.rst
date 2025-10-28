@@ -107,6 +107,12 @@ Documentation Sections
 
 .. toctree::
    :maxdepth: 2
+   :caption: Architecture
+
+   architecture
+
+.. toctree::
+   :maxdepth: 2
    :caption: Advanced Topics
 
    advanced-topics/index

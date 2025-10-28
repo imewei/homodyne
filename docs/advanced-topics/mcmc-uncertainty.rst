@@ -361,7 +361,16 @@ Low ESS (Effective Sample Size < 400)
 See Also
 --------
 
+**Architecture Documentation (Technical Details)**:
+
+- :doc:`../architecture` - Complete architecture documentation hub
+- :doc:`../architecture/nuts-chain-parallelization` - NUTS chain execution modes (4,000+ words)
+- :doc:`../architecture/nuts-chain-parallelization-quick-reference` - Quick reference for chain configuration
+
+**Related Topics**:
+
 - :doc:`nlsq-optimization` - Point estimates with NLSQ
+- :doc:`cmc-large-datasets` - CMC for large datasets
 - :doc:`../user-guide/configuration` - Configuration system
 - :doc:`../api-reference/optimization` - Optimization API
 - :doc:`../theoretical-framework/core-equations` - Theory

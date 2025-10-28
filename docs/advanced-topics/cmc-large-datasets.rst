@@ -223,7 +223,16 @@ Example comparison of per-angle vs. combined:
 See Also
 --------
 
+**Architecture Documentation (Technical Details)**:
+
+- :doc:`../architecture` - Complete architecture documentation hub
+- :doc:`../architecture/cmc-dual-mode-strategy` - CMC design and dual-criteria decision logic (3,500+ words)
+- :doc:`../architecture/cmc-decision-quick-reference` - Quick lookup for CMC triggering conditions
+
+**Related Topics**:
+
 - :doc:`nlsq-optimization` - NLSQ base method
+- :doc:`mcmc-uncertainty` - MCMC uncertainty quantification
 - :doc:`streaming-optimization` - For extremely large datasets (100M+)
 - :doc:`../user-guide/configuration` - Configuration details
 
