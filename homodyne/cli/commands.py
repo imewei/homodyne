@@ -1997,12 +1997,21 @@ def _generate_and_plot_fitted_simulations(
     simulated_data_dir.mkdir(parents=True, exist_ok=True)
 
     # Extract fitted parameters from result
-    if hasattr(result, "parameters"):
-        # NLSQ result format
-        fitted_params_dict = result.parameters
-        contrast = fitted_params_dict.get("contrast", 0.5)
-        offset = fitted_params_dict.get("offset", 1.0)
-        physical_params = fitted_params_dict.get("physical_params", [])
+    if hasattr(result, "parameters") and isinstance(result.parameters, np.ndarray):
+        # NLSQ result format - parameters is np.ndarray
+        # Order: [contrast, offset, D0, alpha, D_offset, ...]
+        # For laminar_flow: [..., gamma_dot_t0, beta, gamma_dot_t_offset, phi0]
+        params_array = result.parameters
+        if len(params_array) >= 2:
+            contrast = float(params_array[0])
+            offset = float(params_array[1])
+            # Physical parameters start at index 2
+            physical_params = params_array[2:] if len(params_array) > 2 else []
+        else:
+            logger.warning(f"Insufficient parameters in result.parameters: {len(params_array)}")
+            contrast = 0.5
+            offset = 1.0
+            physical_params = []
     elif hasattr(result, "mean_params"):
         # MCMC result format
         contrast = result.mean_contrast
