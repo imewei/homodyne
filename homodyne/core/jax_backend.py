@@ -914,11 +914,20 @@ def compute_g1_diffusion(
     """
     # Handle 1D time arrays by creating meshgrids
     if t1.ndim == 1 and t2.ndim == 1:
-        # Create 2D meshgrids from 1D arrays
-        # CRITICAL FIX: Must match caller's convention: t1_grid, t2_grid = meshgrid(t, t, 'ij')
-        t1_grid, t2_grid = jnp.meshgrid(t1, t2, indexing="ij")
-        t1 = t1_grid
-        t2 = t2_grid
+        # Check if this is flattened pooled data (from CMC) vs normal time vectors
+        # Normal time vectors: typically 100-2000 elements (need meshgrid expansion)
+        # Pooled data for SVI: 2000-5000+ elements (already element-wise matched, DON'T mesh)
+        # Using 2000 as threshold: above typical time vectors (e.g., 1001), below pooled data (e.g., 4600)
+        if len(t1) > 2000:
+            # Pooled/flattened data: arrays already element-wise matched, don't create meshgrid
+            # Creating meshgrid would cause OOM: e.g., 4600² = 21M elements, 23M² = 530 quadrillion
+            pass  # t1 and t2 are already correctly paired element-wise
+        else:
+            # Normal time vectors: create 2D meshgrids for all (t1[i], t2[j]) pairs
+            # CRITICAL: Must match caller's convention: t1_grid, t2_grid = meshgrid(t, t, 'ij')
+            t1_grid, t2_grid = jnp.meshgrid(t1, t2, indexing="ij")
+            t1 = t1_grid
+            t2 = t2_grid
 
     if dt is None:
         # FALLBACK: Estimate from time array (NOT RECOMMENDED)
@@ -969,11 +978,20 @@ def compute_g1_shear(
 
     # Handle 1D time arrays by creating meshgrids
     if t1.ndim == 1 and t2.ndim == 1:
-        # Create 2D meshgrids from 1D arrays
-        # CRITICAL FIX: Must match caller's convention: t1_grid, t2_grid = meshgrid(t, t, 'ij')
-        t1_grid, t2_grid = jnp.meshgrid(t1, t2, indexing="ij")
-        t1 = t1_grid
-        t2 = t2_grid
+        # Check if this is flattened pooled data (from CMC) vs normal time vectors
+        # Normal time vectors: typically 100-2000 elements (need meshgrid expansion)
+        # Pooled data for SVI: 2000-5000+ elements (already element-wise matched, DON'T mesh)
+        # Using 2000 as threshold: above typical time vectors (e.g., 1001), below pooled data (e.g., 4600)
+        if len(t1) > 2000:
+            # Pooled/flattened data: arrays already element-wise matched, don't create meshgrid
+            # Creating meshgrid would cause OOM: e.g., 4600² = 21M elements, 23M² = 530 quadrillion
+            pass  # t1 and t2 are already correctly paired element-wise
+        else:
+            # Normal time vectors: create 2D meshgrids for all (t1[i], t2[j]) pairs
+            # CRITICAL: Must match caller's convention: t1_grid, t2_grid = meshgrid(t, t, 'ij')
+            t1_grid, t2_grid = jnp.meshgrid(t1, t2, indexing="ij")
+            t1 = t1_grid
+            t2 = t2_grid
 
     # Compute the physics factor using configuration dt
     sinc_prefactor = 0.5 / PI * q * L * dt
@@ -1016,11 +1034,20 @@ def compute_g1_total(
 
     # Handle 1D time arrays by creating meshgrids
     if t1.ndim == 1 and t2.ndim == 1:
-        # Create 2D meshgrids from 1D arrays
-        # CRITICAL FIX: Must match caller's convention: t1_grid, t2_grid = meshgrid(t, t, 'ij')
-        t1_grid, t2_grid = jnp.meshgrid(t1, t2, indexing="ij")
-        t1 = t1_grid
-        t2 = t2_grid
+        # Check if this is flattened pooled data (from CMC) vs normal time vectors
+        # Normal time vectors: typically 100-2000 elements (need meshgrid expansion)
+        # Pooled data for SVI: 2000-5000+ elements (already element-wise matched, DON'T mesh)
+        # Using 2000 as threshold: above typical time vectors (e.g., 1001), below pooled data (e.g., 4600)
+        if len(t1) > 2000:
+            # Pooled/flattened data: arrays already element-wise matched, don't create meshgrid
+            # Creating meshgrid would cause OOM: e.g., 4600² = 21M elements, 23M² = 530 quadrillion
+            pass  # t1 and t2 are already correctly paired element-wise
+        else:
+            # Normal time vectors: create 2D meshgrids for all (t1[i], t2[j]) pairs
+            # CRITICAL: Must match caller's convention: t1_grid, t2_grid = meshgrid(t, t, 'ij')
+            t1_grid, t2_grid = jnp.meshgrid(t1, t2, indexing="ij")
+            t1 = t1_grid
+            t2 = t2_grid
 
     # Compute the physics factors using configuration dt
     wavevector_q_squared_half_dt = 0.5 * (q**2) * dt
@@ -1075,11 +1102,20 @@ def compute_g2_scaled(
 
     # Handle 1D time arrays by creating meshgrids
     if t1.ndim == 1 and t2.ndim == 1:
-        # Create 2D meshgrids from 1D arrays
-        # CRITICAL FIX: Must match caller's convention: t1_grid, t2_grid = meshgrid(t, t, 'ij')
-        t1_grid, t2_grid = jnp.meshgrid(t1, t2, indexing="ij")
-        t1 = t1_grid
-        t2 = t2_grid
+        # Check if this is flattened pooled data (from CMC) vs normal time vectors
+        # Normal time vectors: typically 100-2000 elements (need meshgrid expansion)
+        # Pooled data for SVI: 2000-5000+ elements (already element-wise matched, DON'T mesh)
+        # Using 2000 as threshold: above typical time vectors (e.g., 1001), below pooled data (e.g., 4600)
+        if len(t1) > 2000:
+            # Pooled/flattened data: arrays already element-wise matched, don't create meshgrid
+            # Creating meshgrid would cause OOM: e.g., 4600² = 21M elements, 23M² = 530 quadrillion
+            pass  # t1 and t2 are already correctly paired element-wise
+        else:
+            # Normal time vectors: create 2D meshgrids for all (t1[i], t2[j]) pairs
+            # CRITICAL: Must match caller's convention: t1_grid, t2_grid = meshgrid(t, t, 'ij')
+            t1_grid, t2_grid = jnp.meshgrid(t1, t2, indexing="ij")
+            t1 = t1_grid
+            t2 = t2_grid
 
     # Compute the physics factors using configuration dt
     wavevector_q_squared_half_dt = 0.5 * (q**2) * dt
@@ -1132,10 +1168,20 @@ def compute_g2_scaled_with_factors(
     """
     # Handle 1D time arrays by creating meshgrids
     if t1.ndim == 1 and t2.ndim == 1:
-        # CRITICAL FIX: Must match caller's convention: t1_grid, t2_grid = meshgrid(t, t, 'ij')
-        t1_grid, t2_grid = jnp.meshgrid(t1, t2, indexing="ij")
-        t1 = t1_grid
-        t2 = t2_grid
+        # Check if this is flattened pooled data (from CMC) vs normal time vectors
+        # Normal time vectors: typically 100-2000 elements (need meshgrid expansion)
+        # Pooled data for SVI: 2000-5000+ elements (already element-wise matched, DON'T mesh)
+        # Using 2000 as threshold: above typical time vectors (e.g., 1001), below pooled data (e.g., 4600)
+        if len(t1) > 2000:
+            # Pooled/flattened data: arrays already element-wise matched, don't create meshgrid
+            # Creating meshgrid would cause OOM: e.g., 4600² = 21M elements, 23M² = 530 quadrillion
+            pass  # t1 and t2 are already correctly paired element-wise
+        else:
+            # Normal time vectors: create 2D meshgrids for all (t1[i], t2[j]) pairs
+            # CRITICAL: Must match caller's convention: t1_grid, t2_grid = meshgrid(t, t, 'ij')
+            t1_grid, t2_grid = jnp.meshgrid(t1, t2, indexing="ij")
+            t1 = t1_grid
+            t2 = t2_grid
 
     # Call core computation with pre-computed factors
     return _compute_g2_scaled_core(
