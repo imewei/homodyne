@@ -30,11 +30,13 @@ except ImportError:
     # Will log warning later when plotting is attempted
 
 from homodyne.cli.args_parser import validate_args  # noqa: E402
+from homodyne.config.parameter_manager import ParameterManager  # noqa: E402
 from homodyne.config.types import (  # noqa: E402
     LAMINAR_FLOW_PARAM_NAMES,
     SCALING_PARAM_NAMES,
     STATIC_PARAM_NAMES,
 )
+from homodyne.core.fitting import ParameterSpace  # noqa: E402
 from homodyne.core.jax_backend import compute_g2_scaled  # noqa: E402
 from homodyne.utils.logging import get_logger  # noqa: E402
 
@@ -42,6 +44,117 @@ logger = get_logger(__name__)
 
 # Common XPCS experimental angles (in degrees) for validation
 COMMON_XPCS_ANGLES = [0, 30, 45, 60, 90, 120, 135, 150, 180]
+
+
+def clamp_parameters_to_bounds(
+    params: dict[str, float],
+    config: Any,
+    analysis_mode: str,
+) -> dict[str, float]:
+    """Clamp NLSQ parameters to valid NumPyro prior bounds.
+
+    NumPyro uses TruncatedNormal priors with strict bounds. NLSQ can sometimes
+    return values outside these bounds (e.g., negative values for positive parameters),
+    which causes MCMC initialization to fail with "Cannot find valid initial parameters".
+
+    This function ensures all parameters are within their valid NumPyro prior bounds
+    before being passed to MCMC/CMC initialization.
+
+    NOTE: Uses hardcoded NumPyro prior bounds, not NLSQ optimization bounds.
+    NLSQ bounds allow negative values for exploration, but NumPyro priors enforce
+    strict physical constraints (e.g., diffusion coefficients must be positive).
+
+    IMPORTANT: Parameters are clamped to slightly INSIDE the bounds (with epsilon offset)
+    to avoid numerical issues with TruncatedNormal PDFs at exact boundary values.
+    Epsilon is chosen as max(1e-6, 0.001 * range) to handle both small and large ranges.
+
+    Parameters
+    ----------
+    params : dict[str, float]
+        Parameter dictionary from NLSQ optimization
+    config : Any
+        Configuration object (unused, kept for API compatibility)
+    analysis_mode : str
+        Analysis mode ("static_isotropic" or "laminar_flow")
+
+    Returns
+    -------
+    dict[str, float]
+        Clamped parameters with all values within valid NumPyro prior bounds (with epsilon offset)
+
+    Examples
+    --------
+    >>> params = {"alpha": -3.38, "D_offset": -2386.63}
+    >>> clamped = clamp_parameters_to_bounds(params, config, "laminar_flow")
+    >>> clamped["alpha"]  # Clamped to [-2.0 + epsilon, 2.0 - epsilon], epsilon = 0.004
+    -1.996
+    >>> clamped["D_offset"]  # Clamped to [0.0 + epsilon, 1e6 - epsilon], epsilon = 1000.0
+    1000.0
+    """
+    # NumPyro prior bounds (strict physics constraints)
+    # These MUST match ParameterSpace bounds from homodyne/core/fitting.py
+    # which are used by TruncatedNormal priors in homodyne/optimization/mcmc.py
+    NUMPYRO_PRIOR_BOUNDS = {
+        # Scaling parameters (always present)
+        "contrast": (0.0, 1.0),  # fitting.py: implied from prior
+        "offset": (0.8, 1.2),  # fitting.py: implied from prior
+        # Core diffusion parameters
+        "D0": (1.0, 1.0e6),  # fitting.py:73
+        "alpha": (-10.0, 10.0),  # fitting.py:74
+        "D_offset": (-100000.0, 100000.0),  # fitting.py:75-78
+        # Laminar flow parameters
+        "gamma_dot_t0": (1.0e-5, 1.0),  # fitting.py:81
+        "beta": (-10.0, 10.0),  # fitting.py:82
+        "gamma_dot_t_offset": (-1.0, 1.0),  # fitting.py:83-86 (CAN BE NEGATIVE!)
+        "phi0": (-30.0, 30.0),  # fitting.py:87
+    }
+
+    # Clamp each parameter
+    clamped_params = {}
+    clamped_count = 0
+
+    for param_name, value in params.items():
+        if param_name in NUMPYRO_PRIOR_BOUNDS:
+            min_val, max_val = NUMPYRO_PRIOR_BOUNDS[param_name]
+
+            # Check if value is already within bounds (no clamping needed)
+            if min_val <= value <= max_val:
+                # Value is valid, no need to clamp
+                clamped_params[param_name] = float(value)
+            else:
+                # Value is outside bounds, clamp to epsilon-adjusted bounds
+                # NumPyro's TruncatedNormal PDF approaches zero at boundaries,
+                # so we use epsilon offset to avoid exact boundary values
+                param_range = max_val - min_val
+                epsilon = max(1e-6, 0.001 * param_range)  # 0.1% of range or 1e-6, whichever is larger
+
+                # Adjust bounds to be slightly inside the valid region
+                min_val_adjusted = min_val + epsilon
+                max_val_adjusted = max_val - epsilon
+
+                # Clamp to epsilon-adjusted bounds
+                clamped_value = np.clip(value, min_val_adjusted, max_val_adjusted)
+
+                logger.warning(
+                    f"Clamping {param_name}: {value:.6f} → {clamped_value:.6f} "
+                    f"(NumPyro prior bounds: [{min_val:.3e}, {max_val:.3e}], epsilon={epsilon:.3e})"
+                )
+                clamped_count += 1
+
+                clamped_params[param_name] = float(clamped_value)
+        else:
+            # Unknown parameter, keep as-is (shouldn't happen)
+            logger.debug(f"Unknown parameter {param_name}, keeping value {value}")
+            clamped_params[param_name] = value
+
+    if clamped_count > 0:
+        logger.info(
+            f"Clamped {clamped_count}/{len(params)} parameters to valid NumPyro prior bounds"
+        )
+    else:
+        logger.debug("All NLSQ parameters within NumPyro prior bounds")
+
+    return clamped_params
 
 
 def normalize_angle_to_symmetric_range(angle):
@@ -951,6 +1064,13 @@ def _run_optimization(args, config: ConfigManager, data: dict[str, Any]) -> Any:
             # Get configuration flag (default: True for auto/cmc methods to improve SVI convergence)
             run_nlsq_init = cmc_config.get("initialization", {}).get("run_nlsq_init", True)
 
+            # Determine analysis mode (needed for ParameterSpace creation and NLSQ initialization)
+            analysis_mode_str = (
+                config.config.get("analysis_mode", "static_isotropic")
+                if hasattr(config, "config")
+                else "static_isotropic"
+            )
+
             # Prepare initial_params from NLSQ if enabled
             initial_params = None
             if run_nlsq_init and method in ["auto", "cmc"]:
@@ -970,11 +1090,6 @@ def _run_optimization(args, config: ConfigManager, data: dict[str, Any]) -> Any:
                     # OptimizationResult.parameters contains all fitted parameters as np.ndarray
                     # Order: [contrast, offset, D0, alpha, D_offset, ...]
                     # For laminar_flow: [..., gamma_dot_t0, beta, gamma_dot_t_offset, phi0]
-                    analysis_mode_str = (
-                        config.config.get("analysis_mode", "static_isotropic")
-                        if hasattr(config, "config")
-                        else "static_isotropic"
-                    )
 
                     # Define parameter names based on analysis mode
                     if analysis_mode_str == "laminar_flow":
@@ -989,6 +1104,15 @@ def _run_optimization(args, config: ConfigManager, data: dict[str, Any]) -> Any:
                         if i < len(nlsq_result.parameters):
                             initial_params[param_name] = float(nlsq_result.parameters[i])
 
+                    # Clamp parameters to valid NumPyro prior bounds
+                    # NLSQ can return values outside bounds (e.g., negative values for positive parameters),
+                    # which causes MCMC initialization to fail. This ensures all values are within valid ranges.
+                    initial_params = clamp_parameters_to_bounds(
+                        params=initial_params,
+                        config=config,
+                        analysis_mode=analysis_mode_str,
+                    )
+
                     logger.info(f"✓ NLSQ initialization complete: {len(initial_params)} parameters")
                     logger.debug(f"Initial params: {initial_params}")
 
@@ -1001,6 +1125,14 @@ def _run_optimization(args, config: ConfigManager, data: dict[str, Any]) -> Any:
                 logger.info("NLSQ pre-optimization disabled via configuration")
             else:
                 logger.debug(f"NLSQ pre-optimization skipped for method={method}")
+
+            # Create ParameterSpace with config to ensure NumPyro uses config bounds
+            # This is CRITICAL: without config_manager, NumPyro will use hardcoded
+            # default bounds from fitting.py instead of configuration-specified bounds
+            parameter_space = ParameterSpace(config_manager=config)
+            logger.debug(
+                f"Created ParameterSpace with config_manager for {analysis_mode_str} mode"
+            )
 
             # Run MCMC with optional initial_params
             result = fit_mcmc_jax(
@@ -1025,6 +1157,7 @@ def _run_optimization(args, config: ConfigManager, data: dict[str, Any]) -> Any:
                 method=method,  # Pass method to fit_mcmc_jax for auto/nuts/cmc selection
                 cmc_config=cmc_config,  # Pass CMC configuration
                 initial_params=initial_params,  # ✅ Pass NLSQ initialization
+                parameter_space=parameter_space,  # ✅ Pass config-aware ParameterSpace
             )
 
             # Generate CMC diagnostic plots if requested
