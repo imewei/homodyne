@@ -536,6 +536,23 @@ def _run_standard_nuts(
         if sigma is None:
             sigma = _estimate_noise(data)
 
+        # Pre-compute dt before JIT compilation to avoid jnp.unique() JAX concretization error
+        # This fixes: "Abstract tracer value encountered where concrete value is expected"
+        dt_computed = None
+        if t1 is not None:
+            import numpy as np  # Use numpy (not jax.numpy) for pre-computation
+            if t1.ndim == 2:
+                time_array = np.asarray(t1[:, 0] if t1.shape[1] > 0 else t1[0, :])
+            else:
+                time_array = np.asarray(t1)
+            # Estimate from first two unique time points
+            unique_times = np.unique(time_array)
+            if len(unique_times) > 1:
+                dt_computed = float(unique_times[1] - unique_times[0])
+            else:
+                dt_computed = 1.0  # Fallback
+            logger.debug(f"Pre-computed dt = {dt_computed:.6f} s for MCMC model")
+
         # Create NumPyro model with optional initialization
         model = _create_numpyro_model(
             data,
@@ -549,6 +566,7 @@ def _run_standard_nuts(
             parameter_space,
             initial_params=initial_params,
             use_simplified=use_simplified_likelihood,
+            dt=dt_computed,
         )
 
         # Run MCMC sampling
@@ -894,19 +912,12 @@ def _compute_simple_theory(params, t1, t2, phi, q, analysis_mode, L=None, dt=Non
     This function now uses the proper physics from core.jax_backend to match
     NLSQ optimization, fixing the NaN ELBO issue caused by physics mismatch.
     """
-    # Estimate dt from time array if not provided
+    # dt must be provided (pre-computed before JIT compilation)
+    # Using jnp.unique() here would cause JAX concretization error during JIT tracing
     if dt is None:
-        if t1.ndim == 2:
-            time_array = t1[:, 0] if t1.shape[1] > 0 else t1[0, :]
-        else:
-            time_array = t1
-        # Estimate from first two unique time points
-        unique_times = jnp.unique(time_array)
-        if len(unique_times) > 1:
-            dt = float(unique_times[1] - unique_times[0])
-        else:
-            dt = 1.0  # Fallback
-        logger.debug(f"Estimated dt = {dt:.6f} s for MCMC model")
+        # Fallback for backward compatibility, but this should not happen in normal use
+        dt = 1.0
+        logger.warning("dt not provided to _compute_simple_theory, using fallback value 1.0")
 
     # Extract physical parameters (skip contrast and offset at indices 0,1)
     # params = [contrast, offset, D0, alpha, D_offset, ...]
