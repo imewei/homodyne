@@ -3931,18 +3931,28 @@ def _plot_single_angle_datashader(args):
 
     # Lazy import to ensure environment variables take effect
     from homodyne.viz.datashader_backend import plot_c2_comparison_fast
+    import numpy as np
 
     i, phi_angles, c2_exp, c2_fit, residuals, t1, t2, output_dir, width, height = args
     phi = phi_angles[i]
     output_file = output_dir / f"c2_heatmaps_phi_{phi:.1f}deg.png"
 
+    # Convert JAX GPU arrays to numpy CPU arrays before plotting
+    # This fixes: "BufferError: INVALID_ARGUMENT: Python buffer protocol is only defined for CPU buffers"
+    # Numba (used by Datashader) requires CPU arrays for buffer protocol access
+    c2_exp_cpu = np.asarray(c2_exp)
+    c2_fit_cpu = np.asarray(c2_fit)
+    residuals_cpu = np.asarray(residuals)
+    t1_cpu = np.asarray(t1)
+    t2_cpu = np.asarray(t2)
+
     # Use Datashader fast plotting with higher resolution
     plot_c2_comparison_fast(
-        c2_exp,
-        c2_fit,
-        residuals,
-        t1,
-        t2,
+        c2_exp_cpu,
+        c2_fit_cpu,
+        residuals_cpu,
+        t1_cpu,
+        t2_cpu,
         output_file,
         phi_angle=phi,
         width=width,
