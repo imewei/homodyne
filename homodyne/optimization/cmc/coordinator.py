@@ -191,6 +191,7 @@ class CMCCoordinator:
         analysis_mode: str,
         nlsq_params: Optional[Dict[str, float]] = None,
         model_fn: Optional[Callable] = None,
+        parameter_space: Optional['ParameterSpace'] = None,
     ) -> MCMCResult:
         """Run complete CMC pipeline.
 
@@ -222,6 +223,8 @@ class CMCCoordinator:
             NLSQ parameter estimates (initial values for SVI)
         model_fn : callable, optional
             NumPyro model function (if None, will be imported)
+        parameter_space : ParameterSpace, optional
+            Parameter space with configuration-specific bounds (if None, default bounds will be used)
 
         Returns
         -------
@@ -336,7 +339,9 @@ class CMCCoordinator:
         logger.info("STEP 2: Running SVI initialization")
         logger.info("=" * 70)
 
-        use_svi = self.config.get('cmc', {}).get('initialization', {}).get('use_svi', True)
+        # TEMPORARY FIX: Disable SVI by default to avoid 778GB OOM error
+        # TODO: Investigate NumPyro AutoLowRankMultivariateNormal guide memory issue
+        use_svi = self.config.get('cmc', {}).get('initialization', {}).get('use_svi', False)
 
         if use_svi:
             # Pool samples from shards
@@ -358,8 +363,8 @@ class CMCCoordinator:
                     pooled_data['sigma'] = _estimate_noise(pooled_data['data'])
                     logger.debug("Estimated sigma for pooled data")
 
-                # Create parameter space
-                parameter_space = ParameterSpace()
+                # Create parameter space (use passed one if available, otherwise default)
+                parameter_space = parameter_space if parameter_space is not None else ParameterSpace()
 
                 # Extract dt from pooled data or estimate from t1
                 dt = pooled_data.get('dt')
@@ -465,6 +470,8 @@ class CMCCoordinator:
             mcmc_config=mcmc_config,
             init_params=init_params,
             inv_mass_matrix=inv_mass_matrix,
+            analysis_mode=analysis_mode,
+            parameter_space=parameter_space,
         )
 
         logger.info(f"✓ Completed MCMC on {len(shard_results)} shards")

@@ -66,7 +66,7 @@ Error Handling
 - Timeouts: Not implemented (rely on MCMC convergence)
 """
 
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
 import time
 
 import numpy as np
@@ -163,6 +163,8 @@ class PjitBackend(CMCBackend):
         mcmc_config: Dict[str, Any],
         init_params: Dict[str, float],
         inv_mass_matrix: np.ndarray,
+        analysis_mode: str = "static_isotropic",
+        parameter_space: Optional['ParameterSpace'] = None,
     ) -> List[Dict[str, Any]]:
         """Run MCMC on all shards using JAX pmap or sequential execution.
 
@@ -179,6 +181,10 @@ class PjitBackend(CMCBackend):
             Initial parameter values from SVI
         inv_mass_matrix : np.ndarray
             Inverse mass matrix from SVI
+        analysis_mode : str, optional
+            Analysis mode ('static_isotropic' or 'laminar_flow')
+        parameter_space : ParameterSpace, optional
+            Parameter space with configuration-specific bounds (if None, default bounds will be used)
 
         Returns
         -------
@@ -190,12 +196,14 @@ class PjitBackend(CMCBackend):
         # Sequential execution (single GPU or CPU)
         if not self.is_parallel:
             return self._run_sequential(
-                shards, mcmc_config, init_params, inv_mass_matrix
+                shards, mcmc_config, init_params, inv_mass_matrix,
+                analysis_mode, parameter_space
             )
 
         # Parallel execution (multi-GPU)
         return self._run_parallel(
-            shards, mcmc_config, init_params, inv_mass_matrix
+            shards, mcmc_config, init_params, inv_mass_matrix,
+            analysis_mode, parameter_space
         )
 
     def _run_sequential(
@@ -204,6 +212,8 @@ class PjitBackend(CMCBackend):
         mcmc_config: Dict[str, Any],
         init_params: Dict[str, float],
         inv_mass_matrix: np.ndarray,
+        analysis_mode: str = "static_isotropic",
+        parameter_space: Optional['ParameterSpace'] = None,
     ) -> List[Dict[str, Any]]:
         """Execute shards sequentially on single device.
 
@@ -217,6 +227,10 @@ class PjitBackend(CMCBackend):
             Initial parameters
         inv_mass_matrix : np.ndarray
             Mass matrix
+        analysis_mode : str, optional
+            Analysis mode ('static_isotropic' or 'laminar_flow')
+        parameter_space : ParameterSpace, optional
+            Parameter space with configuration-specific bounds
 
         Returns
         -------
@@ -233,7 +247,8 @@ class PjitBackend(CMCBackend):
             try:
                 # Run MCMC on single shard
                 result = self._run_single_shard_mcmc(
-                    shard, mcmc_config, init_params, inv_mass_matrix, shard_idx=i
+                    shard, mcmc_config, init_params, inv_mass_matrix,
+                    analysis_mode, parameter_space, shard_idx=i
                 )
 
                 # Add timing
@@ -387,6 +402,8 @@ class PjitBackend(CMCBackend):
         mcmc_config: Dict[str, Any],
         init_params: Dict[str, float],
         inv_mass_matrix: np.ndarray,
+        analysis_mode: str,
+        parameter_space: Optional['ParameterSpace'],
         shard_idx: int,
     ) -> Dict[str, Any]:
         """Run MCMC on a single shard.
@@ -404,6 +421,10 @@ class PjitBackend(CMCBackend):
             Initial parameters
         inv_mass_matrix : np.ndarray
             Mass matrix
+        analysis_mode : str
+            Analysis mode ("static_isotropic" or "laminar_flow")
+        parameter_space : ParameterSpace, optional
+            Parameter space with configuration-specific bounds
         shard_idx : int
             Shard index for logging
 
@@ -419,48 +440,40 @@ class PjitBackend(CMCBackend):
         target_accept_prob = mcmc_config.get('target_accept_prob', 0.8)
         max_tree_depth = mcmc_config.get('max_tree_depth', 10)
 
-        # Convert data to JAX arrays
-        data_jax = jnp.array(shard['data'])
-        sigma_jax = jnp.array(shard.get('sigma', np.ones_like(shard['data'])))
-        t1_jax = jnp.array(shard['t1'])
-        t2_jax = jnp.array(shard['t2'])
-        phi_jax = jnp.array(shard['phi'])
+        # Extract shard data - pass as numpy arrays (not JAX) to _create_numpyro_model
+        # The model will handle JAX conversion internally as needed
+        data_np = shard['data']
+        sigma_np = shard.get('sigma', np.ones_like(shard['data']))
+        t1_np = shard['t1']
+        t2_np = shard['t2']
+        phi_np = shard['phi']
         q = float(shard['q'])
         L = float(shard['L'])
 
-        # Define NumPyro model
-        def model(data, sigma, t1, t2, phi, q, L):
-            """NumPyro model for homodyne XPCS.
+        # Create NumPyro model using parameter_space bounds
+        # Use real model from mcmc.py that respects parameter_space configuration
+        # Lazy import to avoid circular dependency
+        from homodyne.optimization.mcmc import _create_numpyro_model
 
-            This is a simplified model for CMC. The full model would
-            be imported from homodyne.optimization.mcmc, but for now
-            we use a placeholder that samples from priors.
-            """
-            # Sample parameters from priors
-            # TODO: Use proper priors from parameter_manager
-            contrast = sample('contrast', dist.Uniform(0.0, 1.0))
-            offset = sample('offset', dist.Normal(1.0, 0.1))
-            D0 = sample('D0', dist.Uniform(100.0, 10000.0))
-            alpha = sample('alpha', dist.Uniform(0.0, 2.0))
-            D_offset = sample('D_offset', dist.Uniform(0.0, 100.0))
+        model = _create_numpyro_model(
+            data=data_np,
+            sigma=sigma_np,
+            t1=t1_np,
+            t2=t2_np,
+            phi=phi_np,
+            q=q,
+            L=L,
+            analysis_mode=analysis_mode,
+            param_space=parameter_space,
+            initial_params=None,  # Will be set via init_strategy in NUTS
+            use_simplified=True,  # Use simplified likelihood (default, avoids JAX tracing issues)
+            dt=None,  # Will be computed automatically
+        )
 
-            # Compute theoretical g2 (placeholder)
-            # TODO: Use actual compute_g2_scaled from homodyne.core.jax_backend
-            g2_theory = jnp.ones_like(data)
-
-            # Likelihood
-            mu = contrast * g2_theory + offset
-            sample('obs', dist.Normal(mu, sigma), obs=data)
-
-        # Convert init_params to array format
-        # TODO: Proper parameter ordering from parameter_manager
-        init_param_values = {
-            'contrast': init_params.get('contrast', 0.5),
-            'offset': init_params.get('offset', 1.0),
-            'D0': init_params.get('D0', 1000.0),
-            'alpha': init_params.get('alpha', 0.5),
-            'D_offset': init_params.get('D_offset', 10.0),
-        }
+        # Use all init_params (supports both static and laminar_flow modes)
+        # init_params already contains all required parameters (5 for static, 9 for laminar_flow)
+        # with values from NLSQ pre-optimization (clamped to NumPyro prior bounds)
+        init_param_values = init_params
 
         # Create NUTS sampler
         nuts_kernel = NUTS(
@@ -483,27 +496,23 @@ class PjitBackend(CMCBackend):
         rng_key = jax.random.PRNGKey(shard_idx)
 
         try:
-            mcmc.run(
-                rng_key,
-                data=data_jax,
-                sigma=sigma_jax,
-                t1=t1_jax,
-                t2=t2_jax,
-                phi=phi_jax,
-                q=q,
-                L=L,
-            )
+            # Model is a closure with data already captured, so no extra args needed
+            mcmc.run(rng_key)
 
             # Extract samples
             samples_dict = mcmc.get_samples()
 
-            # Convert to numpy arrays
+            # Convert to numpy arrays - parameter order based on analysis_mode
+            if analysis_mode == "static_isotropic":
+                # 5 parameters: contrast, offset, D0, alpha, D_offset
+                param_names = ['contrast', 'offset', 'D0', 'alpha', 'D_offset']
+            else:  # laminar_flow
+                # 9 parameters: contrast, offset, D0, alpha, D_offset, gamma_dot_0, beta, gamma_dot_offset, phi_0
+                param_names = ['contrast', 'offset', 'D0', 'alpha', 'D_offset',
+                             'gamma_dot_0', 'beta', 'gamma_dot_offset', 'phi_0']
+
             samples_array = np.stack([
-                np.array(samples_dict['contrast']),
-                np.array(samples_dict['offset']),
-                np.array(samples_dict['D0']),
-                np.array(samples_dict['alpha']),
-                np.array(samples_dict['D_offset']),
+                np.array(samples_dict[name]) for name in param_names
             ], axis=1)
 
             # Compute diagnostics

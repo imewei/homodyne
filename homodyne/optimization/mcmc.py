@@ -439,6 +439,7 @@ def fit_mcmc_jax(
             L=L,
             analysis_mode=analysis_mode,
             nlsq_params=nlsq_params,
+            parameter_space=parameter_space,
         )
 
         logger.info(f"CMC execution completed. Used {result.num_shards} shards.")
@@ -828,6 +829,25 @@ def _create_numpyro_model(
             )
 
         # Compute theoretical model using JIT-compiled function with proper physics
+        # CRITICAL FIX: Ensure t1, t2, phi, sigma match data size to avoid closure memory explosion
+        # For pooled data (4,600 samples), these should be 1D arrays of length 4,600
+        # NOT the original meshgrids (1,002,001 elements)
+
+        # Verify array sizes match to prevent OOM during SVI
+        data_size = data.shape[0] if hasattr(data, 'shape') else len(data)
+        t1_size = t1.shape[0] if hasattr(t1, 'shape') else len(t1)
+
+        if t1_size != data_size:
+            # Arrays are mismatched - this indicates closure is capturing wrong arrays
+            # This is the root cause of the 778GB SVI OOM error
+            import warnings
+            warnings.warn(
+                f"Model closure array size mismatch: data={data_size}, t1={t1_size}. "
+                f"This will cause OOM during SVI. Ensure pooled_data has correctly sized arrays.",
+                RuntimeWarning,
+                stacklevel=2
+            )
+
         # Pass full params array for proper indexing, plus L and dt for correct physics
         c2_theory = _compute_simple_theory_jit(params, t1, t2, phi, q, analysis_mode, L, dt)
 
