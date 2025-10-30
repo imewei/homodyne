@@ -450,6 +450,23 @@ class PjitBackend(CMCBackend):
         q = float(shard['q'])
         L = float(shard['L'])
 
+        # Pre-compute dt before JIT compilation to avoid jnp.unique() JAX concretization error
+        # This fixes: "Abstract tracer value encountered where concrete value is expected"
+        dt_computed = None
+        if t1_np is not None:
+            import numpy as np  # Use numpy (not jax.numpy) for pre-computation
+            if t1_np.ndim == 2:
+                time_array = np.asarray(t1_np[:, 0] if t1_np.shape[1] > 0 else t1_np[0, :])
+            else:
+                time_array = np.asarray(t1_np)
+            # Estimate from first two unique time points
+            unique_times = np.unique(time_array)
+            if len(unique_times) > 1:
+                dt_computed = float(unique_times[1] - unique_times[0])
+            else:
+                dt_computed = 1.0  # Fallback
+            logger.debug(f"Shard {shard_idx}: Pre-computed dt = {dt_computed:.6f} s for MCMC model")
+
         # Create NumPyro model using parameter_space bounds
         # Use real model from mcmc.py that respects parameter_space configuration
         # Lazy import to avoid circular dependency
@@ -467,7 +484,7 @@ class PjitBackend(CMCBackend):
             param_space=parameter_space,
             initial_params=None,  # Will be set via init_strategy in NUTS
             use_simplified=True,  # Use simplified likelihood (default, avoids JAX tracing issues)
-            dt=None,  # Will be computed automatically
+            dt=dt_computed,  # Pre-computed to avoid JAX concretization error
         )
 
         # Use all init_params (supports both static and laminar_flow modes)

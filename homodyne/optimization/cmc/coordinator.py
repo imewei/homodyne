@@ -369,13 +369,15 @@ class CMCCoordinator:
                 # Extract dt from pooled data or estimate from t1
                 dt = pooled_data.get('dt')
                 if dt is None:
-                    # Estimate from time array
+                    # Estimate from time array using numpy (not jax.numpy) to avoid JAX concretization error
+                    # This fixes: "Abstract tracer value encountered where concrete value is expected"
+                    import numpy as np
                     t1_arr = pooled_data['t1']
                     if t1_arr.ndim == 2:
-                        time_array = t1_arr[:, 0] if t1_arr.shape[1] > 0 else t1_arr[0, :]
+                        time_array = np.asarray(t1_arr[:, 0] if t1_arr.shape[1] > 0 else t1_arr[0, :])
                     else:
-                        time_array = t1_arr
-                    unique_times = jnp.unique(time_array)
+                        time_array = np.asarray(t1_arr)
+                    unique_times = np.unique(time_array)
                     if len(unique_times) > 1:
                         dt = float(unique_times[1] - unique_times[0])
                     else:
