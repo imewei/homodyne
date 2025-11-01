@@ -191,8 +191,8 @@ class TestFunctionSignatures:
             sig = inspect.signature(load_xpcs_data)
             params = list(sig.parameters.keys())
 
-            # Should have config as parameter
-            assert "config" in params, "load_xpcs_data should have config parameter"
+            # Should have config_path as parameter (renamed from config in v2.1.0)
+            assert "config_path" in params, "load_xpcs_data should have config_path parameter"
 
         except ImportError:
             pytest.skip("Data loader not available")

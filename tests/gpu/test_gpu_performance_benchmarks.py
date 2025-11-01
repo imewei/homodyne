@@ -94,6 +94,10 @@ class TestGPUPerformanceBenchmarks:
             )
 
     @pytest.mark.slow
+    @pytest.mark.skipif(
+        not _has_cuda(),
+        reason="GPU speedup test requires actual NVIDIA GPU with CUDA"
+    )
     def test_us2_1_gpu_speedup_large_dataset(self):
         """
         US2 Scenario 1 (Part 2): Verify GPU achieves 3x speedup for large datasets.
