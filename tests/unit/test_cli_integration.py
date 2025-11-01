@@ -54,7 +54,7 @@ class TestCMCArgumentParsing:
         """Test --method argument accepts all valid choices."""
         parser = create_parser()
 
-        for method in ["nlsq", "mcmc", "nuts", "cmc", "auto"]:
+        for method in ["nlsq", "mcmc"]:
             args = parser.parse_args(["--method", method])
             assert args.method == method
 
@@ -66,16 +66,16 @@ class TestCMCArgumentParsing:
         assert args.method == "nlsq"
 
     def test_all_cmc_arguments_together(self):
-        """Test all CMC arguments can be used together."""
+        """Test all CMC arguments can be used together with automatic selection."""
         parser = create_parser()
         args = parser.parse_args([
-            "--method", "cmc",
+            "--method", "mcmc",
             "--cmc-num-shards", "16",
             "--cmc-backend", "pjit",
             "--cmc-plot-diagnostics"
         ])
 
-        assert args.method == "cmc"
+        assert args.method == "mcmc"
         assert args.cmc_num_shards == 16
         assert args.cmc_backend == "pjit"
         assert args.cmc_plot_diagnostics is True
@@ -165,7 +165,7 @@ class TestCMCConfigOverride:
 
         # Create args with CLI override
         args = argparse.Namespace(
-            method="cmc",
+            method="mcmc",
             cmc_num_shards=20,  # CLI override
             cmc_backend=None,
             cmc_plot_diagnostics=False,
@@ -212,7 +212,7 @@ class TestCMCConfigOverride:
 
         # Create args with CLI override
         args = argparse.Namespace(
-            method="cmc",
+            method="mcmc",
             cmc_num_shards=None,
             cmc_backend="multiprocessing",  # CLI override
             cmc_plot_diagnostics=False,
@@ -264,7 +264,7 @@ class TestCMCDiagnosticPlotGeneration:
 
         # Create args with diagnostic plots enabled
         args = argparse.Namespace(
-            method="cmc",
+            method="mcmc",
             cmc_num_shards=None,
             cmc_backend=None,
             cmc_plot_diagnostics=True,  # Request diagnostic plots
@@ -313,7 +313,7 @@ class TestCMCDiagnosticPlotGeneration:
 
         # Create args with diagnostic plots enabled
         args = argparse.Namespace(
-            method="nuts",
+            method="mcmc",
             cmc_num_shards=None,
             cmc_backend=None,
             cmc_plot_diagnostics=True,  # Request diagnostic plots
@@ -360,7 +360,7 @@ class TestCMCDiagnosticPlotGeneration:
 
         # Create args without diagnostic plots
         args = argparse.Namespace(
-            method="cmc",
+            method="mcmc",
             cmc_num_shards=None,
             cmc_backend=None,
             cmc_plot_diagnostics=False,  # Do NOT request diagnostic plots
@@ -494,12 +494,12 @@ def test_cli_integration_summary():
 
     # Test 1: All CMC arguments parse correctly
     args = parser.parse_args([
-        "--method", "cmc",
+        "--method", "mcmc",
         "--cmc-num-shards", "16",
         "--cmc-backend", "multiprocessing",
         "--cmc-plot-diagnostics",
     ])
-    assert args.method == "cmc"
+    assert args.method == "mcmc"
     assert args.cmc_num_shards == 16
     assert args.cmc_backend == "multiprocessing"
     assert args.cmc_plot_diagnostics is True

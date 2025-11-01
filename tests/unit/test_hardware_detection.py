@@ -257,7 +257,7 @@ class TestShouldUseCMC:
             max_parallel_shards=1,
         )
 
-        # 100k points is below default min_points_for_cmc (500k)
+        # 100k points is below default min_samples_for_cmc threshold
         result = should_use_cmc(100_000, config)
         assert result is False
 
@@ -367,8 +367,8 @@ class TestShouldUseCMC:
         result = should_use_cmc(2_000_000, config, memory_threshold_pct=0.5)
         assert result is True  # Due to hardware threshold for 16GB GPU
 
-    def test_custom_min_points(self):
-        """Test custom min_points_for_cmc parameter."""
+    def test_custom_min_samples(self):
+        """Test custom min_samples_for_cmc parameter."""
         config = HardwareConfig(
             platform="gpu",
             num_devices=1,
@@ -382,12 +382,12 @@ class TestShouldUseCMC:
         )
 
         # With higher minimum (5M), should not use CMC for 2M points
-        result = should_use_cmc(2_000_000, config, min_points_for_cmc=5_000_000)
+        result = should_use_cmc(2_000_000, config, min_samples_for_cmc=5_000_000)
         assert result is False
 
-        # But should use CMC for 6M points
-        result = should_use_cmc(6_000_000, config, min_points_for_cmc=5_000_000)
-        assert result is False  # Below 10M threshold for 80GB GPU
+        # But should use CMC for 6M points (exceeds 5M threshold)
+        result = should_use_cmc(6_000_000, config, min_samples_for_cmc=5_000_000)
+        assert result is True  # 6M >= 5M threshold triggers parallelism mode
 
 
 class TestBackendRecommendation:

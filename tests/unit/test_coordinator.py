@@ -261,6 +261,10 @@ class TestEndToEndPipeline:
 
             with patch.object(coordinator.backend, 'run_parallel_mcmc', side_effect=mock_run_mcmc):
                 # Run CMC pipeline
+                # Create parameter space for v2.1.0
+                from homodyne.config.parameter_space import ParameterSpace
+                param_space = ParameterSpace.from_defaults('static_isotropic')
+
                 result = coordinator.run_cmc(
                     data=synthetic_data['data'],
                     t1=synthetic_data['t1'],
@@ -269,7 +273,8 @@ class TestEndToEndPipeline:
                     q=synthetic_data['q'],
                     L=synthetic_data['L'],
                     analysis_mode='static_isotropic',
-                    nlsq_params=mock_nlsq_params,
+                    parameter_space=param_space,
+                    initial_values=mock_nlsq_params,
                 )
 
             # Validate result structure
@@ -300,6 +305,10 @@ class TestEndToEndPipeline:
                 ]
 
             with patch.object(coordinator.backend, 'run_parallel_mcmc', side_effect=mock_run_mcmc):
+                # Create parameter space for v2.1.0
+                from homodyne.config.parameter_space import ParameterSpace
+                param_space = ParameterSpace.from_defaults('static_isotropic')
+
                 result = coordinator.run_cmc(
                     data=synthetic_data['data'],
                     t1=synthetic_data['t1'],
@@ -308,7 +317,8 @@ class TestEndToEndPipeline:
                     q=synthetic_data['q'],
                     L=synthetic_data['L'],
                     analysis_mode='static_isotropic',
-                    nlsq_params=mock_nlsq_params,
+                    parameter_space=param_space,
+                    initial_values=mock_nlsq_params,
                 )
 
             # With small dataset (1000 points), only 1 shard is created
@@ -410,6 +420,10 @@ class TestErrorHandling:
 
             coordinator = CMCCoordinator(minimal_config)
 
+            # Create parameter space for v2.1.0
+            from homodyne.config.parameter_space import ParameterSpace
+            param_space = ParameterSpace.from_defaults('static_isotropic')
+
             with pytest.raises(ValueError, match="empty dataset"):
                 coordinator.run_cmc(
                     data=np.array([]),
@@ -419,7 +433,8 @@ class TestErrorHandling:
                     q=0.01,
                     L=3.5,
                     analysis_mode='static_isotropic',
-                    nlsq_params={'D0': 1000.0},
+                    parameter_space=param_space,
+                    initial_values={'D0': 1000.0},
                 )
 
     def test_low_convergence_rate_warning(self, minimal_config, mock_hardware_cpu):

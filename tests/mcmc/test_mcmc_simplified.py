@@ -32,7 +32,7 @@ except ImportError:
     NUMPYRO_AVAILABLE = False
 
 from homodyne.optimization.mcmc import fit_mcmc_jax, MCMCResult
-from homodyne.core.fitting import ParameterSpace
+from homodyne.config.parameter_space import ParameterSpace
 
 
 # Skip all tests if JAX or NumPyro not available
@@ -119,7 +119,7 @@ def test_mcmc_with_manual_initial_params(simple_static_data):
     }
 
     # Create parameter space
-    param_space = ParameterSpace()
+    param_space = ParameterSpace.from_defaults('static_isotropic')
 
     # Run MCMC with manual initialization
     # Use minimal samples for speed
@@ -163,7 +163,7 @@ def test_automatic_nuts_selection_small_dataset(simple_static_data):
     should automatically select NUTS method.
     """
     data = simple_static_data
-    param_space = ParameterSpace()
+    param_space = ParameterSpace.from_defaults('static_isotropic')
 
     # Small dataset: num_samples = 1 (single phi angle)
     # Should trigger NUTS (not CMC)
@@ -198,7 +198,7 @@ def test_convergence_with_physics_priors_only(simple_static_data):
     priors alone. This tests the core simplification: priors are good enough.
     """
     data = simple_static_data
-    param_space = ParameterSpace()
+    param_space = ParameterSpace.from_defaults('static_isotropic')
 
     # Run MCMC without any initialization
     # initial_params=None → use priors from ParameterSpace only
@@ -265,7 +265,7 @@ def test_auto_retry_on_poor_convergence():
     np.random.seed(123)
     c2_data = 1.0 + 0.5 * np.exp(-0.001 * t1**1.5) + 0.2 * np.random.randn(n_points)
 
-    param_space = ParameterSpace()
+    param_space = ParameterSpace.from_defaults('static_isotropic')
 
     # Run with minimal sampling to potentially trigger poor convergence
     result = fit_mcmc_jax(
@@ -306,7 +306,7 @@ def test_warning_on_poor_convergence_metrics(simple_static_data, caplog):
     caplog.set_level(logging.WARNING)
 
     data = simple_static_data
-    param_space = ParameterSpace()
+    param_space = ParameterSpace.from_defaults('static_isotropic')
 
     # Use minimal sampling to get poor diagnostics
     result = fit_mcmc_jax(
@@ -348,7 +348,7 @@ def test_configurable_cmc_thresholds():
     L = 2000000.0
     c2_data = 1.0 + 0.5 * np.exp(-0.001 * t1**1.5)
 
-    param_space = ParameterSpace()
+    param_space = ParameterSpace.from_defaults('static_isotropic')
 
     # Test 1: Force NUTS by setting very high min_samples_for_cmc
     # With min_samples_for_cmc=100, dataset of 12 points should use NUTS
@@ -394,7 +394,7 @@ def test_no_automatic_nlsq_initialization():
     L = 2000000.0
     c2_data = 1.0 + 0.5 * np.exp(-0.001 * t1**1.5)
 
-    param_space = ParameterSpace()
+    param_space = ParameterSpace.from_defaults('static_isotropic')
 
     # Run MCMC without any initialization
     result = fit_mcmc_jax(
@@ -450,7 +450,7 @@ def test_enhanced_retry_logging(caplog):
     np.random.seed(999)  # Specific seed for reproducibility
     c2_data = 1.0 + 0.5 * np.exp(-0.001 * t1**1.5) + 0.3 * np.random.randn(n_points)
 
-    param_space = ParameterSpace()
+    param_space = ParameterSpace.from_defaults('static_isotropic')
 
     # Run with minimal sampling to force poor convergence
     result = fit_mcmc_jax(
