@@ -95,7 +95,7 @@ class TestGPUPerformanceBenchmarks:
 
     @pytest.mark.slow
     @pytest.mark.skipif(
-        not _has_cuda(),
+        not GPU_AVAILABLE,
         reason="GPU speedup test requires actual NVIDIA GPU with CUDA"
     )
     def test_us2_1_gpu_speedup_large_dataset(self):
