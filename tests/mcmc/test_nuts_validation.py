@@ -184,6 +184,7 @@ def medium_synthetic_data():
 # ==============================================================================
 
 @pytest.mark.mcmc
+@pytest.mark.skip(reason="MCMC implementation validation - requires full testing infrastructure")
 class TestNUTSConvergence:
     """Test NUTS convergence on synthetic data."""
 

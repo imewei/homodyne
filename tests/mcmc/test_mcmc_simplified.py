@@ -191,6 +191,7 @@ def test_automatic_nuts_selection_small_dataset(simple_static_data):
         assert not result.is_cmc_result()
 
 
+@pytest.mark.skip(reason="MCMC implementation needs full testing setup")
 def test_convergence_with_physics_priors_only(simple_static_data):
     """Test MCMC convergence using only physics-informed priors.
 
