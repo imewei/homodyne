@@ -86,10 +86,7 @@ if [[ -z "$_HOMODYNE_ZSH_COMPLETION_LOADED" ]]; then
 
     # Method aliases (hm- prefix)
     alias hm-nlsq='homodyne --method nlsq'    # NLSQ trust-region optimization (primary)
-    alias hm-mcmc='homodyne --method mcmc'    # Alias for auto (NUTS/CMC based on dataset size)
-    alias hm-auto='homodyne --method auto'    # Auto-select NUTS (<500k) or CMC (>500k)
-    alias hm-nuts='homodyne --method nuts'    # Standard NUTS MCMC
-    alias hm-cmc='homodyne --method cmc'      # Consensus Monte Carlo for large datasets
+    alias hm-mcmc='homodyne --method mcmc'    # MCMC with automatic NUTS/CMC selection
 
     # Config mode aliases (hc- prefix)
     alias hc-stat='homodyne-config --mode static'         # Generate static mode config
@@ -130,7 +127,7 @@ if [[ -z "$_HOMODYNE_ZSH_COMPLETION_LOADED" ]]; then
             echo ""
             echo "Install GPU support:"
             echo "   pip install jax[cuda12-local]==0.8.0 jaxlib==0.8.0"
-            echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+            echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
         else
             echo "GPU status only available on Linux"
         fi
@@ -144,10 +141,7 @@ if [[ -z "$_HOMODYNE_ZSH_COMPLETION_LOADED" ]]; then
         echo ""
         echo "Method shortcuts (hm- prefix):"
         echo "  hm-nlsq  = homodyne --method nlsq  # NLSQ trust-region (primary)"
-        echo "  hm-mcmc  = homodyne --method mcmc  # Alias for auto"
-        echo "  hm-auto  = homodyne --method auto  # Auto NUTS/CMC"
-        echo "  hm-nuts  = homodyne --method nuts  # Standard NUTS MCMC"
-        echo "  hm-cmc   = homodyne --method cmc   # Consensus Monte Carlo"
+        echo "  hm-mcmc  = homodyne --method mcmc  # MCMC with automatic NUTS/CMC selection"
         echo ""
         echo "Config mode shortcuts (hc- prefix):"
         echo "  hc-stat  = homodyne-config --mode static"
@@ -287,7 +281,7 @@ fi
 
             print("✅ Shell completion installed (conda/mamba)")
             print("   • Auto-activated on environment activation")
-            print("   • Aliases: hm, hconfig, hm-nlsq, hm-mcmc, hm-auto, hm-nuts, hm-cmc")
+            print("   • Aliases: hm, hconfig, hm-nlsq, hm-mcmc")
             print("   • Config: hc-stat, hc-flow")
             print("   • Plotting: hexp, hsim")
             print()
@@ -297,7 +291,7 @@ fi
             modified_scripts = integrate_with_venv_activate(venv_path)
 
             print("✅ Shell completion installed (uv/venv/virtualenv)")
-            print("   • Aliases: hm, hconfig, hm-nlsq, hm-mcmc, hm-auto, hm-nuts, hm-cmc")
+            print("   • Aliases: hm, hconfig, hm-nlsq, hm-mcmc")
             print("   • Config: hc-stat, hc-flow")
             print("   • Plotting: hexp, hsim")
             print()
@@ -583,7 +577,7 @@ def show_installation_summary(interactive_results=None):
     """Show installation summary with available commands."""
     print("\n🚀 Quick Start Commands:")
     print("   homodyne --method nlsq --config config.yaml")
-    print("   homodyne --method auto --config config.yaml  # Auto NUTS/CMC")
+    print("   homodyne --method mcmc --config config.yaml  # Automatic NUTS/CMC selection")
     print("   homodyne-config --mode static -o my_config.yaml")
 
     print("\n⚡ Available Shortcuts (after shell restart):")
@@ -592,10 +586,7 @@ def show_installation_summary(interactive_results=None):
     print("     hconfig  = homodyne-config")
     print("\n   Method shortcuts (hm- prefix):")
     print("     hm-nlsq  = homodyne --method nlsq  # NLSQ trust-region (primary)")
-    print("     hm-mcmc  = homodyne --method mcmc  # Alias for auto")
-    print("     hm-auto  = homodyne --method auto  # Auto NUTS/CMC")
-    print("     hm-nuts  = homodyne --method nuts  # Standard NUTS MCMC")
-    print("     hm-cmc   = homodyne --method cmc   # Consensus Monte Carlo")
+    print("     hm-mcmc  = homodyne --method mcmc  # MCMC with automatic NUTS/CMC selection")
     print("\n   Config mode shortcuts (hc- prefix):")
     print("     hc-stat  = homodyne-config --mode static")
     print("     hc-flow  = homodyne-config --mode laminar_flow")

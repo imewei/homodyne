@@ -71,13 +71,15 @@ compatibility** for all validated components:
 
 **New in v2.0**: Scalable Bayesian uncertainty quantification with **dual-criteria automatic selection**
 
-**Optimized Triggering Conditions** (October 2025):
-- **Sample-based parallelism**: Triggers when `num_samples >= 20` (e.g., 20+ phi angles)
+**Automatic NUTS/CMC Selection** (v2.1.0 - October 2025):
+- **Sample-based parallelism**: Triggers when `num_samples >= 15` (e.g., 20+ phi angles)
   - Optimized for multi-core CPU workloads (14+ cores)
-  - Example: 23 samples on 14-core CPU → ~1.4x speedup via CMC
-- **Memory management**: Triggers when `memory usage > 40%` of available memory
+  - Example: 20 samples on 14-core CPU → ~1.4x speedup via CMC
+- **Memory management**: Triggers when `memory usage > 30%` of available memory
   - Conservative OOM prevention for large datasets
   - Example: 100M+ points → automatic data sharding
+- **Simplified CLI**: Only `--method mcmc` needed (automatic NUTS/CMC selection)
+- **No initialization required**: Physics-informed priors from `ParameterSpace`
 
 **Key Features:**
 - **Dual-criteria OR logic**: Triggers on EITHER many samples OR large memory footprint
@@ -287,7 +289,7 @@ make gpu-check         # Verify GPU setup
 # NLSQ optimization (default method)
 homodyne --method nlsq --config config.yaml
 
-# MCMC sampling for uncertainty quantification
+# MCMC sampling for uncertainty quantification (v2.1.0: automatic NUTS/CMC selection)
 homodyne --method mcmc --config config.yaml
 
 # Force CPU-only computation
@@ -295,6 +297,27 @@ homodyne --method nlsq --force-cpu
 
 # Custom output directory
 homodyne --method nlsq --output-dir ./results
+```
+
+### Manual NLSQ → MCMC Workflow (v2.1.0)
+
+**Step-by-step process:**
+
+```bash
+# 1. Run NLSQ first
+homodyne --method nlsq --config config.yaml
+
+# 2. Copy best-fit results from output:
+#    D0: 1234.5 ± 45.6
+#    alpha: 0.567 ± 0.012
+#    D_offset: 12.34 ± 1.23
+
+# 3. Update config.yaml:
+#    initial_parameters:
+#      values: [1234.5, 0.567, 12.34]
+
+# 4. Run MCMC with initialized parameters
+homodyne --method mcmc --config config.yaml
 ```
 
 ### Python API
@@ -397,7 +420,6 @@ After installing completion, use short aliases:
 ```bash
 hm-nlsq --config config.yaml           # homodyne --method nlsq
 hm-mcmc --config config.yaml           # homodyne --method mcmc
-hm-auto --config large_dataset.yaml   # Auto-select NUTS/CMC
 
 hc-stat --output static.yaml           # homodyne-config --mode static
 hc-flow --output flow.yaml             # homodyne-config --mode laminar_flow
@@ -409,7 +431,7 @@ hconfig --validate my_config.yaml      # homodyne-config --validate
 
 ```bash
 homodyne --config <TAB>        # Shows *.yaml files
-homodyne --method <TAB>        # Shows: nlsq, mcmc, auto, nuts, cmc
+homodyne --method <TAB>        # Shows: nlsq, mcmc (v2.1.0: nuts/cmc removed)
 hm-nlsq --<TAB>                # Shows all available options
 ```
 

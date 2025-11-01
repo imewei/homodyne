@@ -388,18 +388,15 @@ def should_use_cmc(
     - CMC sharding strategy adapts based on which condition triggered it
     - Calibration: 23M points → ~12-14 GB actual NUTS memory usage on GPU
     """
-    # Step 1: Check minimum sample threshold for parallelism-based CMC
+    # Step 1: Evaluate dual-criteria OR logic
+    # Criterion 1 (Parallelism): num_samples >= min_samples_for_cmc
     use_cmc_for_parallelism = num_samples >= min_samples_for_cmc
 
-    if use_cmc_for_parallelism:
-        logger.info(
-            f"Sample count {num_samples:,} >= min_samples_for_cmc ({min_samples_for_cmc:,}). "
-            f"Using CMC for sample-level parallelization."
-        )
-        return True
+    # Criterion 2 (Memory): estimated_memory > memory_threshold_pct
+    use_cmc_for_memory = False
+    estimated_memory_gb = 0.0
+    memory_fraction = 0.0
 
-    # Step 2: Check if dataset size requires CMC for memory management
-    # Even with few samples, large datasets need CMC to avoid OOM
     if dataset_size is not None:
         # Estimate memory requirement for MCMC
         # Formula: dataset_size × 8 bytes/float × 30 (data + gradients + NUTS tree + JAX overhead + MCMC state)
@@ -408,26 +405,48 @@ def should_use_cmc(
         estimated_memory_gb = (dataset_size * 8 * 30) / 1e9
         available_memory_gb = hardware_config.memory_per_device_gb
         memory_fraction = estimated_memory_gb / available_memory_gb
+        use_cmc_for_memory = memory_fraction > memory_threshold_pct
 
-        if memory_fraction > memory_threshold_pct:
-            logger.info(
-                f"Dataset requires ~{estimated_memory_gb:.2f} GB "
-                f"({memory_fraction:.1%} of {available_memory_gb:.2f} GB available). "
-                f"Using CMC for memory-efficient data sharding."
-            )
-            return True
-        else:
-            logger.debug(
-                f"Memory requirement: {estimated_memory_gb:.2f} GB "
-                f"({memory_fraction:.1%} of {available_memory_gb:.2f} GB) - within NUTS capacity"
-            )
-
-    # Default: Use standard NUTS
-    logger.debug(
-        f"Sample count {num_samples:,} within standard NUTS capacity. "
-        f"Using single-chain NUTS (faster for small sample counts)."
+    # Step 2: Log comprehensive dual-criteria evaluation
+    logger.info("=" * 70)
+    logger.info("Automatic NUTS/CMC Selection - Dual-Criteria Evaluation")
+    logger.info("=" * 70)
+    logger.info(
+        f"Parallelism criterion: num_samples={num_samples:,} >= "
+        f"min_samples_for_cmc={min_samples_for_cmc} → {use_cmc_for_parallelism}"
     )
-    return False
+
+    if dataset_size is not None:
+        logger.info(
+            f"Memory criterion: {memory_fraction:.1%} "
+            f"({estimated_memory_gb:.2f}/{hardware_config.memory_per_device_gb:.2f} GB) > "
+            f"{memory_threshold_pct:.1%} → {use_cmc_for_memory}"
+        )
+    else:
+        logger.info("Memory criterion: dataset_size=None → False (not evaluated)")
+
+    # Step 3: Apply OR logic and make decision
+    use_cmc = use_cmc_for_parallelism or use_cmc_for_memory
+
+    logger.info("-" * 70)
+    logger.info(
+        f"Final decision: Using {'CMC' if use_cmc else 'NUTS'} "
+        f"({'Parallelism' if use_cmc_for_parallelism else ''}"
+        f"{' + Memory' if use_cmc_for_memory and use_cmc_for_parallelism else ''}"
+        f"{'Memory' if use_cmc_for_memory and not use_cmc_for_parallelism else ''}"
+        f"{'Both criteria failed' if not use_cmc else ''} mode)"
+    )
+    logger.info("=" * 70)
+
+    # Step 4: Log warnings for edge cases
+    if use_cmc and num_samples < min_samples_for_cmc:
+        logger.warning(
+            f"Using CMC with only {num_samples} samples (< {min_samples_for_cmc} threshold). "
+            f"CMC adds 10-20% overhead; NUTS is faster for <{min_samples_for_cmc} samples if memory permits. "
+            f"Triggered by memory criterion: {memory_fraction:.1%} > {memory_threshold_pct:.1%}"
+        )
+
+    return use_cmc
 
 
 # Export public API

@@ -28,7 +28,7 @@ Key Features
 Implementation Details
 ----------------------
 - Uses NumPyro NUTS sampler with JAX backend
-- Respects init_params and inv_mass_matrix from SVI
+- Respects init_params and inv_mass_matrix from config
 - Returns standardized result format (samples, diagnostics, timing)
 - Handles OOM errors gracefully with retry
 
@@ -178,9 +178,11 @@ class PjitBackend(CMCBackend):
         mcmc_config : dict
             MCMC configuration (num_warmup, num_samples, etc.)
         init_params : dict
-            Initial parameter values from SVI
+            Initial parameter values for MCMC chain initialization
+            (loaded from config: `initial_parameters.values`)
         inv_mass_matrix : np.ndarray
-            Inverse mass matrix from SVI
+            Inverse mass matrix for NUTS initialization
+            (typically identity matrix, adapted during warmup)
         analysis_mode : str, optional
             Analysis mode ('static_isotropic' or 'laminar_flow')
         parameter_space : ParameterSpace, optional

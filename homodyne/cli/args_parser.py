@@ -21,18 +21,12 @@ def create_parser() -> argparse.ArgumentParser:
     Returns:
         Configured ArgumentParser with essential CLI options
     """
-    parser = argparse.ArgumentParser(
-        prog="homodyne",
-        description="JAX-first homodyne scattering analysis for XPCS",
-        formatter_class=argparse.RawDescriptionHelpFormatter,
-        epilog=f"""
+    # Create epilog with version interpolation
+    epilog_text = f"""
 Examples:
   %(prog)s                                    # Run with default NLSQ method
   %(prog)s --method nlsq                      # NLSQ trust-region least squares (default)
   %(prog)s --method mcmc                      # MCMC with automatic NUTS/CMC selection
-  %(prog)s --method auto                      # Auto-select NUTS or CMC (same as mcmc)
-  %(prog)s --method nuts                      # Force standard NUTS (for datasets < 500k points)
-  %(prog)s --method cmc                       # Force CMC (for datasets > 500k points)
   %(prog)s --config my_config.yaml            # Use custom config file
   %(prog)s --output-dir ./results             # Custom output directory
   %(prog)s --force-cpu                        # Force CPU-only computation
@@ -44,28 +38,27 @@ Examples:
   %(prog)s --static-mode                      # Force static mode (3 parameters)
   %(prog)s --laminar-flow --method mcmc       # Force laminar flow (7 parameters) with MCMC
 
-CMC Examples:
-  %(prog)s --method cmc --cmc-num-shards 20                    # CMC with 20 shards
-  %(prog)s --method cmc --cmc-backend multiprocessing          # CMC with multiprocessing backend
-  %(prog)s --method cmc --cmc-plot-diagnostics                 # CMC with diagnostic plots
-  %(prog)s --method cmc --cmc-num-shards 16 --cmc-backend pjit # CMC on multi-GPU system
+Manual NLSQ → MCMC Workflow:
+  Step 1: Run NLSQ to get point estimates
+    %(prog)s --method nlsq --config config.yaml
+
+  Step 2: Manually copy best-fit parameters from NLSQ output
+
+  Step 3: Update config.yaml with NLSQ results:
+    initial_parameters:
+      values: [1234.5, -1.234, 567.8]  # From NLSQ output
+
+  Step 4: Run MCMC with initialized parameters
+    %(prog)s --method mcmc --config config.yaml
 
 Optimization Methods:
   nlsq:    NLSQ trust-region nonlinear least squares (PRIMARY)
           Use for: Fast, reliable parameter estimation
 
-  mcmc:    Alias for 'auto' - automatic NUTS/CMC selection (SECONDARY)
+  mcmc:    Automatic NUTS/CMC selection based on dataset characteristics (SECONDARY)
           Use for: Uncertainty quantification, publication-quality analysis
-
-  auto:    Automatic selection between NUTS and CMC based on dataset size
-          < 500k points → NUTS (single-device MCMC)
-          > 500k points → CMC (distributed MCMC with data sharding)
-
-  nuts:    Force standard NUTS MCMC (NumPyro/BlackJAX)
-          Use for: Datasets < 500k points, when CMC overhead is unnecessary
-
-  cmc:     Force Consensus Monte Carlo (distributed Bayesian inference)
-          Use for: Large datasets (> 500k points), multi-GPU/HPC systems
+          Automatic selection: (num_samples >= 15) OR (memory > 30%%) → CMC, else NUTS
+          Configure thresholds in config file: min_samples_for_cmc, memory_threshold_pct
 
 Physical Model:
   c₂(φ,t₁,t₂) = 1 + contrast × [c₁(φ,t₁,t₂)]²
@@ -74,7 +67,13 @@ Physical Model:
   Laminar Flow:    7 parameters [D₀, α, D_offset, γ̇₀, β, γ̇_offset, φ₀]
 
 Homodyne v{__version__} - JAX-First Architecture
-        """,
+        """
+
+    parser = argparse.ArgumentParser(
+        prog="homodyne",
+        description="JAX-first homodyne scattering analysis for XPCS",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog=epilog_text,
     )
 
     # Version information
@@ -87,12 +86,13 @@ Homodyne v{__version__} - JAX-First Architecture
     # Method selection - JAX-first methods only
     parser.add_argument(
         "--method",
-        choices=["nlsq", "mcmc", "nuts", "cmc", "auto"],
+        choices=["nlsq", "mcmc"],
         default="nlsq",
         help=(
-            "Optimization method: nlsq (NLSQ trust-region), mcmc (alias for auto), "
-            "auto (automatic NUTS/CMC selection), nuts (force NUTS), cmc (force CMC) "
-            "(default: %(default)s)"
+            "Optimization method: nlsq (NLSQ trust-region), mcmc (automatic NUTS/CMC selection). "
+            "For MCMC, selection uses dual criteria: (num_samples >= min_samples_for_cmc) OR "
+            "(memory > memory_threshold_pct). Control via config: optimization.mcmc.min_samples_for_cmc "
+            "and optimization.mcmc.memory_threshold_pct (default: %(default)s)"
         ),
     )
 
@@ -185,7 +185,12 @@ Homodyne v{__version__} - JAX-First Architecture
     )
 
     # CMC-specific options
-    cmc_group = parser.add_argument_group("Consensus Monte Carlo (CMC) Options")
+    cmc_group = parser.add_argument_group(
+        "Consensus Monte Carlo (CMC) Options",
+        description="Options for CMC when automatically selected by --method mcmc. "
+        "CMC is selected when: (num_samples >= 15) OR (memory > 30%). "
+        "These options control CMC behavior when automatic selection chooses CMC.",
+    )
     cmc_group.add_argument(
         "--cmc-num-shards",
         type=int,
@@ -204,6 +209,87 @@ Homodyne v{__version__} - JAX-First Architecture
         "--cmc-plot-diagnostics",
         action="store_true",
         help="Generate CMC diagnostic plots (per-shard convergence, between-shard consistency)",
+    )
+
+    # Parameter override options
+    override_group = parser.add_argument_group(
+        "Parameter Override Options",
+        description="Override initial parameter values and MCMC thresholds from config file. "
+        "Priority: CLI args > config file > package defaults. "
+        "Useful for exploratory analysis without modifying config files.",
+    )
+
+    # Initial parameter overrides (static mode: 3 parameters)
+    override_group.add_argument(
+        "--initial-d0",
+        type=float,
+        default=None,
+        help="Override initial D0 (diffusion coefficient at t=1s, nm²/s) from config",
+    )
+
+    override_group.add_argument(
+        "--initial-alpha",
+        type=float,
+        default=None,
+        help="Override initial alpha (time-dependent diffusion exponent) from config",
+    )
+
+    override_group.add_argument(
+        "--initial-d-offset",
+        type=float,
+        default=None,
+        help="Override initial D_offset (constant offset diffusion, nm²/s) from config",
+    )
+
+    # Initial parameter overrides (laminar flow mode: 4 additional parameters)
+    override_group.add_argument(
+        "--initial-gamma-dot-t0",
+        type=float,
+        default=None,
+        help="Override initial gamma_dot_t0 (shear rate at t=1s, s⁻¹) from config (laminar flow only)",
+    )
+
+    override_group.add_argument(
+        "--initial-beta",
+        type=float,
+        default=None,
+        help="Override initial beta (time-dependent shear exponent) from config (laminar flow only)",
+    )
+
+    override_group.add_argument(
+        "--initial-gamma-dot-offset",
+        type=float,
+        default=None,
+        help="Override initial gamma_dot_t_offset (constant offset shear rate, s⁻¹) from config (laminar flow only)",
+    )
+
+    override_group.add_argument(
+        "--initial-phi0",
+        type=float,
+        default=None,
+        help="Override initial phi0 (flow direction angle, radians) from config (laminar flow only)",
+    )
+
+    # MCMC threshold overrides
+    override_group.add_argument(
+        "--min-samples-cmc",
+        type=int,
+        default=None,
+        help="Override min_samples_for_cmc threshold for CMC selection (default: 15)",
+    )
+
+    override_group.add_argument(
+        "--memory-threshold-pct",
+        type=float,
+        default=None,
+        help="Override memory_threshold_pct for CMC selection (0.0-1.0, default: 0.30)",
+    )
+
+    # MCMC/CMC mass matrix option
+    override_group.add_argument(
+        "--dense-mass-matrix",
+        action="store_true",
+        help="Use dense mass matrix for NUTS/CMC (default: diagonal). May improve sampling for correlated parameters.",
     )
 
     # Output options
@@ -336,7 +422,7 @@ def validate_args(args) -> bool:
         return False
 
     # Warn if CMC arguments provided with non-MCMC method
-    if args.method not in ["mcmc", "auto", "nuts", "cmc"]:
+    if args.method not in ["mcmc"]:
         if args.cmc_num_shards is not None:
             print(
                 f"Warning: --cmc-num-shards ignored (not applicable for method={args.method})"
@@ -349,6 +435,20 @@ def validate_args(args) -> bool:
             print(
                 f"Warning: --cmc-plot-diagnostics ignored (not applicable for method={args.method})"
             )
+
+    # Validate parameter override values
+    if args.initial_d0 is not None and args.initial_d0 <= 0:
+        print("Error: --initial-d0 must be positive")
+        return False
+
+    if args.min_samples_cmc is not None and args.min_samples_cmc <= 0:
+        print("Error: --min-samples-cmc must be positive")
+        return False
+
+    if args.memory_threshold_pct is not None:
+        if not (0.0 <= args.memory_threshold_pct <= 1.0):
+            print("Error: --memory-threshold-pct must be between 0.0 and 1.0")
+            return False
 
     # Check config file exists if provided and not default
     if args.config != Path("./homodyne_config.yaml") and not args.config.exists():

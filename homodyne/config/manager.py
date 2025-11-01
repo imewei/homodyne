@@ -325,6 +325,206 @@ class ConfigManager:
         """
         return self._get_parameter_manager().get_active_parameters()
 
+    def get_initial_parameters(
+        self,
+        use_midpoint_defaults: bool = True,
+    ) -> dict[str, float]:
+        """Get initial parameter values from configuration.
+
+        Loads initial parameter values from the `initial_parameters.values` section
+        of the configuration. If values are null or missing, calculates mid-point
+        defaults from parameter bounds.
+
+        Parameters
+        ----------
+        use_midpoint_defaults : bool
+            If True (default), calculate mid-point defaults when values are null.
+            If False, raise an error when values are missing.
+
+        Returns
+        -------
+        dict[str, float]
+            Dictionary mapping parameter names (canonical) to initial values.
+            Only includes active parameters (excludes fixed parameters).
+
+        Raises
+        ------
+        ValueError
+            If values are null and use_midpoint_defaults is False.
+            If number of values doesn't match number of parameter names.
+
+        Examples
+        --------
+        >>> # With explicit values in config
+        >>> config = {
+        ...     'initial_parameters': {
+        ...         'parameter_names': ['D0', 'alpha', 'D_offset'],
+        ...         'values': [1000.0, 0.5, 10.0]
+        ...     }
+        ... }
+        >>> config_mgr = ConfigManager(config_override=config)
+        >>> config_mgr.get_initial_parameters()
+        {'D0': 1000.0, 'alpha': 0.5, 'D_offset': 10.0}
+
+        >>> # With null values (mid-point defaults)
+        >>> config = {
+        ...     'initial_parameters': {
+        ...         'parameter_names': ['D0', 'alpha'],
+        ...         'values': null
+        ...     }
+        ... }
+        >>> config_mgr = ConfigManager(config_override=config)
+        >>> params = config_mgr.get_initial_parameters()
+        >>> # params['D0'] will be mid-point of bounds: (min + max) / 2
+
+        Notes
+        -----
+        - Uses ParameterManager for name mapping (gamma_dot_0 → gamma_dot_t0)
+        - Respects active_parameters and fixed_parameters from config
+        - Logs when using mid-point defaults
+        - Returns only active parameters (fixed parameters excluded)
+        """
+        if not self.config:
+            logger.warning("No configuration loaded, using empty initial parameters")
+            return {}
+
+        # Get initial_parameters section
+        initial_params = self.config.get("initial_parameters", {})
+        if not initial_params:
+            logger.info("No initial_parameters section in config, using mid-point defaults")
+            return self._calculate_midpoint_defaults()
+
+        # Get parameter names from config
+        param_names_config = initial_params.get("parameter_names")
+        if not param_names_config or not isinstance(param_names_config, list):
+            logger.info(
+                "No parameter_names in initial_parameters, using active parameters from mode"
+            )
+            return self._calculate_midpoint_defaults()
+
+        # Get parameter values from config
+        param_values = initial_params.get("values")
+
+        # Handle null/missing values
+        if param_values is None:
+            if use_midpoint_defaults:
+                logger.info(
+                    f"initial_parameters.values is null, calculating mid-point defaults for {len(param_names_config)} parameters"
+                )
+                return self._calculate_midpoint_defaults()
+            else:
+                raise ValueError(
+                    "initial_parameters.values is null and use_midpoint_defaults is False"
+                )
+
+        # Validate that values is a list
+        if not isinstance(param_values, list):
+            raise ValueError(
+                f"initial_parameters.values must be a list, got {type(param_values)}"
+            )
+
+        # Validate length match
+        if len(param_values) != len(param_names_config):
+            raise ValueError(
+                f"Number of values ({len(param_values)}) does not match "
+                f"number of parameter_names ({len(param_names_config)})"
+            )
+
+        # Get ParameterManager for name mapping
+        param_manager = self._get_parameter_manager()
+
+        # Build initial parameters dict with name mapping
+        initial_params_dict: dict[str, float] = {}
+        for param_name, value in zip(param_names_config, param_values):
+            # Apply name mapping (e.g., gamma_dot_0 → gamma_dot_t0)
+            from homodyne.config.types import PARAMETER_NAME_MAPPING
+
+            canonical_name = PARAMETER_NAME_MAPPING.get(param_name, param_name)
+            initial_params_dict[canonical_name] = float(value)
+
+        # Filter by active_parameters if specified
+        active_params_config = initial_params.get("active_parameters")
+        if active_params_config and isinstance(active_params_config, list):
+            # Map active parameter names to canonical names
+            active_canonical = set()
+            for name in active_params_config:
+                from homodyne.config.types import PARAMETER_NAME_MAPPING
+
+                canonical = PARAMETER_NAME_MAPPING.get(name, name)
+                active_canonical.add(canonical)
+
+            # Filter to only active parameters
+            initial_params_dict = {
+                k: v for k, v in initial_params_dict.items() if k in active_canonical
+            }
+            logger.info(
+                f"Filtered to {len(initial_params_dict)} active parameters: {list(initial_params_dict.keys())}"
+            )
+
+        # Exclude fixed_parameters
+        fixed_params = initial_params.get("fixed_parameters")
+        if fixed_params and isinstance(fixed_params, dict):
+            # Map fixed parameter names to canonical names
+            fixed_canonical = set()
+            for name in fixed_params.keys():
+                from homodyne.config.types import PARAMETER_NAME_MAPPING
+
+                canonical = PARAMETER_NAME_MAPPING.get(name, name)
+                fixed_canonical.add(canonical)
+
+            # Remove fixed parameters from initial_params_dict
+            initial_params_dict = {
+                k: v for k, v in initial_params_dict.items() if k not in fixed_canonical
+            }
+            logger.info(
+                f"Excluded {len(fixed_canonical)} fixed parameters, "
+                f"{len(initial_params_dict)} remaining"
+            )
+
+        logger.info(
+            f"Loaded initial parameters from config: {list(initial_params_dict.keys())}"
+        )
+
+        return initial_params_dict
+
+    def _calculate_midpoint_defaults(self) -> dict[str, float]:
+        """Calculate mid-point default values from parameter bounds.
+
+        Returns
+        -------
+        dict[str, float]
+            Dictionary mapping parameter names to mid-point values: (min + max) / 2
+
+        Notes
+        -----
+        - Uses ParameterManager to get bounds
+        - Only includes active parameters (excludes fixed)
+        - Logs calculation for transparency
+        """
+        param_manager = self._get_parameter_manager()
+
+        # Get active parameter names (already excludes fixed parameters)
+        active_params = param_manager.get_active_parameters()
+
+        # Get bounds for active parameters
+        bounds_list = param_manager.get_parameter_bounds(active_params)
+
+        # Calculate mid-points
+        midpoint_dict: dict[str, float] = {}
+        for bound_dict in bounds_list:
+            param_name = bound_dict["name"]
+            min_val = bound_dict["min"]
+            max_val = bound_dict["max"]
+            midpoint = (min_val + max_val) / 2.0
+            midpoint_dict[param_name] = midpoint
+
+        logger.info(
+            f"Calculated mid-point defaults for {len(midpoint_dict)} parameters"
+        )
+        logger.debug(f"Mid-point values: {midpoint_dict}")
+
+        return midpoint_dict
+
     def get_cmc_config(self) -> dict[str, Any]:
         """Get CMC (Consensus Monte Carlo) configuration with validation and defaults.
 
@@ -339,7 +539,6 @@ class ConfigManager:
             - enable: bool or "auto"
             - min_points_for_cmc: int
             - sharding: dict with strategy, num_shards, max_points_per_shard
-            - initialization: dict with method, svi_steps, etc.
             - backend: dict with name, checkpoint settings
             - combination: dict with method, validation settings
             - per_shard_mcmc: dict with num_warmup, num_samples, etc.
@@ -402,13 +601,6 @@ class ConfigManager:
                 "strategy": "stratified",
                 "num_shards": "auto",
                 "max_points_per_shard": "auto",
-            },
-            "initialization": {
-                "method": "svi",
-                "svi_steps": 5000,
-                "svi_learning_rate": 0.001,
-                "svi_rank": 5,
-                "fallback_to_identity": True,
             },
             "backend": {
                 "name": "auto",
@@ -497,13 +689,8 @@ class ConfigManager:
                 f"num_shards must be 'auto' or positive integer, got: {num_shards}"
             )
 
-        # Validate initialization
-        initialization = cmc_config.get("initialization", {})
-        method = initialization.get("method", "svi")
-        if method not in ["svi", "nlsq", "identity"]:
-            raise ValueError(
-                f"Initialization method must be 'svi', 'nlsq', or 'identity', got: {method}"
-            )
+        # Note: initialization config section is deprecated in v2.1.0
+        # CMC now uses identity mass matrix by default (no SVI initialization)
 
         # Validate backend (handle both old dict schema and new string schema)
         backend = cmc_config.get("backend", {})

@@ -143,29 +143,18 @@ class CMCShardingConfig(TypedDict, total=False):
 
 
 class CMCInitializationConfig(TypedDict, total=False):
-    """CMC initialization configuration.
+    """CMC initialization configuration (deprecated - kept for backward compatibility).
 
-    Configuration for NUTS inverse mass matrix initialization.
+    As of v2.1.0, CMC uses identity mass matrix by default. This TypedDict is kept
+    for backward compatibility with old configuration files but all fields are unused.
 
     Attributes
     ----------
     method : str
-        Initialization method: "svi", "nlsq", or "identity"
-    svi_steps : int
-        Number of SVI optimization steps
-    svi_learning_rate : float
-        Adam learning rate for SVI
-    svi_rank : int
-        Low-rank approximation rank (1-10)
-    fallback_to_identity : bool
-        Use identity matrix if SVI fails
+        Deprecated (unused)
     """
 
     method: str
-    svi_steps: int
-    svi_learning_rate: float
-    svi_rank: int
-    fallback_to_identity: bool
 
 
 class CMCBackendConfig(TypedDict, total=False):

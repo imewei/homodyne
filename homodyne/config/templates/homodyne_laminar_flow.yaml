@@ -328,6 +328,11 @@ optimization:
     max_tree_depth: 10                        # Maximum NUTS tree depth
     backend: "numpyro"                        # Options: "numpyro" | "blackjax"
 
+    # Automatic NUTS/CMC selection thresholds
+    min_samples_for_cmc: 15                   # Parallelism threshold for CMC selection
+    memory_threshold_pct: 0.30                # Memory threshold (30%) for CMC selection
+    dense_mass_matrix: false                  # False: diagonal (faster), True: full covariance
+
     # Chain initialization
     init_strategy: "median"                   # Options: "median" | "uniform" | "prior"
 
@@ -372,21 +377,6 @@ optimization:
       strategy: "stratified"                  # Options: "stratified" | "random" | "contiguous"
       num_shards: "auto"                      # Number of shards (int or "auto" for automatic)
       max_points_per_shard: "auto"            # Maximum points per shard (int or "auto")
-
-    # Initialization strategy for inverse mass matrix
-    initialization:
-      run_nlsq_init: true                     # Run NLSQ pre-optimization before SVI (RECOMMENDED: true)
-                                              # Provides 2-10x faster SVI convergence
-      use_svi: true                           # Enable SVI for mass matrix estimation
-      svi_steps: 5000                         # Number of SVI optimization steps (5000 recommended)
-      svi_timeout: null                       # SVI timeout in seconds (null = adaptive timeout)
-                                              # Adaptive: ~53 min for 4600 samples × 5000 steps without init
-                                              #          ~27 min with NLSQ init (50% faster)
-                                              # Manual override: 3600 (60 min) for large datasets
-      samples_per_shard: 200                  # Samples to pool from each shard for SVI
-      svi_learning_rate: 0.001                # Adam learning rate for SVI
-      svi_rank: 5                             # Low-rank approximation rank (1-10)
-      fallback_to_identity: true              # Use identity matrix if SVI fails
 
     # Backend configuration for parallel execution
     backend_config:

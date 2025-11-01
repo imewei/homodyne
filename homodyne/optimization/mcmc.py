@@ -1,31 +1,86 @@
-"""MCMC + JAX: High-Accuracy Bayesian Analysis for Homodyne v2
-===========================================================
+"""MCMC + JAX: High-Accuracy Bayesian Analysis for Homodyne v2.1
+================================================================
 
 NumPyro/BlackJAX-based MCMC sampling for high-precision parameter estimation
-and uncertainty quantification. MCMC serves as the refinement method for
-critical analysis using the unified homodyne model.
+and uncertainty quantification with automatic NUTS/CMC selection.
 
-Key Features:
-- NumPyro/BlackJAX NUTS sampling only (PyMC completely removed)
-- Unified homodyne model: c2_fitted = c2_theory * contrast + offset
-- Same likelihood as VI: Exp - (contrast * Theory + offset)
-- Full posterior sampling with specified parameter priors
-- JAX acceleration for both CPU and GPU
-- Comprehensive convergence diagnostics
-- Can be initialized from VI results for efficiency
-- Automatic method selection: NUTS vs CMC based on dual criteria
-- Consensus Monte Carlo (CMC) for many samples (>=100) OR large memory footprint
+Key Features
+------------
+- **Automatic NUTS/CMC Selection**: Dual-criteria OR logic based on dataset characteristics
+  - Parallelism criterion: num_samples >= min_samples_for_cmc (default: 15)
+  - Memory criterion: estimated_memory > memory_threshold_pct (default: 30%)
+  - Decision: CMC if (Criterion 1 OR Criterion 2), otherwise NUTS
 
-MCMC Philosophy:
+- **Configuration-Driven Parameter Management**: All parameters loaded from YAML config
+  - parameter_space: Bounds and prior distributions
+  - initial_values: Starting points for MCMC chains (e.g., from NLSQ results)
+  - Automatic fallback to mid-point of bounds if values not specified
+
+- **Full Posterior Sampling**: NumPyro/BlackJAX NUTS with comprehensive diagnostics
+  - Unified homodyne model: c2_fitted = contrast * c2_theory + offset
+  - Physics-informed priors from ParameterSpace
+  - Convergence diagnostics: R-hat, ESS, acceptance rate
+  - Auto-retry mechanism with different random seeds (max 3 retries)
+
+- **JAX Acceleration**: Transparent CPU/GPU execution with JIT compilation
+  - Single-device NUTS for small datasets (<1M points)
+  - Multi-shard CMC for large datasets or many samples
+  - Hardware-adaptive selection using HardwareConfig
+
+Workflow
+--------
+**Recommended: Manual NLSQ → MCMC Workflow**
+1. Run NLSQ optimization to get point estimates
+2. Manually copy best-fit results to config YAML: `initial_parameters.values`
+3. Run MCMC with `--method mcmc` (automatic NUTS/CMC selection)
+4. MCMC uses config-loaded values for faster convergence
+
+**Configuration Structure (YAML)**
+```yaml
+optimization:
+  mcmc:
+    min_samples_for_cmc: 15        # Parallelism threshold
+    memory_threshold_pct: 0.30     # Memory threshold (30%)
+    dense_mass_matrix: false       # Diagonal (fast) vs full covariance (accurate)
+
+initial_parameters:
+  parameter_names: [D0, alpha, D_offset]
+  values: [1234.5, 0.567, 12.34]  # From NLSQ results (manual copy)
+
+parameter_space:
+  bounds:
+    D0: {min: 100.0, max: 5000.0}
+    alpha: {min: 0.1, max: 2.0}
+    D_offset: {min: 0.1, max: 100.0}
+  priors:
+    D0: {type: TruncatedNormal, mu: 1000.0, sigma: 500.0}
+    alpha: {type: TruncatedNormal, mu: 1.0, sigma: 0.3}
+    D_offset: {type: TruncatedNormal, mu: 10.0, sigma: 5.0}
+```
+
+MCMC Philosophy
+---------------
 - Gold standard for uncertainty quantification
 - Full posterior sampling (not just point estimates)
 - Essential for critical/publication-quality analysis
-- Complements VI+JAX for comprehensive Bayesian workflow
+- Complements NLSQ for comprehensive Bayesian workflow
 
-Method Selection:
-- 'auto': Automatically select NUTS or CMC based on dataset size and hardware
-- 'nuts': Force standard NUTS (may fail on very large datasets)
-- 'cmc': Force Consensus Monte Carlo (adds overhead for small datasets)
+Automatic Selection Logic
+--------------------------
+**NUTS (Single-Device):**
+- Fast for small datasets (<1M points)
+- Low overhead, single-device execution
+- Selected when: (num_samples < 15) AND (memory < 30%)
+
+**CMC (Multi-Shard):**
+- Parallelized for CPU cores or large memory requirements
+- ~10-20% overhead but enables unlimited dataset sizes
+- Selected when: (num_samples >= 15) OR (memory >= 30%)
+
+**Examples:**
+- 50 phi angles (num_samples=50) → CMC for ~3x speedup on 14-core CPU
+- 5 phi angles but 10M points (memory>30%) → CMC to prevent OOM
+- 10 phi angles, 100k points (memory<30%) → NUTS for minimal overhead
 """
 
 import time
@@ -91,7 +146,7 @@ except ImportError:
 
 # Core homodyne imports
 try:
-    from homodyne.core.fitting import ParameterSpace
+    from homodyne.core.fitting import ParameterSpace as LegacyParameterSpace
     from homodyne.core.jax_backend import compute_g1_diffusion, compute_g1_total
 
     HAS_CORE_MODULES = True
@@ -100,6 +155,16 @@ except ImportError:
     # Fallback if jax_backend not available
     compute_g1_diffusion = None
     compute_g1_total = None
+
+# New config-driven ParameterSpace (v2.1)
+try:
+    from homodyne.config.parameter_space import ParameterSpace, PriorDistribution
+
+    HAS_PARAMETER_SPACE = True
+except ImportError:
+    HAS_PARAMETER_SPACE = False
+    ParameterSpace = LegacyParameterSpace if HAS_CORE_MODULES else None
+    PriorDistribution = None
 
 # Import extended MCMCResult with CMC support
 # This provides backward compatibility while supporting CMC
@@ -178,6 +243,38 @@ except ImportError:
             self.effective_sample_size = effective_sample_size
 
 
+def _calculate_midpoint_defaults(parameter_space: ParameterSpace) -> dict[str, float]:
+    """Calculate mid-point defaults for initial parameter values.
+
+    Used when initial_values is None or null in config. Calculates the mid-point
+    between min and max bounds for each parameter.
+
+    Parameters
+    ----------
+    parameter_space : ParameterSpace
+        Parameter space containing bounds
+
+    Returns
+    -------
+    dict[str, float]
+        Dictionary mapping parameter names to mid-point values
+    """
+    initial_values = {}
+
+    for param_name in parameter_space.parameter_names:
+        # Skip contrast and offset (scaling parameters, not physical)
+        if param_name in ['contrast', 'offset']:
+            continue
+
+        bounds = parameter_space.get_bounds(param_name)
+        if bounds is not None:
+            min_val, max_val = bounds
+            midpoint = (min_val + max_val) / 2.0
+            initial_values[param_name] = midpoint
+
+    return initial_values
+
+
 @log_performance(threshold=10.0)
 def fit_mcmc_jax(
     data: np.ndarray,
@@ -187,144 +284,236 @@ def fit_mcmc_jax(
     phi: np.ndarray = None,
     q: float = None,
     L: float = None,
-    analysis_mode: str = "static_isotropic",  # Changed default to simpler mode
+    analysis_mode: str = "static_isotropic",
     parameter_space: ParameterSpace | None = None,
+    initial_values: dict[str, float] | None = None,
     enable_dataset_optimization: bool = True,
     estimate_noise: bool = False,
     noise_model: str = "hierarchical",
-    initial_params: dict[str, float] | None = None,  # Added for initialization
-    use_simplified_likelihood: bool = True,  # Added for performance
-    method: str = "auto",  # NEW: Method selection ('auto', 'nuts', 'cmc')
+    use_simplified_likelihood: bool = True,
     **kwargs,
 ) -> MCMCResult:
-    """High-accuracy fitting using MCMC+JAX sampling with automatic method selection.
+    """High-accuracy Bayesian parameter estimation using MCMC with automatic NUTS/CMC selection.
 
-    Uses NumPyro/BlackJAX for full posterior sampling with unified homodyne model.
-    Same likelihood as VI: Exp - (contrast * Theory + offset)
-    Automatically selects between standard NUTS and Consensus Monte Carlo (CMC)
-    based on dataset size and hardware configuration.
+    Performs full posterior sampling using NumPyro/BlackJAX with the unified homodyne
+    correlation model. Automatically selects between standard NUTS (single-device) and
+    Consensus Monte Carlo (multi-shard parallelization) based on dual-criteria OR logic:
+    (num_samples >= min_samples_for_cmc) OR (estimated_memory > memory_threshold_pct).
 
-    Method Selection Strategy
-    -------------------------
-    - **'auto'** (default): Automatically select using dual-criteria OR logic
-        - CMC if: (num_samples >= 100) OR (estimated_memory > threshold)
-        - NUTS otherwise (faster for few samples with manageable memory)
-        - Hardware-adaptive: Considers GPU memory, CPU cores, cluster environment
-    - **'nuts'**: Force standard NUTS MCMC
-        - Single-device execution
-        - May fail with OOM on very large datasets
-        - Best for <1M points
-    - **'cmc'**: Force Consensus Monte Carlo
-        - Multi-shard execution with subposterior combination
-        - Adds overhead for small datasets
-        - Recommended for >1M points
+    Configuration-Driven Parameter Management
+    ------------------------------------------
+    Parameters and priors are loaded from YAML configuration files via:
+    - **parameter_space**: Bounds and prior distributions (from `parameter_space` YAML section)
+    - **initial_values**: Starting points for MCMC chains (from `initial_parameters.values` YAML section)
+
+    If not provided, defaults are loaded from package configuration:
+    - Mid-point of parameter bounds for initial values
+    - Physics-informed TruncatedNormal priors with wide distributions
+
+    Manual NLSQ → MCMC Workflow:
+    1. Run NLSQ optimization to get point estimates
+    2. Manually copy best-fit results to config YAML: `initial_parameters.values`
+    3. Run MCMC with initialized values for faster convergence
+
+    Automatic NUTS/CMC Selection
+    -----------------------------
+    Selection uses dual-criteria OR logic (configurable via YAML):
+
+    **Criterion 1 - Parallelism**: `num_samples >= min_samples_for_cmc` (default: 15)
+    - Many independent samples (e.g., 50 phi angles) → CMC for CPU parallelization
+    - Achieves ~3x speedup on 14-core CPU with 50 samples
+
+    **Criterion 2 - Memory**: `estimated_memory > memory_threshold_pct` (default: 0.30)
+    - Large datasets approaching OOM threshold → CMC for memory management
+    - Prevents out-of-memory failures on datasets >1M points
+
+    **Decision**: CMC if (Criterion 1 OR Criterion 2), otherwise NUTS
+
+    Configuration (in YAML):
+    ```yaml
+    optimization:
+      mcmc:
+        min_samples_for_cmc: 15        # Parallelism threshold
+        memory_threshold_pct: 0.30     # Memory threshold (30%)
+        dense_mass_matrix: false       # Diagonal (fast) vs full covariance (accurate)
+    ```
 
     Parameters
     ----------
     data : np.ndarray
-        Experimental correlation data (flattened)
+        Experimental correlation data (flattened or 2D array)
     sigma : np.ndarray, optional
-        Noise standard deviations. If None, estimated from data.
+        Noise standard deviations. If None, estimated as 1% of data.
     t1 : np.ndarray
-        First delay time array (flattened, same length as data)
+        First delay time array (same shape as data)
     t2 : np.ndarray
-        Second delay time array (flattened, same length as data)
+        Second delay time array (same shape as data)
     phi : np.ndarray
-        Phi angle values (flattened, same length as data)
+        Azimuthal angle values (same shape as data)
     q : float
-        q-vector magnitude
+        Scattering wavevector magnitude [Å⁻¹]
     L : float
-        Sample-detector distance
+        Sample-detector distance [Å] (required for laminar_flow mode)
     analysis_mode : str, default "static_isotropic"
-        Analysis mode: "static_isotropic" (3 params) or "laminar_flow" (7 params)
+        Physics model selection:
+        - "static_isotropic": Diffusion-only (3 physical params)
+        - "laminar_flow": Diffusion + shear flow (7 physical params)
     parameter_space : ParameterSpace, optional
-        Parameter bounds and priors
+        Parameter bounds and prior distributions. If None, loaded from config or defaults.
+        Loaded from YAML: `parameter_space` section
+    initial_values : dict[str, float], optional
+        Initial parameter values for MCMC chains (e.g., from NLSQ results).
+        If None, defaults to mid-point of parameter bounds.
+        Loaded from YAML: `initial_parameters.values` section
+        Example: {'D0': 1234.5, 'alpha': 0.567, 'D_offset': 12.34}
     enable_dataset_optimization : bool, default True
-        Enable dataset size optimization (deprecated, kept for compatibility)
+        Deprecated parameter, kept for backward compatibility. No effect.
     estimate_noise : bool, default False
-        Whether to estimate noise hierarchically
+        Enable hierarchical noise estimation (experimental feature)
     noise_model : str, default "hierarchical"
-        Noise model type
-    initial_params : dict[str, float], optional
-        Initial parameter values (e.g., from NLSQ optimization)
-        Used for tighter priors and faster convergence
+        Noise model type for hierarchical estimation
     use_simplified_likelihood : bool, default True
         Use simplified likelihood for faster computation
-    method : str, default "auto"
-        MCMC method selection:
-        - 'auto': Automatic selection based on dataset size (RECOMMENDED)
-        - 'nuts': Force standard NUTS (may fail on large datasets)
-        - 'cmc': Force Consensus Monte Carlo (adds overhead for small datasets)
     **kwargs
-        Additional MCMC/CMC configuration parameters:
-        - For NUTS: n_samples, n_warmup, n_chains, target_accept_prob, etc.
-        - For CMC: cmc_config dict with sharding, initialization, combination settings
+        Additional MCMC configuration parameters:
+        - n_samples : int, default 1000
+            Number of posterior samples per chain
+        - n_warmup : int, default 500
+            Number of warmup iterations for adaptation
+        - n_chains : int, default 4
+            Number of parallel MCMC chains
+        - target_accept_prob : float, default 0.8
+            Target acceptance probability for step size adaptation
+        - max_tree_depth : int, default 10
+            Maximum NUTS tree depth
+        - rng_key : int, default 42
+            Random seed for reproducibility
+        - min_samples_for_cmc : int, default 15
+            Parallelism threshold for CMC selection (from YAML config)
+        - memory_threshold_pct : float, default 0.30
+            Memory threshold (30%) for CMC selection (from YAML config)
+        - dense_mass_matrix : bool, default False
+            Use full covariance (True) vs diagonal (False) mass matrix
+        - cmc_config : dict, optional
+            CMC-specific configuration (sharding, backend, diagnostics)
 
     Returns
     -------
     MCMCResult
-        MCMC sampling result with posterior samples and diagnostics.
-        For CMC results, includes additional fields:
-        - per_shard_diagnostics: List of per-shard convergence info
-        - cmc_diagnostics: Overall CMC diagnostics
-        - combination_method: Method used to combine posteriors
-        - num_shards: Number of shards used
+        MCMC sampling result with full posterior samples and diagnostics.
+
+        Standard NUTS results:
+        - mean_params, std_params : Parameter means and standard deviations
+        - samples_params : Full posterior samples (n_samples × n_params)
+        - r_hat : Gelman-Rubin convergence diagnostic (per parameter)
+        - effective_sample_size : ESS diagnostic (per parameter)
+        - acceptance_rate : Mean acceptance probability
+
+        CMC results (additional fields):
+        - per_shard_diagnostics : List of per-shard convergence info
+        - cmc_diagnostics : Overall CMC diagnostics
+        - combination_method : Method used to combine posteriors
+        - num_shards : Number of shards used for parallelization
 
     Raises
     ------
     ImportError
         If NumPyro or BlackJAX not available
     ValueError
-        If data validation fails or invalid method specified
+        If data validation fails (None/empty data, missing arrays, invalid parameters)
     RuntimeError
-        If CMC execution fails (all shards fail to converge)
+        If MCMC fails to converge after auto-retry attempts (max 3 retries)
 
     Examples
     --------
-    Automatic method selection (recommended):
+    **Example 1: Config-driven workflow with automatic selection**
 
+    >>> from homodyne.config import ConfigManager
+    >>> from homodyne.config.parameter_space import ParameterSpace
+    >>>
+    >>> # Load configuration from YAML
+    >>> config = ConfigManager.from_yaml("config.yaml")
+    >>> param_space = ParameterSpace.from_config(config.to_dict())
+    >>> initial_vals = config.get_initial_parameters()
+    >>>
+    >>> # Run MCMC with automatic NUTS/CMC selection
     >>> result = fit_mcmc_jax(
     ...     data=c2_exp, t1=t1, t2=t2, phi=phi, q=0.01, L=3.5,
     ...     analysis_mode='laminar_flow',
-    ...     initial_params={'D0': 1000.0, 'alpha': 1.5},
+    ...     parameter_space=param_space,
+    ...     initial_values=initial_vals,
     ... )
-    >>> print(f"Used method: {'CMC' if result.is_cmc_result() else 'NUTS'}")
+    >>> print(f"Used method: {'CMC' if hasattr(result, 'num_shards') else 'NUTS'}")
+    >>> print(f"Convergence: R-hat={result.r_hat}, ESS={result.effective_sample_size}")
 
-    Force standard NUTS:
+    **Example 2: Manual NLSQ → MCMC workflow**
 
+    >>> # Step 1: Run NLSQ for point estimates
+    >>> nlsq_result = fit_nlsq_jax(data=c2_exp, t1=t1, t2=t2, phi=phi, q=0.01, L=3.5)
+    >>> print(f"NLSQ results: D0={nlsq_result.params[0]:.2f}, alpha={nlsq_result.params[1]:.3f}")
+    >>>
+    >>> # Step 2: Manually update config.yaml with NLSQ results
+    >>> # Edit initial_parameters.values:
+    >>> #   values: [1234.5, 0.567, 12.34]  # From NLSQ output
+    >>>
+    >>> # Step 3: Run MCMC with initialized values from config
+    >>> config = ConfigManager.from_yaml("config.yaml")  # Reload after manual edit
+    >>> initial_vals = config.get_initial_parameters()
     >>> result = fit_mcmc_jax(
     ...     data=c2_exp, t1=t1, t2=t2, phi=phi, q=0.01, L=3.5,
-    ...     method='nuts',
+    ...     initial_values=initial_vals,  # From NLSQ via config
     ... )
 
-    Force CMC with custom configuration:
+    **Example 3: CLI override of automatic selection thresholds**
 
-    >>> cmc_config = {
-    ...     'sharding': {'num_shards': 10, 'strategy': 'stratified'},
-    ...     'initialization': {'use_svi': True, 'svi_steps': 5000},
-    ...     'combination': {'method': 'weighted'},
-    ... }
+    >>> # Override config thresholds via CLI arguments
     >>> result = fit_mcmc_jax(
     ...     data=c2_exp, t1=t1, t2=t2, phi=phi, q=0.01, L=3.5,
-    ...     method='cmc',
-    ...     cmc_config=cmc_config,
+    ...     min_samples_for_cmc=20,      # Increase parallelism threshold
+    ...     memory_threshold_pct=0.40,   # Increase memory threshold
     ... )
-    >>> print(f"Used {result.num_shards} shards")
+
+    **Example 4: Dense mass matrix for difficult posteriors**
+
+    >>> # Use full covariance mass matrix (slower but more accurate)
+    >>> result = fit_mcmc_jax(
+    ...     data=c2_exp, t1=t1, t2=t2, phi=phi, q=0.01, L=3.5,
+    ...     dense_mass_matrix=True,
+    ...     n_warmup=1000,  # More warmup for mass matrix adaptation
+    ... )
 
     Notes
     -----
-    - CMC is automatically enabled based on dual criteria: (samples >= 100) OR (memory > threshold)
-    - method='auto' is recommended for all use cases
-    - CMC adds ~10-20% overhead but enables parallelism and unlimited dataset sizes
-    - Backward compatible: Existing code continues to work without changes
+    **Automatic Selection Logic:**
+    - Dual-criteria OR logic ensures optimal performance across all scenarios
+    - Parallelism criterion: Many samples (e.g., 50 phi angles) trigger CMC for speedup
+    - Memory criterion: Large datasets (>30% memory) trigger CMC to prevent OOM
+    - Hardware-adaptive: Uses `HardwareConfig` for GPU memory, CPU cores, cluster detection
+
+    **Configuration Structure:**
+    - All parameters loaded from YAML configuration files
+    - Three-tier priority: CLI args > config file > package defaults
+    - See YAML templates: homodyne_static.yaml, homodyne_laminar_flow.yaml
+
+    **Convergence Diagnostics:**
+    - Auto-retry mechanism: Up to 3 attempts with different random seeds
+    - R-hat < 1.1 indicates good convergence (Gelman-Rubin diagnostic)
+    - ESS > 100 indicates sufficient effective sample size
+    - Acceptance rate ~0.7-0.9 indicates good step size tuning
+
+    **Performance:**
+    - NUTS: Fast for small datasets (<1M points), single-device execution
+    - CMC: Parallelized for large datasets or many samples, ~10-20% overhead
+    - Dense mass matrix: 2-3x slower but better for correlated parameters
+
+    See Also
+    --------
+    ConfigManager.get_initial_parameters : Load initial values from config
+    ParameterSpace.from_config : Load parameter space from config
+    fit_nlsq_jax : NLSQ optimization for point estimates
     """
 
-    # Validate method parameter
-    if method not in ['auto', 'nuts', 'cmc']:
-        raise ValueError(
-            f"Invalid method '{method}'. Must be one of: 'auto', 'nuts', 'cmc'"
-        )
-
+    # Validate dependencies
     if not NUMPYRO_AVAILABLE and not BLACKJAX_AVAILABLE:
         raise ImportError(
             "NumPyro or BlackJAX is required for MCMC optimization. "
@@ -337,10 +526,111 @@ def fit_mcmc_jax(
     # Validate input data
     _validate_mcmc_data(data, t1, t2, phi, q, L)
 
+    # =========================================================================
+    # CONFIG-DRIVEN PARAMETER LOADING
+    # =========================================================================
+    # Load parameter_space and initial_values from config if not provided
+    # This implements three-tier priority: CLI args > config file > package defaults
+    # - parameter_space: Bounds and prior distributions (from YAML parameter_space section)
+    # - initial_values: Starting points for MCMC chains (from YAML initial_parameters.values)
+
+    # Extract config dict once from kwargs (avoid duplicate pop)
+    config_dict = kwargs.pop('config', None)
+
+    # Step 1: Load parameter_space from config if None
+    # Contains parameter bounds and prior distributions for Bayesian sampling
+    if parameter_space is None:
+        logger.info("Loading parameter_space from config (not provided as argument)")
+        try:
+            if config_dict is not None:
+                # Load ParameterSpace from config dict
+                parameter_space = ParameterSpace.from_config(config_dict)
+                logger.info(
+                    f"Loaded parameter_space from config: "
+                    f"model={parameter_space.model_type}, "
+                    f"num_params={len(parameter_space.parameter_names)}"
+                )
+            else:
+                # Fallback to package defaults
+                logger.info("No config provided, using package default parameter_space")
+                parameter_space = ParameterSpace.from_defaults(analysis_mode)
+
+        except Exception as e:
+            logger.warning(
+                f"Failed to load parameter_space from config: {e}. "
+                "Using package defaults."
+            )
+            parameter_space = ParameterSpace.from_defaults(analysis_mode)
+    else:
+        logger.info(
+            f"Using provided parameter_space: "
+            f"model={parameter_space.model_type}, "
+            f"num_params={len(parameter_space.parameter_names)}"
+        )
+
+    # Step 2: Load initial_values from config if None
+    if initial_values is None:
+        logger.info("Loading initial_values from config (not provided as argument)")
+        try:
+            if config_dict is not None:
+                # Load initial values from config using ConfigManager
+                from homodyne.config.manager import ConfigManager
+                config_mgr = ConfigManager(config_override=config_dict)
+                initial_values = config_mgr.get_initial_parameters()
+
+                if initial_values:
+                    logger.info(
+                        f"Loaded initial_values from config: "
+                        f"{list(initial_values.keys())} = "
+                        f"{[f'{v:.4g}' for v in initial_values.values()]}"
+                    )
+                else:
+                    # Calculate mid-point defaults
+                    logger.info("Config has null initial_values, calculating mid-point defaults")
+                    initial_values = _calculate_midpoint_defaults(parameter_space)
+                    logger.info(
+                        f"Using mid-point defaults: "
+                        f"{list(initial_values.keys())} = "
+                        f"{[f'{v:.4g}' for v in initial_values.values()]}"
+                    )
+            else:
+                # No config, calculate mid-point defaults
+                logger.info("No config provided, calculating mid-point defaults for initial_values")
+                initial_values = _calculate_midpoint_defaults(parameter_space)
+                logger.info(
+                    f"Using mid-point defaults: "
+                    f"{list(initial_values.keys())} = "
+                    f"{[f'{v:.4g}' for v in initial_values.values()]}"
+                )
+
+        except Exception as e:
+            logger.warning(
+                f"Failed to load initial_values from config: {e}. "
+                "Using mid-point defaults."
+            )
+            initial_values = _calculate_midpoint_defaults(parameter_space)
+    else:
+        logger.info(
+            f"Using provided initial_values: "
+            f"{list(initial_values.keys())} = "
+            f"{[f'{v:.4g}' for v in initial_values.values()]}"
+        )
+
+    # Step 3: Validate loaded parameters
+    # Verify initial_values are within parameter_space bounds
+    if initial_values is not None:
+        is_valid, violations = parameter_space.validate_values(initial_values)
+        if not is_valid:
+            raise ValueError(
+                f"Initial parameter values violate bounds:\n"
+                + "\n".join(violations)
+            )
+        logger.info("Initial parameter values validated successfully (all within bounds)")
+
     # Get total dataset size (handles both 1D and multi-dimensional arrays)
     dataset_size = data.size if hasattr(data, 'size') else len(data)
 
-    # Get number of independent samples for CMC decision
+    # Get number of independent samples for NUTS/CMC decision
     # For multi-dimensional XPCS data (n_phi, n_t1, n_t2), each phi angle is one sample
     # For 1D data, num_samples equals dataset_size
     if hasattr(data, 'shape') and hasattr(data, 'ndim'):
@@ -352,54 +642,74 @@ def fit_mcmc_jax(
     logger.info(f"Dataset size: {dataset_size:,} data points ({num_samples} independent samples)")
     logger.info(f"Analysis mode: {analysis_mode}")
 
+    # =========================================================================
+    # AUTOMATIC NUTS/CMC SELECTION - DUAL-CRITERIA OR LOGIC
+    # =========================================================================
     # Step 1: Detect hardware configuration
+    # Hardware detection provides memory information for dual-criteria decision
     try:
         from homodyne.device.config import detect_hardware, should_use_cmc
         hardware_config = detect_hardware()
     except ImportError:
         logger.warning(
-            "Hardware detection not available. Assuming standard NUTS execution."
+            "Hardware detection not available. Using simple threshold-based selection."
         )
         hardware_config = None
 
-    # Step 2: Determine actual method to use
-    if method == 'auto':
-        if hardware_config is not None:
-            # CMC decision based on TWO criteria (OR logic):
-            # 1. Parallelism: num_samples >= threshold (e.g., 100)
-            # 2. Memory: dataset_size causes estimated memory > threshold
-            use_cmc = should_use_cmc(num_samples, hardware_config, dataset_size=dataset_size)
-            actual_method = 'cmc' if use_cmc else 'nuts'
-            logger.info(
-                f"Automatic method selection: {actual_method.upper()} "
-                f"(num_samples={num_samples:,}, dataset_size={dataset_size:,}, "
-                f"platform={hardware_config.platform})"
-            )
-        else:
-            # Fallback: Simple threshold-based selection using num_samples
-            use_cmc = num_samples > 500
-            actual_method = 'cmc' if use_cmc else 'nuts'
-            logger.info(
-                f"Automatic method selection (fallback): {actual_method.upper()} "
-                f"(num_samples={num_samples:,})"
-            )
-    else:
-        actual_method = method
-        logger.info(f"Using user-specified method: {actual_method.upper()}")
+    # Step 2: Extract configurable thresholds from kwargs (with defaults)
+    # These thresholds are loaded from YAML config: optimization.mcmc.min_samples_for_cmc
+    # Users can override via CLI: --min-samples-cmc, --memory-threshold-pct
+    min_samples_for_cmc = kwargs.pop('min_samples_for_cmc', 15)
+    memory_threshold_pct = kwargs.pop('memory_threshold_pct', 0.30)
 
-    # Step 3: Log warnings for suboptimal method choices
-    if actual_method == 'cmc' and num_samples < 20:
+    # Step 3: Automatic NUTS/CMC selection using dual-criteria OR logic
+    # Criterion 1 (Parallelism): num_samples >= min_samples_for_cmc (default: 15)
+    #   - Many independent samples (e.g., 50 phi angles) → CMC for CPU parallelization
+    #   - Achieves ~3x speedup on multi-core CPUs with many samples
+    # Criterion 2 (Memory): estimated_memory > memory_threshold_pct (default: 30%)
+    #   - Large datasets approaching OOM threshold → CMC for memory management
+    #   - Prevents out-of-memory failures on datasets >1M points
+    # Decision: use_cmc = (Criterion 1 OR Criterion 2)
+    #   - Either criterion triggers CMC (OR logic, not AND)
+    if hardware_config is not None:
+        # Hardware detection available - use full dual-criteria logic
+        use_cmc = should_use_cmc(
+            num_samples,
+            hardware_config,
+            dataset_size=dataset_size,
+            min_samples_for_cmc=min_samples_for_cmc,
+            memory_threshold_pct=memory_threshold_pct,
+        )
+        actual_method = 'cmc' if use_cmc else 'nuts'
+        logger.info(
+            f"Automatic selection: {actual_method.upper()} "
+            f"(num_samples={num_samples:,}, dataset_size={dataset_size:,}, "
+            f"thresholds: min_samples={min_samples_for_cmc}, memory={memory_threshold_pct:.1%}, "
+            f"platform={hardware_config.platform})"
+        )
+    else:
+        # Fallback: Simple threshold-based selection using num_samples only
+        use_cmc = num_samples >= min_samples_for_cmc
+        actual_method = 'cmc' if use_cmc else 'nuts'
+        logger.info(
+            f"Automatic selection (fallback): {actual_method.upper()} "
+            f"(num_samples={num_samples:,}, min_samples_for_cmc={min_samples_for_cmc})"
+        )
+
+    # Step 4: Log warnings for edge cases
+    if actual_method == 'cmc' and num_samples < min_samples_for_cmc:
         logger.warning(
             f"Using CMC with very few samples ({num_samples} samples). "
-            f"CMC adds 10-20% overhead; consider method='nuts' for <20 samples if memory permits."
+            f"CMC adds 10-20% overhead; NUTS is faster for <{min_samples_for_cmc} samples if memory permits. "
+            f"(Likely triggered by memory criterion: estimated_memory > {memory_threshold_pct:.1%})"
         )
-    elif actual_method == 'nuts' and num_samples > 100:
-        logger.warning(
-            f"Using NUTS with many samples ({num_samples:,} samples). "
-            f"CMC may be 2-5x faster via parallelization on multi-core CPU; consider method='auto' or method='cmc'."
+    elif actual_method == 'nuts' and num_samples >= min_samples_for_cmc:
+        logger.info(
+            f"Using NUTS with {num_samples:,} samples. "
+            f"CMC may provide additional parallelization on multi-core CPU."
         )
 
-    # Step 4: Execute selected method
+    # Step 5: Execute selected method
     if actual_method == 'cmc':
         # Use Consensus Monte Carlo
         logger.info("=" * 70)
@@ -425,11 +735,7 @@ def fit_mcmc_jax(
         # Create CMC coordinator
         coordinator = CMCCoordinator(cmc_config)
 
-        # Prepare NLSQ params from initial_params
-        # Pass None instead of {} to let SVI fallback logic work correctly
-        nlsq_params = initial_params if initial_params is not None else None
-
-        # Run CMC pipeline
+        # Run CMC pipeline with config-driven parameters
         result = coordinator.run_cmc(
             data=data,
             t1=t1,
@@ -438,33 +744,136 @@ def fit_mcmc_jax(
             q=q,
             L=L,
             analysis_mode=analysis_mode,
-            nlsq_params=nlsq_params,
             parameter_space=parameter_space,
+            initial_values=initial_values,
         )
 
         logger.info(f"CMC execution completed. Used {result.num_shards} shards.")
         return result
 
     else:
-        # Use standard NUTS
+        # Use standard NUTS with automatic retry on convergence failure
         logger.info("=" * 70)
         logger.info("Executing standard NUTS MCMC")
         logger.info("=" * 70)
 
-        return _run_standard_nuts(
-            data=data,
-            sigma=sigma,
-            t1=t1,
-            t2=t2,
-            phi=phi,
-            q=q,
-            L=L,
-            analysis_mode=analysis_mode,
-            parameter_space=parameter_space,
-            initial_params=initial_params,
-            use_simplified_likelihood=use_simplified_likelihood,
-            **kwargs,
-        )
+        # Implement auto-retry mechanism for poor convergence
+        max_retries = 3
+        for attempt in range(max_retries):
+            # Use different random seed for each retry
+            retry_kwargs = kwargs.copy()
+            if attempt > 0:
+                # Change random seed for retry attempts
+                base_seed = kwargs.get('rng_key', 42)
+                new_seed = base_seed + attempt * 1000
+                retry_kwargs['rng_key'] = new_seed
+
+                # Enhanced logging with diagnostics from previous attempt
+                # Get diagnostics from previous attempt (if available)
+                if 'result' in locals():
+                    max_rhat = max(
+                        [v for v in result.r_hat.values() if v is not None],
+                        default=0.0
+                    ) if result.r_hat is not None else 0.0
+                    min_ess = min(
+                        [v for v in result.effective_sample_size.values() if v is not None],
+                        default=0.0
+                    ) if result.effective_sample_size is not None else 0.0
+                    logger.warning(
+                        f"🔄 Retry {attempt}/{max_retries-1} - Convergence poor "
+                        f"(R-hat={max_rhat:.3f}, ESS={min_ess:.0f}). "
+                        f"Changing random seed to {new_seed}..."
+                    )
+                else:
+                    logger.warning(
+                        f"🔄 Retry {attempt}/{max_retries-1} with new random seed "
+                        f"(seed={new_seed})"
+                    )
+
+            result = _run_standard_nuts(
+                data=data,
+                sigma=sigma,
+                t1=t1,
+                t2=t2,
+                phi=phi,
+                q=q,
+                L=L,
+                analysis_mode=analysis_mode,
+                parameter_space=parameter_space,
+                initial_values=initial_values,
+                use_simplified_likelihood=use_simplified_likelihood,
+                **retry_kwargs,
+            )
+
+            # Check convergence quality
+            if result.converged:
+                # Check R-hat if available
+                poor_rhat = False
+                if result.r_hat is not None:
+                    max_rhat = max(
+                        [v for v in result.r_hat.values() if v is not None],
+                        default=0.0
+                    )
+                    if max_rhat > 1.1:
+                        poor_rhat = True
+                        logger.warning(
+                            f"Poor convergence detected: max R-hat = {max_rhat:.3f} > 1.1"
+                        )
+
+                # Check ESS if available
+                poor_ess = False
+                if result.effective_sample_size is not None:
+                    min_ess = min(
+                        [v for v in result.effective_sample_size.values() if v is not None],
+                        default=float('inf')
+                    )
+                    if min_ess < 100:
+                        poor_ess = True
+                        logger.warning(
+                            f"Low effective sample size: min ESS = {min_ess:.0f} < 100"
+                        )
+
+                # Retry if convergence is poor and we have retries left
+                if (poor_rhat or poor_ess) and attempt < max_retries - 1:
+                    logger.warning(
+                        f"Convergence quality poor. Retrying with different random seed..."
+                    )
+                    continue  # Retry
+                else:
+                    # Either convergence is good, or we're out of retries
+                    if poor_rhat or poor_ess:
+                        # All retries failed - provide actionable suggestions
+                        logger.warning(
+                            f"❌ All {max_retries} retry attempts failed. "
+                            f"Final diagnostics: R-hat={max_rhat:.3f}, ESS={min_ess:.0f}. "
+                            f"Consider: (1) Increase n_warmup/n_samples, "
+                            f"(2) Reparameterize model, (3) Check data quality"
+                        )
+                    elif attempt > 0:
+                        # Retry was successful - show improved diagnostics
+                        logger.info(
+                            f"✅ Retry {attempt} successful - Convergence improved "
+                            f"(R-hat={max_rhat:.3f}, ESS={min_ess:.0f})"
+                        )
+                    return result
+            else:
+                # Convergence failed completely
+                if attempt < max_retries - 1:
+                    logger.warning(
+                        f"🔄 Retry {attempt+1}/{max_retries-1} - MCMC did not converge. "
+                        f"Retrying with different random seed..."
+                    )
+                    continue
+                else:
+                    logger.error(
+                        f"❌ All {max_retries} retry attempts failed - MCMC did not converge. "
+                        f"Consider: (1) Increase n_warmup/n_samples, "
+                        f"(2) Reparameterize model, (3) Check data quality"
+                    )
+                    return result
+
+        # Should never reach here, but return last result as fallback
+        return result
 
 
 def _run_standard_nuts(
@@ -477,14 +886,14 @@ def _run_standard_nuts(
     L: float = None,
     analysis_mode: str = "static_isotropic",
     parameter_space: ParameterSpace | None = None,
-    initial_params: dict[str, float] | None = None,
+    initial_values: dict[str, float] | None = None,
     use_simplified_likelihood: bool = True,
     **kwargs,
 ) -> MCMCResult:
     """Execute standard NUTS MCMC sampling.
 
-    This is the original MCMC implementation extracted into a helper function.
-    Used when method='nuts' or when automatic selection chooses standard NUTS.
+    Internal helper function for single-device NUTS execution.
+    Used when automatic selection chooses NUTS based on dual-criteria logic.
 
     Parameters
     ----------
@@ -499,9 +908,9 @@ def _run_standard_nuts(
     analysis_mode : str
         Analysis mode
     parameter_space : ParameterSpace, optional
-        Parameter bounds and priors
-    initial_params : dict, optional
-        Initial parameter values
+        Parameter bounds and priors (loaded from config)
+    initial_values : dict, optional
+        Initial parameter values for MCMC chains (loaded from config)
     use_simplified_likelihood : bool
         Use simplified likelihood
     **kwargs
@@ -553,7 +962,7 @@ def _run_standard_nuts(
                 dt_computed = 1.0  # Fallback
             logger.debug(f"Pre-computed dt = {dt_computed:.6f} s for MCMC model")
 
-        # Create NumPyro model with optional initialization
+        # Create NumPyro model using physics-informed priors from ParameterSpace
         model = _create_numpyro_model(
             data,
             sigma,
@@ -564,14 +973,23 @@ def _run_standard_nuts(
             L,
             analysis_mode,
             parameter_space,
-            initial_params=initial_params,
             use_simplified=use_simplified_likelihood,
             dt=dt_computed,
         )
 
+        # Log initial values if provided (for MCMC chain initialization)
+        if initial_values is not None:
+            logger.info(
+                f"Initializing MCMC chains with values: "
+                f"{list(initial_values.keys())} = "
+                f"{[f'{v:.4g}' for v in initial_values.values()]}"
+            )
+        else:
+            logger.info("MCMC chains will use default initialization (NumPyro random)")
+
         # Run MCMC sampling
         if NUMPYRO_AVAILABLE:
-            result = _run_numpyro_sampling(model, mcmc_config)
+            result = _run_numpyro_sampling(model, mcmc_config, initial_values)
         else:
             result = _run_blackjax_sampling(model, mcmc_config)
 
@@ -651,13 +1069,59 @@ def _estimate_noise(data: np.ndarray) -> np.ndarray:
 
 
 def _get_mcmc_config(kwargs: dict[str, Any]) -> dict[str, Any]:
-    """Get MCMC configuration with optimized defaults."""
+    """Get MCMC configuration with optimized defaults.
+
+    Parameters
+    ----------
+    kwargs : dict
+        Configuration overrides from YAML config or function arguments.
+        Supported keys:
+        - n_samples : int
+            Number of MCMC samples per chain
+        - n_warmup : int
+            Number of warmup samples for NUTS adaptation
+        - n_chains : int
+            Number of parallel MCMC chains
+        - target_accept_prob : float
+            Target acceptance probability for NUTS (0.8 recommended)
+        - max_tree_depth : int
+            Maximum NUTS tree depth (10 default)
+        - dense_mass_matrix : bool
+            Use full covariance mass matrix (slower, more accurate)
+        - rng_key : int
+            Random seed for reproducibility
+
+    Returns
+    -------
+    dict
+        Complete MCMC configuration dictionary
+
+    Notes
+    -----
+    **Mass Matrix Options:**
+
+    - **dense_mass_matrix=False (default)**: Uses diagonal mass matrix
+      - Faster: O(d) complexity for d parameters
+      - Less memory: stores only d diagonal elements
+      - Good for: weakly correlated posteriors, >10 parameters
+      - Recommended for: production use, large parameter spaces
+
+    - **dense_mass_matrix=True**: Uses full covariance mass matrix
+      - Slower: O(d²) complexity for matrix operations
+      - More memory: stores d×d matrix elements
+      - Better for: highly correlated posteriors, <10 parameters
+      - Recommended for: research, difficult convergence cases
+
+    The mass matrix is learned during warmup via adaptation and affects
+    the proposal distribution geometry in HMC/NUTS sampling.
+    """
     default_config = {
         "n_samples": 1000,
         "n_warmup": 500,  # Reduced warmup for faster testing
         "n_chains": 4,  # Enable parallel chains by default
         "target_accept_prob": 0.8,
         "max_tree_depth": 10,
+        "dense_mass_matrix": False,  # Diagonal mass matrix (faster)
         "rng_key": 42,
     }
 
@@ -675,183 +1139,222 @@ def _create_numpyro_model(
     q,
     L,
     analysis_mode,
-    param_space,
-    initial_params=None,
+    parameter_space,
     use_simplified=True,
     dt=None,
 ):
-    """Create NumPyro probabilistic model with optional initialization.
+    """Create NumPyro probabilistic model using config-driven priors.
+
+    This function creates a NumPyro model with prior distributions dynamically
+    generated from the ParameterSpace configuration. It supports multiple
+    distribution types (Normal, TruncatedNormal, Uniform, LogNormal) and
+    automatically handles parameter ordering for different analysis modes.
 
     Parameters
     ----------
-    initial_params : dict, optional
-        Initial parameter values for better starting points (from NLSQ)
-    use_simplified : bool
+    data : array
+        Experimental correlation data to fit
+    sigma : array
+        Noise standard deviations for likelihood
+    t1, t2 : array
+        Time delay arrays
+    phi : array
+        Azimuthal angle array
+    q : float
+        Wavevector magnitude
+    L : float
+        Sample-detector distance (for laminar_flow)
+    analysis_mode : str
+        Analysis mode: 'static_isotropic' or 'laminar_flow'
+    parameter_space : ParameterSpace
+        Parameter space configuration with bounds and prior distributions
+        loaded from YAML config file. Contains:
+        - parameter_names: list of parameter names
+        - bounds: dict mapping param_name -> (min, max)
+        - priors: dict mapping param_name -> PriorDistribution
+    use_simplified : bool, default=True
         Use simplified likelihood for faster computation
+    dt : float, optional
+        Time step (pre-computed to avoid JAX concretization errors)
+
+    Returns
+    -------
+    callable
+        NumPyro model function for MCMC sampling
 
     Notes
     -----
-    If initial_params provided (from NLSQ), uses tighter priors centered
-    on NLSQ values for faster MCMC convergence. Otherwise uses default
-    broad priors from parameter_space.
+    **Config-Driven Prior Creation:**
+
+    Priors are created dynamically from the ParameterSpace object, which is
+    loaded from the YAML config file. Example config structure:
+
+    .. code-block:: yaml
+
+        parameter_space:
+          model: static
+          bounds:
+            - name: D0
+              min: 100.0
+              max: 100000.0
+              prior_mu: 1000.0
+              prior_sigma: 1000.0
+              type: TruncatedNormal
+            - name: alpha
+              min: -2.0
+              max: 2.0
+              prior_mu: -1.2
+              prior_sigma: 0.3
+              type: Normal
+
+    **Supported Prior Distribution Types:**
+
+    - **TruncatedNormal**: Normal distribution truncated to [min, max] bounds
+      (recommended for most parameters with finite support)
+    - **Normal**: Standard normal distribution (use for unbounded parameters)
+    - **Uniform**: Uniform distribution over [min, max] (non-informative)
+    - **LogNormal**: Log-normal distribution (for strictly positive parameters)
+
+    **Prior Selection Guidelines:**
+
+    - Use TruncatedNormal for physical parameters with hard bounds (D0, alpha)
+    - Use Normal for parameters without physical constraints
+    - Use Uniform for completely non-informative priors
+    - Use LogNormal for strictly positive scale parameters (rare in XPCS)
+
+    **Physics-Informed Defaults:**
+
+    If config does not specify priors, the ParameterSpace class provides
+    scientifically validated defaults based on XPCS domain knowledge:
+    - D0: TruncatedNormal centered at mid-range with wide sigma
+    - alpha: TruncatedNormal centered at -1.2 (typical homodyne value)
+    - Flow parameters: TruncatedNormal with physically reasonable ranges
+
+    **Parameter Ordering:**
+
+    The function automatically orders parameters correctly for the physics
+    engine based on analysis_mode:
+    - static_isotropic: [contrast, offset, D0, alpha, D_offset]
+    - laminar_flow: [contrast, offset, D0, alpha, D_offset,
+                     gamma_dot_t0, beta, gamma_dot_t_offset, phi0]
+
+    Examples
+    --------
+    >>> # Load parameter space from config
+    >>> from homodyne.config.parameter_space import ParameterSpace
+    >>> param_space = ParameterSpace.from_config(config_dict)
+    >>>
+    >>> # Create model
+    >>> model = _create_numpyro_model(
+    ...     data, sigma, t1, t2, phi, q, L,
+    ...     analysis_mode='static_isotropic',
+    ...     parameter_space=param_space
+    ... )
+    >>>
+    >>> # Use in MCMC sampling
+    >>> from numpyro.infer import MCMC, NUTS
+    >>> nuts_kernel = NUTS(model)
+    >>> mcmc = MCMC(nuts_kernel, num_warmup=500, num_samples=1000)
+    >>> mcmc.run(jax.random.PRNGKey(0))
+
+    See Also
+    --------
+    homodyne.config.parameter_space.ParameterSpace : Parameter space configuration
+    homodyne.config.parameter_space.PriorDistribution : Prior distribution specs
     """
+    # Map distribution type names to NumPyro distribution classes
+    DIST_TYPE_MAP = {
+        "Normal": dist.Normal,
+        "TruncatedNormal": dist.TruncatedNormal,
+        "Uniform": dist.Uniform,
+        "LogNormal": dist.LogNormal,
+    }
 
     def homodyne_model():
-        # Define priors based on analysis mode
+        """Inner NumPyro model function with config-driven priors."""
+        # Determine parameter list based on analysis mode
+        # Note: Scaling parameters (contrast, offset) are always first
         if "static" in analysis_mode:
-            # Static mode: 5 parameters
-            contrast = sample(
-                "contrast",
-                dist.TruncatedNormal(
-                    param_space.contrast_prior[0],
-                    param_space.contrast_prior[1],
-                    low=param_space.contrast_bounds[0],
-                    high=param_space.contrast_bounds[1],
-                ),
-            )
-            offset = sample(
-                "offset",
-                dist.TruncatedNormal(
-                    param_space.offset_prior[0],
-                    param_space.offset_prior[1],
-                    low=param_space.offset_bounds[0],
-                    high=param_space.offset_bounds[1],
-                ),
-            )
-            D0 = sample(
-                "D0",
-                dist.TruncatedNormal(
-                    param_space.D0_prior[0],
-                    param_space.D0_prior[1],
-                    low=param_space.D0_bounds[0],
-                    high=param_space.D0_bounds[1],
-                ),
-            )
-            alpha = sample(
-                "alpha",
-                dist.TruncatedNormal(
-                    param_space.alpha_prior[0],
-                    param_space.alpha_prior[1],
-                    low=param_space.alpha_bounds[0],
-                    high=param_space.alpha_bounds[1],
-                ),
-            )
-            D_offset = sample(
-                "D_offset",
-                dist.TruncatedNormal(
-                    param_space.D_offset_prior[0],
-                    param_space.D_offset_prior[1],
-                    low=param_space.D_offset_bounds[0],
-                    high=param_space.D_offset_bounds[1],
-                ),
-            )
-
-            params = jnp.array([contrast, offset, D0, alpha, D_offset])
+            # Static mode: 5 parameters (scaling + physics)
+            param_names_ordered = [
+                "contrast", "offset", "D0", "alpha", "D_offset"
+            ]
         else:
-            # Laminar flow mode: 9 parameters
-            # (Add the additional 4 parameters)
-            contrast = sample(
-                "contrast",
-                dist.TruncatedNormal(
-                    param_space.contrast_prior[0],
-                    param_space.contrast_prior[1],
-                    low=param_space.contrast_bounds[0],
-                    high=param_space.contrast_bounds[1],
-                ),
-            )
-            offset = sample(
-                "offset",
-                dist.TruncatedNormal(
-                    param_space.offset_prior[0],
-                    param_space.offset_prior[1],
-                    low=param_space.offset_bounds[0],
-                    high=param_space.offset_bounds[1],
-                ),
-            )
-            D0 = sample(
-                "D0",
-                dist.TruncatedNormal(
-                    param_space.D0_prior[0],
-                    param_space.D0_prior[1],
-                    low=param_space.D0_bounds[0],
-                    high=param_space.D0_bounds[1],
-                ),
-            )
-            alpha = sample(
-                "alpha",
-                dist.TruncatedNormal(
-                    param_space.alpha_prior[0],
-                    param_space.alpha_prior[1],
-                    low=param_space.alpha_bounds[0],
-                    high=param_space.alpha_bounds[1],
-                ),
-            )
-            D_offset = sample(
-                "D_offset",
-                dist.TruncatedNormal(
-                    param_space.D_offset_prior[0],
-                    param_space.D_offset_prior[1],
-                    low=param_space.D_offset_bounds[0],
-                    high=param_space.D_offset_bounds[1],
-                ),
-            )
-            gamma_dot_t0 = sample(
-                "gamma_dot_t0",
-                dist.TruncatedNormal(
-                    param_space.gamma_dot_t0_prior[0],
-                    param_space.gamma_dot_t0_prior[1],
-                    low=param_space.gamma_dot_t0_bounds[0],
-                    high=param_space.gamma_dot_t0_bounds[1],
-                ),
-            )
-            beta = sample(
-                "beta",
-                dist.TruncatedNormal(
-                    param_space.beta_prior[0],
-                    param_space.beta_prior[1],
-                    low=param_space.beta_bounds[0],
-                    high=param_space.beta_bounds[1],
-                ),
-            )
-            gamma_dot_t_offset = sample(
-                "gamma_dot_t_offset",
-                dist.TruncatedNormal(
-                    param_space.gamma_dot_t_offset_prior[0],
-                    param_space.gamma_dot_t_offset_prior[1],
-                    low=param_space.gamma_dot_t_offset_bounds[0],
-                    high=param_space.gamma_dot_t_offset_bounds[1],
-                ),
-            )
-            phi0 = sample(
-                "phi0",
-                dist.TruncatedNormal(
-                    param_space.phi0_prior[0],
-                    param_space.phi0_prior[1],
-                    low=param_space.phi0_bounds[0],
-                    high=param_space.phi0_bounds[1],
-                ),
+            # Laminar flow mode: 9 parameters (scaling + physics + flow)
+            param_names_ordered = [
+                "contrast", "offset", "D0", "alpha", "D_offset",
+                "gamma_dot_t0", "beta", "gamma_dot_t_offset", "phi0"
+            ]
+
+        # =====================================================================
+        # DYNAMIC PRIOR SAMPLING FROM CONFIG
+        # =====================================================================
+        # Sample parameters dynamically using config-driven priors
+        # Loop through all parameters in correct order (scaling + physics)
+        sampled_params = []
+        for param_name in param_names_ordered:
+            # Get prior distribution from parameter space (loaded from YAML config)
+            # Handle missing scaling parameters (contrast, offset) with fallback defaults
+            try:
+                prior_spec = parameter_space.get_prior(param_name)
+            except KeyError:
+                # Scaling parameters (contrast, offset) might not be in config
+                # Use sensible defaults based on XPCS physics
+                if param_name == "contrast":
+                    # Contrast typically in [0, 1], centered at 0.5
+                    prior_spec = PriorDistribution(
+                        dist_type="TruncatedNormal",
+                        mu=0.5,
+                        sigma=0.2,
+                        min_val=0.0,
+                        max_val=1.0,
+                    )
+                elif param_name == "offset":
+                    # Offset typically near 1.0 for c2
+                    prior_spec = PriorDistribution(
+                        dist_type="TruncatedNormal",
+                        mu=1.0,
+                        sigma=0.2,
+                        min_val=0.5,
+                        max_val=1.5,
+                    )
+                else:
+                    # Unexpected missing parameter - raise error
+                    raise KeyError(
+                        f"Parameter '{param_name}' not found in parameter_space "
+                        f"and no default available. Available parameters: "
+                        f"{list(parameter_space.priors.keys())}"
+                    )
+
+            # Get NumPyro distribution class
+            dist_class = DIST_TYPE_MAP.get(
+                prior_spec.dist_type,
+                dist.TruncatedNormal  # Safe fallback
             )
 
-            params = jnp.array(
-                [
-                    contrast,
-                    offset,
-                    D0,
-                    alpha,
-                    D_offset,
-                    gamma_dot_t0,
-                    beta,
-                    gamma_dot_t_offset,
-                    phi0,
-                ],
-            )
+            # Get distribution kwargs
+            dist_kwargs = prior_spec.to_numpyro_kwargs()
 
+            # Sample parameter
+            param_value = sample(param_name, dist_class(**dist_kwargs))
+            sampled_params.append(param_value)
+
+        # Convert to JAX array for physics computation
+        params = jnp.array(sampled_params)
+
+        # Extract contrast and offset for scaling (always first two parameters)
+        contrast = sampled_params[0]
+        offset = sampled_params[1]
+
+        # =====================================================================
+        # THEORETICAL MODEL COMPUTATION
+        # =====================================================================
         # Compute theoretical model using JIT-compiled function with proper physics
-        # CRITICAL FIX: Ensure t1, t2, phi, sigma match data size to avoid closure memory explosion
+        # CRITICAL: Ensure t1, t2, phi, sigma arrays match data size to avoid memory issues
         # For pooled data (4,600 samples), these should be 1D arrays of length 4,600
-        # NOT the original meshgrids (1,002,001 elements)
+        # NOT the original meshgrids (1,002,001 elements) which would cause OOM
 
-        # Verify array sizes match to prevent OOM during SVI
+        # Verify array sizes match to prevent memory explosion during MCMC
         data_size = data.shape[0] if hasattr(data, 'shape') else len(data)
         t1_size = t1.shape[0] if hasattr(t1, 'shape') else len(t1)
 
@@ -966,7 +1469,7 @@ def _compute_simple_theory(params, t1, t2, phi, q, analysis_mode, L=None, dt=Non
 _compute_simple_theory_jit = jit(_compute_simple_theory, static_argnums=(5,))
 
 
-def _run_numpyro_sampling(model, config):
+def _run_numpyro_sampling(model, config, initial_values=None):
     """Run NumPyro MCMC sampling with parallel chains and comprehensive diagnostics.
 
     Parameters
@@ -981,6 +1484,10 @@ def _run_numpyro_sampling(model, config):
         - target_accept_prob : float
         - max_tree_depth : int
         - rng_key : int
+    initial_values : dict[str, float], optional
+        Initial parameter values for MCMC chains (e.g., from NLSQ results).
+        If provided, chains will be initialized near these values.
+        If None, NumPyro uses random initialization from priors.
 
     Returns
     -------
@@ -992,6 +1499,7 @@ def _run_numpyro_sampling(model, config):
     - Configures parallel chains for CPU/GPU
     - Extracts acceptance probability and divergence info
     - Logs warmup diagnostics for debugging
+    - Initial values improve convergence when starting from good point estimates
     """
     # Configure parallel chains - must be done before creating MCMC object
     # For CPU parallelization, set host device count
@@ -1018,15 +1526,20 @@ def _run_numpyro_sampling(model, config):
         except Exception as e:
             logger.warning(f"Could not configure parallel chains: {e}")
 
-    # Create NUTS kernel with diagnostics
+    # Create NUTS kernel with diagnostics and config-driven mass matrix
+    dense_mass_matrix = config.get("dense_mass_matrix", False)
     nuts_kernel = NUTS(
         model,
         target_accept_prob=config["target_accept_prob"],
         max_tree_depth=config.get("max_tree_depth", 10),
         adapt_step_size=True,
         adapt_mass_matrix=True,
-        dense_mass=False,  # Use diagonal mass matrix for efficiency
+        dense_mass=dense_mass_matrix,  # Config-driven: False=diagonal, True=full covariance
     )
+
+    # Log mass matrix configuration
+    mass_type = "full covariance" if dense_mass_matrix else "diagonal"
+    logger.info(f"NUTS mass matrix: {mass_type} (dense_mass={dense_mass_matrix})")
 
     # Create MCMC sampler
     mcmc = MCMC(

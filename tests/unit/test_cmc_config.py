@@ -60,7 +60,7 @@ optimization:
             # Check that defaults were applied
             assert cmc_config["min_points_for_cmc"] == 500000
             assert cmc_config["sharding"]["strategy"] == "stratified"
-            assert cmc_config["initialization"]["method"] == "svi"
+            # Note: initialization section removed in v2.1.0 (no more SVI)
             assert cmc_config["backend"]["name"] == "auto"
             assert cmc_config["combination"]["method"] == "weighted_gaussian"
 
@@ -81,12 +81,6 @@ optimization:
       strategy: random
       num_shards: 16
       max_points_per_shard: 500000
-    initialization:
-      method: nlsq
-      svi_steps: 10000
-      svi_learning_rate: 0.01
-      svi_rank: 10
-      fallback_to_identity: false
     backend:
       name: pjit
       enable_checkpoints: false
@@ -128,12 +122,7 @@ optimization:
             assert cmc_config["sharding"]["num_shards"] == 16
             assert cmc_config["sharding"]["max_points_per_shard"] == 500000
 
-            # Initialization
-            assert cmc_config["initialization"]["method"] == "nlsq"
-            assert cmc_config["initialization"]["svi_steps"] == 10000
-            assert cmc_config["initialization"]["svi_learning_rate"] == 0.01
-            assert cmc_config["initialization"]["svi_rank"] == 10
-            assert cmc_config["initialization"]["fallback_to_identity"] is False
+            # Note: Initialization section removed in v2.1.0 (no more SVI)
 
             # Backend
             assert cmc_config["backend"]["name"] == "pjit"
@@ -184,7 +173,6 @@ optimization:
             # User-specified values
             assert cmc_config["enable"] is True
             assert cmc_config["sharding"]["strategy"] == "contiguous"
-            assert cmc_config["initialization"]["method"] == "identity"
 
             # Default values preserved
             assert cmc_config["min_points_for_cmc"] == 500000
@@ -216,7 +204,6 @@ analysis_mode: static_isotropic
             assert cmc_config["enable"] == "auto"
             assert cmc_config["min_points_for_cmc"] == 500000
             assert cmc_config["sharding"]["strategy"] == "stratified"
-            assert cmc_config["initialization"]["method"] == "svi"
             assert cmc_config["backend"]["name"] == "auto"
             assert cmc_config["combination"]["method"] == "weighted_gaussian"
             assert cmc_config["per_shard_mcmc"]["num_warmup"] == 500

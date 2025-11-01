@@ -111,6 +111,31 @@ class MCMCResult:
         If > 1, result is from CMC.
         Default: None (for non-CMC results)
 
+    Config-Driven Metadata (v2.1.0+)
+    ---------------------------------
+    parameter_space_metadata : dict, optional
+        Parameter space configuration used for this analysis. Contains:
+        - bounds : dict[str, tuple[float, float]]
+        - priors : dict[str, dict] (prior distribution specs)
+        - model_type : str (static_isotropic or laminar_flow)
+        Default: None (for backward compatibility)
+
+    initial_values_metadata : dict[str, float], optional
+        Initial parameter values used to initialize MCMC chains. Example:
+        {"D0": 1234.5, "alpha": 0.567, "D_offset": 12.34}
+        Default: None (for backward compatibility)
+
+    selection_decision_metadata : dict, optional
+        Automatic NUTS/CMC selection decision information. Contains:
+        - selected_method : str ("NUTS" or "CMC")
+        - num_samples : int
+        - parallelism_criterion_met : bool
+        - memory_criterion_met : bool
+        - min_samples_for_cmc : int
+        - memory_threshold_pct : float
+        - estimated_memory_fraction : float (optional)
+        Default: None (for backward compatibility)
+
     Examples
     --------
     Standard MCMC result (backward compatible):
@@ -171,6 +196,10 @@ class MCMCResult:
         cmc_diagnostics: Optional[Dict[str, Any]] = None,
         combination_method: Optional[str] = None,
         num_shards: Optional[int] = None,
+        # NEW v2.1.0: Config-driven metadata fields (optional, backward compatible)
+        parameter_space_metadata: Optional[Dict[str, Any]] = None,
+        initial_values_metadata: Optional[Dict[str, float]] = None,
+        selection_decision_metadata: Optional[Dict[str, Any]] = None,
         **kwargs,
     ):
         """Initialize MCMCResult with optional CMC support.
@@ -217,6 +246,11 @@ class MCMCResult:
         self.cmc_diagnostics = cmc_diagnostics
         self.combination_method = combination_method
         self.num_shards = num_shards
+
+        # NEW v2.1.0: Config-driven metadata attributes (all optional, default None)
+        self.parameter_space_metadata = parameter_space_metadata
+        self.initial_values_metadata = initial_values_metadata
+        self.selection_decision_metadata = selection_decision_metadata
 
     def is_cmc_result(self) -> bool:
         """Check if this result is from Consensus Monte Carlo.
@@ -309,6 +343,10 @@ class MCMCResult:
             "cmc_diagnostics": self.cmc_diagnostics,
             "combination_method": self.combination_method,
             "num_shards": self.num_shards,
+            # v2.1.0 Config-driven metadata fields
+            "parameter_space_metadata": self.parameter_space_metadata,
+            "initial_values_metadata": self.initial_values_metadata,
+            "selection_decision_metadata": self.selection_decision_metadata,
         }
         return data
 
@@ -378,4 +416,8 @@ class MCMCResult:
             cmc_diagnostics=data.get("cmc_diagnostics"),
             combination_method=data.get("combination_method"),
             num_shards=data.get("num_shards"),
+            # v2.1.0 Config-driven metadata fields (default to None for backward compatibility)
+            parameter_space_metadata=data.get("parameter_space_metadata"),
+            initial_values_metadata=data.get("initial_values_metadata"),
+            selection_decision_metadata=data.get("selection_decision_metadata"),
         )

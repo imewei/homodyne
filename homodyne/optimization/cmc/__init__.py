@@ -5,7 +5,6 @@ quantification on large XPCS datasets (4M-200M+ points).
 
 Key Components:
 - Data sharding: Splits large datasets into manageable chunks (stratified/random/contiguous)
-- SVI initialization: Provides mass matrix for MCMC warmup
 - Parallel MCMC execution: Runs independent MCMC on each shard
 - Subposterior combination: Combines shard posteriors into final result
 
@@ -15,11 +14,6 @@ References:
 """
 
 from homodyne.optimization.cmc.result import MCMCResult
-
-from homodyne.optimization.cmc.svi_init import (
-    pool_samples_from_shards,
-    run_svi_initialization,
-)
 
 from homodyne.optimization.cmc.sharding import (
     calculate_optimal_num_shards,
@@ -47,9 +41,6 @@ __all__ = [
     "CMCCoordinator",
     # Extended MCMCResult
     "MCMCResult",
-    # SVI initialization
-    "pool_samples_from_shards",
-    "run_svi_initialization",
     # Data sharding
     "calculate_optimal_num_shards",
     "shard_data_random",

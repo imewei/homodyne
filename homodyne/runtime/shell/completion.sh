@@ -43,7 +43,7 @@ _homodyne_get_recent_configs() {
 # Smart method completion based on config mode
 _homodyne_smart_method_completion() {
     local config_file="$1"
-    local methods="nlsq mcmc auto nuts cmc"
+    local methods="nlsq mcmc"
 
     # If config file exists, try to detect mode and suggest appropriate methods
     if [[ -f "$config_file" ]] && command -v python3 >/dev/null 2>&1; then
@@ -57,9 +57,9 @@ try:
             config = json.load(f)
         mode = config.get('mode', '')
         if 'static' in mode:
-            print('nlsq auto')
+            print('nlsq mcmc')
         elif 'laminar' in mode:
-            print('mcmc auto cmc')
+            print('nlsq mcmc')
         else:
             print('$methods')
 except:
@@ -228,7 +228,7 @@ if [[ -n "$ZSH_VERSION" ]]; then
 
         case $state in
             methods)
-                local methods="nlsq mcmc auto nuts cmc"
+                local methods="nlsq mcmc"
                 _values 'method' ${(z)methods}
                 ;;
             configs)
@@ -265,9 +265,6 @@ if [[ -n "$ZSH_VERSION" ]]; then
     compdef _homodyne_advanced_zsh hm 2>/dev/null || true         # homodyne
     compdef _homodyne_advanced_zsh hm-nlsq 2>/dev/null || true    # homodyne --method nlsq
     compdef _homodyne_advanced_zsh hm-mcmc 2>/dev/null || true    # homodyne --method mcmc
-    compdef _homodyne_advanced_zsh hm-auto 2>/dev/null || true    # homodyne --method auto
-    compdef _homodyne_advanced_zsh hm-nuts 2>/dev/null || true    # homodyne --method nuts
-    compdef _homodyne_advanced_zsh hm-cmc 2>/dev/null || true     # homodyne --method cmc
 
     # Register completion for config aliases (hc- prefix)
     compdef _homodyne_config_zsh hconfig 2>/dev/null || true      # homodyne-config
@@ -289,9 +286,6 @@ if [[ -n "$BASH_VERSION" ]]; then
     complete -F _homodyne_advanced_completion hm 2>/dev/null || true         # homodyne
     complete -F _homodyne_advanced_completion hm-nlsq 2>/dev/null || true    # homodyne --method nlsq
     complete -F _homodyne_advanced_completion hm-mcmc 2>/dev/null || true    # homodyne --method mcmc
-    complete -F _homodyne_advanced_completion hm-auto 2>/dev/null || true    # homodyne --method auto
-    complete -F _homodyne_advanced_completion hm-nuts 2>/dev/null || true    # homodyne --method nuts
-    complete -F _homodyne_advanced_completion hm-cmc 2>/dev/null || true     # homodyne --method cmc
 
     # Register completion for config aliases (hc- prefix)
     complete -F _homodyne_config_completion hconfig 2>/dev/null || true      # homodyne-config
@@ -312,10 +306,7 @@ if [[ -n "$BASH_VERSION" ]] || [[ -n "$ZSH_VERSION" ]]; then
 
     # Method aliases (hm- prefix)
     alias hm-nlsq='homodyne --method nlsq'         # NLSQ trust-region optimization (primary)
-    alias hm-mcmc='homodyne --method mcmc'         # Alias for auto (NUTS/CMC based on dataset size)
-    alias hm-auto='homodyne --method auto'         # Auto-select NUTS (<500k) or CMC (>500k)
-    alias hm-nuts='homodyne --method nuts'         # Standard NUTS MCMC
-    alias hm-cmc='homodyne --method cmc'           # Consensus Monte Carlo for large datasets
+    alias hm-mcmc='homodyne --method mcmc'         # MCMC with automatic NUTS/CMC selection
 
     # Config mode aliases (hc- prefix)
     alias hc-stat='homodyne-config --mode static'         # Generate static mode config
@@ -338,7 +329,7 @@ homodyne_build() {
 
     # Select method
     PS3="Select analysis method: "
-    select m in "nlsq" "mcmc" "auto" "nuts" "cmc" "skip"; do
+    select m in "nlsq" "mcmc" "skip"; do
         [[ -n "$m" ]] && [[ "$m" != "skip" ]] && method="--method $m"
         break
     done

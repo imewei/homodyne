@@ -8,7 +8,7 @@ This file provides guidance to Claude Code when working with this repository.
 
 **Core Equation:** `c₂(φ,t₁,t₂) = 1 + contrast × [c₁(φ,t₁,t₂)]²`
 
-**Version:** 2.0.0 | **Python:** 3.12+ | **JAX:** 0.8.0
+**Version:** 2.1.0 | **Python:** 3.12+ | **JAX:** 0.8.0
 
 ## Essential Links
 
@@ -35,27 +35,37 @@ ______________________________________________________________________
 
 ______________________________________________________________________
 
-## Recent Updates (October 28, 2025)
+## Recent Updates (October 31, 2025)
 
-**CMC Performance Optimization**
+**Version 2.1.0: Simplified MCMC Implementation** (October 31, 2025)
+- **Breaking Change**: Removed `--method nuts` and `--method cmc` CLI flags
+- Only `--method nlsq` and `--method mcmc` supported (75% reduction in CLI complexity)
+- Automatic NUTS/CMC selection: `(num_samples >= 15) OR (memory > 30%)` → CMC
+- Removed automatic NLSQ/SVI initialization from MCMC (manual workflow required)
+- Removed `mcmc.initialization` section from all YAML templates
+- Added configurable thresholds: `min_samples_for_cmc: 15`, `memory_threshold_pct: 0.30`
+- Implemented auto-retry mechanism with convergence failures (max 3 retries)
+- See [Migration Guide](docs/migration/v2.0-to-v2.1.md) for upgrade instructions
+
+**CMC Performance Optimization** (October 28, 2025)
 - Optimized CMC selection thresholds for CPU parallelism
-- `min_samples_for_cmc`: 100 → **20** (captures parallelism on multi-core CPU)
-- `memory_threshold_pct`: 0.50 → **0.40** (more conservative OOM prevention)
-- **Impact**: 23-sample experiment on 14-core CPU now triggers CMC for ~1.4x speedup
+- `min_samples_for_cmc`: 100 → 20 → **15** (more aggressive parallelism)
+- `memory_threshold_pct`: 0.50 → 0.40 → **0.30** (more conservative OOM prevention)
+- **Impact**: 20-sample experiment on 14-core CPU now triggers CMC for ~1.4x speedup
 
-**Architecture Documentation**
+**Architecture Documentation** (October 28, 2025)
 - New comprehensive architecture documentation section
 - `docs/architecture/cmc-dual-mode-strategy.md` - CMC design (3,500+ words)
 - `docs/architecture/nuts-chain-parallelization.md` - NUTS chains (4,000+ words)
 - Quick reference guides for both CMC and NUTS strategies
 
-**CMC Dual-Criteria Logic**
-- Implemented OR logic: `(num_samples >= 20) OR (memory > 40%)`
+**CMC Dual-Criteria Logic** (October 28, 2025)
+- Implemented OR logic: `(num_samples >= 15) OR (memory > 30%)`
 - **Use Case 1**: Parallelism - many samples (e.g., 50 phi angles → 3x speedup)
 - **Use Case 2**: Memory management - large datasets (avoid OOM errors)
 - Hardware-adaptive decision making for optimal performance
 
-**MCMC Result Saving**
+**MCMC Result Saving** (October 28, 2025)
 - Comprehensive result saving for both NUTS and CMC methods
 - HDF5 format with posterior samples, diagnostics, and metadata
 - Visualization support with trace plots, corner plots, autocorrelation
@@ -108,6 +118,28 @@ ______________________________________________________________________
 - Removed VI (Variational Inference) → use NLSQ or MCMC
 - Removed `performance.subsampling` config → NLSQ handles automatically
 - New module: `homodyne.device` for CPU/GPU management
+
+### Breaking Changes from v2.0 → v2.1
+
+**CLI Method Flags** (Hard Break)
+- Removed `--method nuts` and `--method cmc` (use `--method mcmc` only)
+- Automatic NUTS/CMC selection based on dataset characteristics
+- No deprecation warnings (acknowledged breaking change)
+
+**YAML Configuration Structure**
+- Removed entire `mcmc.initialization` section from templates
+- Removed fields: `run_nlsq_init`, `use_svi`, `svi_steps`, `svi_timeout`
+- Added: `min_samples_for_cmc: 15` to `optimization.mcmc`
+- Added: `memory_threshold_pct: 0.30` to `optimization.mcmc`
+- `initial_parameters.values` structure unchanged (backward compatible)
+
+**MCMC Initialization Behavior**
+- No automatic NLSQ/SVI initialization before MCMC
+- Manual workflow required: Run NLSQ → copy results → update YAML → run MCMC
+- Physics-informed priors from `ParameterSpace` used directly
+- Complete separation between NLSQ and MCMC methods
+
+**Migration Required**: See [Migration Guide](docs/migration/v2.0-to-v2.1.md) for step-by-step upgrade instructions
 
 ______________________________________________________________________
 
@@ -236,7 +268,11 @@ ______________________________________________________________________
 - Strategy selection: STANDARD → LARGE → CHUNKED → STREAMING
 
 **Secondary Optimization:** NumPyro/BlackJAX MCMC
-- NUTS sampling for uncertainty quantification
+- Automatic NUTS/CMC selection: `(num_samples >= 15) OR (memory > 30%)` → CMC
+- NUTS sampling for uncertainty quantification (small datasets)
+- CMC parallelization for many samples or large memory requirements
+- Physics-informed priors from `ParameterSpace` (no initialization needed)
+- Auto-retry mechanism with convergence failures (max 3 retries)
 - Built-in progress tracking
 
 **Device Management:**
@@ -379,9 +415,10 @@ homodyne --config config.yaml
 # Override data file
 homodyne --config config.yaml --data-file experiment.hdf
 
-# Select method
-homodyne --config config.yaml --method nlsq   # Default: fast
-homodyne --config config.yaml --method mcmc   # Uncertainty quantification
+# Select method (v2.1.0: only nlsq and mcmc supported)
+homodyne --config config.yaml --method nlsq   # Default: fast optimization
+homodyne --config config.yaml --method mcmc   # Bayesian uncertainty quantification
+                                              # Automatic NUTS/CMC selection
 
 # With visualization
 homodyne --config config.yaml --plot-experimental-data
@@ -390,6 +427,36 @@ homodyne --config config.yaml --plot-experimental-data
 homodyne --config config.yaml --verbose       # DEBUG level
 homodyne --config config.yaml --quiet         # Errors only
 ```
+
+### Manual NLSQ → MCMC Workflow (v2.1.0)
+
+**Step-by-step process for using NLSQ results to initialize MCMC:**
+
+```bash
+# 1. Run NLSQ analysis first to get point estimates
+homodyne --config config.yaml --method nlsq
+
+# 2. Manually copy best-fit results from NLSQ output
+#    Example output:
+#    Best-fit parameters:
+#      D0: 1234.5 ± 45.6
+#      alpha: 0.567 ± 0.012
+#      D_offset: 12.34 ± 1.23
+
+# 3. Update config.yaml with NLSQ results
+#    Edit initial_parameters.values:
+#      parameter_names: [D0, alpha, D_offset]
+#      values: [1234.5, 0.567, 12.34]  # From NLSQ output
+
+# 4. Run MCMC analysis with initialized parameters
+homodyne --config config.yaml --method mcmc
+
+# 5. Automatic selection decides NUTS vs CMC based on:
+#    - (num_samples >= 15) OR (memory > 30%) → CMC
+#    - Otherwise → NUTS
+```
+
+**Note:** No automatic initialization in v2.1.0. Manual workflow ensures transparency and user control over parameter transfer between methods.
 
 ### Configuration Generator
 

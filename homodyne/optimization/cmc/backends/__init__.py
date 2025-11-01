@@ -57,8 +57,8 @@ Usage Examples
     results = backend.run_parallel_mcmc(
         shards=data_shards,
         mcmc_config={'num_warmup': 500, 'num_samples': 2000},
-        init_params=svi_params,
-        inv_mass_matrix=svi_mass_matrix,
+        init_params={'D0': 1234.5, 'alpha': 0.567},  # From config
+        inv_mass_matrix=identity_matrix,  # Identity, adapted during warmup
     )
 
     # Direct instantiation

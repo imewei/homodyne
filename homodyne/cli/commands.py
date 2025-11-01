@@ -612,6 +612,15 @@ def _apply_cli_overrides(config: ConfigManager, args) -> None:
 
     Implements precedence: CLI args > Config file > Code defaults
     For MCMC parameters, config uses 'num_*' prefix, args use 'n_*' prefix
+
+    Supports overriding:
+    - Data file path
+    - Analysis mode
+    - MCMC sampling parameters (n_samples, n_warmup, n_chains)
+    - MCMC threshold parameters (min_samples_for_cmc, memory_threshold_pct)
+    - Initial parameter values (D0, alpha, D_offset, gamma_dot_t0, beta, gamma_dot_t_offset, phi0)
+    - Mass matrix type (dense_mass_matrix flag)
+    - Hardware settings (force_cpu, gpu_memory_fraction)
     """
     if not hasattr(config, "config") or not config.config:
         return
@@ -644,6 +653,114 @@ def _apply_cli_overrides(config: ConfigManager, args) -> None:
         args.n_warmup = mcmc_config.get("num_warmup", 500)
     if args.n_chains is None:
         args.n_chains = mcmc_config.get("num_chains", 4)
+
+    # Override MCMC threshold parameters
+    if "mcmc" not in config.config["optimization"]:
+        config.config["optimization"]["mcmc"] = {}
+
+    if args.min_samples_cmc is not None:
+        old_value = config.config["optimization"]["mcmc"].get("min_samples_for_cmc", 15)
+        config.config["optimization"]["mcmc"]["min_samples_for_cmc"] = args.min_samples_cmc
+        logger.info(
+            f"Overriding config min_samples_for_cmc={old_value} with CLI value min_samples_for_cmc={args.min_samples_cmc}"
+        )
+
+    if args.memory_threshold_pct is not None:
+        old_value = config.config["optimization"]["mcmc"].get("memory_threshold_pct", 0.30)
+        config.config["optimization"]["mcmc"]["memory_threshold_pct"] = args.memory_threshold_pct
+        logger.info(
+            f"Overriding config memory_threshold_pct={old_value:.2f} with CLI value memory_threshold_pct={args.memory_threshold_pct:.2f}"
+        )
+
+    # Override dense mass matrix flag
+    if args.dense_mass_matrix:
+        old_value = config.config["optimization"]["mcmc"].get("dense_mass", False)
+        config.config["optimization"]["mcmc"]["dense_mass"] = True
+        logger.info(
+            f"Overriding config dense_mass={old_value} with CLI flag dense_mass=True"
+        )
+
+    # Override initial parameter values
+    # Map CLI argument names to canonical parameter names
+    param_overrides = {
+        "initial_d0": "D0",
+        "initial_alpha": "alpha",
+        "initial_d_offset": "D_offset",
+        "initial_gamma_dot_t0": "gamma_dot_t0",
+        "initial_beta": "beta",
+        "initial_gamma_dot_offset": "gamma_dot_t_offset",
+        "initial_phi0": "phi0",
+    }
+
+    # Collect CLI overrides
+    cli_param_values = {}
+    for arg_name, param_name in param_overrides.items():
+        arg_value = getattr(args, arg_name, None)
+        if arg_value is not None:
+            cli_param_values[param_name] = arg_value
+
+    # Apply parameter overrides to config if any provided
+    if cli_param_values:
+        # Ensure initial_parameters section exists
+        if "initial_parameters" not in config.config:
+            config.config["initial_parameters"] = {}
+
+        # Get or create parameter_names list and values list
+        param_names = config.config["initial_parameters"].get("parameter_names", [])
+        param_values = config.config["initial_parameters"].get("values", [])
+
+        # Handle case where values is None (null in YAML)
+        if param_values is None:
+            param_values = []
+
+        # Convert to dict for easier manipulation
+        if param_names and param_values and len(param_names) == len(param_values):
+            # Use ParameterManager for name mapping (config → canonical)
+            from homodyne.config.parameter_manager import ParameterManager
+            pm = ParameterManager(config.config, config.config.get("analysis_mode", "laminar_flow"))
+
+            # Build current param dict with name mapping
+            current_params = {}
+            for pname, pval in zip(param_names, param_values):
+                # Map config name to canonical name
+                canonical_name = pm._param_name_mapping.get(pname, pname)
+                current_params[canonical_name] = pval
+        else:
+            # No existing values or mismatch - start fresh
+            current_params = {}
+
+        # Apply CLI overrides and log
+        for param_name, new_value in cli_param_values.items():
+            old_value = current_params.get(param_name, None)
+            current_params[param_name] = new_value
+
+            if old_value is not None:
+                logger.info(
+                    f"Overriding config {param_name}={old_value:.6g} with CLI value {param_name}={new_value:.6g}"
+                )
+            else:
+                logger.info(
+                    f"Setting {param_name}={new_value:.6g} from CLI (not in config)"
+                )
+
+        # Update config with new parameter values
+        # Build parameter_names and values lists in canonical order
+        analysis_mode = config.config.get("analysis_mode", "laminar_flow")
+        if "static" in analysis_mode.lower():
+            expected_params = ["D0", "alpha", "D_offset"]
+        else:
+            expected_params = ["D0", "alpha", "D_offset", "gamma_dot_t0", "beta", "gamma_dot_t_offset", "phi0"]
+
+        # Only include parameters that have values (either from config or CLI)
+        final_param_names = []
+        final_param_values = []
+        for param in expected_params:
+            if param in current_params:
+                final_param_names.append(param)
+                final_param_values.append(current_params[param])
+
+        config.config["initial_parameters"]["parameter_names"] = final_param_names
+        config.config["initial_parameters"]["values"] = final_param_values
 
     # Override hardware settings
     if "hardware" not in config.config:
@@ -1005,8 +1122,8 @@ def _run_optimization(args, config: ConfigManager, data: dict[str, Any]) -> Any:
                 else:
                     # Not an OOM error, re-raise
                     raise nlsq_error
-        elif method in ["auto", "nuts", "cmc"]:
-            # MCMC/CMC methods: auto, nuts, cmc
+        elif method == "auto":
+            # MCMC with automatic NUTS/CMC selection
             # Get CMC configuration from config file
             cmc_config = config.get_cmc_config()
 
@@ -1028,12 +1145,6 @@ def _run_optimization(args, config: ConfigManager, data: dict[str, Any]) -> Any:
             if method == "auto":
                 logger.info(
                     "Automatic method selection: CMC if (samples >= 15) OR (memory > 30%), else NUTS",
-                )
-            elif method == "nuts":
-                logger.info("Forcing standard NUTS MCMC (single-device execution)")
-            elif method == "cmc":
-                logger.info(
-                    "Forcing Consensus Monte Carlo (distributed Bayesian inference)"
                 )
 
             # Log key CMC parameters
@@ -3594,6 +3705,16 @@ def _create_mcmc_analysis_dict(
             "execution_time": float(getattr(result, "computation_time", 0.0)),
         },
     }
+
+    # v2.1.0: Add config-driven metadata if available
+    if hasattr(result, "parameter_space_metadata") and result.parameter_space_metadata is not None:
+        analysis_dict["parameter_space"] = result.parameter_space_metadata
+
+    if hasattr(result, "initial_values_metadata") and result.initial_values_metadata is not None:
+        analysis_dict["initial_values"] = result.initial_values_metadata
+
+    if hasattr(result, "selection_decision_metadata") and result.selection_decision_metadata is not None:
+        analysis_dict["selection_decision"] = result.selection_decision_metadata
 
     return analysis_dict
 

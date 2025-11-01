@@ -5,13 +5,12 @@ This module implements the main coordinator for Consensus Monte Carlo (CMC),
 orchestrating all CMC components to perform scalable Bayesian uncertainty
 quantification on large XPCS datasets (4M-200M+ points).
 
-The CMCCoordinator executes a 6-step pipeline:
+The CMCCoordinator executes a 5-step pipeline:
     1. Create data shards (stratified by phi angle)
-    2. Run SVI initialization (pooled samples → mass matrix)
-    3. Execute parallel MCMC on shards (via selected backend)
-    4. Combine subposteriors (weighted Gaussian product or averaging)
-    5. Validate results (convergence checks)
-    6. Package results (extended MCMCResult with CMC diagnostics)
+    2. Execute parallel MCMC on shards (via selected backend)
+    3. Combine subposteriors (weighted Gaussian product or averaging)
+    4. Validate results (convergence checks)
+    5. Package results (extended MCMCResult with CMC diagnostics)
 
 Key Features
 ------------
@@ -29,7 +28,6 @@ Usage
     config = {
         'cmc': {
             'sharding': {'strategy': 'stratified'},
-            'initialization': {'use_svi': True, 'svi_steps': 5000},
             'combination': {'method': 'weighted', 'fallback_enabled': True},
         },
         'mcmc': {
@@ -40,6 +38,11 @@ Usage
     }
     coordinator = CMCCoordinator(config)
 
+    # Load configuration-driven parameters
+    from homodyne.config.parameter_space import ParameterSpace
+    param_space = ParameterSpace.from_config(config)
+    initial_vals = {'D0': 1234.5, 'alpha': 0.567, 'D_offset': 12.34}
+
     # Run complete CMC pipeline
     result = coordinator.run_cmc(
         data=c2_exp,
@@ -49,7 +52,8 @@ Usage
         q=q,
         L=L,
         analysis_mode='laminar_flow',
-        nlsq_params={'D0': 1000.0, 'alpha': 1.5, ...},
+        parameter_space=param_space,
+        initial_values=initial_vals,
     )
 
     # Check if CMC was used
@@ -82,10 +86,6 @@ from homodyne.optimization.cmc.sharding import (
     calculate_optimal_num_shards,
     shard_data_stratified,
     validate_shards,
-)
-from homodyne.optimization.cmc.svi_init import (
-    pool_samples_from_shards,
-    run_svi_initialization,
 )
 from homodyne.optimization.cmc.combination import combine_subposteriors
 from homodyne.optimization.cmc.result import MCMCResult
@@ -124,7 +124,14 @@ class CMCCoordinator:
     --------
     >>> config = {'mcmc': {'num_warmup': 500, 'num_samples': 2000}}
     >>> coordinator = CMCCoordinator(config)
-    >>> result = coordinator.run_cmc(data, t1, t2, phi, q, L, 'laminar_flow', nlsq_params)
+    >>> from homodyne.config.parameter_space import ParameterSpace
+    >>> param_space = ParameterSpace.from_config(config)
+    >>> initial_vals = {'D0': 1234.5, 'alpha': 0.567, 'D_offset': 12.34}
+    >>> result = coordinator.run_cmc(
+    ...     data, t1, t2, phi, q, L, 'laminar_flow',
+    ...     parameter_space=param_space,
+    ...     initial_values=initial_vals
+    ... )
     >>> print(f"Used {result.num_shards} shards")
     """
 
@@ -189,19 +196,18 @@ class CMCCoordinator:
         q: float,
         L: float,
         analysis_mode: str,
-        nlsq_params: Optional[Dict[str, float]] = None,
-        model_fn: Optional[Callable] = None,
         parameter_space: Optional['ParameterSpace'] = None,
+        initial_values: Optional[Dict[str, float]] = None,
+        model_fn: Optional[Callable] = None,
     ) -> MCMCResult:
         """Run complete CMC pipeline.
 
-        Executes the 6-step CMC workflow:
+        Executes the 5-step CMC workflow:
         1. Create shards
-        2. Run SVI initialization
-        3. Execute parallel MCMC
-        4. Combine subposteriors
-        5. Validate results
-        6. Return MCMCResult
+        2. Execute parallel MCMC
+        3. Combine subposteriors
+        4. Validate results
+        5. Return MCMCResult
 
         Parameters
         ----------
@@ -219,12 +225,16 @@ class CMCCoordinator:
             Sample-detector distance
         analysis_mode : str
             Analysis mode: 'static_isotropic' or 'laminar_flow'
-        nlsq_params : dict
-            NLSQ parameter estimates (initial values for SVI)
+        parameter_space : ParameterSpace, optional
+            Parameter space with configuration-specific bounds and prior distributions.
+            Loaded from YAML config file. If None, defaults are used.
+        initial_values : dict[str, float], optional
+            Initial parameter values for MCMC chain initialization (e.g., from NLSQ results).
+            Loaded from YAML config: `initial_parameters.values` section.
+            If None, defaults to mid-point of parameter bounds.
+            Example: {'D0': 1234.5, 'alpha': 0.567, 'D_offset': 12.34}
         model_fn : callable, optional
             NumPyro model function (if None, will be imported)
-        parameter_space : ParameterSpace, optional
-            Parameter space with configuration-specific bounds (if None, default bounds will be used)
 
         Returns
         -------
@@ -245,12 +255,17 @@ class CMCCoordinator:
         Examples
         --------
         >>> coordinator = CMCCoordinator(config)
+        >>> # Config-driven parameter loading (recommended)
+        >>> from homodyne.config.parameter_space import ParameterSpace
+        >>> param_space = ParameterSpace.from_config(config)
+        >>> initial_vals = config.get('initial_parameters', {}).get('values', {})
         >>> result = coordinator.run_cmc(
         ...     data=c2_exp,
         ...     t1=t1, t2=t2, phi=phi,
         ...     q=0.01, L=3.5,
         ...     analysis_mode='laminar_flow',
-        ...     nlsq_params={'D0': 1000.0, 'alpha': 1.5, 'D_offset': 10.0},
+        ...     parameter_space=param_space,
+        ...     initial_values=initial_vals,
         ... )
         >>> print(f"CMC used {result.num_shards} shards")
         >>> print(f"Combination method: {result.combination_method}")
@@ -333,125 +348,85 @@ class CMCCoordinator:
         logger.info(f"  Shard sizes: {[s['shard_size'] for s in shards]} data points per shard")
 
         # =====================================================================
-        # Step 2: SVI initialization
+        # Step 2: Config-Driven Parameter Loading
         # =====================================================================
         logger.info("=" * 70)
-        logger.info("STEP 2: Running SVI initialization")
+        logger.info("STEP 2: Loading parameters from configuration")
         logger.info("=" * 70)
 
-        # TEMPORARY FIX: Disable SVI by default to avoid 778GB OOM error
-        # TODO: Investigate NumPyro AutoLowRankMultivariateNormal guide memory issue
-        use_svi = self.config.get('cmc', {}).get('initialization', {}).get('use_svi', False)
-
-        if use_svi:
-            # Pool samples from shards
-            samples_per_shard = self.config.get('cmc', {}).get('initialization', {}).get('samples_per_shard', 200)
-            pooled_data = pool_samples_from_shards(shards, samples_per_shard=samples_per_shard)
-            logger.info(f"Pooled {len(pooled_data['data'])} samples from {len(shards)} shards")
-
-            # Import model function if not provided
-            if model_fn is None:
-                from homodyne.optimization.mcmc import _create_numpyro_model, _estimate_noise
-                from homodyne.core.fitting import ParameterSpace
-
-                # Add q and L to pooled_data (required by model)
-                pooled_data['q'] = q
-                pooled_data['L'] = L
-
-                # Estimate sigma if not present
-                if 'sigma' not in pooled_data:
-                    pooled_data['sigma'] = _estimate_noise(pooled_data['data'])
-                    logger.debug("Estimated sigma for pooled data")
-
-                # Create parameter space (use passed one if available, otherwise default)
-                parameter_space = parameter_space if parameter_space is not None else ParameterSpace()
-
-                # Extract dt from pooled data or estimate from t1
-                dt = pooled_data.get('dt')
-                if dt is None:
-                    # Estimate from time array using numpy (not jax.numpy) to avoid JAX concretization error
-                    # This fixes: "Abstract tracer value encountered where concrete value is expected"
-                    import numpy as np
-                    t1_arr = pooled_data['t1']
-                    if t1_arr.ndim == 2:
-                        time_array = np.asarray(t1_arr[:, 0] if t1_arr.shape[1] > 0 else t1_arr[0, :])
-                    else:
-                        time_array = np.asarray(t1_arr)
-                    unique_times = np.unique(time_array)
-                    if len(unique_times) > 1:
-                        dt = float(unique_times[1] - unique_times[0])
-                    else:
-                        dt = 1.0
-                    logger.debug(f"Estimated dt = {dt:.6f} s for CMC model")
-
-                # Create model function with pooled data
-                model_fn = _create_numpyro_model(
-                    pooled_data['data'],
-                    pooled_data['sigma'],
-                    pooled_data['t1'],
-                    pooled_data['t2'],
-                    pooled_data['phi'],
-                    q,
-                    L,
-                    analysis_mode,
-                    parameter_space,
-                    initial_params=nlsq_params,
-                    dt=dt,
-                )
-                logger.debug("Created NumPyro model function for SVI")
-
-            # Run SVI initialization
-            svi_steps = self.config.get('cmc', {}).get('initialization', {}).get('svi_steps', 5000)
-
-            # Calculate adaptive timeout based on dataset size
-            timeout_seconds = self.config.get('cmc', {}).get('initialization', {}).get('svi_timeout')
-            if timeout_seconds is None:
-                # Use adaptive timeout calculation
-                timeout_seconds = self._calculate_adaptive_svi_timeout(
-                    pooled_size=len(pooled_data['data']),
-                    svi_steps=svi_steps,
-                    has_init_params=(nlsq_params is not None and len(nlsq_params) > 0)
-                )
+        # Load parameter_space and initial_values using same logic as mcmc.py
+        # This ensures consistency between NUTS and CMC parameter handling
+        if parameter_space is None:
+            logger.info("No parameter_space provided, using package defaults")
+            try:
+                from homodyne.config.parameter_space import ParameterSpace
+                parameter_space = ParameterSpace.from_defaults(analysis_mode)
                 logger.info(
-                    f"Using adaptive SVI timeout: {timeout_seconds/60:.1f} minutes "
-                    f"(pooled_size={len(pooled_data['data'])}, "
-                    f"svi_steps={svi_steps}, "
-                    f"has_init_params={nlsq_params is not None and len(nlsq_params) > 0})"
+                    f"Loaded default parameter_space: model={parameter_space.model_type}, "
+                    f"num_params={len(parameter_space.parameter_names)}"
                 )
-            else:
-                logger.info(f"Using configured SVI timeout: {timeout_seconds/60:.1f} minutes")
-
-            init_params, inv_mass_matrix = run_svi_initialization(
-                model_fn=model_fn,
-                pooled_data=pooled_data,
-                init_params=nlsq_params,
-                num_steps=svi_steps,
-                timeout_minutes=timeout_seconds / 60.0,
+            except Exception as e:
+                logger.error(f"Failed to load default parameter_space: {e}")
+                raise RuntimeError(
+                    "Cannot initialize CMC without parameter_space. "
+                    "Provide parameter_space argument or ensure config is valid."
+                ) from e
+        else:
+            logger.info(
+                f"Using provided parameter_space: model={parameter_space.model_type}, "
+                f"num_params={len(parameter_space.parameter_names)}"
             )
 
-            # Check if SVI succeeded
-            if inv_mass_matrix is None:
-                logger.warning("SVI initialization failed, using identity mass matrix")
-                # Use init_params returned from SVI fallback
-                num_params = len(init_params)
-                inv_mass_matrix = jnp.eye(num_params)
-            else:
-                logger.info("✓ SVI initialization completed successfully")
+        # Load initial_values (used for MCMC chain initialization)
+        if initial_values is None:
+            logger.info("No initial_values provided, calculating mid-point defaults from bounds")
+            # Calculate mid-point of parameter bounds as default
+            initial_values = {}
+            for param_name in parameter_space.parameter_names:
+                # Skip scaling parameters (contrast, offset)
+                if param_name in ['contrast', 'offset']:
+                    continue
+                bounds = parameter_space.get_bounds(param_name)
+                if bounds is not None:
+                    min_val, max_val = bounds
+                    midpoint = (min_val + max_val) / 2.0
+                    initial_values[param_name] = midpoint
+            logger.info(
+                f"Using mid-point defaults: {list(initial_values.keys())} = "
+                f"{[f'{v:.4g}' for v in initial_values.values()]}"
+            )
         else:
-            logger.info("SVI disabled, using identity mass matrix")
-            # When SVI is disabled, use NLSQ params or infer from analysis_mode
-            if nlsq_params is not None:
-                init_params = nlsq_params
-                num_params = len(nlsq_params)
-            else:
-                # Infer from analysis_mode
-                num_params = 9 if analysis_mode == 'laminar_flow' else 5
-                param_names = ['contrast', 'offset', 'D0', 'alpha', 'D_offset']
-                if analysis_mode == 'laminar_flow':
-                    param_names.extend(['gamma_dot_t0', 'beta', 'gamma_dot_offset', 'phi0'])
-                init_params = {name: 0.0 for name in param_names[:num_params]}
-                logger.warning(f"No NLSQ params provided, using {num_params} zero-initialized params for {analysis_mode}")
-            inv_mass_matrix = jnp.eye(num_params)
+            logger.info(
+                f"Using provided initial_values: {list(initial_values.keys())} = "
+                f"{[f'{v:.4g}' for v in initial_values.values()]}"
+            )
+
+        # Validate initial_values against parameter_space bounds
+        if initial_values:
+            is_valid, violations = parameter_space.validate_values(initial_values)
+            if not is_valid:
+                raise ValueError(
+                    f"Initial parameter values violate bounds:\n" + "\n".join(violations)
+                )
+            logger.info("Initial parameter values validated successfully (all within bounds)")
+
+        # Determine number of parameters from parameter_space
+        num_params = len(parameter_space.parameter_names)
+
+        # Create init_params dict for backend (includes scaling parameters)
+        # Note: Backends expect dict[str, float] for all parameters
+        init_params = initial_values.copy()
+
+        # Add scaling parameters if not present (contrast, offset)
+        if 'contrast' not in init_params:
+            init_params['contrast'] = 0.5  # Default contrast
+        if 'offset' not in init_params:
+            init_params['offset'] = 1.0  # Default offset
+
+        # Use identity mass matrix (diagonal covariance)
+        # CMC uses simple initialization - mass matrix adapted during warmup
+        inv_mass_matrix = jnp.eye(num_params)
+        logger.info(f"✓ Initialized {num_params} parameters with identity mass matrix")
 
         # =====================================================================
         # Step 3: Parallel MCMC execution
@@ -486,10 +461,10 @@ class CMCCoordinator:
             raise RuntimeError("All shards failed to converge. Cannot combine posteriors.")
 
         # =====================================================================
-        # Step 4: Combine subposteriors
+        # Step 3: Combine subposteriors
         # =====================================================================
         logger.info("=" * 70)
-        logger.info("STEP 4: Combining subposteriors")
+        logger.info("STEP 3: Combining subposteriors")
         logger.info("=" * 70)
 
         combination_method = self.config.get('cmc', {}).get('combination', {}).get('method', 'weighted')
@@ -510,10 +485,10 @@ class CMCCoordinator:
         logger.info(f"  Combination time: {combination_time:.2f}s")
 
         # =====================================================================
-        # Step 5: Validate results
+        # Step 4: Validate results
         # =====================================================================
         logger.info("=" * 70)
-        logger.info("STEP 5: Validating CMC results")
+        logger.info("STEP 4: Validating CMC results")
         logger.info("=" * 70)
 
         # TODO (Task Group 10): Integrate full validation module
@@ -528,10 +503,10 @@ class CMCCoordinator:
             logger.info("✓ Basic validation passed")
 
         # =====================================================================
-        # Step 6: Package results
+        # Step 5: Package results
         # =====================================================================
         logger.info("=" * 70)
-        logger.info("STEP 6: Packaging results")
+        logger.info("STEP 5: Packaging results")
         logger.info("=" * 70)
 
         result = self._create_mcmc_result(
@@ -585,57 +560,6 @@ class CMCCoordinator:
             min_shard_size=min_shard_size,
         )
 
-    def _calculate_adaptive_svi_timeout(
-        self,
-        pooled_size: int,
-        svi_steps: int,
-        has_init_params: bool = False,
-        base_timeout: int = 900
-    ) -> int:
-        """Calculate adaptive SVI timeout based on dataset characteristics.
-
-        Formula:
-        - Base timeout: 900s (15 min) for small datasets
-        - Scaling factor: (pooled_size * svi_steps / 10000)
-        - Init params bonus: Reduce by 50% if NLSQ init provided
-        - Cap: Maximum 7200s (2 hours)
-
-        Examples
-        --------
-        - 1,000 samples × 5,000 steps, no init: ~1,400s (23 min)
-        - 4,600 samples × 5,000 steps, no init: ~3,200s (53 min)
-        - 4,600 samples × 5,000 steps, with init: ~1,600s (27 min) [50% faster]
-        - 10,000 samples × 5,000 steps, no init: capped at 7,200s (2 hours)
-
-        Parameters
-        ----------
-        pooled_size : int
-            Number of pooled samples for SVI
-        svi_steps : int
-            Number of SVI optimization steps
-        has_init_params : bool, default False
-            Whether NLSQ initialization parameters are provided
-        base_timeout : int, default 900
-            Base timeout in seconds
-
-        Returns
-        -------
-        int
-            Adaptive timeout in seconds
-        """
-        # Calculate base adaptive timeout
-        adaptive_time = base_timeout + (pooled_size * svi_steps / 10000)
-
-        # Apply 50% reduction if we have good initialization
-        if has_init_params:
-            adaptive_time = adaptive_time * 0.5
-            logger.debug("SVI timeout reduced 50% due to NLSQ initialization")
-
-        # Cap at 2 hours to prevent excessively long waits
-        adaptive_time = min(adaptive_time, 7200)
-
-        return int(adaptive_time)
-
     def _get_mcmc_config(self) -> Dict[str, Any]:
         """Extract MCMC configuration parameters.
 
@@ -649,7 +573,7 @@ class CMCCoordinator:
         """
         mcmc = self.config.get('mcmc', {})
 
-        # Default values for CMC (reduced warmup since we have SVI init)
+        # Default values for CMC
         return {
             'num_warmup': mcmc.get('num_warmup', 500),
             'num_samples': mcmc.get('num_samples', 2000),

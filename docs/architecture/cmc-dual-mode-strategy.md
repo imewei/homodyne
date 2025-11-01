@@ -2,7 +2,7 @@
 
 **Status**: Dual-criteria decision logic IMPLEMENTED ✓ | Dual-mode sharding PLANNED
 
-**Last Updated**: October 28, 2025
+**Last Updated**: October 31, 2025 (v2.1.0)
 
 ## Overview
 
@@ -26,18 +26,18 @@ Consensus Monte Carlo (CMC) serves two distinct purposes in XPCS analysis, requi
 CMC addresses two distinct computational challenges:
 
 #### Use Case 1: Parallelism (Many Independent Samples)
-- **Trigger**: `num_samples >= min_samples_for_cmc` (default: 100)
-- **Scenario**: 200 phi angles × 1M points each
+- **Trigger**: `num_samples >= min_samples_for_cmc` (default: **15** in v2.1.0)
+- **Scenario**: 20 phi angles × 10M points each
 - **Sharding**: Split samples (phi angles) across shards
 - **Benefit**: Parallel MCMC chains, faster convergence
-- **Example**: 200 phi → 10 shards × 20 phi each
+- **Example**: 20 phi → 4 shards × 5 phi each on 14-core CPU
 
 #### Use Case 2: Memory Management (Few Samples, Huge Data)
-- **Trigger**: `dataset_size` causes estimated memory > threshold
-- **Scenario**: 2 phi angles × 100M+ points each
+- **Trigger**: `dataset_size` causes estimated memory > **30%** threshold (v2.1.0)
+- **Scenario**: 5 phi angles × 50M+ points each
 - **Sharding**: Keep all samples in each shard, split data points (NOT YET IMPLEMENTED)
 - **Benefit**: Avoid OOM errors, enable large dataset analysis
-- **Example**: 2 phi × 100M → 4 shards × 2 phi × 25M points each
+- **Example**: 5 phi × 50M → 4 shards × 5 phi × 12.5M points each
 
 ### Decision Logic (OR Condition)
 
@@ -50,39 +50,40 @@ CMC addresses two distinct computational challenges:
 ### Memory Estimation Formula
 
 ```python
-estimated_memory_gb = (dataset_size × 8 bytes × 6) / 1e9
+estimated_memory_gb = (dataset_size × 8 bytes × 30) / 1e9
 ```
 
-**Multiplier Breakdown:**
+**Multiplier Breakdown (v2.1.0 - empirically calibrated):**
 - Original data: 1×
-- Gradients: 2×
-- MCMC state overhead: 3×
+- Gradients for 9 params: 9×
+- NUTS trajectory storage: 15×
+- JAX overhead + MCMC state: 5×
 
-**Default Threshold**: 50% of available GPU/CPU memory
+**Default Threshold**: **30%** of available GPU/CPU memory (v2.1.0, conservative for OOM prevention)
 
 ### Implementation
 
 **File**: `homodyne/device/config.py`
 
-**Function**: `should_use_cmc(num_samples, hardware_config, dataset_size=None, memory_threshold_pct=0.5, min_samples_for_cmc=100)`
+**Function**: `should_use_cmc(num_samples, hardware_config, dataset_size=None, memory_threshold_pct=0.30, min_samples_for_cmc=15)` (v2.1.0)
 
-**Example**:
+**Example (v2.1.0)**:
 ```python
 from homodyne.device.config import detect_hardware, should_use_cmc
 
 hw = detect_hardware()
 
 # Case 1: Few samples, small data → NUTS
-use_cmc = should_use_cmc(2, hw, dataset_size=1_000_000)
-# Result: False (2 < 100, 0.6 GB = 4% memory)
+use_cmc = should_use_cmc(10, hw, dataset_size=5_000_000)
+# Result: False (10 < 15, estimated memory < 30%)
 
 # Case 2: Many samples → CMC (parallelism)
-use_cmc = should_use_cmc(200, hw, dataset_size=10_000_000)
-# Result: True (200 >= 100 samples)
+use_cmc = should_use_cmc(20, hw, dataset_size=10_000_000)
+# Result: True (20 >= 15 samples, parallelism mode)
 
 # Case 3: Few samples, HUGE data → CMC (memory)
-use_cmc = should_use_cmc(2, hw, dataset_size=200_000_000)
-# Result: True (9.6 GB = 60% > 50% threshold)
+use_cmc = should_use_cmc(5, hw, dataset_size=50_000_000)
+# Result: True (12 GB = 37.5% > 30% threshold, memory mode)
 ```
 
 ---
@@ -337,13 +338,15 @@ Before merging data-level sharding, validate:
 Add to YAML config:
 ```yaml
 mcmc:
+  # v2.1.0: Automatic NUTS/CMC selection thresholds
+  min_samples_for_cmc: 15              # Parallelism threshold (default: 15)
+  memory_threshold_pct: 0.30           # Memory management threshold (default: 30%)
+
   cmc:
     sharding:
       mode: auto  # Options: auto, sample, data, hybrid
-      min_samples_for_cmc: 100
-      memory_threshold_pct: 0.5
 
-      # Advanced options
+      # Advanced options (optional)
       force_data_sharding: false
       max_shard_size_gb: 2.0
 ```

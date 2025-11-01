@@ -142,10 +142,12 @@ class CMCBackend(ABC):
             - 'target_accept_prob': Target acceptance probability (float)
             - 'max_tree_depth': Maximum NUTS tree depth (int)
         init_params : dict
-            Initial parameter values from SVI initialization
+            Initial parameter values for MCMC chain initialization.
+            Loaded from config: `initial_parameters.values` section.
             Keys are parameter names (e.g., 'D0', 'alpha', 'contrast')
         inv_mass_matrix : np.ndarray
-            Inverse mass matrix (precision matrix) from SVI initialization
+            Inverse mass matrix (precision matrix) for NUTS initialization.
+            Typically identity matrix (diagonal); adapted during warmup.
             Shape: (num_params, num_params)
 
         Returns
