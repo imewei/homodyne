@@ -87,6 +87,7 @@ dependencies = [
 
     # System utilities
     "psutil>=6.0.0",  # Tested: psutil 7.1.1
+    "cloudpickle>=3.0.0",  # Multiprocessing serialization for complex objects (CMC backend)
 
     # Plotting (stable)
     "matplotlib>=3.8.0,<4.0.0",  # Tested: matplotlib 3.10.7
