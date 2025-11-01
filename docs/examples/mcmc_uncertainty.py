@@ -1,21 +1,26 @@
 #!/usr/bin/env python
 """
-Example 3: MCMC Uncertainty Quantification
+Example 3: MCMC Uncertainty Quantification (v2.1.0)
 
-Demonstrates MCMC sampling with NumPyro for obtaining posterior distributions
-and uncertainty estimates.
+Demonstrates MCMC sampling with automatic NUTS/CMC selection for obtaining
+posterior distributions and uncertainty estimates.
 
 Key concepts:
 - MCMC sampling vs NLSQ point estimates
-- NumPyro NUTS sampler for efficient sampling
+- Automatic NUTS/CMC selection based on dataset characteristics
+  - NUTS: Small datasets (< 15 samples AND < 30% memory)
+  - CMC: Large datasets (>= 15 samples OR >= 30% memory)
 - Convergence diagnostics (R-hat, ESS)
 - Posterior distributions and credible intervals
+- Physics-informed priors from ParameterSpace (no initialization needed)
 
 Configuration example:
   num_warmup: 1000
   num_samples: 2000
   num_chains: 4
   backend: "numpyro"
+  min_samples_for_cmc: 15        # Parallelism threshold
+  memory_threshold_pct: 0.30     # Memory threshold (30%)
 """
 
 from pathlib import Path
@@ -58,11 +63,14 @@ optimization:
   method: "mcmc"
 
   mcmc:
-    num_warmup: 1000           # NUTS warmup samples
-    num_samples: 2000          # Posterior samples
-    num_chains: 4              # Parallel chains
-    progress_bar: true         # Show progress
-    backend: "numpyro"         # or "blackjax"
+    num_warmup: 1000                # NUTS warmup samples
+    num_samples: 2000               # Posterior samples
+    num_chains: 4                   # Parallel chains
+    progress_bar: true              # Show progress
+    backend: "numpyro"              # or "blackjax"
+    min_samples_for_cmc: 15         # Parallelism threshold
+    memory_threshold_pct: 0.30      # Memory threshold (30%)
+    dense_mass_matrix: false        # Use diagonal mass matrix
 
 phi_filtering:
   enabled: true
@@ -81,7 +89,7 @@ output:
 
 def main():
     """Run MCMC uncertainty example."""
-    print("MCMC Uncertainty Quantification Example")
+    print("MCMC Uncertainty Quantification Example (v2.1.0)")
     print("=" * 60)
 
     config_path = Path("homodyne_config_mcmc.yaml")
@@ -92,8 +100,13 @@ def main():
     print("  Warmup samples: 1000 (tuning phase)")
     print("  Posterior samples: 2000 (for inference)")
     print("  Parallel chains: 4 (for convergence diagnostics)")
-    print("  Sampler: NUTS (No-U-Turn Sampler)")
+    print("  Automatic selection: NUTS/CMC based on dataset size")
     print("  Backend: NumPyro (with progress bars)")
+
+    print("\nAutomatic NUTS/CMC Selection (v2.1.0):")
+    print("  Criterion 1: num_samples >= 15 → CMC for parallelism")
+    print("  Criterion 2: memory > 30% → CMC for memory management")
+    print("  Default: NUTS if both criteria fail")
 
     print("\nExpected output:")
     print("  - parameters.json: Mean, median, std of posterior")
@@ -104,6 +117,11 @@ def main():
     print("\nConvergence diagnostics:")
     print("  R-hat: Should be < 1.01 (indicates convergence)")
     print("  ESS: Effective sample size (>>1 means efficient sampling)")
+
+    print("\nMigration note (v2.0 → v2.1):")
+    print("  - No automatic NLSQ initialization (manual workflow required)")
+    print("  - Physics-informed priors from ParameterSpace")
+    print("  - Run NLSQ first, then manually update config with results")
 
     print("\nTo run:")
     print(f"  homodyne --config {config_path}")

@@ -1,11 +1,21 @@
-# Homodyne v2: JAX-First XPCS Analysis
+# Homodyne v2.1: JAX-First XPCS Analysis
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Python](https://img.shields.io/badge/Python-3.12%2B-blue)](https://www.python.org/)
+[![Version](https://img.shields.io/badge/Version-2.1.0-green.svg)](#)
 [![Documentation](https://img.shields.io/badge/docs-sphinx-blue.svg)](https://homodyne.readthedocs.io)
 [![ReadTheDocs](https://readthedocs.org/projects/homodyne/badge/?version=latest)](https://homodyne.readthedocs.io/en/latest/)
 [![GitHub Actions](https://github.com/imewei/homodyne/actions/workflows/docs.yml/badge.svg)](https://github.com/imewei/homodyne/actions/workflows/docs.yml)
 [![DOI](https://zenodo.org/badge/DOI/10.1073/pnas.2401162121.svg)](https://doi.org/10.1073/pnas.2401162121)
+
+## ⚠️ v2.1.0 Breaking Changes
+
+**If upgrading from v2.0.x, please read the [Migration Guide](docs/migration/v2.0-to-v2.1.md).**
+
+Key changes:
+- **CLI**: Only `--method nlsq` and `--method mcmc` supported (automatic NUTS/CMC selection)
+- **Config**: Removed `mcmc.initialization` section; added `min_samples_for_cmc`, `memory_threshold_pct`
+- **API**: Updated `fit_mcmc_jax()` signature with new `parameter_space` and `initial_values` parameters
 
 **High-performance JAX-first package for X-ray Photon Correlation Spectroscopy (XPCS)
 analysis**, implementing the theoretical framework from
@@ -92,22 +102,26 @@ compatibility** for all validated components:
 
 ```python
 from homodyne.optimization.mcmc import fit_mcmc_jax
+from homodyne.config.parameter_space import ParameterSpace
 
 # Example 1: Many samples (23 angles) → CMC for parallelism
+parameter_space = ParameterSpace.from_config(config_dict)
 result = fit_mcmc_jax(
     data=data['c2'],
     t1=data['t1'], t2=data['t2'], phi=data['phi'],  # 23 angles
     q=0.0054, L=2000000,
     analysis_mode='static_isotropic',
-    initial_params={'D0': 10000.0, 'alpha': 0.8, 'D_offset': 100.0},
-    method='auto',  # Auto-selects NUTS or CMC
+    parameter_space=parameter_space,
+    initial_values={'D0': 10000.0, 'alpha': 0.8, 'D_offset': 100.0},
+    # Automatic NUTS/CMC selection: ≥15 samples OR ≥30% memory → CMC
 )
 
 # Example 2: Few samples, huge dataset → CMC for memory
 result = fit_mcmc_jax(
     data=huge_data['c2'],  # 100M+ points
     t1=huge_data['t1'], t2=huge_data['t2'], phi=huge_data['phi'],  # 2 angles
-    method='auto',  # CMC for OOM prevention
+    parameter_space=parameter_space,
+    # Automatic selection: 2 samples < 15 but memory > 30% → CMC for OOM prevention
 )
 
 # Check which method was used
@@ -325,7 +339,7 @@ homodyne --method mcmc --config config.yaml
 ```python
 from homodyne.optimization import fit_nlsq_jax, fit_mcmc_jax
 from homodyne.data import load_xpcs_data
-from homodyne.config import ConfigManager
+from homodyne.config import ConfigManager, ParameterSpace
 
 # Load data and configuration
 data = load_xpcs_data("config.yaml")
@@ -337,8 +351,16 @@ print(f"Parameters: {result.parameters}")
 print(f"Chi-squared: {result.chi_squared:.4f}")
 print(f"Convergence: {result.convergence_status}")
 
-# Secondary: MCMC sampling for uncertainty quantification
-mcmc_result = fit_mcmc_jax(data, config)
+# Secondary: MCMC sampling for uncertainty quantification (v2.1: automatic NUTS/CMC selection)
+parameter_space = ParameterSpace.from_config(config.to_dict())
+initial_values = config.get_initial_parameters()
+
+mcmc_result = fit_mcmc_jax(
+    data=data,
+    parameter_space=parameter_space,
+    initial_values=initial_values,
+    # Automatic NUTS/CMC selection based on dataset characteristics
+)
 print(f"Posterior means: {mcmc_result.mean_params}")
 ```
 

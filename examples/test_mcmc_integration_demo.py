@@ -15,9 +15,9 @@ from homodyne.optimization.mcmc import fit_mcmc_jax
 
 
 def demo_automatic_selection():
-    """Demonstrate automatic method selection."""
+    """Demonstrate automatic method selection (v2.1.0)."""
     print("=" * 70)
-    print("DEMO 1: Automatic Method Selection (method='auto')")
+    print("DEMO 1: Automatic Method Selection (v2.1.0)")
     print("=" * 70)
 
     # Create small synthetic dataset (10k points)
@@ -28,10 +28,13 @@ def demo_automatic_selection():
     phi = np.random.rand(10_000) * 360 - 180
 
     print("\nSmall dataset: 10,000 points")
-    print("Expected: Automatic selection will choose NUTS\n")
+    print("Expected: Automatic selection will choose NUTS")
+    print("Reason: < 15 samples AND < 30% memory\n")
 
     # Note: This would normally run MCMC, but for demo we're just showing the API
     # In production, you would call:
+    # from homodyne.config.parameter_space import ParameterSpace
+    # parameter_space = ParameterSpace.from_config(config_dict)
     # result = fit_mcmc_jax(
     #     data=data_small,
     #     t1=t1,
@@ -39,77 +42,96 @@ def demo_automatic_selection():
     #     phi=phi,
     #     q=0.01,
     #     L=3.5,
-    #     # method='auto' is default, no need to specify
+    #     parameter_space=parameter_space,
+    #     initial_values=initial_values,
+    #     # No method= parameter (automatic selection)
     # )
     # print(f"Method used: {'CMC' if result.is_cmc_result() else 'NUTS'}")
 
-    print("✅ API call signature:")
-    print("   result = fit_mcmc_jax(data, t1, t2, phi, q, L)")
-    print("   # Automatically selects NUTS for <500k points")
+    print("✅ API call signature (v2.1.0):")
+    print("   result = fit_mcmc_jax(")
+    print("       data, t1, t2, phi, q, L,")
+    print("       parameter_space=parameter_space,")
+    print("       initial_values=initial_values,")
+    print("   )")
+    print("   # Automatically selects NUTS for small datasets")
 
 
 def demo_forced_nuts():
-    """Demonstrate forcing NUTS method."""
+    """Demonstrate NUTS method (v2.1.0: automatic selection)."""
     print("\n" + "=" * 70)
-    print("DEMO 2: Force Standard NUTS (method='nuts')")
+    print("DEMO 2: NUTS Method (v2.1.0: Automatic Selection)")
     print("=" * 70)
 
-    print("\nForce NUTS even for large datasets:")
-    print("✅ API call signature:")
-    print("   result = fit_mcmc_jax(data, t1, t2, phi, q, L, method='nuts')")
-    print("   # Forces NUTS regardless of dataset size")
+    print("\nWhen NUTS is used:")
+    print("  - Criteria: num_samples < 15 AND memory < 30%")
+    print("  - Typical: Small experiments (< 15 angles) with < 100M points")
+    print("\n✅ API call signature (v2.1.0):")
+    print("   result = fit_mcmc_jax(")
+    print("       data, t1, t2, phi, q, L,")
+    print("       parameter_space=parameter_space,")
+    print("       initial_values=initial_values,")
+    print("   )")
+    print("   # Automatic: NUTS for small datasets")
 
 
 def demo_forced_cmc():
-    """Demonstrate forcing CMC method with custom config."""
+    """Demonstrate CMC method (v2.1.0: automatic selection)."""
     print("\n" + "=" * 70)
-    print("DEMO 3: Force CMC with Custom Configuration (method='cmc')")
+    print("DEMO 3: CMC Method (v2.1.0: Automatic Selection)")
     print("=" * 70)
 
-    cmc_config = {
-        'sharding': {
-            'num_shards': 10,
-            'strategy': 'stratified',
-        },
-        'initialization': {
-            'use_svi': True,
-            'svi_steps': 5000,
-        },
-        'combination': {
-            'method': 'weighted',
-            'fallback_enabled': True,
-        },
+    print("\nWhen CMC is used:")
+    print("  - Criterion 1: num_samples >= 15 (parallelism)")
+    print("    Example: 20+ phi angles → ~1.4x speedup")
+    print("  - Criterion 2: memory > 30% (OOM prevention)")
+    print("    Example: 100M+ points → avoid OOM")
+
+    print("\nCMC Configuration (v2.1.0):")
+    mcmc_config = {
+        'num_warmup': 1000,
+        'num_samples': 2000,
+        'min_samples_for_cmc': 15,           # Parallelism threshold
+        'memory_threshold_pct': 0.30,        # Memory threshold
+        'dense_mass_matrix': False,          # Efficiency for large datasets
     }
 
-    print("\nCustom CMC configuration:")
-    print("  - 10 shards (stratified)")
-    print("  - SVI initialization (5000 steps)")
-    print("  - Weighted posterior combination")
-    print("\n✅ API call signature:")
+    print("  - min_samples_for_cmc: 15 (configurable)")
+    print("  - memory_threshold_pct: 0.30 (configurable)")
+    print("  - dense_mass_matrix: false (efficiency)")
+
+    print("\n✅ API call signature (v2.1.0):")
     print("   result = fit_mcmc_jax(")
     print("       data, t1, t2, phi, q, L,")
-    print("       method='cmc',")
-    print("       cmc_config=cmc_config,")
+    print("       parameter_space=parameter_space,")
+    print("       initial_values=initial_values,")
     print("   )")
-    print("   print(f'Used {result.num_shards} shards')")
+    print("   # Automatic: CMC when >=15 samples OR >=30% memory")
 
 
 def demo_backward_compatibility():
-    """Demonstrate backward compatibility."""
+    """Demonstrate backward compatibility (v2.1.0)."""
     print("\n" + "=" * 70)
-    print("DEMO 4: Backward Compatibility (existing code works unchanged)")
+    print("DEMO 4: Backward Compatibility (v2.1.0)")
     print("=" * 70)
 
-    print("\nExisting v2.x code:")
-    print("✅ result = fit_mcmc_jax(data, t1, t2, phi, q, L)")
-    print("   # Still works! Automatically selects optimal method")
-    print("\nExisting kwargs still work:")
+    print("\nVersion 2.0 API signature (deprecated):")
+    print("  ❌ result = fit_mcmc_jax(data, t1, t2, phi, q, L, method='nuts')")
+    print("  ❌ result = fit_mcmc_jax(data, ..., method='cmc')")
+    print("  ❌ result = fit_mcmc_jax(data, ..., initial_params={})")
+
+    print("\nVersion 2.1 API signature (current):")
     print("✅ result = fit_mcmc_jax(")
     print("       data, t1, t2, phi, q, L,")
-    print("       n_samples=2000,")
-    print("       n_warmup=1000,")
-    print("       n_chains=4,")
+    print("       parameter_space=parameter_space,")
+    print("       initial_values=initial_values,")
     print("   )")
+    print("\nChanges required for v2.0 → v2.1 migration:")
+    print("  1. Remove 'method' parameter (automatic selection)")
+    print("  2. Rename 'initial_params' to 'initial_values'")
+    print("  3. Add 'parameter_space' from ParameterSpace.from_config()")
+    print("  4. Remove 'mcmc.initialization' from YAML config")
+    print("  5. Add 'min_samples_for_cmc', 'memory_threshold_pct' to YAML")
 
 
 def demo_result_inspection():
@@ -132,7 +154,7 @@ if __name__ == '__main__':
     print("\n")
     print("╔" + "=" * 68 + "╗")
     print("║" + " " * 68 + "║")
-    print("║" + "  Task Group 9: MCMC Integration with CMC - Demonstrations  ".center(68) + "║")
+    print("║" + "  v2.1.0: MCMC with Automatic NUTS/CMC Selection - Demonstrations  ".center(68) + "║")
     print("║" + " " * 68 + "║")
     print("╚" + "=" * 68 + "╝")
     print()
@@ -144,16 +166,18 @@ if __name__ == '__main__':
     demo_result_inspection()
 
     print("\n" + "=" * 70)
-    print("Summary of New Features")
+    print("v2.1.0 Features & Changes")
     print("=" * 70)
-    print("\n✅ Automatic method selection (method='auto')")
-    print("✅ Force NUTS (method='nuts')")
-    print("✅ Force CMC (method='cmc')")
-    print("✅ Hardware-adaptive thresholds")
-    print("✅ 100% backward compatible")
+    print("\n✅ Automatic method selection (NUTS/CMC)")
+    print("✅ Dual-criteria OR logic: samples >= 15 OR memory > 30%")
+    print("✅ Removed explicit 'method' parameter")
+    print("✅ New API: parameter_space, initial_values")
+    print("✅ Removed 'mcmc.initialization' from YAML")
+    print("✅ Added 'min_samples_for_cmc', 'memory_threshold_pct'")
+    print("✅ Hardware-adaptive thresholds (configurable)")
     print("✅ Extended MCMCResult with CMC fields")
-    print("✅ Warning system for suboptimal choices")
     print("\n" + "=" * 70)
-    print("Test Coverage: 15/15 tests passing (100%)")
+    print("Migration Status: v2.0 → v2.1.0 (Breaking Changes)")
     print("=" * 70)
-    print("\n✨ Task Group 9 Complete! Ready for production use.\n")
+    print("\nSee docs/migration/v2.0-to-v2.1.md for detailed upgrade guide")
+    print("\n✨ v2.1.0 Ready for production use.\n")

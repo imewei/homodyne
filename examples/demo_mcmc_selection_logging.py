@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 """
-Demonstration of Automatic NUTS/CMC Selection with Comprehensive Logging
+Demonstration of Automatic NUTS/CMC Selection (v2.1.0)
 
 This script demonstrates the dual-criteria OR logic for automatic method selection
 in the MCMC implementation, showing how the decision is made based on:
@@ -8,10 +8,17 @@ in the MCMC implementation, showing how the decision is made based on:
 1. Parallelism criterion: num_samples >= min_samples_for_cmc (default: 15)
 2. Memory criterion: estimated_memory > memory_threshold_pct (default: 30%)
 
+In v2.1.0, selection happens automatically in fit_mcmc_jax():
+- Users no longer specify method='nuts' or method='cmc'
+- System automatically selects based on dataset characteristics
+- Selection thresholds are configurable in YAML
+
 The comprehensive logging shows both criteria evaluation and the final decision.
 
 Usage:
     python examples/demo_mcmc_selection_logging.py
+
+See docs/migration/v2.0-to-v2.1.md for upgrade details.
 """
 
 import logging
@@ -138,7 +145,7 @@ print(f"\n→ Decision: {'CMC' if result5 else 'NUTS'}")
 
 # Summary
 print("\n" + "=" * 80)
-print("SUMMARY")
+print("SUMMARY (v2.1.0)")
 print("=" * 80)
 print(f"\nScenario 1 (Parallelism):  {'✓ CMC' if result1 else '✗ NUTS'}")
 print(f"Scenario 2 (Memory):       {'✓ CMC' if result2 else '✗ NUTS'}")
@@ -148,4 +155,15 @@ print(f"Scenario 5 (Custom):       {'✗ CMC' if result5 else '✓ NUTS'}")
 print()
 print("All scenarios executed successfully!")
 print("Dual-criteria OR logic working as expected.")
+print()
+print("v2.1.0 Features:")
+print("  ✓ Automatic selection (no manual method choice)")
+print("  ✓ Dual-criteria OR logic (samples >= 15 OR memory > 30%)")
+print("  ✓ Configurable thresholds (YAML: min_samples_for_cmc, memory_threshold_pct)")
+print("  ✓ Seamless integration with fit_mcmc_jax()")
+print()
+print("Migration Note:")
+print("  Users no longer specify method='nuts' or method='cmc'")
+print("  System automatically selects based on dataset characteristics")
+print("  See docs/migration/v2.0-to-v2.1.md for upgrade details")
 print("=" * 80)
