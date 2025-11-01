@@ -26,7 +26,7 @@ from unittest.mock import Mock, patch
 from homodyne.optimization.nlsq_wrapper import NLSQWrapper, OptimizationResult
 from homodyne.optimization.strategy import OptimizationStrategy, DatasetSizeStrategy
 from tests.factories.large_dataset_factory import LargeDatasetFactory
-from tests.factories.synthetic_data import create_synthetic_g2_data
+from tests.factories.synthetic_data import generate_synthetic_xpcs_data
 
 
 # ============================================================================
