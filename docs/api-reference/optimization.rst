@@ -139,45 +139,121 @@ homodyne.optimization.mcmc
    :show-inheritance:
    :exclude-members: __weakref__
 
-MCMC Bayesian inference using NumPyro's No-U-Turn Sampler (NUTS) for uncertainty quantification.
+MCMC Bayesian inference with automatic NUTS/CMC selection for uncertainty quantification.
+
+.. versionchanged:: 2.1.0
+   Automatic NUTS/CMC selection replaces manual method parameter. Configuration-driven
+   parameter management via ``parameter_space`` and ``initial_values``.
 
 **Key Functions:**
 
-* ``fit_mcmc_jax()`` - Main MCMC entry point
-* ``MCMCResult`` - Result container with posterior samples
+* ``fit_mcmc_jax()`` - Main MCMC entry point with automatic method selection
+* ``MCMCResult`` - Result container with posterior samples and diagnostics
 
-**Usage Example:**
+**Automatic Selection (v2.1.0):**
+
+MCMC automatically selects between NUTS (single-device) and CMC (multi-shard) based on:
+
+* **Parallelism criterion**: ``num_samples >= 15`` → CMC for CPU parallelization
+* **Memory criterion**: ``estimated_memory > 30%`` → CMC for OOM prevention
+* **Decision logic**: CMC if **(Criterion 1 OR Criterion 2)**, otherwise NUTS
+
+**Configuration-Driven Parameters (v2.1.0):**
+
+.. code-block:: yaml
+
+   # YAML configuration structure
+   parameter_space:
+     bounds:
+       - name: D0
+         min: 100.0
+         max: 10000.0
+       - name: alpha
+         min: 0.1
+         max: 2.0
+       - name: D_offset
+         min: 0.1
+         max: 100.0
+     priors:
+       D0:
+         type: TruncatedNormal
+         mu: 1000.0
+         sigma: 500.0
+       alpha:
+         type: TruncatedNormal
+         mu: 1.0
+         sigma: 0.3
+
+   initial_parameters:
+     parameter_names: [D0, alpha, D_offset]
+     values: [1234.5, 0.567, 12.34]  # From NLSQ results
+
+   optimization:
+     mcmc:
+       min_samples_for_cmc: 15       # Parallelism threshold
+       memory_threshold_pct: 0.30    # Memory threshold (30%)
+       dense_mass_matrix: false      # Diagonal vs full covariance
+
+**Usage Example (v2.1.0):**
 
 .. code-block:: python
 
    from homodyne.optimization import fit_mcmc_jax
-   import jax.numpy as jnp
+   from homodyne.config.parameter_space import ParameterSpace
+   from homodyne.config.manager import ConfigManager
+   import numpy as np
 
-   # MCMC typically initialized from NLSQ result
-   nlsq_params = {
-       'D0': 1000.0,
-       'alpha': 0.8,
-       'D_offset': 10.0
-   }
+   # Load configuration (recommended approach)
+   config_manager = ConfigManager("config.yaml")
+   parameter_space = ParameterSpace.from_config(config_manager.config)
+   initial_values = config_manager.get_initial_parameters()
 
-   # Run MCMC with NUTS sampler
+   # Run MCMC with automatic NUTS/CMC selection
    mcmc_result = fit_mcmc_jax(
-       t1, t2, phi, c2_exp,
+       data=c2_exp,
+       t1=t1,
+       t2=t2,
+       phi=phi,
        q=0.01,
-       analysis_type='static_isotropic',
-       initial_params=nlsq_params,
-       num_warmup=500,
-       num_samples=1000,
-       num_chains=4
+       analysis_mode='static_isotropic',
+       parameter_space=parameter_space,    # NEW in v2.1.0
+       initial_values=initial_values,      # NEW in v2.1.0 (renamed from initial_params)
+       n_warmup=500,
+       n_samples=1000,
+       n_chains=4
    )
 
    # Extract posterior statistics
+   print(f"Method used: {mcmc_result.metadata.get('method_used')}")  # 'NUTS' or 'CMC'
    print(f"Mean parameters: {mcmc_result.mean_params}")
    print(f"Std parameters: {mcmc_result.std_params}")
    print(f"Credible intervals (95%): {mcmc_result.credible_intervals_95}")
 
    # Access full posterior samples
    samples = mcmc_result.samples  # Shape: (num_chains, num_samples, num_params)
+
+**Manual NLSQ → MCMC Workflow (v2.1.0):**
+
+.. code-block:: bash
+
+   # Step 1: Run NLSQ optimization
+   homodyne --config config.yaml --method nlsq
+
+   # Step 2: Manually copy best-fit results to config.yaml
+   # Edit initial_parameters.values: [D0_result, alpha_result, D_offset_result]
+
+   # Step 3: Run MCMC with initialized parameters
+   homodyne --config config.yaml --method mcmc
+
+.. warning::
+   **Breaking Changes in v2.1.0**
+
+   * Removed ``method`` parameter (use automatic selection)
+   * Renamed ``initial_params`` → ``initial_values``
+   * Added required ``parameter_space`` parameter
+   * No automatic NLSQ/SVI initialization (manual workflow required)
+
+   See :doc:`../migration/v2.0-to-v2.1` for migration guide.
 
 **Diagnostic Checks:**
 
@@ -503,6 +579,9 @@ Configuration
      num_chains: 4
      target_accept_prob: 0.8
      max_tree_depth: 10
+     min_samples_for_cmc: 15        # NEW in v2.1.0
+     memory_threshold_pct: 0.30     # NEW in v2.1.0
+     dense_mass_matrix: false       # NEW in v2.1.0
 
 Performance Considerations
 --------------------------

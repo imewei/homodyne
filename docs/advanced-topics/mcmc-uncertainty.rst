@@ -30,10 +30,15 @@ Typical workflow: **NLSQ first for speed, then MCMC for rigorous uncertainties**
 Configuration
 --------------
 
+.. versionchanged:: 2.1.0
+   Automatic NUTS/CMC selection replaces manual method specification.
+   Configuration-driven parameter management via ``parameter_space`` and ``initial_values``.
+   Removed ``mcmc.initialization`` section.
+
 Basic Configuration
 ~~~~~~~~~~~~~~~~~~~~
 
-Minimal MCMC setup with NumPyro (default):
+Minimal MCMC setup with NumPyro (default) and automatic NUTS/CMC selection:
 
 .. code-block:: yaml
 
@@ -45,6 +50,37 @@ Minimal MCMC setup with NumPyro (default):
         num_chains: 4             # Parallel chains for convergence checks
         progress_bar: true        # Show sampling progress
         backend: "numpyro"        # numpyro | blackjax
+        # NEW in v2.1.0: Automatic selection thresholds
+        min_samples_for_cmc: 15       # Parallelism threshold (default: 15)
+        memory_threshold_pct: 0.30    # Memory threshold (default: 0.30)
+        dense_mass_matrix: false      # Diagonal (fast) vs full covariance
+
+    # NEW in v2.1.0: Configuration-driven parameters
+    parameter_space:
+      bounds:
+        - name: D0
+          min: 100.0
+          max: 10000.0
+        - name: alpha
+          min: 0.1
+          max: 2.0
+        - name: D_offset
+          min: 0.1
+          max: 100.0
+      priors:
+        D0:
+          type: TruncatedNormal
+          mu: 1000.0
+          sigma: 500.0
+        alpha:
+          type: TruncatedNormal
+          mu: 1.0
+          sigma: 0.3
+
+    # Optional: Initial values (e.g., from NLSQ results)
+    initial_parameters:
+      parameter_names: [D0, alpha, D_offset]
+      values: [1234.5, 0.567, 12.34]  # From NLSQ output
 
 **Recommended Settings:**
 
@@ -282,8 +318,11 @@ Run MCMC:
 
 Expected runtime: 5-30 minutes (depending on dataset size)
 
-Two-Stage Workflow: NLSQ then MCMC
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+Two-Stage Workflow: NLSQ then MCMC (v2.1.0)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. versionchanged:: 2.1.0
+   Manual workflow required. No automatic NLSQ/SVI initialization.
 
 Professional workflow combining speed and rigor:
 
@@ -292,11 +331,31 @@ Professional workflow combining speed and rigor:
     # Stage 1: Quick NLSQ for initial estimates
     homodyne --config config.yaml --method nlsq --output-dir results_nlsq
 
-    # Stage 2: Use NLSQ results as starting point for MCMC
-    # (Optional: update initial_parameters based on NLSQ results)
-    homodyne --config config_mcmc.yaml --output-dir results_mcmc
+    # Stage 2: Manually copy NLSQ best-fit results
+    # Example NLSQ output:
+    #   Best-fit parameters:
+    #     D0: 1234.5 ± 45.6
+    #     alpha: 0.567 ± 0.012
+    #     D_offset: 12.34 ± 1.23
 
-This approach: **NLSQ in 1-5 min + MCMC in 10-30 min = complete uncertainty analysis in 15-35 min**
+    # Edit config.yaml:
+    #   initial_parameters:
+    #     parameter_names: [D0, alpha, D_offset]
+    #     values: [1234.5, 0.567, 12.34]  # Copy from NLSQ output
+
+    # Stage 3: Run MCMC with initialized parameters
+    homodyne --config config.yaml --method mcmc --output-dir results_mcmc
+
+.. note::
+   **Why manual workflow?** (v2.1.0)
+
+   * **Transparency**: Clear separation between NLSQ and MCMC methods
+   * **User control**: Explicit parameter transfer ensures understanding
+   * **Flexibility**: Can adjust parameters or skip MCMC if NLSQ sufficient
+
+   Automatic initialization was removed to simplify codebase and improve clarity.
+
+This approach: **NLSQ in 1-5 min + manual copy (30 sec) + MCMC in 10-30 min = complete uncertainty analysis in 15-35 min**
 
 HPC Parallel Chains
 ~~~~~~~~~~~~~~~~~~~

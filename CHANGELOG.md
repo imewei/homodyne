@@ -7,6 +7,360 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ______________________________________________________________________
 
+## [2.1.0] - 2025-10-31
+
+### 🎉 MCMC/CMC Simplification Release
+
+Homodyne v2.1.0 significantly simplifies the MCMC API by removing manual method selection and implementing automatic NUTS/CMC selection based on dataset characteristics. This release introduces **breaking changes** to the MCMC interface that require configuration updates.
+
+📖 **[Read the Migration Guide](docs/migration/v2.0-to-v2.1.md)** for step-by-step upgrade instructions.
+
+______________________________________________________________________
+
+### Breaking Changes
+
+#### API Changes: fit_mcmc_jax()
+
+**Removed Parameters:**
+- `method` (str) - No longer accepts `"nuts"`, `"cmc"`, or `"auto"` arguments
+- `initial_params` (dict) - Renamed to `initial_values`
+
+**Added Parameters:**
+- `parameter_space` (ParameterSpace | None) - Config-driven bounds and prior distributions
+- `initial_values` (dict[str, float] | None) - Renamed from `initial_params`
+- `min_samples_for_cmc` (int, default=15) - Parallelism threshold for CMC selection
+- `memory_threshold_pct` (float, default=0.30) - Memory threshold for CMC selection
+- `dense_mass_matrix` (bool, default=False) - Use dense vs diagonal mass matrix
+
+**Migration Example:**
+
+```python
+# OLD (v2.0.0)
+result = fit_mcmc_jax(
+    method="nuts",
+    initial_params={"D0": 1000.0, "alpha": 0.5},
+    ...
+)
+
+# NEW (v2.1.0)
+from homodyne.config.parameter_space import ParameterSpace
+from homodyne.config.manager import ConfigManager
+
+config_mgr = ConfigManager("config.yaml")
+parameter_space = ParameterSpace.from_config(config_mgr.config)
+initial_values = config_mgr.get_initial_parameters()
+
+result = fit_mcmc_jax(
+    parameter_space=parameter_space,
+    initial_values=initial_values,
+    ...
+)
+```
+
+#### CLI Changes
+
+**Removed CLI Flags:**
+- `--method nuts` → Use `--method mcmc` (automatic selection)
+- `--method cmc` → Use `--method mcmc` (automatic selection)
+- `--method auto` → Use `--method mcmc` (now default behavior)
+
+**Supported Methods (v2.1.0):**
+- `--method nlsq` - Nonlinear least squares optimization
+- `--method mcmc` - MCMC with automatic NUTS/CMC selection
+
+**Migration Example:**
+
+```bash
+# OLD
+homodyne --config config.yaml --method nuts
+
+# NEW
+homodyne --config config.yaml --method mcmc
+```
+
+#### Configuration Changes
+
+**Removed from YAML:**
+
+```yaml
+# REMOVED in v2.1.0
+mcmc:
+  initialization:
+    run_nlsq_init: true
+    use_svi: false
+    svi_steps: 1000
+    svi_timeout: 300
+```
+
+**Added to YAML:**
+
+```yaml
+# NEW in v2.1.0
+optimization:
+  mcmc:
+    min_samples_for_cmc: 15        # Parallelism threshold
+    memory_threshold_pct: 0.30     # Memory threshold (30%)
+    dense_mass_matrix: false       # Diagonal vs full covariance
+
+parameter_space:
+  bounds:
+    - name: D0
+      min: 100.0
+      max: 10000.0
+  priors:  # NEW: Prior distributions for MCMC
+    D0:
+      type: TruncatedNormal
+      mu: 1000.0
+      sigma: 500.0
+
+initial_parameters:
+  parameter_names: [D0, alpha, D_offset]
+  values: [1234.5, 0.567, 12.34]  # From NLSQ results (manual copy)
+```
+
+#### Workflow Changes
+
+**OLD Workflow (v2.0):** Automatic initialization
+
+```bash
+homodyne --config config.yaml --method mcmc
+```
+
+**NEW Workflow (v2.1.0):** Manual NLSQ → MCMC
+
+```bash
+# Step 1: Run NLSQ optimization
+homodyne --config config.yaml --method nlsq
+
+# Step 2: Manually copy best-fit results to config.yaml
+# Edit initial_parameters.values: [D0_result, alpha_result, D_offset_result]
+
+# Step 3: Run MCMC with initialized parameters
+homodyne --config config.yaml --method mcmc
+```
+
+**Rationale:**
+- **Transparency**: Clear separation between NLSQ and MCMC methods
+- **User control**: Explicit parameter transfer ensures understanding
+- **Simplification**: Removes complex initialization logic from codebase
+
+______________________________________________________________________
+
+### Added
+
+#### Automatic NUTS/CMC Selection
+
+**Dual-Criteria OR Logic:**
+
+CMC is automatically selected when **EITHER** criterion is met:
+
+1. **Parallelism criterion**: `num_samples >= min_samples_for_cmc` (default: 15)
+   - Triggers CMC for CPU parallelization with many independent samples
+   - Example: 50 phi angles → ~3x speedup on 14-core CPU
+
+2. **Memory criterion**: `estimated_memory > memory_threshold_pct` (default: 0.30)
+   - Triggers CMC for memory management with large datasets
+   - Example: 10M+ points → prevent OOM errors
+
+**Decision Logic**: CMC if **(Criterion 1 OR Criterion 2)**, otherwise NUTS
+
+**Configurable Thresholds:**
+
+```yaml
+optimization:
+  mcmc:
+    min_samples_for_cmc: 15        # Adjust parallelism trigger
+    memory_threshold_pct: 0.30     # Adjust memory trigger (0-1)
+```
+
+**Metadata in Results:**
+
+```python
+result = fit_mcmc_jax(...)
+print(f"Method used: {result.metadata.get('method_used')}")  # 'NUTS' or 'CMC'
+print(f"Selection reason: {result.metadata.get('selection_decision_metadata')}")
+```
+
+#### Configuration-Driven Parameter Management
+
+**New Classes:**
+
+- `ParameterSpace` class in `homodyne.config.parameter_space`
+  - `ParameterSpace.from_config(config_dict)` - Load from YAML config
+  - Stores parameter bounds and prior distributions
+  - Supports TruncatedNormal, Uniform, and LogNormal priors
+
+- `ConfigManager.get_initial_parameters()` method
+  - Loads initial values from `initial_parameters.values` in YAML
+  - Falls back to mid-point of bounds: `(min + max) / 2`
+  - Supports CLI overrides
+
+**Usage Example:**
+
+```python
+from homodyne.config import ConfigManager
+from homodyne.config.parameter_space import ParameterSpace
+from homodyne.optimization import fit_mcmc_jax
+
+config_mgr = ConfigManager("config.yaml")
+parameter_space = ParameterSpace.from_config(config_mgr.config)
+initial_values = config_mgr.get_initial_parameters()
+
+result = fit_mcmc_jax(
+    data=data, t1=t1, t2=t2, phi=phi, q=0.01,
+    parameter_space=parameter_space,
+    initial_values=initial_values
+)
+```
+
+#### Auto-Retry Mechanism
+
+**MCMC Convergence Failures:**
+- Automatic retry with different random seeds (max 3 attempts)
+- Helps recover from poor initialization or transient numerical issues
+- Configurable retry limit: `max_retries` parameter
+
+**Metadata Tracking:**
+
+```python
+result = fit_mcmc_jax(...)
+print(f"Number of retries: {result.metadata.get('num_retries')}")
+```
+
+#### Enhanced Diagnostics
+
+**MCMCResult Metadata Fields:**
+- `method_used` - 'NUTS' or 'CMC'
+- `selection_decision_metadata` - Why NUTS/CMC was selected
+- `parameter_space_metadata` - Bounds and priors used
+- `initial_values_metadata` - Initial parameter values used
+- `num_retries` - Number of retry attempts (if any)
+- `convergence_diagnostics` - R-hat, ESS, acceptance rate, divergences
+
+______________________________________________________________________
+
+### Changed
+
+#### CMC Selection Thresholds (Performance Optimization)
+
+**Threshold Evolution:**
+
+- `min_samples_for_cmc`: 100 → 20 → **15** (October 28, 2025)
+  - More aggressive parallelism for multi-core CPUs
+  - 20-sample experiment on 14-core CPU now triggers CMC (~1.4x speedup)
+
+- `memory_threshold_pct`: 0.50 → 0.40 → **0.30** (October 28, 2025)
+  - More conservative OOM prevention
+  - Triggers CMC earlier for large datasets
+
+**Impact:**
+- Better CPU utilization on HPC systems (14-128 cores)
+- Safer memory management for large datasets (>1M points)
+- Hardware-adaptive decision making
+
+#### Documentation Updates
+
+**Updated API References:**
+- `docs/api-reference/optimization.rst` - fit_mcmc_jax() v2.1.0 API
+- `docs/api-reference/config.rst` - ParameterSpace and ConfigManager
+- `docs/advanced-topics/mcmc-uncertainty.rst` - v2.1.0 workflow changes
+
+**New Documentation:**
+- `docs/migration/v2.0-to-v2.1.md` - Comprehensive migration guide
+- YAML configuration examples with v2.1.0 structure
+- API reference for ParameterSpace class
+
+**Updated Architecture Docs:**
+- `docs/architecture/cmc-dual-mode-strategy.md` - Updated thresholds
+- `CLAUDE.md` - v2.1.0 changes and workflows
+
+______________________________________________________________________
+
+### Deprecated
+
+**No Deprecation Warnings (Hard Break):**
+
+The following features were removed without deprecation warnings due to acknowledged breaking change:
+
+- `method` parameter in `fit_mcmc_jax()`
+- `initial_params` parameter (use `initial_values`)
+- `--method nuts/cmc/auto` CLI flags
+- `mcmc.initialization` configuration section
+
+**Rationale:** Simplification release with clear migration path documented.
+
+______________________________________________________________________
+
+### Removed
+
+**Automatic Initialization:**
+- No automatic NLSQ/SVI initialization before MCMC
+- Removed `run_nlsq_init`, `use_svi`, `svi_steps`, `svi_timeout` config options
+- Manual workflow required for NLSQ → MCMC transfer
+
+**Method Selection:**
+- Removed manual NUTS/CMC/auto method specification
+- All method selection is now automatic based on dual criteria
+
+______________________________________________________________________
+
+### Fixed
+
+**MCMC Numerical Stability:**
+- Improved convergence with auto-retry mechanism
+- Better handling of poor initialization
+- Enhanced error messages with recovery suggestions
+
+**Configuration Validation:**
+- Better error messages for missing parameter_space
+- Validation of prior distribution types
+- Clear warnings when initial_values not provided
+
+______________________________________________________________________
+
+### Performance
+
+**CMC Optimization:**
+- 20-sample experiment on 14-core CPU: ~1.4x speedup (CMC vs NUTS)
+- 50-sample experiment on 14-core CPU: ~3x speedup (CMC vs NUTS)
+- Large datasets (>1M points): ~30% memory threshold prevents OOM
+
+**Auto-Retry Overhead:**
+- Typical: 0 retries (no overhead)
+- Poor initialization: 1-2 retries (~2-4x initial warmup time)
+- Max 3 retries before failure
+
+______________________________________________________________________
+
+### Testing
+
+**New Tests:**
+- `tests/mcmc/test_mcmc_simplified.py` - Simplified API tests
+- `tests/integration/test_mcmc_simplified_workflow.py` - Workflow tests
+- `tests/unit/test_cli_args.py` - CLI argument validation
+
+**Test Coverage:**
+- Automatic selection logic (15 test cases)
+- Configuration-driven parameter management (8 test cases)
+- Auto-retry mechanism (5 test cases)
+- Breaking change detection (10 test cases)
+
+______________________________________________________________________
+
+### Migration Resources
+
+**Documentation:**
+- [Migration Guide](docs/migration/v2.0-to-v2.1.md) - Step-by-step upgrade instructions
+- [API Reference](docs/api-reference/optimization.rst) - Updated fit_mcmc_jax() docs
+- [Configuration Guide](docs/api-reference/config.rst) - ParameterSpace and YAML structure
+- [CLAUDE.md](CLAUDE.md) - Developer guide with v2.1.0 workflows
+
+**Support:**
+- GitHub Issues: https://github.com/imewei/homodyne/issues
+- Migration Questions: Tag with `migration-v2.1`
+
+______________________________________________________________________
+
 ## [Unreleased]
 
 ### Changed

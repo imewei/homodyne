@@ -87,6 +87,38 @@ Main configuration loading and management.
 
    config_mgr = ConfigManager.from_dict(config_dict)
 
+**Extract Initial Parameters (v2.1.0):**
+
+.. versionadded:: 2.1.0
+   ``get_initial_parameters()`` method for MCMC initialization.
+
+.. code-block:: python
+
+   from homodyne.config import ConfigManager
+   from homodyne.config.parameter_space import ParameterSpace
+
+   # Load configuration
+   config_mgr = ConfigManager('config.yaml')
+
+   # Get parameter space
+   parameter_space = ParameterSpace.from_config(config_mgr.config)
+
+   # Get initial parameter values
+   initial_values = config_mgr.get_initial_parameters(
+       parameter_space=parameter_space,
+       active_parameters=['D0', 'alpha', 'D_offset']
+   )
+
+   print(initial_values)
+   # Output: {'D0': 1234.5, 'alpha': 0.567, 'D_offset': 12.34}
+   # If not in config: {'D0': 5050.0, 'alpha': 1.05, 'D_offset': 50.05}  (mid-points)
+
+**Behavior:**
+
+* Loads from ``initial_parameters.values`` in YAML if present
+* Falls back to mid-point of bounds: ``(min + max) / 2``
+* Supports CLI overrides via ``config_override`` section
+
 homodyne.config.parameter_manager
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
@@ -143,6 +175,101 @@ Centralized parameter bounds, validation, and management.
 
    pm = ParameterManager(config, analysis_type='static_isotropic')
    custom_bounds = pm.get_parameter_bounds(['D0', 'alpha'])
+
+homodyne.config.parameter_space
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. automodule:: homodyne.config.parameter_space
+   :members:
+   :undoc-members:
+   :show-inheritance:
+   :exclude-members: __weakref__
+
+.. versionadded:: 2.1.0
+   ParameterSpace class for config-driven parameter bounds and prior distributions in MCMC.
+
+Configuration-driven parameter management for MCMC Bayesian inference.
+
+**Key Classes:**
+
+* ``ParameterSpace`` - Parameter bounds and prior distributions container
+
+**Usage Example:**
+
+.. code-block:: python
+
+   from homodyne.config.parameter_space import ParameterSpace
+   from homodyne.config.manager import ConfigManager
+
+   # Load from configuration file
+   config_manager = ConfigManager("config.yaml")
+   parameter_space = ParameterSpace.from_config(config_manager.config)
+
+   # Access bounds
+   print(f"D0 bounds: {parameter_space.get_bounds('D0')}")
+   # Output: {'min': 100.0, 'max': 10000.0}
+
+   # Access priors
+   print(f"D0 prior: {parameter_space.get_prior('D0')}")
+   # Output: {'type': 'TruncatedNormal', 'mu': 1000.0, 'sigma': 500.0}
+
+   # Get all parameter names
+   param_names = parameter_space.get_parameter_names()
+   print(f"Parameters: {param_names}")
+   # Output: ['D0', 'alpha', 'D_offset']
+
+**Configuration Structure:**
+
+.. code-block:: yaml
+
+   # In config.yaml
+   parameter_space:
+     bounds:
+       - name: D0
+         min: 100.0
+         max: 10000.0
+       - name: alpha
+         min: 0.1
+         max: 2.0
+       - name: D_offset
+         min: 0.1
+         max: 100.0
+     priors:
+       D0:
+         type: TruncatedNormal
+         mu: 1000.0
+         sigma: 500.0
+       alpha:
+         type: TruncatedNormal
+         mu: 1.0
+         sigma: 0.3
+       D_offset:
+         type: TruncatedNormal
+         mu: 10.0
+         sigma: 5.0
+
+**Supported Prior Distributions:**
+
+* ``TruncatedNormal`` - Truncated Gaussian (mu, sigma, truncated at bounds)
+* ``Uniform`` - Uniform distribution (uses bounds directly)
+* ``LogNormal`` - Log-normal distribution (mu, sigma on log scale)
+
+**Integration with MCMC:**
+
+.. code-block:: python
+
+   from homodyne.optimization import fit_mcmc_jax
+
+   # parameter_space automatically used for bounds and priors
+   result = fit_mcmc_jax(
+       data=data,
+       t1=t1,
+       t2=t2,
+       phi=phi,
+       q=0.01,
+       parameter_space=parameter_space,  # Loaded from config
+       initial_values={'D0': 1234.5, 'alpha': 0.567, 'D_offset': 12.34}
+   )
 
 homodyne.config.types
 ~~~~~~~~~~~~~~~~~~~~~
@@ -225,7 +352,7 @@ Configuration Structure
      L: 1.0             # Sample thickness (mm)
      dt: 0.001          # Time resolution (s)
 
-   # Parameter Space
+   # Parameter Space (v2.1.0: includes priors for MCMC)
    parameter_space:
      bounds:
        - name: D0
@@ -237,22 +364,25 @@ Configuration Structure
        - name: D_offset
          min: 0.0
          max: 100.0
+     priors:  # NEW in v2.1.0 for MCMC
+       D0:
+         type: TruncatedNormal
+         mu: 1000.0
+         sigma: 500.0
+       alpha:
+         type: TruncatedNormal
+         mu: 1.0
+         sigma: 0.3
+       D_offset:
+         type: TruncatedNormal
+         mu: 10.0
+         sigma: 5.0
 
-   # Initial Parameters
+   # Initial Parameters (v2.1.0: optional, for MCMC initialization)
    initial_parameters:
-     parameter_names:
-       - D0
-       - alpha
-       - D_offset
-     initial_values:
-       D0: 1000.0
-       alpha: 0.8
-       D_offset: 10.0
-     active_parameters:  # Optional: subset to optimize
-       - D0
-       - alpha
-     fixed_parameters:   # Optional: hold fixed
-       D_offset: 10.0
+     parameter_names: [D0, alpha, D_offset]
+     values: [1234.5, 0.567, 12.34]  # From NLSQ results (manual copy)
+     # If 'values' not provided, defaults to mid-point of bounds
 
    # Optimization Settings
    optimization:
@@ -269,6 +399,10 @@ Configuration Structure
      num_samples: 1000
      num_chains: 4
      target_accept_prob: 0.8
+     # NEW in v2.1.0: Automatic NUTS/CMC selection thresholds
+     min_samples_for_cmc: 15        # Parallelism threshold
+     memory_threshold_pct: 0.30     # Memory threshold (30%)
+     dense_mass_matrix: false       # Diagonal (fast) vs full covariance
 
    # Angle Filtering (Optional)
    phi_filtering:

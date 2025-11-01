@@ -7,6 +7,8 @@ PRODUCTION_READINESS_REPORT.md
 SCIENTIFIC_VALIDATION_REPORT.md
 DOCUMENTATION_POLISH_SUMMARY.md
 PERFORMANCE_ANALYSIS_REPORT.md
+cmc_temp_*
+TASK_GROUP_*.md
 
 # Run code and experimental data
 homodyne_analysis_results/

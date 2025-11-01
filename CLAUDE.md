@@ -4,7 +4,7 @@ This file provides guidance to Claude Code when working with this repository.
 
 ## Quick Start
 
-**Homodyne v2.0** is a JAX-first high-performance package for X-ray Photon Correlation Spectroscopy (XPCS) analysis. It implements the theoretical framework from [He et al. PNAS 2024](https://doi.org/10.1073/pnas.2401162121).
+**Homodyne v2.1** is a JAX-first high-performance package for X-ray Photon Correlation Spectroscopy (XPCS) analysis. It implements the theoretical framework from [He et al. PNAS 2024](https://doi.org/10.1073/pnas.2401162121).
 
 **Core Equation:** `c₂(φ,t₁,t₂) = 1 + contrast × [c₁(φ,t₁,t₂)]²`
 
@@ -102,7 +102,7 @@ ______________________________________________________________________
 - 4 commands: `homodyne`, `homodyne-config`, `homodyne-post-install`, `homodyne-cleanup`
 - Intelligent completion for bash/zsh/fish
 - Environment detection: conda vs venv/uv/virtualenv
-- Convenient aliases: `hm-nlsq`, `hc-stat`, `hconfig`
+- Convenient aliases: `hm-nlsq`, `hm-mcmc`, `hc-stat`, `hconfig`
 
 ### Scientific Validation
 
@@ -131,6 +131,7 @@ ______________________________________________________________________
 - Removed fields: `run_nlsq_init`, `use_svi`, `svi_steps`, `svi_timeout`
 - Added: `min_samples_for_cmc: 15` to `optimization.mcmc`
 - Added: `memory_threshold_pct: 0.30` to `optimization.mcmc`
+- Added: `dense_mass_matrix: false` to `optimization.mcmc`
 - `initial_parameters.values` structure unchanged (backward compatible)
 
 **MCMC Initialization Behavior**
