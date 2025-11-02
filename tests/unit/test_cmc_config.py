@@ -310,6 +310,7 @@ optimization:
         finally:
             Path(config_path).unlink()
 
+    @pytest.mark.skip(reason="v2.1.0: mcmc.initialization section removed - no initialization method validation needed")
     def test_invalid_initialization_method(self):
         """Test validation catches invalid initialization method."""
         config_yaml = """
@@ -450,7 +451,7 @@ optimization:
             assert isinstance(cmc_config, dict)
             assert "enable" in cmc_config
             assert "sharding" in cmc_config
-            assert "initialization" in cmc_config
+            # "initialization" removed in v2.1.0
             assert "backend" in cmc_config
             assert "combination" in cmc_config
             assert "per_shard_mcmc" in cmc_config

@@ -85,11 +85,13 @@ class TestJAXBackendCore:
         phi = jnp.linspace(0, 2 * jnp.pi, 36)
         t1 = jnp.array([[0, 1, 2]])
         t2 = jnp.array([[0], [1], [2]])
-        gamma_dot = 0.1
+        # Parameters: [D0, alpha, D_offset, gamma_dot_0, beta, gamma_dot_offset, phi0]
+        params = jnp.array([1000.0, 0.5, 10.0, 0.1, 0.5, 0.01, 0.0])
         q = 0.01
         L = 1.0
+        dt = 0.1
 
-        result = compute_g1_shear(phi, t1, t2, gamma_dot, q, L)
+        result = compute_g1_shear(params, t1, t2, phi, q, L, dt)
 
         # Test shape
         expected_shape = (len(phi), 1, 1)
@@ -104,11 +106,13 @@ class TestJAXBackendCore:
         phi = jnp.linspace(0, 2 * jnp.pi, 24)
         t1 = jnp.ones((1, 5))
         t2 = jnp.ones((5, 1))
-        gamma_dot = 0.0  # No shear
+        # Parameters with zero shear: [D0, alpha, D_offset, gamma_dot_0=0, beta, gamma_dot_offset, phi0]
+        params = jnp.array([1000.0, 0.5, 10.0, 0.0, 0.5, 0.0, 0.0])
         q = 0.01
         L = 1.0
+        dt = 0.1
 
-        result = compute_g1_shear(phi, t1, t2, gamma_dot, q, L)
+        result = compute_g1_shear(params, t1, t2, phi, q, L, dt)
 
         # With no shear, result should be all ones
         expected = jnp.ones_like(result)
@@ -407,8 +411,7 @@ class TestJAXBackendProperties:
         result = compute_g1_diffusion_jax(t1_base, t2_varying, q, D)
 
         # Should be monotonically decreasing
-        for i in range(len(result) - 1):
-            assert result[i] >= result[i + 1], "g1_diffusion should decrease with tau"
+        assert jnp.all(result[:-1] >= result[1:]), "g1_diffusion should decrease with tau"
 
     @pytest.mark.requires_jax
     def test_c2_model_scaling(self, jax_backend):

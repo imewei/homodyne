@@ -247,7 +247,7 @@ class TestShouldUseCMC:
     """Test should_use_cmc() decision logic."""
 
     def test_below_minimum_threshold(self):
-        """Test that CMC is not used below minimum threshold."""
+        """Test that CMC is not used below minimum threshold (min_samples_for_cmc=15)."""
         config = HardwareConfig(
             platform="gpu",
             num_devices=1,
@@ -260,8 +260,11 @@ class TestShouldUseCMC:
             max_parallel_shards=1,
         )
 
-        # 100k points is below default min_samples_for_cmc threshold
-        result = should_use_cmc(100_000, config)
+        # With min_samples_for_cmc=15, test below threshold
+        # num_samples=10 < 15 → Parallelism criterion FALSE
+        # Large GPU memory → Memory criterion FALSE
+        # Result: NUTS (not CMC)
+        result = should_use_cmc(10, config)
         assert result is False
 
     def test_memory_threshold_exceeded(self):
@@ -285,7 +288,7 @@ class TestShouldUseCMC:
         assert result is True
 
     def test_hardware_threshold_16gb_gpu(self):
-        """Test hardware-specific threshold for 16GB GPU."""
+        """Test hardware-specific threshold for 16GB GPU with dual-criteria logic."""
         config = HardwareConfig(
             platform="gpu",
             num_devices=1,
@@ -298,16 +301,20 @@ class TestShouldUseCMC:
             max_parallel_shards=1,
         )
 
-        # 1M points should trigger CMC on 16GB GPU
-        result = should_use_cmc(1_000_001, config)
-        assert result is True
+        # With min_samples_for_cmc=15, parallelism criterion dominates
+        # Any num_samples >= 15 will trigger CMC regardless of memory
+        result = should_use_cmc(1_000_000, config)
+        assert result is True  # Parallelism criterion: 1M >= 15
 
-        # 900k points should not trigger CMC
         result = should_use_cmc(900_000, config)
-        assert result is False
+        assert result is True  # Parallelism criterion: 900k >= 15
+
+        # Only very small sample counts test memory criterion independently
+        result = should_use_cmc(10, config)
+        assert result is False  # Parallelism: 10 < 15, Memory: OK
 
     def test_hardware_threshold_80gb_gpu(self):
-        """Test hardware-specific threshold for 80GB GPU."""
+        """Test hardware-specific threshold for 80GB GPU with dual-criteria logic."""
         config = HardwareConfig(
             platform="gpu",
             num_devices=1,
@@ -320,16 +327,19 @@ class TestShouldUseCMC:
             max_parallel_shards=1,
         )
 
-        # 10M points should trigger CMC on 80GB GPU
-        result = should_use_cmc(10_000_001, config)
-        assert result is True
+        # With min_samples_for_cmc=15, parallelism criterion dominates
+        result = should_use_cmc(10_000_000, config)
+        assert result is True  # Parallelism criterion: 10M >= 15
 
-        # 5M points should not trigger CMC
         result = should_use_cmc(5_000_000, config)
-        assert result is False
+        assert result is True  # Parallelism criterion: 5M >= 15
+
+        # Test memory criterion with small sample count
+        result = should_use_cmc(10, config)
+        assert result is False  # Parallelism: 10 < 15, Memory: OK on 80GB
 
     def test_hardware_threshold_cpu(self):
-        """Test hardware-specific threshold for CPU system."""
+        """Test hardware-specific threshold for CPU system with dual-criteria logic."""
         config = HardwareConfig(
             platform="cpu",
             num_devices=1,
@@ -342,13 +352,17 @@ class TestShouldUseCMC:
             max_parallel_shards=16,
         )
 
-        # 20M points should trigger CMC on CPU
-        result = should_use_cmc(20_000_001, config)
-        assert result is True
+        # With min_samples_for_cmc=15, parallelism criterion dominates
+        # Any num_samples >= 15 will trigger CMC for CPU parallelism
+        result = should_use_cmc(20_000_000, config)
+        assert result is True  # Parallelism criterion: 20M >= 15
 
-        # 10M points should not trigger CMC
         result = should_use_cmc(10_000_000, config)
-        assert result is False
+        assert result is True  # Parallelism criterion: 10M >= 15
+
+        # Only very small sample counts test memory criterion independently
+        result = should_use_cmc(10, config)
+        assert result is False  # Parallelism: 10 < 15, Memory: OK on 64GB CPU
 
     def test_custom_memory_threshold(self):
         """Test custom memory threshold parameter."""

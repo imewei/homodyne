@@ -456,7 +456,7 @@ class PjitBackend(CMCBackend):
         # This fixes: "Abstract tracer value encountered where concrete value is expected"
         dt_computed = None
         if t1_np is not None:
-            import numpy as np  # Use numpy (not jax.numpy) for pre-computation
+            # Use numpy (not jax.numpy) for pre-computation
             if t1_np.ndim == 2:
                 time_array = np.asarray(t1_np[:, 0] if t1_np.shape[1] > 0 else t1_np[0, :])
             else:
@@ -483,8 +483,7 @@ class PjitBackend(CMCBackend):
             q=q,
             L=L,
             analysis_mode=analysis_mode,
-            param_space=parameter_space,
-            initial_params=None,  # Will be set via init_strategy in NUTS
+            parameter_space=parameter_space,
             use_simplified=True,  # Use simplified likelihood (default, avoids JAX tracing issues)
             dt=dt_computed,  # Pre-computed to avoid JAX concretization error
         )
