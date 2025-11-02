@@ -34,6 +34,7 @@ class TestResidualFunctionCreation:
                 self.sigma = np.ones_like(self.g2) * 0.1
                 self.q = 0.01
                 self.L = 1.0
+                self.dt = 0.1  # Time step in seconds (required for physics calculations)
 
         mock_data = MockXPCSData()
         wrapper = NLSQWrapper()
@@ -81,6 +82,7 @@ class TestResidualFunctionCreation:
                 self.sigma = np.ones_like(self.g2) * 0.1
                 self.q = 0.01
                 self.L = 1.0
+                self.dt = 0.1  # Time step in seconds (required for physics calculations)
 
         mock_data = MockXPCSData()
         wrapper = NLSQWrapper()
@@ -125,6 +127,7 @@ class TestResidualFunctionCreation:
                 self.sigma = np.ones_like(self.g2) * 0.1
                 self.q = 0.01
                 self.L = 1.0
+                self.dt = 0.1  # Time step in seconds (required for physics calculations)
 
         mock_data = MockXPCSData()
         wrapper = NLSQWrapper()
@@ -164,6 +167,7 @@ class TestResidualFunctionCreation:
                 self.sigma = np.ones_like(self.g2) * 0.1
                 self.q = 0.01
                 self.L = 1.0
+                self.dt = 0.1  # Time step in seconds (required for physics calculations)
 
         mock_data = MockXPCSData()
         wrapper = NLSQWrapper()

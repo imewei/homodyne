@@ -31,7 +31,8 @@ try:
 except ImportError:
     NLSQ_AVAILABLE = False
 
-from homodyne.optimization.nlsq import NLSQResult, fit_nlsq_jax
+from homodyne.optimization.nlsq import fit_nlsq_jax
+from homodyne.optimization.nlsq_wrapper import OptimizationResult
 
 
 @pytest.mark.unit
@@ -82,7 +83,7 @@ class TestNLSQOptimization:
         result = fit_nlsq_jax(data, config)
 
         # Basic result validation
-        assert isinstance(result, NLSQResult)
+        assert isinstance(result, OptimizationResult)
         assert result.success, f"Optimization failed: {result.message}"
         assert hasattr(result, "parameters")
         assert hasattr(result, "chi_squared")
@@ -143,6 +144,7 @@ class TestNLSQOptimization:
             "c2_exp": c2_exp,
             "wavevector_q_list": np.array([q]),
             "sigma": np.ones_like(c2_exp) * 0.001,
+            "dt": 0.1,  # Time step in seconds (required for physics calculations)
         }
 
         # Run optimization

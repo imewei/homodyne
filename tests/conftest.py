@@ -226,6 +226,7 @@ def synthetic_xpcs_data():
         "c2_exp": c2_exp,
         "wavevector_q_list": np.array([0.01]),
         "sigma": np.ones_like(c2_exp) * 0.01,
+        "dt": 0.1,  # Time step in seconds (required for physics calculations)
     }
 
 
@@ -248,6 +249,7 @@ def small_xpcs_data():
         "c2_exp": c2_exp,
         "wavevector_q_list": np.array([0.015]),
         "sigma": np.ones_like(c2_exp) * 0.02,
+        "dt": 0.1,  # Time step in seconds (required for physics calculations)
     }
 
 
