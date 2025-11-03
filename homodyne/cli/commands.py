@@ -36,7 +36,7 @@ from homodyne.config.types import (  # noqa: E402
     SCALING_PARAM_NAMES,
     STATIC_PARAM_NAMES,
 )
-from homodyne.core.fitting import ParameterSpace  # noqa: E402
+from homodyne.config.parameter_space import ParameterSpace  # noqa: E402
 from homodyne.core.jax_backend import compute_g2_scaled  # noqa: E402
 from homodyne.utils.logging import get_logger  # noqa: E402
 
