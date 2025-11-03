@@ -220,8 +220,25 @@ def fit_nlsq_jax(
     x0 = _params_to_array(initial_params, analysis_mode)
 
     # Set up parameter bounds
-    param_space = ParameterSpace()
-    bounds_dict = _get_parameter_bounds(analysis_mode, param_space)
+    # ✅ FIX: Use ParameterManager to load bounds from config (including custom user bounds)
+    if HAS_PARAMETER_MANAGER:
+        # Handle both ConfigManager objects and plain dicts
+        if hasattr(config, 'config'):
+            config_dict = config.config  # ConfigManager object
+        else:
+            config_dict = config  # Already a dict
+
+        # Use ParameterManager to get bounds from config (properly loads custom bounds)
+        param_manager = ParameterManager(config_dict=config_dict, analysis_mode=analysis_mode)
+        param_names = _get_param_names(analysis_mode)
+        bounds_list = param_manager.get_parameter_bounds(param_names)
+        # Convert ParameterManager format (list of dicts) to _bounds_to_arrays format (dict of tuples)
+        bounds_dict = {b["name"]: (b["min"], b["max"]) for b in bounds_list}
+    else:
+        # Fallback to ParameterSpace with hardcoded defaults (for backward compatibility)
+        param_space = ParameterSpace()
+        bounds_dict = _get_parameter_bounds(analysis_mode, param_space)
+
     lower_bounds, upper_bounds = _bounds_to_arrays(bounds_dict, analysis_mode)
     bounds = (lower_bounds, upper_bounds)
 
