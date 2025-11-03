@@ -1168,8 +1168,46 @@ def _run_optimization(args, config: ConfigManager, data: dict[str, Any]) -> Any:
                 f"backend={backend_display}",
             )
 
-            # Convert data format for MCMC if needed
-            mcmc_data = filtered_data["c2_exp"]
+            # =========================================================================
+            # MCMC DATA POOLING (CRITICAL FIX)
+            # =========================================================================
+            # MCMC expects 1D pooled/flattened data with matching array lengths
+            # Problem: c2_exp is 3D (n_phi, n_t, n_t), but t1/t2 are 2D meshgrids
+            # Solution: Flatten all arrays and tile/repeat to match pooled data length
+
+            # Extract raw data from filtered_data
+            c2_3d = filtered_data["c2_exp"]  # Shape: (n_phi, n_t, n_t)
+            t1_2d = filtered_data.get("t1")  # Shape: (n_t, n_t) meshgrid
+            t2_2d = filtered_data.get("t2")  # Shape: (n_t, n_t) meshgrid
+            phi_angles = filtered_data.get("phi_angles_list")  # Shape: (n_phi,)
+
+            # Get dimensions
+            n_phi = c2_3d.shape[0]
+            n_t = c2_3d.shape[1]
+            n_total = n_phi * n_t * n_t
+
+            # Pool/flatten correlation data: (n_phi, n_t, n_t) → (n_phi * n_t * n_t,)
+            mcmc_data = c2_3d.ravel()  # Flattens to 1D
+
+            # Create corresponding t1, t2, phi arrays of same length
+            # Tile the 2D meshgrid for each phi angle
+            t1_pooled = np.tile(t1_2d.ravel(), n_phi)  # (n_t*n_t,) repeated n_phi times
+            t2_pooled = np.tile(t2_2d.ravel(), n_phi)
+            phi_pooled = np.repeat(phi_angles, n_t * n_t)  # Each phi repeated n_t*n_t times
+
+            # Verify all arrays have matching lengths (CRITICAL for MCMC)
+            assert mcmc_data.shape[0] == n_total, f"Data pooling failed: mcmc_data={mcmc_data.shape[0]}, expected={n_total}"
+            assert t1_pooled.shape[0] == n_total, f"Data pooling failed: t1={t1_pooled.shape[0]}, expected={n_total}"
+            assert t2_pooled.shape[0] == n_total, f"Data pooling failed: t2={t2_pooled.shape[0]}, expected={n_total}"
+            assert phi_pooled.shape[0] == n_total, f"Data pooling failed: phi={phi_pooled.shape[0]}, expected={n_total}"
+
+            logger.debug(
+                f"Pooled MCMC data: {n_phi} angles × {n_t}×{n_t} = {n_total:,} data points"
+            )
+            logger.debug(
+                f"Array shapes: data={mcmc_data.shape}, t1={t1_pooled.shape}, "
+                f"t2={t2_pooled.shape}, phi={phi_pooled.shape}"
+            )
 
             # ✅ v2.1.0 BREAKING CHANGE: Removed automatic NLSQ/SVI initialization
             # Manual workflow required: Run NLSQ separately, copy results to YAML, then run MCMC
@@ -1195,12 +1233,12 @@ def _run_optimization(args, config: ConfigManager, data: dict[str, Any]) -> Any:
                 f"Created ParameterSpace with config for {analysis_mode_str} mode"
             )
 
-            # Run MCMC with optional initial_params
+            # Run MCMC with pooled 1D arrays (all same length)
             result = fit_mcmc_jax(
                 mcmc_data,
-                t1=filtered_data.get("t1"),
-                t2=filtered_data.get("t2"),
-                phi=filtered_data.get("phi_angles_list"),
+                t1=t1_pooled,
+                t2=t2_pooled,
+                phi=phi_pooled,
                 q=(
                     filtered_data.get("wavevector_q_list", [1.0])[0]
                     if filtered_data.get("wavevector_q_list") is not None
