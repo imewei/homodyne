@@ -344,6 +344,7 @@ clean-test:
 	rm -rf .homodyne_cache/
 	rm -f TASK_GROUP_*.md
 	rm -rf cmc_temp_*/
+	rm -f phi_angles_list.txt
 
 clean-cache:
 	find . -type d -name '.cache' -exec rm -rf {} + 2>/dev/null || true

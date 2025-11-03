@@ -246,7 +246,7 @@ class TestEndToEndPipeline:
 
             # Mock the backend.run_parallel_mcmc to avoid actual MCMC execution
             # This is a unit test, not an integration test
-            def mock_run_mcmc(shards, mcmc_config, init_params, inv_mass_matrix):
+            def mock_run_mcmc(shards, mcmc_config, init_params, inv_mass_matrix, analysis_mode, parameter_space):
                 # Return results matching the number of shards
                 return [
                     {
@@ -294,7 +294,7 @@ class TestEndToEndPipeline:
             coordinator = CMCCoordinator(minimal_config)
 
             # Mock backend execution - match actual number of shards created
-            def mock_run_mcmc(shards, mcmc_config, init_params, inv_mass_matrix):
+            def mock_run_mcmc(shards, mcmc_config, init_params, inv_mass_matrix, analysis_mode, parameter_space):
                 return [
                     {
                         'samples': np.random.randn(20, 5),

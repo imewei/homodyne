@@ -271,14 +271,14 @@ class TestCMCScalingBehavior:
         # Configuration 1: 1M points, 10 shards = 100k/shard
         config1 = {
             'n_shards': 10,
-            'n_samples': 2000,
+            'n_samples_per_shard': 2000,
             'n_params': 5,
         }
 
         # Configuration 2: 10M points, 100 shards = 100k/shard
         config2 = {
             'n_shards': 100,
-            'n_samples': 2000,
+            'n_samples_per_shard': 2000,
             'n_params': 5,
         }
 
@@ -291,7 +291,7 @@ class TestCMCScalingBehavior:
         )
 
         # Memory estimate: n_samples * n_params * 8 bytes
-        mem1 = config1['n_shards'] * config1['n_samples'] * config1['n_params'] * 8
+        mem1 = config1['n_shards'] * config1['n_samples_per_shard'] * config1['n_params'] * 8
         mem2 = 100 * 2000 * 5 * 8
 
         # Per-shard memory
@@ -448,7 +448,11 @@ class TestCMCNumericalStability:
         # Treat combined as new "shard" and combine with originals
         # This tests stability of iterative operations
         extended_results = shard_results + [
-            {'mean': combined1['mean'], 'cov': combined1['cov']}
+            {
+                'samples': combined1['samples'],
+                'mean': combined1['mean'],
+                'cov': combined1['cov']
+            }
         ]
 
         combined2 = combine_subposteriors(extended_results)
@@ -559,11 +563,18 @@ class TestCMCConsistencyAnalysis:
         assert combined_few is not None
         assert combined_many is not None
 
+    @pytest.mark.skip(
+        reason="v2.1.0 API change: CMC validation now enforces balanced shards "
+               "(all shards must have same sample count). Imbalanced shards no longer supported."
+    )
     def test_consistency_degrades_with_imbalanced_shards(self):
         """
         Test that consistency is affected by imbalanced shards.
 
         If shards have very different sample counts, agreement may suffer.
+
+        NOTE: This test is skipped in v2.1.0 because CMC validation now requires
+        all shards to have the same number of samples (validation at combination.py:423-427).
         """
         # Balanced
         balanced = create_large_shard_results(

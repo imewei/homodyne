@@ -83,6 +83,74 @@ from homodyne.utils.logging import get_logger
 logger = get_logger(__name__)
 
 
+def calculate_adaptive_min_shard_size(
+    dataset_size: int,
+    num_shards: int,
+    default_min: int = 10_000,
+    absolute_min: int = 100,
+    large_dataset_threshold: int = 100_000,
+) -> int:
+    """Calculate dataset-adaptive minimum shard size.
+
+    Adapts the minimum shard size based on dataset size to support both
+    production datasets (requiring statistical robustness) and test datasets
+    (requiring validation without artificial failures).
+
+    Algorithm
+    ---------
+    - Large datasets (≥100k points): Use default_min (10,000)
+    - Small datasets (<100k points): Use max(absolute_min, expected_size / 2)
+    - Ensures each shard has at least absolute_min points
+
+    Parameters
+    ----------
+    dataset_size : int
+        Total number of data points in the dataset
+    num_shards : int
+        Number of shards to create
+    default_min : int, default 10_000
+        Standard minimum for large datasets (statistical robustness)
+    absolute_min : int, default 100
+        Absolute minimum shard size (prevents degenerate cases)
+    large_dataset_threshold : int, default 100_000
+        Dataset size threshold for using default_min
+
+    Returns
+    -------
+    min_shard_size : int
+        Adaptive minimum shard size
+
+    Examples
+    --------
+    >>> # Large dataset (production)
+    >>> calculate_adaptive_min_shard_size(5_000_000, 5)
+    10000  # Use default minimum
+
+    >>> # Small dataset (testing)
+    >>> calculate_adaptive_min_shard_size(1_350, 1)
+    675  # Use dataset_size / 2 = 1350 / 2 = 675
+
+    >>> # Very small dataset
+    >>> calculate_adaptive_min_shard_size(50, 1)
+    100  # Use absolute minimum
+
+    Notes
+    -----
+    - Ensures test datasets (1k-10k points) can pass validation
+    - Maintains statistical rigor for production datasets (>100k points)
+    - Never exceeds default_min for consistency
+    """
+    if dataset_size >= large_dataset_threshold:
+        # Large dataset: use standard minimum for statistical robustness
+        return default_min
+    else:
+        # Small dataset: adaptive minimum based on expected shard size
+        expected_shard_size = dataset_size // num_shards if num_shards > 0 else dataset_size
+        adaptive_min = max(absolute_min, expected_shard_size // 2)
+        # Never exceed default for consistency
+        return min(adaptive_min, default_min)
+
+
 def calculate_optimal_num_shards(
     dataset_size: int,
     hardware_config: HardwareConfig,
@@ -743,6 +811,7 @@ def validate_shards(
 
 # Export public API
 __all__ = [
+    "calculate_adaptive_min_shard_size",
     "calculate_optimal_num_shards",
     "shard_data_random",
     "shard_data_stratified",

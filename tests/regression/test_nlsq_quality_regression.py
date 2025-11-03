@@ -352,38 +352,30 @@ class TestBackwardCompatibility:
 
     def test_result_dataclass_compatible(self):
         """Test OptimizationResult dataclass is backward compatible."""
-        # Should have these fields
+        # Should have these fields (updated to match v2.1.0 API)
         required_fields = [
             'parameters',
             'uncertainties',
-            'covariance_matrix',
-            'residuals',
+            'covariance',  # Updated from covariance_matrix
             'chi_squared',
             'reduced_chi_squared',
-            'n_data_points',
-            'n_parameters',
-            'degrees_of_freedom',
             'iterations',
             'convergence_status',
             'execution_time',
-            'success',
+            'success',  # @property for backward compatibility
         ]
 
-        # Create mock result
+        # Create mock result with current API
         result = OptimizationResult(
             parameters=np.array([1.0]),
             uncertainties=np.array([0.1]),
-            covariance_matrix=np.eye(1),
-            residuals=np.array([0.0]),
+            covariance=np.eye(1),  # Updated from covariance_matrix
             chi_squared=1.0,
             reduced_chi_squared=1.0,
-            n_data_points=100,
-            n_parameters=1,
-            degrees_of_freedom=99,
+            convergence_status='converged',  # Updated from 'success'
             iterations=10,
-            convergence_status='success',
             execution_time=1.5,
-            success=True,
+            device_info={'platform': 'cpu'},  # Added required field
         )
 
         # All required fields should be accessible

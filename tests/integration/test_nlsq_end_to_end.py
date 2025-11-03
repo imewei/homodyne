@@ -190,7 +190,7 @@ class TestCheckpointResume:
             )
 
         # Verify checkpoints saved
-        checkpoints = list(checkpoint_dir.glob("checkpoint_*.h5"))
+        checkpoints = list(checkpoint_dir.glob("homodyne_state_batch_*.h5"))
         assert len(checkpoints) > 0
 
     def test_resume_from_checkpoint_after_interruption(self, tmp_path):

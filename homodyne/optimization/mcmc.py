@@ -632,11 +632,19 @@ def fit_mcmc_jax(
 
     # Get number of independent samples for NUTS/CMC decision
     # For multi-dimensional XPCS data (n_phi, n_t1, n_t2), each phi angle is one sample
-    # For 1D data, num_samples equals dataset_size
+    # For 1D flattened data, count unique phi angles from phi parameter
     if hasattr(data, 'shape') and hasattr(data, 'ndim'):
-        num_samples = data.shape[0] if data.ndim > 1 else dataset_size
+        if data.ndim > 1:
+            # Multi-dimensional: first dimension is number of samples (phi angles)
+            num_samples = data.shape[0]
+        else:
+            # 1D flattened data: count unique phi angles from phi parameter
+            import numpy as np
+            num_samples = len(np.unique(phi)) if phi is not None else dataset_size
     else:
-        num_samples = dataset_size
+        # Fallback for non-array data: count unique phi angles if available
+        import numpy as np
+        num_samples = len(np.unique(phi)) if phi is not None else dataset_size
 
     logger.info("Starting MCMC+JAX sampling")
     logger.info(f"Dataset size: {dataset_size:,} data points ({num_samples} independent samples)")

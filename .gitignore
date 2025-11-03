@@ -15,6 +15,7 @@ homodyne_analysis_results/
 homodyne_results/
 homodyne_analysis_results.json
 run.log
+phi_angles_list.txt
 .nlsq_cache/
 
 # Development scripts

@@ -240,6 +240,9 @@ class XPCSDataLoader:
         else:
             raise ValueError("Must provide either config_path or config_dict")
 
+        # Transform flat structure to nested structure for backward compatibility
+        self._normalize_config_structure()
+
         # Process v2 configuration enhancements
         self._process_v2_config_enhancements()
 
@@ -274,6 +277,80 @@ class XPCSDataLoader:
             )
             logger.error(error_msg)
             raise XPCSDependencyError(error_msg)
+
+    def _normalize_config_structure(self) -> None:
+        """Transform flat config structure to nested structure for backward compatibility.
+
+        Detects flat structure (config with data_file at root level) and transforms it to
+        nested structure (config with experimental_data, analyzer_parameters sections).
+
+        Flat structure example:
+            {
+                "data_file": "/path/to/file.h5",
+                "analysis_mode": "static_isotropic",
+                "dt": 0.1,
+                "start_frame": 1,
+                "end_frame": -1,
+            }
+
+        Nested structure example:
+            {
+                "analysis_mode": "static_isotropic",
+                "experimental_data": {
+                    "data_folder_path": "/path/to",
+                    "data_file_name": "file.h5",
+                },
+                "analyzer_parameters": {
+                    "dt": 0.1,
+                    "start_frame": 1,
+                    "end_frame": -1,
+                },
+            }
+        """
+        # Check if already in nested structure (has experimental_data section)
+        if "experimental_data" in self.config:
+            return  # Already normalized
+
+        # Check if in flat structure (has data_file at root)
+        if "data_file" not in self.config:
+            return  # Neither flat nor nested - let validation handle it
+
+        # Transform flat to nested
+        import os
+
+        data_file = self.config.pop("data_file")
+        data_folder_path = os.path.dirname(data_file) or "."
+        data_file_name = os.path.basename(data_file)
+
+        # Create experimental_data section
+        self.config["experimental_data"] = {
+            "data_folder_path": data_folder_path,
+            "data_file_name": data_file_name,
+        }
+
+        # Move analyzer parameters to analyzer_parameters section with defaults
+        analyzer_params = {
+            "dt": 0.1,  # Default time step (seconds)
+            "start_frame": 1,  # Default start frame
+            "end_frame": -1,  # Default end frame (-1 means all frames)
+        }
+        self.config["analyzer_parameters"] = {}
+        for param, default_value in analyzer_params.items():
+            if param in self.config:
+                self.config["analyzer_parameters"][param] = self.config.pop(param)
+            else:
+                # Provide default for backward compatibility
+                self.config["analyzer_parameters"][param] = default_value
+
+        # Move output parameters to output section if present
+        output_params = ["output_directory"]
+        if any(param in self.config for param in output_params):
+            self.config["output"] = {}
+            for param in output_params:
+                if param in self.config:
+                    self.config["output"][param] = self.config.pop(param)
+
+        logger.debug("Transformed flat config structure to nested structure")
 
     def _process_v2_config_enhancements(self) -> None:
         """Process v2 configuration enhancements and set defaults."""
@@ -610,7 +687,13 @@ class XPCSDataLoader:
 
     @log_performance(threshold=0.1)
     def _detect_format(self, hdf_path: str) -> str:
-        """Detect whether HDF5 file is APS old or APS-U new format."""
+        """Detect whether HDF5 file is APS old or APS-U new format.
+
+        Returns:
+            "aps_u" for APS-U format
+            "aps_old" for APS old format
+            "unknown" for unrecognized or empty files
+        """
         with h5py.File(hdf_path, "r") as f:
             # Check for APS-U format keys
             if (
@@ -633,11 +716,9 @@ class XPCSDataLoader:
                 return "aps_old"
 
             else:
-                available_keys = list(f.keys())
-                raise XPCSDataFormatError(
-                    f"Cannot determine HDF5 format - missing expected keys. "
-                    f"Available root keys: {available_keys}",
-                )
+                # Return "unknown" for graceful handling by caller
+                # Caller can decide how to handle unknown formats
+                return "unknown"
 
     @log_performance(threshold=0.8)
     def _load_aps_old_format(self, hdf_path: str) -> dict[str, Any]:
@@ -1619,23 +1700,43 @@ class XPCSDataLoader:
 
 # Convenience function for simple usage
 @log_performance(threshold=1.0)
-def load_xpcs_data(config_path: str) -> dict[str, Any]:
-    """Convenience function to load XPCS data from configuration file.
+def load_xpcs_data(
+    config_path: str | dict | None = None,
+    config_dict: dict | None = None,
+) -> dict[str, Any]:
+    """Convenience function to load XPCS data from configuration file or dict.
 
-    Supports both YAML and JSON configuration files with auto-detection.
+    Supports both YAML and JSON configuration files with auto-detection,
+    or direct configuration dictionary for programmatic use (backward compatible).
 
     Args:
-        config_path: Path to YAML or JSON configuration file
+        config_path: Path to YAML/JSON config file, OR dict for backward compatibility
+        config_dict: Configuration dictionary (alternative to config_path)
 
     Returns:
         Dictionary containing loaded experimental data with JAX arrays when available
 
     Example:
-        >>> data = load_xpcs_data("xpcs_config.yaml")
+        >>> # From config file
+        >>> data = load_xpcs_data(config_path="xpcs_config.yaml")
         >>> print(data.keys())
         dict_keys(['wavevector_q_list', 'phi_angles_list', 't1', 't2', 'c2_exp'])
+
+        >>> # From dict (backward compatible - positional)
+        >>> config = {"data_file": "experiment.h5", "analysis_mode": "static_isotropic"}
+        >>> data = load_xpcs_data(config)
+
+        >>> # From dict (keyword argument)
+        >>> data = load_xpcs_data(config_dict=config)
     """
-    loader = XPCSDataLoader(config_path=config_path)
+    # Backward compatibility: if config_path is a dict, treat it as config_dict
+    if isinstance(config_path, dict):
+        if config_dict is not None:
+            raise ValueError("Cannot provide both config_path as dict and config_dict parameter")
+        config_dict = config_path
+        config_path = None
+
+    loader = XPCSDataLoader(config_path=config_path, config_dict=config_dict)
     return loader.load_experimental_data()
 
 

@@ -212,7 +212,10 @@ def synthetic_xpcs_data():
 
     # Generate synthetic correlation function
     tau = np.abs(t1 - t2) + 1e-6
-    c2_exp = 1 + 0.5 * np.exp(-tau / 10.0)
+    c2_base = 1 + 0.5 * np.exp(-tau / 10.0)
+
+    # Create 3D array (n_angles, n_times, n_times) by repeating for each angle
+    c2_exp = np.tile(c2_base, (n_angles, 1, 1))
 
     # Add realistic noise
     np.random.seed(42)  # Reproducible
@@ -299,19 +302,41 @@ def test_parameters():
 
 @pytest.fixture
 def mock_hdf5_file(temp_dir):
-    """Create a mock HDF5 file for testing."""
+    """Create a mock HDF5 file for testing in APS old format.
+
+    APS old format structure:
+    - xpcs/dqlist: (1, N) array of q-vectors
+    - xpcs/dphilist: (1, N) array of phi angles
+    - exchange/C2T_all/{0000, 0001, ...}: half-matrix correlation data
+    """
     if not HAS_H5PY:
         pytest.skip("h5py not available")
 
     file_path = temp_dir / "test_data.h5"
 
     with h5py.File(file_path, "w") as f:
-        # Mock APS format structure
-        grp = f.create_group("exchange")
-        grp.create_dataset("correlation", data=np.random.random((50, 50, 36)))
-        grp.create_dataset("phi_angles", data=np.linspace(0, 2 * np.pi, 36))
-        grp.create_dataset("wavevector_q", data=np.array([0.01]))
-        grp.create_dataset("time_grid", data=np.arange(50))
+        # Create APS old format structure
+        # Required keys for detection: xpcs/dqlist, xpcs/dphilist, exchange/C2T_all
+        xpcs_grp = f.create_group("xpcs")
+
+        # Create dqlist and dphilist with shape (1, N)
+        n_angles = 36
+        xpcs_grp.create_dataset("dqlist", data=np.array([[0.01] * n_angles]))  # Shape (1, 36)
+        xpcs_grp.create_dataset("dphilist", data=np.array([np.linspace(0, 2 * np.pi, n_angles)]))  # Shape (1, 36)
+
+        # Create exchange/C2T_all group with correlation matrices
+        exchange_grp = f.create_group("exchange")
+        c2t_grp = exchange_grp.create_group("C2T_all")
+
+        # Create correlation matrices (half matrices as per APS old format)
+        # APS "half matrix" is actually a square matrix (NxN) where full = half + half.T
+        # Reconstruction: c2_full = c2_half + c2_half.T; c2_full[diag] /= 2
+        n_times = 50
+
+        for i in range(n_angles):
+            # Create square half matrix (upper triangular part matters)
+            half_matrix = np.triu(np.random.random((n_times, n_times))) + 1.0  # Values > 1.0
+            c2t_grp.create_dataset(f"{i:04d}", data=half_matrix)
 
     yield file_path
 
