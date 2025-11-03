@@ -421,6 +421,24 @@ ______________________________________________________________________
 
 ### Fixed
 
+#### **MCMC NLSQ Initialization** - Removed automatic NLSQ execution before MCMC (2025-11-03)
+
+- ✅ **Fixed MCMC incorrectly running NLSQ initialization** - Properly implements v2.1.0 breaking change #3
+  - Previous: `--method mcmc` was still running "NLSQ pre-optimization for MCMC initialization" despite v2.1.0 removal
+  - Root cause: Code in `commands.py:1176` read `run_nlsq_init` from removed `mcmc.initialization` config section, defaulting to `True`
+  - Fix: Removed entire 67-line NLSQ initialization block, replaced with direct `initial_params = None` assignment
+  - Impact: MCMC now starts immediately with physics-informed priors from `ParameterSpace` as documented
+
+- ✅ **Simplified CLI workflow** - MCMC initialization behavior now matches v2.1.0 specification
+  - No automatic NLSQ execution before MCMC
+  - Users must manually run NLSQ first if initialization desired (NLSQ → copy results → update YAML → MCMC)
+  - Physics-informed priors from `ParameterSpace` used directly for MCMC sampling
+
+**Files Modified**:
+- `homodyne/cli/commands.py` (lines 1171-1185, 1217) - Removed NLSQ initialization block and updated comments
+
+**Verification**: `/tmp/verify_mcmc_no_nlsq.py` and `/tmp/mcmc_nlsq_init_fix_report.md`
+
 #### **CMC Pipeline Errors** - Critical bug fixes enabling CMC execution
 
 - ✅ **Fixed CMC shard validation** - Corrected data point counting to use total across all shards instead of per-shard

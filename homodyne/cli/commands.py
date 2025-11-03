@@ -1171,78 +1171,28 @@ def _run_optimization(args, config: ConfigManager, data: dict[str, Any]) -> Any:
             # Convert data format for MCMC if needed
             mcmc_data = filtered_data["c2_exp"]
 
-            # Check if NLSQ pre-optimization should be run
-            # Get configuration flag (default: True for auto/cmc methods to improve SVI convergence)
-            run_nlsq_init = cmc_config.get("initialization", {}).get("run_nlsq_init", True)
+            # ✅ v2.1.0 BREAKING CHANGE: Removed automatic NLSQ/SVI initialization
+            # Manual workflow required: Run NLSQ separately, copy results to YAML, then run MCMC
+            # MCMC now uses physics-informed priors from ParameterSpace directly
+            initial_params = None  # No automatic initialization
+            logger.debug("MCMC will use physics-informed priors from ParameterSpace (v2.1.0 behavior)")
 
-            # Determine analysis mode (needed for ParameterSpace creation and NLSQ initialization)
+            # Determine analysis mode (needed for ParameterSpace creation)
             analysis_mode_str = (
                 config.config.get("analysis_mode", "static_isotropic")
                 if hasattr(config, "config")
                 else "static_isotropic"
             )
 
-            # Prepare initial_params from NLSQ if enabled
-            initial_params = None
-            if run_nlsq_init and method in ["auto", "cmc"]:
-                logger.info("=" * 70)
-                logger.info("Running NLSQ pre-optimization for MCMC initialization")
-                logger.info("=" * 70)
-                logger.info("This provides better starting points for SVI, improving convergence by 2-10x")
-
-                try:
-                    # Run NLSQ on the same data
-                    nlsq_result = fit_nlsq_jax(
-                        data=filtered_data,
-                        config=config,
-                    )
-
-                    # Extract parameters from NLSQ result
-                    # OptimizationResult.parameters contains all fitted parameters as np.ndarray
-                    # Order: [contrast, offset, D0, alpha, D_offset, ...]
-                    # For laminar_flow: [..., gamma_dot_t0, beta, gamma_dot_t_offset, phi0]
-
-                    # Define parameter names based on analysis mode
-                    if analysis_mode_str == "laminar_flow":
-                        param_names = ['contrast', 'offset', 'D0', 'alpha', 'D_offset',
-                                      'gamma_dot_t0', 'beta', 'gamma_dot_t_offset', 'phi0']
-                    else:  # static_isotropic
-                        param_names = ['contrast', 'offset', 'D0', 'alpha', 'D_offset']
-
-                    # Map NLSQ parameters to dict
-                    initial_params = {}
-                    for i, param_name in enumerate(param_names):
-                        if i < len(nlsq_result.parameters):
-                            initial_params[param_name] = float(nlsq_result.parameters[i])
-
-                    # Clamp parameters to valid NumPyro prior bounds
-                    # NLSQ can return values outside bounds (e.g., negative values for positive parameters),
-                    # which causes MCMC initialization to fail. This ensures all values are within valid ranges.
-                    initial_params = clamp_parameters_to_bounds(
-                        params=initial_params,
-                        config=config,
-                        analysis_mode=analysis_mode_str,
-                    )
-
-                    logger.info(f"✓ NLSQ initialization complete: {len(initial_params)} parameters")
-                    logger.debug(f"Initial params: {initial_params}")
-
-                except Exception as e:
-                    logger.warning(f"NLSQ pre-optimization failed: {e}")
-                    logger.warning("Continuing with MCMC without initialization (SVI will start from scratch)")
-                    initial_params = None
-
-            elif not run_nlsq_init:
-                logger.info("NLSQ pre-optimization disabled via configuration")
-            else:
-                logger.debug(f"NLSQ pre-optimization skipped for method={method}")
-
-            # Create ParameterSpace with config to ensure NumPyro uses config bounds
-            # This is CRITICAL: without config_manager, NumPyro will use hardcoded
-            # default bounds from fitting.py instead of configuration-specified bounds
-            parameter_space = ParameterSpace(config_manager=config)
+            # Create ParameterSpace from config to ensure NumPyro uses config bounds
+            # This is CRITICAL: ParameterSpace loads bounds/priors from configuration
+            # instead of hardcoded default bounds from fitting.py
+            parameter_space = ParameterSpace.from_config(
+                config_dict=config.config if hasattr(config, "config") else config,
+                analysis_mode=analysis_mode_str,
+            )
             logger.debug(
-                f"Created ParameterSpace with config_manager for {analysis_mode_str} mode"
+                f"Created ParameterSpace with config for {analysis_mode_str} mode"
             )
 
             # Run MCMC with optional initial_params
@@ -1267,7 +1217,7 @@ def _run_optimization(args, config: ConfigManager, data: dict[str, Any]) -> Any:
                 n_chains=args.n_chains,
                 method=method,  # Pass method to fit_mcmc_jax for auto/nuts/cmc selection
                 cmc_config=cmc_config,  # Pass CMC configuration
-                initial_params=initial_params,  # ✅ Pass NLSQ initialization
+                initial_params=initial_params,  # ✅ v2.1.0: None (no automatic initialization)
                 parameter_space=parameter_space,  # ✅ Pass config-aware ParameterSpace
             )
 
