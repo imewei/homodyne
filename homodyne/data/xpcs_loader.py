@@ -1013,10 +1013,10 @@ class XPCSDataLoader:
 
         # Create diagonal values using the same array type as input
         if HAS_JAX and hasattr(c2_mat, "device"):  # JAX array
-            diag_val = jnp.zeros(size)
+            diag_val = jnp.zeros(size, dtype=c2_mat.dtype)
             diag_val = diag_val.at[:-1].add(side_band)
             diag_val = diag_val.at[1:].add(side_band)
-            norm = jnp.ones(size)
+            norm = jnp.ones(size, dtype=c2_mat.dtype)
             norm = norm.at[1:-1].set(2)
             # Update diagonal using JAX immutable operations
             diag_indices = np.diag_indices(size)
