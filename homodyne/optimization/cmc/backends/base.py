@@ -366,6 +366,91 @@ class CMCBackend(ABC):
         """
         return time.time() - start_time
 
+    def _validate_analysis_mode_consistency(
+        self,
+        analysis_mode: str,
+        parameter_space,
+    ) -> None:
+        """Validate that analysis_mode is consistent with parameter_space.
+
+        This prevents model/mode mismatches that cause convergence failures.
+        For example, using a static_isotropic model when analysis_mode is
+        laminar_flow would result in wrong parameter count and physics.
+
+        Parameters
+        ----------
+        analysis_mode : str
+            Analysis mode ('static_isotropic' or 'laminar_flow')
+        parameter_space : ParameterSpace
+            Parameter space object containing parameter definitions
+
+        Raises
+        ------
+        ValueError
+            If analysis_mode is inconsistent with parameter_space configuration
+
+        Notes
+        -----
+        Expected parameter counts:
+        - static_isotropic: 5 parameters (contrast, offset, D0, alpha, D_offset)
+        - laminar_flow: 9 parameters (+ gamma_dot_t0, beta, gamma_dot_t_offset, phi0)
+
+        Examples
+        --------
+        >>> self._validate_analysis_mode_consistency("laminar_flow", param_space)
+        # Passes if param_space has 9 parameters
+        >>> self._validate_analysis_mode_consistency("static_isotropic", param_space)
+        # Passes if param_space has 5 parameters
+        """
+        # Get expected parameter count based on analysis_mode
+        # NOTE: ParameterSpace.bounds only contains PHYSICAL parameters
+        # (contrast and offset are scaling parameters added separately in MCMC)
+        if "static" in analysis_mode.lower():
+            expected_param_count = 3  # D0, alpha, D_offset
+            expected_mode_name = "static_isotropic"
+        elif "laminar" in analysis_mode.lower():
+            expected_param_count = 7  # D0, alpha, D_offset, gamma_dot_t0, beta, gamma_dot_t_offset, phi0
+            expected_mode_name = "laminar_flow"
+        else:
+            # Unknown mode, log warning but don't fail
+            logger.warning(
+                f"Unknown analysis_mode '{analysis_mode}'. "
+                f"Expected 'static_isotropic' or 'laminar_flow'. "
+                f"Skipping validation."
+            )
+            return
+
+        # Get actual parameter count from parameter_space
+        # Check if parameter_space has the expected attributes
+        if not hasattr(parameter_space, "bounds"):
+            logger.warning(
+                f"ParameterSpace missing 'bounds' attribute. "
+                f"Cannot validate analysis_mode consistency."
+            )
+            return
+
+        # Count parameters from bounds dictionary
+        actual_param_count = len(parameter_space.bounds)
+
+        # Validate consistency
+        if actual_param_count != expected_param_count:
+            error_msg = (
+                f"Analysis mode mismatch detected!\n"
+                f"  analysis_mode: '{analysis_mode}' (expects {expected_mode_name})\n"
+                f"  expected parameters: {expected_param_count}\n"
+                f"  actual parameters: {actual_param_count}\n"
+                f"This mismatch will cause MCMC convergence failures.\n"
+                f"Ensure config analysis_mode matches parameter_space configuration."
+            )
+            logger.error(f"[{self.get_backend_name()}] {error_msg}")
+            raise ValueError(error_msg)
+
+        # Log successful validation
+        logger.info(
+            f"[{self.get_backend_name()}] Validation passed: "
+            f"analysis_mode='{analysis_mode}' matches {actual_param_count} parameters"
+        )
+
 
 # Export abstract base class
 __all__ = ["CMCBackend"]

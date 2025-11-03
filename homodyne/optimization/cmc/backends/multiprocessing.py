@@ -202,6 +202,9 @@ class MultiprocessingBackend(CMCBackend):
             f"using {self.num_workers} workers"
         )
 
+        # Validate analysis_mode consistency before execution
+        self._validate_analysis_mode_consistency(analysis_mode, parameter_space)
+
         # Prepare arguments for workers
         worker_args = [
             (i, shard, mcmc_config, init_params, inv_mass_matrix, analysis_mode, parameter_space)
@@ -389,6 +392,9 @@ def _worker_function(args: tuple) -> Dict[str, Any]:
         }
 
     try:
+        # Import the correct model creation function from mcmc.py
+        from homodyne.optimization.mcmc import _create_numpyro_model
+
         # Extract MCMC configuration
         num_warmup = mcmc_config.get('num_warmup', 500)
         num_samples = mcmc_config.get('num_samples', 2000)
@@ -405,30 +411,30 @@ def _worker_function(args: tuple) -> Dict[str, Any]:
         q = float(shard['q'])
         L = float(shard['L'])
 
-        # Define NumPyro model (same as pjit backend)
-        def model(data, sigma, t1, t2, phi, q, L):
-            """NumPyro model for homodyne XPCS."""
-            contrast = sample('contrast', dist.Uniform(0.0, 1.0))
-            offset = sample('offset', dist.Normal(1.0, 0.1))
-            D0 = sample('D0', dist.Uniform(100.0, 10000.0))
-            alpha = sample('alpha', dist.Uniform(0.0, 2.0))
-            D_offset = sample('D_offset', dist.Uniform(0.0, 100.0))
+        # Compute dt from t1 array (required for physics computation)
+        if len(t1_jax) > 1:
+            dt = float(np.median(np.diff(np.unique(t1_jax))))
+        else:
+            dt = 1.0  # Fallback
 
-            # Compute theoretical g2 (placeholder)
-            g2_theory = jnp.ones_like(data)
+        # Create proper NumPyro model with actual XPCS physics
+        model = _create_numpyro_model(
+            data=data_jax,
+            sigma=sigma_jax,
+            t1=t1_jax,
+            t2=t2_jax,
+            phi=phi_jax,
+            q=q,
+            L=L,
+            analysis_mode=analysis_mode,
+            parameter_space=parameter_space,
+            use_simplified=True,
+            dt=dt,
+        )
 
-            # Likelihood
-            mu = contrast * g2_theory + offset
-            sample('obs', dist.Normal(mu, sigma), obs=data)
-
-        # Initial parameter values
-        init_param_values = {
-            'contrast': init_params.get('contrast', 0.5),
-            'offset': init_params.get('offset', 1.0),
-            'D0': init_params.get('D0', 1000.0),
-            'alpha': init_params.get('alpha', 0.5),
-            'D_offset': init_params.get('D_offset', 10.0),
-        }
+        # Create initial values dict from init_params
+        # Note: init_params keys should match parameter names from parameter_space
+        init_param_values = {k: float(v) for k, v in init_params.items()}
 
         # Create NUTS sampler
         nuts_kernel = NUTS(
@@ -449,25 +455,21 @@ def _worker_function(args: tuple) -> Dict[str, Any]:
 
         # Run MCMC
         rng_key = jax.random.PRNGKey(shard_idx)
-        mcmc.run(
-            rng_key,
-            data=data_jax,
-            sigma=sigma_jax,
-            t1=t1_jax,
-            t2=t2_jax,
-            phi=phi_jax,
-            q=q,
-            L=L,
-        )
+        mcmc.run(rng_key)
 
         # Extract samples
         samples_dict = mcmc.get_samples()
+
+        # Determine parameter ordering based on analysis_mode
+        if "static" in analysis_mode:
+            param_order = ['contrast', 'offset', 'D0', 'alpha', 'D_offset']
+        else:  # laminar_flow
+            param_order = ['contrast', 'offset', 'D0', 'alpha', 'D_offset',
+                          'gamma_dot_t0', 'beta', 'gamma_dot_t_offset', 'phi0']
+
+        # Stack samples in correct order
         samples_array = np.stack([
-            np.array(samples_dict['contrast']),
-            np.array(samples_dict['offset']),
-            np.array(samples_dict['D0']),
-            np.array(samples_dict['alpha']),
-            np.array(samples_dict['D_offset']),
+            np.array(samples_dict[name]) for name in param_order
         ], axis=1)
 
         # Compute diagnostics
@@ -485,9 +487,10 @@ def _worker_function(args: tuple) -> Dict[str, Any]:
         }
 
     except Exception as e:
+        import traceback
         return {
             'converged': False,
-            'error': f"Worker MCMC failed: {str(e)}",
+            'error': f"Worker MCMC failed: {str(e)}\n{traceback.format_exc()}",
             'samples': None,
             'diagnostics': {},
             'shard_idx': shard_idx,

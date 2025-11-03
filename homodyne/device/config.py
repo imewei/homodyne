@@ -335,18 +335,20 @@ def should_use_cmc(
     - Benefit: Avoid OOM errors, enable large dataset analysis
     - Example: 5 phi × 10M points → CMC triggered (75% memory) → avoid OOM
 
-    **Use Case 3: JAX Broadcasting Protection** (very large pooled datasets)
-    - Trigger: dataset_size > large_dataset_threshold (default: 1M)
+    **Use Case 3: JAX Broadcasting Protection** (very large pooled datasets with parallelism)
+    - Trigger: dataset_size > large_dataset_threshold (default: 1M) AND num_samples >= min_samples_for_cmc
     - Reason: JAX broadcasting in compute_g1_total can create impossible arrays
-    - Example: 3M pooled points → (3M, 3M, 3M) array = ~217 exabytes (impossible)
+    - Example: 20 phi × 2M points → JAX broadcasting overflow (requires parallelism)
     - Benefit: CMC sharding prevents catastrophic memory overflow
+    - Constraint: Only trigger if enough samples for parallelism (avoid 10-20% CMC overhead)
 
     Decision Logic (OR condition)
     ------------------------------
     Use CMC if:
     1. num_samples >= min_samples_for_cmc (parallelism mode), OR
     2. estimated_memory_gb > threshold × available_memory (memory mode), OR
-    3. dataset_size > large_dataset_threshold (JAX broadcasting protection)
+    3. (dataset_size > large_dataset_threshold AND num_samples >= min_samples_for_cmc)
+       (JAX broadcasting protection with sufficient parallelism)
 
     Parameters
     ----------
@@ -427,7 +429,13 @@ def should_use_cmc(
 
         # Check large dataset criterion (JAX broadcasting protection)
         # Critical for pooled datasets >1M that can cause JAX broadcasting overflow
-        use_cmc_for_large_dataset = dataset_size > large_dataset_threshold
+        # IMPORTANT: Only trigger if we have enough samples for parallelism benefit
+        # Without parallelism, CMC adds 10-20% overhead with no speedup
+        # Edge case: 3M points / 3 samples → Criterion 3 alone is insufficient
+        use_cmc_for_large_dataset = (
+            dataset_size > large_dataset_threshold
+            and num_samples >= min_samples_for_cmc
+        )
 
     # Step 2: Log comprehensive tri-criteria evaluation
     logger.info("=" * 70)
@@ -445,8 +453,9 @@ def should_use_cmc(
             f"{memory_threshold_pct:.1%} → {use_cmc_for_memory}"
         )
         logger.info(
-            f"Criterion 3 (Large Dataset): dataset_size={dataset_size:,} > "
-            f"threshold={large_dataset_threshold:,} → {use_cmc_for_large_dataset}"
+            f"Criterion 3 (Large Dataset): (dataset_size={dataset_size:,} > "
+            f"threshold={large_dataset_threshold:,}) AND (num_samples={num_samples} >= "
+            f"min={min_samples_for_cmc}) → {use_cmc_for_large_dataset}"
         )
     else:
         logger.info("Criterion 2 (Memory): dataset_size=None → False (not evaluated)")
