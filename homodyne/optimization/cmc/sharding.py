@@ -154,7 +154,7 @@ def calculate_adaptive_min_shard_size(
 def calculate_optimal_num_shards(
     dataset_size: int,
     hardware_config: HardwareConfig,
-    target_shard_size_gpu: int = 1_000_000,
+    target_shard_size_gpu: int = 50_000,
     target_shard_size_cpu: int = 2_000_000,
     min_shard_size: int = 10_000,
 ) -> int:
@@ -164,6 +164,7 @@ def calculate_optimal_num_shards(
     1. **Memory constraints**: Each shard must fit in device memory
     2. **Parallelization**: More shards enable more parallel speedup
     3. **Statistical efficiency**: Fewer shards reduce combination overhead
+    4. **GPU kernel limits**: JAX kernel launch has grid dimension limits
 
     Algorithm
     ---------
@@ -179,8 +180,10 @@ def calculate_optimal_num_shards(
         Total number of data points in the dataset
     hardware_config : HardwareConfig
         Detected hardware configuration from detect_hardware()
-    target_shard_size_gpu : int, default 1_000_000
-        Target points per shard for GPU (1M points for 16GB GPU)
+    target_shard_size_gpu : int, default 50_000
+        Target points per shard for GPU (50K points to avoid kernel launch limits)
+        Reduced from 1M to prevent JAX kernel grid dimension overflow:
+        Max grid: (2^31-1, 65535), large shards exceed these limits
     target_shard_size_cpu : int, default 2_000_000
         Target points per shard for CPU (2M points typical)
     min_shard_size : int, default 10_000
@@ -197,14 +200,16 @@ def calculate_optimal_num_shards(
     >>> hw = detect_hardware()
     >>> num_shards = calculate_optimal_num_shards(5_000_000, hw)
     >>> print(num_shards)
-    5  # For GPU: 5M / 1M = 5 shards
+    100  # For GPU: 5M / 50K = 100 shards (avoids kernel launch limits)
 
     Notes
     -----
-    - GPU limits are based on memory constraints (~16GB typical)
-    - CPU limits are more relaxed (more memory available)
+    - GPU limits based on JAX kernel grid dimensions: max (2^31-1, 65535) blocks
+    - GPU default 50K points/shard prevents kernel launch overflow
+    - CPU limits more relaxed (more memory, no kernel launch limits)
     - Warnings logged if num_shards > max_parallel_shards (sequential execution)
     - Returns 1 if dataset is too small for sharding
+    - Many shards executed sequentially on single GPU (pjit backend)
     """
     logger.info(
         f"Calculating optimal num_shards for {dataset_size:,} points on "
