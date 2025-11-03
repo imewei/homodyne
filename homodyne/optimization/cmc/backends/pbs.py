@@ -220,6 +220,8 @@ class PBSBackend(CMCBackend):
         mcmc_config: Dict[str, Any],
         init_params: Dict[str, float],
         inv_mass_matrix: np.ndarray,
+        analysis_mode: str,
+        parameter_space,
     ) -> List[Dict[str, Any]]:
         """Run MCMC on all shards via PBS job array.
 
@@ -241,6 +243,10 @@ class PBSBackend(CMCBackend):
             Initial parameter values
         inv_mass_matrix : np.ndarray
             Inverse mass matrix
+        analysis_mode : str
+            Analysis mode ("static_isotropic" or "laminar_flow")
+        parameter_space : ParameterSpace
+            Parameter space with bounds and constraints
 
         Returns
         -------
@@ -254,7 +260,7 @@ class PBSBackend(CMCBackend):
         try:
             # Step 1: Write shard data to files
             logger.info("Writing shard data to HDF5 files...")
-            self._write_shard_data(shards, mcmc_config, init_params, inv_mass_matrix)
+            self._write_shard_data(shards, mcmc_config, init_params, inv_mass_matrix, analysis_mode, parameter_space)
 
             # Step 2: Generate PBS script
             logger.info("Generating PBS job array script...")

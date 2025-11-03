@@ -108,6 +108,8 @@ class CMCBackend(ABC):
         mcmc_config: Dict[str, Any],
         init_params: Dict[str, float],
         inv_mass_matrix: np.ndarray,
+        analysis_mode: str,
+        parameter_space,
     ) -> List[Dict[str, Any]]:
         """Run MCMC on all shards in parallel or sequentially.
 
@@ -149,6 +151,12 @@ class CMCBackend(ABC):
             Inverse mass matrix (precision matrix) for NUTS initialization.
             Typically identity matrix (diagonal); adapted during warmup.
             Shape: (num_params, num_params)
+        analysis_mode : str
+            Analysis mode specifying the physics model to use.
+            Either "static_isotropic" or "laminar_flow"
+        parameter_space : ParameterSpace
+            Parameter space object containing parameter bounds and physics constraints.
+            Used for prior distributions and parameter validation
 
         Returns
         -------
