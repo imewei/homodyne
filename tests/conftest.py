@@ -166,6 +166,62 @@ def jax_backend():
         os.environ.pop("JAX_PLATFORM_NAME", None)
 
 
+@pytest.fixture(autouse=True, scope="function")
+def cleanup_jax_state():
+    """Clear JAX cache and GPU memory between tests to prevent contamination.
+
+    This fixture automatically runs after each test to ensure clean state.
+    Addresses test isolation issues identified in v2.1.0 testing.
+    """
+    yield
+
+    # Clear JAX compilation cache
+    if JAX_AVAILABLE:
+        try:
+            from jax import clear_caches
+            clear_caches()
+        except Exception:
+            pass
+
+    # Force garbage collection
+    import gc
+    gc.collect()
+
+    # Clear GPU memory if available
+    if JAX_AVAILABLE:
+        try:
+            if jax.devices()[0].platform == 'gpu':
+                jax.clear_backends()
+        except Exception:
+            pass
+
+
+@pytest.fixture(autouse=True, scope="function")
+def reset_config_state():
+    """Reset global configuration state between tests.
+
+    Prevents config pollution from one test affecting subsequent tests.
+    Clears cached ConfigManager instances and parameter spaces.
+    """
+    yield
+
+    # Clear cached config managers
+    try:
+        from homodyne.config import manager
+        if hasattr(manager, '_cache'):
+            manager._cache.clear()
+    except (ImportError, AttributeError):
+        pass
+
+    # Clear parameter space cache
+    try:
+        from homodyne.config import parameter_space
+        if hasattr(parameter_space, '_cache'):
+            parameter_space._cache.clear()
+    except (ImportError, AttributeError):
+        pass
+
+
 @pytest.fixture
 def numpy_backend():
     """NumPy backend for fallback tests."""

@@ -310,9 +310,13 @@ optimization:
         finally:
             Path(config_path).unlink()
 
-    @pytest.mark.skip(reason="v2.1.0: mcmc.initialization section removed - no initialization method validation needed")
+    @pytest.mark.skip(reason="v2.1.0 removed mcmc.initialization section and initialization.method field")
     def test_invalid_initialization_method(self):
-        """Test validation catches invalid initialization method."""
+        """Test validation catches invalid initialization method.
+
+        DEPRECATED in v2.1.0: The initialization section was removed.
+        Tests now use physics-informed priors directly from ParameterSpace.
+        """
         config_yaml = """
 analysis_mode: static_isotropic
 

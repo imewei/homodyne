@@ -36,7 +36,7 @@ from homodyne.device.config import HardwareConfig
 
 @pytest.fixture
 def minimal_config():
-    """Minimal valid configuration."""
+    """Minimal valid configuration (v2.1.0 compatible)."""
     return {
         'mcmc': {
             'num_warmup': 10,
@@ -48,7 +48,7 @@ def minimal_config():
                 'strategy': 'stratified',
                 'min_shard_size': 100,  # Reduced for small test datasets
             },
-            'initialization': {'use_svi': False},  # Disable for speed
+            # Note: initialization section removed in v2.1.0
             'combination': {'method': 'weighted', 'fallback_enabled': True},
         },
     }
@@ -56,7 +56,7 @@ def minimal_config():
 
 @pytest.fixture
 def full_config():
-    """Full configuration with all options."""
+    """Full configuration with all options (v2.1.0 compatible)."""
     return {
         'mcmc': {
             'num_warmup': 100,
@@ -71,12 +71,8 @@ def full_config():
                 'target_shard_size_cpu': 2_000_000,
                 'min_shard_size': 10_000,
             },
-            'initialization': {
-                'use_svi': True,
-                'svi_steps': 1000,
-                'svi_timeout': 900,
-                'samples_per_shard': 200,
-            },
+            # Note: initialization section removed in v2.1.0
+            # Use physics-informed priors from ParameterSpace directly
             'combination': {
                 'method': 'weighted',
                 'fallback_enabled': True,
@@ -286,8 +282,13 @@ class TestEndToEndPipeline:
             assert result.cmc_diagnostics is not None
             assert len(result.per_shard_diagnostics) == 2
 
+    @pytest.mark.skip(reason="v2.1.0 removed SVI initialization - use physics priors directly")
     def test_pipeline_with_svi_disabled(self, minimal_config, synthetic_data, mock_nlsq_params, mock_hardware_cpu):
-        """Test pipeline with SVI initialization disabled."""
+        """Test pipeline with SVI initialization disabled.
+
+        DEPRECATED in v2.1.0: SVI initialization was removed.
+        MCMC now uses physics-informed priors from ParameterSpace directly.
+        """
         with patch('homodyne.optimization.cmc.coordinator.detect_hardware') as mock_detect:
             mock_detect.return_value = mock_hardware_cpu
 
@@ -494,10 +495,11 @@ class TestConfiguration:
 
             coordinator = CMCCoordinator(full_config)
 
-            # Check all config sections are accessible
+            # Check all config sections are accessible (v2.1.0 compatible)
             assert coordinator.config['mcmc']['num_warmup'] == 100
             assert coordinator.config['cmc']['sharding']['num_shards'] == 4
-            assert coordinator.config['cmc']['initialization']['use_svi'] is True
+            # v2.1.0: initialization section removed
+            # assert coordinator.config['cmc']['initialization']['use_svi'] is True
             assert coordinator.config['cmc']['combination']['method'] == 'weighted'
 
 

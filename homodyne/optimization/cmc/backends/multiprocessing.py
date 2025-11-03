@@ -466,6 +466,7 @@ def _worker_function(args: tuple) -> Dict[str, Any]:
 
         return {
             'converged': converged,
+            'error': None,  # No error on success (for backend consistency with pjit)
             'samples': samples_array,
             'diagnostics': diagnostics,
             'shard_idx': shard_idx,
