@@ -3,7 +3,8 @@
 
 This module provides hardware-adaptive detection and decision-making for
 CMC (Consensus Monte Carlo) optimization. It determines when to use CMC
-based on available hardware resources and dataset characteristics.
+based on available hardware resources and dataset characteristics using
+a tri-criteria OR logic system.
 
 Key Features
 ------------
@@ -11,6 +12,7 @@ Key Features
 - GPU memory detection with graceful fallback
 - Cluster environment detection (PBS/Slurm)
 - Hardware-adaptive CMC threshold selection
+- Tri-criteria decision logic (parallelism OR memory OR large dataset)
 - Backend recommendation based on hardware capabilities
 
 Usage
@@ -315,10 +317,11 @@ def should_use_cmc(
     dataset_size: Optional[int] = None,
     memory_threshold_pct: float = 0.30,
     min_samples_for_cmc: int = 15,
+    large_dataset_threshold: int = 1_000_000,
 ) -> bool:
     """Determine if CMC should be used based on samples AND/OR dataset size.
 
-    CMC serves TWO distinct purposes requiring different triggering conditions:
+    CMC serves THREE distinct purposes requiring different triggering conditions:
 
     **Use Case 1: Parallelism** (many independent samples)
     - Trigger: num_samples >= min_samples_for_cmc (default: 15)
@@ -332,11 +335,18 @@ def should_use_cmc(
     - Benefit: Avoid OOM errors, enable large dataset analysis
     - Example: 5 phi × 10M points → CMC triggered (75% memory) → avoid OOM
 
+    **Use Case 3: JAX Broadcasting Protection** (very large pooled datasets)
+    - Trigger: dataset_size > large_dataset_threshold (default: 1M)
+    - Reason: JAX broadcasting in compute_g1_total can create impossible arrays
+    - Example: 3M pooled points → (3M, 3M, 3M) array = ~217 exabytes (impossible)
+    - Benefit: CMC sharding prevents catastrophic memory overflow
+
     Decision Logic (OR condition)
     ------------------------------
     Use CMC if:
     1. num_samples >= min_samples_for_cmc (parallelism mode), OR
-    2. estimated_memory_gb > threshold × available_memory (memory mode)
+    2. estimated_memory_gb > threshold × available_memory (memory mode), OR
+    3. dataset_size > large_dataset_threshold (JAX broadcasting protection)
 
     Parameters
     ----------
@@ -355,6 +365,10 @@ def should_use_cmc(
         Minimum samples for parallelism-mode CMC
         Optimized for multi-core CPU workloads (14+ cores)
         15 samples / 14 cores = 1.07 samples/core (acceptable minimum)
+    large_dataset_threshold : int, default 1_000_000
+        Force CMC if dataset_size > threshold (JAX broadcasting protection)
+        Prevents catastrophic memory overflow from JAX broadcasting in compute_g1_total
+        Critical for pooled datasets >1M points in laminar flow analysis
 
     Returns
     -------
@@ -387,8 +401,9 @@ def should_use_cmc(
       Components: data + gradients (9 params) + NUTS tree + JAX overhead + MCMC state
     - CMC sharding strategy adapts based on which condition triggered it
     - Calibration: 23M points → ~12-14 GB actual NUTS memory usage on GPU
+    - Large dataset threshold protects against JAX broadcasting edge cases
     """
-    # Step 1: Evaluate dual-criteria OR logic
+    # Step 1: Evaluate tri-criteria OR logic
     # Criterion 1 (Parallelism): num_samples >= min_samples_for_cmc
     use_cmc_for_parallelism = num_samples >= min_samples_for_cmc
 
@@ -396,6 +411,9 @@ def should_use_cmc(
     use_cmc_for_memory = False
     estimated_memory_gb = 0.0
     memory_fraction = 0.0
+
+    # Criterion 3 (Large Dataset): dataset_size > large_dataset_threshold
+    use_cmc_for_large_dataset = False
 
     if dataset_size is not None:
         # Estimate memory requirement for MCMC
@@ -407,43 +425,66 @@ def should_use_cmc(
         memory_fraction = estimated_memory_gb / available_memory_gb
         use_cmc_for_memory = memory_fraction > memory_threshold_pct
 
-    # Step 2: Log comprehensive dual-criteria evaluation
+        # Check large dataset criterion (JAX broadcasting protection)
+        # Critical for pooled datasets >1M that can cause JAX broadcasting overflow
+        use_cmc_for_large_dataset = dataset_size > large_dataset_threshold
+
+    # Step 2: Log comprehensive tri-criteria evaluation
     logger.info("=" * 70)
-    logger.info("Automatic NUTS/CMC Selection - Dual-Criteria Evaluation")
+    logger.info("Automatic NUTS/CMC Selection - Tri-Criteria Evaluation")
     logger.info("=" * 70)
     logger.info(
-        f"Parallelism criterion: num_samples={num_samples:,} >= "
+        f"Criterion 1 (Parallelism): num_samples={num_samples:,} >= "
         f"min_samples_for_cmc={min_samples_for_cmc} → {use_cmc_for_parallelism}"
     )
 
     if dataset_size is not None:
         logger.info(
-            f"Memory criterion: {memory_fraction:.1%} "
+            f"Criterion 2 (Memory): {memory_fraction:.1%} "
             f"({estimated_memory_gb:.2f}/{hardware_config.memory_per_device_gb:.2f} GB) > "
             f"{memory_threshold_pct:.1%} → {use_cmc_for_memory}"
         )
+        logger.info(
+            f"Criterion 3 (Large Dataset): dataset_size={dataset_size:,} > "
+            f"threshold={large_dataset_threshold:,} → {use_cmc_for_large_dataset}"
+        )
     else:
-        logger.info("Memory criterion: dataset_size=None → False (not evaluated)")
+        logger.info("Criterion 2 (Memory): dataset_size=None → False (not evaluated)")
+        logger.info("Criterion 3 (Large Dataset): dataset_size=None → False (not evaluated)")
 
-    # Step 3: Apply OR logic and make decision
-    use_cmc = use_cmc_for_parallelism or use_cmc_for_memory
+    # Step 3: Apply OR logic and make decision (any criterion triggers CMC)
+    use_cmc = use_cmc_for_parallelism or use_cmc_for_memory or use_cmc_for_large_dataset
 
     logger.info("-" * 70)
-    logger.info(
-        f"Final decision: Using {'CMC' if use_cmc else 'NUTS'} "
-        f"({'Parallelism' if use_cmc_for_parallelism else ''}"
-        f"{' + Memory' if use_cmc_for_memory and use_cmc_for_parallelism else ''}"
-        f"{'Memory' if use_cmc_for_memory and not use_cmc_for_parallelism else ''}"
-        f"{'Both criteria failed' if not use_cmc else ''} mode)"
-    )
+
+    # Build mode string based on which criteria triggered CMC
+    if use_cmc:
+        mode_parts = []
+        if use_cmc_for_parallelism:
+            mode_parts.append("Parallelism")
+        if use_cmc_for_memory:
+            mode_parts.append("Memory")
+        if use_cmc_for_large_dataset:
+            mode_parts.append("Large Dataset")
+        mode_string = " + ".join(mode_parts) + " mode"
+    else:
+        mode_string = "All criteria failed mode"
+
+    logger.info(f"Final decision: Using {'CMC' if use_cmc else 'NUTS'} ({mode_string})")
     logger.info("=" * 70)
 
     # Step 4: Log warnings for edge cases
     if use_cmc and num_samples < min_samples_for_cmc:
+        # CMC triggered by memory or large dataset criterion, not parallelism
+        trigger_reason = []
+        if use_cmc_for_memory:
+            trigger_reason.append(f"memory ({memory_fraction:.1%} > {memory_threshold_pct:.1%})")
+        if use_cmc_for_large_dataset:
+            trigger_reason.append(f"large dataset ({dataset_size:,} > {large_dataset_threshold:,})")
         logger.warning(
             f"Using CMC with only {num_samples} samples (< {min_samples_for_cmc} threshold). "
             f"CMC adds 10-20% overhead; NUTS is faster for <{min_samples_for_cmc} samples if memory permits. "
-            f"Triggered by memory criterion: {memory_fraction:.1%} > {memory_threshold_pct:.1%}"
+            f"Triggered by: {', '.join(trigger_reason)}"
         )
 
     return use_cmc

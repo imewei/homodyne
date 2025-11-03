@@ -6,10 +6,11 @@ and uncertainty quantification with automatic NUTS/CMC selection.
 
 Key Features
 ------------
-- **Automatic NUTS/CMC Selection**: Dual-criteria OR logic based on dataset characteristics
-  - Parallelism criterion: num_samples >= min_samples_for_cmc (default: 15)
-  - Memory criterion: estimated_memory > memory_threshold_pct (default: 30%)
-  - Decision: CMC if (Criterion 1 OR Criterion 2), otherwise NUTS
+- **Automatic NUTS/CMC Selection**: Tri-criteria OR logic based on dataset characteristics
+  - Criterion 1 (Parallelism): num_samples >= min_samples_for_cmc (default: 15)
+  - Criterion 2 (Memory): estimated_memory > memory_threshold_pct (default: 30%)
+  - Criterion 3 (Large Dataset): dataset_size > large_dataset_threshold (default: 1M)
+  - Decision: CMC if (Criterion 1 OR Criterion 2 OR Criterion 3), otherwise NUTS
 
 - **Configuration-Driven Parameter Management**: All parameters loaded from YAML config
   - parameter_space: Bounds and prior distributions
@@ -70,17 +71,18 @@ Automatic Selection Logic
 **NUTS (Single-Device):**
 - Fast for small datasets (<1M points)
 - Low overhead, single-device execution
-- Selected when: (num_samples < 15) AND (memory < 30%)
+- Selected when: ALL criteria fail (num_samples < 15) AND (memory < 30%) AND (dataset_size <= 1M)
 
 **CMC (Multi-Shard):**
 - Parallelized for CPU cores or large memory requirements
 - ~10-20% overhead but enables unlimited dataset sizes
-- Selected when: (num_samples >= 15) OR (memory >= 30%)
+- Selected when: (num_samples >= 15) OR (memory >= 30%) OR (dataset_size > 1M)
 
 **Examples:**
-- 50 phi angles (num_samples=50) → CMC for ~3x speedup on 14-core CPU
-- 5 phi angles but 10M points (memory>30%) → CMC to prevent OOM
-- 10 phi angles, 100k points (memory<30%) → NUTS for minimal overhead
+- 50 phi angles (num_samples=50) → CMC (parallelism criterion)
+- 5 phi angles but 10M points (memory>30%) → CMC (memory criterion)
+- 3 phi angles, 3M pooled points → CMC (large dataset criterion, JAX broadcasting protection)
+- 10 phi angles, 100k points (memory<30%) → NUTS (all criteria fail, minimal overhead)
 """
 
 import time
@@ -666,27 +668,32 @@ def fit_mcmc_jax(
 
     # Step 2: Extract configurable thresholds from kwargs (with defaults)
     # These thresholds are loaded from YAML config: optimization.mcmc.min_samples_for_cmc
-    # Users can override via CLI: --min-samples-cmc, --memory-threshold-pct
+    # Users can override via CLI: --min-samples-cmc, --memory-threshold-pct, --large-dataset-threshold
     min_samples_for_cmc = kwargs.pop('min_samples_for_cmc', 15)
     memory_threshold_pct = kwargs.pop('memory_threshold_pct', 0.30)
+    large_dataset_threshold = kwargs.pop('large_dataset_threshold', 1_000_000)
 
-    # Step 3: Automatic NUTS/CMC selection using dual-criteria OR logic
+    # Step 3: Automatic NUTS/CMC selection using tri-criteria OR logic
     # Criterion 1 (Parallelism): num_samples >= min_samples_for_cmc (default: 15)
     #   - Many independent samples (e.g., 50 phi angles) → CMC for CPU parallelization
     #   - Achieves ~3x speedup on multi-core CPUs with many samples
     # Criterion 2 (Memory): estimated_memory > memory_threshold_pct (default: 30%)
     #   - Large datasets approaching OOM threshold → CMC for memory management
     #   - Prevents out-of-memory failures on datasets >1M points
-    # Decision: use_cmc = (Criterion 1 OR Criterion 2)
-    #   - Either criterion triggers CMC (OR logic, not AND)
+    # Criterion 3 (Large Dataset): dataset_size > large_dataset_threshold (default: 1M)
+    #   - Very large pooled datasets → CMC to prevent JAX broadcasting overflow
+    #   - Critical for pooled data causing (3M, 3M, 3M) array creation
+    # Decision: use_cmc = (Criterion 1 OR Criterion 2 OR Criterion 3)
+    #   - Any criterion triggers CMC (OR logic, not AND)
     if hardware_config is not None:
-        # Hardware detection available - use full dual-criteria logic
+        # Hardware detection available - use full tri-criteria logic
         use_cmc = should_use_cmc(
             num_samples,
             hardware_config,
             dataset_size=dataset_size,
             min_samples_for_cmc=min_samples_for_cmc,
             memory_threshold_pct=memory_threshold_pct,
+            large_dataset_threshold=large_dataset_threshold,
         )
         actual_method = 'cmc' if use_cmc else 'nuts'
         logger.info(

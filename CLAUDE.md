@@ -708,3 +708,4 @@ ______________________________________________________________________
 - `pyproject.toml` - Package metadata, tool configs
 - `.pre-commit-config.yaml` - Black, ruff, mypy, bandit
 - Requires: `python >= 3.12`
+- Float32 recommended for MCMC and Homodyne supports both float32 and float64
