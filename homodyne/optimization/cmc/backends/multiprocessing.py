@@ -167,6 +167,8 @@ class MultiprocessingBackend(CMCBackend):
         mcmc_config: Dict[str, Any],
         init_params: Dict[str, float],
         inv_mass_matrix: np.ndarray,
+        analysis_mode: str,
+        parameter_space,
     ) -> List[Dict[str, Any]]:
         """Run MCMC on all shards using multiprocessing.Pool.
 
@@ -185,6 +187,10 @@ class MultiprocessingBackend(CMCBackend):
         inv_mass_matrix : np.ndarray
             Inverse mass matrix for NUTS initialization
             (typically identity matrix, adapted during warmup)
+        analysis_mode : str
+            Analysis mode ("static_isotropic" or "laminar_flow")
+        parameter_space : ParameterSpace
+            Parameter space with bounds and constraints
 
         Returns
         -------
@@ -198,7 +204,7 @@ class MultiprocessingBackend(CMCBackend):
 
         # Prepare arguments for workers
         worker_args = [
-            (i, shard, mcmc_config, init_params, inv_mass_matrix)
+            (i, shard, mcmc_config, init_params, inv_mass_matrix, analysis_mode, parameter_space)
             for i, shard in enumerate(shards)
         ]
 
@@ -279,6 +285,8 @@ class MultiprocessingBackend(CMCBackend):
         mcmc_config: Dict[str, Any],
         init_params: Dict[str, float],
         inv_mass_matrix: np.ndarray,
+        analysis_mode: str,
+        parameter_space,
     ) -> List[Dict[str, Any]]:
         """Alternative implementation using Pool.map for batch execution.
 
@@ -297,6 +305,10 @@ class MultiprocessingBackend(CMCBackend):
             Initial parameters
         inv_mass_matrix : np.ndarray
             Mass matrix
+        analysis_mode : str
+            Analysis mode ("static_isotropic" or "laminar_flow")
+        parameter_space : ParameterSpace
+            Parameter space with bounds and constraints
 
         Returns
         -------
@@ -310,7 +322,7 @@ class MultiprocessingBackend(CMCBackend):
 
         # Prepare arguments
         worker_args = [
-            (i, shard, mcmc_config, init_params, inv_mass_matrix)
+            (i, shard, mcmc_config, init_params, inv_mass_matrix, analysis_mode, parameter_space)
             for i, shard in enumerate(shards)
         ]
 
@@ -348,14 +360,14 @@ def _worker_function(args: tuple) -> Dict[str, Any]:
     Parameters
     ----------
     args : tuple
-        (shard_idx, shard_data, mcmc_config, init_params, inv_mass_matrix)
+        (shard_idx, shard_data, mcmc_config, init_params, inv_mass_matrix, analysis_mode, parameter_space)
 
     Returns
     -------
     dict
         Shard result with samples and diagnostics
     """
-    shard_idx, shard, mcmc_config, init_params, inv_mass_matrix = args
+    shard_idx, shard, mcmc_config, init_params, inv_mass_matrix, analysis_mode, parameter_space = args
 
     # Import modules locally (avoids serialization issues)
     import numpy as np

@@ -163,8 +163,8 @@ class PjitBackend(CMCBackend):
         mcmc_config: Dict[str, Any],
         init_params: Dict[str, float],
         inv_mass_matrix: np.ndarray,
-        analysis_mode: str = "static_isotropic",
-        parameter_space: Optional['ParameterSpace'] = None,
+        analysis_mode: str,
+        parameter_space,
     ) -> List[Dict[str, Any]]:
         """Run MCMC on all shards using JAX pmap or sequential execution.
 
@@ -183,10 +183,10 @@ class PjitBackend(CMCBackend):
         inv_mass_matrix : np.ndarray
             Inverse mass matrix for NUTS initialization
             (typically identity matrix, adapted during warmup)
-        analysis_mode : str, optional
+        analysis_mode : str
             Analysis mode ('static_isotropic' or 'laminar_flow')
-        parameter_space : ParameterSpace, optional
-            Parameter space with configuration-specific bounds (if None, default bounds will be used)
+        parameter_space : ParameterSpace
+            Parameter space with configuration-specific bounds
 
         Returns
         -------
@@ -539,8 +539,14 @@ class PjitBackend(CMCBackend):
             # Check convergence
             converged = self._check_convergence(diagnostics)
 
+            # Create error message if not converged
+            error_msg = None
+            if not converged:
+                error_msg = "Convergence criteria not met (check diagnostics for details)"
+
             return {
                 'converged': converged,
+                'error': error_msg,
                 'samples': samples_array,
                 'diagnostics': diagnostics,
                 'shard_idx': shard_idx,

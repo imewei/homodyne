@@ -109,6 +109,27 @@ def inv_mass_matrix():
 
 
 @pytest.fixture
+def parameter_space():
+    """Create parameter space for static_isotropic model."""
+    from homodyne.config.parameter_space import ParameterSpace
+
+    # Create minimal config dict for static_isotropic mode
+    config_dict = {
+        "analysis_mode": "static_isotropic",
+        "parameter_space": {
+            "model": "static",
+            "bounds": [
+                {"name": "D0", "min": 100.0, "max": 10000.0},
+                {"name": "alpha", "min": 0.0, "max": 2.0},
+                {"name": "D_offset", "min": 0.0, "max": 100.0},
+            ]
+        }
+    }
+
+    return ParameterSpace.from_config(config_dict, analysis_mode="static_isotropic")
+
+
+@pytest.fixture
 def temp_dir():
     """Create temporary directory for tests."""
     temp_path = Path(tempfile.mkdtemp(prefix="test_backend_"))
@@ -669,7 +690,7 @@ Job Id: 12345.pbsserver
 
 @pytest.mark.slow
 @pytest.mark.integration
-def test_backend_integration_comparison(synthetic_shards, mcmc_config, init_params, inv_mass_matrix):
+def test_backend_integration_comparison(synthetic_shards, mcmc_config, init_params, inv_mass_matrix, parameter_space):
     """Integration test: Compare results from different backends (if available)."""
     # Skip if backends not available
     if not (PJIT_AVAILABLE and MULTIPROCESSING_AVAILABLE):
@@ -677,6 +698,7 @@ def test_backend_integration_comparison(synthetic_shards, mcmc_config, init_para
 
     # Use single shard for comparison
     shards = [synthetic_shards[0]]
+    analysis_mode = "static_isotropic"
 
     # Run with pjit backend
     pjit_backend = get_backend_by_name('pjit')
@@ -685,6 +707,8 @@ def test_backend_integration_comparison(synthetic_shards, mcmc_config, init_para
         mcmc_config=mcmc_config,
         init_params=init_params,
         inv_mass_matrix=inv_mass_matrix,
+        analysis_mode=analysis_mode,
+        parameter_space=parameter_space,
     )
 
     # Run with multiprocessing backend
@@ -694,6 +718,8 @@ def test_backend_integration_comparison(synthetic_shards, mcmc_config, init_para
         mcmc_config=mcmc_config,
         init_params=init_params,
         inv_mass_matrix=inv_mass_matrix,
+        analysis_mode=analysis_mode,
+        parameter_space=parameter_space,
     )
 
     # Both should return same number of results
