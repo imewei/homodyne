@@ -544,14 +544,26 @@ class PjitBackend(CMCBackend):
             samples_dict = mcmc.get_samples()
 
             # Convert to numpy arrays - parameter order based on analysis_mode
-            if analysis_mode == "static_isotropic":
-                # 5 parameters: contrast, offset, D0, alpha, D_offset
-                param_names = ['contrast', 'offset', 'D0', 'alpha', 'D_offset']
-            else:  # laminar_flow
-                # 9 parameters: contrast, offset, D0, alpha, D_offset, gamma_dot_t0, beta, gamma_dot_t_offset, phi0
-                # NOTE: Must match parameter names in mcmc.py:_create_numpyro_model()
-                param_names = ['contrast', 'offset', 'D0', 'alpha', 'D_offset',
-                             'gamma_dot_t0', 'beta', 'gamma_dot_t_offset', 'phi0']
+            # Use centralized parameter names from homodyne.config.parameter_names
+            # to ensure consistency with model definition in mcmc.py
+            from homodyne.config.parameter_names import get_parameter_names
+            param_names = get_parameter_names(analysis_mode)
+
+            # VALIDATION: Verify all expected parameters exist in samples_dict
+            # This prevents KeyError during sample extraction due to parameter name mismatches
+            missing = [p for p in param_names if p not in samples_dict]
+            if missing:
+                available = list(samples_dict.keys())
+                raise KeyError(
+                    f"Missing parameters in MCMC samples for shard {shard_idx} ({analysis_mode}):\n"
+                    f"Missing: {missing}\n"
+                    f"Expected: {param_names}\n"
+                    f"Available: {available}\n\n"
+                    f"This indicates a parameter name mismatch between NumPyro model "
+                    f"definition (mcmc.py:_create_numpyro_model) and sample extraction "
+                    f"(pjit.py:_run_single_shard_mcmc). Verify both use identical parameter "
+                    f"names as defined in homodyne.config.parameter_names"
+                )
 
             samples_array = np.stack([
                 np.array(samples_dict[name]) for name in param_names

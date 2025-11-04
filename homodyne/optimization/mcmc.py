@@ -1327,19 +1327,14 @@ def _create_numpyro_model(
 
     def homodyne_model():
         """Inner NumPyro model function with config-driven priors."""
+        # Import parameter name constants to ensure consistency
+        from homodyne.config.parameter_names import get_parameter_names
+
         # Determine parameter list based on analysis mode
         # Note: Scaling parameters (contrast, offset) are always first
-        if "static" in analysis_mode:
-            # Static mode: 5 parameters (scaling + physics)
-            param_names_ordered = [
-                "contrast", "offset", "D0", "alpha", "D_offset"
-            ]
-        else:
-            # Laminar flow mode: 9 parameters (scaling + physics + flow)
-            param_names_ordered = [
-                "contrast", "offset", "D0", "alpha", "D_offset",
-                "gamma_dot_t0", "beta", "gamma_dot_t_offset", "phi0"
-            ]
+        # Using centralized parameter names from homodyne.config.parameter_names
+        # to prevent mismatches with sample extraction logic
+        param_names_ordered = get_parameter_names(analysis_mode)
 
         # =====================================================================
         # DYNAMIC PRIOR SAMPLING FROM CONFIG
