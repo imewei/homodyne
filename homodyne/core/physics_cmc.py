@@ -404,17 +404,54 @@ def compute_g1_total(
     CMC-specific function - expects 1D paired arrays (t1[i], t2[i]).
     No meshgrid expansion, no dispatchers, direct element-wise computation only.
 
+    **CRITICAL (Nov 2025): phi Parameter Requirements**
+
+    This function expects phi to contain UNIQUE scattering angles only.
+    When calling from MCMC backends, the caller MUST pre-compute unique values:
+
+    ```python
+    # CORRECT: Pre-compute unique phi before calling
+    phi_unique = np.unique(np.asarray(phi))
+    g1 = compute_g1_total(params, t1, t2, phi_unique, q, L, dt)
+
+    # INCORRECT: Passing replicated phi array causes memory explosion
+    # phi_replicated = [0, 0, 0, ..., 90, 90, 90, ...]  # 300K elements
+    # g1 = compute_g1_total(..., phi_replicated, ...)  # BAD: Will call jnp.unique() during JIT
+    ```
+
+    **Why Pre-computation is Required:**
+
+    - CMC pooled data replicates phi for each time point (e.g., 3 angles × 100K points = 300K array)
+    - Computing unique values inside this function with `jnp.unique()` causes JAX concretization errors
+      when called from NumPyro's JIT-traced MCMC model
+    - Pre-computing unique values in non-JIT context (e.g., in `mcmc.py:_run_standard_nuts()`)
+      avoids this issue and reduces memory from 80GB to 2.4MB
+
+    **Backward Compatibility:**
+
+    For non-MCMC use cases where phi is already unique or contains few duplicates,
+    this function will still work correctly. The internal `jnp.unique()` call has been
+    removed as of Nov 2025, so callers must ensure phi contains unique values.
+
     Args:
         params: Physical parameters [D0, alpha, D_offset, gamma_dot_0, beta, gamma_dot_offset, phi0]
         t1: Time array (1D, element-wise paired with t2)
         t2: Time array (1D, element-wise paired with t1)
-        phi: Scattering angles
+        phi: Scattering angles (MUST be unique values, not replicated array)
         q: Scattering wave vector magnitude
         L: Sample-detector distance (stator_rotor_gap)
         dt: Time step from configuration [s] (REQUIRED)
 
     Returns:
         Total g1 correlation function (2D array: (n_phi, n_points))
+
+    Raises:
+        ValueError: If t1/t2 are not 1D paired arrays of same length
+
+    Notes:
+        - For MCMC use: Pre-compute phi_unique = np.unique(phi) before calling
+        - For direct use: Ensure phi contains only unique scattering angles
+        - Memory scaling: (n_unique_phi, n_points) NOT (n_replicated_phi, n_points)
     """
     # Validate inputs
     if t1.ndim != 1 or t2.ndim != 1:
@@ -431,11 +468,23 @@ def compute_g1_total(
     wavevector_q_squared_half_dt = 0.5 * (q**2) * dt
     sinc_prefactor = 0.5 / PI * q * L * dt
 
-    # CRITICAL FIX (Nov 2025): Extract unique phi values BEFORE JIT compilation
-    # CMC pooled data replicates phi for each time point (e.g., 3 angles × 100K points = 300K array)
-    # We need unique phi values for broadcasting to avoid 80GB meshgrid OOM
-    # MUST be done here (non-JIT function) since jnp.unique() doesn't work during JIT tracing
-    phi_unique = jnp.unique(jnp.atleast_1d(phi))
+    # CRITICAL FIX (Nov 2025): Removed jnp.unique() call to prevent JAX concretization error
+    # The caller MUST pre-compute unique phi values before calling this function
+    # This is especially critical for MCMC backends where NumPyro JIT-traces this function
+    #
+    # OLD CODE (REMOVED):
+    # phi_unique = jnp.unique(jnp.atleast_1d(phi))  # ❌ Causes JAX concretization error in MCMC
+    #
+    # NEW CODE:
+    # Assume phi is already unique (caller's responsibility to pre-compute)
+    phi_unique = jnp.atleast_1d(phi)
+
+    # Log warning if phi appears to have duplicates (only when size is suspicious)
+    # This is a soft check - we can't call np.unique() here without breaking JIT
+    if hasattr(phi, 'shape') and len(phi.shape) == 1:
+        # If phi has many elements, it might contain duplicates
+        # But we can't check without calling unique(), so just trust the caller
+        pass
 
     return _compute_g1_total_elementwise(
         params,

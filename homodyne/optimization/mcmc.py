@@ -962,8 +962,14 @@ def _run_standard_nuts(
         if sigma is None:
             sigma = _estimate_noise(data)
 
-        # Pre-compute dt before JIT compilation to avoid jnp.unique() JAX concretization error
+        # =====================================================================
+        # PRE-COMPUTATION BEFORE JIT TRACING
+        # =====================================================================
+        # Pre-compute dt and phi_unique BEFORE JIT compilation to avoid JAX concretization errors
         # This fixes: "Abstract tracer value encountered where concrete value is expected"
+        # when jnp.unique() is called during NumPyro's JIT tracing
+
+        # Pre-compute dt
         dt_computed = None
         if t1 is not None:
             import numpy as np  # Use numpy (not jax.numpy) for pre-computation
@@ -979,13 +985,27 @@ def _run_standard_nuts(
                 dt_computed = 1.0  # Fallback
             logger.debug(f"Pre-computed dt = {dt_computed:.6f} s for MCMC model")
 
+        # Pre-compute phi_unique (CRITICAL FIX for JAX concretization error)
+        # CMC pooled data replicates phi for each time point (e.g., 3 angles × 100K points = 300K array)
+        # We need unique phi values for broadcasting, but jnp.unique() doesn't work during JIT tracing
+        # Extract unique values HERE (non-JIT context) and pass to model as closure variable
+        phi_unique = None
+        if phi is not None and "laminar" in analysis_mode.lower():
+            import numpy as np  # Use numpy (not jax.numpy) for pre-computation
+            phi_unique = np.unique(np.asarray(phi))
+            logger.debug(
+                f"Pre-computed phi_unique: {len(phi_unique)} unique angles from {len(phi)} total values "
+                f"(reduction: {len(phi)/len(phi_unique):.1f}x)"
+            )
+
         # Create NumPyro model using physics-informed priors from ParameterSpace
+        # Pass phi_unique (if available) instead of full phi array to avoid JIT tracing jnp.unique()
         model = _create_numpyro_model(
             data,
             sigma,
             t1,
             t2,
-            phi,
+            phi_unique if phi_unique is not None else phi,  # Use pre-computed unique values
             q,
             L,
             analysis_mode,
@@ -1176,7 +1196,7 @@ def _create_numpyro_model(
     t1, t2 : array
         Time delay arrays
     phi : array
-        Azimuthal angle array
+        Azimuthal angle array (pre-computed unique values for laminar_flow)
     q : float
         Wavevector magnitude
     L : float
@@ -1201,6 +1221,21 @@ def _create_numpyro_model(
 
     Notes
     -----
+    **CRITICAL FIX (Nov 2025): Pre-computed phi_unique**
+
+    The phi parameter passed to this function should be pre-computed unique values
+    (not the full replicated array) when using laminar_flow mode. This avoids
+    JAX concretization errors when NumPyro JIT-traces the model.
+
+    The caller (_run_standard_nuts) must pre-compute:
+    ```python
+    phi_unique = np.unique(np.asarray(phi))
+    model = _create_numpyro_model(..., phi=phi_unique, ...)
+    ```
+
+    This ensures jnp.unique() is never called during JIT tracing, which would
+    cause: "Abstract tracer value encountered where concrete value is expected"
+
     **Config-Driven Prior Creation:**
 
     Priors are created dynamically from the ParameterSpace object, which is
@@ -1261,10 +1296,13 @@ def _create_numpyro_model(
     >>> from homodyne.config.parameter_space import ParameterSpace
     >>> param_space = ParameterSpace.from_config(config_dict)
     >>>
+    >>> # Pre-compute phi_unique (CRITICAL for laminar_flow)
+    >>> phi_unique = np.unique(np.asarray(phi))
+    >>>
     >>> # Create model
     >>> model = _create_numpyro_model(
-    ...     data, sigma, t1, t2, phi, q, L,
-    ...     analysis_mode='static_isotropic',
+    ...     data, sigma, t1, t2, phi_unique, q, L,
+    ...     analysis_mode='laminar_flow',
     ...     parameter_space=param_space
     ... )
     >>>
@@ -1387,6 +1425,8 @@ def _create_numpyro_model(
             )
 
         # Pass full params array for proper indexing, plus L and dt for correct physics
+        # NOTE: phi parameter here should be pre-computed unique values (not full replicated array)
+        # This avoids JAX concretization error when compute_g1_total() is called
         c2_theory = _compute_simple_theory_jit(params, t1, t2, phi, q, analysis_mode, L, dt)
 
         # Scaled model: c2_fitted = contrast * c2_theory + offset
@@ -1412,7 +1452,7 @@ def _compute_simple_theory(params, t1, t2, phi, q, analysis_mode, L=None, dt=Non
     t1, t2 : arrays
         Time delay arrays
     phi : array
-        Angle array (required for laminar_flow)
+        Angle array (pre-computed unique values for laminar_flow)
     q : scalar
         Wavevector magnitude
     analysis_mode : str
@@ -1429,6 +1469,18 @@ def _compute_simple_theory(params, t1, t2, phi, q, analysis_mode, L=None, dt=Non
 
     Notes
     -----
+    **CRITICAL FIX (Nov 2025): Pre-computed phi_unique**
+
+    The phi parameter must be pre-computed unique values (not replicated array)
+    when using laminar_flow mode. This avoids JAX concretization errors during
+    NumPyro's JIT tracing when compute_g1_total() is called.
+
+    The caller must ensure phi contains only unique angles:
+    ```python
+    phi_unique = np.unique(np.asarray(phi))
+    c2_theory = _compute_simple_theory(..., phi=phi_unique, ...)
+    ```
+
     This function now uses the proper physics from core.jax_backend to match
     NLSQ optimization, fixing the NaN ELBO issue caused by physics mismatch.
     """
@@ -1452,11 +1504,14 @@ def _compute_simple_theory(params, t1, t2, phi, q, analysis_mode, L=None, dt=Non
             L = 2000000.0  # Default: 200 µm in Angstroms
             logger.debug(f"Using default L = {L:.1f} Å for laminar_flow model")
 
+        # CRITICAL: phi here should be pre-computed unique values
+        # compute_g1_total will NOT call jnp.unique() since phi is already unique
+        # This is handled by the pre-computation in _run_standard_nuts()
         g1 = compute_g1_total(
             phys_params,  # [D0, alpha, D_offset, gamma_dot_t0, beta, gamma_dot_t_offset, phi0]
             t1,
             t2,
-            phi,
+            phi,  # Pre-computed unique values (not replicated array)
             q,
             L,
             dt,
