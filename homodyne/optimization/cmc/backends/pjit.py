@@ -479,6 +479,19 @@ class PjitBackend(CMCBackend):
                 dt_computed = 1.0  # Fallback
             logger.debug(f"Shard {shard_idx}: Pre-computed dt = {dt_computed:.6f} s for MCMC model")
 
+        # CRITICAL FIX (Nov 2025): Pre-compute unique phi values to prevent 80GB OOM error
+        # CMC shards contain replicated phi arrays (e.g., 100K elements for 3 unique angles)
+        # physics_cmc.compute_g1_total() requires unique phi to avoid memory explosion:
+        #   - Replicated: (100K, 100K) broadcast → 80GB
+        #   - Unique: (3, 100K) broadcast → 2.4MB
+        # This extraction MUST happen before JIT compilation (NumPyro model creation)
+        phi_unique = np.unique(np.asarray(phi_np))
+        logger.debug(
+            f"Shard {shard_idx}: Extracted {len(phi_unique)} unique phi values from "
+            f"{len(phi_np)} replicated elements (memory reduction: "
+            f"{len(phi_np)}→{len(phi_unique)}, {len(phi_np)/len(phi_unique):.1f}x)"
+        )
+
         # Create NumPyro model using parameter_space bounds
         # Use real model from mcmc.py that respects parameter_space configuration
         # Lazy import to avoid circular dependency
@@ -489,7 +502,7 @@ class PjitBackend(CMCBackend):
             sigma=sigma_np,
             t1=t1_np,
             t2=t2_np,
-            phi=phi_np,
+            phi=phi_unique,  # FIXED: Use unique phi values (not replicated array)
             q=q,
             L=L,
             analysis_mode=analysis_mode,
