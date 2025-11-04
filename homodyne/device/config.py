@@ -355,8 +355,8 @@ def should_use_cmc(
     Use CMC if:
     1. num_samples >= min_samples_for_cmc (parallelism mode), OR
     2. estimated_memory_gb > threshold × available_memory (memory mode), OR
-    3. (dataset_size > large_dataset_threshold AND num_samples >= min_samples_for_cmc)
-       (JAX broadcasting protection with sufficient parallelism), OR
+    3. dataset_size > large_dataset_threshold
+       (JAX broadcasting protection - independent of sample count), OR
     4. (dataset_size > large_dataset_threshold_low_sample AND 2 <= num_samples < min_samples_for_cmc)
        (proactive OOM prevention for large datasets with few samples)
 

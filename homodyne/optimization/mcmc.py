@@ -1183,7 +1183,7 @@ def _create_numpyro_model(
     use_simplified=True,
     dt=None,
     phi_full=None,
-    per_angle_scaling=True,
+    per_angle_scaling=True,  # Default True: Physically correct per-angle scaling
 ):
     """Create NumPyro probabilistic model using config-driven priors.
 
@@ -1230,8 +1230,13 @@ def _create_numpyro_model(
         Example: [0, 0, 0, ..., 60, 60, 60, ..., 120, 120, 120, ...]
         If None and per_angle_scaling=True, will use phi for mapping (assumes pre-sorted data)
     per_angle_scaling : bool, default=True
-        If True, sample contrast and offset as arrays of shape (n_phi,) for per-angle scaling
-        If False, use legacy behavior with scalar contrast and offset (shared across all angles)
+        If True (default), sample contrast and offset as arrays of shape (n_phi,) for per-angle scaling.
+        This is the physically correct behavior as each scattering angle can have different
+        optical properties and detector responses.
+
+        If False, use legacy behavior with scalar contrast and offset (shared across all angles).
+        This mode is provided for backward compatibility testing only and is not recommended
+        for production analysis.
 
     Returns
     -------
@@ -1344,6 +1349,21 @@ def _create_numpyro_model(
         "LogNormal": dist.LogNormal,
     }
 
+    # =========================================================================
+    # PRE-COMPUTE PHI VALUES BEFORE JIT TRACING (CRITICAL FIX)
+    # =========================================================================
+    # CRITICAL FIX (Nov 2025): Pre-compute phi_unique BEFORE model function definition
+    # to avoid JAX concretization error during NumPyro's JIT tracing.
+    #
+    # The model function will be JIT-compiled by NumPyro, so any values that need to be
+    # concrete (actual values, not abstract tracers) must be computed BEFORE the model
+    # function is defined. These values are captured by the closure.
+    #
+    # Using numpy (not jax.numpy) ensures we get concrete values:
+    phi_array_for_mapping = phi_full if phi_full is not None else phi
+    phi_unique_for_sampling = np.unique(np.asarray(phi))  # numpy, not jnp!
+    n_phi = len(phi_unique_for_sampling)  # Python int, not JAX tracer
+
     def homodyne_model():
         """Inner NumPyro model function with config-driven priors."""
         # Import parameter name constants to ensure consistency
@@ -1359,11 +1379,8 @@ def _create_numpyro_model(
         # DYNAMIC PRIOR SAMPLING FROM CONFIG
         # =====================================================================
         # NEW (Nov 2025): Per-angle contrast and offset sampling
-        #
-        # Determine number of phi angles for per-angle scaling
-        phi_array_for_mapping = phi_full if phi_full is not None else phi
-        phi_unique_for_sampling = jnp.unique(jnp.atleast_1d(phi))
-        n_phi = len(phi_unique_for_sampling)
+        # Note: phi_array_for_mapping, phi_unique_for_sampling, and n_phi are
+        # pre-computed above (before model definition) and captured by closure
 
         # Sample parameters dynamically using config-driven priors
         # Loop through all parameters in correct order (scaling + physics)

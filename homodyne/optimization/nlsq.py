@@ -142,8 +142,9 @@ def fit_nlsq_jax(
     data: dict[str, Any],
     config: ConfigManager,
     initial_params: dict[str, float] | None = None,
+    per_angle_scaling: bool = True,
 ) -> OptimizationResult:
-    """NLSQ trust-region nonlinear least squares optimization (NEW IMPLEMENTATION).
+    """NLSQ trust-region nonlinear least squares optimization with per-angle scaling (NEW IMPLEMENTATION).
 
     Backward-compatible wrapper around NLSQWrapper that provides the legacy API.
     Uses the NLSQ package (github.com/imewei/NLSQ) for trust-region optimization.
@@ -180,6 +181,10 @@ def fit_nlsq_jax(
         Configuration manager with optimization settings
     initial_params : dict, optional
         Initial parameter guesses. If None, uses defaults from config.
+    per_angle_scaling : bool, default=True
+        If True (default), use per-angle contrast/offset parameters. This is the
+        physically correct behavior as each scattering angle can have different
+        optical properties and detector responses.
 
     Returns
     -------
@@ -378,6 +383,7 @@ def fit_nlsq_jax(
         initial_params=x0,
         bounds=bounds,
         analysis_mode=analysis_mode,
+        per_angle_scaling=per_angle_scaling,
     )
 
     logger.info(f"NLSQ optimization completed in {result.execution_time:.3f}s")

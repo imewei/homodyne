@@ -34,10 +34,10 @@ class TestAutomaticNUTSCMCSelection:
     """Test automatic NUTS/CMC selection based on dual-criteria OR logic."""
 
     def test_automatic_nuts_selection_for_small_datasets(self):
-        """Test NUTS selected for small datasets (10 samples, 5M points)."""
-        # Arrange - Small dataset (below both thresholds)
+        """Test NUTS selected for small datasets (10 samples, 500K points)."""
+        # Arrange - Small dataset (below all thresholds)
         num_samples = 10  # Below min_samples_for_cmc (15)
-        dataset_size = 5_000_000  # Small data
+        dataset_size = 500_000  # Below JAX broadcasting threshold (1M)
         hw_config = HardwareConfig(
             platform="cpu",
             num_devices=1,
@@ -127,7 +127,7 @@ class TestAutomaticNUTSCMCSelection:
         """Test that thresholds are configurable via YAML config."""
         # Arrange - Custom thresholds (stricter than defaults)
         num_samples = 12
-        dataset_size = 8_000_000
+        dataset_size = 800_000  # Below JAX broadcasting threshold (1M)
         hw_config = HardwareConfig(
             platform="cpu",
             num_devices=1,

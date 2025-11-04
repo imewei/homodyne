@@ -212,13 +212,15 @@ class TestNumPyroModelCreation:
         rng_key = random.PRNGKey(42)
         prior_samples = prior_predictive(rng_key)
 
-        # Check that all parameters are sampled
-        expected_params = ["contrast", "offset", "D0", "alpha", "D_offset", "obs"]
+        # Check that all parameters are sampled (per-angle mode with n_phi=1)
+        # With per_angle_scaling=True (default), expect contrast_0, offset_0 instead of contrast, offset
+        expected_params = ["contrast_0", "offset_0", "D0", "alpha", "D_offset", "obs"]
         for param in expected_params:
             assert param in prior_samples, f"Missing parameter: {param}"
 
-        # Check sample shapes
-        assert prior_samples["contrast"].shape == (10,)
+        # Check sample shapes (per-angle parameters)
+        assert prior_samples["contrast_0"].shape == (10,)
+        assert prior_samples["offset_0"].shape == (10,)
         assert prior_samples["D0"].shape == (10,)
         assert prior_samples["obs"].shape == (10, len(simple_data["data"]))
 
@@ -244,10 +246,11 @@ class TestNumPyroModelCreation:
         rng_key = random.PRNGKey(42)
         prior_samples = prior_predictive(rng_key)
 
-        # Check that all parameters are sampled (9 for laminar flow)
+        # Check that all parameters are sampled (per-angle mode with n_phi=1)
+        # With per_angle_scaling=True (default), expect contrast_0, offset_0 instead of contrast, offset
         expected_params = [
-            "contrast",
-            "offset",
+            "contrast_0",
+            "offset_0",
             "D0",
             "alpha",
             "D_offset",
@@ -260,8 +263,9 @@ class TestNumPyroModelCreation:
         for param in expected_params:
             assert param in prior_samples, f"Missing parameter: {param}"
 
-        # Check sample shapes
-        assert prior_samples["contrast"].shape == (10,)
+        # Check sample shapes (per-angle parameters)
+        assert prior_samples["contrast_0"].shape == (10,)
+        assert prior_samples["offset_0"].shape == (10,)
         assert prior_samples["gamma_dot_t0"].shape == (10,)
         assert prior_samples["obs"].shape == (10, len(simple_data["data"]))
 
@@ -489,8 +493,8 @@ class TestParameterOrdering:
         """Test static mode has correct 5-parameter order."""
         param_space = ParameterSpace.from_defaults("static")
 
-        # Expected order for static mode
-        expected_order = ["contrast", "offset", "D0", "alpha", "D_offset"]
+        # Expected order for static mode (per-angle mode with n_phi=1)
+        expected_order = ["contrast_0", "offset_0", "D0", "alpha", "D_offset"]
 
         # Create minimal data
         n = 10
@@ -519,10 +523,10 @@ class TestParameterOrdering:
         """Test laminar_flow mode has correct 9-parameter order."""
         param_space = ParameterSpace.from_defaults("laminar_flow")
 
-        # Expected order for laminar flow mode
+        # Expected order for laminar flow mode (per-angle mode with n_phi=1)
         expected_order = [
-            "contrast",
-            "offset",
+            "contrast_0",
+            "offset_0",
             "D0",
             "alpha",
             "D_offset",

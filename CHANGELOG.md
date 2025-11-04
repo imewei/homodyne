@@ -7,6 +7,206 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ______________________________________________________________________
 
+## [Unreleased]
+
+### 🎯 Per-Angle Contrast/Offset Feature
+
+Homodyne now implements **per-angle contrast and offset parameters**, allowing each scattering angle (phi) to have independent scaling parameters. This is the **physically correct behavior** as different scattering angles can have different optical properties and detector responses.
+
+______________________________________________________________________
+
+### Breaking Changes
+
+#### Default Behavior Change: per_angle_scaling=True
+
+**CRITICAL:** Both MCMC and NLSQ now default to per-angle scaling mode (`per_angle_scaling=True`). This is a breaking change in parameter structure and naming.
+
+**Parameter Structure Changes:**
+
+**MCMC Model Parameters:**
+
+```python
+# OLD (v2.1.0): Global contrast/offset
+samples = {
+    "contrast": [0.5],      # Single value for all angles
+    "offset": [1.0],        # Single value for all angles
+    "D0": [1000.0],
+    "alpha": [0.5],
+    ...
+}
+
+# NEW (Unreleased): Per-angle contrast/offset
+samples = {
+    "contrast_0": [0.5],    # Contrast for phi angle 0
+    "contrast_1": [0.6],    # Contrast for phi angle 1
+    "contrast_2": [0.7],    # Contrast for phi angle 2
+    "offset_0": [1.0],      # Offset for phi angle 0
+    "offset_1": [1.1],      # Offset for phi angle 1
+    "offset_2": [1.2],      # Offset for phi angle 2
+    "D0": [1000.0],         # Physical params shared across angles
+    "alpha": [0.5],
+    ...
+}
+```
+
+**NLSQ Optimization Parameters:**
+
+```python
+# OLD (v2.1.0): 5 parameters for static mode
+parameters = [contrast, offset, D0, alpha, D_offset]
+
+# NEW (Unreleased): (2*n_phi + 3) parameters for static mode
+# For n_phi=3:
+parameters = [
+    contrast_0, contrast_1, contrast_2,  # Per-angle contrasts
+    offset_0, offset_1, offset_2,        # Per-angle offsets
+    D0, alpha, D_offset                  # Physical parameters
+]
+```
+
+**Total Parameter Counts:**
+- **Static Mode (OLD)**: 5 params (2 scaling + 3 physical)
+- **Static Mode (NEW with n_phi=3)**: 9 params (6 scaling + 3 physical)
+- **Laminar Flow (OLD)**: 9 params (2 scaling + 7 physical)
+- **Laminar Flow (NEW with n_phi=3)**: 15 params (6 scaling + 7 physical)
+
+**Formula:** `total_params = (2 × n_phi) + n_physical`
+
+#### API Changes
+
+**MCMC (`_create_numpyro_model`):**
+
+```python
+# NEW parameter (default=True)
+def _create_numpyro_model(
+    ...,
+    per_angle_scaling: bool = True,  # NEW: Physically correct default
+):
+    """
+    Parameters
+    ----------
+    per_angle_scaling : bool, default=True
+        If True (default), sample contrast and offset as arrays of shape (n_phi,)
+        for per-angle scaling. This is the physically correct behavior.
+
+        If False, use legacy behavior with scalar contrast/offset (shared across
+        all angles). This mode is provided for backward compatibility testing only.
+    """
+```
+
+**NLSQ (`fit_nlsq_jax`):**
+
+```python
+# NEW parameter (default=True)
+def fit_nlsq_jax(
+    data: dict,
+    config: ConfigManager,
+    initial_params: dict | None = None,
+    per_angle_scaling: bool = True,  # NEW: Physically correct default
+) -> OptimizationResult:
+    """
+    Parameters
+    ----------
+    per_angle_scaling : bool, default=True
+        If True (default), use per-angle contrast/offset parameters. This is the
+        physically correct behavior as each scattering angle can have different
+        optical properties and detector responses.
+    """
+```
+
+#### Migration Guide
+
+**For Existing Code:**
+
+If you have code that expects global `contrast` and `offset` parameters, you have two options:
+
+**Option 1: Update to Per-Angle (Recommended)**
+
+```python
+# Update your code to handle per-angle parameters
+result = fit_mcmc_jax(data, config)  # per_angle_scaling=True by default
+
+# Access per-angle parameters
+for i in range(n_phi):
+    contrast_i = result.samples[f"contrast_{i}"]
+    offset_i = result.samples[f"offset_{i}"]
+```
+
+**Option 2: Use Legacy Mode (Backward Compatibility)**
+
+```python
+# Explicitly request legacy behavior
+result = fit_mcmc_jax(data, config, per_angle_scaling=False)
+
+# Access global parameters (old behavior)
+contrast = result.samples["contrast"]
+offset = result.samples["offset"]
+```
+
+**For Tests:**
+
+Update test expectations to check for per-angle parameter names:
+
+```python
+# OLD
+assert "contrast" in samples
+assert "offset" in samples
+
+# NEW (for n_phi=1)
+assert "contrast_0" in samples
+assert "offset_0" in samples
+
+# NEW (for n_phi=3)
+assert "contrast_0" in samples
+assert "contrast_1" in samples
+assert "contrast_2" in samples
+assert "offset_0" in samples
+assert "offset_1" in samples
+assert "offset_2" in samples
+```
+
+#### Rationale
+
+**Physical Correctness:**
+- Different scattering angles probe different length scales in the sample
+- Detector response varies across the detector surface
+- Optical path differences affect signal intensity
+- Each angle can have different contrast and baseline levels
+
+**Scientific Validation:**
+- Allows fitting data where different angles have genuinely different properties
+- Improves fit quality for heterogeneous samples
+- Enables detection of angle-dependent artifacts
+
+**Implementation:**
+- MCMC: Per-angle parameters sampled independently via NumPyro
+- NLSQ: Per-angle parameters optimized via JAX vmap
+- Closure pattern used to avoid JAX concretization errors
+
+______________________________________________________________________
+
+### Added
+
+- **Per-angle scaling for MCMC**: Each phi angle has independent contrast/offset parameters
+- **Per-angle scaling for NLSQ**: Trust-region optimization with per-angle parameters
+- **Comprehensive per-angle tests**: 8 new tests covering multiple angles, independence, and backward compatibility
+  - `tests/unit/test_per_angle_scaling.py`: Full test suite for per-angle functionality
+- **JAX concretization fix**: Pre-compute phi_unique before JIT tracing to avoid abstract tracer errors
+  - Location: `homodyne/optimization/mcmc.py:1347-1360`
+
+### Changed
+
+- **Default behavior**: `per_angle_scaling=True` is now the default for both MCMC and NLSQ
+- **Parameter naming**: Contrast/offset now named as `contrast_0`, `offset_0`, etc. by default
+- **Test expectations**: Updated all MCMC unit tests to expect per-angle parameter names
+
+### Fixed
+
+- **JAX concretization error**: Fixed ConcretizationTypeError when calling `jnp.unique()` inside JIT-traced MCMC model
+- **MCMC model parameter structure**: Properly handles variable number of phi angles
+
+______________________________________________________________________
+
 ## [2.1.0] - 2025-10-31
 
 ### 🎉 MCMC/CMC Simplification Release
