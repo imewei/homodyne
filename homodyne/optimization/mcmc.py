@@ -1000,6 +1000,7 @@ def _run_standard_nuts(
 
         # Create NumPyro model using physics-informed priors from ParameterSpace
         # Pass phi_unique (if available) instead of full phi array to avoid JIT tracing jnp.unique()
+        # Also pass phi_full for per-angle contrast/offset scaling
         model = _create_numpyro_model(
             data,
             sigma,
@@ -1012,6 +1013,8 @@ def _run_standard_nuts(
             parameter_space,
             use_simplified=use_simplified_likelihood,
             dt=dt_computed,
+            phi_full=phi,  # Full replicated phi array for per-angle scaling mapping
+            per_angle_scaling=True,  # Enable per-angle contrast/offset
         )
 
         # Log initial values if provided (for MCMC chain initialization)
@@ -1179,6 +1182,8 @@ def _create_numpyro_model(
     parameter_space,
     use_simplified=True,
     dt=None,
+    phi_full=None,
+    per_angle_scaling=True,
 ):
     """Create NumPyro probabilistic model using config-driven priors.
 
@@ -1186,6 +1191,13 @@ def _create_numpyro_model(
     generated from the ParameterSpace configuration. It supports multiple
     distribution types (Normal, TruncatedNormal, Uniform, LogNormal) and
     automatically handles parameter ordering for different analysis modes.
+
+    **NEW (Nov 2025): Per-angle contrast and offset parameters**
+
+    When per_angle_scaling=True, contrast and offset are sampled as arrays of
+    shape (n_phi,) instead of scalars, allowing different scaling parameters
+    for each phi angle. This requires phi_full to create the mapping from
+    data points to phi angles.
 
     Parameters
     ----------
@@ -1213,6 +1225,13 @@ def _create_numpyro_model(
         Use simplified likelihood for faster computation
     dt : float, optional
         Time step (pre-computed to avoid JAX concretization errors)
+    phi_full : array, optional
+        Full replicated phi array matching data length (required for per_angle_scaling)
+        Example: [0, 0, 0, ..., 60, 60, 60, ..., 120, 120, 120, ...]
+        If None and per_angle_scaling=True, will use phi for mapping (assumes pre-sorted data)
+    per_angle_scaling : bool, default=True
+        If True, sample contrast and offset as arrays of shape (n_phi,) for per-angle scaling
+        If False, use legacy behavior with scalar contrast and offset (shared across all angles)
 
     Returns
     -------
@@ -1339,10 +1358,17 @@ def _create_numpyro_model(
         # =====================================================================
         # DYNAMIC PRIOR SAMPLING FROM CONFIG
         # =====================================================================
+        # NEW (Nov 2025): Per-angle contrast and offset sampling
+        #
+        # Determine number of phi angles for per-angle scaling
+        phi_array_for_mapping = phi_full if phi_full is not None else phi
+        phi_unique_for_sampling = jnp.unique(jnp.atleast_1d(phi))
+        n_phi = len(phi_unique_for_sampling)
+
         # Sample parameters dynamically using config-driven priors
         # Loop through all parameters in correct order (scaling + physics)
         sampled_params = []
-        for param_name in param_names_ordered:
+        for i, param_name in enumerate(param_names_ordered):
             # Get prior distribution from parameter space (loaded from YAML config)
             # Handle missing scaling parameters (contrast, offset) with fallback defaults
             try:
@@ -1385,16 +1411,44 @@ def _create_numpyro_model(
             # Get distribution kwargs
             dist_kwargs = prior_spec.to_numpyro_kwargs()
 
-            # Sample parameter
-            param_value = sample(param_name, dist_class(**dist_kwargs))
-            sampled_params.append(param_value)
-
-        # Convert to JAX array for physics computation
-        params = jnp.array(sampled_params)
+            # PER-ANGLE SAMPLING: contrast and offset as separate parameters per phi angle
+            if per_angle_scaling and param_name in ["contrast", "offset"]:
+                # Sample separate parameters for each phi angle
+                # This ensures clean sample extraction and backward compatibility
+                param_values = []
+                for phi_idx in range(n_phi):
+                    # Name: contrast_0, contrast_1, ..., offset_0, offset_1, ...
+                    param_name_phi = f"{param_name}_{phi_idx}"
+                    param_value_phi = sample(param_name_phi, dist_class(**dist_kwargs))
+                    param_values.append(param_value_phi)
+                # Stack into array for per-point indexing
+                param_value = jnp.array(param_values)
+                sampled_params.append(param_value)
+            else:
+                # Sample scalar parameter (standard behavior for physics params)
+                param_value = sample(param_name, dist_class(**dist_kwargs))
+                sampled_params.append(param_value)
 
         # Extract contrast and offset for scaling (always first two parameters)
+        # These are now arrays of shape (n_phi,) if per_angle_scaling=True
         contrast = sampled_params[0]
         offset = sampled_params[1]
+
+        # Build params array for physics computation (physics params only, no scaling)
+        # Physics parameters start at index 2 (after contrast and offset)
+        physics_params = sampled_params[2:]
+        params = jnp.array(physics_params)
+
+        # For backward compatibility with physics functions that expect full params array,
+        # we need to prepend mean values of contrast and offset
+        if per_angle_scaling:
+            # Use mean values for physics computation (theory doesn't need per-angle scaling)
+            contrast_mean = jnp.mean(contrast)
+            offset_mean = jnp.mean(offset)
+            params_full = jnp.concatenate([jnp.array([contrast_mean, offset_mean]), params])
+        else:
+            # Standard behavior: contrast and offset are scalars
+            params_full = jnp.concatenate([jnp.array([contrast, offset]), params])
 
         # =====================================================================
         # THEORETICAL MODEL COMPUTATION
@@ -1422,10 +1476,34 @@ def _create_numpyro_model(
         # Pass full params array for proper indexing, plus L and dt for correct physics
         # NOTE: phi parameter here should be pre-computed unique values (not full replicated array)
         # This avoids JAX concretization error when compute_g1_total() is called
-        c2_theory = _compute_simple_theory_jit(params, t1, t2, phi, q, analysis_mode, L, dt)
+        c2_theory = _compute_simple_theory_jit(params_full, t1, t2, phi, q, analysis_mode, L, dt)
 
-        # Scaled model: c2_fitted = contrast * c2_theory + offset
-        c2_fitted = contrast * c2_theory + offset
+        # PER-ANGLE SCALING: Apply different contrast/offset for each phi angle
+        if per_angle_scaling:
+            # Create mapping from data points to phi angle indices
+            # phi_array_for_mapping contains the full replicated phi array matching data length
+            # phi_unique_for_sampling contains the unique phi values
+            #
+            # Example:
+            #   phi_array_for_mapping = [0, 0, 0, ..., 60, 60, 60, ..., 120, 120, 120]  (300K elements)
+            #   phi_unique_for_sampling = [0, 60, 120]  (3 elements)
+            #   phi_indices = [0, 0, 0, ..., 1, 1, 1, ..., 2, 2, 2]  (300K elements)
+            #
+            # Use searchsorted to find the index of each phi value in the unique array
+            phi_array_for_mapping_jax = jnp.atleast_1d(phi_array_for_mapping)
+            phi_indices = jnp.searchsorted(phi_unique_for_sampling, phi_array_for_mapping_jax)
+
+            # Select the appropriate contrast and offset for each data point
+            # contrast: shape (n_phi,) → contrast_per_point: shape (n_data_points,)
+            # offset: shape (n_phi,) → offset_per_point: shape (n_data_points,)
+            contrast_per_point = contrast[phi_indices]
+            offset_per_point = offset[phi_indices]
+
+            # Apply per-angle scaling
+            c2_fitted = contrast_per_point * c2_theory + offset_per_point
+        else:
+            # LEGACY BEHAVIOR: Global contrast and offset (shared across all angles)
+            c2_fitted = contrast * c2_theory + offset
 
         # Likelihood
         sample("obs", dist.Normal(c2_fitted, sigma), obs=data)

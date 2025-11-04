@@ -417,19 +417,31 @@ def _worker_function(args: tuple) -> Dict[str, Any]:
         else:
             dt = 1.0  # Fallback
 
+        # CRITICAL FIX (Nov 2025): Pre-compute unique phi values to prevent 80GB OOM error
+        # CMC shards contain replicated phi arrays (e.g., 100K elements for 3 unique angles)
+        # Extract unique values before JIT compilation (NumPyro model creation)
+        phi_unique = np.unique(np.asarray(phi_jax))
+        logger.debug(
+            f"Multiprocessing shard {shard_idx}: Extracted {len(phi_unique)} unique phi values from "
+            f"{len(phi_jax)} replicated elements (memory reduction: "
+            f"{len(phi_jax)}→{len(phi_unique)}, {len(phi_jax)/len(phi_unique):.1f}x)"
+        )
+
         # Create proper NumPyro model with actual XPCS physics
         model = _create_numpyro_model(
             data=data_jax,
             sigma=sigma_jax,
             t1=t1_jax,
             t2=t2_jax,
-            phi=phi_jax,
+            phi=phi_unique,  # Use unique phi values for theory computation
             q=q,
             L=L,
             analysis_mode=analysis_mode,
             parameter_space=parameter_space,
             use_simplified=True,
             dt=dt,
+            phi_full=phi_jax,  # Full replicated phi array for per-angle scaling mapping
+            per_angle_scaling=True,  # Enable per-angle contrast/offset
         )
 
         # Create initial values dict from init_params
@@ -460,16 +472,29 @@ def _worker_function(args: tuple) -> Dict[str, Any]:
         # Extract samples
         samples_dict = mcmc.get_samples()
 
-        # Determine parameter ordering based on analysis_mode
-        if "static" in analysis_mode:
-            param_order = ['contrast', 'offset', 'D0', 'alpha', 'D_offset']
-        else:  # laminar_flow
-            param_order = ['contrast', 'offset', 'D0', 'alpha', 'D_offset',
-                          'gamma_dot_t0', 'beta', 'gamma_dot_t_offset', 'phi0']
+        # Use centralized parameter names from homodyne.config.parameter_names
+        from homodyne.config.parameter_names import get_parameter_names
+        param_names_base = get_parameter_names(analysis_mode)
+
+        # PER-ANGLE PARAMETERS: Expand contrast and offset into per-angle names
+        # With per-angle scaling enabled, contrast and offset are sampled as:
+        # contrast_0, contrast_1, ..., contrast_{n_phi-1}
+        # offset_0, offset_1, ..., offset_{n_phi-1}
+        n_phi_samples = len(phi_unique)
+        param_names_expanded = []
+
+        for param_name in param_names_base:
+            if param_name in ["contrast", "offset"]:
+                # Expand into per-angle parameters
+                for phi_idx in range(n_phi_samples):
+                    param_names_expanded.append(f"{param_name}_{phi_idx}")
+            else:
+                # Regular physics parameter (not per-angle)
+                param_names_expanded.append(param_name)
 
         # Stack samples in correct order
         samples_array = np.stack([
-            np.array(samples_dict[name]) for name in param_order
+            np.array(samples_dict[name]) for name in param_names_expanded
         ], axis=1)
 
         # Compute diagnostics

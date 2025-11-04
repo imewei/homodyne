@@ -509,6 +509,8 @@ class PjitBackend(CMCBackend):
             parameter_space=parameter_space,
             use_simplified=True,  # Use simplified likelihood (default, avoids JAX tracing issues)
             dt=dt_computed,  # Pre-computed to avoid JAX concretization error
+            phi_full=phi_np,  # Full replicated phi array for per-angle scaling mapping
+            per_angle_scaling=True,  # Enable per-angle contrast/offset
         )
 
         # Use all init_params (supports both static and laminar_flow modes)
@@ -547,17 +549,33 @@ class PjitBackend(CMCBackend):
             # Use centralized parameter names from homodyne.config.parameter_names
             # to ensure consistency with model definition in mcmc.py
             from homodyne.config.parameter_names import get_parameter_names
-            param_names = get_parameter_names(analysis_mode)
+            param_names_base = get_parameter_names(analysis_mode)
+
+            # PER-ANGLE PARAMETERS: Expand contrast and offset into per-angle names
+            # With per-angle scaling enabled, contrast and offset are sampled as:
+            # contrast_0, contrast_1, ..., contrast_{n_phi-1}
+            # offset_0, offset_1, ..., offset_{n_phi-1}
+            n_phi_samples = len(phi_unique)
+            param_names_expanded = []
+
+            for param_name in param_names_base:
+                if param_name in ["contrast", "offset"]:
+                    # Expand into per-angle parameters
+                    for phi_idx in range(n_phi_samples):
+                        param_names_expanded.append(f"{param_name}_{phi_idx}")
+                else:
+                    # Regular physics parameter (not per-angle)
+                    param_names_expanded.append(param_name)
 
             # VALIDATION: Verify all expected parameters exist in samples_dict
             # This prevents KeyError during sample extraction due to parameter name mismatches
-            missing = [p for p in param_names if p not in samples_dict]
+            missing = [p for p in param_names_expanded if p not in samples_dict]
             if missing:
                 available = list(samples_dict.keys())
                 raise KeyError(
                     f"Missing parameters in MCMC samples for shard {shard_idx} ({analysis_mode}):\n"
                     f"Missing: {missing}\n"
-                    f"Expected: {param_names}\n"
+                    f"Expected: {param_names_expanded}\n"
                     f"Available: {available}\n\n"
                     f"This indicates a parameter name mismatch between NumPyro model "
                     f"definition (mcmc.py:_create_numpyro_model) and sample extraction "
@@ -566,7 +584,7 @@ class PjitBackend(CMCBackend):
                 )
 
             samples_array = np.stack([
-                np.array(samples_dict[name]) for name in param_names
+                np.array(samples_dict[name]) for name in param_names_expanded
             ], axis=1)
 
             # Log memory usage (architectural fix monitoring, Nov 2025)
