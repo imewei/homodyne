@@ -336,12 +336,12 @@ def should_use_cmc(
     - Benefit: Avoid OOM errors, enable large dataset analysis
     - Example: 2 phi × 50M points → CMC triggered (50% memory) → avoid OOM
 
-    **Use Case 3: JAX Broadcasting Protection** (very large pooled datasets with parallelism)
-    - Trigger: dataset_size > large_dataset_threshold (default: 1M) AND num_samples >= min_samples_for_cmc
+    **Use Case 3: JAX Broadcasting Protection** (very large pooled datasets)
+    - Trigger: dataset_size > large_dataset_threshold (default: 1M)
     - Reason: JAX broadcasting in compute_g1_total can create impossible arrays
-    - Example: 20 phi × 2M points → JAX broadcasting overflow (requires parallelism)
+    - Example: 3 phi × 3M points → JAX broadcasting overflow → CMC prevents crash
     - Benefit: CMC sharding prevents catastrophic memory overflow
-    - Constraint: Only trigger if enough samples for parallelism (avoid 10-20% CMC overhead)
+    - Trade-off: Accept 10-20% CMC overhead to prevent JAX crash (overflow independent of sample count)
 
     **Use Case 4: Large Dataset, Few Samples** (proactive OOM prevention)
     - Trigger: dataset_size > large_dataset_threshold_low_sample (default: 10M) AND 2 <= num_samples < min_samples_for_cmc
@@ -449,15 +449,12 @@ def should_use_cmc(
         memory_fraction = estimated_memory_gb / available_memory_gb
         use_cmc_for_memory = memory_fraction > memory_threshold_pct
 
-        # Check large dataset criterion (JAX broadcasting protection)
+        # Criterion 3: JAX Broadcasting Protection (large datasets)
         # Critical for pooled datasets >1M that can cause JAX broadcasting overflow
-        # IMPORTANT: Only trigger if we have enough samples for parallelism benefit
-        # Without parallelism, CMC adds 10-20% overhead with no speedup
-        # Edge case: 3M points / 3 samples → Criterion 3 alone is insufficient
-        use_cmc_for_large_dataset = (
-            dataset_size > large_dataset_threshold
-            and num_samples >= min_samples_for_cmc
-        )
+        # JAX overflow is physics-based (array size), NOT dependent on sample count
+        # Trade-off: Accept 10-20% CMC overhead to prevent catastrophic JAX crash
+        # Example: 3M points / 3 samples → triggers CMC → prevents overflow
+        use_cmc_for_large_dataset = dataset_size > large_dataset_threshold
 
         # Criterion 4 (NEW): Proactive OOM prevention for large datasets with few samples
         # Purpose: Prevent OOM before it happens when parallelism doesn't apply
@@ -485,9 +482,8 @@ def should_use_cmc(
             f"{memory_threshold_pct:.1%} → {use_cmc_for_memory}"
         )
         logger.info(
-            f"Criterion 3 (Large Dataset + Parallelism): (dataset_size={dataset_size:,} > "
-            f"threshold={large_dataset_threshold:,}) AND (num_samples={num_samples} >= "
-            f"min={min_samples_for_cmc}) → {use_cmc_for_large_dataset}"
+            f"Criterion 3 (JAX Broadcasting Protection): dataset_size={dataset_size:,} > "
+            f"threshold={large_dataset_threshold:,} → {use_cmc_for_large_dataset}"
         )
         logger.info(
             f"Criterion 4 (Large Dataset, Few Samples): (dataset_size={dataset_size:,} > "
@@ -496,7 +492,7 @@ def should_use_cmc(
         )
     else:
         logger.info("Criterion 2 (Memory): dataset_size=None → False (not evaluated)")
-        logger.info("Criterion 3 (Large Dataset + Parallelism): dataset_size=None → False (not evaluated)")
+        logger.info("Criterion 3 (JAX Broadcasting Protection): dataset_size=None → False (not evaluated)")
         logger.info("Criterion 4 (Large Dataset, Few Samples): dataset_size=None → False (not evaluated)")
 
     # Step 3: Apply OR logic and make decision (any criterion triggers CMC)
@@ -517,7 +513,7 @@ def should_use_cmc(
         if use_cmc_for_memory:
             mode_parts.append("Memory")
         if use_cmc_for_large_dataset:
-            mode_parts.append("Large Dataset + Parallelism")
+            mode_parts.append("JAX Broadcasting Protection")
         if use_cmc_large_low_sample:
             mode_parts.append("Large Dataset, Few Samples")
         mode_string = " + ".join(mode_parts) + " mode"
@@ -534,7 +530,7 @@ def should_use_cmc(
         if use_cmc_for_memory:
             trigger_reason.append(f"memory ({memory_fraction:.1%} > {memory_threshold_pct:.1%})")
         if use_cmc_for_large_dataset:
-            trigger_reason.append(f"large dataset + parallelism ({dataset_size:,} > {large_dataset_threshold:,})")
+            trigger_reason.append(f"JAX broadcasting protection ({dataset_size:,} > {large_dataset_threshold:,})")
         if use_cmc_large_low_sample:
             trigger_reason.append(f"large dataset, few samples ({dataset_size:,} > {large_dataset_threshold_low_sample:,})")
         logger.warning(
