@@ -561,7 +561,7 @@ class CMCCoordinator:
             return user_num_shards
 
         # Calculate automatically
-        target_shard_size_gpu = self.config.get('cmc', {}).get('sharding', {}).get('target_shard_size_gpu', 300_000)
+        target_shard_size_gpu = self.config.get('cmc', {}).get('sharding', {}).get('target_shard_size_gpu', 100_000)
         target_shard_size_cpu = self.config.get('cmc', {}).get('sharding', {}).get('target_shard_size_cpu', 2_000_000)
         min_shard_size = self.config.get('cmc', {}).get('sharding', {}).get('min_shard_size', 10_000)
 
