@@ -39,6 +39,7 @@ References:
 - Validation Report: SCIENTIFIC_VALIDATION_REPORT.md
 - Production Report: PRODUCTION_READINESS_REPORT.md
 """
+from __future__ import annotations
 
 from typing import Any
 

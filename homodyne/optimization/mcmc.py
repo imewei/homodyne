@@ -85,6 +85,8 @@ Automatic Selection Logic
 - 10 phi angles, 100k points (memory<30%) → NUTS (all criteria fail, minimal overhead)
 """
 
+from __future__ import annotations
+
 import time
 from typing import Any, Dict
 
@@ -149,12 +151,12 @@ except ImportError:
 # Core homodyne imports
 try:
     from homodyne.core.fitting import ParameterSpace as LegacyParameterSpace
-    from homodyne.core.jax_backend import compute_g1_diffusion, compute_g1_total
+    from homodyne.core.physics_cmc import compute_g1_diffusion, compute_g1_total
 
     HAS_CORE_MODULES = True
 except ImportError:
     HAS_CORE_MODULES = False
-    # Fallback if jax_backend not available
+    # Fallback if physics_cmc not available
     compute_g1_diffusion = None
     compute_g1_total = None
 
@@ -1478,10 +1480,11 @@ def _compute_simple_theory(params, t1, t2, phi, q, analysis_mode, L=None, dt=Non
     return c2_theory
 
 
-# JIT compile with static arguments for maximum performance
-# Static argnums: (5,) for analysis_mode
-# Note: L and dt are optional float args, not static
-_compute_simple_theory_jit = jit(_compute_simple_theory, static_argnums=(5,))
+# ARCHITECTURAL FIX (Nov 2025): Remove @jit to prevent 80GB OOM
+# DO NOT JIT THIS FUNCTION - it calls dispatchers with Python conditionals
+# NumPyro's internal tracing would compile both branches causing 80GB meshgrid allocation
+# The inner element-wise/meshgrid functions are already JIT-compiled for performance
+_compute_simple_theory_jit = _compute_simple_theory  # No JIT wrapper
 
 
 def _run_numpyro_sampling(model, config, initial_values=None):

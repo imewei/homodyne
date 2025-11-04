@@ -1141,8 +1141,8 @@ class NLSQWrapper:
         Raises:
             AttributeError: If data is missing required attributes
         """
-        # Import JAX backend for g2 computation
-        from homodyne.core.jax_backend import compute_g2_scaled
+        # Import NLSQ physics backend for g2 computation
+        from homodyne.core.physics_nlsq import compute_g2_scaled
 
         # Validate data has required attributes
         required_attrs = ["phi", "t1", "t2", "g2", "sigma", "q", "L"]
@@ -1235,7 +1235,7 @@ class NLSQWrapper:
             # The experimental data is diagonal-corrected in xpcs_loader.py:530-540.
             # We MUST apply the same correction to theoretical model to prevent mismatch.
             # Without this, NLSQ fails silently with 0 iterations.
-            from homodyne.core.jax_backend import apply_diagonal_correction
+            from homodyne.core.physics_nlsq import apply_diagonal_correction
             apply_diagonal_vmap = jax.vmap(apply_diagonal_correction, in_axes=0)
             g2_theory = apply_diagonal_vmap(g2_theory)
 
