@@ -224,31 +224,30 @@ def _compute_g1_shear_elementwise(
     params: jnp.ndarray,
     t1: jnp.ndarray,
     t2: jnp.ndarray,
-    phi: jnp.ndarray,
+    phi_unique: jnp.ndarray,
     sinc_prefactor: float,
 ) -> jnp.ndarray:
     """Element-wise shear computation for CMC shards.
 
-    Computes g1_shear for paired (t1[i], t2[i]) points across all phi angles.
+    Computes g1_shear for paired (t1[i], t2[i]) points across unique phi angles.
     This is the ONLY shear function for CMC - no meshgrid mode.
 
     Args:
         params: Physical parameters [D0, alpha, D_offset, gamma_dot_0, beta, gamma_dot_offset, phi0]
         t1: Time array (1D, element-wise paired with t2)
         t2: Time array (1D, element-wise paired with t1)
-        phi: Scattering angles (1D array)
+        phi_unique: UNIQUE scattering angles (1D array, pre-filtered for unique values only)
         sinc_prefactor: Pre-computed factor 0.5/π * q * L * dt
 
     Returns:
-        Shear contribution to g1 (2D array: (n_phi, n_points))
+        Shear contribution to g1 (2D array: (n_unique_phi, n_points))
     """
     # Check params length - if < 7, we're in static mode (no shear)
     if safe_len(params) < 7:
-        # Return ones for all phi angles and time combinations (g1_shear = 1)
-        phi_array = jnp.atleast_1d(phi)
-        n_phi = safe_len(phi_array)
-        n_points = len(t1)
-        return jnp.ones((n_phi, n_points))
+        # Return ones for all unique phi angles and time combinations (g1_shear = 1)
+        n_phi_unique = safe_len(phi_unique)
+        n_points = safe_len(t1)
+        return jnp.ones((n_phi_unique, n_points))
 
     gamma_dot_0, beta, gamma_dot_offset, phi0 = (
         params[3],
@@ -275,29 +274,23 @@ def _compute_g1_shear_elementwise(
     # Trapezoidal integration: ∫γ̇(t)dt ≈ |t2-t1| * (γ̇(t1) + γ̇(t2)) / 2
     gamma_integral_elementwise = jnp.abs(t2 - t1) * (gamma_t1 + gamma_t2) / 2.0
 
-    # Fix phi shape if needed
-    phi = jnp.asarray(phi)
-    while phi.ndim > 1:
-        phi = jnp.squeeze(phi)
-        if phi.ndim > 1:
-            phi = phi.flatten()
-            break
+    # phi_unique is already filtered to unique values by caller (compute_g1_total)
+    # No need for jnp.unique() here (causes JAX concretization error during JIT)
+    n_phi_unique = safe_len(phi_unique)
 
-    phi_array = jnp.atleast_1d(phi)
-    n_phi = safe_len(phi_array)
+    # Compute phase for unique phi angles (vectorized over unique phi)
+    angle_diff = jnp.deg2rad(phi0 - phi_unique)  # shape: (n_unique_phi,)
+    cos_term = jnp.cos(angle_diff)  # shape: (n_unique_phi,)
 
-    # Compute phase for all phi angles (vectorized over phi)
-    angle_diff = jnp.deg2rad(phi0 - phi_array)  # shape: (n_phi,)
-    cos_term = jnp.cos(angle_diff)  # shape: (n_phi,)
-
-    # Broadcast: cos_term (n_phi,) × gamma_integral_elementwise (n_points,) → (n_phi, n_points)
+    # Broadcast: cos_term (n_unique_phi,) × gamma_integral_elementwise (n_points,) → (n_unique_phi, n_points)
+    # Example: 3 unique angles × 100K points = 300K elements (2.4 MB), NOT 300K×100K (80 GB)
     phase = sinc_prefactor * cos_term[:, None] * gamma_integral_elementwise[None, :]
 
     # Compute sinc² values
     sinc_val = safe_sinc(phase)
     g1_shear = sinc_val**2
 
-    return g1_shear  # Shape: (n_phi, n_points)
+    return g1_shear  # Shape: (n_unique_phi, n_points)
 
 
 @jit
@@ -305,7 +298,7 @@ def _compute_g1_total_elementwise(
     params: jnp.ndarray,
     t1: jnp.ndarray,
     t2: jnp.ndarray,
-    phi: jnp.ndarray,
+    phi_unique: jnp.ndarray,
     wavevector_q_squared_half_dt: float,
     sinc_prefactor: float,
 ) -> jnp.ndarray:
@@ -318,18 +311,18 @@ def _compute_g1_total_elementwise(
         params: Physical parameters [D0, alpha, D_offset, gamma_dot_0, beta, gamma_dot_offset, phi0]
         t1: Time array (1D, element-wise paired with t2)
         t2: Time array (1D, element-wise paired with t1)
-        phi: Scattering angles
+        phi_unique: UNIQUE scattering angles (1D array, pre-filtered)
         wavevector_q_squared_half_dt: Pre-computed factor 0.5 * q² * dt
         sinc_prefactor: Pre-computed factor 0.5/π * q * L * dt
 
     Returns:
-        Total g1 correlation function (2D array: (n_phi, n_points))
+        Total g1 correlation function (2D array: (n_unique_phi, n_points))
     """
     # Compute diffusion contribution: shape (n_points,)
     g1_diff = _compute_g1_diffusion_elementwise(params, t1, t2, wavevector_q_squared_half_dt)
 
-    # Compute shear contribution: shape (n_phi, n_points)
-    g1_shear = _compute_g1_shear_elementwise(params, t1, t2, phi, sinc_prefactor)
+    # Compute shear contribution: shape (n_unique_phi, n_points)
+    g1_shear = _compute_g1_shear_elementwise(params, t1, t2, phi_unique, sinc_prefactor)
 
     # Broadcast g1_diff from (n_points,) to (n_phi, n_points)
     n_phi = g1_shear.shape[0]
@@ -438,11 +431,17 @@ def compute_g1_total(
     wavevector_q_squared_half_dt = 0.5 * (q**2) * dt
     sinc_prefactor = 0.5 / PI * q * L * dt
 
+    # CRITICAL FIX (Nov 2025): Extract unique phi values BEFORE JIT compilation
+    # CMC pooled data replicates phi for each time point (e.g., 3 angles × 100K points = 300K array)
+    # We need unique phi values for broadcasting to avoid 80GB meshgrid OOM
+    # MUST be done here (non-JIT function) since jnp.unique() doesn't work during JIT tracing
+    phi_unique = jnp.unique(jnp.atleast_1d(phi))
+
     return _compute_g1_total_elementwise(
         params,
         t1,
         t2,
-        phi,
+        phi_unique,
         wavevector_q_squared_half_dt,
         sinc_prefactor,
     )
