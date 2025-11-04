@@ -428,13 +428,19 @@ def _compute_g1_diffusion_core(
     Reference: self.wavevector_q_squared_half_dt = 0.5 * self.wavevector_q_squared * self.dt
     Which is: wavevector_q_squared_half_dt = 0.5 * (q²) * dt
 
+    ELEMENT-WISE MODE (Nov 2025):
+    For large 1D arrays (>2000 points from CMC sharding), computes element-wise
+    instead of creating NxN matrices to avoid OOM errors.
+
     Args:
         params: Physical parameters [D0, alpha, D_offset, ...]
-        t1, t2: Time grids (should be identical: t1 = t2 = t)
+        t1, t2: Time grids (meshgrid for NLSQ) or paired arrays (CMC)
         wavevector_q_squared_half_dt: Pre-computed factor 0.5 * q² * dt from configuration
 
     Returns:
         Diffusion contribution to g1 correlation function
+        - 2D (n_times, n_times) for meshgrid mode
+        - 1D (n_points,) for element-wise mode
     """
     D0, alpha, D_offset = params[0], params[1], params[2]
 
@@ -460,6 +466,26 @@ def _compute_g1_diffusion_core(
                 f"DEBUG g1_diffusion: wavevector_q_squared_half_dt={wavevector_q_squared_half_dt:.6e}",
             )
 
+    # ELEMENT-WISE MODE: Detect large 1D arrays from CMC sharding
+    # CMC shards create element-wise paired (t1[i], t2[i]) arrays with >2000 points
+    # Computing NxN matrices for these would cause OOM (e.g., 100K × 100K = 80GB)
+    if t1.ndim == 1 and len(t1) > 2000:
+        # Element-wise computation for each paired (t1[i], t2[i]) point
+        # Compute integral from t1[i] to t2[i] for each i
+        D_t1 = _calculate_diffusion_coefficient_impl_jax(t1, D0, alpha, D_offset)
+        D_t2 = _calculate_diffusion_coefficient_impl_jax(t2, D0, alpha, D_offset)
+
+        # Trapezoidal integration: ∫D(t)dt ≈ |t2-t1| * (D(t1) + D(t2)) / 2
+        D_integral_elementwise = jnp.abs(t2 - t1) * (D_t1 + D_t2) / 2.0
+
+        # Compute g1 using log-space for numerical stability
+        log_g1 = -wavevector_q_squared_half_dt * D_integral_elementwise
+        log_g1_clipped = jnp.clip(log_g1, -100.0, 0.0)
+        g1_diffusion = jnp.exp(log_g1_clipped)
+
+        return g1_diffusion  # Shape: (n_points,)
+
+    # MESHGRID MODE: Original algorithm for 2D meshgrids or small 1D arrays
     # Step 1: Extract time array (t1 and t2 should be identical)
     # Handle all dimensionality cases: 0D (scalar), 1D arrays, and 2D meshgrids
     if t1.ndim == 2:
@@ -585,14 +611,20 @@ def _compute_g1_shear_core(
     Which is: sinc_prefactor = 0.5/π * q * L * dt
     Where L = stator_rotor_gap (sample-detector distance)
 
+    ELEMENT-WISE MODE (Nov 2025):
+    For large 1D arrays (>2000 points from CMC sharding), computes element-wise
+    instead of creating NxN matrices to avoid OOM errors.
+
     Args:
         params: Physical parameters [D0, alpha, D_offset, gamma_dot_0, beta, gamma_dot_offset, phi0]
-        t1, t2: Time grids (should be identical: t1 = t2 = t)
+        t1, t2: Time grids (meshgrid for NLSQ) or paired arrays (CMC)
         phi: Scattering angles
         sinc_prefactor: Pre-computed factor 0.5/π * q * L * dt from configuration
 
     Returns:
         Shear contribution to g1 correlation function (sinc² values)
+        - 3D (n_phi, n_times, n_times) for meshgrid mode
+        - 2D (n_phi, n_points) for element-wise mode
     """
     # Check params length - if < 7, we're in static mode (no shear)
     if safe_len(params) < 7:
@@ -602,6 +634,10 @@ def _compute_g1_shear_core(
         if t1.ndim == 2:
             n_times = t1.shape[0]
             return jnp.ones((n_phi, n_times, n_times))
+        elif t1.ndim == 1 and len(t1) > 2000:
+            # Element-wise mode for static (no shear)
+            n_points = len(t1)
+            return jnp.ones((n_phi, n_points))
         else:
             n_times = safe_len(t1)
             return jnp.ones((n_phi, n_times, n_times))
@@ -613,6 +649,53 @@ def _compute_g1_shear_core(
         params[6],
     )
 
+    # ELEMENT-WISE MODE: Detect large 1D arrays from CMC sharding
+    # CMC shards create element-wise paired (t1[i], t2[i]) arrays with >2000 points
+    # Computing NxN matrices for these would cause OOM (e.g., 100K × 100K = 80GB)
+    if t1.ndim == 1 and len(t1) > 2000:
+        # Element-wise computation for each paired (t1[i], t2[i]) point
+        # Compute integral from t1[i] to t2[i] for each i
+        gamma_t1 = _calculate_shear_rate_impl_jax(
+            t1,
+            gamma_dot_0,
+            beta,
+            gamma_dot_offset,
+        )
+        gamma_t2 = _calculate_shear_rate_impl_jax(
+            t2,
+            gamma_dot_0,
+            beta,
+            gamma_dot_offset,
+        )
+
+        # Trapezoidal integration: ∫γ̇(t)dt ≈ |t2-t1| * (γ̇(t1) + γ̇(t2)) / 2
+        gamma_integral_elementwise = jnp.abs(t2 - t1) * (gamma_t1 + gamma_t2) / 2.0
+
+        # Fix phi shape if needed
+        phi = jnp.asarray(phi)
+        while phi.ndim > 1:
+            phi = jnp.squeeze(phi)
+            if phi.ndim > 1:
+                phi = phi.flatten()
+                break
+
+        phi_array = jnp.atleast_1d(phi)
+        n_phi = safe_len(phi_array)
+
+        # Compute phase for all phi angles (vectorized over phi)
+        angle_diff = jnp.deg2rad(phi0 - phi_array)  # shape: (n_phi,)
+        cos_term = jnp.cos(angle_diff)  # shape: (n_phi,)
+
+        # Broadcast: cos_term (n_phi,) × gamma_integral_elementwise (n_points,) → (n_phi, n_points)
+        phase = sinc_prefactor * cos_term[:, None] * gamma_integral_elementwise[None, :]
+
+        # Compute sinc² values
+        sinc_val = safe_sinc(phase)
+        g1_shear = sinc_val**2
+
+        return g1_shear  # Shape: (n_phi, n_points)
+
+    # MESHGRID MODE: Original algorithm for 2D meshgrids or small 1D arrays
     # Step 1: Extract time array (t1 and t2 should be identical)
     # Handle all dimensionality cases: 0D (scalar), 1D arrays, and 2D meshgrids
     if t1.ndim == 2:
@@ -711,30 +794,49 @@ def _compute_g1_total_core(
 
     Physical constraint: 0 < g₁(t) ≤ 1
 
+    ELEMENT-WISE MODE (Nov 2025):
+    For large 1D arrays (>2000 points from CMC sharding), computes element-wise
+    instead of creating NxN matrices to avoid OOM errors.
+
     Args:
         params: Physical parameters [D0, alpha, D_offset, gamma_dot_0, beta, gamma_dot_offset, phi0]
-        t1, t2: Time grids (should be identical: t1 = t2 = t)
+        t1, t2: Time grids (meshgrid for NLSQ) or paired arrays (CMC)
         phi: Scattering angles
         wavevector_q_squared_half_dt: Pre-computed factor 0.5 * q² * dt from configuration
         sinc_prefactor: Pre-computed factor 0.5/π * q * L * dt from configuration
 
     Returns:
-        Total g1 correlation function with shape (n_phi, n_times, n_times)
+        Total g1 correlation function
+        - Meshgrid mode: shape (n_phi, n_times, n_times)
+        - Element-wise mode: shape (n_phi, n_points)
     """
-    # Compute diffusion contribution: shape (n_times, n_times)
+    # Compute diffusion contribution
+    # Meshgrid mode: shape (n_times, n_times)
+    # Element-wise mode: shape (n_points,)
     g1_diff = _compute_g1_diffusion_core(params, t1, t2, wavevector_q_squared_half_dt)
 
-    # Compute shear contribution: shape (n_phi, n_times, n_times)
+    # Compute shear contribution
+    # Meshgrid mode: shape (n_phi, n_times, n_times)
+    # Element-wise mode: shape (n_phi, n_points)
     g1_shear = _compute_g1_shear_core(params, t1, t2, phi, sinc_prefactor)
 
-    # Broadcast diffusion term to match shear dimensions
-    # g1_diff needs to be broadcast from (n_times, n_times) to (n_phi, n_times, n_times)
-    # Use the shape of g1_shear to determine n_phi (more reliable than parsing phi directly)
-    n_phi = g1_shear.shape[0]
-    g1_diff_broadcasted = jnp.broadcast_to(
-        g1_diff[None, :, :],
-        (n_phi, g1_diff.shape[0], g1_diff.shape[1]),
-    )
+    # Handle broadcasting for both modes
+    if g1_diff.ndim == 1:
+        # ELEMENT-WISE MODE: g1_diff is (n_points,), g1_shear is (n_phi, n_points)
+        # Broadcast g1_diff from (n_points,) to (n_phi, n_points)
+        n_phi = g1_shear.shape[0]
+        g1_diff_broadcasted = jnp.broadcast_to(
+            g1_diff[None, :],
+            (n_phi, g1_diff.shape[0]),
+        )
+    else:
+        # MESHGRID MODE: g1_diff is (n_times, n_times), g1_shear is (n_phi, n_times, n_times)
+        # Broadcast g1_diff from (n_times, n_times) to (n_phi, n_times, n_times)
+        n_phi = g1_shear.shape[0]
+        g1_diff_broadcasted = jnp.broadcast_to(
+            g1_diff[None, :, :],
+            (n_phi, g1_diff.shape[0], g1_diff.shape[1]),
+        )
 
     # Multiply: g₁_total[phi, i, j] = g₁_diffusion[i, j] × g₁_shear[phi, i, j]
     try:
