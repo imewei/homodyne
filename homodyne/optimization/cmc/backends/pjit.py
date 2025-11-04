@@ -548,9 +548,10 @@ class PjitBackend(CMCBackend):
                 # 5 parameters: contrast, offset, D0, alpha, D_offset
                 param_names = ['contrast', 'offset', 'D0', 'alpha', 'D_offset']
             else:  # laminar_flow
-                # 9 parameters: contrast, offset, D0, alpha, D_offset, gamma_dot_0, beta, gamma_dot_offset, phi_0
+                # 9 parameters: contrast, offset, D0, alpha, D_offset, gamma_dot_t0, beta, gamma_dot_t_offset, phi0
+                # NOTE: Must match parameter names in mcmc.py:_create_numpyro_model()
                 param_names = ['contrast', 'offset', 'D0', 'alpha', 'D_offset',
-                             'gamma_dot_0', 'beta', 'gamma_dot_offset', 'phi_0']
+                             'gamma_dot_t0', 'beta', 'gamma_dot_t_offset', 'phi0']
 
             samples_array = np.stack([
                 np.array(samples_dict[name]) for name in param_names
