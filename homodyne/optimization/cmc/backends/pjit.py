@@ -134,7 +134,7 @@ class PjitBackend(CMCBackend):
                 "Install with: pip install numpyro"
             )
 
-        # Detect JAX devices
+        # Detect JAX devices (GPU or CPU based on system configuration)
         self.devices = jax.devices()
         self.num_devices = len(self.devices)
         self.platform = self.devices[0].platform if self.devices else 'cpu'
@@ -452,6 +452,16 @@ class PjitBackend(CMCBackend):
         q = float(shard['q'])
         L = float(shard['L'])
 
+        # DEBUG: Log array shapes to diagnose element-wise mode detection
+        logger.info(
+            f"Shard {shard_idx} arrays: "
+            f"data={data_np.shape}, t1={t1_np.shape}, t2={t2_np.shape}, phi={phi_np.shape}"
+        )
+        logger.info(
+            f"Shard {shard_idx} t1: ndim={t1_np.ndim}, len={len(t1_np)}, "
+            f"element-wise threshold check: t1.ndim==1={t1_np.ndim==1}, len(t1)>2000={len(t1_np)>2000}"
+        )
+
         # Pre-compute dt before JIT compilation to avoid jnp.unique() JAX concretization error
         # This fixes: "Abstract tracer value encountered where concrete value is expected"
         dt_computed = None
@@ -532,6 +542,13 @@ class PjitBackend(CMCBackend):
             samples_array = np.stack([
                 np.array(samples_dict[name]) for name in param_names
             ], axis=1)
+
+            # Log memory usage (architectural fix monitoring, Nov 2025)
+            peak_memory_mb = samples_array.nbytes / 1e6
+            logger.info(
+                f"Shard {shard_idx}: Peak memory = {peak_memory_mb:.2f} MB "
+                f"(samples shape: {samples_array.shape})"
+            )
 
             # Compute diagnostics
             diagnostics = self._compute_diagnostics(samples_dict, mcmc)
