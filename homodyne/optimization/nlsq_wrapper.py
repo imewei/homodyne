@@ -48,7 +48,7 @@ import numpy as np
 # Import order is INTENTIONAL: nlsq must be imported BEFORE JAX
 # This enables automatic x64 (double precision) configuration per NLSQ best practices
 # Reference: https://nlsq.readthedocs.io/en/latest/guides/advanced_features.html
-from nlsq import curve_fit, curve_fit_large
+from nlsq import curve_fit, curve_fit_large, LeastSquares
 
 # Try importing StreamingOptimizer (available in NLSQ >= 0.1.5)
 try:
@@ -73,6 +73,10 @@ from homodyne.optimization.stratified_chunking import (
     compute_stratification_diagnostics,
     format_diagnostics_report,
     StratificationDiagnostics,
+)
+from homodyne.optimization.stratified_residual import (
+    StratifiedResidualFunction,
+    create_stratified_residual_function,
 )
 from homodyne.optimization.sequential_angle import (
     optimize_per_angle_sequential,
@@ -205,6 +209,29 @@ class NLSQWrapper:
         self.best_params = None
         self.best_loss = float('inf')
         self.best_batch_idx = -1
+
+    @staticmethod
+    def _get_physical_param_names(analysis_mode: str) -> list[str]:
+        """Get physical parameter names for a given analysis mode.
+
+        Args:
+            analysis_mode: 'static_isotropic' or 'laminar_flow'
+
+        Returns:
+            List of physical parameter names (excludes scaling parameters)
+
+        Raises:
+            ValueError: If analysis_mode is not recognized
+        """
+        if analysis_mode == "static_isotropic":
+            return ['D0', 'alpha', 'D_offset']
+        elif analysis_mode == "laminar_flow":
+            return ['D0', 'alpha', 'D_offset', 'gamma_dot_0', 'beta', 'gamma_dot_offset', 'phi0']
+        else:
+            raise ValueError(
+                f"Unknown analysis_mode: '{analysis_mode}'. "
+                f"Expected 'static_isotropic' or 'laminar_flow'"
+            )
 
     @staticmethod
     def _handle_nlsq_result(
@@ -419,6 +446,108 @@ class NLSQWrapper:
                 logger,
                 start_time,
             )
+
+        # NEW: Check if stratified least_squares should be used (v2.2.0 double-chunking fix)
+        # Conditions:
+        # 1. Stratified data was created (has phi_flat attribute)
+        # 2. Per-angle scaling is enabled
+        # 3. Dataset is large enough to benefit (>1M points)
+        use_stratified_least_squares = (
+            hasattr(stratified_data, 'phi_flat') and
+            per_angle_scaling and
+            hasattr(stratified_data, 'g2_flat') and
+            len(stratified_data.g2_flat) >= 1_000_000
+        )
+
+        if use_stratified_least_squares:
+            logger.info("=" * 80)
+            logger.info("STRATIFIED LEAST-SQUARES PATH ACTIVATED (v2.2.1)")
+            logger.info("Solving double-chunking problem with NLSQ's least_squares()")
+            logger.info("=" * 80)
+
+            # Validate initial parameters
+            if initial_params is None:
+                raise ValueError("initial_params must be provided")
+            validated_params = self._validate_initial_params(initial_params, bounds)
+
+            # Convert bounds
+            nlsq_bounds = self._convert_bounds(bounds)
+
+            # Validate bounds consistency
+            if nlsq_bounds is not None:
+                lower, upper = nlsq_bounds
+                if np.any(lower >= upper):
+                    invalid_indices = np.where(lower >= upper)[0]
+                    raise ValueError(
+                        f"Invalid bounds at indices {invalid_indices}: "
+                        f"lower >= upper. Lower: {lower[invalid_indices]}, Upper: {upper[invalid_indices]}"
+                    )
+
+            # Get physical parameter names for this analysis mode
+            physical_param_names = self._get_physical_param_names(analysis_mode)
+            logger.info(f"Physical parameters for {analysis_mode}: {physical_param_names}")
+
+            # Extract target chunk size from config
+            target_chunk_size = 100_000  # Default
+            if config is not None and hasattr(config, 'config'):
+                strat_config = config.config.get('optimization', {}).get('stratification', {})
+                target_chunk_size = strat_config.get('target_chunk_size', 100_000)
+
+            # Call stratified least_squares optimization
+            try:
+                popt, pcov, info = self._fit_with_stratified_least_squares(
+                    stratified_data=stratified_data,
+                    per_angle_scaling=per_angle_scaling,
+                    physical_param_names=physical_param_names,
+                    initial_params=validated_params,
+                    bounds=nlsq_bounds,
+                    logger=logger,
+                    target_chunk_size=target_chunk_size,
+                )
+
+                # Compute final residuals for result creation
+                # We need to recreate the residual function to compute final residuals
+                chunked_data = self._create_stratified_chunks(stratified_data, target_chunk_size)
+                residual_fn = create_stratified_residual_function(
+                    stratified_data=chunked_data,
+                    per_angle_scaling=per_angle_scaling,
+                    physical_param_names=physical_param_names,
+                    logger=logger,
+                    validate=False,  # Already validated
+                )
+                final_residuals = residual_fn(popt)
+                n_data = len(final_residuals)
+
+                # Get execution time
+                execution_time = time.time() - start_time
+
+                # Create result
+                result = self._create_fit_result(
+                    popt=popt,
+                    pcov=pcov,
+                    residuals=final_residuals,
+                    n_data=n_data,
+                    iterations=info.get('nit', 0),
+                    execution_time=execution_time,
+                    convergence_status="converged" if info.get('success', True) else "failed",
+                    recovery_actions=[f"stratified_least_squares_method"],
+                    streaming_diagnostics=None,
+                    stratification_diagnostics=stratification_diagnostics,
+                )
+
+                logger.info("=" * 80)
+                logger.info("STRATIFIED LEAST-SQUARES COMPLETE")
+                logger.info(f"Final χ²: {result.chi_squared:.4e}, Reduced χ²: {result.reduced_chi_squared:.4f}")
+                logger.info("=" * 80)
+
+                return result
+
+            except Exception as e:
+                logger.error(
+                    f"Stratified least_squares failed: {e}\n"
+                    f"Falling back to standard curve_fit_large path..."
+                )
+                # Fall through to standard optimization path below
 
         # Step 2: Prepare data
         logger.info(f"Preparing data for {analysis_mode} optimization...")
@@ -702,7 +831,7 @@ class NLSQWrapper:
         elif 'streaming_diagnostics' in info:
             streaming_diagnostics = info['streaming_diagnostics']
 
-        # Step 9: Create result with streaming diagnostics
+        # Step 9: Create result with streaming and stratification diagnostics
         result = self._create_fit_result(
             popt=popt,
             pcov=pcov,
@@ -713,6 +842,7 @@ class NLSQWrapper:
             convergence_status=convergence_status,
             recovery_actions=recovery_actions,
             streaming_diagnostics=streaming_diagnostics,  # Task 5.4
+            stratification_diagnostics=stratification_diagnostics,  # v2.2.1
         )
 
         logger.info(
@@ -1346,7 +1476,7 @@ class NLSQWrapper:
 
         # Create a simple namespace object to hold stratified data
         class StratifiedData:
-            def __init__(self, phi, t1, t2, g2, diagnostics=None):
+            def __init__(self, phi, t1, t2, g2, original_data, diagnostics=None):
                 # Store flattened stratified arrays
                 self.phi_flat = phi
                 self.t1_flat = t1
@@ -1361,11 +1491,23 @@ class NLSQWrapper:
                 # Store as 1D array (already flattened and stratified)
                 self.g2 = g2
 
+                # Copy critical metadata attributes from original data
+                # These are required for residual function computation
+                self.sigma = original_data.sigma  # Uncertainty/error bars (CRITICAL)
+                self.q = original_data.q          # Wavevector magnitude (CRITICAL)
+                self.L = original_data.L          # Sample-detector distance (CRITICAL)
+
+                # Copy optional dt if present (time step)
+                if hasattr(original_data, 'dt'):
+                    self.dt = original_data.dt
+
                 # Store diagnostics if available
                 self.stratification_diagnostics = diagnostics
 
         stratified_data = StratifiedData(
-            phi_stratified, t1_stratified, t2_stratified, g2_stratified, diagnostics
+            phi_stratified, t1_stratified, t2_stratified, g2_stratified,
+            data,  # Pass original data to copy metadata attributes
+            diagnostics
         )
 
         logger.info(
@@ -2107,6 +2249,263 @@ class NLSQWrapper:
                     error_context={'original_error': type(e).__name__}
                 ) from e
 
+    def _create_stratified_chunks(
+        self,
+        stratified_data: Any,
+        target_chunk_size: int = 100_000,
+    ) -> Any:
+        """Convert stratified flat arrays into chunks for StratifiedResidualFunction.
+
+        Args:
+            stratified_data: StratifiedData object with flat stratified arrays
+            target_chunk_size: Target size for each chunk
+
+        Returns:
+            Object with .chunks attribute containing list of chunk objects
+        """
+        # Get flat stratified arrays
+        phi_flat = stratified_data.phi_flat
+        t1_flat = stratified_data.t1_flat
+        t2_flat = stratified_data.t2_flat
+        g2_flat = stratified_data.g2_flat
+
+        # Get metadata (not chunked - shared across all chunks)
+        sigma = stratified_data.sigma  # 3D array: (n_phi, n_t1, n_t2)
+        q = stratified_data.q
+        L = stratified_data.L
+        dt = getattr(stratified_data, 'dt', None)
+
+        # Determine number of chunks
+        n_total = len(g2_flat)
+        n_chunks = max(1, (n_total + target_chunk_size - 1) // target_chunk_size)
+
+        # Create chunks
+        chunks = []
+        for i in range(n_chunks):
+            start_idx = i * target_chunk_size
+            end_idx = min(start_idx + target_chunk_size, n_total)
+
+            # Create simple namespace object for chunk
+            # Note: sigma, q, L, dt are metadata - not chunked per chunk
+            class Chunk:
+                def __init__(self, phi, t1, t2, g2, q, L, dt):
+                    self.phi = phi
+                    self.t1 = t1
+                    self.t2 = t2
+                    self.g2 = g2
+                    self.q = q
+                    self.L = L
+                    self.dt = dt
+
+            chunk = Chunk(
+                phi=phi_flat[start_idx:end_idx],
+                t1=t1_flat[start_idx:end_idx],
+                t2=t2_flat[start_idx:end_idx],
+                g2=g2_flat[start_idx:end_idx],
+                q=q,
+                L=L,
+                dt=dt,
+            )
+            chunks.append(chunk)
+
+        # Create object with chunks attribute and metadata
+        class StratifiedChunkedData:
+            def __init__(self, chunks, sigma):
+                self.chunks = chunks
+                self.sigma = sigma  # Store sigma as metadata at parent level
+
+        return StratifiedChunkedData(chunks, sigma)
+
+    def _fit_with_stratified_least_squares(
+        self,
+        stratified_data: Any,
+        per_angle_scaling: bool,
+        physical_param_names: list[str],
+        initial_params: np.ndarray,
+        bounds: tuple[np.ndarray, np.ndarray] | None,
+        logger: Any,
+        target_chunk_size: int = 100_000,
+    ) -> tuple[np.ndarray, np.ndarray, dict]:
+        """Fit using NLSQ's least_squares() with stratified residual function.
+
+        This method solves the double-chunking problem by using NLSQ's least_squares()
+        function directly with a StratifiedResidualFunction. This gives us full control
+        over chunking, ensuring angle completeness in each chunk for proper per-angle
+        parameter gradients.
+
+        Unlike curve_fit_large(), which expects a MODEL function f(x, *params) → y and
+        does its own internal chunking (breaking angle stratification), least_squares()
+        accepts a RESIDUAL function fun(params) → residuals where we control all data
+        access inside the function.
+
+        Key Features:
+        - Uses NLSQ's least_squares() for JAX-accelerated optimization
+        - Maintains angle-stratified chunks (no double-chunking)
+        - Compatible with per-angle scaling parameters
+        - GPU/CPU transparent execution
+        - Trust-region reflective (TRF) algorithm
+
+        Args:
+            stratified_data: StratifiedData object with flat stratified arrays
+            per_angle_scaling: Whether per-angle parameters are enabled
+            physical_param_names: List of physical parameter names (e.g., ['D0', 'alpha', 'D_offset'])
+            initial_params: Initial parameter guess
+            bounds: Parameter bounds (lower, upper) tuple
+            logger: Logger instance
+            target_chunk_size: Target size for each chunk (default: 100k points)
+
+        Returns:
+            (popt, pcov, info) tuple:
+                - popt: Optimized parameters
+                - pcov: Covariance matrix
+                - info: Optimization info dict
+
+        Raises:
+            ValueError: If stratified_data doesn't have required attributes
+            RuntimeError: If optimization fails
+
+        References:
+            - Solution document: docs/architecture/nlsq-least-squares-solution.md
+            - Ultra-think analysis: docs/architecture/ultra-think-nlsq-solution-20251106.md
+        """
+        import time
+
+        logger.info("=" * 80)
+        logger.info("STRATIFIED LEAST-SQUARES OPTIMIZATION")
+        logger.info("Using NLSQ's least_squares() with angle-stratified chunks")
+        logger.info("=" * 80)
+
+        # Convert stratified flat arrays into chunks
+        logger.info(f"Creating chunks from stratified data (target size: {target_chunk_size:,})...")
+        chunked_data = self._create_stratified_chunks(stratified_data, target_chunk_size)
+        logger.info(f"Created {len(chunked_data.chunks)} chunks")
+
+        # Start timing
+        start_time = time.perf_counter()
+
+        # Create stratified residual function
+        logger.info("Creating stratified residual function...")
+        residual_fn = create_stratified_residual_function(
+            stratified_data=chunked_data,  # Use chunked_data with .chunks attribute
+            per_angle_scaling=per_angle_scaling,
+            physical_param_names=physical_param_names,
+            logger=logger,
+            validate=True,  # Validate chunk structure
+        )
+
+        # Log diagnostics
+        residual_fn.log_diagnostics()
+
+        # Prepare for optimization
+        logger.info("Starting NLSQ least_squares() optimization...")
+        logger.info(f"  Initial parameters: {len(initial_params)} parameters")
+        logger.info(f"  Bounds: {'provided' if bounds is not None else 'unbounded'}")
+
+        # Call NLSQ's least_squares() - NO xdata/ydata needed!
+        # Data is encapsulated in residual_fn
+        optimization_start = time.perf_counter()
+
+        # Instantiate LeastSquares class and call its least_squares method
+        ls = LeastSquares()
+        result = ls.least_squares(
+            fun=residual_fn,              # Residual function (we control chunking!)
+            x0=initial_params,            # Initial parameters
+            jac=None,                     # Use JAX autodiff for Jacobian
+            bounds=bounds,                # Parameter bounds
+            method='trf',                 # Trust Region Reflective
+            ftol=1e-8,                    # Function tolerance
+            xtol=1e-8,                    # Parameter tolerance
+            gtol=1e-8,                    # Gradient tolerance
+            max_nfev=1000,                # Max function evaluations
+            verbose=2,                    # Show progress
+        )
+
+        optimization_time = time.perf_counter() - optimization_start
+        logger.info(f"Optimization completed in {optimization_time:.2f}s")
+
+        # Extract results from NLSQ result object
+        popt = np.asarray(result['x'])
+
+        # Compute covariance matrix from Jacobian
+        # NLSQ's least_squares may or may not provide pcov directly
+        if 'pcov' in result and result['pcov'] is not None:
+            pcov = np.asarray(result['pcov'])
+            logger.info("Using covariance matrix from NLSQ result")
+        else:
+            # Compute covariance from Jacobian: pcov = inv(J^T J)
+            logger.info("Computing covariance matrix from Jacobian...")
+
+            # Use JAX to compute Jacobian at final parameters
+            jac_fn = jax.jacfwd(residual_fn)
+            J = jac_fn(popt)
+            J = np.asarray(J)
+
+            # Compute covariance: (J^T J)^{-1}
+            # This is the standard formula for nonlinear least squares
+            try:
+                JTJ = J.T @ J
+                pcov = np.linalg.inv(JTJ)
+            except np.linalg.LinAlgError:
+                logger.warning("Singular Jacobian, using pseudo-inverse for covariance")
+                pcov = np.linalg.pinv(JTJ)
+
+        # Compute final cost
+        final_residuals = residual_fn(popt)
+        final_cost = float(np.sum(final_residuals**2))
+
+        # Extract convergence information
+        success = result.get('success', True)
+        message = result.get('message', 'Optimization completed')
+        nfev = result.get('nfev', 0)
+        nit = result.get('nit', 0)
+
+        # Determine if optimization actually improved
+        initial_residuals = residual_fn(initial_params)
+        initial_cost = float(np.sum(initial_residuals**2))
+        cost_reduction = (initial_cost - final_cost) / initial_cost if initial_cost > 0 else 0
+        params_changed = not np.allclose(popt, initial_params, rtol=1e-8)
+
+        # Log results
+        logger.info("=" * 80)
+        logger.info("OPTIMIZATION RESULTS")
+        logger.info(f"  Status: {'SUCCESS' if success else 'FAILED'}")
+        logger.info(f"  Message: {message}")
+        logger.info(f"  Function evaluations: {nfev}")
+        logger.info(f"  Iterations: {nit}")
+        logger.info(f"  Initial cost: {initial_cost:.6e}")
+        logger.info(f"  Final cost: {final_cost:.6e}")
+        logger.info(f"  Cost reduction: {cost_reduction*100:+.2f}%")
+        logger.info(f"  Parameters changed: {params_changed}")
+        logger.info(f"  Total time: {time.perf_counter() - start_time:.2f}s")
+        logger.info("=" * 80)
+
+        # Check for optimization failure
+        if not params_changed or cost_reduction < 0.01:
+            logger.warning(
+                "Optimization may have failed:\n"
+                f"  Parameters changed: {params_changed}\n"
+                f"  Cost reduction: {cost_reduction*100:.2f}%\n"
+                "This may indicate:\n"
+                "  - Initial parameters already optimal\n"
+                "  - Optimization converged immediately\n"
+                "  - Problem with gradient computation"
+            )
+
+        # Prepare info dict
+        info = {
+            'success': success,
+            'message': message,
+            'nfev': nfev,
+            'nit': nit,
+            'initial_cost': initial_cost,
+            'final_cost': final_cost,
+            'cost_reduction': cost_reduction,
+            'optimization_time': optimization_time,
+            'method': 'stratified_least_squares',
+        }
+
+        return popt, pcov, info
+
     def _create_fit_result(
         self,
         popt: np.ndarray,
@@ -2118,6 +2517,7 @@ class NLSQWrapper:
         convergence_status: str = "converged",
         recovery_actions: list[str] | None = None,
         streaming_diagnostics: dict[str, Any] | None = None,
+        stratification_diagnostics: StratificationDiagnostics | None = None,
     ) -> OptimizationResult:
         """Convert NLSQ output to OptimizationResult.
 
