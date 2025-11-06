@@ -624,6 +624,78 @@ parameter_space:
       max: 100000.0   # Reasonable upper bound
 ```
 
+### Per-Angle Scaling with Non-Stratified Sharding
+
+**⚠️ CRITICAL: CMC Sharding Strategy Requirement**
+
+**Symptom:**
+- Parameters unchanged from initial values
+- Zero gradients in optimization
+- "Convergence failure" warnings for some/all shards
+- Identical initial and final parameter estimates
+
+**Root Cause:**
+
+CMC always uses **per-angle scaling** (separate `contrast[i]` and `offset[i]` for each phi angle).
+This requires that **every shard contains data from all phi angles**. Non-stratified sharding
+(random, contiguous) may create shards with incomplete phi angle coverage, causing:
+
+1. Missing angles in shard → Zero gradient for that angle's parameters
+2. MCMC sampler cannot update parameters with zero gradients
+3. Silent optimization failure (completes but returns initial values)
+
+**Technical Details:**
+
+This is the same root cause as the NLSQ chunking issue documented in
+`docs/troubleshooting/nlsq-zero-iterations-investigation.md`:
+
+```
+Per-angle parameters: contrast[0], offset[0], contrast[1], offset[1], ...
+                               ↓
+Shard missing phi[0] → grad(contrast[0]) = 0, grad(offset[0]) = 0
+                               ↓
+MCMC sampler cannot move in zero-gradient directions
+                               ↓
+Parameters unchanged → silent failure
+```
+
+**Solution:**
+
+**ALWAYS use stratified sharding for CMC (default):**
+
+```yaml
+cmc:
+  sharding:
+    strategy: stratified  # REQUIRED for per-angle scaling
+    num_shards: auto
+```
+
+**Verification:**
+
+Check that your configuration doesn't override the default:
+
+```python
+# ❌ WRONG - May cause per-angle failures
+cmc:
+  sharding:
+    strategy: random      # Dangerous with per-angle scaling
+
+# ❌ WRONG - May cause per-angle failures
+cmc:
+  sharding:
+    strategy: contiguous  # Dangerous with per-angle scaling
+
+# ✅ CORRECT - Safe for per-angle scaling
+cmc:
+  sharding:
+    strategy: stratified  # Default, explicitly specified
+```
+
+**References:**
+- Ultra-Think Analysis: `ultra-think-20251106-012247`
+- NLSQ Investigation: `docs/troubleshooting/nlsq-zero-iterations-investigation.md`
+- Code: `homodyne/optimization/cmc/backends/multiprocessing.py:444` (per_angle_scaling=True)
+
 ---
 
 ## Diagnostic Interpretation

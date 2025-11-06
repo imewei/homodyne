@@ -399,6 +399,9 @@ optimization:
   - Stratified sampling across (t1, t2, phi) dimensions
   - Best for heterogeneous data distributions
   - Example: Each shard has proportional samples from all phi angles
+  - **⚠️ REQUIRED for per-angle scaling**: CMC always uses per-angle contrast/offset parameters.
+    Random or contiguous sharding may create shards with incomplete phi angle coverage, causing
+    zero gradients and silent parameter estimation failures. See troubleshooting guide for details.
 
 - **`random`**:
   - Random permutation before sharding

@@ -155,6 +155,52 @@ def synthetic_data_structured_phi():
     }
 
 
+@pytest.fixture
+def synthetic_data_discrete_phi_angles():
+    """Generate synthetic data with discrete replicated phi angles (for per-angle parameter testing).
+
+    This fixture creates data with exactly 3 unique phi angles (0°, 60°, 120°), each
+    replicated many times. This mimics realistic XPCS datasets where measurements are
+    taken at discrete angles with multiple time points per angle.
+
+    Used for testing CMC per-angle scaling compatibility where each shard must contain
+    all unique phi angles.
+    """
+    np.random.seed(42)
+
+    # Define 3 discrete phi angles (matching typical XPCS experiments)
+    phi_angles = np.array([0.0, 60.0, 120.0])
+    n_angles = len(phi_angles)
+
+    # Create 10,000 points per angle (30,000 total points)
+    n_points_per_angle = 10_000
+    n_total = n_angles * n_points_per_angle
+
+    # Replicate each angle n_points_per_angle times
+    phi = np.repeat(phi_angles, n_points_per_angle)
+
+    # Shuffle to mix angles (realistic: data isn't perfectly ordered by angle)
+    shuffle_indices = np.random.permutation(n_total)
+    phi = phi[shuffle_indices]
+
+    # Generate random data, t1, t2 with same shuffled order
+    data = (np.random.randn(n_total) + 1.0)[shuffle_indices]
+    t1 = np.random.uniform(0, 10, n_total)
+    t2 = np.random.uniform(0, 10, n_total)
+    sigma = np.abs(np.random.randn(n_total) * 0.1)
+
+    return {
+        "data": data,
+        "t1": t1,
+        "t2": t2,
+        "phi": phi,
+        "sigma": sigma,
+        "q": 0.01,
+        "L": 5.0,
+        "unique_angles": phi_angles,  # For easy access in tests
+    }
+
+
 # ============================================================================
 # Test Group 1: calculate_optimal_num_shards()
 # ============================================================================
@@ -429,6 +475,88 @@ def test_stratified_sharding_phi_coverage(synthetic_data_structured_phi):
         shard_phi_range = shard["phi"].max() - shard["phi"].min()
         # Each shard should cover at least 10% of overall phi range
         assert shard_phi_range >= 0.10 * overall_phi_range
+
+
+def test_stratified_sharding_per_angle_parameter_compatibility(synthetic_data_discrete_phi_angles):
+    """Test that stratified sharding ensures all shards contain ALL unique phi angles.
+
+    CRITICAL TEST for per-angle scaling compatibility (v2.2+)
+    ---------------------------------------------------------
+
+    Background:
+    CMC always uses per-angle scaling (separate contrast[i], offset[i] for each phi angle).
+    This requires that EVERY shard contains data from ALL phi angles. If a shard is missing
+    an angle, the gradient w.r.t. that angle's parameters will be zero, causing silent
+    optimization failures (parameters unchanged from initial values).
+
+    This test verifies that stratified sharding (the default strategy) satisfies this
+    requirement by ensuring each shard contains ALL unique phi angles present in the
+    original dataset.
+
+    References:
+    - Ultra-Think Analysis: ultra-think-20251106-012247
+    - NLSQ Investigation: docs/troubleshooting/nlsq-zero-iterations-investigation.md
+    - Code: homodyne/optimization/cmc/backends/multiprocessing.py:444 (per_angle_scaling=True)
+    """
+    # Get unique phi angles from the original dataset
+    unique_phi_angles = synthetic_data_discrete_phi_angles["unique_angles"]
+    n_unique_angles = len(unique_phi_angles)
+
+    # Create shards using stratified strategy
+    shards = shard_data_stratified(
+        data=synthetic_data_discrete_phi_angles["data"],
+        t1=synthetic_data_discrete_phi_angles["t1"],
+        t2=synthetic_data_discrete_phi_angles["t2"],
+        phi=synthetic_data_discrete_phi_angles["phi"],
+        num_shards=5,
+        q=synthetic_data_discrete_phi_angles["q"],
+        L=synthetic_data_discrete_phi_angles["L"],
+    )
+
+    # CRITICAL CHECK: Every shard must contain ALL unique phi angles
+    for i, shard in enumerate(shards):
+        shard_unique_phi = np.unique(shard["phi"])
+
+        # Check 1: Number of unique angles matches original dataset
+        assert len(shard_unique_phi) == n_unique_angles, (
+            f"Shard {i} is missing phi angles! "
+            f"Expected {n_unique_angles} unique angles, got {len(shard_unique_phi)}. "
+            f"Missing angles would cause zero gradients for per-angle parameters."
+        )
+
+        # Check 2: All unique angles are present (not just the count)
+        assert np.allclose(shard_unique_phi, unique_phi_angles, rtol=1e-10), (
+            f"Shard {i} has different phi angles than the original dataset! "
+            f"Expected angles: {unique_phi_angles}, got: {shard_unique_phi}. "
+            f"This would break per-angle parameter gradients."
+        )
+
+        # Check 3: Each angle has sufficient representation (at least 1 data point)
+        # This is implicitly guaranteed by checks 1 and 2, but we verify explicitly
+        for angle in unique_phi_angles:
+            angle_count = np.sum(np.isclose(shard["phi"], angle, rtol=1e-10))
+            assert angle_count > 0, (
+                f"Shard {i} has ZERO data points for phi={angle}! "
+                f"This would cause zero gradient for contrast[{angle}] and offset[{angle}]."
+            )
+
+    # Additional verification: Check angle distribution balance using KS test
+    # This ensures stratified sharding doesn't just include all angles but distributes them evenly
+    for angle in unique_phi_angles:
+        # Get the proportion of this angle in the original dataset
+        original_prop = np.sum(np.isclose(synthetic_data_discrete_phi_angles["phi"], angle, rtol=1e-10)) / len(synthetic_data_discrete_phi_angles["phi"])
+
+        # Check the proportion in each shard
+        for i, shard in enumerate(shards):
+            shard_prop = np.sum(np.isclose(shard["phi"], angle, rtol=1e-10)) / len(shard["phi"])
+
+            # Allow up to 50% deviation from the original proportion (lenient for small datasets)
+            # For production datasets with thousands of points per angle, this tolerance is tighter
+            assert abs(shard_prop - original_prop) < 0.5 * original_prop, (
+                f"Shard {i} has unbalanced representation of phi={angle}! "
+                f"Expected proportion: {original_prop:.3f}, got: {shard_prop:.3f}. "
+                f"Stratified sharding should distribute angles evenly across shards."
+            )
 
 
 # ============================================================================

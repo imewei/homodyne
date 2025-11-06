@@ -298,6 +298,21 @@ class CMCCoordinator:
         )
 
         strategy = self.config.get('cmc', {}).get('sharding', {}).get('strategy', 'stratified')
+
+        # CRITICAL VALIDATION: CMC always uses per-angle scaling (per_angle_scaling=True)
+        # which requires stratified sharding to ensure all shards contain all phi angles.
+        # Random/contiguous sharding may create angle imbalance → zero gradients → silent failures.
+        # See: docs/troubleshooting/nlsq-zero-iterations-investigation.md (NLSQ chunking issue)
+        if strategy != 'stratified':
+            logger.warning(
+                f"CMC sharding strategy is '{strategy}', but CMC always uses per-angle scaling "
+                f"which requires stratified sharding for correct results. "
+                f"Non-stratified strategies (random, contiguous) may cause angle imbalance "
+                f"in individual shards, leading to zero gradients and parameter estimation failures. "
+                f"RECOMMENDATION: Set cmc.sharding.strategy='stratified' in configuration. "
+                f"See ultra-think-20251106-012247 for technical details."
+            )
+
         # Use adaptive min_shard_size based on dataset size
         # This allows small test datasets to pass validation while maintaining
         # statistical rigor for production datasets
