@@ -142,7 +142,7 @@ def fit_nlsq_jax(
     data: dict[str, Any],
     config: ConfigManager,
     initial_params: dict[str, float] | None = None,
-    per_angle_scaling: bool = True,
+    per_angle_scaling: bool = True,  # Default True, but incompatible with chunking for large datasets!
 ) -> OptimizationResult:
     """NLSQ trust-region nonlinear least squares optimization with per-angle scaling (NEW IMPLEMENTATION).
 

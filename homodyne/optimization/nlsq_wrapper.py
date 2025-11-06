@@ -327,7 +327,7 @@ class NLSQWrapper:
         initial_params: np.ndarray | None = None,
         bounds: tuple[np.ndarray, np.ndarray] | None = None,
         analysis_mode: str = "static_isotropic",
-        per_angle_scaling: bool = True,
+        per_angle_scaling: bool = True,  # Default True, but incompatible with chunking for large datasets!
     ) -> OptimizationResult:
         """Execute NLSQ optimization with automatic strategy selection and per-angle scaling.
 
@@ -597,8 +597,37 @@ class NLSQWrapper:
         # Step 8: Measure execution time
         execution_time = time.time() - start_time
 
+        # Compute costs for success determination
+        initial_cost = info.get("initial_cost", 0) if isinstance(info, dict) else 0
+        final_cost = np.sum(final_residuals**2)
+
+        # Determine optimization success based on actual behavior (not misleading iteration count)
+        # NLSQ trust-region methods often return iterations=0, so we check actual optimization activity:
+        # 1. Function evaluations > 10 suggests optimization actually ran
+        # 2. Cost reduction > 5% suggests parameters were actually optimized
+        # 3. Parameters changed suggests optimization didn't immediately declare convergence
+        function_evals = iterations  # nfev = number of function evaluations
+        cost_reduction = (initial_cost - final_cost) / initial_cost if initial_cost > 0 else 0
+        params_changed = not np.allclose(popt, validated_params, rtol=1e-8)
+
+        optimization_ran = function_evals > 10 or params_changed
+        optimization_improved = cost_reduction > 0.05  # 5% improvement threshold
+
+        if optimization_ran and optimization_improved:
+            status_indicator = "✅ SUCCESS"
+            status_msg = "Optimization succeeded"
+        elif optimization_ran and not optimization_improved:
+            status_indicator = "⚠️ MARGINAL"
+            status_msg = "Optimization ran but minimal improvement"
+        else:
+            status_indicator = "❌ FAILED"
+            status_msg = "Optimization failed (0 iterations, no cost reduction)"
+
         logger.info(
-            f"Optimization completed in {execution_time:.2f}s, {iterations} iterations",
+            f"{status_indicator}: {status_msg} in {execution_time:.2f}s\n"
+            f"  Function evaluations: {function_evals}\n"
+            f"  Cost: {initial_cost:.4e} → {final_cost:.4e} ({cost_reduction*100:+.1f}%)\n"
+            f"  Iterations reported: {iterations} (note: NLSQ trust-region may show 0)"
         )
         if recovery_actions:
             logger.info(f"Recovery actions applied: {len(recovery_actions)}")
@@ -665,6 +694,10 @@ class NLSQWrapper:
         max_retries = 3
         current_params = initial_params.copy()
 
+        # Compute initial cost for optimization success tracking
+        initial_residuals = residual_fn(xdata, *initial_params)
+        initial_cost = np.sum(initial_residuals**2)
+
         # Determine if we should use large dataset functions
         use_large = strategy != OptimizationStrategy.STANDARD
         show_progress = strategy in [
@@ -698,7 +731,7 @@ class NLSQWrapper:
                         show_progress=show_progress,  # Enable progress for large datasets
                     )
                     # Create empty info dict for consistency with curve_fit path
-                    info = {}
+                    info = {"initial_cost": initial_cost}
                 else:
                     # Use standard curve_fit for small datasets
                     popt, pcov = curve_fit(
@@ -713,7 +746,7 @@ class NLSQWrapper:
                         max_nfev=5000,  # Increased max function evaluations
                         verbose=2,  # Show iteration details
                     )
-                    info = {}
+                    info = {"initial_cost": initial_cost}
 
                 # Validate result: Check for NLSQ streaming bug (returns p0 instead of best_params)
                 # This bug can occur when streaming optimization fails internally
@@ -1292,12 +1325,10 @@ class NLSQWrapper:
             # Flatten theory to match flattened data (NLSQ expects 1D output)
             g2_theory_flat = g2_theory.flatten()
 
-            # CRITICAL FIX for curve_fit_large chunking:
-            # xdata contains indices into the flattened array.
-            # When curve_fit_large chunks the data, it passes subset indices.
-            # We must return only those requested points to match ydata chunk size.
-            # For full dataset: xdata = [0, 1, ..., n-1] returns all points
-            # For chunk: xdata = [0, 1, ..., chunk_size-1] returns subset
+            # Return only requested points via fancy indexing
+            # JAX JIT supports fancy indexing with traced indices (validated 2025-01-05).
+            # This works for both STANDARD (all indices) and LARGE (chunked) strategies.
+            # NLSQ passes xdata as integer indices into the flattened array.
             indices = xdata.astype(jnp.int32)
             return g2_theory_flat[indices]
 
@@ -1396,6 +1427,10 @@ class NLSQWrapper:
             )
 
         logger.info("Initializing NLSQ StreamingOptimizer for unlimited dataset size...")
+
+        # Compute initial cost for optimization success tracking
+        initial_residuals = residual_fn(xdata, *initial_params)
+        initial_cost = np.sum(initial_residuals**2)
 
         # Parse checkpoint configuration
         checkpoint_config = checkpoint_config or {}
@@ -1562,6 +1597,9 @@ class NLSQWrapper:
             # Add batch statistics to info
             batch_stats = self.batch_statistics.get_statistics()
             info['batch_statistics'] = batch_stats
+
+            # Add initial cost to info for success tracking
+            info['initial_cost'] = initial_cost
 
             # Add checkpoint information to info
             if checkpoint_manager:
