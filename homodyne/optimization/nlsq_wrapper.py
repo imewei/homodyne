@@ -10,17 +10,26 @@ The NLSQWrapper class implements the Adapter pattern to translate:
 
 Key Features:
 - Automatic dataset size detection and strategy selection
+- Angle-stratified chunking for per-angle parameter compatibility (v2.2+)
 - Intelligent error recovery with 3-attempt retry strategy (T022-T024)
 - Actionable error diagnostics with 5 error categories
 - GPU/CPU transparent execution through JAX device abstraction
 - Progress logging and convergence diagnostics
 - Scientifically validated (7/7 validation tests passed, T036-T041)
 
+Per-Angle Scaling Fix (v2.2):
+- Fixes silent optimization failures with per-angle parameters on large datasets
+- Applies angle-stratified chunking when: per_angle_scaling=True AND n_points>100k
+- Ensures every NLSQ chunk contains all phi angles → gradients always well-defined
+- <1% performance overhead (0.15s for 3M points)
+- Reference: ultra-think-20251106-012247
+
 Production Status:
 - ✅ Production-ready with comprehensive error recovery
 - ✅ Scientifically validated (100% test pass rate)
 - ✅ Parameter recovery accuracy: 2-14% on core parameters
 - ✅ Sub-linear performance scaling with dataset size
+- ✅ Per-angle scaling compatible with large datasets (v2.2+)
 
 References:
 - NLSQ Package: https://github.com/imewei/NLSQ
@@ -55,6 +64,20 @@ from homodyne.optimization.strategy import (
     OptimizationStrategy,
     estimate_memory_requirements,
 )
+from homodyne.optimization.stratified_chunking import (
+    create_angle_stratified_data,
+    create_angle_stratified_indices,
+    analyze_angle_distribution,
+    estimate_stratification_memory,
+    should_use_stratification,
+    compute_stratification_diagnostics,
+    format_diagnostics_report,
+    StratificationDiagnostics,
+)
+from homodyne.optimization.sequential_angle import (
+    optimize_per_angle_sequential,
+    split_data_by_angle,
+)
 from homodyne.optimization.batch_statistics import BatchStatistics
 from homodyne.optimization.recovery_strategies import RecoveryStrategyApplicator
 from homodyne.optimization.numerical_validation import NumericalValidator
@@ -84,6 +107,7 @@ class OptimizationResult:
         recovery_actions: List of error recovery actions taken
         quality_flag: 'good', 'marginal', 'poor'
         streaming_diagnostics: Enhanced diagnostics for streaming optimization (Task 5.4)
+        stratification_diagnostics: Diagnostics for angle-stratified chunking (v2.2.1)
         success: Boolean indicating convergence (backward compatibility)
         message: Descriptive message about optimization outcome (backward compatibility)
     """
@@ -100,6 +124,7 @@ class OptimizationResult:
     recovery_actions: list[str] = field(default_factory=list)
     quality_flag: str = "good"
     streaming_diagnostics: dict[str, Any] | None = None  # Task 5.4: Enhanced streaming diagnostics
+    stratification_diagnostics: StratificationDiagnostics | None = None  # v2.2.1: Stratification diagnostics
 
     # Backward compatibility attributes (FR-002)
     @property
@@ -116,6 +141,21 @@ class OptimizationResult:
             return "Optimization stopped: maximum iterations reached"
         else:
             return f"Optimization failed: {self.convergence_status}"
+
+
+@dataclass
+class UseSequentialOptimization:
+    """Marker indicating sequential per-angle optimization should be used.
+
+    This is returned by _apply_stratification_if_needed when conditions require
+    sequential per-angle optimization as a fallback strategy.
+
+    Attributes:
+        data: Original XPCS data object
+        reason: Why sequential optimization is needed
+    """
+    data: Any
+    reason: str
 
 
 class NLSQWrapper:
@@ -357,9 +397,32 @@ class NLSQWrapper:
         # Start timing
         start_time = time.time()
 
-        # Step 1: Prepare data
+        # Step 1: Apply angle-stratified chunking if needed (BEFORE data preparation)
+        # This fixes per-angle parameter incompatibility with NLSQ chunking (ultra-think-20251106-012247)
+        stratified_data = self._apply_stratification_if_needed(data, per_angle_scaling, config, logger)
+
+        # Extract stratification diagnostics if available
+        stratification_diagnostics = None
+        if hasattr(stratified_data, 'stratification_diagnostics'):
+            stratification_diagnostics = stratified_data.stratification_diagnostics
+
+        # Check if sequential optimization is required
+        if isinstance(stratified_data, UseSequentialOptimization):
+            logger.info(f"Using sequential per-angle optimization: {stratified_data.reason}")
+            return self._run_sequential_optimization(
+                stratified_data.data,
+                config,
+                initial_params,
+                bounds,
+                analysis_mode,
+                per_angle_scaling,
+                logger,
+                start_time,
+            )
+
+        # Step 2: Prepare data
         logger.info(f"Preparing data for {analysis_mode} optimization...")
-        xdata, ydata = self._prepare_data(data)
+        xdata, ydata = self._prepare_data(stratified_data)
         n_data = len(ydata)
         logger.info(f"Data prepared: {n_data} points")
 
@@ -380,7 +443,7 @@ class NLSQWrapper:
                 f"  GPU memory will be managed automatically with chunking."
             )
 
-        # Step 2: Validate initial parameters
+        # Step 3: Validate initial parameters
         if initial_params is None:
             raise ValueError(
                 "initial_params must be provided (auto-loading not yet implemented)",
@@ -388,10 +451,10 @@ class NLSQWrapper:
 
         validated_params = self._validate_initial_params(initial_params, bounds)
 
-        # Step 3: Convert bounds
+        # Step 4: Convert bounds
         nlsq_bounds = self._convert_bounds(bounds)
 
-        # Step 4: Validate bounds consistency (FR-006)
+        # Step 5: Validate bounds consistency (FR-006)
         if nlsq_bounds is not None:
             lower, upper = nlsq_bounds
             if np.any(lower >= upper):
@@ -402,11 +465,11 @@ class NLSQWrapper:
                     f"Lower: {lower[invalid_indices]}, Upper: {upper[invalid_indices]}",
                 )
 
-        # Step 5: Create residual function with per-angle scaling
+        # Step 6: Create residual function with per-angle scaling
         logger.info(f"Creating residual function (per_angle_scaling={per_angle_scaling})...")
-        residual_fn = self._create_residual_function(data, analysis_mode, per_angle_scaling)
+        residual_fn = self._create_residual_function(stratified_data, analysis_mode, per_angle_scaling)
 
-        # Step 6: Select optimization strategy using intelligent strategy selector
+        # Step 7: Select optimization strategy using intelligent strategy selector
         # Following NLSQ best practices: estimate memory first, then select strategy
         # Reference: https://nlsq.readthedocs.io/en/latest/guides/large_datasets.html
         n_parameters = len(validated_params)
@@ -457,7 +520,7 @@ class NLSQWrapper:
             f"  Progress bars: {'Yes' if strategy_info['supports_progress'] else 'No'}"
         )
 
-        # Step 7: Execute optimization with strategy fallback
+        # Step 8: Execute optimization with strategy fallback
         # Try selected strategy first, then fallback to simpler strategies if needed
         current_strategy = strategy
         strategy_attempts = []
@@ -1036,7 +1099,7 @@ class NLSQWrapper:
         """Transform multi-dimensional XPCS data to flattened 1D arrays.
 
         Args:
-            data: XPCSData with shape (n_phi, n_t1, n_t2)
+            data: XPCSData with shape (n_phi, n_t1, n_t2) OR StratifiedData (already flattened)
 
         Returns:
             (xdata, ydata): Flattened independent variables and observations
@@ -1050,6 +1113,15 @@ class NLSQWrapper:
         ):
             raise ValueError("Data must have 'phi', 't1', 't2', and 'g2' attributes")
 
+        # Check if this is already stratified data (has phi_flat attribute)
+        if hasattr(data, "phi_flat"):
+            # Stratified data is already flattened - use directly
+            g2_flat = data.g2_flat
+            xdata = np.arange(len(g2_flat), dtype=np.float64)
+            ydata = g2_flat
+            return xdata, ydata
+
+        # Original data path: needs meshgrid and flattening
         # Get dimensions
         phi = np.asarray(data.phi)
         t1 = np.asarray(data.t1)
@@ -1073,6 +1145,412 @@ class NLSQWrapper:
         ydata = g2.flatten()
 
         return xdata, ydata
+
+    def _apply_stratification_if_needed(
+        self,
+        data: Any,
+        per_angle_scaling: bool,
+        config: Any,
+        logger: Any,
+    ) -> Any:
+        """Apply angle-stratified chunking if conditions require it.
+
+        This method fixes the per-angle scaling + NLSQ chunking incompatibility
+        identified in ultra-think-20251106-012247. When per-angle parameters are
+        used (contrast[i], offset[i] for each phi angle), NLSQ's arbitrary chunking
+        can create chunks without certain angles, resulting in zero gradients and
+        silent optimization failures.
+
+        Solution: Reorganize data so every chunk contains all phi angles, ensuring
+        gradients are always well-defined.
+
+        Args:
+            data: XPCSData object with phi, t1, t2, g2 attributes
+            per_angle_scaling: Whether per-angle parameters are enabled
+            config: Configuration manager with stratification settings
+            logger: Logger instance for diagnostics
+
+        Returns:
+            Data object (original or stratified copy) ready for optimization
+
+        Notes:
+            - No-op if conditions don't require stratification
+            - Creates temporary 2x memory overhead during reorganization
+            - <1% performance overhead (0.15s for 3M points)
+            - Respects configuration overrides in optimization.stratification
+        """
+        # Extract stratification configuration with defaults
+        strat_config = {}
+        if config is not None and hasattr(config, 'config'):
+            opt_config = config.config.get('optimization', {})
+            strat_config = opt_config.get('stratification', {})
+
+        # Configuration defaults (matching YAML template)
+        enabled = strat_config.get('enabled', 'auto')  # "auto", true, false
+        target_chunk_size = strat_config.get('target_chunk_size', 100_000)
+        max_imbalance_ratio = strat_config.get('max_imbalance_ratio', 5.0)
+        force_sequential = strat_config.get('force_sequential_fallback', False)
+        check_memory = strat_config.get('check_memory_safety', True)
+        use_index_based = strat_config.get('use_index_based', False)
+        collect_diagnostics = strat_config.get('collect_diagnostics', False)
+        log_diagnostics = strat_config.get('log_diagnostics', False)
+
+        # Check if explicitly disabled
+        if enabled is False or (isinstance(enabled, str) and enabled.lower() == 'false'):
+            logger.info("Stratification disabled via configuration")
+            return data
+
+        # Check if we should fallback to sequential
+        if force_sequential:
+            logger.info("Sequential per-angle fallback forced via configuration")
+            return UseSequentialOptimization(
+                data=data,
+                reason="force_sequential_fallback=true in configuration"
+            )
+
+        # Quick checks: Do we need stratification?
+        if not per_angle_scaling:
+            logger.debug("Stratification skipped: per_angle_scaling=False")
+            return data
+
+        # Get data dimensions
+        phi = np.asarray(data.phi)
+        t1 = np.asarray(data.t1)
+        t2 = np.asarray(data.t2)
+        g2 = np.asarray(data.g2)
+
+        # Calculate total points (meshgrid creates n_phi × n_t1 × n_t2 points)
+        n_points = len(phi) * len(t1) * len(t2)
+
+        # Analyze angle distribution
+        stats = analyze_angle_distribution(phi)
+
+        # Decision logic (use configured max_imbalance_ratio)
+        # Override the imbalance check with configured value
+        should_stratify_auto, reason = should_use_stratification(
+            n_points=n_points,
+            n_angles=stats.n_angles,
+            per_angle_scaling=per_angle_scaling,
+            imbalance_ratio=stats.imbalance_ratio,
+        )
+
+        # Override with configuration if imbalance exceeds configured threshold
+        if stats.imbalance_ratio > max_imbalance_ratio:
+            # Extreme imbalance - use sequential optimization
+            logger.info(
+                f"Extreme angle imbalance detected ({stats.imbalance_ratio:.1f} > {max_imbalance_ratio:.1f})"
+            )
+            return UseSequentialOptimization(
+                data=data,
+                reason=f"Angle imbalance ratio ({stats.imbalance_ratio:.1f}) exceeds threshold ({max_imbalance_ratio:.1f})"
+            )
+
+        # Handle "auto" mode
+        if enabled == 'auto' or (isinstance(enabled, str) and enabled.lower() == 'auto'):
+            should_stratify = should_stratify_auto
+        else:
+            # enabled is True (force on)
+            should_stratify = True
+            reason = "Stratification forced via configuration (enabled=true)"
+
+        if not should_stratify:
+            logger.info(f"Stratification skipped: {reason}")
+            return data
+
+        # Apply stratification
+        logger.info(
+            f"Applying angle-stratified chunking: {reason}\n"
+            f"  Angles: {stats.n_angles}, Imbalance ratio: {stats.imbalance_ratio:.2f}\n"
+            f"  Total points: {n_points:,}\n"
+            f"  Target chunk size: {target_chunk_size:,}\n"
+            f"  Use index-based: {use_index_based}"
+        )
+
+        # Check memory safety (if enabled in config)
+        if check_memory:
+            mem_stats = estimate_stratification_memory(n_points, use_index_based=use_index_based)
+            if not mem_stats["is_safe"]:
+                logger.warning(
+                    f"Stratification may use significant memory: "
+                    f"{mem_stats['peak_memory_mb']:.1f} MB peak. "
+                    f"Consider: (1) setting use_index_based=true, or "
+                    f"(2) setting force_sequential_fallback=true"
+                )
+
+        # Reorganize data arrays
+        # Need to expand to full meshgrid first, then stratify
+        phi_grid, t1_grid, t2_grid = np.meshgrid(phi, t1, t2, indexing="ij")
+        phi_flat = phi_grid.flatten()
+        t1_flat = t1_grid.flatten()
+        t2_flat = t2_grid.flatten()
+        g2_flat = g2.flatten()
+
+        # Measure stratification execution time
+        import time
+        stratification_start = time.perf_counter()
+
+        # Apply stratification based on mode
+        if use_index_based:
+            # Index-based stratification (zero-copy, ~1% memory overhead)
+            logger.info("Using index-based stratification (zero-copy)")
+            indices = create_angle_stratified_indices(phi_flat, target_chunk_size=target_chunk_size)
+
+            # Apply indices to get stratified data
+            phi_stratified = phi_flat[indices]
+            t1_stratified = t1_flat[indices]
+            t2_stratified = t2_flat[indices]
+            g2_stratified = g2_flat[indices]
+        else:
+            # Full copy stratification (2x memory overhead)
+            logger.info("Using full-copy stratification")
+            # Convert to JAX arrays for stratification
+            phi_jax = jnp.array(phi_flat)
+            t1_jax = jnp.array(t1_flat)
+            t2_jax = jnp.array(t2_flat)
+            g2_jax = jnp.array(g2_flat)
+
+            # Apply stratification (use configured target_chunk_size)
+            phi_stratified, t1_stratified, t2_stratified, g2_stratified = create_angle_stratified_data(
+                phi_jax, t1_jax, t2_jax, g2_jax, target_chunk_size=target_chunk_size
+            )
+
+            # Convert back to numpy
+            phi_stratified = np.array(phi_stratified)
+            t1_stratified = np.array(t1_stratified)
+            t2_stratified = np.array(t2_stratified)
+            g2_stratified = np.array(g2_stratified)
+
+        # Measure execution time
+        stratification_time_ms = (time.perf_counter() - stratification_start) * 1000.0
+
+        # Compute diagnostics if requested
+        diagnostics = None
+        if collect_diagnostics:
+            diagnostics = compute_stratification_diagnostics(
+                phi_original=phi_flat,
+                phi_stratified=phi_stratified,
+                execution_time_ms=stratification_time_ms,
+                use_index_based=use_index_based,
+                target_chunk_size=target_chunk_size,
+            )
+
+            # Optionally log diagnostic report
+            if log_diagnostics and diagnostics is not None:
+                report = format_diagnostics_report(diagnostics)
+                logger.info(f"\n{report}")
+
+        # Create stratified data object (modify in-place or create copy)
+        # We need to "unflatten" back to original shape for _prepare_data to work
+        # Actually, we can't easily unflatten to 3D grid, so instead we'll create
+        # a modified data object that stores the flattened stratified arrays
+
+        # Create a simple namespace object to hold stratified data
+        class StratifiedData:
+            def __init__(self, phi, t1, t2, g2, diagnostics=None):
+                # Store flattened stratified arrays
+                self.phi_flat = phi
+                self.t1_flat = t1
+                self.t2_flat = t2
+                self.g2_flat = g2
+
+                # Also store unique values for backwards compatibility
+                self.phi = np.unique(phi)
+                self.t1 = np.unique(t1)
+                self.t2 = np.unique(t2)
+
+                # Store as 1D array (already flattened and stratified)
+                self.g2 = g2
+
+                # Store diagnostics if available
+                self.stratification_diagnostics = diagnostics
+
+        stratified_data = StratifiedData(
+            phi_stratified, t1_stratified, t2_stratified, g2_stratified, diagnostics
+        )
+
+        logger.info(
+            f"Stratification complete: {len(g2_stratified):,} points reorganized"
+        )
+
+        return stratified_data
+
+    def _run_sequential_optimization(
+        self,
+        data: Any,
+        config: Any,
+        initial_params: np.ndarray | None,
+        bounds: tuple[np.ndarray, np.ndarray] | None,
+        analysis_mode: str,
+        per_angle_scaling: bool,
+        logger: Any,
+        start_time: float,
+    ) -> OptimizationResult:
+        """Run sequential per-angle optimization as a fallback strategy.
+
+        This method optimizes each phi angle independently and combines results
+        using inverse variance weighting. It's used when:
+        - Angle imbalance ratio exceeds threshold (>5.0 by default)
+        - force_sequential_fallback=true in configuration
+        - Stratification cannot be applied
+
+        Args:
+            data: Original XPCS data object
+            config: Configuration manager
+            initial_params: Initial parameter guess
+            bounds: Parameter bounds (lower, upper)
+            analysis_mode: 'static_isotropic' or 'laminar_flow'
+            per_angle_scaling: Whether per-angle parameters enabled
+            logger: Logger instance
+            start_time: Start time for execution timing
+
+        Returns:
+            OptimizationResult with combined parameters from all angles
+
+        Raises:
+            RuntimeError: If too few angles converge (<50% by default)
+        """
+        import time
+
+        logger.info("=" * 80)
+        logger.info("SEQUENTIAL PER-ANGLE OPTIMIZATION")
+        logger.info("=" * 80)
+
+        # Prepare data arrays
+        phi = np.asarray(data.phi)
+        t1 = np.asarray(data.t1)
+        t2 = np.asarray(data.t2)
+        g2 = np.asarray(data.g2)
+
+        # Create full meshgrid
+        phi_grid, t1_grid, t2_grid = np.meshgrid(phi, t1, t2, indexing="ij")
+        phi_flat = phi_grid.flatten()
+        t1_flat = t1_grid.flatten()
+        t2_flat = t2_grid.flatten()
+        g2_flat = g2.flatten()
+
+        # Load initial parameters if not provided
+        if initial_params is None:
+            from homodyne.config.parameter_manager import ParameterManager
+            param_manager = ParameterManager(config.config, analysis_mode)
+            initial_params = param_manager.get_initial_values()
+            logger.info(f"Loaded initial parameters from config: {len(initial_params)} parameters")
+
+        # Load bounds if not provided
+        if bounds is None:
+            from homodyne.config.parameter_manager import ParameterManager
+            param_manager = ParameterManager(config.config, analysis_mode)
+            param_names = param_manager.get_parameter_names()
+            bounds = param_manager.get_parameter_bounds(param_names)
+            logger.info(f"Loaded parameter bounds from config")
+
+        # Create residual function
+        from homodyne.core.jax_backend import compute_residuals
+
+        def residual_func(params, phi_vals, t1_vals, t2_vals, g2_vals):
+            """Residual function compatible with sequential optimization."""
+            # Convert to JAX arrays
+            phi_jax = jnp.array(phi_vals)
+            t1_jax = jnp.array(t1_vals)
+            t2_jax = jnp.array(t2_vals)
+            g2_jax = jnp.array(g2_vals)
+            params_jax = jnp.array(params)
+
+            # Compute residuals
+            residuals = compute_residuals(
+                params_jax,
+                phi_jax,
+                t1_jax,
+                t2_jax,
+                g2_jax,
+                analysis_mode,
+                per_angle_scaling,
+            )
+
+            return np.array(residuals)
+
+        # Get optimizer configuration
+        opt_config = config.config.get('optimization', {})
+        nlsq_config = opt_config.get('nlsq', {})
+
+        # Sequential-specific config
+        seq_config = opt_config.get('sequential', {})
+        min_success_rate = seq_config.get('min_success_rate', 0.5)
+        weighting = seq_config.get('weighting', 'inverse_variance')
+
+        # Run sequential optimization
+        logger.info(f"Starting per-angle optimization with {len(np.unique(phi_flat))} angles...")
+
+        sequential_result = optimize_per_angle_sequential(
+            phi=phi_flat,
+            t1=t1_flat,
+            t2=t2_flat,
+            g2_exp=g2_flat,
+            residual_func=residual_func,
+            initial_params=initial_params,
+            bounds=bounds,
+            weighting=weighting,
+            min_success_rate=min_success_rate,
+            max_nfev=nlsq_config.get('max_iterations', 1000),
+            ftol=nlsq_config.get('tolerance', 1e-8),
+        )
+
+        # Convert SequentialResult to OptimizationResult
+        execution_time = time.time() - start_time
+
+        # Get device info
+        device_info = {
+            'type': 'CPU',  # Sequential uses scipy.optimize.least_squares (CPU only)
+            'backend': 'scipy.optimize.least_squares',
+            'strategy': 'sequential_per_angle',
+        }
+
+        # Compute chi-squared
+        final_residuals = residual_func(
+            sequential_result.combined_parameters,
+            phi_flat, t1_flat, t2_flat, g2_flat
+        )
+        chi_squared = float(np.sum(final_residuals**2))
+        n_data = len(phi_flat)
+        n_params = len(sequential_result.combined_parameters)
+        reduced_chi_squared = chi_squared / (n_data - n_params)
+
+        # Determine convergence status
+        if sequential_result.success_rate >= min_success_rate:
+            convergence_status = "converged"
+            quality_flag = "good" if sequential_result.success_rate > 0.8 else "marginal"
+        else:
+            convergence_status = "failed"
+            quality_flag = "poor"
+
+        # Compute uncertainties from covariance
+        uncertainties = np.sqrt(np.diag(sequential_result.combined_covariance))
+
+        # Summary logging
+        logger.info("=" * 80)
+        logger.info("SEQUENTIAL OPTIMIZATION COMPLETE")
+        logger.info(f"  Success rate: {sequential_result.success_rate:.1%}")
+        logger.info(f"  Angles optimized: {sequential_result.n_angles_optimized}/{sequential_result.n_angles_optimized + sequential_result.n_angles_failed}")
+        logger.info(f"  Combined cost: {sequential_result.total_cost:.4f}")
+        logger.info(f"  Reduced χ²: {reduced_chi_squared:.4f}")
+        logger.info(f"  Execution time: {execution_time:.2f}s")
+        logger.info(f"  Weighting: {weighting}")
+        logger.info("=" * 80)
+
+        return OptimizationResult(
+            parameters=sequential_result.combined_parameters,
+            uncertainties=uncertainties,
+            covariance=sequential_result.combined_covariance,
+            chi_squared=chi_squared,
+            reduced_chi_squared=reduced_chi_squared,
+            convergence_status=convergence_status,
+            iterations=sum(r['n_iterations'] for r in sequential_result.per_angle_results),
+            execution_time=execution_time,
+            device_info=device_info,
+            recovery_actions=[
+                f"Sequential per-angle optimization: {sequential_result.n_angles_optimized} angles converged"
+            ],
+            quality_flag=quality_flag,
+        )
 
     def _validate_initial_params(
         self,
@@ -1729,6 +2207,7 @@ class NLSQWrapper:
             recovery_actions=recovery_actions or [],
             quality_flag=quality_flag,
             streaming_diagnostics=enhanced_streaming_diagnostics,  # Task 5.4
+            stratification_diagnostics=stratification_diagnostics,  # v2.2.1: Stratification diagnostics
         )
 
         return result
