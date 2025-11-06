@@ -260,6 +260,58 @@ optimization:
     verbose: false                            # Print iteration details
 
   # ---------------------------------------------------------------------------
+  # STRATIFICATION - Angle-Stratified Chunking (v2.2+)
+  # ---------------------------------------------------------------------------
+  # Fixes per-angle parameter compatibility with NLSQ chunking for large datasets
+  # Automatically reorganizes data to ensure all chunks contain all phi angles
+  # Prevents silent optimization failures (0 iterations, zero gradients)
+  stratification:
+    enabled: "auto"                           # Options: "auto" | true | false
+                                              # "auto" activates when: per_angle_scaling=True AND n_points>=100k
+    target_chunk_size: 100000                 # Target size for stratified chunks [points]
+                                              # Should match NLSQ's internal chunk size
+    max_imbalance_ratio: 5.0                  # Maximum angle imbalance ratio before fallback
+                                              # Fallback to sequential if max_count/min_count > threshold
+    force_sequential_fallback: false          # Force sequential per-angle optimization
+                                              # Useful for highly imbalanced angle distributions
+    check_memory_safety: true                 # Check available memory before stratification
+                                              # Warns if peak memory > 70% of available
+    use_index_based: false                    # Use zero-copy index-based stratification
+                                              # Reduces memory overhead from 2x to ~1%
+                                              # Recommended for very large datasets (>10M points)
+    collect_diagnostics: false                # Collect detailed stratification diagnostics
+                                              # Performance metrics, chunk balance, angle coverage
+                                              # Minimal overhead (~0.01s)
+    log_diagnostics: false                    # Log diagnostic report to console
+                                              # Requires collect_diagnostics=true
+                                              # Useful for troubleshooting and validation
+
+  # Performance Impact:
+  # - Time overhead: <1% (0.15s for 3M points)
+  # - Memory overhead: 2x peak (temporary) or ~1% (index-based)
+  # - Diagnostics overhead: <0.1% (0.01s for 3M points)
+  # - Fixes: Silent failures with per-angle scaling on large datasets
+
+  # ---------------------------------------------------------------------------
+  # SEQUENTIAL - Sequential Per-Angle Optimization (v2.2+)
+  # ---------------------------------------------------------------------------
+  # Fallback strategy when stratification cannot be applied
+  # Optimizes each phi angle independently and combines results
+  # Used when: angle imbalance > threshold OR force_sequential_fallback=true
+  sequential:
+    min_success_rate: 0.5                     # Minimum fraction of angles that must converge
+                                              # Optimization fails if fewer angles converge
+    weighting: "inverse_variance"             # Result combination method
+                                              # Options: "inverse_variance" | "uniform" | "n_points"
+                                              # "inverse_variance" provides optimal statistical weighting
+
+  # Usage Notes:
+  # - Automatically activated when: imbalance_ratio > max_imbalance_ratio
+  # - Can be forced via: optimization.stratification.force_sequential_fallback=true
+  # - Uses scipy.optimize.least_squares per angle (CPU only)
+  # - Combines results using weighted averaging
+
+  # ---------------------------------------------------------------------------
   # MCMC - Markov Chain Monte Carlo (Uncertainty Quantification)
   # ---------------------------------------------------------------------------
   # Provides full posterior distributions and uncertainty estimates

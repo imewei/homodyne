@@ -122,6 +122,149 @@ class StreamingConfig(TypedDict, total=False):
     min_success_rate: float
 
 
+class StratificationConfig(TypedDict, total=False):
+    """Angle-stratified chunking configuration (v2.2+).
+
+    Configuration for angle-stratified data reorganization to fix per-angle
+    parameter incompatibility with NLSQ chunking on large datasets.
+
+    Root Cause Fixed:
+    -----------------
+    NLSQ's arbitrary chunking can create chunks without certain phi angles,
+    resulting in zero gradients for per-angle parameters (contrast[i], offset[i])
+    and silent optimization failures (0 iterations, unchanged parameters).
+
+    Solution:
+    ---------
+    Reorganize data BEFORE optimization to ensure every chunk contains all phi
+    angles, making gradients always well-defined.
+
+    Attributes
+    ----------
+    enabled : bool | str
+        Enable stratification: true (force on), false (force off), "auto" (default)
+        "auto" applies stratification when: per_angle_scaling=True AND n_points>=100k
+    target_chunk_size : int
+        Target size for stratified chunks (default: 100_000)
+        Should match NLSQ's internal chunk size for optimal results
+    max_imbalance_ratio : float
+        Maximum angle imbalance ratio before falling back to sequential optimization
+        Default: 5.0 (use sequential if max_count/min_count > 5.0)
+    force_sequential_fallback : bool
+        Force sequential per-angle optimization instead of stratification
+        Useful for highly imbalanced datasets (default: false)
+    check_memory_safety : bool
+        Check available memory before stratification (default: true)
+        Warns if peak memory > 70% of available
+    use_index_based : bool
+        Use index-based (zero-copy) stratification for very large datasets
+        Reduces memory overhead from 2x to ~1% (default: false)
+    collect_diagnostics : bool
+        Collect detailed stratification diagnostics (performance, chunk balance, angle coverage)
+        Minimal overhead ~0.01s (default: false)
+    log_diagnostics : bool
+        Log diagnostic report to console (requires collect_diagnostics=true)
+        Useful for troubleshooting and validation (default: false)
+
+    Examples
+    --------
+    Default (automatic):
+        stratification:
+          enabled: "auto"  # Auto-activates for large datasets with per-angle scaling
+
+    Force enabled for all datasets:
+        stratification:
+          enabled: true
+          target_chunk_size: 100000
+
+    Disable (use original data):
+        stratification:
+          enabled: false
+
+    Highly imbalanced angles:
+        stratification:
+          max_imbalance_ratio: 10.0  # More lenient
+          force_sequential_fallback: false
+
+    Memory-constrained systems:
+        stratification:
+          check_memory_safety: true
+          use_index_based: true  # Minimal memory overhead
+
+    References
+    ----------
+    Ultra-Think Analysis: ultra-think-20251106-012247
+    Performance: <1% overhead (0.15s for 3M points)
+    Memory: 2x peak (temporary) or ~1% (index-based)
+    """
+
+    enabled: bool | str  # true, false, or "auto"
+    target_chunk_size: int
+    max_imbalance_ratio: float
+    force_sequential_fallback: bool
+    check_memory_safety: bool
+    use_index_based: bool
+    collect_diagnostics: bool
+    log_diagnostics: bool
+
+
+class SequentialConfig(TypedDict, total=False):
+    """Sequential per-angle optimization configuration (v2.2+).
+
+    Configuration for sequential optimization fallback when stratification
+    cannot be applied (e.g., extreme angle imbalance >5.0 ratio).
+
+    Strategy:
+    ---------
+    1. Split data by phi angle
+    2. Optimize each angle independently using scipy.optimize.least_squares
+    3. Combine results using weighted averaging (inverse variance weighting)
+
+    Use Cases:
+    ----------
+    - Extreme angle imbalance (ratio > 5.0)
+    - Stratification explicitly disabled
+    - Memory-constrained environments
+    - Debugging and validation
+
+    Attributes
+    ----------
+    min_success_rate : float
+        Minimum fraction of angles that must converge (default: 0.5)
+        Optimization fails if success_rate < min_success_rate
+        Range: 0.0-1.0
+    weighting : str
+        Method for combining per-angle results (default: "inverse_variance")
+        Options:
+          - "inverse_variance": Optimal statistical weighting (w_i = 1/σ²_i)
+          - "uniform": Equal weights for all angles
+          - "n_points": Weight by number of data points per angle
+
+    Examples
+    --------
+    Default configuration (optimal statistical combination):
+        sequential:
+          min_success_rate: 0.5
+          weighting: "inverse_variance"
+
+    Require higher convergence rate:
+        sequential:
+          min_success_rate: 0.8  # 80% of angles must converge
+
+    Equal weighting (not recommended):
+        sequential:
+          weighting: "uniform"
+
+    References
+    ----------
+    Module: homodyne.optimization.sequential_angle
+    Inverse Variance Weighting: https://en.wikipedia.org/wiki/Inverse-variance_weighting
+    """
+
+    min_success_rate: float
+    weighting: str
+
+
 class CMCShardingConfig(TypedDict, total=False):
     """CMC data sharding configuration.
 
@@ -307,6 +450,10 @@ class OptimizationConfig(TypedDict, total=False):
         Angle filtering settings
     streaming : StreamingConfig, optional
         Streaming optimization settings (checkpoint management, fault tolerance)
+    stratification : StratificationConfig, optional
+        Angle-stratified chunking settings (v2.2+, fixes per-angle parameter compatibility)
+    sequential : SequentialConfig, optional
+        Sequential per-angle optimization settings (v2.2+, fallback for extreme imbalance)
     """
 
     method: Literal["nlsq", "mcmc", "cmc", "auto"]
@@ -315,6 +462,8 @@ class OptimizationConfig(TypedDict, total=False):
     cmc: CMCConfig
     angle_filtering: dict[str, Any]
     streaming: StreamingConfig
+    stratification: StratificationConfig
+    sequential: SequentialConfig
 
 
 class HomodyneConfig(TypedDict, total=False):
