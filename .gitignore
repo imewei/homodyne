@@ -9,6 +9,7 @@ DOCUMENTATION_POLISH_SUMMARY.md
 PERFORMANCE_ANALYSIS_REPORT.md
 cmc_temp_*
 TASK_GROUP_*.md
+.ultra-think/
 
 # Run code and experimental data
 homodyne_analysis_results/

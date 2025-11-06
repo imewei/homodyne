@@ -637,15 +637,57 @@ if np.allclose(popt, initial_params):
     print("No optimization occurred")
 ```
 
-**Issue:** Model function chunking for large datasets
+**Issue:** Per-angle scaling incompatible with NLSQ chunking for large datasets (>1M points)
 
-**Correct pattern:**
-```python
-def model_function(xdata, *params):
-    full_output = compute_theory(params)  # e.g., 23M points
-    indices = xdata.astype(jnp.int32)
-    return full_output[indices]  # Only requested subset
+**Symptoms:**
+- NLSQ returns 0 iterations with unchanged parameters
+- `first-order optimality 0.00e+00` (gradient = 0)
+- Final cost = initial cost (no improvement)
+- Analysis completes but with unoptimized results
+- Only affects datasets >1M points (triggers LARGE/CHUNKED strategy)
+
+**Root Cause (VERIFIED 2025-01-06):**
+Per-angle scaling architecture is fundamentally incompatible with NLSQ's chunking implementation:
+
+1. **Per-angle scaling** adds 2×n_phi parameters (contrast[i], offset[i] for each phi angle)
+   - Example: 3 angles → 6 scaling params + 7 physics params = 13 total
+2. **NLSQ chunking** splits 3M points into 11 chunks of 300k points each
+3. **Problem**: Each chunk may not contain all phi angles
+4. **Result**: Gradient w.r.t. angle-specific parameters is zero for chunks missing those angles
+5. **Failure**: NLSQ's gradient aggregation across chunks fails with partial angle coverage
+
+**Proof:**
+```bash
+# With per_angle_scaling=True (default):
+Function evaluations: 1, gradient: 0.00, NO OPTIMIZATION ❌
+
+# With per_angle_scaling=False:
+Function evaluations: 53-127, gradient: 9.22-8290, WORKS ✅
+Initial cost: 2202 → Final cost: 508
+Reduced chi-squared: 1.39 (good fit)
 ```
+
+**Immediate Workaround:**
+Disable per-angle scaling for large datasets by modifying the fit call:
+```python
+# In your analysis script:
+from homodyne.optimization.nlsq import fit_nlsq_jax
+result = fit_nlsq_jax(data, config, per_angle_scaling=False)
+```
+
+**Alternative Workarounds:**
+1. **Reduce dataset size** below 1M points via phi angle filtering (forces STANDARD strategy)
+2. **Force STANDARD strategy** with `strategy_override: "standard"` (no chunking, but memory intensive)
+3. **Use MCMC** instead of NLSQ (handles per-angle scaling correctly)
+
+**Long-term Solutions:**
+1. **Fix NLSQ chunking** to handle per-angle parameters correctly (requires NLSQ library changes)
+2. **Restructure data** so each chunk contains all phi angles (pre-process before optimization)
+3. **Use alternative optimizer** like scipy.optimize.least_squares (loses GPU acceleration)
+
+**Note:** Per-angle scaling is physically correct and recommended for small datasets (<1M points). The issue only affects large datasets requiring chunking.
+
+**See:** `docs/troubleshooting/nlsq-zero-iterations-investigation.md` for investigation timeline
 
 ### Plotting
 
@@ -665,6 +707,7 @@ ax.imshow(c2.T, origin='lower', extent=[t1[0], t1[-1], t2[0], t2[-1]])
 ### Documentation Resources
 
 - Silent failures: `docs/troubleshooting/silent-failure-diagnosis.md`
+- Zero-iteration investigation: `docs/troubleshooting/nlsq-zero-iterations-investigation.md`
 - Plotting issues: `docs/troubleshooting/imshow-transpose-pitfalls.md`
 - NLSQ docs: https://nlsq.readthedocs.io/en/latest/
 - Performance guide: https://nlsq.readthedocs.io/en/latest/guides/performance_guide.html
