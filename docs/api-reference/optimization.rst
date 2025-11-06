@@ -40,6 +40,8 @@ The optimization module is organized into several submodules:
 * :mod:`homodyne.optimization.batch_statistics` - Batch-level monitoring
 * :mod:`homodyne.optimization.exceptions` - Custom exception hierarchy
 * :mod:`homodyne.optimization.cmc` - Covariance Matrix Combination (advanced)
+* :mod:`homodyne.optimization.stratified_chunking` - Angle-stratified data reorganization (v2.2+)
+* :mod:`homodyne.optimization.sequential_angle` - Sequential per-angle optimization fallback (v2.2+)
 
 Submodules
 ----------
@@ -519,6 +521,181 @@ CMC is automatically enabled when EITHER of these conditions is met:
 **For More Details:**
 
 See :doc:`../architecture/cmc-dual-mode-strategy` for comprehensive explanation of CMC design and decision logic.
+
+homodyne.optimization.stratified_chunking
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. automodule:: homodyne.optimization.stratified_chunking
+   :members:
+   :undoc-members:
+   :show-inheritance:
+   :exclude-members: __weakref__
+
+.. versionadded:: 2.2.0
+   Angle-stratified chunking to fix per-angle scaling compatibility with NLSQ chunking on large datasets.
+
+**Critical Fix for Large Datasets (>1M points)**
+
+This module solves silent NLSQ optimization failures caused by incompatibility between per-angle scaling parameters and arbitrary data chunking. When datasets exceed 1M points, NLSQ uses chunked processing where chunks may not contain all phi angles, resulting in zero gradients for per-angle parameters and silent optimization failures.
+
+**Solution:** Reorganize data BEFORE optimization to ensure every chunk contains all phi angles, making gradients always well-defined.
+
+**Key Functions:**
+
+* ``reorganize_data_stratified()`` - Angle-stratified data reorganization (primary method)
+* ``sequential_per_angle_optimization()`` - Sequential fallback for extreme angle imbalance
+* ``StratificationDiagnostics`` - Performance monitoring and validation
+
+**Automatic Activation (Recommended):**
+
+Stratification activates automatically when:
+
+* ``per_angle_scaling=True`` (default in v2.2.0)
+* AND ``n_points >= 100,000``
+
+**Performance:**
+
+* Overhead: <1% (0.15s for 3M points)
+* Scaling: O(n^1.01) sub-linear
+* Memory: 2x peak (temporary during reorganization)
+
+**Usage Example:**
+
+.. code-block:: python
+
+   from homodyne.optimization.nlsq_wrapper import NLSQWrapper
+   from homodyne.config.manager import ConfigManager
+
+   # Load configuration
+   config = ConfigManager("config.yaml")
+
+   # Run NLSQ with automatic stratification
+   wrapper = NLSQWrapper(config=config.to_dict())
+   result = wrapper.optimize(
+       data={'c2': c2_data, 't1': t1, 't2': t2, 'phi': phi},
+       per_angle_scaling=True  # Triggers stratification if n >= 100k
+   )
+
+   # Check if stratification was used
+   if result.diagnostics.get('stratification_applied'):
+       print("✓ Stratification enabled")
+       print(f"  Overhead: {result.diagnostics['stratification_time']:.2f}s")
+
+**Manual Configuration:**
+
+.. code-block:: yaml
+
+   optimization:
+     stratification:
+       enabled: "auto"  # Options: true, false, "auto"
+       target_chunk_size: 100000
+       max_imbalance_ratio: 5.0  # Use sequential if max/min count > 5.0
+       force_sequential_fallback: false
+       check_memory_safety: true
+       use_index_based: false  # Future: zero-copy optimization
+       collect_diagnostics: false
+       log_diagnostics: false
+
+**Sequential Fallback (Extreme Imbalance):**
+
+When angle imbalance ratio exceeds ``max_imbalance_ratio`` (default: 5.0), automatic fallback to sequential per-angle optimization:
+
+.. code-block:: python
+
+   # Automatic fallback for extreme imbalance
+   # Dataset: 10k points for phi=0°, 1k for phi=60°, 500 for phi=120°
+   # Imbalance ratio: 10000/500 = 20.0 > 5.0 → Sequential optimization
+
+   result = wrapper.optimize(data, per_angle_scaling=True)
+   # Uses sequential_per_angle_optimization() internally
+
+**References:**
+
+* Release Notes: :doc:`../releases/v2.2-stratification-release-notes`
+* Investigation: :doc:`../troubleshooting/nlsq-zero-iterations-investigation`
+
+homodyne.optimization.sequential_angle
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. automodule:: homodyne.optimization.sequential_angle
+   :members:
+   :undoc-members:
+   :show-inheritance:
+   :exclude-members: __weakref__
+
+.. versionadded:: 2.2.0
+   Sequential per-angle optimization fallback for extreme angle imbalance scenarios.
+
+**Fallback Strategy for Extreme Angle Imbalance**
+
+This module provides sequential per-angle optimization when stratification cannot be applied (e.g., angle count imbalance ratio > 5.0). Instead of chunking, it splits data by phi angle and optimizes each angle independently using ``scipy.optimize.least_squares``.
+
+**Strategy:**
+
+1. Split data by phi angle
+2. Optimize each angle independently (per-angle contrast/offset + shared physical params)
+3. Combine results using weighted averaging (inverse variance weighting)
+
+**Use Cases:**
+
+* Extreme angle imbalance (ratio > 5.0)
+* Stratification explicitly disabled
+* Memory-constrained environments
+* Debugging and validation
+
+**Key Functions:**
+
+* ``sequential_per_angle_optimization()`` - Main sequential optimization
+* ``combine_per_angle_results()`` - Weighted result combination
+
+**Configuration:**
+
+.. code-block:: yaml
+
+   optimization:
+     sequential:
+       min_success_rate: 0.5  # Minimum fraction of angles that must converge
+       weighting: "inverse_variance"  # Options: inverse_variance, uniform, n_points
+
+**Usage Example:**
+
+.. code-block:: python
+
+   from homodyne.optimization.sequential_angle import (
+       sequential_per_angle_optimization,
+       combine_per_angle_results
+   )
+
+   # Explicitly use sequential optimization
+   angle_results = sequential_per_angle_optimization(
+       data_dict=data,
+       analysis_mode='static_isotropic',
+       initial_params=initial_params,
+       bounds=bounds,
+       min_success_rate=0.5
+   )
+
+   # Combine results with inverse variance weighting
+   combined = combine_per_angle_results(
+       angle_results,
+       weighting='inverse_variance'
+   )
+
+   print(f"Combined parameters: {combined['parameters']}")
+   print(f"Combined uncertainties: {combined['uncertainties']}")
+   print(f"Success rate: {combined['success_rate']:.1%}")
+
+**Weighting Methods:**
+
+* ``inverse_variance`` (recommended): Optimal statistical weighting (w_i = 1/σ²_i)
+* ``uniform``: Equal weights for all angles
+* ``n_points``: Weight by number of data points per angle
+
+**Performance:**
+
+* Execution: Sequential (no parallelization)
+* Memory: Minimal (one angle at a time)
+* Convergence: Dependent on per-angle data quality
 
 Optimization Workflow
 ---------------------

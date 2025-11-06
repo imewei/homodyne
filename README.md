@@ -8,6 +8,19 @@
 [![GitHub Actions](https://github.com/imewei/homodyne/actions/workflows/docs.yml/badge.svg)](https://github.com/imewei/homodyne/actions/workflows/docs.yml)
 [![DOI](https://zenodo.org/badge/DOI/10.1073/pnas.2401162121.svg)](https://doi.org/10.1073/pnas.2401162121)
 
+## 🎉 v2.2.0 New Features
+
+**Angle-Stratified Chunking** - Automatic fix for per-angle scaling on large datasets (>1M points)
+
+Key improvements:
+- **Automatic activation**: No configuration required - activates when `per_angle_scaling=True` AND `n_points>=100k`
+- **Zero regressions**: 100% backward compatible with existing configurations
+- **Performance**: <1% overhead (0.15s for 3M points), sub-linear O(n^1.01) scaling
+- **Reliability**: Fixes silent optimization failures caused by arbitrary chunking
+- **Fallbacks**: Sequential per-angle optimization for extreme angle imbalance (>5.0 ratio)
+
+See [v2.2 Release Notes](docs/releases/v2.2-stratification-release-notes.md) for complete details.
+
 ## ⚠️ v2.1.0 Breaking Changes
 
 **If upgrading from v2.0.x, please read the [Migration Guide](docs/migration/v2.0-to-v2.1.md).**

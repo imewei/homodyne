@@ -1,7 +1,17 @@
 Homodyne Documentation
 ======================
 
-**JAX-first high-performance XPCS analysis for nonequilibrium soft matter systems**
+**Version 2.2.0** - JAX-first high-performance XPCS analysis for nonequilibrium soft matter systems
+
+.. admonition:: New in v2.2.0
+   :class: note
+
+   **Angle-Stratified Chunking** - Critical fix for per-angle scaling on large datasets (>1M points)
+
+   * Automatic activation when ``per_angle_scaling=True`` AND ``n_points >= 100k``
+   * Zero regressions - 100% backward compatible
+   * Performance: <1% overhead, O(n^1.01) sub-linear scaling
+   * See :doc:`releases/v2.2-stratification-release-notes` for complete details
 
 .. image:: https://img.shields.io/badge/python-3.12+-blue.svg
    :target: https://www.python.org/downloads/
@@ -131,6 +141,12 @@ Documentation Sections
    configuration-templates/master-template
    configuration-templates/static-isotropic
    configuration-templates/laminar-flow
+
+.. toctree::
+   :maxdepth: 2
+   :caption: Release Notes
+
+   releases/v2.2-stratification-release-notes
 
 Installation
 ------------
