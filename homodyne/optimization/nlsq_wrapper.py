@@ -487,11 +487,149 @@ class NLSQWrapper:
             physical_param_names = self._get_physical_param_names(analysis_mode)
             logger.info(f"Physical parameters for {analysis_mode}: {physical_param_names}")
 
-            # Extract target chunk size from config
+            # FIX: Expand scaling parameters for per-angle scaling
+            # When per_angle_scaling=True with N angles, we need:
+            # - All physical parameters (7 for laminar_flow, 3 for static)
+            # - N contrast parameters (one per angle)
+            # - N offset parameters (one per angle)
+            # Total: n_physical + 2*N parameters
+            #
+            # Config provides: n_physical + 2 parameters (single contrast, single offset)
+            # We must expand: [contrast, offset] → [c0, c1, ..., cN-1, o0, o1, ..., oN-1]
+
+            if per_angle_scaling:
+                # Determine number of angles from stratified data
+                n_angles = len(np.unique(stratified_data.phi_flat))
+                n_physical = len(physical_param_names)
+
+                logger.info(f"Expanding scaling parameters for per-angle scaling:")
+                logger.info(f"  Angles: {n_angles}")
+                logger.info(f"  Physical parameters: {n_physical}")
+                logger.info(f"  Input parameters: {len(validated_params)} (expected: {n_physical + 2})")
+
+                # Validate input parameter count
+                expected_input = n_physical + 2  # Physical params + single contrast + single offset
+                if len(validated_params) != expected_input:
+                    raise ValueError(
+                        f"Parameter count mismatch for per-angle scaling: "
+                        f"got {len(validated_params)}, expected {expected_input} "
+                        f"({n_physical} physical + 2 scaling). "
+                        f"For {n_angles} angles, will expand to {n_physical + 2 * n_angles} parameters."
+                    )
+
+                # CRITICAL: Parameter ordering must match StratifiedResidualFunction!
+                # StratifiedResidualFunction expects: [contrast_per_angle, offset_per_angle, physical_params]
+                #
+                # validated_params comes from _params_to_array() which ALREADY reordered to:
+                # [contrast, offset, physical_params...] (scaling first!)
+                #
+                # So extract base scaling parameters from BEGINNING of validated_params
+                base_contrast = validated_params[0]  # First element
+                base_offset = validated_params[1]    # Second element
+                physical_params = validated_params[2:]  # Rest are physical params
+
+                logger.info(f"  Base scaling: contrast={base_contrast:.4f}, offset={base_offset:.4f}")
+
+                # Expand scaling parameters per angle
+                contrast_per_angle = np.full(n_angles, base_contrast)
+                offset_per_angle = np.full(n_angles, base_offset)
+
+                # Concatenate in StratifiedResidualFunction order: [scaling_params, physical_params]
+                # StratifiedResidualFunction._compute_chunk_residuals_raw line 207-211:
+                #   contrast = params_all[:self.n_phi]
+                #   offset = params_all[self.n_phi:2*self.n_phi]
+                #   physical_params = params_all[2*self.n_phi:]
+                expanded_params = np.concatenate([
+                    contrast_per_angle,  # Indices 0 to n_angles-1
+                    offset_per_angle,    # Indices n_angles to 2*n_angles-1
+                    physical_params      # Indices 2*n_angles onward
+                ])
+
+                logger.info(f"  Expanded to {len(expanded_params)} parameters:")
+                logger.info(f"    - Contrast per angle: {n_angles} (indices 0 to {n_angles - 1})")
+                logger.info(f"    - Offset per angle: {n_angles} (indices {n_angles} to {2*n_angles - 1})")
+                logger.info(f"    - Physical: {n_physical} (indices {2*n_angles} to {2*n_angles + n_physical - 1})")
+
+                # Update validated_params with expanded version
+                validated_params = expanded_params
+
+                # Expand bounds similarly (match parameter order!)
+                if nlsq_bounds is not None:
+                    lower, upper = nlsq_bounds
+
+                    # Bounds come from _convert_bounds() which follows _params_to_array() ordering:
+                    # [contrast, offset, physical_params...] (scaling first!)
+                    lower_contrast = lower[0]  # First element
+                    upper_contrast = upper[0]
+                    lower_offset = lower[1]    # Second element
+                    upper_offset = upper[1]
+                    lower_physical = lower[2:]  # Rest are physical bounds
+                    upper_physical = upper[2:]
+
+                    # Expand scaling bounds per angle
+                    lower_contrast_per_angle = np.full(n_angles, lower_contrast)
+                    upper_contrast_per_angle = np.full(n_angles, upper_contrast)
+                    lower_offset_per_angle = np.full(n_angles, lower_offset)
+                    upper_offset_per_angle = np.full(n_angles, upper_offset)
+
+                    # Concatenate bounds in StratifiedResidualFunction order
+                    expanded_lower = np.concatenate([
+                        lower_contrast_per_angle,  # Scaling first
+                        lower_offset_per_angle,
+                        lower_physical             # Physical last
+                    ])
+                    expanded_upper = np.concatenate([
+                        upper_contrast_per_angle,
+                        upper_offset_per_angle,
+                        upper_physical
+                    ])
+
+                    nlsq_bounds = (expanded_lower, expanded_upper)
+                    logger.info(f"  Bounds expanded to {len(expanded_lower)} parameters")
+
+            # Parameter count validation (CRITICAL)
+            n_physical = len(physical_param_names)
+            if per_angle_scaling:
+                n_angles = len(np.unique(stratified_data.phi_flat))
+                expected_params = n_physical + 2 * n_angles
+            else:
+                expected_params = n_physical + 2
+
+            if len(validated_params) != expected_params:
+                raise ValueError(
+                    f"Parameter count mismatch: got {len(validated_params)}, "
+                    f"expected {expected_params} "
+                    f"(physical={n_physical}, per_angle_scaling={per_angle_scaling}, "
+                    f"n_angles={n_angles if per_angle_scaling else 'N/A'})"
+                )
+
+            logger.info(f"✓ Parameter validation passed: {len(validated_params)} parameters")
+
+            # Extract target chunk size from config with GPU memory adaptation
             target_chunk_size = 100_000  # Default
             if config is not None and hasattr(config, 'config'):
                 strat_config = config.config.get('optimization', {}).get('stratification', {})
                 target_chunk_size = strat_config.get('target_chunk_size', 100_000)
+
+            # GPU Memory Adaptation: Reduce chunk size for GPU to prevent OOM
+            try:
+                import jax
+                devices = jax.devices()
+                is_gpu = any(d.platform == 'gpu' for d in devices)
+
+                if is_gpu:
+                    # For GPU, use smaller chunks to avoid memory exhaustion
+                    # SVD operations in least_squares are memory-intensive on GPU
+                    gpu_chunk_size = min(target_chunk_size, 50_000)  # Max 50k per chunk on GPU
+
+                    if gpu_chunk_size < target_chunk_size:
+                        logger.info(f"GPU detected - reducing chunk size for memory safety:")
+                        logger.info(f"  Original: {target_chunk_size:,} points/chunk")
+                        logger.info(f"  GPU-optimized: {gpu_chunk_size:,} points/chunk")
+                        logger.info(f"  This prevents GPU OOM errors during optimization")
+                        target_chunk_size = gpu_chunk_size
+            except Exception as e:
+                logger.debug(f"GPU chunk size adaptation skipped: {e}")
 
             # Call stratified least_squares optimization
             try:
@@ -2396,10 +2534,79 @@ class NLSQWrapper:
         # Log diagnostics
         residual_fn.log_diagnostics()
 
+        # Gradient sanity check (CRITICAL)
+        # Verify that gradients are non-zero before starting optimization
+        # This catches parameter initialization issues early
+        logger.info("=" * 80)
+        logger.info("GRADIENT SANITY CHECK")
+        logger.info("=" * 80)
+
+        try:
+            # Compute residuals at initial parameters
+            residuals_0 = residual_fn(initial_params)
+            logger.info(f"Initial residuals: shape={residuals_0.shape}, "
+                       f"min={float(np.min(residuals_0)):.6e}, "
+                       f"max={float(np.max(residuals_0)):.6e}, "
+                       f"mean={float(np.mean(residuals_0)):.6e}")
+
+            # Perturb first physical parameter by 1%
+            params_test = np.array(initial_params, copy=True)
+            params_test[0] *= 1.01  # 1% perturbation
+            residuals_1 = residual_fn(params_test)
+
+            # Estimate gradient magnitude
+            gradient_estimate = float(np.abs(np.sum(residuals_1 - residuals_0)))
+            logger.info(f"Gradient estimate (1% perturbation of param[0]): {gradient_estimate:.6e}")
+
+            # Check if gradient is suspiciously small
+            if gradient_estimate < 1e-10:
+                logger.error("=" * 80)
+                logger.error("GRADIENT SANITY CHECK FAILED")
+                logger.error("=" * 80)
+                logger.error(f"Gradient estimate: {gradient_estimate:.6e} (expected > 1e-10)")
+                logger.error("This indicates:")
+                logger.error("  - Parameter initialization issue (likely wrong parameter count)")
+                logger.error("  - Residual function not sensitive to parameter changes")
+                logger.error("  - Optimization will fail with 0 iterations")
+                logger.error("")
+                logger.error("Diagnostic information:")
+                logger.error(f"  Initial parameters count: {len(initial_params)}")
+                logger.error(f"  Expected for per-angle scaling: {len(physical_param_names)} physical + 2*{residual_fn.n_phi} scaling = {len(physical_param_names) + 2*residual_fn.n_phi}")
+                logger.error(f"  Residual function expects: per_angle_scaling={per_angle_scaling}, n_phi={residual_fn.n_phi}")
+                logger.error("=" * 80)
+                raise ValueError(
+                    f"Gradient sanity check FAILED: gradient ≈ {gradient_estimate:.2e} "
+                    f"(expected > 1e-10). Optimization cannot proceed with zero gradients."
+                )
+
+            logger.info(f"✓ Gradient sanity check passed (gradient magnitude: {gradient_estimate:.6e})")
+
+        except Exception as e:
+            if "Gradient sanity check FAILED" in str(e):
+                raise  # Re-raise our custom error
+            logger.warning(f"Gradient sanity check encountered error: {e}")
+            logger.warning("Proceeding with optimization, but this may fail")
+
+        logger.info("=" * 80)
+
         # Prepare for optimization
         logger.info("Starting NLSQ least_squares() optimization...")
         logger.info(f"  Initial parameters: {len(initial_params)} parameters")
         logger.info(f"  Bounds: {'provided' if bounds is not None else 'unbounded'}")
+
+        # GPU Memory Management (prevent OOM errors)
+        try:
+            import jax
+            devices = jax.devices()
+            is_gpu = any(d.platform == 'gpu' for d in devices)
+
+            if is_gpu:
+                logger.info("GPU detected - clearing memory cache before optimization")
+                # Clear compilation cache to free GPU memory
+                jax.clear_caches()
+                logger.info("✓ GPU memory cache cleared")
+        except Exception as e:
+            logger.debug(f"GPU memory management skipped: {e}")
 
         # Call NLSQ's least_squares() - NO xdata/ydata needed!
         # Data is encapsulated in residual_fn
@@ -2407,18 +2614,47 @@ class NLSQWrapper:
 
         # Instantiate LeastSquares class and call its least_squares method
         ls = LeastSquares()
-        result = ls.least_squares(
-            fun=residual_fn,              # Residual function (we control chunking!)
-            x0=initial_params,            # Initial parameters
-            jac=None,                     # Use JAX autodiff for Jacobian
-            bounds=bounds,                # Parameter bounds
-            method='trf',                 # Trust Region Reflective
-            ftol=1e-8,                    # Function tolerance
-            xtol=1e-8,                    # Parameter tolerance
-            gtol=1e-8,                    # Gradient tolerance
-            max_nfev=1000,                # Max function evaluations
-            verbose=2,                    # Show progress
-        )
+
+        try:
+            result = ls.least_squares(
+                fun=residual_fn,              # Residual function (we control chunking!)
+                x0=initial_params,            # Initial parameters
+                jac=None,                     # Use JAX autodiff for Jacobian
+                bounds=bounds,                # Parameter bounds
+                method='trf',                 # Trust Region Reflective
+                ftol=1e-8,                    # Function tolerance
+                xtol=1e-8,                    # Parameter tolerance
+                gtol=1e-8,                    # Gradient tolerance
+                max_nfev=1000,                # Max function evaluations
+                verbose=2,                    # Show progress
+            )
+        except RuntimeError as e:
+            if "RESOURCE_EXHAUSTED" in str(e) and "GPU" in str(e).upper():
+                logger.error("=" * 80)
+                logger.error("GPU OUT OF MEMORY ERROR")
+                logger.error("=" * 80)
+                logger.error(f"Error: {e}")
+                logger.error("")
+                logger.error("GPU optimization failed due to insufficient memory.")
+                logger.error("This typically happens with large datasets on GPUs with limited memory.")
+                logger.error("")
+                logger.error("Solutions:")
+                logger.error("  1. Run with CPU-only mode: CUDA_VISIBLE_DEVICES=\"\" homodyne --config ...")
+                logger.error("  2. Reduce GPU memory fraction in config (currently using 90%):")
+                logger.error("     device:")
+                logger.error("       gpu_memory_fraction: 0.7  # Reduce to 70%")
+                logger.error("  3. Reduce chunk size in config:")
+                logger.error("     optimization:")
+                logger.error("       stratification:")
+                logger.error("         target_chunk_size: 50000  # Reduce from 100k")
+                logger.error("=" * 80)
+                raise RuntimeError(
+                    "GPU out of memory during optimization. "
+                    "Use CPU-only mode (CUDA_VISIBLE_DEVICES=\"\") or reduce GPU memory fraction. "
+                    "See log for details."
+                ) from e
+            else:
+                raise
 
         optimization_time = time.perf_counter() - optimization_start
         logger.info(f"Optimization completed in {optimization_time:.2f}s")
