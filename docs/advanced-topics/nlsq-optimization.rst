@@ -195,6 +195,179 @@ See Also
 
 For large datasets with streaming, see :doc:`streaming-optimization`.
 
+Angle-Stratified Chunking (v2.2.0+)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+**Overview:**
+
+For large datasets (>100k points) with per-angle scaling enabled, Homodyne automatically reorganizes data using angle-stratified chunking to ensure each optimization chunk contains all phi angles.
+
+**Why Stratification is Needed:**
+
+When using per-angle scaling (separate contrast/offset parameters for each angle), NLSQ's chunking must see all angles in each chunk to compute gradients correctly. Without stratification:
+
+.. code-block:: text
+
+    Problem: 3M points split into 11 chunks of 300k points each
+    Issue: Each chunk may contain only 1-2 angles
+    Result: Gradient w.r.t. angle-specific parameters = 0 for missing angles
+    Outcome: Optimization returns unchanged parameters (0 iterations)
+
+**Stratification Solution:**
+
+.. code-block:: text
+
+    Solution: Reorganize data so each chunk contains all 3 angles
+    Example: 3M points, 3 angles, 100k chunk size
+    → 30 chunks, each with 33.3k points per angle
+    Result: Every chunk has complete angle coverage
+    Outcome: NLSQ gradients computed correctly for all parameters
+
+**Automatic Activation:**
+
+Stratification activates automatically when **all** conditions are met:
+
+1. ``per_angle_scaling=True`` (default in v2.2.0+)
+2. ``n_points >= 100,000``
+3. Angle distribution is balanced (imbalance ratio ≤ 5.0)
+
+**Configuration:**
+
+.. code-block:: yaml
+
+    optimization:
+      stratification:
+        enabled: "auto"              # "auto" | true | false
+        target_chunk_size: 100000    # Points per chunk (default 100k)
+        max_imbalance_ratio: 5.0     # Balance threshold
+        collect_diagnostics: false   # Enable diagnostics collection
+        use_index_based: false       # Zero-copy mode (advanced)
+
+**Configuration Options:**
+
+.. list-table::
+    :header-rows: 1
+    :widths: 30 15 55
+
+    * - Parameter
+      - Default
+      - Description
+    * - ``enabled``
+      - ``"auto"``
+      - "auto" activates when needed, ``true`` forces on, ``false`` disables
+    * - ``target_chunk_size``
+      - 100000
+      - Target points per chunk (NLSQ processes chunks sequentially)
+    * - ``max_imbalance_ratio``
+      - 5.0
+      - If imbalance > threshold, falls back to sequential per-angle optimization
+    * - ``collect_diagnostics``
+      - false
+      - Collect detailed stratification metrics (adds ~1% overhead)
+    * - ``use_index_based``
+      - false
+      - Zero-copy mode via index reordering (advanced, ~99% memory savings)
+
+**Diagnostics Collection:**
+
+When ``collect_diagnostics=true``, stratification metrics are saved in ``OptimizationResult``:
+
+.. code-block:: python
+
+    from homodyne.optimization.nlsq import fit_nlsq_jax
+
+    result = fit_nlsq_jax(data, config)
+
+    # Access stratification diagnostics
+    if result.stratification_diagnostics is not None:
+        diag = result.stratification_diagnostics
+        print(f"Chunks created: {diag.n_chunks}")
+        print(f"Chunk sizes: {diag.chunk_sizes}")
+        print(f"Angles per chunk: {diag.angles_per_chunk}")
+        print(f"Execution time: {diag.execution_time_ms:.2f} ms")
+        print(f"Memory overhead: {diag.memory_overhead_mb:.1f} MB")
+        print(f"Throughput: {diag.throughput_points_per_sec:.0f} pts/s")
+
+**Diagnostics Attributes:**
+
+.. list-table::
+    :header-rows: 1
+    :widths: 30 70
+
+    * - Attribute
+      - Description
+    * - ``n_chunks``
+      - Number of chunks created
+    * - ``chunk_sizes``
+      - List of chunk sizes (points per chunk)
+    * - ``chunk_balance``
+      - Statistics: {mean, std, min, max, cv}
+    * - ``angles_per_chunk``
+      - Number of unique angles in each chunk
+    * - ``angle_coverage``
+      - Coverage statistics: {mean, std, min_coverage_ratio}
+    * - ``execution_time_ms``
+      - Stratification execution time (milliseconds)
+    * - ``memory_overhead_mb``
+      - Peak memory overhead during stratification
+    * - ``memory_efficiency``
+      - Ratio of data size to peak memory (1.0 = perfect)
+    * - ``throughput_points_per_sec``
+      - Processing throughput (points/sec)
+    * - ``use_index_based``
+      - Whether index-based (zero-copy) mode was used
+
+**Performance Characteristics:**
+
+.. code-block:: text
+
+    Overhead: < 1% (typically 50-200 ms for 1-10M points)
+    Memory: 2x peak (full-copy) or 1.01x (index-based)
+    Scaling: O(n^1.01) sub-linear (cache-friendly reorganization)
+
+**When Stratification is Skipped:**
+
+Stratification automatically falls back to sequential per-angle optimization when:
+
+1. Dataset is small (< 100k points) → use STANDARD strategy
+2. Per-angle scaling disabled (``per_angle_scaling=False``)
+3. Extreme angle imbalance (ratio > ``max_imbalance_ratio``)
+4. Single angle only (stratification unnecessary)
+5. User disabled (``enabled: false``)
+
+**Troubleshooting:**
+
+If you see "Parameters unchanged after optimization" with large datasets:
+
+1. **Check stratification status** in logs:
+
+   .. code-block:: text
+
+       INFO | Applying angle-stratified chunking: ...
+       INFO | Stratification complete: X points reorganized
+
+2. **Verify per-angle scaling** is needed:
+
+   .. code-block:: yaml
+
+       # Try disabling if not physically required
+       per_angle_scaling: false
+
+3. **Check angle balance**:
+
+   .. code-block:: python
+
+       from homodyne.optimization.stratified_chunking import analyze_angle_distribution
+       stats = analyze_angle_distribution(data.phi)
+       print(f"Imbalance ratio: {stats.imbalance_ratio:.2f}")
+       print(f"Balanced: {stats.is_balanced}")
+
+**See Also:**
+
+- Log analysis guide: ``docs/troubleshooting/nlsq-zero-iterations-investigation.md``
+- Known issues: ``CLAUDE.md`` Section "Known Issues → NLSQ Optimization"
+- Stratification algorithm: ``homodyne/optimization/stratified_chunking.py``
+
 Error Recovery
 ---------------
 
