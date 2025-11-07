@@ -476,7 +476,10 @@ class TestXPCSDataLoaderFallback:
             # Provide minimal config for v2.1.0 API
             minimal_config = {
                 "analysis_mode": "static_isotropic",
-                "experimental_data": {"data_folder_path": str(temp_dir), "data_file_name": "dummy.h5"},
+                "experimental_data": {
+                    "data_folder_path": str(temp_dir),
+                    "data_file_name": "dummy.h5",
+                },
             }
             loader = XPCSDataLoader(config_dict=minimal_config)
 

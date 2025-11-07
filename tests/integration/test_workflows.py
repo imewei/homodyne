@@ -180,7 +180,9 @@ class TestEndToEndWorkflows:
             # Step 1: Load data
             # Note: load_xpcs_data now expects a config_path (str), not a config dict
             # Skipping this test as it requires proper HDF5 files
-            pytest.skip("load_xpcs_data API changed: requires config_path, not config dict")
+            pytest.skip(
+                "load_xpcs_data API changed: requires config_path, not config dict"
+            )
 
             # Step 2: Validate loaded data
             assert isinstance(data, dict)
@@ -332,7 +334,9 @@ class TestEndToEndWorkflows:
                 0.05 <= recovered_D <= 0.2
             ), f"Diffusion coefficient recovery poor: {recovered_D}"
 
-    @pytest.mark.skip(reason="Residual function issue in nlsq_wrapper - needs investigation")
+    @pytest.mark.skip(
+        reason="Residual function issue in nlsq_wrapper - needs investigation"
+    )
     def test_error_propagation_workflow(self, test_config):
         """Test error propagation through workflow."""
         try:

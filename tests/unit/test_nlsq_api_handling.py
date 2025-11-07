@@ -32,54 +32,54 @@ class TestHandleNLSQResult:
     def test_dict_with_x_and_pcov(self):
         """Test dict with 'x' and 'pcov' keys (StreamingOptimizer standard)."""
         result = {
-            'x': np.array([1.0, 2.0, 3.0]),
-            'pcov': np.eye(3) * 0.1,
-            'success': True,
-            'message': 'Optimization succeeded',
-            'streaming_diagnostics': {'batches_processed': 100}
+            "x": np.array([1.0, 2.0, 3.0]),
+            "pcov": np.eye(3) * 0.1,
+            "success": True,
+            "message": "Optimization succeeded",
+            "streaming_diagnostics": {"batches_processed": 100},
         }
 
         popt, pcov, info = NLSQWrapper._handle_nlsq_result(
             result, OptimizationStrategy.STREAMING
         )
 
-        np.testing.assert_array_equal(popt, result['x'])
-        np.testing.assert_array_equal(pcov, result['pcov'])
-        assert info['success'] is True
-        assert info['message'] == 'Optimization succeeded'
-        assert 'streaming_diagnostics' in info
-        assert info['streaming_diagnostics']['batches_processed'] == 100
+        np.testing.assert_array_equal(popt, result["x"])
+        np.testing.assert_array_equal(pcov, result["pcov"])
+        assert info["success"] is True
+        assert info["message"] == "Optimization succeeded"
+        assert "streaming_diagnostics" in info
+        assert info["streaming_diagnostics"]["batches_processed"] == 100
 
     def test_dict_with_popt_fallback(self):
         """Test dict with 'popt' key instead of 'x' (alternative format)."""
         result = {
-            'popt': np.array([10.0, 20.0]),
-            'pcov': np.eye(2) * 0.05,
-            'success': False,
-            'message': 'Max iterations reached'
+            "popt": np.array([10.0, 20.0]),
+            "pcov": np.eye(2) * 0.05,
+            "success": False,
+            "message": "Max iterations reached",
         }
 
         popt, pcov, info = NLSQWrapper._handle_nlsq_result(
             result, OptimizationStrategy.LARGE
         )
 
-        np.testing.assert_array_equal(popt, result['popt'])
-        np.testing.assert_array_equal(pcov, result['pcov'])
-        assert info['success'] is False
+        np.testing.assert_array_equal(popt, result["popt"])
+        np.testing.assert_array_equal(pcov, result["pcov"])
+        assert info["success"] is False
 
     def test_dict_missing_pcov_creates_identity(self):
         """Test dict without 'pcov' creates identity matrix."""
         result = {
-            'x': np.array([5.0, 10.0, 15.0, 20.0]),
-            'success': True,
-            'message': 'Converged'
+            "x": np.array([5.0, 10.0, 15.0, 20.0]),
+            "success": True,
+            "message": "Converged",
         }
 
         popt, pcov, info = NLSQWrapper._handle_nlsq_result(
             result, OptimizationStrategy.CHUNKED
         )
 
-        np.testing.assert_array_equal(popt, result['x'])
+        np.testing.assert_array_equal(popt, result["x"])
         # Should create identity matrix with correct size
         expected_pcov = np.eye(4)
         np.testing.assert_array_equal(pcov, expected_pcov)
@@ -87,10 +87,10 @@ class TestHandleNLSQResult:
     def test_dict_with_partial_streaming_diagnostics(self):
         """Test dict with partial streaming diagnostics."""
         result = {
-            'x': np.array([1.0, 2.0]),
-            'success': True,
-            'best_loss': 0.001,
-            'final_epoch': 50
+            "x": np.array([1.0, 2.0]),
+            "success": True,
+            "best_loss": 0.001,
+            "final_epoch": 50,
         }
 
         popt, pcov, info = NLSQWrapper._handle_nlsq_result(
@@ -98,10 +98,10 @@ class TestHandleNLSQResult:
         )
 
         # Dict format always creates these keys
-        assert 'streaming_diagnostics' in info
-        assert info['streaming_diagnostics'] == {}  # Empty dict when not provided
-        assert info['best_loss'] == 0.001
-        assert info['final_epoch'] == 50
+        assert "streaming_diagnostics" in info
+        assert info["streaming_diagnostics"] == {}  # Empty dict when not provided
+        assert info["best_loss"] == 0.001
+        assert info["final_epoch"] == 50
 
     # =========================================================================
     # Case 2: Tuple (2 elements) - (popt, pcov)
@@ -144,12 +144,7 @@ class TestHandleNLSQResult:
         """Test (popt, pcov, info) tuple with full_output=True."""
         popt_in = np.array([50.0, 100.0])
         pcov_in = np.eye(2) * 0.15
-        info_in = {
-            'nfev': 42,
-            'njev': 20,
-            'mesg': 'Converged successfully',
-            'ier': 1
-        }
+        info_in = {"nfev": 42, "njev": 20, "mesg": "Converged successfully", "ier": 1}
         result = (popt_in, pcov_in, info_in)
 
         popt, pcov, info = NLSQWrapper._handle_nlsq_result(
@@ -159,7 +154,7 @@ class TestHandleNLSQResult:
         np.testing.assert_array_equal(popt, popt_in)
         np.testing.assert_array_equal(pcov, pcov_in)
         assert info == info_in
-        assert info['nfev'] == 42
+        assert info["nfev"] == 42
 
     def test_tuple_three_elements_empty_info(self):
         """Test (popt, pcov, info) with empty info dict."""
@@ -186,7 +181,7 @@ class TestHandleNLSQResult:
         result.x = np.array([10.0, 20.0, 30.0])
         result.pcov = np.eye(3) * 0.5
         result.success = True
-        result.message = 'Optimization terminated successfully'
+        result.message = "Optimization terminated successfully"
         result.nfev = 100
         result.njev = 50
 
@@ -196,18 +191,18 @@ class TestHandleNLSQResult:
 
         np.testing.assert_array_equal(popt, result.x)
         np.testing.assert_array_equal(pcov, result.pcov)
-        assert info['success'] is True
-        assert info['message'] == 'Optimization terminated successfully'
-        assert info['nfev'] == 100
-        assert info['njev'] == 50
+        assert info["success"] is True
+        assert info["message"] == "Optimization terminated successfully"
+        assert info["nfev"] == 100
+        assert info["njev"] == 50
 
     def test_object_with_popt_attribute(self):
         """Test object with 'popt' attribute (CurveFitResult format)."""
-        result = Mock(spec=['popt', 'pcov', 'success', 'message'])
+        result = Mock(spec=["popt", "pcov", "success", "message"])
         result.popt = np.array([5.0, 15.0])
         result.pcov = np.eye(2) * 0.25
         result.success = False
-        result.message = 'Maximum iterations exceeded'
+        result.message = "Maximum iterations exceeded"
 
         popt, pcov, info = NLSQWrapper._handle_nlsq_result(
             result, OptimizationStrategy.STANDARD
@@ -215,17 +210,17 @@ class TestHandleNLSQResult:
 
         np.testing.assert_array_equal(popt, result.popt)
         np.testing.assert_array_equal(pcov, result.pcov)
-        assert info['success'] is False
-        assert info['message'] == 'Maximum iterations exceeded'
+        assert info["success"] is False
+        assert info["message"] == "Maximum iterations exceeded"
 
     def test_object_missing_pcov_creates_identity(self):
         """Test object without 'pcov' attribute creates identity matrix."""
         result = Mock()
         result.x = np.array([1.0, 2.0, 3.0, 4.0])
         result.success = True
-        result.message = 'Converged'
+        result.message = "Converged"
         # Simulate missing pcov attribute
-        delattr(result, 'pcov')
+        delattr(result, "pcov")
 
         popt, pcov, info = NLSQWrapper._handle_nlsq_result(
             result, OptimizationStrategy.CHUNKED
@@ -237,11 +232,23 @@ class TestHandleNLSQResult:
 
     def test_object_with_all_common_attributes(self):
         """Test object with all common optimization result attributes."""
-        result = Mock(spec=['x', 'pcov', 'success', 'message', 'fun', 'jac', 'nfev', 'njev', 'optimality'])
+        result = Mock(
+            spec=[
+                "x",
+                "pcov",
+                "success",
+                "message",
+                "fun",
+                "jac",
+                "nfev",
+                "njev",
+                "optimality",
+            ]
+        )
         result.x = np.array([100.0])
         result.pcov = np.array([[1.0]])
         result.success = True
-        result.message = 'All good'
+        result.message = "All good"
         result.fun = 0.123
         result.jac = np.array([0.01])
         result.nfev = 25
@@ -254,13 +261,13 @@ class TestHandleNLSQResult:
 
         # Check all standard attributes extracted
         # Implementation extracts: message, success, nfev, njev, fun, jac, optimality
-        assert info['success'] is True
-        assert info['message'] == 'All good'
-        assert info['fun'] == 0.123
-        np.testing.assert_array_equal(info['jac'], np.array([0.01]))
-        assert info['nfev'] == 25
-        assert info['njev'] == 12
-        assert info['optimality'] == 1e-6
+        assert info["success"] is True
+        assert info["message"] == "All good"
+        assert info["fun"] == 0.123
+        np.testing.assert_array_equal(info["jac"], np.array([0.01]))
+        assert info["nfev"] == 25
+        assert info["njev"] == 12
+        assert info["optimality"] == 1e-6
 
     # =========================================================================
     # Edge Cases and Error Conditions
@@ -294,7 +301,7 @@ class TestHandleNLSQResult:
 
     def test_dict_missing_both_x_and_popt_raises_error(self):
         """Test dict without 'x' or 'popt' raises error when converting None to array."""
-        result = {'pcov': np.eye(2), 'success': True}
+        result = {"pcov": np.eye(2), "success": True}
 
         # np.asarray(None) will raise TypeError or ValueError
         with pytest.raises((TypeError, ValueError)):
@@ -302,7 +309,7 @@ class TestHandleNLSQResult:
 
     def test_object_missing_both_x_and_popt_raises_error(self):
         """Test object without 'x' or 'popt' raises TypeError."""
-        result = Mock(spec=['pcov'])  # Only has pcov, no x or popt
+        result = Mock(spec=["pcov"])  # Only has pcov, no x or popt
         result.pcov = np.eye(3)
 
         # Should fall through to unrecognized format error
@@ -316,8 +323,8 @@ class TestHandleNLSQResult:
     def test_list_converted_to_array(self):
         """Test that list parameters are converted to numpy arrays."""
         result = {
-            'x': [1.0, 2.0, 3.0],  # List instead of array
-            'pcov': [[1, 0, 0], [0, 1, 0], [0, 0, 1]]  # List of lists
+            "x": [1.0, 2.0, 3.0],  # List instead of array
+            "pcov": [[1, 0, 0], [0, 1, 0], [0, 0, 1]],  # List of lists
         }
 
         popt, pcov, info = NLSQWrapper._handle_nlsq_result(
@@ -369,12 +376,12 @@ class TestHandleNLSQResult:
             result, OptimizationStrategy.LARGE
         )
 
-        assert info['success'] is True
-        assert info['message'] == "Success"
+        assert info["success"] is True
+        assert info["message"] == "Success"
 
     def test_chunked_strategy_progress_info(self):
         """Test CHUNKED strategy extracts standard attributes."""
-        result = Mock(spec=['x', 'pcov', 'success', 'message'])
+        result = Mock(spec=["x", "pcov", "success", "message"])
         result.x = np.array([5.0, 10.0])
         result.pcov = np.eye(2)
         result.success = True
@@ -385,37 +392,37 @@ class TestHandleNLSQResult:
         )
 
         # Standard attributes extracted
-        assert info['success'] is True
-        assert info['message'] == "Chunked optimization complete"
+        assert info["success"] is True
+        assert info["message"] == "Chunked optimization complete"
 
     def test_streaming_strategy_with_full_diagnostics(self):
         """Test STREAMING strategy with comprehensive diagnostics."""
         result = {
-            'x': np.array([1.0, 2.0, 3.0, 4.0, 5.0]),
-            'pcov': np.eye(5) * 0.01,
-            'success': True,
-            'message': 'Streaming optimization converged',
-            'fun': 0.00123,
-            'best_loss': 0.00123,
-            'final_epoch': 100,
-            'streaming_diagnostics': {
-                'batches_processed': 1000,
-                'batches_succeeded': 995,
-                'batches_failed': 5,
-                'best_epoch': 87,
-                'convergence_rate': 0.95
-            }
+            "x": np.array([1.0, 2.0, 3.0, 4.0, 5.0]),
+            "pcov": np.eye(5) * 0.01,
+            "success": True,
+            "message": "Streaming optimization converged",
+            "fun": 0.00123,
+            "best_loss": 0.00123,
+            "final_epoch": 100,
+            "streaming_diagnostics": {
+                "batches_processed": 1000,
+                "batches_succeeded": 995,
+                "batches_failed": 5,
+                "best_epoch": 87,
+                "convergence_rate": 0.95,
+            },
         }
 
         popt, pcov, info = NLSQWrapper._handle_nlsq_result(
             result, OptimizationStrategy.STREAMING
         )
 
-        assert 'streaming_diagnostics' in info
-        assert info['streaming_diagnostics']['batches_processed'] == 1000
-        assert info['streaming_diagnostics']['batches_succeeded'] == 995
-        assert info['best_loss'] == 0.00123
-        assert info['final_epoch'] == 100
+        assert "streaming_diagnostics" in info
+        assert info["streaming_diagnostics"]["batches_processed"] == 1000
+        assert info["streaming_diagnostics"]["batches_succeeded"] == 995
+        assert info["best_loss"] == 0.00123
+        assert info["final_epoch"] == 100
 
     # =========================================================================
     # Mock Different NLSQ Versions
@@ -424,10 +431,7 @@ class TestHandleNLSQResult:
     def test_nlsq_v015_curve_fit_standard(self):
         """Mock NLSQ v0.1.5 curve_fit standard behavior."""
         # curve_fit returns (popt, pcov) by default
-        result = (
-            np.array([1.0, 2.0, 3.0]),
-            np.eye(3) * 0.1
-        )
+        result = (np.array([1.0, 2.0, 3.0]), np.eye(3) * 0.1)
 
         popt, pcov, info = NLSQWrapper._handle_nlsq_result(
             result, OptimizationStrategy.STANDARD
@@ -440,26 +444,19 @@ class TestHandleNLSQResult:
     def test_nlsq_v015_curve_fit_with_full_output(self):
         """Mock NLSQ v0.1.5 curve_fit with full_output=True."""
         # curve_fit with full_output=True returns (popt, pcov, info)
-        result = (
-            np.array([10.0, 20.0]),
-            np.eye(2),
-            {'nfev': 50, 'mesg': 'Success'}
-        )
+        result = (np.array([10.0, 20.0]), np.eye(2), {"nfev": 50, "mesg": "Success"})
 
         popt, pcov, info = NLSQWrapper._handle_nlsq_result(
             result, OptimizationStrategy.STANDARD
         )
 
-        assert info['nfev'] == 50
-        assert info['mesg'] == 'Success'
+        assert info["nfev"] == 50
+        assert info["mesg"] == "Success"
 
     def test_nlsq_v015_curve_fit_large(self):
         """Mock NLSQ v0.1.5 curve_fit_large behavior."""
         # curve_fit_large returns (popt, pcov) only
-        result = (
-            np.array([100.0, 200.0, 300.0]),
-            np.eye(3) * 0.5
-        )
+        result = (np.array([100.0, 200.0, 300.0]), np.eye(3) * 0.5)
 
         popt, pcov, info = NLSQWrapper._handle_nlsq_result(
             result, OptimizationStrategy.LARGE
@@ -471,38 +468,38 @@ class TestHandleNLSQResult:
         """Mock NLSQ v0.1.5 StreamingOptimizer.fit() behavior."""
         # StreamingOptimizer returns dict
         result = {
-            'x': np.array([5.0, 10.0, 15.0]),
-            'success': True,
-            'message': 'Optimization succeeded',
-            'fun': 0.001,
-            'best_loss': 0.001,
-            'final_epoch': 50,
-            'streaming_diagnostics': {
-                'batches_processed': 500,
-                'batches_succeeded': 490,
-                'batches_failed': 10
-            }
+            "x": np.array([5.0, 10.0, 15.0]),
+            "success": True,
+            "message": "Optimization succeeded",
+            "fun": 0.001,
+            "best_loss": 0.001,
+            "final_epoch": 50,
+            "streaming_diagnostics": {
+                "batches_processed": 500,
+                "batches_succeeded": 490,
+                "batches_failed": 10,
+            },
         }
 
         popt, pcov, info = NLSQWrapper._handle_nlsq_result(
             result, OptimizationStrategy.STREAMING
         )
 
-        assert info['success'] is True
-        assert 'streaming_diagnostics' in info
+        assert info["success"] is True
+        assert "streaming_diagnostics" in info
 
     def test_future_nlsq_version_with_info_attribute(self):
         """Test forward compatibility with objects that have 'info' dict attribute."""
-        result = Mock(spec=['x', 'pcov', 'success', 'message', 'info'])
+        result = Mock(spec=["x", "pcov", "success", "message", "info"])
         result.x = np.array([1.0, 2.0])
         result.pcov = np.eye(2)
         result.success = True
         result.message = "Success"
         # Future version might nest additional info in 'info' attribute
         result.info = {
-            'convergence_score': 0.95,
-            'optimization_time': 5.3,
-            'new_feature': "value"
+            "convergence_score": 0.95,
+            "optimization_time": 5.3,
+            "new_feature": "value",
         }
 
         popt, pcov, info = NLSQWrapper._handle_nlsq_result(
@@ -510,13 +507,13 @@ class TestHandleNLSQResult:
         )
 
         # Should extract known attributes
-        assert info['success'] is True
-        assert info['message'] == "Success"
+        assert info["success"] is True
+        assert info["message"] == "Success"
         # Info dict should be merged
-        assert 'convergence_score' in info
-        assert info['convergence_score'] == 0.95
-        assert info['optimization_time'] == 5.3
-        assert info['new_feature'] == "value"
+        assert "convergence_score" in info
+        assert info["convergence_score"] == 0.95
+        assert info["optimization_time"] == 5.3
+        assert info["new_feature"] == "value"
 
     # =========================================================================
     # Data Integrity and Consistency
@@ -525,10 +522,7 @@ class TestHandleNLSQResult:
     def test_popt_pcov_dimension_consistency(self):
         """Test that pcov dimensions match popt length."""
         n_params = 7
-        result = {
-            'x': np.random.randn(n_params),
-            'pcov': np.eye(n_params) * 0.1
-        }
+        result = {"x": np.random.randn(n_params), "pcov": np.eye(n_params) * 0.1}
 
         popt, pcov, info = NLSQWrapper._handle_nlsq_result(
             result, OptimizationStrategy.LARGE
@@ -540,7 +534,7 @@ class TestHandleNLSQResult:
     def test_identity_pcov_when_missing_has_correct_size(self):
         """Test identity matrix created with correct size when pcov missing."""
         n_params = 9
-        result = {'x': np.random.randn(n_params), 'success': True}
+        result = {"x": np.random.randn(n_params), "success": True}
 
         popt, pcov, info = NLSQWrapper._handle_nlsq_result(
             result, OptimizationStrategy.STREAMING
@@ -566,9 +560,9 @@ class TestHandleNLSQResult:
         """Test handling of optimization with many parameters."""
         n_params = 50
         result = {
-            'x': np.random.randn(n_params),
-            'pcov': np.eye(n_params) * 0.01,
-            'success': True
+            "x": np.random.randn(n_params),
+            "pcov": np.eye(n_params) * 0.01,
+            "success": True,
         }
 
         popt, pcov, info = NLSQWrapper._handle_nlsq_result(
@@ -586,11 +580,7 @@ class TestNLSQAPIIntegration:
         """Simulate successful curve_fit call."""
         # This is what NLSQ curve_fit actually returns
         popt = np.array([1.5, 2.3, 0.8])
-        pcov = np.array([
-            [0.1, 0.01, 0.0],
-            [0.01, 0.2, 0.01],
-            [0.0, 0.01, 0.15]
-        ])
+        pcov = np.array([[0.1, 0.01, 0.0], [0.01, 0.2, 0.01], [0.0, 0.01, 0.15]])
         result = (popt, pcov)
 
         popt_out, pcov_out, info = NLSQWrapper._handle_nlsq_result(
@@ -620,45 +610,45 @@ class TestNLSQAPIIntegration:
         """Simulate successful StreamingOptimizer.fit() call."""
         # StreamingOptimizer returns dict with detailed diagnostics
         result = {
-            'x': np.array([10.5, 20.3, 30.1]),
-            'success': True,
-            'message': 'Optimization terminated successfully.',
-            'fun': 0.00234,
-            'best_loss': 0.00234,
-            'final_epoch': 75,
-            'streaming_diagnostics': {
-                'batches_processed': 750,
-                'batches_succeeded': 748,
-                'batches_failed': 2,
-                'best_epoch': 73,
-                'success_rate': 0.997
-            }
+            "x": np.array([10.5, 20.3, 30.1]),
+            "success": True,
+            "message": "Optimization terminated successfully.",
+            "fun": 0.00234,
+            "best_loss": 0.00234,
+            "final_epoch": 75,
+            "streaming_diagnostics": {
+                "batches_processed": 750,
+                "batches_succeeded": 748,
+                "batches_failed": 2,
+                "best_epoch": 73,
+                "success_rate": 0.997,
+            },
         }
 
         popt, pcov, info = NLSQWrapper._handle_nlsq_result(
             result, OptimizationStrategy.STREAMING
         )
 
-        np.testing.assert_array_almost_equal(popt, result['x'])
-        assert info['success'] is True
-        assert info['streaming_diagnostics']['success_rate'] == 0.997
+        np.testing.assert_array_almost_equal(popt, result["x"])
+        assert info["success"] is True
+        assert info["streaming_diagnostics"]["success_rate"] == 0.997
 
     def test_simulate_convergence_failure(self):
         """Simulate optimization that fails to converge."""
         result = {
-            'x': np.array([1.0, 2.0]),  # Last attempted parameters
-            'success': False,
-            'message': 'Maximum iterations exceeded without convergence',
-            'fun': 10.5,  # High loss value
-            'final_epoch': 100
+            "x": np.array([1.0, 2.0]),  # Last attempted parameters
+            "success": False,
+            "message": "Maximum iterations exceeded without convergence",
+            "fun": 10.5,  # High loss value
+            "final_epoch": 100,
         }
 
         popt, pcov, info = NLSQWrapper._handle_nlsq_result(
             result, OptimizationStrategy.LARGE
         )
 
-        assert info['success'] is False
-        assert 'Maximum iterations' in info['message']
+        assert info["success"] is False
+        assert "Maximum iterations" in info["message"]
         # Identity pcov created when missing
         np.testing.assert_array_equal(pcov, np.eye(2))
 

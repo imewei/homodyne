@@ -35,6 +35,7 @@ from homodyne.optimization.cmc.coordinator import CMCCoordinator
 # Import config infrastructure
 try:
     from homodyne.config.parameter_space import ParameterSpace, PriorDistribution
+
     HAS_PARAMETER_SPACE = True
 except ImportError:
     HAS_PARAMETER_SPACE = False
@@ -45,17 +46,22 @@ except ImportError:
 def static_parameter_space():
     """Create parameter_space for static_isotropic mode."""
     config = {
-        'parameter_space': {
-            'model': 'static',
-            'bounds': [
-                {'name': 'D0', 'min': 100.0, 'max': 5000.0},
-                {'name': 'alpha', 'min': 0.1, 'max': 2.0},
-                {'name': 'D_offset', 'min': 0.1, 'max': 100.0},
+        "parameter_space": {
+            "model": "static",
+            "bounds": [
+                {"name": "D0", "min": 100.0, "max": 5000.0},
+                {"name": "alpha", "min": 0.1, "max": 2.0},
+                {"name": "D_offset", "min": 0.1, "max": 100.0},
             ],
-            'priors': [
-                {'name': 'D0', 'type': 'TruncatedNormal', 'mu': 1000.0, 'sigma': 500.0},
-                {'name': 'alpha', 'type': 'TruncatedNormal', 'mu': 1.0, 'sigma': 0.3},
-                {'name': 'D_offset', 'type': 'TruncatedNormal', 'mu': 10.0, 'sigma': 5.0},
+            "priors": [
+                {"name": "D0", "type": "TruncatedNormal", "mu": 1000.0, "sigma": 500.0},
+                {"name": "alpha", "type": "TruncatedNormal", "mu": 1.0, "sigma": 0.3},
+                {
+                    "name": "D_offset",
+                    "type": "TruncatedNormal",
+                    "mu": 10.0,
+                    "sigma": 5.0,
+                },
             ],
         }
     }
@@ -66,16 +72,16 @@ def static_parameter_space():
 def laminar_parameter_space():
     """Create parameter_space for laminar_flow mode."""
     config = {
-        'parameter_space': {
-            'model': 'laminar_flow',
-            'bounds': [
-                {'name': 'D0', 'min': 100.0, 'max': 5000.0},
-                {'name': 'alpha', 'min': 0.1, 'max': 2.0},
-                {'name': 'D_offset', 'min': 0.1, 'max': 100.0},
-                {'name': 'gamma_dot_t0', 'min': 0.1, 'max': 10.0},
-                {'name': 'beta', 'min': 0.0, 'max': 2.0},
-                {'name': 'gamma_dot_t_offset', 'min': 0.0, 'max': 5.0},
-                {'name': 'phi0', 'min': -np.pi, 'max': np.pi},
+        "parameter_space": {
+            "model": "laminar_flow",
+            "bounds": [
+                {"name": "D0", "min": 100.0, "max": 5000.0},
+                {"name": "alpha", "min": 0.1, "max": 2.0},
+                {"name": "D_offset", "min": 0.1, "max": 100.0},
+                {"name": "gamma_dot_t0", "min": 0.1, "max": 10.0},
+                {"name": "beta", "min": 0.0, "max": 2.0},
+                {"name": "gamma_dot_t_offset", "min": 0.0, "max": 5.0},
+                {"name": "phi0", "min": -np.pi, "max": np.pi},
             ],
         }
     }
@@ -86,9 +92,9 @@ def laminar_parameter_space():
 def initial_values_static():
     """Create initial_values for static mode (from NLSQ results)."""
     return {
-        'D0': 1234.5,
-        'alpha': 0.567,
-        'D_offset': 12.34,
+        "D0": 1234.5,
+        "alpha": 0.567,
+        "D_offset": 12.34,
     }
 
 
@@ -96,13 +102,13 @@ def initial_values_static():
 def initial_values_laminar():
     """Create initial_values for laminar flow mode."""
     return {
-        'D0': 1234.5,
-        'alpha': 0.567,
-        'D_offset': 12.34,
-        'gamma_dot_t0': 1.23,
-        'beta': 0.89,
-        'gamma_dot_t_offset': 0.45,
-        'phi0': 0.12,
+        "D0": 1234.5,
+        "alpha": 0.567,
+        "D_offset": 12.34,
+        "gamma_dot_t0": 1.23,
+        "beta": 0.89,
+        "gamma_dot_t_offset": 0.45,
+        "phi0": 0.12,
     }
 
 
@@ -115,18 +121,18 @@ def mock_backend():
     # Mock successful shard results
     backend.run_parallel_mcmc.return_value = [
         {
-            'samples': np.random.randn(1000, 5),
-            'converged': True,
-            'acceptance_rate': 0.85,
-            'r_hat': {'D0': 1.01, 'alpha': 1.02},
-            'ess': {'D0': 850.0, 'alpha': 900.0},
+            "samples": np.random.randn(1000, 5),
+            "converged": True,
+            "acceptance_rate": 0.85,
+            "r_hat": {"D0": 1.01, "alpha": 1.02},
+            "ess": {"D0": 850.0, "alpha": 900.0},
         },
         {
-            'samples': np.random.randn(1000, 5),
-            'converged': True,
-            'acceptance_rate': 0.82,
-            'r_hat': {'D0': 1.03, 'alpha': 1.01},
-            'ess': {'D0': 820.0, 'alpha': 880.0},
+            "samples": np.random.randn(1000, 5),
+            "converged": True,
+            "acceptance_rate": 0.82,
+            "r_hat": {"D0": 1.03, "alpha": 1.01},
+            "ess": {"D0": 820.0, "alpha": 880.0},
         },
     ]
 
@@ -137,19 +143,19 @@ def mock_backend():
 def minimal_config():
     """Create minimal CMC config."""
     return {
-        'mcmc': {
-            'num_warmup': 100,
-            'num_samples': 200,
-            'num_chains': 1,
+        "mcmc": {
+            "num_warmup": 100,
+            "num_samples": 200,
+            "num_chains": 1,
         },
-        'cmc': {
-            'sharding': {
-                'strategy': 'stratified',
-                'min_shard_size': 100,
+        "cmc": {
+            "sharding": {
+                "strategy": "stratified",
+                "min_shard_size": 100,
             },
-            'combination': {
-                'method': 'weighted',
-                'fallback_enabled': True,
+            "combination": {
+                "method": "weighted",
+                "fallback_enabled": True,
             },
         },
     }
@@ -158,6 +164,7 @@ def minimal_config():
 # =============================================================================
 # Test 1: parameter_space Propagation Through CMC Pipeline
 # =============================================================================
+
 
 def test_parameter_space_propagation(
     static_parameter_space,
@@ -184,7 +191,10 @@ def test_parameter_space_propagation(
     L = 3.5
 
     # Create coordinator with mocked backend
-    with patch('homodyne.optimization.cmc.coordinator.select_backend', return_value=mock_backend):
+    with patch(
+        "homodyne.optimization.cmc.coordinator.select_backend",
+        return_value=mock_backend,
+    ):
         coordinator = CMCCoordinator(minimal_config)
 
         # Run CMC with parameter_space
@@ -195,7 +205,7 @@ def test_parameter_space_propagation(
             phi=phi,
             q=q,
             L=L,
-            analysis_mode='static_isotropic',
+            analysis_mode="static_isotropic",
             parameter_space=static_parameter_space,
             initial_values=initial_values_static,
         )
@@ -205,23 +215,23 @@ def test_parameter_space_propagation(
     call_kwargs = mock_backend.run_parallel_mcmc.call_args.kwargs
 
     # Check parameter_space propagation
-    assert 'parameter_space' in call_kwargs
-    assert call_kwargs['parameter_space'] is static_parameter_space
+    assert "parameter_space" in call_kwargs
+    assert call_kwargs["parameter_space"] is static_parameter_space
 
     # Check analysis_mode propagation
-    assert 'analysis_mode' in call_kwargs
-    assert call_kwargs['analysis_mode'] == 'static_isotropic'
+    assert "analysis_mode" in call_kwargs
+    assert call_kwargs["analysis_mode"] == "static_isotropic"
 
     # Check init_params includes initial_values
-    assert 'init_params' in call_kwargs
-    init_params = call_kwargs['init_params']
-    assert init_params['D0'] == 1234.5
-    assert init_params['alpha'] == 0.567
-    assert init_params['D_offset'] == 12.34
+    assert "init_params" in call_kwargs
+    init_params = call_kwargs["init_params"]
+    assert init_params["D0"] == 1234.5
+    assert init_params["alpha"] == 0.567
+    assert init_params["D_offset"] == 12.34
 
     # Check scaling parameters added
-    assert 'contrast' in init_params
-    assert 'offset' in init_params
+    assert "contrast" in init_params
+    assert "offset" in init_params
 
     print("✓ parameter_space successfully propagated through CMC pipeline")
 
@@ -229,6 +239,7 @@ def test_parameter_space_propagation(
 # =============================================================================
 # Test 2: initial_values Usage for Shard Initialization
 # =============================================================================
+
 
 def test_initial_values_usage(
     laminar_parameter_space,
@@ -255,7 +266,10 @@ def test_initial_values_usage(
     L = 3.5
 
     # Create coordinator with mocked backend
-    with patch('homodyne.optimization.cmc.coordinator.select_backend', return_value=mock_backend):
+    with patch(
+        "homodyne.optimization.cmc.coordinator.select_backend",
+        return_value=mock_backend,
+    ):
         coordinator = CMCCoordinator(minimal_config)
 
         # Run CMC with initial_values
@@ -266,27 +280,27 @@ def test_initial_values_usage(
             phi=phi,
             q=q,
             L=L,
-            analysis_mode='laminar_flow',
+            analysis_mode="laminar_flow",
             parameter_space=laminar_parameter_space,
             initial_values=initial_values_laminar,
         )
 
     # Verify backend received init_params
     call_kwargs = mock_backend.run_parallel_mcmc.call_args.kwargs
-    init_params = call_kwargs['init_params']
+    init_params = call_kwargs["init_params"]
 
     # Check all physics parameters from initial_values
-    assert init_params['D0'] == 1234.5
-    assert init_params['alpha'] == 0.567
-    assert init_params['D_offset'] == 12.34
-    assert init_params['gamma_dot_t0'] == 1.23
-    assert init_params['beta'] == 0.89
-    assert init_params['gamma_dot_t_offset'] == 0.45
-    assert init_params['phi0'] == 0.12
+    assert init_params["D0"] == 1234.5
+    assert init_params["alpha"] == 0.567
+    assert init_params["D_offset"] == 12.34
+    assert init_params["gamma_dot_t0"] == 1.23
+    assert init_params["beta"] == 0.89
+    assert init_params["gamma_dot_t_offset"] == 0.45
+    assert init_params["phi0"] == 0.12
 
     # Check scaling parameters added automatically
-    assert init_params['contrast'] == 0.5  # Default
-    assert init_params['offset'] == 1.0  # Default
+    assert init_params["contrast"] == 0.5  # Default
+    assert init_params["offset"] == 1.0  # Default
 
     print("✓ initial_values successfully used for shard initialization")
 
@@ -294,6 +308,7 @@ def test_initial_values_usage(
 # =============================================================================
 # Test 3: Mid-Point Defaults When initial_values is None
 # =============================================================================
+
 
 def test_midpoint_defaults_when_no_initial_values(
     static_parameter_space,
@@ -319,7 +334,10 @@ def test_midpoint_defaults_when_no_initial_values(
     L = 3.5
 
     # Create coordinator with mocked backend
-    with patch('homodyne.optimization.cmc.coordinator.select_backend', return_value=mock_backend):
+    with patch(
+        "homodyne.optimization.cmc.coordinator.select_backend",
+        return_value=mock_backend,
+    ):
         coordinator = CMCCoordinator(minimal_config)
 
         # Run CMC WITHOUT initial_values (should use mid-point defaults)
@@ -330,22 +348,22 @@ def test_midpoint_defaults_when_no_initial_values(
             phi=phi,
             q=q,
             L=L,
-            analysis_mode='static_isotropic',
+            analysis_mode="static_isotropic",
             parameter_space=static_parameter_space,
             initial_values=None,  # Trigger mid-point calculation
         )
 
     # Verify backend received mid-point init_params
     call_kwargs = mock_backend.run_parallel_mcmc.call_args.kwargs
-    init_params = call_kwargs['init_params']
+    init_params = call_kwargs["init_params"]
 
     # Check mid-point values
     # D0 bounds: [100, 5000] → mid-point = 2550.0
     # alpha bounds: [0.1, 2.0] → mid-point = 1.05
     # D_offset bounds: [0.1, 100.0] → mid-point = 50.05
-    assert abs(init_params['D0'] - 2550.0) < 1.0
-    assert abs(init_params['alpha'] - 1.05) < 0.01
-    assert abs(init_params['D_offset'] - 50.05) < 0.01
+    assert abs(init_params["D0"] - 2550.0) < 1.0
+    assert abs(init_params["alpha"] - 1.05) < 0.01
+    assert abs(init_params["D_offset"] - 50.05) < 0.01
 
     print("✓ Mid-point defaults calculated correctly when initial_values is None")
 
@@ -353,6 +371,7 @@ def test_midpoint_defaults_when_no_initial_values(
 # =============================================================================
 # Test 4: Parameter Validation Against Bounds
 # =============================================================================
+
 
 def test_parameter_validation_against_bounds(
     static_parameter_space,
@@ -379,13 +398,16 @@ def test_parameter_validation_against_bounds(
 
     # Create invalid initial_values (D0 out of bounds: max = 5000.0)
     invalid_initial_values = {
-        'D0': 10000.0,  # Exceeds max bound
-        'alpha': 0.567,
-        'D_offset': 12.34,
+        "D0": 10000.0,  # Exceeds max bound
+        "alpha": 0.567,
+        "D_offset": 12.34,
     }
 
     # Create coordinator with mocked backend
-    with patch('homodyne.optimization.cmc.coordinator.select_backend', return_value=mock_backend):
+    with patch(
+        "homodyne.optimization.cmc.coordinator.select_backend",
+        return_value=mock_backend,
+    ):
         coordinator = CMCCoordinator(minimal_config)
 
         # Expect ValueError due to out-of-bounds D0
@@ -397,7 +419,7 @@ def test_parameter_validation_against_bounds(
                 phi=phi,
                 q=q,
                 L=L,
-                analysis_mode='static_isotropic',
+                analysis_mode="static_isotropic",
                 parameter_space=static_parameter_space,
                 initial_values=invalid_initial_values,
             )
@@ -411,6 +433,7 @@ def test_parameter_validation_against_bounds(
 # =============================================================================
 # Test 5: Automatic CMC Selection Logging
 # =============================================================================
+
 
 def test_automatic_cmc_selection_logging(
     static_parameter_space,
@@ -429,6 +452,7 @@ def test_automatic_cmc_selection_logging(
     Task 4.1.4: Update CMC logging
     """
     import logging
+
     caplog.set_level(logging.INFO)
 
     # Create synthetic data (large enough to potentially trigger CMC)
@@ -441,7 +465,10 @@ def test_automatic_cmc_selection_logging(
     L = 3.5
 
     # Create coordinator with mocked backend
-    with patch('homodyne.optimization.cmc.coordinator.select_backend', return_value=mock_backend):
+    with patch(
+        "homodyne.optimization.cmc.coordinator.select_backend",
+        return_value=mock_backend,
+    ):
         coordinator = CMCCoordinator(minimal_config)
 
         # Run CMC
@@ -452,7 +479,7 @@ def test_automatic_cmc_selection_logging(
             phi=phi,
             q=q,
             L=L,
-            analysis_mode='static_isotropic',
+            analysis_mode="static_isotropic",
             parameter_space=static_parameter_space,
             initial_values=initial_values_static,
         )
@@ -461,16 +488,16 @@ def test_automatic_cmc_selection_logging(
     log_text = caplog.text.lower()
 
     # Verify CMC pipeline logged
-    assert 'starting cmc pipeline' in log_text or 'cmc' in log_text
+    assert "starting cmc pipeline" in log_text or "cmc" in log_text
 
     # Verify backend name logged
-    assert 'mock_backend' in log_text or 'backend' in log_text
+    assert "mock_backend" in log_text or "backend" in log_text
 
     # Verify shard information logged
-    assert 'shard' in log_text
+    assert "shard" in log_text
 
     # Verify parameter loading logged
-    assert 'parameter' in log_text or 'initial' in log_text
+    assert "parameter" in log_text or "initial" in log_text
 
     print("✓ CMC selection and configuration properly logged")
 
@@ -478,6 +505,7 @@ def test_automatic_cmc_selection_logging(
 # =============================================================================
 # Test 6: No SVI References Remaining
 # =============================================================================
+
 
 def test_no_svi_references_in_coordinator():
     """Verify that all SVI references have been removed from CMC coordinator.
@@ -501,17 +529,17 @@ def test_no_svi_references_in_coordinator():
     # But should not be in active code
 
     # Check function signatures don't have SVI parameters
-    assert 'svi_params' not in source_lower
-    assert 'svi_config' not in source_lower
-    assert 'svi_result' not in source_lower
+    assert "svi_params" not in source_lower
+    assert "svi_config" not in source_lower
+    assert "svi_result" not in source_lower
 
     # Check docstrings updated (no "from SVI" language in active parameters)
     # Note: Historical context in docstrings is OK, but active parameter descriptions should not reference SVI
     run_cmc_source = inspect.getsource(coordinator_module.CMCCoordinator.run_cmc)
 
     # Parameter descriptions should not say "from SVI"
-    assert 'initial parameter values from svi' not in run_cmc_source.lower()
-    assert 'inverse mass matrix from svi' not in run_cmc_source.lower()
+    assert "initial parameter values from svi" not in run_cmc_source.lower()
+    assert "inverse mass matrix from svi" not in run_cmc_source.lower()
 
     print("✓ No active SVI references found in CMC coordinator")
 
@@ -519,6 +547,7 @@ def test_no_svi_references_in_coordinator():
 # =============================================================================
 # Integration Test: Full CMC Pipeline with Config-Driven Parameters
 # =============================================================================
+
 
 def test_full_cmc_pipeline_with_config_parameters(
     laminar_parameter_space,
@@ -548,7 +577,10 @@ def test_full_cmc_pipeline_with_config_parameters(
     L = 3.5
 
     # Create coordinator with mocked backend
-    with patch('homodyne.optimization.cmc.coordinator.select_backend', return_value=mock_backend):
+    with patch(
+        "homodyne.optimization.cmc.coordinator.select_backend",
+        return_value=mock_backend,
+    ):
         coordinator = CMCCoordinator(minimal_config)
 
         # Run full CMC pipeline
@@ -559,28 +591,28 @@ def test_full_cmc_pipeline_with_config_parameters(
             phi=phi,
             q=q,
             L=L,
-            analysis_mode='laminar_flow',
+            analysis_mode="laminar_flow",
             parameter_space=laminar_parameter_space,
             initial_values=initial_values_laminar,
         )
 
     # Verify result structure
     assert result is not None
-    assert hasattr(result, 'mean_params')
-    assert hasattr(result, 'converged')
+    assert hasattr(result, "mean_params")
+    assert hasattr(result, "converged")
 
     # Verify CMC-specific fields (extended MCMCResult)
-    assert hasattr(result, 'num_shards')
-    assert hasattr(result, 'combination_method')
+    assert hasattr(result, "num_shards")
+    assert hasattr(result, "combination_method")
 
     # Verify backend was called correctly
     assert mock_backend.run_parallel_mcmc.called
     call_kwargs = mock_backend.run_parallel_mcmc.call_args.kwargs
 
     # Final verification: All config-driven parameters propagated
-    assert call_kwargs['parameter_space'] is laminar_parameter_space
-    assert call_kwargs['analysis_mode'] == 'laminar_flow'
-    assert call_kwargs['init_params']['D0'] == 1234.5  # From initial_values
+    assert call_kwargs["parameter_space"] is laminar_parameter_space
+    assert call_kwargs["analysis_mode"] == "laminar_flow"
+    assert call_kwargs["init_params"]["D0"] == 1234.5  # From initial_values
 
     print("✓ Full CMC pipeline executed successfully with config-driven parameters")
 

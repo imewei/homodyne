@@ -133,7 +133,9 @@ def test_compute_diagnostics_balanced_data(balanced_data):
     phi, t1, t2, g2 = balanced_data
 
     # Create stratified data
-    phi_stratified, _, _, _ = create_angle_stratified_data(phi, t1, t2, g2, target_chunk_size=250)
+    phi_stratified, _, _, _ = create_angle_stratified_data(
+        phi, t1, t2, g2, target_chunk_size=250
+    )
 
     # Compute diagnostics
     diagnostics = compute_stratification_diagnostics(
@@ -155,7 +157,9 @@ def test_compute_diagnostics_chunk_balance(balanced_data):
     """Test chunk balance statistics are computed correctly."""
     phi, t1, t2, g2 = balanced_data
 
-    phi_stratified, _, _, _ = create_angle_stratified_data(phi, t1, t2, g2, target_chunk_size=250)
+    phi_stratified, _, _, _ = create_angle_stratified_data(
+        phi, t1, t2, g2, target_chunk_size=250
+    )
 
     diagnostics = compute_stratification_diagnostics(
         phi_original=phi,
@@ -184,7 +188,9 @@ def test_compute_diagnostics_angle_coverage(balanced_data):
     """Test angle coverage statistics are computed correctly."""
     phi, t1, t2, g2 = balanced_data
 
-    phi_stratified, _, _, _ = create_angle_stratified_data(phi, t1, t2, g2, target_chunk_size=250)
+    phi_stratified, _, _, _ = create_angle_stratified_data(
+        phi, t1, t2, g2, target_chunk_size=250
+    )
 
     diagnostics = compute_stratification_diagnostics(
         phi_original=phi,
@@ -204,14 +210,20 @@ def test_compute_diagnostics_angle_coverage(balanced_data):
     assert diagnostics.angle_coverage["mean_angles"] > 0
     assert diagnostics.angle_coverage["std_angles"] >= 0
     assert 0.0 <= diagnostics.angle_coverage["min_coverage_ratio"] <= 1.0
-    assert 0 <= diagnostics.angle_coverage["perfect_coverage_chunks"] <= diagnostics.n_chunks
+    assert (
+        0
+        <= diagnostics.angle_coverage["perfect_coverage_chunks"]
+        <= diagnostics.n_chunks
+    )
 
 
 def test_compute_diagnostics_perfect_coverage_balanced(balanced_data):
     """Test that balanced data achieves perfect coverage in all chunks."""
     phi, t1, t2, g2 = balanced_data
 
-    phi_stratified, _, _, _ = create_angle_stratified_data(phi, t1, t2, g2, target_chunk_size=250)
+    phi_stratified, _, _, _ = create_angle_stratified_data(
+        phi, t1, t2, g2, target_chunk_size=250
+    )
 
     diagnostics = compute_stratification_diagnostics(
         phi_original=phi,
@@ -225,14 +237,19 @@ def test_compute_diagnostics_perfect_coverage_balanced(balanced_data):
     # min_coverage_ratio should be high (>0.9)
     assert diagnostics.angle_coverage["min_coverage_ratio"] >= 0.9
     # Most chunks should have perfect coverage
-    assert diagnostics.angle_coverage["perfect_coverage_chunks"] >= diagnostics.n_chunks - 1
+    assert (
+        diagnostics.angle_coverage["perfect_coverage_chunks"]
+        >= diagnostics.n_chunks - 1
+    )
 
 
 def test_compute_diagnostics_performance_metrics(balanced_data):
     """Test performance metrics are computed correctly."""
     phi, t1, t2, g2 = balanced_data
 
-    phi_stratified, _, _, _ = create_angle_stratified_data(phi, t1, t2, g2, target_chunk_size=250)
+    phi_stratified, _, _, _ = create_angle_stratified_data(
+        phi, t1, t2, g2, target_chunk_size=250
+    )
 
     execution_time_ms = 15.5
     diagnostics = compute_stratification_diagnostics(
@@ -256,7 +273,9 @@ def test_compute_diagnostics_memory_metrics(balanced_data):
     """Test memory metrics are computed correctly."""
     phi, t1, t2, g2 = balanced_data
 
-    phi_stratified, _, _, _ = create_angle_stratified_data(phi, t1, t2, g2, target_chunk_size=250)
+    phi_stratified, _, _, _ = create_angle_stratified_data(
+        phi, t1, t2, g2, target_chunk_size=250
+    )
 
     diagnostics = compute_stratification_diagnostics(
         phi_original=phi,
@@ -305,7 +324,9 @@ def test_compute_diagnostics_imbalanced_data(imbalanced_data):
     """Test diagnostic computation with imbalanced dataset."""
     phi, t1, t2, g2 = imbalanced_data
 
-    phi_stratified, _, _, _ = create_angle_stratified_data(phi, t1, t2, g2, target_chunk_size=250)
+    phi_stratified, _, _, _ = create_angle_stratified_data(
+        phi, t1, t2, g2, target_chunk_size=250
+    )
 
     diagnostics = compute_stratification_diagnostics(
         phi_original=phi,
@@ -508,7 +529,9 @@ def test_diagnostics_end_to_end_balanced(balanced_data):
     phi, t1, t2, g2 = balanced_data
 
     # Stratify data
-    phi_stratified, _, _, _ = create_angle_stratified_data(phi, t1, t2, g2, target_chunk_size=250)
+    phi_stratified, _, _, _ = create_angle_stratified_data(
+        phi, t1, t2, g2, target_chunk_size=250
+    )
 
     # Compute diagnostics
     diagnostics = compute_stratification_diagnostics(
@@ -590,7 +613,9 @@ def test_diagnostics_comparison_full_vs_index(balanced_data):
     # Both should have similar chunking structure
     assert diag_full.n_chunks == diag_index.n_chunks
     assert (
-        abs(diag_full.angle_coverage["min_coverage_ratio"]
-        - diag_index.angle_coverage["min_coverage_ratio"])
+        abs(
+            diag_full.angle_coverage["min_coverage_ratio"]
+            - diag_index.angle_coverage["min_coverage_ratio"]
+        )
         < 0.1
     )

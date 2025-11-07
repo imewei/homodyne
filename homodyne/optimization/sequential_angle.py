@@ -169,7 +169,7 @@ def split_data_by_angle(
         subsets.append(subset)
         logger.debug(
             f"  Angle {angle:6.2f}°: {n_points:,} points "
-            f"({n_points/len(phi_np)*100:.1f}% of total)"
+            f"({n_points / len(phi_np) * 100:.1f}% of total)"
         )
 
     return subsets
@@ -217,12 +217,16 @@ def optimize_single_angle(
     """
     from scipy.optimize import least_squares
 
-    logger.debug(f"Optimizing angle {subset.phi_angle:.2f}° ({subset.n_points:,} points)")
+    logger.debug(
+        f"Optimizing angle {subset.phi_angle:.2f}° ({subset.n_points:,} points)"
+    )
 
     try:
         # Define residual function for this angle
         def residuals(params):
-            return residual_func(params, subset.phi, subset.t1, subset.t2, subset.g2_exp)
+            return residual_func(
+                params, subset.phi, subset.t1, subset.t2, subset.g2_exp
+            )
 
         # Run optimization
         result = least_squares(
@@ -236,10 +240,16 @@ def optimize_single_angle(
         try:
             # Covariance from Jacobian
             J = result.jac
-            cov = np.linalg.inv(J.T @ J) * (result.fun @ result.fun) / (len(result.fun) - len(initial_params))
+            cov = (
+                np.linalg.inv(J.T @ J)
+                * (result.fun @ result.fun)
+                / (len(result.fun) - len(initial_params))
+            )
         except (np.linalg.LinAlgError, ValueError):
             # Fallback to identity if singular
-            logger.warning(f"Could not compute covariance for angle {subset.phi_angle:.2f}°")
+            logger.warning(
+                f"Could not compute covariance for angle {subset.phi_angle:.2f}°"
+            )
             cov = np.eye(len(initial_params))
 
         return {

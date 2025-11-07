@@ -19,12 +19,12 @@ from homodyne.optimization.exceptions import (
 ERROR_RECOVERY_STRATEGIES = {
     NLSQConvergenceError: [
         ("perturb_parameters", 0.05),  # 5% random perturbation
-        ("increase_iterations", 1.5),   # 50% more iterations
-        ("relax_tolerance", 10.0),      # 10x tolerance relaxation
+        ("increase_iterations", 1.5),  # 50% more iterations
+        ("relax_tolerance", 10.0),  # 10x tolerance relaxation
     ],
     NLSQNumericalError: [
-        ("reduce_step_size", 0.5),      # Halve step size
-        ("tighten_bounds", 0.9),        # 10% tighter bounds
+        ("reduce_step_size", 0.5),  # Halve step size
+        ("tighten_bounds", 0.9),  # 10% tighter bounds
         ("rescale_data", "normalize"),  # Normalize to [0, 1]
     ],
 }

@@ -100,9 +100,9 @@ class TestCMCSelectionLogic:
             min_samples_for_cmc=15,
         )
 
-        assert result is True, (
-            "CMC should be selected at exactly 15 samples (threshold boundary)"
-        )
+        assert (
+            result is True
+        ), "CMC should be selected at exactly 15 samples (threshold boundary)"
 
     def test_nuts_selection_below_all_thresholds(self, mock_hardware_config):
         """
@@ -129,7 +129,9 @@ class TestCMCSelectionLogic:
             f"and small dataset (< 30% memory)"
         )
 
-    def test_threshold_configurability_custom_sample_threshold(self, mock_hardware_config):
+    def test_threshold_configurability_custom_sample_threshold(
+        self, mock_hardware_config
+    ):
         """
         Test threshold configurability: custom min_samples_for_cmc.
 
@@ -147,9 +149,9 @@ class TestCMCSelectionLogic:
             min_samples_for_cmc=30,  # Custom: higher than default 15
         )
 
-        assert result_high_threshold is False, (
-            f"NUTS should be selected when {num_samples} < custom threshold (30)"
-        )
+        assert (
+            result_high_threshold is False
+        ), f"NUTS should be selected when {num_samples} < custom threshold (30)"
 
         # Test with custom threshold of 20 samples
         result_low_threshold = should_use_cmc(
@@ -160,11 +162,13 @@ class TestCMCSelectionLogic:
             min_samples_for_cmc=20,  # Custom: 25 >= 20
         )
 
-        assert result_low_threshold is True, (
-            f"CMC should be selected when {num_samples} >= custom threshold (20)"
-        )
+        assert (
+            result_low_threshold is True
+        ), f"CMC should be selected when {num_samples} >= custom threshold (20)"
 
-    def test_threshold_configurability_custom_memory_threshold(self, mock_hardware_config):
+    def test_threshold_configurability_custom_memory_threshold(
+        self, mock_hardware_config
+    ):
         """
         Test threshold configurability: custom memory_threshold_pct.
 
@@ -184,9 +188,9 @@ class TestCMCSelectionLogic:
             min_samples_for_cmc=15,
         )
 
-        assert result_strict is True, (
-            "CMC should be selected when memory (22.5%) > strict threshold (20%)"
-        )
+        assert (
+            result_strict is True
+        ), "CMC should be selected when memory (22.5%) > strict threshold (20%)"
 
         # Test with relaxed 25% threshold
         result_relaxed = should_use_cmc(
@@ -197,9 +201,9 @@ class TestCMCSelectionLogic:
             min_samples_for_cmc=15,
         )
 
-        assert result_relaxed is False, (
-            "NUTS should be selected when memory (22.5%) < relaxed threshold (25%)"
-        )
+        assert (
+            result_relaxed is False
+        ), "NUTS should be selected when memory (22.5%) < relaxed threshold (25%)"
 
     def test_memory_estimation_without_dataset_size(self, mock_hardware_config):
         """
@@ -264,7 +268,9 @@ class TestCMCSelectionLogic:
             "(parallelism mode)"
         )
 
-    def test_realistic_xpcs_scenario_large_memory_experiment(self, mock_hardware_config):
+    def test_realistic_xpcs_scenario_large_memory_experiment(
+        self, mock_hardware_config
+    ):
         """
         Test realistic XPCS scenario: few angles but huge data (5 phi, 50M points).
 

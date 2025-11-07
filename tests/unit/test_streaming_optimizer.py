@@ -20,7 +20,11 @@ import pytest
 from unittest.mock import Mock, patch, MagicMock
 import time
 
-from homodyne.optimization.nlsq_wrapper import NLSQWrapper, OptimizationStrategy, OptimizationResult
+from homodyne.optimization.nlsq_wrapper import (
+    NLSQWrapper,
+    OptimizationStrategy,
+    OptimizationResult,
+)
 from homodyne.optimization.exceptions import (
     NLSQOptimizationError,
     NLSQConvergenceError,
@@ -248,9 +252,11 @@ class TestStreamingOptimizerErrorRecovery:
         def mock_fit_batch():
             attempt_count[0] += 1
             if attempt_count[0] == 1:
-                raise NLSQConvergenceError("Convergence failed", iteration_count=50, final_loss=10.0)
+                raise NLSQConvergenceError(
+                    "Convergence failed", iteration_count=50, final_loss=10.0
+                )
             else:
-                return {'success': True, 'x': np.array([1.0, 2.0]), 'loss': 0.5}
+                return {"success": True, "x": np.array([1.0, 2.0]), "loss": 0.5}
 
         # Simulate retry logic
         max_retries = 2
@@ -275,7 +281,7 @@ class TestStreamingOptimizerErrorRecovery:
             if attempt_count[0] == 1:
                 raise NLSQNumericalError("NaN in gradients", detection_point="gradient")
             else:
-                return {'success': True, 'x': np.array([1.0, 2.0]), 'loss': 0.5}
+                return {"success": True, "x": np.array([1.0, 2.0]), "loss": 0.5}
 
         # Simulate retry with reduced learning rate
         max_retries = 2
@@ -320,11 +326,11 @@ class TestStreamingOptimizerErrorRecovery:
                     # Simulate failure
                     if batch_idx == 5:  # Batch 5 always fails
                         raise NLSQConvergenceError("Batch 5 fails")
-                    return {'success': True}
+                    return {"success": True}
                 except NLSQConvergenceError:
                     if retry == max_retries - 1:
                         failed_batches.append(batch_idx)
-                        return {'success': False, 'skipped': True}
+                        return {"success": False, "skipped": True}
 
         # Process 10 batches
         for i in range(10):
@@ -337,19 +343,21 @@ class TestStreamingOptimizerErrorRecovery:
         recovery_log = []
 
         def log_recovery(batch_idx, error_type, strategy):
-            recovery_log.append({
-                'batch_idx': batch_idx,
-                'error_type': error_type,
-                'strategy': strategy,
-            })
+            recovery_log.append(
+                {
+                    "batch_idx": batch_idx,
+                    "error_type": error_type,
+                    "strategy": strategy,
+                }
+            )
 
         # Simulate recovery
         log_recovery(3, "ConvergenceError", "perturb_parameters")
         log_recovery(7, "NumericalError", "reduce_learning_rate")
 
         assert len(recovery_log) == 2
-        assert recovery_log[0]['strategy'] == "perturb_parameters"
-        assert recovery_log[1]['error_type'] == "NumericalError"
+        assert recovery_log[0]["strategy"] == "perturb_parameters"
+        assert recovery_log[1]["error_type"] == "NumericalError"
 
 
 class TestStreamingOptimizerNumericalValidation:
@@ -429,7 +437,7 @@ class TestStreamingOptimizerNumericalValidation:
 
     def test_validation_point_identification(self):
         """Test that validation identifies which point failed."""
-        validation_points = ['gradient', 'parameter', 'loss']
+        validation_points = ["gradient", "parameter", "loss"]
 
         for point in validation_points:
             # Each point should be identified separately
@@ -442,10 +450,10 @@ class TestStreamingOptimizerBestParameterTracking:
     def test_best_params_initialization(self):
         """Test best parameters initialized correctly."""
         best_params = None
-        best_loss = float('inf')
+        best_loss = float("inf")
 
         assert best_params is None
-        assert best_loss == float('inf')
+        assert best_loss == float("inf")
 
     def test_best_params_update_on_improvement(self):
         """Test best parameters update when loss improves."""
@@ -539,14 +547,14 @@ class TestStreamingOptimizerBatchStatistics:
     def test_error_type_distribution(self):
         """Test error type distribution tracking."""
         error_counts = {
-            'ConvergenceError': 5,
-            'NumericalError': 3,
-            'BoundsViolation': 2,
+            "ConvergenceError": 5,
+            "NumericalError": 3,
+            "BoundsViolation": 2,
         }
 
         total_errors = sum(error_counts.values())
         assert total_errors == 10
-        assert error_counts['ConvergenceError'] == 5
+        assert error_counts["ConvergenceError"] == 5
 
     def test_running_average_calculation(self):
         """Test running average of batch losses."""
@@ -558,15 +566,15 @@ class TestStreamingOptimizerBatchStatistics:
     def test_batch_statistics_export(self):
         """Test exporting batch statistics."""
         stats = {
-            'total_batches': 100,
-            'total_successes': 95,
-            'total_failures': 5,
-            'success_rate': 0.95,
-            'error_distribution': {'ConvergenceError': 3, 'NumericalError': 2},
+            "total_batches": 100,
+            "total_successes": 95,
+            "total_failures": 5,
+            "success_rate": 0.95,
+            "error_distribution": {"ConvergenceError": 3, "NumericalError": 2},
         }
 
-        assert stats['success_rate'] == 0.95
-        assert sum(stats['error_distribution'].values()) == stats['total_failures']
+        assert stats["success_rate"] == 0.95
+        assert sum(stats["error_distribution"].values()) == stats["total_failures"]
 
 
 class TestStreamingOptimizerIntegration:

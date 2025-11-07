@@ -2,8 +2,11 @@
 """Homodyne System Validator
 ==========================
 
-Comprehensive testing and validation system for shell completion,
-GPU acceleration, and overall system health.
+Comprehensive testing and validation system for Homodyne installation,
+including dependency versions, JAX configuration, NLSQ integration,
+configuration system, data pipeline, shell completion, and overall system health.
+
+Version: 2.3.0 (CPU-only architecture, GPU validation removed)
 """
 
 import json
@@ -77,7 +80,6 @@ class SystemValidator:
                 "conda_env": os.environ.get("CONDA_DEFAULT_ENV"),
                 "virtual_env": os.environ.get("VIRTUAL_ENV"),
                 "shell": os.environ.get("SHELL", "").split("/")[-1],
-                "cuda_home": os.environ.get("CUDA_HOME"),
                 "path_dirs": len(os.environ.get("PATH", "").split(":")),
             }
 
@@ -91,9 +93,6 @@ class SystemValidator:
             warnings = []
             if not is_venv:
                 warnings.append("Not running in a virtual environment")
-
-            if self.environment_info["platform"] != "Linux":
-                warnings.append("GPU acceleration only available on Linux")
 
             execution_time = time.perf_counter() - start_time
 
@@ -126,10 +125,8 @@ class SystemValidator:
             commands = [
                 "homodyne",
                 "homodyne-config",
-                "homodyne-gpu",
                 "homodyne-post-install",
                 "homodyne-cleanup",
-                "homodyne-gpu-optimize",
                 "homodyne-validate",
             ]
             found_commands = []
@@ -357,131 +354,6 @@ alias hc-iso >/dev/null 2>&1 && echo "shortcut_alias_works" || echo "shortcut_al
                 name="Shell Completion",
                 success=False,
                 message=f"Shell completion test failed: {e}",
-                execution_time=execution_time,
-            )
-
-    def test_gpu_setup(self) -> ValidationResult:
-        """Test GPU setup and acceleration."""
-        start_time = time.perf_counter()
-
-        try:
-            if self.environment_info.get("platform") != "Linux":
-                execution_time = time.perf_counter() - start_time
-                return ValidationResult(
-                    name="GPU Setup",
-                    success=True,
-                    message="GPU not available on non-Linux platforms",
-                    execution_time=execution_time,
-                )
-
-            # Check GPU files
-            venv_path = Path(sys.prefix)
-            gpu_files = []
-            missing_files = []
-
-            # Check for GPU files (actual current structure)
-            potential_gpu_files = [
-                venv_path / "etc" / "conda" / "activate.d" / "homodyne-gpu.sh",
-            ]
-
-            # Also check for the main GPU activation source file
-            try:
-                import homodyne
-
-                homodyne_src_dir = Path(homodyne.__file__).parent.parent
-                main_gpu_file = (
-                    homodyne_src_dir / "homodyne" / "runtime" / "gpu" / "activation.sh"
-                )
-                if main_gpu_file.exists():
-                    potential_gpu_files.append(main_gpu_file)
-            except ImportError:
-                pass
-
-            for file_path in potential_gpu_files:
-                if file_path.exists():
-                    gpu_files.append(str(file_path))
-                else:
-                    missing_files.append(str(file_path))
-
-            # Check NVIDIA GPU availability
-            nvidia_available = shutil.which("nvidia-smi") is not None
-            if nvidia_available:
-                success, stdout, stderr = self.run_command(["nvidia-smi", "-L"])
-                gpu_count = len([line for line in stdout.split("\n") if "GPU" in line])
-            else:
-                gpu_count = 0
-
-            # Test JAX GPU support
-            jax_gpu_available = False
-            jax_error = None
-            try:
-                import jax
-
-                devices = jax.devices()
-                jax_gpu_available = any(
-                    "gpu" in str(d).lower() or "cuda" in str(d).lower() for d in devices
-                )
-            except ImportError:
-                jax_error = "JAX not installed"
-            except Exception as e:
-                jax_error = str(e)
-
-            execution_time = time.perf_counter() - start_time
-            warnings = []
-
-            # Only warn about GPU files if GPU acceleration should be available
-            critical_gpu_missing = []
-            for file_path in potential_gpu_files:
-                if not file_path.exists():
-                    if "homodyne-gpu.sh" in str(file_path):
-                        critical_gpu_missing.append(file_path)
-                    elif "activation.sh" in str(file_path):
-                        critical_gpu_missing.append(file_path)
-
-            if critical_gpu_missing and nvidia_available:
-                warnings.append(
-                    "Run 'homodyne-post-install --gpu' to install GPU acceleration",
-                )
-            if not nvidia_available:
-                warnings.append("NVIDIA drivers not available")
-            if jax_error:
-                warnings.append(f"JAX issue: {jax_error}")
-
-            # Determine success
-            has_gpu_files = len(gpu_files) > 0
-            success = has_gpu_files  # Success if GPU files are present
-
-            details = {
-                "gpu_files": gpu_files,
-                "missing_files": missing_files,
-                "nvidia_available": nvidia_available,
-                "gpu_count": gpu_count,
-                "jax_gpu_available": jax_gpu_available,
-                "jax_error": jax_error,
-            }
-
-            if success and nvidia_available and jax_gpu_available:
-                message = f"GPU ready: {gpu_count} GPU(s) with JAX support"
-            elif success:
-                message = f"GPU files installed ({len(gpu_files)} files)"
-            else:
-                message = "GPU setup not found"
-
-            return ValidationResult(
-                name="GPU Setup",
-                success=success,
-                message=message,
-                details=details,
-                execution_time=execution_time,
-                warnings=warnings,
-            )
-
-        except Exception as e:
-            execution_time = time.perf_counter() - start_time
-            return ValidationResult(
-                name="GPU Setup",
-                success=False,
-                message=f"GPU test failed: {e}",
                 execution_time=execution_time,
             )
 
@@ -720,53 +592,10 @@ alias hc-iso >/dev/null 2>&1 && echo "shortcut_alias_works" || echo "shortcut_al
             if platform not in ["Linux", "Darwin", "Windows"]:
                 warnings.append(f"Unknown platform: {platform}")
 
-            # macOS/Windows GPU warning
-            if platform in ["Darwin", "Windows"] and details.get("gpu_devices", 0) > 0:
-                warnings.append(
-                    f"GPU devices detected on {platform}, but GPU acceleration "
-                    "is only supported on Linux. Homodyne will use CPU-only mode.",
-                )
-                remediation.append(
-                    "For GPU support, use Linux with CUDA 12.1-12.9 installed",
-                )
+            # Note: GPU support removed in v2.3.0 - Homodyne is CPU-only
+            # All platforms now use CPU-only JAX configuration
 
-            # Linux without GPU - informational
-            if platform == "Linux" and details.get("gpu_devices", 0) == 0:
-                warnings.append(
-                    "No GPU devices detected on Linux. Running in CPU-only mode.",
-                )
-                remediation.append(
-                    "For GPU support: pip install jax[cuda12-local]==0.8.0 jaxlib==0.8.0",
-                )
-
-            # Test 4: CUDA version detection (if GPU available)
-            if details.get("gpu_devices", 0) > 0 and platform == "Linux":
-                cuda_version = None
-                for device_str in details.get("devices", []):
-                    # Try to extract CUDA version from device string
-                    if "cuda" in device_str.lower():
-                        # Device string format varies, try to extract version
-                        import re
-
-                        match = re.search(r"cuda[:\s]*(\d+\.\d+)", device_str, re.I)
-                        if match:
-                            cuda_version = match.group(1)
-                            break
-
-                if cuda_version:
-                    details["cuda_version"] = cuda_version
-                    # Validate CUDA version (12.1-12.9 supported)
-                    try:
-                        cuda_major = int(float(cuda_version))
-                        if cuda_major != 12:
-                            warnings.append(
-                                f"CUDA {cuda_version} detected. "
-                                "Homodyne requires CUDA 12.1-12.9 for GPU support.",
-                            )
-                    except ValueError:
-                        pass
-
-            # Test 5: Test JIT compilation
+            # Test 4: Test JIT compilation
             try:
 
                 @jax.jit
@@ -861,7 +690,9 @@ alias hc-iso >/dev/null 2>&1 && echo "shortcut_alias_works" || echo "shortcut_al
                     )
                     remediation.append("pip install --upgrade nlsq>=0.1.0")
 
-                details["version_check"] = "pass" if installed >= required else "warning"
+                details["version_check"] = (
+                    "pass" if installed >= required else "warning"
+                )
 
             except AttributeError:
                 details["nlsq_version"] = "unknown"
@@ -1037,7 +868,9 @@ alias hc-iso >/dev/null 2>&1 && echo "shortcut_alias_works" || echo "shortcut_al
                     ]
 
                     missing_templates = [
-                        t for t in expected_templates if t not in details["template_files"]
+                        t
+                        for t in expected_templates
+                        if t not in details["template_files"]
                     ]
                     if missing_templates:
                         warnings.append(
@@ -1089,9 +922,8 @@ alias hc-iso >/dev/null 2>&1 && echo "shortcut_alias_works" || echo "shortcut_al
             if config_load_ok:
                 message += ", config loading works"
 
-            success = (
-                details.get("config_manager") == "available"
-                and details.get("template_dir_exists", False)
+            success = details.get("config_manager") == "available" and details.get(
+                "template_dir_exists", False
             )
 
             return ValidationResult(
@@ -1172,7 +1004,9 @@ alias hc-iso >/dev/null 2>&1 && echo "shortcut_alias_works" || echo "shortcut_al
 
             # Test 3: Phi filtering import
             try:
-                from homodyne.data.phi_filtering import normalize_angle_to_symmetric_range
+                from homodyne.data.phi_filtering import (
+                    normalize_angle_to_symmetric_range,
+                )
 
                 details["phi_filtering"] = "available"
 
@@ -1226,7 +1060,9 @@ alias hc-iso >/dev/null 2>&1 && echo "shortcut_alias_works" || echo "shortcut_al
                         examples_dir.rglob("*.hdf"),
                     )
                     if hdf5_files:
-                        test_data_locations.append(f"examples/ ({len(hdf5_files)} files)")
+                        test_data_locations.append(
+                            f"examples/ ({len(hdf5_files)} files)"
+                        )
 
                 if tests_dir.exists():
                     hdf5_files = list(tests_dir.rglob("*.hdf5")) + list(
@@ -1287,7 +1123,7 @@ alias hc-iso >/dev/null 2>&1 && echo "shortcut_alias_works" || echo "shortcut_al
             )
 
     def run_all_tests(self) -> dict[str, ValidationResult]:
-        """Run all system tests."""
+        """Run all system tests (9 tests total)."""
         tests = [
             self.test_environment_detection,
             self.test_dependency_versions,
@@ -1297,7 +1133,6 @@ alias hc-iso >/dev/null 2>&1 && echo "shortcut_alias_works" || echo "shortcut_al
             self.test_data_pipeline,
             self.test_homodyne_installation,
             self.test_shell_completion,
-            self.test_gpu_setup,
             self.test_integration,
         ]
 
@@ -1346,11 +1181,26 @@ alias hc-iso >/dev/null 2>&1 && echo "shortcut_alias_works" || echo "shortcut_al
         return results
 
     def calculate_health_score(self) -> int:
-        """Calculate overall system health score (0-100)."""
+        """Calculate overall system health score (0-100) across 9 validation tests.
+
+        Weight Distribution (totaling 100%):
+        - Dependency Versions: 20% (critical - exact JAX/jaxlib match required)
+        - JAX Installation: 20% (critical - core computation engine)
+        - NLSQ Integration: 15% (important - primary optimization method)
+        - Config System: 10% (important - configuration management)
+        - Data Pipeline: 10% (important - HDF5 data loading)
+        - Homodyne Installation: 10% (important - CLI commands available)
+        - Environment Detection: 5% (baseline - platform/Python/shell)
+        - Shell Completion: 5% (convenience - aliases and completion)
+        - Integration: 5% (optional - cross-component integration)
+
+        Note: GPU validation removed in v2.3.0 (CPU-only architecture).
+        Integration weight increased from 2% to 5% to absorb GPU test weight.
+        """
         if not self.results:
             return 0
 
-        # Weight factors for different test categories
+        # Weight factors for different test categories (9 tests, totaling 100%)
         weights = {
             "Environment Detection": 5,
             "Dependency Versions": 20,
@@ -1360,8 +1210,7 @@ alias hc-iso >/dev/null 2>&1 && echo "shortcut_alias_works" || echo "shortcut_al
             "Data Pipeline": 10,
             "Homodyne Installation": 10,
             "Shell Completion": 5,
-            "GPU Setup": 3,
-            "Integration": 2,
+            "Integration": 5,  # Increased from 2% (absorbed GPU test weight)
         }
 
         total_weight = 0
@@ -1404,9 +1253,23 @@ alias hc-iso >/dev/null 2>&1 && echo "shortcut_alias_works" || echo "shortcut_al
 
         # Health Score
         health_score = self.calculate_health_score()
-        health_emoji = "🟢" if health_score >= 90 else "🟡" if health_score >= 70 else "🟠" if health_score >= 50 else "🔴"
-        health_status = "Excellent" if health_score >= 90 else "Good" if health_score >= 70 else "Fair" if health_score >= 50 else "Poor"
-        report.append(f"\n{health_emoji} Health Score: {health_score}/100 ({health_status})")
+        health_emoji = (
+            "🟢"
+            if health_score >= 90
+            else "🟡" if health_score >= 70 else "🟠" if health_score >= 50 else "🔴"
+        )
+        health_status = (
+            "Excellent"
+            if health_score >= 90
+            else (
+                "Good"
+                if health_score >= 70
+                else "Fair" if health_score >= 50 else "Poor"
+            )
+        )
+        report.append(
+            f"\n{health_emoji} Health Score: {health_score}/100 ({health_status})"
+        )
 
         # Summary
         passed = sum(1 for r in self.results if r.success)
@@ -1511,7 +1374,6 @@ Examples:
             "data",
             "install",
             "completion",
-            "gpu",
             "integration",
         ],
         help="Run specific test only",
@@ -1532,7 +1394,6 @@ Examples:
             "data": validator.test_data_pipeline,
             "install": validator.test_homodyne_installation,
             "completion": validator.test_shell_completion,
-            "gpu": validator.test_gpu_setup,
             "integration": validator.test_integration,
         }
 

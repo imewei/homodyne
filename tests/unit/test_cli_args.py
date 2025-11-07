@@ -126,11 +126,9 @@ class TestCMCOptions:
         config_file = tmp_path / "test_config.yaml"
         config_file.write_text("# Test config")
 
-        args = parser.parse_args([
-            "--method", "mcmc",
-            "--cmc-num-shards", "4",
-            "--config", str(config_file)
-        ])
+        args = parser.parse_args(
+            ["--method", "mcmc", "--cmc-num-shards", "4", "--config", str(config_file)]
+        )
 
         assert args.method == "mcmc"
         assert args.cmc_num_shards == 4
@@ -142,11 +140,9 @@ class TestCMCOptions:
         config_file = tmp_path / "test_config.yaml"
         config_file.write_text("# Test config")
 
-        args = parser.parse_args([
-            "--method", "mcmc",
-            "--cmc-backend", "pjit",
-            "--config", str(config_file)
-        ])
+        args = parser.parse_args(
+            ["--method", "mcmc", "--cmc-backend", "pjit", "--config", str(config_file)]
+        )
 
         assert args.method == "mcmc"
         assert args.cmc_backend == "pjit"
@@ -158,11 +154,9 @@ class TestCMCOptions:
         config_file = tmp_path / "test_config.yaml"
         config_file.write_text("# Test config")
 
-        args = parser.parse_args([
-            "--method", "mcmc",
-            "--cmc-plot-diagnostics",
-            "--config", str(config_file)
-        ])
+        args = parser.parse_args(
+            ["--method", "mcmc", "--cmc-plot-diagnostics", "--config", str(config_file)]
+        )
 
         assert args.method == "mcmc"
         assert args.cmc_plot_diagnostics is True
@@ -174,13 +168,19 @@ class TestCMCOptions:
         config_file = tmp_path / "test_config.yaml"
         config_file.write_text("# Test config")
 
-        args = parser.parse_args([
-            "--method", "mcmc",
-            "--cmc-num-shards", "8",
-            "--cmc-backend", "multiprocessing",
-            "--cmc-plot-diagnostics",
-            "--config", str(config_file)
-        ])
+        args = parser.parse_args(
+            [
+                "--method",
+                "mcmc",
+                "--cmc-num-shards",
+                "8",
+                "--cmc-backend",
+                "multiprocessing",
+                "--cmc-plot-diagnostics",
+                "--config",
+                str(config_file),
+            ]
+        )
 
         assert args.method == "mcmc"
         assert args.cmc_num_shards == 8
@@ -194,13 +194,19 @@ class TestCMCOptions:
         config_file = tmp_path / "test_config.yaml"
         config_file.write_text("# Test config")
 
-        args = parser.parse_args([
-            "--method", "nlsq",
-            "--cmc-num-shards", "4",
-            "--cmc-backend", "pjit",
-            "--cmc-plot-diagnostics",
-            "--config", str(config_file)
-        ])
+        args = parser.parse_args(
+            [
+                "--method",
+                "nlsq",
+                "--cmc-num-shards",
+                "4",
+                "--cmc-backend",
+                "pjit",
+                "--cmc-plot-diagnostics",
+                "--config",
+                str(config_file),
+            ]
+        )
 
         # Validation should succeed but generate warnings
         result = validate_args(args)

@@ -39,6 +39,7 @@ References:
 - Validation Report: SCIENTIFIC_VALIDATION_REPORT.md
 - Production Report: PRODUCTION_READINESS_REPORT.md
 """
+
 from __future__ import annotations
 
 from typing import Any
@@ -229,13 +230,15 @@ def fit_nlsq_jax(
     # ✅ FIX: Use ParameterManager to load bounds from config (including custom user bounds)
     if HAS_PARAMETER_MANAGER:
         # Handle both ConfigManager objects and plain dicts
-        if hasattr(config, 'config'):
+        if hasattr(config, "config"):
             config_dict = config.config  # ConfigManager object
         else:
             config_dict = config  # Already a dict
 
         # Use ParameterManager to get bounds from config (properly loads custom bounds)
-        param_manager = ParameterManager(config_dict=config_dict, analysis_mode=analysis_mode)
+        param_manager = ParameterManager(
+            config_dict=config_dict, analysis_mode=analysis_mode
+        )
         param_names = _get_param_names(analysis_mode)
         bounds_list = param_manager.get_parameter_bounds(param_names)
         # Convert ParameterManager format (list of dicts) to _bounds_to_arrays format (dict of tuples)

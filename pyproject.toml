@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "homodyne"
 dynamic = ["version"]
-description = "JAX-first homodyne scattering analysis for XPCS under nonequilibrium conditions"
+description = "CPU-optimized JAX-based homodyne scattering analysis for XPCS under nonequilibrium conditions"
 readme = "README.md"
 license = {text = "MIT"}
 authors = [
@@ -39,38 +39,33 @@ classifiers = [
 requires-python = ">=3.12"
 
 # ============================================================================
-# GPU ACCELERATION (20-100x speedup for large datasets)
+# CPU-ONLY ARCHITECTURE (v2.3.0+)
 # ============================================================================
-# Default: CPU-only JAX (works on ALL platforms: Linux, macOS, Windows)
+# Homodyne v2.3.0+ is CPU-only, optimized for multi-core systems and HPC clusters.
+# Works on ALL platforms: Linux, macOS, Windows
 #
-# For GPU acceleration (Linux + CUDA 12.1-12.9 ONLY):
+# GPU support removed in v2.3.0 for simplified maintenance and reliability.
+# For GPU users: Use Homodyne v2.2.1 (last GPU-supporting version)
 #
-#   Quick install (from homodyne repository):
-#     make install-jax-gpu
+# Platform support:
+#   ✅ Linux: Full support (HPC clusters with 36/128-core nodes)
+#   ✅ macOS: Full support (Apple Silicon/Intel)
+#   ✅ Windows: Full support
 #
-#   Manual install:
-#     pip uninstall -y jax jaxlib
-#     pip install jax[cuda12-local]==0.8.0 jaxlib==0.8.0
+# Requirements:
+#   - Python 3.12+
+#   - JAX 0.8.0 (CPU-only, exact version)
+#   - Multi-core CPU recommended (14+ cores for best performance)
 #
-#   Platform support:
-#     ✅ Linux + NVIDIA GPU + CUDA 12.1-12.9: Full GPU acceleration
-#     ❌ macOS: CPU-only (Apple Silicon/Intel, no NVIDIA GPU support)
-#     ❌ Windows: CPU-only (CUDA support experimental/unstable)
-#
-#   Requirements:
-#     - System CUDA 12.1-12.9 pre-installed (not bundled)
-#     - NVIDIA driver >= 525
-#     - Linux x86_64 or aarch64
-#
-# See README.md for detailed GPU installation guide
+# See README.md for HPC CPU optimization guide
+# See docs/migration/v2.2-to-v2.3-gpu-removal.md for migration from v2.2.x
 # ============================================================================
 dependencies = [
     # Core scientific computing (2025 tested stable)
     "numpy>=2.0.0,<3.0.0",  # Tested: NumPy 2.3.4
     "scipy>=1.14.0,<2.0.0",  # Tested: SciPy 1.16.2
 
-    # JAX ecosystem (CPU-only - works on all platforms)
-    # GPU users: see installation instructions above
+    # JAX ecosystem (CPU-only in v2.3.0+)
     "jax==0.8.0",  # JAX 0.8.0 CPU-only - exact version required
     "jaxlib==0.8.0",  # jaxlib 0.8.0 CPU-only - must match JAX version exactly
     "nlsq>=0.1.0",  # NLSQ trust-region optimizer for JAX-native nonlinear least squares

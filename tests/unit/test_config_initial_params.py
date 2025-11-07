@@ -395,7 +395,9 @@ class TestErrorHandling:
 
         config_mgr = ConfigManager(config_override=config)
 
-        with pytest.raises(ValueError, match="values is null and use_midpoint_defaults is False"):
+        with pytest.raises(
+            ValueError, match="values is null and use_midpoint_defaults is False"
+        ):
             config_mgr.get_initial_parameters(use_midpoint_defaults=False)
 
     def test_empty_config(self):

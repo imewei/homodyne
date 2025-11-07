@@ -3,6 +3,8 @@
 
 Simplified argument parsing system for the minimal CLI interface.
 Focuses on essential commands while maintaining compatibility.
+
+Note: GPU support removed in v2.3.0 - CPU-only execution.
 """
 
 import argparse
@@ -19,7 +21,7 @@ def create_parser() -> argparse.ArgumentParser:
     """Create the main argument parser for Homodyne CLI.
 
     Returns:
-        Configured ArgumentParser with essential CLI options
+        Configured ArgumentParser with essential CLI options (CPU-only)
     """
     # Create epilog with version interpolation
     epilog_text = f"""
@@ -29,7 +31,6 @@ Examples:
   %(prog)s --method mcmc                      # MCMC with automatic NUTS/CMC selection
   %(prog)s --config my_config.yaml            # Use custom config file
   %(prog)s --output-dir ./results             # Custom output directory
-  %(prog)s --force-cpu                        # Force CPU-only computation
   %(prog)s --verbose                          # Enable verbose logging
   %(prog)s --plot-experimental-data          # Generate data validation plots
   %(prog)s --plot-simulated-data              # Plot theoretical heatmaps
@@ -66,12 +67,12 @@ Physical Model:
   Static Mode:     3 parameters [D₀, α, D_offset]
   Laminar Flow:    7 parameters [D₀, α, D_offset, γ̇₀, β, γ̇_offset, φ₀]
 
-Homodyne v{__version__} - JAX-First Architecture
+Homodyne v{__version__} - CPU-Optimized JAX Architecture
         """
 
     parser = argparse.ArgumentParser(
         prog="homodyne",
-        description="JAX-first homodyne scattering analysis for XPCS",
+        description="CPU-optimized homodyne scattering analysis for XPCS",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog=epilog_text,
     )
@@ -116,20 +117,6 @@ Homodyne v{__version__} - JAX-First Architecture
         "--data-file",
         type=Path,
         help="Path to experimental data file (overrides config)",
-    )
-
-    # Device configuration
-    parser.add_argument(
-        "--force-cpu",
-        action="store_true",
-        help="Force CPU-only computation (disable GPU acceleration)",
-    )
-
-    parser.add_argument(
-        "--gpu-memory-fraction",
-        type=float,
-        default=0.9,
-        help="Fraction of GPU memory to use (0.1-1.0) (default: %(default)s)",
     )
 
     # Analysis mode
@@ -393,10 +380,6 @@ def validate_args(args) -> bool:
         return False
 
     # Validate numeric ranges
-    if not (0.1 <= args.gpu_memory_fraction <= 1.0):
-        print("Error: GPU memory fraction must be between 0.1 and 1.0")
-        return False
-
     if args.max_iterations <= 0:
         print("Error: Maximum iterations must be positive")
         return False

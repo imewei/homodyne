@@ -65,7 +65,11 @@ def is_cuda_available():
     if not JAX_AVAILABLE:
         return False
     try:
-        gpu_devices = [d for d in jax.devices() if "gpu" in str(d).lower() or "cuda" in str(d).lower()]
+        gpu_devices = [
+            d
+            for d in jax.devices()
+            if "gpu" in str(d).lower() or "cuda" in str(d).lower()
+        ]
         return len(gpu_devices) > 0
     except Exception:
         return False
@@ -77,25 +81,17 @@ def is_gpu_compatible():
 
 
 # Skip decorators for platform-specific tests
-skip_if_not_linux = pytest.mark.skipif(
-    not is_linux(),
-    reason="Test requires Linux OS"
-)
+skip_if_not_linux = pytest.mark.skipif(not is_linux(), reason="Test requires Linux OS")
 
 skip_if_no_gpu = pytest.mark.skipif(
-    not is_gpu_compatible(),
-    reason="GPU tests require Linux + CUDA 12+ GPU"
+    not is_gpu_compatible(), reason="GPU tests require Linux + CUDA 12+ GPU"
 )
 
 skip_if_windows = pytest.mark.skipif(
-    is_windows(),
-    reason="Test not supported on Windows"
+    is_windows(), reason="Test not supported on Windows"
 )
 
-skip_if_macos = pytest.mark.skipif(
-    is_macos(),
-    reason="Test not supported on macOS"
-)
+skip_if_macos = pytest.mark.skipif(is_macos(), reason="Test not supported on macOS")
 
 
 # ============================================================================
@@ -108,12 +104,16 @@ def pytest_configure(config):
     config.addinivalue_line("markers", "unit: Unit tests for individual components")
     config.addinivalue_line("markers", "integration: Integration tests for workflows")
     config.addinivalue_line("markers", "performance: Performance and benchmark tests")
-    config.addinivalue_line("markers", "gpu: GPU acceleration tests (requires Linux + CUDA 12+)")
+    config.addinivalue_line(
+        "markers", "gpu: GPU acceleration tests (requires Linux + CUDA 12+)"
+    )
     config.addinivalue_line("markers", "mcmc: MCMC statistical tests")
     config.addinivalue_line("markers", "property: Property-based tests")
     config.addinivalue_line("markers", "slow: Slow tests (> 5 seconds)")
     config.addinivalue_line("markers", "requires_jax: Requires JAX installation")
-    config.addinivalue_line("markers", "requires_gpu: Requires GPU hardware (Linux + CUDA 12+)")
+    config.addinivalue_line(
+        "markers", "requires_gpu: Requires GPU hardware (Linux + CUDA 12+)"
+    )
     config.addinivalue_line("markers", "linux: Requires Linux OS")
 
 
@@ -179,18 +179,20 @@ def cleanup_jax_state():
     if JAX_AVAILABLE:
         try:
             from jax import clear_caches
+
             clear_caches()
         except Exception:
             pass
 
     # Force garbage collection
     import gc
+
     gc.collect()
 
     # Clear GPU memory if available
     if JAX_AVAILABLE:
         try:
-            if jax.devices()[0].platform == 'gpu':
+            if jax.devices()[0].platform == "gpu":
                 jax.clear_backends()
         except Exception:
             pass
@@ -208,7 +210,8 @@ def reset_config_state():
     # Clear cached config managers
     try:
         from homodyne.config import manager
-        if hasattr(manager, '_cache'):
+
+        if hasattr(manager, "_cache"):
             manager._cache.clear()
     except (ImportError, AttributeError):
         pass
@@ -216,7 +219,8 @@ def reset_config_state():
     # Clear parameter space cache
     try:
         from homodyne.config import parameter_space
-        if hasattr(parameter_space, '_cache'):
+
+        if hasattr(parameter_space, "_cache"):
             parameter_space._cache.clear()
     except (ImportError, AttributeError):
         pass
@@ -377,8 +381,12 @@ def mock_hdf5_file(temp_dir):
 
         # Create dqlist and dphilist with shape (1, N)
         n_angles = 36
-        xpcs_grp.create_dataset("dqlist", data=np.array([[0.01] * n_angles]))  # Shape (1, 36)
-        xpcs_grp.create_dataset("dphilist", data=np.array([np.linspace(0, 2 * np.pi, n_angles)]))  # Shape (1, 36)
+        xpcs_grp.create_dataset(
+            "dqlist", data=np.array([[0.01] * n_angles])
+        )  # Shape (1, 36)
+        xpcs_grp.create_dataset(
+            "dphilist", data=np.array([np.linspace(0, 2 * np.pi, n_angles)])
+        )  # Shape (1, 36)
 
         # Create exchange/C2T_all group with correlation matrices
         exchange_grp = f.create_group("exchange")
@@ -391,7 +399,9 @@ def mock_hdf5_file(temp_dir):
 
         for i in range(n_angles):
             # Create square half matrix (upper triangular part matters)
-            half_matrix = np.triu(np.random.random((n_times, n_times))) + 1.0  # Values > 1.0
+            half_matrix = (
+                np.triu(np.random.random((n_times, n_times))) + 1.0
+            )  # Values > 1.0
             c2t_grp.create_dataset(f"{i:04d}", data=half_matrix)
 
     yield file_path

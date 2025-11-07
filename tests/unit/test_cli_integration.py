@@ -68,12 +68,17 @@ class TestCMCArgumentParsing:
     def test_all_cmc_arguments_together(self):
         """Test all CMC arguments can be used together with automatic selection."""
         parser = create_parser()
-        args = parser.parse_args([
-            "--method", "mcmc",
-            "--cmc-num-shards", "16",
-            "--cmc-backend", "pjit",
-            "--cmc-plot-diagnostics"
-        ])
+        args = parser.parse_args(
+            [
+                "--method",
+                "mcmc",
+                "--cmc-num-shards",
+                "16",
+                "--cmc-backend",
+                "pjit",
+                "--cmc-plot-diagnostics",
+            ]
+        )
 
         assert args.method == "mcmc"
         assert args.cmc_num_shards == 16
@@ -134,11 +139,9 @@ class TestCMCArgumentValidation:
 class TestCMCConfigOverride:
     """Test CLI arguments override config file values."""
 
-    @patch('homodyne.cli.commands.fit_mcmc_jax')
-    @patch('homodyne.cli.commands._apply_angle_filtering_for_optimization')
-    def test_cmc_num_shards_overrides_config(
-        self, mock_filter, mock_fit_mcmc
-    ):
+    @patch("homodyne.cli.commands.fit_mcmc_jax")
+    @patch("homodyne.cli.commands._apply_angle_filtering_for_optimization")
+    def test_cmc_num_shards_overrides_config(self, mock_filter, mock_fit_mcmc):
         """Test --cmc-num-shards CLI argument overrides config file."""
         # Setup mocks
         mock_config = Mock()
@@ -182,11 +185,9 @@ class TestCMCConfigOverride:
         call_kwargs = mock_fit_mcmc.call_args[1]
         assert call_kwargs["cmc_config"]["sharding"]["num_shards"] == 20
 
-    @patch('homodyne.cli.commands.fit_mcmc_jax')
-    @patch('homodyne.cli.commands._apply_angle_filtering_for_optimization')
-    def test_cmc_backend_overrides_config(
-        self, mock_filter, mock_fit_mcmc
-    ):
+    @patch("homodyne.cli.commands.fit_mcmc_jax")
+    @patch("homodyne.cli.commands._apply_angle_filtering_for_optimization")
+    def test_cmc_backend_overrides_config(self, mock_filter, mock_fit_mcmc):
         """Test --cmc-backend CLI argument overrides config file."""
         # Setup mocks
         mock_config = Mock()
@@ -233,9 +234,9 @@ class TestCMCConfigOverride:
 class TestCMCDiagnosticPlotGeneration:
     """Test CMC diagnostic plot generation."""
 
-    @patch('homodyne.cli.commands._generate_cmc_diagnostic_plots')
-    @patch('homodyne.cli.commands.fit_mcmc_jax')
-    @patch('homodyne.cli.commands._apply_angle_filtering_for_optimization')
+    @patch("homodyne.cli.commands._generate_cmc_diagnostic_plots")
+    @patch("homodyne.cli.commands.fit_mcmc_jax")
+    @patch("homodyne.cli.commands._apply_angle_filtering_for_optimization")
     def test_diagnostic_plots_generated_for_cmc_result(
         self, mock_filter, mock_fit_mcmc, mock_generate_plots
     ):
@@ -283,9 +284,9 @@ class TestCMCDiagnosticPlotGeneration:
         assert call_args[0] == mock_result
         assert call_args[1] == Path("/tmp/test")
 
-    @patch('homodyne.cli.commands._generate_cmc_diagnostic_plots')
-    @patch('homodyne.cli.commands.fit_mcmc_jax')
-    @patch('homodyne.cli.commands._apply_angle_filtering_for_optimization')
+    @patch("homodyne.cli.commands._generate_cmc_diagnostic_plots")
+    @patch("homodyne.cli.commands.fit_mcmc_jax")
+    @patch("homodyne.cli.commands._apply_angle_filtering_for_optimization")
     def test_diagnostic_plots_not_generated_for_nuts_result(
         self, mock_filter, mock_fit_mcmc, mock_generate_plots
     ):
@@ -329,9 +330,9 @@ class TestCMCDiagnosticPlotGeneration:
         # Verify _generate_cmc_diagnostic_plots was NOT called
         mock_generate_plots.assert_not_called()
 
-    @patch('homodyne.cli.commands._generate_cmc_diagnostic_plots')
-    @patch('homodyne.cli.commands.fit_mcmc_jax')
-    @patch('homodyne.cli.commands._apply_angle_filtering_for_optimization')
+    @patch("homodyne.cli.commands._generate_cmc_diagnostic_plots")
+    @patch("homodyne.cli.commands.fit_mcmc_jax")
+    @patch("homodyne.cli.commands._apply_angle_filtering_for_optimization")
     def test_diagnostic_plots_not_generated_when_flag_false(
         self, mock_filter, mock_fit_mcmc, mock_generate_plots
     ):
@@ -397,9 +398,7 @@ class TestCMCDiagnosticPlotFunction:
         output_dir = tmp_path / "test_output"
 
         # Call function
-        _generate_cmc_diagnostic_plots(
-            mock_result, output_dir, "laminar_flow"
-        )
+        _generate_cmc_diagnostic_plots(mock_result, output_dir, "laminar_flow")
 
         # Verify JSON file was created
         diag_file = output_dir / "cmc_diagnostics" / "cmc_diagnostics.json"
@@ -407,6 +406,7 @@ class TestCMCDiagnosticPlotFunction:
 
         # Verify JSON content
         import json
+
         with open(diag_file) as f:
             data = json.load(f)
         assert "per_shard_diagnostics" in data
@@ -426,14 +426,14 @@ class TestCMCDiagnosticPlotFunction:
 
         # Call function
         with caplog.at_level("WARNING"):
-            _generate_cmc_diagnostic_plots(
-                mock_result, output_dir, "laminar_flow"
-            )
+            _generate_cmc_diagnostic_plots(mock_result, output_dir, "laminar_flow")
 
         # Verify warning was logged
         assert "not a CMC result" in caplog.text
 
-    def test_diagnostic_plot_function_with_missing_diagnostics_logs_warning(self, caplog):
+    def test_diagnostic_plot_function_with_missing_diagnostics_logs_warning(
+        self, caplog
+    ):
         """Test _generate_cmc_diagnostic_plots logs warning when diagnostics missing."""
         from homodyne.cli.commands import _generate_cmc_diagnostic_plots
 
@@ -446,9 +446,7 @@ class TestCMCDiagnosticPlotFunction:
 
         # Call function
         with caplog.at_level("WARNING"):
-            _generate_cmc_diagnostic_plots(
-                mock_result, output_dir, "laminar_flow"
-            )
+            _generate_cmc_diagnostic_plots(mock_result, output_dir, "laminar_flow")
 
         # Verify warning was logged
         assert "diagnostics not available" in caplog.text
@@ -462,10 +460,14 @@ class TestBackwardCompatibility:
         parser = create_parser()
 
         # Old usage (no CMC arguments)
-        args = parser.parse_args([
-            "--config", "my_config.yaml",
-            "--method", "nlsq",
-        ])
+        args = parser.parse_args(
+            [
+                "--config",
+                "my_config.yaml",
+                "--method",
+                "nlsq",
+            ]
+        )
 
         # Verify default values for CMC arguments
         assert args.cmc_num_shards is None
@@ -476,9 +478,12 @@ class TestBackwardCompatibility:
         """Test --method mcmc without CMC arguments works (auto-selection)."""
         parser = create_parser()
 
-        args = parser.parse_args([
-            "--method", "mcmc",
-        ])
+        args = parser.parse_args(
+            [
+                "--method",
+                "mcmc",
+            ]
+        )
 
         # Verify defaults
         assert args.method == "mcmc"
@@ -493,12 +498,17 @@ def test_cli_integration_summary():
     parser = create_parser()
 
     # Test 1: All CMC arguments parse correctly
-    args = parser.parse_args([
-        "--method", "mcmc",
-        "--cmc-num-shards", "16",
-        "--cmc-backend", "multiprocessing",
-        "--cmc-plot-diagnostics",
-    ])
+    args = parser.parse_args(
+        [
+            "--method",
+            "mcmc",
+            "--cmc-num-shards",
+            "16",
+            "--cmc-backend",
+            "multiprocessing",
+            "--cmc-plot-diagnostics",
+        ]
+    )
     assert args.method == "mcmc"
     assert args.cmc_num_shards == 16
     assert args.cmc_backend == "multiprocessing"

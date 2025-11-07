@@ -23,12 +23,14 @@ import pytest
 # Handle optional dependencies
 try:
     import h5py
+
     HAS_H5PY = True
 except ImportError:
     HAS_H5PY = False
 
 try:
     import yaml
+
     HAS_YAML = True
 except ImportError:
     HAS_YAML = False
@@ -36,6 +38,7 @@ except ImportError:
 try:
     import jax
     import jax.numpy as jnp
+
     JAX_AVAILABLE = True
 except ImportError:
     JAX_AVAILABLE = False
@@ -49,6 +52,7 @@ try:
         shard_data_stratified,
     )
     from homodyne.optimization.cmc.result import MCMCResult
+
     CMC_AVAILABLE = True
 except ImportError:
     CMC_AVAILABLE = False
@@ -56,6 +60,7 @@ except ImportError:
 # Import test factories
 try:
     from tests.factories.data_factory import XPCSDataFactory
+
     FACTORIES_AVAILABLE = True
 except ImportError:
     FACTORIES_AVAILABLE = False
@@ -66,7 +71,15 @@ def generate_synthetic_xpcs_data(
     n_angles: int = 8,
     analysis_mode: str = "laminar_flow",
     seed: int = 42,
-) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray, Dict[str, float]]:
+) -> Tuple[
+    np.ndarray,
+    np.ndarray,
+    np.ndarray,
+    np.ndarray,
+    np.ndarray,
+    np.ndarray,
+    Dict[str, float],
+]:
     """
     Generate synthetic XPCS data for testing.
 
@@ -93,13 +106,11 @@ def generate_synthetic_xpcs_data(
 
     # Create time meshgrid
     t1, t2 = np.meshgrid(
-        np.linspace(0, 10, n_times),
-        np.linspace(0, 10, n_times),
-        indexing="ij"
+        np.linspace(0, 10, n_times), np.linspace(0, 10, n_times), indexing="ij"
     )
 
     # Create phi angles
-    phi = np.linspace(0, 2*np.pi, n_angles, endpoint=False)
+    phi = np.linspace(0, 2 * np.pi, n_angles, endpoint=False)
 
     # Set wavevector and length
     q = 0.01
@@ -114,7 +125,7 @@ def generate_synthetic_xpcs_data(
             "gamma_dot_0": 0.1,
             "beta": 0.5,
             "gamma_dot_offset": 0.01,
-            "phi0": np.pi/4,
+            "phi0": np.pi / 4,
         }
     else:  # static_isotropic
         true_params = {
@@ -129,7 +140,7 @@ def generate_synthetic_xpcs_data(
 
     # Generate g2 = 1 + contrast * g1^2
     contrast = 0.4
-    g2_true = 1.0 + contrast * (g1_decay ** 2)
+    g2_true = 1.0 + contrast * (g1_decay**2)
 
     # Add angle dependence for laminar flow
     if analysis_mode == "laminar_flow":
@@ -197,21 +208,21 @@ class TestCMCIntegrationBasic:
     def test_cmc_coordinator_instantiation(self):
         """Test CMC coordinator can be instantiated with config."""
         config = {
-            'cmc': {
-                'sharding': {'strategy': 'stratified', 'num_shards': 5},
-                'initialization': {'use_svi': True, 'svi_steps': 100},
-                'combination': {'method': 'weighted', 'fallback_enabled': True},
+            "cmc": {
+                "sharding": {"strategy": "stratified", "num_shards": 5},
+                "initialization": {"use_svi": True, "svi_steps": 100},
+                "combination": {"method": "weighted", "fallback_enabled": True},
             },
-            'mcmc': {
-                'num_warmup': 100,
-                'num_samples': 200,
-                'num_chains': 1,
+            "mcmc": {
+                "num_warmup": 100,
+                "num_samples": 200,
+                "num_chains": 1,
             },
         }
 
         coordinator = CMCCoordinator(config)
         assert coordinator is not None
-        assert hasattr(coordinator, 'run_cmc')
+        assert hasattr(coordinator, "run_cmc")
 
     def test_cmc_data_sharding_basic(self):
         """Test basic data sharding functionality."""
@@ -221,8 +232,7 @@ class TestCMCIntegrationBasic:
         n_angles = 8
 
         c2_exp, t1, t2, phi, q, L, _ = generate_synthetic_xpcs_data(
-            n_points=n_points,
-            n_angles=n_angles
+            n_points=n_points, n_angles=n_angles
         )
 
         # Test optimal shard calculation
@@ -237,18 +247,12 @@ class TestCMCIntegrationBasic:
         )
 
         shards = shard_data_stratified(
-            data=c2_flat,
-            t1=t1_flat,
-            t2=t2_flat,
-            phi=phi_flat,
-            num_shards=2,
-            q=q,
-            L=L
+            data=c2_flat, t1=t1_flat, t2=t2_flat, phi=phi_flat, num_shards=2, q=q, L=L
         )
         assert len(shards) == 2
         for shard in shards:
-            assert 'data' in shard
-            assert 'phi' in shard
+            assert "data" in shard
+            assert "phi" in shard
 
     def test_cmc_small_dataset_vs_nuts(self):
         """
@@ -258,9 +262,7 @@ class TestCMCIntegrationBasic:
         """
         n_points = 10000
         c2_exp, t1, t2, phi, q, L, true_params = generate_synthetic_xpcs_data(
-            n_points=n_points,
-            n_angles=8,
-            analysis_mode='static_isotropic'
+            n_points=n_points, n_angles=8, analysis_mode="static_isotropic"
         )
 
         # This test structure validates integration
@@ -297,9 +299,9 @@ mcmc:
 """
 
         config = yaml.safe_load(config_content)
-        assert config['cmc']['sharding']['strategy'] == 'stratified'
-        assert config['cmc']['sharding']['num_shards'] == 5
-        assert config['mcmc']['num_samples'] == 2000
+        assert config["cmc"]["sharding"]["strategy"] == "stratified"
+        assert config["cmc"]["sharding"]["num_shards"] == 5
+        assert config["mcmc"]["num_samples"] == 2000
 
 
 @pytest.mark.integration
@@ -317,17 +319,22 @@ class TestCMCBackendIntegration:
         assert hw_config is not None
 
         # Test that backend recommendation exists
-        assert hw_config.recommended_backend in ['pjit', 'multiprocessing', 'pbs', 'slurm']
+        assert hw_config.recommended_backend in [
+            "pjit",
+            "multiprocessing",
+            "pbs",
+            "slurm",
+        ]
 
         # Test auto-selection (uses hardware config)
         backend_auto = select_backend(hw_config)
         assert backend_auto is not None
-        assert backend_auto.get_backend_name() in ['pjit', 'multiprocessing', 'pbs']
+        assert backend_auto.get_backend_name() in ["pjit", "multiprocessing", "pbs"]
 
         # Test manual override
-        backend_override = select_backend(hw_config, user_override='multiprocessing')
+        backend_override = select_backend(hw_config, user_override="multiprocessing")
         assert backend_override is not None
-        assert backend_override.get_backend_name() == 'multiprocessing'
+        assert backend_override.get_backend_name() == "multiprocessing"
 
     def test_multiprocessing_backend_basic(self):
         """Test multiprocessing backend instantiation."""
@@ -335,12 +342,12 @@ class TestCMCBackendIntegration:
         from homodyne.device.config import detect_hardware
 
         hw_config = detect_hardware()
-        backend = select_backend(hw_config, user_override='multiprocessing')
+        backend = select_backend(hw_config, user_override="multiprocessing")
 
         assert backend is not None
-        assert hasattr(backend, 'run_parallel_mcmc')
-        assert hasattr(backend, 'get_backend_name')
-        assert backend.get_backend_name() == 'multiprocessing'
+        assert hasattr(backend, "run_parallel_mcmc")
+        assert hasattr(backend, "get_backend_name")
+        assert backend.get_backend_name() == "multiprocessing"
 
 
 @pytest.mark.integration
@@ -355,8 +362,7 @@ class TestCMCShardingStrategies:
         num_shards = 4
 
         c2_exp, t1, t2, phi, q, L, _ = generate_synthetic_xpcs_data(
-            n_points=n_points,
-            n_angles=n_angles
+            n_points=n_points, n_angles=n_angles
         )
 
         c2_flat, t1_flat, t2_flat, phi_flat = prepare_flattened_data_for_sharding(
@@ -369,7 +375,7 @@ class TestCMCShardingStrategies:
             phi=phi_flat,
             num_shards=num_shards,
             q=q,
-            L=L
+            L=L,
         )
 
         assert len(shards) == num_shards
@@ -378,12 +384,12 @@ class TestCMCShardingStrategies:
         total_data_points = 0
         unique_angles_per_shard = []
         for shard in shards:
-            assert 'data' in shard
-            assert 'phi' in shard
-            assert len(shard['phi']) > 0
-            total_data_points += len(shard['data'])
+            assert "data" in shard
+            assert "phi" in shard
+            assert len(shard["phi"]) > 0
+            total_data_points += len(shard["data"])
             # Count unique angles in each shard
-            unique_angles_per_shard.append(len(np.unique(shard['phi'])))
+            unique_angles_per_shard.append(len(np.unique(shard["phi"])))
 
         # Total data points should match flattened data (minus 2% removed by sharding)
         assert total_data_points >= int(len(c2_flat) * 0.98)
@@ -396,9 +402,9 @@ class TestCMCShardingStrategies:
         from homodyne.device.config import detect_hardware
 
         test_cases = [
-            (100_000, 4),    # 100k points, expect ~4 shards
+            (100_000, 4),  # 100k points, expect ~4 shards
             (1_000_000, 8),  # 1M points, expect ~8 shards
-            (10_000, 1),     # 10k points, expect 1 shard
+            (10_000, 1),  # 10k points, expect 1 shard
         ]
 
         hw_config = detect_hardware()
@@ -414,18 +420,20 @@ class TestCMCShardingStrategies:
 class TestCMCDataSizes:
     """Test CMC with different dataset sizes."""
 
-    @pytest.mark.parametrize("n_points", [
-        pytest.param(1000, id="1k_points"),
-        pytest.param(10000, id="10k_points"),
-        pytest.param(100000, id="100k_points"),
-    ])
+    @pytest.mark.parametrize(
+        "n_points",
+        [
+            pytest.param(1000, id="1k_points"),
+            pytest.param(10000, id="10k_points"),
+            pytest.param(100000, id="100k_points"),
+        ],
+    )
     def test_cmc_various_sizes(self, n_points):
         """Test CMC pipeline with various dataset sizes."""
         from homodyne.device.config import detect_hardware
 
         c2_exp, t1, t2, phi, q, L, _ = generate_synthetic_xpcs_data(
-            n_points=n_points,
-            n_angles=8
+            n_points=n_points, n_angles=8
         )
 
         # Verify data structure
@@ -449,7 +457,7 @@ class TestCMCDataSizes:
             phi=phi_flat,
             num_shards=min(num_shards, 5),
             q=q,
-            L=L
+            L=L,
         )
         assert len(shards) <= min(num_shards, 5)
 
@@ -464,8 +472,7 @@ class TestCMCDataSizes:
 
         n_points = 100_000
         c2_exp, t1, t2, phi, q, L, _ = generate_synthetic_xpcs_data(
-            n_points=n_points,
-            n_angles=16
+            n_points=n_points, n_angles=16
         )
 
         # Verify data structure
@@ -490,7 +497,7 @@ class TestCMCDataSizes:
             phi=phi_flat,
             num_shards=max(1, num_shards),
             q=q,
-            L=L
+            L=L,
         )
         assert len(shards) >= 1
 
@@ -517,13 +524,13 @@ class TestCMCErrorHandling:
             phi=phi_flat,
             num_shards=num_shards,
             q=q,
-            L=L
+            L=L,
         )
         # Implementation uses round-robin, so can create more shards than unique angles
         assert len(shards) == num_shards
         # Each shard should still have data
         for shard in shards:
-            assert len(shard['data']) > 0
+            assert len(shard["data"]) > 0
 
     def test_empty_data_handling(self):
         """Test handling of edge cases."""
@@ -543,7 +550,7 @@ class TestCMCErrorHandling:
                 phi=phi_flat,
                 num_shards=1,
                 q=q,
-                L=L
+                L=L,
             )
             assert len(shards) == 1
         except Exception as e:
@@ -572,38 +579,41 @@ class TestCMCConfigurationIntegration:
     def test_config_with_default_values(self):
         """Test CMC configuration with default values."""
         config = {
-            'cmc': {},
-            'mcmc': {
-                'num_warmup': 500,
-                'num_samples': 2000,
-            }
+            "cmc": {},
+            "mcmc": {
+                "num_warmup": 500,
+                "num_samples": 2000,
+            },
         }
 
         # Should use sensible defaults for missing values
-        assert 'cmc' in config
-        assert 'mcmc' in config
+        assert "cmc" in config
+        assert "mcmc" in config
 
     def test_config_override_precedence(self):
         """Test configuration override precedence."""
         # Default config
         default_config = {
-            'cmc': {
-                'sharding': {'strategy': 'stratified', 'num_shards': 4},
-                'combination': {'method': 'weighted'},
+            "cmc": {
+                "sharding": {"strategy": "stratified", "num_shards": 4},
+                "combination": {"method": "weighted"},
             }
         }
 
         # User override
         user_config = {
-            'cmc': {
-                'sharding': {'num_shards': 8},
+            "cmc": {
+                "sharding": {"num_shards": 8},
             }
         }
 
         # Merge logic (user overrides defaults)
-        merged = {**default_config, 'cmc': {**default_config['cmc'], **user_config['cmc']}}
+        merged = {
+            **default_config,
+            "cmc": {**default_config["cmc"], **user_config["cmc"]},
+        }
 
-        assert merged['cmc']['sharding']['num_shards'] == 8
+        assert merged["cmc"]["sharding"]["num_shards"] == 8
 
 
 @pytest.mark.integration
@@ -618,24 +628,24 @@ class TestCMCResultIntegration:
 
         # Check basic attributes
         required_attrs = [
-            'mean_params',
-            'std_params',
-            'samples',
-            'diagnostics',
+            "mean_params",
+            "std_params",
+            "samples",
+            "diagnostics",
         ]
 
         for attr in required_attrs:
             # These should be attributes of MCMCResult
-            assert hasattr(MCMCResult, '__init__') or attr in dir(MCMCResult)
+            assert hasattr(MCMCResult, "__init__") or attr in dir(MCMCResult)
 
     def test_cmc_result_metadata(self):
         """Test CMC-specific result metadata."""
         # This validates structure expected by result extension
         expected_cmc_fields = [
-            'num_shards',
-            'combination_method',
-            'per_shard_diagnostics',
-            'kl_divergence_matrix',
+            "num_shards",
+            "combination_method",
+            "per_shard_diagnostics",
+            "kl_divergence_matrix",
         ]
 
         # Structure validation (not instantiation, as it requires full MCMC)
@@ -655,7 +665,7 @@ class TestCMCMemoryManagement:
         # Each point has multiple fields (c2, errors, etc.)
         points_per_shard = n_points / 4
         bytes_per_point = 8 * 10  # 8 bytes per float64, ~10 floats per point
-        estimated_shard_mb = (points_per_shard * bytes_per_point) / (1024 ** 2)
+        estimated_shard_mb = (points_per_shard * bytes_per_point) / (1024**2)
 
         # Should be reasonable (< 1GB per shard)
         assert estimated_shard_mb < 1000
@@ -664,7 +674,7 @@ class TestCMCMemoryManagement:
         """Test memory bounds for chunk processing."""
         # Maximum points per shard with 8GB limit
         memory_limit_gb = 8.0
-        memory_bytes = memory_limit_gb * (1024 ** 3)
+        memory_bytes = memory_limit_gb * (1024**3)
 
         # Rough estimate: 100 bytes per point
         max_points = int(memory_bytes / 100)
@@ -688,12 +698,12 @@ class TestCMCEndToEndStructure:
         # 6. Package results
 
         pipeline_steps = [
-            'sharding',
-            'svi_initialization',
-            'parallel_mcmc',
-            'combination',
-            'validation',
-            'packaging',
+            "sharding",
+            "svi_initialization",
+            "parallel_mcmc",
+            "combination",
+            "validation",
+            "packaging",
         ]
 
         # Verify all steps are documented
@@ -703,10 +713,15 @@ class TestCMCEndToEndStructure:
     def test_cmc_parameter_names_consistency(self):
         """Test parameter naming consistency."""
         # CMC should preserve parameter names from NLSQ/MCMC
-        expected_params_static = ['D0', 'alpha', 'D_offset']
+        expected_params_static = ["D0", "alpha", "D_offset"]
         expected_params_laminar = [
-            'D0', 'alpha', 'D_offset',
-            'gamma_dot_0', 'beta', 'gamma_dot_offset', 'phi0'
+            "D0",
+            "alpha",
+            "D_offset",
+            "gamma_dot_0",
+            "beta",
+            "gamma_dot_offset",
+            "phi0",
         ]
 
         assert len(expected_params_static) == 3
@@ -717,16 +732,19 @@ class TestCMCEndToEndStructure:
 # Parametrized Tests for Coverage
 # ============================================================================
 
+
 @pytest.mark.integration
-@pytest.mark.parametrize("analysis_mode", [
-    "static_isotropic",
-    "laminar_flow",
-])
+@pytest.mark.parametrize(
+    "analysis_mode",
+    [
+        "static_isotropic",
+        "laminar_flow",
+    ],
+)
 def test_cmc_analysis_modes(analysis_mode):
     """Test CMC with different analysis modes."""
     c2_exp, t1, t2, phi, q, L, true_params = generate_synthetic_xpcs_data(
-        n_points=5000,
-        analysis_mode=analysis_mode
+        n_points=5000, analysis_mode=analysis_mode
     )
 
     assert c2_exp.shape[0] > 0
@@ -734,9 +752,12 @@ def test_cmc_analysis_modes(analysis_mode):
 
 
 @pytest.mark.integration
-@pytest.mark.parametrize("strategy", [
-    "stratified",
-])
+@pytest.mark.parametrize(
+    "strategy",
+    [
+        "stratified",
+    ],
+)
 @pytest.mark.skipif(not CMC_AVAILABLE, reason="CMC not available")
 def test_sharding_strategies(strategy):
     """Test different sharding strategies."""
@@ -747,16 +768,10 @@ def test_sharding_strategies(strategy):
             c2_exp, t1, t2, phi
         )
         shards = shard_data_stratified(
-            data=c2_flat,
-            t1=t1_flat,
-            t2=t2_flat,
-            phi=phi_flat,
-            num_shards=4,
-            q=q,
-            L=L
+            data=c2_flat, t1=t1_flat, t2=t2_flat, phi=phi_flat, num_shards=4, q=q, L=L
         )
         assert len(shards) == 4
 
 
-if __name__ == '__main__':
-    pytest.main([__file__, '-v'])
+if __name__ == "__main__":
+    pytest.main([__file__, "-v"])

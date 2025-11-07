@@ -110,14 +110,14 @@ def validate_cmc_results(
     if not shard_results:
         error_msg = "No shard results provided"
         if strict_mode:
-            return False, {'error': error_msg}
+            return False, {"error": error_msg}
         else:
             logger.warning(error_msg)
             validation_warnings.append(error_msg)
-            return True, {'validation_warnings': validation_warnings}
+            return True, {"validation_warnings": validation_warnings}
 
     # 1. Check success rate
-    successful_shards = [r for r in shard_results if r.get('converged', False)]
+    successful_shards = [r for r in shard_results if r.get("converged", False)]
     success_rate = len(successful_shards) / len(shard_results)
 
     if success_rate < min_success_rate:
@@ -127,10 +127,10 @@ def validate_cmc_results(
         )
         if strict_mode:
             return False, {
-                'error': error_msg,
-                'success_rate': success_rate,
-                'num_successful': len(successful_shards),
-                'num_total': len(shard_results),
+                "error": error_msg,
+                "success_rate": success_rate,
+                "num_successful": len(successful_shards),
+                "num_total": len(shard_results),
             }
         else:
             logger.warning(error_msg)
@@ -140,12 +140,12 @@ def validate_cmc_results(
     if not successful_shards:
         error_msg = "No shards converged successfully"
         if strict_mode:
-            return False, {'error': error_msg, 'success_rate': 0.0}
+            return False, {"error": error_msg, "success_rate": 0.0}
         else:
             logger.warning(error_msg)
             return True, {
-                'success_rate': 0.0,
-                'validation_warnings': [error_msg],
+                "success_rate": 0.0,
+                "validation_warnings": [error_msg],
             }
 
     # 2. Compute between-shard KL divergence
@@ -160,9 +160,9 @@ def validate_cmc_results(
             )
             if strict_mode:
                 return False, {
-                    'error': error_msg,
-                    'max_kl_divergence': max_kl,
-                    'kl_matrix': kl_matrix.tolist(),
+                    "error": error_msg,
+                    "max_kl_divergence": max_kl,
+                    "kl_matrix": kl_matrix.tolist(),
                 }
             else:
                 logger.warning(error_msg)
@@ -188,19 +188,21 @@ def validate_cmc_results(
             per_shard_diagnostics.append(shard_diag)
 
             # Collect validation errors/warnings from shard
-            if 'validation_errors' in shard_diag:
-                validation_errors.extend(shard_diag['validation_errors'])
-            if 'validation_warnings' in shard_diag:
-                validation_warnings.extend(shard_diag['validation_warnings'])
+            if "validation_errors" in shard_diag:
+                validation_errors.extend(shard_diag["validation_errors"])
+            if "validation_warnings" in shard_diag:
+                validation_warnings.extend(shard_diag["validation_warnings"])
 
         except Exception as e:
             error_msg = f"Shard {i} validation failed: {str(e)}"
             logger.warning(error_msg)
             validation_warnings.append(error_msg)
-            per_shard_diagnostics.append({
-                'shard_id': i,
-                'error': str(e),
-            })
+            per_shard_diagnostics.append(
+                {
+                    "shard_id": i,
+                    "error": str(e),
+                }
+            )
 
     # 4. Compute combined posterior diagnostics
     try:
@@ -209,19 +211,19 @@ def validate_cmc_results(
         error_msg = f"Failed to compute combined diagnostics: {str(e)}"
         logger.warning(error_msg)
         validation_warnings.append(error_msg)
-        combined_diagnostics = {'error': str(e)}
+        combined_diagnostics = {"error": str(e)}
 
     # 5. Build final diagnostics dict
     diagnostics = {
-        'success_rate': success_rate,
-        'num_successful': len(successful_shards),
-        'num_total': len(shard_results),
-        'max_kl_divergence': max_kl,
-        'kl_matrix': kl_matrix.tolist() if kl_matrix is not None else None,
-        'per_shard_diagnostics': per_shard_diagnostics,
-        'combined_diagnostics': combined_diagnostics,
-        'validation_warnings': validation_warnings,
-        'validation_errors': validation_errors,
+        "success_rate": success_rate,
+        "num_successful": len(successful_shards),
+        "num_total": len(shard_results),
+        "max_kl_divergence": max_kl,
+        "kl_matrix": kl_matrix.tolist() if kl_matrix is not None else None,
+        "per_shard_diagnostics": per_shard_diagnostics,
+        "combined_diagnostics": combined_diagnostics,
+        "validation_warnings": validation_warnings,
+        "validation_errors": validation_errors,
     }
 
     # 6. Final validation decision
@@ -265,21 +267,21 @@ def compute_per_shard_diagnostics(
     - Trace data is useful for plotting convergence
     """
     diagnostics = {
-        'shard_id': shard_idx,
-        'num_samples': None,
-        'num_params': None,
-        'rhat': None,
-        'ess': None,
-        'acceptance_rate': None,
-        'trace_data': {},
+        "shard_id": shard_idx,
+        "num_samples": None,
+        "num_params": None,
+        "rhat": None,
+        "ess": None,
+        "acceptance_rate": None,
+        "trace_data": {},
     }
 
     # Extract samples
-    if 'samples' not in shard_result:
+    if "samples" not in shard_result:
         logger.warning(f"Shard {shard_idx} missing 'samples' key")
         return diagnostics
 
-    samples = shard_result['samples']
+    samples = shard_result["samples"]
     if not isinstance(samples, (np.ndarray, jnp.ndarray)):
         logger.warning(f"Shard {shard_idx} samples not an array")
         return diagnostics
@@ -294,18 +296,20 @@ def compute_per_shard_diagnostics(
         num_chains, num_samples, num_params = samples.shape
         samples_for_diag = samples
     else:
-        logger.warning(f"Shard {shard_idx} samples have unexpected shape: {samples.shape}")
+        logger.warning(
+            f"Shard {shard_idx} samples have unexpected shape: {samples.shape}"
+        )
         return diagnostics
 
-    diagnostics['num_samples'] = num_samples
-    diagnostics['num_params'] = num_params
+    diagnostics["num_samples"] = num_samples
+    diagnostics["num_params"] = num_params
 
     # Use existing diagnostics if available
-    if 'diagnostics' in shard_result and isinstance(shard_result['diagnostics'], dict):
-        existing_diag = shard_result['diagnostics']
-        diagnostics['rhat'] = existing_diag.get('rhat')
-        diagnostics['ess'] = existing_diag.get('ess')
-        diagnostics['acceptance_rate'] = existing_diag.get('acceptance_rate')
+    if "diagnostics" in shard_result and isinstance(shard_result["diagnostics"], dict):
+        existing_diag = shard_result["diagnostics"]
+        diagnostics["rhat"] = existing_diag.get("rhat")
+        diagnostics["ess"] = existing_diag.get("ess")
+        diagnostics["acceptance_rate"] = existing_diag.get("acceptance_rate")
     else:
         # Compute diagnostics using NumPyro
         try:
@@ -316,9 +320,11 @@ def compute_per_shard_diagnostics(
             for param_idx in range(num_params):
                 param_samples = samples_for_diag[:, :, param_idx]
                 ess = effective_sample_size(param_samples)
-                ess_dict[f'param_{param_idx}'] = float(ess) if ess.size == 1 else float(np.mean(ess))
+                ess_dict[f"param_{param_idx}"] = (
+                    float(ess) if ess.size == 1 else float(np.mean(ess))
+                )
 
-            diagnostics['ess'] = ess_dict
+            diagnostics["ess"] = ess_dict
 
             # R-hat per parameter (only for multi-chain)
             if num_chains > 1:
@@ -326,28 +332,36 @@ def compute_per_shard_diagnostics(
                 for param_idx in range(num_params):
                     param_samples = samples_for_diag[:, :, param_idx]
                     rhat = gelman_rubin(param_samples)
-                    rhat_dict[f'param_{param_idx}'] = float(rhat) if rhat.size == 1 else float(np.mean(rhat))
+                    rhat_dict[f"param_{param_idx}"] = (
+                        float(rhat) if rhat.size == 1 else float(np.mean(rhat))
+                    )
 
-                diagnostics['rhat'] = rhat_dict
+                diagnostics["rhat"] = rhat_dict
             else:
                 # Single chain: R-hat not defined
-                diagnostics['rhat'] = {f'param_{i}': 1.0 for i in range(num_params)}
+                diagnostics["rhat"] = {f"param_{i}": 1.0 for i in range(num_params)}
 
         except ImportError:
             logger.warning("NumPyro not available for diagnostics computation")
         except Exception as e:
-            logger.warning(f"Failed to compute diagnostics for shard {shard_idx}: {str(e)}")
+            logger.warning(
+                f"Failed to compute diagnostics for shard {shard_idx}: {str(e)}"
+            )
 
     # Extract trace data for plotting
     try:
         if samples.ndim == 2:
             # Single chain: (num_samples, num_params)
             for param_idx in range(num_params):
-                diagnostics['trace_data'][f'param_{param_idx}'] = samples[:, param_idx].tolist()
+                diagnostics["trace_data"][f"param_{param_idx}"] = samples[
+                    :, param_idx
+                ].tolist()
         else:
             # Multi-chain: (num_chains, num_samples, num_params)
             for param_idx in range(num_params):
-                diagnostics['trace_data'][f'param_{param_idx}'] = samples[:, :, param_idx].tolist()
+                diagnostics["trace_data"][f"param_{param_idx}"] = samples[
+                    :, :, param_idx
+                ].tolist()
     except Exception as e:
         logger.warning(f"Failed to extract trace data for shard {shard_idx}: {str(e)}")
 
@@ -389,10 +403,10 @@ def compute_between_shard_kl_divergence(
     # Extract samples and fit Gaussians to each shard
     gaussians = []
     for i, result in enumerate(shard_results):
-        if 'samples' not in result:
+        if "samples" not in result:
             raise ValueError(f"Shard {i} missing 'samples' key")
 
-        samples = result['samples']
+        samples = result["samples"]
         if not isinstance(samples, (np.ndarray, jnp.ndarray)):
             raise ValueError(f"Shard {i} samples not an array")
 
@@ -402,19 +416,20 @@ def compute_between_shard_kl_divergence(
             num_chains, num_samples, num_params = samples.shape
             samples = samples.reshape(num_chains * num_samples, num_params)
         elif samples.ndim != 2:
-            raise ValueError(f"Shard {i} samples have unexpected shape: {samples.shape}")
+            raise ValueError(
+                f"Shard {i} samples have unexpected shape: {samples.shape}"
+            )
 
         # Fit Gaussian
         gaussian = _fit_gaussian_to_samples(samples)
         gaussians.append(gaussian)
 
     # Check parameter consistency
-    num_params = gaussians[0]['mean'].shape[0]
+    num_params = gaussians[0]["mean"].shape[0]
     for i, g in enumerate(gaussians):
-        if g['mean'].shape[0] != num_params:
+        if g["mean"].shape[0] != num_params:
             raise ValueError(
-                f"Shard {i} has {g['mean'].shape[0]} parameters, "
-                f"expected {num_params}"
+                f"Shard {i} has {g['mean'].shape[0]} parameters, expected {num_params}"
             )
 
     # Compute KL divergence matrix
@@ -452,10 +467,10 @@ def compute_combined_posterior_diagnostics(
     # Concatenate all samples
     all_samples = []
     for result in shard_results:
-        if 'samples' not in result:
+        if "samples" not in result:
             continue
 
-        samples = result['samples']
+        samples = result["samples"]
         if not isinstance(samples, (np.ndarray, jnp.ndarray)):
             continue
 
@@ -485,22 +500,24 @@ def compute_combined_posterior_diagnostics(
         for param_idx in range(num_params):
             param_samples = combined_samples_3d[:, :, param_idx]
             ess = effective_sample_size(param_samples)
-            ess_dict[f'param_{param_idx}'] = float(ess) if ess.size == 1 else float(np.mean(ess))
+            ess_dict[f"param_{param_idx}"] = (
+                float(ess) if ess.size == 1 else float(np.mean(ess))
+            )
 
-        diagnostics['combined_ess'] = ess_dict
+        diagnostics["combined_ess"] = ess_dict
 
     except Exception as e:
         logger.warning(f"Failed to compute combined ESS: {str(e)}")
-        diagnostics['combined_ess'] = None
+        diagnostics["combined_ess"] = None
 
     # Compute parameter uncertainty comparison
     try:
         # Per-shard std
         per_shard_stds = []
         for result in shard_results:
-            if 'samples' not in result:
+            if "samples" not in result:
                 continue
-            samples = result['samples']
+            samples = result["samples"]
             if samples.ndim == 3:
                 samples = samples.reshape(-1, num_params)
             per_shard_stds.append(np.std(samples, axis=0))
@@ -511,24 +528,23 @@ def compute_combined_posterior_diagnostics(
 
             # Ratio > 1.0 means combined posterior has larger uncertainty
             uncertainty_ratio = combined_std / (mean_per_shard_std + 1e-10)
-            diagnostics['parameter_uncertainty_ratio'] = {
-                f'param_{i}': float(ratio)
-                for i, ratio in enumerate(uncertainty_ratio)
+            diagnostics["parameter_uncertainty_ratio"] = {
+                f"param_{i}": float(ratio) for i, ratio in enumerate(uncertainty_ratio)
             }
         else:
-            diagnostics['parameter_uncertainty_ratio'] = None
+            diagnostics["parameter_uncertainty_ratio"] = None
 
     except Exception as e:
         logger.warning(f"Failed to compute uncertainty ratio: {str(e)}")
-        diagnostics['parameter_uncertainty_ratio'] = None
+        diagnostics["parameter_uncertainty_ratio"] = None
 
     # Check for multimodality
     try:
         multimodality_detected = _check_multimodality(combined_samples)
-        diagnostics['multimodality_detected'] = multimodality_detected
+        diagnostics["multimodality_detected"] = multimodality_detected
     except Exception as e:
         logger.warning(f"Failed to check multimodality: {str(e)}")
-        diagnostics['multimodality_detected'] = None
+        diagnostics["multimodality_detected"] = None
 
     return diagnostics
 
@@ -566,9 +582,9 @@ def _validate_single_shard(
         Validation results with errors/warnings
     """
     validation = {
-        'shard_id': shard_idx,
-        'validation_errors': [],
-        'validation_warnings': [],
+        "shard_id": shard_idx,
+        "validation_errors": [],
+        "validation_warnings": [],
     }
 
     # Get diagnostics
@@ -576,38 +592,38 @@ def _validate_single_shard(
     validation.update(diagnostics)
 
     # Check convergence flag
-    if not shard_result.get('converged', False):
+    if not shard_result.get("converged", False):
         msg = f"Shard {shard_idx} did not converge"
         if strict_mode:
-            validation['validation_errors'].append(msg)
+            validation["validation_errors"].append(msg)
         else:
-            validation['validation_warnings'].append(msg)
+            validation["validation_warnings"].append(msg)
 
     # Check R-hat
-    if diagnostics.get('rhat'):
-        for param_name, rhat_val in diagnostics['rhat'].items():
+    if diagnostics.get("rhat"):
+        for param_name, rhat_val in diagnostics["rhat"].items():
             if rhat_val > max_rhat:
                 msg = (
                     f"Shard {shard_idx} {param_name} R-hat {rhat_val:.3f} "
                     f"exceeds maximum {max_rhat}"
                 )
                 if strict_mode:
-                    validation['validation_errors'].append(msg)
+                    validation["validation_errors"].append(msg)
                 else:
-                    validation['validation_warnings'].append(msg)
+                    validation["validation_warnings"].append(msg)
 
     # Check ESS
-    if diagnostics.get('ess'):
-        for param_name, ess_val in diagnostics['ess'].items():
+    if diagnostics.get("ess"):
+        for param_name, ess_val in diagnostics["ess"].items():
             if ess_val < min_ess:
                 msg = (
                     f"Shard {shard_idx} {param_name} ESS {ess_val:.1f} "
                     f"below minimum {min_ess}"
                 )
                 if strict_mode:
-                    validation['validation_errors'].append(msg)
+                    validation["validation_errors"].append(msg)
                 else:
-                    validation['validation_warnings'].append(msg)
+                    validation["validation_warnings"].append(msg)
 
     return validation
 
@@ -652,7 +668,7 @@ def _fit_gaussian_to_samples(samples: np.ndarray) -> Dict[str, np.ndarray]:
     except Exception as e:
         logger.warning(f"Failed to validate covariance matrix: {str(e)}")
 
-    return {'mean': mean, 'cov': cov}
+    return {"mean": mean, "cov": cov}
 
 
 def _compute_kl_divergence_matrix(
@@ -680,18 +696,18 @@ def _compute_kl_divergence_matrix(
         for j in range(i + 1, num_gaussians):
             # KL(i || j)
             kl_forward = _kl_divergence_gaussian(
-                gaussians[i]['mean'],
-                gaussians[i]['cov'],
-                gaussians[j]['mean'],
-                gaussians[j]['cov'],
+                gaussians[i]["mean"],
+                gaussians[i]["cov"],
+                gaussians[j]["mean"],
+                gaussians[j]["cov"],
             )
 
             # KL(j || i)
             kl_reverse = _kl_divergence_gaussian(
-                gaussians[j]['mean'],
-                gaussians[j]['cov'],
-                gaussians[i]['mean'],
-                gaussians[i]['cov'],
+                gaussians[j]["mean"],
+                gaussians[j]["cov"],
+                gaussians[i]["mean"],
+                gaussians[i]["cov"],
             )
 
             # Symmetric KL: average of forward and reverse

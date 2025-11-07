@@ -83,6 +83,7 @@ logger = get_logger(__name__)
 # Try to import cloudpickle for better serialization
 try:
     import cloudpickle
+
     CLOUDPICKLE_AVAILABLE = True
 except ImportError:
     CLOUDPICKLE_AVAILABLE = False
@@ -207,7 +208,15 @@ class MultiprocessingBackend(CMCBackend):
 
         # Prepare arguments for workers
         worker_args = [
-            (i, shard, mcmc_config, init_params, inv_mass_matrix, analysis_mode, parameter_space)
+            (
+                i,
+                shard,
+                mcmc_config,
+                init_params,
+                inv_mass_matrix,
+                analysis_mode,
+                parameter_space,
+            )
             for i, shard in enumerate(shards)
         ]
 
@@ -216,7 +225,7 @@ class MultiprocessingBackend(CMCBackend):
         try:
             # Use 'spawn' method for better cross-platform compatibility
             # and to avoid issues with JAX/NumPyro in forked processes
-            ctx = multiprocessing.get_context('spawn')
+            ctx = multiprocessing.get_context("spawn")
             pool = ctx.Pool(processes=self.num_workers)
 
             logger.info(f"Created pool with {self.num_workers} worker processes")
@@ -235,14 +244,14 @@ class MultiprocessingBackend(CMCBackend):
                     result = async_result.get(timeout=self.timeout_seconds)
 
                     # Add timing
-                    result['elapsed_time'] = self._get_elapsed_time(start_time)
+                    result["elapsed_time"] = self._get_elapsed_time(start_time)
 
                     # Validate result
                     self._validate_shard_result(result, i)
 
                     # Log completion
                     self._log_shard_complete(
-                        i, len(shards), result['elapsed_time'], result['converged']
+                        i, len(shards), result["elapsed_time"], result["converged"]
                     )
 
                     results.append(result)
@@ -252,24 +261,24 @@ class MultiprocessingBackend(CMCBackend):
                     elapsed = self._get_elapsed_time(start_time)
                     error_msg = (
                         f"Shard {i} timed out after {self.timeout_seconds:.0f}s "
-                        f"({self.timeout_seconds/60:.1f} min)"
+                        f"({self.timeout_seconds / 60:.1f} min)"
                     )
                     logger.error(f"[{self.get_backend_name()}] {error_msg}")
 
                     error_result = {
-                        'converged': False,
-                        'error': error_msg,
-                        'elapsed_time': elapsed,
-                        'samples': None,
-                        'diagnostics': {},
-                        'shard_idx': i,
+                        "converged": False,
+                        "error": error_msg,
+                        "elapsed_time": elapsed,
+                        "samples": None,
+                        "diagnostics": {},
+                        "shard_idx": i,
                     }
                     results.append(error_result)
 
                 except Exception as e:
                     # Handle other errors
                     error_result = self._handle_shard_error(e, i)
-                    error_result['elapsed_time'] = self._get_elapsed_time(start_time)
+                    error_result["elapsed_time"] = self._get_elapsed_time(start_time)
                     results.append(error_result)
 
             return results
@@ -325,14 +334,22 @@ class MultiprocessingBackend(CMCBackend):
 
         # Prepare arguments
         worker_args = [
-            (i, shard, mcmc_config, init_params, inv_mass_matrix, analysis_mode, parameter_space)
+            (
+                i,
+                shard,
+                mcmc_config,
+                init_params,
+                inv_mass_matrix,
+                analysis_mode,
+                parameter_space,
+            )
             for i, shard in enumerate(shards)
         ]
 
         # Create pool and execute
         pool = None
         try:
-            ctx = multiprocessing.get_context('spawn')
+            ctx = multiprocessing.get_context("spawn")
             pool = ctx.Pool(processes=self.num_workers)
 
             # Execute all shards
@@ -354,6 +371,7 @@ class MultiprocessingBackend(CMCBackend):
 # Worker Function (executed in separate process)
 # -----------------------------------------------------------------------------
 
+
 def _worker_function(args: tuple) -> Dict[str, Any]:
     """Worker function executed in separate process.
 
@@ -370,7 +388,15 @@ def _worker_function(args: tuple) -> Dict[str, Any]:
     dict
         Shard result with samples and diagnostics
     """
-    shard_idx, shard, mcmc_config, init_params, inv_mass_matrix, analysis_mode, parameter_space = args
+    (
+        shard_idx,
+        shard,
+        mcmc_config,
+        init_params,
+        inv_mass_matrix,
+        analysis_mode,
+        parameter_space,
+    ) = args
 
     # Import modules locally (avoids serialization issues)
     import numpy as np
@@ -384,11 +410,11 @@ def _worker_function(args: tuple) -> Dict[str, Any]:
         from numpyro import sample
     except ImportError as e:
         return {
-            'converged': False,
-            'error': f"NumPyro not available in worker: {str(e)}",
-            'samples': None,
-            'diagnostics': {},
-            'shard_idx': shard_idx,
+            "converged": False,
+            "error": f"NumPyro not available in worker: {str(e)}",
+            "samples": None,
+            "diagnostics": {},
+            "shard_idx": shard_idx,
         }
 
     try:
@@ -396,20 +422,20 @@ def _worker_function(args: tuple) -> Dict[str, Any]:
         from homodyne.optimization.mcmc import _create_numpyro_model
 
         # Extract MCMC configuration
-        num_warmup = mcmc_config.get('num_warmup', 500)
-        num_samples = mcmc_config.get('num_samples', 2000)
-        num_chains = mcmc_config.get('num_chains', 1)
-        target_accept_prob = mcmc_config.get('target_accept_prob', 0.8)
-        max_tree_depth = mcmc_config.get('max_tree_depth', 10)
+        num_warmup = mcmc_config.get("num_warmup", 500)
+        num_samples = mcmc_config.get("num_samples", 2000)
+        num_chains = mcmc_config.get("num_chains", 1)
+        target_accept_prob = mcmc_config.get("target_accept_prob", 0.8)
+        max_tree_depth = mcmc_config.get("max_tree_depth", 10)
 
         # Convert data to JAX arrays
-        data_jax = jnp.array(shard['data'])
-        sigma_jax = jnp.array(shard.get('sigma', np.ones_like(shard['data'])))
-        t1_jax = jnp.array(shard['t1'])
-        t2_jax = jnp.array(shard['t2'])
-        phi_jax = jnp.array(shard['phi'])
-        q = float(shard['q'])
-        L = float(shard['L'])
+        data_jax = jnp.array(shard["data"])
+        sigma_jax = jnp.array(shard.get("sigma", np.ones_like(shard["data"])))
+        t1_jax = jnp.array(shard["t1"])
+        t2_jax = jnp.array(shard["t2"])
+        phi_jax = jnp.array(shard["phi"])
+        q = float(shard["q"])
+        L = float(shard["L"])
 
         # Compute dt from t1 array (required for physics computation)
         if len(t1_jax) > 1:
@@ -424,7 +450,7 @@ def _worker_function(args: tuple) -> Dict[str, Any]:
         logger.debug(
             f"Multiprocessing shard {shard_idx}: Extracted {len(phi_unique)} unique phi values from "
             f"{len(phi_jax)} replicated elements (memory reduction: "
-            f"{len(phi_jax)}→{len(phi_unique)}, {len(phi_jax)/len(phi_unique):.1f}x)"
+            f"{len(phi_jax)}→{len(phi_unique)}, {len(phi_jax) / len(phi_unique):.1f}x)"
         )
 
         # Create proper NumPyro model with actual XPCS physics
@@ -474,6 +500,7 @@ def _worker_function(args: tuple) -> Dict[str, Any]:
 
         # Use centralized parameter names from homodyne.config.parameter_names
         from homodyne.config.parameter_names import get_parameter_names
+
         param_names_base = get_parameter_names(analysis_mode)
 
         # PER-ANGLE PARAMETERS: Expand contrast and offset into per-angle names
@@ -493,9 +520,9 @@ def _worker_function(args: tuple) -> Dict[str, Any]:
                 param_names_expanded.append(param_name)
 
         # Stack samples in correct order
-        samples_array = np.stack([
-            np.array(samples_dict[name]) for name in param_names_expanded
-        ], axis=1)
+        samples_array = np.stack(
+            [np.array(samples_dict[name]) for name in param_names_expanded], axis=1
+        )
 
         # Compute diagnostics
         diagnostics = _compute_diagnostics_worker(samples_dict, mcmc)
@@ -504,21 +531,22 @@ def _worker_function(args: tuple) -> Dict[str, Any]:
         converged = _check_convergence_worker(diagnostics)
 
         return {
-            'converged': converged,
-            'error': None,  # No error on success (for backend consistency with pjit)
-            'samples': samples_array,
-            'diagnostics': diagnostics,
-            'shard_idx': shard_idx,
+            "converged": converged,
+            "error": None,  # No error on success (for backend consistency with pjit)
+            "samples": samples_array,
+            "diagnostics": diagnostics,
+            "shard_idx": shard_idx,
         }
 
     except Exception as e:
         import traceback
+
         return {
-            'converged': False,
-            'error': f"Worker MCMC failed: {str(e)}\n{traceback.format_exc()}",
-            'samples': None,
-            'diagnostics': {},
-            'shard_idx': shard_idx,
+            "converged": False,
+            "error": f"Worker MCMC failed: {str(e)}\n{traceback.format_exc()}",
+            "samples": None,
+            "diagnostics": {},
+            "shard_idx": shard_idx,
         }
 
 
@@ -547,10 +575,10 @@ def _compute_diagnostics_worker(
 
         # Acceptance rate
         extra_fields = mcmc.get_extra_fields()
-        if 'accept_prob' in extra_fields:
-            diagnostics['acceptance_rate'] = float(np.mean(extra_fields['accept_prob']))
+        if "accept_prob" in extra_fields:
+            diagnostics["acceptance_rate"] = float(np.mean(extra_fields["accept_prob"]))
         else:
-            diagnostics['acceptance_rate'] = None
+            diagnostics["acceptance_rate"] = None
 
         # ESS and R-hat
         if mcmc.num_chains > 1:
@@ -559,31 +587,35 @@ def _compute_diagnostics_worker(
             ess_dict = {}
             for param_name, samples in samples_dict.items():
                 ess = effective_sample_size(samples)
-                ess_dict[param_name] = float(ess) if ess.size == 1 else float(np.mean(ess))
+                ess_dict[param_name] = (
+                    float(ess) if ess.size == 1 else float(np.mean(ess))
+                )
 
-            diagnostics['ess'] = ess_dict
+            diagnostics["ess"] = ess_dict
 
             rhat_dict = {}
             for param_name, samples in samples_dict.items():
                 rhat = gelman_rubin(samples)
-                rhat_dict[param_name] = float(rhat) if rhat.size == 1 else float(np.mean(rhat))
+                rhat_dict[param_name] = (
+                    float(rhat) if rhat.size == 1 else float(np.mean(rhat))
+                )
 
-            diagnostics['rhat'] = rhat_dict
+            diagnostics["rhat"] = rhat_dict
         else:
             ess_dict = {}
             for param_name in samples_dict.keys():
                 ess_dict[param_name] = len(samples_dict[param_name])
 
-            diagnostics['ess'] = ess_dict
-            diagnostics['rhat'] = {k: 1.0 for k in samples_dict.keys()}
+            diagnostics["ess"] = ess_dict
+            diagnostics["rhat"] = {k: 1.0 for k in samples_dict.keys()}
 
         return diagnostics
 
     except Exception:
         return {
-            'acceptance_rate': None,
-            'ess': {},
-            'rhat': {},
+            "acceptance_rate": None,
+            "ess": {},
+            "rhat": {},
         }
 
 
@@ -601,20 +633,20 @@ def _check_convergence_worker(diagnostics: Dict[str, Any]) -> bool:
         True if converged
     """
     # Check R-hat
-    if 'rhat' in diagnostics and diagnostics['rhat']:
-        max_rhat = max(diagnostics['rhat'].values())
+    if "rhat" in diagnostics and diagnostics["rhat"]:
+        max_rhat = max(diagnostics["rhat"].values())
         if max_rhat > 1.1:
             return False
 
     # Check ESS
-    if 'ess' in diagnostics and diagnostics['ess']:
-        min_ess = min(diagnostics['ess'].values())
+    if "ess" in diagnostics and diagnostics["ess"]:
+        min_ess = min(diagnostics["ess"].values())
         if min_ess < 100:
             return False
 
     # Check acceptance rate
-    if diagnostics.get('acceptance_rate') is not None:
-        if diagnostics['acceptance_rate'] < 0.5:
+    if diagnostics.get("acceptance_rate") is not None:
+        if diagnostics["acceptance_rate"] < 0.5:
             return False
 
     return True

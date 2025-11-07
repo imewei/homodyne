@@ -384,8 +384,12 @@ def plot_c2_comparison_fast(
     vmax_shared = max(c2_exp.max(), c2_fit.max())
 
     # Rasterize all three panels using Datashader for speed
-    img_exp = renderer.rasterize_heatmap(c2_exp.T, t1, t2, cmap="viridis", vmin=vmin_shared, vmax=vmax_shared)
-    img_fit = renderer.rasterize_heatmap(c2_fit.T, t1, t2, cmap="viridis", vmin=vmin_shared, vmax=vmax_shared)
+    img_exp = renderer.rasterize_heatmap(
+        c2_exp.T, t1, t2, cmap="viridis", vmin=vmin_shared, vmax=vmax_shared
+    )
+    img_fit = renderer.rasterize_heatmap(
+        c2_fit.T, t1, t2, cmap="viridis", vmin=vmin_shared, vmax=vmax_shared
+    )
 
     # Symmetric colormap for residuals (diverging)
     res_max = np.abs(residuals).max()

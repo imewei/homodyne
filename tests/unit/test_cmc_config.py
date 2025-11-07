@@ -310,7 +310,9 @@ optimization:
         finally:
             Path(config_path).unlink()
 
-    @pytest.mark.skip(reason="v2.1.0 removed mcmc.initialization section and initialization.method field")
+    @pytest.mark.skip(
+        reason="v2.1.0 removed mcmc.initialization section and initialization.method field"
+    )
     def test_invalid_initialization_method(self):
         """Test validation catches invalid initialization method.
 
@@ -401,7 +403,9 @@ optimization:
 
         try:
             config_mgr = ConfigManager(config_path)
-            with pytest.raises(ValueError, match="num_warmup must be a positive integer"):
+            with pytest.raises(
+                ValueError, match="num_warmup must be a positive integer"
+            ):
                 config_mgr.get_cmc_config()
 
         finally:
@@ -583,7 +587,9 @@ optimization:
             config_mgr.get_cmc_config()
 
             # Check for deprecation warning
-            assert any("consensus_monte_carlo" in record.message for record in caplog.records)
+            assert any(
+                "consensus_monte_carlo" in record.message for record in caplog.records
+            )
 
         finally:
             Path(config_path).unlink()
@@ -608,7 +614,9 @@ optimization:
             config_mgr.get_cmc_config()
 
             # Check for deprecation warning
-            assert any("optimal_shard_size" in record.message for record in caplog.records)
+            assert any(
+                "optimal_shard_size" in record.message for record in caplog.records
+            )
 
         finally:
             Path(config_path).unlink()

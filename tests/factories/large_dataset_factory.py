@@ -78,7 +78,7 @@ class LargeDatasetFactory:
         jacobian_bytes = n_points * n_params * 8
         # Working memory (factor of 3 for intermediate calculations)
         total_bytes = (data_bytes + jacobian_bytes) * 3
-        return total_bytes / (1024 ** 2)
+        return total_bytes / (1024**2)
 
     def _determine_expected_strategy(self, n_points: int) -> str:
         """Determine expected optimization strategy based on dataset size.
@@ -159,9 +159,7 @@ class LargeDatasetFactory:
                 "D_offset": 10.0,
             }
 
-        data = self._generate_synthetic_data(
-            n_phi, n_t1, n_t2, true_params
-        )
+        data = self._generate_synthetic_data(n_phi, n_t1, n_t2, true_params)
 
         return data, metadata
 
@@ -190,6 +188,7 @@ class LargeDatasetFactory:
         MockXPCSData
             Mock data object with realistic structure
         """
+
         class MockXPCSData:
             pass
 
@@ -208,7 +207,7 @@ class LargeDatasetFactory:
 
         # Create meshgrid
         phi_grid, t1_grid, t2_grid = np.meshgrid(
-            data.phi, data.t1, data.t2, indexing='ij'
+            data.phi, data.t1, data.t2, indexing="ij"
         )
 
         # Simplified decay rate (angle-dependent)
@@ -235,7 +234,9 @@ class LargeDatasetFactory:
     # Convenience Methods for Standard Dataset Sizes
     # ========================================================================
 
-    def create_1m_dataset(self, allocate_data: bool = True) -> Tuple[Any, DatasetMetadata]:
+    def create_1m_dataset(
+        self, allocate_data: bool = True
+    ) -> Tuple[Any, DatasetMetadata]:
         """Create 1M point dataset (boundary: STANDARD → LARGE).
 
         Dataset: 100 phi × 100 t1 × 100 t2 = 1,000,000 points
@@ -259,7 +260,9 @@ class LargeDatasetFactory:
             allocate_data=allocate_data,
         )
 
-    def create_10m_dataset(self, allocate_data: bool = False) -> Tuple[Any, DatasetMetadata]:
+    def create_10m_dataset(
+        self, allocate_data: bool = False
+    ) -> Tuple[Any, DatasetMetadata]:
         """Create 10M point dataset (boundary: LARGE → CHUNKED).
 
         Dataset: 200 phi × 250 t1 × 200 t2 = 10,000,000 points
@@ -284,7 +287,7 @@ class LargeDatasetFactory:
             warnings.warn(
                 "Allocating 10M point dataset (~1.2 GB). "
                 "This may cause memory issues on low-memory systems.",
-                ResourceWarning
+                ResourceWarning,
             )
 
         return self.create_mock_dataset(
@@ -294,7 +297,9 @@ class LargeDatasetFactory:
             allocate_data=allocate_data,
         )
 
-    def create_100m_dataset(self, allocate_data: bool = False) -> Tuple[Any, DatasetMetadata]:
+    def create_100m_dataset(
+        self, allocate_data: bool = False
+    ) -> Tuple[Any, DatasetMetadata]:
         """Create 100M point dataset (boundary: CHUNKED → STREAMING).
 
         Dataset: 400 phi × 500 t1 × 500 t2 = 100,000,000 points
@@ -330,7 +335,9 @@ class LargeDatasetFactory:
             allocate_data=allocate_data,
         )
 
-    def create_1b_dataset(self, allocate_data: bool = False) -> Tuple[Any, DatasetMetadata]:
+    def create_1b_dataset(
+        self, allocate_data: bool = False
+    ) -> Tuple[Any, DatasetMetadata]:
         """Create 1B point dataset (extreme STREAMING test).
 
         Dataset: 1000 phi × 1000 t1 × 1000 t2 = 1,000,000,000 points
@@ -405,11 +412,11 @@ class LargeDatasetFactory:
             ydata = self.rng.normal(1.0, 0.01, n_points_batch)
 
             yield {
-                'batch_idx': batch_idx,
-                'indices': xdata,
-                'xdata': xdata,
-                'ydata': ydata,
-                'n_points': n_points_batch,
+                "batch_idx": batch_idx,
+                "indices": xdata,
+                "xdata": xdata,
+                "ydata": ydata,
+                "n_points": n_points_batch,
             }
 
 
@@ -455,18 +462,17 @@ def create_test_dataset(
     factory = LargeDatasetFactory(seed=seed)
 
     size = size.lower()
-    if size == '1m':
+    if size == "1m":
         return factory.create_1m_dataset(allocate_data=allocate_data)
-    elif size == '10m':
+    elif size == "10m":
         return factory.create_10m_dataset(allocate_data=allocate_data)
-    elif size == '100m':
+    elif size == "100m":
         return factory.create_100m_dataset(allocate_data=allocate_data)
-    elif size == '1b':
+    elif size == "1b":
         return factory.create_1b_dataset(allocate_data=False)
     else:
         raise ValueError(
-            f"Unknown size: {size}. "
-            f"Valid options: '1m', '10m', '100m', '1b'"
+            f"Unknown size: {size}. Valid options: '1m', '10m', '100m', '1b'"
         )
 
 

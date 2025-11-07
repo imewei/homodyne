@@ -319,7 +319,9 @@ def _compute_g1_total_elementwise(
         Total g1 correlation function (2D array: (n_unique_phi, n_points))
     """
     # Compute diffusion contribution: shape (n_points,)
-    g1_diff = _compute_g1_diffusion_elementwise(params, t1, t2, wavevector_q_squared_half_dt)
+    g1_diff = _compute_g1_diffusion_elementwise(
+        params, t1, t2, wavevector_q_squared_half_dt
+    )
 
     # Compute shear contribution: shape (n_unique_phi, n_points)
     g1_shear = _compute_g1_shear_elementwise(params, t1, t2, phi_unique, sinc_prefactor)
@@ -387,7 +389,9 @@ def compute_g1_diffusion(
     # Compute the pre-computed factor using configuration dt
     wavevector_q_squared_half_dt = 0.5 * (q**2) * dt
 
-    return _compute_g1_diffusion_elementwise(params, t1, t2, wavevector_q_squared_half_dt)
+    return _compute_g1_diffusion_elementwise(
+        params, t1, t2, wavevector_q_squared_half_dt
+    )
 
 
 def compute_g1_total(
@@ -481,7 +485,7 @@ def compute_g1_total(
 
     # Log warning if phi appears to have duplicates (only when size is suspicious)
     # This is a soft check - we can't call np.unique() here without breaking JIT
-    if hasattr(phi, 'shape') and len(phi.shape) == 1:
+    if hasattr(phi, "shape") and len(phi.shape) == 1:
         # If phi has many elements, it might contain duplicates
         # But we can't check without calling unique(), so just trust the caller
         pass

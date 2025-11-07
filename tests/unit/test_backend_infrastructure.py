@@ -63,16 +63,18 @@ class MockBackend(CMCBackend):
         self.call_count += 1
         results = []
         for i in range(len(shards)):
-            results.append({
-                "converged": True,
-                "samples": np.random.randn(100, 5),
-                "diagnostics": {
-                    "ess": np.array([50.0] * 5),
-                    "rhat": np.array([1.05] * 5),
-                    "acceptance_rate": 0.85,
-                },
-                "elapsed_time": 10.0,
-            })
+            results.append(
+                {
+                    "converged": True,
+                    "samples": np.random.randn(100, 5),
+                    "diagnostics": {
+                        "ess": np.array([50.0] * 5),
+                        "rhat": np.array([1.05] * 5),
+                        "acceptance_rate": 0.85,
+                    },
+                    "elapsed_time": 10.0,
+                }
+            )
         return results
 
     def get_backend_name(self) -> str:
@@ -92,38 +94,6 @@ class IncompleteBackend(CMCBackend):
 # ============================================================================
 # Test Fixtures
 # ============================================================================
-
-
-@pytest.fixture
-def gpu_hardware_config():
-    """Hardware configuration for single GPU system."""
-    return HardwareConfig(
-        platform="gpu",
-        num_devices=1,
-        memory_per_device_gb=16.0,
-        num_nodes=1,
-        cores_per_node=16,
-        total_memory_gb=64.0,
-        cluster_type="standalone",
-        recommended_backend="pjit",
-        max_parallel_shards=1,
-    )
-
-
-@pytest.fixture
-def multi_gpu_hardware_config():
-    """Hardware configuration for multi-GPU system."""
-    return HardwareConfig(
-        platform="gpu",
-        num_devices=4,
-        memory_per_device_gb=80.0,
-        num_nodes=1,
-        cores_per_node=32,
-        total_memory_gb=256.0,
-        cluster_type="standalone",
-        recommended_backend="pjit",
-        max_parallel_shards=4,
-    )
 
 
 @pytest.fixture
@@ -226,35 +196,11 @@ def mock_inv_mass_matrix():
 # ============================================================================
 
 
-def test_backend_selection_single_gpu(gpu_hardware_config):
-    """Test auto-selection chooses pjit for single GPU."""
-    # Since backends are not implemented, we'll mock the get_backend_by_name
-    with patch("homodyne.optimization.cmc.backends.selection.get_backend_by_name") as mock_get:
-        mock_backend = MockBackend("pjit")
-        mock_get.return_value = mock_backend
-
-        backend = select_backend(gpu_hardware_config)
-
-        # Verify pjit was selected
-        mock_get.assert_called_once_with("pjit")
-        assert backend.get_backend_name() == "pjit"
-
-
-def test_backend_selection_multi_gpu(multi_gpu_hardware_config):
-    """Test auto-selection chooses pjit for multi-GPU."""
-    with patch("homodyne.optimization.cmc.backends.selection.get_backend_by_name") as mock_get:
-        mock_backend = MockBackend("pjit")
-        mock_get.return_value = mock_backend
-
-        backend = select_backend(multi_gpu_hardware_config)
-
-        mock_get.assert_called_once_with("pjit")
-        assert backend.get_backend_name() == "pjit"
-
-
 def test_backend_selection_cpu_only(cpu_hardware_config):
     """Test auto-selection chooses multiprocessing for CPU."""
-    with patch("homodyne.optimization.cmc.backends.selection.get_backend_by_name") as mock_get:
+    with patch(
+        "homodyne.optimization.cmc.backends.selection.get_backend_by_name"
+    ) as mock_get:
         mock_backend = MockBackend("multiprocessing")
         mock_get.return_value = mock_backend
 
@@ -266,7 +212,9 @@ def test_backend_selection_cpu_only(cpu_hardware_config):
 
 def test_backend_selection_pbs_cluster(pbs_cluster_hardware_config):
     """Test auto-selection chooses pbs for PBS cluster."""
-    with patch("homodyne.optimization.cmc.backends.selection.get_backend_by_name") as mock_get:
+    with patch(
+        "homodyne.optimization.cmc.backends.selection.get_backend_by_name"
+    ) as mock_get:
         mock_backend = MockBackend("pbs")
         mock_get.return_value = mock_backend
 
@@ -278,7 +226,9 @@ def test_backend_selection_pbs_cluster(pbs_cluster_hardware_config):
 
 def test_backend_selection_slurm_cluster(slurm_cluster_hardware_config):
     """Test auto-selection chooses slurm for Slurm cluster."""
-    with patch("homodyne.optimization.cmc.backends.selection.get_backend_by_name") as mock_get:
+    with patch(
+        "homodyne.optimization.cmc.backends.selection.get_backend_by_name"
+    ) as mock_get:
         mock_backend = MockBackend("slurm")
         mock_get.return_value = mock_backend
 
@@ -293,23 +243,11 @@ def test_backend_selection_slurm_cluster(slurm_cluster_hardware_config):
 # ============================================================================
 
 
-def test_user_override_forces_specific_backend(gpu_hardware_config):
-    """Test user override correctly forces a specific backend."""
-    with patch("homodyne.optimization.cmc.backends.selection.get_backend_by_name") as mock_get:
-        mock_backend = MockBackend("multiprocessing")
-        mock_get.return_value = mock_backend
-
-        # GPU system, but user forces multiprocessing
-        backend = select_backend(gpu_hardware_config, user_override="multiprocessing")
-
-        # Should call get_backend_by_name with override
-        mock_get.assert_called_once_with("multiprocessing")
-        assert backend.get_backend_name() == "multiprocessing"
-
-
 def test_user_override_on_cluster(pbs_cluster_hardware_config):
     """Test user can override cluster backend selection."""
-    with patch("homodyne.optimization.cmc.backends.selection.get_backend_by_name") as mock_get:
+    with patch(
+        "homodyne.optimization.cmc.backends.selection.get_backend_by_name"
+    ) as mock_get:
         mock_backend = MockBackend("pjit")
         mock_get.return_value = mock_backend
 
@@ -489,40 +427,6 @@ def test_compatibility_warning_pjit_on_cpu(cpu_hardware_config):
         assert "multiprocessing" in warning_msg
 
 
-def test_compatibility_warning_pbs_on_standalone(gpu_hardware_config):
-    """Test warning when using PBS backend on standalone system."""
-    backend = MockBackend("pbs")
-
-    with patch("homodyne.optimization.cmc.backends.selection.logger") as mock_logger:
-        _validate_backend_compatibility(backend, gpu_hardware_config)
-        mock_logger.warning.assert_called()
-        warning_msg = mock_logger.warning.call_args[0][0]
-        assert "standalone system" in warning_msg
-        assert "scheduler may not be available" in warning_msg
-
-
-def test_compatibility_warning_multiprocessing_on_gpu(multi_gpu_hardware_config):
-    """Test warning when using multiprocessing on multi-GPU system."""
-    backend = MockBackend("multiprocessing")
-
-    with patch("homodyne.optimization.cmc.backends.selection.logger") as mock_logger:
-        _validate_backend_compatibility(backend, multi_gpu_hardware_config)
-        mock_logger.warning.assert_called()
-        warning_msg = mock_logger.warning.call_args[0][0]
-        assert "multi-GPU system" in warning_msg
-        assert "pjit" in warning_msg
-
-
-def test_no_compatibility_warning_for_optimal_selection(gpu_hardware_config):
-    """Test no warning when backend matches optimal selection."""
-    backend = MockBackend("pjit")
-
-    with patch("homodyne.optimization.cmc.backends.selection.logger") as mock_logger:
-        _validate_backend_compatibility(backend, gpu_hardware_config)
-        # Should not log any warnings
-        mock_logger.warning.assert_not_called()
-
-
 # ============================================================================
 # Test 6: Integration Test - Full Selection Flow
 # ============================================================================
@@ -530,7 +434,9 @@ def test_no_compatibility_warning_for_optimal_selection(gpu_hardware_config):
 
 def test_full_selection_flow_with_auto_select(cpu_hardware_config):
     """Test complete backend selection flow with auto-selection."""
-    with patch("homodyne.optimization.cmc.backends.selection.get_backend_by_name") as mock_get:
+    with patch(
+        "homodyne.optimization.cmc.backends.selection.get_backend_by_name"
+    ) as mock_get:
         mock_backend = MockBackend("multiprocessing")
         mock_get.return_value = mock_backend
 
@@ -573,12 +479,16 @@ def test_backend_infrastructure_test_count():
     """
     # Count test functions in this module
     import sys
+
     module = sys.modules[__name__]
     test_functions = [
-        name for name in dir(module)
+        name
+        for name in dir(module)
         if name.startswith("test_") and callable(getattr(module, name))
     ]
 
     # Should have at least 4-6 tests (we have 20+)
-    assert len(test_functions) >= 4, f"Need at least 4 tests, have {len(test_functions)}"
+    assert (
+        len(test_functions) >= 4
+    ), f"Need at least 4 tests, have {len(test_functions)}"
     print(f"✅ Backend infrastructure has {len(test_functions)} comprehensive tests")

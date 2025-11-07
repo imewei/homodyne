@@ -206,6 +206,7 @@ class TestCheckpointManagerSave:
 
         # Create an un-picklable optimizer state
         import threading
+
         optimizer_state = {"lock": threading.Lock()}  # Cannot pickle locks
 
         with pytest.raises(NLSQCheckpointError, match="Failed to save checkpoint"):

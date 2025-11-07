@@ -467,15 +467,9 @@ performance:
   # Computation settings
   computation:
     enable_jit: true                          # Enable JAX JIT compilation
-    gpu_acceleration: "auto"                  # Options: "auto" | true | false
     cpu_threads: "auto"                       # Number of CPU threads (int or "auto")
     vectorization_level: "high"               # Options: "low" | "medium" | "high"
-
-  # Device configuration
-  device:
-    preferred_device: "auto"                  # Options: "auto" | "cpu" | "gpu"
-    gpu_memory_fraction: 0.9                  # Fraction of GPU memory to use (0.0-1.0)
-    # Note: GPU support requires Linux + CUDA 12.1-12.9
+    # Note: GPU support removed in v2.3.0 (use v2.2.x for GPU)
 
 # ==============================================================================
 # LOGGING
@@ -548,7 +542,7 @@ plotting:
   datashader:
     canvas_width: 1200                        # Rendering resolution in pixels
     canvas_height: 1200                       # Higher values = more detail, larger files
-    gpu_acceleration: true                    # Use GPU if CuPy available
+    # Note: CPU-only rendering in v2.3.0+
 
   # Matplotlib configuration (used when preview_mode: false)
   matplotlib:
@@ -669,17 +663,11 @@ validation:
 #
 # PLATFORM SUPPORT:
 # -----------------
-# CPU: Linux, macOS, Windows (full support)
-# GPU: Linux only (CUDA 12.1-12.9 required)
+# CPU-only: Linux, macOS, Windows (full support)
+# GPU support removed in v2.3.0 (use v2.2.x for GPU)
 #
 # Installation:
-#   CPU-only (default):
-#     pip install homodyne
-#
-#   GPU (Linux only):
-#     module load cuda/12.2  # or other CUDA 12.x version
-#     pip install jax[cuda12-local]==0.8.0 jaxlib==0.8.0
-#     pip install homodyne
+#   pip install homodyne
 #
 # JAX/jaxlib MUST be version 0.8.0 (exact match required)
 #

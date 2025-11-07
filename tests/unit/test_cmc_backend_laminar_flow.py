@@ -24,6 +24,7 @@ from homodyne.optimization.cmc.backends.multiprocessing import MultiprocessingBa
 # Import config infrastructure
 try:
     from homodyne.config.parameter_space import ParameterSpace
+
     HAS_PARAMETER_SPACE = True
 except ImportError:
     HAS_PARAMETER_SPACE = False
@@ -38,25 +39,40 @@ def laminar_parameter_space():
     They are scaling parameters added automatically by the MCMC model.
     """
     config = {
-        'parameter_space': {
-            'model': 'laminar_flow',
-            'bounds': [
-                {'name': 'D0', 'min': 100.0, 'max': 5000.0},
-                {'name': 'alpha', 'min': 0.1, 'max': 2.0},
-                {'name': 'D_offset', 'min': 0.1, 'max': 100.0},
-                {'name': 'gamma_dot_t0', 'min': 0.1, 'max': 10.0},
-                {'name': 'beta', 'min': 0.0, 'max': 2.0},
-                {'name': 'gamma_dot_t_offset', 'min': 0.0, 'max': 5.0},
-                {'name': 'phi0', 'min': -np.pi, 'max': np.pi},
+        "parameter_space": {
+            "model": "laminar_flow",
+            "bounds": [
+                {"name": "D0", "min": 100.0, "max": 5000.0},
+                {"name": "alpha", "min": 0.1, "max": 2.0},
+                {"name": "D_offset", "min": 0.1, "max": 100.0},
+                {"name": "gamma_dot_t0", "min": 0.1, "max": 10.0},
+                {"name": "beta", "min": 0.0, "max": 2.0},
+                {"name": "gamma_dot_t_offset", "min": 0.0, "max": 5.0},
+                {"name": "phi0", "min": -np.pi, "max": np.pi},
             ],
-            'priors': [
-                {'name': 'D0', 'type': 'TruncatedNormal', 'mu': 1000.0, 'sigma': 500.0},
-                {'name': 'alpha', 'type': 'TruncatedNormal', 'mu': 1.0, 'sigma': 0.3},
-                {'name': 'D_offset', 'type': 'TruncatedNormal', 'mu': 10.0, 'sigma': 5.0},
-                {'name': 'gamma_dot_t0', 'type': 'TruncatedNormal', 'mu': 1.0, 'sigma': 1.0},
-                {'name': 'beta', 'type': 'TruncatedNormal', 'mu': 1.0, 'sigma': 0.5},
-                {'name': 'gamma_dot_t_offset', 'type': 'Uniform', 'low': 0.0, 'high': 5.0},
-                {'name': 'phi0', 'type': 'Uniform', 'low': -np.pi, 'high': np.pi},
+            "priors": [
+                {"name": "D0", "type": "TruncatedNormal", "mu": 1000.0, "sigma": 500.0},
+                {"name": "alpha", "type": "TruncatedNormal", "mu": 1.0, "sigma": 0.3},
+                {
+                    "name": "D_offset",
+                    "type": "TruncatedNormal",
+                    "mu": 10.0,
+                    "sigma": 5.0,
+                },
+                {
+                    "name": "gamma_dot_t0",
+                    "type": "TruncatedNormal",
+                    "mu": 1.0,
+                    "sigma": 1.0,
+                },
+                {"name": "beta", "type": "TruncatedNormal", "mu": 1.0, "sigma": 0.5},
+                {
+                    "name": "gamma_dot_t_offset",
+                    "type": "Uniform",
+                    "low": 0.0,
+                    "high": 5.0,
+                },
+                {"name": "phi0", "type": "Uniform", "low": -np.pi, "high": np.pi},
             ],
         }
     }
@@ -71,12 +87,12 @@ def static_parameter_space():
     They are scaling parameters added automatically by the MCMC model.
     """
     config = {
-        'parameter_space': {
-            'model': 'static',
-            'bounds': [
-                {'name': 'D0', 'min': 100.0, 'max': 5000.0},
-                {'name': 'alpha', 'min': 0.1, 'max': 2.0},
-                {'name': 'D_offset', 'min': 0.1, 'max': 100.0},
+        "parameter_space": {
+            "model": "static",
+            "bounds": [
+                {"name": "D0", "min": 100.0, "max": 5000.0},
+                {"name": "alpha", "min": 0.1, "max": 2.0},
+                {"name": "D_offset", "min": 0.1, "max": 100.0},
             ],
         }
     }
@@ -95,14 +111,15 @@ def test_backend_validation_passes_for_laminar_flow(laminar_parameter_space):
     # Should not raise ValueError
     try:
         backend._validate_analysis_mode_consistency(
-            analysis_mode="laminar_flow",
-            parameter_space=laminar_parameter_space
+            analysis_mode="laminar_flow", parameter_space=laminar_parameter_space
         )
     except ValueError as e:
         pytest.fail(f"Validation should pass but raised ValueError: {e}")
 
 
-def test_backend_validation_fails_for_mode_mismatch(laminar_parameter_space, static_parameter_space):
+def test_backend_validation_fails_for_mode_mismatch(
+    laminar_parameter_space, static_parameter_space
+):
     """Test that validation fails when analysis_mode doesn't match parameter_space.
 
     Verifies:
@@ -115,15 +132,13 @@ def test_backend_validation_fails_for_mode_mismatch(laminar_parameter_space, sta
     # Test 1: Static mode with laminar parameter space (9 params but expects 5)
     with pytest.raises(ValueError, match="Analysis mode mismatch"):
         backend._validate_analysis_mode_consistency(
-            analysis_mode="static_isotropic",
-            parameter_space=laminar_parameter_space
+            analysis_mode="static_isotropic", parameter_space=laminar_parameter_space
         )
 
     # Test 2: Laminar mode with static parameter space (5 params but expects 9)
     with pytest.raises(ValueError, match="Analysis mode mismatch"):
         backend._validate_analysis_mode_consistency(
-            analysis_mode="laminar_flow",
-            parameter_space=static_parameter_space
+            analysis_mode="laminar_flow", parameter_space=static_parameter_space
         )
 
 
@@ -138,8 +153,7 @@ def test_backend_validation_passes_for_static_flow(static_parameter_space):
     # Should not raise ValueError
     try:
         backend._validate_analysis_mode_consistency(
-            analysis_mode="static_isotropic",
-            parameter_space=static_parameter_space
+            analysis_mode="static_isotropic", parameter_space=static_parameter_space
         )
     except ValueError as e:
         pytest.fail(f"Validation should pass but raised ValueError: {e}")
@@ -163,34 +177,34 @@ def test_multiprocessing_backend_with_laminar_flow_minimal(laminar_parameter_spa
     np.random.seed(42)
     n_points = 50  # Very small for speed
     shard = {
-        'data': np.random.randn(n_points),
-        'sigma': np.ones(n_points) * 0.1,
-        't1': np.linspace(0, 1, n_points),
-        't2': np.linspace(0, 1, n_points),
-        'phi': np.zeros(n_points),  # Single angle
-        'q': 0.01,
-        'L': 1.0,
+        "data": np.random.randn(n_points),
+        "sigma": np.ones(n_points) * 0.1,
+        "t1": np.linspace(0, 1, n_points),
+        "t2": np.linspace(0, 1, n_points),
+        "phi": np.zeros(n_points),  # Single angle
+        "q": 0.01,
+        "L": 1.0,
     }
 
     # Minimal MCMC config (just for smoke test, not convergence)
     mcmc_config = {
-        'num_warmup': 10,
-        'num_samples': 20,
-        'num_chains': 1,
-        'target_accept_prob': 0.8,
+        "num_warmup": 10,
+        "num_samples": 20,
+        "num_chains": 1,
+        "target_accept_prob": 0.8,
     }
 
     # Initial parameters (mid-point of bounds)
     init_params = {
-        'contrast': 0.5,
-        'offset': 1.0,
-        'D0': 1000.0,
-        'alpha': 1.0,
-        'D_offset': 10.0,
-        'gamma_dot_t0': 1.0,
-        'beta': 1.0,
-        'gamma_dot_t_offset': 0.5,
-        'phi0': 0.0,
+        "contrast": 0.5,
+        "offset": 1.0,
+        "D0": 1000.0,
+        "alpha": 1.0,
+        "D_offset": 10.0,
+        "gamma_dot_t0": 1.0,
+        "beta": 1.0,
+        "gamma_dot_t_offset": 0.5,
+        "phi0": 0.0,
     }
 
     # Identity mass matrix
@@ -212,18 +226,20 @@ def test_multiprocessing_backend_with_laminar_flow_minimal(laminar_parameter_spa
     result = results[0]
 
     # Check result structure (may or may not converge, but should have structure)
-    assert 'converged' in result, "Result should have 'converged' field"
-    assert 'elapsed_time' in result, "Result should have 'elapsed_time' field"
+    assert "converged" in result, "Result should have 'converged' field"
+    assert "elapsed_time" in result, "Result should have 'elapsed_time' field"
 
     # If it converged, check samples shape
-    if result['converged']:
-        assert 'samples' in result, "Converged result should have 'samples'"
-        samples = result['samples']
-        assert samples.shape[1] == 9, f"Samples should have 9 parameters, got {samples.shape[1]}"
+    if result["converged"]:
+        assert "samples" in result, "Converged result should have 'samples'"
+        samples = result["samples"]
+        assert (
+            samples.shape[1] == 9
+        ), f"Samples should have 9 parameters, got {samples.shape[1]}"
     else:
         # If it didn't converge (which is OK for this minimal test),
         # just verify error is logged
-        assert 'error' in result, "Failed result should have 'error' field"
+        assert "error" in result, "Failed result should have 'error' field"
 
 
 if __name__ == "__main__":

@@ -89,9 +89,9 @@ class DatasetSizeStrategy:
     """
 
     # Size thresholds (class constants)
-    THRESHOLD_SMALL = 1_000_000      # 1M points
-    THRESHOLD_MEDIUM = 10_000_000    # 10M points
-    THRESHOLD_LARGE = 100_000_000    # 100M points
+    THRESHOLD_SMALL = 1_000_000  # 1M points
+    THRESHOLD_MEDIUM = 10_000_000  # 10M points
+    THRESHOLD_LARGE = 100_000_000  # 100M points
 
     def __init__(self, config: Optional[dict[str, Any]] = None):
         """Initialize strategy selector.
@@ -184,9 +184,7 @@ class DatasetSizeStrategy:
 
         # Memory-based adjustment
         if check_memory:
-            strategy = self._adjust_for_memory(
-                strategy, n_points, n_parameters
-            )
+            strategy = self._adjust_for_memory(strategy, n_points, n_parameters)
 
         return strategy
 
@@ -362,21 +360,19 @@ class DatasetSizeStrategy:
 
         # Calculate optimal batch size based on available memory
         available_gb = self._get_available_memory_gb()
-        batch_size = self._calculate_optimal_batch_size(
-            available_gb, n_parameters
-        )
+        batch_size = self._calculate_optimal_batch_size(available_gb, n_parameters)
 
         # Extract checkpoint settings with defaults
-        enable_checkpoints = checkpoint_config.get('enable_checkpoints', False)
-        checkpoint_dir = checkpoint_config.get('checkpoint_dir', './checkpoints')
-        checkpoint_frequency = checkpoint_config.get('checkpoint_frequency', 10)
-        resume_from_checkpoint = checkpoint_config.get('resume_from_checkpoint', True)
-        keep_last_n = checkpoint_config.get('keep_last_checkpoints', 3)
+        enable_checkpoints = checkpoint_config.get("enable_checkpoints", False)
+        checkpoint_dir = checkpoint_config.get("checkpoint_dir", "./checkpoints")
+        checkpoint_frequency = checkpoint_config.get("checkpoint_frequency", 10)
+        resume_from_checkpoint = checkpoint_config.get("resume_from_checkpoint", True)
+        keep_last_n = checkpoint_config.get("keep_last_checkpoints", 3)
 
         # Extract fault tolerance settings
-        enable_fault_tolerance = checkpoint_config.get('enable_fault_tolerance', True)
-        max_retries_per_batch = checkpoint_config.get('max_retries_per_batch', 2)
-        min_success_rate = checkpoint_config.get('min_success_rate', 0.5)
+        enable_fault_tolerance = checkpoint_config.get("enable_fault_tolerance", True)
+        max_retries_per_batch = checkpoint_config.get("max_retries_per_batch", 2)
+        min_success_rate = checkpoint_config.get("min_success_rate", 0.5)
 
         logger.info(
             f"Building streaming config for {n_points:,} points: "
@@ -387,14 +383,12 @@ class DatasetSizeStrategy:
             # Batch processing
             "batch_size": batch_size,
             "max_epochs": 10,
-
             # Checkpoint management
             "enable_checkpoints": enable_checkpoints,
             "checkpoint_dir": checkpoint_dir,
             "checkpoint_frequency": checkpoint_frequency if enable_checkpoints else 0,
             "resume_from_checkpoint": resume_from_checkpoint,
             "keep_last_checkpoints": keep_last_n,
-
             # Fault tolerance
             "enable_fault_tolerance": enable_fault_tolerance,
             "validate_numerics": enable_fault_tolerance,

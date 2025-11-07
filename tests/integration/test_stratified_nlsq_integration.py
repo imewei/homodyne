@@ -65,11 +65,13 @@ def imbalanced_test_data():
     n_points_angle0 = 100_000
     n_points_other = 10_000
 
-    phi = np.concatenate([
-        np.full(n_points_angle0, 0.0),
-        np.full(n_points_other, 45.0),
-        np.full(n_points_other, 90.0),
-    ])
+    phi = np.concatenate(
+        [
+            np.full(n_points_angle0, 0.0),
+            np.full(n_points_other, 45.0),
+            np.full(n_points_other, 90.0),
+        ]
+    )
     t1 = np.linspace(1e-6, 1e-3, len(phi))
     t2 = t1.copy()
     g2_exp = 1.0 + 0.4 * np.exp(-0.1 * (t1 + t2))
@@ -410,6 +412,7 @@ def test_stratified_data_preserves_metadata_attributes():
 
     class MockOriginalData:
         """Mock data object with all attributes expected by NLSQ."""
+
         def __init__(self):
             # Array attributes: UNIQUE values only (meshgrid will expand them)
             self.phi = np.array([0.0, 45.0, 90.0])  # 3 unique phi angles
@@ -454,12 +457,12 @@ def test_stratified_data_preserves_metadata_attributes():
     # These checks prevent regression of the AttributeError bug
 
     # Check required attributes exist
-    assert hasattr(stratified_data, 'sigma'), "sigma not copied (CRITICAL)"
-    assert hasattr(stratified_data, 'q'), "q not copied (CRITICAL)"
-    assert hasattr(stratified_data, 'L'), "L not copied (CRITICAL)"
+    assert hasattr(stratified_data, "sigma"), "sigma not copied (CRITICAL)"
+    assert hasattr(stratified_data, "q"), "q not copied (CRITICAL)"
+    assert hasattr(stratified_data, "L"), "L not copied (CRITICAL)"
 
     # Check optional dt attribute
-    assert hasattr(stratified_data, 'dt'), "dt not copied (optional but expected)"
+    assert hasattr(stratified_data, "dt"), "dt not copied (optional but expected)"
 
     # Verify values match original (scalars should be copied verbatim)
     assert stratified_data.q == original_data.q, "q value mismatch"
@@ -467,13 +470,13 @@ def test_stratified_data_preserves_metadata_attributes():
     assert stratified_data.dt == original_data.dt, "dt value mismatch"
 
     # Verify array attributes were reorganized (not just copied)
-    assert hasattr(stratified_data, 'phi'), "phi missing"
-    assert hasattr(stratified_data, 't1'), "t1 missing"
-    assert hasattr(stratified_data, 't2'), "t2 missing"
-    assert hasattr(stratified_data, 'g2'), "g2 missing"
+    assert hasattr(stratified_data, "phi"), "phi missing"
+    assert hasattr(stratified_data, "t1"), "t1 missing"
+    assert hasattr(stratified_data, "t2"), "t2 missing"
+    assert hasattr(stratified_data, "g2"), "g2 missing"
 
     # Verify stratification diagnostics present
-    assert hasattr(stratified_data, 'stratification_diagnostics'), "diagnostics missing"
+    assert hasattr(stratified_data, "stratification_diagnostics"), "diagnostics missing"
 
     # Additional check: Simulate residual function validation
     # This is the code that originally failed with AttributeError
@@ -524,17 +527,19 @@ def test_stratification_diagnostics_passed_to_result():
             stratification_diagnostics=None,  # KEY FIX: Parameter now accepted
         )
     except NameError as e:
-        if 'stratification_diagnostics' in str(e):
+        if "stratification_diagnostics" in str(e):
             pytest.fail(f"NameError when passing stratification_diagnostics=None: {e}")
         else:
             raise
 
     # Verify result was created successfully
     assert isinstance(result, OptimizationResult), "Result is not OptimizationResult"
-    assert hasattr(result, 'stratification_diagnostics'), \
-        "Result missing stratification_diagnostics attribute"
-    assert result.stratification_diagnostics is None, \
-        "Expected stratification_diagnostics=None"
+    assert hasattr(
+        result, "stratification_diagnostics"
+    ), "Result missing stratification_diagnostics attribute"
+    assert (
+        result.stratification_diagnostics is None
+    ), "Expected stratification_diagnostics=None"
 
     # Success: The parameter is now accepted without NameError
     # This prevents the bug from recurring where _create_fit_result() tried to
@@ -572,6 +577,7 @@ def test_full_nlsq_workflow_with_stratification():
 
     class MockData:
         """Mock experimental data with full metadata."""
+
         def __init__(self):
             # Unique arrays for phi, t1, t2 (meshgrid will expand)
             self.phi = np.array([0.0, 45.0, 90.0])
@@ -579,7 +585,7 @@ def test_full_nlsq_workflow_with_stratification():
             self.t2 = np.linspace(1e-6, 1e-3, n_t)
 
             # Generate synthetic g2 data with known structure
-            t1_grid, t2_grid = np.meshgrid(self.t1, self.t2, indexing='ij')
+            t1_grid, t2_grid = np.meshgrid(self.t1, self.t2, indexing="ij")
             tau_sum = t1_grid + t2_grid
 
             # Simple isotropic data (same for all angles)
@@ -625,7 +631,7 @@ def test_full_nlsq_workflow_with_stratification():
             logger=logger,
         )
     except AttributeError as e:
-        if 'sigma' in str(e) or 'q' in str(e) or 'L' in str(e):
+        if "sigma" in str(e) or "q" in str(e) or "L" in str(e):
             pytest.fail(f"Metadata not preserved during stratification (Bug #1): {e}")
         else:
             raise
@@ -633,27 +639,32 @@ def test_full_nlsq_workflow_with_stratification():
         pytest.fail(f"Stratification failed: {e}")
 
     # Validate stratification occurred
-    assert hasattr(stratified_data, 'stratification_diagnostics'), \
-        "Stratification diagnostics not created"
-    assert stratified_data.stratification_diagnostics is not None, \
-        "Stratification diagnostics is None (Bug #2 would cause NameError later)"
+    assert hasattr(
+        stratified_data, "stratification_diagnostics"
+    ), "Stratification diagnostics not created"
+    assert (
+        stratified_data.stratification_diagnostics is not None
+    ), "Stratification diagnostics is None (Bug #2 would cause NameError later)"
 
     # Validate metadata preserved (Bug #1 fix)
-    assert hasattr(stratified_data, 'sigma'), "sigma not preserved"
-    assert hasattr(stratified_data, 'q'), "q not preserved"
-    assert hasattr(stratified_data, 'L'), "L not preserved"
-    assert hasattr(stratified_data, 'dt'), "dt not preserved"
+    assert hasattr(stratified_data, "sigma"), "sigma not preserved"
+    assert hasattr(stratified_data, "q"), "q not preserved"
+    assert hasattr(stratified_data, "L"), "L not preserved"
+    assert hasattr(stratified_data, "dt"), "dt not preserved"
 
     # Validate diagnostics content
     diag = stratified_data.stratification_diagnostics
     assert diag.n_chunks > 0, "Should have created chunks"
     assert len(diag.chunk_sizes) == diag.n_chunks, "Chunk sizes list length mismatch"
-    assert len(diag.angles_per_chunk) == diag.n_chunks, "Angles per chunk list length mismatch"
+    assert (
+        len(diag.angles_per_chunk) == diag.n_chunks
+    ), "Angles per chunk list length mismatch"
 
     # Validate all chunks have all angles (key stratification requirement)
     for i, n_angles in enumerate(diag.angles_per_chunk):
-        assert n_angles == 3, \
-            f"Chunk {i} has {n_angles} angles, expected 3 (stratification failed)"
+        assert (
+            n_angles == 3
+        ), f"Chunk {i} has {n_angles} angles, expected 3 (stratification failed)"
 
     # CRITICAL TEST: Create result with diagnostics (Bug #2 fix)
     try:
@@ -670,16 +681,20 @@ def test_full_nlsq_workflow_with_stratification():
             stratification_diagnostics=stratified_data.stratification_diagnostics,  # Bug #2
         )
     except NameError as e:
-        if 'stratification_diagnostics' in str(e):
-            pytest.fail(f"NameError when passing stratification_diagnostics (Bug #2): {e}")
+        if "stratification_diagnostics" in str(e):
+            pytest.fail(
+                f"NameError when passing stratification_diagnostics (Bug #2): {e}"
+            )
         else:
             raise
 
     # Validate result contains diagnostics
-    assert hasattr(result, 'stratification_diagnostics'), \
-        "Result missing stratification_diagnostics"
-    assert result.stratification_diagnostics is not None, \
-        "Result stratification_diagnostics is None"
+    assert hasattr(
+        result, "stratification_diagnostics"
+    ), "Result missing stratification_diagnostics"
+    assert (
+        result.stratification_diagnostics is not None
+    ), "Result stratification_diagnostics is None"
 
     # Success: Full workflow completed with both fixes validated
     print(f"✓ Full stratification workflow test passed:")

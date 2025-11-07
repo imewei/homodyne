@@ -114,16 +114,25 @@ def plot_trace_plots(
     # Generate parameter names if not provided
     if param_names is None:
         if result.analysis_mode == "static_isotropic":
-            param_names = ['D0', 'alpha', 'D_offset']
+            param_names = ["D0", "alpha", "D_offset"]
         elif result.analysis_mode == "laminar_flow":
-            param_names = ['D0', 'alpha', 'D_offset', 'gamma_dot_t0', 'beta',
-                          'gamma_dot_t_offset', 'phi0']
+            param_names = [
+                "D0",
+                "alpha",
+                "D_offset",
+                "gamma_dot_t0",
+                "beta",
+                "gamma_dot_t_offset",
+                "phi0",
+            ]
         else:
-            param_names = [f'param_{i}' for i in range(num_params)]
+            param_names = [f"param_{i}" for i in range(num_params)]
 
     # Ensure we have enough parameter names
     if len(param_names) < num_params_to_plot:
-        param_names.extend([f'param_{i}' for i in range(len(param_names), num_params_to_plot)])
+        param_names.extend(
+            [f"param_{i}" for i in range(len(param_names), num_params_to_plot)]
+        )
 
     # Calculate figure layout
     ncols = min(3, num_params_to_plot)
@@ -136,7 +145,7 @@ def plot_trace_plots(
     axes = axes.flatten()
 
     # Check if this is a CMC result
-    is_cmc = result.is_cmc_result() if hasattr(result, 'is_cmc_result') else False
+    is_cmc = result.is_cmc_result() if hasattr(result, "is_cmc_result") else False
 
     if is_cmc and result.per_shard_diagnostics is not None:
         # CMC: Plot multiple shard traces
@@ -148,36 +157,42 @@ def plot_trace_plots(
 
             # Plot trace for each shard
             for shard_idx, shard_diag in enumerate(result.per_shard_diagnostics):
-                if 'trace_data' in shard_diag:
-                    trace_key = f'param_{param_idx}'
-                    if trace_key in shard_diag['trace_data']:
-                        trace = np.array(shard_diag['trace_data'][trace_key])
+                if "trace_data" in shard_diag:
+                    trace_key = f"param_{param_idx}"
+                    if trace_key in shard_diag["trace_data"]:
+                        trace = np.array(shard_diag["trace_data"][trace_key])
 
                         # Handle multi-chain traces (flatten if needed)
                         if trace.ndim == 2:
                             # Multi-chain: plot all chains
                             for chain_idx in range(trace.shape[0]):
-                                ax.plot(trace[chain_idx, :],
-                                       color=colors[shard_idx],
-                                       alpha=0.7,
-                                       linewidth=0.5,
-                                       label=f'Shard {shard_idx}' if chain_idx == 0 else '')
+                                ax.plot(
+                                    trace[chain_idx, :],
+                                    color=colors[shard_idx],
+                                    alpha=0.7,
+                                    linewidth=0.5,
+                                    label=(
+                                        f"Shard {shard_idx}" if chain_idx == 0 else ""
+                                    ),
+                                )
                         else:
                             # Single chain
-                            ax.plot(trace,
-                                   color=colors[shard_idx],
-                                   alpha=0.7,
-                                   linewidth=0.8,
-                                   label=f'Shard {shard_idx}')
+                            ax.plot(
+                                trace,
+                                color=colors[shard_idx],
+                                alpha=0.7,
+                                linewidth=0.8,
+                                label=f"Shard {shard_idx}",
+                            )
 
-            ax.set_xlabel('Sample Index')
+            ax.set_xlabel("Sample Index")
             ax.set_ylabel(param_names[param_idx])
-            ax.set_title(f'{param_names[param_idx]} Trace (CMC)')
+            ax.set_title(f"{param_names[param_idx]} Trace (CMC)")
             ax.grid(True, alpha=0.3)
 
             # Add legend for first subplot only (to avoid clutter)
             if param_idx == 0 and num_shards <= 10:
-                ax.legend(loc='upper right', fontsize=8, ncol=2)
+                ax.legend(loc="upper right", fontsize=8, ncol=2)
 
     else:
         # Standard NUTS: Plot single trace (possibly multi-chain)
@@ -196,10 +211,10 @@ def plot_trace_plots(
             ax = axes[param_idx]
             trace = samples[:, param_idx]
 
-            ax.plot(trace, linewidth=0.5, alpha=0.8, color='steelblue')
-            ax.set_xlabel('Sample Index')
+            ax.plot(trace, linewidth=0.5, alpha=0.8, color="steelblue")
+            ax.set_xlabel("Sample Index")
             ax.set_ylabel(param_names[param_idx])
-            ax.set_title(f'{param_names[param_idx]} Trace')
+            ax.set_title(f"{param_names[param_idx]} Trace")
             ax.grid(True, alpha=0.3)
 
     # Hide unused subplots
@@ -207,16 +222,16 @@ def plot_trace_plots(
         axes[idx].set_visible(False)
 
     # Add overall title
-    title = 'MCMC Trace Plots'
+    title = "MCMC Trace Plots"
     if is_cmc:
-        title += f' (CMC: {result.num_shards} shards)'
-    fig.suptitle(title, fontsize=14, fontweight='bold', y=0.995)
+        title += f" (CMC: {result.num_shards} shards)"
+    fig.suptitle(title, fontsize=14, fontweight="bold", y=0.995)
 
     plt.tight_layout()
 
     # Save or show
     if save_path is not None:
-        fig.savefig(save_path, dpi=dpi, bbox_inches='tight')
+        fig.savefig(save_path, dpi=dpi, bbox_inches="tight")
         logger.info(f"Trace plots saved to {save_path}")
 
     if show:
@@ -228,7 +243,7 @@ def plot_trace_plots(
 def plot_kl_divergence_matrix(
     result: MCMCResult,
     figsize: tuple = (8, 7),
-    cmap: str = 'coolwarm',
+    cmap: str = "coolwarm",
     threshold: float = 2.0,
     show: bool = False,
     save_path: Optional[Union[str, Path]] = None,
@@ -279,29 +294,41 @@ def plot_kl_divergence_matrix(
     - Values > 2.0: Poor agreement (possible multimodality)
     """
     # Check if CMC result
-    is_cmc = result.is_cmc_result() if hasattr(result, 'is_cmc_result') else False
+    is_cmc = result.is_cmc_result() if hasattr(result, "is_cmc_result") else False
 
     if not is_cmc:
         raise ValueError("KL divergence matrix is only available for CMC results")
 
     # Extract KL matrix from diagnostics
-    if result.cmc_diagnostics is None or 'kl_matrix' not in result.cmc_diagnostics:
+    if result.cmc_diagnostics is None or "kl_matrix" not in result.cmc_diagnostics:
         raise ValueError("KL divergence matrix not found in CMC diagnostics")
 
-    kl_matrix = np.array(result.cmc_diagnostics['kl_matrix'])
+    kl_matrix = np.array(result.cmc_diagnostics["kl_matrix"])
     num_shards = kl_matrix.shape[0]
 
     # Create figure
     fig, ax = plt.subplots(figsize=figsize)
 
     # Plot heatmap
-    im = ax.imshow(kl_matrix, cmap=cmap, aspect='auto', vmin=0, vmax=max(threshold * 1.5, kl_matrix.max()))
+    im = ax.imshow(
+        kl_matrix,
+        cmap=cmap,
+        aspect="auto",
+        vmin=0,
+        vmax=max(threshold * 1.5, kl_matrix.max()),
+    )
 
     # Add colorbar
-    cbar = plt.colorbar(im, ax=ax, label='KL Divergence')
+    cbar = plt.colorbar(im, ax=ax, label="KL Divergence")
 
     # Add threshold line on colorbar
-    cbar.ax.axhline(y=threshold, color='red', linestyle='--', linewidth=2, label=f'Threshold ({threshold})')
+    cbar.ax.axhline(
+        y=threshold,
+        color="red",
+        linestyle="--",
+        linewidth=2,
+        label=f"Threshold ({threshold})",
+    )
 
     # Annotate cells with KL values
     for i in range(num_shards):
@@ -309,39 +336,54 @@ def plot_kl_divergence_matrix(
             kl_val = kl_matrix[i, j]
 
             # Choose text color based on background
-            text_color = 'white' if kl_val > threshold else 'black'
+            text_color = "white" if kl_val > threshold else "black"
 
             # Add text annotation
-            text = ax.text(j, i, f'{kl_val:.2f}',
-                          ha="center", va="center",
-                          color=text_color, fontsize=9)
+            text = ax.text(
+                j,
+                i,
+                f"{kl_val:.2f}",
+                ha="center",
+                va="center",
+                color=text_color,
+                fontsize=9,
+            )
 
             # Highlight problematic shards (KL > threshold)
             if kl_val > threshold and i != j:
-                ax.add_patch(plt.Rectangle((j - 0.5, i - 0.5), 1, 1,
-                                          fill=False, edgecolor='red',
-                                          linewidth=2))
+                ax.add_patch(
+                    plt.Rectangle(
+                        (j - 0.5, i - 0.5),
+                        1,
+                        1,
+                        fill=False,
+                        edgecolor="red",
+                        linewidth=2,
+                    )
+                )
 
     # Set labels and title
     ax.set_xticks(np.arange(num_shards))
     ax.set_yticks(np.arange(num_shards))
-    ax.set_xticklabels([f'S{i}' for i in range(num_shards)])
-    ax.set_yticklabels([f'S{i}' for i in range(num_shards)])
-    ax.set_xlabel('Shard Index')
-    ax.set_ylabel('Shard Index')
-    ax.set_title(f'Between-Shard KL Divergence Matrix\n({num_shards} shards, threshold={threshold})',
-                fontweight='bold')
+    ax.set_xticklabels([f"S{i}" for i in range(num_shards)])
+    ax.set_yticklabels([f"S{i}" for i in range(num_shards)])
+    ax.set_xlabel("Shard Index")
+    ax.set_ylabel("Shard Index")
+    ax.set_title(
+        f"Between-Shard KL Divergence Matrix\n({num_shards} shards, threshold={threshold})",
+        fontweight="bold",
+    )
 
     # Add grid
     ax.set_xticks(np.arange(num_shards) - 0.5, minor=True)
     ax.set_yticks(np.arange(num_shards) - 0.5, minor=True)
-    ax.grid(which="minor", color="gray", linestyle='-', linewidth=0.5)
+    ax.grid(which="minor", color="gray", linestyle="-", linewidth=0.5)
 
     plt.tight_layout()
 
     # Save or show
     if save_path is not None:
-        fig.savefig(save_path, dpi=dpi, bbox_inches='tight')
+        fig.savefig(save_path, dpi=dpi, bbox_inches="tight")
         logger.info(f"KL divergence matrix saved to {save_path}")
 
     if show:
@@ -352,7 +394,7 @@ def plot_kl_divergence_matrix(
 
 def plot_convergence_diagnostics(
     result: MCMCResult,
-    metrics: List[str] = ['rhat', 'ess'],
+    metrics: List[str] = ["rhat", "ess"],
     figsize: Optional[tuple] = None,
     rhat_threshold: float = 1.1,
     ess_threshold: float = 100.0,
@@ -404,7 +446,7 @@ def plot_convergence_diagnostics(
     - ESS < 100: Poor sampling efficiency (bad)
     """
     # Check if CMC result
-    is_cmc = result.is_cmc_result() if hasattr(result, 'is_cmc_result') else False
+    is_cmc = result.is_cmc_result() if hasattr(result, "is_cmc_result") else False
 
     # Determine number of subplots
     num_metrics = len(metrics)
@@ -418,37 +460,50 @@ def plot_convergence_diagnostics(
     # Extract parameter names
     num_params = len(result.mean_params)
     if result.analysis_mode == "static_isotropic":
-        param_names = ['D0', 'alpha', 'D_offset'][:num_params]
+        param_names = ["D0", "alpha", "D_offset"][:num_params]
     elif result.analysis_mode == "laminar_flow":
-        param_names = ['D0', 'alpha', 'D_offset', 'gamma_dot_t0', 'beta',
-                      'gamma_dot_t_offset', 'phi0'][:num_params]
+        param_names = [
+            "D0",
+            "alpha",
+            "D_offset",
+            "gamma_dot_t0",
+            "beta",
+            "gamma_dot_t_offset",
+            "phi0",
+        ][:num_params]
     else:
-        param_names = [f'param_{i}' for i in range(num_params)]
+        param_names = [f"param_{i}" for i in range(num_params)]
 
     # Plot each metric
     for metric_idx, metric in enumerate(metrics):
         ax = axes[metric_idx]
 
-        if metric == 'rhat':
+        if metric == "rhat":
             _plot_rhat(ax, result, param_names, rhat_threshold, is_cmc)
-        elif metric == 'ess':
+        elif metric == "ess":
             _plot_ess(ax, result, param_names, ess_threshold, is_cmc)
         else:
             logger.warning(f"Unknown metric: {metric}")
-            ax.text(0.5, 0.5, f'Unknown metric: {metric}',
-                   ha='center', va='center', transform=ax.transAxes)
+            ax.text(
+                0.5,
+                0.5,
+                f"Unknown metric: {metric}",
+                ha="center",
+                va="center",
+                transform=ax.transAxes,
+            )
 
     # Add overall title
-    title = 'MCMC Convergence Diagnostics'
+    title = "MCMC Convergence Diagnostics"
     if is_cmc:
-        title += f' (CMC: {result.num_shards} shards)'
-    fig.suptitle(title, fontsize=14, fontweight='bold', y=0.995)
+        title += f" (CMC: {result.num_shards} shards)"
+    fig.suptitle(title, fontsize=14, fontweight="bold", y=0.995)
 
     plt.tight_layout()
 
     # Save or show
     if save_path is not None:
-        fig.savefig(save_path, dpi=dpi, bbox_inches='tight')
+        fig.savefig(save_path, dpi=dpi, bbox_inches="tight")
         logger.info(f"Convergence diagnostics saved to {save_path}")
 
     if show:
@@ -468,45 +523,68 @@ def _plot_rhat(ax, result, param_names, threshold, is_cmc):
         rhat_matrix = np.full((num_shards, num_params), np.nan)
 
         for shard_idx, shard_diag in enumerate(result.per_shard_diagnostics):
-            if 'rhat' in shard_diag and shard_diag['rhat'] is not None:
+            if "rhat" in shard_diag and shard_diag["rhat"] is not None:
                 for param_idx in range(num_params):
-                    param_key = f'param_{param_idx}'
-                    if param_key in shard_diag['rhat']:
-                        rhat_matrix[shard_idx, param_idx] = shard_diag['rhat'][param_key]
+                    param_key = f"param_{param_idx}"
+                    if param_key in shard_diag["rhat"]:
+                        rhat_matrix[shard_idx, param_idx] = shard_diag["rhat"][
+                            param_key
+                        ]
 
         # Plot as grouped bar chart
         x = np.arange(num_params)
         width = 0.8 / num_shards if num_shards < 10 else 0.8 / 10
 
-        for shard_idx in range(min(num_shards, 10)):  # Limit to first 10 shards for clarity
+        for shard_idx in range(
+            min(num_shards, 10)
+        ):  # Limit to first 10 shards for clarity
             offset = (shard_idx - num_shards / 2) * width
             values = rhat_matrix[shard_idx, :]
 
             # Color based on convergence
-            colors = ['green' if v < threshold else 'red' for v in values]
-            ax.bar(x + offset, values, width, label=f'Shard {shard_idx}', color=colors, alpha=0.7)
+            colors = ["green" if v < threshold else "red" for v in values]
+            ax.bar(
+                x + offset,
+                values,
+                width,
+                label=f"Shard {shard_idx}",
+                color=colors,
+                alpha=0.7,
+            )
 
-        ax.axhline(y=threshold, color='red', linestyle='--', linewidth=2, label=f'Threshold ({threshold})')
-        ax.set_xlabel('Parameter')
-        ax.set_ylabel('R-hat')
-        ax.set_title('R-hat Convergence Diagnostic (per shard)')
+        ax.axhline(
+            y=threshold,
+            color="red",
+            linestyle="--",
+            linewidth=2,
+            label=f"Threshold ({threshold})",
+        )
+        ax.set_xlabel("Parameter")
+        ax.set_ylabel("R-hat")
+        ax.set_title("R-hat Convergence Diagnostic (per shard)")
         ax.set_xticks(x)
-        ax.set_xticklabels(param_names, rotation=45, ha='right')
-        ax.legend(loc='upper right', fontsize=8, ncol=2)
-        ax.grid(True, alpha=0.3, axis='y')
+        ax.set_xticklabels(param_names, rotation=45, ha="right")
+        ax.legend(loc="upper right", fontsize=8, ncol=2)
+        ax.grid(True, alpha=0.3, axis="y")
 
     else:
         # Standard NUTS: Plot combined R-hat
         if result.r_hat is None:
-            ax.text(0.5, 0.5, 'R-hat not available\n(requires multiple chains)',
-                   ha='center', va='center', transform=ax.transAxes)
+            ax.text(
+                0.5,
+                0.5,
+                "R-hat not available\n(requires multiple chains)",
+                ha="center",
+                va="center",
+                transform=ax.transAxes,
+            )
             return
 
         # Extract R-hat values
         rhat_values = []
         for param_name in param_names:
             # Try different key formats
-            for key in [param_name, param_name.lower(), param_name.replace('_', '')]:
+            for key in [param_name, param_name.lower(), param_name.replace("_", "")]:
                 if key in result.r_hat:
                     rhat_values.append(result.r_hat[key])
                     break
@@ -515,17 +593,23 @@ def _plot_rhat(ax, result, param_names, threshold, is_cmc):
 
         # Plot as bar chart
         x = np.arange(len(param_names))
-        colors = ['green' if v < threshold else 'red' for v in rhat_values]
+        colors = ["green" if v < threshold else "red" for v in rhat_values]
 
         ax.bar(x, rhat_values, color=colors, alpha=0.7)
-        ax.axhline(y=threshold, color='red', linestyle='--', linewidth=2, label=f'Threshold ({threshold})')
-        ax.set_xlabel('Parameter')
-        ax.set_ylabel('R-hat')
-        ax.set_title('R-hat Convergence Diagnostic')
+        ax.axhline(
+            y=threshold,
+            color="red",
+            linestyle="--",
+            linewidth=2,
+            label=f"Threshold ({threshold})",
+        )
+        ax.set_xlabel("Parameter")
+        ax.set_ylabel("R-hat")
+        ax.set_title("R-hat Convergence Diagnostic")
         ax.set_xticks(x)
-        ax.set_xticklabels(param_names, rotation=45, ha='right')
+        ax.set_xticklabels(param_names, rotation=45, ha="right")
         ax.legend()
-        ax.grid(True, alpha=0.3, axis='y')
+        ax.grid(True, alpha=0.3, axis="y")
 
 
 def _plot_ess(ax, result, param_names, threshold, is_cmc):
@@ -539,11 +623,11 @@ def _plot_ess(ax, result, param_names, threshold, is_cmc):
         ess_matrix = np.full((num_shards, num_params), np.nan)
 
         for shard_idx, shard_diag in enumerate(result.per_shard_diagnostics):
-            if 'ess' in shard_diag and shard_diag['ess'] is not None:
+            if "ess" in shard_diag and shard_diag["ess"] is not None:
                 for param_idx in range(num_params):
-                    param_key = f'param_{param_idx}'
-                    if param_key in shard_diag['ess']:
-                        ess_matrix[shard_idx, param_idx] = shard_diag['ess'][param_key]
+                    param_key = f"param_{param_idx}"
+                    if param_key in shard_diag["ess"]:
+                        ess_matrix[shard_idx, param_idx] = shard_diag["ess"][param_key]
 
         # Plot as grouped bar chart
         x = np.arange(num_params)
@@ -554,30 +638,49 @@ def _plot_ess(ax, result, param_names, threshold, is_cmc):
             values = ess_matrix[shard_idx, :]
 
             # Color based on adequacy
-            colors = ['green' if v > threshold else 'orange' for v in values]
-            ax.bar(x + offset, values, width, label=f'Shard {shard_idx}', color=colors, alpha=0.7)
+            colors = ["green" if v > threshold else "orange" for v in values]
+            ax.bar(
+                x + offset,
+                values,
+                width,
+                label=f"Shard {shard_idx}",
+                color=colors,
+                alpha=0.7,
+            )
 
-        ax.axhline(y=threshold, color='red', linestyle='--', linewidth=2, label=f'Threshold ({threshold})')
-        ax.set_xlabel('Parameter')
-        ax.set_ylabel('Effective Sample Size (ESS)')
-        ax.set_title('ESS Diagnostic (per shard)')
+        ax.axhline(
+            y=threshold,
+            color="red",
+            linestyle="--",
+            linewidth=2,
+            label=f"Threshold ({threshold})",
+        )
+        ax.set_xlabel("Parameter")
+        ax.set_ylabel("Effective Sample Size (ESS)")
+        ax.set_title("ESS Diagnostic (per shard)")
         ax.set_xticks(x)
-        ax.set_xticklabels(param_names, rotation=45, ha='right')
-        ax.legend(loc='upper right', fontsize=8, ncol=2)
-        ax.grid(True, alpha=0.3, axis='y')
+        ax.set_xticklabels(param_names, rotation=45, ha="right")
+        ax.legend(loc="upper right", fontsize=8, ncol=2)
+        ax.grid(True, alpha=0.3, axis="y")
 
     else:
         # Standard NUTS: Plot combined ESS
         if result.effective_sample_size is None:
-            ax.text(0.5, 0.5, 'ESS not available',
-                   ha='center', va='center', transform=ax.transAxes)
+            ax.text(
+                0.5,
+                0.5,
+                "ESS not available",
+                ha="center",
+                va="center",
+                transform=ax.transAxes,
+            )
             return
 
         # Extract ESS values
         ess_values = []
         for param_name in param_names:
             # Try different key formats
-            for key in [param_name, param_name.lower(), param_name.replace('_', '')]:
+            for key in [param_name, param_name.lower(), param_name.replace("_", "")]:
                 if key in result.effective_sample_size:
                     ess_values.append(result.effective_sample_size[key])
                     break
@@ -586,17 +689,23 @@ def _plot_ess(ax, result, param_names, threshold, is_cmc):
 
         # Plot as bar chart
         x = np.arange(len(param_names))
-        colors = ['green' if v > threshold else 'orange' for v in ess_values]
+        colors = ["green" if v > threshold else "orange" for v in ess_values]
 
         ax.bar(x, ess_values, color=colors, alpha=0.7)
-        ax.axhline(y=threshold, color='red', linestyle='--', linewidth=2, label=f'Threshold ({threshold})')
-        ax.set_xlabel('Parameter')
-        ax.set_ylabel('Effective Sample Size (ESS)')
-        ax.set_title('ESS Diagnostic')
+        ax.axhline(
+            y=threshold,
+            color="red",
+            linestyle="--",
+            linewidth=2,
+            label=f"Threshold ({threshold})",
+        )
+        ax.set_xlabel("Parameter")
+        ax.set_ylabel("Effective Sample Size (ESS)")
+        ax.set_title("ESS Diagnostic")
         ax.set_xticks(x)
-        ax.set_xticklabels(param_names, rotation=45, ha='right')
+        ax.set_xticklabels(param_names, rotation=45, ha="right")
         ax.legend()
-        ax.grid(True, alpha=0.3, axis='y')
+        ax.grid(True, alpha=0.3, axis="y")
 
 
 def plot_posterior_comparison(
@@ -652,7 +761,7 @@ def plot_posterior_comparison(
     - Poor agreement: Shards show different modes
     """
     # Check if CMC result
-    is_cmc = result.is_cmc_result() if hasattr(result, 'is_cmc_result') else False
+    is_cmc = result.is_cmc_result() if hasattr(result, "is_cmc_result") else False
 
     if not is_cmc:
         raise ValueError("Posterior comparison is only available for CMC results")
@@ -661,7 +770,9 @@ def plot_posterior_comparison(
         raise ValueError("Per-shard diagnostics not available")
 
     # Extract samples
-    num_params = result.samples_params.shape[-1] if result.samples_params is not None else 0
+    num_params = (
+        result.samples_params.shape[-1] if result.samples_params is not None else 0
+    )
 
     # Select parameters to plot
     if param_indices is None:
@@ -681,12 +792,19 @@ def plot_posterior_comparison(
 
     # Get parameter names
     if result.analysis_mode == "static_isotropic":
-        param_names = ['D0', 'alpha', 'D_offset']
+        param_names = ["D0", "alpha", "D_offset"]
     elif result.analysis_mode == "laminar_flow":
-        param_names = ['D0', 'alpha', 'D_offset', 'gamma_dot_t0', 'beta',
-                      'gamma_dot_t_offset', 'phi0']
+        param_names = [
+            "D0",
+            "alpha",
+            "D_offset",
+            "gamma_dot_t0",
+            "beta",
+            "gamma_dot_t_offset",
+            "phi0",
+        ]
     else:
-        param_names = [f'param_{i}' for i in range(num_params)]
+        param_names = [f"param_{i}" for i in range(num_params)]
 
     # Plot each parameter
     for plot_idx, param_idx in enumerate(param_indices):
@@ -697,50 +815,64 @@ def plot_posterior_comparison(
         colors = plt.cm.tab10(np.linspace(0, 1, num_shards))
 
         for shard_idx, shard_diag in enumerate(result.per_shard_diagnostics):
-            if 'trace_data' in shard_diag:
-                trace_key = f'param_{param_idx}'
-                if trace_key in shard_diag['trace_data']:
-                    trace = np.array(shard_diag['trace_data'][trace_key])
+            if "trace_data" in shard_diag:
+                trace_key = f"param_{param_idx}"
+                if trace_key in shard_diag["trace_data"]:
+                    trace = np.array(shard_diag["trace_data"][trace_key])
 
                     # Flatten if multi-chain
                     if trace.ndim == 2:
                         trace = trace.flatten()
 
                     # Plot histogram
-                    ax.hist(trace, bins=bins, alpha=0.3,
-                           color=colors[shard_idx],
-                           density=True,
-                           label=f'Shard {shard_idx}' if num_shards <= 10 else '')
+                    ax.hist(
+                        trace,
+                        bins=bins,
+                        alpha=0.3,
+                        color=colors[shard_idx],
+                        density=True,
+                        label=f"Shard {shard_idx}" if num_shards <= 10 else "",
+                    )
 
         # Plot combined posterior
         if result.samples_params is not None:
             combined_samples = result.samples_params[:, param_idx]
-            ax.hist(combined_samples, bins=bins, alpha=0.5,
-                   color='black', density=True,
-                   histtype='step', linewidth=2,
-                   label='Combined')
+            ax.hist(
+                combined_samples,
+                bins=bins,
+                alpha=0.5,
+                color="black",
+                density=True,
+                histtype="step",
+                linewidth=2,
+                label="Combined",
+            )
 
         ax.set_xlabel(param_names[param_idx])
-        ax.set_ylabel('Density')
-        ax.set_title(f'{param_names[param_idx]} Posterior')
+        ax.set_ylabel("Density")
+        ax.set_title(f"{param_names[param_idx]} Posterior")
 
         # Add legend for first subplot only
         if plot_idx == 0 and num_shards <= 10:
-            ax.legend(loc='upper right', fontsize=8)
+            ax.legend(loc="upper right", fontsize=8)
 
     # Hide unused subplots
     for idx in range(num_plots, len(axes)):
         axes[idx].set_visible(False)
 
     # Add overall title
-    fig.suptitle(f'Posterior Comparison (CMC: {result.num_shards} shards)',
-                fontsize=14, fontweight='bold', y=0.995)
+    fig.suptitle(
+        f"Posterior Comparison (CMC: {result.num_shards} shards)",
+        fontsize=14,
+        fontweight="bold",
+        y=0.995,
+    )
 
     plt.tight_layout()
 
     # Save or show
     if save_path is not None:
-        fig.savefig(save_path, dpi=dpi, bbox_inches='tight')
+        fig.savefig(save_path, dpi=dpi, bbox_inches="tight")
         logger.info(f"Posterior comparison saved to {save_path}")
 
     if show:
@@ -798,7 +930,7 @@ def plot_cmc_summary_dashboard(
     and posterior quality in a single figure.
     """
     # Check if CMC result
-    is_cmc = result.is_cmc_result() if hasattr(result, 'is_cmc_result') else False
+    is_cmc = result.is_cmc_result() if hasattr(result, "is_cmc_result") else False
 
     if not is_cmc:
         raise ValueError("Summary dashboard is only available for CMC results")
@@ -810,36 +942,60 @@ def plot_cmc_summary_dashboard(
     # Panel 1: KL divergence matrix (top left)
     ax_kl = fig.add_subplot(gs[0, 0])
     try:
-        if result.cmc_diagnostics is not None and 'kl_matrix' in result.cmc_diagnostics:
-            kl_matrix = np.array(result.cmc_diagnostics['kl_matrix'])
+        if result.cmc_diagnostics is not None and "kl_matrix" in result.cmc_diagnostics:
+            kl_matrix = np.array(result.cmc_diagnostics["kl_matrix"])
             num_shards = kl_matrix.shape[0]
             threshold = 2.0
 
-            im = ax_kl.imshow(kl_matrix, cmap='coolwarm', aspect='auto', vmin=0, vmax=max(threshold * 1.5, kl_matrix.max()))
-            plt.colorbar(im, ax=ax_kl, label='KL Divergence')
+            im = ax_kl.imshow(
+                kl_matrix,
+                cmap="coolwarm",
+                aspect="auto",
+                vmin=0,
+                vmax=max(threshold * 1.5, kl_matrix.max()),
+            )
+            plt.colorbar(im, ax=ax_kl, label="KL Divergence")
 
             # Annotate cells
             for i in range(num_shards):
                 for j in range(num_shards):
                     kl_val = kl_matrix[i, j]
-                    text_color = 'white' if kl_val > threshold else 'black'
-                    ax_kl.text(j, i, f'{kl_val:.2f}',
-                             ha="center", va="center",
-                             color=text_color, fontsize=7)
+                    text_color = "white" if kl_val > threshold else "black"
+                    ax_kl.text(
+                        j,
+                        i,
+                        f"{kl_val:.2f}",
+                        ha="center",
+                        va="center",
+                        color=text_color,
+                        fontsize=7,
+                    )
 
             ax_kl.set_xticks(np.arange(num_shards))
             ax_kl.set_yticks(np.arange(num_shards))
-            ax_kl.set_xticklabels([f'S{i}' for i in range(num_shards)], fontsize=8)
-            ax_kl.set_yticklabels([f'S{i}' for i in range(num_shards)], fontsize=8)
-            ax_kl.set_xlabel('Shard Index', fontsize=9)
-            ax_kl.set_ylabel('Shard Index', fontsize=9)
-            ax_kl.set_title('KL Divergence Matrix', fontsize=10, fontweight='bold')
+            ax_kl.set_xticklabels([f"S{i}" for i in range(num_shards)], fontsize=8)
+            ax_kl.set_yticklabels([f"S{i}" for i in range(num_shards)], fontsize=8)
+            ax_kl.set_xlabel("Shard Index", fontsize=9)
+            ax_kl.set_ylabel("Shard Index", fontsize=9)
+            ax_kl.set_title("KL Divergence Matrix", fontsize=10, fontweight="bold")
         else:
-            ax_kl.text(0.5, 0.5, 'KL matrix not available',
-                      ha='center', va='center', transform=ax_kl.transAxes)
+            ax_kl.text(
+                0.5,
+                0.5,
+                "KL matrix not available",
+                ha="center",
+                va="center",
+                transform=ax_kl.transAxes,
+            )
     except Exception as e:
-        ax_kl.text(0.5, 0.5, f'Error plotting KL matrix:\n{str(e)}',
-                  ha='center', va='center', transform=ax_kl.transAxes)
+        ax_kl.text(
+            0.5,
+            0.5,
+            f"Error plotting KL matrix:\n{str(e)}",
+            ha="center",
+            va="center",
+            transform=ax_kl.transAxes,
+        )
 
     # Panel 2: Convergence diagnostics (top right)
     ax_conv = fig.add_subplot(gs[0, 1])
@@ -851,16 +1007,18 @@ def plot_cmc_summary_dashboard(
 
             # Get parameter names
             if result.analysis_mode == "static_isotropic":
-                param_names = ['D0', 'alpha', 'D_offset'][:num_params]
+                param_names = ["D0", "alpha", "D_offset"][:num_params]
             else:
-                param_names = [f'P{i}' for i in range(num_params)]
+                param_names = [f"P{i}" for i in range(num_params)]
 
             # Collect ESS values
             ess_matrix = []
             for shard_diag in result.per_shard_diagnostics:
-                if 'ess' in shard_diag and shard_diag['ess'] is not None:
-                    ess_vals = [shard_diag['ess'].get(f'param_{i}', np.nan)
-                               for i in range(num_params)]
+                if "ess" in shard_diag and shard_diag["ess"] is not None:
+                    ess_vals = [
+                        shard_diag["ess"].get(f"param_{i}", np.nan)
+                        for i in range(num_params)
+                    ]
                     ess_matrix.append(ess_vals)
 
             if ess_matrix:
@@ -868,26 +1026,48 @@ def plot_cmc_summary_dashboard(
 
                 # Plot as box plot
                 positions = np.arange(num_params)
-                bp = ax_conv.boxplot([ess_matrix[:, i] for i in range(num_params)],
-                                    positions=positions,
-                                    labels=param_names,
-                                    patch_artist=True)
+                bp = ax_conv.boxplot(
+                    [ess_matrix[:, i] for i in range(num_params)],
+                    positions=positions,
+                    labels=param_names,
+                    patch_artist=True,
+                )
 
                 # Color boxes
-                for patch in bp['boxes']:
-                    patch.set_facecolor('lightblue')
+                for patch in bp["boxes"]:
+                    patch.set_facecolor("lightblue")
 
-                ax_conv.axhline(y=100, color='red', linestyle='--', linewidth=2, label='ESS threshold (100)')
-                ax_conv.set_ylabel('Effective Sample Size', fontsize=9)
-                ax_conv.set_title('ESS Distribution Across Shards', fontsize=10, fontweight='bold')
+                ax_conv.axhline(
+                    y=100,
+                    color="red",
+                    linestyle="--",
+                    linewidth=2,
+                    label="ESS threshold (100)",
+                )
+                ax_conv.set_ylabel("Effective Sample Size", fontsize=9)
+                ax_conv.set_title(
+                    "ESS Distribution Across Shards", fontsize=10, fontweight="bold"
+                )
                 ax_conv.legend(fontsize=8)
-                ax_conv.grid(True, alpha=0.3, axis='y')
+                ax_conv.grid(True, alpha=0.3, axis="y")
         else:
-            ax_conv.text(0.5, 0.5, 'Convergence diagnostics not available',
-                        ha='center', va='center', transform=ax_conv.transAxes)
+            ax_conv.text(
+                0.5,
+                0.5,
+                "Convergence diagnostics not available",
+                ha="center",
+                va="center",
+                transform=ax_conv.transAxes,
+            )
     except Exception as e:
-        ax_conv.text(0.5, 0.5, f'Error plotting convergence:\n{str(e)}',
-                    ha='center', va='center', transform=ax_conv.transAxes)
+        ax_conv.text(
+            0.5,
+            0.5,
+            f"Error plotting convergence:\n{str(e)}",
+            ha="center",
+            va="center",
+            transform=ax_conv.transAxes,
+        )
 
     # Panel 3: Trace plots for first 3 parameters (middle row)
     num_trace_params = min(3, len(result.mean_params))
@@ -901,29 +1081,38 @@ def plot_cmc_summary_dashboard(
                 colors = plt.cm.tab10(np.linspace(0, 1, num_shards))
 
                 for shard_idx, shard_diag in enumerate(result.per_shard_diagnostics):
-                    if 'trace_data' in shard_diag:
-                        trace_key = f'param_{i}'
-                        if trace_key in shard_diag['trace_data']:
-                            trace = np.array(shard_diag['trace_data'][trace_key])
+                    if "trace_data" in shard_diag:
+                        trace_key = f"param_{i}"
+                        if trace_key in shard_diag["trace_data"]:
+                            trace = np.array(shard_diag["trace_data"][trace_key])
 
                             if trace.ndim == 2:
                                 trace = trace[0, :]  # Use first chain only
 
-                            ax_trace.plot(trace, color=colors[shard_idx],
-                                        alpha=0.6, linewidth=0.5)
+                            ax_trace.plot(
+                                trace, color=colors[shard_idx], alpha=0.6, linewidth=0.5
+                            )
 
                 if result.analysis_mode == "static_isotropic":
-                    param_names = ['D0', 'alpha', 'D_offset']
+                    param_names = ["D0", "alpha", "D_offset"]
                 else:
-                    param_names = [f'param_{i}' for i in range(len(result.mean_params))]
+                    param_names = [f"param_{i}" for i in range(len(result.mean_params))]
 
-                ax_trace.set_xlabel('Sample Index', fontsize=9)
+                ax_trace.set_xlabel("Sample Index", fontsize=9)
                 ax_trace.set_ylabel(param_names[i], fontsize=9)
-                ax_trace.set_title(f'{param_names[i]} Trace', fontsize=10, fontweight='bold')
+                ax_trace.set_title(
+                    f"{param_names[i]} Trace", fontsize=10, fontweight="bold"
+                )
                 ax_trace.grid(True, alpha=0.3)
         except Exception as e:
-            ax_trace.text(0.5, 0.5, f'Error:\n{str(e)}',
-                         ha='center', va='center', transform=ax_trace.transAxes)
+            ax_trace.text(
+                0.5,
+                0.5,
+                f"Error:\n{str(e)}",
+                ha="center",
+                va="center",
+                transform=ax_trace.transAxes,
+            )
 
     # Panel 4: Posterior histograms (bottom row)
     num_hist_params = min(2, len(result.mean_params))
@@ -935,34 +1124,55 @@ def plot_cmc_summary_dashboard(
             if result.samples_params is not None:
                 combined_samples = result.samples_params[:, i]
 
-                ax_hist.hist(combined_samples, bins=30, alpha=0.7,
-                           color='steelblue', density=True)
+                ax_hist.hist(
+                    combined_samples,
+                    bins=30,
+                    alpha=0.7,
+                    color="steelblue",
+                    density=True,
+                )
 
                 # Add vertical line for mean
                 mean_val = result.mean_params[i]
-                ax_hist.axvline(mean_val, color='red', linestyle='--',
-                              linewidth=2, label=f'Mean: {mean_val:.2f}')
+                ax_hist.axvline(
+                    mean_val,
+                    color="red",
+                    linestyle="--",
+                    linewidth=2,
+                    label=f"Mean: {mean_val:.2f}",
+                )
 
                 if result.analysis_mode == "static_isotropic":
-                    param_names = ['D0', 'alpha', 'D_offset']
+                    param_names = ["D0", "alpha", "D_offset"]
                 else:
-                    param_names = [f'param_{i}' for i in range(len(result.mean_params))]
+                    param_names = [f"param_{i}" for i in range(len(result.mean_params))]
 
                 ax_hist.set_xlabel(param_names[i], fontsize=9)
-                ax_hist.set_ylabel('Density', fontsize=9)
-                ax_hist.set_title(f'{param_names[i]} Posterior', fontsize=10, fontweight='bold')
+                ax_hist.set_ylabel("Density", fontsize=9)
+                ax_hist.set_title(
+                    f"{param_names[i]} Posterior", fontsize=10, fontweight="bold"
+                )
                 ax_hist.legend(fontsize=8)
         except Exception as e:
-            ax_hist.text(0.5, 0.5, f'Error:\n{str(e)}',
-                        ha='center', va='center', transform=ax_hist.transAxes)
+            ax_hist.text(
+                0.5,
+                0.5,
+                f"Error:\n{str(e)}",
+                ha="center",
+                va="center",
+                transform=ax_hist.transAxes,
+            )
 
     # Add overall title
-    fig.suptitle(f'CMC Summary Dashboard ({result.num_shards} shards, {result.analysis_mode})',
-                fontsize=14, fontweight='bold')
+    fig.suptitle(
+        f"CMC Summary Dashboard ({result.num_shards} shards, {result.analysis_mode})",
+        fontsize=14,
+        fontweight="bold",
+    )
 
     # Save or show
     if save_path is not None:
-        fig.savefig(save_path, dpi=dpi, bbox_inches='tight')
+        fig.savefig(save_path, dpi=dpi, bbox_inches="tight")
         logger.info(f"CMC summary dashboard saved to {save_path}")
 
     if show:
@@ -974,8 +1184,9 @@ def plot_cmc_summary_dashboard(
 def _create_empty_figure(message: str) -> Figure:
     """Create an empty figure with a message."""
     fig, ax = plt.subplots(figsize=(8, 6))
-    ax.text(0.5, 0.5, message, ha='center', va='center',
-           transform=ax.transAxes, fontsize=14)
+    ax.text(
+        0.5, 0.5, message, ha="center", va="center", transform=ax.transAxes, fontsize=14
+    )
     ax.set_xticks([])
     ax.set_yticks([])
     return fig

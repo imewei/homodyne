@@ -113,7 +113,7 @@ class TestAutomaticCMCSelectionParallelism:
                     "n_chains": 2,
                     "num_shards": 2,
                 }
-            }
+            },
         }
 
         # Verify CMC selection logic with parallelism criterion
@@ -130,10 +130,9 @@ class TestAutomaticCMCSelectionParallelism:
         )
 
         # Parallelism criterion: 20 >= 15 → True, should use CMC
-        assert use_cmc is True, (
-            f"CMC should be selected when num_samples=20 >= "
-            f"min_samples_for_cmc=15"
-        )
+        assert (
+            use_cmc is True
+        ), f"CMC should be selected when num_samples=20 >= min_samples_for_cmc=15"
 
     def test_cmc_selection_with_15_samples_boundary(self):
         """Test CMC selected at boundary (num_samples = 15).
@@ -153,9 +152,9 @@ class TestAutomaticCMCSelectionParallelism:
             memory_threshold_pct=0.30,
         )
 
-        assert use_cmc is True, (
-            "CMC should be selected when num_samples=15 (>= threshold)"
-        )
+        assert (
+            use_cmc is True
+        ), "CMC should be selected when num_samples=15 (>= threshold)"
 
     def test_nuts_selection_below_parallelism_threshold(self):
         """Test NUTS selected when num_samples < 15.
@@ -176,10 +175,9 @@ class TestAutomaticCMCSelectionParallelism:
             memory_threshold_pct=0.30,
         )
 
-        assert use_cmc is False, (
-            "NUTS should be selected when num_samples=10 < 15 "
-            "AND memory < 30%"
-        )
+        assert (
+            use_cmc is False
+        ), "NUTS should be selected when num_samples=10 < 15 AND memory < 30%"
 
 
 class TestAutomaticCMCSelectionMemory:
@@ -248,9 +246,7 @@ class TestAutomaticCMCSelectionMemory:
         )
 
         # Above boundary, should use CMC
-        assert use_cmc is True, (
-            "CMC should be selected when memory > 30% threshold"
-        )
+        assert use_cmc is True, "CMC should be selected when memory > 30% threshold"
 
 
 class TestNUTSSelectionFallback:
@@ -368,7 +364,7 @@ class TestCMCWithConfigLoadedParameters:
                     "min_samples_for_cmc": 15,
                     "memory_threshold_pct": 0.30,
                 }
-            }
+            },
         }
 
         # Load config and extract parameters
@@ -662,7 +658,7 @@ class TestCMCBackends:
                     "n_samples": 20,  # CMC threshold
                     "n_chains": 2,
                 }
-            }
+            },
         }
 
         # Both backends should work with valid config

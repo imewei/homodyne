@@ -91,7 +91,9 @@ class TestNLSQOptimization:
 
         # Parameter validation - parameters is now an array, not dict
         assert isinstance(result.parameters, np.ndarray)
-        assert len(result.parameters) == 5  # static_isotropic: [contrast, offset, D0, alpha, D_offset]
+        assert (
+            len(result.parameters) == 5
+        )  # static_isotropic: [contrast, offset, D0, alpha, D_offset]
 
         # Physical constraints - static_isotropic: [contrast, offset, D0, alpha, D_offset]
         offset = result.parameters[1]

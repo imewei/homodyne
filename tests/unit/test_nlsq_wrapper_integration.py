@@ -55,7 +55,7 @@ def mock_xpcs_data():
 
             # Generate synthetic g2 data: g2 ≈ 1.0 + contrast * exp(-rate * t)
             phi_grid, t1_grid, t2_grid = np.meshgrid(
-                self.phi, self.t1, self.t2, indexing='ij'
+                self.phi, self.t1, self.t2, indexing="ij"
             )
             decay_rate = 1.0
             contrast = 0.3
@@ -80,14 +80,14 @@ def mock_config():
     class MockConfig:
         def __init__(self):
             self.config = {
-                'performance': {
-                    'enable_progress': False,  # Disable for cleaner test output
+                "performance": {
+                    "enable_progress": False,  # Disable for cleaner test output
                 },
-                'optimization': {
-                    'streaming': {
-                        'enable_checkpoints': False,  # Disable for test speed
+                "optimization": {
+                    "streaming": {
+                        "enable_checkpoints": False,  # Disable for test speed
                     }
-                }
+                },
             }
 
         def get_config_dict(self):
@@ -148,13 +148,19 @@ def test_standard_strategy_small_dataset(
     assert isinstance(result, OptimizationResult)
     assert result.parameters.shape == static_isotropic_params.shape
     assert result.uncertainties.shape == static_isotropic_params.shape
-    assert result.covariance.shape == (len(static_isotropic_params), len(static_isotropic_params))
+    assert result.covariance.shape == (
+        len(static_isotropic_params),
+        len(static_isotropic_params),
+    )
     assert result.chi_squared >= 0
     assert result.iterations >= 0
     assert result.execution_time >= 0
 
     # Check convergence
-    assert result.success is True or result.convergence_status in ["converged", "converged_with_recovery"]
+    assert result.success is True or result.convergence_status in [
+        "converged",
+        "converged_with_recovery",
+    ]
 
 
 def test_large_strategy_medium_dataset(
@@ -174,7 +180,9 @@ def test_large_strategy_medium_dataset(
     )
 
     # Mock dataset size detection to force LARGE strategy
-    with patch('homodyne.optimization.nlsq_wrapper.NLSQWrapper._prepare_data') as mock_prepare:
+    with patch(
+        "homodyne.optimization.nlsq_wrapper.NLSQWrapper._prepare_data"
+    ) as mock_prepare:
         # Simulate 2M points (within LARGE range: 1M - 10M)
         xdata = np.arange(2_000_000, dtype=np.float64)
         ydata = np.random.randn(2_000_000) * 0.01 + 1.0
@@ -201,7 +209,7 @@ def test_streaming_strategy_huge_dataset(
     )
 
     # Check that _fit_with_streaming_optimizer method exists
-    assert hasattr(wrapper, '_fit_with_streaming_optimizer')
+    assert hasattr(wrapper, "_fit_with_streaming_optimizer")
 
 
 # ============================================================================
@@ -214,13 +222,22 @@ def test_fallback_chain_standard_to_none():
     wrapper = NLSQWrapper()
 
     # STREAMING → CHUNKED
-    assert wrapper._get_fallback_strategy(OptimizationStrategy.STREAMING) == OptimizationStrategy.CHUNKED
+    assert (
+        wrapper._get_fallback_strategy(OptimizationStrategy.STREAMING)
+        == OptimizationStrategy.CHUNKED
+    )
 
     # CHUNKED → LARGE
-    assert wrapper._get_fallback_strategy(OptimizationStrategy.CHUNKED) == OptimizationStrategy.LARGE
+    assert (
+        wrapper._get_fallback_strategy(OptimizationStrategy.CHUNKED)
+        == OptimizationStrategy.LARGE
+    )
 
     # LARGE → STANDARD
-    assert wrapper._get_fallback_strategy(OptimizationStrategy.LARGE) == OptimizationStrategy.STANDARD
+    assert (
+        wrapper._get_fallback_strategy(OptimizationStrategy.LARGE)
+        == OptimizationStrategy.STANDARD
+    )
 
     # STANDARD → None (no more fallbacks)
     assert wrapper._get_fallback_strategy(OptimizationStrategy.STANDARD) is None
@@ -239,9 +256,10 @@ def test_fallback_chain_execution(
 
     # Force wrapper to use LARGE strategy by mocking dataset size
     # Then make LARGE fail, which should trigger fallback to STANDARD
-    with patch('homodyne.optimization.nlsq_wrapper.curve_fit_large') as mock_large, \
-         patch.object(wrapper, '_prepare_data') as mock_prepare:
-
+    with (
+        patch("homodyne.optimization.nlsq_wrapper.curve_fit_large") as mock_large,
+        patch.object(wrapper, "_prepare_data") as mock_prepare,
+    ):
         # Mock large dataset (triggers LARGE strategy)
         xdata_large = np.arange(2_000_000, dtype=np.float64)
         ydata_large = np.random.randn(2_000_000) * 0.01 + 1.0
@@ -263,7 +281,7 @@ def test_fallback_chain_execution(
         assert result.success is True
 
         # Check recovery action was recorded
-        assert any('fallback' in action.lower() for action in result.recovery_actions)
+        assert any("fallback" in action.lower() for action in result.recovery_actions)
 
 
 # ============================================================================
@@ -303,7 +321,7 @@ def test_error_recovery_detects_stagnation(
     wrapper = NLSQWrapper(enable_large_dataset=True, enable_recovery=True)
 
     # Mock NLSQ to return unchanged parameters (simulate bug)
-    with patch('homodyne.optimization.nlsq_wrapper.curve_fit') as mock_fit:
+    with patch("homodyne.optimization.nlsq_wrapper.curve_fit") as mock_fit:
         # Return unchanged parameters and identity covariance
         mock_fit.return_value = (
             static_isotropic_params.copy(),  # Unchanged
@@ -321,7 +339,9 @@ def test_error_recovery_detects_stagnation(
             )
 
             # Check if stagnation was detected
-            assert any('stagnation' in action.lower() for action in result.recovery_actions)
+            assert any(
+                "stagnation" in action.lower() for action in result.recovery_actions
+            )
         except RuntimeError:
             # May fail after all retries, which is acceptable
             pass
@@ -343,9 +363,9 @@ def test_diagnose_error_oom(
         attempt=0,
     )
 
-    assert diagnostic['error_type'] == 'out_of_memory'
-    assert 'CPU' in ' '.join(diagnostic['suggestions'])
-    assert diagnostic['recovery_strategy']['action'] == 'no_recovery_available'
+    assert diagnostic["error_type"] == "out_of_memory"
+    assert "CPU" in " ".join(diagnostic["suggestions"])
+    assert diagnostic["recovery_strategy"]["action"] == "no_recovery_available"
 
 
 def test_diagnose_error_convergence(
@@ -363,9 +383,12 @@ def test_diagnose_error_convergence(
         attempt=0,
     )
 
-    assert diagnostic['error_type'] == 'convergence_failure'
-    assert 'perturb' in diagnostic['recovery_strategy']['action'].lower()
-    assert diagnostic['recovery_strategy']['new_params'].shape == static_isotropic_params.shape
+    assert diagnostic["error_type"] == "convergence_failure"
+    assert "perturb" in diagnostic["recovery_strategy"]["action"].lower()
+    assert (
+        diagnostic["recovery_strategy"]["new_params"].shape
+        == static_isotropic_params.shape
+    )
 
 
 # ============================================================================
@@ -393,7 +416,7 @@ def test_handle_nlsq_result_tuple_3_elements():
     """Test _handle_nlsq_result with (popt, pcov, info) tuple."""
     popt = np.array([1.0, 2.0, 3.0])
     pcov = np.eye(3)
-    info_dict = {'nfev': 100, 'success': True}
+    info_dict = {"nfev": 100, "success": True}
 
     result = (popt, pcov, info_dict)
     normalized_popt, normalized_pcov, info = NLSQWrapper._handle_nlsq_result(
@@ -402,8 +425,8 @@ def test_handle_nlsq_result_tuple_3_elements():
 
     assert np.allclose(normalized_popt, popt)
     assert np.allclose(normalized_pcov, pcov)
-    assert info['nfev'] == 100
-    assert info['success'] is True
+    assert info["nfev"] == 100
+    assert info["success"] is True
 
 
 def test_handle_nlsq_result_object_with_attributes():
@@ -424,31 +447,31 @@ def test_handle_nlsq_result_object_with_attributes():
 
     assert np.allclose(normalized_popt, result.popt)
     assert np.allclose(normalized_pcov, result.pcov)
-    assert info['success'] is True
-    assert info['nfev'] == 50
+    assert info["success"] is True
+    assert info["nfev"] == 50
 
 
 def test_handle_nlsq_result_dict_streaming():
     """Test _handle_nlsq_result with dict (StreamingOptimizer format)."""
     result_dict = {
-        'x': np.array([1.0, 2.0, 3.0]),
-        'pcov': np.eye(3),
-        'streaming_diagnostics': {
-            'batch_success_rate': 0.95,
-            'total_batches': 100,
+        "x": np.array([1.0, 2.0, 3.0]),
+        "pcov": np.eye(3),
+        "streaming_diagnostics": {
+            "batch_success_rate": 0.95,
+            "total_batches": 100,
         },
-        'success': True,
-        'best_loss': 0.123,
+        "success": True,
+        "best_loss": 0.123,
     }
 
     normalized_popt, normalized_pcov, info = NLSQWrapper._handle_nlsq_result(
         result_dict, OptimizationStrategy.STREAMING
     )
 
-    assert np.allclose(normalized_popt, result_dict['x'])
-    assert np.allclose(normalized_pcov, result_dict['pcov'])
-    assert 'streaming_diagnostics' in info
-    assert info['streaming_diagnostics']['batch_success_rate'] == 0.95
+    assert np.allclose(normalized_popt, result_dict["x"])
+    assert np.allclose(normalized_pcov, result_dict["pcov"])
+    assert "streaming_diagnostics" in info
+    assert info["streaming_diagnostics"]["batch_success_rate"] == 0.95
 
 
 def test_handle_nlsq_result_invalid_format():
@@ -481,11 +504,11 @@ def test_optimization_result_includes_diagnostics(
     )
 
     # Check diagnostic fields exist
-    assert hasattr(result, 'recovery_actions')
-    assert hasattr(result, 'quality_flag')
-    assert hasattr(result, 'device_info')
+    assert hasattr(result, "recovery_actions")
+    assert hasattr(result, "quality_flag")
+    assert hasattr(result, "device_info")
     assert isinstance(result.recovery_actions, list)
-    assert result.quality_flag in ['good', 'marginal', 'poor']
+    assert result.quality_flag in ["good", "marginal", "poor"]
 
 
 def test_batch_statistics_tracking():
@@ -497,7 +520,14 @@ def test_batch_statistics_tracking():
     # Record some batches
     stats.record_batch(0, success=True, loss=1.0, iterations=50, recovery_actions=[])
     stats.record_batch(1, success=True, loss=0.9, iterations=45, recovery_actions=[])
-    stats.record_batch(2, success=False, loss=2.0, iterations=100, recovery_actions=['retry'], error_type='convergence')
+    stats.record_batch(
+        2,
+        success=False,
+        loss=2.0,
+        iterations=100,
+        recovery_actions=["retry"],
+        error_type="convergence",
+    )
 
     # Check statistics
     assert stats.total_batches == 3
@@ -506,8 +536,8 @@ def test_batch_statistics_tracking():
     assert stats.get_success_rate() == pytest.approx(2.0 / 3.0)
 
     full_stats = stats.get_statistics()
-    assert full_stats['total_batches'] == 3
-    assert 'convergence' in full_stats['error_distribution']
+    assert full_stats["total_batches"] == 3
+    assert "convergence" in full_stats["error_distribution"]
 
 
 # ============================================================================
@@ -527,7 +557,7 @@ def test_checkpoint_manager_save_load(tmp_path):
 
     # Save checkpoint
     params = np.array([1.0, 2.0, 3.0])
-    optimizer_state = {'iteration': 42, 'loss_history': [1.0, 0.9, 0.8]}
+    optimizer_state = {"iteration": 42, "loss_history": [1.0, 0.9, 0.8]}
     loss = 0.5
 
     checkpoint_path = manager.save_checkpoint(
@@ -542,10 +572,10 @@ def test_checkpoint_manager_save_load(tmp_path):
     # Load checkpoint
     loaded = manager.load_checkpoint(checkpoint_path)
 
-    assert loaded['batch_idx'] == 10
-    assert np.allclose(loaded['parameters'], params)
-    assert loaded['loss'] == loss
-    assert loaded['optimizer_state']['iteration'] == 42
+    assert loaded["batch_idx"] == 10
+    assert np.allclose(loaded["parameters"], params)
+    assert loaded["loss"] == loss
+    assert loaded["optimizer_state"]["iteration"] == 42
 
 
 def test_checkpoint_manager_find_latest(tmp_path):
@@ -560,7 +590,7 @@ def test_checkpoint_manager_find_latest(tmp_path):
         manager.save_checkpoint(
             batch_idx=batch_idx,
             parameters=params * batch_idx,
-            optimizer_state={'iteration': batch_idx},
+            optimizer_state={"iteration": batch_idx},
             loss=1.0 / batch_idx,
         )
 
@@ -569,7 +599,7 @@ def test_checkpoint_manager_find_latest(tmp_path):
     assert latest is not None
 
     loaded = manager.load_checkpoint(latest)
-    assert loaded['batch_idx'] == 30
+    assert loaded["batch_idx"] == 30
 
 
 def test_checkpoint_manager_cleanup(tmp_path):
@@ -694,14 +724,16 @@ def test_fast_mode_minimal_overhead(
 def test_summary_all_strategies_tested():
     """Meta-test: Verify we've tested all 4 strategies."""
     strategies_tested = {
-        'STANDARD',  # test_standard_strategy_small_dataset
-        'LARGE',     # test_large_strategy_medium_dataset
-        'CHUNKED',   # (implicit in fallback tests)
-        'STREAMING', # test_streaming_strategy_huge_dataset
+        "STANDARD",  # test_standard_strategy_small_dataset
+        "LARGE",  # test_large_strategy_medium_dataset
+        "CHUNKED",  # (implicit in fallback tests)
+        "STREAMING",  # test_streaming_strategy_huge_dataset
     }
 
     all_strategies = {s.name for s in OptimizationStrategy}
-    assert strategies_tested == all_strategies, f"Missing tests for: {all_strategies - strategies_tested}"
+    assert (
+        strategies_tested == all_strategies
+    ), f"Missing tests for: {all_strategies - strategies_tested}"
 
 
 if __name__ == "__main__":

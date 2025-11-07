@@ -42,12 +42,12 @@ def mock_stratified_data_small():
             self.dt = dt
 
     # Generate data
-    phi_vals = np.array([0.0, np.pi/4, np.pi/2])  # 3 angles
+    phi_vals = np.array([0.0, np.pi / 4, np.pi / 2])  # 3 angles
     t1_vals = np.linspace(0.001, 1.0, 10)
     t2_vals = np.linspace(0.001, 1.0, 10)
 
     # Create meshgrid
-    phi_grid, t1_grid, t2_grid = np.meshgrid(phi_vals, t1_vals, t2_vals, indexing='ij')
+    phi_grid, t1_grid, t2_grid = np.meshgrid(phi_vals, t1_vals, t2_vals, indexing="ij")
 
     # Create sigma (3D array: n_phi × n_t1 × n_t2) - stored at parent level
     sigma = np.ones((n_phi, len(t1_vals), len(t2_vals))) * 0.1
@@ -103,17 +103,27 @@ def mock_stratified_data_small():
 @pytest.fixture
 def physical_param_names_static():
     """Physical parameter names for static_isotropic mode."""
-    return ['D0', 'alpha', 'D_offset']
+    return ["D0", "alpha", "D_offset"]
 
 
 @pytest.fixture
 def physical_param_names_laminar():
     """Physical parameter names for laminar_flow mode."""
-    return ['D0', 'alpha', 'D_offset', 'gamma_dot_0', 'beta', 'gamma_dot_offset', 'phi0']
+    return [
+        "D0",
+        "alpha",
+        "D_offset",
+        "gamma_dot_0",
+        "beta",
+        "gamma_dot_offset",
+        "phi0",
+    ]
 
 
 # Test 1: Initialization
-def test_initialization_per_angle_scaling(mock_stratified_data_small, physical_param_names_static):
+def test_initialization_per_angle_scaling(
+    mock_stratified_data_small, physical_param_names_static
+):
     """Test StratifiedResidualFunction initialization with per-angle scaling."""
     residual_fn = StratifiedResidualFunction(
         stratified_data=mock_stratified_data_small,
@@ -129,7 +139,9 @@ def test_initialization_per_angle_scaling(mock_stratified_data_small, physical_p
     assert residual_fn.n_total_params == 9  # 6 scaling + 3 physical
 
 
-def test_initialization_legacy_scaling(mock_stratified_data_small, physical_param_names_static):
+def test_initialization_legacy_scaling(
+    mock_stratified_data_small, physical_param_names_static
+):
     """Test StratifiedResidualFunction initialization with legacy scaling."""
     residual_fn = StratifiedResidualFunction(
         stratified_data=mock_stratified_data_small,
@@ -145,7 +157,9 @@ def test_initialization_legacy_scaling(mock_stratified_data_small, physical_para
     assert residual_fn.n_total_params == 5  # 2 scaling + 3 physical
 
 
-def test_initialization_laminar_flow(mock_stratified_data_small, physical_param_names_laminar):
+def test_initialization_laminar_flow(
+    mock_stratified_data_small, physical_param_names_laminar
+):
     """Test initialization with laminar_flow parameters."""
     residual_fn = StratifiedResidualFunction(
         stratified_data=mock_stratified_data_small,
@@ -159,6 +173,7 @@ def test_initialization_laminar_flow(mock_stratified_data_small, physical_param_
 
 def test_initialization_empty_chunks_raises():
     """Test that empty chunks raise ValueError."""
+
     class EmptyData:
         def __init__(self):
             self.chunks = []
@@ -168,12 +183,14 @@ def test_initialization_empty_chunks_raises():
         StratifiedResidualFunction(
             stratified_data=EmptyData(),
             per_angle_scaling=True,
-            physical_param_names=['D0', 'alpha', 'D_offset'],
+            physical_param_names=["D0", "alpha", "D_offset"],
         )
 
 
 # Test 2: Chunk Structure Validation
-def test_validate_chunk_structure_success(mock_stratified_data_small, physical_param_names_static):
+def test_validate_chunk_structure_success(
+    mock_stratified_data_small, physical_param_names_static
+):
     """Test successful chunk structure validation."""
     residual_fn = StratifiedResidualFunction(
         stratified_data=mock_stratified_data_small,
@@ -189,12 +206,12 @@ def test_validate_chunk_structure_success(mock_stratified_data_small, physical_p
 def test_validate_chunk_structure_missing_angles():
     """Test validation failure when chunks missing angles."""
     n_phi = 3
-    phi_vals = np.array([0.0, np.pi/4, np.pi/2])
+    phi_vals = np.array([0.0, np.pi / 4, np.pi / 2])
     t1_vals = np.linspace(0.001, 1.0, 10)
     t2_vals = np.linspace(0.001, 1.0, 10)
 
     # Create chunk 1 with all angles
-    phi_grid, t1_grid, t2_grid = np.meshgrid(phi_vals, t1_vals, t2_vals, indexing='ij')
+    phi_grid, t1_grid, t2_grid = np.meshgrid(phi_vals, t1_vals, t2_vals, indexing="ij")
 
     class MockChunk:
         def __init__(self, phi, t1, t2, g2, q, L, dt):
@@ -234,7 +251,7 @@ def test_validate_chunk_structure_missing_angles():
     chunk2_phi = []
     chunk2_t1 = []
     chunk2_t2 = []
-    for phi_val in [0.0, np.pi/4]:  # Missing π/2
+    for phi_val in [0.0, np.pi / 4]:  # Missing π/2
         # Add second half of (t1, t2) pairs for this angle
         chunk2_phi.extend([phi_val] * 50)
         t1_flat = t1_vals.repeat(len(t2_vals))[50:100]
@@ -260,7 +277,7 @@ def test_validate_chunk_structure_missing_angles():
     residual_fn = StratifiedResidualFunction(
         stratified_data=MockData([chunk1, chunk2], sigma),
         per_angle_scaling=True,
-        physical_param_names=['D0', 'alpha', 'D_offset'],
+        physical_param_names=["D0", "alpha", "D_offset"],
     )
 
     with pytest.raises(ValueError, match="Chunk .* has inconsistent angles"):
@@ -268,7 +285,9 @@ def test_validate_chunk_structure_missing_angles():
 
 
 # Test 3: Residual Computation
-def test_call_returns_correct_shape_per_angle(mock_stratified_data_small, physical_param_names_static):
+def test_call_returns_correct_shape_per_angle(
+    mock_stratified_data_small, physical_param_names_static
+):
     """Test that __call__ returns residuals with correct shape (per-angle mode)."""
     residual_fn = StratifiedResidualFunction(
         stratified_data=mock_stratified_data_small,
@@ -287,7 +306,9 @@ def test_call_returns_correct_shape_per_angle(mock_stratified_data_small, physic
     assert jnp.all(jnp.isfinite(residuals))
 
 
-def test_call_returns_correct_shape_legacy(mock_stratified_data_small, physical_param_names_static):
+def test_call_returns_correct_shape_legacy(
+    mock_stratified_data_small, physical_param_names_static
+):
     """Test that __call__ returns residuals with correct shape (legacy mode)."""
     residual_fn = StratifiedResidualFunction(
         stratified_data=mock_stratified_data_small,
@@ -306,7 +327,9 @@ def test_call_returns_correct_shape_legacy(mock_stratified_data_small, physical_
     assert jnp.all(jnp.isfinite(residuals))
 
 
-def test_residuals_are_finite_and_reasonable(mock_stratified_data_small, physical_param_names_static):
+def test_residuals_are_finite_and_reasonable(
+    mock_stratified_data_small, physical_param_names_static
+):
     """Test that residuals are finite and within reasonable range."""
     residual_fn = StratifiedResidualFunction(
         stratified_data=mock_stratified_data_small,
@@ -341,17 +364,19 @@ def test_get_diagnostics(mock_stratified_data_small, physical_param_names_static
 
     diagnostics = residual_fn.get_diagnostics()
 
-    assert diagnostics['n_chunks'] == 2
-    assert diagnostics['n_total_points'] == 300
-    assert diagnostics['n_angles'] == 3
-    assert diagnostics['per_angle_scaling'] is True
-    assert len(diagnostics['chunk_sizes']) == 2
-    assert diagnostics['min_chunk_size'] == 150
-    assert diagnostics['max_chunk_size'] == 150
-    assert 'chunk_angle_counts' in diagnostics
+    assert diagnostics["n_chunks"] == 2
+    assert diagnostics["n_total_points"] == 300
+    assert diagnostics["n_angles"] == 3
+    assert diagnostics["per_angle_scaling"] is True
+    assert len(diagnostics["chunk_sizes"]) == 2
+    assert diagnostics["min_chunk_size"] == 150
+    assert diagnostics["max_chunk_size"] == 150
+    assert "chunk_angle_counts" in diagnostics
 
 
-def test_log_diagnostics_no_error(mock_stratified_data_small, physical_param_names_static):
+def test_log_diagnostics_no_error(
+    mock_stratified_data_small, physical_param_names_static
+):
     """Test that log_diagnostics doesn't raise errors."""
     residual_fn = StratifiedResidualFunction(
         stratified_data=mock_stratified_data_small,
@@ -364,7 +389,9 @@ def test_log_diagnostics_no_error(mock_stratified_data_small, physical_param_nam
 
 
 # Test 5: Factory Function
-def test_create_factory_function(mock_stratified_data_small, physical_param_names_static):
+def test_create_factory_function(
+    mock_stratified_data_small, physical_param_names_static
+):
     """Test create_stratified_residual_function factory."""
     residual_fn = create_stratified_residual_function(
         stratified_data=mock_stratified_data_small,
@@ -377,7 +404,9 @@ def test_create_factory_function(mock_stratified_data_small, physical_param_name
     assert residual_fn.n_total_params == 9  # 6 scaling + 3 physical
 
 
-def test_factory_validation_can_be_disabled(mock_stratified_data_small, physical_param_names_static):
+def test_factory_validation_can_be_disabled(
+    mock_stratified_data_small, physical_param_names_static
+):
     """Test that factory validation can be disabled."""
     residual_fn = create_stratified_residual_function(
         stratified_data=mock_stratified_data_small,
@@ -424,11 +453,13 @@ def test_jit_compilation_works(mock_stratified_data_small, physical_param_names_
     )
 
     # Check that JIT function exists
-    assert hasattr(residual_fn, 'compute_chunk_jit')
+    assert hasattr(residual_fn, "compute_chunk_jit")
     assert callable(residual_fn.compute_chunk_jit)
 
 
-def test_multiple_calls_consistent(mock_stratified_data_small, physical_param_names_static):
+def test_multiple_calls_consistent(
+    mock_stratified_data_small, physical_param_names_static
+):
     """Test that multiple calls with same parameters give consistent results."""
     residual_fn = StratifiedResidualFunction(
         stratified_data=mock_stratified_data_small,
@@ -448,11 +479,11 @@ def test_multiple_calls_consistent(mock_stratified_data_small, physical_param_na
 def test_single_chunk(physical_param_names_static):
     """Test with single chunk."""
     n_phi = 3
-    phi_vals = np.array([0.0, np.pi/4, np.pi/2])
+    phi_vals = np.array([0.0, np.pi / 4, np.pi / 2])
     t1_vals = np.linspace(0.001, 1.0, 10)
     t2_vals = np.linspace(0.001, 1.0, 10)
 
-    phi_grid, t1_grid, t2_grid = np.meshgrid(phi_vals, t1_vals, t2_vals, indexing='ij')
+    phi_grid, t1_grid, t2_grid = np.meshgrid(phi_vals, t1_vals, t2_vals, indexing="ij")
 
     class MockChunk:
         def __init__(self, phi, t1, t2, g2, sigma, q, L, dt):
@@ -496,7 +527,9 @@ def test_single_chunk(physical_param_names_static):
     assert np.all(np.isfinite(residuals))
 
 
-def test_large_parameter_array(mock_stratified_data_small, physical_param_names_laminar):
+def test_large_parameter_array(
+    mock_stratified_data_small, physical_param_names_laminar
+):
     """Test with larger parameter array (laminar_flow)."""
     residual_fn = StratifiedResidualFunction(
         stratified_data=mock_stratified_data_small,
@@ -505,12 +538,23 @@ def test_large_parameter_array(mock_stratified_data_small, physical_param_names_
     )
 
     # 6 scaling + 7 physical = 13 parameters
-    params = np.array([
-        0.5, 0.5, 0.5,  # contrast per angle
-        1.0, 1.0, 1.0,  # offset per angle
-        1e-10, 1.0, 0.0,  # D0, alpha, D_offset
-        1.0, 1.0, 0.0, 0.0,  # gamma_dot_0, beta, gamma_dot_offset, phi0
-    ])
+    params = np.array(
+        [
+            0.5,
+            0.5,
+            0.5,  # contrast per angle
+            1.0,
+            1.0,
+            1.0,  # offset per angle
+            1e-10,
+            1.0,
+            0.0,  # D0, alpha, D_offset
+            1.0,
+            1.0,
+            0.0,
+            0.0,  # gamma_dot_0, beta, gamma_dot_offset, phi0
+        ]
+    )
 
     residuals = residual_fn(params)
 
@@ -519,7 +563,9 @@ def test_large_parameter_array(mock_stratified_data_small, physical_param_names_
 
 
 # Test 9: Integration with NLSQ
-def test_compatible_with_nlsq_least_squares(mock_stratified_data_small, physical_param_names_static):
+def test_compatible_with_nlsq_least_squares(
+    mock_stratified_data_small, physical_param_names_static
+):
     """Test that residual function is compatible with NLSQ's least_squares signature."""
     residual_fn = StratifiedResidualFunction(
         stratified_data=mock_stratified_data_small,
@@ -538,7 +584,7 @@ def test_compatible_with_nlsq_least_squares(mock_stratified_data_small, physical
     assert isinstance(residuals, jnp.ndarray)
     assert residuals.ndim == 1  # 1D array required by least_squares
     # Verify it's a JAX array (can be JIT-compiled)
-    assert hasattr(residuals, 'device')
+    assert hasattr(residuals, "device")
 
 
 if __name__ == "__main__":

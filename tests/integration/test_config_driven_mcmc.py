@@ -356,7 +356,9 @@ class TestConfigDrivenMCMC:
         # Verify MCMC starts from NLSQ results (not mid-point)
         assert mcmc_init_params["D0"] == nlsq_best_fit["D0"]
         assert mcmc_init_params["alpha"] == nlsq_best_fit["alpha"]
-        assert mcmc_init_params["D0"] != nlsq_init_params["D0"]  # Different from NLSQ init
+        assert (
+            mcmc_init_params["D0"] != nlsq_init_params["D0"]
+        )  # Different from NLSQ init
 
         # Step 5: Verify ParameterSpace for MCMC prior sampling
         param_space = ParameterSpace.from_config(mcmc_config)

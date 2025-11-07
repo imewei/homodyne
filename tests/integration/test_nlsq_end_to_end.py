@@ -91,7 +91,7 @@ class TestFullPipeline:
             covariance=np.eye(5),
             chi_squared=1.2,
             reduced_chi_squared=1.0,
-            convergence_status='converged',
+            convergence_status="converged",
             iterations=25,
             execution_time=1.5,
             device_info={},
@@ -99,7 +99,7 @@ class TestFullPipeline:
 
         assert result.success
         assert result.parameters.shape == initial_params.shape
-        assert result.convergence_status == 'converged'
+        assert result.convergence_status == "converged"
 
     def test_large_pipeline_medium_dataset(self):
         """Test full pipeline with LARGE strategy (1M - 10M points)."""
@@ -157,9 +157,9 @@ class TestFullPipeline:
             n_parameters=5,
         )
 
-        assert 'batch_size' in streaming_config
-        assert 'checkpoint_dir' in streaming_config
-        assert streaming_config['enable_fault_tolerance']
+        assert "batch_size" in streaming_config
+        assert "checkpoint_dir" in streaming_config
+        assert streaming_config["enable_fault_tolerance"]
 
 
 # ============================================================================
@@ -185,7 +185,7 @@ class TestCheckpointResume:
             manager.save_checkpoint(
                 batch_idx=batch_idx,
                 parameters=np.random.randn(5),
-                optimizer_state={'iteration': batch_idx * 10},
+                optimizer_state={"iteration": batch_idx * 10},
                 loss=1.0 / (batch_idx + 1),
             )
 
@@ -212,8 +212,9 @@ class TestCheckpointResume:
         for batch_idx in range(3):
             manager.save_checkpoint(
                 batch_idx=batch_idx,
-                parameters=np.array([0.3, 1.0, 1000.0, 0.5, 10.0]) * (1 + batch_idx * 0.1),
-                optimizer_state={'iteration': batch_idx * 10},
+                parameters=np.array([0.3, 1.0, 1000.0, 0.5, 10.0])
+                * (1 + batch_idx * 0.1),
+                optimizer_state={"iteration": batch_idx * 10},
                 loss=1.0 / (batch_idx + 1),
             )
 
@@ -224,27 +225,27 @@ class TestCheckpointResume:
         # Phase 3: Resume from checkpoint
         resumed_data = manager.load_checkpoint(latest_checkpoint)
         assert resumed_data is not None
-        assert 'batch_idx' in resumed_data
-        assert 'parameters' in resumed_data
+        assert "batch_idx" in resumed_data
+        assert "parameters" in resumed_data
 
         # Phase 4: Continue optimization from batch 3
-        resume_batch = resumed_data['batch_idx'] + 1
+        resume_batch = resumed_data["batch_idx"] + 1
         assert resume_batch == 3
 
         # Continue with batches 3-5
-        resumed_params = resumed_data['parameters']
+        resumed_params = resumed_data["parameters"]
         for batch_idx in range(resume_batch, 6):
             manager.save_checkpoint(
                 batch_idx=batch_idx,
                 parameters=resumed_params * (1 + (batch_idx - resume_batch) * 0.05),
-                optimizer_state={'iteration': batch_idx * 10},
+                optimizer_state={"iteration": batch_idx * 10},
                 loss=1.0 / (batch_idx + 1),
             )
 
         # Verify complete optimization
         final_checkpoint = manager.find_latest_checkpoint()
         final_data = manager.load_checkpoint(final_checkpoint)
-        assert final_data['batch_idx'] == 5
+        assert final_data["batch_idx"] == 5
 
     def test_multiple_resume_cycles(self, tmp_path):
         """Test multiple interruption/resume cycles."""
@@ -264,7 +265,7 @@ class TestCheckpointResume:
 
         checkpoint1 = manager.find_latest_checkpoint()
         data1 = manager.load_checkpoint(checkpoint1)
-        assert data1['batch_idx'] == 2
+        assert data1["batch_idx"] == 2
 
         # Cycle 2: Batches 3-5
         for i in range(3, 6):
@@ -277,7 +278,7 @@ class TestCheckpointResume:
 
         checkpoint2 = manager.find_latest_checkpoint()
         data2 = manager.load_checkpoint(checkpoint2)
-        assert data2['batch_idx'] == 5
+        assert data2["batch_idx"] == 5
 
         # Cycle 3: Batches 6-8
         for i in range(6, 9):
@@ -290,7 +291,7 @@ class TestCheckpointResume:
 
         final_checkpoint = manager.find_latest_checkpoint()
         final_data = manager.load_checkpoint(final_checkpoint)
-        assert final_data['batch_idx'] == 8
+        assert final_data["batch_idx"] == 8
 
     def test_checkpoint_cleanup_during_optimization(self, tmp_path):
         """Test automatic checkpoint cleanup keeps only recent checkpoints."""
@@ -432,7 +433,9 @@ class TestMultiStrategyFallback:
 # ============================================================================
 
 
-@pytest.mark.skip(reason="NumericalValidator API changed - validation now raises exceptions")
+@pytest.mark.skip(
+    reason="NumericalValidator API changed - validation now raises exceptions"
+)
 class TestErrorRecoveryValidation:
     """Test error recovery in realistic scenarios."""
 
@@ -458,7 +461,9 @@ class TestErrorRecoveryValidation:
 # ============================================================================
 
 
-@pytest.mark.skip(reason="API changed: validate_parameters, BatchStatistics, and checkpoint APIs have changed")
+@pytest.mark.skip(
+    reason="API changed: validate_parameters, BatchStatistics, and checkpoint APIs have changed"
+)
 class TestCompleteWorkflowIntegration:
     """Test complete workflows combining all components."""
 
@@ -483,16 +488,16 @@ def test_end_to_end_integration_summary():
     5. Complete workflow integration
     """
     integration_scenarios = {
-        'full_pipeline_standard': True,
-        'full_pipeline_large': True,
-        'full_pipeline_chunked': True,
-        'full_pipeline_streaming': True,
-        'checkpoint_save': True,
-        'checkpoint_resume': True,
-        'multiple_resume_cycles': True,
-        'fallback_chain': True,
-        'error_recovery': True,
-        'complete_workflow': True,
+        "full_pipeline_standard": True,
+        "full_pipeline_large": True,
+        "full_pipeline_chunked": True,
+        "full_pipeline_streaming": True,
+        "checkpoint_save": True,
+        "checkpoint_resume": True,
+        "multiple_resume_cycles": True,
+        "fallback_chain": True,
+        "error_recovery": True,
+        "complete_workflow": True,
     }
 
     # All scenarios tested

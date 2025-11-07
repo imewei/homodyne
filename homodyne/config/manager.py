@@ -4,6 +4,8 @@
 Simplified configuration system with preserved API compatibility.
 Provides essential YAML/JSON loading with the same interface as the original
 ConfigManager while removing complex features not needed for core functionality.
+
+Note: GPU support removed in v2.3.0 - CPU-only execution.
 """
 
 import json
@@ -46,6 +48,7 @@ class ConfigManager:
     - Compatible .config attribute access
     - Preserved constructor signature
     - Graceful fallback to defaults
+    - CPU-only execution (GPU support removed in v2.3.0)
 
     Usage:
         config_manager = ConfigManager('my_config.yaml')
@@ -150,11 +153,12 @@ class ConfigManager:
         """Get default configuration structure.
 
         Returns minimal configuration that supports basic analysis modes.
+        CPU-only execution (GPU support removed in v2.3.0).
         """
         return {
             "metadata": {
-                "config_version": "2.1",
-                "description": "Default minimal configuration",
+                "config_version": "2.3",
+                "description": "Default minimal configuration (CPU-only)",
             },
             "analysis_mode": "static_isotropic",
             "analyzer_parameters": {
@@ -180,10 +184,6 @@ class ConfigManager:
                     "n_chains": 4,
                     "target_accept_prob": 0.8,
                 },
-            },
-            "hardware": {
-                "force_cpu": False,
-                "gpu_memory_fraction": 0.8,
             },
             "output": {
                 "formats": ["yaml", "npz"],
@@ -391,7 +391,9 @@ class ConfigManager:
         # Get initial_parameters section
         initial_params = self.config.get("initial_parameters", {})
         if not initial_params:
-            logger.info("No initial_parameters section in config, using mid-point defaults")
+            logger.info(
+                "No initial_parameters section in config, using mid-point defaults"
+            )
             return self._calculate_midpoint_defaults()
 
         # Get parameter names from config
@@ -641,7 +643,11 @@ class ConfigManager:
             User-provided configuration to merge
         """
         for key, value in user.items():
-            if key in defaults and isinstance(defaults[key], dict) and isinstance(value, dict):
+            if (
+                key in defaults
+                and isinstance(defaults[key], dict)
+                and isinstance(value, dict)
+            ):
                 # Recursive merge for nested dictionaries
                 self._merge_cmc_config(defaults[key], value)
             else:
@@ -684,7 +690,9 @@ class ConfigManager:
             )
 
         num_shards = sharding.get("num_shards", "auto")
-        if num_shards != "auto" and (not isinstance(num_shards, int) or num_shards <= 0):
+        if num_shards != "auto" and (
+            not isinstance(num_shards, int) or num_shards <= 0
+        ):
             raise ValueError(
                 f"num_shards must be 'auto' or positive integer, got: {num_shards}"
             )
@@ -709,7 +717,13 @@ class ConfigManager:
             backend_config = cmc_config.get("backend_config", {})
             if backend_config:
                 backend_name = backend_config.get("name", "auto")
-                valid_parallel_backends = ["auto", "pjit", "multiprocessing", "pbs", "slurm"]
+                valid_parallel_backends = [
+                    "auto",
+                    "pjit",
+                    "multiprocessing",
+                    "pbs",
+                    "slurm",
+                ]
                 if backend_name not in valid_parallel_backends:
                     raise ValueError(
                         f"Parallel execution backend must be one of {valid_parallel_backends}, got: {backend_name}"
@@ -750,15 +764,11 @@ class ConfigManager:
         validation = cmc_config.get("validation", {})
         ess = validation.get("min_per_shard_ess", 100)
         if not isinstance(ess, (int, float)) or ess < 0:
-            raise ValueError(
-                f"min_per_shard_ess must be non-negative, got: {ess}"
-            )
+            raise ValueError(f"min_per_shard_ess must be non-negative, got: {ess}")
 
         rhat = validation.get("max_per_shard_rhat", 1.1)
         if not isinstance(rhat, (int, float)) or rhat < 1.0:
-            raise ValueError(
-                f"max_per_shard_rhat must be >= 1.0, got: {rhat}"
-            )
+            raise ValueError(f"max_per_shard_rhat must be >= 1.0, got: {rhat}")
 
         logger.debug("CMC configuration validation passed")
 

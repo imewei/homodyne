@@ -174,6 +174,7 @@ except ImportError:
 # This provides backward compatibility while supporting CMC
 try:
     from homodyne.optimization.cmc.result import MCMCResult
+
     HAS_CMC_RESULT = True
 except ImportError:
     # Fallback to original MCMCResult if CMC module not available
@@ -267,7 +268,7 @@ def _calculate_midpoint_defaults(parameter_space: ParameterSpace) -> dict[str, f
 
     for param_name in parameter_space.parameter_names:
         # Skip contrast and offset (scaling parameters, not physical)
-        if param_name in ['contrast', 'offset']:
+        if param_name in ["contrast", "offset"]:
             continue
 
         bounds = parameter_space.get_bounds(param_name)
@@ -539,7 +540,7 @@ def fit_mcmc_jax(
     # - initial_values: Starting points for MCMC chains (from YAML initial_parameters.values)
 
     # Extract config dict once from kwargs (avoid duplicate pop)
-    config_dict = kwargs.pop('config', None)
+    config_dict = kwargs.pop("config", None)
 
     # Step 1: Load parameter_space from config if None
     # Contains parameter bounds and prior distributions for Bayesian sampling
@@ -579,6 +580,7 @@ def fit_mcmc_jax(
             if config_dict is not None:
                 # Load initial values from config using ConfigManager
                 from homodyne.config.manager import ConfigManager
+
                 config_mgr = ConfigManager(config_override=config_dict)
                 initial_values = config_mgr.get_initial_parameters()
 
@@ -590,7 +592,9 @@ def fit_mcmc_jax(
                     )
                 else:
                     # Calculate mid-point defaults
-                    logger.info("Config has null initial_values, calculating mid-point defaults")
+                    logger.info(
+                        "Config has null initial_values, calculating mid-point defaults"
+                    )
                     initial_values = _calculate_midpoint_defaults(parameter_space)
                     logger.info(
                         f"Using mid-point defaults: "
@@ -599,7 +603,9 @@ def fit_mcmc_jax(
                     )
             else:
                 # No config, calculate mid-point defaults
-                logger.info("No config provided, calculating mid-point defaults for initial_values")
+                logger.info(
+                    "No config provided, calculating mid-point defaults for initial_values"
+                )
                 initial_values = _calculate_midpoint_defaults(parameter_space)
                 logger.info(
                     f"Using mid-point defaults: "
@@ -626,32 +632,37 @@ def fit_mcmc_jax(
         is_valid, violations = parameter_space.validate_values(initial_values)
         if not is_valid:
             raise ValueError(
-                f"Initial parameter values violate bounds:\n"
-                + "\n".join(violations)
+                f"Initial parameter values violate bounds:\n" + "\n".join(violations)
             )
-        logger.info("Initial parameter values validated successfully (all within bounds)")
+        logger.info(
+            "Initial parameter values validated successfully (all within bounds)"
+        )
 
     # Get total dataset size (handles both 1D and multi-dimensional arrays)
-    dataset_size = data.size if hasattr(data, 'size') else len(data)
+    dataset_size = data.size if hasattr(data, "size") else len(data)
 
     # Get number of independent samples for NUTS/CMC decision
     # For multi-dimensional XPCS data (n_phi, n_t1, n_t2), each phi angle is one sample
     # For 1D flattened data, count unique phi angles from phi parameter
-    if hasattr(data, 'shape') and hasattr(data, 'ndim'):
+    if hasattr(data, "shape") and hasattr(data, "ndim"):
         if data.ndim > 1:
             # Multi-dimensional: first dimension is number of samples (phi angles)
             num_samples = data.shape[0]
         else:
             # 1D flattened data: count unique phi angles from phi parameter
             import numpy as np
+
             num_samples = len(np.unique(phi)) if phi is not None else dataset_size
     else:
         # Fallback for non-array data: count unique phi angles if available
         import numpy as np
+
         num_samples = len(np.unique(phi)) if phi is not None else dataset_size
 
     logger.info("Starting MCMC+JAX sampling")
-    logger.info(f"Dataset size: {dataset_size:,} data points ({num_samples} independent samples)")
+    logger.info(
+        f"Dataset size: {dataset_size:,} data points ({num_samples} independent samples)"
+    )
     logger.info(f"Analysis mode: {analysis_mode}")
 
     # =========================================================================
@@ -661,6 +672,7 @@ def fit_mcmc_jax(
     # Hardware detection provides memory information for dual-criteria decision
     try:
         from homodyne.device.config import detect_hardware, should_use_cmc
+
         hardware_config = detect_hardware()
     except ImportError:
         logger.warning(
@@ -671,9 +683,9 @@ def fit_mcmc_jax(
     # Step 2: Extract configurable thresholds from kwargs (with defaults)
     # These thresholds are loaded from YAML config: optimization.mcmc.min_samples_for_cmc
     # Users can override via CLI: --min-samples-cmc, --memory-threshold-pct, --large-dataset-threshold
-    min_samples_for_cmc = kwargs.pop('min_samples_for_cmc', 15)
-    memory_threshold_pct = kwargs.pop('memory_threshold_pct', 0.30)
-    large_dataset_threshold = kwargs.pop('large_dataset_threshold', 1_000_000)
+    min_samples_for_cmc = kwargs.pop("min_samples_for_cmc", 15)
+    memory_threshold_pct = kwargs.pop("memory_threshold_pct", 0.30)
+    large_dataset_threshold = kwargs.pop("large_dataset_threshold", 1_000_000)
 
     # Step 3: Automatic NUTS/CMC selection using tri-criteria OR logic
     # Criterion 1 (Parallelism): num_samples >= min_samples_for_cmc (default: 15)
@@ -697,7 +709,7 @@ def fit_mcmc_jax(
             memory_threshold_pct=memory_threshold_pct,
             large_dataset_threshold=large_dataset_threshold,
         )
-        actual_method = 'cmc' if use_cmc else 'nuts'
+        actual_method = "cmc" if use_cmc else "nuts"
         logger.info(
             f"Automatic selection: {actual_method.upper()} "
             f"(num_samples={num_samples:,}, dataset_size={dataset_size:,}, "
@@ -707,27 +719,27 @@ def fit_mcmc_jax(
     else:
         # Fallback: Simple threshold-based selection using num_samples only
         use_cmc = num_samples >= min_samples_for_cmc
-        actual_method = 'cmc' if use_cmc else 'nuts'
+        actual_method = "cmc" if use_cmc else "nuts"
         logger.info(
             f"Automatic selection (fallback): {actual_method.upper()} "
             f"(num_samples={num_samples:,}, min_samples_for_cmc={min_samples_for_cmc})"
         )
 
     # Step 4: Log warnings for edge cases
-    if actual_method == 'cmc' and num_samples < min_samples_for_cmc:
+    if actual_method == "cmc" and num_samples < min_samples_for_cmc:
         logger.warning(
             f"Using CMC with very few samples ({num_samples} samples). "
             f"CMC adds 10-20% overhead; NUTS is faster for <{min_samples_for_cmc} samples if memory permits. "
             f"(Likely triggered by memory criterion: estimated_memory > {memory_threshold_pct:.1%})"
         )
-    elif actual_method == 'nuts' and num_samples >= min_samples_for_cmc:
+    elif actual_method == "nuts" and num_samples >= min_samples_for_cmc:
         logger.info(
             f"Using NUTS with {num_samples:,} samples. "
             f"CMC may provide additional parallelization on multi-core CPU."
         )
 
     # Step 5: Execute selected method
-    if actual_method == 'cmc':
+    if actual_method == "cmc":
         # Use Consensus Monte Carlo
         logger.info("=" * 70)
         logger.info("Executing Consensus Monte Carlo (CMC)")
@@ -743,11 +755,11 @@ def fit_mcmc_jax(
             ) from e
 
         # Extract CMC configuration
-        cmc_config = kwargs.pop('cmc_config', {})
+        cmc_config = kwargs.pop("cmc_config", {})
 
         # Add MCMC config to cmc_config if not already present
-        if 'mcmc' not in cmc_config:
-            cmc_config['mcmc'] = _get_mcmc_config(kwargs)
+        if "mcmc" not in cmc_config:
+            cmc_config["mcmc"] = _get_mcmc_config(kwargs)
 
         # Create CMC coordinator
         coordinator = CMCCoordinator(cmc_config)
@@ -781,29 +793,41 @@ def fit_mcmc_jax(
             retry_kwargs = kwargs.copy()
             if attempt > 0:
                 # Change random seed for retry attempts
-                base_seed = kwargs.get('rng_key', 42)
+                base_seed = kwargs.get("rng_key", 42)
                 new_seed = base_seed + attempt * 1000
-                retry_kwargs['rng_key'] = new_seed
+                retry_kwargs["rng_key"] = new_seed
 
                 # Enhanced logging with diagnostics from previous attempt
                 # Get diagnostics from previous attempt (if available)
-                if 'result' in locals():
-                    max_rhat = max(
-                        [v for v in result.r_hat.values() if v is not None],
-                        default=0.0
-                    ) if result.r_hat is not None else 0.0
-                    min_ess = min(
-                        [v for v in result.effective_sample_size.values() if v is not None],
-                        default=0.0
-                    ) if result.effective_sample_size is not None else 0.0
+                if "result" in locals():
+                    max_rhat = (
+                        max(
+                            [v for v in result.r_hat.values() if v is not None],
+                            default=0.0,
+                        )
+                        if result.r_hat is not None
+                        else 0.0
+                    )
+                    min_ess = (
+                        min(
+                            [
+                                v
+                                for v in result.effective_sample_size.values()
+                                if v is not None
+                            ],
+                            default=0.0,
+                        )
+                        if result.effective_sample_size is not None
+                        else 0.0
+                    )
                     logger.warning(
-                        f"🔄 Retry {attempt}/{max_retries-1} - Convergence poor "
+                        f"🔄 Retry {attempt}/{max_retries - 1} - Convergence poor "
                         f"(R-hat={max_rhat:.3f}, ESS={min_ess:.0f}). "
                         f"Changing random seed to {new_seed}..."
                     )
                 else:
                     logger.warning(
-                        f"🔄 Retry {attempt}/{max_retries-1} with new random seed "
+                        f"🔄 Retry {attempt}/{max_retries - 1} with new random seed "
                         f"(seed={new_seed})"
                     )
 
@@ -828,8 +852,7 @@ def fit_mcmc_jax(
                 poor_rhat = False
                 if result.r_hat is not None:
                     max_rhat = max(
-                        [v for v in result.r_hat.values() if v is not None],
-                        default=0.0
+                        [v for v in result.r_hat.values() if v is not None], default=0.0
                     )
                     if max_rhat > 1.1:
                         poor_rhat = True
@@ -841,8 +864,12 @@ def fit_mcmc_jax(
                 poor_ess = False
                 if result.effective_sample_size is not None:
                     min_ess = min(
-                        [v for v in result.effective_sample_size.values() if v is not None],
-                        default=float('inf')
+                        [
+                            v
+                            for v in result.effective_sample_size.values()
+                            if v is not None
+                        ],
+                        default=float("inf"),
                     )
                     if min_ess < 100:
                         poor_ess = True
@@ -877,7 +904,7 @@ def fit_mcmc_jax(
                 # Convergence failed completely
                 if attempt < max_retries - 1:
                     logger.warning(
-                        f"🔄 Retry {attempt+1}/{max_retries-1} - MCMC did not converge. "
+                        f"🔄 Retry {attempt + 1}/{max_retries - 1} - MCMC did not converge. "
                         f"Retrying with different random seed..."
                     )
                     continue
@@ -973,6 +1000,7 @@ def _run_standard_nuts(
         dt_computed = None
         if t1 is not None:
             import numpy as np  # Use numpy (not jax.numpy) for pre-computation
+
             if t1.ndim == 2:
                 time_array = np.asarray(t1[:, 0] if t1.shape[1] > 0 else t1[0, :])
             else:
@@ -992,10 +1020,11 @@ def _run_standard_nuts(
         phi_unique = None
         if phi is not None and "laminar" in analysis_mode.lower():
             import numpy as np  # Use numpy (not jax.numpy) for pre-computation
+
             phi_unique = np.unique(np.asarray(phi))
             logger.debug(
                 f"Pre-computed phi_unique: {len(phi_unique)} unique angles from {len(phi)} total values "
-                f"(reduction: {len(phi)/len(phi_unique):.1f}x)"
+                f"(reduction: {len(phi) / len(phi_unique):.1f}x)"
             )
 
         # Create NumPyro model using physics-informed priors from ParameterSpace
@@ -1006,7 +1035,9 @@ def _run_standard_nuts(
             sigma,
             t1,
             t2,
-            phi_unique if phi_unique is not None else phi,  # Use pre-computed unique values
+            (
+                phi_unique if phi_unique is not None else phi
+            ),  # Use pre-computed unique values
             q,
             L,
             analysis_mode,
@@ -1422,7 +1453,7 @@ def _create_numpyro_model(
             # Get NumPyro distribution class
             dist_class = DIST_TYPE_MAP.get(
                 prior_spec.dist_type,
-                dist.TruncatedNormal  # Safe fallback
+                dist.TruncatedNormal,  # Safe fallback
             )
 
             # Get distribution kwargs
@@ -1462,7 +1493,9 @@ def _create_numpyro_model(
             # Use mean values for physics computation (theory doesn't need per-angle scaling)
             contrast_mean = jnp.mean(contrast)
             offset_mean = jnp.mean(offset)
-            params_full = jnp.concatenate([jnp.array([contrast_mean, offset_mean]), params])
+            params_full = jnp.concatenate(
+                [jnp.array([contrast_mean, offset_mean]), params]
+            )
         else:
             # Standard behavior: contrast and offset are scalars
             params_full = jnp.concatenate([jnp.array([contrast, offset]), params])
@@ -1476,24 +1509,27 @@ def _create_numpyro_model(
         # NOT the original meshgrids (1,002,001 elements) which would cause OOM
 
         # Verify array sizes match to prevent memory explosion during MCMC
-        data_size = data.shape[0] if hasattr(data, 'shape') else len(data)
-        t1_size = t1.shape[0] if hasattr(t1, 'shape') else len(t1)
+        data_size = data.shape[0] if hasattr(data, "shape") else len(data)
+        t1_size = t1.shape[0] if hasattr(t1, "shape") else len(t1)
 
         if t1_size != data_size:
             # Arrays are mismatched - this indicates closure is capturing wrong arrays
             # This is the root cause of the 778GB SVI OOM error
             import warnings
+
             warnings.warn(
                 f"Model closure array size mismatch: data={data_size}, t1={t1_size}. "
                 f"This will cause OOM during SVI. Ensure pooled_data has correctly sized arrays.",
                 RuntimeWarning,
-                stacklevel=2
+                stacklevel=2,
             )
 
         # Pass full params array for proper indexing, plus L and dt for correct physics
         # NOTE: phi parameter here should be pre-computed unique values (not full replicated array)
         # This avoids JAX concretization error when compute_g1_total() is called
-        c2_theory = _compute_simple_theory_jit(params_full, t1, t2, phi, q, analysis_mode, L, dt)
+        c2_theory = _compute_simple_theory_jit(
+            params_full, t1, t2, phi, q, analysis_mode, L, dt
+        )
 
         # PER-ANGLE SCALING: Apply different contrast/offset for each phi angle
         if per_angle_scaling:
@@ -1508,7 +1544,9 @@ def _create_numpyro_model(
             #
             # Use searchsorted to find the index of each phi value in the unique array
             phi_array_for_mapping_jax = jnp.atleast_1d(phi_array_for_mapping)
-            phi_indices = jnp.searchsorted(phi_unique_for_sampling, phi_array_for_mapping_jax)
+            phi_indices = jnp.searchsorted(
+                phi_unique_for_sampling, phi_array_for_mapping_jax
+            )
 
             # Select the appropriate contrast and offset for each data point
             # contrast: shape (n_phi,) → contrast_per_point: shape (n_data_points,)
@@ -1579,7 +1617,9 @@ def _compute_simple_theory(params, t1, t2, phi, q, analysis_mode, L=None, dt=Non
     if dt is None:
         # Fallback for backward compatibility, but this should not happen in normal use
         dt = 1.0
-        logger.warning("dt not provided to _compute_simple_theory, using fallback value 1.0")
+        logger.warning(
+            "dt not provided to _compute_simple_theory, using fallback value 1.0"
+        )
 
     # Extract physical parameters (skip contrast and offset at indices 0,1)
     # params = [contrast, offset, D0, alpha, D_offset, ...]
@@ -1609,7 +1649,9 @@ def _compute_simple_theory(params, t1, t2, phi, q, analysis_mode, L=None, dt=Non
     else:
         # Static mode: use diffusion-only physics
         if compute_g1_diffusion is None:
-            raise ImportError("compute_g1_diffusion not available from core.jax_backend")
+            raise ImportError(
+                "compute_g1_diffusion not available from core.jax_backend"
+            )
 
         g1 = compute_g1_diffusion(
             phys_params,  # [D0, alpha, D_offset]
@@ -1683,7 +1725,9 @@ def _run_numpyro_sampling(model, config, initial_values=None):
                 )
             elif platform == "gpu":
                 # GPU mode: use available GPU devices
-                logger.info(f"Using GPU with {n_chains} chains on {n_devices} device(s)")
+                logger.info(
+                    f"Using GPU with {n_chains} chains on {n_devices} device(s)"
+                )
             else:
                 logger.info(f"Using {min(n_chains, n_devices)} parallel devices")
         except Exception as e:
@@ -1729,7 +1773,7 @@ def _run_numpyro_sampling(model, config, initial_values=None):
                 "accept_prob",
                 "diverging",
                 "num_steps",
-            )
+            ),
         )
 
         # Log warmup diagnostics
@@ -1854,12 +1898,18 @@ def _process_posterior_samples(mcmc_result, analysis_mode):
             for param_name in samples.keys():
                 try:
                     # R-hat (Gelman-Rubin statistic)
-                    r_hat_dict[param_name] = float(gelman_rubin(samples_with_chains[param_name]))
+                    r_hat_dict[param_name] = float(
+                        gelman_rubin(samples_with_chains[param_name])
+                    )
 
                     # ESS (Effective Sample Size)
-                    ess_dict[param_name] = float(effective_sample_size(samples_with_chains[param_name]))
+                    ess_dict[param_name] = float(
+                        effective_sample_size(samples_with_chains[param_name])
+                    )
                 except Exception as e:
-                    logger.warning(f"Could not compute diagnostics for {param_name}: {e}")
+                    logger.warning(
+                        f"Could not compute diagnostics for {param_name}: {e}"
+                    )
                     r_hat_dict[param_name] = None
                     ess_dict[param_name] = None
         else:
@@ -1869,7 +1919,9 @@ def _process_posterior_samples(mcmc_result, analysis_mode):
                 r_hat_dict[param_name] = None
                 # Compute ESS for single chain using autocorrelation
                 try:
-                    ess_dict[param_name] = float(effective_sample_size(samples_with_chains[param_name]))
+                    ess_dict[param_name] = float(
+                        effective_sample_size(samples_with_chains[param_name])
+                    )
                 except:
                     ess_dict[param_name] = None
 
@@ -1877,16 +1929,24 @@ def _process_posterior_samples(mcmc_result, analysis_mode):
         converged = True
         if any(r_hat_dict.values()):
             # Check if any R-hat > 1.1 (indicates non-convergence)
-            max_r_hat = max([v for v in r_hat_dict.values() if v is not None], default=0.0)
+            max_r_hat = max(
+                [v for v in r_hat_dict.values() if v is not None], default=0.0
+            )
             if max_r_hat > 1.1:
-                logger.warning(f"Poor convergence detected: max R-hat = {max_r_hat:.3f} > 1.1")
+                logger.warning(
+                    f"Poor convergence detected: max R-hat = {max_r_hat:.3f} > 1.1"
+                )
                 converged = False
 
         if any(ess_dict.values()):
             # Check if any ESS < 100 (indicates poor mixing)
-            min_ess = min([v for v in ess_dict.values() if v is not None], default=float('inf'))
+            min_ess = min(
+                [v for v in ess_dict.values() if v is not None], default=float("inf")
+            )
             if min_ess < 100:
-                logger.warning(f"Poor sampling efficiency: min ESS = {min_ess:.0f} < 100")
+                logger.warning(
+                    f"Poor sampling efficiency: min ESS = {min_ess:.0f} < 100"
+                )
                 # Don't set converged=False for low ESS, just warn
 
     except Exception as e:

@@ -97,18 +97,23 @@ from homodyne.optimization.cmc.backends.selection import (
 # These are lazy-loaded by get_backend_by_name() but can be imported directly
 try:
     from homodyne.optimization.cmc.backends.pjit import PjitBackend
+
     PJIT_AVAILABLE = True
 except ImportError:
     PJIT_AVAILABLE = False
 
 try:
-    from homodyne.optimization.cmc.backends.multiprocessing import MultiprocessingBackend
+    from homodyne.optimization.cmc.backends.multiprocessing import (
+        MultiprocessingBackend,
+    )
+
     MULTIPROCESSING_AVAILABLE = True
 except ImportError:
     MULTIPROCESSING_AVAILABLE = False
 
 try:
     from homodyne.optimization.cmc.backends.pbs import PBSBackend
+
     PBS_AVAILABLE = True
 except ImportError:
     PBS_AVAILABLE = False

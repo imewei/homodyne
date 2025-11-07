@@ -50,14 +50,17 @@ class TestMCMCConvergenceQuality:
         }
 
         # Assert convergence standards met
-        assert v21_diagnostics["r_hat"] < expected_diagnostics["r_hat_threshold"], \
-            "R-hat should indicate convergence"
-        assert v21_diagnostics["ess"] >= expected_diagnostics["ess_min"], \
-            "ESS should indicate adequate samples"
-        assert (expected_diagnostics["acceptance_rate_min"]
-                <= v21_diagnostics["acceptance_rate"]
-                <= expected_diagnostics["acceptance_rate_max"]), \
-            "Acceptance rate should be in typical NUTS range"
+        assert (
+            v21_diagnostics["r_hat"] < expected_diagnostics["r_hat_threshold"]
+        ), "R-hat should indicate convergence"
+        assert (
+            v21_diagnostics["ess"] >= expected_diagnostics["ess_min"]
+        ), "ESS should indicate adequate samples"
+        assert (
+            expected_diagnostics["acceptance_rate_min"]
+            <= v21_diagnostics["acceptance_rate"]
+            <= expected_diagnostics["acceptance_rate_max"]
+        ), "Acceptance rate should be in typical NUTS range"
 
     def test_parameter_recovery_accuracy_maintained(self):
         """Verify parameter recovery accuracy unchanged from v2.0.
@@ -96,8 +99,9 @@ class TestMCMCConvergenceQuality:
             error = abs(recovered_val - truth_val) / truth_val
             tolerance = tolerances[param]
 
-            assert error < tolerance, \
-                f"{param}: error {error:.2%} exceeds tolerance {tolerance:.2%}"
+            assert (
+                error < tolerance
+            ), f"{param}: error {error:.2%} exceeds tolerance {tolerance:.2%}"
 
     def test_automatic_selection_convergence_not_degraded(self):
         """Verify automatic NUTS/CMC selection doesn't degrade convergence.
@@ -137,9 +141,10 @@ class TestMCMCConvergenceQuality:
         scenarios = [nuts_scenario, cmc_parallelism, cmc_memory]
 
         for scenario in scenarios:
-            assert scenario["expected_r_hat"] <= r_hat_max, \
-                f"{scenario['method_selected']}: R-hat {scenario['expected_r_hat']} " \
+            assert scenario["expected_r_hat"] <= r_hat_max, (
+                f"{scenario['method_selected']}: R-hat {scenario['expected_r_hat']} "
                 f"exceeds convergence threshold {r_hat_max}"
+            )
 
     def test_config_driven_initialization_improves_convergence(self):
         """Verify config-driven initialization helps or maintains convergence.
@@ -158,8 +163,9 @@ class TestMCMCConvergenceQuality:
         config_init_r_hat = 1.03
 
         # Verify improvement or maintenance
-        assert config_init_r_hat < random_init_r_hat, \
-            "Config-driven initialization should improve convergence"
+        assert (
+            config_init_r_hat < random_init_r_hat
+        ), "Config-driven initialization should improve convergence"
 
     def test_backward_compatibility_initial_parameters_structure(self):
         """Verify v2.1.0 handles v2.0 config format correctly.
@@ -232,8 +238,9 @@ class TestCMCConvergencePreservation:
 
         # Verify they're comparable (within 0.02)
         difference = abs(nuts_r_hat - cmc_r_hat)
-        assert difference < 0.02, \
-            f"NUTS and CMC R-hat differ by {difference:.3f} (should be < 0.02)"
+        assert (
+            difference < 0.02
+        ), f"NUTS and CMC R-hat differ by {difference:.3f} (should be < 0.02)"
 
 
 class TestParameterSpaceLoadingRegression:

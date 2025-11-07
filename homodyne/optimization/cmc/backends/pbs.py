@@ -157,7 +157,8 @@ class PBSBackend(CMCBackend):
     - Job array size limited by cluster configuration
     """
 
-    def __init__(self,
+    def __init__(
+        self,
         project_name: Optional[str] = None,
         walltime: str = "02:00:00",
         queue: str = "batch",
@@ -260,7 +261,14 @@ class PBSBackend(CMCBackend):
         try:
             # Step 1: Write shard data to files
             logger.info("Writing shard data to HDF5 files...")
-            self._write_shard_data(shards, mcmc_config, init_params, inv_mass_matrix, analysis_mode, parameter_space)
+            self._write_shard_data(
+                shards,
+                mcmc_config,
+                init_params,
+                inv_mass_matrix,
+                analysis_mode,
+                parameter_space,
+            )
 
             # Step 2: Generate PBS script
             logger.info("Generating PBS job array script...")
@@ -322,11 +330,14 @@ class PBSBackend(CMCBackend):
 
         # Write MCMC config and init params (shared across shards)
         config_path = self.temp_dir / "mcmc_config.json"
-        with open(config_path, 'w') as f:
-            json.dump({
-                'mcmc_config': mcmc_config,
-                'init_params': init_params,
-            }, f)
+        with open(config_path, "w") as f:
+            json.dump(
+                {
+                    "mcmc_config": mcmc_config,
+                    "init_params": init_params,
+                },
+                f,
+            )
 
         # Write mass matrix (shared across shards)
         mass_matrix_path = self.temp_dir / "inv_mass_matrix.npy"
@@ -336,16 +347,18 @@ class PBSBackend(CMCBackend):
         for i, shard in enumerate(shards):
             shard_path = shard_data_dir / f"shard_{i:03d}.h5"
 
-            with h5py.File(shard_path, 'w') as f:
+            with h5py.File(shard_path, "w") as f:
                 # Write shard data
-                f.create_dataset('data', data=shard['data'])
-                f.create_dataset('sigma', data=shard.get('sigma', np.ones_like(shard['data'])))
-                f.create_dataset('t1', data=shard['t1'])
-                f.create_dataset('t2', data=shard['t2'])
-                f.create_dataset('phi', data=shard['phi'])
-                f.attrs['q'] = shard['q']
-                f.attrs['L'] = shard['L']
-                f.attrs['shard_idx'] = i
+                f.create_dataset("data", data=shard["data"])
+                f.create_dataset(
+                    "sigma", data=shard.get("sigma", np.ones_like(shard["data"]))
+                )
+                f.create_dataset("t1", data=shard["t1"])
+                f.create_dataset("t2", data=shard["t2"])
+                f.create_dataset("phi", data=shard["phi"])
+                f.attrs["q"] = shard["q"]
+                f.attrs["L"] = shard["L"]
+                f.attrs["shard_idx"] = i
 
         logger.info(f"Wrote {len(shards)} shard data files to {shard_data_dir}")
 
@@ -373,7 +386,7 @@ class PBSBackend(CMCBackend):
             )
             template_content = self._get_fallback_template()
         else:
-            with open(template_path, 'r') as f:
+            with open(template_path, "r") as f:
                 template_content = f.read()
 
         # Generate job name
@@ -388,14 +401,13 @@ class PBSBackend(CMCBackend):
         # Set job array
         script_content = script_content.replace(
             "#PBS -l select=4:mpiprocs=128",
-            f"#PBS -l select=1:ncpus={self.cores_per_node}"
+            f"#PBS -l select=1:ncpus={self.cores_per_node}",
         )
 
         # Add job array directive
         array_directive = f"#PBS -J 0-{num_shards - 1}\n"
         script_content = script_content.replace(
-            "#PBS -N <job_name>",
-            f"#PBS -N {job_name}\n{array_directive}"
+            "#PBS -N <job_name>", f"#PBS -N {job_name}\n{array_directive}"
         )
 
         # Replace email if provided
@@ -404,18 +416,17 @@ class PBSBackend(CMCBackend):
         else:
             # Remove email lines
             script_content = script_content.replace("#PBS -m be\n", "")
-            script_content = script_content.replace("#PBS -M <your_email_address>\n", "")
+            script_content = script_content.replace(
+                "#PBS -M <your_email_address>\n", ""
+            )
 
         # Replace job execution commands
         execution_script = self._get_execution_script()
-        script_content = script_content.replace(
-            "mpirun ./hello_mpi",
-            execution_script
-        )
+        script_content = script_content.replace("mpirun ./hello_mpi", execution_script)
 
         # Write script to file
         script_path = self.temp_dir / "job_script.pbs"
-        with open(script_path, 'w') as f:
+        with open(script_path, "w") as f:
             f.write(script_content)
 
         logger.info(f"Generated PBS script: {script_path}")
@@ -584,20 +595,20 @@ run_shard_task(
             )
 
             # Parse qstat output for job_state
-            for line in result.stdout.split('\n'):
-                if 'job_state' in line:
-                    state = line.split('=')[-1].strip()
-                    if state == 'Q':
-                        return 'queued'
-                    elif state == 'R':
-                        return 'running'
-                    elif state == 'F' or state == 'C':
+            for line in result.stdout.split("\n"):
+                if "job_state" in line:
+                    state = line.split("=")[-1].strip()
+                    if state == "Q":
+                        return "queued"
+                    elif state == "R":
+                        return "running"
+                    elif state == "F" or state == "C":
                         # Check exit status
                         return self._check_exit_status(result.stdout)
                     else:
-                        return 'unknown'
+                        return "unknown"
 
-            return 'unknown'
+            return "unknown"
 
         except subprocess.CalledProcessError:
             # Job not found in queue (likely completed or failed)
@@ -616,13 +627,13 @@ run_shard_task(
         str
             'completed' or 'failed'
         """
-        for line in qstat_output.split('\n'):
-            if 'exit_status' in line:
-                exit_code = int(line.split('=')[-1].strip())
-                return 'completed' if exit_code == 0 else 'failed'
+        for line in qstat_output.split("\n"):
+            if "exit_status" in line:
+                exit_code = int(line.split("=")[-1].strip())
+                return "completed" if exit_code == 0 else "failed"
 
         # No exit status found - assume completed
-        return 'completed'
+        return "completed"
 
     def _check_completion_status(self) -> str:
         """Check if job completed by examining output files.
@@ -634,8 +645,8 @@ run_shard_task(
         """
         results_dir = self.temp_dir / "shard_results"
         if results_dir.exists():
-            return 'completed'
-        return 'failed'
+            return "completed"
+        return "failed"
 
     def _count_completed_shards(self, num_shards: int) -> int:
         """Count number of completed shards.
@@ -684,53 +695,65 @@ run_shard_task(
             if not result_path.exists():
                 # Shard failed - create error result
                 logger.error(f"Shard {i} output file not found: {result_path}")
-                results.append({
-                    'converged': False,
-                    'error': f"Output file not found: {result_path}",
-                    'samples': None,
-                    'diagnostics': {},
-                    'elapsed_time': 0.0,
-                    'shard_idx': i,
-                })
+                results.append(
+                    {
+                        "converged": False,
+                        "error": f"Output file not found: {result_path}",
+                        "samples": None,
+                        "diagnostics": {},
+                        "elapsed_time": 0.0,
+                        "shard_idx": i,
+                    }
+                )
                 continue
 
             try:
                 # Read result from HDF5
-                with h5py.File(result_path, 'r') as f:
+                with h5py.File(result_path, "r") as f:
                     result = {
-                        'converged': bool(f.attrs.get('converged', False)),
-                        'samples': f['samples'][:] if 'samples' in f else None,
-                        'elapsed_time': float(f.attrs.get('elapsed_time', 0.0)),
-                        'shard_idx': int(f.attrs.get('shard_idx', i)),
+                        "converged": bool(f.attrs.get("converged", False)),
+                        "samples": f["samples"][:] if "samples" in f else None,
+                        "elapsed_time": float(f.attrs.get("elapsed_time", 0.0)),
+                        "shard_idx": int(f.attrs.get("shard_idx", i)),
                     }
 
                     # Read diagnostics
-                    if 'diagnostics' in f:
-                        diag_group = f['diagnostics']
-                        result['diagnostics'] = {
-                            'acceptance_rate': diag_group.attrs.get('acceptance_rate'),
-                            'ess': dict(diag_group['ess'].attrs) if 'ess' in diag_group else {},
-                            'rhat': dict(diag_group['rhat'].attrs) if 'rhat' in diag_group else {},
+                    if "diagnostics" in f:
+                        diag_group = f["diagnostics"]
+                        result["diagnostics"] = {
+                            "acceptance_rate": diag_group.attrs.get("acceptance_rate"),
+                            "ess": (
+                                dict(diag_group["ess"].attrs)
+                                if "ess" in diag_group
+                                else {}
+                            ),
+                            "rhat": (
+                                dict(diag_group["rhat"].attrs)
+                                if "rhat" in diag_group
+                                else {}
+                            ),
                         }
                     else:
-                        result['diagnostics'] = {}
+                        result["diagnostics"] = {}
 
                     # Check for error
-                    if 'error' in f.attrs:
-                        result['error'] = f.attrs['error']
+                    if "error" in f.attrs:
+                        result["error"] = f.attrs["error"]
 
                 results.append(result)
 
             except Exception as e:
                 logger.error(f"Failed to read shard {i} result: {str(e)}")
-                results.append({
-                    'converged': False,
-                    'error': f"Failed to read result: {str(e)}",
-                    'samples': None,
-                    'diagnostics': {},
-                    'elapsed_time': 0.0,
-                    'shard_idx': i,
-                })
+                results.append(
+                    {
+                        "converged": False,
+                        "error": f"Failed to read result: {str(e)}",
+                        "samples": None,
+                        "diagnostics": {},
+                        "elapsed_time": 0.0,
+                        "shard_idx": i,
+                    }
+                )
 
         return results
 
@@ -756,6 +779,7 @@ run_shard_task(
 # -----------------------------------------------------------------------------
 # PBS Job Array Task Function (executed on cluster nodes)
 # -----------------------------------------------------------------------------
+
 
 def run_shard_task(temp_dir: str, shard_idx: int) -> None:
     """Execute MCMC for a single shard (called by PBS job array task).
@@ -790,61 +814,61 @@ def run_shard_task(temp_dir: str, shard_idx: int) -> None:
         # Read shard data
         shard_path = temp_path / "shard_data" / f"shard_{shard_idx:03d}.h5"
 
-        with h5py.File(shard_path, 'r') as f:
+        with h5py.File(shard_path, "r") as f:
             shard = {
-                'data': f['data'][:],
-                'sigma': f['sigma'][:],
-                't1': f['t1'][:],
-                't2': f['t2'][:],
-                'phi': f['phi'][:],
-                'q': f.attrs['q'],
-                'L': f.attrs['L'],
+                "data": f["data"][:],
+                "sigma": f["sigma"][:],
+                "t1": f["t1"][:],
+                "t2": f["t2"][:],
+                "phi": f["phi"][:],
+                "q": f.attrs["q"],
+                "L": f.attrs["L"],
             }
 
         # Read MCMC config
         config_path = temp_path / "mcmc_config.json"
-        with open(config_path, 'r') as f:
+        with open(config_path, "r") as f:
             config_data = json.load(f)
-            mcmc_config = config_data['mcmc_config']
-            init_params = config_data['init_params']
+            mcmc_config = config_data["mcmc_config"]
+            init_params = config_data["init_params"]
 
         # Read mass matrix
         mass_matrix_path = temp_path / "inv_mass_matrix.npy"
         inv_mass_matrix = np.load(mass_matrix_path)
 
         # Run MCMC (same logic as pjit/multiprocessing backends)
-        num_warmup = mcmc_config.get('num_warmup', 500)
-        num_samples = mcmc_config.get('num_samples', 2000)
-        num_chains = mcmc_config.get('num_chains', 1)
-        target_accept_prob = mcmc_config.get('target_accept_prob', 0.8)
-        max_tree_depth = mcmc_config.get('max_tree_depth', 10)
+        num_warmup = mcmc_config.get("num_warmup", 500)
+        num_samples = mcmc_config.get("num_samples", 2000)
+        num_chains = mcmc_config.get("num_chains", 1)
+        target_accept_prob = mcmc_config.get("target_accept_prob", 0.8)
+        max_tree_depth = mcmc_config.get("max_tree_depth", 10)
 
         # Convert to JAX arrays
-        data_jax = jnp.array(shard['data'])
-        sigma_jax = jnp.array(shard['sigma'])
-        t1_jax = jnp.array(shard['t1'])
-        t2_jax = jnp.array(shard['t2'])
-        phi_jax = jnp.array(shard['phi'])
+        data_jax = jnp.array(shard["data"])
+        sigma_jax = jnp.array(shard["sigma"])
+        t1_jax = jnp.array(shard["t1"])
+        t2_jax = jnp.array(shard["t2"])
+        phi_jax = jnp.array(shard["phi"])
 
         # Define model
         def model(data, sigma, t1, t2, phi, q, L):
-            contrast = sample('contrast', dist.Uniform(0.0, 1.0))
-            offset = sample('offset', dist.Normal(1.0, 0.1))
-            D0 = sample('D0', dist.Uniform(100.0, 10000.0))
-            alpha = sample('alpha', dist.Uniform(0.0, 2.0))
-            D_offset = sample('D_offset', dist.Uniform(0.0, 100.0))
+            contrast = sample("contrast", dist.Uniform(0.0, 1.0))
+            offset = sample("offset", dist.Normal(1.0, 0.1))
+            D0 = sample("D0", dist.Uniform(100.0, 10000.0))
+            alpha = sample("alpha", dist.Uniform(0.0, 2.0))
+            D_offset = sample("D_offset", dist.Uniform(0.0, 100.0))
 
             g2_theory = jnp.ones_like(data)
             mu = contrast * g2_theory + offset
-            sample('obs', dist.Normal(mu, sigma), obs=data)
+            sample("obs", dist.Normal(mu, sigma), obs=data)
 
         # Initial values
         init_param_values = {
-            'contrast': init_params.get('contrast', 0.5),
-            'offset': init_params.get('offset', 1.0),
-            'D0': init_params.get('D0', 1000.0),
-            'alpha': init_params.get('alpha', 0.5),
-            'D_offset': init_params.get('D_offset', 10.0),
+            "contrast": init_params.get("contrast", 0.5),
+            "offset": init_params.get("offset", 1.0),
+            "D0": init_params.get("D0", 1000.0),
+            "alpha": init_params.get("alpha", 0.5),
+            "D_offset": init_params.get("D_offset", 10.0),
         }
 
         # Create NUTS sampler
@@ -872,25 +896,28 @@ def run_shard_task(temp_dir: str, shard_idx: int) -> None:
             t1=t1_jax,
             t2=t2_jax,
             phi=phi_jax,
-            q=shard['q'],
-            L=shard['L'],
+            q=shard["q"],
+            L=shard["L"],
         )
 
         # Extract samples
         samples_dict = mcmc.get_samples()
-        samples_array = np.stack([
-            np.array(samples_dict['contrast']),
-            np.array(samples_dict['offset']),
-            np.array(samples_dict['D0']),
-            np.array(samples_dict['alpha']),
-            np.array(samples_dict['D_offset']),
-        ], axis=1)
+        samples_array = np.stack(
+            [
+                np.array(samples_dict["contrast"]),
+                np.array(samples_dict["offset"]),
+                np.array(samples_dict["D0"]),
+                np.array(samples_dict["alpha"]),
+                np.array(samples_dict["D_offset"]),
+            ],
+            axis=1,
+        )
 
         # Compute diagnostics
         diagnostics = {}
         extra_fields = mcmc.get_extra_fields()
-        if 'accept_prob' in extra_fields:
-            diagnostics['acceptance_rate'] = float(np.mean(extra_fields['accept_prob']))
+        if "accept_prob" in extra_fields:
+            diagnostics["acceptance_rate"] = float(np.mean(extra_fields["accept_prob"]))
 
         if mcmc.num_chains > 1:
             from numpyro.diagnostics import effective_sample_size, gelman_rubin
@@ -898,22 +925,26 @@ def run_shard_task(temp_dir: str, shard_idx: int) -> None:
             ess_dict = {}
             for param_name, samples in samples_dict.items():
                 ess = effective_sample_size(samples)
-                ess_dict[param_name] = float(ess) if ess.size == 1 else float(np.mean(ess))
-            diagnostics['ess'] = ess_dict
+                ess_dict[param_name] = (
+                    float(ess) if ess.size == 1 else float(np.mean(ess))
+                )
+            diagnostics["ess"] = ess_dict
 
             rhat_dict = {}
             for param_name, samples in samples_dict.items():
                 rhat = gelman_rubin(samples)
-                rhat_dict[param_name] = float(rhat) if rhat.size == 1 else float(np.mean(rhat))
-            diagnostics['rhat'] = rhat_dict
+                rhat_dict[param_name] = (
+                    float(rhat) if rhat.size == 1 else float(np.mean(rhat))
+                )
+            diagnostics["rhat"] = rhat_dict
         else:
-            diagnostics['ess'] = {k: len(v) for k, v in samples_dict.items()}
-            diagnostics['rhat'] = {k: 1.0 for k in samples_dict.keys()}
+            diagnostics["ess"] = {k: len(v) for k, v in samples_dict.items()}
+            diagnostics["rhat"] = {k: 1.0 for k in samples_dict.keys()}
 
         # Check convergence
         converged = True
-        if diagnostics.get('rhat'):
-            max_rhat = max(diagnostics['rhat'].values())
+        if diagnostics.get("rhat"):
+            max_rhat = max(diagnostics["rhat"].values())
             if max_rhat > 1.1:
                 converged = False
 
@@ -924,23 +955,23 @@ def run_shard_task(temp_dir: str, shard_idx: int) -> None:
 
         elapsed_time = time.time() - start_time
 
-        with h5py.File(result_path, 'w') as f:
-            f.create_dataset('samples', data=samples_array)
-            f.attrs['converged'] = converged
-            f.attrs['elapsed_time'] = elapsed_time
-            f.attrs['shard_idx'] = shard_idx
+        with h5py.File(result_path, "w") as f:
+            f.create_dataset("samples", data=samples_array)
+            f.attrs["converged"] = converged
+            f.attrs["elapsed_time"] = elapsed_time
+            f.attrs["shard_idx"] = shard_idx
 
             # Write diagnostics
-            diag_group = f.create_group('diagnostics')
-            if 'acceptance_rate' in diagnostics:
-                diag_group.attrs['acceptance_rate'] = diagnostics['acceptance_rate']
-            if 'ess' in diagnostics:
-                ess_group = diag_group.create_group('ess')
-                for k, v in diagnostics['ess'].items():
+            diag_group = f.create_group("diagnostics")
+            if "acceptance_rate" in diagnostics:
+                diag_group.attrs["acceptance_rate"] = diagnostics["acceptance_rate"]
+            if "ess" in diagnostics:
+                ess_group = diag_group.create_group("ess")
+                for k, v in diagnostics["ess"].items():
                     ess_group.attrs[k] = v
-            if 'rhat' in diagnostics:
-                rhat_group = diag_group.create_group('rhat')
-                for k, v in diagnostics['rhat'].items():
+            if "rhat" in diagnostics:
+                rhat_group = diag_group.create_group("rhat")
+                for k, v in diagnostics["rhat"].items():
                     rhat_group.attrs[k] = v
 
         print(f"Shard {shard_idx} completed in {elapsed_time:.2f}s")
@@ -956,11 +987,11 @@ def run_shard_task(temp_dir: str, shard_idx: int) -> None:
 
         elapsed_time = time.time() - start_time
 
-        with h5py.File(result_path, 'w') as f:
-            f.attrs['converged'] = False
-            f.attrs['error'] = error_msg
-            f.attrs['elapsed_time'] = elapsed_time
-            f.attrs['shard_idx'] = shard_idx
+        with h5py.File(result_path, "w") as f:
+            f.attrs["converged"] = False
+            f.attrs["error"] = error_msg
+            f.attrs["elapsed_time"] = elapsed_time
+            f.attrs["shard_idx"] = shard_idx
 
 
 # Export backend class

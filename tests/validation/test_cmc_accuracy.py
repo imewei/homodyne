@@ -22,6 +22,7 @@ from typing import Dict, Tuple, Optional
 try:
     import jax
     import jax.numpy as jnp
+
     JAX_AVAILABLE = True
 except ImportError:
     JAX_AVAILABLE = False
@@ -36,6 +37,7 @@ try:
         compute_combined_posterior_diagnostics,
         validate_cmc_results,
     )
+
     CMC_AVAILABLE = True
 except ImportError:
     CMC_AVAILABLE = False
@@ -111,14 +113,16 @@ def create_shard_results(
             seed=shard_seed,
         )
 
-        shard_results.append({
-            'shard_id': shard_id,
-            'samples': samples,
-            'mean': mean,
-            'cov': cov,
-            'n_samples': n_samples,
-            'n_params': n_params,
-        })
+        shard_results.append(
+            {
+                "shard_id": shard_id,
+                "samples": samples,
+                "mean": mean,
+                "cov": cov,
+                "n_samples": n_samples,
+                "n_params": n_params,
+            }
+        )
 
     return shard_results
 
@@ -147,24 +151,22 @@ class TestCMCNumericalAccuracy:
         samples2 = np.random.multivariate_normal(mu2, sigma2, size=2000)
 
         shard_results = [
-            {'samples': samples1, 'mean': mu1, 'cov': sigma1},
-            {'samples': samples2, 'mean': mu2, 'cov': sigma2},
+            {"samples": samples1, "mean": mu1, "cov": sigma1},
+            {"samples": samples2, "mean": mu2, "cov": sigma2},
         ]
 
         # Combine with weighted method
         combined = combine_subposteriors(
-            shard_results,
-            method='weighted',
-            fallback_enabled=False
+            shard_results, method="weighted", fallback_enabled=False
         )
 
-        assert 'mean' in combined
-        assert 'cov' in combined
+        assert "mean" in combined
+        assert "cov" in combined
 
         # Result should be between individual means
-        assert np.all(np.isfinite(combined['mean']))
-        assert np.all(np.isfinite(combined['cov']))
-        assert np.linalg.matrix_rank(combined['cov']) == 2
+        assert np.all(np.isfinite(combined["mean"]))
+        assert np.all(np.isfinite(combined["cov"]))
+        assert np.linalg.matrix_rank(combined["cov"]) == 2
 
     def test_simple_averaging(self):
         """Test simple averaging combination method."""
@@ -172,21 +174,19 @@ class TestCMCNumericalAccuracy:
 
         # Combine with simple averaging (correct method name is 'average')
         combined = combine_subposteriors(
-            shard_results,
-            method='average',
-            fallback_enabled=False
+            shard_results, method="average", fallback_enabled=False
         )
 
-        assert 'mean' in combined
-        assert len(combined['mean']) == 3
+        assert "mean" in combined
+        assert len(combined["mean"]) == 3
 
         # Check that combined mean is reasonable (within range of individual means)
-        individual_means = [s['mean'] for s in shard_results]
+        individual_means = [s["mean"] for s in shard_results]
         mean_of_means = np.mean(individual_means, axis=0)
 
         # The 'average' method uses samples-based averaging, not just mean of means
         # So we use a relaxed tolerance to check it's in the right ballpark
-        assert np.allclose(combined['mean'], mean_of_means, rtol=0.1)  # 10% tolerance
+        assert np.allclose(combined["mean"], mean_of_means, rtol=0.1)  # 10% tolerance
 
     def test_combination_fallback_mechanism(self):
         """Test fallback from weighted to simple averaging."""
@@ -194,13 +194,11 @@ class TestCMCNumericalAccuracy:
 
         # Request weighted with fallback enabled
         combined = combine_subposteriors(
-            shard_results,
-            method='weighted',
-            fallback_enabled=True
+            shard_results, method="weighted", fallback_enabled=True
         )
 
         assert combined is not None
-        assert 'mean' in combined
+        assert "mean" in combined
 
     def test_posterior_contraction(self):
         """
@@ -208,21 +206,15 @@ class TestCMCNumericalAccuracy:
 
         When combining posteriors, variance should decrease.
         """
-        shard_results = create_shard_results(
-            n_shards=4,
-            n_samples=1000,
-            n_params=3
-        )
+        shard_results = create_shard_results(n_shards=4, n_samples=1000, n_params=3)
 
         # Get individual shard standard deviations
-        individual_stds = [
-            np.sqrt(np.diag(s['cov'])) for s in shard_results
-        ]
+        individual_stds = [np.sqrt(np.diag(s["cov"])) for s in shard_results]
         avg_shard_std = np.mean(individual_stds, axis=0)
 
         # Combine
-        combined = combine_subposteriors(shard_results, method='weighted')
-        combined_std = np.sqrt(np.diag(combined['cov']))
+        combined = combine_subposteriors(shard_results, method="weighted")
+        combined_std = np.sqrt(np.diag(combined["cov"]))
 
         # Combined posterior should be more concentrated
         # (though not necessarily for all parameters in weighted method)
@@ -239,7 +231,7 @@ class TestCMCConvergenceDiagnostics:
         shard_results = create_shard_results(n_shards=3, n_samples=2000)
 
         for shard in shard_results:
-            diagnostics = compute_per_shard_diagnostics(shard['samples'])
+            diagnostics = compute_per_shard_diagnostics(shard["samples"])
 
             assert diagnostics is not None
             assert isinstance(diagnostics, dict)
@@ -309,18 +301,16 @@ class TestCMCRobustness:
         shard_results = create_shard_results(n_shards=4, n_params=5)
 
         # Corrupt one shard (high variance, shifted mean)
-        shard_results[0]['cov'] *= 10  # 10x larger covariance
-        shard_results[0]['mean'] += np.random.randn(5)
+        shard_results[0]["cov"] *= 10  # 10x larger covariance
+        shard_results[0]["mean"] += np.random.randn(5)
 
         # CMC should still work
         combined = combine_subposteriors(
-            shard_results,
-            method='weighted',
-            fallback_enabled=True
+            shard_results, method="weighted", fallback_enabled=True
         )
 
         assert combined is not None
-        assert np.all(np.isfinite(combined['mean']))
+        assert np.all(np.isfinite(combined["mean"]))
 
     def test_ill_conditioned_covariance(self):
         """
@@ -341,15 +331,13 @@ class TestCMCRobustness:
             mean = np.random.randn(n_params)
             # Generate samples from the ill-conditioned distribution
             samples = np.random.multivariate_normal(mean, ill_cond_cov, size=2000)
-            shard_results.append({
-                'samples': samples,
-                'mean': mean,
-                'cov': ill_cond_cov.copy()
-            })
+            shard_results.append(
+                {"samples": samples, "mean": mean, "cov": ill_cond_cov.copy()}
+            )
 
         # Should still handle gracefully
         try:
-            combined = combine_subposteriors(shard_results, method='weighted')
+            combined = combine_subposteriors(shard_results, method="weighted")
             assert combined is not None
         except np.linalg.LinAlgError:
             # Acceptable if it raises due to singularity
@@ -367,41 +355,43 @@ class TestCMCRobustness:
         mean1 = np.array([1.0, 1.0])
         cov1 = np.eye(2) * 0.1
         samples1 = np.random.multivariate_normal(mean1, cov1, size=2000)
-        shard_results.append({
-            'samples': samples1,
-            'mean': mean1,
-            'cov': cov1,
-        })
+        shard_results.append(
+            {
+                "samples": samples1,
+                "mean": mean1,
+                "cov": cov1,
+            }
+        )
 
         # Second shard: centered at [5, 5] (very different)
         mean2 = np.array([5.0, 5.0])
         cov2 = np.eye(2) * 0.1
         samples2 = np.random.multivariate_normal(mean2, cov2, size=2000)
-        shard_results.append({
-            'samples': samples2,
-            'mean': mean2,
-            'cov': cov2,
-        })
+        shard_results.append(
+            {
+                "samples": samples2,
+                "mean": mean2,
+                "cov": cov2,
+            }
+        )
 
         # Should work but indicate problem
         combined = combine_subposteriors(
-            shard_results,
-            method='weighted',
-            fallback_enabled=True
+            shard_results, method="weighted", fallback_enabled=True
         )
 
         # Result should be between the two means
-        assert np.all(combined['mean'] >= 1.0)
-        assert np.all(combined['mean'] <= 5.0)
+        assert np.all(combined["mean"] >= 1.0)
+        assert np.all(combined["mean"] <= 5.0)
 
     def test_single_shard(self):
         """Test CMC with only one shard (degenerate case)."""
         shard_results = create_shard_results(n_shards=1, n_params=3)
 
-        combined = combine_subposteriors(shard_results, method='weighted')
+        combined = combine_subposteriors(shard_results, method="weighted")
 
         # Should return the single shard result
-        assert np.allclose(combined['mean'], shard_results[0]['mean'])
+        assert np.allclose(combined["mean"], shard_results[0]["mean"])
 
 
 @pytest.mark.validation
@@ -420,23 +410,22 @@ class TestCMCParameterRecovery:
         shard_results = []
         for shard_id in range(4):
             samples, mean, cov = generate_synthetic_posterior_samples(
-                n_samples=2000,
-                n_params=5,
-                true_params=true_params,
-                seed=42 + shard_id
+                n_samples=2000, n_params=5, true_params=true_params, seed=42 + shard_id
             )
 
-            shard_results.append({
-                'samples': samples,
-                'mean': mean,
-                'cov': cov,
-            })
+            shard_results.append(
+                {
+                    "samples": samples,
+                    "mean": mean,
+                    "cov": cov,
+                }
+            )
 
         # Combine shards
-        combined = combine_subposteriors(shard_results, method='weighted')
+        combined = combine_subposteriors(shard_results, method="weighted")
 
         # Check recovery
-        recovery_error = np.abs(combined['mean'] - true_params) / np.abs(true_params)
+        recovery_error = np.abs(combined["mean"] - true_params) / np.abs(true_params)
 
         # Should recover parameters within reasonable error
         assert np.all(recovery_error < 0.5)  # 50% error max
@@ -449,9 +438,9 @@ class TestCMCParameterRecovery:
         """
         shard_results = create_shard_results(n_shards=4, n_params=5)
 
-        combined = combine_subposteriors(shard_results, method='weighted')
+        combined = combine_subposteriors(shard_results, method="weighted")
 
-        combined_std = np.sqrt(np.diag(combined['cov']))
+        combined_std = np.sqrt(np.diag(combined["cov"]))
 
         # Standard deviations should be positive
         assert np.all(combined_std > 0)
@@ -474,8 +463,7 @@ class TestCMCValidationSuite:
         # Parameter is 'strict_mode', not 'strict'
         try:
             is_valid, validation_result = validate_cmc_results(
-                shard_results=shard_results,
-                strict_mode=True
+                shard_results=shard_results, strict_mode=True
             )
 
             # Either passes validation or returns diagnostic info
@@ -489,16 +477,16 @@ class TestCMCValidationSuite:
         """Test that validation produces appropriate warnings."""
         # Create problematic shard results
         bad_results = [
-            {'mean': np.array([1.0, 2.0]), 'cov': np.eye(2) * 0.01},
-            {'mean': np.array([100.0, 200.0]), 'cov': np.eye(2) * 0.01},
+            {"mean": np.array([1.0, 2.0]), "cov": np.eye(2) * 0.01},
+            {"mean": np.array([100.0, 200.0]), "cov": np.eye(2) * 0.01},
         ]
 
         # Validation should detect inconsistency
         try:
             validation_result = validate_cmc_results(
                 shard_results=bad_results,
-                combined_posterior={'mean': np.array([50.0, 100.0]), 'cov': np.eye(2)},
-                strict=False
+                combined_posterior={"mean": np.array([50.0, 100.0]), "cov": np.eye(2)},
+                strict=False,
             )
             # Should produce warning or diagnostic
         except Exception:
@@ -522,7 +510,7 @@ class TestCMCAccuracyMetrics:
 
         combined = combine_subposteriors(shard_results)
 
-        mse = np.mean((combined['mean'] - true_params) ** 2)
+        mse = np.mean((combined["mean"] - true_params) ** 2)
 
         # MSE should be small
         assert mse < 1.0
@@ -535,11 +523,11 @@ class TestCMCAccuracyMetrics:
         """
         shard_results = create_shard_results(n_shards=4, n_params=5)
 
-        individual_traces = [np.trace(s['cov']) for s in shard_results]
+        individual_traces = [np.trace(s["cov"]) for s in shard_results]
         avg_individual_trace = np.mean(individual_traces)
 
-        combined = combine_subposteriors(shard_results, method='weighted')
-        combined_trace = np.trace(combined['cov'])
+        combined = combine_subposteriors(shard_results, method="weighted")
+        combined_trace = np.trace(combined["cov"])
 
         # Combined should have less total uncertainty in general
         # (though not guaranteed for all combination methods)
@@ -550,11 +538,11 @@ class TestCMCAccuracyMetrics:
         shard_results = create_shard_results(n_shards=3, n_params=4)
 
         for shard in shard_results:
-            det = np.linalg.det(shard['cov'])
+            det = np.linalg.det(shard["cov"])
             assert det > 0, "Covariance matrix not positive definite"
 
         combined = combine_subposteriors(shard_results)
-        det_combined = np.linalg.det(combined['cov'])
+        det_combined = np.linalg.det(combined["cov"])
         assert det_combined > 0, "Combined covariance not positive definite"
 
 
@@ -562,37 +550,31 @@ class TestCMCAccuracyMetrics:
 # Parametrized Validation Tests
 # ============================================================================
 
+
 @pytest.mark.validation
 @pytest.mark.parametrize("n_shards", [2, 4, 8])
 @pytest.mark.skipif(not CMC_AVAILABLE, reason="CMC not available")
 def test_combination_with_different_shard_counts(n_shards):
     """Test combination accuracy varies with number of shards."""
-    shard_results = create_shard_results(
-        n_shards=n_shards,
-        n_samples=1000,
-        n_params=5
-    )
+    shard_results = create_shard_results(n_shards=n_shards, n_samples=1000, n_params=5)
 
-    combined = combine_subposteriors(shard_results, method='weighted')
+    combined = combine_subposteriors(shard_results, method="weighted")
 
     assert combined is not None
-    assert len(combined['mean']) == 5
+    assert len(combined["mean"]) == 5
 
 
 @pytest.mark.validation
 @pytest.mark.parametrize("n_params", [2, 5, 10])
 def test_parameter_dimension_scaling(n_params):
     """Test accuracy varies with number of parameters."""
-    shard_results = create_shard_results(
-        n_shards=4,
-        n_params=n_params
-    )
+    shard_results = create_shard_results(n_shards=4, n_params=n_params)
 
     combined = combine_subposteriors(shard_results)
 
-    assert len(combined['mean']) == n_params
-    assert combined['cov'].shape == (n_params, n_params)
+    assert len(combined["mean"]) == n_params
+    assert combined["cov"].shape == (n_params, n_params)
 
 
-if __name__ == '__main__':
-    pytest.main([__file__, '-v'])
+if __name__ == "__main__":
+    pytest.main([__file__, "-v"])

@@ -8,6 +8,8 @@ Tests for API stability and backward compatibility:
 - Function signature consistency
 - Deprecation handling
 - Version compatibility checks
+
+Note: GPU-related tests removed in v2.3.0 - CPU-only focus
 """
 
 import importlib
@@ -127,19 +129,6 @@ class TestPublicAPIStability:
         except ImportError as e:
             pytest.skip(f"Config functions not available: {e}")
 
-    def test_gpu_api_functions(self):
-        """Test GPU API function availability."""
-        try:
-            from homodyne.runtime.gpu import GPUActivator, activate_gpu, get_gpu_status
-
-            assert callable(activate_gpu), "activate_gpu not callable"
-            assert callable(get_gpu_status), "get_gpu_status not callable"
-            assert inspect.isclass(GPUActivator), "GPUActivator not a class"
-
-        except ImportError:
-            # GPU module might not be available
-            pass
-
 
 @pytest.mark.api
 class TestFunctionSignatures:
@@ -192,26 +181,12 @@ class TestFunctionSignatures:
             params = list(sig.parameters.keys())
 
             # Should have config_path as parameter (renamed from config in v2.1.0)
-            assert "config_path" in params, "load_xpcs_data should have config_path parameter"
+            assert (
+                "config_path" in params
+            ), "load_xpcs_data should have config_path parameter"
 
         except ImportError:
             pytest.skip("Data loader not available")
-
-    def test_gpu_function_signatures(self):
-        """Test GPU function signatures are stable."""
-        try:
-            from homodyne.runtime.gpu import activate_gpu
-
-            sig = inspect.signature(activate_gpu)
-            params = list(sig.parameters.keys())
-
-            # Expected GPU activation parameters
-            expected_params = ["memory_fraction", "force_gpu", "gpu_id", "verbose"]
-            for param in expected_params:
-                assert param in params, f"Missing parameter {param} in activate_gpu"
-
-        except ImportError:
-            pytest.skip("GPU functions not available")
 
 
 @pytest.mark.api
@@ -270,25 +245,6 @@ class TestReturnTypes:
             assert hasattr(data[key], "shape"), f"{key} should be array-like"
             assert hasattr(data[key], "dtype"), f"{key} should have dtype"
 
-    def test_gpu_return_types(self):
-        """Test GPU function return types are consistent."""
-        try:
-            from homodyne.runtime.gpu import activate_gpu, get_gpu_status
-        except ImportError:
-            pytest.skip("GPU module not available")
-
-        # GPU status should return dict
-        status = get_gpu_status()
-        assert isinstance(status, dict), "GPU status should be dict"
-
-        # Required keys
-        assert "jax_available" in status, "Missing jax_available in GPU status"
-        assert "devices" in status, "Missing devices in GPU status"
-
-        # GPU activation should return dict
-        result = activate_gpu(force_gpu=False, verbose=False)
-        assert isinstance(result, dict), "GPU activation result should be dict"
-
 
 @pytest.mark.api
 class TestErrorHandling:
@@ -328,20 +284,6 @@ class TestErrorHandling:
         for invalid_config in invalid_configs:
             with pytest.raises((KeyError, ValueError, FileNotFoundError, TypeError)):
                 load_xpcs_data(invalid_config)
-
-    def test_gpu_error_handling(self):
-        """Test GPU error handling."""
-        try:
-            from homodyne.runtime.gpu import activate_gpu
-        except ImportError:
-            pytest.skip("GPU module not available")
-
-        # Invalid parameters should raise appropriate errors
-        with pytest.raises(ValueError):
-            activate_gpu(memory_fraction=2.0)  # > 1.0
-
-        with pytest.raises(ValueError):
-            activate_gpu(memory_fraction=0.0)  # <= 0.0
 
 
 @pytest.mark.api
@@ -449,7 +391,6 @@ class TestVersionCompatibility:
         # Should handle missing optional dependencies gracefully
         optional_modules = [
             "homodyne.optimization.mcmc",
-            "homodyne.runtime.gpu",
         ]
 
         for module_name in optional_modules:
@@ -495,22 +436,3 @@ class TestDocumentationCompatibility:
 
         except Exception as e:
             pytest.skip(f"Basic usage example failed: {e}")
-
-    def test_gpu_usage_example(self):
-        """Test GPU usage example from documentation."""
-        try:
-            from homodyne.runtime.gpu import activate_gpu, get_gpu_status
-        except ImportError:
-            pytest.skip("GPU module not available")
-
-        try:
-            # Example usage (should match docs)
-            status = get_gpu_status()
-            assert isinstance(status, dict)
-
-            # Activation example
-            result = activate_gpu(memory_fraction=0.8, force_gpu=False)
-            assert isinstance(result, dict)
-
-        except Exception as e:
-            pytest.skip(f"GPU usage example failed: {e}")

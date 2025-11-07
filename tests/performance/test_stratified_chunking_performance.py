@@ -124,7 +124,9 @@ class TestStratificationOverhead:
 
         # Performance assertions
         mean_time = perf["mean_time"]
-        assert mean_time < 0.5, f"Stratification too slow: {mean_time:.3f}s (target: <0.5s)"
+        assert (
+            mean_time < 0.5
+        ), f"Stratification too slow: {mean_time:.3f}s (target: <0.5s)"
 
         # Overhead should be <1% of typical optimization (assume 10s optimization)
         typical_optimization_time = 10.0  # seconds
@@ -150,7 +152,9 @@ class TestStratificationOverhead:
         )
 
         mean_time = perf["mean_time"]
-        assert mean_time < 2.0, f"Stratification too slow: {mean_time:.3f}s (target: <2.0s)"
+        assert (
+            mean_time < 2.0
+        ), f"Stratification too slow: {mean_time:.3f}s (target: <2.0s)"
 
         # Overhead check
         typical_optimization_time = 30.0  # seconds for 1M points
@@ -177,7 +181,9 @@ class TestStratificationOverhead:
 
         mean_time = perf["mean_time"]
         # Ultra-Think target: 0.15s, but be lenient for CI
-        assert mean_time < 5.0, f"Stratification too slow: {mean_time:.3f}s (target: <5.0s)"
+        assert (
+            mean_time < 5.0
+        ), f"Stratification too slow: {mean_time:.3f}s (target: <5.0s)"
 
         print(f"\n3M points: {mean_time:.4f}s (Ultra-Think target: 0.15s)")
 
@@ -202,7 +208,7 @@ class TestDatasetSizeScaling:
         mean_time = perf["mean_time"]
         assert mean_time < 0.01, f"Analysis too slow: {mean_time:.3f}s"
 
-        print(f"\nSmall dataset (10k): {mean_time*1000:.2f}ms")
+        print(f"\nSmall dataset (10k): {mean_time * 1000:.2f}ms")
 
     def test_medium_dataset_performance(self):
         """Medium dataset (500k points) with stratification."""
@@ -288,7 +294,9 @@ class TestChunkSizeVariations:
         variation = (time_range / mean_time) * 100
 
         # Variation should be <50% (chunk size is not a major factor)
-        assert variation < 50.0, f"Too much variation across chunk sizes: {variation:.1f}%"
+        assert (
+            variation < 50.0
+        ), f"Too much variation across chunk sizes: {variation:.1f}%"
 
         print(f"\nChunk size results: {results}")
         print(f"Variation: {variation:.1f}%")
@@ -455,10 +463,16 @@ class TestScalabilityAnalysis:
 
         # Should be close to linear (exponent ≈ 1.0)
         # Allow up to O(n log n) behavior (exponent ≈ 1.1)
-        assert 0.8 <= scaling_exponent <= 1.3, f"Non-linear scaling: exponent={scaling_exponent:.2f}"
+        assert (
+            0.8 <= scaling_exponent <= 1.3
+        ), f"Non-linear scaling: exponent={scaling_exponent:.2f}"
 
         print(f"\nScaling analysis: time ∝ size^{scaling_exponent:.2f}")
-        print("✓ Linear scaling verified" if abs(scaling_exponent - 1.0) < 0.2 else "⚠ Sub-linear scaling")
+        print(
+            "✓ Linear scaling verified"
+            if abs(scaling_exponent - 1.0) < 0.2
+            else "⚠ Sub-linear scaling"
+        )
 
     def test_throughput_measurement(self):
         """Measure throughput (points/second) across different sizes."""
@@ -484,7 +498,7 @@ class TestScalabilityAnalysis:
             # Should process >100k points/second
             assert throughput > 100_000, f"Low throughput: {throughput:.0f} points/s"
 
-            print(f"\n{n_points:,} points: {throughput/1e6:.2f}M points/s")
+            print(f"\n{n_points:,} points: {throughput / 1e6:.2f}M points/s")
 
         # Throughput should remain relatively consistent (linear scaling)
         throughput_values = list(throughputs.values())
@@ -493,6 +507,8 @@ class TestScalabilityAnalysis:
         throughput_variation = (max_throughput - min_throughput) / min_throughput * 100
 
         # Allow 100% variation (2x difference) for consistent linear scaling
-        assert throughput_variation < 100.0, f"Inconsistent throughput: {throughput_variation:.1f}%"
+        assert (
+            throughput_variation < 100.0
+        ), f"Inconsistent throughput: {throughput_variation:.1f}%"
 
         print(f"\nThroughput variation: {throughput_variation:.1f}%")

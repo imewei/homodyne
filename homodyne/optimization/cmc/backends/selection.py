@@ -147,21 +147,24 @@ def select_backend(
     - Selection can be overridden for testing and debugging
     """
     # Handle user override
-    if user_override and user_override.lower() != 'auto':
+    if user_override and user_override.lower() != "auto":
         logger.info(f"User override: forcing '{user_override}' backend")
         backend = get_backend_by_name(user_override)
         _validate_backend_compatibility(backend, hardware_config)
         return backend
 
     # Log when 'auto' is explicitly requested
-    if user_override and user_override.lower() == 'auto':
+    if user_override and user_override.lower() == "auto":
         logger.info("Backend set to 'auto', using automatic hardware-based selection")
 
     # Auto-selection based on hardware
     logger.info("Auto-selecting CMC backend based on hardware configuration...")
 
     # Priority 1: Multi-node HPC cluster
-    if hardware_config.cluster_type in ["pbs", "slurm"] and hardware_config.num_nodes > 1:
+    if (
+        hardware_config.cluster_type in ["pbs", "slurm"]
+        and hardware_config.num_nodes > 1
+    ):
         backend_name = hardware_config.cluster_type
         logger.info(
             f"Multi-node {hardware_config.cluster_type.upper()} cluster detected "
@@ -244,8 +247,7 @@ def get_backend_by_name(backend_name: str) -> CMCBackend:
     if backend_name not in _BACKEND_REGISTRY:
         available = list(_BACKEND_REGISTRY.keys())
         raise ValueError(
-            f"Unknown backend: '{backend_name}'. "
-            f"Available backends: {available}"
+            f"Unknown backend: '{backend_name}'. Available backends: {available}"
         )
 
     # Lazy load backend class
@@ -255,6 +257,7 @@ def get_backend_by_name(backend_name: str) -> CMCBackend:
     try:
         # Import module
         import importlib
+
         module = importlib.import_module(module_path)
 
         # Get class
@@ -312,7 +315,10 @@ def _validate_backend_compatibility(
         )
 
     # Check cluster backend on standalone system
-    if backend_name in ["pbs", "slurm"] and hardware_config.cluster_type == "standalone":
+    if (
+        backend_name in ["pbs", "slurm"]
+        and hardware_config.cluster_type == "standalone"
+    ):
         logger.warning(
             f"Using '{backend_name}' backend on standalone system. "
             f"PBS/Slurm scheduler may not be available. "

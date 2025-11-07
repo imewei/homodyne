@@ -145,7 +145,9 @@ def calculate_adaptive_min_shard_size(
         return default_min
     else:
         # Small dataset: adaptive minimum based on expected shard size
-        expected_shard_size = dataset_size // num_shards if num_shards > 0 else dataset_size
+        expected_shard_size = (
+            dataset_size // num_shards if num_shards > 0 else dataset_size
+        )
         adaptive_min = max(absolute_min, expected_shard_size // 2)
         # Never exceed default for consistency
         return min(adaptive_min, default_min)
@@ -710,7 +712,9 @@ def validate_shards(
     - KS test is only meaningful for stratified sharding
     - Diagnostics always returned (even if validation fails)
     """
-    logger.info(f"Validating {len(shards)} shards against original dataset size {original_dataset_size:,}")
+    logger.info(
+        f"Validating {len(shards)} shards against original dataset size {original_dataset_size:,}"
+    )
 
     # Initialize diagnostics
     diagnostics = {
@@ -752,7 +756,9 @@ def validate_shards(
         diagnostics["errors"].append(error_msg)
 
     # Check 3: Balance check
-    size_imbalance = max(shard_sizes) / min(shard_sizes) if min(shard_sizes) > 0 else float("inf")
+    size_imbalance = (
+        max(shard_sizes) / min(shard_sizes) if min(shard_sizes) > 0 else float("inf")
+    )
     diagnostics["size_imbalance"] = size_imbalance
     balance_check = size_imbalance <= (1.0 + max_size_imbalance_pct)
     diagnostics["balance_check"] = balance_check
@@ -790,7 +796,9 @@ def validate_shards(
         diagnostics["phi_distribution_check"] = phi_distribution_check
 
         if not phi_distribution_check:
-            failed_shards = [i for i, p in enumerate(ks_pvalues) if p < ks_test_threshold]
+            failed_shards = [
+                i for i, p in enumerate(ks_pvalues) if p < ks_test_threshold
+            ]
             error_msg = (
                 f"Phi distribution check failed for {len(failed_shards)} shards "
                 f"(KS test p-value < {ks_test_threshold}): {failed_shards}"
@@ -800,10 +808,7 @@ def validate_shards(
 
     # Overall validation result
     is_valid = (
-        data_loss_check
-        and min_size_check
-        and balance_check
-        and phi_distribution_check
+        data_loss_check and min_size_check and balance_check and phi_distribution_check
     )
 
     if is_valid:

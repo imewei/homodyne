@@ -54,7 +54,7 @@ logger = logging.getLogger(__name__)
 
 def combine_subposteriors(
     shard_results: List[Dict[str, Any]],
-    method: str = 'weighted',
+    method: str = "weighted",
     fallback_enabled: bool = True,
 ) -> Dict[str, np.ndarray]:
     """Combine subposteriors from all shards into a single posterior.
@@ -134,30 +134,28 @@ def combine_subposteriors(
     # Handle single shard edge case
     if len(shard_results) == 1:
         logger.info("Single shard detected, returning shard samples directly")
-        samples = shard_results[0]['samples']
+        samples = shard_results[0]["samples"]
         return {
-            'samples': samples,
-            'mean': np.mean(samples, axis=0),
-            'cov': np.cov(samples.T),
-            'method': 'single_shard',
+            "samples": samples,
+            "mean": np.mean(samples, axis=0),
+            "cov": np.cov(samples.T),
+            "method": "single_shard",
         }
 
     # Try requested method with optional fallback
     try:
-        if method == 'weighted':
+        if method == "weighted":
             return _weighted_gaussian_product(shard_results)
-        elif method == 'average':
+        elif method == "average":
             return _simple_averaging(shard_results)
         else:
             raise ValueError(
-                f"Unknown combination method: {method}. "
-                f"Must be 'weighted' or 'average'"
+                f"Unknown combination method: {method}. Must be 'weighted' or 'average'"
             )
     except Exception as e:
-        if fallback_enabled and method == 'weighted':
+        if fallback_enabled and method == "weighted":
             logger.warning(
-                f"Weighted combination failed: {e}. "
-                f"Falling back to averaging."
+                f"Weighted combination failed: {e}. Falling back to averaging."
             )
             return _simple_averaging(shard_results)
         else:
@@ -207,7 +205,7 @@ def _weighted_gaussian_product(shard_results: List[Dict[str, Any]]) -> Dict[str,
     Scott et al. (2016): https://arxiv.org/abs/1411.7435
     """
     # Extract samples from each shard
-    shard_samples = [result['samples'] for result in shard_results]
+    shard_samples = [result["samples"] for result in shard_results]
     num_shards = len(shard_samples)
     num_samples = shard_samples[0].shape[0]
     num_params = shard_samples[0].shape[1]
@@ -277,10 +275,10 @@ def _weighted_gaussian_product(shard_results: List[Dict[str, Any]]) -> Dict[str,
     logger.info("Weighted Gaussian product completed successfully")
 
     return {
-        'samples': combined_samples,
-        'mean': combined_mean,
-        'cov': combined_cov,
-        'method': 'weighted',
+        "samples": combined_samples,
+        "mean": combined_mean,
+        "cov": combined_cov,
+        "method": "weighted",
     }
 
 
@@ -318,7 +316,7 @@ def _simple_averaging(shard_results: List[Dict[str, Any]]) -> Dict[str, Any]:
     original sample count from a single shard.
     """
     # Extract samples
-    shard_samples = [result['samples'] for result in shard_results]
+    shard_samples = [result["samples"] for result in shard_results]
     num_shards = len(shard_samples)
     num_samples_per_shard = shard_samples[0].shape[0]
     num_params = shard_samples[0].shape[1]
@@ -333,11 +331,7 @@ def _simple_averaging(shard_results: List[Dict[str, Any]]) -> Dict[str, Any]:
 
     # Resample to uniform weight (maintain original sample count)
     total_samples = len(all_samples)
-    indices = np.random.choice(
-        total_samples,
-        size=num_samples_per_shard,
-        replace=False
-    )
+    indices = np.random.choice(total_samples, size=num_samples_per_shard, replace=False)
     combined_samples = all_samples[indices]
 
     # Compute statistics
@@ -347,10 +341,10 @@ def _simple_averaging(shard_results: List[Dict[str, Any]]) -> Dict[str, Any]:
     logger.info("Simple averaging completed successfully")
 
     return {
-        'samples': combined_samples,
-        'mean': combined_mean,
-        'cov': combined_cov,
-        'method': 'average',
+        "samples": combined_samples,
+        "mean": combined_mean,
+        "cov": combined_cov,
+        "method": "average",
     }
 
 
@@ -371,31 +365,25 @@ def _validate_shard_results(shard_results: List[Dict[str, Any]]) -> None:
         raise ValueError("shard_results is empty")
 
     if not isinstance(shard_results, list):
-        raise ValueError(
-            f"shard_results must be a list, got {type(shard_results)}"
-        )
+        raise ValueError(f"shard_results must be a list, got {type(shard_results)}")
 
     # Check all shards have 'samples' key
     for i, result in enumerate(shard_results):
         if not isinstance(result, dict):
-            raise ValueError(
-                f"Shard {i} is not a dict, got {type(result)}"
-            )
-        if 'samples' not in result:
+            raise ValueError(f"Shard {i} is not a dict, got {type(result)}")
+        if "samples" not in result:
             raise ValueError(
                 f"Shard {i} missing 'samples' key. "
                 f"Available keys: {list(result.keys())}"
             )
 
     # Extract samples and validate shapes
-    shard_samples = [result['samples'] for result in shard_results]
+    shard_samples = [result["samples"] for result in shard_results]
 
     # Check first shard
     first_samples = shard_samples[0]
     if not isinstance(first_samples, np.ndarray):
-        raise ValueError(
-            f"Shard 0 samples is not ndarray, got {type(first_samples)}"
-        )
+        raise ValueError(f"Shard 0 samples is not ndarray, got {type(first_samples)}")
     if first_samples.ndim != 2:
         raise ValueError(
             f"Shard 0 samples must be 2D (num_samples, num_params), "
@@ -408,13 +396,9 @@ def _validate_shard_results(shard_results: List[Dict[str, Any]]) -> None:
     # Validate all shards have consistent shapes
     for i, samples in enumerate(shard_samples[1:], start=1):
         if not isinstance(samples, np.ndarray):
-            raise ValueError(
-                f"Shard {i} samples is not ndarray, got {type(samples)}"
-            )
+            raise ValueError(f"Shard {i} samples is not ndarray, got {type(samples)}")
         if samples.ndim != 2:
-            raise ValueError(
-                f"Shard {i} samples must be 2D, got shape {samples.shape}"
-            )
+            raise ValueError(f"Shard {i} samples must be 2D, got shape {samples.shape}")
         if samples.shape[1] != num_params_expected:
             raise ValueError(
                 f"Shard {i} has {samples.shape[1]} parameters, "

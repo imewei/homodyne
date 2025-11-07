@@ -34,7 +34,9 @@ class TestResidualFunctionCreation:
                 self.sigma = np.ones_like(self.g2) * 0.1
                 self.q = 0.01
                 self.L = 1.0
-                self.dt = 0.1  # Time step in seconds (required for physics calculations)
+                self.dt = (
+                    0.1  # Time step in seconds (required for physics calculations)
+                )
 
         mock_data = MockXPCSData()
         wrapper = NLSQWrapper()
@@ -82,7 +84,9 @@ class TestResidualFunctionCreation:
                 self.sigma = np.ones_like(self.g2) * 0.1
                 self.q = 0.01
                 self.L = 1.0
-                self.dt = 0.1  # Time step in seconds (required for physics calculations)
+                self.dt = (
+                    0.1  # Time step in seconds (required for physics calculations)
+                )
 
         mock_data = MockXPCSData()
         wrapper = NLSQWrapper()
@@ -106,7 +110,9 @@ class TestResidualFunctionCreation:
 
         # Verify residuals have reasonable magnitude (not all zeros)
         # With data=1.5, sigma=0.1, residuals should be non-zero unless perfect fit
-        assert np.abs(np.mean(residuals)) > 0.1, "Residuals should have non-zero magnitude"
+        assert (
+            np.abs(np.mean(residuals)) > 0.1
+        ), "Residuals should have non-zero magnitude"
 
         # Verify residuals are consistent across all points
         # (uniform data should give uniform residuals)
@@ -130,7 +136,9 @@ class TestResidualFunctionCreation:
                 self.sigma = np.ones_like(self.g2) * 0.1
                 self.q = 0.01
                 self.L = 1.0
-                self.dt = 0.1  # Time step in seconds (required for physics calculations)
+                self.dt = (
+                    0.1  # Time step in seconds (required for physics calculations)
+                )
 
         mock_data = MockXPCSData()
         wrapper = NLSQWrapper()
@@ -170,7 +178,9 @@ class TestResidualFunctionCreation:
                 self.sigma = np.ones_like(self.g2) * 0.1
                 self.q = 0.01
                 self.L = 1.0
-                self.dt = 0.1  # Time step in seconds (required for physics calculations)
+                self.dt = (
+                    0.1  # Time step in seconds (required for physics calculations)
+                )
 
         mock_data = MockXPCSData()
         wrapper = NLSQWrapper()

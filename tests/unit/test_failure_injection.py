@@ -41,7 +41,9 @@ from tests.factories.large_dataset_factory import LargeDatasetFactory
 # ============================================================================
 
 
-@pytest.mark.skip(reason="NumericalValidator API changed - validate_gradients and other methods no longer exist")
+@pytest.mark.skip(
+    reason="NumericalValidator API changed - validate_gradients and other methods no longer exist"
+)
 class TestNaNInfInjection:
     """Test NaN/Inf detection and recovery at various points."""
 
@@ -196,7 +198,9 @@ class TestNaNInfInjection:
 # ============================================================================
 
 
-@pytest.mark.skip(reason="Uses deprecated NumericalValidator and RecoveryStrategyApplicator APIs")
+@pytest.mark.skip(
+    reason="Uses deprecated NumericalValidator and RecoveryStrategyApplicator APIs"
+)
 class TestMemoryErrorInjection:
     """Test memory error handling and recovery."""
 
@@ -205,7 +209,7 @@ class TestMemoryErrorInjection:
         factory = LargeDatasetFactory(seed=42)
 
         # Mock MemoryError during allocation
-        with patch('numpy.random.randn', side_effect=MemoryError("Out of memory")):
+        with patch("numpy.random.randn", side_effect=MemoryError("Out of memory")):
             with pytest.raises(MemoryError):
                 # This should trigger MemoryError
                 large_array = np.random.randn(1000000000)  # 1B elements
@@ -260,7 +264,7 @@ class TestCheckpointCorruption:
         checkpoint_path = checkpoint_dir / "checkpoint.h5"
 
         # Create corrupted file (not valid HDF5)
-        with open(checkpoint_path, 'wb') as f:
+        with open(checkpoint_path, "wb") as f:
             f.write(b"This is not a valid HDF5 file")
 
         manager = CheckpointManager(checkpoint_dir=checkpoint_dir)
@@ -277,8 +281,8 @@ class TestCheckpointCorruption:
         checkpoint_path = checkpoint_dir / "checkpoint.h5"
 
         # Create checkpoint missing required data
-        with h5py.File(checkpoint_path, 'w') as f:
-            f.attrs['batch_idx'] = 10
+        with h5py.File(checkpoint_path, "w") as f:
+            f.attrs["batch_idx"] = 10
             # Missing: parameters, optimizer_state
 
         manager = CheckpointManager(checkpoint_dir=checkpoint_dir)
@@ -295,18 +299,18 @@ class TestCheckpointCorruption:
         checkpoint_path = checkpoint_dir / "checkpoint.h5"
 
         # Create checkpoint with incompatible version
-        with h5py.File(checkpoint_path, 'w') as f:
-            f.attrs['version'] = "0.0.1"  # Very old version
-            f.create_dataset('parameters', data=np.array([1.0, 2.0, 3.0]))
-            f.attrs['batch_idx'] = 10
+        with h5py.File(checkpoint_path, "w") as f:
+            f.attrs["version"] = "0.0.1"  # Very old version
+            f.create_dataset("parameters", data=np.array([1.0, 2.0, 3.0]))
+            f.attrs["batch_idx"] = 10
 
         manager = CheckpointManager(checkpoint_dir=checkpoint_dir)
 
         # Should handle gracefully (warning or error)
         # Implementation depends on CheckpointManager design
         # For now, verify we can detect version
-        with h5py.File(checkpoint_path, 'r') as f:
-            version = f.attrs['version']
+        with h5py.File(checkpoint_path, "r") as f:
+            version = f.attrs["version"]
             assert version == "0.0.1"
 
     def test_checksum_validation_failure(self, tmp_path):
@@ -322,18 +326,18 @@ class TestCheckpointCorruption:
         original_params = np.array([1.0, 2.0, 3.0, 4.0, 5.0])
         original_checksum = hashlib.sha256(original_params.tobytes()).hexdigest()
 
-        with h5py.File(checkpoint_path, 'w') as f:
-            f.create_dataset('parameters', data=original_params)
-            f.attrs['checksum'] = original_checksum
+        with h5py.File(checkpoint_path, "w") as f:
+            f.create_dataset("parameters", data=original_params)
+            f.attrs["checksum"] = original_checksum
 
         # Modify parameters (simulate corruption)
-        with h5py.File(checkpoint_path, 'a') as f:
-            f['parameters'][:] = np.array([9.0, 9.0, 9.0, 9.0, 9.0])
+        with h5py.File(checkpoint_path, "a") as f:
+            f["parameters"][:] = np.array([9.0, 9.0, 9.0, 9.0, 9.0])
 
         # Verify checksum mismatch
-        with h5py.File(checkpoint_path, 'r') as f:
-            stored_checksum = f.attrs['checksum']
-            current_params = f['parameters'][:]
+        with h5py.File(checkpoint_path, "r") as f:
+            stored_checksum = f.attrs["checksum"]
+            current_params = f["parameters"][:]
             current_checksum = hashlib.sha256(current_params.tobytes()).hexdigest()
 
         assert stored_checksum != current_checksum
@@ -347,13 +351,13 @@ class TestCheckpointCorruption:
 
         # Create valid checkpoint
         valid_checkpoint = checkpoint_dir / "checkpoint_0001.h5"
-        with h5py.File(valid_checkpoint, 'w') as f:
-            f.create_dataset('parameters', data=np.array([1.0, 2.0, 3.0]))
-            f.attrs['batch_idx'] = 1
+        with h5py.File(valid_checkpoint, "w") as f:
+            f.create_dataset("parameters", data=np.array([1.0, 2.0, 3.0]))
+            f.attrs["batch_idx"] = 1
 
         # Create corrupted checkpoint (more recent)
         corrupted_checkpoint = checkpoint_dir / "checkpoint_0002.h5"
-        with open(corrupted_checkpoint, 'wb') as f:
+        with open(corrupted_checkpoint, "wb") as f:
             f.write(b"corrupted")
 
         # Should find valid checkpoint when latest is corrupted
@@ -388,7 +392,9 @@ class TestRecoveryMechanisms:
         # Should perturb parameters
         assert not np.array_equal(recovered_params, initial_params)
         # Perturbation should be small (< 10%)
-        relative_change = np.abs(recovered_params - initial_params) / (np.abs(initial_params) + 1e-10)
+        relative_change = np.abs(recovered_params - initial_params) / (
+            np.abs(initial_params) + 1e-10
+        )
         assert np.all(relative_change < 0.1)
 
     def test_learning_rate_reduction_recovery(self):
@@ -509,7 +515,7 @@ class TestFailureHandlingIntegration:
         )
 
         # Mock NLSQ to inject NaN
-        with patch('homodyne.optimization.nlsq_wrapper.curve_fit') as mock_fit:
+        with patch("homodyne.optimization.nlsq_wrapper.curve_fit") as mock_fit:
             # First attempt: return NaN
             mock_fit.side_effect = [
                 ValueError("NaN detected"),
@@ -532,19 +538,19 @@ class TestFailureHandlingIntegration:
 
         # Create valid checkpoint 1
         checkpoint1_path = checkpoint_dir / "checkpoint_0001.h5"
-        with h5py.File(checkpoint1_path, 'w') as f:
-            f.create_dataset('parameters', data=np.array([1.0, 2.0, 3.0]))
-            f.attrs['batch_idx'] = 1
+        with h5py.File(checkpoint1_path, "w") as f:
+            f.create_dataset("parameters", data=np.array([1.0, 2.0, 3.0]))
+            f.attrs["batch_idx"] = 1
 
         # Create valid checkpoint 2
         checkpoint2_path = checkpoint_dir / "checkpoint_0002.h5"
-        with h5py.File(checkpoint2_path, 'w') as f:
-            f.create_dataset('parameters', data=np.array([1.1, 2.1, 3.1]))
-            f.attrs['batch_idx'] = 2
+        with h5py.File(checkpoint2_path, "w") as f:
+            f.create_dataset("parameters", data=np.array([1.1, 2.1, 3.1]))
+            f.attrs["batch_idx"] = 2
 
         # Create corrupted checkpoint 3 (most recent)
         checkpoint3_path = checkpoint_dir / "checkpoint_0003.h5"
-        with open(checkpoint3_path, 'wb') as f:
+        with open(checkpoint3_path, "wb") as f:
             f.write(b"corrupted data")
 
         # Should find checkpoint 2 (most recent valid)
@@ -580,7 +586,9 @@ class TestFailureHandlingIntegration:
         # 2. Recovery strategy applied
         recovery = RecoveryStrategyApplicator()
         initial_params = np.array([0.3, 1.0, 1000.0])
-        recovered_params = recovery.apply_recovery(initial_params, error_type, attempt=1)
+        recovered_params = recovery.apply_recovery(
+            initial_params, error_type, attempt=1
+        )
         assert not np.any(np.isnan(recovered_params))
 
         # 3. Batch statistics records failure
@@ -593,7 +601,7 @@ class TestFailureHandlingIntegration:
             error_type=error_type,
         )
         stats = batch_stats.get_statistics()
-        assert stats['batch_success_rate'] < 1.0
+        assert stats["batch_success_rate"] < 1.0
 
 
 # ============================================================================
@@ -611,15 +619,15 @@ def test_failure_injection_summary():
     4. Recovery mechanisms work correctly
     """
     failure_scenarios = {
-        'nan_in_gradients': True,
-        'inf_in_gradients': True,
-        'nan_in_parameters': True,
-        'inf_in_parameters': True,
-        'nan_in_loss': True,
-        'inf_in_loss': True,
-        'memory_errors': True,
-        'checkpoint_corruption': True,
-        'recovery_strategies': True,
+        "nan_in_gradients": True,
+        "inf_in_gradients": True,
+        "nan_in_parameters": True,
+        "inf_in_parameters": True,
+        "nan_in_loss": True,
+        "inf_in_loss": True,
+        "memory_errors": True,
+        "checkpoint_corruption": True,
+        "recovery_strategies": True,
     }
 
     # All scenarios tested

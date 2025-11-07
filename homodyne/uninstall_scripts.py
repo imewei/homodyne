@@ -106,8 +106,8 @@ def cleanup_advanced_features():
     cli_commands = [
         venv_path / "bin" / "homodyne-gpu-optimize",
         venv_path / "bin" / "homodyne-validate",
-        venv_path / "bin" / "homodyne-activate",           # Bash/Zsh activation
-        venv_path / "bin" / "homodyne-activate.fish",      # Fish activation
+        venv_path / "bin" / "homodyne-activate",  # Bash/Zsh activation
+        venv_path / "bin" / "homodyne-activate.fish",  # Fish activation
     ]
 
     for file_path in cli_commands:
@@ -177,9 +177,7 @@ def interactive_cleanup():
             print("   - GPU works automatically via JAX device detection")
 
             remove_gpu = (
-                input("   Remove GPU setup files? [y/N]: ")
-                .lower()
-                .startswith("y")
+                input("   Remove GPU setup files? [y/N]: ").lower().startswith("y")
             )
 
         # Advanced features
@@ -189,7 +187,9 @@ def interactive_cleanup():
         print("   - Removes homodyne-activate scripts (for uv/venv/virtualenv)")
 
         remove_advanced = (
-            input("   Remove advanced features & activation scripts? [y/N]: ").lower().startswith("y")
+            input("   Remove advanced features & activation scripts? [y/N]: ")
+            .lower()
+            .startswith("y")
         )
 
         # Old system files

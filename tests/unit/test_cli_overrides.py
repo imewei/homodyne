@@ -720,9 +720,7 @@ def test_logging_parameter_override(mock_logger, mock_config):
     _apply_cli_overrides(mock_config, args)
 
     # Check that logger.info was called with override message
-    mock_logger.info.assert_any_call(
-        "Overriding config D0=1000 with CLI value D0=2000"
-    )
+    mock_logger.info.assert_any_call("Overriding config D0=1000 with CLI value D0=2000")
 
 
 @patch("homodyne.cli.commands.logger")

@@ -75,7 +75,7 @@ def temp_config_file():
                 "dense_mass": False,
             }
         },
-        "hardware": {"force_cpu": False, "gpu_memory_fraction": 0.9},
+        "hardware": {"force_cpu": False},
     }
 
     # Write to temporary file

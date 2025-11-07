@@ -100,7 +100,7 @@ class NumericalValidator:
                 f"First few invalid values: {invalid_values}",
                 detection_point="gradient",
                 invalid_values=invalid_values,
-                error_context={'n_invalid': int(len(invalid_indices))},
+                error_context={"n_invalid": int(len(invalid_indices))},
             )
 
     def validate_parameters(
@@ -150,7 +150,7 @@ class NumericalValidator:
                 f"First few invalid values: {invalid_values}",
                 detection_point="parameter",
                 invalid_values=invalid_values,
-                error_context={'n_invalid': int(len(invalid_indices))},
+                error_context={"n_invalid": int(len(invalid_indices))},
             )
 
         # Check bounds violations if bounds provided
@@ -164,7 +164,9 @@ class NumericalValidator:
             violations_upper = param_array > upper
 
             if jnp.any(violations_lower) or jnp.any(violations_upper):
-                n_violations = int(jnp.sum(violations_lower) + jnp.sum(violations_upper))
+                n_violations = int(
+                    jnp.sum(violations_lower) + jnp.sum(violations_upper)
+                )
 
                 violation_info = []
                 for i in range(len(param_array)):
@@ -185,7 +187,7 @@ class NumericalValidator:
                     f"Violations: {violation_info[:5]}",
                     detection_point="parameter_bounds",
                     invalid_values=violation_info[:10],
-                    error_context={'n_violations': n_violations},
+                    error_context={"n_violations": n_violations},
                 )
 
     def validate_loss(self, loss_value: Any) -> None:
@@ -224,7 +226,7 @@ class NumericalValidator:
                 f"  - Checking model function for numerical issues",
                 detection_point="loss",
                 invalid_values=[f"loss={loss_scalar}"],
-                error_context={'loss_value': loss_scalar},
+                error_context={"loss_value": loss_scalar},
             )
 
     def set_bounds(self, bounds: tuple[np.ndarray, np.ndarray]) -> None:

@@ -37,8 +37,9 @@ class TestAPISignature:
         Automatic selection handles NUTS/CMC internally based on data characteristics.
         """
         import inspect
+
         sig = inspect.signature(fit_mcmc_jax)
-        assert 'method' not in sig.parameters, (
+        assert "method" not in sig.parameters, (
             "method parameter should not exist in v2.1.0. "
             "Automatic selection is now internal."
         )
@@ -46,27 +47,30 @@ class TestAPISignature:
     def test_function_accepts_kwargs(self):
         """Test that fit_mcmc_jax accepts **kwargs for backward compatibility."""
         import inspect
+
         sig = inspect.signature(fit_mcmc_jax)
         # Should have **kwargs to accept old-style method parameter
-        assert any(p.kind == inspect.Parameter.VAR_KEYWORD for p in sig.parameters.values()), (
-            "fit_mcmc_jax should accept **kwargs for backward compatibility"
-        )
+        assert any(
+            p.kind == inspect.Parameter.VAR_KEYWORD for p in sig.parameters.values()
+        ), "fit_mcmc_jax should accept **kwargs for backward compatibility"
 
     def test_parameter_space_parameter_exists(self):
         """Test that parameter_space parameter exists (v2.1.0 feature)."""
         import inspect
+
         sig = inspect.signature(fit_mcmc_jax)
-        assert 'parameter_space' in sig.parameters, (
-            "parameter_space parameter should exist in v2.1.0"
-        )
+        assert (
+            "parameter_space" in sig.parameters
+        ), "parameter_space parameter should exist in v2.1.0"
 
     def test_initial_values_parameter_exists(self):
         """Test that initial_values parameter exists (v2.1.0 change)."""
         import inspect
+
         sig = inspect.signature(fit_mcmc_jax)
-        assert 'initial_values' in sig.parameters, (
-            "initial_values parameter should exist in v2.1.0 (renamed from initial_params)"
-        )
+        assert (
+            "initial_values" in sig.parameters
+        ), "initial_values parameter should exist in v2.1.0 (renamed from initial_params)"
 
 
 class TestDataValidation:
@@ -131,7 +135,7 @@ class TestDataValidation:
                 phi=np.random.rand(10),
                 q=0.01,
                 L=None,  # Missing for laminar_flow
-                analysis_mode='laminar_flow',
+                analysis_mode="laminar_flow",
             )
 
 
@@ -144,9 +148,9 @@ class TestParameterAcceptance:
         # We're not executing MCMC, just checking parameter acceptance
 
         initial_vals = {
-            'D0': 1000.0,
-            'alpha': 0.5,
-            'D_offset': 10.0,
+            "D0": 1000.0,
+            "alpha": 0.5,
+            "D_offset": 10.0,
         }
 
         # Should not raise TypeError about unexpected keyword argument
@@ -166,14 +170,14 @@ class TestParameterAcceptance:
             )
         except ValueError as e:
             # Data validation errors are OK (we're just checking parameter acceptance)
-            assert 'initial_values' not in str(e).lower()
+            assert "initial_values" not in str(e).lower()
         except RuntimeError as e:
             # Runtime errors related to execution are OK
-            assert 'initial_values' not in str(e).lower()
+            assert "initial_values" not in str(e).lower()
 
     def test_parameter_space_parameter_accepted(self):
         """Test parameter_space parameter is accepted."""
-        param_space = ParameterSpace.from_defaults('static_isotropic')
+        param_space = ParameterSpace.from_defaults("static_isotropic")
 
         # Should not raise TypeError about unexpected keyword argument
         try:
@@ -190,9 +194,9 @@ class TestParameterAcceptance:
                 min_samples_for_cmc=10000,
             )
         except ValueError as e:
-            assert 'parameter_space' not in str(e).lower()
+            assert "parameter_space" not in str(e).lower()
         except RuntimeError as e:
-            assert 'parameter_space' not in str(e).lower()
+            assert "parameter_space" not in str(e).lower()
 
     def test_method_parameter_in_kwargs_not_error(self):
         """Test that method parameter in kwargs doesn't cause TypeError.
@@ -208,16 +212,16 @@ class TestParameterAcceptance:
                 phi=np.array([0.1]),
                 q=0.01,
                 L=3.5,
-                method='nuts',  # Should be silently ignored (goes to kwargs)
+                method="nuts",  # Should be silently ignored (goes to kwargs)
                 n_samples=10,
                 n_warmup=5,
                 min_samples_for_cmc=10000,
             )
         except TypeError as e:
             # Should NOT get "unexpected keyword argument 'method'" error
-            assert 'method' not in str(e).lower(), (
-                "method parameter should be accepted in **kwargs (backward compatibility)"
-            )
+            assert (
+                "method" not in str(e).lower()
+            ), "method parameter should be accepted in **kwargs (backward compatibility)"
 
 
 class TestKwargsAcceptance:
@@ -226,12 +230,12 @@ class TestKwargsAcceptance:
     def test_standard_mcmc_kwargs_accepted(self):
         """Test standard MCMC kwargs are accepted without TypeError."""
         mcmc_kwargs = {
-            'n_samples': 100,
-            'n_warmup': 50,
-            'n_chains': 2,
-            'target_accept_prob': 0.8,
-            'max_tree_depth': 10,
-            'rng_key': 42,
+            "n_samples": 100,
+            "n_warmup": 50,
+            "n_chains": 2,
+            "target_accept_prob": 0.8,
+            "max_tree_depth": 10,
+            "rng_key": 42,
         }
 
         try:
@@ -248,15 +252,15 @@ class TestKwargsAcceptance:
         except TypeError as e:
             # Should not get unexpected keyword argument errors
             for key in mcmc_kwargs.keys():
-                assert key not in str(e), (
-                    f"Standard MCMC kwarg '{key}' should be accepted"
-                )
+                assert key not in str(
+                    e
+                ), f"Standard MCMC kwarg '{key}' should be accepted"
 
     def test_cmc_threshold_kwargs_accepted(self):
         """Test CMC threshold configuration kwargs are accepted."""
         cmc_kwargs = {
-            'min_samples_for_cmc': 20,
-            'memory_threshold_pct': 0.35,
+            "min_samples_for_cmc": 20,
+            "memory_threshold_pct": 0.35,
         }
 
         try:
@@ -273,9 +277,7 @@ class TestKwargsAcceptance:
             )
         except TypeError as e:
             for key in cmc_kwargs.keys():
-                assert key not in str(e), (
-                    f"CMC kwarg '{key}' should be accepted"
-                )
+                assert key not in str(e), f"CMC kwarg '{key}' should be accepted"
 
 
 class TestAnalysisModesSupported:
@@ -291,13 +293,13 @@ class TestAnalysisModesSupported:
                 phi=np.array([0.1]),
                 q=0.01,
                 L=3.5,
-                analysis_mode='static_isotropic',
+                analysis_mode="static_isotropic",
                 n_samples=10,
                 n_warmup=5,
                 min_samples_for_cmc=10000,
             )
         except ValueError as e:
-            assert 'analysis_mode' not in str(e).lower()
+            assert "analysis_mode" not in str(e).lower()
 
     def test_laminar_flow_mode_accepted(self):
         """Test laminar_flow analysis mode doesn't raise ValueError."""
@@ -309,13 +311,13 @@ class TestAnalysisModesSupported:
                 phi=np.array([0.1]),
                 q=0.01,
                 L=3.5,
-                analysis_mode='laminar_flow',
+                analysis_mode="laminar_flow",
                 n_samples=10,
                 n_warmup=5,
                 min_samples_for_cmc=10000,
             )
         except ValueError as e:
-            assert 'analysis_mode' not in str(e).lower()
+            assert "analysis_mode" not in str(e).lower()
 
 
 class TestMCMCResultStructure:
@@ -331,10 +333,10 @@ class TestMCMCResultStructure:
         )
 
         # Verify standard fields exist
-        assert hasattr(result, 'mean_params')
-        assert hasattr(result, 'mean_contrast')
-        assert hasattr(result, 'mean_offset')
-        assert hasattr(result, 'converged')
+        assert hasattr(result, "mean_params")
+        assert hasattr(result, "mean_contrast")
+        assert hasattr(result, "mean_offset")
+        assert hasattr(result, "converged")
 
         # Verify field values are correct
         assert np.allclose(result.mean_params, [100.0, 1.5, 10.0])
@@ -355,9 +357,9 @@ class TestMCMCResultStructure:
         )
 
         # Verify optional fields can be set
-        assert hasattr(result, 'std_params')
-        assert hasattr(result, 'n_iterations')
-        assert hasattr(result, 'computation_time')
+        assert hasattr(result, "std_params")
+        assert hasattr(result, "n_iterations")
+        assert hasattr(result, "computation_time")
 
     def test_mcmc_result_cmc_fields(self):
         """Test that MCMCResult supports CMC-specific fields."""
@@ -367,17 +369,17 @@ class TestMCMCResultStructure:
             mean_offset=1.0,
             converged=True,
             num_shards=10,
-            combination_method='weighted',
-            per_shard_diagnostics=[{'shard_id': 0, 'converged': True}],
+            combination_method="weighted",
+            per_shard_diagnostics=[{"shard_id": 0, "converged": True}],
         )
 
         # Verify CMC-specific fields can be set
-        assert hasattr(result, 'num_shards')
-        assert hasattr(result, 'combination_method')
-        assert hasattr(result, 'per_shard_diagnostics')
+        assert hasattr(result, "num_shards")
+        assert hasattr(result, "combination_method")
+        assert hasattr(result, "per_shard_diagnostics")
         assert result.num_shards == 10
 
 
 # Run all tests
-if __name__ == '__main__':
-    pytest.main([__file__, '-v'])
+if __name__ == "__main__":
+    pytest.main([__file__, "-v"])

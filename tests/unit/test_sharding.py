@@ -477,7 +477,9 @@ def test_stratified_sharding_phi_coverage(synthetic_data_structured_phi):
         assert shard_phi_range >= 0.10 * overall_phi_range
 
 
-def test_stratified_sharding_per_angle_parameter_compatibility(synthetic_data_discrete_phi_angles):
+def test_stratified_sharding_per_angle_parameter_compatibility(
+    synthetic_data_discrete_phi_angles,
+):
     """Test that stratified sharding ensures all shards contain ALL unique phi angles.
 
     CRITICAL TEST for per-angle scaling compatibility (v2.2+)
@@ -544,11 +546,15 @@ def test_stratified_sharding_per_angle_parameter_compatibility(synthetic_data_di
     # This ensures stratified sharding doesn't just include all angles but distributes them evenly
     for angle in unique_phi_angles:
         # Get the proportion of this angle in the original dataset
-        original_prop = np.sum(np.isclose(synthetic_data_discrete_phi_angles["phi"], angle, rtol=1e-10)) / len(synthetic_data_discrete_phi_angles["phi"])
+        original_prop = np.sum(
+            np.isclose(synthetic_data_discrete_phi_angles["phi"], angle, rtol=1e-10)
+        ) / len(synthetic_data_discrete_phi_angles["phi"])
 
         # Check the proportion in each shard
         for i, shard in enumerate(shards):
-            shard_prop = np.sum(np.isclose(shard["phi"], angle, rtol=1e-10)) / len(shard["phi"])
+            shard_prop = np.sum(np.isclose(shard["phi"], angle, rtol=1e-10)) / len(
+                shard["phi"]
+            )
 
             # Allow up to 50% deviation from the original proportion (lenient for small datasets)
             # For production datasets with thousands of points per angle, this tolerance is tighter
@@ -609,13 +615,12 @@ def test_contiguous_sharding_handles_non_divisible_sizes(synthetic_data_small):
     """Test that contiguous sharding handles non-divisible dataset sizes."""
     # Use dataset size that doesn't divide evenly
     # Create dataset with non-divisible size inline
-    dataset_size = 50_007  # Prime-ish number  
+    dataset_size = 50_007  # Prime-ish number
     np.random.seed(999)
     data = np.random.randn(dataset_size) + 1.0
     t1 = np.random.uniform(0, 10, dataset_size)
     t2 = np.random.uniform(0, 10, dataset_size)
     phi = np.random.uniform(-180, 180, dataset_size)
-
 
     shards = shard_data_contiguous(
         data=data,
@@ -649,9 +654,7 @@ def test_validate_shards_success(synthetic_data_small):
         L=synthetic_data_small["L"],
     )
 
-    is_valid, diagnostics = validate_shards(
-        shards, len(synthetic_data_small["data"])
-    )
+    is_valid, diagnostics = validate_shards(shards, len(synthetic_data_small["data"]))
 
     assert is_valid
     assert diagnostics["data_loss_check"]
@@ -696,9 +699,7 @@ def test_validate_shards_detects_min_size_violation():
     )
 
     # Each shard will have ~500 points, which is < 10,000 minimum
-    is_valid, diagnostics = validate_shards(
-        shards, 5_000, min_shard_size=10_000
-    )
+    is_valid, diagnostics = validate_shards(shards, 5_000, min_shard_size=10_000)
 
     assert not is_valid
     assert not diagnostics["min_size_check"]
@@ -787,7 +788,9 @@ def test_sharding_very_small_dataset():
 
     # Validation should pass even though shards are small
     is_valid, diagnostics = validate_shards(
-        shards, 1_000, min_shard_size=100  # Lower threshold for small dataset
+        shards,
+        1_000,
+        min_shard_size=100,  # Lower threshold for small dataset
     )
 
     assert is_valid

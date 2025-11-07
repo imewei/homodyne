@@ -83,7 +83,7 @@ class TestJAXFancyIndexing:
         # Verify type conversion + indexing worked
         assert result.shape == (100000,)
         assert result.dtype == jnp.float64
-        assert jnp.array_equal(result[:5], jnp.array([0., 1., 2., 3., 4.]))
+        assert jnp.array_equal(result[:5], jnp.array([0.0, 1.0, 2.0, 3.0, 4.0]))
 
     def test_nested_computation_with_indexing(self):
         """Test nested computation + indexing (real scenario simulation)."""

@@ -641,7 +641,9 @@ class TestScientificValidation:
         If run in isolation, it will run all prerequisite tests automatically.
         """
         # If _VALIDATION_RESULTS is empty or incomplete, run prerequisite tests
-        expected_test_count = 8  # T036 (3 cases), T037, T038, T039, T040, plus this test
+        expected_test_count = (
+            8  # T036 (3 cases), T037, T038, T039, T040, plus this test
+        )
         if len(_VALIDATION_RESULTS) < 5:  # Need at least T036-T040 results
             print("\n=== Running prerequisite tests (T036-T040) ===\n")
             # Clear any partial results to ensure clean state

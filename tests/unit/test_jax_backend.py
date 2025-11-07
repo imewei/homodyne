@@ -412,7 +412,9 @@ class TestJAXBackendProperties:
         result = compute_g1_diffusion_jax(t1_base, t2_varying, q, D)
 
         # Should be monotonically decreasing
-        assert jnp.all(result[:-1] >= result[1:]), "g1_diffusion should decrease with tau"
+        assert jnp.all(
+            result[:-1] >= result[1:]
+        ), "g1_diffusion should decrease with tau"
 
     @pytest.mark.requires_jax
     def test_c2_model_scaling(self, jax_backend):
@@ -486,12 +488,12 @@ class TestDispatcherMemory:
 
     def test_shear_dispatcher_prevents_80gb_allocation(self, jax_backend):
         """Verify dispatcher prevents 80GB allocation for CMC shards.
-        
+
         Background (Nov 2025):
         - Previous implementation had @jit on _compute_g1_shear_core with conditional logic
         - JAX traced both element-wise (~8 MB) and meshgrid (80GB) branches at compile time
         - Resulted in OOM errors for 100K point CMC shards on 16GB GPU
-        
+
         Fix:
         - Separated into two JIT functions: elementwise and meshgrid
         - Non-JIT dispatcher chooses based on t1.ndim and t2.ndim
@@ -501,37 +503,39 @@ class TestDispatcherMemory:
         t1 = jnp.linspace(0, 10, 100200)
         t2 = jnp.linspace(0, 10, 100200)
         phi = jnp.zeros(1)  # Single angle
-        
+
         # Laminar flow parameters: [D0, alpha, D_offset, gamma_dot_t0, beta, gamma_dot_t_offset, phi0]
         params = jnp.array([1000.0, 1.0, 10.0, 0.5, 1.0, 0.1, 0.0])
-        
+
         # Pre-computed sinc_prefactor from configuration
         q = 0.005
         L = 1.0
         dt = 0.1
         sinc_prefactor = 0.5 / jnp.pi * q * L * dt
-        
+
         # Import the core function (uses dispatcher)
         from homodyne.core.jax_backend import _compute_g1_shear_core
-        
+
         # Call dispatcher (should use element-wise JIT function)
         result = _compute_g1_shear_core(params, t1, t2, phi, sinc_prefactor)
-        
+
         # Verify element-wise mode was used (shape should be 2D, not 3D)
         assert result.ndim == 2, "Element-wise mode should return 2D array"
         assert result.shape == (1, 100200), f"Expected (1, 100200), got {result.shape}"
-        
+
         # Verify memory usage is reasonable (~8 MB, not 80GB)
         memory_mb = result.nbytes / 1e6
-        assert memory_mb < 10.0, f"Memory usage {memory_mb:.1f} MB exceeds 10 MB threshold"
-        
+        assert (
+            memory_mb < 10.0
+        ), f"Memory usage {memory_mb:.1f} MB exceeds 10 MB threshold"
+
         # Verify physical constraints
         assert jnp.all(result >= 0.0), "g1_shear must be non-negative"
         assert jnp.all(result <= 1.0), "g1_shear must be <= 1.0"
 
     def test_diffusion_dispatcher_prevents_80gb_allocation(self, jax_backend):
         """Verify dispatcher prevents 80GB allocation for diffusion component.
-        
+
         Background (Nov 2025):
         - Same architectural fix applied to _compute_g1_diffusion_core
         - Laminar flow mode computes: g1_total = g1_diffusion × g1_shear
@@ -540,29 +544,33 @@ class TestDispatcherMemory:
         # Simulate CMC shard data (100,200 points)
         t1 = jnp.linspace(0, 10, 100200)
         t2 = jnp.linspace(0, 10, 100200)
-        
+
         # Diffusion parameters: [D0, alpha, D_offset]
         params = jnp.array([1000.0, 1.0, 10.0])
-        
+
         # Pre-computed wavevector term
         q = 0.005
         dt = 0.1
-        wavevector_q_squared_half_dt = 0.5 * (q ** 2) * dt
-        
+        wavevector_q_squared_half_dt = 0.5 * (q**2) * dt
+
         # Import the core function (uses dispatcher)
         from homodyne.core.jax_backend import _compute_g1_diffusion_core
-        
+
         # Call dispatcher (should use element-wise JIT function)
-        result = _compute_g1_diffusion_core(params, t1, t2, wavevector_q_squared_half_dt)
-        
+        result = _compute_g1_diffusion_core(
+            params, t1, t2, wavevector_q_squared_half_dt
+        )
+
         # Verify element-wise mode was used (shape should be 1D, not 2D)
         assert result.ndim == 1, "Element-wise mode should return 1D array"
         assert result.shape == (100200,), f"Expected (100200,), got {result.shape}"
-        
+
         # Verify memory usage is reasonable
         memory_mb = result.nbytes / 1e6
-        assert memory_mb < 10.0, f"Memory usage {memory_mb:.1f} MB exceeds 10 MB threshold"
-        
+        assert (
+            memory_mb < 10.0
+        ), f"Memory usage {memory_mb:.1f} MB exceeds 10 MB threshold"
+
         # Verify physical constraints
         assert jnp.all(result >= 0.0), "g1_diffusion must be non-negative"
         assert jnp.all(result <= 1.0), "g1_diffusion must be <= 1.0"
@@ -571,41 +579,44 @@ class TestDispatcherMemory:
         """Verify meshgrid mode still works for NLSQ (small arrays)."""
         # Small meshgrid for NLSQ (20x20 = 400 points, safe for memory)
         n = 20
-        t1, t2 = jnp.meshgrid(jnp.linspace(0, 2, n), jnp.linspace(0, 2, n), indexing="ij")
-        phi = jnp.array([0.0, jnp.pi/2, jnp.pi])
-        
+        t1, t2 = jnp.meshgrid(
+            jnp.linspace(0, 2, n), jnp.linspace(0, 2, n), indexing="ij"
+        )
+        phi = jnp.array([0.0, jnp.pi / 2, jnp.pi])
+
         # Laminar flow parameters
         params = jnp.array([1000.0, 1.0, 10.0, 0.5, 1.0, 0.1, 0.0])
         q = 0.005
         L = 1.0
         dt = 0.1
         sinc_prefactor = 0.5 / jnp.pi * q * L * dt
-        
+
         from homodyne.core.jax_backend import _compute_g1_shear_core
-        
+
         # Call dispatcher (should use meshgrid JIT function)
         result = _compute_g1_shear_core(params, t1, t2, phi, sinc_prefactor)
-        
+
         # Verify meshgrid mode was used (shape should be 3D)
         assert result.ndim == 3, "Meshgrid mode should return 3D array"
         assert result.shape == (3, 20, 20), f"Expected (3, 20, 20), got {result.shape}"
-        
+
         # Verify physical constraints
         assert jnp.all(result >= 0.0), "g1_shear must be non-negative"
         assert jnp.all(result <= 1.0), "g1_shear must be <= 1.0"
+
 
 @pytest.mark.unit
 @pytest.mark.requires_jax
 class TestParameterDependency:
     """
     Test that physics functions depend on input parameters.
-    
+
     Historical Context:
     - During NLSQ zero-iteration debugging, we suspected parameters weren't
       affecting output, which would cause zero gradients
     - These tests verify parameters DO affect physics computations
     - Root cause was actually per-angle scaling incompatibility with chunking
-    
+
     See: .ultra-think/ROOT_CAUSE_FOUND.md for full investigation
     """
 
@@ -633,13 +644,25 @@ class TestParameterDependency:
         # Compute g2 with both parameter sets
         g2_1 = compute_g2_scaled(
             params=params1,
-            t1=t1, t2=t2, phi=phi, q=q, L=L,
-            contrast=contrast, offset=offset, dt=dt
+            t1=t1,
+            t2=t2,
+            phi=phi,
+            q=q,
+            L=L,
+            contrast=contrast,
+            offset=offset,
+            dt=dt,
         )
         g2_2 = compute_g2_scaled(
             params=params2,
-            t1=t1, t2=t2, phi=phi, q=q, L=L,
-            contrast=contrast, offset=offset, dt=dt
+            t1=t1,
+            t2=t2,
+            phi=phi,
+            q=q,
+            L=L,
+            contrast=contrast,
+            offset=offset,
+            dt=dt,
         )
 
         # Verify outputs are different (very tolerant threshold for synthetic params)
@@ -669,8 +692,14 @@ class TestParameterDependency:
         def loss_fn(params):
             g2 = compute_g2_scaled(
                 params=params,
-                t1=t1, t2=t2, phi=phi, q=q, L=L,
-                contrast=contrast, offset=offset, dt=dt
+                t1=t1,
+                t2=t2,
+                phi=phi,
+                q=q,
+                L=L,
+                contrast=contrast,
+                offset=offset,
+                dt=dt,
             )
             return jnp.sum(g2)
 
@@ -680,7 +709,9 @@ class TestParameterDependency:
 
         # Verify gradient is non-zero
         gradient_norm = jnp.linalg.norm(gradient)
-        assert gradient_norm > 1e-6, f"Gradient norm {gradient_norm:.6e} is too small (should be >1e-6)"
+        assert (
+            gradient_norm > 1e-6
+        ), f"Gradient norm {gradient_norm:.6e} is too small (should be >1e-6)"
         assert jnp.all(jnp.isfinite(gradient)), "Gradient must be finite"
 
     # Note: More detailed parameter sensitivity tests with ACTUAL config parameters

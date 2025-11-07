@@ -4,11 +4,11 @@ This file provides guidance to Claude Code when working with this repository.
 
 ## Quick Start
 
-**Homodyne v2.2** is a JAX-first high-performance package for X-ray Photon Correlation Spectroscopy (XPCS) analysis. It implements the theoretical framework from [He et al. PNAS 2024](https://doi.org/10.1073/pnas.2401162121).
+**Homodyne v2.3** is a CPU-optimized high-performance package for X-ray Photon Correlation Spectroscopy (XPCS) analysis. It implements the theoretical framework from [He et al. PNAS 2024](https://doi.org/10.1073/pnas.2401162121).
 
 **Core Equation:** `c₂(φ,t₁,t₂) = 1 + contrast × [c₁(φ,t₁,t₂)]²`
 
-**Version:** 2.2.1 | **Python:** 3.12+ | **JAX:** 0.8.0
+**Version:** 2.3.0 | **Python:** 3.12+ | **JAX:** 0.8.0 (CPU-only)
 
 ## Essential Links
 
@@ -35,7 +35,32 @@ ______________________________________________________________________
 
 ______________________________________________________________________
 
-## Recent Updates (November 6, 2025)
+## Recent Updates (November 7, 2025)
+
+**Version 2.3.0: GPU Support Removed - CPU-Only Architecture** (November 7, 2025)
+- **Breaking Change**: All GPU acceleration support removed
+- **Hard break**: No migration path - choose v2.2.1 (GPU) or v2.3.0 (CPU-only)
+- **Rationale**: Simplify maintenance, focus on reliable HPC CPU optimization
+- **CPU-only JAX**: All installation now uses CPU-only JAX 0.8.0
+- **Removed features**:
+  - CLI flags: `--force-cpu`, `--gpu-memory-fraction` (deleted)
+  - Configuration keys: `gpu_memory_fraction`, `force_cpu`, `cuda_device_id` (gracefully ignored)
+  - API functions: `configure_system_cuda`, `detect_system_cuda`, `get_gpu_memory_info`, etc. (9 functions removed)
+  - Makefile targets: `install-jax-gpu`, `gpu-check`, `test-gpu` (deleted)
+  - Example files: `gpu_accelerated_optimization.py`, `gpu_acceleration.py` (deleted)
+  - System validation: GPU Setup test removed (9 tests now, was 10)
+  - Runtime module: `homodyne/runtime/gpu/` directory deleted
+  - Device module: `homodyne/device/gpu.py` deleted
+- **New CPU-focused examples**:
+  - `examples/cpu_optimization.py` - HPC multi-core CPU usage patterns
+  - `examples/multi_core_batch_processing.py` - Parallel CPU workflows
+- **Migration guide**: See [v2.2-to-v2.3 GPU Removal Guide](docs/migration/v2.2-to-v2.3-gpu-removal.md)
+- **For GPU users**: Stay on v2.2.1 (maintained, available on PyPI)
+- **For CPU users**: Upgrade to v2.3.0 (recommended, simpler, more reliable)
+
+______________________________________________________________________
+
+## Previous Updates
 
 **Version 2.2.1: Per-Angle Scaling Parameter Fix** (November 6, 2025)
 - **Critical Fix**: Resolves parameter initialization bug for per-angle scaling with large datasets
@@ -43,7 +68,7 @@ ______________________________________________________________________
 - **Solution**: Automatic parameter expansion (9 → 13) with correct ordering for StratifiedResidualFunction
 - **Gradient Sanity Check**: New pre-optimization validation detects zero-gradient issues before wasting time
 - **Uses**: NLSQ's `least_squares()` directly with StratifiedResidualFunction
-- **Full NLSQ power**: JAX-accelerated, GPU/CPU compatible, trust-region optimization
+- **Full NLSQ power**: JAX-accelerated, CPU-optimized, trust-region optimization
 - **Automatic activation**: Activates for datasets ≥1M points with per-angle scaling
 - **Validation**: Comprehensive parameter count and gradient checks before optimization
 - **Test coverage**: 20/20 unit tests passing for StratifiedResidualFunction
@@ -119,19 +144,8 @@ result = least_squares(fun=residual_fn, x0=expanded_params, bounds=bounds, ...)
 - Gradient sanity check: ✅ PASSED (5.614e+03)
 - Function evaluations: 113 (vs 1 before fix)
 - Cost reduction: 93.15% (vs 0% before fix)
-- Optimization time: 146.77s
+- Optimization time: 146.77s (14-core CPU)
 - Status: SUCCESS
-
-**GPU Memory Considerations:**
-- **Large datasets (>1M points) + per-angle scaling**: GPU memory may be insufficient
-- **Symptom**: `RESOURCE_EXHAUSTED: Unable to allocate device workspace for gesvd`
-- **Solution**: Use CPU-only mode for reliable results
-  ```bash
-  # CPU-only mode (recommended for per-angle scaling)
-  CUDA_VISIBLE_DEVICES="" homodyne --config config.yaml
-  ```
-- **Why**: SVD operations in least_squares are memory-intensive on GPU
-- **Performance**: CPU optimization still achieves 93%+ cost reduction in ~150s
 
 **Status:** ✅ **Production Ready** - Resolves all silent optimization failures with per-angle scaling.
 
@@ -217,10 +231,9 @@ ______________________________________________________________________
 - File: `homodyne/runtime/utils/system_validator.py`
 
 **Cross-Platform JAX Support** (October 21, 2025)
-- CPU-first installation (all platforms: Linux, macOS, Windows)
-- Optional GPU on Linux (CUDA 12.1-12.9)
+- CPU-only installation (all platforms: Linux, macOS, Windows)
 - Platform auto-detection in Makefile
-- Follows PyTorch installation model
+- **Note**: GPU support removed in v2.3.0 (see migration guide)
 
 **NLSQ Optimization Engine** (October 22, 2025)
 - StreamingOptimizer for unlimited datasets (>100M points)
@@ -248,7 +261,19 @@ ______________________________________________________________________
 - Removed JAXFit optimization engine → replaced with NLSQ
 - Removed VI (Variational Inference) → use NLSQ or MCMC
 - Removed `performance.subsampling` config → NLSQ handles automatically
-- New module: `homodyne.device` for CPU/GPU management
+- New module: `homodyne.device` for CPU management
+
+### Breaking Changes from v2.2 → v2.3
+
+**GPU Support Removal** (Hard Break in v2.3.0)
+- Removed all GPU acceleration (see [Migration Guide](docs/migration/v2.2-to-v2.3-gpu-removal.md))
+- Removed CLI flags: `--force-cpu`, `--gpu-memory-fraction`
+- Removed config keys: `gpu_memory_fraction`, `force_cpu`, `cuda_device_id`
+- Removed 9 GPU API functions from `homodyne.device`
+- Removed 3 Makefile targets: `install-jax-gpu`, `gpu-check`, `test-gpu`
+- Removed GPU example files, runtime modules, and device code
+- **For GPU users**: Stay on v2.2.1 (last GPU-supporting version)
+- **For CPU users**: Upgrade to v2.3.0 (recommended)
 
 ### Breaking Changes from v2.0 → v2.1
 
@@ -287,7 +312,6 @@ make quality           # Format + lint + type-check
 
 # Installation
 make dev               # CPU-only (all platforms)
-make install-jax-gpu   # GPU support (Linux + CUDA 12.1-12.9 only)
 
 # Validation
 python -m homodyne.runtime.utils.system_validator           # Full (~6.5s)
@@ -306,7 +330,6 @@ make test-integration  # Integration tests
 make test-performance  # Benchmarks
 make test-nlsq         # NLSQ optimization
 make test-mcmc         # MCMC statistical validation
-make test-gpu          # GPU validation (Linux only)
 ```
 
 ### Code Quality
@@ -321,7 +344,6 @@ pre-commit run --all-files  # Run all pre-commit hooks
 
 ```bash
 make deps-check        # Check dependencies
-make gpu-check         # Check GPU/CUDA (Linux only)
 ```
 
 ______________________________________________________________________
@@ -340,7 +362,7 @@ homodyne/
 │   │   ├── manager.py          # YAML/JSON config loading
 │   │   ├── parameter_manager.py # Parameter bounds & validation
 │   │   ├── types.py            # TypedDict definitions
-│   │   └── templates/          # 4 YAML templates
+│   │   └── templates/          # 3 YAML templates
 │   ├── core/                   # JAX physics engine
 │   │   ├── jax_backend.py      # compute_g1, compute_g2, chi_squared
 │   │   ├── physics.py          # Physical models
@@ -352,27 +374,24 @@ homodyne/
 │   │   ├── preprocessing.py    # Data preparation
 │   │   ├── phi_filtering.py    # Angular filtering
 │   │   └── memory_manager.py   # Memory-efficient handling
-│   ├── device/                 # CPU/GPU management
+│   ├── device/                 # CPU management (v2.3.0: GPU removed)
 │   │   ├── __init__.py         # configure_optimal_device()
-│   │   ├── gpu.py              # GPU/CUDA configuration
 │   │   └── cpu.py              # HPC CPU optimization
 │   ├── optimization/           # NLSQ & MCMC
-│   │   ├── nlsq_wrapper.py     # NLSQ integration (423 lines)
+│   │   ├── nlsq_wrapper.py     # NLSQ integration (CPU-optimized)
 │   │   ├── strategy.py         # Dataset strategy selection
 │   │   ├── checkpoint_manager.py # HDF5 checkpoints
 │   │   ├── mcmc.py             # NumPyro/BlackJAX MCMC
 │   │   └── exceptions.py       # Custom exceptions
 │   ├── runtime/                # Runtime features
 │   │   ├── shell/              # Shell completion
-│   │   ├── gpu/                # GPU activation scripts
-│   │   └── utils/              # system_validator.py (1,577 lines)
+│   │   └── utils/              # system_validator.py
 │   └── utils/                  # Logging, progress
 ├── tests/
 │   ├── unit/                   # Function-level tests
 │   ├── integration/            # End-to-end workflows
 │   ├── performance/            # Benchmarks
 │   ├── mcmc/                   # Statistical validation
-│   ├── gpu/                    # GPU/CUDA tests
 │   ├── api/                    # Backward compatibility
 │   └── factories/              # Test data generators
 ├── docs/                       # Sphinx documentation
@@ -392,11 +411,11 @@ ______________________________________________________________________
 
 ## Architecture
 
-### JAX-First Design
+### CPU-Optimized JAX Design (v2.3.0)
 
 **Primary Optimization:** NLSQ trust-region solver
 - Levenberg-Marquardt algorithm via NLSQ package
-- JIT-compiled, CPU/GPU transparent execution
+- JIT-compiled, CPU-optimized execution
 - Strategy selection: STANDARD → LARGE → CHUNKED → STREAMING
 
 **Secondary Optimization:** NumPyro/BlackJAX MCMC
@@ -408,9 +427,9 @@ ______________________________________________________________________
 - Built-in progress tracking
 
 **Device Management:**
-- `configure_optimal_device()` - Auto-detect optimal device
-- Graceful GPU→CPU fallback
+- `configure_optimal_device()` - CPU-only device configuration
 - HPC CPU optimization (36/128-core nodes)
+- Multi-core parallelization for MCMC and batch processing
 
 ### Analysis Modes
 
@@ -448,32 +467,39 @@ bounds = pm.get_parameter_bounds(["D0", "alpha"])
 ### Critical Performance Paths
 
 1. **Residual Calculation** (`core/jax_backend.py:compute_residuals`) - JIT-compiled, called repeatedly
-2. **G2 Computation** (`core/jax_backend.py:compute_g2_scaled`) - Vectorized over phi angles, GPU-accelerated
+2. **G2 Computation** (`core/jax_backend.py:compute_g2_scaled`) - Vectorized over phi angles, CPU-optimized
 3. **Memory Management** (`data/memory_manager.py`) - Data chunking, efficient JAX arrays
 
-### GPU Support
+### CPU Optimization Best Practices (v2.3.0)
 
-**Requirements:**
-- Linux x86_64 or aarch64 only
-- CUDA 12.1-12.9 (system pre-installed)
-- NVIDIA driver >= 525
+**Multi-Core Configuration:**
+```python
+import os
+import psutil
 
-**Installation:**
-```bash
-# Load system CUDA
-module load cuda/12.2
-
-# Install JAX with CUDA
-pip install jax[cuda12-local]==0.8.0 jaxlib==0.8.0
-
-# Install homodyne
-pip install homodyne[dev]
+# Reserve 2 cores for OS
+cpu_count = psutil.cpu_count(logical=False)
+os.environ['XLA_FLAGS'] = f'--xla_force_host_platform_device_count={cpu_count - 2}'
 ```
 
-**Auto-fallback to CPU:**
-- Windows or macOS
-- CUDA not available
-- GPU initialization fails
+**HPC Cluster Setup (Slurm Example):**
+```bash
+#!/bin/bash
+#SBATCH --nodes=1
+#SBATCH --ntasks-per-node=36
+#SBATCH --time=02:00:00
+
+export OMP_NUM_THREADS=34  # Reserve 2 for OS
+homodyne --config config.yaml
+```
+
+**Performance Tips:**
+- Use multi-core CPUs (14+ cores recommended)
+- Configure thread pools for parallel processing
+- Use NUMA-aware configuration on large HPC nodes
+- See `examples/cpu_optimization.py` for comprehensive guide
+
+**Note:** GPU support removed in v2.3.0. For GPU features, use v2.2.1 (last GPU-supporting version).
 
 ______________________________________________________________________
 
@@ -495,19 +521,18 @@ python -m homodyne.runtime.utils.system_validator --test jax
 python -m homodyne.runtime.utils.system_validator --json
 ```
 
-### 10 Validation Tests
+### 9 Validation Tests (v2.3.0: GPU test removed)
 
 | Test | Weight | Type | Runtime | Checks |
 |------|--------|------|---------|--------|
-| Dependency Versions | 20% | Critical | 0.006s | JAX==0.8.0, jaxlib==0.8.0 exact match |
-| JAX Installation | 20% | Critical | 0.14s | Import, devices, CUDA detection |
+| Dependency Versions | 20% | Critical | 0.006s | JAX==0.8.0, jaxlib==0.8.0 exact match (CPU-only) |
+| JAX Installation | 20% | Critical | 0.14s | Import, CPU devices |
 | NLSQ Integration | 15% | Important | 0.001s | curve_fit, StreamingOptimizer |
 | Config System | 10% | Important | 0.005s | ConfigManager, templates |
 | Data Pipeline | 10% | Important | 0.003s | h5py, XPCSDataLoader, phi filtering |
 | Homodyne Installation | 10% | Important | 2.1s | 4 commands available |
-| Environment Detection | 5% | Baseline | 0.0003s | Platform, Python, venv |
-| Shell Completion | 5% | Convenience | 0.004s | Completion scripts, aliases |
-| GPU Setup | 3% | Optional | 0.026s | NVIDIA driver, CUDA home |
+| Environment Detection | 7% | Baseline | 0.0003s | Platform, Python, venv |
+| Shell Completion | 6% | Convenience | 0.004s | Completion scripts, aliases |
 | Integration | 2% | Optional | 4.2s | Module imports, scripts |
 
 ### Health Score
@@ -654,7 +679,6 @@ make test-integration  # Integration only
 make test-performance  # Benchmarks
 make test-nlsq         # NLSQ specific
 make test-mcmc         # MCMC specific
-make test-gpu          # GPU validation (Linux only)
 ```
 
 ### Test Coverage Highlights
@@ -694,24 +718,29 @@ JAX_LOG_COMPILES=1 python script.py
 make profile-nlsq
 make profile-mcmc
 
-# GPU monitoring
-nvidia-smi -l 1
+# CPU monitoring
+htop  # Interactive CPU monitor
+top -H -p $(pgrep -f homodyne)  # Thread-level CPU usage
 
 # Full JAX traces
 JAX_TRACEBACK_FILTERING=off python script.py
 ```
 
-### Debugging GPU/JAX
+### Debugging CPU/JAX (v2.3.0)
 
 ```bash
-# Device status
+# Device status (always CPU)
 python -c "from homodyne.device import get_device_status; print(get_device_status())"
 
-# Benchmark
-python -c "from homodyne.device import benchmark_device_performance; print(benchmark_device_performance())"
+# CPU benchmark
+python -c "from homodyne.device import benchmark_cpu_performance; print(benchmark_cpu_performance())"
 
-# CUDA validation
+# JAX CPU devices
 python -c "import jax; print(jax.devices())"
+# Expected: [CpuDevice(id=0)]
+
+# Check CPU thread configuration
+python -c "import os; print(f'XLA_FLAGS: {os.environ.get(\"XLA_FLAGS\", \"not set\")}')"
 ```
 
 ### API Compatibility
@@ -785,7 +814,7 @@ Three-layer fix resolves all silent optimization failures:
 - ✅ **Correct parameter ordering**: Matches StratifiedResidualFunction expectations
 - ✅ **Gradient sanity check**: Pre-optimization validation detects zero-gradient issues
 - ✅ **Stratified least-squares**: Uses NLSQ's `least_squares()` with StratifiedResidualFunction
-- ✅ **Full NLSQ power**: JAX-accelerated, GPU/CPU compatible, trust-region optimization
+- ✅ **Full NLSQ power**: JAX-accelerated, CPU-optimized, trust-region optimization
 - ✅ **Graceful fallback**: Falls back to curve_fit_large if needed
 
 **For Current v2.2.1 Users:**
@@ -843,38 +872,6 @@ Users on v2.2.0 or earlier experiencing per-angle scaling issues should upgrade 
 pip install --upgrade homodyne
 ```
 
-### GPU Memory Limitations (v2.2.1)
-
-**Issue:** GPU out of memory with large datasets + per-angle scaling
-
-**Symptoms:**
-- `RESOURCE_EXHAUSTED: Unable to allocate device workspace for gesvd` after ~30s
-- Optimization fails or falls back to non-stratified path
-- Gradient sanity check passes, but optimization doesn't complete
-
-**Root Cause:**
-- SVD operations in `least_squares()` are memory-intensive on GPU
-- Large datasets (>1M points) with per-angle scaling require significant GPU memory
-- Laptop GPUs (even RTX 4090) may not have sufficient memory
-
-**Solution:** Use CPU-only mode for reliable results with per-angle scaling:
-```bash
-# Recommended for large datasets + per-angle scaling
-env CUDA_VISIBLE_DEVICES="" homodyne --config config.yaml
-```
-
-**Performance:**
-- CPU optimization: ~150s for 3M points
-- Cost reduction: 93.15%
-- Function evaluations: 113
-- Status: SUCCESS
-
-**When to Use CPU-only Mode:**
-- Dataset size > 1M points
-- Per-angle scaling enabled (`per_angle_scaling: true`)
-- Getting GPU OOM errors
-- Consistent, reproducible results needed
-
 ### Plotting
 
 **Issue:** Two-time correlation diagonal orientation
@@ -902,12 +899,12 @@ ______________________________________________________________________
 
 ## Dependencies
 
-### Core Stack (2025)
+### Core Stack (v2.3.0 - CPU-only)
 
 **Required:**
-- **JAX 0.8.0 + jaxlib 0.8.0** (exact match required)
-  - Default: CPU-only (all platforms)
-  - Linux + CUDA 12.1-12.9: Optional GPU via `jax[cuda12-local]`
+- **JAX 0.8.0 + jaxlib 0.8.0** (exact match required, CPU-only)
+  - Installation: `pip install jax==0.8.0 jaxlib==0.8.0`
+  - **GPU support removed in v2.3.0** (use v2.2.1 for GPU)
 - **nlsq >= 0.1.0** - Trust-region optimization
 - **NumPyro >= 0.18.0, <0.20.0** - MCMC with progress bars
 - **BlackJAX >= 1.2.0, <2.0.0** - Alternative MCMC backend
@@ -918,11 +915,11 @@ ______________________________________________________________________
 - **matplotlib >= 3.8.0, <4.0.0** - Plotting
 - **psutil >= 6.0.0** - System utilities
 
-### Platform Support
+### Platform Support (v2.3.0)
 
 - **Python**: 3.12+ (all platforms)
-- **CPU**: Linux, macOS, Windows (full support)
-- **GPU**: Linux only (CUDA 12.1-12.9)
+- **CPU**: Linux, macOS, Windows (full support, multi-core optimized)
+- **GPU**: Not supported (removed in v2.3.0)
 
 ### Development
 

@@ -527,18 +527,36 @@ def test_optimize_per_angle_sequential_different_weightings(
 
     # Try all three weighting schemes
     result_inv_var = optimize_per_angle_sequential(
-        phi, t1, t2, g2, simple_residual_function, initial_params, bounds,
-        weighting="inverse_variance"
+        phi,
+        t1,
+        t2,
+        g2,
+        simple_residual_function,
+        initial_params,
+        bounds,
+        weighting="inverse_variance",
     )
 
     result_uniform = optimize_per_angle_sequential(
-        phi, t1, t2, g2, simple_residual_function, initial_params, bounds,
-        weighting="uniform"
+        phi,
+        t1,
+        t2,
+        g2,
+        simple_residual_function,
+        initial_params,
+        bounds,
+        weighting="uniform",
     )
 
     result_n_points = optimize_per_angle_sequential(
-        phi, t1, t2, g2, simple_residual_function, initial_params, bounds,
-        weighting="n_points"
+        phi,
+        t1,
+        t2,
+        g2,
+        simple_residual_function,
+        initial_params,
+        bounds,
+        weighting="n_points",
     )
 
     # All should converge
@@ -594,9 +612,7 @@ def test_optimize_single_angle_error_handling():
     initial_params = np.array([0.5, 1.0])
     bounds = (np.array([0.0, 0.0]), np.array([1.0, 10.0]))
 
-    result = optimize_single_angle(
-        subset, bad_residual_func, initial_params, bounds
-    )
+    result = optimize_single_angle(subset, bad_residual_func, initial_params, bounds)
 
     # Should return failed result, not raise exception
     assert result["success"] is False

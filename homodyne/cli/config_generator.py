@@ -21,6 +21,7 @@ import yaml
 
 try:
     from ruamel.yaml import YAML
+
     HAS_RUAMEL = True
 except ImportError:
     HAS_RUAMEL = False
@@ -149,7 +150,9 @@ def get_template_path(mode: str) -> Path:
     return template_path
 
 
-def generate_config(mode: str, output_path: Path, force: bool = False) -> Dict[str, Any]:
+def generate_config(
+    mode: str, output_path: Path, force: bool = False
+) -> Dict[str, Any]:
     """Generate configuration from template.
 
     Parameters
@@ -253,9 +256,7 @@ def interactive_builder() -> Dict[str, Any]:
 
     # Output directory
     print()
-    output_dir = (
-        input("Output directory (default: './output'): ").strip() or "./output"
-    )
+    output_dir = input("Output directory (default: './output'): ").strip() or "./output"
 
     # Output path
     print()
@@ -268,7 +269,9 @@ def interactive_builder() -> Dict[str, Any]:
 
     # Check overwrite
     if output_path.exists():
-        overwrite = input(f"\n⚠ File exists: {output_path}\nOverwrite? [y/N]: ").strip().lower()
+        overwrite = (
+            input(f"\n⚠ File exists: {output_path}\nOverwrite? [y/N]: ").strip().lower()
+        )
         if overwrite != "y":
             print("Configuration not saved.")
             # Still load and return config for reference
@@ -309,12 +312,10 @@ def interactive_builder() -> Dict[str, Any]:
 
         # Replace key values using simple text substitution
         content = content.replace(
-            'file_path: "./data/sample/experiment.hdf"',
-            f'file_path: "{data_file}"'
+            'file_path: "./data/sample/experiment.hdf"', f'file_path: "{data_file}"'
         )
         content = content.replace(
-            'directory: "./results"',
-            f'directory: "{output_dir}"'
+            'directory: "./results"', f'directory: "{output_dir}"'
         )
 
         # Add sample name and experiment_id if not present
@@ -322,7 +323,7 @@ def interactive_builder() -> Dict[str, Any]:
             # Insert after directory line in output section
             content = content.replace(
                 f'directory: "{output_dir}"',
-                f'directory: "{output_dir}"\n  sample_name: "{sample_name}"\n  experiment_id: "{experiment_id}"'
+                f'directory: "{output_dir}"\n  sample_name: "{sample_name}"\n  experiment_id: "{experiment_id}"',
             )
 
         with open(output_path, "w") as f:

@@ -21,12 +21,14 @@ import pytest
 try:
     import jax.numpy as jnp
     from jax import random
+
     JAX_AVAILABLE = True
 except ImportError:
     JAX_AVAILABLE = False
 
 try:
     import numpyro
+
     NUMPYRO_AVAILABLE = True
 except ImportError:
     NUMPYRO_AVAILABLE = False
@@ -38,7 +40,7 @@ from homodyne.config.parameter_space import ParameterSpace
 # Skip all tests if JAX or NumPyro not available
 pytestmark = pytest.mark.skipif(
     not JAX_AVAILABLE or not NUMPYRO_AVAILABLE,
-    reason="JAX and NumPyro required for MCMC tests"
+    reason="JAX and NumPyro required for MCMC tests",
 )
 
 
@@ -83,20 +85,20 @@ def simple_static_data():
     c2_data += noise
 
     return {
-        'data': c2_data,
-        't1': t1,
-        't2': t2,
-        'phi': phi,
-        'q': q,
-        'L': L,
-        'num_samples': n_points,  # Add this for clarity
-        'true_params': {
-            'D0': true_D0,
-            'alpha': true_alpha,
-            'D_offset': true_D_offset,
-            'contrast': true_contrast,
-            'offset': true_offset,
-        }
+        "data": c2_data,
+        "t1": t1,
+        "t2": t2,
+        "phi": phi,
+        "q": q,
+        "L": L,
+        "num_samples": n_points,  # Add this for clarity
+        "true_params": {
+            "D0": true_D0,
+            "alpha": true_alpha,
+            "D_offset": true_D_offset,
+            "contrast": true_contrast,
+            "offset": true_offset,
+        },
     }
 
 
@@ -111,29 +113,29 @@ def test_mcmc_with_manual_initial_params(simple_static_data):
 
     # Manual initial parameters (e.g., from previous NLSQ run)
     initial_params = {
-        'D0': 1100.0,  # Close to true value 1000.0
-        'alpha': 1.4,  # Close to true value 1.5
-        'D_offset': 60.0,  # Close to true value 50.0
-        'contrast': 0.45,
-        'offset': 0.95,
+        "D0": 1100.0,  # Close to true value 1000.0
+        "alpha": 1.4,  # Close to true value 1.5
+        "D_offset": 60.0,  # Close to true value 50.0
+        "contrast": 0.45,
+        "offset": 0.95,
     }
 
     # Create parameter space
-    param_space = ParameterSpace.from_defaults('static_isotropic')
+    param_space = ParameterSpace.from_defaults("static_isotropic")
 
     # Run MCMC with manual initialization
     # Use minimal samples for speed
     result = fit_mcmc_jax(
-        data=data['data'],
-        t1=data['t1'],
-        t2=data['t2'],
-        phi=data['phi'],
-        q=data['q'],
-        L=data['L'],
-        analysis_mode='static_isotropic',
+        data=data["data"],
+        t1=data["t1"],
+        t2=data["t2"],
+        phi=data["phi"],
+        q=data["q"],
+        L=data["L"],
+        analysis_mode="static_isotropic",
         parameter_space=param_space,
         initial_params=initial_params,  # Manual initialization
-        method='auto',  # Will select NUTS for small dataset
+        method="auto",  # Will select NUTS for small dataset
         n_samples=200,  # Small for speed
         n_warmup=100,
         n_chains=1,  # Single chain for speed
@@ -163,20 +165,20 @@ def test_automatic_nuts_selection_small_dataset(simple_static_data):
     should automatically select NUTS method.
     """
     data = simple_static_data
-    param_space = ParameterSpace.from_defaults('static_isotropic')
+    param_space = ParameterSpace.from_defaults("static_isotropic")
 
     # Small dataset: num_samples = 1 (single phi angle)
     # Should trigger NUTS (not CMC)
     result = fit_mcmc_jax(
-        data=data['data'][:10],  # Very small for guaranteed NUTS selection
-        t1=data['t1'][:10],
-        t2=data['t2'][:10],
-        phi=data['phi'][:10],
-        q=data['q'],
-        L=data['L'],
-        analysis_mode='static_isotropic',
+        data=data["data"][:10],  # Very small for guaranteed NUTS selection
+        t1=data["t1"][:10],
+        t2=data["t2"][:10],
+        phi=data["phi"][:10],
+        q=data["q"],
+        L=data["L"],
+        analysis_mode="static_isotropic",
         parameter_space=param_space,
-        method='auto',  # Automatic selection
+        method="auto",  # Automatic selection
         n_samples=100,
         n_warmup=50,
         n_chains=1,
@@ -187,7 +189,7 @@ def test_automatic_nuts_selection_small_dataset(simple_static_data):
     assert result.sampler == "NUTS"  # Should use NUTS
 
     # Verify it's not a CMC result
-    if hasattr(result, 'is_cmc_result'):
+    if hasattr(result, "is_cmc_result"):
         assert not result.is_cmc_result()
 
 
@@ -199,21 +201,21 @@ def test_convergence_with_physics_priors_only(simple_static_data):
     priors alone. This tests the core simplification: priors are good enough.
     """
     data = simple_static_data
-    param_space = ParameterSpace.from_defaults('static_isotropic')
+    param_space = ParameterSpace.from_defaults("static_isotropic")
 
     # Run MCMC without any initialization
     # initial_params=None → use priors from ParameterSpace only
     result = fit_mcmc_jax(
-        data=data['data'],
-        t1=data['t1'],
-        t2=data['t2'],
-        phi=data['phi'],
-        q=data['q'],
-        L=data['L'],
-        analysis_mode='static_isotropic',
+        data=data["data"],
+        t1=data["t1"],
+        t2=data["t2"],
+        phi=data["phi"],
+        q=data["q"],
+        L=data["L"],
+        analysis_mode="static_isotropic",
         parameter_space=param_space,
         initial_params=None,  # NO initialization
-        method='auto',
+        method="auto",
         n_samples=500,  # More samples to ensure convergence
         n_warmup=300,
         n_chains=2,  # Multiple chains for diagnostics
@@ -227,7 +229,9 @@ def test_convergence_with_physics_priors_only(simple_static_data):
     if result.r_hat is not None:
         for param_name, r_hat_value in result.r_hat.items():
             if r_hat_value is not None:
-                assert r_hat_value < 1.2, f"Poor convergence for {param_name}: R-hat={r_hat_value}"
+                assert (
+                    r_hat_value < 1.2
+                ), f"Poor convergence for {param_name}: R-hat={r_hat_value}"
 
     # Verify ESS if available
     if result.effective_sample_size is not None:
@@ -266,7 +270,7 @@ def test_auto_retry_on_poor_convergence():
     np.random.seed(123)
     c2_data = 1.0 + 0.5 * np.exp(-0.001 * t1**1.5) + 0.2 * np.random.randn(n_points)
 
-    param_space = ParameterSpace.from_defaults('static_isotropic')
+    param_space = ParameterSpace.from_defaults("static_isotropic")
 
     # Run with minimal sampling to potentially trigger poor convergence
     result = fit_mcmc_jax(
@@ -276,10 +280,10 @@ def test_auto_retry_on_poor_convergence():
         phi=phi,
         q=q,
         L=L,
-        analysis_mode='static_isotropic',
+        analysis_mode="static_isotropic",
         parameter_space=param_space,
         initial_params=None,
-        method='auto',
+        method="auto",
         n_samples=50,  # Very few samples
         n_warmup=20,  # Very short warmup
         n_chains=2,
@@ -304,23 +308,24 @@ def test_warning_on_poor_convergence_metrics(simple_static_data, caplog):
     Even with warnings, result should be returned with converged=False.
     """
     import logging
+
     caplog.set_level(logging.WARNING)
 
     data = simple_static_data
-    param_space = ParameterSpace.from_defaults('static_isotropic')
+    param_space = ParameterSpace.from_defaults("static_isotropic")
 
     # Use minimal sampling to get poor diagnostics
     result = fit_mcmc_jax(
-        data=data['data'],
-        t1=data['t1'],
-        t2=data['t2'],
-        phi=data['phi'],
-        q=data['q'],
-        L=data['L'],
-        analysis_mode='static_isotropic',
+        data=data["data"],
+        t1=data["t1"],
+        t2=data["t2"],
+        phi=data["phi"],
+        q=data["q"],
+        L=data["L"],
+        analysis_mode="static_isotropic",
         parameter_space=param_space,
         initial_params=None,
-        method='auto',
+        method="auto",
         n_samples=30,  # Very few samples → low ESS
         n_warmup=10,  # Very short warmup → poor convergence
         n_chains=2,
@@ -349,7 +354,7 @@ def test_configurable_cmc_thresholds():
     L = 2000000.0
     c2_data = 1.0 + 0.5 * np.exp(-0.001 * t1**1.5)
 
-    param_space = ParameterSpace.from_defaults('static_isotropic')
+    param_space = ParameterSpace.from_defaults("static_isotropic")
 
     # Test 1: Force NUTS by setting very high min_samples_for_cmc
     # With min_samples_for_cmc=100, dataset of 12 points should use NUTS
@@ -360,9 +365,9 @@ def test_configurable_cmc_thresholds():
         phi=phi,
         q=q,
         L=L,
-        analysis_mode='static_isotropic',
+        analysis_mode="static_isotropic",
         parameter_space=param_space,
-        method='auto',
+        method="auto",
         min_samples_for_cmc=100,  # Threshold configured via kwargs
         memory_threshold_pct=0.30,
         n_samples=100,
@@ -395,7 +400,7 @@ def test_no_automatic_nlsq_initialization():
     L = 2000000.0
     c2_data = 1.0 + 0.5 * np.exp(-0.001 * t1**1.5)
 
-    param_space = ParameterSpace.from_defaults('static_isotropic')
+    param_space = ParameterSpace.from_defaults("static_isotropic")
 
     # Run MCMC without any initialization
     result = fit_mcmc_jax(
@@ -405,10 +410,10 @@ def test_no_automatic_nlsq_initialization():
         phi=phi,
         q=q,
         L=L,
-        analysis_mode='static_isotropic',
+        analysis_mode="static_isotropic",
         parameter_space=param_space,
         initial_params=None,  # Explicitly no initialization
-        method='auto',
+        method="auto",
         n_samples=100,
         n_warmup=50,
         n_chains=1,
@@ -436,6 +441,7 @@ def test_enhanced_retry_logging(caplog):
     This test forces poor convergence to trigger retry mechanism.
     """
     import logging
+
     caplog.set_level(logging.WARNING)
 
     # Create challenging dataset with high noise
@@ -451,7 +457,7 @@ def test_enhanced_retry_logging(caplog):
     np.random.seed(999)  # Specific seed for reproducibility
     c2_data = 1.0 + 0.5 * np.exp(-0.001 * t1**1.5) + 0.3 * np.random.randn(n_points)
 
-    param_space = ParameterSpace.from_defaults('static_isotropic')
+    param_space = ParameterSpace.from_defaults("static_isotropic")
 
     # Run with minimal sampling to force poor convergence
     result = fit_mcmc_jax(
@@ -461,10 +467,10 @@ def test_enhanced_retry_logging(caplog):
         phi=phi,
         q=q,
         L=L,
-        analysis_mode='static_isotropic',
+        analysis_mode="static_isotropic",
         parameter_space=param_space,
         initial_params=None,
-        method='auto',
+        method="auto",
         n_samples=20,  # Very few samples → poor convergence
         n_warmup=10,  # Very short warmup → poor convergence
         n_chains=2,  # Need multiple chains for R-hat

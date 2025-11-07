@@ -22,6 +22,7 @@ import pytest
 try:
     import jax
     import jax.numpy as jnp
+
     JAX_AVAILABLE = True
 except ImportError:
     JAX_AVAILABLE = False
@@ -29,6 +30,7 @@ except ImportError:
 
 try:
     import numpyro
+
     NUMPYRO_AVAILABLE = True
 except ImportError:
     NUMPYRO_AVAILABLE = False
@@ -36,6 +38,7 @@ except ImportError:
 try:
     from homodyne.optimization.mcmc import fit_mcmc_jax, MCMCResult
     from homodyne.core.fitting import ParameterSpace
+
     HOMODYNE_AVAILABLE = True
 except ImportError:
     HOMODYNE_AVAILABLE = False
@@ -50,7 +53,7 @@ pytestmark = pytest.mark.skipif(
 
 @pytest.fixture(scope="module", autouse=True)
 def force_cpu_for_mcmc_tests():
-    """Force CPU mode for all MCMC tests to avoid GPU memory issues."""
+    """Force CPU mode for all MCMC tests."""
     original = os.environ.get("JAX_PLATFORM_NAME", "")
     os.environ["JAX_PLATFORM_NAME"] = "cpu"
 
@@ -92,12 +95,12 @@ def synthetic_ground_truth_data():
 
     # Physical parameters
     q = 0.01  # nm^-1
-    L = 5.0   # meters
+    L = 5.0  # meters
 
     # Compute theoretical g2
     tau = np.abs(t2 - t1) + 1e-10
     effective_D = true_params["D0"] + true_params["D_offset"]
-    exponent = -effective_D * (q ** 2) * (tau ** true_params["alpha"])
+    exponent = -effective_D * (q**2) * (tau ** true_params["alpha"])
     g1 = np.exp(exponent)
     c2_theory = 1.0 + g1 * g1
 
@@ -150,7 +153,7 @@ def medium_synthetic_data():
     # Simple diffusion model
     tau = np.abs(t2 - t1) + 1e-10
     D_eff = 800.0
-    g1 = np.exp(-D_eff * (q ** 2) * (tau ** 0.6))
+    g1 = np.exp(-D_eff * (q**2) * (tau**0.6))
     c2_theory = 1.0 + g1 * g1
     c2_fitted = 0.4 * c2_theory + 1.0
 
@@ -183,8 +186,11 @@ def medium_synthetic_data():
 # Task 0.1: Diagnose Silent Convergence Failures
 # ==============================================================================
 
+
 @pytest.mark.mcmc
-@pytest.mark.skip(reason="MCMC implementation validation - requires full testing infrastructure")
+@pytest.mark.skip(
+    reason="MCMC implementation validation - requires full testing infrastructure"
+)
 class TestNUTSConvergence:
     """Test NUTS convergence on synthetic data."""
 
@@ -245,23 +251,35 @@ class TestNUTSConvergence:
             # Check D0
             error_D0 = abs(mean_D0 - true_params["D0"]) / true_params["D0"]
             assert error_D0 < 0.20, f"D0 recovery error: {error_D0:.1%} >= 20%"
-            print(f"✓ D0: {mean_D0:.1f} vs true {true_params['D0']:.1f} (error: {error_D0:.1%})")
+            print(
+                f"✓ D0: {mean_D0:.1f} vs true {true_params['D0']:.1f} (error: {error_D0:.1%})"
+            )
 
             # Check alpha
             error_alpha = abs(mean_alpha - true_params["alpha"]) / true_params["alpha"]
             assert error_alpha < 0.20, f"alpha recovery error: {error_alpha:.1%} >= 20%"
-            print(f"✓ alpha: {mean_alpha:.3f} vs true {true_params['alpha']:.3f} (error: {error_alpha:.1%})")
+            print(
+                f"✓ alpha: {mean_alpha:.3f} vs true {true_params['alpha']:.3f} (error: {error_alpha:.1%})"
+            )
 
         # Test 5: Contrast and offset recovery
-        error_contrast = abs(result.mean_contrast - true_params["contrast"]) / true_params["contrast"]
-        error_offset = abs(result.mean_offset - true_params["offset"]) / abs(true_params["offset"] + 1e-10)
+        error_contrast = (
+            abs(result.mean_contrast - true_params["contrast"])
+            / true_params["contrast"]
+        )
+        error_offset = abs(result.mean_offset - true_params["offset"]) / abs(
+            true_params["offset"] + 1e-10
+        )
 
-        assert error_contrast < 0.20, f"Contrast recovery error: {error_contrast:.1%} >= 20%"
+        assert (
+            error_contrast < 0.20
+        ), f"Contrast recovery error: {error_contrast:.1%} >= 20%"
         assert error_offset < 0.20, f"Offset recovery error: {error_offset:.1%} >= 20%"
 
-        print(f"✓ Contrast: {result.mean_contrast:.3f} vs true {true_params['contrast']:.3f}")
+        print(
+            f"✓ Contrast: {result.mean_contrast:.3f} vs true {true_params['contrast']:.3f}"
+        )
         print(f"✓ Offset: {result.mean_offset:.3f} vs true {true_params['offset']:.3f}")
-
 
     def test_no_divergent_transitions(self, synthetic_ground_truth_data):
         """Test that NUTS has no (or minimal) divergent transitions."""
@@ -293,6 +311,7 @@ class TestNUTSConvergence:
 # Task 0.2: Memory Leak Testing
 # ==============================================================================
 
+
 @pytest.mark.mcmc
 @pytest.mark.slow
 class TestNUTSMemoryStability:
@@ -309,6 +328,7 @@ class TestNUTSMemoryStability:
         data_dict = synthetic_ground_truth_data
 
         import tracemalloc
+
         tracemalloc.start()
 
         # Get initial memory
@@ -334,18 +354,19 @@ class TestNUTSMemoryStability:
         tracemalloc.stop()
 
         # Compute memory growth
-        top_stats = snapshot_end.compare_to(snapshot_start, 'lineno')
+        top_stats = snapshot_end.compare_to(snapshot_start, "lineno")
         total_growth_mb = sum(stat.size_diff for stat in top_stats) / (1024 * 1024)
 
         print(f"Memory growth over 10k iterations: {total_growth_mb:.1f} MB")
 
         # Memory should not grow excessively (< 500 MB for 10k iterations)
-        assert total_growth_mb < 500, f"Excessive memory growth: {total_growth_mb:.1f} MB"
+        assert (
+            total_growth_mb < 500
+        ), f"Excessive memory growth: {total_growth_mb:.1f} MB"
 
         # Verify sampling completed
         assert result.converged, "Long MCMC run failed to converge"
         assert result.n_iterations == 10000, "Incorrect number of iterations"
-
 
     def test_jax_cache_cleanup(self, synthetic_ground_truth_data):
         """Test that JAX compilation cache doesn't accumulate."""
@@ -368,7 +389,7 @@ class TestNUTSMemoryStability:
                 rng_key=42 + i,  # Different seed each time
             )
 
-            assert result.converged, f"MCMC run {i+1} failed"
+            assert result.converged, f"MCMC run {i + 1} failed"
 
         # If we get here without OOM, cache management is working
         print("✓ Multiple MCMC runs completed without memory issues")
@@ -378,22 +399,20 @@ class TestNUTSMemoryStability:
 # Task 0.3: Initialization Testing
 # ==============================================================================
 
+
 @pytest.mark.mcmc
 class TestNUTSInitialization:
     """Test NUTS initialization from priors and NLSQ parameters."""
 
-    @pytest.mark.gpu_memory_intensive
     @pytest.mark.skip(
-        reason="GPU OOM: Requires >2GB free GPU memory. Test fails with RESOURCE_EXHAUSTED "
-               "even for small 14MB allocations. Environmental limitation, not a code bug. "
-               "Code works correctly with adequate GPU memory."
+        reason="Memory intensive: Requires significant memory for NUTS sampling. "
+        "Test skipped to avoid resource exhaustion in CI/CD environments."
     )
     def test_initialization_from_default_priors(self, synthetic_ground_truth_data):
         """Test NUTS with default prior initialization.
 
-        NOTE: Skipped due to GPU memory limitations on test environment.
-        This test requires significant GPU memory (>2GB free) for NUTS sampling.
-        The code is correct - this is purely an environmental resource limitation.
+        NOTE: Skipped due to memory limitations in test environment.
+        This test requires significant memory for NUTS sampling.
         """
         data_dict = synthetic_ground_truth_data
 
@@ -418,22 +437,19 @@ class TestNUTSInitialization:
 
         # Acceptance rate should be reasonable (0.6 - 0.9)
         if result.acceptance_rate:
-            assert 0.5 < result.acceptance_rate < 0.95, \
-                f"Acceptance rate {result.acceptance_rate:.3f} outside reasonable range"
+            assert (
+                0.5 < result.acceptance_rate < 0.95
+            ), f"Acceptance rate {result.acceptance_rate:.3f} outside reasonable range"
 
-
-    @pytest.mark.gpu_memory_intensive
     @pytest.mark.skip(
-        reason="GPU OOM: Requires >2GB free GPU memory. Test fails with RESOURCE_EXHAUSTED "
-               "even for small 14MB allocations. Environmental limitation, not a code bug. "
-               "Code works correctly with adequate GPU memory."
+        reason="Memory intensive: Requires significant memory for NUTS sampling. "
+        "Test skipped to avoid resource exhaustion in CI/CD environments."
     )
     def test_initialization_from_nlsq_parameters(self, synthetic_ground_truth_data):
         """Test NUTS initialization from NLSQ parameters.
 
-        NOTE: Skipped due to GPU memory limitations on test environment.
-        This test requires significant GPU memory (>2GB free) for NUTS sampling.
-        The code is correct - this is purely an environmental resource limitation.
+        NOTE: Skipped due to memory limitations in test environment.
+        This test requires significant memory for NUTS sampling.
         """
         data_dict = synthetic_ground_truth_data
         true_params = data_dict["true_params"]
@@ -473,17 +489,18 @@ class TestNUTSInitialization:
 # Task 0.4: Comprehensive Diagnostics
 # ==============================================================================
 
+
 @pytest.mark.mcmc
 class TestNUTSDiagnostics:
     """Test comprehensive MCMC diagnostics."""
 
     @pytest.mark.skip(
         reason="Stochastic MCMC test with statistical variability. R-hat convergence (< 1.1) "
-               "depends on random sampling, hardware architecture, and numerical precision. "
-               "Despite fixed seed (42), different CPUs/architectures produce different random "
-               "streams, causing intermittent failures. Test validates MCMC methodology but is "
-               "too strict for automated CI/CD. For production validation, run on dedicated "
-               "hardware with broader tolerance (R-hat < 1.2) or manual inspection."
+        "depends on random sampling, hardware architecture, and numerical precision. "
+        "Despite fixed seed (42), different CPUs/architectures produce different random "
+        "streams, causing intermittent failures. Test validates MCMC methodology but is "
+        "too strict for automated CI/CD. For production validation, run on dedicated "
+        "hardware with broader tolerance (R-hat < 1.2) or manual inspection."
     )
     def test_rhat_calculation_multiple_chains(self, synthetic_ground_truth_data):
         """Test R-hat calculation with multiple chains."""
@@ -514,7 +531,6 @@ class TestNUTSDiagnostics:
                 print(f"R-hat({param_name}) = {rhat:.4f}")
                 assert rhat < 1.1, f"Poor convergence: R-hat({param_name}) = {rhat:.3f}"
 
-
     def test_ess_calculation(self, synthetic_ground_truth_data):
         """Test Effective Sample Size calculation."""
         data_dict = synthetic_ground_truth_data
@@ -544,7 +560,6 @@ class TestNUTSDiagnostics:
                 print(f"ESS({param_name}) = {ess:.0f}")
                 assert ess > 100, f"Low ESS: ESS({param_name}) = {ess:.0f} < 100"
 
-
     def test_acceptance_rate_tracking(self, synthetic_ground_truth_data):
         """Test acceptance rate tracking."""
         data_dict = synthetic_ground_truth_data
@@ -571,9 +586,9 @@ class TestNUTSDiagnostics:
 
         # Should be close to target (within 0.15)
         target = 0.8
-        assert abs(result.acceptance_rate - target) < 0.15, \
-            f"Acceptance rate {result.acceptance_rate:.3f} far from target {target}"
-
+        assert (
+            abs(result.acceptance_rate - target) < 0.15
+        ), f"Acceptance rate {result.acceptance_rate:.3f} far from target {target}"
 
     def test_trace_data_collection(self, synthetic_ground_truth_data):
         """Test that trace data is collected for plotting."""
@@ -601,13 +616,15 @@ class TestNUTSDiagnostics:
 
         # Samples should have correct shape
         n_total_samples = 500 * 2  # n_samples * n_chains
-        assert len(result.samples_contrast) == n_total_samples, \
-            f"Contrast samples: {len(result.samples_contrast)} != {n_total_samples}"
+        assert (
+            len(result.samples_contrast) == n_total_samples
+        ), f"Contrast samples: {len(result.samples_contrast)} != {n_total_samples}"
 
 
 # ==============================================================================
 # Task 0.5 & 0.6: Integration and Validation
 # ==============================================================================
+
 
 @pytest.mark.mcmc
 @pytest.mark.slow
@@ -616,11 +633,11 @@ class TestNUTSValidation:
 
     @pytest.mark.skip(
         reason="Stochastic MCMC convergence test on 100k points with statistical variability. "
-               "Convergence depends on random sampling paths, hardware (CPU/GPU differences), "
-               "numerical precision, and system timing. The test validates MCMC methodology "
-               "and dataset handling but fails intermittently due to stochastic nature of MCMC. "
-               "For production validation, use manual inspection with convergence diagnostics "
-               "(R-hat, ESS, trace plots) on dedicated hardware."
+        "Convergence depends on random sampling paths, hardware (CPU/GPU differences), "
+        "numerical precision, and system timing. The test validates MCMC methodology "
+        "and dataset handling but fails intermittently due to stochastic nature of MCMC. "
+        "For production validation, use manual inspection with convergence diagnostics "
+        "(R-hat, ESS, trace plots) on dedicated hardware."
     )
     def test_nuts_on_medium_dataset(self, medium_synthetic_data):
         """Test NUTS on medium-sized dataset (100k points)."""
@@ -646,7 +663,6 @@ class TestNUTSValidation:
         assert result.computation_time > 0, "No timing recorded"
 
         print(f"✓ 100k point dataset: {result.computation_time:.1f}s")
-
 
     def test_nuts_reproducibility(self, synthetic_ground_truth_data):
         """Test NUTS reproducibility with same seed."""
@@ -688,7 +704,7 @@ class TestNUTSValidation:
             result1.samples_contrast,
             result2.samples_contrast,
             rtol=1e-10,
-            err_msg="NUTS not reproducible with same seed"
+            err_msg="NUTS not reproducible with same seed",
         )
 
         print("✓ NUTS is reproducible with same random seed")

@@ -11,6 +11,216 @@ ______________________________________________________________________
 
 ______________________________________________________________________
 
+## [2.3.0] - 2025-11-07
+
+### Breaking Changes
+
+#### 🚨 GPU Support Removed - CPU-Only Architecture
+
+**CRITICAL BREAKING CHANGE**: Homodyne v2.3.0 removes all GPU acceleration support. This is a **hard break** with no migration path.
+
+**Decision:**
+- **Stay on v2.2.1**: If you need GPU acceleration (last GPU-supporting version)
+- **Upgrade to v2.3.0**: For simplified CPU-only workflows on multi-core systems
+
+**Rationale:**
+- Simplify maintenance and reduce complexity
+- Focus on reliable HPC CPU optimization for 36/128-core nodes
+- Eliminate GPU OOM errors and CUDA compatibility issues
+- Enable better cross-platform support (Linux/macOS/Windows)
+
+### Removed
+
+#### CLI Flags
+- `--force-cpu` - No longer needed (CPU-only by default)
+- `--gpu-memory-fraction` - GPU memory management removed
+
+#### Configuration Keys
+- `hardware.force_cpu` - Removed from YAML templates
+- `hardware.gpu_memory_fraction` - Removed from YAML templates
+- `hardware.cuda_device_id` - Removed from YAML templates
+- `performance.computation.gpu_acceleration` - Removed from YAML templates
+- `performance.device.preferred_device` - Removed from YAML templates
+- `plotting.datashader.gpu_acceleration` - Removed from YAML templates
+
+**Note**: Old configs will gracefully ignore these keys (no errors).
+
+#### API Functions (homodyne.device module)
+- `configure_system_cuda()` - GPU device configuration
+- `detect_system_cuda()` - GPU detection
+- `get_gpu_memory_info()` - GPU memory queries
+- `is_gpu_active()` - GPU status checks
+- `switch_to_cpu()` - GPU fallback logic
+- `benchmark_gpu_performance()` - GPU benchmarking
+- Plus 3 additional internal GPU functions
+
+**New API**: `configure_optimal_device()` now CPU-only, no parameters needed.
+
+#### Makefile Targets
+- `install-jax-gpu` - GPU JAX installation
+- `gpu-check` - GPU validation
+- `test-gpu` - GPU test suite
+
+#### Examples
+- `examples/gpu_accelerated_optimization.py` - Deleted
+- `examples/gpu_acceleration.py` - Deleted
+
+**New Examples:**
+- `examples/cpu_optimization.py` - HPC CPU optimization guide
+- `examples/multi_core_batch_processing.py` - Parallel CPU workflows
+
+#### Test Infrastructure
+- `tests/gpu/` directory - All GPU tests removed
+- GPU test markers from pytest configuration
+
+#### Runtime Modules
+- `homodyne/runtime/gpu/` - Entire GPU runtime module deleted
+  - `activation.py`
+  - `gpu_wrapper.py`
+  - `optimizer.py`
+  - `activation.sh`
+
+#### Device Modules
+- `homodyne/device/gpu.py` - GPU device management (637 lines removed)
+
+#### Documentation Sections
+- GPU installation instructions from README.md
+- GPU acceleration sections from all YAML templates
+- CUDA setup guides from documentation
+- GPU troubleshooting sections
+
+### Modified
+
+#### Core Modules
+- `homodyne/cli/commands.py` - Removed GPU OOM fallback logic (~60 lines)
+- `homodyne/cli/args_parser.py` - Removed GPU CLI flags (~17 lines)
+- `homodyne/cli/main.py` - Removed GPU availability check function
+- `homodyne/config/manager.py` - GPU config keys now gracefully ignored
+- `homodyne/optimization/nlsq_wrapper.py` - Removed GPU chunk size adaptation
+- `homodyne/device/__init__.py` - Simplified to CPU-only device configuration
+
+#### Configuration Templates
+- `homodyne/config/templates/homodyne_static.yaml` - CPU-only updates
+- `homodyne/config/templates/homodyne_laminar_flow.yaml` - CPU-only updates
+- `homodyne/config/templates/homodyne_master_template.yaml` - CPU-only updates
+
+**Changes:**
+- Removed `gpu_acceleration` and `gpu_memory_fraction` settings
+- Removed `preferred_device` options (CPU-only now)
+- Updated platform support notes (CPU-only, all platforms)
+- Updated installation instructions (removed GPU steps)
+
+#### System Validator
+- `homodyne/runtime/utils/system_validator.py` - Reduced from 10 to 9 tests
+  - Removed "GPU Setup" test (test #9, 124 lines)
+  - Redistributed test weights (Integration: 2% → 5%)
+  - Updated health score calculation for 9 tests
+
+### Added
+
+#### CPU Optimization
+- Enhanced multi-core CPU support for HPC clusters
+- NUMA-aware thread allocation recommendations
+- Slurm job script examples for 36/128-core nodes
+
+#### Documentation
+- `docs/migration/v2.2-to-v2.3-gpu-removal.md` - Comprehensive migration guide
+- `examples/README.md` - Updated with CPU-focused examples
+- CPU optimization sections in README.md and CLAUDE.md
+
+#### Examples
+- `examples/cpu_optimization.py` (457 lines) - HPC CPU setup guide
+  - Multi-core thread configuration
+  - NUMA awareness
+  - Slurm/PBS/LSF job scripts
+  - Performance profiling
+
+- `examples/multi_core_batch_processing.py` (506 lines) - Parallel CPU workflows
+  - ProcessPoolExecutor patterns
+  - Automatic worker scaling
+  - Memory-efficient batch processing
+
+### Changed
+
+#### Dependencies
+- JAX/jaxlib locked to 0.8.0 (CPU-only, exact version)
+- Removed all CUDA-related optional dependencies
+- Updated platform support: Linux/macOS/Windows (all CPU-only)
+
+#### Performance
+- Optimized for 14+ core CPUs (desktop/workstation)
+- HPC cluster support: 36/128-core nodes
+- Memory-efficient processing for datasets up to 100M+ points
+- No GPU OOM errors (CPU memory management more predictable)
+
+#### Platform Support
+- ✅ Linux: Full CPU-only support
+- ✅ macOS: Full CPU-only support (Apple Silicon + Intel)
+- ✅ Windows: Full CPU-only support
+
+### Migration Guide
+
+**From v2.2.x → v2.3.0:**
+
+1. **Remove GPU JAX** (if installed):
+   ```bash
+   pip uninstall -y jax jaxlib
+   ```
+
+2. **Install v2.3.0**:
+   ```bash
+   pip install homodyne==2.3.0
+   ```
+
+3. **Update configs** (optional - graceful degradation):
+   - Remove `--force-cpu` and `--gpu-memory-fraction` from CLI commands
+   - GPU settings in YAML files are automatically ignored
+
+4. **Verify**:
+   ```bash
+   python -c "import jax; print(jax.devices())"
+   # Expected: [CpuDevice(id=0)]
+   ```
+
+**For GPU Users:**
+
+Stay on v2.2.1 (last GPU-supporting version):
+```bash
+pip install homodyne==2.2.1
+```
+
+### Statistics
+
+**Code Removal:**
+- 5 test files deleted (tests/gpu/)
+- 8 test files modified (GPU markers removed)
+- 4 source files deleted (device/gpu.py, runtime/gpu/)
+- 2 example files deleted (GPU examples)
+- 3 Makefile targets removed
+- 9 API functions removed
+- 2 CLI flags removed
+- 6 configuration keys deprecated
+
+**Code Added:**
+- 2 new CPU-focused examples (963 lines)
+- 1 migration guide (450 lines)
+- Enhanced CPU optimization documentation
+
+**Overall Impact:**
+- ~2,000 lines of GPU code removed
+- ~1,400 lines of CPU optimization code added
+- Net reduction: ~600 lines
+- Simplified architecture and maintenance
+
+### References
+
+- Migration Guide: `docs/migration/v2.2-to-v2.3-gpu-removal.md`
+- CPU Optimization: `examples/cpu_optimization.py`
+- Multi-Core Workflows: `examples/multi_core_batch_processing.py`
+- System Validator: Now 9 tests (was 10)
+
+______________________________________________________________________
+
 ## [2.2.0] - 2025-11-06
 
 ### Added

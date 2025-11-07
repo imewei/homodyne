@@ -82,12 +82,12 @@ class BatchStatistics:
             Type of error encountered (if failed), by default None
         """
         batch_record = {
-            'batch_idx': batch_idx,
-            'success': success,
-            'loss': loss,
-            'iterations': iterations,
-            'recovery_actions': recovery_actions,
-            'error_type': error_type,
+            "batch_idx": batch_idx,
+            "success": success,
+            "loss": loss,
+            "iterations": iterations,
+            "recovery_actions": recovery_actions,
+            "error_type": error_type,
         }
 
         self.buffer.append(batch_record)
@@ -111,7 +111,7 @@ class BatchStatistics:
         if not self.buffer:
             return 0.0
 
-        successes = sum(1 for batch in self.buffer if batch['success'])
+        successes = sum(1 for batch in self.buffer if batch["success"])
         return successes / len(self.buffer)
 
     def get_average_loss(self) -> float:
@@ -122,11 +122,11 @@ class BatchStatistics:
         float
             Average loss from successful batches in buffer
         """
-        successful_batches = [b for b in self.buffer if b['success']]
+        successful_batches = [b for b in self.buffer if b["success"]]
         if not successful_batches:
-            return float('inf')
+            return float("inf")
 
-        total_loss = sum(b['loss'] for b in successful_batches)
+        total_loss = sum(b["loss"] for b in successful_batches)
         return total_loss / len(successful_batches)
 
     def get_average_iterations(self) -> float:
@@ -140,7 +140,7 @@ class BatchStatistics:
         if not self.buffer:
             return 0.0
 
-        total_iterations = sum(b['iterations'] for b in self.buffer)
+        total_iterations = sum(b["iterations"] for b in self.buffer)
         return total_iterations / len(self.buffer)
 
     def get_statistics(self) -> dict[str, Any]:
@@ -160,14 +160,14 @@ class BatchStatistics:
             - recent_batches: List of recent batch records
         """
         return {
-            'total_batches': self.total_batches,
-            'total_successes': self.total_successes,
-            'total_failures': self.total_failures,
-            'success_rate': self.get_success_rate(),
-            'average_loss': self.get_average_loss(),
-            'average_iterations': self.get_average_iterations(),
-            'error_distribution': dict(self.error_counts),
-            'recent_batches': list(self.buffer),
+            "total_batches": self.total_batches,
+            "total_successes": self.total_successes,
+            "total_failures": self.total_failures,
+            "success_rate": self.get_success_rate(),
+            "average_loss": self.get_average_loss(),
+            "average_iterations": self.get_average_iterations(),
+            "error_distribution": dict(self.error_counts),
+            "recent_batches": list(self.buffer),
         }
 
     def __repr__(self) -> str:

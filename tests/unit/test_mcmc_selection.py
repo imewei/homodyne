@@ -93,6 +93,7 @@ class TestMCMCSelectionIntegration:
         Spec requirement: Add comprehensive logging showing decision process
         """
         import logging
+
         caplog.set_level(logging.INFO)
 
         num_samples = 20  # Triggers parallelism
@@ -121,6 +122,7 @@ class TestMCMCSelectionIntegration:
         Spec requirement: Add comprehensive logging showing decision process
         """
         import logging
+
         caplog.set_level(logging.INFO)
 
         num_samples = 5  # Below parallelism threshold
@@ -150,6 +152,7 @@ class TestMCMCSelectionIntegration:
         Spec requirement: Add comprehensive logging showing decision process
         """
         import logging
+
         caplog.set_level(logging.INFO)
 
         num_samples = 10  # Below parallelism threshold
@@ -177,6 +180,7 @@ class TestMCMCSelectionIntegration:
         Spec requirement: Log warning for edge case (CMC + few samples)
         """
         import logging
+
         caplog.set_level(logging.WARNING)
 
         num_samples = 5  # Very few samples
@@ -212,9 +216,9 @@ class TestMCMCSelectionIntegration:
             dataset_size=dataset_size,
         )
 
-        assert result is True, (
-            "CMC should be selected at exactly 15 samples (default threshold)"
-        )
+        assert (
+            result is True
+        ), "CMC should be selected at exactly 15 samples (default threshold)"
 
     def test_memory_estimation_accuracy(self, mock_hardware_config):
         """

@@ -159,15 +159,15 @@ class CMCCoordinator:
         # Handle both config schemas:
         # - New schema: backend="jax" (string) + backend_config={name: "auto"} (dict)
         # - Old schema: backend={name: "auto"} or backend={type: "auto"} (dict only)
-        backend_value = config.get('backend', {})
+        backend_value = config.get("backend", {})
         if isinstance(backend_value, str):
             # New schema: computational backend is string, parallel backend in backend_config
-            backend_config = config.get('backend_config', {})
-            user_override = backend_config.get('name') if backend_config else None
+            backend_config = config.get("backend_config", {})
+            user_override = backend_config.get("name") if backend_config else None
         elif isinstance(backend_value, dict):
             # Old schema: backend is dict with 'name' or 'type' field for parallel execution
             # Support both 'name' and 'type' for backward compatibility
-            user_override = backend_value.get('name') or backend_value.get('type')
+            user_override = backend_value.get("name") or backend_value.get("type")
         else:
             user_override = None
 
@@ -177,7 +177,7 @@ class CMCCoordinator:
         # Step 3: Initialize checkpoint manager (Phase 2)
         # For Phase 1, we set up the architecture but don't use it
         self.checkpoint_manager = None
-        checkpoint_dir = config.get('checkpoint_dir')
+        checkpoint_dir = config.get("checkpoint_dir")
         if checkpoint_dir:
             logger.info(
                 f"Checkpoint architecture initialized (dir={checkpoint_dir}). "
@@ -198,7 +198,7 @@ class CMCCoordinator:
         q: float,
         L: float,
         analysis_mode: str,
-        parameter_space: Optional['ParameterSpace'] = None,
+        parameter_space: Optional["ParameterSpace"] = None,
         initial_values: Optional[Dict[str, float]] = None,
         model_fn: Optional[Callable] = None,
     ) -> MCMCResult:
@@ -277,10 +277,14 @@ class CMCCoordinator:
             raise ValueError("Cannot run CMC on empty dataset")
 
         # Get total dataset size (handles multi-dimensional arrays correctly)
-        dataset_size = data.size if hasattr(data, 'size') else len(data)
-        num_samples = data.shape[0] if hasattr(data, 'shape') and data.ndim > 1 else dataset_size
+        dataset_size = data.size if hasattr(data, "size") else len(data)
+        num_samples = (
+            data.shape[0] if hasattr(data, "shape") and data.ndim > 1 else dataset_size
+        )
 
-        logger.info(f"Starting CMC pipeline for {num_samples} samples ({dataset_size:,} total data points)")
+        logger.info(
+            f"Starting CMC pipeline for {num_samples} samples ({dataset_size:,} total data points)"
+        )
         logger.info(f"Analysis mode: {analysis_mode}")
         pipeline_start_time = time.time()
 
@@ -297,13 +301,15 @@ class CMCCoordinator:
             f"(~{dataset_size // num_shards:,} points/shard)"
         )
 
-        strategy = self.config.get('cmc', {}).get('sharding', {}).get('strategy', 'stratified')
+        strategy = (
+            self.config.get("cmc", {}).get("sharding", {}).get("strategy", "stratified")
+        )
 
         # CRITICAL VALIDATION: CMC always uses per-angle scaling (per_angle_scaling=True)
         # which requires stratified sharding to ensure all shards contain all phi angles.
         # Random/contiguous sharding may create angle imbalance → zero gradients → silent failures.
         # See: docs/troubleshooting/nlsq-zero-iterations-investigation.md (NLSQ chunking issue)
-        if strategy != 'stratified':
+        if strategy != "stratified":
             logger.warning(
                 f"CMC sharding strategy is '{strategy}', but CMC always uses per-angle scaling "
                 f"which requires stratified sharding for correct results. "
@@ -316,7 +322,9 @@ class CMCCoordinator:
         # Use adaptive min_shard_size based on dataset size
         # This allows small test datasets to pass validation while maintaining
         # statistical rigor for production datasets
-        default_min_shard_size = self.config.get('cmc', {}).get('sharding', {}).get('min_shard_size', 10_000)
+        default_min_shard_size = (
+            self.config.get("cmc", {}).get("sharding", {}).get("min_shard_size", 10_000)
+        )
         min_shard_size = calculate_adaptive_min_shard_size(
             dataset_size=dataset_size,
             num_shards=num_shards,
@@ -327,26 +335,38 @@ class CMCCoordinator:
         # Sharding functions expect 1D arrays: data (N,), t1 (N,), t2 (N,), phi (N,)
         # Input data shape: (n_phi, n_t1, n_t2) → flatten to (n_phi * n_t1 * n_t2,)
         # Note: t1 and t2 are already 2D meshgrids from data loader
-        if hasattr(data, 'ndim') and data.ndim > 1:
-            logger.info(f"Flattening multi-dimensional data from shape {data.shape} for sharding")
+        if hasattr(data, "ndim") and data.ndim > 1:
+            logger.info(
+                f"Flattening multi-dimensional data from shape {data.shape} for sharding"
+            )
 
             # Flatten data (preserves phi-major ordering: all points from phi[0], then phi[1], etc.)
             data_flat = data.flatten()
 
             # Calculate points per phi angle
-            points_per_phi = data.shape[1] * data.shape[2] if data.ndim == 3 else data.shape[1]
+            points_per_phi = (
+                data.shape[1] * data.shape[2] if data.ndim == 3 else data.shape[1]
+            )
 
             # t1 and t2 are already 2D meshgrids (n_t1, n_t2) from data loader
             # Flatten each meshgrid once, then tile for each phi angle
             t1_pattern = t1.flatten()  # (n_t1 * n_t2,) = (1,002,001,)
             t2_pattern = t2.flatten()  # (n_t1 * n_t2,) = (1,002,001,)
-            t1_flat = np.tile(t1_pattern, num_samples)  # (n_phi * n_t1 * n_t2,) = (23,046,023,)
-            t2_flat = np.tile(t2_pattern, num_samples)  # (n_phi * n_t1 * n_t2,) = (23,046,023,)
+            t1_flat = np.tile(
+                t1_pattern, num_samples
+            )  # (n_phi * n_t1 * n_t2,) = (23,046,023,)
+            t2_flat = np.tile(
+                t2_pattern, num_samples
+            )  # (n_phi * n_t1 * n_t2,) = (23,046,023,)
 
             # Replicate phi values for each (t1, t2) pair
-            phi_flat = np.repeat(phi, points_per_phi)  # (n_phi * n_t1 * n_t2,) = (23,046,023,)
+            phi_flat = np.repeat(
+                phi, points_per_phi
+            )  # (n_phi * n_t1 * n_t2,) = (23,046,023,)
 
-            logger.info(f"Flattened arrays: data={data_flat.shape}, t1={t1_flat.shape}, t2={t2_flat.shape}, phi={phi_flat.shape}")
+            logger.info(
+                f"Flattened arrays: data={data_flat.shape}, t1={t1_flat.shape}, t2={t2_flat.shape}, phi={phi_flat.shape}"
+            )
         else:
             # Data already 1D, use as-is
             data_flat = data
@@ -365,12 +385,16 @@ class CMCCoordinator:
         )
 
         # Validate shards (pass min_shard_size from config)
-        is_valid, shard_diagnostics = validate_shards(shards, dataset_size, min_shard_size=min_shard_size)
+        is_valid, shard_diagnostics = validate_shards(
+            shards, dataset_size, min_shard_size=min_shard_size
+        )
         if not is_valid:
             raise RuntimeError(f"Shard validation failed: {shard_diagnostics}")
 
         logger.info(f"✓ Created {len(shards)} shards using {strategy} strategy")
-        logger.info(f"  Shard sizes: {[s['shard_size'] for s in shards]} data points per shard")
+        logger.info(
+            f"  Shard sizes: {[s['shard_size'] for s in shards]} data points per shard"
+        )
 
         # =====================================================================
         # Step 2: Config-Driven Parameter Loading
@@ -385,6 +409,7 @@ class CMCCoordinator:
             logger.info("No parameter_space provided, using package defaults")
             try:
                 from homodyne.config.parameter_space import ParameterSpace
+
                 parameter_space = ParameterSpace.from_defaults(analysis_mode)
                 logger.info(
                     f"Loaded default parameter_space: model={parameter_space.model_type}, "
@@ -404,12 +429,14 @@ class CMCCoordinator:
 
         # Load initial_values (used for MCMC chain initialization)
         if initial_values is None:
-            logger.info("No initial_values provided, calculating mid-point defaults from bounds")
+            logger.info(
+                "No initial_values provided, calculating mid-point defaults from bounds"
+            )
             # Calculate mid-point of parameter bounds as default
             initial_values = {}
             for param_name in parameter_space.parameter_names:
                 # Skip scaling parameters (contrast, offset)
-                if param_name in ['contrast', 'offset']:
+                if param_name in ["contrast", "offset"]:
                     continue
                 bounds = parameter_space.get_bounds(param_name)
                 if bounds is not None:
@@ -429,14 +456,21 @@ class CMCCoordinator:
         # Validate initial_values against parameter_space bounds
         # (exclude scaling parameters which are handled separately)
         if initial_values:
-            physical_params = {k: v for k, v in initial_values.items() if k not in ['contrast', 'offset']}
+            physical_params = {
+                k: v
+                for k, v in initial_values.items()
+                if k not in ["contrast", "offset"]
+            }
             if physical_params:
                 is_valid, violations = parameter_space.validate_values(physical_params)
                 if not is_valid:
                     raise ValueError(
-                        f"Initial parameter values violate bounds:\n" + "\n".join(violations)
+                        f"Initial parameter values violate bounds:\n"
+                        + "\n".join(violations)
                     )
-                logger.info("Initial parameter values validated successfully (all within bounds)")
+                logger.info(
+                    "Initial parameter values validated successfully (all within bounds)"
+                )
 
         # Determine number of parameters from parameter_space
         num_params = len(parameter_space.parameter_names)
@@ -446,10 +480,10 @@ class CMCCoordinator:
         init_params = initial_values.copy()
 
         # Add scaling parameters if not present (contrast, offset)
-        if 'contrast' not in init_params:
-            init_params['contrast'] = 0.5  # Default contrast
-        if 'offset' not in init_params:
-            init_params['offset'] = 1.0  # Default offset
+        if "contrast" not in init_params:
+            init_params["contrast"] = 0.5  # Default contrast
+        if "offset" not in init_params:
+            init_params["offset"] = 1.0  # Default offset
 
         # Use identity mass matrix (diagonal covariance)
         # CMC uses simple initialization - mass matrix adapted during warmup
@@ -482,11 +516,13 @@ class CMCCoordinator:
         logger.info(f"✓ Completed MCMC on {len(shard_results)} shards")
 
         # Check how many shards converged
-        n_converged = sum(1 for r in shard_results if r.get('converged', True))
+        n_converged = sum(1 for r in shard_results if r.get("converged", True))
         logger.info(f"  Converged shards: {n_converged}/{len(shard_results)}")
 
         if n_converged == 0:
-            raise RuntimeError("All shards failed to converge. Cannot combine posteriors.")
+            raise RuntimeError(
+                "All shards failed to converge. Cannot combine posteriors."
+            )
 
         # =====================================================================
         # Step 3: Combine subposteriors
@@ -495,8 +531,14 @@ class CMCCoordinator:
         logger.info("STEP 3: Combining subposteriors")
         logger.info("=" * 70)
 
-        combination_method = self.config.get('cmc', {}).get('combination', {}).get('method', 'weighted')
-        fallback_enabled = self.config.get('cmc', {}).get('combination', {}).get('fallback_enabled', True)
+        combination_method = (
+            self.config.get("cmc", {}).get("combination", {}).get("method", "weighted")
+        )
+        fallback_enabled = (
+            self.config.get("cmc", {})
+            .get("combination", {})
+            .get("fallback_enabled", True)
+        )
 
         combination_start = time.time()
         combined_posterior = combine_subposteriors(
@@ -541,7 +583,7 @@ class CMCCoordinator:
             combined_posterior=combined_posterior,
             shard_results=shard_results,
             num_shards=num_shards,
-            combination_method=combined_posterior['method'],
+            combination_method=combined_posterior["method"],
             combination_time=combination_time,
             validation_diagnostics=validation_diagnostics,
             analysis_mode=analysis_mode,
@@ -570,15 +612,27 @@ class CMCCoordinator:
             Optimal number of shards
         """
         # Allow user override
-        user_num_shards = self.config.get('cmc', {}).get('sharding', {}).get('num_shards')
+        user_num_shards = (
+            self.config.get("cmc", {}).get("sharding", {}).get("num_shards")
+        )
         if user_num_shards is not None:
             logger.info(f"Using user-specified num_shards: {user_num_shards}")
             return user_num_shards
 
         # Calculate automatically
-        target_shard_size_gpu = self.config.get('cmc', {}).get('sharding', {}).get('target_shard_size_gpu', 100_000)
-        target_shard_size_cpu = self.config.get('cmc', {}).get('sharding', {}).get('target_shard_size_cpu', 2_000_000)
-        min_shard_size = self.config.get('cmc', {}).get('sharding', {}).get('min_shard_size', 10_000)
+        target_shard_size_gpu = (
+            self.config.get("cmc", {})
+            .get("sharding", {})
+            .get("target_shard_size_gpu", 100_000)
+        )
+        target_shard_size_cpu = (
+            self.config.get("cmc", {})
+            .get("sharding", {})
+            .get("target_shard_size_cpu", 2_000_000)
+        )
+        min_shard_size = (
+            self.config.get("cmc", {}).get("sharding", {}).get("min_shard_size", 10_000)
+        )
 
         return calculate_optimal_num_shards(
             dataset_size=dataset_size,
@@ -599,13 +653,13 @@ class CMCCoordinator:
             - num_samples: int
             - num_chains: int
         """
-        mcmc = self.config.get('mcmc', {})
+        mcmc = self.config.get("mcmc", {})
 
         # Default values for CMC
         return {
-            'num_warmup': mcmc.get('num_warmup', 500),
-            'num_samples': mcmc.get('num_samples', 2000),
-            'num_chains': mcmc.get('num_chains', 1),  # 1 chain per shard
+            "num_warmup": mcmc.get("num_warmup", 500),
+            "num_samples": mcmc.get("num_samples", 2000),
+            "num_chains": mcmc.get("num_chains", 1),  # 1 chain per shard
         }
 
     def _basic_validation(
@@ -635,19 +689,19 @@ class CMCCoordinator:
         is_valid = True
 
         # Check for NaN/Inf in combined samples
-        samples = combined_posterior['samples']
+        samples = combined_posterior["samples"]
         if np.any(np.isnan(samples)) or np.any(np.isinf(samples)):
             is_valid = False
-            diagnostics['nan_inf_detected'] = True
+            diagnostics["nan_inf_detected"] = True
 
         # Check convergence rate
-        n_converged = sum(1 for r in shard_results if r.get('converged', True))
+        n_converged = sum(1 for r in shard_results if r.get("converged", True))
         convergence_rate = n_converged / len(shard_results)
-        diagnostics['convergence_rate'] = convergence_rate
+        diagnostics["convergence_rate"] = convergence_rate
 
         if convergence_rate < 0.5:
             is_valid = False
-            diagnostics['low_convergence_rate'] = True
+            diagnostics["low_convergence_rate"] = True
 
         return is_valid, diagnostics
 
@@ -688,9 +742,9 @@ class CMCCoordinator:
         MCMCResult
             Extended MCMC result with CMC fields
         """
-        samples = combined_posterior['samples']
-        mean = combined_posterior['mean']
-        cov = combined_posterior['cov']
+        samples = combined_posterior["samples"]
+        mean = combined_posterior["mean"]
+        cov = combined_posterior["cov"]
 
         # Compute standard deviations
         std = np.sqrt(np.diag(cov))
@@ -713,34 +767,36 @@ class CMCCoordinator:
         per_shard_diagnostics = []
         for i, shard_result in enumerate(shard_results):
             shard_diag = {
-                'shard_id': i,
-                'n_samples': len(shard_result.get('samples', [])),
-                'converged': shard_result.get('converged', True),
+                "shard_id": i,
+                "n_samples": len(shard_result.get("samples", [])),
+                "converged": shard_result.get("converged", True),
             }
 
             # Add convergence diagnostics if available
-            if 'acceptance_rate' in shard_result:
-                shard_diag['acceptance_rate'] = shard_result['acceptance_rate']
-            if 'r_hat' in shard_result:
-                shard_diag['r_hat'] = shard_result['r_hat']
-            if 'ess' in shard_result:
-                shard_diag['ess'] = shard_result['ess']
+            if "acceptance_rate" in shard_result:
+                shard_diag["acceptance_rate"] = shard_result["acceptance_rate"]
+            if "r_hat" in shard_result:
+                shard_diag["r_hat"] = shard_result["r_hat"]
+            if "ess" in shard_result:
+                shard_diag["ess"] = shard_result["ess"]
 
             per_shard_diagnostics.append(shard_diag)
 
         # Create CMC diagnostics
-        n_shards_converged = sum(1 for r in shard_results if r.get('converged', True))
+        n_shards_converged = sum(1 for r in shard_results if r.get("converged", True))
         cmc_diagnostics = {
-            'combination_success': True,
-            'n_shards_converged': n_shards_converged,
-            'n_shards_total': len(shard_results),
-            'combination_time': combination_time,
-            'convergence_rate': n_shards_converged / len(shard_results),
+            "combination_success": True,
+            "n_shards_converged": n_shards_converged,
+            "n_shards_total": len(shard_results),
+            "combination_time": combination_time,
+            "convergence_rate": n_shards_converged / len(shard_results),
         }
         cmc_diagnostics.update(validation_diagnostics)
 
         # Compute overall acceptance rate (if available)
-        acceptance_rates = [r.get('acceptance_rate') for r in shard_results if 'acceptance_rate' in r]
+        acceptance_rates = [
+            r.get("acceptance_rate") for r in shard_results if "acceptance_rate" in r
+        ]
         if acceptance_rates:
             overall_acceptance_rate = float(np.mean(acceptance_rates))
         else:
@@ -758,15 +814,15 @@ class CMCCoordinator:
             samples_params=samples_params,
             samples_contrast=samples_contrast,
             samples_offset=samples_offset,
-            converged=cmc_diagnostics['convergence_rate'] >= 0.5,
-            n_iterations=mcmc_config['num_warmup'] + mcmc_config['num_samples'],
+            converged=cmc_diagnostics["convergence_rate"] >= 0.5,
+            n_iterations=mcmc_config["num_warmup"] + mcmc_config["num_samples"],
             computation_time=combination_time,  # This is just combination time; full time tracked elsewhere
             backend=self.backend.get_backend_name(),
             analysis_mode=analysis_mode,
             dataset_size=f"{num_shards}_shards",
-            n_chains=mcmc_config['num_chains'],
-            n_warmup=mcmc_config['num_warmup'],
-            n_samples=mcmc_config['num_samples'],
+            n_chains=mcmc_config["num_chains"],
+            n_warmup=mcmc_config["num_warmup"],
+            n_samples=mcmc_config["num_samples"],
             sampler="NUTS",
             acceptance_rate=overall_acceptance_rate,
             # CMC-specific fields

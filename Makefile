@@ -1,9 +1,9 @@
 # Homodyne Analysis Package - Development Makefile
 # ================================================
-# JAX-accelerated XPCS analysis with NLSQ and MCMC
-# Updated: 2025-10-21 - Cross-platform JAX support
+# JAX-accelerated XPCS analysis with NLSQ and MCMC (CPU-only)
+# Updated: 2025-11-07 - CPU-only JAX 0.8.0
 
-.PHONY: help clean clean-all clean-build clean-pyc clean-test clean-cache install dev test test-all test-unit test-integration test-performance lint format type-check type-check-strict quality docs build check gpu-check benchmark install-jax-gpu env-info
+.PHONY: help clean clean-all clean-build clean-pyc clean-test clean-cache install dev test test-all test-unit test-integration test-performance lint format type-check type-check-strict quality docs build check benchmark env-info
 
 # Variables
 PYTHON := python
@@ -11,7 +11,7 @@ PYTEST := pytest
 RUFF := ruff
 BLACK := black
 
-# Platform detection
+# Platform detection (for informational purposes only)
 UNAME_S := $(shell uname -s 2>/dev/null || echo "Windows")
 ifeq ($(UNAME_S),Linux)
     PLATFORM := linux
@@ -51,13 +51,6 @@ else
     INSTALL_CMD := pip install
 endif
 
-# GPU installation command (platform-specific)
-ifeq ($(PLATFORM),linux)
-    JAX_GPU_PKG := jax[cuda12-local]==0.8.0 jaxlib==0.8.0
-else
-    JAX_GPU_PKG :=
-endif
-
 # Default target
 help:
 	@echo "Homodyne Analysis Package - Development Commands"
@@ -71,10 +64,8 @@ help:
 	@echo "Installation & Setup:"
 	@echo "  install         Install package in production mode (CPU-only)"
 	@echo "  dev             Install package with development dependencies (CPU-only)"
-	@echo "  install-jax-gpu Install JAX with GPU support (Linux + CUDA 12+ only)"
 	@echo "  env-info        Show detailed environment and package manager detection"
 	@echo "  deps-check      Check all dependencies status"
-	@echo "  gpu-check       Check GPU availability and CUDA setup"
 	@echo
 	@echo "Testing:"
 	@echo "  test            Run core unit tests"
@@ -82,7 +73,6 @@ help:
 	@echo "  test-unit       Run unit tests only"
 	@echo "  test-integration Run integration tests only"
 	@echo "  test-performance Run performance benchmarks"
-	@echo "  test-gpu        Run GPU validation tests"
 	@echo "  test-nlsq       Test NLSQ optimization specifically"
 	@echo "  test-mcmc       Test MCMC optimization specifically"
 	@echo
@@ -125,15 +115,15 @@ help:
 install:
 	$(PIP) install -e .
 	@echo "✓ Package installed (CPU-only)"
-	@echo "  For GPU support on Linux: make install-jax-gpu"
+	@echo "  JAX version: 0.8.0 (CPU-only)"
 
 dev:
 	$(PIP) install -e ".[dev,docs]"
 	@echo "✓ Development environment ready (CPU-only)"
 	@echo "  Platform: $(PLATFORM)"
+	@echo "  JAX: 0.8.0 (CPU-only)"
 	@echo "  NLSQ: Ready"
 	@echo "  MCMC (NumPyro): Ready"
-	@echo "  For GPU support on Linux: make install-jax-gpu"
 	@$(PYTHON) -c "from homodyne import get_package_info; info = get_package_info(); print('\nDependency Status:'); [print(f'  {k}: ✓' if v else f'  {k}: ✗') for k,v in info['dependencies'].items()]"
 
 env-info:
@@ -171,51 +161,14 @@ else
 endif
 	@echo "  pip: $(shell which pip 2>/dev/null || echo 'not found')"
 	@echo
-	@echo "GPU Support:"
-ifeq ($(PLATFORM),linux)
-	@echo "  Platform: ✅ Linux (GPU support available)"
-	@echo "  JAX GPU package: $(JAX_GPU_PKG)"
-	@$(PYTHON) -c "import subprocess; r = subprocess.run(['nvidia-smi', '--query-gpu=name', '--format=csv,noheader'], capture_output=True, text=True, timeout=5); print(f'  GPU hardware: ✓ {r.stdout.strip()}') if r.returncode == 0 else print('  GPU hardware: ✗ Not detected')" 2>/dev/null || echo "  GPU hardware: ✗ nvidia-smi not found"
-	@$(PYTHON) -c "import subprocess; r = subprocess.run(['nvcc', '--version'], capture_output=True, text=True, timeout=5); version = [line for line in r.stdout.split('\\n') if 'release' in line]; print(f'  CUDA: ✓ {version[0].split(\"release\")[1].split(\",\")[0].strip() if version else \"unknown\"}') if r.returncode == 0 else print('  CUDA: ✗ Not found')" 2>/dev/null || echo "  CUDA: ✗ nvcc not found"
-else
-	@echo "  Platform: ❌ $(PLATFORM) (GPU not supported)"
-endif
+	@echo "JAX Configuration:"
+	@echo "  JAX version: 0.8.0 (CPU-only)"
+	@echo "  GPU support: Not available (CPU-only installation)"
 	@echo
 	@echo "Installation Commands:"
 	@echo "  Install dev: make dev"
-	@echo "  Install GPU: make install-jax-gpu"
+	@echo "  Install prod: make install"
 	@echo
-
-install-jax-gpu:
-	@echo "Installing JAX with GPU support..."
-	@echo "===================================="
-	@echo "Platform: $(PLATFORM)"
-	@echo "Package manager: $(PKG_MANAGER)"
-	@echo
-ifeq ($(PLATFORM),linux)
-	@echo "Step 1/3: Uninstalling CPU-only JAX..."
-	@$(UNINSTALL_CMD) jax jaxlib 2>/dev/null || true
-	@echo
-	@echo "Step 2/3: Installing GPU-enabled JAX (CUDA 12.1-12.9)..."
-	@echo "Command: $(INSTALL_CMD) $(JAX_GPU_PKG)"
-	@$(INSTALL_CMD) $(JAX_GPU_PKG)
-	@echo
-	@echo "Step 3/3: Verifying GPU detection..."
-	@$(MAKE) gpu-check
-	@echo
-	@echo "✓ JAX GPU support installed successfully"
-	@echo "  Package manager: $(PKG_MANAGER)"
-	@echo "  JAX version: 0.8.0 with CUDA 12 support"
-else
-	@echo "✗ GPU acceleration only available on Linux with CUDA 12+"
-	@echo "  Current platform: $(PLATFORM)"
-	@echo "  Keeping CPU-only installation"
-	@echo
-	@echo "Platform support:"
-	@echo "  ✅ Linux + CUDA 12.1-12.9: Full GPU acceleration"
-	@echo "  ❌ macOS: CPU-only (no NVIDIA GPU support)"
-	@echo "  ❌ Windows: CPU-only (CUDA support experimental/unstable)"
-endif
 
 deps-check:
 	@echo "Checking Homodyne Dependencies..."
@@ -236,11 +189,6 @@ deps-check:
 		print(f'  PyYAML: ' + ('✓' if deps.get('yaml') else '✗')); \
 		"
 
-gpu-check:
-	@echo "Checking GPU Configuration..."
-	@echo "============================"
-	@$(PYTHON) -c "import jax; print(f'JAX version: {jax.__version__}'); devices = jax.devices(); print(f'Available devices: {devices}'); gpu_devices = [d for d in devices if 'cuda' in str(d).lower() or 'gpu' in str(d).lower()]; print(f'✓ GPU detected: {len(gpu_devices)} device(s)') if gpu_devices else print('✗ No GPU detected - using CPU')"
-
 # Testing targets
 test:
 	$(PYTEST) tests/unit -v --tb=short
@@ -256,9 +204,6 @@ test-integration:
 
 test-performance:
 	$(PYTEST) tests/performance -v -m performance
-
-test-gpu:
-	$(PYTEST) tests/gpu -v --tb=short
 
 test-nlsq:
 	$(PYTEST) tests/unit/test_optimization_nlsq.py -v
@@ -386,7 +331,7 @@ release: test quality build check
 
 # Example/Demo targets
 run-example:
-	$(PYTHON) examples/gpu_accelerated_optimization.py
+	$(PYTHON) examples/static_isotropic_nlsq.py
 
 demo-nlsq:
 	@echo "Running NLSQ optimization demo..."

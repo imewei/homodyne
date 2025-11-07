@@ -24,6 +24,7 @@ try:
     import jax
     import jax.numpy as jnp
     from jax import grad, jit, vmap
+
     JAX_AVAILABLE = True
 except ImportError:
     JAX_AVAILABLE = False
@@ -37,6 +38,7 @@ from homodyne.core.jax_backend import apply_diagonal_correction
 # Fixtures
 # ============================================================================
 
+
 @pytest.fixture
 def rng():
     """Random number generator with fixed seed for reproducibility"""
@@ -46,11 +48,7 @@ def rng():
 @pytest.fixture
 def simple_matrix():
     """Simple 3x3 correlation matrix for basic tests"""
-    return jnp.array([
-        [5.0, 1.2, 1.1],
-        [1.2, 5.0, 1.3],
-        [1.1, 1.3, 5.0]
-    ])
+    return jnp.array([[5.0, 1.2, 1.1], [1.2, 5.0, 1.3], [1.1, 1.3, 5.0]])
 
 
 @pytest.fixture
@@ -78,6 +76,7 @@ def identity_diagonal_matrix():
 # ============================================================================
 # Unit Tests - Basic Functionality
 # ============================================================================
+
 
 class TestDiagonalCorrectionBasic:
     """Test suite for basic diagonal correction functionality"""
@@ -133,13 +132,15 @@ class TestDiagonalCorrectionBasic:
         assert_allclose(
             corrected[mask],
             correlation_matrix_1001x1001[mask],
-            rtol=0, atol=0  # Exact equality
+            rtol=0,
+            atol=0,  # Exact equality
         )
 
 
 # ============================================================================
 # Edge Case Tests
 # ============================================================================
+
 
 class TestDiagonalCorrectionEdgeCases:
     """Edge case tests for diagonal correction"""
@@ -213,11 +214,13 @@ class TestDiagonalCorrectionEdgeCases:
 # Numerical Correctness Tests
 # ============================================================================
 
+
 class TestDiagonalCorrectionCorrectness:
     """Numerical correctness tests"""
 
     def test_matches_reference_implementation(self, correlation_matrix_1001x1001):
         """Test against reference NumPy implementation from xpcs_loader.py"""
+
         # Reference implementation (from xpcs_loader.py:924-953)
         def reference_diagonal_correction(c2_mat):
             c2_np = np.array(c2_mat)
@@ -246,12 +249,14 @@ class TestDiagonalCorrectionCorrectness:
     def test_diagonal_interpolation_formula(self):
         """Test exact diagonal interpolation formula"""
         # Create matrix with known off-diagonal values (use float to avoid integer division)
-        matrix = jnp.array([
-            [999.0, 10.0, 20.0, 30.0],
-            [10.0, 999.0, 11.0, 21.0],
-            [20.0, 11.0, 999.0, 12.0],
-            [30.0, 21.0, 12.0, 999.0]
-        ])
+        matrix = jnp.array(
+            [
+                [999.0, 10.0, 20.0, 30.0],
+                [10.0, 999.0, 11.0, 21.0],
+                [20.0, 11.0, 999.0, 12.0],
+                [30.0, 21.0, 12.0, 999.0],
+            ]
+        )
 
         corrected = apply_diagonal_correction(matrix)
 
@@ -301,6 +306,7 @@ class TestDiagonalCorrectionCorrectness:
 # JAX-Specific Tests
 # ============================================================================
 
+
 @pytest.mark.skipif(not JAX_AVAILABLE, reason="JAX not installed")
 class TestDiagonalCorrectionJAX:
     """JAX-specific tests"""
@@ -327,6 +333,7 @@ class TestDiagonalCorrectionJAX:
 
     def test_gradient_correctness(self):
         """Test gradient using finite differences"""
+
         # Define scalar function for gradient testing
         def scalar_fn(x):
             # Create matrix from vector for testing
@@ -380,7 +387,9 @@ class TestDiagonalCorrectionJAX:
 
         # Add strong diagonal to each phi angle's matrix
         for i in range(n_phi):
-            correlation_stack = correlation_stack.at[i, jnp.arange(n_t), jnp.arange(n_t)].set(5.0)
+            correlation_stack = correlation_stack.at[
+                i, jnp.arange(n_t), jnp.arange(n_t)
+            ].set(5.0)
 
         # Apply vmap over phi axis
         vmapped_correction = vmap(apply_diagonal_correction, in_axes=0)
@@ -411,8 +420,9 @@ class TestDiagonalCorrectionJAX:
             for i in range(len(platforms) - 1):
                 assert_allclose(
                     results[platforms[i]],
-                    results[platforms[i+1]],
-                    rtol=1e-14, atol=1e-16
+                    results[platforms[i + 1]],
+                    rtol=1e-14,
+                    atol=1e-16,
                 )
 
     def test_compilation_cache_reuse(self, simple_matrix):
@@ -424,6 +434,7 @@ class TestDiagonalCorrectionJAX:
 
         # Second call - should use cached compilation
         import time
+
         start = time.time()
         _ = jitted_fn(simple_matrix)
         elapsed = time.time() - start
@@ -435,6 +446,7 @@ class TestDiagonalCorrectionJAX:
 # ============================================================================
 # Integration Tests - NLSQ
 # ============================================================================
+
 
 class TestDiagonalCorrectionNLSQIntegration:
     """Integration tests with NLSQ optimization"""
@@ -469,7 +481,9 @@ class TestDiagonalCorrectionNLSQIntegration:
         model_fn = wrapper._create_residual_function(data, "static_isotropic")
 
         # Test parameters
-        params = jnp.array([0.5, 1.0, 1000.0, 0.5, 100.0])  # [contrast, offset, D0, alpha, D_offset]
+        params = jnp.array(
+            [0.5, 1.0, 1000.0, 0.5, 100.0]
+        )  # [contrast, offset, D0, alpha, D_offset]
 
         # Create xdata indices
         xdata = jnp.arange(n_phi * n_t * n_t)
@@ -494,6 +508,7 @@ class TestDiagonalCorrectionNLSQIntegration:
 # Integration Tests - Data Pipeline
 # ============================================================================
 
+
 class TestDiagonalCorrectionDataPipeline:
     """Integration tests with data loading pipeline"""
 
@@ -510,6 +525,7 @@ class TestDiagonalCorrectionDataPipeline:
 # ============================================================================
 # Performance Tests
 # ============================================================================
+
 
 @pytest.mark.performance
 class TestDiagonalCorrectionPerformance:
@@ -560,6 +576,7 @@ class TestDiagonalCorrectionPerformance:
 # Regression Tests
 # ============================================================================
 
+
 class TestDiagonalCorrectionRegression:
     """Regression tests for known issues"""
 
@@ -595,6 +612,7 @@ class TestDiagonalCorrectionRegression:
 try:
     from hypothesis import given, strategies as st, settings
     from hypothesis.extra.numpy import arrays
+
     HYPOTHESIS_AVAILABLE = True
 
     # Define property-based test class inside try block
@@ -605,13 +623,12 @@ try:
         @given(
             matrix=arrays(
                 dtype=np.float64,
-                shape=st.tuples(st.integers(2, 50), st.integers(2, 50)).map(lambda x: (x[0], x[0])),  # Square
+                shape=st.tuples(st.integers(2, 50), st.integers(2, 50)).map(
+                    lambda x: (x[0], x[0])
+                ),  # Square
                 elements=st.floats(
-                    min_value=-1e3,
-                    max_value=1e3,
-                    allow_nan=False,
-                    allow_infinity=False
-                )
+                    min_value=-1e3, max_value=1e3, allow_nan=False, allow_infinity=False
+                ),
             )
         )
         @settings(max_examples=50, deadline=None)
@@ -639,13 +656,12 @@ try:
         @given(
             matrix=arrays(
                 dtype=np.float64,
-                shape=st.tuples(st.integers(2, 30), st.integers(2, 30)).map(lambda x: (x[0], x[0])),
+                shape=st.tuples(st.integers(2, 30), st.integers(2, 30)).map(
+                    lambda x: (x[0], x[0])
+                ),
                 elements=st.floats(
-                    min_value=-100,
-                    max_value=100,
-                    allow_nan=False,
-                    allow_infinity=False
-                )
+                    min_value=-100, max_value=100, allow_nan=False, allow_infinity=False
+                ),
             )
         )
         @settings(max_examples=50, deadline=None)
@@ -659,12 +675,15 @@ try:
             for i in range(size):
                 for j in range(size):
                     if i != j:
-                        assert corrected[i, j] == matrix_jax[i, j], \
-                            f"Off-diagonal element [{i},{j}] changed"
+                        assert (
+                            corrected[i, j] == matrix_jax[i, j]
+                        ), f"Off-diagonal element [{i},{j}] changed"
 
         @given(
             size=st.integers(2, 100),
-            value=st.floats(min_value=-1e6, max_value=1e6, allow_nan=False, allow_infinity=False)
+            value=st.floats(
+                min_value=-1e6, max_value=1e6, allow_nan=False, allow_infinity=False
+            ),
         )
         @settings(max_examples=50, deadline=None)
         def test_uniform_matrix_property(self, size, value):

@@ -277,7 +277,10 @@ class TestNLSQWrapperErrorRecovery:
                 return real_curve_fit(f, xdata, ydata, p0=p0, bounds=bounds, **kwargs)
 
         # Patch curve_fit in the nlsq_wrapper module namespace (since it's imported at module level)
-        with patch("homodyne.optimization.nlsq_wrapper.curve_fit", side_effect=mock_curve_fit_with_retry):
+        with patch(
+            "homodyne.optimization.nlsq_wrapper.curve_fit",
+            side_effect=mock_curve_fit_with_retry,
+        ):
             result = wrapper.fit(
                 data=synthetic_data,
                 config=mock_config,
@@ -344,7 +347,10 @@ class TestNLSQWrapperErrorRecovery:
             )
 
         # Patch in the nlsq_wrapper module namespace
-        with patch("homodyne.optimization.nlsq_wrapper.curve_fit", side_effect=mock_curve_fit_always_fail):
+        with patch(
+            "homodyne.optimization.nlsq_wrapper.curve_fit",
+            side_effect=mock_curve_fit_always_fail,
+        ):
             with pytest.raises(Exception) as exc_info:
                 wrapper.fit(
                     data=synthetic_data,
@@ -458,6 +464,7 @@ class TestNLSQWrapperErrorRecovery:
 
         class MockConfig:
             """Mock config that forces STREAMING strategy."""
+
             def __init__(self):
                 self.optimization = {"lsq": {"max_iterations": 100, "tolerance": 1e-6}}
                 self.config = {
@@ -483,13 +490,13 @@ class TestNLSQWrapperErrorRecovery:
 
         def mock_curve_fit_large(*args, **kwargs):
             """Mock curve_fit_large that always fails."""
-            strategy = kwargs.get('show_progress', False)
-            strategies_attempted.append('large')
+            strategy = kwargs.get("show_progress", False)
+            strategies_attempted.append("large")
             raise RuntimeError("Mock failure: curve_fit_large failed")
 
         def mock_curve_fit(*args, **kwargs):
             """Mock curve_fit that succeeds (STANDARD strategy)."""
-            strategies_attempted.append('standard')
+            strategies_attempted.append("standard")
             # Use real curve_fit for success
             return real_curve_fit(*args, **kwargs)
 
@@ -497,8 +504,14 @@ class TestNLSQWrapperErrorRecovery:
         # (where they are imported)
         from unittest.mock import patch, MagicMock
 
-        with patch("homodyne.optimization.nlsq_wrapper.curve_fit_large", side_effect=mock_curve_fit_large):
-            with patch("homodyne.optimization.nlsq_wrapper.curve_fit", side_effect=mock_curve_fit):
+        with patch(
+            "homodyne.optimization.nlsq_wrapper.curve_fit_large",
+            side_effect=mock_curve_fit_large,
+        ):
+            with patch(
+                "homodyne.optimization.nlsq_wrapper.curve_fit",
+                side_effect=mock_curve_fit,
+            ):
                 result = wrapper.fit(
                     data=synthetic_data,
                     config=mock_config,
@@ -515,11 +528,18 @@ class TestNLSQWrapperErrorRecovery:
         # CHUNKED uses curve_fit_large → fails
         # LARGE uses curve_fit_large → fails
         # STANDARD uses curve_fit → succeeds
-        assert len(strategies_attempted) >= 2, f"Should attempt multiple strategies, attempted: {strategies_attempted}"
-        assert strategies_attempted[-1] == 'standard', "Should succeed with STANDARD strategy"
+        assert (
+            len(strategies_attempted) >= 2
+        ), f"Should attempt multiple strategies, attempted: {strategies_attempted}"
+        assert (
+            strategies_attempted[-1] == "standard"
+        ), "Should succeed with STANDARD strategy"
 
         # Verify convergence
-        assert result.convergence_status in ["converged", "success"], f"Should converge, got: {result.convergence_status}"
+        assert result.convergence_status in [
+            "converged",
+            "success",
+        ], f"Should converge, got: {result.convergence_status}"
 
         print("\n✅ Fallback chain test passed")
         print(f"Strategies attempted: {strategies_attempted}")

@@ -170,9 +170,12 @@ def analyze_angle_distribution(phi: jnp.ndarray | np.ndarray) -> AngleDistributi
     total_points = len(phi)
 
     # Build statistics dictionaries
-    counts_dict = {float(angle): int(count) for angle, count in zip(unique_angles, counts)}
+    counts_dict = {
+        float(angle): int(count) for angle, count in zip(unique_angles, counts)
+    }
     fractions_dict = {
-        float(angle): float(count) / total_points for angle, count in zip(unique_angles, counts)
+        float(angle): float(count) / total_points
+        for angle, count in zip(unique_angles, counts)
     }
 
     # Calculate imbalance
@@ -754,25 +757,25 @@ def compute_stratification_diagnostics(
     >>> print(f"Throughput: {diagnostics.throughput_points_per_sec:,.0f} pts/s")
     """
     n_points = len(phi_original)
-    
+
     # Analyze original angle distribution
     stats = analyze_angle_distribution(phi_original)
-    
+
     # Estimate number of chunks
     n_chunks = int(np.ceil(n_points / target_chunk_size))
-    
+
     # Analyze chunks by simulating chunk boundaries
     chunk_sizes = []
     angles_per_chunk = []
-    
+
     for chunk_idx in range(n_chunks):
         start_idx = chunk_idx * target_chunk_size
         end_idx = min(start_idx + target_chunk_size, n_points)
-        
+
         chunk_phi = phi_stratified[start_idx:end_idx]
         chunk_sizes.append(len(chunk_phi))
         angles_per_chunk.append(len(np.unique(chunk_phi)))
-    
+
     # Chunk balance statistics
     chunk_sizes_arr = np.array(chunk_sizes)
     chunk_balance = {
@@ -780,28 +783,34 @@ def compute_stratification_diagnostics(
         "std": float(np.std(chunk_sizes_arr)),
         "min": int(np.min(chunk_sizes_arr)),
         "max": int(np.max(chunk_sizes_arr)),
-        "cv": float(np.std(chunk_sizes_arr) / np.mean(chunk_sizes_arr)),  # Coefficient of variation
+        "cv": float(
+            np.std(chunk_sizes_arr) / np.mean(chunk_sizes_arr)
+        ),  # Coefficient of variation
     }
-    
+
     # Angle coverage statistics
     angles_per_chunk_arr = np.array(angles_per_chunk)
     min_coverage_ratio = float(np.min(angles_per_chunk_arr) / stats.n_angles)
-    
+
     angle_coverage = {
         "mean_angles": float(np.mean(angles_per_chunk_arr)),
         "std_angles": float(np.std(angles_per_chunk_arr)),
         "min_coverage_ratio": min_coverage_ratio,  # Fraction of angles in worst chunk
         "perfect_coverage_chunks": int(np.sum(angles_per_chunk_arr == stats.n_angles)),
     }
-    
+
     # Memory overhead estimation
-    mem_stats = estimate_stratification_memory(n_points, use_index_based=use_index_based)
+    mem_stats = estimate_stratification_memory(
+        n_points, use_index_based=use_index_based
+    )
     memory_overhead_mb = mem_stats["peak_memory_mb"] - mem_stats["original_memory_mb"]
     memory_efficiency = mem_stats["original_memory_mb"] / mem_stats["peak_memory_mb"]
-    
+
     # Throughput calculation
-    throughput_points_per_sec = (n_points / execution_time_ms) * 1000.0 if execution_time_ms > 0 else 0.0
-    
+    throughput_points_per_sec = (
+        (n_points / execution_time_ms) * 1000.0 if execution_time_ms > 0 else 0.0
+    )
+
     return StratificationDiagnostics(
         n_chunks=n_chunks,
         chunk_sizes=chunk_sizes,
@@ -866,5 +875,5 @@ def format_diagnostics_report(diagnostics: StratificationDiagnostics) -> str:
         "",
         "=" * 70,
     ]
-    
+
     return "\n".join(lines)

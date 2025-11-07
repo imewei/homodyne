@@ -66,7 +66,9 @@ class TestMCMCResultMetadata:
         assert result.parameter_space_metadata["model_type"] == "static_isotropic"
         assert "D0" in result.parameter_space_metadata["bounds"]
         assert "D0" in result.parameter_space_metadata["priors"]
-        assert result.parameter_space_metadata["priors"]["D0"]["type"] == "TruncatedNormal"
+        assert (
+            result.parameter_space_metadata["priors"]["D0"]["type"] == "TruncatedNormal"
+        )
 
     def test_result_with_initial_values_metadata(self):
         """Verify initial_values_metadata field works correctly."""
@@ -261,9 +263,14 @@ class TestResultSerialization:
         reconstructed = MCMCResult.from_dict(data)
 
         # Verify all metadata preserved
-        assert reconstructed.parameter_space_metadata == original.parameter_space_metadata
+        assert (
+            reconstructed.parameter_space_metadata == original.parameter_space_metadata
+        )
         assert reconstructed.initial_values_metadata == original.initial_values_metadata
-        assert reconstructed.selection_decision_metadata == original.selection_decision_metadata
+        assert (
+            reconstructed.selection_decision_metadata
+            == original.selection_decision_metadata
+        )
 
         # Verify standard fields preserved
         assert np.allclose(reconstructed.mean_params, original.mean_params)
@@ -326,9 +333,14 @@ class TestResultFileSaving:
             assert "parameter_space_metadata" in loaded_data
             assert "initial_values_metadata" in loaded_data
             assert "selection_decision_metadata" in loaded_data
-            assert loaded_data["parameter_space_metadata"]["model_type"] == "static_isotropic"
+            assert (
+                loaded_data["parameter_space_metadata"]["model_type"]
+                == "static_isotropic"
+            )
             assert loaded_data["initial_values_metadata"]["D0"] == 1234.5
-            assert loaded_data["selection_decision_metadata"]["selected_method"] == "CMC"
+            assert (
+                loaded_data["selection_decision_metadata"]["selected_method"] == "CMC"
+            )
         finally:
             # Clean up
             Path(temp_path).unlink()

@@ -40,31 +40,38 @@ class TestParameterNameConstants:
 
     def test_static_params_ordering(self):
         """Verify static parameter ordering."""
-        expected = ['contrast', 'offset', 'D0', 'alpha', 'D_offset']
+        expected = ["contrast", "offset", "D0", "alpha", "D_offset"]
         assert STATIC_ISOTROPIC_PARAMS == expected
 
     def test_laminar_params_ordering(self):
         """Verify laminar flow parameter ordering."""
         expected = [
-            'contrast', 'offset', 'D0', 'alpha', 'D_offset',
-            'gamma_dot_t0', 'beta', 'gamma_dot_t_offset', 'phi0'
+            "contrast",
+            "offset",
+            "D0",
+            "alpha",
+            "D_offset",
+            "gamma_dot_t0",
+            "beta",
+            "gamma_dot_t_offset",
+            "phi0",
         ]
         assert LAMINAR_FLOW_PARAMS == expected
 
     def test_get_parameter_names_static(self):
         """Test get_parameter_names for static mode."""
-        params = get_parameter_names('static_isotropic')
+        params = get_parameter_names("static_isotropic")
         assert params == STATIC_ISOTROPIC_PARAMS
 
     def test_get_parameter_names_laminar(self):
         """Test get_parameter_names for laminar flow."""
-        params = get_parameter_names('laminar_flow')
+        params = get_parameter_names("laminar_flow")
         assert LAMINAR_FLOW_PARAMS == params
 
     def test_get_num_parameters(self):
         """Test get_num_parameters function."""
-        assert get_num_parameters('static_isotropic') == 5
-        assert get_num_parameters('laminar_flow') == 9
+        assert get_num_parameters("static_isotropic") == 5
+        assert get_num_parameters("laminar_flow") == 9
 
 
 class TestParameterNameValidation:
@@ -72,55 +79,62 @@ class TestParameterNameValidation:
 
     def test_validate_correct_static_params(self):
         """Validate correct static parameter names."""
-        params = ['contrast', 'offset', 'D0', 'alpha', 'D_offset']
-        validate_parameter_names(params, 'static_isotropic')  # Should not raise
+        params = ["contrast", "offset", "D0", "alpha", "D_offset"]
+        validate_parameter_names(params, "static_isotropic")  # Should not raise
 
     def test_validate_correct_laminar_params(self):
         """Validate correct laminar flow parameter names."""
         params = [
-            'contrast', 'offset', 'D0', 'alpha', 'D_offset',
-            'gamma_dot_t0', 'beta', 'gamma_dot_t_offset', 'phi0'
+            "contrast",
+            "offset",
+            "D0",
+            "alpha",
+            "D_offset",
+            "gamma_dot_t0",
+            "beta",
+            "gamma_dot_t_offset",
+            "phi0",
         ]
-        validate_parameter_names(params, 'laminar_flow')  # Should not raise
+        validate_parameter_names(params, "laminar_flow")  # Should not raise
 
     def test_validate_wrong_order_strict(self):
         """Test validation fails with wrong order (strict mode)."""
-        params = ['offset', 'contrast', 'D0', 'alpha', 'D_offset']  # Wrong order
+        params = ["offset", "contrast", "D0", "alpha", "D_offset"]  # Wrong order
         with pytest.raises(ValueError, match="don't match expected order"):
-            validate_parameter_names(params, 'static_isotropic', strict=True)
+            validate_parameter_names(params, "static_isotropic", strict=True)
 
     def test_validate_missing_params(self):
         """Test validation fails with missing parameters."""
-        params = ['contrast', 'D0', 'alpha']  # Missing offset, D_offset
+        params = ["contrast", "D0", "alpha"]  # Missing offset, D_offset
         with pytest.raises(ValueError, match="Missing parameters"):
-            validate_parameter_names(params, 'static_isotropic', strict=False)
+            validate_parameter_names(params, "static_isotropic", strict=False)
 
     def test_validate_extra_params(self):
         """Test validation fails with extra parameters."""
-        params = ['contrast', 'offset', 'D0', 'alpha', 'D_offset', 'extra_param']
+        params = ["contrast", "offset", "D0", "alpha", "D_offset", "extra_param"]
         with pytest.raises(ValueError, match="Unexpected parameters"):
-            validate_parameter_names(params, 'static_isotropic', strict=False)
+            validate_parameter_names(params, "static_isotropic", strict=False)
 
     def test_verify_samples_dict_complete(self):
         """Test verify_samples_dict with complete samples."""
         samples = {
-            'contrast': np.array([0.5]),
-            'offset': np.array([1.0]),
-            'D0': np.array([1000.0]),
-            'alpha': np.array([0.5]),
-            'D_offset': np.array([10.0]),
+            "contrast": np.array([0.5]),
+            "offset": np.array([1.0]),
+            "D0": np.array([1000.0]),
+            "alpha": np.array([0.5]),
+            "D_offset": np.array([10.0]),
         }
-        verify_samples_dict(samples, 'static_isotropic')  # Should not raise
+        verify_samples_dict(samples, "static_isotropic")  # Should not raise
 
     def test_verify_samples_dict_missing(self):
         """Test verify_samples_dict fails with missing parameters."""
         samples = {
-            'contrast': np.array([0.5]),
-            'D0': np.array([1000.0]),
+            "contrast": np.array([0.5]),
+            "D0": np.array([1000.0]),
             # Missing: offset, alpha, D_offset
         }
         with pytest.raises(KeyError, match="Missing parameters in MCMC samples"):
-            verify_samples_dict(samples, 'static_isotropic')
+            verify_samples_dict(samples, "static_isotropic")
 
 
 class TestMCMCModelConsistency:
@@ -163,7 +177,9 @@ class TestMCMCModelConsistency:
             # If model creation succeeds, parameter names are internally consistent
             assert model is not None
         except Exception as e:
-            pytest.fail(f"Model creation failed, possibly due to parameter mismatch: {e}")
+            pytest.fail(
+                f"Model creation failed, possibly due to parameter mismatch: {e}"
+            )
 
     def test_mcmc_model_param_names_laminar(self):
         """Verify mcmc.py uses correct parameter names for laminar flow."""
@@ -203,7 +219,9 @@ class TestMCMCModelConsistency:
             )
             assert model is not None
         except Exception as e:
-            pytest.fail(f"Model creation failed, possibly due to parameter mismatch: {e}")
+            pytest.fail(
+                f"Model creation failed, possibly due to parameter mismatch: {e}"
+            )
 
 
 class TestPjitBackendConsistency:
@@ -219,14 +237,18 @@ class TestPjitBackendConsistency:
         source = inspect.getsource(PjitBackend._run_single_shard_mcmc)
 
         # Verify it imports get_parameter_names from centralized module
-        assert "from homodyne.config.parameter_names import get_parameter_names" in source
+        assert (
+            "from homodyne.config.parameter_names import get_parameter_names" in source
+        )
 
         # Verify it uses get_parameter_names() instead of hardcoded lists
         assert "param_names = get_parameter_names(analysis_mode)" in source
 
         # Verify old hardcoded parameter lists are no longer present
         # (They've been replaced with centralized constants)
-        assert "param_names = ['contrast', 'offset'" not in source  # Old hardcoded approach
+        assert (
+            "param_names = ['contrast', 'offset'" not in source
+        )  # Old hardcoded approach
 
     def test_pjit_no_old_incorrect_names(self):
         """Verify pjit backend does not contain old incorrect parameter names."""
@@ -238,7 +260,9 @@ class TestPjitBackendConsistency:
 
         # Verify old incorrect names that caused the bug are not present
         assert "'gamma_dot_0'" not in source  # Old bug: should be gamma_dot_t0
-        assert "'gamma_dot_offset'" not in source  # Old bug: should be gamma_dot_t_offset
+        assert (
+            "'gamma_dot_offset'" not in source
+        )  # Old bug: should be gamma_dot_t_offset
         assert "'phi_0'" not in source  # Old bug: should be phi0
 
 
@@ -257,7 +281,7 @@ class TestCrossCodingConsistency:
         # If this test passes, the modules are consistent
 
         # Verify expected matches our constants
-        assert expected == ['contrast', 'offset', 'D0', 'alpha', 'D_offset']
+        assert expected == ["contrast", "offset", "D0", "alpha", "D_offset"]
 
     def test_mcmc_to_pjit_consistency_laminar(self):
         """Verify mcmc.py and pjit.py use identical laminar flow parameter names."""
@@ -268,14 +292,21 @@ class TestCrossCodingConsistency:
 
         # Verify expected matches our constants
         assert expected == [
-            'contrast', 'offset', 'D0', 'alpha', 'D_offset',
-            'gamma_dot_t0', 'beta', 'gamma_dot_t_offset', 'phi0'
+            "contrast",
+            "offset",
+            "D0",
+            "alpha",
+            "D_offset",
+            "gamma_dot_t0",
+            "beta",
+            "gamma_dot_t_offset",
+            "phi0",
         ]
 
         # CRITICAL: Verify no old incorrect names
-        assert 'gamma_dot_0' not in expected  # Old bug name
-        assert 'gamma_dot_offset' not in expected  # Old bug name
-        assert 'phi_0' not in expected  # Old bug name
+        assert "gamma_dot_0" not in expected  # Old bug name
+        assert "gamma_dot_offset" not in expected  # Old bug name
+        assert "phi_0" not in expected  # Old bug name
 
 
 class TestRegressionPrevention:
@@ -286,27 +317,27 @@ class TestRegressionPrevention:
         from homodyne.config.parameter_names import LAMINAR_FLOW_PARAMS
 
         # gamma_dot_0 is the INCORRECT name that caused the bug
-        assert 'gamma_dot_0' not in LAMINAR_FLOW_PARAMS
+        assert "gamma_dot_0" not in LAMINAR_FLOW_PARAMS
         # gamma_dot_t0 is the CORRECT name
-        assert 'gamma_dot_t0' in LAMINAR_FLOW_PARAMS
+        assert "gamma_dot_t0" in LAMINAR_FLOW_PARAMS
 
     def test_no_phi_0_in_constants(self):
         """Ensure phi_0 is never used (should be phi0)."""
         from homodyne.config.parameter_names import LAMINAR_FLOW_PARAMS
 
         # phi_0 is incorrect (old style)
-        assert 'phi_0' not in LAMINAR_FLOW_PARAMS
+        assert "phi_0" not in LAMINAR_FLOW_PARAMS
         # phi0 is correct
-        assert 'phi0' in LAMINAR_FLOW_PARAMS
+        assert "phi0" in LAMINAR_FLOW_PARAMS
 
     def test_no_gamma_dot_offset_in_constants(self):
         """Ensure gamma_dot_offset is never used (should be gamma_dot_t_offset)."""
         from homodyne.config.parameter_names import LAMINAR_FLOW_PARAMS
 
         # gamma_dot_offset is incorrect
-        assert 'gamma_dot_offset' not in LAMINAR_FLOW_PARAMS
+        assert "gamma_dot_offset" not in LAMINAR_FLOW_PARAMS
         # gamma_dot_t_offset is correct
-        assert 'gamma_dot_t_offset' in LAMINAR_FLOW_PARAMS
+        assert "gamma_dot_t_offset" in LAMINAR_FLOW_PARAMS
 
 
 if __name__ == "__main__":

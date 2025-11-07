@@ -22,7 +22,7 @@ import numpy as np
 import pytest
 
 # Use non-interactive backend for testing
-matplotlib.use('Agg')
+matplotlib.use("Agg")
 
 from homodyne.optimization.cmc.result import MCMCResult
 from homodyne.viz.mcmc_plots import (
@@ -47,7 +47,9 @@ def standard_mcmc_result():
 
     # Generate synthetic samples
     np.random.seed(42)
-    samples = np.random.randn(num_samples, num_params) * 10 + np.array([100.0, 1.5, 10.0])
+    samples = np.random.randn(num_samples, num_params) * 10 + np.array(
+        [100.0, 1.5, 10.0]
+    )
 
     # Create result
     result = MCMCResult(
@@ -65,9 +67,9 @@ def standard_mcmc_result():
         n_chains=4,
         n_warmup=1000,
         n_samples=1000,
-        analysis_mode='static_isotropic',
-        r_hat={'D0': 1.02, 'alpha': 1.03, 'D_offset': 1.01},
-        effective_sample_size={'D0': 850.0, 'alpha': 920.0, 'D_offset': 880.0},
+        analysis_mode="static_isotropic",
+        r_hat={"D0": 1.02, "alpha": 1.03, "D_offset": 1.01},
+        effective_sample_size={"D0": 850.0, "alpha": 920.0, "D_offset": 880.0},
         acceptance_rate=0.85,
     )
 
@@ -90,25 +92,30 @@ def cmc_result():
     for shard_idx in range(num_shards):
         # Each shard has slightly different posterior
         shard_mean = np.array([100.0, 1.5, 10.0]) + np.random.randn(num_params) * 2
-        shard_samples = np.random.randn(num_samples_per_shard, num_params) * 5 + shard_mean
+        shard_samples = (
+            np.random.randn(num_samples_per_shard, num_params) * 5 + shard_mean
+        )
         all_samples.append(shard_samples)
 
         # Create trace data
         trace_data = {
-            f'param_{i}': shard_samples[:, i].tolist()
-            for i in range(num_params)
+            f"param_{i}": shard_samples[:, i].tolist() for i in range(num_params)
         }
 
         # Create diagnostics
         diag = {
-            'shard_id': shard_idx,
-            'num_samples': num_samples_per_shard,
-            'num_params': num_params,
-            'rhat': {f'param_{i}': 1.0 + np.random.rand() * 0.05 for i in range(num_params)},
-            'ess': {f'param_{i}': 150.0 + np.random.rand() * 100 for i in range(num_params)},
-            'acceptance_rate': 0.8 + np.random.rand() * 0.15,
-            'trace_data': trace_data,
-            'converged': True,
+            "shard_id": shard_idx,
+            "num_samples": num_samples_per_shard,
+            "num_params": num_params,
+            "rhat": {
+                f"param_{i}": 1.0 + np.random.rand() * 0.05 for i in range(num_params)
+            },
+            "ess": {
+                f"param_{i}": 150.0 + np.random.rand() * 100 for i in range(num_params)
+            },
+            "acceptance_rate": 0.8 + np.random.rand() * 0.15,
+            "trace_data": trace_data,
+            "converged": True,
         }
         per_shard_diagnostics.append(diag)
 
@@ -125,13 +132,13 @@ def cmc_result():
 
     # Create CMC diagnostics
     cmc_diagnostics = {
-        'combination_success': True,
-        'n_shards_converged': num_shards,
-        'n_shards_total': num_shards,
-        'combination_time': 2.5,
-        'kl_matrix': kl_matrix.tolist(),
-        'max_kl_divergence': float(np.max(kl_matrix)),
-        'success_rate': 1.0,
+        "combination_success": True,
+        "n_shards_converged": num_shards,
+        "n_shards_total": num_shards,
+        "combination_time": 2.5,
+        "kl_matrix": kl_matrix.tolist(),
+        "max_kl_divergence": float(np.max(kl_matrix)),
+        "success_rate": 1.0,
     }
 
     # Create result
@@ -145,9 +152,9 @@ def cmc_result():
         samples_params=combined_samples,
         converged=True,
         n_iterations=1000,
-        analysis_mode='static_isotropic',
+        analysis_mode="static_isotropic",
         num_shards=num_shards,
-        combination_method='weighted',
+        combination_method="weighted",
         per_shard_diagnostics=per_shard_diagnostics,
         cmc_diagnostics=cmc_diagnostics,
     )
@@ -172,8 +179,8 @@ class TestTracePlots:
 
         # Check axes labels
         for ax in fig.axes[:3]:
-            assert ax.get_xlabel() == 'Sample Index'
-            assert ax.get_ylabel() != ''
+            assert ax.get_xlabel() == "Sample Index"
+            assert ax.get_ylabel() != ""
 
         plt.close(fig)
 
@@ -186,14 +193,14 @@ class TestTracePlots:
 
         # Check that title mentions CMC
         title = fig._suptitle.get_text()
-        assert 'CMC' in title
-        assert '5 shards' in title
+        assert "CMC" in title
+        assert "5 shards" in title
 
         plt.close(fig)
 
     def test_trace_plots_custom_param_names(self, standard_mcmc_result):
         """Test trace plots with custom parameter names."""
-        param_names = ['D0', 'alpha', 'D_offset']
+        param_names = ["D0", "alpha", "D_offset"]
         fig = plot_trace_plots(standard_mcmc_result, param_names=param_names)
 
         assert isinstance(fig, plt.Figure)
@@ -249,7 +256,7 @@ class TestKLDivergenceMatrix:
 
         # Check title mentions KL divergence
         ax = fig.axes[0]
-        assert 'KL Divergence' in ax.get_title()
+        assert "KL Divergence" in ax.get_title()
 
         plt.close(fig)
 
@@ -302,7 +309,9 @@ class TestConvergenceDiagnostics:
 
     def test_convergence_diagnostics_standard_nuts(self, standard_mcmc_result):
         """Test convergence diagnostics for standard NUTS."""
-        fig = plot_convergence_diagnostics(standard_mcmc_result, metrics=['rhat', 'ess'])
+        fig = plot_convergence_diagnostics(
+            standard_mcmc_result, metrics=["rhat", "ess"]
+        )
 
         assert isinstance(fig, plt.Figure)
         assert len(fig.axes) >= 2  # One for R-hat, one for ESS
@@ -311,19 +320,19 @@ class TestConvergenceDiagnostics:
 
     def test_convergence_diagnostics_cmc_result(self, cmc_result):
         """Test convergence diagnostics for CMC result."""
-        fig = plot_convergence_diagnostics(cmc_result, metrics=['rhat', 'ess'])
+        fig = plot_convergence_diagnostics(cmc_result, metrics=["rhat", "ess"])
 
         assert isinstance(fig, plt.Figure)
 
         # Check title mentions CMC
         title = fig._suptitle.get_text()
-        assert 'CMC' in title
+        assert "CMC" in title
 
         plt.close(fig)
 
     def test_convergence_diagnostics_rhat_only(self, standard_mcmc_result):
         """Test plotting only R-hat metric."""
-        fig = plot_convergence_diagnostics(standard_mcmc_result, metrics=['rhat'])
+        fig = plot_convergence_diagnostics(standard_mcmc_result, metrics=["rhat"])
 
         assert isinstance(fig, plt.Figure)
         assert len(fig.axes) == 1
@@ -332,7 +341,7 @@ class TestConvergenceDiagnostics:
 
     def test_convergence_diagnostics_ess_only(self, standard_mcmc_result):
         """Test plotting only ESS metric."""
-        fig = plot_convergence_diagnostics(standard_mcmc_result, metrics=['ess'])
+        fig = plot_convergence_diagnostics(standard_mcmc_result, metrics=["ess"])
 
         assert isinstance(fig, plt.Figure)
         assert len(fig.axes) == 1
@@ -342,9 +351,7 @@ class TestConvergenceDiagnostics:
     def test_convergence_diagnostics_custom_thresholds(self, standard_mcmc_result):
         """Test custom convergence thresholds."""
         fig = plot_convergence_diagnostics(
-            standard_mcmc_result,
-            rhat_threshold=1.05,
-            ess_threshold=200.0
+            standard_mcmc_result, rhat_threshold=1.05, ess_threshold=200.0
         )
 
         assert isinstance(fig, plt.Figure)
@@ -390,7 +397,9 @@ class TestPosteriorComparison:
 
         plt.close(fig)
 
-    def test_posterior_comparison_non_cmc_result_raises_error(self, standard_mcmc_result):
+    def test_posterior_comparison_non_cmc_result_raises_error(
+        self, standard_mcmc_result
+    ):
         """Test that posterior comparison raises error for non-CMC result."""
         with pytest.raises(ValueError, match="only available for CMC results"):
             plot_posterior_comparison(standard_mcmc_result)
@@ -424,8 +433,8 @@ class TestCMCSummaryDashboard:
 
         # Check title mentions CMC
         title = fig._suptitle.get_text()
-        assert 'CMC' in title
-        assert '5 shards' in title
+        assert "CMC" in title
+        assert "5 shards" in title
 
         plt.close(fig)
 
@@ -460,17 +469,23 @@ class TestEdgeCases:
         num_samples = 100
 
         np.random.seed(456)
-        samples = np.random.randn(num_samples, num_params) * 10 + np.array([100.0, 1.5, 10.0])
+        samples = np.random.randn(num_samples, num_params) * 10 + np.array(
+            [100.0, 1.5, 10.0]
+        )
 
-        per_shard_diagnostics = [{
-            'shard_id': 0,
-            'num_samples': num_samples,
-            'num_params': num_params,
-            'rhat': {f'param_{i}': 1.02 for i in range(num_params)},
-            'ess': {f'param_{i}': 80.0 for i in range(num_params)},
-            'trace_data': {f'param_{i}': samples[:, i].tolist() for i in range(num_params)},
-            'converged': True,
-        }]
+        per_shard_diagnostics = [
+            {
+                "shard_id": 0,
+                "num_samples": num_samples,
+                "num_params": num_params,
+                "rhat": {f"param_{i}": 1.02 for i in range(num_params)},
+                "ess": {f"param_{i}": 80.0 for i in range(num_params)},
+                "trace_data": {
+                    f"param_{i}": samples[:, i].tolist() for i in range(num_params)
+                },
+                "converged": True,
+            }
+        ]
 
         kl_matrix = np.array([[0.0]])
 
@@ -481,8 +496,8 @@ class TestEdgeCases:
             samples_params=samples,
             num_shards=1,
             per_shard_diagnostics=per_shard_diagnostics,
-            cmc_diagnostics={'kl_matrix': kl_matrix.tolist()},
-            analysis_mode='static_isotropic',
+            cmc_diagnostics={"kl_matrix": kl_matrix.tolist()},
+            analysis_mode="static_isotropic",
         )
 
         # Should not be considered a CMC result (single shard)
@@ -502,14 +517,16 @@ class TestEdgeCases:
         np.random.seed(789)
 
         # Create multi-chain samples
-        per_shard_diagnostics = [{
-            'shard_id': 0,
-            'trace_data': {
-                f'param_{i}': np.random.randn(num_chains, num_samples).tolist()
-                for i in range(num_params)
-            },
-            'converged': True,
-        }]
+        per_shard_diagnostics = [
+            {
+                "shard_id": 0,
+                "trace_data": {
+                    f"param_{i}": np.random.randn(num_chains, num_samples).tolist()
+                    for i in range(num_params)
+                },
+                "converged": True,
+            }
+        ]
 
         result = MCMCResult(
             mean_params=np.array([100.0, 1.5, 10.0]),
@@ -518,7 +535,7 @@ class TestEdgeCases:
             samples_params=np.random.randn(num_samples, num_params),
             num_shards=2,
             per_shard_diagnostics=per_shard_diagnostics,
-            analysis_mode='static_isotropic',
+            analysis_mode="static_isotropic",
         )
 
         fig = plot_trace_plots(result)
@@ -528,7 +545,7 @@ class TestEdgeCases:
     def test_laminar_flow_mode(self, cmc_result):
         """Test visualization with laminar_flow analysis mode."""
         # Change analysis mode
-        cmc_result.analysis_mode = 'laminar_flow'
+        cmc_result.analysis_mode = "laminar_flow"
 
         # Should use laminar_flow parameter names
         fig = plot_trace_plots(cmc_result)
@@ -554,7 +571,7 @@ class TestFileFormatSupport:
         fig = plot_trace_plots(standard_mcmc_result, save_path=save_path)
 
         assert save_path.exists()
-        assert save_path.suffix == '.png'
+        assert save_path.suffix == ".png"
 
         plt.close(fig)
 
@@ -564,7 +581,7 @@ class TestFileFormatSupport:
         fig = plot_trace_plots(standard_mcmc_result, save_path=save_path)
 
         assert save_path.exists()
-        assert save_path.suffix == '.pdf'
+        assert save_path.suffix == ".pdf"
 
         plt.close(fig)
 
@@ -574,7 +591,7 @@ class TestFileFormatSupport:
         fig = plot_trace_plots(standard_mcmc_result, save_path=save_path)
 
         assert save_path.exists()
-        assert save_path.suffix == '.svg'
+        assert save_path.suffix == ".svg"
 
         plt.close(fig)
 
@@ -601,13 +618,13 @@ def test_visualization_module_summary():
 
     # Count test categories
     test_categories = {
-        'Trace Plots': 5,
-        'KL Divergence Matrix': 5,
-        'Convergence Diagnostics': 6,
-        'Posterior Comparison': 4,
-        'CMC Summary Dashboard': 3,
-        'Edge Cases': 3,
-        'File Format Support': 4,
+        "Trace Plots": 5,
+        "KL Divergence Matrix": 5,
+        "Convergence Diagnostics": 6,
+        "Posterior Comparison": 4,
+        "CMC Summary Dashboard": 3,
+        "Edge Cases": 3,
+        "File Format Support": 4,
     }
 
     total_tests = sum(test_categories.values())

@@ -66,7 +66,9 @@ class TestHardwareConfig:
         assert config.recommended_backend == "multiprocessing"
 
 
-@pytest.mark.skip(reason="JAX device detection requires import-time mocking which is not feasible")
+@pytest.mark.skip(
+    reason="JAX device detection requires import-time mocking which is not feasible"
+)
 class TestDetectHardware:
     """Test hardware detection function."""
 

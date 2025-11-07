@@ -285,7 +285,9 @@ fi
             print("   • Config: hc-stat, hc-flow")
             print("   • Plotting: hexp, hsim")
             print()
-            print("📋 Completion activates automatically when you activate this environment")
+            print(
+                "📋 Completion activates automatically when you activate this environment"
+            )
         else:
             # Integrate with venv/uv/virtualenv activation scripts
             modified_scripts = integrate_with_venv_activate(venv_path)
@@ -295,7 +297,9 @@ fi
             print("   • Config: hc-stat, hc-flow")
             print("   • Plotting: hexp, hsim")
             print()
-            print("📋 Completion activates automatically when you activate this environment")
+            print(
+                "📋 Completion activates automatically when you activate this environment"
+            )
             print(f"   Modified: {', '.join(s.name for s in modified_scripts)}")
             print()
             print("💡 To test:")
@@ -577,7 +581,9 @@ def show_installation_summary(interactive_results=None):
     """Show installation summary with available commands."""
     print("\n🚀 Quick Start Commands:")
     print("   homodyne --method nlsq --config config.yaml")
-    print("   homodyne --method mcmc --config config.yaml  # Automatic NUTS/CMC selection")
+    print(
+        "   homodyne --method mcmc --config config.yaml  # Automatic NUTS/CMC selection"
+    )
     print("   homodyne-config --mode static -o my_config.yaml")
 
     print("\n⚡ Available Shortcuts (after shell restart):")
@@ -586,7 +592,9 @@ def show_installation_summary(interactive_results=None):
     print("     hconfig  = homodyne-config")
     print("\n   Method shortcuts (hm- prefix):")
     print("     hm-nlsq  = homodyne --method nlsq  # NLSQ trust-region (primary)")
-    print("     hm-mcmc  = homodyne --method mcmc  # MCMC with automatic NUTS/CMC selection")
+    print(
+        "     hm-mcmc  = homodyne --method mcmc  # MCMC with automatic NUTS/CMC selection"
+    )
     print("\n   Config mode shortcuts (hc- prefix):")
     print("     hc-stat  = homodyne-config --mode static")
     print("     hc-flow  = homodyne-config --mode laminar_flow")

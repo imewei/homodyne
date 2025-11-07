@@ -126,7 +126,9 @@ def clamp_parameters_to_bounds(
                 # NumPyro's TruncatedNormal PDF approaches zero at boundaries,
                 # so we use epsilon offset to avoid exact boundary values
                 param_range = max_val - min_val
-                epsilon = max(1e-6, 0.001 * param_range)  # 0.1% of range or 1e-6, whichever is larger
+                epsilon = max(
+                    1e-6, 0.001 * param_range
+                )  # 0.1% of range or 1e-6, whichever is larger
 
                 # Adjust bounds to be slightly inside the valid region
                 min_val_adjusted = min_val + epsilon
@@ -459,26 +461,12 @@ def _configure_device(args) -> dict[str, Any]:
 
     logger.info("Configuring computational device...")
 
-    # Disable JAX GPU autotuning to prevent hanging
-    # This is a known issue with JAX gemm_fusion_autotuner
-    os.environ["XLA_FLAGS"] = (
-        os.environ.get("XLA_FLAGS", "") + " --xla_gpu_autotune_level=0"
-        " --xla_gpu_deterministic_ops=true"
-    ).strip()
-    logger.debug("Disabled JAX GPU autotuning to prevent hangs")
-
-    device_config = configure_optimal_device(
-        prefer_gpu=not args.force_cpu,
-        gpu_memory_fraction=args.gpu_memory_fraction,
-        force_cpu=args.force_cpu,
-    )
+    # Configure CPU-only device (GPU support removed in v2.3.0)
+    device_config = configure_optimal_device()
 
     if device_config["configuration_successful"]:
         device_type = device_config["device_type"]
         logger.info(f"✓ Device configured: {device_type.upper()}")
-
-        if device_type == "gpu":
-            logger.info(f"GPU memory fraction: {args.gpu_memory_fraction:.0%}")
     else:
         logger.warning("Device configuration failed, using defaults")
 
@@ -523,15 +511,18 @@ def _check_deprecated_config(config: "ConfigManager") -> None:
     # Issue all warnings at once for visibility
     if warnings_issued:
         logger.warning(
-            "\n" + "="*70 + "\n"
+            "\n" + "=" * 70 + "\n"
             "DEPRECATED CONFIGURATION DETECTED\n"
-            + "="*70 + "\n"
-            + "\n\n".join(warnings_issued) + "\n"
-            + "="*70 + "\n"
+            + "=" * 70
+            + "\n"
+            + "\n\n".join(warnings_issued)
+            + "\n"
+            + "=" * 70
+            + "\n"
             "Migration: NLSQ v3.0+ uses native large dataset handling.\n"
             "Simply remove the deprecated sections - no replacement needed.\n"
             "See: https://nlsq.readthedocs.io/en/latest/guides/large_datasets.html\n"
-            + "="*70
+            + "=" * 70
         )
 
 
@@ -593,10 +584,7 @@ def _get_default_config(args) -> dict[str, Any]:
                 "n_chains": args.n_chains,
             },
         },
-        "hardware": {
-            "force_cpu": args.force_cpu,
-            "gpu_memory_fraction": args.gpu_memory_fraction,
-        },
+        "hardware": {},
         "output": {
             "formats": [args.output_format],
             "save_plots": args.save_plots,
@@ -620,7 +608,6 @@ def _apply_cli_overrides(config: ConfigManager, args) -> None:
     - MCMC threshold parameters (min_samples_for_cmc, memory_threshold_pct)
     - Initial parameter values (D0, alpha, D_offset, gamma_dot_t0, beta, gamma_dot_t_offset, phi0)
     - Mass matrix type (dense_mass_matrix flag)
-    - Hardware settings (force_cpu, gpu_memory_fraction)
     """
     if not hasattr(config, "config") or not config.config:
         return
@@ -660,14 +647,20 @@ def _apply_cli_overrides(config: ConfigManager, args) -> None:
 
     if args.min_samples_cmc is not None:
         old_value = config.config["optimization"]["mcmc"].get("min_samples_for_cmc", 15)
-        config.config["optimization"]["mcmc"]["min_samples_for_cmc"] = args.min_samples_cmc
+        config.config["optimization"]["mcmc"][
+            "min_samples_for_cmc"
+        ] = args.min_samples_cmc
         logger.info(
             f"Overriding config min_samples_for_cmc={old_value} with CLI value min_samples_for_cmc={args.min_samples_cmc}"
         )
 
     if args.memory_threshold_pct is not None:
-        old_value = config.config["optimization"]["mcmc"].get("memory_threshold_pct", 0.30)
-        config.config["optimization"]["mcmc"]["memory_threshold_pct"] = args.memory_threshold_pct
+        old_value = config.config["optimization"]["mcmc"].get(
+            "memory_threshold_pct", 0.30
+        )
+        config.config["optimization"]["mcmc"][
+            "memory_threshold_pct"
+        ] = args.memory_threshold_pct
         logger.info(
             f"Overriding config memory_threshold_pct={old_value:.2f} with CLI value memory_threshold_pct={args.memory_threshold_pct:.2f}"
         )
@@ -717,7 +710,10 @@ def _apply_cli_overrides(config: ConfigManager, args) -> None:
         if param_names and param_values and len(param_names) == len(param_values):
             # Use ParameterManager for name mapping (config → canonical)
             from homodyne.config.parameter_manager import ParameterManager
-            pm = ParameterManager(config.config, config.config.get("analysis_mode", "laminar_flow"))
+
+            pm = ParameterManager(
+                config.config, config.config.get("analysis_mode", "laminar_flow")
+            )
 
             # Build current param dict with name mapping
             current_params = {}
@@ -749,7 +745,15 @@ def _apply_cli_overrides(config: ConfigManager, args) -> None:
         if "static" in analysis_mode.lower():
             expected_params = ["D0", "alpha", "D_offset"]
         else:
-            expected_params = ["D0", "alpha", "D_offset", "gamma_dot_t0", "beta", "gamma_dot_t_offset", "phi0"]
+            expected_params = [
+                "D0",
+                "alpha",
+                "D_offset",
+                "gamma_dot_t0",
+                "beta",
+                "gamma_dot_t_offset",
+                "phi0",
+            ]
 
         # Only include parameters that have values (either from config or CLI)
         final_param_names = []
@@ -766,8 +770,8 @@ def _apply_cli_overrides(config: ConfigManager, args) -> None:
     if "hardware" not in config.config:
         config.config["hardware"] = {}
 
-    config.config["hardware"]["force_cpu"] = args.force_cpu
-    config.config["hardware"]["gpu_memory_fraction"] = args.gpu_memory_fraction
+    # Hardware configuration (CPU-only in v2.3.0+)
+    # No hardware overrides needed
 
 
 def _load_data(args, config: ConfigManager) -> dict[str, Any]:
@@ -1065,7 +1069,9 @@ def _run_optimization(args, config: ConfigManager, data: dict[str, Any]) -> Any:
     # Normalize method aliases: mcmc → auto
     if method == "mcmc":
         method = "auto"
-        logger.debug("Method 'mcmc' is an alias for 'auto' (automatic NUTS/CMC selection)")
+        logger.debug(
+            "Method 'mcmc' is an alias for 'auto' (automatic NUTS/CMC selection)"
+        )
 
     logger.info(f"Running {method.upper()} optimization...")
 
@@ -1079,49 +1085,8 @@ def _run_optimization(args, config: ConfigManager, data: dict[str, Any]) -> Any:
 
     try:
         if method == "nlsq":
-            # Try NLSQ with automatic CPU fallback on GPU OOM
-            try:
-                result = fit_nlsq_jax(filtered_data, config)
-            except RuntimeError as nlsq_error:
-                # Check if this is a GPU OOM error
-                error_msg = str(nlsq_error).lower()
-                if "out_of_memory" in error_msg or "resource_exhausted" in error_msg:
-                    from homodyne.device import is_gpu_active, switch_to_cpu
-
-                    if is_gpu_active():
-                        logger.warning(
-                            "GPU out of memory detected during NLSQ optimization.",
-                        )
-                        logger.warning(
-                            "Automatically falling back to CPU (slower but will complete)...",
-                        )
-
-                        # Switch to CPU
-                        cpu_result = switch_to_cpu()
-                        if cpu_result.get("success"):
-                            logger.info(
-                                f"Successfully switched to CPU with {cpu_result['num_threads']} threads",
-                            )
-                            logger.info(
-                                "Retrying optimization on CPU (this may take 5-10x longer)...",
-                            )
-
-                            # Retry on CPU
-                            result = fit_nlsq_jax(filtered_data, config)
-                            logger.info(
-                                "✓ CPU fallback successful! Optimization completed.",
-                            )
-                        else:
-                            logger.error(
-                                f"Failed to switch to CPU: {cpu_result.get('error')}",
-                            )
-                            raise nlsq_error
-                    else:
-                        # Already on CPU, can't fallback further
-                        raise nlsq_error
-                else:
-                    # Not an OOM error, re-raise
-                    raise nlsq_error
+            # Run NLSQ optimization (CPU-only in v2.3.0+)
+            result = fit_nlsq_jax(filtered_data, config)
         elif method == "auto":
             # MCMC with automatic NUTS/CMC selection
             # Get CMC configuration from config file
@@ -1132,9 +1097,9 @@ def _run_optimization(args, config: ConfigManager, data: dict[str, Any]) -> Any:
                 logger.info(
                     f"Overriding CMC num_shards from CLI: {args.cmc_num_shards}",
                 )
-                cmc_config.setdefault("sharding", {})["num_shards"] = (
-                    args.cmc_num_shards
-                )
+                cmc_config.setdefault("sharding", {})[
+                    "num_shards"
+                ] = args.cmc_num_shards
 
             if args.cmc_backend is not None:
                 logger.info(f"Overriding CMC backend from CLI: {args.cmc_backend}")
@@ -1156,7 +1121,9 @@ def _run_optimization(args, config: ConfigManager, data: dict[str, Any]) -> Any:
                 # New schema: backend is computational backend string
                 backend_str = backend
                 backend_config = cmc_config.get("backend_config", {})
-                parallel_backend = backend_config.get("name", "auto") if backend_config else "auto"
+                parallel_backend = (
+                    backend_config.get("name", "auto") if backend_config else "auto"
+                )
                 backend_display = f"{backend_str}/{parallel_backend}"
             else:
                 # Old schema: backend is dict with name for parallel execution
@@ -1193,13 +1160,23 @@ def _run_optimization(args, config: ConfigManager, data: dict[str, Any]) -> Any:
             # Tile the 2D meshgrid for each phi angle
             t1_pooled = np.tile(t1_2d.ravel(), n_phi)  # (n_t*n_t,) repeated n_phi times
             t2_pooled = np.tile(t2_2d.ravel(), n_phi)
-            phi_pooled = np.repeat(phi_angles, n_t * n_t)  # Each phi repeated n_t*n_t times
+            phi_pooled = np.repeat(
+                phi_angles, n_t * n_t
+            )  # Each phi repeated n_t*n_t times
 
             # Verify all arrays have matching lengths (CRITICAL for MCMC)
-            assert mcmc_data.shape[0] == n_total, f"Data pooling failed: mcmc_data={mcmc_data.shape[0]}, expected={n_total}"
-            assert t1_pooled.shape[0] == n_total, f"Data pooling failed: t1={t1_pooled.shape[0]}, expected={n_total}"
-            assert t2_pooled.shape[0] == n_total, f"Data pooling failed: t2={t2_pooled.shape[0]}, expected={n_total}"
-            assert phi_pooled.shape[0] == n_total, f"Data pooling failed: phi={phi_pooled.shape[0]}, expected={n_total}"
+            assert (
+                mcmc_data.shape[0] == n_total
+            ), f"Data pooling failed: mcmc_data={mcmc_data.shape[0]}, expected={n_total}"
+            assert (
+                t1_pooled.shape[0] == n_total
+            ), f"Data pooling failed: t1={t1_pooled.shape[0]}, expected={n_total}"
+            assert (
+                t2_pooled.shape[0] == n_total
+            ), f"Data pooling failed: t2={t2_pooled.shape[0]}, expected={n_total}"
+            assert (
+                phi_pooled.shape[0] == n_total
+            ), f"Data pooling failed: phi={phi_pooled.shape[0]}, expected={n_total}"
 
             logger.debug(
                 f"Pooled MCMC data: {n_phi} angles × {n_t}×{n_t} = {n_total:,} data points"
@@ -1213,7 +1190,9 @@ def _run_optimization(args, config: ConfigManager, data: dict[str, Any]) -> Any:
             # Manual workflow required: Run NLSQ separately, copy results to YAML, then run MCMC
             # MCMC now uses physics-informed priors from ParameterSpace directly
             initial_params = None  # No automatic initialization
-            logger.debug("MCMC will use physics-informed priors from ParameterSpace (v2.1.0 behavior)")
+            logger.debug(
+                "MCMC will use physics-informed priors from ParameterSpace (v2.1.0 behavior)"
+            )
 
             # Determine analysis mode (needed for ParameterSpace creation)
             analysis_mode_str = (
@@ -1313,9 +1292,7 @@ def _generate_cmc_diagnostic_plots(
     """
     # Check if result is a CMC result
     if not (hasattr(result, "is_cmc_result") and result.is_cmc_result()):
-        logger.warning(
-            "Result is not a CMC result - skipping diagnostic plots"
-        )
+        logger.warning("Result is not a CMC result - skipping diagnostic plots")
         return
 
     # Check if result has CMC diagnostics
@@ -2240,7 +2217,9 @@ def _generate_and_plot_fitted_simulations(
             # Physical parameters start at index 2
             physical_params = params_array[2:] if len(params_array) > 2 else []
         else:
-            logger.warning(f"Insufficient parameters in result.parameters: {len(params_array)}")
+            logger.warning(
+                f"Insufficient parameters in result.parameters: {len(params_array)}"
+            )
             contrast = 0.5
             offset = 1.0
             physical_params = []
@@ -2686,7 +2665,7 @@ def _apply_diagonal_correction_to_c2(c2_mat: np.ndarray) -> np.ndarray:
     # Create diagonal values as average of adjacent off-diagonal elements
     diag_val = np.zeros(size)
     diag_val[:-1] += side_band  # Upper side
-    diag_val[1:] += side_band   # Lower side (same as upper for symmetric matrix)
+    diag_val[1:] += side_band  # Lower side (same as upper for symmetric matrix)
 
     # Normalization: edge elements averaged once, interior elements averaged twice
     norm = np.ones(size)
@@ -2762,7 +2741,9 @@ def _compute_nlsq_fits(
     logger.debug(
         f"Computing theoretical fits for {len(phi_angles)} angles using L={L:.1f} Å, q={q:.6f} Å⁻¹",
     )
-    logger.info("Diagonal correction will be applied to theoretical fits to match experimental data processing")
+    logger.info(
+        "Diagonal correction will be applied to theoretical fits to match experimental data processing"
+    )
 
     # Sequential per-angle computation
     c2_theoretical_raw = []
@@ -3390,7 +3371,10 @@ def save_mcmc_results(
         if hasattr(result, "samples_params") and result.samples_params is not None:
             samples_list = [result.samples_params]
 
-            if hasattr(result, "samples_contrast") and result.samples_contrast is not None:
+            if (
+                hasattr(result, "samples_contrast")
+                and result.samples_contrast is not None
+            ):
                 # Reshape to (n_samples, 1) if needed
                 contrast_samples = result.samples_contrast
                 if contrast_samples.ndim == 1:
@@ -3402,7 +3386,9 @@ def save_mcmc_results(
                 offset_samples = result.samples_offset
                 if offset_samples.ndim == 1:
                     offset_samples = offset_samples[:, np.newaxis]
-                samples_list.insert(1 if hasattr(result, "samples_contrast") else 0, offset_samples)
+                samples_list.insert(
+                    1 if hasattr(result, "samples_contrast") else 0, offset_samples
+                )
 
             # Concatenate all samples
             save_dict["samples"] = np.concatenate(samples_list, axis=1)
@@ -3416,7 +3402,10 @@ def save_mcmc_results(
                 save_dict["r_hat"] = np.array(list(result.r_hat.values()))
             else:
                 save_dict["r_hat"] = result.r_hat
-        if hasattr(result, "effective_sample_size") and result.effective_sample_size is not None:
+        if (
+            hasattr(result, "effective_sample_size")
+            and result.effective_sample_size is not None
+        ):
             # Convert dict to array if needed
             if isinstance(result.effective_sample_size, dict):
                 save_dict["ess"] = np.array(list(result.effective_sample_size.values()))
@@ -3455,7 +3444,11 @@ def save_mcmc_results(
         logger.debug("Diagnostics saving error:", exc_info=True)
 
     # Step 4b: Save shard_diagnostics.json for CMC results
-    if method_name == "cmc" and hasattr(result, "per_shard_diagnostics") and result.per_shard_diagnostics:
+    if (
+        method_name == "cmc"
+        and hasattr(result, "per_shard_diagnostics")
+        and result.per_shard_diagnostics
+    ):
         try:
             shard_diag_file = method_dir / "shard_diagnostics.json"
             with open(shard_diag_file, "w") as f:
@@ -3501,8 +3494,14 @@ def save_mcmc_results(
         logger.debug("Plot error details:", exc_info=True)
 
     logger.info(f"✓ {method_name.upper()} results saved successfully to {method_dir}")
-    if method_name == "cmc" and hasattr(result, "per_shard_diagnostics") and result.per_shard_diagnostics:
-        logger.info("  - 4 JSON files (parameters, analysis results, diagnostics, shard diagnostics)")
+    if (
+        method_name == "cmc"
+        and hasattr(result, "per_shard_diagnostics")
+        and result.per_shard_diagnostics
+    ):
+        logger.info(
+            "  - 4 JSON files (parameters, analysis results, diagnostics, shard diagnostics)"
+        )
     else:
         logger.info("  - 3 JSON files (parameters, analysis results, diagnostics)")
     logger.info("  - 1 NPZ file (posterior samples)")
@@ -3527,12 +3526,17 @@ def _create_mcmc_parameters_dict(result: Any) -> dict:
     param_dict = {
         "timestamp": datetime.now().isoformat(),
         "analysis_mode": getattr(result, "analysis_mode", "unknown"),
-        "method": "cmc" if (hasattr(result, "is_cmc_result") and result.is_cmc_result()) else "mcmc",
+        "method": (
+            "cmc"
+            if (hasattr(result, "is_cmc_result") and result.is_cmc_result())
+            else "mcmc"
+        ),
         "sampling_summary": {
             "n_samples": getattr(result, "n_samples", 0),
             "n_warmup": getattr(result, "n_warmup", 0),
             "n_chains": getattr(result, "n_chains", 1),
-            "total_samples": getattr(result, "n_samples", 0) * getattr(result, "n_chains", 1),
+            "total_samples": getattr(result, "n_samples", 0)
+            * getattr(result, "n_chains", 1),
             "computation_time": getattr(result, "computation_time", 0.0),
         },
         "convergence": {},
@@ -3546,20 +3550,29 @@ def _create_mcmc_parameters_dict(result: Any) -> dict:
             # Filter out None values
             r_hat_values = [v for v in result.r_hat.values() if v is not None]
             if r_hat_values:
-                param_dict["convergence"]["all_chains_converged"] = bool(all(v < 1.1 for v in r_hat_values))
+                param_dict["convergence"]["all_chains_converged"] = bool(
+                    all(v < 1.1 for v in r_hat_values)
+                )
                 param_dict["convergence"]["min_r_hat"] = float(min(r_hat_values))
                 param_dict["convergence"]["max_r_hat"] = float(max(r_hat_values))
         else:
             r_hat = np.asarray(result.r_hat)
-            param_dict["convergence"]["all_chains_converged"] = bool(np.all(r_hat < 1.1))
+            param_dict["convergence"]["all_chains_converged"] = bool(
+                np.all(r_hat < 1.1)
+            )
             param_dict["convergence"]["min_r_hat"] = float(np.min(r_hat))
             param_dict["convergence"]["max_r_hat"] = float(np.max(r_hat))
 
-    if hasattr(result, "effective_sample_size") and result.effective_sample_size is not None:
+    if (
+        hasattr(result, "effective_sample_size")
+        and result.effective_sample_size is not None
+    ):
         # ESS can be either dict or array (attribute name is effective_sample_size, not ess)
         if isinstance(result.effective_sample_size, dict):
             # Filter out None values
-            ess_values = [v for v in result.effective_sample_size.values() if v is not None]
+            ess_values = [
+                v for v in result.effective_sample_size.values() if v is not None
+            ]
             if ess_values:
                 param_dict["convergence"]["min_ess"] = float(min(ess_values))
         else:
@@ -3588,7 +3601,9 @@ def _create_mcmc_parameters_dict(result: Any) -> dict:
         param_names = _get_parameter_names(analysis_mode)
 
         mean_params = np.asarray(result.mean_params)
-        std_params = np.asarray(getattr(result, "std_params", np.zeros_like(mean_params)))
+        std_params = np.asarray(
+            getattr(result, "std_params", np.zeros_like(mean_params))
+        )
 
         for i, name in enumerate(param_names):
             if i < len(mean_params):
@@ -3627,7 +3642,11 @@ def _create_mcmc_analysis_dict(
     # Get dataset dimensions
     c2_exp = data.get("c2_exp", [])
     n_angles = len(data.get("phi_angles_list", []))
-    n_time_points = c2_exp.shape[1] * c2_exp.shape[2] if hasattr(c2_exp, "shape") and len(c2_exp.shape) >= 3 else 0
+    n_time_points = (
+        c2_exp.shape[1] * c2_exp.shape[2]
+        if hasattr(c2_exp, "shape") and len(c2_exp.shape) >= 3
+        else 0
+    )
     total_data_points = c2_exp.size if hasattr(c2_exp, "size") else 0
 
     # Determine sampling quality
@@ -3650,17 +3669,26 @@ def _create_mcmc_analysis_dict(
                 quality_flag = "good"
             elif max_r_hat < 1.1:
                 quality_flag = "acceptable"
-                warnings.append(f"Some parameters have R-hat between 1.05-1.1 (max={max_r_hat:.3f})")
+                warnings.append(
+                    f"Some parameters have R-hat between 1.05-1.1 (max={max_r_hat:.3f})"
+                )
             else:
                 quality_flag = "poor"
-                warnings.append(f"Convergence issues detected (max R-hat={max_r_hat:.3f})")
+                warnings.append(
+                    f"Convergence issues detected (max R-hat={max_r_hat:.3f})"
+                )
                 recommendations.append("Consider increasing n_warmup or n_samples")
 
-    if hasattr(result, "effective_sample_size") and result.effective_sample_size is not None:
+    if (
+        hasattr(result, "effective_sample_size")
+        and result.effective_sample_size is not None
+    ):
         # ESS can be either dict or array
         if isinstance(result.effective_sample_size, dict):
             # Filter out None values
-            ess_values = [v for v in result.effective_sample_size.values() if v is not None]
+            ess_values = [
+                v for v in result.effective_sample_size.values() if v is not None
+            ]
             min_ess = min(ess_values) if ess_values else None
         else:
             ess = np.asarray(result.effective_sample_size)
@@ -3668,14 +3696,20 @@ def _create_mcmc_analysis_dict(
 
         if min_ess is not None and min_ess < 400:
             warnings.append(f"Low effective sample size (min ESS={min_ess:.0f})")
-            recommendations.append("Consider increasing n_samples for better posterior estimates")
+            recommendations.append(
+                "Consider increasing n_samples for better posterior estimates"
+            )
 
     analysis_dict = {
         "method": method_name,
         "timestamp": datetime.now().isoformat(),
         "analysis_mode": getattr(result, "analysis_mode", "unknown"),
         "sampling_quality": {
-            "convergence_status": "converged" if quality_flag in ["good", "acceptable"] else "not_converged",
+            "convergence_status": (
+                "converged"
+                if quality_flag in ["good", "acceptable"]
+                else "not_converged"
+            ),
             "quality_flag": quality_flag,
             "warnings": warnings,
             "recommendations": recommendations,
@@ -3684,7 +3718,11 @@ def _create_mcmc_analysis_dict(
             "n_angles": n_angles,
             "n_time_points": n_time_points,
             "total_data_points": total_data_points,
-            "q_value": float(data.get("wavevector_q_list", [0.0])[0]) if data.get("wavevector_q_list") is not None else 0.0,
+            "q_value": (
+                float(data.get("wavevector_q_list", [0.0])[0])
+                if data.get("wavevector_q_list") is not None
+                else 0.0
+            ),
         },
         "sampling_summary": {
             "n_samples": getattr(result, "n_samples", 0),
@@ -3695,13 +3733,22 @@ def _create_mcmc_analysis_dict(
     }
 
     # v2.1.0: Add config-driven metadata if available
-    if hasattr(result, "parameter_space_metadata") and result.parameter_space_metadata is not None:
+    if (
+        hasattr(result, "parameter_space_metadata")
+        and result.parameter_space_metadata is not None
+    ):
         analysis_dict["parameter_space"] = result.parameter_space_metadata
 
-    if hasattr(result, "initial_values_metadata") and result.initial_values_metadata is not None:
+    if (
+        hasattr(result, "initial_values_metadata")
+        and result.initial_values_metadata is not None
+    ):
         analysis_dict["initial_values"] = result.initial_values_metadata
 
-    if hasattr(result, "selection_decision_metadata") and result.selection_decision_metadata is not None:
+    if (
+        hasattr(result, "selection_decision_metadata")
+        and result.selection_decision_metadata is not None
+    ):
         analysis_dict["selection_decision"] = result.selection_decision_metadata
 
     return analysis_dict
@@ -3735,7 +3782,9 @@ def _create_mcmc_diagnostics_dict(result: Any) -> dict:
             # Filter out None values
             r_hat_values = [v for v in result.r_hat.values() if v is not None]
             if r_hat_values:
-                diagnostics_dict["convergence"]["all_chains_converged"] = bool(all(v < 1.1 for v in r_hat_values))
+                diagnostics_dict["convergence"]["all_chains_converged"] = bool(
+                    all(v < 1.1 for v in r_hat_values)
+                )
                 diagnostics_dict["convergence"]["r_hat_threshold"] = 1.1
 
             # Add per-parameter diagnostics using dict keys (only for non-None values)
@@ -3746,20 +3795,26 @@ def _create_mcmc_diagnostics_dict(result: Any) -> dict:
                     continue
 
                 ess_val = None
-                if hasattr(result, "effective_sample_size") and isinstance(result.effective_sample_size, dict):
+                if hasattr(result, "effective_sample_size") and isinstance(
+                    result.effective_sample_size, dict
+                ):
                     ess_val = result.effective_sample_size.get(param_name, None)
 
-                per_param.append({
-                    "name": param_name,
-                    "r_hat": float(r_hat_val),
-                    "ess": float(ess_val) if ess_val is not None else 0.0,
-                    "converged": bool(r_hat_val < 1.1),
-                })
+                per_param.append(
+                    {
+                        "name": param_name,
+                        "r_hat": float(r_hat_val),
+                        "ess": float(ess_val) if ess_val is not None else 0.0,
+                        "converged": bool(r_hat_val < 1.1),
+                    }
+                )
             if per_param:
                 diagnostics_dict["convergence"]["per_parameter_diagnostics"] = per_param
         else:
             r_hat = np.asarray(result.r_hat)
-            diagnostics_dict["convergence"]["all_chains_converged"] = bool(np.all(r_hat < 1.1))
+            diagnostics_dict["convergence"]["all_chains_converged"] = bool(
+                np.all(r_hat < 1.1)
+            )
             diagnostics_dict["convergence"]["r_hat_threshold"] = 1.1
 
             # Get parameter names if available
@@ -3768,37 +3823,54 @@ def _create_mcmc_diagnostics_dict(result: Any) -> dict:
 
             # Add per-parameter diagnostics
             per_param = []
-            ess_array = np.asarray(result.effective_sample_size) if (
-                hasattr(result, "effective_sample_size") and
-                result.effective_sample_size is not None and
-                not isinstance(result.effective_sample_size, dict)
-            ) else None
+            ess_array = (
+                np.asarray(result.effective_sample_size)
+                if (
+                    hasattr(result, "effective_sample_size")
+                    and result.effective_sample_size is not None
+                    and not isinstance(result.effective_sample_size, dict)
+                )
+                else None
+            )
 
             for i, name in enumerate(param_names):
                 if i < len(r_hat):
-                    ess_val = ess_array[i] if (ess_array is not None and i < len(ess_array)) else 0.0
-                    per_param.append({
-                        "name": name,
-                        "r_hat": float(r_hat[i]),
-                        "ess": float(ess_val),
-                        "converged": bool(r_hat[i] < 1.1),
-                    })
+                    ess_val = (
+                        ess_array[i]
+                        if (ess_array is not None and i < len(ess_array))
+                        else 0.0
+                    )
+                    per_param.append(
+                        {
+                            "name": name,
+                            "r_hat": float(r_hat[i]),
+                            "ess": float(ess_val),
+                            "converged": bool(r_hat[i] < 1.1),
+                        }
+                    )
 
             diagnostics_dict["convergence"]["per_parameter_diagnostics"] = per_param
 
-    if hasattr(result, "effective_sample_size") and result.effective_sample_size is not None:
+    if (
+        hasattr(result, "effective_sample_size")
+        and result.effective_sample_size is not None
+    ):
         diagnostics_dict["convergence"]["ess_threshold"] = 400
 
     # Sampling efficiency
     if hasattr(result, "acceptance_rate") and result.acceptance_rate is not None:
-        diagnostics_dict["sampling_efficiency"]["acceptance_rate"] = float(result.acceptance_rate)
+        diagnostics_dict["sampling_efficiency"]["acceptance_rate"] = float(
+            result.acceptance_rate
+        )
         diagnostics_dict["sampling_efficiency"]["target_acceptance"] = 0.80
 
     if hasattr(result, "divergences"):
         diagnostics_dict["sampling_efficiency"]["divergences"] = int(result.divergences)
 
     if hasattr(result, "tree_depth_warnings"):
-        diagnostics_dict["sampling_efficiency"]["tree_depth_warnings"] = int(result.tree_depth_warnings)
+        diagnostics_dict["sampling_efficiency"]["tree_depth_warnings"] = int(
+            result.tree_depth_warnings
+        )
 
     # Posterior checks
     if hasattr(result, "ess") and hasattr(result, "n_samples"):
@@ -3806,7 +3878,9 @@ def _create_mcmc_diagnostics_dict(result: Any) -> dict:
         total_samples = result.n_samples * getattr(result, "n_chains", 1)
         if total_samples > 0:
             ess_ratio = float(np.mean(ess) / total_samples)
-            diagnostics_dict["posterior_checks"]["effective_sample_size_ratio"] = ess_ratio
+            diagnostics_dict["posterior_checks"][
+                "effective_sample_size_ratio"
+            ] = ess_ratio
 
     # CMC-specific diagnostics
     if hasattr(result, "is_cmc_result") and result.is_cmc_result():
@@ -3830,7 +3904,11 @@ def _create_mcmc_diagnostics_dict(result: Any) -> dict:
             shard_summary = {
                 "num_shards": len(per_shard),
                 "shards_converged": converged_shards,
-                "convergence_rate": float(converged_shards / len(per_shard)) if len(per_shard) > 0 else 0.0,
+                "convergence_rate": (
+                    float(converged_shards / len(per_shard))
+                    if len(per_shard) > 0
+                    else 0.0
+                ),
             }
 
             # Add acceptance rate statistics if available
@@ -3853,24 +3931,36 @@ def _create_mcmc_diagnostics_dict(result: Any) -> dict:
 
             if isinstance(cmc_diag, dict):
                 if "combination_success" in cmc_diag:
-                    overall_metrics["combination_success"] = bool(cmc_diag["combination_success"])
+                    overall_metrics["combination_success"] = bool(
+                        cmc_diag["combination_success"]
+                    )
                 if "n_shards_converged" in cmc_diag:
-                    overall_metrics["n_shards_converged"] = int(cmc_diag["n_shards_converged"])
+                    overall_metrics["n_shards_converged"] = int(
+                        cmc_diag["n_shards_converged"]
+                    )
                 if "n_shards_total" in cmc_diag:
                     overall_metrics["n_shards_total"] = int(cmc_diag["n_shards_total"])
                 if "weighted_product_std" in cmc_diag:
-                    overall_metrics["weighted_product_std"] = float(cmc_diag["weighted_product_std"])
+                    overall_metrics["weighted_product_std"] = float(
+                        cmc_diag["weighted_product_std"]
+                    )
                 if "combination_time" in cmc_diag:
-                    overall_metrics["combination_time"] = float(cmc_diag["combination_time"])
+                    overall_metrics["combination_time"] = float(
+                        cmc_diag["combination_time"]
+                    )
                 if "success_rate" in cmc_diag:
                     overall_metrics["success_rate"] = float(cmc_diag["success_rate"])
 
                 # Include full diagnostics if available
-                diagnostics_dict["cmc_specific"]["overall_diagnostics"] = overall_metrics
+                diagnostics_dict["cmc_specific"][
+                    "overall_diagnostics"
+                ] = overall_metrics
 
         # Combination method
         if hasattr(result, "combination_method") and result.combination_method:
-            diagnostics_dict["cmc_specific"]["combination_method"] = str(result.combination_method)
+            diagnostics_dict["cmc_specific"]["combination_method"] = str(
+                result.combination_method
+            )
 
         # Number of shards
         if hasattr(result, "num_shards") and result.num_shards:
@@ -3900,9 +3990,19 @@ def _get_parameter_names(analysis_mode: str) -> list[str]:
     if analysis_mode == "static_isotropic":
         return ["D0", "alpha", "D_offset"]
     elif analysis_mode == "laminar_flow":
-        return ["D0", "alpha", "D_offset", "gamma_dot_t0", "beta", "gamma_dot_t_offset", "phi0"]
+        return [
+            "D0",
+            "alpha",
+            "D_offset",
+            "gamma_dot_t0",
+            "beta",
+            "gamma_dot_t_offset",
+            "phi0",
+        ]
     else:
-        logger.warning(f"Unknown analysis mode: {analysis_mode}, assuming static_isotropic")
+        logger.warning(
+            f"Unknown analysis mode: {analysis_mode}, assuming static_isotropic"
+        )
         return ["D0", "alpha", "D_offset"]
 
 
@@ -3990,16 +4090,15 @@ def _compute_theoretical_c2_from_mcmc(
 
 
 def _worker_init_cpu_only():
-    """Initialize worker process with CPU-only mode to prevent CUDA OOM.
+    """Initialize worker process with CPU-only mode.
 
-    When spawning multiple workers for parallel plotting, each worker would
-    try to initialize its own CUDA context, leading to GPU memory exhaustion.
-    Since plotting is CPU-bound (Datashader/matplotlib), we force CPU mode.
+    When spawning multiple workers for parallel plotting, we ensure each worker
+    uses CPU-only execution. Plotting is CPU-bound (Datashader/matplotlib).
 
-    Sets multiple environment variables to aggressively disable CUDA/GPU:
+    Sets environment variables for CPU-only JAX execution:
     - JAX_PLATFORMS: Tells JAX to only use CPU platform
-    - CUDA_VISIBLE_DEVICES: Hides all CUDA devices from process
-    - JAX_ENABLE_X64: Prevents any GPU-specific 64-bit operations
+    - CUDA_VISIBLE_DEVICES: Disables any CUDA device access
+    - XLA_PYTHON_CLIENT_PREALLOCATE: Prevents memory preallocation
     """
     import os
 

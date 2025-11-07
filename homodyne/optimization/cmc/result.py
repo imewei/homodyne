@@ -319,12 +319,26 @@ class MCMCResult:
             "mean_params": self.mean_params.tolist(),
             "mean_contrast": self.mean_contrast,
             "mean_offset": self.mean_offset,
-            "std_params": self.std_params.tolist() if self.std_params is not None else None,
+            "std_params": (
+                self.std_params.tolist() if self.std_params is not None else None
+            ),
             "std_contrast": self.std_contrast,
             "std_offset": self.std_offset,
-            "samples_params": self.samples_params.tolist() if self.samples_params is not None else None,
-            "samples_contrast": self.samples_contrast.tolist() if self.samples_contrast is not None else None,
-            "samples_offset": self.samples_offset.tolist() if self.samples_offset is not None else None,
+            "samples_params": (
+                self.samples_params.tolist()
+                if self.samples_params is not None
+                else None
+            ),
+            "samples_contrast": (
+                self.samples_contrast.tolist()
+                if self.samples_contrast is not None
+                else None
+            ),
+            "samples_offset": (
+                self.samples_offset.tolist()
+                if self.samples_offset is not None
+                else None
+            ),
             "converged": self.converged,
             "n_iterations": self.n_iterations,
             "computation_time": self.computation_time,
@@ -383,10 +397,24 @@ class MCMCResult:
         """
         # Convert lists back to numpy arrays
         mean_params = np.array(data["mean_params"])
-        std_params = np.array(data["std_params"]) if data.get("std_params") is not None else None
-        samples_params = np.array(data["samples_params"]) if data.get("samples_params") is not None else None
-        samples_contrast = np.array(data["samples_contrast"]) if data.get("samples_contrast") is not None else None
-        samples_offset = np.array(data["samples_offset"]) if data.get("samples_offset") is not None else None
+        std_params = (
+            np.array(data["std_params"]) if data.get("std_params") is not None else None
+        )
+        samples_params = (
+            np.array(data["samples_params"])
+            if data.get("samples_params") is not None
+            else None
+        )
+        samples_contrast = (
+            np.array(data["samples_contrast"])
+            if data.get("samples_contrast") is not None
+            else None
+        )
+        samples_offset = (
+            np.array(data["samples_offset"])
+            if data.get("samples_offset") is not None
+            else None
+        )
 
         return cls(
             mean_params=mean_params,

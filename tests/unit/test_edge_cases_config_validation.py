@@ -36,9 +36,7 @@ class TestMalformedConfigFiles:
         config = {
             "analysis_mode": "static_isotropic",
             # Missing initial_parameters section
-            "parameter_space": {
-                "bounds": {"D0": {"min": 100, "max": 5000}}
-            }
+            "parameter_space": {"bounds": {"D0": {"min": 100, "max": 5000}}},
         }
         config_mgr = ConfigManager(config_override=config)
         # Should return empty dict or defaults
@@ -49,10 +47,7 @@ class TestMalformedConfigFiles:
         """Test config without parameter_space section."""
         config = {
             "analysis_mode": "static_isotropic",
-            "initial_parameters": {
-                "parameter_names": ["D0"],
-                "values": [1000.0]
-            }
+            "initial_parameters": {"parameter_names": ["D0"], "values": [1000.0]},
             # Missing parameter_space section
         }
         # Should not raise, fallback to defaults
@@ -81,7 +76,7 @@ class TestMissingRequiredFields:
             "initial_parameters": {
                 # Missing parameter_names
                 "values": [1000.0, 0.5, 10.0]
-            }
+            },
         }
         config_mgr = ConfigManager(config_override=config)
         initial_params = config_mgr.get_initial_parameters()
@@ -95,7 +90,7 @@ class TestMissingRequiredFields:
             "initial_parameters": {
                 "parameter_names": ["D0", "alpha", "D_offset"],
                 # Missing values
-            }
+            },
         }
         config_mgr = ConfigManager(config_override=config)
         initial_params = config_mgr.get_initial_parameters()
@@ -108,8 +103,8 @@ class TestMissingRequiredFields:
             "analysis_mode": "static_isotropic",
             "initial_parameters": {
                 "parameter_names": ["D0", "alpha"],  # 2 parameters
-                "values": [1000.0, 0.5, 10.0]  # 3 values
-            }
+                "values": [1000.0, 0.5, 10.0],  # 3 values
+            },
         }
         config_mgr = ConfigManager(config_override=config)
         # Should either raise or handle gracefully
@@ -123,7 +118,7 @@ class TestMissingRequiredFields:
             "parameter_space": {
                 # Missing bounds section
                 "priors": {"D0": {"type": "TruncatedNormal", "mu": 1000, "sigma": 100}}
-            }
+            },
         }
         param_space = ParameterSpace.from_config(config, "static_isotropic")
         # Should use defaults
@@ -139,8 +134,8 @@ class TestInvalidParameterValues:
             "analysis_mode": "static_isotropic",
             "initial_parameters": {
                 "parameter_names": ["D0", "alpha", "D_offset"],
-                "values": [float('nan'), 0.5, 10.0]
-            }
+                "values": [float("nan"), 0.5, 10.0],
+            },
         }
         config_mgr = ConfigManager(config_override=config)
         initial_params = config_mgr.get_initial_parameters()
@@ -154,8 +149,8 @@ class TestInvalidParameterValues:
             "analysis_mode": "static_isotropic",
             "initial_parameters": {
                 "parameter_names": ["D0", "alpha", "D_offset"],
-                "values": [float('inf'), 0.5, 10.0]
-            }
+                "values": [float("inf"), 0.5, 10.0],
+            },
         }
         config_mgr = ConfigManager(config_override=config)
         initial_params = config_mgr.get_initial_parameters()
@@ -168,8 +163,8 @@ class TestInvalidParameterValues:
             "analysis_mode": "static_isotropic",
             "initial_parameters": {
                 "parameter_names": ["D0", "alpha", "D_offset"],
-                "values": [-1000.0, 0.5, 10.0]  # Negative D0 is invalid
-            }
+                "values": [-1000.0, 0.5, 10.0],  # Negative D0 is invalid
+            },
         }
         param_space = ParameterSpace.from_defaults("static_isotropic")
         initial_params = {"D0": -1000.0, "alpha": 0.5, "D_offset": 10.0}
@@ -185,8 +180,8 @@ class TestInvalidParameterValues:
             "analysis_mode": "static_isotropic",
             "initial_parameters": {
                 "parameter_names": ["D0", "alpha", "D_offset"],
-                "values": ["1000.0", 0.5, 10.0]  # First value is string
-            }
+                "values": ["1000.0", 0.5, 10.0],  # First value is string
+            },
         }
         config_mgr = ConfigManager(config_override=config)
         # Should attempt type coercion or raise error
@@ -204,8 +199,8 @@ class TestInvalidParameterValues:
             "analysis_mode": "static_isotropic",
             "initial_parameters": {
                 "parameter_names": ["D0", "alpha", "D_offset"],
-                "values": [1e20, 0.5, 10.0]  # Very large D0
-            }
+                "values": [1e20, 0.5, 10.0],  # Very large D0
+            },
         }
         config_mgr = ConfigManager(config_override=config)
         initial_params = config_mgr.get_initial_parameters()
@@ -217,8 +212,8 @@ class TestInvalidParameterValues:
             "analysis_mode": "static_isotropic",
             "initial_parameters": {
                 "parameter_names": ["D0", "alpha", "D_offset"],
-                "values": [1e-20, 0.5, 10.0]  # Very small D0
-            }
+                "values": [1e-20, 0.5, 10.0],  # Very small D0
+            },
         }
         config_mgr = ConfigManager(config_override=config)
         initial_params = config_mgr.get_initial_parameters()
@@ -243,7 +238,7 @@ class TestExtremeThresholdValues:
             "optimization": {
                 "mcmc": {
                     "min_samples_for_cmc": -1,  # Invalid: negative
-                    "memory_threshold_pct": 0.30
+                    "memory_threshold_pct": 0.30,
                 }
             }
         }
@@ -258,7 +253,7 @@ class TestExtremeThresholdValues:
             "optimization": {
                 "mcmc": {
                     "min_samples_for_cmc": 0,  # Edge case: zero
-                    "memory_threshold_pct": 0.30
+                    "memory_threshold_pct": 0.30,
                 }
             }
         }
@@ -271,7 +266,7 @@ class TestExtremeThresholdValues:
             "optimization": {
                 "mcmc": {
                     "min_samples_for_cmc": 15,
-                    "memory_threshold_pct": -0.1  # Invalid: negative
+                    "memory_threshold_pct": -0.1,  # Invalid: negative
                 }
             }
         }
@@ -285,7 +280,7 @@ class TestExtremeThresholdValues:
             "optimization": {
                 "mcmc": {
                     "min_samples_for_cmc": 15,
-                    "memory_threshold_pct": 1.5  # Invalid: > 1.0
+                    "memory_threshold_pct": 1.5,  # Invalid: > 1.0
                 }
             }
         }
@@ -299,7 +294,7 @@ class TestExtremeThresholdValues:
             "optimization": {
                 "mcmc": {
                     "min_samples_for_cmc": 15,
-                    "memory_threshold_pct": 1.0  # Edge case: exactly 100%
+                    "memory_threshold_pct": 1.0,  # Edge case: exactly 100%
                 }
             }
         }
@@ -312,7 +307,7 @@ class TestExtremeThresholdValues:
             "optimization": {
                 "mcmc": {
                     "min_samples_for_cmc": 1000000,  # Very large number
-                    "memory_threshold_pct": 0.30
+                    "memory_threshold_pct": 0.30,
                 }
             }
         }
@@ -326,7 +321,7 @@ class TestExtremeThresholdValues:
             "optimization": {
                 "mcmc": {
                     "min_samples_for_cmc": 15,
-                    "memory_threshold_pct": 0.0  # Edge case: 0%
+                    "memory_threshold_pct": 0.0,  # Edge case: 0%
                 }
             }
         }
@@ -347,7 +342,7 @@ class TestPriorDistributionEdgeCases:
                 min_val=100.0,
                 max_val=100.0,  # min == max
                 mu=100.0,
-                sigma=10.0
+                sigma=10.0,
             )
 
     def test_truncated_normal_inverted_bounds(self):
@@ -358,7 +353,7 @@ class TestPriorDistributionEdgeCases:
                 min_val=1000.0,
                 max_val=100.0,  # min > max (inverted)
                 mu=500.0,
-                sigma=10.0
+                sigma=10.0,
             )
 
     def test_truncated_normal_mu_outside_bounds(self):
@@ -368,7 +363,7 @@ class TestPriorDistributionEdgeCases:
             min_val=100.0,
             max_val=500.0,
             mu=1000.0,  # Outside bounds
-            sigma=10.0
+            sigma=10.0,
         )
         # Should warn or accept with clipping
         assert prior is not None
@@ -381,7 +376,7 @@ class TestPriorDistributionEdgeCases:
             min_val=100.0,
             max_val=500.0,
             mu=300.0,
-            sigma=-10.0  # Negative sigma unusual but not prohibited
+            sigma=-10.0,  # Negative sigma unusual but not prohibited
         )
         assert prior is not None
 
@@ -393,7 +388,7 @@ class TestPriorDistributionEdgeCases:
             min_val=100.0,
             max_val=500.0,
             mu=300.0,
-            sigma=0.0  # Degenerate
+            sigma=0.0,  # Degenerate
         )
         # May be problematic for MCMC but should be allowed
         assert prior is not None
@@ -405,7 +400,7 @@ class TestPriorDistributionEdgeCases:
             min_val=100.0,
             max_val=500.0,
             mu=300.0,
-            sigma=10.0
+            sigma=10.0,
         )
         # Should warn and default to TruncatedNormal
         assert prior.dist_type == "TruncatedNormal"
@@ -430,7 +425,7 @@ class TestParameterSpaceEdgeCases:
             "parameter_space": {
                 "bounds": {
                     "D0": None,  # Null bounds
-                    "alpha": {"min": 0.1, "max": 1.0}
+                    "alpha": {"min": 0.1, "max": 1.0},
                 }
             }
         }
@@ -443,13 +438,7 @@ class TestParameterSpaceEdgeCases:
 
     def test_parameter_space_single_parameter(self):
         """Test ParameterSpace with only one parameter."""
-        config = {
-            "parameter_space": {
-                "bounds": {
-                    "D0": {"min": 100, "max": 5000}
-                }
-            }
-        }
+        config = {"parameter_space": {"bounds": {"D0": {"min": 100, "max": 5000}}}}
         param_space = ParameterSpace.from_config(config, "static_isotropic")
         # Should still work
         assert param_space is not None
@@ -467,15 +456,15 @@ class TestComplexIntegrationEdgeCases:
             "analysis_mode": "static_isotropic",
             "initial_parameters": {
                 "parameter_names": ["D0", "alpha", "D_offset"],
-                "values": [100.0, 0.0, 0.0]  # All at minimum
+                "values": [100.0, 0.0, 0.0],  # All at minimum
             },
             "parameter_space": {
                 "bounds": {
                     "D0": {"min": 100.0, "max": 5000.0},
                     "alpha": {"min": 0.0, "max": 1.0},
-                    "D_offset": {"min": 0.0, "max": 1000.0}
+                    "D_offset": {"min": 0.0, "max": 1000.0},
                 }
-            }
+            },
         }
         config_mgr = ConfigManager(config_override=config)
         initial_params = config_mgr.get_initial_parameters()
@@ -490,15 +479,15 @@ class TestComplexIntegrationEdgeCases:
             "analysis_mode": "static_isotropic",
             "initial_parameters": {
                 "parameter_names": ["D0", "alpha", "D_offset"],
-                "values": [5000.0, 1.0, 1000.0]  # All at maximum
+                "values": [5000.0, 1.0, 1000.0],  # All at maximum
             },
             "parameter_space": {
                 "bounds": {
                     "D0": {"min": 100.0, "max": 5000.0},
                     "alpha": {"min": 0.0, "max": 1.0},
-                    "D_offset": {"min": 0.0, "max": 1000.0}
+                    "D_offset": {"min": 0.0, "max": 1000.0},
                 }
-            }
+            },
         }
         config_mgr = ConfigManager(config_override=config)
         initial_params = config_mgr.get_initial_parameters()
@@ -513,13 +502,9 @@ class TestComplexIntegrationEdgeCases:
             "analysis_mode": "static_isotropic",
             "initial_parameters": {
                 "parameter_names": ["D0"],
-                "values": None  # Will calculate midpoint
+                "values": None,  # Will calculate midpoint
             },
-            "parameter_space": {
-                "bounds": {
-                    "D0": {"min": 100.0, "max": float('inf')}
-                }
-            }
+            "parameter_space": {"bounds": {"D0": {"min": 100.0, "max": float("inf")}}},
         }
         config_mgr = ConfigManager(config_override=config)
         # Should handle infinite bounds gracefully

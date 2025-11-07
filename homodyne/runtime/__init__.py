@@ -1,13 +1,15 @@
 """Homodyne v2 Runtime Support
 ==========================
 
-Runtime support modules for GPU acceleration and hardware optimization.
+Runtime support modules for hardware optimization and system utilities.
 
 This module provides:
-- GPU detection and optimization
+- System resource management
 - Hardware-aware configuration
 - Performance monitoring
-- System resource management
+- Shell completion support
+
+Note: GPU support removed in v2.3.0 - CPU-only focus for reliability
 """
 
 __all__ = []

@@ -114,7 +114,9 @@ class TestRealDataStratification:
             n_angles = len(phi_angles)
 
             logger.info(f"C021 phi angles: {n_angles} angles")
-            logger.info(f"Angle range: {phi_angles.min():.2f}° to {phi_angles.max():.2f}°")
+            logger.info(
+                f"Angle range: {phi_angles.min():.2f}° to {phi_angles.max():.2f}°"
+            )
 
             # Analyze distribution
             n_time_points = 100  # Estimate
@@ -153,7 +155,9 @@ class TestRealDataStratification:
         logger.info(f"  Is safe: {mem_stats['is_safe']}")
 
         # Should be safe for 500k points
-        assert mem_stats["is_safe"], "Memory estimation should be safe for C020-like data"
+        assert mem_stats[
+            "is_safe"
+        ], "Memory estimation should be safe for C020-like data"
         assert mem_stats["peak_memory_mb"] < 1000, "Peak memory should be reasonable"
 
     def test_existing_config_compatibility(self):
@@ -180,7 +184,9 @@ class TestRealDataStratification:
         stratification = config.get("optimization", {}).get("stratification", {})
 
         logger.info("Existing config compatibility:")
-        logger.info(f"  Has stratification section: {'stratification' in config.get('optimization', {})}")
+        logger.info(
+            f"  Has stratification section: {'stratification' in config.get('optimization', {})}"
+        )
         logger.info(f"  Config mode: {config['analysis_mode']}")
 
         # Test default values when section is missing
@@ -227,7 +233,9 @@ class TestRealDataWorkflow:
 
         logger.info("C020 workflow dry run:")
         logger.info(f"  Config loaded: {config_file.name}")
-        logger.info(f"  Data file: {data_file.name} ({data_file.stat().st_size / 1e9:.2f} GB)")
+        logger.info(
+            f"  Data file: {data_file.name} ({data_file.stat().st_size / 1e9:.2f} GB)"
+        )
         logger.info(f"  Phi angles: {len(phi_angles)} angles")
         logger.info(f"  Analysis mode: {config_dict['analysis_mode']}")
 

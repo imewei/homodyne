@@ -92,7 +92,9 @@ def test_stratification_preserves_data_count(balanced_data):
     phi, t1, t2, g2_exp = balanced_data
     original_count = len(phi)
 
-    phi_s, t1_s, t2_s, g2_s = create_angle_stratified_data(phi, t1, t2, g2_exp, target_chunk_size=50)
+    phi_s, t1_s, t2_s, g2_s = create_angle_stratified_data(
+        phi, t1, t2, g2_exp, target_chunk_size=50
+    )
 
     # Check that total points are preserved
     assert len(phi_s) == original_count
@@ -105,7 +107,9 @@ def test_stratification_preserves_data_values(balanced_data):
     """Test that stratification preserves data values (no corruption)."""
     phi, t1, t2, g2_exp = balanced_data
 
-    phi_s, t1_s, t2_s, g2_s = create_angle_stratified_data(phi, t1, t2, g2_exp, target_chunk_size=50)
+    phi_s, t1_s, t2_s, g2_s = create_angle_stratified_data(
+        phi, t1, t2, g2_exp, target_chunk_size=50
+    )
 
     # Sort both original and stratified to compare values
     original_sorted = np.sort(np.column_stack([phi, t1, t2, g2_exp]), axis=0)
@@ -122,7 +126,9 @@ def test_stratification_no_duplicates(balanced_data):
     """Test that stratification doesn't create duplicate points."""
     phi, t1, t2, g2_exp = balanced_data
 
-    phi_s, t1_s, t2_s, g2_s = create_angle_stratified_data(phi, t1, t2, g2_exp, target_chunk_size=50)
+    phi_s, t1_s, t2_s, g2_s = create_angle_stratified_data(
+        phi, t1, t2, g2_exp, target_chunk_size=50
+    )
 
     # Convert to NumPy arrays to ensure hashability
     phi_s_np = np.asarray(phi_s)
@@ -151,7 +157,9 @@ def test_stratification_chunk_balance(balanced_data):
     phi, t1, t2, g2_exp = balanced_data
     target_chunk_size = 50
 
-    phi_s, t1_s, t2_s, g2_s = create_angle_stratified_data(phi, t1, t2, g2_exp, target_chunk_size=target_chunk_size)
+    phi_s, t1_s, t2_s, g2_s = create_angle_stratified_data(
+        phi, t1, t2, g2_exp, target_chunk_size=target_chunk_size
+    )
 
     # Calculate number of chunks
     n_points = len(phi_s)
@@ -179,7 +187,9 @@ def test_stratification_chunk_size_target(balanced_data):
     phi, t1, t2, g2_exp = balanced_data
     target_chunk_size = 75
 
-    phi_s, t1_s, t2_s, g2_s = create_angle_stratified_data(phi, t1, t2, g2_exp, target_chunk_size=target_chunk_size)
+    phi_s, t1_s, t2_s, g2_s = create_angle_stratified_data(
+        phi, t1, t2, g2_exp, target_chunk_size=target_chunk_size
+    )
 
     # Calculate number of chunks
     n_points = len(phi_s)
@@ -198,7 +208,9 @@ def test_stratification_last_chunk_remainder(balanced_data):
     phi, t1, t2, g2_exp = balanced_data
     target_chunk_size = 70  # Won't divide evenly
 
-    phi_s, t1_s, t2_s, g2_s = create_angle_stratified_data(phi, t1, t2, g2_exp, target_chunk_size=target_chunk_size)
+    phi_s, t1_s, t2_s, g2_s = create_angle_stratified_data(
+        phi, t1, t2, g2_exp, target_chunk_size=target_chunk_size
+    )
 
     # Calculate number of chunks
     n_points = len(phi_s)
@@ -404,7 +416,9 @@ def test_stratification_single_point():
     t2 = np.array([1e-6])
     g2_exp = np.array([1.2])
 
-    phi_s, t1_s, t2_s, g2_s = create_angle_stratified_data(phi, t1, t2, g2_exp, target_chunk_size=50)
+    phi_s, t1_s, t2_s, g2_s = create_angle_stratified_data(
+        phi, t1, t2, g2_exp, target_chunk_size=50
+    )
 
     # Should return the single point unchanged
     assert len(phi_s) == 1
@@ -440,7 +454,9 @@ def test_stratification_jax_array_input(balanced_data):
     g2_jax = jnp.array(g2_exp)
 
     # Should work with JAX arrays
-    phi_s, t1_s, t2_s, g2_s = create_angle_stratified_data(phi_jax, t1_jax, t2_jax, g2_jax, target_chunk_size=50)
+    phi_s, t1_s, t2_s, g2_s = create_angle_stratified_data(
+        phi_jax, t1_jax, t2_jax, g2_jax, target_chunk_size=50
+    )
 
     # Check result is valid
     assert len(phi_s) == len(phi)
@@ -450,7 +466,9 @@ def test_stratification_output_numpy_compatible(balanced_data):
     """Test that stratification output is NumPy compatible."""
     phi, t1, t2, g2_exp = balanced_data
 
-    phi_s, t1_s, t2_s, g2_s = create_angle_stratified_data(phi, t1, t2, g2_exp, target_chunk_size=50)
+    phi_s, t1_s, t2_s, g2_s = create_angle_stratified_data(
+        phi, t1, t2, g2_exp, target_chunk_size=50
+    )
 
     # Output should work with NumPy operations
     mean_phi = np.mean(np.asarray(phi_s))
@@ -475,13 +493,15 @@ def test_stratified_result_types(balanced_data):
     phi, t1, t2, g2_exp = balanced_data
     target_chunk_size = 75
 
-    phi_s, t1_s, t2_s, g2_s = create_angle_stratified_data(phi, t1, t2, g2_exp, target_chunk_size=target_chunk_size)
+    phi_s, t1_s, t2_s, g2_s = create_angle_stratified_data(
+        phi, t1, t2, g2_exp, target_chunk_size=target_chunk_size
+    )
 
     # Check that all outputs are array-like
-    assert hasattr(phi_s, '__len__')
-    assert hasattr(t1_s, '__len__')
-    assert hasattr(t2_s, '__len__')
-    assert hasattr(g2_s, '__len__')
+    assert hasattr(phi_s, "__len__")
+    assert hasattr(t1_s, "__len__")
+    assert hasattr(t2_s, "__len__")
+    assert hasattr(g2_s, "__len__")
 
     # Check consistent lengths
     assert len(phi_s) == len(t1_s) == len(t2_s) == len(g2_s)
@@ -499,9 +519,9 @@ def test_stratified_result_types(balanced_data):
 def test_index_based_returns_correct_length(balanced_data):
     """Test that index array has correct length."""
     phi, t1, t2, g2_exp = balanced_data
-    
+
     indices = create_angle_stratified_indices(phi, target_chunk_size=75)
-    
+
     # Index array should have same length as input
     assert len(indices) == len(phi)
 
@@ -509,9 +529,9 @@ def test_index_based_returns_correct_length(balanced_data):
 def test_index_based_no_duplicates(balanced_data):
     """Test that index array contains no duplicates."""
     phi, t1, t2, g2_exp = balanced_data
-    
+
     indices = create_angle_stratified_indices(phi, target_chunk_size=75)
-    
+
     # All indices should be unique
     assert len(np.unique(indices)) == len(indices)
 
@@ -519,9 +539,9 @@ def test_index_based_no_duplicates(balanced_data):
 def test_index_based_all_indices_valid(balanced_data):
     """Test that all indices are valid (in range)."""
     phi, t1, t2, g2_exp = balanced_data
-    
+
     indices = create_angle_stratified_indices(phi, target_chunk_size=75)
-    
+
     # All indices should be in [0, len(phi))
     assert np.all(indices >= 0)
     assert np.all(indices < len(phi))
@@ -530,16 +550,16 @@ def test_index_based_all_indices_valid(balanced_data):
 def test_index_based_preserves_data_when_applied(balanced_data):
     """Test that applying indices preserves all data."""
     phi, t1, t2, g2_exp = balanced_data
-    
+
     indices = create_angle_stratified_indices(phi, target_chunk_size=75)
-    
+
     # Apply indices
     phi_stratified = phi[indices]
     g2_stratified = g2_exp[indices]
-    
+
     # Should preserve all unique values
     assert set(np.unique(phi)) == set(np.unique(phi_stratified))
-    
+
     # Total sum should be preserved (within floating point error)
     assert np.allclose(np.sort(g2_exp), np.sort(g2_stratified))
 
@@ -548,19 +568,19 @@ def test_index_based_equivalent_to_full_copy(balanced_data):
     """Test that index-based produces same result as full copy."""
     phi, t1, t2, g2_exp = balanced_data
     target_chunk_size = 75
-    
+
     # Full copy approach
     phi_full, t1_full, t2_full, g2_full = create_angle_stratified_data(
         phi, t1, t2, g2_exp, target_chunk_size=target_chunk_size
     )
-    
+
     # Index-based approach
     indices = create_angle_stratified_indices(phi, target_chunk_size=target_chunk_size)
     phi_index = phi[indices]
     t1_index = t1[indices]
     t2_index = t2[indices]
     g2_index = g2_exp[indices]
-    
+
     # Should produce identical results
     assert_allclose(phi_full, phi_index)
     assert_allclose(t1_full, t1_index)
@@ -571,12 +591,12 @@ def test_index_based_equivalent_to_full_copy(balanced_data):
 def test_index_based_single_angle_identity(balanced_data):
     """Test that single angle returns identity index."""
     phi, t1, t2, g2_exp = balanced_data
-    
+
     # Use only first angle
     phi_single = phi[:100]  # All same angle
-    
+
     indices = create_angle_stratified_indices(phi_single, target_chunk_size=75)
-    
+
     # Should return identity index [0, 1, 2, ..., 99]
     expected = np.arange(len(phi_single))
     assert_array_equal(indices, expected)
@@ -586,17 +606,17 @@ def test_index_based_memory_efficiency():
     """Test that index-based uses less memory than full copy."""
     n_points = 300
     phi = np.repeat([0.0, 45.0, 90.0], 100)
-    
+
     # Estimate memory for both approaches
     mem_full = estimate_stratification_memory(n_points, use_index_based=False)
     mem_index = estimate_stratification_memory(n_points, use_index_based=True)
-    
+
     # Index-based should use significantly less memory
-    assert mem_index['peak_memory_mb'] < mem_full['peak_memory_mb']
-    
+    assert mem_index["peak_memory_mb"] < mem_full["peak_memory_mb"]
+
     # Index-based should have zero stratified copy memory
-    assert mem_index['stratified_memory_mb'] == 0
-    assert mem_full['stratified_memory_mb'] > 0
+    assert mem_index["stratified_memory_mb"] == 0
+    assert mem_full["stratified_memory_mb"] > 0
 
 
 def test_index_based_large_dataset():
@@ -604,11 +624,11 @@ def test_index_based_large_dataset():
     n_points = 100_000
     n_angles = 5
     points_per_angle = n_points // n_angles
-    
+
     phi = np.repeat(np.linspace(0, 180, n_angles), points_per_angle)
-    
+
     indices = create_angle_stratified_indices(phi, target_chunk_size=10_000)
-    
+
     # Basic validity checks
     assert len(indices) == n_points
     assert len(np.unique(indices)) == n_points

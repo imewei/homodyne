@@ -1732,7 +1732,9 @@ def load_xpcs_data(
     # Backward compatibility: if config_path is a dict, treat it as config_dict
     if isinstance(config_path, dict):
         if config_dict is not None:
-            raise ValueError("Cannot provide both config_path as dict and config_dict parameter")
+            raise ValueError(
+                "Cannot provide both config_path as dict and config_dict parameter"
+            )
         config_dict = config_path
         config_path = None
 

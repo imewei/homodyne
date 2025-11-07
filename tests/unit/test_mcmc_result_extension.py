@@ -144,9 +144,24 @@ class TestCMCFieldsPreservation:
     def test_per_shard_diagnostics_storage(self):
         """Test per_shard_diagnostics field storage."""
         diagnostics = [
-            {"shard_id": 0, "converged": True, "acceptance_rate": 0.85, "n_samples": 1000},
-            {"shard_id": 1, "converged": True, "acceptance_rate": 0.82, "n_samples": 1000},
-            {"shard_id": 2, "converged": False, "acceptance_rate": 0.45, "n_samples": 1000},
+            {
+                "shard_id": 0,
+                "converged": True,
+                "acceptance_rate": 0.85,
+                "n_samples": 1000,
+            },
+            {
+                "shard_id": 1,
+                "converged": True,
+                "acceptance_rate": 0.82,
+                "n_samples": 1000,
+            },
+            {
+                "shard_id": 2,
+                "converged": False,
+                "acceptance_rate": 0.45,
+                "n_samples": 1000,
+            },
         ]
 
         result = MCMCResult(
@@ -294,7 +309,9 @@ class TestSerialization:
             samples_offset=np.array([0.98, 1.02]),
             num_shards=5,
             combination_method="average",
-            per_shard_diagnostics=[{"shard_id": i, "converged": True} for i in range(5)],
+            per_shard_diagnostics=[
+                {"shard_id": i, "converged": True} for i in range(5)
+            ],
             cmc_diagnostics={"combination_success": True},
         )
 

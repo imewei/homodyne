@@ -206,7 +206,10 @@ class CheckpointManager:
         except Exception as e:
             raise NLSQCheckpointError(
                 f"Failed to save checkpoint at batch {batch_idx}: {e}",
-                error_context={"batch_idx": batch_idx, "checkpoint_path": str(checkpoint_path)},
+                error_context={
+                    "batch_idx": batch_idx,
+                    "checkpoint_path": str(checkpoint_path),
+                },
             ) from e
 
     def load_checkpoint(self, checkpoint_path: Path) -> dict:

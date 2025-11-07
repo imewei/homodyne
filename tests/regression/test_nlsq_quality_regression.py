@@ -39,50 +39,50 @@ class ReferenceResults:
 
     # Static isotropic reference (from scientific validation)
     STATIC_ISOTROPIC_REFERENCE = {
-        'true_params': {
-            'contrast': 0.3,
-            'offset': 1.0,
-            'D0': 1000.0,
-            'alpha': 0.5,
-            'D_offset': 10.0,
+        "true_params": {
+            "contrast": 0.3,
+            "offset": 1.0,
+            "D0": 1000.0,
+            "alpha": 0.5,
+            "D_offset": 10.0,
         },
-        'expected_recovery_error_pct': {
-            'contrast': 5.0,  # < 5% error
-            'offset': 2.0,  # < 2% error
-            'D0': 10.0,  # < 10% error
-            'alpha': 5.0,  # < 5% error
-            'D_offset': 15.0,  # < 15% error
+        "expected_recovery_error_pct": {
+            "contrast": 5.0,  # < 5% error
+            "offset": 2.0,  # < 2% error
+            "D0": 10.0,  # < 10% error
+            "alpha": 5.0,  # < 5% error
+            "D_offset": 15.0,  # < 15% error
         },
-        'max_chi_squared': 1.5,  # Acceptable fit quality
-        'min_success_rate': 0.95,  # 95% success rate
+        "max_chi_squared": 1.5,  # Acceptable fit quality
+        "min_success_rate": 0.95,  # 95% success rate
     }
 
     # Laminar flow reference
     LAMINAR_FLOW_REFERENCE = {
-        'true_params': {
-            'contrast': 0.3,
-            'offset': 1.0,
-            'D0': 1000.0,
-            'alpha': 0.5,
-            'D_offset': 10.0,
-            'gamma_dot_0': 0.1,
-            'beta': 0.8,
-            'gamma_dot_offset': 0.01,
-            'phi_0': 45.0,
+        "true_params": {
+            "contrast": 0.3,
+            "offset": 1.0,
+            "D0": 1000.0,
+            "alpha": 0.5,
+            "D_offset": 10.0,
+            "gamma_dot_0": 0.1,
+            "beta": 0.8,
+            "gamma_dot_offset": 0.01,
+            "phi_0": 45.0,
         },
-        'expected_recovery_error_pct': {
-            'contrast': 5.0,
-            'offset': 2.0,
-            'D0': 10.0,
-            'alpha': 5.0,
-            'D_offset': 15.0,
-            'gamma_dot_0': 20.0,
-            'beta': 10.0,
-            'gamma_dot_offset': 25.0,
-            'phi_0': 5.0,
+        "expected_recovery_error_pct": {
+            "contrast": 5.0,
+            "offset": 2.0,
+            "D0": 10.0,
+            "alpha": 5.0,
+            "D_offset": 15.0,
+            "gamma_dot_0": 20.0,
+            "beta": 10.0,
+            "gamma_dot_offset": 25.0,
+            "phi_0": 5.0,
         },
-        'max_chi_squared': 2.0,
-        'min_success_rate': 0.90,
+        "max_chi_squared": 2.0,
+        "min_success_rate": 0.90,
     }
 
 
@@ -97,8 +97,8 @@ class TestParameterRecoveryQuality:
     def test_static_isotropic_recovery_quality(self):
         """Test static isotropic parameter recovery meets quality standards."""
         ref = ReferenceResults.STATIC_ISOTROPIC_REFERENCE
-        true_params = ref['true_params']
-        max_errors = ref['expected_recovery_error_pct']
+        true_params = ref["true_params"]
+        max_errors = ref["expected_recovery_error_pct"]
 
         factory = LargeDatasetFactory(seed=42)
 
@@ -112,13 +112,15 @@ class TestParameterRecoveryQuality:
         )
 
         # Initial guess (perturbed from true values)
-        initial_params = np.array([
-            true_params['contrast'] * 1.1,
-            true_params['offset'] * 0.95,
-            true_params['D0'] * 1.2,
-            true_params['alpha'] * 0.9,
-            true_params['D_offset'] * 1.15,
-        ])
+        initial_params = np.array(
+            [
+                true_params["contrast"] * 1.1,
+                true_params["offset"] * 0.95,
+                true_params["D0"] * 1.2,
+                true_params["alpha"] * 0.9,
+                true_params["D_offset"] * 1.15,
+            ]
+        )
 
         # Bounds
         bounds = (
@@ -132,16 +134,18 @@ class TestParameterRecoveryQuality:
         wrapper = NLSQWrapper(enable_large_dataset=False)
 
         # Simulate optimized parameters (in real test, from actual fit)
-        optimized_params = np.array([
-            true_params['contrast'] * 1.02,  # 2% error
-            true_params['offset'] * 1.01,  # 1% error
-            true_params['D0'] * 1.05,  # 5% error
-            true_params['alpha'] * 1.03,  # 3% error
-            true_params['D_offset'] * 1.08,  # 8% error
-        ])
+        optimized_params = np.array(
+            [
+                true_params["contrast"] * 1.02,  # 2% error
+                true_params["offset"] * 1.01,  # 1% error
+                true_params["D0"] * 1.05,  # 5% error
+                true_params["alpha"] * 1.03,  # 3% error
+                true_params["D_offset"] * 1.08,  # 8% error
+            ]
+        )
 
         # Validate recovery quality
-        param_names = ['contrast', 'offset', 'D0', 'alpha', 'D_offset']
+        param_names = ["contrast", "offset", "D0", "alpha", "D_offset"]
         true_values = np.array([true_params[name] for name in param_names])
 
         recovery_errors_pct = np.abs(optimized_params - true_values) / true_values * 100
@@ -157,30 +161,46 @@ class TestParameterRecoveryQuality:
     def test_laminar_flow_recovery_quality(self):
         """Test laminar flow parameter recovery meets quality standards."""
         ref = ReferenceResults.LAMINAR_FLOW_REFERENCE
-        true_params = ref['true_params']
-        max_errors = ref['expected_recovery_error_pct']
+        true_params = ref["true_params"]
+        max_errors = ref["expected_recovery_error_pct"]
 
         # For laminar flow, 9 parameters
         param_names = [
-            'contrast', 'offset', 'D0', 'alpha', 'D_offset',
-            'gamma_dot_0', 'beta', 'gamma_dot_offset', 'phi_0'
+            "contrast",
+            "offset",
+            "D0",
+            "alpha",
+            "D_offset",
+            "gamma_dot_0",
+            "beta",
+            "gamma_dot_offset",
+            "phi_0",
         ]
 
         true_values = np.array([true_params[name] for name in param_names])
 
         # Simulate optimized parameters (within tolerance)
-        optimized_params = true_values * np.array([
-            1.02, 1.01, 1.05, 1.03, 1.08,  # First 5
-            1.10, 1.05, 1.15, 1.02,  # Last 4
-        ])
+        optimized_params = true_values * np.array(
+            [
+                1.02,
+                1.01,
+                1.05,
+                1.03,
+                1.08,  # First 5
+                1.10,
+                1.05,
+                1.15,
+                1.02,  # Last 4
+            ]
+        )
 
         recovery_errors_pct = np.abs(optimized_params - true_values) / true_values * 100
         max_allowed_errors = np.array([max_errors[name] for name in param_names])
 
         # All parameters should be recovered within tolerance
-        assert np.all(recovery_errors_pct <= max_allowed_errors), (
-            f"Parameter recovery errors exceed tolerance for laminar flow"
-        )
+        assert np.all(
+            recovery_errors_pct <= max_allowed_errors
+        ), f"Parameter recovery errors exceed tolerance for laminar flow"
 
 
 # ============================================================================
@@ -200,23 +220,25 @@ class TestConvergenceBehavior:
         # Simulate optimization result
         simulated_iterations = 25
 
-        assert expected_min_iterations <= simulated_iterations <= expected_max_iterations
+        assert (
+            expected_min_iterations <= simulated_iterations <= expected_max_iterations
+        )
 
     def test_convergence_criteria_unchanged(self):
         """Test convergence criteria remain unchanged."""
         # Reference convergence criteria
         ref_criteria = {
-            'xtol': 1e-8,  # Parameter tolerance
-            'ftol': 1e-8,  # Function tolerance
-            'gtol': 1e-8,  # Gradient tolerance
-            'max_iterations': 1000,
+            "xtol": 1e-8,  # Parameter tolerance
+            "ftol": 1e-8,  # Function tolerance
+            "gtol": 1e-8,  # Gradient tolerance
+            "max_iterations": 1000,
         }
 
         # These should remain constant
-        assert ref_criteria['xtol'] == 1e-8
-        assert ref_criteria['ftol'] == 1e-8
-        assert ref_criteria['gtol'] == 1e-8
-        assert ref_criteria['max_iterations'] == 1000
+        assert ref_criteria["xtol"] == 1e-8
+        assert ref_criteria["ftol"] == 1e-8
+        assert ref_criteria["gtol"] == 1e-8
+        assert ref_criteria["max_iterations"] == 1000
 
     def test_chi_squared_fit_quality(self):
         """Test chi-squared fit quality remains acceptable."""
@@ -226,7 +248,7 @@ class TestConvergenceBehavior:
         simulated_chi_squared = 1.2  # Good fit
 
         # Should be below threshold
-        assert simulated_chi_squared < ref['max_chi_squared'], (
+        assert simulated_chi_squared < ref["max_chi_squared"], (
             f"Chi-squared {simulated_chi_squared:.2f} exceeds "
             f"threshold {ref['max_chi_squared']:.2f}"
         )
@@ -235,15 +257,15 @@ class TestConvergenceBehavior:
         """Test convergence status reporting is consistent."""
         # Expected convergence statuses
         valid_statuses = [
-            'success',
-            'max_iterations_reached',
-            'xtol_satisfied',
-            'ftol_satisfied',
-            'gtol_satisfied',
+            "success",
+            "max_iterations_reached",
+            "xtol_satisfied",
+            "ftol_satisfied",
+            "gtol_satisfied",
         ]
 
         # Simulate status
-        simulated_status = 'success'
+        simulated_status = "success"
 
         assert simulated_status in valid_statuses
 
@@ -265,9 +287,9 @@ class TestResultQualityMetrics:
         # Relative uncertainties should be reasonable (< 10%)
         relative_uncertainties = uncertainties / np.abs(parameters)
 
-        assert np.all(relative_uncertainties < 0.1), (
-            f"Some uncertainties exceed 10%: {relative_uncertainties}"
-        )
+        assert np.all(
+            relative_uncertainties < 0.1
+        ), f"Some uncertainties exceed 10%: {relative_uncertainties}"
 
     def test_covariance_matrix_quality(self):
         """Test covariance matrix quality."""
@@ -277,12 +299,14 @@ class TestResultQualityMetrics:
 
         # Should be positive semi-definite
         eigenvalues = np.linalg.eigvalsh(covariance)
-        assert np.all(eigenvalues >= -1e-10), "Covariance matrix not positive semi-definite"
+        assert np.all(
+            eigenvalues >= -1e-10
+        ), "Covariance matrix not positive semi-definite"
 
         # Should not be identity (would indicate no information)
-        assert not np.allclose(covariance, np.eye(n_params)), (
-            "Covariance is identity matrix (no optimization occurred)"
-        )
+        assert not np.allclose(
+            covariance, np.eye(n_params)
+        ), "Covariance is identity matrix (no optimization occurred)"
 
     def test_residuals_distribution(self):
         """Test residuals follow expected distribution."""
@@ -305,7 +329,7 @@ class TestResultQualityMetrics:
         n_attempts = 50
         success_rate = n_successes / n_attempts
 
-        assert success_rate >= ref['min_success_rate'], (
+        assert success_rate >= ref["min_success_rate"], (
             f"Success rate {success_rate:.2%} below "
             f"threshold {ref['min_success_rate']:.2%}"
         )
@@ -343,10 +367,17 @@ class TestBackwardCompatibility:
 
         # Should have these parameters
         import inspect
+
         fit_signature = inspect.signature(wrapper.fit)
         param_names = list(fit_signature.parameters.keys())
 
-        required_params = ['data', 'config', 'initial_params', 'bounds', 'analysis_mode']
+        required_params = [
+            "data",
+            "config",
+            "initial_params",
+            "bounds",
+            "analysis_mode",
+        ]
         for param in required_params:
             assert param in param_names, f"Missing required parameter: {param}"
 
@@ -354,15 +385,15 @@ class TestBackwardCompatibility:
         """Test OptimizationResult dataclass is backward compatible."""
         # Should have these fields (updated to match v2.1.0 API)
         required_fields = [
-            'parameters',
-            'uncertainties',
-            'covariance',  # Updated from covariance_matrix
-            'chi_squared',
-            'reduced_chi_squared',
-            'iterations',
-            'convergence_status',
-            'execution_time',
-            'success',  # @property for backward compatibility
+            "parameters",
+            "uncertainties",
+            "covariance",  # Updated from covariance_matrix
+            "chi_squared",
+            "reduced_chi_squared",
+            "iterations",
+            "convergence_status",
+            "execution_time",
+            "success",  # @property for backward compatibility
         ]
 
         # Create mock result with current API
@@ -372,10 +403,10 @@ class TestBackwardCompatibility:
             covariance=np.eye(1),  # Updated from covariance_matrix
             chi_squared=1.0,
             reduced_chi_squared=1.0,
-            convergence_status='converged',  # Updated from 'success'
+            convergence_status="converged",  # Updated from 'success'
             iterations=10,
             execution_time=1.5,
-            device_info={'platform': 'cpu'},  # Added required field
+            device_info={"platform": "cpu"},  # Added required field
         )
 
         # All required fields should be accessible
@@ -411,7 +442,9 @@ class TestPerformanceRegression:
         simulated_time = 1.05  # 5% slower
 
         # Calculate regression
-        regression_pct = (simulated_time - baseline_time_seconds) / baseline_time_seconds * 100
+        regression_pct = (
+            (simulated_time - baseline_time_seconds) / baseline_time_seconds * 100
+        )
 
         assert regression_pct < acceptable_regression_pct, (
             f"Performance regressed by {regression_pct:.1f}% "
@@ -428,7 +461,9 @@ class TestPerformanceRegression:
         simulated_memory = 110.0  # 10% more
 
         # Calculate regression
-        regression_pct = (simulated_memory - baseline_memory_mb) / baseline_memory_mb * 100
+        regression_pct = (
+            (simulated_memory - baseline_memory_mb) / baseline_memory_mb * 100
+        )
 
         assert regression_pct < acceptable_regression_pct, (
             f"Memory usage regressed by {regression_pct:.1f}% "
@@ -446,9 +481,9 @@ class TestPerformanceRegression:
         # Should be within 10% of baseline
         throughput_ratio = simulated_throughput / baseline_throughput
 
-        assert throughput_ratio > 0.9, (
-            f"Throughput dropped to {throughput_ratio:.1%} of baseline"
-        )
+        assert (
+            throughput_ratio > 0.9
+        ), f"Throughput dropped to {throughput_ratio:.1%} of baseline"
 
 
 # ============================================================================
@@ -475,12 +510,12 @@ class TestReferenceDataValidation:
         simulated_errors = np.array([2.0, 1.5, 5.0, 3.0, 8.0])  # % errors
 
         # All errors should be within scientific validation bounds
-        assert np.all(simulated_errors >= expected_min_error * 0.5), (
-            "Some parameters recovered too well (suspiciously low error)"
-        )
-        assert np.all(simulated_errors <= expected_max_error * 1.5), (
-            "Some parameters exceeded maximum acceptable error"
-        )
+        assert np.all(
+            simulated_errors >= expected_min_error * 0.5
+        ), "Some parameters recovered too well (suspiciously low error)"
+        assert np.all(
+            simulated_errors <= expected_max_error * 1.5
+        ), "Some parameters exceeded maximum acceptable error"
 
     def test_consistency_across_initial_conditions(self):
         """Test consistency across different initial conditions.
@@ -520,12 +555,12 @@ def test_regression_test_summary():
     6. Reference data validated
     """
     regression_requirements = {
-        'parameter_recovery_quality': True,
-        'convergence_behavior': True,
-        'result_quality': True,
-        'backward_compatibility': True,
-        'no_performance_regression': True,
-        'reference_data_validation': True,
+        "parameter_recovery_quality": True,
+        "convergence_behavior": True,
+        "result_quality": True,
+        "backward_compatibility": True,
+        "no_performance_regression": True,
+        "reference_data_validation": True,
     }
 
     # All requirements tested

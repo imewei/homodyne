@@ -22,8 +22,6 @@ tests/
 │   └── test_mathematical_properties.py # Hypothesis-driven property tests
 ├── factories/                    # Test data generation
 │   └── data_factory.py          # Synthetic data and mock file generators
-├── gpu/                         # GPU acceleration validation
-│   └── test_gpu_validation.py   # GPU performance and consistency tests
 ├── mcmc/                        # MCMC statistical validation
 │   └── test_statistical_validation.py # Bayesian sampling validation
 └── api/                         # API compatibility tests
@@ -50,7 +48,6 @@ tests/
 - **Computational Benchmarks**: JAX operations, optimization performance
 - **Memory Scaling**: Memory usage patterns and scaling behavior
 - **Regression Testing**: Performance baseline validation
-- **CPU vs GPU Comparison**: Acceleration validation
 
 ### 🎯 Property Tests (`property/`)
 
@@ -65,13 +62,6 @@ tests/
 - **Mock File Creation**: HDF5 files in APS and APS-U formats
 - **Parameter Sets**: Edge cases, realistic scenarios, sweeps
 - **Noise Models**: Various noise types and artifacts
-
-### 🖥️ GPU Tests (`gpu/`)
-
-- **GPU Detection**: Hardware detection and activation
-- **Performance Validation**: Speedup verification, memory management
-- **Numerical Consistency**: CPU vs GPU result validation
-- **Error Handling**: Graceful fallbacks, invalid configurations
 
 ### 📊 MCMC Tests (`mcmc/`)
 
@@ -107,7 +97,6 @@ python tests/test_runner.py full
 python tests/test_runner.py unit          # Unit tests only
 python tests/test_runner.py integration   # Integration tests
 python tests/test_runner.py performance   # Performance benchmarks
-python tests/test_runner.py gpu          # GPU acceleration tests
 python tests/test_runner.py mcmc         # MCMC statistical tests
 python tests/test_runner.py property     # Property-based tests
 python tests/test_runner.py api          # API compatibility tests
@@ -130,7 +119,6 @@ python tests/test_runner.py env          # Check test environment
 ```bash
 pytest tests/unit/                       # Unit tests
 pytest tests/ -m "not slow"             # Fast tests only
-pytest tests/ -m "gpu and requires_gpu" # GPU tests only
 pytest tests/ -k "test_optimization"    # Specific test patterns
 ```
 
@@ -139,12 +127,10 @@ pytest tests/ -k "test_optimization"    # Specific test patterns
 - `unit`: Unit tests for individual components
 - `integration`: Integration tests for workflows
 - `performance`: Performance and benchmark tests
-- `gpu`: GPU acceleration tests
 - `mcmc`: MCMC statistical tests
 - `property`: Property-based tests with Hypothesis
 - `slow`: Slow tests (> 5 seconds)
 - `requires_jax`: Requires JAX installation
-- `requires_gpu`: Requires GPU hardware
 - `api`: API compatibility tests
 
 ## Dependencies
@@ -213,7 +199,6 @@ pytest tests/ -k "test_optimization"    # Specific test patterns
 The test suite is designed for automated CI/CD with:
 
 - Parallel test execution
-- GPU test skipping in environments without GPU
 - Comprehensive reporting (HTML, XML, coverage)
 - Performance regression detection
 - Cross-platform validation
@@ -222,7 +207,7 @@ The test suite is designed for automated CI/CD with:
 
 ### Computational Performance
 
-- **Matrix Operations**: > 10 GFLOPS (CPU), > 100 GFLOPS (GPU)
+- **Matrix Operations**: > 10 GFLOPS (CPU)
 - **NLSQ Optimization**: < 30s for standard datasets
 - **Data Loading**: > 1 MB/s for HDF5 files
 - **Memory Usage**: < 10x theoretical minimum
@@ -248,9 +233,7 @@ When adding new features:
 
 ### Common Issues
 
-- **JAX not available**: Install with `pip install "jax[cpu]"` or
-  `pip install "jax[cuda12-local]"`
-- **GPU tests failing**: Ensure CUDA 12.1+ and compatible drivers
+- **JAX not available**: Install with `pip install "jax[cpu]"`
 - **MCMC tests slow**: Reduce sample sizes in test configuration
 - **H5PY issues**: Install with `pip install h5py`
 - **Hypothesis tests failing**: Update to latest hypothesis version
@@ -259,7 +242,6 @@ When adding new features:
 
 - **Slow tests**: Use `pytest -m "not slow"` for development
 - **Memory errors**: Reduce dataset sizes in performance tests
-- **GPU memory**: Lower `memory_fraction` in GPU tests
 - **Parallel execution**: Use `pytest -n auto` for multicore testing
 
 For detailed troubleshooting, see the main package documentation.

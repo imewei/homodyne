@@ -79,7 +79,7 @@ class StratifiedResidualFunction:
         stratified_data: Any,
         per_angle_scaling: bool,
         physical_param_names: List[str],
-        logger: Optional[logging.Logger] = None
+        logger: Optional[logging.Logger] = None,
     ):
         """
         Initialize the stratified residual function.
@@ -145,9 +145,9 @@ class StratifiedResidualFunction:
         self.chunk_metadata = []
         for chunk in self.chunks:
             metadata = {
-                'phi_unique': jnp.sort(jnp.unique(jnp.asarray(chunk.phi))),
-                't1_unique': jnp.sort(jnp.unique(jnp.asarray(chunk.t1))),
-                't2_unique': jnp.sort(jnp.unique(jnp.asarray(chunk.t2))),
+                "phi_unique": jnp.sort(jnp.unique(jnp.asarray(chunk.phi))),
+                "t1_unique": jnp.sort(jnp.unique(jnp.asarray(chunk.t1))),
+                "t2_unique": jnp.sort(jnp.unique(jnp.asarray(chunk.t2))),
             }
             self.chunk_metadata.append(metadata)
 
@@ -174,7 +174,7 @@ class StratifiedResidualFunction:
         t2_unique: jnp.ndarray,
         q: float,
         L: float,
-        dt: Optional[float]
+        dt: Optional[float],
     ) -> jnp.ndarray:
         """
         Raw chunk residual computation (JIT-compiled).
@@ -206,9 +206,9 @@ class StratifiedResidualFunction:
         # Extract scaling and physical parameters
         if self.per_angle_scaling:
             # Per-angle mode: params = [contrast_0, ..., contrast_{n-1}, offset_0, ..., offset_{n-1}, *physical]
-            contrast = params_all[:self.n_phi]  # Shape: (n_phi,)
-            offset = params_all[self.n_phi:2*self.n_phi]  # Shape: (n_phi,)
-            physical_params = params_all[2*self.n_phi:]
+            contrast = params_all[: self.n_phi]  # Shape: (n_phi,)
+            offset = params_all[self.n_phi : 2 * self.n_phi]  # Shape: (n_phi,)
+            physical_params = params_all[2 * self.n_phi :]
         else:
             # Legacy mode: params = [contrast, offset, *physical]
             contrast = params_all[0]  # Scalar
@@ -235,7 +235,9 @@ class StratifiedResidualFunction:
                 ),
                 in_axes=(0, 0, 0),
             )
-            g2_theory_grid = compute_g2_vmap(phi_unique, contrast, offset)  # Shape: (n_phi, n_t1, n_t2)
+            g2_theory_grid = compute_g2_vmap(
+                phi_unique, contrast, offset
+            )  # Shape: (n_phi, n_t1, n_t2)
         else:
             # Legacy: single contrast/offset for all angles
             compute_g2_vmap = jax.vmap(
@@ -328,12 +330,12 @@ class StratifiedResidualFunction:
                 g2_obs=jnp.asarray(chunk.g2),
                 sigma_full=sigma_full,
                 params_all=params_jax,
-                phi_unique=metadata['phi_unique'],
-                t1_unique=metadata['t1_unique'],
-                t2_unique=metadata['t2_unique'],
+                phi_unique=metadata["phi_unique"],
+                t1_unique=metadata["t1_unique"],
+                t2_unique=metadata["t2_unique"],
                 q=float(chunk.q),
                 L=float(chunk.L),
-                dt=float(chunk.dt) if chunk.dt is not None else None
+                dt=float(chunk.dt) if chunk.dt is not None else None,
             )
             all_residuals.append(chunk_residuals)
 
@@ -451,7 +453,7 @@ def create_stratified_residual_function(
     per_angle_scaling: bool,
     physical_param_names: List[str],
     logger: Optional[logging.Logger] = None,
-    validate: bool = True
+    validate: bool = True,
 ) -> StratifiedResidualFunction:
     """
     Factory function to create and validate a stratified residual function.
@@ -485,7 +487,7 @@ def create_stratified_residual_function(
         stratified_data=stratified_data,
         per_angle_scaling=per_angle_scaling,
         physical_param_names=physical_param_names,
-        logger=logger
+        logger=logger,
     )
 
     if validate:

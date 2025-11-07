@@ -137,7 +137,7 @@ class PjitBackend(CMCBackend):
         # Detect JAX devices (GPU or CPU based on system configuration)
         self.devices = jax.devices()
         self.num_devices = len(self.devices)
-        self.platform = self.devices[0].platform if self.devices else 'cpu'
+        self.platform = self.devices[0].platform if self.devices else "cpu"
         self.is_parallel = self.num_devices > 1
 
         logger.info(
@@ -198,14 +198,22 @@ class PjitBackend(CMCBackend):
         # Sequential execution (single GPU or CPU)
         if not self.is_parallel:
             return self._run_sequential(
-                shards, mcmc_config, init_params, inv_mass_matrix,
-                analysis_mode, parameter_space
+                shards,
+                mcmc_config,
+                init_params,
+                inv_mass_matrix,
+                analysis_mode,
+                parameter_space,
             )
 
         # Parallel execution (multi-GPU)
         return self._run_parallel(
-            shards, mcmc_config, init_params, inv_mass_matrix,
-            analysis_mode, parameter_space
+            shards,
+            mcmc_config,
+            init_params,
+            inv_mass_matrix,
+            analysis_mode,
+            parameter_space,
         )
 
     def _run_sequential(
@@ -215,7 +223,7 @@ class PjitBackend(CMCBackend):
         init_params: Dict[str, float],
         inv_mass_matrix: np.ndarray,
         analysis_mode: str = "static_isotropic",
-        parameter_space: Optional['ParameterSpace'] = None,
+        parameter_space: Optional["ParameterSpace"] = None,
     ) -> List[Dict[str, Any]]:
         """Execute shards sequentially on single device.
 
@@ -239,7 +247,9 @@ class PjitBackend(CMCBackend):
         list of dict
             Per-shard results
         """
-        logger.info(f"Sequential execution: processing {len(shards)} shards one at a time")
+        logger.info(
+            f"Sequential execution: processing {len(shards)} shards one at a time"
+        )
 
         results = []
         for i, shard in enumerate(shards):
@@ -249,19 +259,24 @@ class PjitBackend(CMCBackend):
             try:
                 # Run MCMC on single shard
                 result = self._run_single_shard_mcmc(
-                    shard, mcmc_config, init_params, inv_mass_matrix,
-                    analysis_mode, parameter_space, shard_idx=i
+                    shard,
+                    mcmc_config,
+                    init_params,
+                    inv_mass_matrix,
+                    analysis_mode,
+                    parameter_space,
+                    shard_idx=i,
                 )
 
                 # Add timing
-                result['elapsed_time'] = self._get_elapsed_time(start_time)
+                result["elapsed_time"] = self._get_elapsed_time(start_time)
 
                 # Validate result
                 self._validate_shard_result(result, i)
 
                 # Log completion
                 self._log_shard_complete(
-                    i, len(shards), result['elapsed_time'], result['converged']
+                    i, len(shards), result["elapsed_time"], result["converged"]
                 )
 
                 results.append(result)
@@ -269,7 +284,7 @@ class PjitBackend(CMCBackend):
             except Exception as e:
                 # Handle error
                 error_result = self._handle_shard_error(e, i)
-                error_result['elapsed_time'] = self._get_elapsed_time(start_time)
+                error_result["elapsed_time"] = self._get_elapsed_time(start_time)
                 results.append(error_result)
 
         return results
@@ -323,8 +338,11 @@ class PjitBackend(CMCBackend):
 
             # Process batch in parallel
             batch_results = self._run_parallel_batch(
-                batch_shards, mcmc_config, init_params, inv_mass_matrix,
-                start_shard_idx=start_idx
+                batch_shards,
+                mcmc_config,
+                init_params,
+                inv_mass_matrix,
+                start_shard_idx=start_idx,
             )
 
             results.extend(batch_results)
@@ -384,16 +402,18 @@ class PjitBackend(CMCBackend):
                 result = self._run_single_shard_mcmc(
                     shard, mcmc_config, init_params, inv_mass_matrix, shard_idx
                 )
-                result['elapsed_time'] = self._get_elapsed_time(start_time)
+                result["elapsed_time"] = self._get_elapsed_time(start_time)
                 self._validate_shard_result(result, shard_idx)
                 self._log_shard_complete(
-                    shard_idx, start_shard_idx + len(batch_shards),
-                    result['elapsed_time'], result['converged']
+                    shard_idx,
+                    start_shard_idx + len(batch_shards),
+                    result["elapsed_time"],
+                    result["converged"],
                 )
                 results.append(result)
             except Exception as e:
                 error_result = self._handle_shard_error(e, shard_idx)
-                error_result['elapsed_time'] = self._get_elapsed_time(start_time)
+                error_result["elapsed_time"] = self._get_elapsed_time(start_time)
                 results.append(error_result)
 
         return results
@@ -405,7 +425,7 @@ class PjitBackend(CMCBackend):
         init_params: Dict[str, float],
         inv_mass_matrix: np.ndarray,
         analysis_mode: str,
-        parameter_space: Optional['ParameterSpace'],
+        parameter_space: Optional["ParameterSpace"],
         shard_idx: int,
     ) -> Dict[str, Any]:
         """Run MCMC on a single shard.
@@ -436,21 +456,21 @@ class PjitBackend(CMCBackend):
             Shard result with samples and diagnostics
         """
         # Extract MCMC configuration
-        num_warmup = mcmc_config.get('num_warmup', 500)
-        num_samples = mcmc_config.get('num_samples', 2000)
-        num_chains = mcmc_config.get('num_chains', 1)
-        target_accept_prob = mcmc_config.get('target_accept_prob', 0.8)
-        max_tree_depth = mcmc_config.get('max_tree_depth', 10)
+        num_warmup = mcmc_config.get("num_warmup", 500)
+        num_samples = mcmc_config.get("num_samples", 2000)
+        num_chains = mcmc_config.get("num_chains", 1)
+        target_accept_prob = mcmc_config.get("target_accept_prob", 0.8)
+        max_tree_depth = mcmc_config.get("max_tree_depth", 10)
 
         # Extract shard data - pass as numpy arrays (not JAX) to _create_numpyro_model
         # The model will handle JAX conversion internally as needed
-        data_np = shard['data']
-        sigma_np = shard.get('sigma', np.ones_like(shard['data']))
-        t1_np = shard['t1']
-        t2_np = shard['t2']
-        phi_np = shard['phi']
-        q = float(shard['q'])
-        L = float(shard['L'])
+        data_np = shard["data"]
+        sigma_np = shard.get("sigma", np.ones_like(shard["data"]))
+        t1_np = shard["t1"]
+        t2_np = shard["t2"]
+        phi_np = shard["phi"]
+        q = float(shard["q"])
+        L = float(shard["L"])
 
         # DEBUG: Log array shapes to diagnose element-wise mode detection
         logger.info(
@@ -459,7 +479,7 @@ class PjitBackend(CMCBackend):
         )
         logger.info(
             f"Shard {shard_idx} t1: ndim={t1_np.ndim}, len={len(t1_np)}, "
-            f"element-wise threshold check: t1.ndim==1={t1_np.ndim==1}, len(t1)>2000={len(t1_np)>2000}"
+            f"element-wise threshold check: t1.ndim==1={t1_np.ndim == 1}, len(t1)>2000={len(t1_np) > 2000}"
         )
 
         # Pre-compute dt before JIT compilation to avoid jnp.unique() JAX concretization error
@@ -468,7 +488,9 @@ class PjitBackend(CMCBackend):
         if t1_np is not None:
             # Use numpy (not jax.numpy) for pre-computation
             if t1_np.ndim == 2:
-                time_array = np.asarray(t1_np[:, 0] if t1_np.shape[1] > 0 else t1_np[0, :])
+                time_array = np.asarray(
+                    t1_np[:, 0] if t1_np.shape[1] > 0 else t1_np[0, :]
+                )
             else:
                 time_array = np.asarray(t1_np)
             # Estimate from first two unique time points
@@ -477,7 +499,9 @@ class PjitBackend(CMCBackend):
                 dt_computed = float(unique_times[1] - unique_times[0])
             else:
                 dt_computed = 1.0  # Fallback
-            logger.debug(f"Shard {shard_idx}: Pre-computed dt = {dt_computed:.6f} s for MCMC model")
+            logger.debug(
+                f"Shard {shard_idx}: Pre-computed dt = {dt_computed:.6f} s for MCMC model"
+            )
 
         # CRITICAL FIX (Nov 2025): Pre-compute unique phi values to prevent 80GB OOM error
         # CMC shards contain replicated phi arrays (e.g., 100K elements for 3 unique angles)
@@ -489,7 +513,7 @@ class PjitBackend(CMCBackend):
         logger.debug(
             f"Shard {shard_idx}: Extracted {len(phi_unique)} unique phi values from "
             f"{len(phi_np)} replicated elements (memory reduction: "
-            f"{len(phi_np)}→{len(phi_unique)}, {len(phi_np)/len(phi_unique):.1f}x)"
+            f"{len(phi_np)}→{len(phi_unique)}, {len(phi_np) / len(phi_unique):.1f}x)"
         )
 
         # Create NumPyro model using parameter_space bounds
@@ -549,6 +573,7 @@ class PjitBackend(CMCBackend):
             # Use centralized parameter names from homodyne.config.parameter_names
             # to ensure consistency with model definition in mcmc.py
             from homodyne.config.parameter_names import get_parameter_names
+
             param_names_base = get_parameter_names(analysis_mode)
 
             # PER-ANGLE PARAMETERS: Expand contrast and offset into per-angle names
@@ -583,9 +608,9 @@ class PjitBackend(CMCBackend):
                     f"names as defined in homodyne.config.parameter_names"
                 )
 
-            samples_array = np.stack([
-                np.array(samples_dict[name]) for name in param_names_expanded
-            ], axis=1)
+            samples_array = np.stack(
+                [np.array(samples_dict[name]) for name in param_names_expanded], axis=1
+            )
 
             # Log memory usage (architectural fix monitoring, Nov 2025)
             peak_memory_mb = samples_array.nbytes / 1e6
@@ -603,24 +628,26 @@ class PjitBackend(CMCBackend):
             # Create error message if not converged
             error_msg = None
             if not converged:
-                error_msg = "Convergence criteria not met (check diagnostics for details)"
+                error_msg = (
+                    "Convergence criteria not met (check diagnostics for details)"
+                )
 
             return {
-                'converged': converged,
-                'error': error_msg,
-                'samples': samples_array,
-                'diagnostics': diagnostics,
-                'shard_idx': shard_idx,
+                "converged": converged,
+                "error": error_msg,
+                "samples": samples_array,
+                "diagnostics": diagnostics,
+                "shard_idx": shard_idx,
             }
 
         except Exception as e:
             logger.error(f"MCMC failed for shard {shard_idx}: {str(e)}")
             return {
-                'converged': False,
-                'error': f"MCMC execution failed: {str(e)}",
-                'samples': None,
-                'diagnostics': {},
-                'shard_idx': shard_idx,
+                "converged": False,
+                "error": f"MCMC execution failed: {str(e)}",
+                "samples": None,
+                "diagnostics": {},
+                "shard_idx": shard_idx,
             }
 
     def _compute_diagnostics(
@@ -648,12 +675,12 @@ class PjitBackend(CMCBackend):
 
             # Acceptance rate
             extra_fields = mcmc.get_extra_fields()
-            if 'accept_prob' in extra_fields:
-                diagnostics['acceptance_rate'] = float(
-                    np.mean(extra_fields['accept_prob'])
+            if "accept_prob" in extra_fields:
+                diagnostics["acceptance_rate"] = float(
+                    np.mean(extra_fields["accept_prob"])
                 )
             else:
-                diagnostics['acceptance_rate'] = None
+                diagnostics["acceptance_rate"] = None
 
             # ESS and R-hat (if multiple chains)
             if mcmc.num_chains > 1:
@@ -663,34 +690,38 @@ class PjitBackend(CMCBackend):
                 ess_dict = {}
                 for param_name, samples in samples_dict.items():
                     ess = effective_sample_size(samples)
-                    ess_dict[param_name] = float(ess) if ess.size == 1 else float(np.mean(ess))
+                    ess_dict[param_name] = (
+                        float(ess) if ess.size == 1 else float(np.mean(ess))
+                    )
 
-                diagnostics['ess'] = ess_dict
+                diagnostics["ess"] = ess_dict
 
                 # Compute R-hat for each parameter
                 rhat_dict = {}
                 for param_name, samples in samples_dict.items():
                     rhat = gelman_rubin(samples)
-                    rhat_dict[param_name] = float(rhat) if rhat.size == 1 else float(np.mean(rhat))
+                    rhat_dict[param_name] = (
+                        float(rhat) if rhat.size == 1 else float(np.mean(rhat))
+                    )
 
-                diagnostics['rhat'] = rhat_dict
+                diagnostics["rhat"] = rhat_dict
             else:
                 # Single chain: use simpler diagnostics
                 ess_dict = {}
                 for param_name in samples_dict.keys():
                     ess_dict[param_name] = len(samples_dict[param_name])
 
-                diagnostics['ess'] = ess_dict
-                diagnostics['rhat'] = {k: 1.0 for k in samples_dict.keys()}
+                diagnostics["ess"] = ess_dict
+                diagnostics["rhat"] = {k: 1.0 for k in samples_dict.keys()}
 
             return diagnostics
 
         except Exception as e:
             logger.warning(f"Failed to compute diagnostics: {str(e)}")
             return {
-                'acceptance_rate': None,
-                'ess': {},
-                'rhat': {},
+                "acceptance_rate": None,
+                "ess": {},
+                "rhat": {},
             }
 
     def _check_convergence(self, diagnostics: Dict[str, Any]) -> bool:
@@ -712,22 +743,22 @@ class PjitBackend(CMCBackend):
             True if converged
         """
         # Check R-hat
-        if 'rhat' in diagnostics and diagnostics['rhat']:
-            max_rhat = max(diagnostics['rhat'].values())
+        if "rhat" in diagnostics and diagnostics["rhat"]:
+            max_rhat = max(diagnostics["rhat"].values())
             if max_rhat > 1.1:
                 logger.warning(f"Convergence warning: max R-hat = {max_rhat:.3f} > 1.1")
                 return False
 
         # Check ESS
-        if 'ess' in diagnostics and diagnostics['ess']:
-            min_ess = min(diagnostics['ess'].values())
+        if "ess" in diagnostics and diagnostics["ess"]:
+            min_ess = min(diagnostics["ess"].values())
             if min_ess < 100:
                 logger.warning(f"Convergence warning: min ESS = {min_ess:.0f} < 100")
                 return False
 
         # Check acceptance rate
-        if diagnostics.get('acceptance_rate') is not None:
-            accept_rate = diagnostics['acceptance_rate']
+        if diagnostics.get("acceptance_rate") is not None:
+            accept_rate = diagnostics["acceptance_rate"]
             if accept_rate < 0.5:
                 logger.warning(
                     f"Convergence warning: acceptance rate = {accept_rate:.3f} < 0.5"

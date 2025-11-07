@@ -52,6 +52,7 @@ import jax
 
 try:
     import psutil
+
     HAS_PSUTIL = True
 except ImportError:
     HAS_PSUTIL = False
@@ -173,10 +174,12 @@ def detect_hardware() -> HardwareConfig:
         # Try new API first (JAX 0.8.0+), fall back to legacy API
         try:
             from jax.extend import backend as jax_backend
+
             backend = jax_backend.get_backend()
         except (ImportError, AttributeError):
             # Legacy API for JAX < 0.8.0
             from jax.lib import xla_bridge
+
             backend = xla_bridge.get_backend()
 
         platform = backend.platform
@@ -492,8 +495,12 @@ def should_use_cmc(
         )
     else:
         logger.info("Criterion 2 (Memory): dataset_size=None → False (not evaluated)")
-        logger.info("Criterion 3 (JAX Broadcasting Protection): dataset_size=None → False (not evaluated)")
-        logger.info("Criterion 4 (Large Dataset, Few Samples): dataset_size=None → False (not evaluated)")
+        logger.info(
+            "Criterion 3 (JAX Broadcasting Protection): dataset_size=None → False (not evaluated)"
+        )
+        logger.info(
+            "Criterion 4 (Large Dataset, Few Samples): dataset_size=None → False (not evaluated)"
+        )
 
     # Step 3: Apply OR logic and make decision (any criterion triggers CMC)
     use_cmc = (
@@ -528,11 +535,17 @@ def should_use_cmc(
         # CMC triggered by memory, large dataset, or low-sample criterion, not parallelism
         trigger_reason = []
         if use_cmc_for_memory:
-            trigger_reason.append(f"memory ({memory_fraction:.1%} > {memory_threshold_pct:.1%})")
+            trigger_reason.append(
+                f"memory ({memory_fraction:.1%} > {memory_threshold_pct:.1%})"
+            )
         if use_cmc_for_large_dataset:
-            trigger_reason.append(f"JAX broadcasting protection ({dataset_size:,} > {large_dataset_threshold:,})")
+            trigger_reason.append(
+                f"JAX broadcasting protection ({dataset_size:,} > {large_dataset_threshold:,})"
+            )
         if use_cmc_large_low_sample:
-            trigger_reason.append(f"large dataset, few samples ({dataset_size:,} > {large_dataset_threshold_low_sample:,})")
+            trigger_reason.append(
+                f"large dataset, few samples ({dataset_size:,} > {large_dataset_threshold_low_sample:,})"
+            )
         logger.warning(
             f"Using CMC with only {num_samples} samples (< {min_samples_for_cmc} threshold). "
             f"CMC adds 10-20% overhead; NUTS is faster for <{min_samples_for_cmc} samples if memory permits. "

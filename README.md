@@ -57,7 +57,7 @@ compatibility** for all validated components:
   NumPyro/BlackJAX MCMC
   - ✅ **Scientifically validated** (7/7 validation tests passed)
   - ✅ **Production-ready** with intelligent error recovery
-- **`device/`** - HPC/GPU optimization with system CUDA integration
+- **`device/`** - HPC CPU optimization for multi-core systems
 - **`config/`** - Streamlined YAML-only configuration system with parameter management
 - **`utils/`** - Minimal logging with preserved API signatures
 - **`cli/`** - Essential command-line interface
@@ -70,25 +70,18 @@ compatibility** for all validated components:
 - **Secondary**: NumPyro/BlackJAX NUTS sampling for uncertainty quantification
 - **Core Equation**: `c₂(φ,t₁,t₂) = 1 + contrast × [c₁(φ,t₁,t₂)]²`
 
-### System CUDA Integration
+### HPC CPU Optimization (v2.3.0+)
 
-- Uses `jax[cuda12-local]` for system CUDA libraries
-- Avoids version conflicts with existing HPC CUDA installations
-- Graceful fallback to optimized CPU computation
-
-### HPC Optimization
-
-- CPU-primary design for 36/128-core HPC nodes
+- **CPU-only architecture** for 36/128-core HPC nodes
 - Intelligent thread allocation and NUMA-aware configuration
 - Memory-efficient processing for large datasets
+- Optimized for multi-core personal computers and CPU clusters
 
 ### Intelligent Resource Allocation
 
-- **GPU acceleration** for compute-intensive physics (NLSQ optimization, theoretical
-  fits)
-- **CPU processing** for I/O operations (data loading, result saving, plotting)
-- **Exclusive GPU allocation** for main optimization process (90% memory)
-- **CPU-only workers** for parallel plotting to prevent GPU memory exhaustion
+- **CPU processing** for all operations (optimization, data loading, plotting)
+- **Parallel CPU workers** for efficient batch processing
+- **Memory management** optimized for large datasets without GPU constraints
 
 ### Consensus Monte Carlo (CMC) for Large-Scale Bayesian Inference
 
@@ -147,10 +140,10 @@ if result.is_cmc_result():
 
 | Scenario | Samples | Data Size | Method | Runtime | Speedup |
 |----------|---------|-----------|--------|---------|---------|
-| Multi-core CPU | 23 | 50M | CMC | ~40 min | 1.4x |
-| Multi-core CPU | 23 | 50M | NUTS | ~60 min | baseline |
-| Single GPU | 5 | 200M | CMC | ~2 hours | Avoids OOM |
-| Single GPU | 5 | 200M | NUTS | OOM ❌ | N/A |
+| Multi-core CPU (14 cores) | 23 | 50M | CMC | ~40 min | 1.4x |
+| Multi-core CPU (14 cores) | 23 | 50M | NUTS | ~60 min | baseline |
+| HPC CPU (36 cores) | 5 | 200M | CMC | ~2 hours | 1.5x |
+| HPC CPU (36 cores) | 5 | 200M | NUTS | ~3 hours | baseline |
 
 **Documentation:**
 - Architecture Guide: [`docs/architecture/cmc-dual-mode-strategy.md`](docs/architecture/cmc-dual-mode-strategy.md)
@@ -160,152 +153,106 @@ if result.is_cmc_result():
 
 ## Platform Support
 
-### CPU-Only (All Platforms) ✅
+### CPU-Only Architecture (All Platforms) ✅
 
-- **Linux**: Full support
+**v2.3.0+**: GPU support removed - CPU-optimized for all platforms
+
+- **Linux**: Full support (HPC clusters recommended)
 - **macOS**: Full support
 - **Windows**: Full support
 - **Python**: 3.12+
 
-Default installation provides CPU-only JAX, which works on all platforms:
-
-```bash
-pip install homodyne
-```
-
-### GPU Acceleration (Linux Only) ⚡
-
-- **Supported**: Linux x86_64 or aarch64 **only**
-- **Not supported**: Windows, macOS
-- **Requirements**:
-  - NVIDIA GPU with CUDA Compute Capability 6.0+
-  - CUDA 12.1-12.9 (pre-installed on system)
-  - NVIDIA driver >= 525
+**For GPU users**: Use Homodyne v2.2.1 (last GPU-supporting version)
 
 ## Installation
 
-### Quick Install (CPU-Only, All Platforms)
+### Quick Install (All Platforms)
 
 ```bash
+# CPU-only installation (v2.3.0+)
 # Works on Linux, macOS, Windows
 pip install homodyne
 ```
 
-This installs homodyne with CPU-only JAX (suitable for development and small datasets).
+This installs Homodyne with CPU-optimized JAX 0.8.0, suitable for:
+- Development and prototyping
+- Datasets up to 100M points on multi-core CPUs
+- HPC clusters with 36-128 CPU cores
 
-### GPU Installation (Linux Only) ⚡
+### Migration from GPU to CPU-Only
 
-**Performance Impact**: 20-100x speedup for large datasets (>1M points)
-
-#### Option 1: Quick Install via Makefile (Recommended)
-
-From the homodyne repository:
-
-```bash
-git clone https://github.com/your-org/homodyne.git
-cd homodyne
-make install-jax-gpu  # Automatically handles uninstall + GPU install
-```
-
-This single command:
-- Uninstalls CPU-only JAX
-- Installs GPU-enabled JAX with CUDA 12 support
-- Verifies GPU detection
-
-#### Option 2: Manual Installation
-
-For GPU-accelerated computation on Linux systems with CUDA 12+:
+**If upgrading from v2.2.x (GPU version):**
 
 ```bash
-# Step 1: Uninstall CPU-only version
+# Uninstall GPU JAX
 pip uninstall -y jax jaxlib
 
-# Step 2: Install JAX with CUDA support
-pip install jax[cuda12-local]==0.8.0 jaxlib==0.8.0
+# Install CPU-only Homodyne v2.3.0+
+pip install homodyne
 
-# Step 3: Verify GPU detection
+# Verify CPU devices
 python -c "import jax; print('Devices:', jax.devices())"
-# Should show: [cuda(id=0)] instead of [CpuDevice(id=0)]
+# Expected: [CpuDevice(id=0)]
 ```
 
-**Why separate installation?** JAX with CUDA support is Linux-specific and requires system CUDA 12.1-12.9 pre-installed. Separating the installation avoids dependency conflicts on macOS/Windows.
+### For GPU Users
 
-#### GPU Troubleshooting
+**GPU support removed in v2.3.0.** If you need GPU acceleration:
 
-**Issue**: Warning "An NVIDIA GPU may be present... but a CUDA-enabled jaxlib is not installed"
+1. **Stay on v2.2.1** (last GPU-supporting version):
+   ```bash
+   pip install homodyne==2.2.1
+   ```
 
-**Solution**:
+2. **See migration guide**: [`docs/migration/v2.2-to-v2.3-gpu-removal.md`](docs/migration/v2.2-to-v2.3-gpu-removal.md)
+
+### System Validation
+
+After installation, verify your system:
+
 ```bash
-# 1. Check GPU hardware
-nvidia-smi  # Should show your GPU
-
-# 2. Check CUDA version
-nvcc --version  # Should show CUDA 12.1-12.9
-
-# 3. Reinstall JAX with GPU support
-pip uninstall -y jax jaxlib
-pip install jax[cuda12-local]==0.8.0 jaxlib==0.8.0
-
-# 4. Verify JAX detects GPU
-python -c "import jax; print(jax.devices())"
-# Expected: [cuda(id=0)]
-# If still showing [CpuDevice(id=0)], check CUDA installation
+python -m homodyne.runtime.utils.system_validator --quick
 ```
 
-**Issue**: ImportError or CUDA library not found
-
-**Solution**:
-```bash
-# Set CUDA library path (add to ~/.bashrc for permanent fix)
-export LD_LIBRARY_PATH=/usr/local/cuda/lib64:$LD_LIBRARY_PATH
-
-# Or use homodyne's activation script
-source homodyne/runtime/gpu/activation.sh
-```
-
-**Issue**: Out of memory errors during optimization
-
-**Solution**: Reduce GPU memory fraction in config:
-```yaml
-performance:
-  gpu_memory_fraction: 0.7  # Reduce from default 0.9
-```
+Expected output: 9 tests passing (90-100% health score)
 
 ### Development Installation
 
 ```bash
-# CPU-only (all platforms)
+# CPU-only installation (all platforms)
 pip install homodyne[dev]
 
 # Or from source
 git clone https://github.com/your-org/homodyne.git
 cd homodyne
 pip install -e ".[dev]"
-
-# For GPU support on Linux: run this first
-pip install jax[cuda12-local]==0.8.0 jaxlib==0.8.0
 ```
 
 ### HPC Environment Setup
 
-```bash
-# First, load system CUDA modules (site-specific)
-module load cuda/12.2
-module load cudnn/9.8
+For HPC clusters with multi-core CPUs:
 
-# Install JAX with CUDA support
-pip install jax[cuda12-local]==0.8.0 jaxlib==0.8.0
+```bash
+# Load Python module (site-specific)
+module load python/3.12
+
+# Create virtual environment
+python -m venv homodyne-env
+source homodyne-env/bin/activate
 
 # Install homodyne
 pip install homodyne[dev]
+
+# Configure CPU threads for your HPC node
+export OMP_NUM_THREADS=34  # Reserve 2 cores for OS on 36-core node
 ```
 
 ### Makefile Shortcuts (Development)
 
 ```bash
 make dev               # Install dev environment (CPU-only)
-make install-jax-gpu   # Install JAX with GPU support (Linux only)
-make gpu-check         # Verify GPU setup
+make test              # Run core test suite
+make quality           # Format, lint, type-check
 ```
 
 ## Quick Start
@@ -385,14 +332,8 @@ from homodyne.device import configure_optimal_device
 # Auto-detect and configure optimal device
 device_config = configure_optimal_device()
 
-# Force CPU optimization
-cpu_config = configure_optimal_device(force_cpu=True)
-
-# Configure GPU with specific memory fraction
-gpu_config = configure_optimal_device(
-    prefer_gpu=True,
-    gpu_memory_fraction=0.8
-)
+# Configure CPU-only device (v2.3.0+)
+cpu_config = configure_optimal_device()
 ```
 
 ### Interactive Example
@@ -582,134 +523,97 @@ performance:
 - ✅ **Transparent operation**: No user intervention required
 - ✅ **Backward compatible**: Existing configs work without changes
 
-## Pipeline Architecture: GPU vs CPU Usage
+## Pipeline Architecture: CPU-Optimized (v2.3.0+)
 
-The NLSQ analysis pipeline uses **GPU acceleration for physics computations**
-(optimization and theoretical fits) while **CPU for everything else** (data I/O,
-validation, plotting). This optimal resource allocation prevents GPU memory conflicts
-while maximizing performance.
+The NLSQ analysis pipeline uses **JAX-accelerated CPU processing** for all operations, optimized for multi-core systems and HPC clusters.
 
 ### Computational Stages
 
-**CPU-Only Stages** (I/O and validation):
+**All stages run on CPU** with JAX JIT compilation:
 
-- **Configuration Loading**: YAML parsing with PyYAML
-- **Data Loading**: HDF5 file reading with h5py + NumPy (2-3s for cached data)
-- **Data Validation**: Statistical quality checks with NumPy + SciPy (\<1s)
-- **Angle Filtering**: Array slicing and indexing (\<1ms)
+1. **Configuration Loading**: YAML parsing with PyYAML (\<1s)
+2. **Data Loading**: HDF5 file reading with h5py + NumPy (2-3s for cached data)
+3. **Data Validation**: Statistical quality checks with NumPy + SciPy (\<1s)
+4. **Angle Filtering**: Array slicing and indexing (\<1ms)
+5. **NLSQ Optimization**: JIT-compiled JAX physics functions (30-60s on 14-core CPU)
+   - Residual calculations called hundreds of times per iteration
+   - Data volume: 3 angles × 1001 × 1001 = 3M+ points per iteration
+   - Automatic parallelization across CPU cores
+6. **Theoretical Fit Computation**: JAX backend with per-angle scaling (~2-3s on CPU)
+7. **Result Saving**: JSON serialization + NPZ compression (~1s)
+8. **Parallel Plotting**: 20 parallel workers using Datashader (CPU-optimized, ~12s)
 
-**GPU-Accelerated Stages** ⚡ (compute-intensive):
+### Performance Summary (14-Core CPU)
 
-**1. NLSQ Optimization** (Primary GPU usage, ~6s):
+| Stage | Backend | Duration | Notes |
+|-------|---------|----------|-------|
+| Config Loading | PyYAML | <1s | I/O bound |
+| Data Loading | h5py+NumPy | ~2s | I/O bound |
+| Data Validation | NumPy+SciPy | <1s | Fast validation |
+| Angle Filtering | NumPy | <1ms | Array operations |
+| **NLSQ Optimization** | **JAX JIT** | **30-60s** | **Multi-core parallel** |
+| **Theoretical Fits** | **JAX JIT** | **~2-3s** | **CPU-accelerated** |
+| Result Saving | json+npz | ~1s | I/O bound |
+| Plotting (Workers) | Datashader | ~12s | Parallel workers |
 
-- JIT-compiled JAX physics functions (`compute_g2_scaled_core`, `compute_g1_diffusion`,
-  `compute_g1_shear`)
-- Residual calculations called hundreds of times per iteration
-- Data volume: 3 angles × 1001 × 1001 = 3M+ points per iteration
-- Performance: **6s on GPU vs 30-60s on CPU** (5-10x speedup)
-- Memory: **90% GPU allocation** (exclusive to main process)
-
-**2. Theoretical Fit Computation** (~1s):
-
-- Uses same JAX backend as optimization
-- Sequential computation for all 23 angles (not just filtered subset)
-- Per-angle scaling via least squares (find optimal contrast/offset)
-
-**CPU-Only Stages** (Output and visualization):
-
-**3. Result Saving & Plotting** (I/O bound, GPU provides no benefit):
-
-- **Result Saving**: JSON serialization + NPZ compression (~1s)
-- **Plotting Workers**: **Forced to CPU** to prevent GPU memory conflicts
-  - 20 parallel workers using Datashader (CPU-optimized rasterization)
-  - Environment variables set: `JAX_PLATFORMS="cpu"`, `CUDA_VISIBLE_DEVICES="-1"`
-  - Reason: Main process uses 90% GPU memory; workers would cause
-    `CUDA_ERROR_OUT_OF_MEMORY`
-  - Performance: 23 plots in ~12s (5-10x faster than pure matplotlib)
-
-### Performance Summary
-
-| Stage | Device | Backend | Duration | GPU Benefit |
-|-------|--------|---------|----------|-------------| | Config Loading | CPU | PyYAML |
-\<1s | None (I/O bound) | | Data Loading | CPU | h5py+NumPy | ~2s | None (I/O bound) | |
-Data Validation | CPU | NumPy+SciPy | \<1s | None (not critical) | | Angle Filtering |
-CPU | NumPy | \<1ms | None (trivial) | | **NLSQ Optimization** | **GPU** ⚡ | **JAX JIT**
-| **6s** | **5-10x speedup** | | **Theoretical Fits** | **GPU** ⚡ | **JAX JIT** |
-**~1s** | **3-5x speedup** | | Result Saving | CPU | json+npz | ~1s | None (I/O bound) |
-| Plotting (Workers) | CPU 🔒 | Datashader | ~12s | None (forced CPU) |
-
-**Total GPU Time**: ~7 seconds (optimization + theoretical fits) **Total CPU Time**: ~17
-seconds (all other stages) **Peak GPU Memory**: 90% allocation (main process only)
-**Overall Speedup**: 5-10x for compute-intensive parts; ~24s total vs ~70-100s without
-GPU
+**Total Runtime**: ~50-80 seconds (14-core CPU)
+**HPC Speedup**: ~2-3x faster on 36-core nodes
 
 ### Key Architectural Insights
 
-- **GPU Acceleration Where It Matters**: Only the most compute-intensive stages (NLSQ
-  optimization and theoretical fits) use GPU, achieving 5-10x speedup for ~7 seconds of
-  GPU time. This focused allocation maximizes performance impact.
+- **JAX JIT Compilation**: All compute-intensive operations use JAX's JIT compiler for CPU optimization
+- **Multi-Core Parallelization**: Automatic thread distribution across available CPU cores
+- **Memory Efficiency**: Optimized memory usage for datasets up to 100M+ points
+- **Parallel Visualization**: CPU workers efficiently handle batch plotting without memory constraints
 
-- **CPU for I/O and Visualization**: All data operations (loading, validation, saving)
-  remain on CPU where they are I/O bound. Parallel plotting is forced to CPU-only
-  workers to prevent GPU memory conflicts while leveraging Datashader's efficient CPU
-  rasterization.
-
-- **Resource Isolation Strategy**: Main process maintains exclusive GPU access (90%
-  memory) for optimization. Worker processes are restricted to CPU via environment
-  variables (`JAX_PLATFORMS="cpu"`, `CUDA_VISIBLE_DEVICES="-1"`), preventing CUDA OOM
-  errors while enabling parallel visualization.
-
-## System Requirements
+## System Requirements (v2.3.0+)
 
 ### Minimum
 
-- Python 3.10+
-- NumPy >= 1.25, SciPy >= 1.11
+- Python 3.12+
+- NumPy >= 2.0, SciPy >= 1.14
 - 4+ CPU cores
-- Linux for GPU support
+- 8+ GB RAM
 
 ### Recommended
 
-- Python 3.11+
-- 16+ CPU cores or GPU
+- Python 3.12+
+- 14+ CPU cores (desktop/workstation)
 - 16+ GB RAM
-- CUDA 12.1-12.9 pre-installed (for GPU)
+- Linux, macOS, or Windows
 
 ### HPC Environment
 
 - 36/128-core CPU nodes
-- System CUDA 12.1-12.9 (for GPU acceleration)
-- cuDNN 9.8+
-- NVIDIA Driver >= 525 (or >= 570 for CUDA 12.8)
 - 64+ GB RAM for large datasets
+- NUMA-aware configuration
+- High-speed storage (NVMe/parallel filesystem)
 
-## Dependencies (2025 Latest Stable)
+## Dependencies (v2.3.0 - CPU-Only)
 
 ### Required Dependencies
 
-- `numpy>=2.0.0` - Core numerical operations (NumPy 2.x series)
-- `scipy>=1.14.0` - Scientific computing
-- `jax>=0.7.2` - JAX acceleration framework
-- `jaxlib>=0.7.2` - JAX XLA library (must match JAX version)
+- `jax==0.8.0` - JAX CPU framework (exact version required)
+- `jaxlib==0.8.0` - JAX XLA library (must match JAX version)
+- `numpy>=2.0.0,<3.0.0` - Core numerical operations (NumPy 2.x series)
+- `scipy>=1.14.0,<2.0.0` - Scientific computing
 - `nlsq>=0.1.0` - **NLSQ trust-region optimizer** for JAX-native nonlinear least squares
-- `numpyro>=0.19.0` - MCMC with built-in progress bars
-- `h5py>=3.8.0` - HDF5 file support
-- `pyyaml>=6.0` - YAML configuration
+- `numpyro>=0.18.0,<0.20.0` - MCMC with built-in progress bars
+- `h5py>=3.10.0,<4.0.0` - HDF5 file support
+- `pyyaml>=6.0.2` - YAML configuration
 
 ### Optional Dependencies
 
-- `jax[cuda12-local]>=0.7.2` - System CUDA integration (Linux only)
-- `blackjax>=1.2.5` - Alternative MCMC backend
-- `psutil>=5.9.0` - Enhanced CPU optimization
+- `blackjax>=1.2.0,<2.0.0` - Alternative MCMC backend
+- `psutil>=6.0.0` - Enhanced CPU optimization
 - `tqdm>=4.65.0` - Progress bars for NLSQ optimization
-- `matplotlib>=3.6.0` - Plotting capabilities
+- `matplotlib>=3.8.0,<4.0.0` - Plotting capabilities
 
-### GPU/System CUDA Notes
+### Version Notes
 
-- **Platform**: Linux x86_64 or aarch64 only
-- **CUDA**: Pre-installed 12.1-12.9 required
-- **Why cuda12-local**: Uses system CUDA, avoids HPC conflicts
-- **Alternative**: `jax[cuda12]` bundles CUDA (not recommended for HPC)
+- **JAX 0.8.0**: CPU-only, exact version match required for stability
+- **NumPy 2.x**: Required for JAX 0.8.0 compatibility
+- **Python 3.12+**: Minimum version for all dependencies
 
 ## Testing
 
@@ -748,69 +652,56 @@ from homodyne.device import configure_optimal_device
 
 Existing YAML configuration files work without modification.
 
-## HPC and System CUDA Setup
+## HPC CPU Optimization (v2.3.0+)
 
-### Why System CUDA (`jax[cuda12-local]`)?
+### Multi-Core CPU Configuration
 
-- **Avoids Conflicts**: Uses existing HPC CUDA installation
-- **Version Compatibility**: Works with site-specific CUDA modules
-- **Smaller Package**: Doesn't bundle CUDA libraries
-- **Module System**: Compatible with HPC module environments
+Homodyne v2.3.0+ is optimized for multi-core CPUs on HPC clusters:
 
-### HPC Quick Setup
+- **36-core nodes**: Reserve 2 cores for OS, use 34 for computation
+- **128-core nodes**: Reserve 4-8 cores for OS, use remaining for computation
+- **NUMA awareness**: Automatic thread affinity for large HPC nodes
+- **Memory efficiency**: Optimized for datasets up to 100M+ points
 
-```bash
-# 1. Load system modules (site-specific commands)
-module load cuda/12.2
-module load cudnn/9.8
-
-# 2. Verify CUDA installation
-nvcc --version  # Should show CUDA 12.1+
-nvidia-smi      # Should show driver >= 525
-
-# 3. Set environment variables if needed
-export PATH=/usr/local/cuda-12/bin:$PATH
-export LD_LIBRARY_PATH=/usr/local/cuda-12/lib64:$LD_LIBRARY_PATH
-
-# 4. Install homodyne with system CUDA
-pip install --upgrade "jax[cuda12-local]==0.7.2" jaxlib==0.7.2 \
-            nlsq>=0.1.0 numpyro==0.19.0 h5py pyyaml
-
-# 5. Verify GPU detection
-python -c "import jax; print(jax.devices())"
-# Should show: [cuda:0], [cuda:1], etc.
-```
-
-### Troubleshooting GPU/CUDA Issues
-
-**"CUDA not found" or "No GPU detected":**
+### HPC Slurm Job Example
 
 ```bash
-# Check CUDA paths
-which nvcc
-echo $LD_LIBRARY_PATH
+#!/bin/bash
+#SBATCH --nodes=1
+#SBATCH --ntasks-per-node=36
+#SBATCH --time=04:00:00
+#SBATCH --mem=64GB
 
-# Ensure paths are set
-export PATH=/path/to/cuda/bin:$PATH
-export LD_LIBRARY_PATH=/path/to/cuda/lib64:$LD_LIBRARY_PATH
+# Load Python module
+module load python/3.12
+
+# Activate environment
+source homodyne-env/bin/activate
+
+# Configure CPU threads (reserve 2 for OS)
+export OMP_NUM_THREADS=34
+export JAX_NUM_THREADS=34
+
+# Run analysis
+homodyne --config laminar_flow.yaml --method nlsq
 ```
 
-**"CUDA version mismatch":**
+### CPU Performance Optimization
 
-- Requires CUDA 12.1-12.9 (CUDA 11.x no longer supported)
-- Check with: `nvcc --version`
-- Update driver if needed: minimum 525 (or 570 for CUDA 12.8)
+```python
+# examples/cpu_optimization.py
+import os
+import psutil
 
-**"Missing cuDNN":**
+# Reserve cores for system
+cpu_count = psutil.cpu_count(logical=False)
+optimal_threads = max(1, cpu_count - 2)
 
-- Install cuDNN 9.8+ or load via module system
-- Verify with: `ls $LD_LIBRARY_PATH | grep cudnn`
+os.environ['OMP_NUM_THREADS'] = str(optimal_threads)
+os.environ['JAX_NUM_THREADS'] = str(optimal_threads)
+```
 
-**Platform limitations:**
-
-- GPU support is Linux-only (x86_64 or aarch64)
-- Windows users: Use WSL2 with Linux installation
-- macOS: CPU-only (no CUDA support)
+See [`examples/cpu_optimization.py`](examples/cpu_optimization.py) for comprehensive HPC setup guide.
 
 ### Progress Tracking
 

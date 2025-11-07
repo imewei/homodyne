@@ -42,18 +42,22 @@ class TestPerAngleMCMC:
         phi_angles = [0.0, 60.0, 120.0]  # Three distinct angles
 
         # Replicate phi for each angle's data points
-        phi = np.concatenate([np.full(n_points_per_angle, angle) for angle in phi_angles])
+        phi = np.concatenate(
+            [np.full(n_points_per_angle, angle) for angle in phi_angles]
+        )
 
         # Time arrays
         t1 = np.linspace(0, 10, n_total)
         t2 = np.linspace(0, 10, n_total)
 
         # Synthetic c2 data with slight variations per angle
-        data = np.concatenate([
-            np.ones(n_points_per_angle) * 1.1,  # phi=0
-            np.ones(n_points_per_angle) * 1.15, # phi=60
-            np.ones(n_points_per_angle) * 1.2,  # phi=120
-        ])
+        data = np.concatenate(
+            [
+                np.ones(n_points_per_angle) * 1.1,  # phi=0
+                np.ones(n_points_per_angle) * 1.15,  # phi=60
+                np.ones(n_points_per_angle) * 1.2,  # phi=120
+            ]
+        )
 
         sigma = np.ones(n_total) * 0.01
 
@@ -76,7 +80,9 @@ class TestPerAngleMCMC:
         """Create ParameterSpace for static mode."""
         return ParameterSpace.from_defaults("static")
 
-    def test_per_angle_parameter_creation_multiple_phi(self, multi_angle_data, static_param_space):
+    def test_per_angle_parameter_creation_multiple_phi(
+        self, multi_angle_data, static_param_space
+    ):
         """Test that per-angle parameters are created for each phi angle."""
         model = _create_numpyro_model(
             data=multi_angle_data["data"],
@@ -102,7 +108,9 @@ class TestPerAngleMCMC:
         # Verify all per-angle contrast parameters exist
         for i in range(n_phi):
             assert f"contrast_{i}" in samples, f"Missing contrast_{i}"
-            assert samples[f"contrast_{i}"].shape == (10,), f"Wrong shape for contrast_{i}"
+            assert samples[f"contrast_{i}"].shape == (
+                10,
+            ), f"Wrong shape for contrast_{i}"
 
         # Verify all per-angle offset parameters exist
         for i in range(n_phi):
@@ -114,7 +122,9 @@ class TestPerAngleMCMC:
         assert "alpha" in samples
         assert "D_offset" in samples
 
-    def test_per_angle_parameters_are_independent(self, multi_angle_data, static_param_space):
+    def test_per_angle_parameters_are_independent(
+        self, multi_angle_data, static_param_space
+    ):
         """Test that contrast/offset for different angles are sampled independently."""
         model = _create_numpyro_model(
             data=multi_angle_data["data"],
@@ -141,20 +151,24 @@ class TestPerAngleMCMC:
         # (Statistical test: correlation should not be 1.0)
         for i in range(n_phi - 1):
             contrast_i = samples[f"contrast_{i}"]
-            contrast_j = samples[f"contrast_{i+1}"]
+            contrast_j = samples[f"contrast_{i + 1}"]
 
             # Pearson correlation should not be perfect (< 0.99)
             correlation = np.corrcoef(contrast_i, contrast_j)[0, 1]
-            assert abs(correlation) < 0.99, \
-                f"contrast_{i} and contrast_{i+1} are too correlated: {correlation}"
+            assert (
+                abs(correlation) < 0.99
+            ), f"contrast_{i} and contrast_{i + 1} are too correlated: {correlation}"
 
             offset_i = samples[f"offset_{i}"]
-            offset_j = samples[f"offset_{i+1}"]
+            offset_j = samples[f"offset_{i + 1}"]
             correlation = np.corrcoef(offset_i, offset_j)[0, 1]
-            assert abs(correlation) < 0.99, \
-                f"offset_{i} and offset_{i+1} are too correlated: {correlation}"
+            assert (
+                abs(correlation) < 0.99
+            ), f"offset_{i} and offset_{i + 1} are too correlated: {correlation}"
 
-    def test_legacy_mode_single_contrast_offset(self, multi_angle_data, static_param_space):
+    def test_legacy_mode_single_contrast_offset(
+        self, multi_angle_data, static_param_space
+    ):
         """Test legacy mode uses single contrast/offset for all angles."""
         model = _create_numpyro_model(
             data=multi_angle_data["data"],
@@ -197,7 +211,9 @@ class TestPerAngleMCMC:
             n_total = n_phi * n_points_per_angle
 
             phi_angles = np.linspace(0, 180, n_phi, endpoint=False)
-            phi = np.concatenate([np.full(n_points_per_angle, angle) for angle in phi_angles])
+            phi = np.concatenate(
+                [np.full(n_points_per_angle, angle) for angle in phi_angles]
+            )
 
             model = _create_numpyro_model(
                 data=np.ones(n_total) * 1.1,
@@ -224,8 +240,9 @@ class TestPerAngleMCMC:
 
             # Expected: 2*n_phi (contrast/offset per angle) + 3 (D0, alpha, D_offset)
             expected_params = 2 * n_phi + 3
-            assert n_params == expected_params, \
-                f"n_phi={n_phi}: Expected {expected_params} params, got {n_params}"
+            assert (
+                n_params == expected_params
+            ), f"n_phi={n_phi}: Expected {expected_params} params, got {n_params}"
 
 
 class TestPerAngleNLSQ:

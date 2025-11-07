@@ -13,7 +13,7 @@ Key Features:
 - Angle-stratified chunking for per-angle parameter compatibility (v2.2+)
 - Intelligent error recovery with 3-attempt retry strategy (T022-T024)
 - Actionable error diagnostics with 5 error categories
-- GPU/CPU transparent execution through JAX device abstraction
+- CPU-optimized execution through JAX
 - Progress logging and convergence diagnostics
 - Scientifically validated (7/7 validation tests passed, T036-T041)
 
@@ -53,6 +53,7 @@ from nlsq import curve_fit, curve_fit_large, LeastSquares
 # Try importing StreamingOptimizer (available in NLSQ >= 0.1.5)
 try:
     from nlsq import StreamingOptimizer, StreamingConfig
+
     STREAMING_AVAILABLE = True
 except ImportError:
     STREAMING_AVAILABLE = False
@@ -107,7 +108,7 @@ class OptimizationResult:
         convergence_status: 'converged', 'max_iter', 'failed'
         iterations: Number of optimization iterations
         execution_time: Wall-clock execution time in seconds
-        device_info: Device used for computation (CPU/GPU details)
+        device_info: Device used for computation (CPU details)
         recovery_actions: List of error recovery actions taken
         quality_flag: 'good', 'marginal', 'poor'
         streaming_diagnostics: Enhanced diagnostics for streaming optimization (Task 5.4)
@@ -127,8 +128,12 @@ class OptimizationResult:
     device_info: dict[str, Any]
     recovery_actions: list[str] = field(default_factory=list)
     quality_flag: str = "good"
-    streaming_diagnostics: dict[str, Any] | None = None  # Task 5.4: Enhanced streaming diagnostics
-    stratification_diagnostics: StratificationDiagnostics | None = None  # v2.2.1: Stratification diagnostics
+    streaming_diagnostics: dict[str, Any] | None = (
+        None  # Task 5.4: Enhanced streaming diagnostics
+    )
+    stratification_diagnostics: StratificationDiagnostics | None = (
+        None  # v2.2.1: Stratification diagnostics
+    )
 
     # Backward compatibility attributes (FR-002)
     @property
@@ -158,6 +163,7 @@ class UseSequentialOptimization:
         data: Original XPCS data object
         reason: Why sequential optimization is needed
     """
+
     data: Any
     reason: str
 
@@ -203,11 +209,13 @@ class NLSQWrapper:
         # Initialize streaming optimization components
         self.batch_statistics = BatchStatistics(max_size=100)
         self.recovery_applicator = RecoveryStrategyApplicator(max_retries=max_retries)
-        self.numerical_validator = NumericalValidator(enable_validation=enable_numerical_validation and not fast_mode)
+        self.numerical_validator = NumericalValidator(
+            enable_validation=enable_numerical_validation and not fast_mode
+        )
 
         # Best parameter tracking
         self.best_params = None
-        self.best_loss = float('inf')
+        self.best_loss = float("inf")
         self.best_batch_idx = -1
 
     @staticmethod
@@ -224,9 +232,17 @@ class NLSQWrapper:
             ValueError: If analysis_mode is not recognized
         """
         if analysis_mode == "static_isotropic":
-            return ['D0', 'alpha', 'D_offset']
+            return ["D0", "alpha", "D_offset"]
         elif analysis_mode == "laminar_flow":
-            return ['D0', 'alpha', 'D_offset', 'gamma_dot_0', 'beta', 'gamma_dot_offset', 'phi0']
+            return [
+                "D0",
+                "alpha",
+                "D_offset",
+                "gamma_dot_0",
+                "beta",
+                "gamma_dot_offset",
+                "phi0",
+            ]
         else:
             raise ValueError(
                 f"Unknown analysis_mode: '{analysis_mode}'. "
@@ -292,16 +308,20 @@ class NLSQWrapper:
 
         # Case 1: Dict (from StreamingOptimizer)
         if isinstance(result, dict):
-            popt = np.asarray(result.get('x', result.get('popt')))
-            pcov = np.asarray(result.get('pcov', np.eye(len(popt))))  # Identity if missing
+            popt = np.asarray(result.get("x", result.get("popt")))
+            pcov = np.asarray(
+                result.get("pcov", np.eye(len(popt)))
+            )  # Identity if missing
             info = {
-                'streaming_diagnostics': result.get('streaming_diagnostics', {}),
-                'success': result.get('success', True),
-                'message': result.get('message', ''),
-                'best_loss': result.get('best_loss', None),
-                'final_epoch': result.get('final_epoch', None),
+                "streaming_diagnostics": result.get("streaming_diagnostics", {}),
+                "success": result.get("success", True),
+                "message": result.get("message", ""),
+                "best_loss": result.get("best_loss", None),
+                "final_epoch": result.get("final_epoch", None),
             }
-            logger.debug(f"Normalized StreamingOptimizer dict result (strategy: {strategy.value})")
+            logger.debug(
+                f"Normalized StreamingOptimizer dict result (strategy: {strategy.value})"
+            )
             return popt, pcov, info
 
         # Case 2: Tuple with 2 or 3 elements
@@ -310,15 +330,21 @@ class NLSQWrapper:
                 # (popt, pcov) - most common case
                 popt, pcov = result
                 info = {}
-                logger.debug(f"Normalized (popt, pcov) tuple (strategy: {strategy.value})")
+                logger.debug(
+                    f"Normalized (popt, pcov) tuple (strategy: {strategy.value})"
+                )
             elif len(result) == 3:
                 # (popt, pcov, info) - from curve_fit with full_output=True
                 popt, pcov, info = result
                 # Ensure info is a dict
                 if not isinstance(info, dict):
-                    logger.warning(f"Info object is not a dict: {type(info)}. Converting to dict.")
-                    info = {'raw_info': info}
-                logger.debug(f"Normalized (popt, pcov, info) tuple (strategy: {strategy.value})")
+                    logger.warning(
+                        f"Info object is not a dict: {type(info)}. Converting to dict."
+                    )
+                    info = {"raw_info": info}
+                logger.debug(
+                    f"Normalized (popt, pcov, info) tuple (strategy: {strategy.value})"
+                )
             else:
                 raise TypeError(
                     f"Unexpected tuple length: {len(result)}. "
@@ -328,9 +354,9 @@ class NLSQWrapper:
             return np.asarray(popt), np.asarray(pcov), info
 
         # Case 3: Object with attributes (CurveFitResult, OptimizeResult, etc.)
-        if hasattr(result, 'x') or hasattr(result, 'popt'):
+        if hasattr(result, "x") or hasattr(result, "popt"):
             # Extract popt
-            popt = getattr(result, 'x', getattr(result, 'popt', None))
+            popt = getattr(result, "x", getattr(result, "popt", None))
             if popt is None:
                 raise AttributeError(
                     f"Result object has neither 'x' nor 'popt' attribute. "
@@ -338,21 +364,31 @@ class NLSQWrapper:
                 )
 
             # Extract pcov
-            pcov = getattr(result, 'pcov', None)
+            pcov = getattr(result, "pcov", None)
             if pcov is None:
                 # No covariance available, create identity matrix
-                logger.warning(f"No pcov attribute in result object. Using identity matrix.")
+                logger.warning(
+                    f"No pcov attribute in result object. Using identity matrix."
+                )
                 pcov = np.eye(len(popt))
 
             # Extract info dict
             info = {}
             # Common attributes to extract
-            for attr in ['message', 'success', 'nfev', 'njev', 'fun', 'jac', 'optimality']:
+            for attr in [
+                "message",
+                "success",
+                "nfev",
+                "njev",
+                "fun",
+                "jac",
+                "optimality",
+            ]:
                 if hasattr(result, attr):
                     info[attr] = getattr(result, attr)
 
             # Check for 'info' attribute (some objects nest additional info)
-            if hasattr(result, 'info') and isinstance(result.info, dict):
+            if hasattr(result, "info") and isinstance(result.info, dict):
                 info.update(result.info)
 
             logger.debug(
@@ -367,7 +403,9 @@ class NLSQWrapper:
             f"Available attributes: {dir(result) if hasattr(result, '__dict__') else 'N/A'}"
         )
 
-    def _get_fallback_strategy(self, current_strategy: OptimizationStrategy) -> OptimizationStrategy | None:
+    def _get_fallback_strategy(
+        self, current_strategy: OptimizationStrategy
+    ) -> OptimizationStrategy | None:
         """Get fallback strategy when current strategy fails.
 
         Implements degradation chain:
@@ -426,16 +464,20 @@ class NLSQWrapper:
 
         # Step 1: Apply angle-stratified chunking if needed (BEFORE data preparation)
         # This fixes per-angle parameter incompatibility with NLSQ chunking (ultra-think-20251106-012247)
-        stratified_data = self._apply_stratification_if_needed(data, per_angle_scaling, config, logger)
+        stratified_data = self._apply_stratification_if_needed(
+            data, per_angle_scaling, config, logger
+        )
 
         # Extract stratification diagnostics if available
         stratification_diagnostics = None
-        if hasattr(stratified_data, 'stratification_diagnostics'):
+        if hasattr(stratified_data, "stratification_diagnostics"):
             stratification_diagnostics = stratified_data.stratification_diagnostics
 
         # Check if sequential optimization is required
         if isinstance(stratified_data, UseSequentialOptimization):
-            logger.info(f"Using sequential per-angle optimization: {stratified_data.reason}")
+            logger.info(
+                f"Using sequential per-angle optimization: {stratified_data.reason}"
+            )
             return self._run_sequential_optimization(
                 stratified_data.data,
                 config,
@@ -453,10 +495,10 @@ class NLSQWrapper:
         # 2. Per-angle scaling is enabled
         # 3. Dataset is large enough to benefit (>1M points)
         use_stratified_least_squares = (
-            hasattr(stratified_data, 'phi_flat') and
-            per_angle_scaling and
-            hasattr(stratified_data, 'g2_flat') and
-            len(stratified_data.g2_flat) >= 1_000_000
+            hasattr(stratified_data, "phi_flat")
+            and per_angle_scaling
+            and hasattr(stratified_data, "g2_flat")
+            and len(stratified_data.g2_flat) >= 1_000_000
         )
 
         if use_stratified_least_squares:
@@ -485,7 +527,9 @@ class NLSQWrapper:
 
             # Get physical parameter names for this analysis mode
             physical_param_names = self._get_physical_param_names(analysis_mode)
-            logger.info(f"Physical parameters for {analysis_mode}: {physical_param_names}")
+            logger.info(
+                f"Physical parameters for {analysis_mode}: {physical_param_names}"
+            )
 
             # FIX: Expand scaling parameters for per-angle scaling
             # When per_angle_scaling=True with N angles, we need:
@@ -505,10 +549,14 @@ class NLSQWrapper:
                 logger.info(f"Expanding scaling parameters for per-angle scaling:")
                 logger.info(f"  Angles: {n_angles}")
                 logger.info(f"  Physical parameters: {n_physical}")
-                logger.info(f"  Input parameters: {len(validated_params)} (expected: {n_physical + 2})")
+                logger.info(
+                    f"  Input parameters: {len(validated_params)} (expected: {n_physical + 2})"
+                )
 
                 # Validate input parameter count
-                expected_input = n_physical + 2  # Physical params + single contrast + single offset
+                expected_input = (
+                    n_physical + 2
+                )  # Physical params + single contrast + single offset
                 if len(validated_params) != expected_input:
                     raise ValueError(
                         f"Parameter count mismatch for per-angle scaling: "
@@ -525,10 +573,12 @@ class NLSQWrapper:
                 #
                 # So extract base scaling parameters from BEGINNING of validated_params
                 base_contrast = validated_params[0]  # First element
-                base_offset = validated_params[1]    # Second element
+                base_offset = validated_params[1]  # Second element
                 physical_params = validated_params[2:]  # Rest are physical params
 
-                logger.info(f"  Base scaling: contrast={base_contrast:.4f}, offset={base_offset:.4f}")
+                logger.info(
+                    f"  Base scaling: contrast={base_contrast:.4f}, offset={base_offset:.4f}"
+                )
 
                 # Expand scaling parameters per angle
                 contrast_per_angle = np.full(n_angles, base_contrast)
@@ -539,16 +589,24 @@ class NLSQWrapper:
                 #   contrast = params_all[:self.n_phi]
                 #   offset = params_all[self.n_phi:2*self.n_phi]
                 #   physical_params = params_all[2*self.n_phi:]
-                expanded_params = np.concatenate([
-                    contrast_per_angle,  # Indices 0 to n_angles-1
-                    offset_per_angle,    # Indices n_angles to 2*n_angles-1
-                    physical_params      # Indices 2*n_angles onward
-                ])
+                expanded_params = np.concatenate(
+                    [
+                        contrast_per_angle,  # Indices 0 to n_angles-1
+                        offset_per_angle,  # Indices n_angles to 2*n_angles-1
+                        physical_params,  # Indices 2*n_angles onward
+                    ]
+                )
 
                 logger.info(f"  Expanded to {len(expanded_params)} parameters:")
-                logger.info(f"    - Contrast per angle: {n_angles} (indices 0 to {n_angles - 1})")
-                logger.info(f"    - Offset per angle: {n_angles} (indices {n_angles} to {2*n_angles - 1})")
-                logger.info(f"    - Physical: {n_physical} (indices {2*n_angles} to {2*n_angles + n_physical - 1})")
+                logger.info(
+                    f"    - Contrast per angle: {n_angles} (indices 0 to {n_angles - 1})"
+                )
+                logger.info(
+                    f"    - Offset per angle: {n_angles} (indices {n_angles} to {2 * n_angles - 1})"
+                )
+                logger.info(
+                    f"    - Physical: {n_physical} (indices {2 * n_angles} to {2 * n_angles + n_physical - 1})"
+                )
 
                 # Update validated_params with expanded version
                 validated_params = expanded_params
@@ -561,7 +619,7 @@ class NLSQWrapper:
                     # [contrast, offset, physical_params...] (scaling first!)
                     lower_contrast = lower[0]  # First element
                     upper_contrast = upper[0]
-                    lower_offset = lower[1]    # Second element
+                    lower_offset = lower[1]  # Second element
                     upper_offset = upper[1]
                     lower_physical = lower[2:]  # Rest are physical bounds
                     upper_physical = upper[2:]
@@ -573,19 +631,25 @@ class NLSQWrapper:
                     upper_offset_per_angle = np.full(n_angles, upper_offset)
 
                     # Concatenate bounds in StratifiedResidualFunction order
-                    expanded_lower = np.concatenate([
-                        lower_contrast_per_angle,  # Scaling first
-                        lower_offset_per_angle,
-                        lower_physical             # Physical last
-                    ])
-                    expanded_upper = np.concatenate([
-                        upper_contrast_per_angle,
-                        upper_offset_per_angle,
-                        upper_physical
-                    ])
+                    expanded_lower = np.concatenate(
+                        [
+                            lower_contrast_per_angle,  # Scaling first
+                            lower_offset_per_angle,
+                            lower_physical,  # Physical last
+                        ]
+                    )
+                    expanded_upper = np.concatenate(
+                        [
+                            upper_contrast_per_angle,
+                            upper_offset_per_angle,
+                            upper_physical,
+                        ]
+                    )
 
                     nlsq_bounds = (expanded_lower, expanded_upper)
-                    logger.info(f"  Bounds expanded to {len(expanded_lower)} parameters")
+                    logger.info(
+                        f"  Bounds expanded to {len(expanded_lower)} parameters"
+                    )
 
             # Parameter count validation (CRITICAL)
             n_physical = len(physical_param_names)
@@ -603,33 +667,17 @@ class NLSQWrapper:
                     f"n_angles={n_angles if per_angle_scaling else 'N/A'})"
                 )
 
-            logger.info(f"✓ Parameter validation passed: {len(validated_params)} parameters")
+            logger.info(
+                f"✓ Parameter validation passed: {len(validated_params)} parameters"
+            )
 
-            # Extract target chunk size from config with GPU memory adaptation
+            # Extract target chunk size from config
             target_chunk_size = 100_000  # Default
-            if config is not None and hasattr(config, 'config'):
-                strat_config = config.config.get('optimization', {}).get('stratification', {})
-                target_chunk_size = strat_config.get('target_chunk_size', 100_000)
-
-            # GPU Memory Adaptation: Reduce chunk size for GPU to prevent OOM
-            try:
-                import jax
-                devices = jax.devices()
-                is_gpu = any(d.platform == 'gpu' for d in devices)
-
-                if is_gpu:
-                    # For GPU, use smaller chunks to avoid memory exhaustion
-                    # SVD operations in least_squares are memory-intensive on GPU
-                    gpu_chunk_size = min(target_chunk_size, 50_000)  # Max 50k per chunk on GPU
-
-                    if gpu_chunk_size < target_chunk_size:
-                        logger.info(f"GPU detected - reducing chunk size for memory safety:")
-                        logger.info(f"  Original: {target_chunk_size:,} points/chunk")
-                        logger.info(f"  GPU-optimized: {gpu_chunk_size:,} points/chunk")
-                        logger.info(f"  This prevents GPU OOM errors during optimization")
-                        target_chunk_size = gpu_chunk_size
-            except Exception as e:
-                logger.debug(f"GPU chunk size adaptation skipped: {e}")
+            if config is not None and hasattr(config, "config"):
+                strat_config = config.config.get("optimization", {}).get(
+                    "stratification", {}
+                )
+                target_chunk_size = strat_config.get("target_chunk_size", 100_000)
 
             # Call stratified least_squares optimization
             try:
@@ -645,7 +693,9 @@ class NLSQWrapper:
 
                 # Compute final residuals for result creation
                 # We need to recreate the residual function to compute final residuals
-                chunked_data = self._create_stratified_chunks(stratified_data, target_chunk_size)
+                chunked_data = self._create_stratified_chunks(
+                    stratified_data, target_chunk_size
+                )
                 residual_fn = create_stratified_residual_function(
                     stratified_data=chunked_data,
                     per_angle_scaling=per_angle_scaling,
@@ -665,9 +715,11 @@ class NLSQWrapper:
                     pcov=pcov,
                     residuals=final_residuals,
                     n_data=n_data,
-                    iterations=info.get('nit', 0),
+                    iterations=info.get("nit", 0),
                     execution_time=execution_time,
-                    convergence_status="converged" if info.get('success', True) else "failed",
+                    convergence_status=(
+                        "converged" if info.get("success", True) else "failed"
+                    ),
                     recovery_actions=[f"stratified_least_squares_method"],
                     streaming_diagnostics=None,
                     stratification_diagnostics=stratification_diagnostics,
@@ -675,7 +727,9 @@ class NLSQWrapper:
 
                 logger.info("=" * 80)
                 logger.info("STRATIFIED LEAST-SQUARES COMPLETE")
-                logger.info(f"Final χ²: {result.chi_squared:.4e}, Reduced χ²: {result.reduced_chi_squared:.4f}")
+                logger.info(
+                    f"Final χ²: {result.chi_squared:.4e}, Reduced χ²: {result.reduced_chi_squared:.4f}"
+                )
                 logger.info("=" * 80)
 
                 return result
@@ -693,21 +747,21 @@ class NLSQWrapper:
         n_data = len(ydata)
         logger.info(f"Data prepared: {n_data} points")
 
-        # Check for very large datasets that may cause GPU OOM
+        # Check for very large datasets that may cause memory issues
         if n_data > 10_000_000:
             logger.warning(
                 f"VERY LARGE DATASET: {n_data:,} points detected!\n"
                 f"  Estimated Jacobian size: ~{n_data * 9 * 8 / 1e9:.2f} GB\n"
                 f"  Using curve_fit_large() with automatic chunking\n"
                 f"  Recommendations if OOM occurs:\n"
-                f"    1. Switch to CPU: XLA_FLAGS='--xla_force_host_platform_device_count=8'\n"
-                f"    2. Enable phi angle filtering to reduce dataset size\n"
-                f"    3. Reduce time points via config (frames or subsampling)"
+                f"    1. Enable phi angle filtering to reduce dataset size\n"
+                f"    2. Reduce time points via config (frames or subsampling)\n"
+                f"    3. Use a machine with more system memory"
             )
         elif n_data > 1_000_000:
             logger.info(
                 f"Large dataset: {n_data:,} points detected. Using curve_fit_large() for optimization.\n"
-                f"  GPU memory will be managed automatically with chunking."
+                f"  Memory will be managed automatically with chunking."
             )
 
         # Step 3: Validate initial parameters
@@ -733,8 +787,12 @@ class NLSQWrapper:
                 )
 
         # Step 6: Create residual function with per-angle scaling
-        logger.info(f"Creating residual function (per_angle_scaling={per_angle_scaling})...")
-        residual_fn = self._create_residual_function(stratified_data, analysis_mode, per_angle_scaling)
+        logger.info(
+            f"Creating residual function (per_angle_scaling={per_angle_scaling})..."
+        )
+        residual_fn = self._create_residual_function(
+            stratified_data, analysis_mode, per_angle_scaling
+        )
 
         # Step 7: Select optimization strategy using intelligent strategy selector
         # Following NLSQ best practices: estimate memory first, then select strategy
@@ -747,7 +805,7 @@ class NLSQWrapper:
             f"{memory_stats['available_memory_gb']:.2f} GB available"
         )
 
-        if not memory_stats['memory_safe']:
+        if not memory_stats["memory_safe"]:
             logger.warning(
                 f"Memory usage may be high ({memory_stats['total_memory_estimate_gb']:.2f} GB). "
                 f"Using memory-efficient strategy."
@@ -756,20 +814,20 @@ class NLSQWrapper:
         # Extract strategy configuration from config object
         # Supports optional overrides: strategy_override, memory_limit_gb, enable_progress
         strategy_config = {}
-        if config is not None and hasattr(config, 'config'):
-            perf_config = config.config.get('performance', {})
+        if config is not None and hasattr(config, "config"):
+            perf_config = config.config.get("performance", {})
 
             # Extract strategy override (e.g., "standard", "large", "chunked", "streaming")
-            if 'strategy_override' in perf_config:
-                strategy_config['strategy_override'] = perf_config['strategy_override']
+            if "strategy_override" in perf_config:
+                strategy_config["strategy_override"] = perf_config["strategy_override"]
 
             # Extract custom memory limit (GB)
-            if 'memory_limit_gb' in perf_config:
-                strategy_config['memory_limit_gb'] = perf_config['memory_limit_gb']
+            if "memory_limit_gb" in perf_config:
+                strategy_config["memory_limit_gb"] = perf_config["memory_limit_gb"]
 
             # Extract progress bar preference
-            if 'enable_progress' in perf_config:
-                strategy_config['enable_progress'] = perf_config['enable_progress']
+            if "enable_progress" in perf_config:
+                strategy_config["enable_progress"] = perf_config["enable_progress"]
 
         # Select strategy based on dataset size and memory
         strategy_selector = DatasetSizeStrategy(config=strategy_config)
@@ -796,19 +854,30 @@ class NLSQWrapper:
         while current_strategy is not None:
             try:
                 strategy_info = strategy_selector.get_strategy_info(current_strategy)
-                logger.info(f"Attempting optimization with {current_strategy.value} strategy...")
+                logger.info(
+                    f"Attempting optimization with {current_strategy.value} strategy..."
+                )
 
                 # Special handling for STREAMING strategy
-                if current_strategy == OptimizationStrategy.STREAMING and STREAMING_AVAILABLE:
-                    logger.info("Using NLSQ StreamingOptimizer for unlimited dataset size...")
+                if (
+                    current_strategy == OptimizationStrategy.STREAMING
+                    and STREAMING_AVAILABLE
+                ):
+                    logger.info(
+                        "Using NLSQ StreamingOptimizer for unlimited dataset size..."
+                    )
 
                     # Extract checkpoint configuration from config
                     checkpoint_config = None
-                    if hasattr(config, 'get_config_dict'):
+                    if hasattr(config, "get_config_dict"):
                         config_dict = config.get_config_dict()
-                        checkpoint_config = config_dict.get('optimization', {}).get('streaming', {})
+                        checkpoint_config = config_dict.get("optimization", {}).get(
+                            "streaming", {}
+                        )
                     elif isinstance(config, dict):
-                        checkpoint_config = config.get('optimization', {}).get('streaming', {})
+                        checkpoint_config = config.get("optimization", {}).get(
+                            "streaming", {}
+                        )
 
                     popt, pcov, info = self._fit_with_streaming_optimizer(
                         residual_fn=residual_fn,
@@ -820,8 +889,10 @@ class NLSQWrapper:
                         checkpoint_config=checkpoint_config,
                     )
                     # StreamingOptimizer handles recovery internally
-                    recovery_actions = info.get('recovery_actions', [])
-                    convergence_status = "converged" if info.get('success', True) else "partial"
+                    recovery_actions = info.get("recovery_actions", [])
+                    convergence_status = (
+                        "converged" if info.get("success", True) else "partial"
+                    )
 
                 elif self.enable_recovery:
                     # Execute with automatic error recovery (T022-T024)
@@ -854,7 +925,7 @@ class NLSQWrapper:
                             max_nfev=5000,
                             verbose=2,
                             full_output=True,
-                            show_progress=strategy_info['supports_progress'],
+                            show_progress=strategy_info["supports_progress"],
                         )
                     else:
                         # Use standard curve_fit for small datasets
@@ -877,7 +948,9 @@ class NLSQWrapper:
 
                 # Success! Record which strategy worked
                 if strategy_attempts:
-                    recovery_actions.append(f"strategy_fallback_to_{current_strategy.value}")
+                    recovery_actions.append(
+                        f"strategy_fallback_to_{current_strategy.value}"
+                    )
                     logger.info(
                         f"Successfully optimized with fallback strategy: {current_strategy.value}\n"
                         f"  Previous attempts: {[s.value for s in strategy_attempts]}"
@@ -909,7 +982,9 @@ class NLSQWrapper:
 
                     # If the last error was a RuntimeError with detailed diagnostics, preserve it
                     # Otherwise create a generic error message
-                    if isinstance(e, RuntimeError) and ("Recovery actions" in str(e) or "Suggestions" in str(e)):
+                    if isinstance(e, RuntimeError) and (
+                        "Recovery actions" in str(e) or "Suggestions" in str(e)
+                    ):
                         # Detailed diagnostics are already in the error message - re-raise as-is
                         raise
                     else:
@@ -937,7 +1012,9 @@ class NLSQWrapper:
         # 2. Cost reduction > 5% suggests parameters were actually optimized
         # 3. Parameters changed suggests optimization didn't immediately declare convergence
         function_evals = iterations  # nfev = number of function evaluations
-        cost_reduction = (initial_cost - final_cost) / initial_cost if initial_cost > 0 else 0
+        cost_reduction = (
+            (initial_cost - final_cost) / initial_cost if initial_cost > 0 else 0
+        )
         params_changed = not np.allclose(popt, validated_params, rtol=1e-8)
 
         optimization_ran = function_evals > 10 or params_changed
@@ -956,7 +1033,7 @@ class NLSQWrapper:
         logger.info(
             f"{status_indicator}: {status_msg} in {execution_time:.2f}s\n"
             f"  Function evaluations: {function_evals}\n"
-            f"  Cost: {initial_cost:.4e} → {final_cost:.4e} ({cost_reduction*100:+.1f}%)\n"
+            f"  Cost: {initial_cost:.4e} → {final_cost:.4e} ({cost_reduction * 100:+.1f}%)\n"
             f"  Iterations reported: {iterations} (note: NLSQ trust-region may show 0)"
         )
         if recovery_actions:
@@ -964,10 +1041,10 @@ class NLSQWrapper:
 
         # Task 5.3 & 5.4: Extract streaming diagnostics from info if available
         streaming_diagnostics = None
-        if 'batch_statistics' in info:
-            streaming_diagnostics = info['batch_statistics']
-        elif 'streaming_diagnostics' in info:
-            streaming_diagnostics = info['streaming_diagnostics']
+        if "batch_statistics" in info:
+            streaming_diagnostics = info["batch_statistics"]
+        elif "streaming_diagnostics" in info:
+            streaming_diagnostics = info["streaming_diagnostics"]
 
         # Step 9: Create result with streaming and stratification diagnostics
         result = self._create_fit_result(
@@ -1039,12 +1116,16 @@ class NLSQWrapper:
 
         for attempt in range(max_retries):
             try:
-                logger.info(f"Optimization attempt {attempt + 1}/{max_retries} ({strategy.value} strategy)")
+                logger.info(
+                    f"Optimization attempt {attempt + 1}/{max_retries} ({strategy.value} strategy)"
+                )
 
                 if use_large:
                     # Use curve_fit_large for LARGE, CHUNKED, STREAMING strategies
                     # NLSQ handles memory management automatically via psutil
-                    logger.debug("Using curve_fit_large with NLSQ automatic memory management")
+                    logger.debug(
+                        "Using curve_fit_large with NLSQ automatic memory management"
+                    )
 
                     # Note: curve_fit_large returns only (popt, pcov), not (popt, pcov, info)
                     # It doesn't support full_output=True like curve_fit does
@@ -1098,11 +1179,17 @@ class NLSQWrapper:
                         recovery_actions.append("detected_parameter_stagnation")
                         logger.info("Retrying with perturbed parameters...")
                         # Perturb parameters by 5% for next attempt
-                        perturbation = 0.05 * current_params * np.random.uniform(-1, 1, size=len(current_params))
+                        perturbation = (
+                            0.05
+                            * current_params
+                            * np.random.uniform(-1, 1, size=len(current_params))
+                        )
                         current_params = current_params + perturbation
                         if bounds is not None:
                             # Clip to bounds
-                            current_params = np.clip(current_params, bounds[0], bounds[1])
+                            current_params = np.clip(
+                                current_params, bounds[0], bounds[1]
+                            )
                         continue  # Retry optimization
                     else:
                         logger.error(
@@ -1200,31 +1287,28 @@ class NLSQWrapper:
         }
 
         # Analyze error and determine recovery strategy
-        # Check for GPU out-of-memory errors first (most critical)
+        # Check for out-of-memory errors first (most critical)
         if "resource_exhausted" in error_str or "out of memory" in error_str:
-            # GPU/CPU memory exhaustion - parameter perturbation won't help
+            # CPU memory exhaustion - parameter perturbation won't help
             diagnostic["error_type"] = "out_of_memory"
             diagnostic["suggestions"] = [
-                "Dataset too large for available GPU memory",
-                "IMMEDIATE FIX: Run with CPU (slower but more RAM):",
-                "  XLA_FLAGS='--xla_force_host_platform_device_count=8' homodyne ...",
-                "ALTERNATIVE: Reduce dataset size:",
+                "Dataset too large for available CPU memory",
+                "IMMEDIATE FIX: Reduce dataset size:",
                 "  - Enable phi angle filtering in config (reduce angles from 23 to 8-12)",
                 "  - Reduce time points via subsampling (1001×1001 → 200×200)",
                 "  - Use smaller time window in config (frames: 1000-2000 → 1000-1500)",
-                "ADVANCED: Reduce GPU memory fraction in config:",
-                "  device.memory_fraction: 0.9 → 0.5",
+                "ALTERNATIVE: Increase system memory or use machine with more RAM",
                 "NOTE: curve_fit_large() is disabled - residual function not chunk-aware",
             ]
 
             # No parameter recovery will help OOM - need architectural change
             diagnostic["recovery_strategy"] = {
                 "action": "no_recovery_available",
-                "reason": "Memory exhaustion requires data reduction or CPU execution",
+                "reason": "Memory exhaustion requires data reduction",
                 "suggested_actions": [
-                    "switch_to_cpu",
                     "enable_angle_filtering",
                     "reduce_time_points",
+                    "increase_system_memory",
                 ],
             }
 
@@ -1449,22 +1533,24 @@ class NLSQWrapper:
         """
         # Extract stratification configuration with defaults
         strat_config = {}
-        if config is not None and hasattr(config, 'config'):
-            opt_config = config.config.get('optimization', {})
-            strat_config = opt_config.get('stratification', {})
+        if config is not None and hasattr(config, "config"):
+            opt_config = config.config.get("optimization", {})
+            strat_config = opt_config.get("stratification", {})
 
         # Configuration defaults (matching YAML template)
-        enabled = strat_config.get('enabled', 'auto')  # "auto", true, false
-        target_chunk_size = strat_config.get('target_chunk_size', 100_000)
-        max_imbalance_ratio = strat_config.get('max_imbalance_ratio', 5.0)
-        force_sequential = strat_config.get('force_sequential_fallback', False)
-        check_memory = strat_config.get('check_memory_safety', True)
-        use_index_based = strat_config.get('use_index_based', False)
-        collect_diagnostics = strat_config.get('collect_diagnostics', False)
-        log_diagnostics = strat_config.get('log_diagnostics', False)
+        enabled = strat_config.get("enabled", "auto")  # "auto", true, false
+        target_chunk_size = strat_config.get("target_chunk_size", 100_000)
+        max_imbalance_ratio = strat_config.get("max_imbalance_ratio", 5.0)
+        force_sequential = strat_config.get("force_sequential_fallback", False)
+        check_memory = strat_config.get("check_memory_safety", True)
+        use_index_based = strat_config.get("use_index_based", False)
+        collect_diagnostics = strat_config.get("collect_diagnostics", False)
+        log_diagnostics = strat_config.get("log_diagnostics", False)
 
         # Check if explicitly disabled
-        if enabled is False or (isinstance(enabled, str) and enabled.lower() == 'false'):
+        if enabled is False or (
+            isinstance(enabled, str) and enabled.lower() == "false"
+        ):
             logger.info("Stratification disabled via configuration")
             return data
 
@@ -1472,8 +1558,7 @@ class NLSQWrapper:
         if force_sequential:
             logger.info("Sequential per-angle fallback forced via configuration")
             return UseSequentialOptimization(
-                data=data,
-                reason="force_sequential_fallback=true in configuration"
+                data=data, reason="force_sequential_fallback=true in configuration"
             )
 
         # Quick checks: Do we need stratification?
@@ -1510,11 +1595,13 @@ class NLSQWrapper:
             )
             return UseSequentialOptimization(
                 data=data,
-                reason=f"Angle imbalance ratio ({stats.imbalance_ratio:.1f}) exceeds threshold ({max_imbalance_ratio:.1f})"
+                reason=f"Angle imbalance ratio ({stats.imbalance_ratio:.1f}) exceeds threshold ({max_imbalance_ratio:.1f})",
             )
 
         # Handle "auto" mode
-        if enabled == 'auto' or (isinstance(enabled, str) and enabled.lower() == 'auto'):
+        if enabled == "auto" or (
+            isinstance(enabled, str) and enabled.lower() == "auto"
+        ):
             should_stratify = should_stratify_auto
         else:
             # enabled is True (force on)
@@ -1536,7 +1623,9 @@ class NLSQWrapper:
 
         # Check memory safety (if enabled in config)
         if check_memory:
-            mem_stats = estimate_stratification_memory(n_points, use_index_based=use_index_based)
+            mem_stats = estimate_stratification_memory(
+                n_points, use_index_based=use_index_based
+            )
             if not mem_stats["is_safe"]:
                 logger.warning(
                     f"Stratification may use significant memory: "
@@ -1555,13 +1644,16 @@ class NLSQWrapper:
 
         # Measure stratification execution time
         import time
+
         stratification_start = time.perf_counter()
 
         # Apply stratification based on mode
         if use_index_based:
             # Index-based stratification (zero-copy, ~1% memory overhead)
             logger.info("Using index-based stratification (zero-copy)")
-            indices = create_angle_stratified_indices(phi_flat, target_chunk_size=target_chunk_size)
+            indices = create_angle_stratified_indices(
+                phi_flat, target_chunk_size=target_chunk_size
+            )
 
             # Apply indices to get stratified data
             phi_stratified = phi_flat[indices]
@@ -1578,8 +1670,10 @@ class NLSQWrapper:
             g2_jax = jnp.array(g2_flat)
 
             # Apply stratification (use configured target_chunk_size)
-            phi_stratified, t1_stratified, t2_stratified, g2_stratified = create_angle_stratified_data(
-                phi_jax, t1_jax, t2_jax, g2_jax, target_chunk_size=target_chunk_size
+            phi_stratified, t1_stratified, t2_stratified, g2_stratified = (
+                create_angle_stratified_data(
+                    phi_jax, t1_jax, t2_jax, g2_jax, target_chunk_size=target_chunk_size
+                )
             )
 
             # Convert back to numpy
@@ -1632,20 +1726,23 @@ class NLSQWrapper:
                 # Copy critical metadata attributes from original data
                 # These are required for residual function computation
                 self.sigma = original_data.sigma  # Uncertainty/error bars (CRITICAL)
-                self.q = original_data.q          # Wavevector magnitude (CRITICAL)
-                self.L = original_data.L          # Sample-detector distance (CRITICAL)
+                self.q = original_data.q  # Wavevector magnitude (CRITICAL)
+                self.L = original_data.L  # Sample-detector distance (CRITICAL)
 
                 # Copy optional dt if present (time step)
-                if hasattr(original_data, 'dt'):
+                if hasattr(original_data, "dt"):
                     self.dt = original_data.dt
 
                 # Store diagnostics if available
                 self.stratification_diagnostics = diagnostics
 
         stratified_data = StratifiedData(
-            phi_stratified, t1_stratified, t2_stratified, g2_stratified,
+            phi_stratified,
+            t1_stratified,
+            t2_stratified,
+            g2_stratified,
             data,  # Pass original data to copy metadata attributes
-            diagnostics
+            diagnostics,
         )
 
         logger.info(
@@ -1711,13 +1808,17 @@ class NLSQWrapper:
         # Load initial parameters if not provided
         if initial_params is None:
             from homodyne.config.parameter_manager import ParameterManager
+
             param_manager = ParameterManager(config.config, analysis_mode)
             initial_params = param_manager.get_initial_values()
-            logger.info(f"Loaded initial parameters from config: {len(initial_params)} parameters")
+            logger.info(
+                f"Loaded initial parameters from config: {len(initial_params)} parameters"
+            )
 
         # Load bounds if not provided
         if bounds is None:
             from homodyne.config.parameter_manager import ParameterManager
+
             param_manager = ParameterManager(config.config, analysis_mode)
             param_names = param_manager.get_parameter_names()
             bounds = param_manager.get_parameter_bounds(param_names)
@@ -1749,16 +1850,18 @@ class NLSQWrapper:
             return np.array(residuals)
 
         # Get optimizer configuration
-        opt_config = config.config.get('optimization', {})
-        nlsq_config = opt_config.get('nlsq', {})
+        opt_config = config.config.get("optimization", {})
+        nlsq_config = opt_config.get("nlsq", {})
 
         # Sequential-specific config
-        seq_config = opt_config.get('sequential', {})
-        min_success_rate = seq_config.get('min_success_rate', 0.5)
-        weighting = seq_config.get('weighting', 'inverse_variance')
+        seq_config = opt_config.get("sequential", {})
+        min_success_rate = seq_config.get("min_success_rate", 0.5)
+        weighting = seq_config.get("weighting", "inverse_variance")
 
         # Run sequential optimization
-        logger.info(f"Starting per-angle optimization with {len(np.unique(phi_flat))} angles...")
+        logger.info(
+            f"Starting per-angle optimization with {len(np.unique(phi_flat))} angles..."
+        )
 
         sequential_result = optimize_per_angle_sequential(
             phi=phi_flat,
@@ -1770,8 +1873,8 @@ class NLSQWrapper:
             bounds=bounds,
             weighting=weighting,
             min_success_rate=min_success_rate,
-            max_nfev=nlsq_config.get('max_iterations', 1000),
-            ftol=nlsq_config.get('tolerance', 1e-8),
+            max_nfev=nlsq_config.get("max_iterations", 1000),
+            ftol=nlsq_config.get("tolerance", 1e-8),
         )
 
         # Convert SequentialResult to OptimizationResult
@@ -1779,15 +1882,14 @@ class NLSQWrapper:
 
         # Get device info
         device_info = {
-            'type': 'CPU',  # Sequential uses scipy.optimize.least_squares (CPU only)
-            'backend': 'scipy.optimize.least_squares',
-            'strategy': 'sequential_per_angle',
+            "type": "CPU",  # Sequential uses scipy.optimize.least_squares (CPU only)
+            "backend": "scipy.optimize.least_squares",
+            "strategy": "sequential_per_angle",
         }
 
         # Compute chi-squared
         final_residuals = residual_func(
-            sequential_result.combined_parameters,
-            phi_flat, t1_flat, t2_flat, g2_flat
+            sequential_result.combined_parameters, phi_flat, t1_flat, t2_flat, g2_flat
         )
         chi_squared = float(np.sum(final_residuals**2))
         n_data = len(phi_flat)
@@ -1797,7 +1899,9 @@ class NLSQWrapper:
         # Determine convergence status
         if sequential_result.success_rate >= min_success_rate:
             convergence_status = "converged"
-            quality_flag = "good" if sequential_result.success_rate > 0.8 else "marginal"
+            quality_flag = (
+                "good" if sequential_result.success_rate > 0.8 else "marginal"
+            )
         else:
             convergence_status = "failed"
             quality_flag = "poor"
@@ -1809,7 +1913,9 @@ class NLSQWrapper:
         logger.info("=" * 80)
         logger.info("SEQUENTIAL OPTIMIZATION COMPLETE")
         logger.info(f"  Success rate: {sequential_result.success_rate:.1%}")
-        logger.info(f"  Angles optimized: {sequential_result.n_angles_optimized}/{sequential_result.n_angles_optimized + sequential_result.n_angles_failed}")
+        logger.info(
+            f"  Angles optimized: {sequential_result.n_angles_optimized}/{sequential_result.n_angles_optimized + sequential_result.n_angles_failed}"
+        )
         logger.info(f"  Combined cost: {sequential_result.total_cost:.4f}")
         logger.info(f"  Reduced χ²: {reduced_chi_squared:.4f}")
         logger.info(f"  Execution time: {execution_time:.2f}s")
@@ -1823,7 +1929,9 @@ class NLSQWrapper:
             chi_squared=chi_squared,
             reduced_chi_squared=reduced_chi_squared,
             convergence_status=convergence_status,
-            iterations=sum(r['n_iterations'] for r in sequential_result.per_angle_results),
+            iterations=sum(
+                r["n_iterations"] for r in sequential_result.per_angle_results
+            ),
             execution_time=execution_time,
             device_info=device_info,
             recovery_actions=[
@@ -1919,7 +2027,9 @@ class NLSQWrapper:
         # Just return validated bounds
         return (lower, upper)
 
-    def _create_residual_function(self, data: Any, analysis_mode: str, per_angle_scaling: bool = True) -> Any:
+    def _create_residual_function(
+        self, data: Any, analysis_mode: str, per_angle_scaling: bool = True
+    ) -> Any:
         """Create JAX-compatible model function for NLSQ with per-angle scaling support.
 
         IMPORTANT: NLSQ's curve_fit_large expects a MODEL FUNCTION f(x, *params) -> y,
@@ -2009,8 +2119,8 @@ class NLSQWrapper:
             if per_angle_scaling:
                 # Per-angle mode: first n_phi are contrasts, next n_phi are offsets
                 contrast = params_array[:n_phi]  # Array of shape (n_phi,)
-                offset = params_array[n_phi:2*n_phi]  # Array of shape (n_phi,)
-                physical_params = params_array[2*n_phi:]
+                offset = params_array[n_phi : 2 * n_phi]  # Array of shape (n_phi,)
+                physical_params = params_array[2 * n_phi :]
             else:
                 # Legacy mode: single scalar contrast and offset
                 contrast = params_array[0]  # Scalar
@@ -2077,6 +2187,7 @@ class NLSQWrapper:
             # We MUST apply the same correction to theoretical model to prevent mismatch.
             # Without this, NLSQ fails silently with 0 iterations.
             from homodyne.core.physics_nlsq import apply_diagonal_correction
+
             apply_diagonal_vmap = jax.vmap(apply_diagonal_correction, in_axes=0)
             g2_theory = apply_diagonal_vmap(g2_theory)
 
@@ -2184,7 +2295,9 @@ class NLSQWrapper:
                 "Please upgrade NLSQ to version >= 0.1.5: pip install --upgrade nlsq"
             )
 
-        logger.info("Initializing NLSQ StreamingOptimizer for unlimited dataset size...")
+        logger.info(
+            "Initializing NLSQ StreamingOptimizer for unlimited dataset size..."
+        )
 
         # Compute initial cost for optimization success tracking
         initial_residuals = residual_fn(xdata, *initial_params)
@@ -2192,16 +2305,17 @@ class NLSQWrapper:
 
         # Parse checkpoint configuration
         checkpoint_config = checkpoint_config or {}
-        enable_checkpoints = checkpoint_config.get('enable_checkpoints', False)
-        checkpoint_dir = checkpoint_config.get('checkpoint_dir', './checkpoints')
-        checkpoint_frequency = checkpoint_config.get('checkpoint_frequency', 10)
-        resume_from_checkpoint = checkpoint_config.get('resume_from_checkpoint', True)
-        keep_last_n = checkpoint_config.get('keep_last_checkpoints', 3)
+        enable_checkpoints = checkpoint_config.get("enable_checkpoints", False)
+        checkpoint_dir = checkpoint_config.get("checkpoint_dir", "./checkpoints")
+        checkpoint_frequency = checkpoint_config.get("checkpoint_frequency", 10)
+        resume_from_checkpoint = checkpoint_config.get("resume_from_checkpoint", True)
+        keep_last_n = checkpoint_config.get("keep_last_checkpoints", 3)
 
         # Initialize CheckpointManager if enabled
         checkpoint_manager = None
         if enable_checkpoints:
             from pathlib import Path
+
             checkpoint_manager = CheckpointManager(
                 checkpoint_dir=Path(checkpoint_dir),
                 checkpoint_frequency=checkpoint_frequency,
@@ -2218,15 +2332,19 @@ class NLSQWrapper:
             if latest_checkpoint:
                 logger.info(f"Found existing checkpoint: {latest_checkpoint}")
                 try:
-                    checkpoint_data = checkpoint_manager.load_checkpoint(latest_checkpoint)
-                    initial_params = checkpoint_data['parameters']
+                    checkpoint_data = checkpoint_manager.load_checkpoint(
+                        latest_checkpoint
+                    )
+                    initial_params = checkpoint_data["parameters"]
                     logger.info(
                         f"Resuming from batch {checkpoint_data['batch_idx']} "
                         f"(loss: {checkpoint_data['loss']:.6e})"
                     )
                     start_from_checkpoint = True
                 except NLSQCheckpointError as e:
-                    logger.warning(f"Failed to load checkpoint: {e}. Starting from scratch.")
+                    logger.warning(
+                        f"Failed to load checkpoint: {e}. Starting from scratch."
+                    )
                     checkpoint_data = None
 
         # Task 5.2: Use build_streaming_config() from DatasetSizeStrategy for optimal configuration
@@ -2235,11 +2353,17 @@ class NLSQWrapper:
         n_parameters = len(initial_params)
 
         # Get checkpoint configuration for strategy selector
-        checkpoint_strategy_config = {
-            'checkpoint_dir': checkpoint_dir if enable_checkpoints else None,
-            'checkpoint_frequency': checkpoint_frequency if enable_checkpoints else 0,
-            'enable_checkpoints': enable_checkpoints,
-        } if enable_checkpoints else None
+        checkpoint_strategy_config = (
+            {
+                "checkpoint_dir": checkpoint_dir if enable_checkpoints else None,
+                "checkpoint_frequency": (
+                    checkpoint_frequency if enable_checkpoints else 0
+                ),
+                "enable_checkpoints": enable_checkpoints,
+            }
+            if enable_checkpoints
+            else None
+        )
 
         # Build optimal streaming configuration using strategy selector
         from homodyne.optimization.strategy import DatasetSizeStrategy
@@ -2263,15 +2387,22 @@ class NLSQWrapper:
         if enable_checkpoints:
             # NLSQ uses separate checkpoint directory for optimizer state
             from pathlib import Path
+
             nlsq_checkpoint_dir = str(Path(checkpoint_dir) / "nlsq_optimizer_state")
 
         config = StreamingConfig(
-            batch_size=streaming_config_dict['batch_size'],
-            max_epochs=streaming_config_dict.get('max_epochs', 10),
-            enable_fault_tolerance=streaming_config_dict.get('enable_fault_tolerance', True),
-            validate_numerics=streaming_config_dict.get('validate_numerics', self.enable_numerical_validation),
-            min_success_rate=streaming_config_dict.get('min_success_rate', 0.5),
-            max_retries_per_batch=streaming_config_dict.get('max_retries_per_batch', self.max_retries),
+            batch_size=streaming_config_dict["batch_size"],
+            max_epochs=streaming_config_dict.get("max_epochs", 10),
+            enable_fault_tolerance=streaming_config_dict.get(
+                "enable_fault_tolerance", True
+            ),
+            validate_numerics=streaming_config_dict.get(
+                "validate_numerics", self.enable_numerical_validation
+            ),
+            min_success_rate=streaming_config_dict.get("min_success_rate", 0.5),
+            max_retries_per_batch=streaming_config_dict.get(
+                "max_retries_per_batch", self.max_retries
+            ),
             checkpoint_dir=nlsq_checkpoint_dir,  # NLSQ's optimizer checkpoints
             checkpoint_frequency=checkpoint_frequency if enable_checkpoints else 0,
             resume_from_checkpoint=start_from_checkpoint,
@@ -2282,11 +2413,16 @@ class NLSQWrapper:
 
         # Reset best parameter tracking
         self.best_params = None
-        self.best_loss = float('inf')
+        self.best_loss = float("inf")
         self.best_batch_idx = -1
 
         # Define enhanced progress callback with checkpoint saving
-        def progress_callback(batch_idx: int, total_batches: int, current_loss: float, current_params: np.ndarray | None = None):
+        def progress_callback(
+            batch_idx: int,
+            total_batches: int,
+            current_loss: float,
+            current_params: np.ndarray | None = None,
+        ):
             logger.info(
                 f"Batch {batch_idx + 1}/{total_batches} | Loss: {current_loss:.6e}"
             )
@@ -2303,23 +2439,27 @@ class NLSQWrapper:
             if checkpoint_manager and batch_idx % checkpoint_frequency == 0:
                 try:
                     # Get current parameters (use best if current not available)
-                    params_to_save = current_params if current_params is not None else self.best_params
+                    params_to_save = (
+                        current_params
+                        if current_params is not None
+                        else self.best_params
+                    )
                     if params_to_save is None:
                         params_to_save = initial_params  # Fallback to initial
 
                     # Prepare metadata
                     metadata = {
-                        'batch_statistics': self.batch_statistics.get_statistics(),
-                        'best_loss': self.best_loss,
-                        'best_batch_idx': self.best_batch_idx,
-                        'total_batches': total_batches,
+                        "batch_statistics": self.batch_statistics.get_statistics(),
+                        "best_loss": self.best_loss,
+                        "best_batch_idx": self.best_batch_idx,
+                        "total_batches": total_batches,
                     }
 
                     # Save homodyne-specific checkpoint
                     checkpoint_path = checkpoint_manager.save_checkpoint(
                         batch_idx=batch_idx,
                         parameters=params_to_save,
-                        optimizer_state={'loss': current_loss},  # Minimal state
+                        optimizer_state={"loss": current_loss},  # Minimal state
                         loss=current_loss,
                         metadata=metadata,
                     )
@@ -2350,23 +2490,25 @@ class NLSQWrapper:
             )
 
             # Use unified result handler to normalize output
-            popt, pcov, info = self._handle_nlsq_result(result, OptimizationStrategy.STREAMING)
+            popt, pcov, info = self._handle_nlsq_result(
+                result, OptimizationStrategy.STREAMING
+            )
 
             # Add batch statistics to info
             batch_stats = self.batch_statistics.get_statistics()
-            info['batch_statistics'] = batch_stats
+            info["batch_statistics"] = batch_stats
 
             # Add initial cost to info for success tracking
-            info['initial_cost'] = initial_cost
+            info["initial_cost"] = initial_cost
 
             # Add checkpoint information to info
             if checkpoint_manager:
-                info['checkpoint_enabled'] = True
-                info['checkpoint_dir'] = str(checkpoint_manager.checkpoint_dir)
-                info['resumed_from_checkpoint'] = start_from_checkpoint
+                info["checkpoint_enabled"] = True
+                info["checkpoint_dir"] = str(checkpoint_manager.checkpoint_dir)
+                info["resumed_from_checkpoint"] = start_from_checkpoint
                 if checkpoint_data:
-                    info['resume_batch_idx'] = checkpoint_data['batch_idx']
-                    info['resume_loss'] = checkpoint_data['loss']
+                    info["resume_batch_idx"] = checkpoint_data["batch_idx"]
+                    info["resume_loss"] = checkpoint_data["loss"]
 
             logger.info(
                 f"Streaming optimization complete. "
@@ -2384,7 +2526,7 @@ class NLSQWrapper:
             else:
                 raise NLSQOptimizationError(
                     f"StreamingOptimizer failed: {str(e)}",
-                    error_context={'original_error': type(e).__name__}
+                    error_context={"original_error": type(e).__name__},
                 ) from e
 
     def _create_stratified_chunks(
@@ -2411,7 +2553,7 @@ class NLSQWrapper:
         sigma = stratified_data.sigma  # 3D array: (n_phi, n_t1, n_t2)
         q = stratified_data.q
         L = stratified_data.L
-        dt = getattr(stratified_data, 'dt', None)
+        dt = getattr(stratified_data, "dt", None)
 
         # Determine number of chunks
         n_total = len(g2_flat)
@@ -2480,7 +2622,7 @@ class NLSQWrapper:
         - Uses NLSQ's least_squares() for JAX-accelerated optimization
         - Maintains angle-stratified chunks (no double-chunking)
         - Compatible with per-angle scaling parameters
-        - GPU/CPU transparent execution
+        - CPU-optimized execution
         - Trust-region reflective (TRF) algorithm
 
         Args:
@@ -2514,8 +2656,12 @@ class NLSQWrapper:
         logger.info("=" * 80)
 
         # Convert stratified flat arrays into chunks
-        logger.info(f"Creating chunks from stratified data (target size: {target_chunk_size:,})...")
-        chunked_data = self._create_stratified_chunks(stratified_data, target_chunk_size)
+        logger.info(
+            f"Creating chunks from stratified data (target size: {target_chunk_size:,})..."
+        )
+        chunked_data = self._create_stratified_chunks(
+            stratified_data, target_chunk_size
+        )
         logger.info(f"Created {len(chunked_data.chunks)} chunks")
 
         # Start timing
@@ -2544,10 +2690,12 @@ class NLSQWrapper:
         try:
             # Compute residuals at initial parameters
             residuals_0 = residual_fn(initial_params)
-            logger.info(f"Initial residuals: shape={residuals_0.shape}, "
-                       f"min={float(np.min(residuals_0)):.6e}, "
-                       f"max={float(np.max(residuals_0)):.6e}, "
-                       f"mean={float(np.mean(residuals_0)):.6e}")
+            logger.info(
+                f"Initial residuals: shape={residuals_0.shape}, "
+                f"min={float(np.min(residuals_0)):.6e}, "
+                f"max={float(np.max(residuals_0)):.6e}, "
+                f"mean={float(np.mean(residuals_0)):.6e}"
+            )
 
             # Perturb first physical parameter by 1%
             params_test = np.array(initial_params, copy=True)
@@ -2556,30 +2704,42 @@ class NLSQWrapper:
 
             # Estimate gradient magnitude
             gradient_estimate = float(np.abs(np.sum(residuals_1 - residuals_0)))
-            logger.info(f"Gradient estimate (1% perturbation of param[0]): {gradient_estimate:.6e}")
+            logger.info(
+                f"Gradient estimate (1% perturbation of param[0]): {gradient_estimate:.6e}"
+            )
 
             # Check if gradient is suspiciously small
             if gradient_estimate < 1e-10:
                 logger.error("=" * 80)
                 logger.error("GRADIENT SANITY CHECK FAILED")
                 logger.error("=" * 80)
-                logger.error(f"Gradient estimate: {gradient_estimate:.6e} (expected > 1e-10)")
+                logger.error(
+                    f"Gradient estimate: {gradient_estimate:.6e} (expected > 1e-10)"
+                )
                 logger.error("This indicates:")
-                logger.error("  - Parameter initialization issue (likely wrong parameter count)")
+                logger.error(
+                    "  - Parameter initialization issue (likely wrong parameter count)"
+                )
                 logger.error("  - Residual function not sensitive to parameter changes")
                 logger.error("  - Optimization will fail with 0 iterations")
                 logger.error("")
                 logger.error("Diagnostic information:")
                 logger.error(f"  Initial parameters count: {len(initial_params)}")
-                logger.error(f"  Expected for per-angle scaling: {len(physical_param_names)} physical + 2*{residual_fn.n_phi} scaling = {len(physical_param_names) + 2*residual_fn.n_phi}")
-                logger.error(f"  Residual function expects: per_angle_scaling={per_angle_scaling}, n_phi={residual_fn.n_phi}")
+                logger.error(
+                    f"  Expected for per-angle scaling: {len(physical_param_names)} physical + 2*{residual_fn.n_phi} scaling = {len(physical_param_names) + 2 * residual_fn.n_phi}"
+                )
+                logger.error(
+                    f"  Residual function expects: per_angle_scaling={per_angle_scaling}, n_phi={residual_fn.n_phi}"
+                )
                 logger.error("=" * 80)
                 raise ValueError(
                     f"Gradient sanity check FAILED: gradient ≈ {gradient_estimate:.2e} "
                     f"(expected > 1e-10). Optimization cannot proceed with zero gradients."
                 )
 
-            logger.info(f"✓ Gradient sanity check passed (gradient magnitude: {gradient_estimate:.6e})")
+            logger.info(
+                f"✓ Gradient sanity check passed (gradient magnitude: {gradient_estimate:.6e})"
+            )
 
         except Exception as e:
             if "Gradient sanity check FAILED" in str(e):
@@ -2594,20 +2754,6 @@ class NLSQWrapper:
         logger.info(f"  Initial parameters: {len(initial_params)} parameters")
         logger.info(f"  Bounds: {'provided' if bounds is not None else 'unbounded'}")
 
-        # GPU Memory Management (prevent OOM errors)
-        try:
-            import jax
-            devices = jax.devices()
-            is_gpu = any(d.platform == 'gpu' for d in devices)
-
-            if is_gpu:
-                logger.info("GPU detected - clearing memory cache before optimization")
-                # Clear compilation cache to free GPU memory
-                jax.clear_caches()
-                logger.info("✓ GPU memory cache cleared")
-        except Exception as e:
-            logger.debug(f"GPU memory management skipped: {e}")
-
         # Call NLSQ's least_squares() - NO xdata/ydata needed!
         # Data is encapsulated in residual_fn
         optimization_start = time.perf_counter()
@@ -2615,57 +2761,29 @@ class NLSQWrapper:
         # Instantiate LeastSquares class and call its least_squares method
         ls = LeastSquares()
 
-        try:
-            result = ls.least_squares(
-                fun=residual_fn,              # Residual function (we control chunking!)
-                x0=initial_params,            # Initial parameters
-                jac=None,                     # Use JAX autodiff for Jacobian
-                bounds=bounds,                # Parameter bounds
-                method='trf',                 # Trust Region Reflective
-                ftol=1e-8,                    # Function tolerance
-                xtol=1e-8,                    # Parameter tolerance
-                gtol=1e-8,                    # Gradient tolerance
-                max_nfev=1000,                # Max function evaluations
-                verbose=2,                    # Show progress
-            )
-        except RuntimeError as e:
-            if "RESOURCE_EXHAUSTED" in str(e) and "GPU" in str(e).upper():
-                logger.error("=" * 80)
-                logger.error("GPU OUT OF MEMORY ERROR")
-                logger.error("=" * 80)
-                logger.error(f"Error: {e}")
-                logger.error("")
-                logger.error("GPU optimization failed due to insufficient memory.")
-                logger.error("This typically happens with large datasets on GPUs with limited memory.")
-                logger.error("")
-                logger.error("Solutions:")
-                logger.error("  1. Run with CPU-only mode: CUDA_VISIBLE_DEVICES=\"\" homodyne --config ...")
-                logger.error("  2. Reduce GPU memory fraction in config (currently using 90%):")
-                logger.error("     device:")
-                logger.error("       gpu_memory_fraction: 0.7  # Reduce to 70%")
-                logger.error("  3. Reduce chunk size in config:")
-                logger.error("     optimization:")
-                logger.error("       stratification:")
-                logger.error("         target_chunk_size: 50000  # Reduce from 100k")
-                logger.error("=" * 80)
-                raise RuntimeError(
-                    "GPU out of memory during optimization. "
-                    "Use CPU-only mode (CUDA_VISIBLE_DEVICES=\"\") or reduce GPU memory fraction. "
-                    "See log for details."
-                ) from e
-            else:
-                raise
+        result = ls.least_squares(
+            fun=residual_fn,  # Residual function (we control chunking!)
+            x0=initial_params,  # Initial parameters
+            jac=None,  # Use JAX autodiff for Jacobian
+            bounds=bounds,  # Parameter bounds
+            method="trf",  # Trust Region Reflective
+            ftol=1e-8,  # Function tolerance
+            xtol=1e-8,  # Parameter tolerance
+            gtol=1e-8,  # Gradient tolerance
+            max_nfev=1000,  # Max function evaluations
+            verbose=2,  # Show progress
+        )
 
         optimization_time = time.perf_counter() - optimization_start
         logger.info(f"Optimization completed in {optimization_time:.2f}s")
 
         # Extract results from NLSQ result object
-        popt = np.asarray(result['x'])
+        popt = np.asarray(result["x"])
 
         # Compute covariance matrix from Jacobian
         # NLSQ's least_squares may or may not provide pcov directly
-        if 'pcov' in result and result['pcov'] is not None:
-            pcov = np.asarray(result['pcov'])
+        if "pcov" in result and result["pcov"] is not None:
+            pcov = np.asarray(result["pcov"])
             logger.info("Using covariance matrix from NLSQ result")
         else:
             # Compute covariance from Jacobian: pcov = inv(J^T J)
@@ -2690,15 +2808,17 @@ class NLSQWrapper:
         final_cost = float(np.sum(final_residuals**2))
 
         # Extract convergence information
-        success = result.get('success', True)
-        message = result.get('message', 'Optimization completed')
-        nfev = result.get('nfev', 0)
-        nit = result.get('nit', 0)
+        success = result.get("success", True)
+        message = result.get("message", "Optimization completed")
+        nfev = result.get("nfev", 0)
+        nit = result.get("nit", 0)
 
         # Determine if optimization actually improved
         initial_residuals = residual_fn(initial_params)
         initial_cost = float(np.sum(initial_residuals**2))
-        cost_reduction = (initial_cost - final_cost) / initial_cost if initial_cost > 0 else 0
+        cost_reduction = (
+            (initial_cost - final_cost) / initial_cost if initial_cost > 0 else 0
+        )
         params_changed = not np.allclose(popt, initial_params, rtol=1e-8)
 
         # Log results
@@ -2710,7 +2830,7 @@ class NLSQWrapper:
         logger.info(f"  Iterations: {nit}")
         logger.info(f"  Initial cost: {initial_cost:.6e}")
         logger.info(f"  Final cost: {final_cost:.6e}")
-        logger.info(f"  Cost reduction: {cost_reduction*100:+.2f}%")
+        logger.info(f"  Cost reduction: {cost_reduction * 100:+.2f}%")
         logger.info(f"  Parameters changed: {params_changed}")
         logger.info(f"  Total time: {time.perf_counter() - start_time:.2f}s")
         logger.info("=" * 80)
@@ -2720,7 +2840,7 @@ class NLSQWrapper:
             logger.warning(
                 "Optimization may have failed:\n"
                 f"  Parameters changed: {params_changed}\n"
-                f"  Cost reduction: {cost_reduction*100:.2f}%\n"
+                f"  Cost reduction: {cost_reduction * 100:.2f}%\n"
                 "This may indicate:\n"
                 "  - Initial parameters already optimal\n"
                 "  - Optimization converged immediately\n"
@@ -2729,15 +2849,15 @@ class NLSQWrapper:
 
         # Prepare info dict
         info = {
-            'success': success,
-            'message': message,
-            'nfev': nfev,
-            'nit': nit,
-            'initial_cost': initial_cost,
-            'final_cost': final_cost,
-            'cost_reduction': cost_reduction,
-            'optimization_time': optimization_time,
-            'method': 'stratified_least_squares',
+            "success": success,
+            "message": message,
+            "nfev": nfev,
+            "nit": nit,
+            "initial_cost": initial_cost,
+            "final_cost": final_cost,
+            "cost_reduction": cost_reduction,
+            "optimization_time": optimization_time,
+            "method": "stratified_least_squares",
         }
 
         return popt, pcov, info
@@ -2814,20 +2934,28 @@ class NLSQWrapper:
             enhanced_streaming_diagnostics = streaming_diagnostics.copy()
 
             # Add batch statistics if available
-            if hasattr(self, 'batch_statistics') and self.batch_statistics.total_batches > 0:
+            if (
+                hasattr(self, "batch_statistics")
+                and self.batch_statistics.total_batches > 0
+            ):
                 batch_stats = self.batch_statistics.get_statistics()
 
                 # Extract key metrics for enhanced diagnostics
-                enhanced_streaming_diagnostics.update({
-                    'batch_success_rate': batch_stats['success_rate'],
-                    'failed_batch_indices': [
-                        b['batch_idx'] for b in batch_stats['recent_batches']
-                        if not b['success']
-                    ],
-                    'error_type_distribution': batch_stats['error_distribution'],
-                    'average_iterations_per_batch': batch_stats['average_iterations'],
-                    'total_batches_processed': batch_stats['total_batches'],
-                })
+                enhanced_streaming_diagnostics.update(
+                    {
+                        "batch_success_rate": batch_stats["success_rate"],
+                        "failed_batch_indices": [
+                            b["batch_idx"]
+                            for b in batch_stats["recent_batches"]
+                            if not b["success"]
+                        ],
+                        "error_type_distribution": batch_stats["error_distribution"],
+                        "average_iterations_per_batch": batch_stats[
+                            "average_iterations"
+                        ],
+                        "total_batches_processed": batch_stats["total_batches"],
+                    }
+                )
 
         # Create result
         result = OptimizationResult(

@@ -132,11 +132,16 @@ class TestCMCSpecificOptions:
         config_file = tmp_path / "test_config.yaml"
         config_file.write_text("# Test config")
 
-        args = parser.parse_args([
-            "--method", "mcmc",
-            "--min-samples-cmc", "20",
-            "--config", str(config_file),
-        ])
+        args = parser.parse_args(
+            [
+                "--method",
+                "mcmc",
+                "--min-samples-cmc",
+                "20",
+                "--config",
+                str(config_file),
+            ]
+        )
 
         assert args.method == "mcmc"
         assert args.min_samples_cmc == 20
@@ -148,11 +153,16 @@ class TestCMCSpecificOptions:
         config_file = tmp_path / "test_config.yaml"
         config_file.write_text("# Test config")
 
-        args = parser.parse_args([
-            "--method", "mcmc",
-            "--memory-threshold-pct", "0.35",
-            "--config", str(config_file),
-        ])
+        args = parser.parse_args(
+            [
+                "--method",
+                "mcmc",
+                "--memory-threshold-pct",
+                "0.35",
+                "--config",
+                str(config_file),
+            ]
+        )
 
         assert args.method == "mcmc"
         assert args.memory_threshold_pct == 0.35
@@ -164,12 +174,18 @@ class TestCMCSpecificOptions:
         config_file = tmp_path / "test_config.yaml"
         config_file.write_text("# Test config")
 
-        args = parser.parse_args([
-            "--method", "mcmc",
-            "--min-samples-cmc", "25",
-            "--memory-threshold-pct", "0.40",
-            "--config", str(config_file),
-        ])
+        args = parser.parse_args(
+            [
+                "--method",
+                "mcmc",
+                "--min-samples-cmc",
+                "25",
+                "--memory-threshold-pct",
+                "0.40",
+                "--config",
+                str(config_file),
+            ]
+        )
 
         assert args.method == "mcmc"
         assert args.min_samples_cmc == 25
@@ -182,11 +198,16 @@ class TestCMCSpecificOptions:
         config_file = tmp_path / "test_config.yaml"
         config_file.write_text("# Test config")
 
-        args = parser.parse_args([
-            "--method", "mcmc",
-            "--cmc-num-shards", "8",
-            "--config", str(config_file),
-        ])
+        args = parser.parse_args(
+            [
+                "--method",
+                "mcmc",
+                "--cmc-num-shards",
+                "8",
+                "--config",
+                str(config_file),
+            ]
+        )
 
         assert args.method == "mcmc"
         assert args.cmc_num_shards == 8
@@ -198,11 +219,16 @@ class TestCMCSpecificOptions:
         config_file = tmp_path / "test_config.yaml"
         config_file.write_text("# Test config")
 
-        args = parser.parse_args([
-            "--method", "mcmc",
-            "--cmc-backend", "pjit",
-            "--config", str(config_file),
-        ])
+        args = parser.parse_args(
+            [
+                "--method",
+                "mcmc",
+                "--cmc-backend",
+                "pjit",
+                "--config",
+                str(config_file),
+            ]
+        )
 
         assert args.method == "mcmc"
         assert args.cmc_backend == "pjit"
@@ -214,15 +240,23 @@ class TestCMCSpecificOptions:
         config_file = tmp_path / "test_config.yaml"
         config_file.write_text("# Test config")
 
-        args = parser.parse_args([
-            "--method", "mcmc",
-            "--min-samples-cmc", "20",
-            "--memory-threshold-pct", "0.35",
-            "--cmc-num-shards", "8",
-            "--cmc-backend", "multiprocessing",
-            "--cmc-plot-diagnostics",
-            "--config", str(config_file),
-        ])
+        args = parser.parse_args(
+            [
+                "--method",
+                "mcmc",
+                "--min-samples-cmc",
+                "20",
+                "--memory-threshold-pct",
+                "0.35",
+                "--cmc-num-shards",
+                "8",
+                "--cmc-backend",
+                "multiprocessing",
+                "--cmc-plot-diagnostics",
+                "--config",
+                str(config_file),
+            ]
+        )
 
         assert args.method == "mcmc"
         assert args.min_samples_cmc == 20
@@ -242,10 +276,14 @@ class TestCLIParameterOverrides:
         config_file = tmp_path / "test_config.yaml"
         config_file.write_text("# Test config")
 
-        args = parser.parse_args([
-            "--initial-d0", "1500.5",
-            "--config", str(config_file),
-        ])
+        args = parser.parse_args(
+            [
+                "--initial-d0",
+                "1500.5",
+                "--config",
+                str(config_file),
+            ]
+        )
 
         assert args.initial_d0 == 1500.5
         assert validate_args(args) is True
@@ -256,10 +294,14 @@ class TestCLIParameterOverrides:
         config_file = tmp_path / "test_config.yaml"
         config_file.write_text("# Test config")
 
-        args = parser.parse_args([
-            "--initial-alpha", "0.75",
-            "--config", str(config_file),
-        ])
+        args = parser.parse_args(
+            [
+                "--initial-alpha",
+                "0.75",
+                "--config",
+                str(config_file),
+            ]
+        )
 
         assert args.initial_alpha == 0.75
         assert validate_args(args) is True
@@ -270,10 +312,14 @@ class TestCLIParameterOverrides:
         config_file = tmp_path / "test_config.yaml"
         config_file.write_text("# Test config")
 
-        args = parser.parse_args([
-            "--initial-d-offset", "100.0",
-            "--config", str(config_file),
-        ])
+        args = parser.parse_args(
+            [
+                "--initial-d-offset",
+                "100.0",
+                "--config",
+                str(config_file),
+            ]
+        )
 
         assert args.initial_d_offset == 100.0
         assert validate_args(args) is True
@@ -284,12 +330,18 @@ class TestCLIParameterOverrides:
         config_file = tmp_path / "test_config.yaml"
         config_file.write_text("# Test config")
 
-        args = parser.parse_args([
-            "--initial-d0", "1234.5",
-            "--initial-alpha", "0.567",
-            "--initial-d-offset", "12.34",
-            "--config", str(config_file),
-        ])
+        args = parser.parse_args(
+            [
+                "--initial-d0",
+                "1234.5",
+                "--initial-alpha",
+                "0.567",
+                "--initial-d-offset",
+                "12.34",
+                "--config",
+                str(config_file),
+            ]
+        )
 
         assert args.initial_d0 == 1234.5
         assert args.initial_alpha == 0.567
@@ -302,13 +354,20 @@ class TestCLIParameterOverrides:
         config_file = tmp_path / "test_config.yaml"
         config_file.write_text("# Test config")
 
-        args = parser.parse_args([
-            "--initial-gamma-dot-t0", "1.5",
-            "--initial-beta", "0.3",
-            "--initial-gamma-dot-offset", "0.1",
-            "--initial-phi0", "0.785",
-            "--config", str(config_file),
-        ])
+        args = parser.parse_args(
+            [
+                "--initial-gamma-dot-t0",
+                "1.5",
+                "--initial-beta",
+                "0.3",
+                "--initial-gamma-dot-offset",
+                "0.1",
+                "--initial-phi0",
+                "0.785",
+                "--config",
+                str(config_file),
+            ]
+        )
 
         assert args.initial_gamma_dot_t0 == 1.5
         assert args.initial_beta == 0.3
@@ -322,11 +381,15 @@ class TestCLIParameterOverrides:
         config_file = tmp_path / "test_config.yaml"
         config_file.write_text("# Test config")
 
-        args = parser.parse_args([
-            "--method", "mcmc",
-            "--dense-mass-matrix",
-            "--config", str(config_file),
-        ])
+        args = parser.parse_args(
+            [
+                "--method",
+                "mcmc",
+                "--dense-mass-matrix",
+                "--config",
+                str(config_file),
+            ]
+        )
 
         assert args.dense_mass_matrix is True
         assert validate_args(args) is True
@@ -337,13 +400,20 @@ class TestCLIParameterOverrides:
         config_file = tmp_path / "test_config.yaml"
         config_file.write_text("# Test config")
 
-        args = parser.parse_args([
-            "--method", "mcmc",
-            "--n-samples", "2000",
-            "--n-warmup", "1000",
-            "--n-chains", "8",
-            "--config", str(config_file),
-        ])
+        args = parser.parse_args(
+            [
+                "--method",
+                "mcmc",
+                "--n-samples",
+                "2000",
+                "--n-warmup",
+                "1000",
+                "--n-chains",
+                "8",
+                "--config",
+                str(config_file),
+            ]
+        )
 
         assert args.n_samples == 2000
         assert args.n_warmup == 1000
@@ -360,10 +430,14 @@ class TestParameterOverrideValidation:
         config_file = tmp_path / "test_config.yaml"
         config_file.write_text("# Test config")
 
-        args = parser.parse_args([
-            "--initial-d0", "-100.0",
-            "--config", str(config_file),
-        ])
+        args = parser.parse_args(
+            [
+                "--initial-d0",
+                "-100.0",
+                "--config",
+                str(config_file),
+            ]
+        )
 
         # Validation should fail for negative D0
         assert validate_args(args) is False
@@ -374,10 +448,14 @@ class TestParameterOverrideValidation:
         config_file = tmp_path / "test_config.yaml"
         config_file.write_text("# Test config")
 
-        args = parser.parse_args([
-            "--memory-threshold-pct", "1.5",  # > 1.0
-            "--config", str(config_file),
-        ])
+        args = parser.parse_args(
+            [
+                "--memory-threshold-pct",
+                "1.5",  # > 1.0
+                "--config",
+                str(config_file),
+            ]
+        )
 
         # Validation should fail for out-of-range threshold
         assert validate_args(args) is False
@@ -389,17 +467,25 @@ class TestParameterOverrideValidation:
         config_file.write_text("# Test config")
 
         # Test 0.0 boundary
-        args = parser.parse_args([
-            "--memory-threshold-pct", "0.0",
-            "--config", str(config_file),
-        ])
+        args = parser.parse_args(
+            [
+                "--memory-threshold-pct",
+                "0.0",
+                "--config",
+                str(config_file),
+            ]
+        )
         assert validate_args(args) is True
 
         # Test 1.0 boundary
-        args = parser.parse_args([
-            "--memory-threshold-pct", "1.0",
-            "--config", str(config_file),
-        ])
+        args = parser.parse_args(
+            [
+                "--memory-threshold-pct",
+                "1.0",
+                "--config",
+                str(config_file),
+            ]
+        )
         assert validate_args(args) is True
 
 
@@ -483,9 +569,9 @@ class TestHelpTextValidation:
 
         # Should mention dual criteria selection
         assert (
-            "automatic NUTS/CMC selection" in help_text or
-            "automatic" in help_text.lower() or
-            "dual criteria" in help_text.lower()
+            "automatic NUTS/CMC selection" in help_text
+            or "automatic" in help_text.lower()
+            or "dual criteria" in help_text.lower()
         )
 
     def test_cmc_group_describes_automatic_selection(self):
@@ -531,17 +617,25 @@ class TestMCMCSpecificOptionsValidation:
         config_file.write_text("# Test config")
 
         # Valid samples
-        args = parser.parse_args([
-            "--n-samples", "1000",
-            "--config", str(config_file),
-        ])
+        args = parser.parse_args(
+            [
+                "--n-samples",
+                "1000",
+                "--config",
+                str(config_file),
+            ]
+        )
         assert validate_args(args) is True
 
         # Invalid samples
-        args = parser.parse_args([
-            "--n-samples", "0",
-            "--config", str(config_file),
-        ])
+        args = parser.parse_args(
+            [
+                "--n-samples",
+                "0",
+                "--config",
+                str(config_file),
+            ]
+        )
         assert validate_args(args) is False
 
     def test_mcmc_warmup_validation(self, tmp_path):
@@ -551,17 +645,25 @@ class TestMCMCSpecificOptionsValidation:
         config_file.write_text("# Test config")
 
         # Valid warmup
-        args = parser.parse_args([
-            "--n-warmup", "500",
-            "--config", str(config_file),
-        ])
+        args = parser.parse_args(
+            [
+                "--n-warmup",
+                "500",
+                "--config",
+                str(config_file),
+            ]
+        )
         assert validate_args(args) is True
 
         # Invalid warmup
-        args = parser.parse_args([
-            "--n-warmup", "-100",
-            "--config", str(config_file),
-        ])
+        args = parser.parse_args(
+            [
+                "--n-warmup",
+                "-100",
+                "--config",
+                str(config_file),
+            ]
+        )
         assert validate_args(args) is False
 
     def test_mcmc_chains_validation(self, tmp_path):
@@ -571,17 +673,25 @@ class TestMCMCSpecificOptionsValidation:
         config_file.write_text("# Test config")
 
         # Valid chains
-        args = parser.parse_args([
-            "--n-chains", "4",
-            "--config", str(config_file),
-        ])
+        args = parser.parse_args(
+            [
+                "--n-chains",
+                "4",
+                "--config",
+                str(config_file),
+            ]
+        )
         assert validate_args(args) is True
 
         # Invalid chains
-        args = parser.parse_args([
-            "--n-chains", "0",
-            "--config", str(config_file),
-        ])
+        args = parser.parse_args(
+            [
+                "--n-chains",
+                "0",
+                "--config",
+                str(config_file),
+            ]
+        )
         assert validate_args(args) is False
 
 
@@ -594,13 +704,19 @@ class TestCMCWarningsWithNLSQ:
         config_file = tmp_path / "test_config.yaml"
         config_file.write_text("# Test config")
 
-        args = parser.parse_args([
-            "--method", "nlsq",
-            "--cmc-num-shards", "4",
-            "--cmc-backend", "pjit",
-            "--cmc-plot-diagnostics",
-            "--config", str(config_file),
-        ])
+        args = parser.parse_args(
+            [
+                "--method",
+                "nlsq",
+                "--cmc-num-shards",
+                "4",
+                "--cmc-backend",
+                "pjit",
+                "--cmc-plot-diagnostics",
+                "--config",
+                str(config_file),
+            ]
+        )
 
         # Validation should succeed but generate warnings
         result = validate_args(args)
@@ -620,11 +736,14 @@ class TestConflictingArguments:
         config_file = tmp_path / "test_config.yaml"
         config_file.write_text("# Test config")
 
-        args = parser.parse_args([
-            "--static-mode",
-            "--laminar-flow",
-            "--config", str(config_file),
-        ])
+        args = parser.parse_args(
+            [
+                "--static-mode",
+                "--laminar-flow",
+                "--config",
+                str(config_file),
+            ]
+        )
 
         # Should fail validation
         assert validate_args(args) is False
@@ -635,11 +754,14 @@ class TestConflictingArguments:
         config_file = tmp_path / "test_config.yaml"
         config_file.write_text("# Test config")
 
-        args = parser.parse_args([
-            "--verbose",
-            "--quiet",
-            "--config", str(config_file),
-        ])
+        args = parser.parse_args(
+            [
+                "--verbose",
+                "--quiet",
+                "--config",
+                str(config_file),
+            ]
+        )
 
         # Should fail validation
         assert validate_args(args) is False
@@ -714,9 +836,12 @@ class TestConfigFileValidation:
         """Test that missing config file is properly rejected."""
         parser = create_parser()
 
-        args = parser.parse_args([
-            "--config", str(tmp_path / "nonexistent.yaml"),
-        ])
+        args = parser.parse_args(
+            [
+                "--config",
+                str(tmp_path / "nonexistent.yaml"),
+            ]
+        )
 
         # Validation should fail for missing config
         assert validate_args(args) is False
@@ -727,9 +852,12 @@ class TestConfigFileValidation:
         config_file = tmp_path / "test_config.yaml"
         config_file.write_text("# Test config")
 
-        args = parser.parse_args([
-            "--config", str(config_file),
-        ])
+        args = parser.parse_args(
+            [
+                "--config",
+                str(config_file),
+            ]
+        )
 
         # Validation should pass
         assert validate_args(args) is True

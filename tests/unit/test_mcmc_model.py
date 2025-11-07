@@ -224,9 +224,7 @@ class TestNumPyroModelCreation:
         assert prior_samples["D0"].shape == (10,)
         assert prior_samples["obs"].shape == (10, len(simple_data["data"]))
 
-    def test_model_creation_laminar_mode(
-        self, simple_data, laminar_parameter_space
-    ):
+    def test_model_creation_laminar_mode(self, simple_data, laminar_parameter_space):
         """Test model creation for laminar_flow mode."""
         model = _create_numpyro_model(
             data=simple_data["data"],

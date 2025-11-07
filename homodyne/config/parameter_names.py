@@ -26,13 +26,13 @@ from typing import List, Literal
 # =============================================================================
 
 # Scaling parameters (common to all modes)
-SCALING_PARAMS = ['contrast', 'offset']
+SCALING_PARAMS = ["contrast", "offset"]
 
 # Static isotropic diffusion parameters (3 physical parameters)
-STATIC_PHYSICAL_PARAMS = ['D0', 'alpha', 'D_offset']
+STATIC_PHYSICAL_PARAMS = ["D0", "alpha", "D_offset"]
 
 # Laminar flow shear parameters (4 additional parameters)
-FLOW_PARAMS = ['gamma_dot_t0', 'beta', 'gamma_dot_t_offset', 'phi0']
+FLOW_PARAMS = ["gamma_dot_t0", "beta", "gamma_dot_t_offset", "phi0"]
 
 # Complete parameter sets for each analysis mode
 STATIC_ISOTROPIC_PARAMS = SCALING_PARAMS + STATIC_PHYSICAL_PARAMS
@@ -40,7 +40,7 @@ LAMINAR_FLOW_PARAMS = SCALING_PARAMS + STATIC_PHYSICAL_PARAMS + FLOW_PARAMS
 
 # Parameter counts
 NUM_PARAMS_STATIC = len(STATIC_ISOTROPIC_PARAMS)  # 5
-NUM_PARAMS_LAMINAR = len(LAMINAR_FLOW_PARAMS)     # 9
+NUM_PARAMS_LAMINAR = len(LAMINAR_FLOW_PARAMS)  # 9
 
 # =============================================================================
 # PARAMETER DESCRIPTIONS
@@ -48,19 +48,17 @@ NUM_PARAMS_LAMINAR = len(LAMINAR_FLOW_PARAMS)     # 9
 
 PARAMETER_DESCRIPTIONS = {
     # Scaling parameters
-    'contrast': 'Contrast factor for c2 = contrast × c1² + offset',
-    'offset': 'Baseline offset for c2 = contrast × c1² + offset',
-
+    "contrast": "Contrast factor for c2 = contrast × c1² + offset",
+    "offset": "Baseline offset for c2 = contrast × c1² + offset",
     # Diffusion parameters
-    'D0': 'Diffusion coefficient amplitude [Å²/s]',
-    'alpha': 'Anomalous diffusion exponent (α < 0: subdiffusion, α > 0: superdiffusion)',
-    'D_offset': 'Baseline diffusion offset [Å²/s]',
-
+    "D0": "Diffusion coefficient amplitude [Å²/s]",
+    "alpha": "Anomalous diffusion exponent (α < 0: subdiffusion, α > 0: superdiffusion)",
+    "D_offset": "Baseline diffusion offset [Å²/s]",
     # Flow parameters (laminar flow only)
-    'gamma_dot_t0': 'Shear rate amplitude at t=0 [s⁻¹]',
-    'beta': 'Shear rate time exponent (γ̇(t) = γ̇₀ × t^β)',
-    'gamma_dot_t_offset': 'Baseline shear rate offset [s⁻¹]',
-    'phi0': 'Flow direction angle [radians]',
+    "gamma_dot_t0": "Shear rate amplitude at t=0 [s⁻¹]",
+    "beta": "Shear rate time exponent (γ̇(t) = γ̇₀ × t^β)",
+    "gamma_dot_t_offset": "Baseline shear rate offset [s⁻¹]",
+    "phi0": "Flow direction angle [radians]",
 }
 
 # =============================================================================
@@ -128,9 +126,7 @@ def get_num_parameters(analysis_mode: AnalysisMode) -> int:
 
 
 def validate_parameter_names(
-    param_names: List[str],
-    analysis_mode: AnalysisMode,
-    strict: bool = True
+    param_names: List[str], analysis_mode: AnalysisMode, strict: bool = True
 ) -> None:
     """Validate parameter names against expected names for analysis mode.
 
@@ -221,10 +217,8 @@ def get_parameter_description(param_name: str) -> str:
 # VALIDATION HELPERS
 # =============================================================================
 
-def verify_samples_dict(
-    samples_dict: dict,
-    analysis_mode: AnalysisMode
-) -> None:
+
+def verify_samples_dict(samples_dict: dict, analysis_mode: AnalysisMode) -> None:
     """Verify samples dictionary contains all expected parameters.
 
     This function should be called after MCMC sampling to ensure the
@@ -265,19 +259,18 @@ def verify_samples_dict(
 
 __all__ = [
     # Constants
-    'SCALING_PARAMS',
-    'STATIC_PHYSICAL_PARAMS',
-    'FLOW_PARAMS',
-    'STATIC_ISOTROPIC_PARAMS',
-    'LAMINAR_FLOW_PARAMS',
-    'NUM_PARAMS_STATIC',
-    'NUM_PARAMS_LAMINAR',
-    'PARAMETER_DESCRIPTIONS',
-
+    "SCALING_PARAMS",
+    "STATIC_PHYSICAL_PARAMS",
+    "FLOW_PARAMS",
+    "STATIC_ISOTROPIC_PARAMS",
+    "LAMINAR_FLOW_PARAMS",
+    "NUM_PARAMS_STATIC",
+    "NUM_PARAMS_LAMINAR",
+    "PARAMETER_DESCRIPTIONS",
     # Functions
-    'get_parameter_names',
-    'get_num_parameters',
-    'validate_parameter_names',
-    'get_parameter_description',
-    'verify_samples_dict',
+    "get_parameter_names",
+    "get_num_parameters",
+    "validate_parameter_names",
+    "get_parameter_description",
+    "verify_samples_dict",
 ]

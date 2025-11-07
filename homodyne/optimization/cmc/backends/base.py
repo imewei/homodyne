@@ -256,9 +256,7 @@ class CMCBackend(ABC):
             f"{status} in {elapsed_time:.2f}s"
         )
 
-    def _validate_shard_result(
-        self, result: Dict[str, Any], shard_idx: int
-    ) -> None:
+    def _validate_shard_result(self, result: Dict[str, Any], shard_idx: int) -> None:
         """Validate that a shard result contains required fields.
 
         Parameters
@@ -297,9 +295,7 @@ class CMCBackend(ABC):
                     f"Shard {shard_idx} marked as converged but missing 'samples'"
                 )
             if "diagnostics" not in result:
-                logger.warning(
-                    f"Shard {shard_idx} missing diagnostics (non-fatal)"
-                )
+                logger.warning(f"Shard {shard_idx} missing diagnostics (non-fatal)")
         else:
             # If failed, check for error message
             if "error" not in result:
@@ -307,9 +303,7 @@ class CMCBackend(ABC):
                     f"Shard {shard_idx} marked as failed but missing 'error' message"
                 )
 
-    def _handle_shard_error(
-        self, error: Exception, shard_idx: int
-    ) -> Dict[str, Any]:
+    def _handle_shard_error(self, error: Exception, shard_idx: int) -> Dict[str, Any]:
         """Log and wrap a shard execution error.
 
         Parameters
@@ -409,7 +403,9 @@ class CMCBackend(ABC):
             expected_param_count = 3  # D0, alpha, D_offset
             expected_mode_name = "static_isotropic"
         elif "laminar" in analysis_mode.lower():
-            expected_param_count = 7  # D0, alpha, D_offset, gamma_dot_t0, beta, gamma_dot_t_offset, phi0
+            expected_param_count = (
+                7  # D0, alpha, D_offset, gamma_dot_t0, beta, gamma_dot_t_offset, phi0
+            )
             expected_mode_name = "laminar_flow"
         else:
             # Unknown mode, log warning but don't fail
