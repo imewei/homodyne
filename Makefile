@@ -3,7 +3,7 @@
 # JAX-accelerated XPCS analysis with NLSQ and MCMC
 # Updated: 2025-10-21 - Cross-platform JAX support
 
-.PHONY: help clean clean-all clean-build clean-pyc clean-test clean-cache install dev test test-all test-unit test-integration test-performance lint format docs build check gpu-check benchmark install-jax-gpu env-info
+.PHONY: help clean clean-all clean-build clean-pyc clean-test clean-cache install dev test test-all test-unit test-integration test-performance lint format type-check type-check-strict quality docs build check gpu-check benchmark install-jax-gpu env-info
 
 # Variables
 PYTHON := python
@@ -280,7 +280,12 @@ format:
 	@echo "✓ Code formatted"
 
 type-check:
-	mypy homodyne/ --ignore-missing-imports
+	mypy homodyne/ --show-error-codes
+	@echo "✓ Type checking passed"
+
+type-check-strict:
+	mypy homodyne/ --strict --show-error-codes
+	@echo "✓ Strict type checking passed"
 
 quality: format lint type-check
 	@echo "✓ All quality checks passed"
