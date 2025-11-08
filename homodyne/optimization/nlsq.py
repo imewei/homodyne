@@ -143,7 +143,7 @@ def fit_nlsq_jax(
     data: dict[str, Any],
     config: ConfigManager,
     initial_params: dict[str, float] | None = None,
-    per_angle_scaling: bool = True,  # Default True, but incompatible with chunking for large datasets!
+    per_angle_scaling: bool = False,  # Default False for backward compatibility
 ) -> OptimizationResult:
     """NLSQ trust-region nonlinear least squares optimization with per-angle scaling (NEW IMPLEMENTATION).
 
@@ -182,10 +182,10 @@ def fit_nlsq_jax(
         Configuration manager with optimization settings
     initial_params : dict, optional
         Initial parameter guesses. If None, uses defaults from config.
-    per_angle_scaling : bool, default=True
-        If True (default), use per-angle contrast/offset parameters. This is the
-        physically correct behavior as each scattering angle can have different
-        optical properties and detector responses.
+    per_angle_scaling : bool, default=False
+        If False (default), use single contrast/offset for all angles (backward compatible).
+        If True, use per-angle contrast/offset parameters - more physically correct as each
+        scattering angle can have different optical properties and detector responses.
 
     Returns
     -------

@@ -432,7 +432,7 @@ class NLSQWrapper:
         initial_params: np.ndarray | None = None,
         bounds: tuple[np.ndarray, np.ndarray] | None = None,
         analysis_mode: str = "static_isotropic",
-        per_angle_scaling: bool = True,  # Default True, but incompatible with chunking for large datasets!
+        per_angle_scaling: bool = False,  # Default False for backward compatibility
     ) -> OptimizationResult:
         """Execute NLSQ optimization with automatic strategy selection and per-angle scaling.
 
@@ -442,9 +442,9 @@ class NLSQWrapper:
             initial_params: Initial parameter guess (auto-loaded if None)
             bounds: Parameter bounds as (lower, upper) tuple
             analysis_mode: 'static_isotropic' or 'laminar_flow'
-            per_angle_scaling: If True (default), use per-angle contrast/offset parameters.
-                             This is the physically correct behavior as each scattering angle
-                             can have different optical properties and detector responses.
+            per_angle_scaling: If False (default), use single contrast/offset for all angles (backward compatible).
+                             If True, use per-angle contrast/offset parameters - more physically correct
+                             as each scattering angle can have different optical properties and detector responses.
 
         Returns:
             OptimizationResult with converged parameters and diagnostics
@@ -793,6 +793,76 @@ class NLSQWrapper:
         residual_fn = self._create_residual_function(
             stratified_data, analysis_mode, per_angle_scaling
         )
+
+        # Step 6.5: Expand parameters for per-angle scaling if needed
+        # This is CRITICAL: the residual function expects per-angle parameters,
+        # but validated_params is still in compact form [contrast, offset, *physical]
+        if per_angle_scaling:
+            # Get number of unique phi angles
+            phi_array = np.asarray(stratified_data.phi)
+            n_phi = len(np.unique(phi_array))
+
+            # Expand parameters from compact to per-angle form
+            # Input:  [contrast, offset, *physical] (e.g., 5 params)
+            # Output: [contrast_0, ..., contrast_{n-1}, offset_0, ..., offset_{n-1}, *physical]
+            #         (e.g., 2*n_phi + 3 params for static_isotropic with n_phi angles)
+
+            contrast_single = validated_params[0]
+            offset_single = validated_params[1]
+            physical_params = validated_params[2:]
+
+            # Replicate contrast and offset for each angle
+            contrast_per_angle = np.full(n_phi, contrast_single)
+            offset_per_angle = np.full(n_phi, offset_single)
+
+            # Concatenate: [contrasts, offsets, physical]
+            validated_params = np.concatenate([
+                contrast_per_angle,
+                offset_per_angle,
+                physical_params
+            ])
+
+            logger.info(
+                f"Expanded parameters for per-angle scaling:\n"
+                f"  {n_phi} phi angles detected\n"
+                f"  Parameters: compact {2 + len(physical_params)} → per-angle {len(validated_params)}\n"
+                f"  Structure: [{n_phi} contrasts, {n_phi} offsets, {len(physical_params)} physical]"
+            )
+
+            # Also expand bounds if they exist
+            if nlsq_bounds is not None:
+                lower, upper = nlsq_bounds
+
+                # Extract compact bounds
+                contrast_lower, offset_lower = lower[0], lower[1]
+                contrast_upper, offset_upper = upper[0], upper[1]
+                physical_lower = lower[2:]
+                physical_upper = upper[2:]
+
+                # Expand to per-angle bounds
+                contrast_lower_per_angle = np.full(n_phi, contrast_lower)
+                contrast_upper_per_angle = np.full(n_phi, contrast_upper)
+                offset_lower_per_angle = np.full(n_phi, offset_lower)
+                offset_upper_per_angle = np.full(n_phi, offset_upper)
+
+                # Concatenate expanded bounds
+                expanded_lower = np.concatenate([
+                    contrast_lower_per_angle,
+                    offset_lower_per_angle,
+                    physical_lower
+                ])
+                expanded_upper = np.concatenate([
+                    contrast_upper_per_angle,
+                    offset_upper_per_angle,
+                    physical_upper
+                ])
+
+                nlsq_bounds = (expanded_lower, expanded_upper)
+
+                logger.info(
+                    f"Expanded bounds for per-angle scaling:\n"
+                    f"  Bounds: compact {2 + len(physical_lower)} → per-angle {len(expanded_lower)}"
+                )
 
         # Step 7: Select optimization strategy using intelligent strategy selector
         # Following NLSQ best practices: estimate memory first, then select strategy

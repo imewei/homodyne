@@ -247,7 +247,7 @@ def test_backend_selection_user_override(mock_hardware_cpu):
 
 @pytest.mark.skipif(not PJIT_AVAILABLE, reason="pjit backend not available")
 def test_pjit_backend_single_shard(
-    synthetic_shards, mcmc_config, init_params, inv_mass_matrix
+    synthetic_shards, mcmc_config, init_params, inv_mass_matrix, parameter_space
 ):
     """Test PjitBackend with single shard."""
     backend = get_backend_by_name("pjit")
@@ -260,6 +260,8 @@ def test_pjit_backend_single_shard(
         mcmc_config=mcmc_config,
         init_params=init_params,
         inv_mass_matrix=inv_mass_matrix,
+        analysis_mode="static_isotropic",
+        parameter_space=parameter_space,
     )
 
     # Validate results
@@ -280,7 +282,7 @@ def test_pjit_backend_single_shard(
 @pytest.mark.skipif(not PJIT_AVAILABLE, reason="pjit backend not available")
 @pytest.mark.slow
 def test_pjit_backend_multiple_shards(
-    synthetic_shards, mcmc_config, init_params, inv_mass_matrix
+    synthetic_shards, mcmc_config, init_params, inv_mass_matrix, parameter_space
 ):
     """Test PjitBackend with multiple shards (sequential execution)."""
     backend = get_backend_by_name("pjit")
@@ -290,6 +292,8 @@ def test_pjit_backend_multiple_shards(
         mcmc_config=mcmc_config,
         init_params=init_params,
         inv_mass_matrix=inv_mass_matrix,
+        analysis_mode="static_isotropic",
+        parameter_space=parameter_space,
     )
 
     # Validate results
@@ -310,7 +314,7 @@ def test_pjit_backend_multiple_shards(
     not MULTIPROCESSING_AVAILABLE, reason="multiprocessing backend not available"
 )
 def test_multiprocessing_backend_single_shard(
-    synthetic_shards, mcmc_config, init_params, inv_mass_matrix
+    synthetic_shards, mcmc_config, init_params, inv_mass_matrix, parameter_space
 ):
     """Test MultiprocessingBackend with single shard."""
     backend = get_backend_by_name("multiprocessing")
@@ -322,6 +326,8 @@ def test_multiprocessing_backend_single_shard(
         mcmc_config=mcmc_config,
         init_params=init_params,
         inv_mass_matrix=inv_mass_matrix,
+        analysis_mode="static_isotropic",
+        parameter_space=parameter_space,
     )
 
     assert len(results) == 1
@@ -336,7 +342,7 @@ def test_multiprocessing_backend_single_shard(
 )
 @pytest.mark.slow
 def test_multiprocessing_backend_parallel_execution(
-    synthetic_shards, mcmc_config, init_params, inv_mass_matrix
+    synthetic_shards, mcmc_config, init_params, inv_mass_matrix, parameter_space
 ):
     """Test MultiprocessingBackend parallel execution."""
     backend = get_backend_by_name("multiprocessing")
@@ -346,6 +352,8 @@ def test_multiprocessing_backend_parallel_execution(
         mcmc_config=mcmc_config,
         init_params=init_params,
         inv_mass_matrix=inv_mass_matrix,
+        analysis_mode="static_isotropic",
+        parameter_space=parameter_space,
     )
 
     assert len(results) == len(synthetic_shards)
@@ -357,7 +365,7 @@ def test_multiprocessing_backend_parallel_execution(
 @pytest.mark.skipif(
     not MULTIPROCESSING_AVAILABLE, reason="multiprocessing backend not available"
 )
-def test_multiprocessing_backend_timeout():
+def test_multiprocessing_backend_timeout(parameter_space):
     """Test MultiprocessingBackend timeout detection."""
     # Create backend with very short timeout
     backend = get_backend_by_name("multiprocessing")
@@ -387,6 +395,8 @@ def test_multiprocessing_backend_timeout():
         mcmc_config=mcmc_config,
         init_params={"D0": 1000.0},
         inv_mass_matrix=np.eye(5),
+        analysis_mode="static_isotropic",
+        parameter_space=parameter_space,
     )
 
     # Should return error result
@@ -513,7 +523,7 @@ def test_backend_error_handling_invalid_name():
 
 
 @pytest.mark.skipif(not PJIT_AVAILABLE, reason="pjit backend not available")
-def test_pjit_backend_handles_errors(init_params, inv_mass_matrix):
+def test_pjit_backend_handles_errors(init_params, inv_mass_matrix, parameter_space):
     """Test PjitBackend error handling."""
     backend = get_backend_by_name("pjit")
 
@@ -527,6 +537,8 @@ def test_pjit_backend_handles_errors(init_params, inv_mass_matrix):
         mcmc_config=mcmc_config,
         init_params=init_params,
         inv_mass_matrix=inv_mass_matrix,
+        analysis_mode="static_isotropic",
+        parameter_space=parameter_space,
     )
 
     # Should return error result (not crash)
@@ -547,7 +559,7 @@ def test_result_format_validation():
 
     # Create mock backend
     class MockBackend(CMCBackend):
-        def run_parallel_mcmc(self, shards, mcmc_config, init_params, inv_mass_matrix):
+        def run_parallel_mcmc(self, shards, mcmc_config, init_params, inv_mass_matrix, analysis_mode, parameter_space):
             return []
 
         def get_backend_name(self):
@@ -583,7 +595,7 @@ def test_result_format_validation():
 
 @pytest.mark.skipif(not PJIT_AVAILABLE, reason="pjit backend not available")
 def test_pjit_backend_diagnostics_collection(
-    synthetic_shards, mcmc_config, init_params, inv_mass_matrix
+    synthetic_shards, mcmc_config, init_params, inv_mass_matrix, parameter_space
 ):
     """Test that PjitBackend collects convergence diagnostics."""
     backend = get_backend_by_name("pjit")
@@ -595,6 +607,8 @@ def test_pjit_backend_diagnostics_collection(
         mcmc_config=mcmc_config,
         init_params=init_params,
         inv_mass_matrix=inv_mass_matrix,
+        analysis_mode="static_isotropic",
+        parameter_space=parameter_space,
     )
 
     result = results[0]
