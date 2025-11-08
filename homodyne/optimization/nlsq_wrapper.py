@@ -2840,6 +2840,55 @@ class NLSQWrapper:
         # Extract results from NLSQ result object
         popt = np.asarray(result["x"])
 
+        # CRITICAL: Enforce parameter bounds (post-optimization clipping)
+        # NLSQ's trust-region algorithm can violate bounds to minimize cost
+        # Clip parameters to ensure physical validity
+        if bounds is not None:
+            lower_bounds, upper_bounds = bounds
+            bounds_violated = False
+
+            for i in range(len(popt)):
+                original_value = popt[i]
+
+                # Clip to bounds
+                if original_value < lower_bounds[i] or original_value > upper_bounds[i]:
+                    popt[i] = np.clip(popt[i], lower_bounds[i], upper_bounds[i])
+                    bounds_violated = True
+
+                    # Determine parameter name for logging
+                    if per_angle_scaling:
+                        n_angles = residual_fn.n_phi
+                        n_scaling = 2 * n_angles
+                        if i < n_angles:
+                            param_name = f"contrast_angle_{i}"
+                        elif i < n_scaling:
+                            param_name = f"offset_angle_{i - n_angles}"
+                        else:
+                            param_idx = i - n_scaling
+                            param_name = physical_param_names[param_idx] if param_idx < len(physical_param_names) else f"param_{i}"
+                    else:
+                        param_name = physical_param_names[i] if i < len(physical_param_names) else f"param_{i}"
+
+                    logger.warning(
+                        f"⚠️  Parameter '{param_name}' violated bounds: "
+                        f"{original_value:.6e} ∉ [{lower_bounds[i]:.6e}, {upper_bounds[i]:.6e}]"
+                    )
+                    logger.warning(
+                        f"    Clipped to: {popt[i]:.6e} (bounds enforced)"
+                    )
+
+            if bounds_violated:
+                logger.warning("=" * 80)
+                logger.warning("BOUNDS VIOLATION DETECTED")
+                logger.warning("=" * 80)
+                logger.warning("One or more parameters violated physical bounds.")
+                logger.warning("Parameters have been clipped to valid ranges.")
+                logger.warning("This may indicate:")
+                logger.warning("  - Poor initial conditions (check config initial_parameters.values)")
+                logger.warning("  - Insufficient constraints (consider constrained optimizer)")
+                logger.warning("  - Optimizer exploring unphysical parameter space")
+                logger.warning("=" * 80)
+
         # Compute covariance matrix from Jacobian
         # NLSQ's least_squares may or may not provide pcov directly
         if "pcov" in result and result["pcov"] is not None:
