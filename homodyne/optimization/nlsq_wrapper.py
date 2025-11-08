@@ -1067,7 +1067,18 @@ class NLSQWrapper:
         final_residuals = residual_fn(xdata, *popt)
 
         # Extract iteration count (if available)
-        iterations = info.get("nfev", 0) if isinstance(info, dict) else 0
+        # Note: Some NLSQ functions don't return iteration count
+        # Use -1 to indicate "unknown" rather than 0 which implies no iterations
+        if isinstance(info, dict):
+            iterations = info.get("nfev", info.get("nit", -1))
+        else:
+            iterations = -1
+
+        # Log if iterations are unknown
+        if iterations == -1:
+            logger.debug(
+                "Iteration count not available from NLSQ (curve_fit_large does not return this info)"
+            )
 
         # Step 8: Measure execution time
         execution_time = time.time() - start_time
@@ -1197,9 +1208,9 @@ class NLSQWrapper:
                         "Using curve_fit_large with NLSQ automatic memory management"
                     )
 
-                    # Note: curve_fit_large returns only (popt, pcov), not (popt, pcov, info)
-                    # It doesn't support full_output=True like curve_fit does
-                    popt, pcov = curve_fit_large(
+                    # Note: curve_fit_large may return (popt, pcov) or OptimizeResult object
+                    # depending on NLSQ version. Use _handle_nlsq_result for normalization.
+                    result = curve_fit_large(
                         residual_fn,
                         xdata,
                         ydata,
@@ -1212,8 +1223,12 @@ class NLSQWrapper:
                         verbose=2,  # Show iteration details
                         show_progress=show_progress,  # Enable progress for large datasets
                     )
-                    # Create empty info dict for consistency with curve_fit path
-                    info = {"initial_cost": initial_cost}
+                    # Normalize result format and extract iterations if available
+                    popt, pcov, info = self._handle_nlsq_result(
+                        result, OptimizationStrategy.LARGE
+                    )
+                    # Add initial cost for diagnostics
+                    info["initial_cost"] = initial_cost
                 else:
                     # Use standard curve_fit for small datasets
                     popt, pcov = curve_fit(
