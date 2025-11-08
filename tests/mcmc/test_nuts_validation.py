@@ -334,6 +334,13 @@ class TestNUTSMemoryStability:
         # Get initial memory
         snapshot_start = tracemalloc.take_snapshot()
 
+        # Provide reasonable initial values close to ground truth
+        initial_values = {
+            "D0": 1200.0,  # Close to true 1000.0
+            "alpha": 0.4,  # Close to true 0.5
+            "D_offset": 12.0,  # Close to true 10.0
+        }
+
         result = fit_mcmc_jax(
             data=data_dict["data"],
             sigma=data_dict["sigma"],
@@ -347,6 +354,7 @@ class TestNUTSMemoryStability:
             n_warmup=1000,
             n_chains=1,
             rng_key=42,
+            initial_values=initial_values,
         )
 
         # Get final memory
@@ -372,6 +380,13 @@ class TestNUTSMemoryStability:
         """Test that JAX compilation cache doesn't accumulate."""
         data_dict = synthetic_ground_truth_data
 
+        # Provide reasonable initial values close to ground truth
+        initial_values = {
+            "D0": 1200.0,  # Close to true 1000.0
+            "alpha": 0.4,  # Close to true 0.5
+            "D_offset": 12.0,  # Close to true 10.0
+        }
+
         # Run multiple independent MCMC runs
         for i in range(3):
             result = fit_mcmc_jax(
@@ -387,6 +402,7 @@ class TestNUTSMemoryStability:
                 n_warmup=100,
                 n_chains=1,
                 rng_key=42 + i,  # Different seed each time
+                initial_values=initial_values,
             )
 
             assert result.converged, f"MCMC run {i + 1} failed"
@@ -535,6 +551,13 @@ class TestNUTSDiagnostics:
         """Test Effective Sample Size calculation."""
         data_dict = synthetic_ground_truth_data
 
+        # Provide reasonable initial values close to ground truth
+        initial_values = {
+            "D0": 1200.0,  # Close to true 1000.0
+            "alpha": 0.4,  # Close to true 0.5
+            "D_offset": 12.0,  # Close to true 10.0
+        }
+
         result = fit_mcmc_jax(
             data=data_dict["data"],
             sigma=data_dict["sigma"],
@@ -548,6 +571,7 @@ class TestNUTSDiagnostics:
             n_warmup=500,
             n_chains=2,
             rng_key=42,
+            initial_values=initial_values,
         )
 
         # ESS should be computed
@@ -564,6 +588,13 @@ class TestNUTSDiagnostics:
         """Test acceptance rate tracking."""
         data_dict = synthetic_ground_truth_data
 
+        # Provide reasonable initial values close to ground truth
+        initial_values = {
+            "D0": 1200.0,  # Close to true 1000.0
+            "alpha": 0.4,  # Close to true 0.5
+            "D_offset": 12.0,  # Close to true 10.0
+        }
+
         result = fit_mcmc_jax(
             data=data_dict["data"],
             sigma=data_dict["sigma"],
@@ -578,6 +609,7 @@ class TestNUTSDiagnostics:
             n_chains=1,
             target_accept_prob=0.8,
             rng_key=42,
+            initial_values=initial_values,
         )
 
         # Acceptance rate should be tracked

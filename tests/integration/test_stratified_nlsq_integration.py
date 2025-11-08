@@ -178,14 +178,20 @@ def test_strategy_selection_with_large_dataset():
     """Test NLSQ strategy selection with large dataset requiring chunking."""
     selector = DatasetSizeStrategy()
 
-    # Large dataset (>1M points) → should select CHUNKED or STREAMING
-    n_points = 3_000_000
+    # Large dataset (>1M points) → should select LARGE, CHUNKED, or STREAMING
+    # Thresholds: <1M→STANDARD, 1M-10M→LARGE, 10M-100M→CHUNKED, >100M→STREAMING
+    n_points = 3_000_000  # 3M points falls in LARGE range (1M-10M)
     n_parameters = 9  # laminar_flow with per-angle scaling
 
     strategy = selector.select_strategy(n_points, n_parameters)
 
-    # Should select CHUNKED or STREAMING (not STANDARD)
-    assert strategy in [OptimizationStrategy.CHUNKED, OptimizationStrategy.STREAMING]
+    # Should select LARGE (1M-10M), CHUNKED (10M-100M), or STREAMING (>100M)
+    # 3M points → LARGE strategy is correct
+    assert strategy in [
+        OptimizationStrategy.LARGE,
+        OptimizationStrategy.CHUNKED,
+        OptimizationStrategy.STREAMING,
+    ]
 
 
 def test_strategy_selection_with_small_dataset():
@@ -205,14 +211,18 @@ def test_strategy_selection_with_small_dataset():
 def test_stratification_decision_integrates_with_strategy():
     """Test stratification decision considers NLSQ strategy selection."""
     # Large dataset with per-angle scaling
-    n_points = 2_000_000
+    n_points = 2_000_000  # 2M points falls in LARGE range (1M-10M)
     n_angles = 3
     per_angle_scaling = True
 
-    # Strategy selector suggests CHUNKED/STREAMING
+    # Strategy selector suggests LARGE/CHUNKED/STREAMING for >1M points
     selector = DatasetSizeStrategy()
     strategy = selector.select_strategy(n_points, n_parameters=9)
-    assert strategy in [OptimizationStrategy.CHUNKED, OptimizationStrategy.STREAMING]
+    assert strategy in [
+        OptimizationStrategy.LARGE,
+        OptimizationStrategy.CHUNKED,
+        OptimizationStrategy.STREAMING,
+    ]
 
     # Stratification should activate for per-angle + large dataset
     stats = analyze_angle_distribution(np.repeat([0.0, 45.0, 90.0], n_points // 3))
@@ -301,8 +311,9 @@ def test_stratification_preserves_all_data_points():
 
     # Verify no duplicates (all unique combinations present)
     # Note: Due to stratification, order changes but uniqueness preserved
-    original_tuples = set(zip(phi, t1, t2))
-    stratified_tuples = set(zip(phi_s, t1_s, t2_s))
+    # Convert arrays to NumPy to ensure hashability (JAX arrays are not hashable)
+    original_tuples = set(zip(np.asarray(phi), np.asarray(t1), np.asarray(t2)))
+    stratified_tuples = set(zip(np.asarray(phi_s), np.asarray(t1_s), np.asarray(t2_s)))
     assert len(original_tuples) == len(stratified_tuples)
 
 
@@ -314,13 +325,15 @@ def test_stratification_preserves_all_data_points():
 def test_integration_stratification_with_strategy_selector():
     """Test full integration: strategy selection + stratification decision."""
     # Large dataset parameters
-    n_points = 2_000_000
+    n_angles = 3
+    points_per_angle = 666_666  # Ensures exact division
+    n_points = n_angles * points_per_angle  # 1,999,998 total (slightly under 2M, still in LARGE range)
     n_parameters = 9  # laminar_flow with per-angle scaling
     per_angle_scaling = True
 
-    # Mock data
+    # Mock data with equal points per angle
     data = {
-        "phi": np.repeat([0.0, 45.0, 90.0], n_points // 3),
+        "phi": np.repeat([0.0, 45.0, 90.0], points_per_angle),
         "t1": np.linspace(1e-6, 1e-3, n_points),
         "t2": np.linspace(1e-6, 1e-3, n_points),
         "g2_exp": np.random.uniform(1.0, 1.5, n_points),
@@ -330,8 +343,12 @@ def test_integration_stratification_with_strategy_selector():
     selector = DatasetSizeStrategy()
     strategy = selector.select_strategy(n_points, n_parameters)
 
-    # Should select CHUNKED or STREAMING
-    assert strategy in [OptimizationStrategy.CHUNKED, OptimizationStrategy.STREAMING]
+    # Should select LARGE (1M-10M), CHUNKED (10M-100M), or STREAMING (>100M)
+    assert strategy in [
+        OptimizationStrategy.LARGE,
+        OptimizationStrategy.CHUNKED,
+        OptimizationStrategy.STREAMING,
+    ]
 
     # Stratification decision
     stats = analyze_angle_distribution(data["phi"])

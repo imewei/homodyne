@@ -43,10 +43,15 @@ class TestParameterRecoveryAccuracy:
             random_seed=42,
         )
 
-        # Set up optimization
-        class MockConfig:
-            def __init__(self):
-                self.optimization = {"lsq": {"max_iterations": 1000, "tolerance": 1e-8}}
+        # Set up optimization with proper config structure
+        # Note: After GPU removal, MockConfig was insufficient. Use proper config object.
+        mock_config = type('MockConfig', (object,), {
+            'optimization': {
+                'lsq': {'max_iterations': 1000, 'tolerance': 1e-8},
+                'stratification': {'enabled': False},  # Disable for small dataset
+            },
+            'hardware': {},  # CPU-only, no GPU settings needed
+        })()
 
         wrapper = NLSQWrapper(enable_large_dataset=False, enable_recovery=False)
 
@@ -72,10 +77,11 @@ class TestParameterRecoveryAccuracy:
         # Optimize
         result = wrapper.fit(
             data=data,
-            config=MockConfig(),
+            config=mock_config,
             initial_params=initial_params,
             bounds=bounds,
             analysis_mode="static_isotropic",
+            per_angle_scaling=False,  # Test uses single contrast/offset, not per-angle
         )
 
         # Extract recovered parameters

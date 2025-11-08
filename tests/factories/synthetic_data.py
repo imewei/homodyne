@@ -27,6 +27,7 @@ class SyntheticXPCSData:
         L: Sample-detector distance
         dt: Time step
         ground_truth_params: True parameter values used to generate data
+        per_angle_scaling: Whether to use per-angle scaling parameters (default: False)
     """
 
     phi: np.ndarray
@@ -38,6 +39,7 @@ class SyntheticXPCSData:
     L: float
     dt: float
     ground_truth_params: dict[str, float]
+    per_angle_scaling: bool = False  # Default to False for parameter recovery tests
 
 
 def generate_synthetic_xpcs_data(

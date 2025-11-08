@@ -499,39 +499,41 @@ class TestCMCWithCLIOverrides:
         """Test overriding memory_threshold_pct via CLI.
 
         Setup:
-        - Config has memory_threshold_pct: 0.30 (30%)
-        - CLI override: --memory-threshold-pct 0.40 (40%)
-        - Dataset size causing 35% memory usage
+        - Config has memory_threshold_pct: 0.005 (0.5%)
+        - CLI override: --memory-threshold-pct 0.010 (1.0%)
+        - Dataset size: 500k points (< 1M to avoid Criterion 3: JAX Broadcasting Protection)
+        - Memory usage: ~0.75% of 16GB
 
         Verify:
-        - With default (30%): 35% > 30% → CMC
-        - With override (40%): 35% < 40% → NUTS (if num_samples < 15)
+        - With default (0.5%): 0.75% > 0.5% → CMC (memory criterion)
+        - With override (1.0%): 0.75% < 1.0% → NUTS (all criteria fail)
+
+        Note: Using small dataset (< 1M) to avoid triggering Criterion 3 which was added
+        for JAX broadcasting protection and is not configurable via CLI overrides.
         """
         hardware = create_hardware_config()
 
-        # Dataset size causing ~35% memory
-        # 35% of 16GB = 5.6GB
-        # dataset_size * 8 * 30 / 1e9 = 5.6
-        # dataset_size ≈ 23.3M
-        dataset_size = 23_000_000
+        # Dataset size < 1M to avoid Criterion 3 (JAX Broadcasting Protection)
+        # Memory calculation: 500k * 8 * 30 / 1e9 / 16.0 = 0.75%
+        dataset_size = 500_000
 
-        # With default threshold (30%): 35% > 30% → CMC
+        # With default threshold (0.5%): 0.75% > 0.5% → CMC (memory criterion)
         use_cmc_default = should_use_cmc(
             num_samples=10,
             dataset_size=dataset_size,
             hardware_config=hardware,
             min_samples_for_cmc=15,
-            memory_threshold_pct=0.30,
+            memory_threshold_pct=0.005,  # 0.5%
         )
         assert use_cmc_default is True
 
-        # With higher threshold (40%): 35% < 40% → NUTS
+        # With higher threshold (1.0%): 0.75% < 1.0% → NUTS (no criteria met)
         use_cmc_override = should_use_cmc(
             num_samples=10,
             dataset_size=dataset_size,
             hardware_config=hardware,
             min_samples_for_cmc=15,
-            memory_threshold_pct=0.40,  # CLI override
+            memory_threshold_pct=0.010,  # 1.0% (CLI override)
         )
         assert use_cmc_override is False
 
@@ -540,33 +542,37 @@ class TestCMCWithCLIOverrides:
 
         Demonstrates three-tier priority:
         CLI args > config file > package defaults
-        """
-        # Test scenario: num_samples=17, memory=32%
-        hardware = create_hardware_config()
-        dataset_size = 21_000_000  # ~32% memory
 
-        # Default config: min_samples=15, memory_threshold=0.30
+        Note: Using dataset < 1M to avoid Criterion 3 (JAX Broadcasting Protection)
+        which was added for large dataset stability and is not configurable via CLI.
+        """
+        # Test scenario: num_samples=17, memory=0.75%, dataset < 1M
+        hardware = create_hardware_config()
+        dataset_size = 500_000  # < 1M, avoids Criterion 3
+
+        # Default config: min_samples=15, memory_threshold=0.005 (0.5%)
         # num_samples=17 >= 15 → CMC (parallelism)
-        # AND memory=32% > 30% → CMC (memory)
+        # AND memory=0.75% > 0.5% → CMC (memory)
         use_cmc_default = should_use_cmc(
             num_samples=17,
             dataset_size=dataset_size,
             hardware_config=hardware,
             min_samples_for_cmc=15,
-            memory_threshold_pct=0.30,
+            memory_threshold_pct=0.005,  # 0.5%
         )
         assert use_cmc_default is True
 
-        # CLI override both: min_samples=20, memory_threshold=0.35
+        # CLI override both: min_samples=20, memory_threshold=0.010 (1.0%)
         # num_samples=17 < 20 → No parallelism
-        # memory=32% < 35% → No memory criterion
-        # Result: NUTS
+        # memory=0.75% < 1.0% → No memory criterion
+        # dataset=500k < 1M → No Criterion 3
+        # Result: NUTS (all criteria fail)
         use_cmc_override = should_use_cmc(
             num_samples=17,
             dataset_size=dataset_size,
             hardware_config=hardware,
             min_samples_for_cmc=20,  # CLI override
-            memory_threshold_pct=0.35,  # CLI override
+            memory_threshold_pct=0.010,  # 1.0% (CLI override)
         )
         assert use_cmc_override is False
 
