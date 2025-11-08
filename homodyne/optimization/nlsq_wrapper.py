@@ -432,7 +432,7 @@ class NLSQWrapper:
         initial_params: np.ndarray | None = None,
         bounds: tuple[np.ndarray, np.ndarray] | None = None,
         analysis_mode: str = "static_isotropic",
-        per_angle_scaling: bool = False,  # Default False for backward compatibility
+        per_angle_scaling: bool = True,  # REQUIRED: per-angle is physically correct
     ) -> OptimizationResult:
         """Execute NLSQ optimization with automatic strategy selection and per-angle scaling.
 
@@ -442,15 +442,15 @@ class NLSQWrapper:
             initial_params: Initial parameter guess (auto-loaded if None)
             bounds: Parameter bounds as (lower, upper) tuple
             analysis_mode: 'static_isotropic' or 'laminar_flow'
-            per_angle_scaling: If False (default), use single contrast/offset for all angles (backward compatible).
-                             If True, use per-angle contrast/offset parameters - more physically correct
-                             as each scattering angle can have different optical properties and detector responses.
+            per_angle_scaling: MUST be True. Per-angle contrast/offset parameters are physically correct
+                             as each scattering angle has different optical properties and detector responses.
+                             Legacy scalar mode (False) is no longer supported.
 
         Returns:
             OptimizationResult with converged parameters and diagnostics
 
         Raises:
-            ValueError: If bounds are invalid (lower >= upper)
+            ValueError: If bounds are invalid (lower >= upper) or if per_angle_scaling=False
         """
         import logging
         import time
@@ -458,6 +458,20 @@ class NLSQWrapper:
         # nlsq imported at module level (line 36) for automatic x64 configuration
 
         logger = logging.getLogger(__name__)
+
+        # BREAKING CHANGE (Nov 2025): Validate per-angle scaling is enabled
+        # Legacy scalar contrast/offset mode is not physically meaningful
+        if not per_angle_scaling:
+            logger.error(
+                "Legacy scalar contrast/offset mode (per_angle_scaling=False) is no longer supported. "
+                "Single contrast/offset parameters are not physically meaningful as each scattering "
+                "angle has different optical properties and detector responses. "
+                "Per-angle scaling is required for physically correct NLSQ optimization."
+            )
+            raise ValueError(
+                "per_angle_scaling=False is deprecated and removed. "
+                "Use per_angle_scaling=True (default) for physically correct behavior."
+            )
 
         # Start timing
         start_time = time.time()
@@ -652,19 +666,17 @@ class NLSQWrapper:
                     )
 
             # Parameter count validation (CRITICAL)
+            # Per-angle scaling is always enabled (legacy mode removed Nov 2025)
             n_physical = len(physical_param_names)
-            if per_angle_scaling:
-                n_angles = len(np.unique(stratified_data.phi_flat))
-                expected_params = n_physical + 2 * n_angles
-            else:
-                expected_params = n_physical + 2
+            n_angles = len(np.unique(stratified_data.phi_flat))
+            expected_params = n_physical + 2 * n_angles
 
             if len(validated_params) != expected_params:
                 raise ValueError(
                     f"Parameter count mismatch: got {len(validated_params)}, "
                     f"expected {expected_params} "
-                    f"(physical={n_physical}, per_angle_scaling={per_angle_scaling}, "
-                    f"n_angles={n_angles if per_angle_scaling else 'N/A'})"
+                    f"(physical={n_physical}, per_angle_scaling=True, "
+                    f"n_angles={n_angles})"
                 )
 
             logger.info(
@@ -1646,12 +1658,8 @@ class NLSQWrapper:
                 data=data, reason="force_sequential_fallback=true in configuration"
             )
 
-        # Quick checks: Do we need stratification?
-        if not per_angle_scaling:
-            logger.debug("Stratification skipped: per_angle_scaling=False")
-            return data
-
         # Get data dimensions
+        # Note: Per-angle scaling is always enabled (legacy mode removed Nov 2025)
         phi = np.asarray(data.phi)
         t1 = np.asarray(data.t1)
         t2 = np.asarray(data.t2)
@@ -2189,10 +2197,9 @@ class NLSQWrapper:
                 xdata: Array of indices into flattened g2 array.
                        Full dataset: [0, 1, ..., n-1]
                        Chunked: [0, 1, ..., chunk_size-1] (subset)
-                *params_tuple: Unpacked parameters
-                    - If per_angle_scaling=True: [contrast_0, ..., contrast_{n_phi-1},
-                                                  offset_0, ..., offset_{n_phi-1}, *physical]
-                    - If per_angle_scaling=False: [contrast, offset, *physical]
+                *params_tuple: Unpacked parameters (per-angle scaling only)
+                    - Format: [contrast_0, ..., contrast_{n_phi-1},
+                              offset_0, ..., offset_{n_phi-1}, *physical]
 
             Returns:
                 Theoretical g2 values at requested indices (size matches xdata)
@@ -2200,72 +2207,40 @@ class NLSQWrapper:
             # Convert params tuple to array
             params_array = jnp.array(params_tuple)
 
-            # Extract scaling parameters based on per_angle_scaling mode
-            if per_angle_scaling:
-                # Per-angle mode: first n_phi are contrasts, next n_phi are offsets
-                contrast = params_array[:n_phi]  # Array of shape (n_phi,)
-                offset = params_array[n_phi : 2 * n_phi]  # Array of shape (n_phi,)
-                physical_params = params_array[2 * n_phi :]
-            else:
-                # Legacy mode: single scalar contrast and offset
-                contrast = params_array[0]  # Scalar
-                offset = params_array[1]  # Scalar
-                physical_params = params_array[2:]
+            # Extract per-angle scaling parameters (legacy mode removed Nov 2025)
+            # Per-angle mode: first n_phi are contrasts, next n_phi are offsets
+            contrast = params_array[:n_phi]  # Array of shape (n_phi,)
+            offset = params_array[n_phi : 2 * n_phi]  # Array of shape (n_phi,)
+            physical_params = params_array[2 * n_phi :]
 
             # Compute theoretical g2 for each phi angle using JAX vmap
             # This vectorizes the computation and maintains proper gradient flow
             # CRITICAL FIX: Python for-loops break JAX autodiff, causing NaN gradients
 
-            # Per-angle mode requires passing different contrast/offset to each phi
-            if per_angle_scaling:
-                # Create vectorized version that takes both phi and scaling parameters
-                # contrast[i] and offset[i] are used for phi[i]
-                compute_g2_scaled_vmap = jax.vmap(
-                    lambda phi_val, contrast_val, offset_val: jnp.squeeze(
-                        compute_g2_scaled(
-                            params=physical_params,
-                            t1=t1,  # 1D arrays
-                            t2=t2,
-                            phi=phi_val,  # Single phi value
-                            q=q,
-                            L=L,
-                            contrast=contrast_val,  # Per-angle contrast
-                            offset=offset_val,  # Per-angle offset
-                            dt=dt,
-                        ),
-                        axis=0,  # Squeeze the phi dimension
+            # Per-angle scaling: pass different contrast/offset to each phi (legacy mode removed Nov 2025)
+            # Create vectorized version that takes both phi and scaling parameters
+            # contrast[i] and offset[i] are used for phi[i]
+            compute_g2_scaled_vmap = jax.vmap(
+                lambda phi_val, contrast_val, offset_val: jnp.squeeze(
+                    compute_g2_scaled(
+                        params=physical_params,
+                        t1=t1,  # 1D arrays
+                        t2=t2,
+                        phi=phi_val,  # Single phi value
+                        q=q,
+                        L=L,
+                        contrast=contrast_val,  # Per-angle contrast
+                        offset=offset_val,  # Per-angle offset
+                        dt=dt,
                     ),
-                    in_axes=(0, 0, 0),  # Vectorize over all three arrays
-                )
+                    axis=0,  # Squeeze the phi dimension
+                ),
+                in_axes=(0, 0, 0),  # Vectorize over all three arrays
+            )
 
-                # Compute all phi angles with their corresponding contrast/offset
-                # Shape: (n_phi, n_t1, n_t2)
-                g2_theory = compute_g2_scaled_vmap(phi, contrast, offset)
-            else:
-                # Legacy mode: single contrast/offset for all phi angles
-                # NOTE: compute_g2_scaled returns shape (1, n_t1, n_t2) for scalar phi,
-                # so we squeeze the extra dimension to get (n_t1, n_t2)
-                compute_g2_scaled_vmap = jax.vmap(
-                    lambda phi_val: jnp.squeeze(
-                        compute_g2_scaled(
-                            params=physical_params,
-                            t1=t1,  # 1D arrays
-                            t2=t2,
-                            phi=phi_val,  # Single phi value
-                            q=q,
-                            L=L,
-                            contrast=contrast,  # Scalar contrast for all angles
-                            offset=offset,  # Scalar offset for all angles
-                            dt=dt,
-                        ),
-                        axis=0,  # Squeeze the phi dimension
-                    ),
-                    in_axes=0,  # Vectorize over first axis of phi
-                )
-
-                # Compute all phi angles at once (much more efficient and gradient-safe)
-                # Shape: (n_phi, n_t1, n_t2)
-                g2_theory = compute_g2_scaled_vmap(phi)
+            # Compute all phi angles with their corresponding contrast/offset
+            # Shape: (n_phi, n_t1, n_t2)
+            g2_theory = compute_g2_scaled_vmap(phi, contrast, offset)
 
             # CRITICAL: Apply diagonal correction to match experimental data preprocessing
             # The experimental data is diagonal-corrected in xpcs_loader.py:530-540.

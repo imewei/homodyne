@@ -143,11 +143,11 @@ def fit_nlsq_jax(
     data: dict[str, Any],
     config: ConfigManager,
     initial_params: dict[str, float] | None = None,
-    per_angle_scaling: bool = False,  # Default False for backward compatibility
+    per_angle_scaling: bool = True,  # REQUIRED: per-angle is physically correct
 ) -> OptimizationResult:
     """NLSQ trust-region nonlinear least squares optimization with per-angle scaling (NEW IMPLEMENTATION).
 
-    Backward-compatible wrapper around NLSQWrapper that provides the legacy API.
+    Wrapper around NLSQWrapper that provides the public API.
     Uses the NLSQ package (github.com/imewei/NLSQ) for trust-region optimization.
 
     Primary optimization method implementing the scaled optimization process:
@@ -182,10 +182,10 @@ def fit_nlsq_jax(
         Configuration manager with optimization settings
     initial_params : dict, optional
         Initial parameter guesses. If None, uses defaults from config.
-    per_angle_scaling : bool, default=False
-        If False (default), use single contrast/offset for all angles (backward compatible).
-        If True, use per-angle contrast/offset parameters - more physically correct as each
-        scattering angle can have different optical properties and detector responses.
+    per_angle_scaling : bool, default=True
+        MUST be True. Per-angle contrast/offset parameters are physically correct as each
+        scattering angle has different optical properties and detector responses.
+        Legacy scalar mode (False) is no longer supported (removed Nov 2025).
 
     Returns
     -------

@@ -1860,9 +1860,57 @@ def _process_posterior_samples(mcmc_result, analysis_mode):
             ],
         )
 
-    # Extract fitting parameter samples
-    contrast_samples = samples["contrast"]
-    offset_samples = samples["offset"]
+    # Extract fitting parameter samples (per-angle scaling ONLY)
+    # BREAKING CHANGE (Nov 2025): Legacy scalar contrast/offset removed - not physically meaningful
+    # MCMC MUST use per-angle scaling: contrast_0, contrast_1, ..., offset_0, offset_1, ...
+    per_angle_scaling_detected = "contrast_0" in samples
+
+    if not per_angle_scaling_detected:
+        # ERROR: Per-angle scaling parameters not found
+        available_keys = list(samples.keys())
+        logger.error(
+            "Per-angle scaling parameters not found in MCMC samples. "
+            "Expected 'contrast_0', 'contrast_1', ... but found: %s. "
+            "Legacy scalar contrast/offset is no longer supported as it is not physically meaningful.",
+            available_keys
+        )
+        raise ValueError(
+            "Per-angle scaling MCMC sampling failed: 'contrast_0' parameter not found. "
+            "This indicates the NumPyro model did not use per-angle scaling. "
+            f"Available parameters: {available_keys}"
+        )
+
+    # PER-ANGLE SCALING: Extract all contrast_i and offset_i parameters
+    contrast_keys = sorted([k for k in samples.keys() if k.startswith("contrast_")])
+    offset_keys = sorted([k for k in samples.keys() if k.startswith("offset_")])
+
+    if not contrast_keys or not offset_keys:
+        logger.error(
+            "Incomplete per-angle parameters: contrast_keys=%s, offset_keys=%s",
+            contrast_keys, offset_keys
+        )
+        raise ValueError(
+            f"Incomplete per-angle scaling parameters. "
+            f"Found {len(contrast_keys)} contrast parameters and {len(offset_keys)} offset parameters. "
+            f"Expected matching counts for all phi angles."
+        )
+
+    # Stack samples: shape (n_samples, n_angles)
+    contrast_samples_per_angle = jnp.stack(
+        [samples[k] for k in contrast_keys], axis=1
+    )
+    offset_samples_per_angle = jnp.stack([samples[k] for k in offset_keys], axis=1)
+
+    # Flatten across angles for global statistics
+    # This gives us all samples from all angles: shape (n_samples * n_angles,)
+    contrast_samples = contrast_samples_per_angle.flatten()
+    offset_samples = offset_samples_per_angle.flatten()
+
+    logger.debug(
+        f"Per-angle scaling validated: {len(contrast_keys)} angles, "
+        f"{contrast_samples_per_angle.shape[0]} samples per angle, "
+        f"total {len(contrast_samples)} contrast samples"
+    )
 
     # Compute summary statistics
     mean_params = jnp.mean(param_samples, axis=0)
@@ -1891,7 +1939,13 @@ def _process_posterior_samples(mcmc_result, analysis_mode):
         # Get samples with chain dimension preserved
         samples_with_chains = mcmc_result.get_samples(group_by_chain=True)
 
-        if samples_with_chains["contrast"].ndim > 1:
+        # Check dimensionality using a representative parameter (handle per-angle scaling)
+        # Use the first available contrast parameter or D0 as reference
+        ref_param_key = "contrast_0" if per_angle_scaling_detected else "contrast"
+        if ref_param_key not in samples_with_chains:
+            ref_param_key = "D0"  # Fallback to physics parameter
+
+        if samples_with_chains[ref_param_key].ndim > 1:
             # Multiple chains available - compute convergence diagnostics
             from numpyro.diagnostics import effective_sample_size, gelman_rubin
 

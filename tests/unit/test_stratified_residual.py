@@ -139,23 +139,6 @@ def test_initialization_per_angle_scaling(
     assert residual_fn.n_total_params == 9  # 6 scaling + 3 physical
 
 
-def test_initialization_legacy_scaling(
-    mock_stratified_data_small, physical_param_names_static
-):
-    """Test StratifiedResidualFunction initialization with legacy scaling."""
-    residual_fn = StratifiedResidualFunction(
-        stratified_data=mock_stratified_data_small,
-        per_angle_scaling=False,
-        physical_param_names=physical_param_names_static,
-    )
-
-    assert residual_fn.n_chunks == 2
-    assert residual_fn.n_total_points == 300
-    assert residual_fn.n_phi == 3
-    assert residual_fn.n_scaling_params == 2  # Single contrast + offset
-    assert residual_fn.n_physical_params == 3
-    assert residual_fn.n_total_params == 5  # 2 scaling + 3 physical
-
 
 def test_initialization_laminar_flow(
     mock_stratified_data_small, physical_param_names_laminar
@@ -305,26 +288,6 @@ def test_call_returns_correct_shape_per_angle(
     assert residuals.shape == (300,)  # Total points across all chunks
     assert jnp.all(jnp.isfinite(residuals))
 
-
-def test_call_returns_correct_shape_legacy(
-    mock_stratified_data_small, physical_param_names_static
-):
-    """Test that __call__ returns residuals with correct shape (legacy mode)."""
-    residual_fn = StratifiedResidualFunction(
-        stratified_data=mock_stratified_data_small,
-        per_angle_scaling=False,
-        physical_param_names=physical_param_names_static,
-    )
-
-    # Create mock parameters: [contrast, offset, D0, alpha, D_offset]
-    params = np.array([0.5, 1.0, 1e-10, 1.0, 0.0])
-
-    residuals = residual_fn(params)
-
-    # Changed in v2.2.1: Returns JAX arrays for LeastSquares JIT compatibility
-    assert isinstance(residuals, jnp.ndarray)
-    assert residuals.shape == (300,)
-    assert jnp.all(jnp.isfinite(residuals))
 
 
 def test_residuals_are_finite_and_reasonable(

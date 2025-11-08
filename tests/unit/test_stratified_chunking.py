@@ -354,18 +354,6 @@ def test_should_use_stratification_disabled_small_dataset():
     assert "100k" in reason.lower() or "standard" in reason.lower()
 
 
-def test_should_use_stratification_disabled_global_scaling():
-    """Test strategy decision without per-angle scaling."""
-    use, reason = should_use_stratification(
-        n_points=200_000,
-        n_angles=3,
-        per_angle_scaling=False,  # Global scaling only
-        imbalance_ratio=2.0,
-    )
-
-    assert use is False
-    assert "per-angle" in reason.lower() or "disabled" in reason.lower()
-
 
 def test_should_use_stratification_disabled_imbalanced():
     """Test strategy decision for highly imbalanced angles."""

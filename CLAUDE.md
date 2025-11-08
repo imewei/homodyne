@@ -37,6 +37,34 @@ ______________________________________________________________________
 
 ## Recent Updates (November 7, 2025)
 
+**Version 2.4.0: Legacy Scalar Scaling Mode Removed - Per-Angle Required** (November 7, 2025)
+- **Breaking Change**: Legacy scalar contrast/offset mode removed from NLSQ and MCMC
+- **Required**: `per_angle_scaling=True` is now the ONLY supported mode (physically correct)
+- **Rationale**: Simplify codebase, enforce physical correctness, eliminate ambiguity
+- **Parameter structure changes**:
+  - Before (legacy - 3 angles): `[contrast, offset, D0, alpha, D_offset]` (5 params)
+  - After (per-angle - 3 angles): `[c₀, c₁, c₂, o₀, o₁, o₂, D0, alpha, D_offset]` (9 params)
+- **MCMC sample structure changes**:
+  - Before: `n_samples × n_chains` total samples
+  - After: `n_samples × n_chains × n_angles` total samples
+- **API changes**:
+  - `fit_nlsq_jax()`: default changed from `per_angle_scaling=False` to `per_angle_scaling=True`
+  - Passing `per_angle_scaling=False` now raises `ValueError` in both NLSQ and MCMC
+- **Code removed**: ~80 lines of legacy conditional code paths
+- **Migration**:
+  - If using default settings: No action needed (per-angle is now default)
+  - If using `per_angle_scaling=False`: Remove this parameter or change to `True`
+  - Update initial parameter counts: multiply scaling parameters by number of angles
+- **Physical justification**:
+  - Each scattering angle has unique optical properties
+  - Detector response varies with angle
+  - Single contrast/offset not physically meaningful
+- **Migration guide**: See `/tmp/v2.4-legacy-mode-removal-COMPLETE.md` for full details
+- **Files changed**: 3 production files, 5 test files updated for per-angle only
+- **Status**: ✅ **Production Ready** - All tests passing, breaking change well-documented
+
+______________________________________________________________________
+
 **Version 2.3.0: GPU Support Removed - CPU-Only Architecture** (November 7, 2025)
 - **Breaking Change**: All GPU acceleration support removed
 - **Hard break**: No migration path - choose v2.2.1 (GPU) or v2.3.0 (CPU-only)

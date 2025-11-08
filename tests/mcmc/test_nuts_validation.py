@@ -647,10 +647,12 @@ class TestNUTSDiagnostics:
         assert result.samples_offset is not None, "No offset samples"
 
         # Samples should have correct shape
-        n_total_samples = 500 * 2  # n_samples * n_chains
+        # Per-angle scaling (Nov 2025: required) returns n_samples * n_chains * n_angles
+        n_angles = len(np.unique(data_dict["phi"]))  # 6 angles in synthetic data
+        n_total_samples = 500 * 2 * n_angles  # n_samples * n_chains * n_angles
         assert (
             len(result.samples_contrast) == n_total_samples
-        ), f"Contrast samples: {len(result.samples_contrast)} != {n_total_samples}"
+        ), f"Contrast samples: {len(result.samples_contrast)} != {n_total_samples} (expected {500}*{2}*{n_angles})"
 
 
 # ==============================================================================

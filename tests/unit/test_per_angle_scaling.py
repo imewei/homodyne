@@ -182,24 +182,24 @@ class TestPerAngleMCMC:
             parameter_space=static_param_space,
             dt=multi_angle_data["dt"],
             phi_full=multi_angle_data["phi_full"],
-            per_angle_scaling=False,  # Legacy mode
+            per_angle_scaling=True,  # Per-angle mode (Nov 2025: required)
         )
 
         # Sample from prior
         prior_pred = Predictive(model, num_samples=10)
         samples = prior_pred(random.PRNGKey(42))
 
-        # Should have single contrast/offset, not per-angle
-        assert "contrast" in samples, "Legacy mode should have 'contrast'"
-        assert "offset" in samples, "Legacy mode should have 'offset'"
+        # Should have per-angle contrast/offset (Nov 2025: required)
+        assert "contrast_0" in samples, "Per-angle mode should have 'contrast_0'"
+        assert "offset_0" in samples, "Per-angle mode should have 'offset_0'"
 
-        # Should NOT have per-angle parameters
-        assert "contrast_0" not in samples, "Legacy mode should not have contrast_0"
-        assert "offset_0" not in samples, "Legacy mode should not have offset_0"
+        # Should NOT have single scalar parameters (legacy mode removed)
+        assert "contrast" not in samples, "Should not have scalar 'contrast'"
+        assert "offset" not in samples, "Should not have scalar 'offset'"
 
-        # Shape should be scalar (sampled across MCMC chains only)
-        assert samples["contrast"].shape == (10,)
-        assert samples["offset"].shape == (10,)
+        # Shape should be (n_samples,) for per-angle parameters
+        assert samples["contrast_0"].shape == (10,)
+        assert samples["offset_0"].shape == (10,)
 
     def test_parameter_count_increases_with_phi_angles(self):
         """Test that total parameters = (2*n_phi + n_physical)."""
