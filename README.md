@@ -1,16 +1,49 @@
-# Homodyne v2.1: JAX-First XPCS Analysis
+# Homodyne v2.3: CPU-Optimized JAX-First XPCS Analysis
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Python](https://img.shields.io/badge/Python-3.12%2B-blue)](https://www.python.org/)
-[![Version](https://img.shields.io/badge/Version-2.1.0-green.svg)](#)
+[![Version](https://img.shields.io/badge/Version-2.3.0-green.svg)](#)
 [![Documentation](https://img.shields.io/badge/docs-sphinx-blue.svg)](https://homodyne.readthedocs.io)
 [![ReadTheDocs](https://readthedocs.org/projects/homodyne/badge/?version=latest)](https://homodyne.readthedocs.io/en/latest/)
 [![GitHub Actions](https://github.com/imewei/homodyne/actions/workflows/docs.yml/badge.svg)](https://github.com/imewei/homodyne/actions/workflows/docs.yml)
 [![DOI](https://zenodo.org/badge/DOI/10.1073/pnas.2401162121.svg)](https://doi.org/10.1073/pnas.2401162121)
 
-## 🎉 v2.2.0 New Features
+## ⚠️ **BREAKING CHANGE: v2.3.0 - GPU Support Removed**
 
-**Angle-Stratified Chunking** - Automatic fix for per-angle scaling on large datasets (>1M points)
+**v2.3.0 transitions to CPU-only architecture** - All GPU acceleration support has been removed.
+
+**Key Changes:**
+- **Rationale**: Simplify maintenance, focus on reliable HPC CPU optimization
+- **Impact**: Removed 9 GPU API functions, GPU-specific CLI flags, GPU examples, and runtime modules
+- **For GPU users**: Stay on **v2.2.1** (last GPU-supporting version, available on PyPI)
+- **For CPU users**: Upgrade to **v2.3.0** (recommended, simpler, more reliable)
+- **Migration guide**: See [v2.2-to-v2.3 GPU Removal Guide](docs/migration/v2.2-to-v2.3-gpu-removal.md)
+
+**What's Removed:**
+- CLI flags: `--force-cpu`, `--gpu-memory-fraction`
+- Config keys: `gpu_memory_fraction`, `force_cpu`, `cuda_device_id`
+- 9 GPU API functions from `homodyne.device`
+- All GPU examples and runtime modules
+
+**What's New:**
+- CPU-optimized JAX 0.8.0 for all platforms (Linux, macOS, Windows)
+- Enhanced multi-core CPU optimization for HPC clusters (36/128-core nodes)
+- Simplified installation and maintenance
+- Consistent CPU-only behavior across all platforms
+
+## 🎉 v2.2.1 Critical Fix
+
+**Parameter Expansion for Per-Angle Scaling** - Resolves silent NLSQ optimization failures
+
+Key fixes:
+- **Automatic parameter expansion**: 9 → 13 parameters for 3 angles (7 physical + 3×2 scaling)
+- **Gradient sanity check**: Pre-optimization validation detects zero-gradient issues
+- **Stratified least-squares**: Direct NLSQ integration with StratifiedResidualFunction
+- **Performance**: 93.15% cost reduction, 113 function evaluations (vs 0 before fix)
+
+## 🎉 v2.2.0 Feature Release
+
+**Angle-Stratified Chunking** - Automatic fix for per-angle scaling on large datasets
 
 Key improvements:
 - **Automatic activation**: No configuration required - activates when `per_angle_scaling=True` AND `n_points>=100k`
@@ -20,15 +53,6 @@ Key improvements:
 - **Fallbacks**: Sequential per-angle optimization for extreme angle imbalance (>5.0 ratio)
 
 See [v2.2 Release Notes](docs/releases/v2.2-stratification-release-notes.md) for complete details.
-
-## ⚠️ v2.1.0 Breaking Changes
-
-**If upgrading from v2.0.x, please read the [Migration Guide](docs/migration/v2.0-to-v2.1.md).**
-
-Key changes:
-- **CLI**: Only `--method nlsq` and `--method mcmc` supported (automatic NUTS/CMC selection)
-- **Config**: Removed `mcmc.initialization` section; added `min_samples_for_cmc`, `memory_threshold_pct`
-- **API**: Updated `fit_mcmc_jax()` signature with new `parameter_space` and `initial_values` parameters
 
 **High-performance JAX-first package for X-ray Photon Correlation Spectroscopy (XPCS)
 analysis**, implementing the theoretical framework from

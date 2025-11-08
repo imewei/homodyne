@@ -11,8 +11,8 @@ sys.path.insert(0, str(Path("..").resolve()))
 project = "Homodyne"
 copyright = "2025, Wei Chen, Hongrui He - Argonne National Laboratory"
 author = "Wei Chen, Hongrui He"
-release = "2.2.0"
-version = "2.2.0"
+release = "2.3.0"
+version = "2.3.0"
 
 # Project metadata
 project_description = "JAX-first high-performance XPCS analysis for nonequilibrium soft matter systems"

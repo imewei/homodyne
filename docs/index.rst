@@ -1,12 +1,33 @@
 Homodyne Documentation
 ======================
 
-**Version 2.2.0** - JAX-first high-performance XPCS analysis for nonequilibrium soft matter systems
+**Version 2.3.0** - CPU-optimized JAX-first XPCS analysis for nonequilibrium soft matter systems
+
+.. admonition:: **BREAKING CHANGE in v2.3.0** - GPU Support Removed
+   :class: warning
+
+   **CPU-Only Architecture** - All GPU acceleration support has been removed in v2.3.0
+
+   * **Rationale**: Simplify maintenance, focus on reliable HPC CPU optimization
+   * **Impact**: Removed 9 GPU API functions, GPU examples, runtime modules
+   * **For GPU users**: Stay on v2.2.1 (last GPU-supporting version, available on PyPI)
+   * **For CPU users**: Upgrade to v2.3.0 (recommended, simpler, more reliable)
+   * **Migration guide**: :doc:`migration/v2.2-to-v2.3-gpu-removal`
+
+.. admonition:: New in v2.2.1
+   :class: note
+
+   **Parameter Expansion Fix** - Resolves silent optimization failures with per-angle scaling
+
+   * **Critical fix**: Automatic parameter expansion (9 → 13 params for 3 angles)
+   * **Gradient validation**: Pre-optimization sanity checks prevent zero-gradient issues
+   * **Stratified least-squares**: Direct NLSQ integration with StratifiedResidualFunction
+   * **Performance**: 93.15% cost reduction, 113 function evaluations (vs 0 before fix)
 
 .. admonition:: New in v2.2.0
    :class: note
 
-   **Angle-Stratified Chunking** - Critical fix for per-angle scaling on large datasets (>1M points)
+   **Angle-Stratified Chunking** - Automatic fix for per-angle scaling on large datasets
 
    * Automatic activation when ``per_angle_scaling=True`` AND ``n_points >= 100k``
    * Zero regressions - 100% backward compatible

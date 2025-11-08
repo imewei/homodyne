@@ -1,12 +1,27 @@
-GPU Acceleration
-================
+GPU Acceleration (DEPRECATED in v2.3.0)
+=======================================
+
+.. warning::
+   **GPU Support Removed in v2.3.0**
+
+   This documentation is **deprecated** and applies only to Homodyne v2.2.1 and earlier.
+
+   * **v2.3.0+**: CPU-only architecture
+   * **For GPU users**: Stay on v2.2.1 (last GPU-supporting version)
+   * **For CPU users**: Upgrade to v2.3.0 (recommended)
+   * **Migration guide**: See :doc:`../migration/v2.2-to-v2.3-gpu-removal`
+
+Historical Documentation (v2.2.1 and earlier)
+---------------------------------------------
 
 Overview
 --------
 
-Homodyne supports GPU acceleration on Linux systems with NVIDIA GPUs, providing 10-100x speedup for optimization and data processing.
+**Note**: The following information applies only to Homodyne v2.2.1 and earlier.
 
-**Key Features:**
+Homodyne v2.2.1 supported GPU acceleration on Linux systems with NVIDIA GPUs, providing 10-100x speedup for optimization and data processing.
+
+**Key Features (v2.2.1):**
 
 - **Transparent Acceleration**: JAX handles GPU/CPU transparently
 - **CUDA 12.1-12.9 Support**: Modern NVIDIA GPU support
