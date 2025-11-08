@@ -2796,9 +2796,41 @@ def _compute_nlsq_fits(
         A = np.column_stack([c2_theory_flat, np.ones_like(c2_theory_flat)])
         b = c2_exp_angle
 
-        # Least squares solution
-        scaling, residuals_lstsq, rank, s = np.linalg.lstsq(A, b, rcond=None)
-        contrast_fit, offset_fit = scaling
+        # Least squares solution with robust error handling
+        try:
+            # Try standard lstsq first
+            scaling, residuals_lstsq, rank, s = np.linalg.lstsq(A, b, rcond=None)
+            contrast_fit, offset_fit = scaling
+        except np.linalg.LinAlgError as e:
+            logger.warning(
+                f"Angle {phi_angle:.1f}°: np.linalg.lstsq failed ({e}), trying with higher rcond..."
+            )
+            try:
+                # Try with higher rcond for better numerical stability
+                scaling, residuals_lstsq, rank, s = np.linalg.lstsq(A, b, rcond=1e-10)
+                contrast_fit, offset_fit = scaling
+            except np.linalg.LinAlgError as e2:
+                logger.warning(
+                    f"Angle {phi_angle:.1f}°: lstsq with rcond=1e-10 also failed ({e2}), using robust fallback..."
+                )
+                # Fallback: Use robust pseudo-inverse with SVD cutoff
+                # This is more numerically stable than lstsq
+                try:
+                    # Compute pseudo-inverse with explicit SVD cutoff
+                    A_pinv = np.linalg.pinv(A, rcond=1e-6)
+                    scaling = A_pinv @ b
+                    contrast_fit, offset_fit = scaling
+                    logger.info(
+                        f"Angle {phi_angle:.1f}°: Successfully used pinv fallback"
+                    )
+                except Exception as e3:
+                    logger.error(
+                        f"Angle {phi_angle:.1f}°: All methods failed ({e3}), using default scaling..."
+                    )
+                    # Ultimate fallback: Use default scaling (no fitting)
+                    contrast_fit = 0.5  # Default contrast
+                    offset_fit = 1.0  # Default offset
+
         per_angle_scaling.append([contrast_fit, offset_fit])
 
         logger.debug(
