@@ -150,11 +150,17 @@ class TestCMCConfigOverride:
         }
         mock_config.config = {"analysis_mode": "laminar_flow"}
 
+        # Fix: Ensure phi_angles_list matches c2_exp first dimension
+        # Also provide 2D meshgrids for t1/t2 (required by data pooling code)
+        n_phi = 3
+        n_t = 10
+        t_vals = np.linspace(0, 1, n_t)
+        t1_2d, t2_2d = np.meshgrid(t_vals, t_vals, indexing='ij')
         mock_data = {
-            "c2_exp": np.random.rand(100, 10, 10),
-            "t1": np.linspace(0, 1, 10),
-            "t2": np.linspace(0, 1, 10),
-            "phi_angles_list": np.array([0, 45, 90]),
+            "c2_exp": np.random.rand(n_phi, n_t, n_t),  # (3, 10, 10)
+            "t1": t1_2d,  # 2D meshgrid (10, 10)
+            "t2": t2_2d,  # 2D meshgrid (10, 10)
+            "phi_angles_list": np.array([0, 45, 90]),  # 3 angles matching c2_exp
             "wavevector_q_list": [0.01],
         }
         mock_filter.return_value = mock_data
@@ -196,11 +202,17 @@ class TestCMCConfigOverride:
         }
         mock_config.config = {"analysis_mode": "laminar_flow"}
 
+        # Fix: Ensure phi_angles_list matches c2_exp first dimension
+        # Also provide 2D meshgrids for t1/t2 (required by data pooling code)
+        n_phi = 3
+        n_t = 10
+        t_vals = np.linspace(0, 1, n_t)
+        t1_2d, t2_2d = np.meshgrid(t_vals, t_vals, indexing='ij')
         mock_data = {
-            "c2_exp": np.random.rand(100, 10, 10),
-            "t1": np.linspace(0, 1, 10),
-            "t2": np.linspace(0, 1, 10),
-            "phi_angles_list": np.array([0, 45, 90]),
+            "c2_exp": np.random.rand(n_phi, n_t, n_t),  # (3, 10, 10)
+            "t1": t1_2d,  # 2D meshgrid (10, 10)
+            "t2": t2_2d,  # 2D meshgrid (10, 10)
+            "phi_angles_list": np.array([0, 45, 90]),  # 3 angles matching c2_exp
             "wavevector_q_list": [0.01],
         }
         mock_filter.return_value = mock_data
@@ -246,11 +258,17 @@ class TestCMCDiagnosticPlotGeneration:
         mock_config.get_cmc_config.return_value = {}
         mock_config.config = {"analysis_mode": "laminar_flow"}
 
+        # Fix: Ensure phi_angles_list matches c2_exp first dimension
+        # Also provide 2D meshgrids for t1/t2 (required by data pooling code)
+        n_phi = 3
+        n_t = 10
+        t_vals = np.linspace(0, 1, n_t)
+        t1_2d, t2_2d = np.meshgrid(t_vals, t_vals, indexing='ij')
         mock_data = {
-            "c2_exp": np.random.rand(100, 10, 10),
-            "t1": np.linspace(0, 1, 10),
-            "t2": np.linspace(0, 1, 10),
-            "phi_angles_list": np.array([0, 45, 90]),
+            "c2_exp": np.random.rand(n_phi, n_t, n_t),  # (3, 10, 10)
+            "t1": t1_2d,  # 2D meshgrid (10, 10)
+            "t2": t2_2d,  # 2D meshgrid (10, 10)
+            "phi_angles_list": np.array([0, 45, 90]),  # 3 angles matching c2_exp
             "wavevector_q_list": [0.01],
         }
         mock_filter.return_value = mock_data
@@ -296,11 +314,17 @@ class TestCMCDiagnosticPlotGeneration:
         mock_config.get_cmc_config.return_value = {}
         mock_config.config = {"analysis_mode": "laminar_flow"}
 
+        # Fix: Ensure phi_angles_list matches c2_exp first dimension
+        # Also provide 2D meshgrids for t1/t2 (required by data pooling code)
+        n_phi = 3
+        n_t = 10
+        t_vals = np.linspace(0, 1, n_t)
+        t1_2d, t2_2d = np.meshgrid(t_vals, t_vals, indexing='ij')
         mock_data = {
-            "c2_exp": np.random.rand(100, 10, 10),
-            "t1": np.linspace(0, 1, 10),
-            "t2": np.linspace(0, 1, 10),
-            "phi_angles_list": np.array([0, 45, 90]),
+            "c2_exp": np.random.rand(n_phi, n_t, n_t),  # (3, 10, 10)
+            "t1": t1_2d,  # 2D meshgrid (10, 10)
+            "t2": t2_2d,  # 2D meshgrid (10, 10)
+            "phi_angles_list": np.array([0, 45, 90]),  # 3 angles matching c2_exp
             "wavevector_q_list": [0.01],
         }
         mock_filter.return_value = mock_data
@@ -342,11 +366,17 @@ class TestCMCDiagnosticPlotGeneration:
         mock_config.get_cmc_config.return_value = {}
         mock_config.config = {"analysis_mode": "laminar_flow"}
 
+        # Fix: Ensure phi_angles_list matches c2_exp first dimension
+        # Also provide 2D meshgrids for t1/t2 (required by data pooling code)
+        n_phi = 3
+        n_t = 10
+        t_vals = np.linspace(0, 1, n_t)
+        t1_2d, t2_2d = np.meshgrid(t_vals, t_vals, indexing='ij')
         mock_data = {
-            "c2_exp": np.random.rand(100, 10, 10),
-            "t1": np.linspace(0, 1, 10),
-            "t2": np.linspace(0, 1, 10),
-            "phi_angles_list": np.array([0, 45, 90]),
+            "c2_exp": np.random.rand(n_phi, n_t, n_t),  # (3, 10, 10)
+            "t1": t1_2d,  # 2D meshgrid (10, 10)
+            "t2": t2_2d,  # 2D meshgrid (10, 10)
+            "phi_angles_list": np.array([0, 45, 90]),  # 3 angles matching c2_exp
             "wavevector_q_list": [0.01],
         }
         mock_filter.return_value = mock_data

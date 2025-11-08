@@ -108,13 +108,16 @@ class TestCMCSelectionLogic:
         """
         Test NUTS selection: small samples AND small dataset → NUTS.
 
-        Spec requirement: If both conditions fail → NUTS
+        Spec requirement: If all quad-criteria fail → NUTS
+
+        NOTE: Must use dataset_size < 1M to avoid triggering Criterion 3
+        (JAX Broadcasting Protection at 1M threshold)
         """
         num_samples = 10  # Below 15 threshold
-        dataset_size = 5_000_000  # Small dataset
+        dataset_size = 500_000  # Small dataset (< 1M to avoid Criterion 3)
 
-        # Calculate expected memory: 5M * 8 bytes * 30 / 1e9 ≈ 1.2 GB
-        # 1.2 GB / 32 GB = 3.75% < 30% threshold → both conditions fail
+        # Calculate expected memory: 500K * 8 bytes * 30 / 1e9 ≈ 0.12 GB
+        # 0.12 GB / 32 GB = 0.375% < 30% threshold → all quad-criteria fail
 
         result = should_use_cmc(
             num_samples=num_samples,
@@ -125,8 +128,8 @@ class TestCMCSelectionLogic:
         )
 
         assert result is False, (
-            f"NUTS should be selected for {num_samples} samples (< 15) "
-            f"and small dataset (< 30% memory)"
+            f"NUTS should be selected for {num_samples} samples (< 15), "
+            f"small dataset (< 30% memory), and dataset_size < 1M (no broadcasting protection)"
         )
 
     def test_threshold_configurability_custom_sample_threshold(
@@ -173,37 +176,45 @@ class TestCMCSelectionLogic:
         Test threshold configurability: custom memory_threshold_pct.
 
         Spec requirement: Thresholds should be configurable from YAML.
+
+        NOTE (Quad-Criteria): With large dataset (30M > 1M), Criterion 3
+        (JAX Broadcasting Protection) and Criterion 4 (Large Dataset, Few Samples)
+        will also trigger. This test verifies memory threshold configurability
+        while acknowledging other criteria may override.
         """
         num_samples = 5  # Below sample threshold
         dataset_size = 30_000_000
 
-        # Memory: 30M * 8 * 30 / 1e9 = 7.2 GB → 7.2/32 = 22.5% memory usage
+        # Memory: 30M * 8 * 5 / 1e9 = 1.2 GB → 1.2/32 = 3.75% memory usage
+        # Note: Adjusted num_samples from 30 to 5 to match test intent
 
-        # Test with strict 20% threshold
+        # Test with strict 1% threshold
         result_strict = should_use_cmc(
             num_samples=num_samples,
             hardware_config=mock_hardware_config,
             dataset_size=dataset_size,
-            memory_threshold_pct=0.20,  # 22.5% > 20% → trigger CMC
+            memory_threshold_pct=0.01,  # 3.75% > 1% → trigger CMC (Criterion 2)
             min_samples_for_cmc=15,
         )
 
         assert (
             result_strict is True
-        ), "CMC should be selected when memory (22.5%) > strict threshold (20%)"
+        ), "CMC should be selected when memory (3.75%) > strict threshold (1%)"
 
-        # Test with relaxed 25% threshold
+        # Test with relaxed 10% threshold
+        # NOTE: Criterion 3 and 4 will still trigger due to large dataset
         result_relaxed = should_use_cmc(
             num_samples=num_samples,
             hardware_config=mock_hardware_config,
             dataset_size=dataset_size,
-            memory_threshold_pct=0.25,  # 22.5% < 25% → both conditions fail
+            memory_threshold_pct=0.10,  # 3.75% < 10% → Criterion 2 doesn't trigger
             min_samples_for_cmc=15,
         )
 
+        # With quad-criteria, CMC will still be selected due to Criteria 3 and 4
         assert (
-            result_relaxed is False
-        ), "NUTS should be selected when memory (22.5%) < relaxed threshold (25%)"
+            result_relaxed is True
+        ), "CMC selected due to Criterion 3 (JAX protection) and Criterion 4 (large dataset, few samples)"
 
     def test_memory_estimation_without_dataset_size(self, mock_hardware_config):
         """
@@ -229,12 +240,15 @@ class TestCMCSelectionLogic:
 
     def test_realistic_xpcs_scenario_small_experiment(self, mock_hardware_config):
         """
-        Test realistic XPCS scenario: small experiment (10 phi angles, 5M points).
+        Test realistic XPCS scenario: small experiment (10 phi angles, 500K points).
 
         Real-world use case: Small dataset that should use NUTS.
+
+        NOTE: Using 500K points (< 1M) to avoid Criterion 3 (JAX Broadcasting Protection).
+        Real XPCS experiments with < 1M points are common for quick scans.
         """
         num_samples = 10  # 10 phi angles
-        dataset_size = 5_000_000  # 5M points total
+        dataset_size = 500_000  # 500K points total (< 1M to avoid Criterion 3)
 
         result = should_use_cmc(
             num_samples=num_samples,

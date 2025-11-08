@@ -4,13 +4,9 @@
 
 This script provides optional setup for:
 1. Shell completion system (bash, zsh, fish) - user choice
-2. GPU acceleration configuration (Linux only) - user choice
-3. Virtual environment integration (conda, mamba, venv, virtualenv)
+2. Virtual environment integration (conda, mamba, venv, virtualenv)
 
-MCMC Backend Architecture:
-- CPU Backend: Pure PyMC implementation (isolated from JAX)
-- GPU Backend: Pure NumPyro+JAX implementation (isolated from PyMC)
-- Complete separation prevents backend conflicts and namespace pollution
+Version 2.3.0: CPU-only architecture (GPU support removed)
 
 Features:
 - Safe completion scripts that don't interfere with system commands
@@ -95,43 +91,6 @@ if [[ -z "$_HOMODYNE_ZSH_COMPLETION_LOADED" ]]; then
     # Plotting shortcuts
     alias hexp='homodyne --plot-experimental-data'
     alias hsim='homodyne --plot-simulated-data'
-
-    # GPU status function
-    homodyne_gpu_status() {
-        if [[ "$(uname -s)" == "Linux" ]]; then
-            echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-            echo "🚀 Homodyne GPU Status (JAX Device Detection)"
-            echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-
-            # Hardware detection
-            if command -v nvidia-smi >/dev/null 2>&1; then
-                echo "✅ NVIDIA GPU detected:"
-                nvidia-smi --query-gpu=name,utilization.gpu,memory.used,memory.total --format=csv,noheader,nounits | sed 's/^/   /'
-            else
-                echo "❌ No NVIDIA GPU detected"
-            fi
-
-            # JAX device detection
-            echo ""
-            echo "🔧 JAX Device Configuration:"
-            python3 -c "import jax; devices = jax.devices(); gpu_count = len([d for d in devices if 'cuda' in str(d).lower() or 'gpu' in str(d).lower()]); print(f'   JAX version: {jax.__version__}'); print(f'   Devices: {devices}'); print(f'   GPU acceleration: {\"✅ Active\" if gpu_count > 0 else \"❌ CPU-only\"}')"
-
-            # Environment status
-            echo ""
-            echo "📊 GPU Acceleration:"
-            echo "   All homodyne methods use automatic JAX device detection"
-            echo "   GPU acceleration works transparently if:"
-            echo "   • Linux platform with NVIDIA GPU"
-            echo "   • CUDA 12.1-12.9 installed"
-            echo "   • jax[cuda12-local] installed"
-            echo ""
-            echo "Install GPU support:"
-            echo "   pip install jax[cuda12-local]==0.8.0 jaxlib==0.8.0"
-            echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-        else
-            echo "GPU status only available on Linux"
-        fi
-    }
 
     # Helper function
     homodyne_help() {
@@ -313,56 +272,7 @@ fi
         return False
 
 
-def install_gpu_acceleration(force=False):
-    """Install GPU acceleration setup (Linux only)."""
-    if platform.system() != "Linux":
-        print("ℹ️  GPU acceleration only available on Linux")
-        return False
-
-    if not is_virtual_environment() and not force:
-        print("⚠️  GPU acceleration recommended only in virtual environments")
-        return False
-
-    try:
-        venv_path = Path(sys.prefix)
-
-        # Find the homodyne source directory
-        try:
-            import homodyne
-
-            homodyne_src_dir = Path(homodyne.__file__).parent.parent
-            smart_gpu_script = (
-                homodyne_src_dir / "homodyne" / "runtime" / "gpu" / "activation.sh"
-            )
-
-            if not smart_gpu_script.exists():
-                print(f"⚠️  Smart GPU activation script not found at {smart_gpu_script}")
-                return False
-        except ImportError:
-            print("❌ Homodyne package not found")
-            return False
-
-        # Create conda activation script for GPU (for conda/mamba environments)
-        if is_conda_environment(venv_path):
-            activate_dir = venv_path / "etc" / "conda" / "activate.d"
-            activate_dir.mkdir(parents=True, exist_ok=True)
-
-            gpu_activate_script = activate_dir / "homodyne-gpu.sh"
-            gpu_activate_content = f"""#!/bin/bash
-# Smart GPU activation for homodyne
-if [[ -f "{smart_gpu_script}" ]]; then
-    source "{smart_gpu_script}"
-fi
-"""
-            gpu_activate_script.write_text(gpu_activate_content)
-            gpu_activate_script.chmod(0o755)
-
-        print("✅ GPU acceleration setup installed")
-        return True
-
-    except Exception as e:
-        print(f"❌ GPU setup failed: {e}")
-        return False
+# GPU acceleration removed in v2.3.0 - function removed for CPU-only architecture
 
 
 def install_macos_shell_completion():
@@ -415,8 +325,8 @@ def install_macos_shell_completion():
 
 
 def install_advanced_features():
-    """Install advanced features (Phases 4-6)."""
-    print("🚀 Installing Advanced Features...")
+    """Install advanced features (Phases 4-6, CPU-only in v2.3.0)."""
+    print("🚀 Installing Advanced Features (CPU-only)...")
 
     try:
         venv_path = Path(sys.prefix)
@@ -430,10 +340,9 @@ def install_advanced_features():
             print("❌ Homodyne package not found")
             return False
 
-        # Check if advanced features files exist
+        # Check if advanced features files exist (CPU-only)
         required_files = [
             homodyne_src_dir / "homodyne" / "runtime" / "shell" / "completion.sh",
-            homodyne_src_dir / "homodyne" / "runtime" / "gpu" / "optimizer.py",
             homodyne_src_dir / "homodyne" / "runtime" / "utils" / "system_validator.py",
         ]
 
@@ -447,18 +356,6 @@ def install_advanced_features():
 
         # Install CLI commands for advanced features
         bin_dir = venv_path / "bin"
-
-        # GPU optimizer command
-        gpu_cmd = bin_dir / "homodyne-gpu-optimize"
-        gpu_content = f"""#!/usr/bin/env python3
-import sys
-sys.path.insert(0, "{homodyne_src_dir / "homodyne" / "runtime" / "gpu"}")
-from optimizer import main
-if __name__ == "__main__":
-    main()
-"""
-        gpu_cmd.write_text(gpu_content)
-        gpu_cmd.chmod(0o755)
 
         # System validator command
         validator_cmd = bin_dir / "homodyne-validate"
@@ -479,7 +376,7 @@ if __name__ == "__main__":
 
             completion_script = activate_dir / "homodyne-advanced-completion.sh"
             completion_content = f"""#!/bin/bash
-# Advanced homodyne completion
+# Advanced homodyne completion (CPU-only v2.3.0)
 if [[ -f "{homodyne_src_dir / "homodyne" / "runtime" / "shell" / "completion.sh"}" ]]; then
     source "{homodyne_src_dir / "homodyne" / "runtime" / "shell" / "completion.sh"}"
 fi
@@ -488,7 +385,6 @@ fi
             completion_script.chmod(0o755)
 
         print("✅ Advanced features installed successfully")
-        print("   • homodyne-gpu-optimize - GPU optimization and benchmarking")
         print("   • homodyne-validate - Comprehensive system validation")
         print("   • Advanced completion - Context-aware shell completion")
 
@@ -500,8 +396,8 @@ fi
 
 
 def interactive_setup():
-    """Interactive setup allowing user to choose what to install."""
-    print("\n🔧 Homodyne Optional Setup")
+    """Interactive setup allowing user to choose what to install (CPU-only in v2.3.0)."""
+    print("\n🔧 Homodyne Optional Setup (v2.3.0 - CPU-only)")
     print("Choose what to install (you can run this again later):")
     print()
 
@@ -530,24 +426,11 @@ def interactive_setup():
             else (current_shell or "bash")
         )
 
-    # GPU acceleration (Linux only)
-    install_gpu = False
-    if platform.system() == "Linux":
-        print("\n2. GPU Acceleration (NumPyro + JAX, Linux only)")
-        print("   - Configures CUDA environment for NumPyro GPU backend")
-        print("   - Enables homodyne-gpu command with automatic CPU fallback")
-        print("   - Requires CUDA toolkit 12.x+ and JAX[cuda12-local] installation")
-
-        install_gpu = (
-            input("   Install GPU acceleration? [y/N]: ").lower().startswith("y")
-        )
-
     # Advanced features (Phases 4-6)
-    print("\n3. Advanced Features (Phases 4-6)")
+    print("\n2. Advanced Features (Phases 4-6)")
     print("   - Phase 4: Advanced shell completion with caching")
-    print("   - Phase 5: GPU auto-optimization and benchmarking")
     print("   - Phase 6: Comprehensive system validation")
-    print("   - Adds homodyne-gpu-optimize and homodyne-validate commands")
+    print("   - Adds homodyne-validate command")
 
     install_advanced = (
         input("   Install advanced features? [y/N]: ").lower().startswith("y")
@@ -561,12 +444,6 @@ def interactive_setup():
             results.append(f"✅ {shell_type.title()} completion")
         else:
             results.append(f"❌ {shell_type.title()} completion failed")
-
-    if install_gpu:
-        if install_gpu_acceleration():
-            results.append("✅ GPU acceleration")
-        else:
-            results.append("❌ GPU acceleration failed")
 
     if install_advanced:
         if install_advanced_features():
@@ -603,9 +480,6 @@ def show_installation_summary(interactive_results=None):
     print("   homodyne --help")
     print("   homodyne-config --help")
     print("   homodyne_help               # View all shortcuts")
-
-    if is_linux():
-        print("   homodyne_gpu_status         # Check JAX GPU status")
 
 
 def main():
@@ -655,7 +529,7 @@ def main():
     success = True
 
     # Determine what to install
-    if args.shell or (not args.gpu and not args.shell and not args.advanced):
+    if args.shell or (not args.shell and not args.advanced):
         # Install shell completion by default or if specified
         print("\n📝 Installing shell completion...")
         shell_type = args.shell if args.shell else None
@@ -663,15 +537,6 @@ def main():
             results.append("✅ Shell completion")
         else:
             results.append("❌ Shell completion failed")
-            success = False
-
-    if args.gpu:
-        # Install GPU if requested
-        print("\n🚀 Installing GPU acceleration...")
-        if install_gpu_acceleration(force=args.force):
-            results.append("✅ GPU acceleration")
-        else:
-            results.append("❌ GPU acceleration failed")
             success = False
 
     if args.advanced:
@@ -696,7 +561,6 @@ def main():
         print("      conda deactivate && conda activate $CONDA_DEFAULT_ENV")
         print("   2. Test commands:")
         print("      hm --help  # Should work after reactivation")
-        print("      homodyne_gpu_status  # Check GPU status")
     else:
         print("\n⚠️  Setup had some issues")
         print("   Try: homodyne-post-install --interactive")
@@ -709,7 +573,7 @@ def parse_args():
     """Parse command line arguments."""
     parser = argparse.ArgumentParser(
         prog="homodyne-post-install",
-        description="Set up optional Homodyne shell completion and GPU acceleration",
+        description="Set up optional Homodyne shell completion (v2.3.0 - CPU-only)",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
@@ -719,9 +583,10 @@ Examples:
 
 The script provides optional installation of:
 - Shell completion (bash/zsh/fish) with safe aliases
-- GPU acceleration setup (Linux only)
-- Advanced features (Phases 4-6): completion caching, GPU optimization, system validation
+- Advanced features (Phases 4-6): completion caching, system validation
 - Virtual environment integration
+
+Version 2.3.0: GPU support removed - CPU-only architecture
         """,
     )
 
@@ -739,12 +604,6 @@ The script provides optional installation of:
     )
 
     parser.add_argument(
-        "--gpu",
-        action="store_true",
-        help="Install GPU acceleration (Linux only)",
-    )
-
-    parser.add_argument(
         "--advanced",
         action="store_true",
         help="Install advanced features (Phases 4-6)",
@@ -758,10 +617,6 @@ The script provides optional installation of:
     )
 
     return parser.parse_args()
-
-
-# Alternative alias
-setup_gpu_acceleration = install_gpu_acceleration
 
 
 if __name__ == "__main__":

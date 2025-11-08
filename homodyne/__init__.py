@@ -40,14 +40,18 @@ import logging
 import os
 import sys
 
-# Suppress JAX TPU backend warnings before any JAX imports
-# TPU is not available on standard systems and creates log noise
-# IMPORTANT: Don't set JAX_PLATFORMS here - it forces backend selection order
-# Instead, let JAX auto-detect optimal backend (GPU > CPU)
+# Suppress NLSQ GPU warnings (v2.3.0 is CPU-only)
+os.environ.setdefault("NLSQ_SKIP_GPU_CHECK", "1")
 
-# Suppress JAX backend initialization INFO messages
-logging.getLogger("jax._src.xla_bridge").setLevel(logging.WARNING)
-logging.getLogger("jax._src.compiler").setLevel(logging.WARNING)
+# Suppress JAX backend warnings and messages (CPU-only in v2.3.0)
+# - TPU backend warnings (not available on standard systems)
+# - GPU fallback warnings (expected behavior for CPU-only installation)
+# - Backend initialization INFO messages
+# IMPORTANT: Don't set JAX_PLATFORMS - let JAX auto-detect available backend
+
+# Suppress JAX backend logs (set to ERROR to hide GPU fallback warnings)
+logging.getLogger("jax._src.xla_bridge").setLevel(logging.ERROR)
+logging.getLogger("jax._src.compiler").setLevel(logging.ERROR)
 
 # Version handling
 try:
@@ -112,22 +116,15 @@ __features__ = {
     "device_optimization": HAS_DEVICE,
     "cli_interface": HAS_CLI,
     "jax_acceleration": None,  # Will be set below
-    "gpu_acceleration": None,  # Will be set below
 }
 
-# Check JAX availability
+# Check JAX availability (CPU-only in v2.3.0)
 try:
     import jax
 
     __features__["jax_acceleration"] = True
-    try:
-        gpu_devices = jax.devices("gpu")
-        __features__["gpu_acceleration"] = len(gpu_devices) > 0
-    except (RuntimeError, AttributeError, ValueError):
-        __features__["gpu_acceleration"] = False
 except ImportError:
     __features__["jax_acceleration"] = False
-    __features__["gpu_acceleration"] = False
 
 # Main exports (only available components)
 __all__ = ["__version__", "__features__", "get_package_info"]
@@ -212,24 +209,14 @@ def get_package_info() -> dict:
             "Install NumPyro or BlackJAX for MCMC: pip install numpyro blackjax",
         )
 
-    if __features__["jax_acceleration"] and not __features__["gpu_acceleration"]:
-        info["recommendations"].append(
-            "For GPU acceleration: pip install jax[local] (uses system CUDA)",
-        )
-
     if not dependencies["h5py"]:
         info["recommendations"].append("Install h5py for HDF5 data: pip install h5py")
 
-    # System recommendations
+    # System recommendations (CPU-only in v2.3.0)
     if __features__["jax_acceleration"]:
-        if __features__["gpu_acceleration"]:
-            info["recommendations"].append(
-                "✓ GPU acceleration available - excellent performance expected",
-            )
-        else:
-            info["recommendations"].append(
-                "CPU acceleration configured - good performance expected",
-            )
+        info["recommendations"].append(
+            "CPU acceleration configured - good performance expected",
+        )
     else:
         info["recommendations"].append("Install JAX for optimal performance")
 
@@ -237,7 +224,7 @@ def get_package_info() -> dict:
 
 
 def _check_installation():
-    """Check installation status and provide helpful messages."""
+    """Check installation status and provide helpful messages (CPU-only in v2.3.0)."""
     if not HAS_OPTIMIZATION:
         print(
             "Warning: Optimization modules not available. Core functionality limited.",
@@ -246,9 +233,6 @@ def _check_installation():
 
     if not __features__["jax_acceleration"]:
         print("Note: JAX not available. Install with: pip install jax")
-
-    if __features__["jax_acceleration"] and not __features__["gpu_acceleration"]:
-        print("Note: For GPU acceleration, install: pip install jax[local]")
 
 
 # Run installation check on import (only in interactive mode)

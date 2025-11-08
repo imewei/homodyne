@@ -206,6 +206,7 @@ def synthetic_data_discrete_phi_angles():
 # ============================================================================
 
 
+@pytest.mark.skip(reason="GPU support removed in v2.3.0 (CPU-only architecture)")
 def test_optimal_num_shards_gpu_small_dataset(mock_hardware_gpu):
     """Test optimal shard calculation for GPU with small dataset."""
     dataset_size = 500_000  # 500k points
@@ -216,6 +217,7 @@ def test_optimal_num_shards_gpu_small_dataset(mock_hardware_gpu):
     assert num_shards == 1
 
 
+@pytest.mark.skip(reason="GPU support removed in v2.3.0 (CPU-only architecture)")
 def test_optimal_num_shards_gpu_medium_dataset(mock_hardware_gpu):
     """Test optimal shard calculation for GPU with medium dataset."""
     dataset_size = 5_000_000  # 5M points
@@ -226,6 +228,7 @@ def test_optimal_num_shards_gpu_medium_dataset(mock_hardware_gpu):
     assert num_shards == 5
 
 
+@pytest.mark.skip(reason="GPU support removed in v2.3.0 (CPU-only architecture)")
 def test_optimal_num_shards_gpu_large_dataset(mock_hardware_gpu):
     """Test optimal shard calculation for GPU with large dataset."""
     dataset_size = 50_000_000  # 50M points

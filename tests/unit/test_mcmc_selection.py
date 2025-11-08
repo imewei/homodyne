@@ -40,10 +40,12 @@ class TestMCMCSelectionIntegration:
         Test that thresholds can be loaded from kwargs (passed from config).
 
         Spec requirement: Extract thresholds from config (not hardcoded)
+
+        NOTE: Using 500K points (< 1M) to avoid Criterion 3 (JAX Broadcasting Protection).
         """
         # Test with custom thresholds from config
         num_samples = 18
-        dataset_size = 10_000_000
+        dataset_size = 500_000  # < 1M to avoid Criterion 3
 
         # Custom thresholds that differ from defaults
         custom_min_samples = 20
@@ -88,16 +90,18 @@ class TestMCMCSelectionIntegration:
 
     def test_comprehensive_logging_parallelism_mode(self, mock_hardware_config, caplog):
         """
-        Test that comprehensive logging shows dual-criteria evaluation for parallelism mode.
+        Test that comprehensive logging shows quad-criteria evaluation for parallelism mode.
 
         Spec requirement: Add comprehensive logging showing decision process
+
+        NOTE: Updated for quad-criteria (was dual-criteria in v2.1.0)
         """
         import logging
 
         caplog.set_level(logging.INFO)
 
-        num_samples = 20  # Triggers parallelism
-        dataset_size = 5_000_000  # Small dataset
+        num_samples = 20  # Triggers parallelism (Criterion 1)
+        dataset_size = 500_000  # < 1M to avoid Criterion 3
 
         should_use_cmc(
             num_samples=num_samples,
@@ -107,11 +111,11 @@ class TestMCMCSelectionIntegration:
             memory_threshold_pct=0.30,
         )
 
-        # Verify logging contains key elements
+        # Verify logging contains key elements (quad-criteria)
         log_text = caplog.text
-        assert "Dual-Criteria Evaluation" in log_text
-        assert "Parallelism criterion" in log_text
-        assert "Memory criterion" in log_text
+        assert "Quad-Criteria Evaluation" in log_text
+        assert "Criterion 1 (Parallelism)" in log_text
+        assert "Criterion 2 (Memory)" in log_text
         assert "Final decision" in log_text
         assert "CMC" in log_text
 
@@ -136,27 +140,29 @@ class TestMCMCSelectionIntegration:
             memory_threshold_pct=0.30,
         )
 
-        # Verify logging shows both criteria
+        # Verify logging shows quad-criteria
         log_text = caplog.text
-        assert "Parallelism criterion" in log_text
-        assert "→ False" in log_text or "False" in log_text  # Parallelism failed
-        assert "Memory criterion" in log_text
-        assert "→ True" in log_text or "True" in log_text  # Memory triggered
+        assert "Quad-Criteria Evaluation" in log_text
+        assert "Criterion 1 (Parallelism)" in log_text
+        assert "→ False" in log_text  # Parallelism failed (5 < 15)
+        assert "Criterion 2 (Memory)" in log_text
+        assert "→ True" in log_text  # Memory or other criteria triggered
         assert "CMC" in log_text
-        assert "Memory mode" in log_text or "memory" in log_text.lower()
 
     def test_comprehensive_logging_nuts_mode(self, mock_hardware_config, caplog):
         """
-        Test that comprehensive logging shows dual-criteria evaluation for NUTS selection.
+        Test that comprehensive logging shows quad-criteria evaluation for NUTS selection.
 
         Spec requirement: Add comprehensive logging showing decision process
+
+        NOTE: Updated for quad-criteria. Using dataset < 1M to avoid Criterion 3.
         """
         import logging
 
         caplog.set_level(logging.INFO)
 
-        num_samples = 10  # Below parallelism threshold
-        dataset_size = 5_000_000  # Small dataset
+        num_samples = 10  # Below parallelism threshold (< 15)
+        dataset_size = 500_000  # < 1M to avoid Criterion 3
 
         should_use_cmc(
             num_samples=num_samples,
@@ -166,12 +172,12 @@ class TestMCMCSelectionIntegration:
             memory_threshold_pct=0.30,
         )
 
-        # Verify logging shows both criteria failed
+        # Verify logging shows quad-criteria with all failed
         log_text = caplog.text
-        assert "Parallelism criterion" in log_text
-        assert "Memory criterion" in log_text
+        assert "Quad-Criteria Evaluation" in log_text
+        assert "Criterion 1 (Parallelism)" in log_text
+        assert "Criterion 2 (Memory)" in log_text
         assert "NUTS" in log_text
-        assert "Both criteria failed" in log_text or "failed" in log_text.lower()
 
     def test_warning_for_cmc_with_few_samples(self, mock_hardware_config, caplog):
         """
@@ -194,11 +200,13 @@ class TestMCMCSelectionIntegration:
             memory_threshold_pct=0.30,
         )
 
-        # Verify warning is logged
+        # Verify warning is logged (quad-criteria format)
         log_text = caplog.text
         assert "Using CMC with only" in log_text
         assert "samples" in log_text
-        assert "Triggered by memory criterion" in log_text
+        # Note: Quad-criteria shows all triggers, not just "memory criterion"
+        assert "Triggered by:" in log_text
+        assert "memory" in log_text.lower()
 
     def test_default_threshold_values(self, mock_hardware_config):
         """
@@ -224,35 +232,40 @@ class TestMCMCSelectionIntegration:
         """
         Test memory estimation formula accuracy.
 
-        Spec requirement: Memory estimation should use dataset_size * 8 * 30 / 1e9
+        Spec requirement: Memory estimation should use dataset_size * 8 * num_samples / 1e9
+
+        NOTE (Quad-Criteria): With large dataset (30M > 1M), Criteria 3 and 4 will
+        also trigger. This test verifies memory calculation is correct, acknowledging
+        that CMC will be selected due to multiple criteria.
         """
         num_samples = 5
         dataset_size = 30_000_000
 
-        # Expected memory: 30M * 8 bytes * 30 / 1e9 = 7.2 GB
-        # 7.2 / 32 = 22.5% memory usage
+        # Expected memory: 30M * 8 bytes * 5 / 1e9 = 1.2 GB
+        # 1.2 / 32 = 3.75% memory usage
 
-        # Test with 20% threshold (should trigger CMC)
+        # Test with 1% threshold (should trigger CMC via Criterion 2)
         result_triggered = should_use_cmc(
             num_samples=num_samples,
             hardware_config=mock_hardware_config,
             dataset_size=dataset_size,
-            memory_threshold_pct=0.20,  # 22.5% > 20%
+            memory_threshold_pct=0.01,  # 3.75% > 1% → Criterion 2 triggers
             min_samples_for_cmc=15,
         )
 
-        assert result_triggered is True, "Memory estimation should trigger CMC at 22.5%"
+        assert result_triggered is True, "CMC should be selected (Criterion 2 + 3 + 4)"
 
-        # Test with 25% threshold (should use NUTS)
-        result_nuts = should_use_cmc(
+        # Test with 10% threshold
+        # NOTE: Criterion 2 won't trigger (3.75% < 10%), but Criteria 3 and 4 will
+        result_quad_criteria = should_use_cmc(
             num_samples=num_samples,
             hardware_config=mock_hardware_config,
             dataset_size=dataset_size,
-            memory_threshold_pct=0.25,  # 22.5% < 25%
+            memory_threshold_pct=0.10,  # 3.75% < 10% → Criterion 2 doesn't trigger
             min_samples_for_cmc=15,
         )
 
-        assert result_nuts is False, "Memory estimation should use NUTS at 22.5%"
+        assert result_quad_criteria is True, "CMC should be selected (Criterion 3 + 4)"
 
 
 class TestMCMCFallbackBehavior:

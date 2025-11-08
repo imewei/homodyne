@@ -2789,18 +2789,38 @@ def _compute_nlsq_fits(
 
         # Least squares scaling: c2_exp = contrast * c2_theory + offset
         # Solve: [c2_theory, ones] @ [contrast, offset] = c2_exp
-        c2_exp_angle = c2_exp[i].flatten()
-        c2_theory_flat = g2_theory_np.flatten()
+        #
+        # IMPORTANT: After diagonal correction, both experimental and theoretical
+        # matrices have modified diagonal elements. To avoid rank deficiency in
+        # the lstsq problem, we extract only off-diagonal elements for fitting.
+        # This provides ~1M clean data points with full rank for robust estimation.
 
-        # Design matrix: [c2_theory, ones]
-        A = np.column_stack([c2_theory_flat, np.ones_like(c2_theory_flat)])
-        b = c2_exp_angle
+        # Create mask for off-diagonal elements
+        size = g2_theory_np.shape[0]
+        off_diag_mask = ~np.eye(size, dtype=bool)
+
+        # Extract off-diagonal elements (1D arrays)
+        c2_exp_off_diag = c2_exp[i][off_diag_mask]
+        c2_theory_off_diag = g2_theory_np[off_diag_mask]
+
+        # Design matrix: [c2_theory, ones] using only off-diagonal elements
+        A = np.column_stack([c2_theory_off_diag, np.ones_like(c2_theory_off_diag)])
+        b = c2_exp_off_diag
 
         # Least squares solution with robust error handling
+        # Using ~N^2-N points (off-diagonal elements) for robust fitting
+        n_points = len(b)
+        logger.debug(
+            f"Angle {phi_angle:.1f}°: Fitting scaling using {n_points:,} off-diagonal points"
+        )
+
         try:
             # Try standard lstsq first
             scaling, residuals_lstsq, rank, s = np.linalg.lstsq(A, b, rcond=None)
             contrast_fit, offset_fit = scaling
+            logger.debug(
+                f"Angle {phi_angle:.1f}°: lstsq succeeded (rank={rank}, n_points={n_points:,})"
+            )
         except np.linalg.LinAlgError as e:
             logger.warning(
                 f"Angle {phi_angle:.1f}°: np.linalg.lstsq failed ({e}), trying with higher rcond..."

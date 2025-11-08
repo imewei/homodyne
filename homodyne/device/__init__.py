@@ -22,13 +22,15 @@ Usage:
 import logging
 import os
 
-# Suppress JAX TPU initialization warnings before importing JAX
-# TPU backend is not available on standard systems and creates noise
-# IMPORTANT: Don't set JAX_PLATFORMS - let JAX auto-select optimal backend
+# Suppress JAX backend warnings and messages (CPU-only in v2.3.0)
+# - TPU backend warnings (not available on standard systems)
+# - GPU fallback warnings (expected behavior for CPU-only installation)
+# - Backend initialization INFO messages
+# IMPORTANT: Don't set JAX_PLATFORMS - let JAX auto-detect available backend
 
-# Suppress JAX INFO-level logs for backend initialization
-logging.getLogger("jax._src.xla_bridge").setLevel(logging.WARNING)
-logging.getLogger("jax._src.compiler").setLevel(logging.WARNING)
+# Suppress JAX backend logs (set to ERROR to hide GPU fallback warnings)
+logging.getLogger("jax._src.xla_bridge").setLevel(logging.ERROR)
+logging.getLogger("jax._src.compiler").setLevel(logging.ERROR)
 
 from homodyne.utils.logging import get_logger
 

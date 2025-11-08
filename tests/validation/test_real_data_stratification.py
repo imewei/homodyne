@@ -37,37 +37,45 @@ class TestRealDataStratification:
 
         # Import here to avoid import errors if not available
         from homodyne.config.manager import ConfigManager
+        from homodyne.data.xpcs_loader import XPCSDataLoader
         from homodyne.optimization.stratified_chunking import (
             analyze_angle_distribution,
             should_use_stratification,
         )
 
-        # Load data characteristics
+        # Load config and data
         logger.info(f"Loading C020 config from: {config_file}")
-        config = ConfigManager.load_from_yaml(str(config_file))
+        config = ConfigManager(str(config_file))
 
-        # Get phi angles
-        phi_angles = loader.phi_angles
+        # XPCSDataLoader expects config file path (not data file)
+        # It will load the data file path from the config
+        loader = XPCSDataLoader(str(config_file))
+
+        # Load experimental data to get phi angles
+        data = loader.load_experimental_data()
+        phi_angles = data["phi_angles_list"]
         n_angles = len(phi_angles)
         logger.info(f"C020 phi angles: {n_angles} angles")
         logger.info(f"Angle range: {phi_angles.min():.2f}° to {phi_angles.max():.2f}°")
 
         # Analyze angle distribution
-        # Create mock arrays for analysis (real data would come from loader)
+        # Create mock phi array with repeated angles (simulating real data structure)
+        # In real data, each angle appears once per (t1, t2) pair
         n_time_points = 100  # Estimate
-        total_points = n_angles * n_time_points * n_time_points
+        points_per_angle = n_time_points * n_time_points
+
+        # Create phi array: repeat each angle points_per_angle times
+        phi_repeated = np.repeat(phi_angles, points_per_angle)
+        total_points = len(phi_repeated)
         logger.info(f"Estimated total points: {total_points:,}")
 
         # Test angle distribution analysis
-        stats = analyze_angle_distribution(
-            phi=phi_angles,
-            points_per_angle=np.full(n_angles, n_time_points * n_time_points),
-        )
+        stats = analyze_angle_distribution(phi=phi_repeated)
 
         logger.info(f"Angle distribution stats:")
         logger.info(f"  Total angles: {stats.n_angles}")
-        logger.info(f"  Min points/angle: {stats.min_points_per_angle:,}")
-        logger.info(f"  Max points/angle: {stats.max_points_per_angle:,}")
+        logger.info(f"  Min points/angle: {min(stats.counts.values()):,}")
+        logger.info(f"  Max points/angle: {max(stats.counts.values()):,}")
         logger.info(f"  Imbalance ratio: {stats.imbalance_ratio:.2f}")
         logger.info(f"  Is balanced: {stats.is_balanced}")
 
@@ -149,9 +157,9 @@ class TestRealDataStratification:
         )
 
         logger.info(f"C020-like memory estimate:")
-        logger.info(f"  Expected peak: {mem_stats['peak_memory_mb']:.1f} MB")
-        logger.info(f"  Available: {mem_stats['available_memory_mb']:.1f} MB")
-        logger.info(f"  Percentage: {mem_stats['memory_percentage']:.1f}%")
+        logger.info(f"  Original: {mem_stats['original_memory_mb']:.1f} MB")
+        logger.info(f"  Stratified: {mem_stats['stratified_memory_mb']:.1f} MB")
+        logger.info(f"  Peak: {mem_stats['peak_memory_mb']:.1f} MB")
         logger.info(f"  Is safe: {mem_stats['is_safe']}")
 
         # Should be safe for 500k points
@@ -227,9 +235,10 @@ class TestRealDataWorkflow:
         if not data_file.exists():
             pytest.skip(f"Data file not found: {data_file}")
 
-        # Test data loading
-        loader = XPCSDataLoader(str(data_file))
-        phi_angles = loader.phi_angles
+        # Test data loading - XPCSDataLoader expects config file path
+        loader = XPCSDataLoader(str(config_file))
+        data = loader.load_experimental_data()
+        phi_angles = data["phi_angles_list"]
 
         logger.info("C020 workflow dry run:")
         logger.info(f"  Config loaded: {config_file.name}")
