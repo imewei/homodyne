@@ -2807,54 +2807,121 @@ def _compute_nlsq_fits(
         A = np.column_stack([c2_theory_off_diag, np.ones_like(c2_theory_off_diag)])
         b = c2_exp_off_diag
 
-        # Least squares solution with robust error handling
+        # Robust least squares solution with comprehensive validation
         # Using ~N^2-N points (off-diagonal elements) for robust fitting
         n_points = len(b)
         logger.debug(
             f"Angle {phi_angle:.1f}°: Fitting scaling using {n_points:,} off-diagonal points"
         )
 
-        try:
-            # Try standard lstsq first
-            scaling, residuals_lstsq, rank, s = np.linalg.lstsq(A, b, rcond=None)
-            contrast_fit, offset_fit = scaling
-            logger.debug(
-                f"Angle {phi_angle:.1f}°: lstsq succeeded (rank={rank}, n_points={n_points:,})"
-            )
-        except np.linalg.LinAlgError as e:
+        # Phase 1: Data validation (prevent SVD convergence failures)
+        theory_mean = np.mean(c2_theory_off_diag)
+        theory_std = np.std(c2_theory_off_diag)
+        theory_min = np.min(c2_theory_off_diag)
+        theory_max = np.max(c2_theory_off_diag)
+
+        exp_mean = np.mean(c2_exp_off_diag)
+        exp_std = np.std(c2_exp_off_diag)
+
+        # Check for invalid values
+        has_nan_inf = not (np.all(np.isfinite(c2_theory_off_diag)) and np.all(np.isfinite(c2_exp_off_diag)))
+        has_low_variance = theory_std < 1e-8  # Theory is essentially constant
+
+        # Diagnostics
+        logger.debug(
+            f"Angle {phi_angle:.1f}°: Theory stats - mean={theory_mean:.6f}, std={theory_std:.6f}, "
+            f"range=[{theory_min:.6f}, {theory_max:.6f}]"
+        )
+        logger.debug(
+            f"Angle {phi_angle:.1f}°: Exp stats - mean={exp_mean:.6f}, std={exp_std:.6f}"
+        )
+
+        # Phase 2: Choose estimation method based on data quality
+        method_used = "lstsq"
+
+        if has_nan_inf:
             logger.warning(
-                f"Angle {phi_angle:.1f}°: np.linalg.lstsq failed ({e}), trying with higher rcond..."
+                f"Angle {phi_angle:.1f}°: NaN/Inf detected in data, using default scaling"
             )
+            contrast_fit = 0.5
+            offset_fit = 1.0
+            method_used = "default_nan"
+        elif has_low_variance:
+            logger.warning(
+                f"Angle {phi_angle:.1f}°: Theory variance too low (std={theory_std:.2e}), "
+                f"using simple ratio estimation"
+            )
+            # Simple fallback: Use variance ratio and mean matching
+            if exp_std > 1e-8:
+                # Estimate contrast from variance ratio (with safety bounds)
+                contrast_fit = np.clip(exp_std / max(theory_std, 1e-8), 0.01, 10.0)
+                offset_fit = exp_mean - contrast_fit * theory_mean
+            else:
+                # Both flat, use defaults
+                contrast_fit = 0.5
+                offset_fit = exp_mean
+            method_used = "ratio"
+        else:
+            # Phase 3: Try normalized lstsq for better numerical stability
             try:
-                # Try with higher rcond for better numerical stability
-                scaling, residuals_lstsq, rank, s = np.linalg.lstsq(A, b, rcond=1e-10)
-                contrast_fit, offset_fit = scaling
-            except np.linalg.LinAlgError as e2:
-                logger.warning(
-                    f"Angle {phi_angle:.1f}°: lstsq with rcond=1e-10 also failed ({e2}), using robust fallback..."
+                # Standardize columns to improve conditioning
+                # x_normalized = (x - mean) / std
+                theory_normalized = (c2_theory_off_diag - theory_mean) / theory_std
+
+                # Build normalized design matrix
+                A_normalized = np.column_stack([theory_normalized, np.ones_like(theory_normalized)])
+
+                # Solve normalized problem
+                scaling_norm, residuals_lstsq, rank, s = np.linalg.lstsq(
+                    A_normalized, b, rcond=None
                 )
-                # Fallback: Use robust pseudo-inverse with SVD cutoff
-                # This is more numerically stable than lstsq
+                contrast_norm, offset_norm = scaling_norm
+
+                # Denormalize solution:
+                # y = c_norm * x_norm + o_norm
+                # y = c_norm * (x - mean_x)/std_x + o_norm
+                # y = (c_norm/std_x) * x + (o_norm - c_norm*mean_x/std_x)
+                contrast_fit = contrast_norm / theory_std
+                offset_fit = offset_norm - contrast_norm * theory_mean / theory_std
+
+                logger.debug(
+                    f"Angle {phi_angle:.1f}°: Normalized lstsq succeeded "
+                    f"(rank={rank}, cond≈{s[0]/s[-1]:.2e})"
+                )
+                method_used = "lstsq_normalized"
+
+            except np.linalg.LinAlgError as e:
+                logger.warning(
+                    f"Angle {phi_angle:.1f}°: Normalized lstsq failed ({e}), "
+                    f"trying pinv with regularization..."
+                )
                 try:
-                    # Compute pseudo-inverse with explicit SVD cutoff
-                    A_pinv = np.linalg.pinv(A, rcond=1e-6)
+                    # Fallback: Use pseudo-inverse with stronger regularization
+                    A_pinv = np.linalg.pinv(A, rcond=1e-3)  # More aggressive cutoff
                     scaling = A_pinv @ b
                     contrast_fit, offset_fit = scaling
                     logger.info(
                         f"Angle {phi_angle:.1f}°: Successfully used pinv fallback"
                     )
-                except Exception as e3:
-                    logger.error(
-                        f"Angle {phi_angle:.1f}°: All methods failed ({e3}), using default scaling..."
+                    method_used = "pinv"
+                except Exception as e2:
+                    logger.warning(
+                        f"Angle {phi_angle:.1f}°: Pinv failed ({e2}), using ratio estimation"
                     )
-                    # Ultimate fallback: Use default scaling (no fitting)
-                    contrast_fit = 0.5  # Default contrast
-                    offset_fit = 1.0  # Default offset
+                    # Ratio-based fallback
+                    if exp_std > 1e-8:
+                        contrast_fit = np.clip(exp_std / max(theory_std, 1e-8), 0.01, 10.0)
+                        offset_fit = exp_mean - contrast_fit * theory_mean
+                    else:
+                        contrast_fit = 0.5
+                        offset_fit = exp_mean
+                    method_used = "ratio_fallback"
 
         per_angle_scaling.append([contrast_fit, offset_fit])
 
         logger.debug(
-            f"Angle {phi_angle:.1f}°: contrast={contrast_fit:.3f}, offset={offset_fit:.3f}",
+            f"Angle {phi_angle:.1f}°: contrast={contrast_fit:.3f}, offset={offset_fit:.3f} "
+            f"(method={method_used})",
         )
 
     # Stack arrays
