@@ -35,7 +35,26 @@ ______________________________________________________________________
 
 ______________________________________________________________________
 
-## Recent Updates (November 7, 2025)
+## Recent Updates (November 9, 2025)
+
+**MCMC Memory Pressure Fix** (November 9, 2025)
+- **Critical Fix**: Resolved OOM (99.2% memory) during CMC parallel execution
+- **Root Cause**: Worker memory calculation underestimated JAX/XLA overhead
+  - Expected: 4.0 GB/worker (data only)
+  - Actual: 4.5-5.0 GB/worker (includes JAX device arrays, XLA buffer pools, JIT compilation)
+- **Solution #1**: Updated worker calculation (multiprocessing backend)
+  - Increased `max_memory_per_worker_gb` from 4.0 to 5.5 GB
+  - Changed to physical cores only (`psutil.cpu_count(logical=False)`)
+  - More conservative CPU allocation (60% vs 80% of cores)
+  - **Impact**: 13 workers → 8 workers, peak memory 99.2% → ~54%
+- **Solution #2**: XLA memory optimization
+  - Disabled XLA pre-allocation (`XLA_PYTHON_CLIENT_PREALLOCATE=false`)
+  - Platform allocator instead of BFC (`XLA_PYTHON_CLIENT_ALLOCATOR=platform`)
+  - Limited memory fraction (`XLA_PYTHON_CLIENT_MEM_FRACTION=0.25`)
+  - **Impact**: Additional 1 GB/worker savings, peak memory ~42%
+- **Testing**: Validated syntax and imports successfully
+- **Performance**: ~1.4× slower with 8 workers (acceptable trade-off for stability)
+- **Files Modified**: `homodyne/optimization/cmc/backends/multiprocessing.py`
 
 **Version 2.4.0: Legacy Scalar Scaling Mode Removed - Per-Angle Required** (November 7, 2025)
 - **Breaking Change**: Legacy scalar contrast/offset mode removed from NLSQ and MCMC

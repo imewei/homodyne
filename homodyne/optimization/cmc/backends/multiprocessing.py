@@ -129,27 +129,32 @@ class MultiprocessingBackend(CMCBackend):
         self,
         num_workers: Optional[int] = None,
         timeout_minutes: float = 30.0,
+        max_memory_per_worker_gb: float = 5.5,
     ):
         """Initialize multiprocessing backend.
 
         Parameters
         ----------
         num_workers : int, optional
-            Number of worker processes. If None, uses os.cpu_count()
+            Number of worker processes. If None, uses memory-aware calculation
         timeout_minutes : float, optional
             Timeout per shard in minutes, by default 30.0
+        max_memory_per_worker_gb : float, optional
+            Maximum memory per worker in GB, by default 4.0
         """
-        # Detect number of CPU cores
+        # Calculate memory-aware worker count if not specified
         if num_workers is None:
-            num_workers = os.cpu_count() or 1
+            num_workers = self._calculate_safe_worker_count(max_memory_per_worker_gb)
 
         self.num_workers = num_workers
+        self.max_concurrent_shards = num_workers  # Maximum shards to run at once
         self.timeout_seconds = timeout_minutes * 60
         self.use_cloudpickle = CLOUDPICKLE_AVAILABLE
 
         logger.info(
             f"Multiprocessing backend initialized: {self.num_workers} workers, "
-            f"{timeout_minutes:.1f} min timeout per shard"
+            f"{timeout_minutes:.1f} min timeout per shard, "
+            f"max {self.max_concurrent_shards} concurrent shards"
         )
 
         if not self.use_cloudpickle:
@@ -157,6 +162,54 @@ class MultiprocessingBackend(CMCBackend):
                 "Running without cloudpickle. Some complex objects may not serialize. "
                 "Install cloudpickle for better compatibility."
             )
+
+    def _calculate_safe_worker_count(self, max_memory_per_worker_gb: float) -> int:
+        """Calculate safe number of workers based on available memory.
+
+        Parameters
+        ----------
+        max_memory_per_worker_gb : float
+            Maximum memory per worker in GB
+
+        Returns
+        -------
+        int
+            Safe number of workers
+        """
+        try:
+            import psutil
+
+            # Get available memory (in GB)
+            available_memory_gb = psutil.virtual_memory().available / (1024**3)
+
+            # Calculate workers based on memory
+            memory_based_workers = max(1, int(available_memory_gb / max_memory_per_worker_gb))
+
+            # Get CPU count (physical cores only, not logical/hyperthreading)
+            cpu_count = psutil.cpu_count(logical=False) or 1
+
+            # Use minimum of memory-based and CPU-based limits
+            # Reserve more workers for OS and be conservative (use 60% of physical CPUs)
+            cpu_workers = max(1, int(cpu_count * 0.6))
+
+            safe_workers = min(memory_based_workers, cpu_workers)
+
+            logger.info(
+                f"Memory-aware worker calculation: {available_memory_gb:.1f}GB available, "
+                f"{memory_based_workers} memory-based workers, "
+                f"{cpu_workers} CPU-based workers (physical cores × 0.6), "
+                f"selected {safe_workers} workers"
+            )
+
+            return safe_workers
+
+        except ImportError:
+            # Fallback if psutil not available
+            cpu_workers = max(1, int((os.cpu_count() or 1) * 0.8))
+            logger.warning(
+                f"psutil not available, using CPU-based worker count: {cpu_workers}"
+            )
+            return cpu_workers
 
     def get_backend_name(self) -> str:
         """Return backend name 'multiprocessing'."""
@@ -230,57 +283,114 @@ class MultiprocessingBackend(CMCBackend):
 
             logger.info(f"Created pool with {self.num_workers} worker processes")
 
-            # Execute workers with timeout
+            # PARALLEL EXECUTION FIX (Nov 2025): Submit all jobs first, then collect results
+            # Previous code used apply_async() + immediate get() which blocked (sequential execution)
+            # New approach: Submit all → wait for all → true parallelization
+
+            # MEMORY-SAFE BATCHED EXECUTION (Nov 2025)
+            # Process shards in batches to limit concurrent memory usage
+            # Each batch contains at most max_concurrent_shards shards
+
+            batch_size = self.max_concurrent_shards
+            num_batches = (len(worker_args) + batch_size - 1) // batch_size
+
+            logger.info(
+                f"Processing {len(worker_args)} shards in {num_batches} batches "
+                f"(max {batch_size} concurrent shards per batch)"
+            )
+
             results = []
-            for i, args in enumerate(worker_args):
-                self._log_shard_start(i, len(shards))
-                start_time = self._create_timer()
 
-                try:
-                    # Apply async with timeout
+            # Process shards in batches
+            for batch_idx in range(num_batches):
+                batch_start = batch_idx * batch_size
+                batch_end = min(batch_start + batch_size, len(worker_args))
+                batch_args = worker_args[batch_start:batch_end]
+
+                logger.info(
+                    f"Starting batch {batch_idx + 1}/{num_batches}: "
+                    f"shards {batch_start} to {batch_end - 1} "
+                    f"({len(batch_args)} shards)"
+                )
+
+                # Phase 1: Submit batch jobs asynchronously
+                async_results = []
+                start_times = []
+                for i, args in enumerate(batch_args):
+                    shard_idx = batch_start + i
+                    self._log_shard_start(shard_idx, len(shards))
+                    start_time = self._create_timer()
+                    start_times.append(start_time)
+
+                    # Submit job without blocking
                     async_result = pool.apply_async(_worker_function, (args,))
+                    async_results.append(async_result)
 
-                    # Wait for result with timeout
-                    result = async_result.get(timeout=self.timeout_seconds)
+                logger.info(
+                    f"Batch {batch_idx + 1}/{num_batches}: "
+                    f"{len(async_results)} shards submitted, waiting for completion..."
+                )
 
-                    # Add timing
-                    result["elapsed_time"] = self._get_elapsed_time(start_time)
+                # Phase 2: Collect batch results as they complete
+                for i, (async_result, start_time) in enumerate(zip(async_results, start_times)):
+                    shard_idx = batch_start + i
+                    try:
+                        # Wait for this specific result with timeout
+                        result = async_result.get(timeout=self.timeout_seconds)
 
-                    # Validate result
-                    self._validate_shard_result(result, i)
+                        # Add timing
+                        result["elapsed_time"] = self._get_elapsed_time(start_time)
 
-                    # Log completion
-                    self._log_shard_complete(
-                        i, len(shards), result["elapsed_time"], result["converged"]
-                    )
+                        # Validate result
+                        self._validate_shard_result(result, shard_idx)
 
-                    results.append(result)
+                        # Log error details if shard failed
+                        if not result["converged"] and result.get("error"):
+                            logger.error(
+                                f"[{self.get_backend_name()}] Shard {shard_idx+1}/{len(shards)} error details:\n"
+                                f"{result['error']}"
+                            )
 
-                except multiprocessing.TimeoutError:
-                    # Handle timeout
-                    elapsed = self._get_elapsed_time(start_time)
-                    error_msg = (
-                        f"Shard {i} timed out after {self.timeout_seconds:.0f}s "
-                        f"({self.timeout_seconds / 60:.1f} min)"
-                    )
-                    logger.error(f"[{self.get_backend_name()}] {error_msg}")
+                        # Log completion
+                        self._log_shard_complete(
+                            shard_idx, len(shards), result["elapsed_time"], result["converged"]
+                        )
 
-                    error_result = {
-                        "converged": False,
-                        "error": error_msg,
-                        "elapsed_time": elapsed,
-                        "samples": None,
-                        "diagnostics": {},
-                        "shard_idx": i,
-                    }
-                    results.append(error_result)
+                        results.append(result)
 
-                except Exception as e:
-                    # Handle other errors
-                    error_result = self._handle_shard_error(e, i)
-                    error_result["elapsed_time"] = self._get_elapsed_time(start_time)
-                    results.append(error_result)
+                    except multiprocessing.TimeoutError:
+                        # Handle timeout
+                        elapsed = self._get_elapsed_time(start_time)
+                        error_msg = (
+                            f"Shard {shard_idx} timed out after {self.timeout_seconds:.0f}s "
+                            f"({self.timeout_seconds / 60:.1f} min)"
+                        )
+                        logger.error(f"[{self.get_backend_name()}] {error_msg}")
 
+                        error_result = {
+                            "converged": False,
+                            "error": error_msg,
+                            "elapsed_time": elapsed,
+                            "samples": None,
+                            "diagnostics": {},
+                            "shard_idx": shard_idx,
+                        }
+                        results.append(error_result)
+
+                    except Exception as e:
+                        # Handle other errors
+                        error_result = self._handle_shard_error(e, shard_idx)
+                        error_result["elapsed_time"] = self._get_elapsed_time(start_time)
+                        results.append(error_result)
+
+                logger.info(
+                    f"Batch {batch_idx + 1}/{num_batches} complete: "
+                    f"{len(results)}/{len(shards)} total shards processed"
+                )
+
+            logger.info(
+                f"All batches complete: {len(results)}/{len(shards)} shards processed"
+            )
             return results
 
         finally:
@@ -400,6 +510,13 @@ def _worker_function(args: tuple) -> Dict[str, Any]:
 
     # Import modules locally (avoids serialization issues)
     import numpy as np
+
+    # Configure XLA for memory-constrained environments (before JAX import)
+    import os
+    os.environ["XLA_PYTHON_CLIENT_PREALLOCATE"] = "false"
+    os.environ["XLA_PYTHON_CLIENT_ALLOCATOR"] = "platform"
+    os.environ["XLA_PYTHON_CLIENT_MEM_FRACTION"] = "0.25"
+
     import jax
     import jax.numpy as jnp
 
@@ -473,6 +590,20 @@ def _worker_function(args: tuple) -> Dict[str, Any]:
         # Create initial values dict from init_params
         # Note: init_params keys should match parameter names from parameter_space
         init_param_values = {k: float(v) for k, v in init_params.items()}
+
+        # CRITICAL FIX (Nov 2025): Add per-angle scaling initial values
+        # When per_angle_scaling=True, NumPyro model expects separate parameters
+        # for each phi angle: contrast_0, contrast_1, ..., offset_0, offset_1, ...
+        # Without these, NUTS initialization fails with missing parameter errors
+        # (per_angle_scaling is always True in multiprocessing backend as of line 491)
+        for phi_idx in range(len(phi_unique)):
+            # Default per-angle initial values (physically reasonable)
+            init_param_values[f"contrast_{phi_idx}"] = 0.5  # Typical contrast
+            init_param_values[f"offset_{phi_idx}"] = 1.0    # Typical c2 offset
+        logger.debug(
+            f"Multiprocessing shard {shard_idx}: Added {len(phi_unique)} per-angle scaling parameters "
+            f"(contrast and offset) to init_param_values for NUTS initialization"
+        )
 
         # Create NUTS sampler
         nuts_kernel = NUTS(
