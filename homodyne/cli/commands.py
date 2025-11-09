@@ -1188,11 +1188,17 @@ def _run_optimization(args, config: ConfigManager, data: dict[str, Any]) -> Any:
 
             # ✅ v2.1.0 BREAKING CHANGE: Removed automatic NLSQ/SVI initialization
             # Manual workflow required: Run NLSQ separately, copy results to YAML, then run MCMC
-            # MCMC now uses physics-informed priors from ParameterSpace directly
-            initial_params = None  # No automatic initialization
-            logger.debug(
-                "MCMC will use physics-informed priors from ParameterSpace (v2.1.0 behavior)"
-            )
+            # Load initial values from config YAML (initial_parameters.values section)
+            initial_values = config.get_initial_parameters() if hasattr(config, 'get_initial_parameters') else None
+            if initial_values:
+                logger.debug(
+                    f"MCMC initial values from config: {list(initial_values.keys())} = "
+                    f"{[f'{v:.4g}' for v in initial_values.values()]}"
+                )
+            else:
+                logger.debug(
+                    "MCMC will use mid-point defaults (no initial_parameters.values in config)"
+                )
 
             # Determine analysis mode (needed for ParameterSpace creation)
             analysis_mode_str = (
@@ -1234,7 +1240,7 @@ def _run_optimization(args, config: ConfigManager, data: dict[str, Any]) -> Any:
                 n_chains=args.n_chains,
                 method=method,  # Pass method to fit_mcmc_jax for auto/nuts/cmc selection
                 cmc_config=cmc_config,  # Pass CMC configuration
-                initial_params=initial_params,  # ✅ v2.1.0: None (no automatic initialization)
+                initial_values=initial_values,  # ✅ FIXED: Load from config initial_parameters.values
                 parameter_space=parameter_space,  # ✅ Pass config-aware ParameterSpace
             )
 
