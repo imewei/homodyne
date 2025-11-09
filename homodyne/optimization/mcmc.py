@@ -1525,10 +1525,14 @@ def _create_numpyro_model(
             )
 
         # Pass full params array for proper indexing, plus L and dt for correct physics
-        # NOTE: phi parameter here should be pre-computed unique values (not full replicated array)
-        # This avoids JAX concretization error when compute_g1_total() is called
+        # CRITICAL FIX (Nov 2025): Use replicated phi for flattened element-wise data
+        # For large datasets (CMC shards with len > 2000), data is flattened element-wise:
+        # each data point is paired with corresponding t1, t2, phi values.
+        # Physics functions need ALL arrays to have same length to avoid meshgrid creation.
+        # For small datasets (len <= 2000), use unique phi values and let physics create meshgrid.
+        phi_for_theory = phi_array_for_mapping if len(t1) > 2000 else phi
         c2_theory = _compute_simple_theory_jit(
-            params_full, t1, t2, phi, q, analysis_mode, L, dt
+            params_full, t1, t2, phi_for_theory, q, analysis_mode, L, dt
         )
 
         # PER-ANGLE SCALING: Apply different contrast/offset for each phi angle

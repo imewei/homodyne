@@ -129,7 +129,7 @@ class MultiprocessingBackend(CMCBackend):
         self,
         num_workers: Optional[int] = None,
         timeout_minutes: float = 30.0,
-        max_memory_per_worker_gb: float = 5.5,
+        max_memory_per_worker_gb: float = 8.0,  # Increased to match actual usage (7.96 GB observed)
     ):
         """Initialize multiprocessing backend.
 
