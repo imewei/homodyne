@@ -274,6 +274,13 @@ class PjitBackend(CMCBackend):
                 # Validate result
                 self._validate_shard_result(result, i)
 
+                # Log error details if shard failed
+                if not result["converged"] and result.get("error"):
+                    logger.error(
+                        f"[{self.get_backend_name()}] Shard {i+1}/{len(shards)} error details:\n"
+                        f"{result['error']}"
+                    )
+
                 # Log completion
                 self._log_shard_complete(
                     i, len(shards), result["elapsed_time"], result["converged"]
@@ -540,7 +547,22 @@ class PjitBackend(CMCBackend):
         # Use all init_params (supports both static and laminar_flow modes)
         # init_params already contains all required parameters (5 for static, 9 for laminar_flow)
         # with values from NLSQ pre-optimization (clamped to NumPyro prior bounds)
-        init_param_values = init_params
+        init_param_values = init_params.copy()  # Make copy to avoid modifying original
+
+        # CRITICAL FIX (Nov 2025): Add per-angle scaling initial values
+        # When per_angle_scaling=True, NumPyro model expects separate parameters
+        # for each phi angle: contrast_0, contrast_1, ..., offset_0, offset_1, ...
+        # Without these, NUTS initialization fails with missing parameter errors
+        # (per_angle_scaling is always True in pjit backend as of line 544)
+        n_phi = len(phi_unique)
+        for phi_idx in range(n_phi):
+            # Default per-angle initial values (physically reasonable)
+            init_param_values[f"contrast_{phi_idx}"] = 0.5  # Typical contrast
+            init_param_values[f"offset_{phi_idx}"] = 1.0    # Typical c2 offset
+        logger.debug(
+            f"Shard {shard_idx}: Added {n_phi} per-angle scaling parameters "
+            f"(contrast and offset) to init_param_values for NUTS initialization"
+        )
 
         # Create NUTS sampler
         nuts_kernel = NUTS(
@@ -653,7 +675,7 @@ class PjitBackend(CMCBackend):
     def _compute_diagnostics(
         self,
         samples_dict: Dict[str, jnp.ndarray],
-        mcmc: MCMC,
+        mcmc: "MCMC",
     ) -> Dict[str, Any]:
         """Compute MCMC diagnostics from samples.
 
