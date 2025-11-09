@@ -328,7 +328,8 @@ def combine_angle_results(
     # Compute weights
     if weighting == "inverse_variance":
         # Weight by 1/σ² (diagonal of inverse covariance)
-        weights = np.array([1.0 / np.diag(cov).mean() for cov in cov_list])
+        # Add small epsilon to prevent division by zero
+        weights = np.array([1.0 / (np.diag(cov).mean() + 1e-10) for cov in cov_list])
     elif weighting == "n_points":
         # Weight by number of data points
         weights = np.array([r["n_points"] for r in successful], dtype=float)
@@ -339,7 +340,8 @@ def combine_angle_results(
         raise ValueError(f"Unknown weighting: {weighting}")
 
     # Normalize weights
-    weights = weights / weights.sum()
+    # Add small epsilon to prevent division by zero
+    weights = weights / (weights.sum() + 1e-10)
 
     # Weighted average of parameters
     combined_params = np.sum(params_list * weights[:, np.newaxis], axis=0)
@@ -347,7 +349,8 @@ def combine_angle_results(
     # Combined covariance (inverse variance weighting formula)
     if weighting == "inverse_variance":
         # σ² = 1 / Σ(1/σ²_i)
-        inv_vars = np.array([1.0 / np.diag(cov) for cov in cov_list])
+        # Add small epsilon to prevent division by zero
+        inv_vars = np.array([1.0 / (np.diag(cov) + 1e-10) for cov in cov_list])
         combined_var = 1.0 / inv_vars.sum(axis=0)
         combined_cov = np.diag(combined_var)
     else:

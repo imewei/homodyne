@@ -421,30 +421,36 @@ def create_angle_stratified_data(
         f"points per angle per chunk: {points_per_angle_per_chunk:,}"
     )
 
+    # Calculate maximum safe chunks (limited by smallest angle)
+    # This ensures ALL chunks contain ALL angles (critical for per-angle parameters)
+    min_angle_size = min(group["size"] for group in angle_groups.values())
+    max_safe_chunks = min_angle_size // points_per_angle_per_chunk
+
+    # Log data usage statistics
+    expected_total_used = max_safe_chunks * target_chunk_size
+    usage_pct = (expected_total_used / n_points) * 100 if n_points > 0 else 0
+
+    logger.info(
+        f"Creating {max_safe_chunks} complete chunks "
+        f"(limited by smallest angle with {min_angle_size:,} points)"
+    )
+    logger.debug(
+        f"Expected data usage: {expected_total_used:,} / {n_points:,} points ({usage_pct:.1f}%)"
+    )
+
     # Build stratified arrays by interleaving angle groups
     stratified_chunks = []
-    chunk_idx = 0
-    active_angles = set(stats.unique_angles)
 
-    while active_angles:
+    for chunk_idx in range(max_safe_chunks):
         chunk_parts = {"phi": [], "t1": [], "t2": [], "g2_exp": []}
 
         for angle in stats.unique_angles:
-            if angle not in active_angles:
-                continue
-
             group = angle_groups[angle]
             start = chunk_idx * points_per_angle_per_chunk
             end = start + points_per_angle_per_chunk
 
-            if start >= group["size"]:
-                # This angle exhausted
-                active_angles.remove(angle)
-                continue
-
-            # Extract this angle's contribution to current chunk
-            # Handle last partial chunk (end > size)
-            end = min(end, group["size"])
+            # All angles guaranteed to have data at this chunk index
+            # (verified by max_safe_chunks calculation)
 
             chunk_parts["phi"].append(group["phi"][start:end])
             chunk_parts["t1"].append(group["t1"][start:end])
@@ -452,20 +458,18 @@ def create_angle_stratified_data(
             chunk_parts["g2_exp"].append(group["g2_exp"][start:end])
 
         # Concatenate all angles for this chunk
-        if chunk_parts["phi"]:
-            chunk_size = sum(len(arr) for arr in chunk_parts["phi"])
-            stratified_chunks.append(
-                {
-                    "phi": np.concatenate(chunk_parts["phi"]),
-                    "t1": np.concatenate(chunk_parts["t1"]),
-                    "t2": np.concatenate(chunk_parts["t2"]),
-                    "g2_exp": np.concatenate(chunk_parts["g2_exp"]),
-                    "size": chunk_size,
-                }
-            )
-            logger.debug(f"Chunk {chunk_idx}: {chunk_size:,} points")
-
-        chunk_idx += 1
+        # All chunks guaranteed to have data (max_safe_chunks ensures this)
+        chunk_size = sum(len(arr) for arr in chunk_parts["phi"])
+        stratified_chunks.append(
+            {
+                "phi": np.concatenate(chunk_parts["phi"]),
+                "t1": np.concatenate(chunk_parts["t1"]),
+                "t2": np.concatenate(chunk_parts["t2"]),
+                "g2_exp": np.concatenate(chunk_parts["g2_exp"]),
+                "size": chunk_size,
+            }
+        )
+        logger.debug(f"Chunk {chunk_idx}: {chunk_size:,} points, {stats.n_angles} angles")
 
     # Flatten back to single arrays
     phi_stratified = np.concatenate([chunk["phi"] for chunk in stratified_chunks])
@@ -473,9 +477,17 @@ def create_angle_stratified_data(
     t2_stratified = np.concatenate([chunk["t2"] for chunk in stratified_chunks])
     g2_stratified = np.concatenate([chunk["g2_exp"] for chunk in stratified_chunks])
 
-    # Verify no data loss
-    assert len(phi_stratified) == n_points, "Data loss during stratification"
-    logger.debug(f"Stratification complete: {len(stratified_chunks)} chunks created")
+    # Verify chunk structure and log data usage
+    n_used = len(phi_stratified)
+    actual_usage_pct = (n_used / n_points) * 100 if n_points > 0 else 0
+
+    logger.info(
+        f"Stratification complete: {len(stratified_chunks)} chunks created, "
+        f"using {n_used:,} / {n_points:,} points ({actual_usage_pct:.1f}%)"
+    )
+
+    # Ensure we didn't somehow create more data than we had
+    assert n_used <= n_points, f"Data expansion during stratification: {n_used} > {n_points}"
 
     # Convert back to JAX arrays
     return (
@@ -598,46 +610,60 @@ def create_angle_stratified_indices(
         f"points per angle per chunk: {points_per_angle_per_chunk:,}"
     )
 
+    # Calculate maximum safe chunks (limited by smallest angle)
+    # This ensures ALL chunks contain ALL angles (critical for per-angle parameters)
+    min_angle_size = min(len(indices) for indices in angle_index_groups.values())
+    max_safe_chunks = min_angle_size // points_per_angle_per_chunk
+
+    # Log data usage statistics
+    expected_total_used = max_safe_chunks * target_chunk_size
+    usage_pct = (expected_total_used / n_points) * 100 if n_points > 0 else 0
+
+    logger.info(
+        f"Creating {max_safe_chunks} complete chunks "
+        f"(limited by smallest angle with {min_angle_size:,} points)"
+    )
+    logger.debug(
+        f"Expected data usage: {expected_total_used:,} / {n_points:,} points ({usage_pct:.1f}%)"
+    )
+
     # Build stratified index array by interleaving angle groups
     stratified_indices = []
-    chunk_idx = 0
-    active_angles = set(stats.unique_angles)
 
-    while active_angles:
+    for chunk_idx in range(max_safe_chunks):
         chunk_indices = []
 
         for angle in stats.unique_angles:
-            if angle not in active_angles:
-                continue
-
             indices_for_angle = angle_index_groups[angle]
             start = chunk_idx * points_per_angle_per_chunk
             end = start + points_per_angle_per_chunk
 
-            if start >= len(indices_for_angle):
-                # This angle exhausted
-                active_angles.remove(angle)
-                continue
-
-            # Extract this angle's contribution to current chunk
-            end = min(end, len(indices_for_angle))
+            # All angles guaranteed to have data at this chunk index
+            # (verified by max_safe_chunks calculation)
             chunk_indices.append(indices_for_angle[start:end])
 
         # Concatenate all angle indices for this chunk
-        if chunk_indices:
-            chunk_size = sum(len(arr) for arr in chunk_indices)
-            stratified_indices.append(np.concatenate(chunk_indices))
-            logger.debug(f"Chunk {chunk_idx}: {chunk_size:,} points")
-
-        chunk_idx += 1
+        # All chunks guaranteed to have data (max_safe_chunks ensures this)
+        chunk_size = sum(len(arr) for arr in chunk_indices)
+        stratified_indices.append(np.concatenate(chunk_indices))
+        logger.debug(f"Chunk {chunk_idx}: {chunk_size:,} points, {stats.n_angles} angles")
 
     # Flatten to single index array
     final_indices = np.concatenate(stratified_indices)
 
-    # Verify correctness
-    assert len(final_indices) == n_points, "Index array size mismatch"
-    assert len(np.unique(final_indices)) == n_points, "Duplicate indices detected"
-    logger.debug(f"Stratification complete: {chunk_idx} chunks created")
+    # Verify correctness and log data usage
+    n_used = len(final_indices)
+    actual_usage_pct = (n_used / n_points) * 100 if n_points > 0 else 0
+
+    logger.info(
+        f"Stratification complete: {max_safe_chunks} chunks created, "
+        f"using {n_used:,} / {n_points:,} indices ({actual_usage_pct:.1f}%)"
+    )
+
+    # Ensure we didn't somehow create more indices than we had points
+    assert n_used <= n_points, f"Index array too large: {n_used} > {n_points}"
+    # Ensure no duplicate indices
+    assert len(np.unique(final_indices)) == n_used, "Duplicate indices detected"
 
     return final_indices
 

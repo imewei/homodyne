@@ -235,6 +235,15 @@ markers = [
     "property: marks tests as property-based tests",
     "requires_jax: marks tests as requiring JAX",
     "requires_gpu: marks tests as requiring GPU hardware (Linux + CUDA 12+)",
+    "api: marks tests as API compatibility tests",
+    "self_consistency: marks tests as CMC self-consistency tests",
+    "validation: marks tests as CMC accuracy validation tests",
+]
+filterwarnings = [
+    # Expected warnings in test environment
+    "ignore:There are not enough devices to run parallel chains:UserWarning",
+    "ignore:JAXopt is no longer maintained:DeprecationWarning",
+    "ignore:Covariance of the parameters could not be estimated:scipy.optimize.OptimizeWarning",
 ]
 
 [tool.coverage.run]

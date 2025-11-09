@@ -864,7 +864,8 @@ def apply_diagonal_correction(c2_mat: jnp.ndarray) -> jnp.ndarray:
 
     # Compute diagonal values as average of adjacent off-diagonal elements
     # This implementation matches xpcs_loader.py:924-953 but uses pure JAX ops
-    diag_val = jnp.zeros(size)
+    # Use same dtype as input matrix to avoid casting warnings
+    diag_val = jnp.zeros(size, dtype=c2_mat.dtype)
 
     # Add left neighbors: diag_val[:-1] += side_band
     diag_val = diag_val.at[:-1].add(side_band)
@@ -873,7 +874,7 @@ def apply_diagonal_correction(c2_mat: jnp.ndarray) -> jnp.ndarray:
     diag_val = diag_val.at[1:].add(side_band)
 
     # Normalize by number of neighbors (1 for edges, 2 for middle)
-    norm = jnp.ones(size)
+    norm = jnp.ones(size, dtype=c2_mat.dtype)
     norm = norm.at[1:-1].set(2.0)  # Middle elements have 2 neighbors
 
     diag_val = diag_val / norm

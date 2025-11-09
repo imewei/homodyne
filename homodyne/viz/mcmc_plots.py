@@ -1029,7 +1029,7 @@ def plot_cmc_summary_dashboard(
                 bp = ax_conv.boxplot(
                     [ess_matrix[:, i] for i in range(num_params)],
                     positions=positions,
-                    labels=param_names,
+                    tick_labels=param_names,
                     patch_artist=True,
                 )
 
