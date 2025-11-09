@@ -7,8 +7,8 @@
 # Use for: Equilibrium systems, pure diffusion, anomalous diffusion
 # Parameter count: 3 physical + 2 × N_angles scaling = 3 + 2N total
 #
-# VERSION: 2.0.0
-# UPDATED: 2025-10-25
+# VERSION: 2.4.0
+# UPDATED: 2025-11-08
 # ==============================================================================
 
 # ==============================================================================
@@ -16,8 +16,8 @@
 # ==============================================================================
 # Template metadata describing analysis configuration
 metadata:
-  config_version: "2.0.0"                     # Configuration file format version
-  description: "Static diffusion analysis - 3-parameter model for equilibrium systems"
+  config_version: "2.4.0"                     # Configuration file format version
+  description: "Static diffusion analysis - 3-parameter model (v2.4.0: CPU-only, per-angle mandatory, auto NUTS/CMC)"
   analysis_mode: "static"                     # Static diffusion mode
   parameter_count: 3                          # D₀, α, D_offset
 
@@ -36,11 +36,13 @@ metadata:
   # Key features of this configuration
   key_features:
     - "3-parameter static diffusion model"
+    - "CPU-only architecture (v2.3.0) with JAX 0.8.0 - GPU support removed"
+    - "Per-angle scaling mandatory (v2.4.0) - physically correct"
+    - "Automatic NUTS/CMC selection in MCMC (v2.1.0) - dual criteria logic"
     - "Multi-angle correlation analysis with phi filtering"
-    - "All optimization methods (NLSQ, MCMC, Streaming, CMC)"
     - "Discrete numerical integration for anomalous diffusion"
     - "Comprehensive quality control and validation"
-    - "Noise estimation for improved fitting"
+    - "HPC CPU optimization for multi-core systems"
 
   # Optional: Generation metadata (filled by homodyne-config)
   generated_at: null                          # ISO timestamp when config generated
@@ -163,6 +165,11 @@ phi_filtering:
 #
 # PARAMETER COUNT (Static):
 # -------------------------
+# **PER-ANGLE SCALING MANDATORY (v2.4.0)**:
+#   - Legacy scalar contrast/offset mode REMOVED
+#   - Each scattering angle has unique optical/detector properties
+#   - Passing per_angle_scaling=False will raise ValueError
+#
 # Physical parameters: 3 [D₀, α, D_offset]
 # Per-angle scaling: 2 × N_angles [contrast, offset]
 # Total: 3 + 2N (e.g., 3 angles → 9 parameters)
@@ -242,12 +249,14 @@ parameter_space:
 # ==============================================================================
 # Optimization method selection and configuration
 optimization:
-  method: "nlsq"                              # Options: "nlsq" | "mcmc" | "cmc" | "auto"
+  method: "nlsq"                              # Options: "nlsq" | "mcmc"
+                                              # Note: NUTS/CMC is auto-selected within MCMC based on dual criteria
 
   # ---------------------------------------------------------------------------
   # NLSQ - Trust-Region Nonlinear Least Squares (Primary Method)
   # ---------------------------------------------------------------------------
   # Fast, deterministic optimization using Levenberg-Marquardt algorithm
+  # CPU-optimized with JAX 0.8.0 (v2.3.0+), JIT-compiled for performance
   # Automatic strategy selection based on dataset size:
   #   < 1M points     → STANDARD (curve_fit)
   #   1M-10M points   → LARGE (curve_fit_large)
@@ -315,7 +324,11 @@ optimization:
   # MCMC - Markov Chain Monte Carlo (Uncertainty Quantification)
   # ---------------------------------------------------------------------------
   # Provides full posterior distributions and uncertainty estimates
-  # Uses NumPyro or BlackJAX with NUTS sampler
+  # Automatic NUTS/CMC selection based on dual criteria (v2.1.0):
+  #   - (num_samples >= 15) OR (memory > 30%) → CMC (parallel sampling)
+  #   - Otherwise → NUTS (sequential sampling)
+  # Uses NumPyro or BlackJAX backend
+  # No automatic NLSQ/SVI initialization (v2.1.0+) - manual workflow required
   # For static mode with 3 parameters: faster convergence than laminar_flow
   mcmc:
     num_warmup: 1000                          # NUTS warmup/adaptation samples
@@ -326,13 +339,15 @@ optimization:
     max_tree_depth: 10                        # Maximum NUTS tree depth
     backend: "numpyro"                        # Options: "numpyro" | "blackjax"
 
-    # Automatic NUTS/CMC selection thresholds
-    min_samples_for_cmc: 15                   # Parallelism threshold for CMC selection
-    memory_threshold_pct: 0.30                # Memory threshold (30%) for CMC selection
+    # Automatic NUTS/CMC selection thresholds (v2.1.0)
+    # CMC selected when: (num_samples >= min_samples_for_cmc) OR (memory > memory_threshold_pct)
+    min_samples_for_cmc: 15                   # Parallelism threshold (samples/angles >= 15)
+    memory_threshold_pct: 0.30                # Memory threshold (30% of available)
     dense_mass_matrix: false                  # False: diagonal (faster), True: full covariance
 
-    # Chain initialization
+    # Chain starting values (NOT automatic NLSQ/SVI initialization - removed in v2.1.0)
     init_strategy: "median"                   # Options: "median" | "uniform" | "prior"
+                                              # Uses physics-informed priors from ParameterSpace
 
     # Diagnostics and quality control
     check_hmc_diagnostics: true               # Verify convergence diagnostics
@@ -360,14 +375,16 @@ optimization:
     adaptive_batching: true                   # Dynamically adjust batch size based on performance
 
   # ---------------------------------------------------------------------------
-  # CMC - Consensus Monte Carlo (Large-Scale Bayesian Inference)
+  # CMC - Consensus Monte Carlo (Automatically Selected by MCMC)
   # ---------------------------------------------------------------------------
-  # For datasets > 1M points requiring full Bayesian uncertainty quantification
+  # CMC is automatically selected when MCMC dual criteria met (v2.1.0):
+  #   (num_samples >= 15) OR (memory > 30%)
+  # This section configures CMC behavior when auto-selected
   # Parallelizes MCMC across data shards and combines subposteriors
   cmc:
-    enable: false                             # Options: false | true | "auto" (auto enables for >1M points)
-    min_points_for_cmc: 1000000               # Minimum dataset size to trigger CMC
-    backend: "jax"                            # Options: "jax" (GPU) | "numpy" (CPU)
+    enable: "auto"                            # Options: false | true | "auto" (recommended: "auto")
+    min_points_for_cmc: 1000000               # Minimum dataset size to trigger CMC (legacy parameter)
+    backend: "jax"                            # Options: "jax" (CPU-only in v2.3.0+) | "numpy"
     diagonal_correction: true                 # Apply diagonal correction to correlation matrix
 
     # Data sharding configuration
@@ -596,12 +613,20 @@ validation:
 # STATIC DIFFUSION - USAGE NOTES
 # ==============================================================================
 #
-# QUICK START:
-# ------------
-# 1. Update experimental_data paths to your HDF5 file
-# 2. Adjust phi_filtering target_ranges based on your system
-# 3. Run: homodyne --config this_file.yaml --method nlsq
-# 4. For uncertainties: homodyne --config this_file.yaml --method mcmc
+# QUICK START (v2.1.0+ Manual Workflow):
+# ----------------------------------------
+# Step 1 - NLSQ optimization:
+#   1. Update experimental_data paths to your HDF5 file
+#   2. Adjust phi_filtering target_ranges based on your system
+#   3. Run: homodyne --config this_file.yaml --method nlsq
+#   4. Note best-fit parameters from output
+#
+# Step 2 - Manual MCMC initialization (no automatic initialization in v2.1.0+):
+#   5. Manually copy NLSQ best-fit results from output
+#   6. Update initial_parameters.values in this file with NLSQ results
+#   7. Example: values: [1234.5, 0.567, 12.34]  # 3 parameters for static
+#   8. Run: homodyne --config this_file.yaml --method mcmc
+#   9. Automatic NUTS/CMC selection based on dual criteria
 #
 # STATIC DIFFUSION PHYSICS:
 # -------------------------
@@ -633,23 +658,23 @@ validation:
 #
 # Use fallback_to_all_angles: true if anisotropy direction unknown
 #
-# OPTIMIZATION METHOD SELECTION:
-# -------------------------------
+# OPTIMIZATION METHOD SELECTION (v2.1.0):
+# ----------------------------------------
 # NLSQ (Recommended first):
 #   - Fast: ~seconds to minutes
+#   - CPU-optimized with JAX 0.8.0 JIT compilation
 #   - Deterministic point estimates
 #   - Good for exploration and initial fit
 #
-# MCMC (For publication):
-#   - Slower: ~minutes to hours
-#   - Full posterior distributions
-#   - Uncertainty quantification
-#   - Use after NLSQ to refine uncertainties
-#
-# CMC (Large datasets > 1M points):
-#   - Parallelizes MCMC across shards
-#   - Full Bayesian UQ for big data
-#   - Requires HPC resources
+# MCMC (For publication with uncertainty quantification):
+#   - Slower: ~minutes to hours (faster than laminar_flow for 3 params)
+#   - Full posterior distributions with credible intervals
+#   - Automatic NUTS/CMC selection based on dual criteria:
+#     * (num_samples >= 15) OR (memory > 30%) → CMC (parallel sampling)
+#     * Otherwise → NUTS (sequential sampling)
+#   - Convergence diagnostics (R-hat, ESS, divergences)
+#   - Manual workflow (v2.1.0+): Run NLSQ → copy results → update YAML → run MCMC
+#   - No automatic NLSQ/SVI initialization (removed in v2.1.0)
 #
 # Streaming (Automatic for >100M points):
 #   - Constant memory footprint
@@ -663,13 +688,19 @@ validation:
 #   10M-100M points → CHUNKED
 #   > 100M points   → STREAMING
 #
-# PLATFORM SUPPORT:
-# -----------------
-# CPU-only: Linux, macOS, Windows (full support)
-# GPU support removed in v2.3.0 (use v2.2.x for GPU)
+# PLATFORM SUPPORT (v2.3.0):
+# ---------------------------
+# CPU-only: Linux, macOS, Windows (full support, multi-core optimized)
+# GPU support removed in v2.3.0 (use v2.2.1 for GPU features)
+# HPC-ready: Optimized for 14+ core CPUs, tested on 36-128 core nodes
 #
 # Installation:
-#   pip install homodyne
+#   pip install homodyne  # Automatically installs CPU-only JAX 0.8.0
+#
+# Requirements:
+#   - Python 3.12+
+#   - JAX==0.8.0 and jaxlib==0.8.0 (exact match required, CPU-only)
+#   - For GPU: Stay on homodyne v2.2.1 (last GPU-supporting version)
 #
 # VALIDATION:
 # -----------

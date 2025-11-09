@@ -4,11 +4,11 @@
 # Comprehensive reference template containing ALL configuration parameters
 # for all analysis modes, optimization methods, and advanced features.
 #
-# This template includes EVERYTHING supported by homodyne v2.0.0.
+# This template includes EVERYTHING supported by homodyne v2.4.0.
 # Use homodyne_static.yaml or homodyne_laminar_flow.yaml for simpler starts.
 #
-# VERSION: 2.0.0
-# UPDATED: 2025-10-25
+# VERSION: 2.4.0
+# UPDATED: 2025-11-08
 # ==============================================================================
 
 # ==============================================================================
@@ -16,8 +16,8 @@
 # ==============================================================================
 # Template metadata describing analysis configuration
 metadata:
-  config_version: "2.0.0"                     # Configuration file format version
-  description: "Master template - comprehensive reference for all parameters"
+  config_version: "2.4.0"                     # Configuration file format version
+  description: "Master template - comprehensive reference (v2.4.0: CPU-only, per-angle scaling mandatory, automatic NUTS/CMC)"
   analysis_mode: "laminar_flow"               # Options: "static" | "laminar_flow"
   parameter_count: 7                          # 3 for static, 7 for laminar_flow
 
@@ -37,12 +37,14 @@ metadata:
   # Key features of this configuration
   key_features:
     - "Complete parameter documentation for static and laminar_flow modes"
-    - "All optimization methods (NLSQ, MCMC, Streaming, CMC)"
+    - "CPU-only architecture (v2.3.0) with JAX 0.8.0 - GPU support removed"
+    - "Per-angle scaling mandatory (v2.4.0) - legacy scalar mode removed"
+    - "Automatic NUTS/CMC selection in MCMC (v2.1.0) - dual criteria logic"
+    - "All optimization methods (NLSQ, MCMC with auto NUTS/CMC, Streaming)"
     - "Advanced phi angle filtering with quality control"
     - "Noise estimation with multiple models"
     - "Comprehensive validation and quality control"
-    - "Platform-specific performance optimization"
-    - "Complete CMC configuration for large-scale inference"
+    - "HPC CPU optimization for multi-core systems"
 
   # Optional: Generation metadata (filled by homodyne-config)
   generated_at: null                          # ISO timestamp when config generated
@@ -165,6 +167,11 @@ phi_filtering:
 # PARAMETER COUNT:
 # ----------------
 # Total parameters = Physical parameters + Scaling parameters per angle
+#
+# **PER-ANGLE SCALING MANDATORY (v2.4.0)**:
+#   - Legacy scalar contrast/offset mode REMOVED
+#   - Each scattering angle has unique optical/detector properties
+#   - Passing per_angle_scaling=False will raise ValueError
 #
 # Static (3 physical):
 #   Physical: [D₀, α, D_offset]
@@ -303,12 +310,14 @@ parameter_space:
 # ==============================================================================
 # Optimization method selection and configuration
 optimization:
-  method: "nlsq"                              # Options: "nlsq" | "mcmc" | "cmc" | "auto"
+  method: "nlsq"                              # Options: "nlsq" | "mcmc"
+                                              # Note: NUTS/CMC is auto-selected within MCMC based on dual criteria
 
   # ---------------------------------------------------------------------------
   # NLSQ - Trust-Region Nonlinear Least Squares (Primary Method)
   # ---------------------------------------------------------------------------
   # Fast, deterministic optimization using Levenberg-Marquardt algorithm
+  # CPU-optimized with JAX 0.8.0 (v2.3.0+), JIT-compiled for performance
   # Automatic strategy selection based on dataset size:
   #   < 1M points     → STANDARD (curve_fit)
   #   1M-10M points   → LARGE (curve_fit_large)
@@ -324,7 +333,11 @@ optimization:
   # MCMC - Markov Chain Monte Carlo (Uncertainty Quantification)
   # ---------------------------------------------------------------------------
   # Provides full posterior distributions and uncertainty estimates
-  # Uses NumPyro or BlackJAX with NUTS sampler
+  # Automatic NUTS/CMC selection based on dual criteria (v2.1.0):
+  #   - (num_samples >= 15) OR (memory > 30%) → CMC (parallel sampling)
+  #   - Otherwise → NUTS (sequential sampling)
+  # Uses NumPyro or BlackJAX backend
+  # No automatic NLSQ/SVI initialization (v2.1.0+) - manual workflow required
   mcmc:
     num_warmup: 1000                          # NUTS warmup/adaptation samples
     num_samples: 2000                         # Posterior samples per chain
@@ -334,13 +347,15 @@ optimization:
     max_tree_depth: 10                        # Maximum NUTS tree depth
     backend: "numpyro"                        # Options: "numpyro" | "blackjax"
 
-    # Automatic NUTS/CMC selection thresholds
-    min_samples_for_cmc: 15                   # Parallelism threshold for CMC selection
-    memory_threshold_pct: 0.30                # Memory threshold (30%) for CMC selection
+    # Automatic NUTS/CMC selection thresholds (v2.1.0)
+    # CMC selected when: (num_samples >= min_samples_for_cmc) OR (memory > memory_threshold_pct)
+    min_samples_for_cmc: 15                   # Parallelism threshold (samples/angles >= 15)
+    memory_threshold_pct: 0.30                # Memory threshold (30% of available)
     dense_mass_matrix: false                  # False: diagonal (faster), True: full covariance
 
-    # Chain initialization
+    # Chain starting values (NOT automatic NLSQ/SVI initialization - removed in v2.1.0)
     init_strategy: "median"                   # Options: "median" | "uniform" | "prior"
+                                              # Uses physics-informed priors from ParameterSpace
 
     # Diagnostics and quality control
     check_hmc_diagnostics: true               # Verify convergence diagnostics
@@ -368,14 +383,16 @@ optimization:
     adaptive_batching: true                   # Dynamically adjust batch size based on performance
 
   # ---------------------------------------------------------------------------
-  # CMC - Consensus Monte Carlo (Large-Scale Bayesian Inference)
+  # CMC - Consensus Monte Carlo (Automatically Selected by MCMC)
   # ---------------------------------------------------------------------------
-  # For datasets > 1M points requiring full Bayesian uncertainty quantification
+  # CMC is automatically selected when MCMC dual criteria met (v2.1.0):
+  #   (num_samples >= 15) OR (memory > 30%)
+  # This section configures CMC behavior when auto-selected
   # Parallelizes MCMC across data shards and combines subposteriors
   cmc:
-    enable: false                             # Options: false | true | "auto" (auto enables for >1M points)
-    min_points_for_cmc: 1000000               # Minimum dataset size to trigger CMC
-    backend: "jax"                            # Options: "jax" (GPU) | "numpy" (CPU)
+    enable: "auto"                            # Options: false | true | "auto" (recommended: "auto")
+    min_points_for_cmc: 1000000               # Minimum dataset size to trigger CMC (legacy parameter)
+    backend: "jax"                            # Options: "jax" (CPU-only in v2.3.0+) | "numpy"
     diagonal_correction: true                 # Apply diagonal correction to correlation matrix
 
     # Data sharding configuration
@@ -625,27 +642,24 @@ validation:
 #   - Total: 7 + 2N parameters (e.g., 3 angles → 13 parameters)
 #   - Use for: Systems under shear flow, nonequilibrium dynamics
 #
-# OPTIMIZATION METHOD SELECTION:
-# -------------------------------
+# OPTIMIZATION METHOD SELECTION (v2.1.0):
+# ----------------------------------------
 # NLSQ (Recommended for initial analysis):
 #   - Fast, deterministic point estimates
+#   - CPU-optimized with JAX 0.8.0 JIT compilation
 #   - Automatic strategy based on dataset size
 #   - Good for parameter estimation and exploration
 #   - Runtime: seconds to minutes
 #
-# MCMC (Recommended for publication):
-#   - Full posterior distributions
-#   - Uncertainty quantification with credible intervals
-#   - Convergence diagnostics (R-hat, ESS)
-#   - Runtime: minutes to hours
-#   - Use after NLSQ for refined uncertainties
-#
-# CMC (For large-scale Bayesian inference):
-#   - Parallelizes MCMC across data shards
-#   - Handles > 1M points with Bayesian UQ
-#   - Combines subposteriors with covariance weighting
-#   - Requires significant computational resources
-#   - Runtime: hours to days
+# MCMC (Recommended for publication with uncertainty quantification):
+#   - Full posterior distributions with credible intervals
+#   - Automatic NUTS/CMC selection based on dual criteria:
+#     * (num_samples >= 15) OR (memory > 30%) → CMC (parallel sampling)
+#     * Otherwise → NUTS (sequential sampling)
+#   - Convergence diagnostics (R-hat, ESS, divergences)
+#   - Manual workflow (v2.1.0+): Run NLSQ → copy results → update YAML → run MCMC
+#   - No automatic NLSQ/SVI initialization (removed in v2.1.0)
+#   - Runtime: minutes to hours (NUTS), hours to days (CMC)
 #
 # Streaming (Automatic for large datasets):
 #   - Constant memory footprint
@@ -661,15 +675,19 @@ validation:
 #   10M-100M points → CHUNKED (progress tracking)
 #   > 100M points   → STREAMING (checkpointing)
 #
-# PLATFORM SUPPORT:
-# -----------------
-# CPU-only: Linux, macOS, Windows (full support)
-# GPU support removed in v2.3.0 (use v2.2.x for GPU)
+# PLATFORM SUPPORT (v2.3.0):
+# ---------------------------
+# CPU-only: Linux, macOS, Windows (full support, multi-core optimized)
+# GPU support removed in v2.3.0 (use v2.2.1 for GPU features)
+# HPC-ready: Optimized for 14+ core CPUs, tested on 36-128 core nodes
 #
 # Installation:
-#   pip install homodyne
+#   pip install homodyne  # Automatically installs CPU-only JAX 0.8.0
 #
-# JAX/jaxlib MUST be version 0.8.0 (exact match required)
+# Requirements:
+#   - Python 3.12+
+#   - JAX==0.8.0 and jaxlib==0.8.0 (exact match required, CPU-only)
+#   - For GPU: Stay on homodyne v2.2.1 (last GPU-supporting version)
 #
 # ANGLE FILTERING:
 # ----------------
@@ -712,21 +730,34 @@ validation:
 #    - Update experimental_data paths
 #    - Run: homodyne --config config.yaml --method nlsq
 #
-# 2. Laminar flow analysis:
-#    - Copy homodyne_laminar_flow.yaml
-#    - Update paths and phi_filtering ranges
-#    - Run: homodyne --config config.yaml --method nlsq
-#    - For uncertainties: homodyne --config config.yaml --method mcmc
+# 2. Laminar flow analysis with uncertainty quantification (v2.1.0 workflow):
+#    Step 1 - NLSQ optimization:
+#      - Copy homodyne_laminar_flow.yaml
+#      - Update paths and phi_filtering ranges
+#      - Run: homodyne --config config.yaml --method nlsq
+#      - Note best-fit parameters from output
+#
+#    Step 2 - Manual MCMC initialization (no automatic initialization in v2.1.0+):
+#      - Manually copy NLSQ best-fit results from output
+#      - Update initial_parameters.values in config.yaml with NLSQ results
+#      - Example: values: [1234.5, 0.567, 12.34, 0.01, 0.0, 0.0, 0.0]
+#      - Run: homodyne --config config.yaml --method mcmc
+#      - Automatic NUTS/CMC selection based on dual criteria:
+#        * (num_samples >= 15) OR (memory > 30%) → CMC
+#        * Otherwise → NUTS
 #
 # 3. Large dataset (>100M points):
 #    - NLSQ automatically uses streaming
 #    - Enable checkpointing: optimization.streaming.enable_checkpoints: true
 #    - Monitor progress in checkpoint_dir
 #
-# 4. Large-scale Bayesian inference:
-#    - Set optimization.method: "cmc"
-#    - Configure cmc.sharding for your dataset size
+# 4. Large-scale Bayesian inference (v2.1.0+):
+#    - Set optimization.method: "mcmc"
+#    - CMC automatically selected when dual criteria met:
+#      * (num_samples >= 15) OR (memory > 30%)
+#    - Configure cmc section for auto-selected CMC behavior
 #    - Use cmc.backend_config for HPC systems (PBS/SLURM)
+#    - No standalone --method cmc option (removed in v2.1.0)
 #
 # VALIDATION AND TESTING:
 # -----------------------
