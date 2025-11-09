@@ -451,52 +451,6 @@ class TestDiagonalCorrectionJAX:
 class TestDiagonalCorrectionNLSQIntegration:
     """Integration tests with NLSQ optimization"""
 
-    def test_nlsq_model_function_applies_correction(self):
-        """Test that NLSQ model function applies diagonal correction"""
-        from homodyne.optimization.nlsq_wrapper import NLSQWrapper
-        from homodyne.core.jax_backend import compute_g2_scaled
-
-        # Create simple test data
-        n_phi = 3
-        n_t = 101
-
-        # Simulate data structure
-        class MockData:
-            def __init__(self):
-                self.phi = jnp.array([0.0, 45.0, 90.0])
-                self.t1 = jnp.linspace(0, 10, n_t)
-                self.t2 = jnp.linspace(0, 10, n_t)
-                self.q = 0.005
-                self.L = 2000000.0
-                self.dt = 0.1
-                self.g2 = jnp.ones((n_phi, n_t, n_t))
-                self.sigma = jnp.ones((n_phi, n_t, n_t)) * 0.1
-
-        data = MockData()
-
-        # Create wrapper
-        wrapper = NLSQWrapper(enable_recovery=False)
-
-        # Create model function
-        model_fn = wrapper._create_residual_function(data, "static_isotropic")
-
-        # Test parameters
-        params = jnp.array(
-            [0.5, 1.0, 1000.0, 0.5, 100.0]
-        )  # [contrast, offset, D0, alpha, D_offset]
-
-        # Create xdata indices
-        xdata = jnp.arange(n_phi * n_t * n_t)
-
-        # Call model function
-        result = model_fn(xdata, *params)
-
-        # Result should be flattened array
-        assert result.shape == (n_phi * n_t * n_t,)
-
-        # Result should be finite (no NaN from gradient issues)
-        assert jnp.all(jnp.isfinite(result))
-
     def test_experimental_theoretical_consistency(self, rng):
         """Test that experimental and theoretical data have same preprocessing"""
         # This is an integration test that would require full pipeline

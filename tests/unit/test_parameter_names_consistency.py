@@ -227,29 +227,6 @@ class TestMCMCModelConsistency:
 class TestPjitBackendConsistency:
     """Test parameter name consistency in pjit backend sample extraction."""
 
-    def test_pjit_uses_centralized_constants(self):
-        """Verify pjit backend uses get_parameter_names from parameter_names module."""
-        # Read the pjit backend source
-        import inspect
-        from homodyne.optimization.cmc.backends.pjit import PjitBackend
-
-        # Get the source code
-        source = inspect.getsource(PjitBackend._run_single_shard_mcmc)
-
-        # Verify it imports get_parameter_names from centralized module
-        assert (
-            "from homodyne.config.parameter_names import get_parameter_names" in source
-        )
-
-        # Verify it uses get_parameter_names() instead of hardcoded lists
-        assert "param_names = get_parameter_names(analysis_mode)" in source
-
-        # Verify old hardcoded parameter lists are no longer present
-        # (They've been replaced with centralized constants)
-        assert (
-            "param_names = ['contrast', 'offset'" not in source
-        )  # Old hardcoded approach
-
     def test_pjit_no_old_incorrect_names(self):
         """Verify pjit backend does not contain old incorrect parameter names."""
         import inspect

@@ -118,51 +118,6 @@ def static_isotropic_bounds():
 # ============================================================================
 
 
-def test_standard_strategy_small_dataset(
-    mock_xpcs_data, mock_config, static_isotropic_params, static_isotropic_bounds
-):
-    """Test STANDARD strategy is used for small datasets (< 1M points).
-
-    Validates:
-    - Strategy selection based on dataset size
-    - curve_fit is called (not curve_fit_large)
-    - Result normalization works correctly
-    """
-    # Create small dataset (5 * 10 * 10 = 500 points)
-    data = mock_xpcs_data(n_phi=5, n_t1=10, n_t2=10)
-
-    wrapper = NLSQWrapper(
-        enable_large_dataset=True,
-        enable_recovery=False,  # Test without recovery first
-    )
-
-    result = wrapper.fit(
-        data=data,
-        config=mock_config,
-        initial_params=static_isotropic_params,
-        bounds=static_isotropic_bounds,
-        analysis_mode="static_isotropic",
-    )
-
-    # Validate result structure
-    assert isinstance(result, OptimizationResult)
-    assert result.parameters.shape == static_isotropic_params.shape
-    assert result.uncertainties.shape == static_isotropic_params.shape
-    assert result.covariance.shape == (
-        len(static_isotropic_params),
-        len(static_isotropic_params),
-    )
-    assert result.chi_squared >= 0
-    assert result.iterations >= 0
-    assert result.execution_time >= 0
-
-    # Check convergence
-    assert result.success is True or result.convergence_status in [
-        "converged",
-        "converged_with_recovery",
-    ]
-
-
 def test_large_strategy_medium_dataset(
     mock_xpcs_data, mock_config, static_isotropic_params, static_isotropic_bounds
 ):

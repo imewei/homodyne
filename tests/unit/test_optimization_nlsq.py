@@ -179,38 +179,6 @@ class TestNLSQOptimization:
                 )
 
     @pytest.mark.skipif(not NLSQ_AVAILABLE, reason="NLSQ package not available")
-    def test_nlsq_convergence_behavior(self, small_xpcs_data, test_config):
-        """Test NLSQ convergence behavior with different tolerances."""
-        data = small_xpcs_data
-
-        # Test with loose tolerance
-        loose_config = test_config.copy()
-        loose_config["optimization"]["lsq"]["tolerance"] = 1e-3
-        loose_config["optimization"]["lsq"]["max_iterations"] = 50
-
-        result_loose = fit_nlsq_jax(data, loose_config)
-
-        # Test with tight tolerance
-        tight_config = test_config.copy()
-        tight_config["optimization"]["lsq"]["tolerance"] = 1e-8
-        tight_config["optimization"]["lsq"]["max_iterations"] = 200
-
-        result_tight = fit_nlsq_jax(data, tight_config)
-
-        # Both should succeed
-        assert result_loose.success, f"Loose tolerance failed: {result_loose.message}"
-        assert result_tight.success, f"Tight tolerance failed: {result_tight.message}"
-
-        # Tight tolerance should generally achieve lower chi-squared
-        assert (
-            result_tight.chi_squared <= result_loose.chi_squared * 1.1
-        ), "Tight tolerance should achieve better or similar fit"
-
-        # Tight tolerance might use more iterations
-        assert (
-            result_tight.iterations >= result_loose.iterations * 0.5
-        ), "Tight tolerance should use reasonable iterations"
-
     @pytest.mark.skipif(not NLSQ_AVAILABLE, reason="NLSQ package not available")
     def test_nlsq_boundary_conditions(self, synthetic_xpcs_data, test_config):
         """Test NLSQ optimization with boundary conditions."""

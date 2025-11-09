@@ -19,6 +19,56 @@ from tests.factories.synthetic_data import generate_static_isotropic_dataset
 _VALIDATION_RESULTS = []
 
 
+def extract_scalar_params_from_per_angle_result(data, result, analysis_mode="static_isotropic"):
+    """
+    Extract scalar parameter values from per-angle optimization result.
+
+    In v2.4.0, per-angle scaling is mandatory. This function aggregates per-angle
+    contrast/offset values and extracts physical parameters.
+
+    Args:
+        data: XPCSData object (used to get n_phi)
+        result: OptimizationResult with per-angle parameters
+        analysis_mode: Analysis mode ("static_isotropic" or "laminar_flow")
+
+    Returns:
+        dict: Scalar parameter values {param_name: value}
+
+    Example:
+        For static_isotropic with n_phi=10:
+        - Input: [c0...c9, o0...o9, D0, alpha, D_offset] (23 params)
+        - Output: {"contrast": mean(c0...c9), "offset": mean(o0...o9), "D0": ..., "alpha": ..., "D_offset": ...}
+    """
+    n_phi = data.phi.shape[0]
+
+    if analysis_mode == "static_isotropic":
+        # Per-angle structure: [c0...cN, o0...oN, D0, alpha, D_offset]
+        expected_length = 2 * n_phi + 3
+        assert len(result.parameters) == expected_length, (
+            f"Expected {expected_length} parameters for static_isotropic with {n_phi} angles, "
+            f"got {len(result.parameters)}"
+        )
+
+        # Aggregate per-angle scaling parameters
+        contrast_mean = np.mean(result.parameters[0:n_phi])
+        offset_mean = np.mean(result.parameters[n_phi:2*n_phi])
+
+        # Extract physical parameters
+        D0 = result.parameters[2*n_phi]
+        alpha = result.parameters[2*n_phi + 1]
+        D_offset = result.parameters[2*n_phi + 2]
+
+        return {
+            "contrast": contrast_mean,
+            "offset": offset_mean,
+            "D0": D0,
+            "alpha": alpha,
+            "D_offset": D_offset,
+        }
+    else:
+        raise NotImplementedError(f"Parameter extraction for {analysis_mode} not yet implemented")
+
+
 @dataclass
 class ValidationResult:
     """Result from a single validation test."""
@@ -61,7 +111,7 @@ class TestScientificValidation:
                     "D_offset": 10.0,
                 },
                 "noise_level": 0.01,
-                "tolerance_pct": 25.0,  # Relaxed to 25% based on observed NLSQ performance with noisy data
+                "tolerance_pct": 30.0,  # Relaxed to 30% for per-angle scaling (v2.4.0: 23 params vs 5 in scalar mode)
             },
             {
                 "name": "medium_recovery",
@@ -139,14 +189,12 @@ class TestScientificValidation:
             )
             execution_time = time.time() - start_time
 
-            # Extract recovered parameters
-            recovered = {
-                "contrast": result.parameters[0],
-                "offset": result.parameters[1],
-                "D0": result.parameters[2],
-                "alpha": result.parameters[3],
-                "D_offset": result.parameters[4],
-            }
+            # Extract recovered parameters (v2.4.0: per-angle scaling is mandatory)
+            recovered = extract_scalar_params_from_per_angle_result(
+                data=data,
+                result=result,
+                analysis_mode="static_isotropic"
+            )
 
             # Compute relative errors
             param_names = ["contrast", "offset", "D0", "alpha", "D_offset"]
@@ -476,14 +524,12 @@ class TestScientificValidation:
                 len(result_recovery.recovery_actions) > 0
             ), "Should have recovery actions if converged with recovery"
 
-        # Compute errors
-        recovered = {
-            "contrast": result_recovery.parameters[0],
-            "offset": result_recovery.parameters[1],
-            "D0": result_recovery.parameters[2],
-            "alpha": result_recovery.parameters[3],
-            "D_offset": result_recovery.parameters[4],
-        }
+        # Compute errors (v2.4.0: per-angle scaling is mandatory)
+        recovered = extract_scalar_params_from_per_angle_result(
+            data=data,
+            result=result_recovery,
+            analysis_mode="static_isotropic"
+        )
 
         param_names = ["contrast", "offset", "D0", "alpha", "D_offset"]
         relative_errors = {}
@@ -554,12 +600,17 @@ class TestScientificValidation:
 
         print("\n--- Physics Validation ---")
 
-        # Extract parameters
-        contrast = result.parameters[0]
-        offset = result.parameters[1]
-        D0 = result.parameters[2]
-        alpha = result.parameters[3]
-        D_offset = result.parameters[4]
+        # Extract parameters (v2.4.0: per-angle scaling is mandatory)
+        params = extract_scalar_params_from_per_angle_result(
+            data=data,
+            result=result,
+            analysis_mode="static_isotropic"
+        )
+        contrast = params["contrast"]
+        offset = params["offset"]
+        D0 = params["D0"]
+        alpha = params["alpha"]
+        D_offset = params["D_offset"]
 
         # Physics constraints
         physics_checks = []
