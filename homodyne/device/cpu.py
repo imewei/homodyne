@@ -109,6 +109,7 @@ def configure_cpu_hpc(
     enable_hyperthreading: bool = False,
     numa_policy: str = "auto",
     memory_optimization: str = "standard",
+    enable_onednn: bool = False,
 ) -> dict[str, any]:
     """Configure JAX and system for HPC CPU optimization.
 
@@ -125,6 +126,11 @@ def configure_cpu_hpc(
         NUMA memory policy ("auto", "local", "interleave")
     memory_optimization : str, default "standard"
         Memory optimization level ("minimal", "standard", "aggressive")
+    enable_onednn : bool, default False
+        Enable Intel oneDNN optimizations for matrix operations.
+        Only recommended for Intel CPUs with matrix-heavy workloads.
+        XPCS analysis is element-wise dominated, so benefit is minimal.
+        Set to True to benchmark potential improvements.
 
     Returns
     -------
@@ -162,7 +168,7 @@ def configure_cpu_hpc(
 
     # Configure JAX for CPU optimization
     if JAX_AVAILABLE:
-        jax_config = _configure_jax_cpu(num_threads, cpu_info)
+        jax_config = _configure_jax_cpu(num_threads, cpu_info, enable_onednn)
         config_summary.update(jax_config)
 
     config_summary.update(
@@ -172,6 +178,7 @@ def configure_cpu_hpc(
             "hyperthreading_enabled": enable_hyperthreading,
             "numa_policy": numa_policy,
             "memory_optimization": memory_optimization,
+            "onednn_enabled": enable_onednn,
         },
     )
 
@@ -226,9 +233,27 @@ def _set_cpu_environment_variables(
     return env_vars
 
 
-def _configure_jax_cpu(num_threads: int, cpu_info: dict) -> dict[str, any]:
-    """Configure JAX for optimal CPU performance."""
+def _configure_jax_cpu(
+    num_threads: int,
+    cpu_info: dict,
+    enable_onednn: bool = False,
+) -> dict[str, any]:
+    """Configure JAX for optimal CPU performance.
 
+    Parameters
+    ----------
+    num_threads : int
+        Number of threads to use
+    cpu_info : dict
+        CPU information from detect_cpu_info()
+    enable_onednn : bool, default False
+        Enable Intel oneDNN optimizations (experimental for XPCS workloads)
+
+    Returns
+    -------
+    dict
+        JAX configuration summary
+    """
     jax_config = {}
 
     try:
@@ -245,20 +270,39 @@ def _configure_jax_cpu(num_threads: int, cpu_info: dict) -> dict[str, any]:
         jax.config.update("jax_traceback_filtering", "off")
         jax_config["traceback_filtering"] = "off"
 
-        # Configure CPU-specific optimizations
+        # Build XLA flags based on CPU capabilities and user preferences
+        xla_flags = ["--xla_cpu_multi_thread_eigen=true"]
+
+        # Add AVX-512 optimizations if supported
         if cpu_info.get("supports_avx512"):
-            os.environ["XLA_FLAGS"] = (
-                "--xla_cpu_multi_thread_eigen=true "
-                "--xla_cpu_use_thunk_runtime=false "
-                "--xla_cpu_enable_fast_math=true "
+            xla_flags.extend([
+                "--xla_cpu_enable_fast_math=true",
                 "--xla_cpu_enable_xla_runtime=false"
-            )
+            ])
             jax_config["optimizations"] = "avx512_enabled"
         else:
-            os.environ["XLA_FLAGS"] = (
-                "--xla_cpu_multi_thread_eigen=true --xla_cpu_use_thunk_runtime=false"
-            )
             jax_config["optimizations"] = "standard"
+
+        # Add oneDNN optimization if requested (experimental for XPCS)
+        if enable_onednn:
+            # Only enable on Intel CPUs where it's likely to help
+            if "Intel" in cpu_info.get("cpu_brand", ""):
+                xla_flags.append("--xla_cpu_use_onednn=true")
+                jax_config["onednn"] = "enabled"
+                logger.info(
+                    "Intel oneDNN enabled (experimental for XPCS workloads). "
+                    "Benchmark to verify performance improvements."
+                )
+            else:
+                logger.warning(
+                    "oneDNN requested but CPU is not Intel. Skipping oneDNN."
+                )
+                jax_config["onednn"] = "skipped_non_intel"
+        else:
+            jax_config["onednn"] = "disabled"
+
+        # Set the combined XLA flags
+        os.environ["XLA_FLAGS"] = " ".join(xla_flags)
 
         # Memory optimization
         jax.config.update("jax_default_device", jax.devices("cpu")[0])

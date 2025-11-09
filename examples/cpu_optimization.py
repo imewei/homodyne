@@ -25,6 +25,13 @@ Performance Targets:
 - 128-core HPC node: ~30-60 minutes for 10M point analysis
 - 16-core personal computer: ~4-8 hours for 10M point analysis
 
+Performance Optimizations (NEW):
+Intel oneDNN optimization (v2.3.0+):
+- Benchmark shows ~15% improvement on Intel i9-13900H (13th Gen)
+- Available for Intel CPUs via enable_onednn=True parameter
+- Run examples/benchmark_onednn.py to test on your system
+- See docs/performance/onednn_benchmark_results.md for details
+
 Note:
 GPU support was removed in v2.3.0 to simplify maintenance and focus on
 reliable CPU execution. v2.2.x remains available for GPU users.
@@ -112,6 +119,17 @@ def configure_cpu_optimal(cpu_info):
     print("\n⚙️ Configuring CPU Optimization...")
     print("-" * 60)
 
+    # Determine if oneDNN should be enabled
+    # Benchmark results (2025-11-09) show ~15% improvement on Intel i9-13900H
+    # See: docs/performance/onednn_benchmark_results.md
+    enable_onednn = False
+    if "Intel" in cpu_info.get("cpu_brand", ""):
+        print("Intel CPU detected - oneDNN optimization available")
+        print("Benchmark shows ~15% performance improvement on i9-13900H")
+        print("Set enable_onednn=True to enable (experimental)")
+        # Uncomment to enable oneDNN (recommended for Intel 12th+ gen):
+        # enable_onednn = True
+
     # Configure optimal HPC CPU settings
     # Use num_threads parameter (leaves 1-2 cores for OS)
     optimal_threads = max(1, cpu_info["cores_logical"] - 2)
@@ -120,36 +138,13 @@ def configure_cpu_optimal(cpu_info):
         enable_hyperthreading=False,
         numa_policy='auto' if cpu_info.get("has_numa", False) else 'single',
         memory_optimization='standard',
+        enable_onednn=enable_onednn,
     )
 
-    print(f"OMP_NUM_THREADS: {config.get('omp_num_threads', optimal_threads)}")
-    print(f"Thread configuration: {config}")
-
-    # Set JAX XLA environment variables for CPU optimization
-    # These flags enable CPU-specific optimizations in JAX/XLA
-    xla_flags = []
-
-    # Enable CPU-optimized code generation
-    xla_flags.append("--xla_cpu_enable_fast_math=true")
-
-    # Use the CPU backend's parallel threading
-    xla_flags.append("--xla_cpu_multi_thread_eigen=true")
-
-    # Optimize for Eigen tensor operations
-    xla_flags.append("--xla_force_host_platform_device_count=1")
-
-    # Auto-tune for the CPU
-    xla_flags.append("--xla_cpu_prefer_vector_width=256")  # AVX2
-    if cpu_info["has_avx512"]:
-        xla_flags.append("--xla_cpu_prefer_vector_width=512")  # AVX-512
-
-    os.environ["XLA_FLAGS"] = " ".join(xla_flags)
-    os.environ["OMP_NUM_THREADS"] = str(optimal_threads)
-
-    print(f"\n✓ JAX XLA Flags configured for CPU optimization:")
-    print(f"  XLA_FLAGS={os.environ['XLA_FLAGS']}")
-    print(f"\n✓ OpenMP threads configured:")
-    print(f"  OMP_NUM_THREADS={os.environ['OMP_NUM_THREADS']}")
+    print(f"\nConfiguration Summary:")
+    print(f"  Threads: {config.get('threads_configured')} (physical cores)")
+    print(f"  oneDNN: {config.get('onednn_enabled', False)}")
+    print(f"  Optimizations: {config.get('optimizations', 'standard')}")
 
     return config
 
