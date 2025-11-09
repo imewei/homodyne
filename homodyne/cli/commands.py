@@ -2580,6 +2580,8 @@ def _prepare_parameter_data(result: Any, analysis_mode: str) -> dict[str, Any]:
     Extracts parameter values and uncertainties from OptimizationResult and
     organizes them by name according to the analysis mode.
 
+    Handles both legacy scalar scaling (9 params) and per-angle scaling (13+ params).
+
     Parameters
     ----------
     result : OptimizationResult
@@ -2595,9 +2597,19 @@ def _prepare_parameter_data(result: Any, analysis_mode: str) -> dict[str, Any]:
     Notes
     -----
     Parameter order in result.parameters:
+
+    **Legacy scalar scaling (deprecated):**
     - Static isotropic: [contrast, offset, D0, alpha, D_offset]
     - Laminar flow: [contrast, offset, D0, alpha, D_offset,
                      gamma_dot_t0, beta, gamma_dot_t_offset, phi0]
+
+    **Per-angle scaling (current default, v2.4.0+):**
+    - Static isotropic: [c0, c1, ..., cN, o0, o1, ..., oN, D0, alpha, D_offset]
+    - Laminar flow: [c0, c1, ..., cN, o0, o1, ..., oN, D0, alpha, D_offset,
+                     gamma_dot_t0, beta, gamma_dot_t_offset, phi0]
+    where N = number of phi angles
+
+    For per-angle scaling, contrast/offset in JSON are set to mean of per-angle values.
 
     Examples
     --------
@@ -2610,22 +2622,110 @@ def _prepare_parameter_data(result: Any, analysis_mode: str) -> dict[str, Any]:
     # Get parameter names for analysis mode
     if analysis_mode == "static_isotropic":
         param_names = SCALING_PARAM_NAMES + STATIC_PARAM_NAMES
+        n_physical = len(STATIC_PARAM_NAMES)
     elif analysis_mode == "laminar_flow":
         param_names = SCALING_PARAM_NAMES + LAMINAR_FLOW_PARAM_NAMES
+        n_physical = len(LAMINAR_FLOW_PARAM_NAMES)
     else:
         raise ValueError(f"Unknown analysis_mode: {analysis_mode}")
 
-    # Extract values and uncertainties
-    param_dict = {}
-    for i, name in enumerate(param_names):
-        param_dict[name] = {
-            "value": float(result.parameters[i]),
-            "uncertainty": (
-                float(result.uncertainties[i])
-                if result.uncertainties is not None
-                else None
-            ),
+    # Detect if per-angle scaling was used
+    n_params_expected = len(param_names)  # 9 for laminar_flow, 5 for static_isotropic
+    n_params_actual = len(result.parameters)
+
+    if n_params_actual > n_params_expected:
+        # Per-angle scaling detected
+        # Structure: [c0, c1, ..., cN, o0, o1, ..., oN, physical_params...]
+        # where N = n_angles - 1
+
+        # Calculate number of angles
+        n_angles = (n_params_actual - n_physical) // 2
+
+        logger.info(
+            f"Detected per-angle scaling: {n_params_actual} parameters for {n_angles} angles"
+        )
+        logger.debug(
+            f"Parameter structure: [{n_angles} contrast] + [{n_angles} offset] + [{n_physical} physical]"
+        )
+
+        # Extract per-angle contrast and offset
+        contrast_per_angle = result.parameters[:n_angles]
+        offset_per_angle = result.parameters[n_angles : 2 * n_angles]
+
+        # Extract physical parameters (start after 2*n_angles)
+        physical_params = result.parameters[2 * n_angles :]
+        physical_uncertainties = (
+            result.uncertainties[2 * n_angles :]
+            if result.uncertainties is not None
+            else None
+        )
+
+        logger.debug(
+            f"Physical params array (indices {2*n_angles}-{len(result.parameters)-1}): {physical_params[:7]}"
+        )
+
+        # Use mean contrast/offset for JSON (representative value)
+        contrast_mean = float(np.mean(contrast_per_angle))
+        offset_mean = float(np.mean(offset_per_angle))
+
+        # Compute uncertainties for contrast/offset (RMS of per-angle uncertainties)
+        if result.uncertainties is not None:
+            contrast_unc_per_angle = result.uncertainties[:n_angles]
+            offset_unc_per_angle = result.uncertainties[n_angles : 2 * n_angles]
+            contrast_unc = float(np.sqrt(np.mean(contrast_unc_per_angle**2)))
+            offset_unc = float(np.sqrt(np.mean(offset_unc_per_angle**2)))
+        else:
+            contrast_unc = None
+            offset_unc = None
+
+        # Build parameter dictionary
+        param_dict = {
+            "contrast": {"value": contrast_mean, "uncertainty": contrast_unc},
+            "offset": {"value": offset_mean, "uncertainty": offset_unc},
         }
+
+        # Add physical parameters
+        physical_param_names = (
+            STATIC_PARAM_NAMES if analysis_mode == "static_isotropic" else LAMINAR_FLOW_PARAM_NAMES
+        )
+        for i, name in enumerate(physical_param_names):
+            param_dict[name] = {
+                "value": float(physical_params[i]),
+                "uncertainty": (
+                    float(physical_uncertainties[i])
+                    if physical_uncertainties is not None
+                    else None
+                ),
+            }
+
+        logger.debug(
+            f"Extracted parameters - contrast_mean={contrast_mean:.4f}, "
+            f"offset_mean={offset_mean:.4f}, "
+            f"D0={param_dict.get('D0', {}).get('value', 'N/A')}, "
+            f"alpha={param_dict.get('alpha', {}).get('value', 'N/A')}, "
+            f"D_offset={param_dict.get('D_offset', {}).get('value', 'N/A')}, "
+            f"gamma_dot_t0={param_dict.get('gamma_dot_t0', {}).get('value', 'N/A')}, "
+            f"beta={param_dict.get('beta', {}).get('value', 'N/A')}, "
+            f"gamma_dot_t_offset={param_dict.get('gamma_dot_t_offset', {}).get('value', 'N/A')}, "
+            f"phi0={param_dict.get('phi0', {}).get('value', 'N/A')}"
+        )
+
+    else:
+        # Legacy scalar scaling (or exact match)
+        logger.debug(
+            f"Using direct parameter extraction (legacy scalar scaling): {n_params_actual} parameters"
+        )
+
+        param_dict = {}
+        for i, name in enumerate(param_names):
+            param_dict[name] = {
+                "value": float(result.parameters[i]),
+                "uncertainty": (
+                    float(result.uncertainties[i])
+                    if result.uncertainties is not None
+                    else None
+                ),
+            }
 
     return param_dict
 
@@ -2724,8 +2824,30 @@ def _compute_nlsq_fits(
     if t2.ndim == 2:
         t2 = t2[0, :]  # Extract first row
 
-    # Extract physical parameters (skip first 2 which are scaling params)
-    physical_params = result.parameters[2:]
+    # Extract physical parameters - handle per-angle scaling
+    # Detect if per-angle scaling was used (13 params for 3 angles vs 9 params scalar)
+    n_params = len(result.parameters)
+    n_angles_opt = len(data.get("phi_angles_list", []))  # Angles used in optimization
+
+    # Expected params for laminar_flow: 7 physical + 2 scaling = 9 (scalar mode)
+    # Expected params for per-angle: 7 physical + 2*n_angles scaling = 13 for 3 angles
+    if n_params > 9:
+        # Per-angle scaling detected
+        # Structure: [c0, c1, ..., cN, o0, o1, ..., oN, physical...]
+        n_angles_from_params = (n_params - 7) // 2  # 7 physical params in laminar_flow
+        physical_params = result.parameters[2 * n_angles_from_params :]
+        logger.debug(
+            f"Per-angle scaling detected in theoretical fits: {n_params} parameters, "
+            f"extracting physical params from index {2*n_angles_from_params}"
+        )
+    else:
+        # Legacy scalar scaling
+        # Structure: [contrast, offset, physical...]
+        physical_params = result.parameters[2:]
+        logger.debug(
+            f"Scalar scaling detected in theoretical fits: {n_params} parameters, "
+            f"extracting physical params from index 2"
+        )
 
     # Extract metadata with defaults
     L = metadata["L"]

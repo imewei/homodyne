@@ -2843,9 +2843,17 @@ class NLSQWrapper:
         # CRITICAL: Enforce parameter bounds (post-optimization clipping)
         # NLSQ's trust-region algorithm can violate bounds to minimize cost
         # Clip parameters to ensure physical validity
+        logger.info(f"POST-OPTIMIZATION BOUNDS CHECK: bounds={'provided' if bounds is not None else 'None'}, popt shape={popt.shape}")
         if bounds is not None:
             lower_bounds, upper_bounds = bounds
             bounds_violated = False
+
+            # Debug: Log first few bounds and parameters
+            logger.info(f"Debug: lower_bounds type={type(lower_bounds)}, shape={getattr(lower_bounds, 'shape', 'N/A')}")
+            logger.info(f"Debug: First 3 lower bounds: {lower_bounds[:3] if hasattr(lower_bounds, '__getitem__') else 'N/A'}")
+            logger.info(f"Debug: Last 3 lower bounds: {lower_bounds[-3:] if hasattr(lower_bounds, '__getitem__') else 'N/A'}")
+            logger.info(f"Debug: First 3 popt: {popt[:3]}")
+            logger.info(f"Debug: Last 3 popt: {popt[-3:]}")
 
             for i in range(len(popt)):
                 original_value = popt[i]
