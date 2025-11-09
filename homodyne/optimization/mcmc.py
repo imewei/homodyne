@@ -1525,12 +1525,16 @@ def _create_numpyro_model(
             )
 
         # Pass full params array for proper indexing, plus L and dt for correct physics
-        # CRITICAL FIX (Nov 2025): Use replicated phi for flattened element-wise data
-        # For large datasets (CMC shards with len > 2000), data is flattened element-wise:
-        # each data point is paired with corresponding t1, t2, phi values.
-        # Physics functions need ALL arrays to have same length to avoid meshgrid creation.
-        # For small datasets (len <= 2000), use unique phi values and let physics create meshgrid.
-        phi_for_theory = phi_array_for_mapping if len(t1) > 2000 else phi
+        # CRITICAL FIX (Nov 2025): physics_cmc.py ALWAYS requires unique phi values
+        #
+        # physics_cmc.py is specifically designed for CMC element-wise data:
+        # - t1/t2 are already element-wise paired (handled internally)
+        # - phi must be UNIQUE values for broadcasting: (n_phi_unique, n_points)
+        # - Using replicated phi creates (2M × 2M) matrix = 35TB allocation!
+        #
+        # The phi_array_for_mapping (replicated) is ONLY used for per-angle scaling
+        # indexing after c2_theory is computed, NOT for physics computation.
+        phi_for_theory = phi  # Always use unique phi (23 elements, not 2M replicated)
         c2_theory = _compute_simple_theory_jit(
             params_full, t1, t2, phi_for_theory, q, analysis_mode, L, dt
         )
