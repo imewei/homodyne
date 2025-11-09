@@ -460,43 +460,62 @@ def _compute_g1_diffusion_core(
                 f"DEBUG g1_diffusion: wavevector_q_squared_half_dt={wavevector_q_squared_half_dt:.6e}",
             )
 
-    # Step 1: Extract time array (t1 and t2 should be identical)
-    # Handle all dimensionality cases: 0D (scalar), 1D arrays, and 2D meshgrids
-    if t1.ndim == 2:
-        # For meshgrid with indexing="ij": t1 varies along rows (axis 0), constant along columns
-        # So extract first COLUMN to get unique t1 values
-        time_array = t1[:, 0]  # Extract first column for unique t1 values
-    elif t1.ndim == 0:
-        # Handle 0-dimensional (scalar) input
-        time_array = jnp.atleast_1d(t1)
+    # CRITICAL FIX (Nov 2025): Detect element-wise data to prevent 35TB matrix allocation
+    # Same issue as in _compute_g1_shear_core
+    is_elementwise = t1.ndim == 1 and safe_len(t1) > 2000
+
+    if is_elementwise:
+        # ELEMENT-WISE MODE: Compute integrals directly for each (t1[i], t2[i]) pair
+        t1_arr = jnp.atleast_1d(t1)
+        t2_arr = jnp.atleast_1d(t2)
+
+        # Compute D(t) at both t1[i] and t2[i] for all i
+        D_t1 = _calculate_diffusion_coefficient_impl_jax(t1_arr, D0, alpha, D_offset)
+        D_t2 = _calculate_diffusion_coefficient_impl_jax(t2_arr, D0, alpha, D_offset)
+
+        # Element-wise trapezoidal integration: ∫_{t1[i]}^{t2[i]} D(t') dt'
+        delta_t = jnp.abs(t2_arr - t1_arr)
+        D_integral = delta_t * 0.5 * (D_t1 + D_t2)  # Shape: (n,)
+
     else:
-        # Handle 1D and other cases
-        time_array = jnp.atleast_1d(t1)
+        # MATRIX MODE: Standard approach for small datasets or meshgrids
+        # Step 1: Extract time array (t1 and t2 should be identical)
+        # Handle all dimensionality cases: 0D (scalar), 1D arrays, and 2D meshgrids
+        if t1.ndim == 2:
+            # For meshgrid with indexing="ij": t1 varies along rows (axis 0), constant along columns
+            # So extract first COLUMN to get unique t1 values
+            time_array = t1[:, 0]  # Extract first column for unique t1 values
+        elif t1.ndim == 0:
+            # Handle 0-dimensional (scalar) input
+            time_array = jnp.atleast_1d(t1)
+        else:
+            # Handle 1D and other cases
+            time_array = jnp.atleast_1d(t1)
 
-    # Step 2: Calculate D(t) at each time point
-    D_t = _calculate_diffusion_coefficient_impl_jax(time_array, D0, alpha, D_offset)
+        # Step 2: Calculate D(t) at each time point
+        D_t = _calculate_diffusion_coefficient_impl_jax(time_array, D0, alpha, D_offset)
 
-    # DEBUG: Check D_t values
-    if not jax_available or not hasattr(jnp, "where"):  # Outside JIT
-        import numpy as np
+        # DEBUG: Check D_t values
+        if not jax_available or not hasattr(jnp, "where"):  # Outside JIT
+            import numpy as np
 
-        if hasattr(D_t, "min"):
-            print(
-                f"DEBUG g1_diffusion: D_t min={np.min(D_t):.6e}, max={np.max(D_t):.6e}, mean={np.mean(D_t):.6e}",
-            )
+            if hasattr(D_t, "min"):
+                print(
+                    f"DEBUG g1_diffusion: D_t min={np.min(D_t):.6e}, max={np.max(D_t):.6e}, mean={np.mean(D_t):.6e}",
+                )
 
-    # Step 3: Create diffusion integral matrix using cumulative sums
-    # This gives matrix[i,j] = |cumsum[i] - cumsum[j]| ≈ |∫D(t)dt from i to j|
-    D_integral = _create_time_integral_matrix_impl_jax(D_t)
+        # Step 3: Create diffusion integral matrix using cumulative sums
+        # This gives matrix[i,j] = |cumsum[i] - cumsum[j]| ≈ |∫D(t)dt from i to j|
+        D_integral = _create_time_integral_matrix_impl_jax(D_t)
 
-    # DEBUG: Check D_integral values
-    if not jax_available or not hasattr(jnp, "where"):  # Outside JIT
-        import numpy as np
+        # DEBUG: Check D_integral values
+        if not jax_available or not hasattr(jnp, "where"):  # Outside JIT
+            import numpy as np
 
-        if hasattr(D_integral, "min"):
-            print(
-                f"DEBUG g1_diffusion: D_integral min={np.min(D_integral):.6e}, max={np.max(D_integral):.6e}, mean={np.mean(D_integral):.6e}",
-            )
+            if hasattr(D_integral, "min"):
+                print(
+                    f"DEBUG g1_diffusion: D_integral min={np.min(D_integral):.6e}, max={np.max(D_integral):.6e}, mean={np.mean(D_integral):.6e}",
+                )
 
     # Step 4: Compute g1 correlation using log-space for numerical stability
     # This matches reference: g1 = exp(-wavevector_q_squared_half_dt * D_integral)
@@ -613,30 +632,63 @@ def _compute_g1_shear_core(
         params[6],
     )
 
-    # Step 1: Extract time array (t1 and t2 should be identical)
-    # Handle all dimensionality cases: 0D (scalar), 1D arrays, and 2D meshgrids
-    if t1.ndim == 2:
-        # For meshgrid with indexing="ij": t1 varies along rows (axis 0), constant along columns
-        # So extract first COLUMN to get unique t1 values
-        time_array = t1[:, 0]  # Extract first column for unique t1 values
-    elif t1.ndim == 0:
-        # Handle 0-dimensional (scalar) input
-        time_array = jnp.atleast_1d(t1)
+    # CRITICAL FIX (Nov 2025): Detect element-wise data to prevent 35TB matrix allocation
+    # For CMC shards with flattened element-wise data (len > 2000), t1 and t2 are paired arrays
+    # where each element i corresponds to one measurement at (t1[i], t2[i], phi[i])
+    # We need element-wise integrals, NOT a full (n×n) matrix!
+    is_elementwise = t1.ndim == 1 and safe_len(t1) > 2000
+
+    if is_elementwise:
+        # ELEMENT-WISE MODE: Compute integrals directly for each (t1[i], t2[i]) pair
+        # Each measurement i needs: ∫_{t1[i]}^{t2[i]} γ̇(t') dt'
+        # Trapezoidal approximation: |t2[i] - t1[i]| × 0.5 × (γ̇(t1[i]) + γ̇(t2[i]))
+
+        t1_arr = jnp.atleast_1d(t1)
+        t2_arr = jnp.atleast_1d(t2)
+
+        # Compute γ̇(t) at both t1[i] and t2[i] for all i
+        gamma_t1 = _calculate_shear_rate_impl_jax(
+            t1_arr, gamma_dot_0, beta, gamma_dot_offset
+        )
+        gamma_t2 = _calculate_shear_rate_impl_jax(
+            t2_arr, gamma_dot_0, beta, gamma_dot_offset
+        )
+
+        # Element-wise trapezoidal integration
+        delta_t = jnp.abs(t2_arr - t1_arr)
+        gamma_integral_elementwise = delta_t * 0.5 * (gamma_t1 + gamma_t2)
+
+        # For consistency with matrix mode, store as 1D array
+        gamma_integral = gamma_integral_elementwise  # Shape: (n,)
+        n_times = safe_len(t1_arr)
+
     else:
-        # Handle 1D and other cases
-        time_array = jnp.atleast_1d(t1)
+        # MATRIX MODE: Standard approach for small datasets or meshgrids
+        # Step 1: Extract time array (t1 and t2 should be identical)
+        # Handle all dimensionality cases: 0D (scalar), 1D arrays, and 2D meshgrids
+        if t1.ndim == 2:
+            # For meshgrid with indexing="ij": t1 varies along rows (axis 0), constant along columns
+            # So extract first COLUMN to get unique t1 values
+            time_array = t1[:, 0]  # Extract first column for unique t1 values
+        elif t1.ndim == 0:
+            # Handle 0-dimensional (scalar) input
+            time_array = jnp.atleast_1d(t1)
+        else:
+            # Handle 1D and other cases
+            time_array = jnp.atleast_1d(t1)
 
-    # Step 2: Calculate γ̇(t) at each time point
-    gamma_t = _calculate_shear_rate_impl_jax(
-        time_array,
-        gamma_dot_0,
-        beta,
-        gamma_dot_offset,
-    )
+        # Step 2: Calculate γ̇(t) at each time point
+        gamma_t = _calculate_shear_rate_impl_jax(
+            time_array,
+            gamma_dot_0,
+            beta,
+            gamma_dot_offset,
+        )
 
-    # Step 3: Create shear integral matrix using cumulative sums
-    # This gives matrix[i,j] = |cumsum[i] - cumsum[j]| ≈ |∫γ̇(t)dt from i to j|
-    gamma_integral = _create_time_integral_matrix_impl_jax(gamma_t)
+        # Step 3: Create shear integral matrix using cumulative sums
+        # This gives matrix[i,j] = |cumsum[i] - cumsum[j]| ≈ |∫γ̇(t)dt from i to j|
+        gamma_integral = _create_time_integral_matrix_impl_jax(gamma_t)
+        n_times = safe_len(time_array)
 
     # Fix phi shape if it has extra dimensions
     # Handle case where phi might be (1, 1, 1, 23) instead of (23,) or other malformed shapes
@@ -658,39 +710,55 @@ def _compute_g1_shear_core(
     # Step 4: Compute sinc² for each phi angle using pre-computed factor (vectorized)
     phi_array = jnp.atleast_1d(phi)
     n_phi = safe_len(phi_array)
-    n_times = safe_len(time_array)
 
-    # Vectorized computation: compute all phi angles at once
-    # angle_diff shape: (n_phi,)
-    angle_diff = jnp.deg2rad(phi0 - phi_array)  # Use phi_array for consistency
-    cos_term = jnp.cos(angle_diff)  # shape: (n_phi,)
+    if is_elementwise:
+        # ELEMENT-WISE MODE: phi, gamma_integral are all 1D arrays (n,)
+        # Each element i has its own phi[i] value (per-angle scaling)
+        # Compute phase: Φ[i] = sinc_prefactor × cos(φ₀-phi[i]) × gamma_integral[i]
 
-    # Broadcast: prefactor shape (n_phi,), gamma_integral shape (n_times, n_times)
-    # Need to expand prefactor to (n_phi, 1, 1) for proper broadcasting
-    prefactor = sinc_prefactor * cos_term[:, None, None]  # shape: (n_phi, 1, 1)
+        # Element-wise computation (no broadcasting needed!)
+        angle_diff = jnp.deg2rad(phi0 - phi_array)  # shape: (n,)
+        cos_term = jnp.cos(angle_diff)  # shape: (n,)
+        prefactor = sinc_prefactor * cos_term  # shape: (n,)
+        phase = prefactor * gamma_integral  # shape: (n,)
 
-    # Ensure gamma_integral has the expected 2D shape
-    if gamma_integral.ndim != 2:
-        raise ValueError(
-            f"gamma_integral should be 2D, got shape {gamma_integral.shape}",
-        )
+        # Compute sinc² values: [sinc(Φ)]² for all elements
+        sinc_val = safe_sinc(phase)
+        sinc2_result = sinc_val**2  # shape: (n,)
 
-    # Compute phase matrix for all phi angles: shape (n_phi, n_times, n_times)
-    try:
-        phase = (
-            prefactor * gamma_integral
-        )  # Broadcast: (n_phi, 1, 1) * (n_times, n_times)
-    except Exception as e:
-        # Enhanced error message for debugging
-        raise ValueError(
-            f"Broadcasting error in _compute_g1_shear_core: "
-            f"prefactor.shape={prefactor.shape}, gamma_integral.shape={gamma_integral.shape}. "
-            f"Original error: {e}",
-        ) from e
+    else:
+        # MATRIX MODE: Standard broadcasting for small datasets
+        # Vectorized computation: compute all phi angles at once
+        # angle_diff shape: (n_phi,)
+        angle_diff = jnp.deg2rad(phi0 - phi_array)  # Use phi_array for consistency
+        cos_term = jnp.cos(angle_diff)  # shape: (n_phi,)
 
-    # Compute sinc² values: [sinc(Φ)]² for all phi angles
-    sinc_val = safe_sinc(phase)
-    sinc2_result = sinc_val**2
+        # Broadcast: prefactor shape (n_phi,), gamma_integral shape (n_times, n_times)
+        # Need to expand prefactor to (n_phi, 1, 1) for proper broadcasting
+        prefactor = sinc_prefactor * cos_term[:, None, None]  # shape: (n_phi, 1, 1)
+
+        # Ensure gamma_integral has the expected 2D shape
+        if gamma_integral.ndim != 2:
+            raise ValueError(
+                f"gamma_integral should be 2D, got shape {gamma_integral.shape}",
+            )
+
+        # Compute phase matrix for all phi angles: shape (n_phi, n_times, n_times)
+        try:
+            phase = (
+                prefactor * gamma_integral
+            )  # Broadcast: (n_phi, 1, 1) * (n_times, n_times)
+        except Exception as e:
+            # Enhanced error message for debugging
+            raise ValueError(
+                f"Broadcasting error in _compute_g1_shear_core: "
+                f"prefactor.shape={prefactor.shape}, gamma_integral.shape={gamma_integral.shape}. "
+                f"Original error: {e}",
+            ) from e
+
+        # Compute sinc² values: [sinc(Φ)]² for all phi angles
+        sinc_val = safe_sinc(phase)
+        sinc2_result = sinc_val**2
 
     return sinc2_result
 
@@ -721,31 +789,49 @@ def _compute_g1_total_core(
     Returns:
         Total g1 correlation function with shape (n_phi, n_times, n_times)
     """
-    # Compute diffusion contribution: shape (n_times, n_times)
+    # Compute diffusion contribution
     g1_diff = _compute_g1_diffusion_core(params, t1, t2, wavevector_q_squared_half_dt)
 
-    # Compute shear contribution: shape (n_phi, n_times, n_times)
+    # Compute shear contribution
     g1_shear = _compute_g1_shear_core(params, t1, t2, phi, sinc_prefactor)
 
-    # Broadcast diffusion term to match shear dimensions
-    # g1_diff needs to be broadcast from (n_times, n_times) to (n_phi, n_times, n_times)
-    # Use the shape of g1_shear to determine n_phi (more reliable than parsing phi directly)
-    n_phi = g1_shear.shape[0]
-    g1_diff_broadcasted = jnp.broadcast_to(
-        g1_diff[None, :, :],
-        (n_phi, g1_diff.shape[0], g1_diff.shape[1]),
-    )
+    # CRITICAL FIX (Nov 2025): Handle element-wise vs matrix mode
+    # Element-wise mode: both g1_diff and g1_shear are 1D (shape (n,))
+    # Matrix mode: g1_diff is 2D (n_times, n_times), g1_shear is 3D (n_phi, n_times, n_times)
+    is_elementwise = g1_diff.ndim == 1 and g1_shear.ndim == 1
 
-    # Multiply: g₁_total[phi, i, j] = g₁_diffusion[i, j] × g₁_shear[phi, i, j]
-    try:
-        g1_total = g1_diff_broadcasted * g1_shear
-    except Exception as e:
-        # Enhanced error message for debugging
-        raise ValueError(
-            f"Broadcasting error in _compute_g1_total_core: "
-            f"g1_diff_broadcasted.shape={g1_diff_broadcasted.shape}, g1_shear.shape={g1_shear.shape}. "
-            f"Original error: {e}",
-        ) from e
+    if is_elementwise:
+        # ELEMENT-WISE MODE: Simple element-wise multiplication
+        # g1_diff: (n,), g1_shear: (n,) → g1_total: (n,)
+        try:
+            g1_total = g1_diff * g1_shear
+        except Exception as e:
+            raise ValueError(
+                f"Element-wise multiplication error in _compute_g1_total_core: "
+                f"g1_diff.shape={g1_diff.shape}, g1_shear.shape={g1_shear.shape}. "
+                f"Original error: {e}",
+            ) from e
+
+    else:
+        # MATRIX MODE: Broadcast diffusion term to match shear dimensions
+        # g1_diff needs to be broadcast from (n_times, n_times) to (n_phi, n_times, n_times)
+        # Use the shape of g1_shear to determine n_phi (more reliable than parsing phi directly)
+        n_phi = g1_shear.shape[0]
+        g1_diff_broadcasted = jnp.broadcast_to(
+            g1_diff[None, :, :],
+            (n_phi, g1_diff.shape[0], g1_diff.shape[1]),
+        )
+
+        # Multiply: g₁_total[phi, i, j] = g₁_diffusion[i, j] × g₁_shear[phi, i, j]
+        try:
+            g1_total = g1_diff_broadcasted * g1_shear
+        except Exception as e:
+            # Enhanced error message for debugging
+            raise ValueError(
+                f"Broadcasting error in _compute_g1_total_core: "
+                f"g1_diff_broadcasted.shape={g1_diff_broadcasted.shape}, g1_shear.shape={g1_shear.shape}. "
+                f"Original error: {e}",
+            ) from e
 
     # Apply loose physical bounds to allow natural correlation function behavior
     # Remove artificial upper bound to prevent fitted data collapse
