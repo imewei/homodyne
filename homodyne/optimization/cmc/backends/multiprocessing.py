@@ -613,11 +613,14 @@ def _worker_function(args: tuple) -> Dict[str, Any]:
         estimated_contrast = max(0.01, data_max - data_min)  # At least 0.01 for numerical stability
         estimated_offset = max(0.5, data_mean - estimated_contrast)  # At least 0.5 (physical minimum)
 
-        logger.debug(
+        # Use logger from worker process
+        from homodyne.utils.logging import get_logger
+        worker_logger = get_logger(__name__)
+        worker_logger.info(
             f"Multiprocessing shard {shard_idx}: Data statistics: "
             f"min={data_min:.4f}, max={data_max:.4f}, mean={data_mean:.4f}"
         )
-        logger.debug(
+        worker_logger.info(
             f"Multiprocessing shard {shard_idx}: Estimated per-angle scaling: "
             f"contrast={estimated_contrast:.4f}, offset={estimated_offset:.4f}"
         )
@@ -626,9 +629,16 @@ def _worker_function(args: tuple) -> Dict[str, Any]:
             # Data-driven initial values (closer to experimental observations)
             init_param_values[f"contrast_{phi_idx}"] = estimated_contrast
             init_param_values[f"offset_{phi_idx}"] = estimated_offset
-        logger.debug(
+
+        worker_logger.info(
             f"Multiprocessing shard {shard_idx}: Added {len(phi_unique)} per-angle scaling parameters "
             f"(contrast and offset) to init_param_values for NUTS initialization"
+        )
+
+        # Log first few parameter values to verify
+        sample_params = {k: v for i, (k, v) in enumerate(init_param_values.items()) if i < 10}
+        worker_logger.info(
+            f"Multiprocessing shard {shard_idx}: init_param_values (first 10): {sample_params}"
         )
 
         # Create NUTS sampler
