@@ -184,14 +184,16 @@ def _create_time_integral_matrix_impl_jax(
 ) -> jnp.ndarray:
     """Create time integral matrix using trapezoidal numerical integration.
 
-    IMPROVED ALGORITHM (Oct 2025): Uses trapezoidal rule instead of simple cumsum
-    to reduce discretization artifacts that cause checkerboard patterns in fitted results.
+    RESTORED (Nov 2025): Back to working implementation from homodyne-analysis/kernels.py
+    The dt scaling happens in wavevector_q_squared_half_dt, NOT in this cumsum.
 
-    Algorithm:
+    Algorithm (from working version):
     1. Trapezoidal integration: cumsum[i] = Σ(k=0 to i-1) 0.5 * (f[k] + f[k+1])
     2. Compute difference matrix: matrix[i,j] = |cumsum[i] - cumsum[j]|
+    3. The dt factor is applied via wavevector_q_squared_half_dt = 0.5 * q² * dt
 
-    This gives: matrix[i,j] ≈ ∫₀^|tᵢ-tⱼ| f(t') dt'
+    This gives: matrix[i,j] = number of integration steps
+    Actual integral: dt * matrix[i,j] ≈ ∫₀^|tᵢ-tⱼ| f(t') dt'
 
     Benefits over simple cumsum:
     - Reduces oscillations from discretization by ~50%
@@ -202,21 +204,20 @@ def _create_time_integral_matrix_impl_jax(
         time_dependent_array: f(t) evaluated at discrete time points
 
     Returns:
-        Time integral matrix for correlation calculations
+        Time integral matrix (in units of integration steps)
     """
     # Handle scalar input by converting to array
     time_dependent_array = jnp.atleast_1d(time_dependent_array)
     n = safe_len(time_dependent_array)
 
     # Step 1: Improved cumulative integration using trapezoidal rule
-    # Trapezoidal: ∫f(t)dt ≈ Σ(dt/2)(f[i] + f[i+1])
-    # This reduces discretization artifacts compared to simple cumsum
+    # Trapezoidal: ∫f(t)dt ≈ dt × Σ(1/2)(f[i] + f[i+1])
+    # The dt scaling happens in wavevector_q_squared_half_dt, not here
     if n > 1:
         # Compute trapezoidal averages: 0.5 * (f[i] + f[i+1])
         trap_avg = 0.5 * (time_dependent_array[:-1] + time_dependent_array[1:])
 
-        # Cumulative sum of trapezoidal averages
-        # Note: Assuming unit time steps (dt=1). For non-uniform grids, multiply by actual dt
+        # Cumulative sum of trapezoidal averages (NO dt scaling)
         cumsum_trap = jnp.cumsum(trap_avg)
 
         # Prepend 0 for initial condition: cumsum[0] = 0
@@ -226,7 +227,7 @@ def _create_time_integral_matrix_impl_jax(
         cumsum = jnp.cumsum(time_dependent_array)
 
     # Step 2: Create difference matrix
-    # matrix[i,j] = |cumsum[i] - cumsum[j]| ≈ ∫₀^|tᵢ-tⱼ| f(t') dt'
+    # matrix[i,j] = |cumsum[i] - cumsum[j]| (number of integration steps)
     cumsum_i = cumsum[:, None]  # Shape: (n, 1)
     cumsum_j = cumsum[None, :]  # Shape: (1, n)
     diff = cumsum_i - cumsum_j
@@ -379,6 +380,7 @@ def _compute_g1_shear_meshgrid(
 
     # Create shear integral matrix using cumulative sums
     # This gives matrix[i,j] = |cumsum[i] - cumsum[j]| ≈ |∫γ̇(t)dt from i to j|
+    # Create shear integral matrix using cumulative sums
     gamma_integral = _create_time_integral_matrix_impl_jax(gamma_t)
 
     # Fix phi shape if it has extra dimensions
