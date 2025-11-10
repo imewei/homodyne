@@ -1584,7 +1584,8 @@ def _create_numpyro_model(
             # c2_theory from physics_cmc.py has shape (n_phi_unique, n_points) = (23, 2M)
             # We need to select the appropriate angle's row for each data point
             # Advanced indexing: c2_theory[phi_indices, range(len)] → shape (2M,)
-            c2_theory_per_point = c2_theory[phi_indices, jnp.arange(len(phi_indices))]
+            # CRITICAL: Use .shape[0] instead of len() for JAX compatibility during tracing
+            c2_theory_per_point = c2_theory[phi_indices, jnp.arange(phi_indices.shape[0])]
 
             # Apply per-angle scaling to flattened c2_theory
             c2_fitted = contrast_per_point * c2_theory_per_point + offset_per_point
