@@ -601,9 +601,25 @@ def _worker_function(args: tuple) -> Dict[str, Any]:
         # Previous hardcoded values (offset=1.0, contrast=0.5) were too far from experimental data
         # causing NumPyro initialization to fail with "Cannot find valid initial parameters"
         # Solution: Estimate offset and contrast from data statistics
-        data_min = float(np.min(shard["data"]))
-        data_max = float(np.max(shard["data"]))
-        data_mean = float(np.mean(shard["data"]))
+
+        # CRITICAL FIX (Nov 10, 2025): Filter bad data before computing statistics
+        # Dataset contains zeros and corrupted values that break initialization
+        # Filter to only valid correlation values (c2 should be >= 1.0 physically)
+        valid_mask = shard["data"] > 0.5  # Remove zeros and near-zero corrupted values
+        data_valid = shard["data"][valid_mask]
+
+        # Fallback if too many invalid points (use full data with warning)
+        if len(data_valid) < 0.5 * len(shard["data"]):
+            worker_logger.warning(
+                f"Multiprocessing shard {shard_idx}: >50% invalid data detected "
+                f"({len(shard['data']) - len(data_valid)}/{len(shard['data'])} points), "
+                f"using full dataset for statistics"
+            )
+            data_valid = shard["data"]
+
+        data_min = float(np.min(data_valid))
+        data_max = float(np.max(data_valid))
+        data_mean = float(np.mean(data_valid))
 
         # c2_theory typically ranges from ~1.0 (decorrelated) to ~2.0 (fully correlated)
         # With scaling: c2_fitted = offset + contrast × c2_theory
