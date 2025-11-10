@@ -1511,18 +1511,30 @@ def _create_numpyro_model(
         # Verify array sizes match to prevent memory explosion during MCMC
         data_size = data.shape[0] if hasattr(data, "shape") else len(data)
         t1_size = t1.shape[0] if hasattr(t1, "shape") else len(t1)
+        t2_size = t2.shape[0] if hasattr(t2, "shape") else len(t2)
+        sigma_size = sigma.shape[0] if hasattr(sigma, "shape") else len(sigma)
 
-        if t1_size != data_size:
-            # Arrays are mismatched - this indicates closure is capturing wrong arrays
-            # This is the root cause of the 778GB SVI OOM error
+        # CRITICAL: All arrays must have the same size
+        if not (t1_size == t2_size == data_size == sigma_size):
             import warnings
-
             warnings.warn(
-                f"Model closure array size mismatch: data={data_size}, t1={t1_size}. "
-                f"This will cause OOM during SVI. Ensure pooled_data has correctly sized arrays.",
+                f"Model closure array size mismatch: data={data_size}, t1={t1_size}, "
+                f"t2={t2_size}, sigma={sigma_size}. This will cause indexing errors.",
                 RuntimeWarning,
                 stacklevel=2,
             )
+
+        # CRITICAL: phi_array_for_mapping must also match data size for per-angle scaling
+        if per_angle_scaling:
+            phi_mapping_size = len(phi_array_for_mapping)
+            if phi_mapping_size != data_size:
+                import warnings
+                warnings.warn(
+                    f"Per-angle scaling size mismatch: phi_array_for_mapping={phi_mapping_size}, "
+                    f"data={data_size}. This will cause phi indexing errors.",
+                    RuntimeWarning,
+                    stacklevel=2,
+                )
 
         # Pass full params array for proper indexing, plus L and dt for correct physics
         # CRITICAL FIX (Nov 2025): physics_cmc.py ALWAYS requires unique phi values
@@ -1585,13 +1597,43 @@ def _create_numpyro_model(
             # We need to select the appropriate angle's row for each data point
             # Advanced indexing: c2_theory[phi_indices, range(len)] → shape (2M,)
             # CRITICAL: Use .shape[0] instead of len() for JAX compatibility during tracing
-            c2_theory_per_point = c2_theory[phi_indices, jnp.arange(phi_indices.shape[0])]
+
+            # Validate c2_theory shape before indexing
+            # c2_theory should be (n_phi_unique, n_data_points)
+            # If shapes don't match, the advanced indexing will fail
+            n_data_points = phi_indices.shape[0]
+
+            c2_theory_per_point = c2_theory[phi_indices, jnp.arange(n_data_points)]
 
             # Apply per-angle scaling to flattened c2_theory
             c2_fitted = contrast_per_point * c2_theory_per_point + offset_per_point
         else:
             # LEGACY BEHAVIOR: Global contrast and offset (shared across all angles)
             c2_fitted = contrast * c2_theory + offset
+
+        # CRITICAL VALIDATION: Ensure c2_fitted matches data shape before sampling
+        # If shapes mismatch, NumPyro will fail with "invalid loc parameter" error
+        # This catches bugs in phi_indices indexing or c2_theory shape issues
+        expected_shape = data.shape
+        if c2_fitted.shape != expected_shape:
+            raise ValueError(
+                f"Shape mismatch in MCMC model: c2_fitted.shape={c2_fitted.shape} "
+                f"but data.shape={expected_shape}. This indicates a bug in "
+                f"per-angle scaling indexing or c2_theory computation."
+            )
+
+        # CRITICAL VALIDATION: Check for NaN/inf in c2_fitted before creating Normal distribution
+        # NumPyro's Normal distribution validation will fail with "invalid loc parameter" if NaN/inf present
+        has_nan = jnp.any(jnp.isnan(c2_fitted))
+        has_inf = jnp.any(jnp.isinf(c2_fitted))
+        if has_nan or has_inf:
+            # Provide detailed diagnostics to identify the source of NaN/inf
+            raise ValueError(
+                f"Invalid c2_fitted values in MCMC model: has_nan={has_nan}, has_inf={has_inf}. "
+                f"c2_fitted shape={c2_fitted.shape}, c2_theory shape={c2_theory.shape}. "
+                f"This indicates numerical issues in physics computation or per-angle scaling. "
+                f"Check parameter values (D0, alpha, gamma_dot, etc.) for extreme ranges that cause overflow/underflow."
+            )
 
         # Likelihood
         sample("obs", dist.Normal(c2_fitted, sigma), obs=data)
