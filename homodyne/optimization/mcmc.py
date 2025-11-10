@@ -1589,6 +1589,10 @@ def _create_numpyro_model(
                 t2_min=jnp.min(t2), t2_max=jnp.max(t2),
                 t1z=jnp.any(t1 == 0.0), t1n=jnp.any(t1 < 0.0)
             )
+            jax.debug.print(
+                "t1[0:10]={t1_sample}, t2[0:10]={t2_sample}",
+                t1_sample=t1[:10], t2_sample=t2[:10]
+            )
         log_params_and_data()
 
         c2_theory = _compute_simple_theory_jit(
@@ -1680,11 +1684,34 @@ def _create_numpyro_model(
 
             c2_theory_per_point = c2_theory[phi_indices, jnp.arange(n_data_points)]
 
-            # DIAGNOSTIC: Log intermediate values for debugging
-            # NOTE: Cannot use Python 'if' statements with JAX arrays during JIT tracing
-            # The jax.debug.print statements above already log has_nan status
-            # If NaN occurs, NumPyro will fail with invalid log probability
-            pass
+            # DIAGNOSTIC: Check c2_theory_per_point extraction
+            def check_c2_extraction():
+                """Check if c2_theory extraction is working correctly."""
+                import jax
+                jax.debug.print(
+                    "c2_theory_per_point: shape={shape}, has_nan={nan}, has_inf={inf}, range=[{mn:.6e}, {mx:.6e}]",
+                    shape=c2_theory_per_point.shape,
+                    nan=jnp.any(jnp.isnan(c2_theory_per_point)),
+                    inf=jnp.any(jnp.isinf(c2_theory_per_point)),
+                    mn=jnp.nanmin(c2_theory_per_point),
+                    mx=jnp.nanmax(c2_theory_per_point)
+                )
+                jax.debug.print(
+                    "c2_theory_per_point[0:10]={sample}",
+                    sample=c2_theory_per_point[:10]
+                )
+                # Also check the raw c2_theory matrix for comparison
+                jax.debug.print(
+                    "c2_theory[0, 0:10]={row0}, c2_theory[0, -10:]={row0_end}",
+                    row0=c2_theory[0, :10],
+                    row0_end=c2_theory[0, -10:]
+                )
+                jax.debug.print(
+                    "c2_theory[0, middle]={mid}, unique_vals_approx={uniq}",
+                    mid=c2_theory[0, n_data_points//2:n_data_points//2+10],
+                    uniq=jnp.array([jnp.min(c2_theory), jnp.max(c2_theory), jnp.mean(c2_theory)])
+                )
+            check_c2_extraction()
 
             # Apply per-angle scaling to flattened c2_theory
             c2_fitted = contrast_per_point * c2_theory_per_point + offset_per_point
@@ -1706,6 +1733,37 @@ def _create_numpyro_model(
         # NOTE: Python 'if' statements with JAX arrays don't work during JIT tracing
         # NumPyro will automatically handle NaN/inf by rejecting those samples during MCMC
         # The jax.debug.print statements above already log has_nan/has_inf status for diagnostics
+
+        # DIAGNOSTIC: Check sigma and c2_fitted before likelihood sampling
+        def check_likelihood_inputs():
+            """Check sigma and c2_fitted for issues that would cause likelihood failure."""
+            import jax
+            jax.debug.print(
+                "Likelihood inputs: c2_fitted shape={cf_shape}, sigma shape={s_shape}",
+                cf_shape=c2_fitted.shape, s_shape=sigma.shape
+            )
+            jax.debug.print(
+                "c2_fitted: has_nan={cf_nan}, has_inf={cf_inf}, range=[{cf_min:.6e}, {cf_max:.6e}], mean={cf_mean:.6f}",
+                cf_nan=jnp.any(jnp.isnan(c2_fitted)), cf_inf=jnp.any(jnp.isinf(c2_fitted)),
+                cf_min=jnp.nanmin(c2_fitted), cf_max=jnp.nanmax(c2_fitted),
+                cf_mean=jnp.mean(c2_fitted)
+            )
+            # Sample values from c2_fitted for detailed inspection
+            jax.debug.print(
+                "c2_fitted[0:10]={sample}",
+                sample=c2_fitted[:10]
+            )
+            jax.debug.print(
+                "data[0:10]={sample}",
+                sample=data[:10]
+            )
+            jax.debug.print(
+                "sigma: has_zero={s_zero}, has_neg={s_neg}, has_nan={s_nan}, has_inf={s_inf}, range=[{s_min:.6e}, {s_max:.6e}]",
+                s_zero=jnp.any(sigma == 0.0), s_neg=jnp.any(sigma < 0.0),
+                s_nan=jnp.any(jnp.isnan(sigma)), s_inf=jnp.any(jnp.isinf(sigma)),
+                s_min=jnp.nanmin(sigma), s_max=jnp.nanmax(sigma)
+            )
+        check_likelihood_inputs()
 
         # Likelihood
         sample("obs", dist.Normal(c2_fitted, sigma), obs=data)

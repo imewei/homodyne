@@ -596,10 +596,36 @@ def _worker_function(args: tuple) -> Dict[str, Any]:
         # for each phi angle: contrast_0, contrast_1, ..., offset_0, offset_1, ...
         # Without these, NUTS initialization fails with missing parameter errors
         # (per_angle_scaling is always True in multiprocessing backend as of line 491)
+
+        # IMPROVED FIX (Nov 10, 2025): Compute data-driven initial values
+        # Previous hardcoded values (offset=1.0, contrast=0.5) were too far from experimental data
+        # causing NumPyro initialization to fail with "Cannot find valid initial parameters"
+        # Solution: Estimate offset and contrast from data statistics
+        data_min = float(np.min(shard["data"]))
+        data_max = float(np.max(shard["data"]))
+        data_mean = float(np.mean(shard["data"]))
+
+        # c2_theory typically ranges from ~1.0 (decorrelated) to ~2.0 (fully correlated)
+        # With scaling: c2_fitted = offset + contrast × c2_theory
+        # At c2_theory=1.0: c2_fitted = data_min (approximately)
+        # At c2_theory=2.0: c2_fitted = data_max (approximately)
+        # Solving: contrast = (data_max - data_min), offset = data_min - contrast
+        estimated_contrast = max(0.01, data_max - data_min)  # At least 0.01 for numerical stability
+        estimated_offset = max(0.5, data_mean - estimated_contrast)  # At least 0.5 (physical minimum)
+
+        logger.debug(
+            f"Multiprocessing shard {shard_idx}: Data statistics: "
+            f"min={data_min:.4f}, max={data_max:.4f}, mean={data_mean:.4f}"
+        )
+        logger.debug(
+            f"Multiprocessing shard {shard_idx}: Estimated per-angle scaling: "
+            f"contrast={estimated_contrast:.4f}, offset={estimated_offset:.4f}"
+        )
+
         for phi_idx in range(len(phi_unique)):
-            # Default per-angle initial values (physically reasonable)
-            init_param_values[f"contrast_{phi_idx}"] = 0.5  # Typical contrast
-            init_param_values[f"offset_{phi_idx}"] = 1.0    # Typical c2 offset
+            # Data-driven initial values (closer to experimental observations)
+            init_param_values[f"contrast_{phi_idx}"] = estimated_contrast
+            init_param_values[f"offset_{phi_idx}"] = estimated_offset
         logger.debug(
             f"Multiprocessing shard {shard_idx}: Added {len(phi_unique)} per-angle scaling parameters "
             f"(contrast and offset) to init_param_values for NUTS initialization"
