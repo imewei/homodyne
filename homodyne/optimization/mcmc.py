@@ -1474,7 +1474,19 @@ def _create_numpyro_model(
                 sampled_params.append(param_value)
             else:
                 # Sample scalar parameter (standard behavior for physics params)
-                param_value = sample(param_name, dist_class(**dist_kwargs))
+                param_value_raw = sample(param_name, dist_class(**dist_kwargs))
+
+                # CRITICAL FIX (Nov 2025): Enforce bounds even for unbounded distributions
+                # Config may specify Normal (unbounded) with bounds, but NumPyro won't enforce them
+                # We must manually clamp to prevent extreme values that cause physics NaN/inf
+                if hasattr(prior_spec, 'min_val') and hasattr(prior_spec, 'max_val'):
+                    if prior_spec.min_val is not None and prior_spec.max_val is not None:
+                        param_value = jnp.clip(param_value_raw, prior_spec.min_val, prior_spec.max_val)
+                    else:
+                        param_value = param_value_raw
+                else:
+                    param_value = param_value_raw
+
                 sampled_params.append(param_value)
 
         # Extract contrast and offset for scaling (always first two parameters)
@@ -1604,6 +1616,29 @@ def _create_numpyro_model(
             n_data_points = phi_indices.shape[0]
 
             c2_theory_per_point = c2_theory[phi_indices, jnp.arange(n_data_points)]
+
+            # DIAGNOSTIC: Check each intermediate value for NaN/inf
+            if jnp.any(jnp.isnan(c2_theory)):
+                raise ValueError(
+                    f"c2_theory contains NaN! Shape={c2_theory.shape}. "
+                    f"This indicates numerical issues in physics computation with current parameter values."
+                )
+            if jnp.any(jnp.isnan(c2_theory_per_point)):
+                raise ValueError(
+                    f"c2_theory_per_point contains NaN after indexing! Shape={c2_theory_per_point.shape}. "
+                    f"phi_indices range=[{jnp.min(phi_indices)}, {jnp.max(phi_indices)}]. "
+                    f"This might indicate invalid phi_indices values."
+                )
+            if jnp.any(jnp.isnan(contrast_per_point)):
+                raise ValueError(
+                    f"contrast_per_point contains NaN! Shape={contrast_per_point.shape}, "
+                    f"contrast shape={contrast.shape}. Check contrast prior sampling."
+                )
+            if jnp.any(jnp.isnan(offset_per_point)):
+                raise ValueError(
+                    f"offset_per_point contains NaN! Shape={offset_per_point.shape}, "
+                    f"offset shape={offset.shape}. Check offset prior sampling."
+                )
 
             # Apply per-angle scaling to flattened c2_theory
             c2_fitted = contrast_per_point * c2_theory_per_point + offset_per_point
