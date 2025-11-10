@@ -1550,11 +1550,29 @@ def _create_numpyro_model(
             #   phi_unique_for_sampling = [0, 60, 120]  (3 elements)
             #   phi_indices = [0, 0, 0, ..., 1, 1, 1, ..., 2, 2, 2]  (300K elements)
             #
-            # Use searchsorted to find the index of each phi value in the unique array
+            # CRITICAL FIX (Nov 2025): Use nearest-neighbor matching instead of searchsorted
+            #
+            # PROBLEM with searchsorted:
+            # - searchsorted finds INSERTION POINTS to maintain sorted order, NOT nearest matches
+            # - Example: phi_unique=[-174.20, -163.56, -154.49], value=-163.57
+            #   searchsorted returns 2 (insert after -163.56), but nearest match is index 1
+            # - This maps data points to WRONG phi angle rows in c2_theory
+            # - Wrong theory values → numerical mismatch → NaN propagation → validation error
+            #
+            # SOLUTION: argmin-based nearest-neighbor matching
+            # - Handles floating-point mismatches (e.g., -154.48506165 vs -154.485)
+            # - Always finds the CLOSEST phi value, not insertion point
+            # - Memory: (n_data × n_phi × 8 bytes) ≈ 368 MB for 2M points × 23 angles
             phi_array_for_mapping_jax = jnp.atleast_1d(phi_array_for_mapping)
-            phi_indices = jnp.searchsorted(
-                phi_unique_for_sampling, phi_array_for_mapping_jax
+
+            # Compute pairwise distances: shape (n_data, n_phi)
+            # Broadcasting: phi_array[:,None] - phi_unique[None,:] creates distance matrix
+            distances = jnp.abs(
+                phi_array_for_mapping_jax[:, None] - phi_unique_for_sampling[None, :]
             )
+
+            # Find index of nearest phi for each data point: shape (n_data,)
+            phi_indices = jnp.argmin(distances, axis=1)
 
             # Select the appropriate contrast and offset for each data point
             # contrast: shape (n_phi,) → contrast_per_point: shape (n_data_points,)
