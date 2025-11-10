@@ -163,6 +163,10 @@ def _calculate_shear_rate_impl_jax(
     # Infer dt from time grid
     if safe_len(time_array) > 1:
         dt = jnp.abs(time_array[1] - time_array[0])
+        # CRITICAL FIX: Ensure dt > 0 to prevent 0^(negative beta) = infinity
+        # CMC element-wise data can have consecutive zeros: t[0]=0, t[1]=0 → dt=0
+        # This causes NaN when beta < 0 in gamma_t = gamma_dot_0 * (time_safe**beta)
+        dt = jnp.maximum(dt, 1e-10)  # Minimum 1e-10 for numerical stability
     else:
         dt = 1e-3  # Fallback for single time point
 

@@ -1568,9 +1568,45 @@ def _create_numpyro_model(
         # The phi_array_for_mapping (replicated) is ONLY used for per-angle scaling
         # indexing after c2_theory is computed, NOT for physics computation.
         phi_for_theory = phi  # Always use unique phi (23 elements, not 2M replicated)
+
+        # DIAGNOSTIC: Log parameter values AND data before physics computation
+        # This helps identify which sampled values cause NaN/inf in c2_theory
+        def log_params_and_data():
+            """Log parameter values and data stats for debugging."""
+            import jax
+            # params_full has shape (n_params_total,) = (2 + n_physics_params,)
+            # For laminar_flow: [contrast_mean, offset_mean, D0, alpha, D_offset, gamma_dot_t0, beta, gamma_dot_t_offset, phi0]
+            jax.debug.print(
+                "MCMC params: contrast={c:.4f}, offset={o:.4f}, D0={d0:.2e}, alpha={a:.4f}, D_offset={doff:.2e}, "
+                "gamma_dot_t0={g0:.4e}, beta={b:.4f}, gamma_dot_t_offset={goff:.4e}, phi0={p0:.4f}",
+                c=params_full[0], o=params_full[1], d0=params_full[2], a=params_full[3],
+                doff=params_full[4], g0=params_full[5], b=params_full[6], goff=params_full[7], p0=params_full[8]
+            )
+            jax.debug.print(
+                "Input data: t1 range=[{t1_min:.6e}, {t1_max:.6e}], t2 range=[{t2_min:.6e}, {t2_max:.6e}], "
+                "t1 has_zero={t1z}, t1 has_neg={t1n}",
+                t1_min=jnp.min(t1), t1_max=jnp.max(t1),
+                t2_min=jnp.min(t2), t2_max=jnp.max(t2),
+                t1z=jnp.any(t1 == 0.0), t1n=jnp.any(t1 < 0.0)
+            )
+        log_params_and_data()
+
         c2_theory = _compute_simple_theory_jit(
             params_full, t1, t2, phi_for_theory, q, analysis_mode, L, dt
         )
+
+        # DIAGNOSTIC: Check c2_theory immediately after computation
+        def check_c2_theory():
+            """Check for NaN/inf in c2_theory and log diagnostics."""
+            import jax
+            has_nan = jnp.any(jnp.isnan(c2_theory))
+            has_inf = jnp.any(jnp.isinf(c2_theory))
+            jax.debug.print(
+                "c2_theory: shape={shape}, has_nan={nan}, has_inf={inf}, range=[{mn:.6e}, {mx:.6e}]",
+                shape=c2_theory.shape, nan=has_nan, inf=has_inf,
+                mn=jnp.nanmin(c2_theory), mx=jnp.nanmax(c2_theory)
+            )
+        check_c2_theory()
 
         # PER-ANGLE SCALING: Apply different contrast/offset for each phi angle
         if per_angle_scaling:
@@ -1610,6 +1646,24 @@ def _create_numpyro_model(
             # Select the appropriate contrast and offset for each data point
             # contrast: shape (n_phi,) → contrast_per_point: shape (n_data_points,)
             # offset: shape (n_phi,) → offset_per_point: shape (n_data_points,)
+
+            # DIAGNOSTIC: Log phi_indices stats before indexing
+            def log_phi_indices():
+                import jax
+                # CRITICAL: Do NOT use jnp.unique() here - causes JAX concretization error during JIT tracing
+                jax.debug.print(
+                    "phi_indices: shape={shape}, min={mn}, max={mx}",
+                    shape=phi_indices.shape,
+                    mn=jnp.min(phi_indices),
+                    mx=jnp.max(phi_indices)
+                )
+                jax.debug.print(
+                    "contrast array: shape={shape}, values={vals}",
+                    shape=contrast.shape,
+                    vals=contrast
+                )
+            log_phi_indices()
+
             contrast_per_point = contrast[phi_indices]
             offset_per_point = offset[phi_indices]
 
@@ -1626,28 +1680,11 @@ def _create_numpyro_model(
 
             c2_theory_per_point = c2_theory[phi_indices, jnp.arange(n_data_points)]
 
-            # DIAGNOSTIC: Check each intermediate value for NaN/inf
-            if jnp.any(jnp.isnan(c2_theory)):
-                raise ValueError(
-                    f"c2_theory contains NaN! Shape={c2_theory.shape}. "
-                    f"This indicates numerical issues in physics computation with current parameter values."
-                )
-            if jnp.any(jnp.isnan(c2_theory_per_point)):
-                raise ValueError(
-                    f"c2_theory_per_point contains NaN after indexing! Shape={c2_theory_per_point.shape}. "
-                    f"phi_indices range=[{jnp.min(phi_indices)}, {jnp.max(phi_indices)}]. "
-                    f"This might indicate invalid phi_indices values."
-                )
-            if jnp.any(jnp.isnan(contrast_per_point)):
-                raise ValueError(
-                    f"contrast_per_point contains NaN! Shape={contrast_per_point.shape}, "
-                    f"contrast shape={contrast.shape}. Check contrast prior sampling."
-                )
-            if jnp.any(jnp.isnan(offset_per_point)):
-                raise ValueError(
-                    f"offset_per_point contains NaN! Shape={offset_per_point.shape}, "
-                    f"offset shape={offset.shape}. Check offset prior sampling."
-                )
+            # DIAGNOSTIC: Log intermediate values for debugging
+            # NOTE: Cannot use Python 'if' statements with JAX arrays during JIT tracing
+            # The jax.debug.print statements above already log has_nan status
+            # If NaN occurs, NumPyro will fail with invalid log probability
+            pass
 
             # Apply per-angle scaling to flattened c2_theory
             c2_fitted = contrast_per_point * c2_theory_per_point + offset_per_point
@@ -1666,18 +1703,9 @@ def _create_numpyro_model(
                 f"per-angle scaling indexing or c2_theory computation."
             )
 
-        # CRITICAL VALIDATION: Check for NaN/inf in c2_fitted before creating Normal distribution
-        # NumPyro's Normal distribution validation will fail with "invalid loc parameter" if NaN/inf present
-        has_nan = jnp.any(jnp.isnan(c2_fitted))
-        has_inf = jnp.any(jnp.isinf(c2_fitted))
-        if has_nan or has_inf:
-            # Provide detailed diagnostics to identify the source of NaN/inf
-            raise ValueError(
-                f"Invalid c2_fitted values in MCMC model: has_nan={has_nan}, has_inf={has_inf}. "
-                f"c2_fitted shape={c2_fitted.shape}, c2_theory shape={c2_theory.shape}. "
-                f"This indicates numerical issues in physics computation or per-angle scaling. "
-                f"Check parameter values (D0, alpha, gamma_dot, etc.) for extreme ranges that cause overflow/underflow."
-            )
+        # NOTE: Python 'if' statements with JAX arrays don't work during JIT tracing
+        # NumPyro will automatically handle NaN/inf by rejecting those samples during MCMC
+        # The jax.debug.print statements above already log has_nan/has_inf status for diagnostics
 
         # Likelihood
         sample("obs", dist.Normal(c2_fitted, sigma), obs=data)
