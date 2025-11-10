@@ -1912,9 +1912,34 @@ def _run_numpyro_sampling(model, config, initial_values=None):
         f"{config['n_warmup']} warmup, {config['n_samples']} samples"
     )
 
+    # Log initialization strategy
+    # TEMPORARY FIX: Disable init_params for per-angle scaling compatibility
+    # The model expects contrast_0, contrast_1, ..., offset_0, offset_1, ... for each phi angle
+    # but config initial_values only provides physical parameters (D0, alpha, etc.)
+    # NumPyro can't match these names, so initialization fails
+    #
+    # Solution: Use None for init_params and let NumPyro sample from priors
+    # The priors are physics-informed (TruncatedNormal with sensible bounds) so this should work
+    #
+    # TODO: Future improvement - expand initial_values to include per-angle parameters
+    if initial_values is not None:
+        logger.warning(
+            f"initial_values provided ({list(initial_values.keys())}), but per-angle scaling mode "
+            "expects contrast_0, contrast_1, ..., offset_0, offset_1, ... parameters. "
+            "Using NumPyro default initialization from priors instead. "
+            "For faster convergence, disable per_angle_scaling or add per-angle parameters to config."
+        )
+        # Disable init_params - use priors instead
+        initial_values = None
+
+    logger.info("Using NumPyro default initialization (sampling from priors)")
+
     try:
+        # Pass initial_values to mcmc.run() for chain initialization
+        # NumPyro will use these as starting points for all chains
         mcmc.run(
             rng_key,
+            init_params=initial_values,  # Initialize chains at these parameter values
             extra_fields=(
                 "potential_energy",
                 "accept_prob",
