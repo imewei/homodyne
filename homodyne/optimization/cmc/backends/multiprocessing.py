@@ -669,15 +669,31 @@ def _worker_function(args: tuple) -> Dict[str, Any]:
         )
 
         # Create NUTS sampler
-        # Option 2: Use init_to_median() instead of init_to_value() to avoid
-        # potential incompatibility with loop-sampled per-angle parameters.
-        # The median will be drawn from the data-driven priors in the config
-        # (contrast mu=0.27, offset mu=0.76), which match our computed values.
+        # CRITICAL FIX (Nov 10, 2025): Use init_to_value() with user-provided initial values
+        # instead of init_to_median() which samples from priors and often produces
+        # numerically unstable parameter combinations even with TruncatedNormal priors.
+        #
+        # Root cause: NumPyro's init_to_median() samples from the prior distribution
+        # (even TruncatedNormal) and computes the median. With wide bounds (e.g.,
+        # alpha: [-10, 10], beta: [-2, 2]), random sampling has very low probability
+        # of landing in numerically stable region, causing "Cannot find valid initial
+        # parameters" error in all 10 initialization attempts.
+        #
+        # Solution: Use deterministic initialization with user-provided initial values
+        # from config (initial_parameters.values). These values are:
+        # - Physically reasonable (from domain knowledge)
+        # - Numerically stable (validated by NLSQ if manual workflow followed)
+        # - Guaranteed to produce finite log probability
+        #
+        # The init_param_values dict already contains:
+        # - Physics parameters from config (D0, alpha, D_offset, gamma_dot_t0, etc.)
+        # - Per-angle scaling parameters (contrast_0, offset_0, contrast_1, offset_1, ...)
+        #   computed from data statistics (lines 600-669)
         nuts_kernel = NUTS(
             model,
             target_accept_prob=target_accept_prob,
             max_tree_depth=max_tree_depth,
-            init_strategy=numpyro.infer.init_to_median(),
+            init_strategy=numpyro.infer.init_to_value(values=init_param_values),
         )
 
         # Create MCMC object

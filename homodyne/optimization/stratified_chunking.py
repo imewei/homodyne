@@ -299,7 +299,7 @@ def create_angle_stratified_data(
     t2: jnp.ndarray,
     g2_exp: jnp.ndarray,
     target_chunk_size: int = 100_000,
-) -> tuple[jnp.ndarray, jnp.ndarray, jnp.ndarray, jnp.ndarray]:
+) -> tuple[jnp.ndarray, jnp.ndarray, jnp.ndarray, jnp.ndarray, list[int]]:
     """Reorganize data to ensure all chunks contain all phi angles.
 
     This is the core function that fixes NLSQ per-angle parameter incompatibility.
@@ -341,6 +341,8 @@ def create_angle_stratified_data(
         Stratified t2 delays
     g2_stratified : jnp.ndarray
         Stratified g2 values
+    chunk_sizes : list[int]
+        Size of each stratified chunk (CRITICAL for correct re-chunking)
 
     Examples
     --------
@@ -395,7 +397,8 @@ def create_angle_stratified_data(
     # Single angle: no stratification needed
     if stats.n_angles == 1:
         logger.info("Single phi angle detected, no stratification needed")
-        return phi, t1, t2, g2_exp
+        # Return with chunk_sizes=None (no chunking needed for single angle)
+        return phi, t1, t2, g2_exp, None
 
     logger.info(
         f"Stratifying {n_points:,} points across {stats.n_angles} angles "
@@ -477,6 +480,14 @@ def create_angle_stratified_data(
     t2_stratified = np.concatenate([chunk["t2"] for chunk in stratified_chunks])
     g2_stratified = np.concatenate([chunk["g2_exp"] for chunk in stratified_chunks])
 
+    # CRITICAL FIX (Nov 10, 2025): Store chunk sizes for correct re-chunking
+    # When re-chunking the flattened data later (in _create_stratified_chunks),
+    # we MUST respect the original chunk boundaries to preserve angle completeness.
+    # Each chunk has exactly points_per_angle_per_chunk × n_angles points.
+    # Bug: Naive sequential slicing at 100k boundaries cuts across chunk boundaries,
+    # causing some chunks to miss angles (e.g., chunk 229 missing angle -174.197464).
+    chunk_sizes = [chunk["size"] for chunk in stratified_chunks]
+
     # Verify chunk structure and log data usage
     n_used = len(phi_stratified)
     actual_usage_pct = (n_used / n_points) * 100 if n_points > 0 else 0
@@ -489,12 +500,13 @@ def create_angle_stratified_data(
     # Ensure we didn't somehow create more data than we had
     assert n_used <= n_points, f"Data expansion during stratification: {n_used} > {n_points}"
 
-    # Convert back to JAX arrays
+    # Convert back to JAX arrays and return with chunk boundary information
     return (
         jnp.array(phi_stratified),
         jnp.array(t1_stratified),
         jnp.array(t2_stratified),
         jnp.array(g2_stratified),
+        chunk_sizes,  # NEW: Original chunk sizes to preserve boundaries
     )
 
 

@@ -1753,6 +1753,13 @@ class NLSQWrapper:
             t1_stratified = t1_flat[indices]
             t2_stratified = t2_flat[indices]
             g2_stratified = g2_flat[indices]
+
+            # CRITICAL FIX (Nov 10, 2025): For index-based stratification,
+            # chunk_sizes are not explicitly returned. Set to None and
+            # _create_stratified_chunks will fall back to sequential chunking.
+            # NOTE: This may still have the boundary alignment issue!
+            # For now, index-based path should avoid stratified least_squares.
+            chunk_sizes = None
         else:
             # Full copy stratification (2x memory overhead)
             logger.info("Using full-copy stratification")
@@ -1763,10 +1770,16 @@ class NLSQWrapper:
             g2_jax = jnp.array(g2_flat)
 
             # Apply stratification (use configured target_chunk_size)
-            phi_stratified, t1_stratified, t2_stratified, g2_stratified = (
-                create_angle_stratified_data(
-                    phi_jax, t1_jax, t2_jax, g2_jax, target_chunk_size=target_chunk_size
-                )
+            # CRITICAL FIX (Nov 10, 2025): Now returns chunk_sizes as 5th value
+            # to preserve stratification boundaries during re-chunking
+            (
+                phi_stratified,
+                t1_stratified,
+                t2_stratified,
+                g2_stratified,
+                chunk_sizes,
+            ) = create_angle_stratified_data(
+                phi_jax, t1_jax, t2_jax, g2_jax, target_chunk_size=target_chunk_size
             )
 
             # Convert back to numpy
@@ -1801,7 +1814,9 @@ class NLSQWrapper:
 
         # Create a simple namespace object to hold stratified data
         class StratifiedData:
-            def __init__(self, phi, t1, t2, g2, original_data, diagnostics=None):
+            def __init__(
+                self, phi, t1, t2, g2, original_data, diagnostics=None, chunk_sizes=None
+            ):
                 # Store flattened stratified arrays
                 self.phi_flat = phi
                 self.t1_flat = t1
@@ -1829,6 +1844,10 @@ class NLSQWrapper:
                 # Store diagnostics if available
                 self.stratification_diagnostics = diagnostics
 
+                # CRITICAL FIX (Nov 10, 2025): Store original chunk sizes
+                # to preserve stratification boundaries during re-chunking
+                self.chunk_sizes = chunk_sizes
+
         stratified_data = StratifiedData(
             phi_stratified,
             t1_stratified,
@@ -1836,6 +1855,7 @@ class NLSQWrapper:
             g2_stratified,
             data,  # Pass original data to copy metadata attributes
             diagnostics,
+            chunk_sizes,  # CRITICAL FIX: Pass chunk sizes for boundary-aware re-chunking
         )
 
         logger.info(
@@ -2615,38 +2635,74 @@ class NLSQWrapper:
         L = stratified_data.L
         dt = getattr(stratified_data, "dt", None)
 
-        # Determine number of chunks
-        n_total = len(g2_flat)
-        n_chunks = max(1, (n_total + target_chunk_size - 1) // target_chunk_size)
+        # CRITICAL FIX (Nov 10, 2025): Use original stratification boundaries
+        # instead of naive sequential slicing to preserve angle completeness
+        chunk_sizes_attr = getattr(stratified_data, "chunk_sizes", None)
 
-        # Create chunks
-        chunks = []
-        for i in range(n_chunks):
-            start_idx = i * target_chunk_size
-            end_idx = min(start_idx + target_chunk_size, n_total)
+        if chunk_sizes_attr is not None:
+            # Use original chunk boundaries from stratification
+            # This ensures each chunk contains all phi angles
+            n_chunks = len(chunk_sizes_attr)
+            chunks = []
+            current_idx = 0
 
-            # Create simple namespace object for chunk
-            # Note: sigma, q, L, dt are metadata - not chunked per chunk
-            class Chunk:
-                def __init__(self, phi, t1, t2, g2, q, L, dt):
-                    self.phi = phi
-                    self.t1 = t1
-                    self.t2 = t2
-                    self.g2 = g2
-                    self.q = q
-                    self.L = L
-                    self.dt = dt
+            for i, chunk_size in enumerate(chunk_sizes_attr):
+                start_idx = current_idx
+                end_idx = current_idx + chunk_size
 
-            chunk = Chunk(
-                phi=phi_flat[start_idx:end_idx],
-                t1=t1_flat[start_idx:end_idx],
-                t2=t2_flat[start_idx:end_idx],
-                g2=g2_flat[start_idx:end_idx],
-                q=q,
-                L=L,
-                dt=dt,
-            )
-            chunks.append(chunk)
+                # Create simple namespace object for chunk
+                class Chunk:
+                    def __init__(self, phi, t1, t2, g2, q, L, dt):
+                        self.phi = phi
+                        self.t1 = t1
+                        self.t2 = t2
+                        self.g2 = g2
+                        self.q = q
+                        self.L = L
+                        self.dt = dt
+
+                chunk = Chunk(
+                    phi=phi_flat[start_idx:end_idx],
+                    t1=t1_flat[start_idx:end_idx],
+                    t2=t2_flat[start_idx:end_idx],
+                    g2=g2_flat[start_idx:end_idx],
+                    q=q,
+                    L=L,
+                    dt=dt,
+                )
+                chunks.append(chunk)
+                current_idx = end_idx
+        else:
+            # Fallback: Sequential chunking (for index-based stratification)
+            # WARNING: This may still have angle incompleteness issues!
+            n_total = len(g2_flat)
+            n_chunks = max(1, (n_total + target_chunk_size - 1) // target_chunk_size)
+
+            chunks = []
+            for i in range(n_chunks):
+                start_idx = i * target_chunk_size
+                end_idx = min(start_idx + target_chunk_size, n_total)
+
+                class Chunk:
+                    def __init__(self, phi, t1, t2, g2, q, L, dt):
+                        self.phi = phi
+                        self.t1 = t1
+                        self.t2 = t2
+                        self.g2 = g2
+                        self.q = q
+                        self.L = L
+                        self.dt = dt
+
+                chunk = Chunk(
+                    phi=phi_flat[start_idx:end_idx],
+                    t1=t1_flat[start_idx:end_idx],
+                    t2=t2_flat[start_idx:end_idx],
+                    g2=g2_flat[start_idx:end_idx],
+                    q=q,
+                    L=L,
+                    dt=dt,
+                )
+                chunks.append(chunk)
 
         # Create object with chunks attribute and metadata
         class StratifiedChunkedData:

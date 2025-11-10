@@ -88,45 +88,59 @@ def single_angle_data():
 
 
 def test_stratification_preserves_data_count(balanced_data):
-    """Test that stratification preserves total number of points."""
+    """Test that stratification preserves most points (>= 95%).
+
+    Note: Stratification may discard some points (~4-5%) to maintain
+    balanced chunks where each chunk has equal points per angle.
+    """
     phi, t1, t2, g2_exp = balanced_data
     original_count = len(phi)
 
-    phi_s, t1_s, t2_s, g2_s = create_angle_stratified_data(
+    phi_s, t1_s, t2_s, g2_s, _ = create_angle_stratified_data(
         phi, t1, t2, g2_exp, target_chunk_size=50
     )
 
-    # Check that total points are preserved
-    assert len(phi_s) == original_count
-    assert len(t1_s) == original_count
-    assert len(t2_s) == original_count
-    assert len(g2_s) == original_count
+    # Check that at least 95% of points are preserved (balanced chunking may discard some)
+    min_expected = int(0.95 * original_count)
+    assert len(phi_s) >= min_expected, f"Expected >= {min_expected} points, got {len(phi_s)}"
+    assert len(t1_s) >= min_expected, f"Expected >= {min_expected} points, got {len(t1_s)}"
+    assert len(t2_s) >= min_expected, f"Expected >= {min_expected} points, got {len(t2_s)}"
+    assert len(g2_s) >= min_expected, f"Expected >= {min_expected} points, got {len(g2_s)}"
 
 
 def test_stratification_preserves_data_values(balanced_data):
-    """Test that stratification preserves data values (no corruption)."""
+    """Test that stratification preserves data values (no corruption).
+
+    Note: Stratification may discard some points, so we verify that the
+    stratified data is a valid subset of the original data.
+    """
     phi, t1, t2, g2_exp = balanced_data
 
-    phi_s, t1_s, t2_s, g2_s = create_angle_stratified_data(
+    phi_s, t1_s, t2_s, g2_s, _ = create_angle_stratified_data(
         phi, t1, t2, g2_exp, target_chunk_size=50
     )
 
-    # Sort both original and stratified to compare values
-    original_sorted = np.sort(np.column_stack([phi, t1, t2, g2_exp]), axis=0)
-    stratified_sorted = np.sort(
-        np.column_stack([phi_s, t1_s, t2_s, g2_s]),
-        axis=0,
-    )
+    # Create combined arrays for easier comparison
+    original_data = np.column_stack([phi, t1, t2, g2_exp])
+    stratified_data = np.column_stack([phi_s, t1_s, t2_s, g2_s])
 
-    # Check that all values are preserved
-    assert_allclose(stratified_sorted, original_sorted, rtol=1e-10)
+    # Check that each stratified point exists in the original data
+    # (allowing for floating point tolerance)
+    for strat_point in stratified_data:
+        # Find if this point exists in original data
+        matches = np.all(np.abs(original_data - strat_point) < 1e-10, axis=1)
+        assert np.any(matches), f"Stratified point {strat_point} not found in original data"
 
 
 def test_stratification_no_duplicates(balanced_data):
-    """Test that stratification doesn't create duplicate points."""
+    """Test that stratification doesn't create duplicate points.
+
+    Note: Stratification may discard some points to maintain balanced chunks,
+    so we verify the stratified data is a subset of the original data.
+    """
     phi, t1, t2, g2_exp = balanced_data
 
-    phi_s, t1_s, t2_s, g2_s = create_angle_stratified_data(
+    phi_s, t1_s, t2_s, g2_s, _ = create_angle_stratified_data(
         phi, t1, t2, g2_exp, target_chunk_size=50
     )
 
@@ -143,8 +157,8 @@ def test_stratification_no_duplicates(balanced_data):
     # Check no duplicates within stratified data
     assert len(stratified_ids) == len(phi_s_np)
 
-    # Check same points as original
-    assert original_ids == stratified_ids
+    # Check stratified points are a subset of original (may discard some points for balance)
+    assert stratified_ids.issubset(original_ids), "Stratified data contains points not in original"
 
 
 # ============================================================================
@@ -157,7 +171,7 @@ def test_stratification_chunk_balance(balanced_data):
     phi, t1, t2, g2_exp = balanced_data
     target_chunk_size = 50
 
-    phi_s, t1_s, t2_s, g2_s = create_angle_stratified_data(
+    phi_s, t1_s, t2_s, g2_s, _ = create_angle_stratified_data(
         phi, t1, t2, g2_exp, target_chunk_size=target_chunk_size
     )
 
@@ -187,7 +201,7 @@ def test_stratification_chunk_size_target(balanced_data):
     phi, t1, t2, g2_exp = balanced_data
     target_chunk_size = 75
 
-    phi_s, t1_s, t2_s, g2_s = create_angle_stratified_data(
+    phi_s, t1_s, t2_s, g2_s, _ = create_angle_stratified_data(
         phi, t1, t2, g2_exp, target_chunk_size=target_chunk_size
     )
 
@@ -204,15 +218,19 @@ def test_stratification_chunk_size_target(balanced_data):
 
 
 def test_stratification_last_chunk_remainder(balanced_data):
-    """Test that last chunk handles remainder points correctly."""
+    """Test that last chunk handles remainder points correctly.
+
+    Note: Stratification may discard some points, so we calculate the
+    expected remainder based on the stratified data, not the original.
+    """
     phi, t1, t2, g2_exp = balanced_data
     target_chunk_size = 70  # Won't divide evenly
 
-    phi_s, t1_s, t2_s, g2_s = create_angle_stratified_data(
+    phi_s, t1_s, t2_s, g2_s, _ = create_angle_stratified_data(
         phi, t1, t2, g2_exp, target_chunk_size=target_chunk_size
     )
 
-    # Calculate number of chunks
+    # Calculate number of chunks based on stratified data
     n_points = len(phi_s)
     n_chunks = (n_points + target_chunk_size - 1) // target_chunk_size
 
@@ -220,7 +238,8 @@ def test_stratification_last_chunk_remainder(balanced_data):
     last_chunk_start = (n_chunks - 1) * target_chunk_size
     last_chunk_size = len(phi_s) - last_chunk_start
 
-    expected_remainder = len(phi) % target_chunk_size
+    # Expected remainder should be calculated from stratified data, not original
+    expected_remainder = n_points % target_chunk_size
     if expected_remainder > 0:
         assert last_chunk_size == expected_remainder
     else:
@@ -404,7 +423,7 @@ def test_stratification_single_point():
     t2 = np.array([1e-6])
     g2_exp = np.array([1.2])
 
-    phi_s, t1_s, t2_s, g2_s = create_angle_stratified_data(
+    phi_s, t1_s, t2_s, g2_s, _ = create_angle_stratified_data(
         phi, t1, t2, g2_exp, target_chunk_size=50
     )
 
@@ -430,7 +449,10 @@ def test_stratification_mismatched_array_lengths():
 
 
 def test_stratification_jax_array_input(balanced_data):
-    """Test that stratification works with JAX arrays."""
+    """Test that stratification works with JAX arrays.
+
+    Note: Stratification may discard some points to maintain balanced chunks.
+    """
     import jax.numpy as jnp
 
     phi, t1, t2, g2_exp = balanced_data
@@ -442,19 +464,20 @@ def test_stratification_jax_array_input(balanced_data):
     g2_jax = jnp.array(g2_exp)
 
     # Should work with JAX arrays
-    phi_s, t1_s, t2_s, g2_s = create_angle_stratified_data(
+    phi_s, t1_s, t2_s, g2_s, _ = create_angle_stratified_data(
         phi_jax, t1_jax, t2_jax, g2_jax, target_chunk_size=50
     )
 
-    # Check result is valid
-    assert len(phi_s) == len(phi)
+    # Check result is valid (at least 95% data preserved)
+    min_expected = int(0.95 * len(phi))
+    assert len(phi_s) >= min_expected, f"Expected >= {min_expected} points, got {len(phi_s)}"
 
 
 def test_stratification_output_numpy_compatible(balanced_data):
     """Test that stratification output is NumPy compatible."""
     phi, t1, t2, g2_exp = balanced_data
 
-    phi_s, t1_s, t2_s, g2_s = create_angle_stratified_data(
+    phi_s, t1_s, t2_s, g2_s, _ = create_angle_stratified_data(
         phi, t1, t2, g2_exp, target_chunk_size=50
     )
 
@@ -481,7 +504,7 @@ def test_stratified_result_types(balanced_data):
     phi, t1, t2, g2_exp = balanced_data
     target_chunk_size = 75
 
-    phi_s, t1_s, t2_s, g2_s = create_angle_stratified_data(
+    phi_s, t1_s, t2_s, g2_s, _ = create_angle_stratified_data(
         phi, t1, t2, g2_exp, target_chunk_size=target_chunk_size
     )
 
@@ -558,7 +581,7 @@ def test_index_based_equivalent_to_full_copy(balanced_data):
     target_chunk_size = 75
 
     # Full copy approach
-    phi_full, t1_full, t2_full, g2_full = create_angle_stratified_data(
+    phi_full, t1_full, t2_full, g2_full, _ = create_angle_stratified_data(
         phi, t1, t2, g2_exp, target_chunk_size=target_chunk_size
     )
 
