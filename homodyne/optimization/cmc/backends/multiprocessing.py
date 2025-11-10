@@ -630,6 +630,14 @@ def _worker_function(args: tuple) -> Dict[str, Any]:
             init_param_values[f"contrast_{phi_idx}"] = estimated_contrast
             init_param_values[f"offset_{phi_idx}"] = estimated_offset
 
+        # CRITICAL: Remove base contrast/offset parameters when using per-angle scaling
+        # NumPyro model expects ONLY per-angle parameters (contrast_0, contrast_1, ...)
+        # Having both causes initialization failure
+        if "contrast" in init_param_values:
+            del init_param_values["contrast"]
+        if "offset" in init_param_values:
+            del init_param_values["offset"]
+
         worker_logger.info(
             f"Multiprocessing shard {shard_idx}: Added {len(phi_unique)} per-angle scaling parameters "
             f"(contrast and offset) to init_param_values for NUTS initialization"
