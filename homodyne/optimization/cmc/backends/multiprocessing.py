@@ -669,11 +669,15 @@ def _worker_function(args: tuple) -> Dict[str, Any]:
         )
 
         # Create NUTS sampler
+        # Option 2: Use init_to_median() instead of init_to_value() to avoid
+        # potential incompatibility with loop-sampled per-angle parameters.
+        # The median will be drawn from the data-driven priors in the config
+        # (contrast mu=0.27, offset mu=0.76), which match our computed values.
         nuts_kernel = NUTS(
             model,
             target_accept_prob=target_accept_prob,
             max_tree_depth=max_tree_depth,
-            init_strategy=numpyro.infer.init_to_value(values=init_param_values),
+            init_strategy=numpyro.infer.init_to_median(),
         )
 
         # Create MCMC object
