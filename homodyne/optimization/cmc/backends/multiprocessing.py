@@ -618,24 +618,26 @@ def _worker_function(args: tuple) -> Dict[str, Any]:
             )
             data_valid = shard["data"]
 
-        data_min = float(np.min(data_valid))
-        data_max = float(np.max(data_valid))
+        # Use percentiles instead of min/max to avoid outliers
+        # Data contains extreme values (>3.0) that corrupt initialization
+        data_p05 = float(np.percentile(data_valid, 5))   # 5th percentile
+        data_p95 = float(np.percentile(data_valid, 95))  # 95th percentile
         data_mean = float(np.mean(data_valid))
 
         # c2_theory typically ranges from ~1.0 (decorrelated) to ~2.0 (fully correlated)
         # With scaling: c2_fitted = offset + contrast × c2_theory
-        # At c2_theory=1.0: c2_fitted = data_min (approximately)
-        # At c2_theory=2.0: c2_fitted = data_max (approximately)
-        # Solving: contrast = (data_max - data_min), offset = data_min - contrast
-        estimated_contrast = max(0.01, data_max - data_min)  # At least 0.01 for numerical stability
-        estimated_offset = max(0.5, data_mean - estimated_contrast)  # At least 0.5 (physical minimum)
+        # At c2_theory=1.0: c2_fitted ≈ data_p05
+        # At c2_theory=2.0: c2_fitted ≈ data_p95
+        # Solving: contrast = (data_p95 - data_p05), offset = data_p05 - contrast
+        estimated_contrast = max(0.01, data_p95 - data_p05)  # At least 0.01 for numerical stability
+        estimated_offset = max(0.5, data_p05 - estimated_contrast)  # At least 0.5 (physical minimum)
 
         # Use logger from worker process
         from homodyne.utils.logging import get_logger
         worker_logger = get_logger(__name__)
         worker_logger.info(
-            f"Multiprocessing shard {shard_idx}: Data statistics: "
-            f"min={data_min:.4f}, max={data_max:.4f}, mean={data_mean:.4f}"
+            f"Multiprocessing shard {shard_idx}: Data statistics (robust): "
+            f"p05={data_p05:.4f}, p95={data_p95:.4f}, mean={data_mean:.4f}"
         )
         worker_logger.info(
             f"Multiprocessing shard {shard_idx}: Estimated per-angle scaling: "
