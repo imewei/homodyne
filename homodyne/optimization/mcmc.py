@@ -1562,8 +1562,14 @@ def _create_numpyro_model(
             contrast_per_point = contrast[phi_indices]
             offset_per_point = offset[phi_indices]
 
-            # Apply per-angle scaling
-            c2_fitted = contrast_per_point * c2_theory + offset_per_point
+            # CRITICAL FIX (Nov 2025): Extract correct c2_theory values for each data point
+            # c2_theory from physics_cmc.py has shape (n_phi_unique, n_points) = (23, 2M)
+            # We need to select the appropriate angle's row for each data point
+            # Advanced indexing: c2_theory[phi_indices, range(len)] → shape (2M,)
+            c2_theory_per_point = c2_theory[phi_indices, jnp.arange(len(phi_indices))]
+
+            # Apply per-angle scaling to flattened c2_theory
+            c2_fitted = contrast_per_point * c2_theory_per_point + offset_per_point
         else:
             # LEGACY BEHAVIOR: Global contrast and offset (shared across all angles)
             c2_fitted = contrast * c2_theory + offset
