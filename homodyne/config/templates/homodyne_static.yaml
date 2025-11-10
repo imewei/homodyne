@@ -223,7 +223,7 @@ parameter_space:
     - name: alpha
       min: -10.0                              # Minimum power-law exponent
       max: 10.0                               # Maximum power-law exponent
-      type: Normal
+      type: TruncatedNormal                   # ✅ FIXED: Changed from Normal to enforce bounds
       prior_mu: -1.2                          # Prior mean
       prior_sigma: 0.3                        # Prior std dev
       unit: "dimensionless"
@@ -234,7 +234,7 @@ parameter_space:
     - name: D_offset
       min: -100000.0                          # Minimum baseline diffusion [Å²/s]
       max: 100000.0                           # Maximum baseline diffusion [Å²/s]
-      type: Normal
+      type: TruncatedNormal                   # ✅ FIXED: Changed from Normal to enforce bounds
       prior_mu: 0.0                           # Prior mean
       prior_sigma: 150.0                      # Prior std dev
       unit: "Å²/s"

@@ -77,27 +77,27 @@ class ParameterManager:
         # Default bounds for all known parameters
         self._default_bounds: dict[str, BoundDict] = {
             # Scaling parameters (always included)
-            "contrast": {"min": 0.0, "max": 1.0, "name": "contrast", "type": "Normal"},
-            "offset": {"min": 0.0, "max": 10.0, "name": "offset", "type": "Normal"},
+            "contrast": {"min": 0.0, "max": 1.0, "name": "contrast", "type": "TruncatedNormal"},
+            "offset": {"min": 0.0, "max": 10.0, "name": "offset", "type": "TruncatedNormal"},
             # Physical parameters - diffusion
-            "D0": {"min": 1.0, "max": 1e6, "name": "D0", "type": "Normal"},
-            "alpha": {"min": -2.0, "max": 2.0, "name": "alpha", "type": "Normal"},
-            "D_offset": {"min": 0.0, "max": 1e6, "name": "D_offset", "type": "Normal"},
+            "D0": {"min": 1.0, "max": 1e6, "name": "D0", "type": "TruncatedNormal"},
+            "alpha": {"min": -2.0, "max": 2.0, "name": "alpha", "type": "TruncatedNormal"},
+            "D_offset": {"min": 0.0, "max": 1e6, "name": "D_offset", "type": "TruncatedNormal"},
             # Physical parameters - shear flow
             "gamma_dot_t0": {
                 "min": 1e-10,
                 "max": 1.0,
                 "name": "gamma_dot_t0",
-                "type": "Normal",
+                "type": "TruncatedNormal",  # CRITICAL: Changed from Normal to prevent beta sampling outside bounds
             },
-            "beta": {"min": -2.0, "max": 2.0, "name": "beta", "type": "Normal"},
+            "beta": {"min": -2.0, "max": 2.0, "name": "beta", "type": "TruncatedNormal"},  # CRITICAL: Changed from Normal to prevent extreme negative values
             "gamma_dot_t_offset": {
                 "min": 1e-10,
                 "max": 1.0,
                 "name": "gamma_dot_t_offset",
-                "type": "Normal",
+                "type": "TruncatedNormal",  # CRITICAL: Changed from Normal to prevent negative/extreme values
             },
-            "phi0": {"min": -np.pi, "max": np.pi, "name": "phi0", "type": "Normal"},
+            "phi0": {"min": -np.pi, "max": np.pi, "name": "phi0", "type": "TruncatedNormal"},
         }
 
         # Parameter name aliases/mappings (use constant from types)

@@ -234,7 +234,7 @@ parameter_space:
     - name: alpha
       min: -10.0                              # Minimum power-law exponent
       max: 10.0                               # Maximum power-law exponent
-      type: Normal
+      type: TruncatedNormal                   # ✅ FIXED: Changed from Normal to enforce bounds
       prior_mu: 0.5                           # Prior mean (superdiffusion common under shear)
       prior_sigma: 0.5                        # Prior std dev
       unit: "dimensionless"
@@ -245,7 +245,7 @@ parameter_space:
     - name: D_offset
       min: -100000.0                          # Minimum baseline diffusion [Å²/s]
       max: 100000.0                           # Maximum baseline diffusion [Å²/s]
-      type: Normal
+      type: TruncatedNormal                   # ✅ FIXED: Changed from Normal to enforce bounds
       prior_mu: 10.0                          # Prior mean (nonzero offset common under shear)
       prior_sigma: 200.0                      # Prior std dev
       unit: "Å²/s"
@@ -268,7 +268,7 @@ parameter_space:
     - name: beta
       min: -2.0                               # Minimum shear exponent
       max: 2.0                                # Maximum shear exponent
-      type: Normal
+      type: TruncatedNormal                   # ✅ FIXED: Changed from Normal to enforce bounds
       prior_mu: 0.0                           # Prior mean (constant shear common)
       prior_sigma: 0.5                        # Prior std dev
       unit: "dimensionless"
@@ -278,7 +278,7 @@ parameter_space:
     - name: gamma_dot_offset
       min: -0.1                               # Minimum baseline shear [s⁻¹]
       max: 0.1                                # Maximum baseline shear [s⁻¹]
-      type: Normal
+      type: TruncatedNormal                   # ✅ FIXED: Changed from Normal to enforce bounds
       prior_mu: 0.0                           # Prior mean
       prior_sigma: 0.02                       # Prior std dev
       unit: "s⁻¹"
@@ -288,7 +288,7 @@ parameter_space:
     - name: phi_0                             # Maps to phi0 in code
       min: -180.0                             # Minimum initial angle [degrees]
       max: 180.0                              # Maximum initial angle [degrees]
-      type: Normal
+      type: TruncatedNormal                   # ✅ FIXED: Changed from Normal to enforce bounds
       prior_mu: 0.0                           # Prior mean (aligned with flow)
       prior_sigma: 30.0                       # Prior std dev
       unit: "degrees"
