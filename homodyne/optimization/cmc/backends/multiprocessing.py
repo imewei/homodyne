@@ -605,7 +605,8 @@ def _worker_function(args: tuple) -> Dict[str, Any]:
         # CRITICAL FIX (Nov 10, 2025): Filter bad data before computing statistics
         # Dataset contains zeros and corrupted values that break initialization
         # Filter to only valid correlation values (c2 should be >= 1.0 physically)
-        valid_mask = shard["data"] > 0.5  # Remove zeros and near-zero corrupted values
+        # c2 correlation function: minimum physical value is 1.0 (perfect decorrelation)
+        valid_mask = shard["data"] >= 1.0  # Remove all physically impossible values
         data_valid = shard["data"][valid_mask]
 
         # Fallback if too many invalid points (use full data with warning)
