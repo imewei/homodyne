@@ -1456,6 +1456,26 @@ def _create_numpyro_model(
                 dist.TruncatedNormal,  # Safe fallback
             )
 
+            # CRITICAL FIX (Nov 2025): Auto-convert unbounded distributions to bounded
+            # If config specifies Normal/LogNormal with bounds, convert to Truncated version
+            # This prevents NumPyro from sampling extreme values that cause physics NaN/inf
+            if hasattr(prior_spec, 'min_val') and hasattr(prior_spec, 'max_val'):
+                if prior_spec.min_val is not None and prior_spec.max_val is not None:
+                    # Bounds are specified - use truncated distribution regardless of type
+                    if prior_spec.dist_type == "Normal":
+                        dist_class = dist.TruncatedNormal
+                        logger.debug(
+                            f"Auto-converted {param_name} from Normal to TruncatedNormal "
+                            f"with bounds [{prior_spec.min_val}, {prior_spec.max_val}]"
+                        )
+                    elif prior_spec.dist_type == "LogNormal":
+                        # LogNormal is inherently positive, truncate at bounds
+                        dist_class = dist.TruncatedNormal  # Use TruncatedNormal as fallback
+                        logger.debug(
+                            f"Converted {param_name} from LogNormal to TruncatedNormal "
+                            f"with bounds [{prior_spec.min_val}, {prior_spec.max_val}]"
+                        )
+
             # Get distribution kwargs
             dist_kwargs = prior_spec.to_numpyro_kwargs()
 
@@ -1474,19 +1494,8 @@ def _create_numpyro_model(
                 sampled_params.append(param_value)
             else:
                 # Sample scalar parameter (standard behavior for physics params)
-                param_value_raw = sample(param_name, dist_class(**dist_kwargs))
-
-                # CRITICAL FIX (Nov 2025): Enforce bounds even for unbounded distributions
-                # Config may specify Normal (unbounded) with bounds, but NumPyro won't enforce them
-                # We must manually clamp to prevent extreme values that cause physics NaN/inf
-                if hasattr(prior_spec, 'min_val') and hasattr(prior_spec, 'max_val'):
-                    if prior_spec.min_val is not None and prior_spec.max_val is not None:
-                        param_value = jnp.clip(param_value_raw, prior_spec.min_val, prior_spec.max_val)
-                    else:
-                        param_value = param_value_raw
-                else:
-                    param_value = param_value_raw
-
+                # Note: Unbounded distributions have been auto-converted to Truncated versions above
+                param_value = sample(param_name, dist_class(**dist_kwargs))
                 sampled_params.append(param_value)
 
         # Extract contrast and offset for scaling (always first two parameters)
