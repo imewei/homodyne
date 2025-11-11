@@ -2890,6 +2890,7 @@ def _compute_nlsq_fits(
     )
 
     # Sequential per-angle computation
+    c2_theoretical_raw_list = []
     c2_theoretical_fitted = []
     per_angle_scaling = []  # Store for compatibility
 
@@ -2900,71 +2901,82 @@ def _compute_nlsq_fits(
         t2_jax = jnp.array(t2)
         params_jax = jnp.array(physical_params)
 
-        # Extract FITTED scaling parameters for this angle
-        contrast_fitted = float(fitted_contrasts[i])
-        offset_fitted = float(fitted_offsets[i])
-
-        # ✅ FIXED (Nov 11, 2025): Use FITTED scaling parameters from NLSQ optimization
-        # This eliminates the need for post-hoc lstsq scaling!
-        # The NLSQ optimization already found the optimal contrast and offset for each angle.
-        # Formula: g₂ = offset + contrast × g₁²
-        g2_theory = compute_g2_scaled(
+        # ✅ FIXED (Nov 11, 2025): Compute RAW theory WITHOUT scaling
+        # NLSQ optimization minimizes weighted residuals (c2_exp - c2_theory)/sigma,
+        # so fitted contrast/offset are optimized for residuals, NOT for absolute scale matching.
+        # For visualization, we compute raw theory and use lstsq to find scaling that maps
+        # theory → experiment (following old working version approach).
+        # Formula: g₂_raw = 1.0 + 1.0 × g₁²  (normalized baseline without experimental scaling)
+        g2_theory_raw = compute_g2_scaled(
             params=params_jax,
             t1=t1_jax,
             t2=t2_jax,
             phi=phi_jax,
             q=float(q),
             L=float(L),
-            contrast=contrast_fitted,  # ✅ Use FITTED contrast from NLSQ!
-            offset=offset_fitted,      # ✅ Use FITTED offset from NLSQ!
+            contrast=1.0,  # ✅ No contrast scaling for raw theory
+            offset=1.0,    # ✅ Normalized baseline (homodyne g2 baseline)
             dt=float(dt),
         )
 
         # Convert to NumPy and squeeze out extra dimension (phi axis)
-        g2_theory_np = np.asarray(g2_theory)
-        if g2_theory_np.ndim == 3:
-            g2_theory_np = g2_theory_np[0]  # Remove phi dimension (size 1)
+        g2_theory_raw_np = np.asarray(g2_theory_raw)
+        if g2_theory_raw_np.ndim == 3:
+            g2_theory_raw_np = g2_theory_raw_np[0]  # Remove phi dimension (size 1)
 
         # Apply diagonal correction to match experimental data processing
         # This fixes the constant diagonal issue in theoretical model (g1(t,t) = 1 always)
-        diag_before = np.diag(g2_theory_np).copy()
-        g2_theory_np = _apply_diagonal_correction_to_c2(g2_theory_np)
-        diag_after = np.diag(g2_theory_np).copy()
+        diag_before = np.diag(g2_theory_raw_np).copy()
+        g2_theory_raw_np = _apply_diagonal_correction_to_c2(g2_theory_raw_np)
+        diag_after = np.diag(g2_theory_raw_np).copy()
 
         logger.debug(
             f"Angle {phi_angle:.1f}°: Diagonal correction - before: [{diag_before[0]:.3f}, {diag_before[1]:.3f}, ..., {diag_before[-1]:.3f}], "
             f"after: [{diag_after[0]:.3f}, {diag_after[1]:.3f}, ..., {diag_after[-1]:.3f}]"
         )
 
-        # Store fitted theoretical g2 (already includes correct scaling from NLSQ!)
-        c2_theoretical_fitted.append(g2_theory_np)
+        # Store raw theory
+        c2_theoretical_raw_list.append(g2_theory_raw_np)
 
-        # Store scaling parameters for compatibility with output format
-        per_angle_scaling.append([contrast_fitted, offset_fitted])
+        # ✅ POST-HOC LEAST-SQUARES SCALING (Nov 11, 2025)
+        # Find optimal contrast/offset that maps theory → experiment for visualization
+        # Solve: c2_exp = contrast * c2_theory_raw + offset (per-angle)
+        # This matches the old working version approach (homodyne-analysis)
+        theory_flat = g2_theory_raw_np.flatten()
+        exp_flat = c2_exp[i].flatten()
 
-        # Log fitted scaling parameters
+        # Build design matrix A = [theory, ones]
+        A = np.column_stack([theory_flat, np.ones_like(theory_flat)])
+        # Solve: A @ [contrast, offset] = exp
+        solution, _, _, _ = np.linalg.lstsq(A, exp_flat, rcond=None)
+        contrast_lstsq, offset_lstsq = solution
+
+        # Apply lstsq scaling
+        c2_theory_scaled = contrast_lstsq * g2_theory_raw_np + offset_lstsq
+        c2_theoretical_fitted.append(c2_theory_scaled)
+
+        # Store lstsq scaling parameters (for visualization, not from optimization)
+        per_angle_scaling.append([contrast_lstsq, offset_lstsq])
+
+        # Log scaling parameters
         logger.debug(
-            f"Angle {phi_angle:.1f}°: contrast={contrast_fitted:.4f}, offset={offset_fitted:.4f} "
-            f"(from NLSQ optimization)"
+            f"Angle {phi_angle:.1f}°: lstsq contrast={contrast_lstsq:.4f}, offset={offset_lstsq:.4f} "
+            f"(post-hoc for visualization)"
         )
 
     # Stack arrays
-    # Note: c2_theoretical_fitted already includes the FITTED scaling parameters from NLSQ
-    # No need for post-hoc scaling - we computed with correct contrast/offset!
-    c2_theoretical_fitted = np.array(c2_theoretical_fitted)
+    c2_theoretical_raw = np.array(c2_theoretical_raw_list)  # Raw theory (contrast=1.0, offset=1.0)
+    c2_theoretical_fitted = np.array(c2_theoretical_fitted)  # Scaled via lstsq
     per_angle_scaling = np.array(per_angle_scaling)
 
-    # Since we computed theory with fitted scaling, this IS the final scaled result
+    # Scaled version is the lstsq-fitted result for visualization
     c2_theoretical_scaled = c2_theoretical_fitted
-
-    # For backward compatibility, keep raw as a copy (though conceptually it's the same now)
-    c2_theoretical_raw = c2_theoretical_fitted
 
     # Compute residuals
     residuals = c2_exp - c2_theoretical_scaled
 
     logger.info(
-        f"Computed theoretical fits for {len(phi_angles)} angles (sequential computation, diagonal corrected)",
+        f"Computed theoretical fits for {len(phi_angles)} angles (sequential computation, diagonal corrected, lstsq scaled)",
     )
 
     return {
