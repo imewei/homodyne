@@ -523,7 +523,7 @@ class TestDispatcherMemory:
         from homodyne.core.jax_backend import _compute_g1_shear_core
 
         # Call dispatcher (should use element-wise JIT function)
-        result = _compute_g1_shear_core(params, t1, t2, phi, sinc_prefactor)
+        result = _compute_g1_shear_core(params, t1, t2, phi, sinc_prefactor, dt)
 
         # Extract array metadata to Python values BEFORE assertions
         # (avoids triggering JAX array materialization in pytest error messages)
@@ -575,7 +575,7 @@ class TestDispatcherMemory:
 
         # Call dispatcher (should use element-wise JIT function)
         result = _compute_g1_diffusion_core(
-            params, t1, t2, wavevector_q_squared_half_dt
+            params, t1, t2, wavevector_q_squared_half_dt, dt
         )
 
         # Extract array metadata to Python values BEFORE assertions
@@ -617,7 +617,7 @@ class TestDispatcherMemory:
         from homodyne.core.jax_backend import _compute_g1_shear_core
 
         # Call dispatcher (should use meshgrid JIT function)
-        result = _compute_g1_shear_core(params, t1, t2, phi, sinc_prefactor)
+        result = _compute_g1_shear_core(params, t1, t2, phi, sinc_prefactor, dt)
 
         # Verify meshgrid mode was used (shape should be 3D)
         assert result.ndim == 3, "Meshgrid mode should return 3D array"

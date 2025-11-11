@@ -412,6 +412,7 @@ def _compute_g1_diffusion_core(
     t1: jnp.ndarray,
     t2: jnp.ndarray,
     wavevector_q_squared_half_dt: float,
+    dt: float,
 ) -> jnp.ndarray:
     """Compute diffusion contribution to g1 using reference implementation approach.
 
@@ -433,6 +434,7 @@ def _compute_g1_diffusion_core(
         params: Physical parameters [D0, alpha, D_offset, ...]
         t1, t2: Time grids (should be identical: t1 = t2 = t)
         wavevector_q_squared_half_dt: Pre-computed factor 0.5 * q² * dt from configuration
+        dt: Time step from experimental configuration (time per frame)
 
     Returns:
         Diffusion contribution to g1 correlation function
@@ -474,9 +476,11 @@ def _compute_g1_diffusion_core(
         D_t1 = _calculate_diffusion_coefficient_impl_jax(t1_arr, D0, alpha, D_offset)
         D_t2 = _calculate_diffusion_coefficient_impl_jax(t2_arr, D0, alpha, D_offset)
 
-        # Element-wise trapezoidal integration: ∫_{t1[i]}^{t2[i]} D(t') dt'
-        delta_t = jnp.abs(t2_arr - t1_arr)
-        D_integral = delta_t * 0.5 * (D_t1 + D_t2)  # Shape: (n,)
+        # Element-wise trapezoidal integration (dimensionless, like matrix mode)
+        # Compute frame separation: |t2[i] - t1[i]| / dt = number of frames
+        # For XPCS data, times are always on uniform grid: t = dt * frame_index
+        frame_diff = jnp.abs(t2_arr - t1_arr) / dt  # Dimensionless (number of frames)
+        D_integral = frame_diff * 0.5 * (D_t1 + D_t2)  # Dimensionless, Shape: (n,)
 
     else:
         # MATRIX MODE: Standard approach for small datasets or meshgrids
@@ -586,6 +590,7 @@ def _compute_g1_shear_core(
     t2: jnp.ndarray,
     phi: jnp.ndarray,
     sinc_prefactor: float,
+    dt: float,
 ) -> jnp.ndarray:
     """Compute shear contribution to g1 using reference implementation approach.
 
@@ -610,6 +615,7 @@ def _compute_g1_shear_core(
         t1, t2: Time grids (should be identical: t1 = t2 = t)
         phi: Scattering angles
         sinc_prefactor: Pre-computed factor 0.5/π * q * L * dt from configuration
+        dt: Time step from experimental configuration (time per frame)
 
     Returns:
         Shear contribution to g1 correlation function (sinc² values)
@@ -655,9 +661,11 @@ def _compute_g1_shear_core(
             t2_arr, gamma_dot_0, beta, gamma_dot_offset
         )
 
-        # Element-wise trapezoidal integration
-        delta_t = jnp.abs(t2_arr - t1_arr)
-        gamma_integral_elementwise = delta_t * 0.5 * (gamma_t1 + gamma_t2)
+        # Element-wise trapezoidal integration (dimensionless, like matrix mode)
+        # Compute frame separation: |t2[i] - t1[i]| / dt = number of frames
+        # For XPCS data, times are always on uniform grid: t = dt * frame_index
+        frame_diff = jnp.abs(t2_arr - t1_arr) / dt  # Dimensionless (number of frames)
+        gamma_integral_elementwise = frame_diff * 0.5 * (gamma_t1 + gamma_t2)  # Dimensionless
 
         # For consistency with matrix mode, store as 1D array
         gamma_integral = gamma_integral_elementwise  # Shape: (n,)
@@ -773,6 +781,7 @@ def _compute_g1_total_core(
     phi: jnp.ndarray,
     wavevector_q_squared_half_dt: float,
     sinc_prefactor: float,
+    dt: float,
 ) -> jnp.ndarray:
     """Compute total g1 correlation function as product of diffusion and shear.
 
@@ -787,15 +796,16 @@ def _compute_g1_total_core(
         phi: Scattering angles
         wavevector_q_squared_half_dt: Pre-computed factor 0.5 * q² * dt from configuration
         sinc_prefactor: Pre-computed factor 0.5/π * q * L * dt from configuration
+        dt: Time step from experimental configuration (time per frame)
 
     Returns:
         Total g1 correlation function with shape (n_phi, n_times, n_times)
     """
     # Compute diffusion contribution
-    g1_diff = _compute_g1_diffusion_core(params, t1, t2, wavevector_q_squared_half_dt)
+    g1_diff = _compute_g1_diffusion_core(params, t1, t2, wavevector_q_squared_half_dt, dt)
 
     # Compute shear contribution
-    g1_shear = _compute_g1_shear_core(params, t1, t2, phi, sinc_prefactor)
+    g1_shear = _compute_g1_shear_core(params, t1, t2, phi, sinc_prefactor, dt)
 
     # CRITICAL FIX (Nov 2025): Handle element-wise vs matrix mode
     # Element-wise mode: both g1_diff and g1_shear are 1D (shape (n,))
@@ -859,6 +869,7 @@ def _compute_g2_scaled_core(
     sinc_prefactor: float,
     contrast: float,
     offset: float,
+    dt: float,
 ) -> jnp.ndarray:
     """Core scaled optimization: g₂ = offset + contrast × [g₁]²
 
@@ -874,6 +885,7 @@ def _compute_g2_scaled_core(
         sinc_prefactor: Pre-computed factor 0.5/π * q * L * dt from configuration
         contrast: Contrast parameter (β in literature)
         offset: Baseline offset
+        dt: Time step from experimental configuration (time per frame) [seconds]
 
     Returns:
         g2 correlation function with scaled fitting and physical bounds applied
@@ -885,6 +897,7 @@ def _compute_g2_scaled_core(
         phi,
         wavevector_q_squared_half_dt,
         sinc_prefactor,
+        dt,
     )
     g2 = offset + contrast * g1**2
 
@@ -1031,7 +1044,7 @@ def compute_g1_diffusion(
     # Compute the pre-computed factor using configuration dt
     wavevector_q_squared_half_dt = 0.5 * (q**2) * dt
 
-    return _compute_g1_diffusion_core(params, t1, t2, wavevector_q_squared_half_dt)
+    return _compute_g1_diffusion_core(params, t1, t2, wavevector_q_squared_half_dt, dt)
 
 
 def compute_g1_shear(
@@ -1087,7 +1100,7 @@ def compute_g1_shear(
     # Compute the physics factor using configuration dt
     sinc_prefactor = 0.5 / PI * q * L * dt
 
-    return _compute_g1_shear_core(params, t1, t2, phi, sinc_prefactor)
+    return _compute_g1_shear_core(params, t1, t2, phi, sinc_prefactor, dt)
 
 
 def compute_g1_total(
@@ -1151,6 +1164,7 @@ def compute_g1_total(
         phi,
         wavevector_q_squared_half_dt,
         sinc_prefactor,
+        dt,
     )
 
 
@@ -1221,6 +1235,7 @@ def compute_g2_scaled(
         sinc_prefactor,
         contrast,
         offset,
+        dt,
     )
 
 
@@ -1234,6 +1249,7 @@ def compute_g2_scaled_with_factors(
     sinc_prefactor: float,
     contrast: float,
     offset: float,
+    dt: float,
 ) -> jnp.ndarray:
     """JIT-optimized g2 computation using pre-computed physics factors.
 
@@ -1249,6 +1265,7 @@ def compute_g2_scaled_with_factors(
         sinc_prefactor: Pre-computed factor (q * L * dt / 2π)
         contrast: Contrast parameter (β in literature)
         offset: Baseline offset
+        dt: Time step from experimental configuration (time per frame) [seconds]
 
     Returns:
         g2 correlation function with scaled fitting
@@ -1284,6 +1301,7 @@ def compute_g2_scaled_with_factors(
         sinc_prefactor,
         contrast,
         offset,
+        dt,
     )
 
 

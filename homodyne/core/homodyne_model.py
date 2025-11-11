@@ -223,6 +223,7 @@ class HomodyneModel:
                 sinc_factor,  # Pre-computed at init
                 contrast,
                 offset,
+                self.dt,  # Time step from experimental configuration
             )
 
             c2_results.append(c2_phi[0])
