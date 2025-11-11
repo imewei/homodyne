@@ -2884,11 +2884,11 @@ def _compute_nlsq_fits(
         t2_jax = jnp.array(t2)
         params_jax = jnp.array(physical_params)
 
-        # Compute theoretical fit (raw g1^2 term only, before scaling)
-        # CRITICAL FIX (Nov 11, 2025): Compute ONLY the g1^2 term (contrast=1.0, offset=0.0)
-        # The least squares fitting will then find: experimental = contrast*g1^2 + offset
-        # This avoids double-counting the baseline "1" from homodyne equation g₂ = 1 + β×g₁²
-        # The fitted offset should be ~1.0 and fitted contrast should be in [0,1] range
+        # Compute theoretical fit using physical homodyne equation g₂ = 1 + β×g₁²
+        # ✅ FIXED (Nov 11, 2025): Use offset=1.0 to include the baseline from physics
+        # The homodyne baseline "1" is included in the offset parameter
+        # For theoretical predictions: offset=1.0, contrast=1.0 gives g₂ = 1 + g₁²
+        # The least squares fitting will then find: experimental = fitted_contrast*theory + fitted_offset
         g2_theory = compute_g2_scaled(
             params=params_jax,
             t1=t1_jax,
@@ -2896,9 +2896,9 @@ def _compute_nlsq_fits(
             phi=phi_jax,
             q=float(q),
             L=float(L),
-            contrast=1.0,  # Extract full g1^2 term
-            offset=0.0,    # ✅ FIXED: No offset - fitting will add it
-            dt=float(dt),  # ✅ FIXED: dt used only for wavevector_q_squared_half_dt calculation
+            contrast=1.0,  # Full contrast for theoretical prediction
+            offset=1.0,    # ✅ FIXED: Include baseline "1" from homodyne physics
+            dt=float(dt),
         )
 
         # Convert to NumPy and squeeze out extra dimension (phi axis)

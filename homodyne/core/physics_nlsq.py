@@ -516,9 +516,12 @@ def _compute_g1_total_meshgrid(
             f"Original error: {e}",
         ) from e
 
-    # Apply positive-only constraint with minimum threshold for numerical stability
+    # Apply physical bounds for g1: (0, 2]
+    # Lower bound: epsilon (effectively 0) for numerical stability
+    # Upper bound: 2.0 (loose bound allowing for experimental variations beyond theoretical 1.0)
+    # ✅ UPDATED (Nov 11, 2025): Loosened bounds to g1 ∈ (0, 2] for fitting flexibility
     epsilon = 1e-10
-    g1_bounded = jnp.maximum(g1_total, epsilon)
+    g1_bounded = jnp.clip(g1_total, epsilon, 2.0)
 
     return g1_bounded
 
@@ -537,8 +540,14 @@ def _compute_g2_scaled_meshgrid(
 ) -> jnp.ndarray:
     """Meshgrid g2 computation for NLSQ optimization.
 
-    Core scaled optimization: g₂ = offset + contrast × [g₁]²
-    This is the central equation for homodyne scattering analysis.
+    Core homodyne equation: g₂ = offset + contrast × [g₁]²
+
+    The homodyne scattering equation is g₂ = 1 + β×g₁², where the baseline "1"
+    is the constant background. In our implementation, this baseline is included
+    in the offset parameter (offset ≈ 1.0 for physical measurements).
+
+    For theoretical fits: Use offset=1.0, contrast=1.0 to get g₂ = 1 + g₁²
+    For experimental fits: offset and contrast are free parameters centered around 1.0 and 0.5
 
     Args:
         params: Physical parameters [D0, alpha, D_offset, gamma_dot_0, beta, gamma_dot_offset, phi0]
@@ -546,8 +555,8 @@ def _compute_g2_scaled_meshgrid(
         phi: Scattering angles
         wavevector_q_squared_half_dt: Pre-computed factor 0.5 * q² * dt
         sinc_prefactor: Pre-computed factor 0.5/π * q * L * dt
-        contrast: Contrast parameter (β in literature)
-        offset: Baseline offset
+        contrast: Contrast parameter (β in literature) - typically [0, 1]
+        offset: Baseline level (includes the "1" from physics) - typically ~1.0
         dt: Time step per frame [seconds] - for frame→time conversion
 
     Returns:
@@ -562,16 +571,17 @@ def _compute_g2_scaled_meshgrid(
         sinc_prefactor,
         dt,
     )
+
+    # Homodyne physics: g₂ = offset + contrast × [g₁]²
+    # The baseline "1" is included in the offset parameter (offset ≈ 1.0 for physical data)
     g2 = offset + contrast * g1**2
 
-    # Apply physical bounds: 0 < g2 ≤ 2
-    # Use small epsilon to avoid exact zero (which could cause numerical issues)
-    #
-    # NOTE (Oct 2025): Analysis confirms upper bound of 2.0 is appropriate:
-    # - Maximum observed g2 = offset_max + contrast_max × 1² ≈ 1.518
-    # - Current bound provides 25% headroom (1.518 < 2.0)
-    # - Physical constraint: g2 ≤ 2 for homodyne detection
-    g2_bounded = jnp.clip(g2, 1e-10, 2.0)
+    # Apply physical bounds: 0.5 < g2 ≤ 2.5
+    # Updated bounds (Nov 11, 2025) to reflect realistic homodyne detection range:
+    # - Lower bound 0.5: Allows for significant negative offset deviations
+    # - Upper bound 2.5: Theoretical maximum for g₂ = 1 + 1×1² = 2, plus 25% headroom
+    # - Physical constraint: 0.5 ≤ g2 ≤ 2.5 for homodyne detection
+    g2_bounded = jnp.clip(g2, 0.5, 2.5)
 
     return g2_bounded
 

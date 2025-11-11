@@ -845,16 +845,13 @@ def _compute_g1_total_core(
                 f"Original error: {e}",
             ) from e
 
-    # Apply loose physical bounds to allow natural correlation function behavior
-    # Remove artificial upper bound to prevent fitted data collapse
-    # |g₁|² ∈ [1e-10, ∞) - naturally non-negative with numerical stability
-
-    # Apply positive-only constraint with minimum threshold for numerical stability
+    # Apply physical bounds for g1: (0, 2]
+    # Theoretical: g1 is the normalized field correlation function, range (0, 1]
+    # Lower bound: epsilon (effectively 0) for numerical stability
+    # Upper bound: 2.0 (loose bound allowing for experimental variations beyond theoretical 1.0)
+    # ✅ UPDATED (Nov 11, 2025): Loosened bounds to g1 ∈ (0, 2] for fitting flexibility
     epsilon = 1e-10
-    g1_bounded = jnp.maximum(g1_total, epsilon)
-
-    # No upper bound - allows unlimited correlation function growth
-    # This removes the previous artificial constraint that caused fitted data collapse
+    g1_bounded = jnp.clip(g1_total, epsilon, 2.0)
 
     return g1_bounded
 
@@ -871,11 +868,16 @@ def _compute_g2_scaled_core(
     offset: float,
     dt: float,
 ) -> jnp.ndarray:
-    """Core scaled optimization: g₂ = offset + contrast × [g₁]²
+    """Core homodyne equation: g₂ = offset + contrast × [g₁]²
 
-    This is the central equation for homodyne scattering analysis.
+    The homodyne scattering equation is g₂ = 1 + β×g₁², where the baseline "1"
+    is the constant background. In our implementation, this baseline is included
+    in the offset parameter (offset ≈ 1.0 for physical measurements).
 
-    Physical constraint: 0 < g2 ≤ 2
+    For theoretical fits: Use offset=1.0, contrast=1.0 to get g₂ = 1 + g₁²
+    For experimental fits: offset and contrast are free parameters centered around 1.0 and 0.5
+
+    Physical constraint: 0.5 < g2 ≤ 2.5
 
     Args:
         params: Physical parameters [D0, alpha, D_offset, gamma_dot_0, beta, gamma_dot_offset, phi0]
@@ -883,8 +885,8 @@ def _compute_g2_scaled_core(
         phi: Scattering angles
         wavevector_q_squared_half_dt: Pre-computed factor 0.5 * q² * dt from configuration
         sinc_prefactor: Pre-computed factor 0.5/π * q * L * dt from configuration
-        contrast: Contrast parameter (β in literature)
-        offset: Baseline offset
+        contrast: Contrast parameter (β in literature) - typically [0, 1]
+        offset: Baseline level (includes the "1" from physics) - typically ~1.0
         dt: Time step from experimental configuration (time per frame) [seconds]
 
     Returns:
@@ -899,20 +901,17 @@ def _compute_g2_scaled_core(
         sinc_prefactor,
         dt,
     )
+
+    # Homodyne physics: g₂ = offset + contrast × [g₁]²
+    # The baseline "1" is included in the offset parameter (offset ≈ 1.0 for physical data)
     g2 = offset + contrast * g1**2
 
-    # Apply physical bounds: 0 < g2 ≤ 2
-    # Use small epsilon to avoid exact zero (which could cause numerical issues)
-    #
-    # NOTE (Oct 2025): Analysis confirms upper bound of 2.0 is appropriate:
-    # - Maximum observed g2 = offset_max + contrast_max × 1² ≈ 1.518
-    # - Current bound provides 25% headroom (1.518 < 2.0)
-    # - Physical constraint: g2 ≤ 2 for homodyne detection
-    #
-    # If checkerboard artifacts persist after trapezoidal integration fix,
-    # uncomment the line below to test without upper bound clipping:
-    # g2_bounded = jnp.maximum(g2, 1e-10)  # Test: remove upper bound
-    g2_bounded = jnp.clip(g2, 1e-10, 2.0)
+    # Apply physical bounds: 0.5 < g2 ≤ 2.5
+    # Updated bounds (Nov 11, 2025) to reflect realistic homodyne detection range:
+    # - Lower bound 0.5: Allows for significant negative offset deviations
+    # - Upper bound 2.5: Theoretical maximum for g₂ = 1 + 1×1² = 2, plus 25% headroom
+    # - Physical constraint: 0.5 ≤ g2 ≤ 2.5 for homodyne detection
+    g2_bounded = jnp.clip(g2, 0.5, 2.5)
 
     return g2_bounded
 
