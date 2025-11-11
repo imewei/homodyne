@@ -2246,9 +2246,9 @@ class NLSQWrapper:
             # This vectorizes the computation and maintains proper gradient flow
             # CRITICAL FIX: Python for-loops break JAX autodiff, causing NaN gradients
 
-            # Per-angle scaling: pass different contrast/offset to each phi (legacy mode removed Nov 2025)
-            # Create vectorized version that takes both phi and scaling parameters
-            # contrast[i] and offset[i] are used for phi[i]
+            # Per-angle scaling: pass different contrast/offset to each unique phi (legacy mode removed Nov 2025)
+            # Create vectorized version that takes unique phi angles and scaling parameters
+            # contrast[i] and offset[i] are used for phi_unique[i]
             compute_g2_scaled_vmap = jax.vmap(
                 lambda phi_val, contrast_val, offset_val: jnp.squeeze(
                     compute_g2_scaled(
@@ -2267,9 +2267,16 @@ class NLSQWrapper:
                 in_axes=(0, 0, 0),  # Vectorize over all three arrays
             )
 
-            # Compute all phi angles with their corresponding contrast/offset
-            # Shape: (n_phi, n_t1, n_t2)
-            g2_theory = compute_g2_scaled_vmap(phi, contrast, offset)
+            # Compute all UNIQUE phi angles with their corresponding contrast/offset
+            # CRITICAL FIX (Nov 11, 2025): Use phi_unique (23 values), NOT phi (23M repeated values)
+            # Bug: vmap with in_axes=(0,0,0) requires all arrays to have same length
+            #   - phi: shape (23M,) - full repeated array
+            #   - contrast: shape (23,) - per-angle values
+            #   - offset: shape (23,) - per-angle values
+            # This dimensional mismatch caused zero gradients for 22/23 angles
+            # Fix: Use phi_unique to match contrast/offset dimensions
+            # Shape: (n_phi, n_t1, n_t2) = (23, 1001, 1001)
+            g2_theory = compute_g2_scaled_vmap(phi_unique, contrast, offset)
 
             # CRITICAL: Apply diagonal correction to match experimental data preprocessing
             # The experimental data is diagonal-corrected in xpcs_loader.py:530-540.
@@ -2280,15 +2287,42 @@ class NLSQWrapper:
             apply_diagonal_vmap = jax.vmap(apply_diagonal_correction, in_axes=0)
             g2_theory = apply_diagonal_vmap(g2_theory)
 
-            # Flatten theory to match flattened data (NLSQ expects 1D output)
-            g2_theory_flat = g2_theory.flatten()
+            # CRITICAL FIX (Nov 11, 2025): Data structure and indexing
+            #
+            # Data structure (stratified):
+            #   - phi: shape (n_data,) - which angle each data point belongs to
+            #   - t1: shape (n_t1,) - UNIQUE t1 grid values (NOT per-point!)
+            #   - t2: shape (n_t2,) - UNIQUE t2 grid values (NOT per-point!)
+            #   - g2: shape (n_data,) - experimental values (SPARSE - not all grid points have data!)
+            #
+            # g2_theory: shape (n_phi, n_t1, n_t2) - computed on FULL GRID
+            #
+            # xdata contains FLAT INDICES into the (n_phi, n_t1, n_t2) grid
+            # BUT these indices assume ANGLE-MAJOR ordering: [phi0_all_t1t2, phi1_all_t1t2, ...]
+            #
+            # Problem: Stratified data has MIXED angle ordering in chunks!
+            # Each chunk has points from ALL angles interleaved.
+            #
+            # Solution: Reconstruct which grid point each data point corresponds to
+            # using phi array to map data points to their angle index
 
-            # Return only requested points via fancy indexing
-            # JAX JIT supports fancy indexing with traced indices (validated 2025-01-05).
-            # This works for both STANDARD (all indices) and LARGE (chunked) strategies.
-            # NLSQ passes xdata as integer indices into the flattened array.
+            # Get requested data point indices
             indices = xdata.astype(jnp.int32)
-            return g2_theory_flat[indices]
+
+            # For each requested index, determine its (phi_idx, t1_idx, t2_idx) in the grid
+            # xdata assumes flattened grid in angle-major order
+            n_t1 = len(t1)
+            n_t2 = len(t2)
+            grid_size_per_angle = n_t1 * n_t2  # 1001 × 1001 = 1,002,001
+
+            # Decompose flat indices into grid coordinates
+            phi_idx = indices // grid_size_per_angle  # Which angle (0-22)
+            remaining = indices % grid_size_per_angle
+            t1_idx = remaining // n_t2  # Which t1 index (0-1000)
+            t2_idx = remaining % n_t2  # Which t2 index (0-1000)
+
+            # Use advanced indexing to select theory values
+            return g2_theory[phi_idx, t1_idx, t2_idx]  # Shape: (chunk_size,)
 
         return model_function
 

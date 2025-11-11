@@ -2830,30 +2830,43 @@ def _compute_nlsq_fits(
     if t2.ndim == 2:
         t2 = t2[0, :]  # Extract first row
 
-    # Extract physical parameters - handle per-angle scaling
-    # Detect if per-angle scaling was used (13 params for 3 angles vs 9 params scalar)
+    # Extract fitted parameters - MUST use per-angle scaling (v2.4.0+)
+    # Structure: [c0, c1, ..., cN-1, o0, o1, ..., oN-1, D0, alpha, D_offset, ...]
+    # For laminar_flow: 7 physical params
     n_params = len(result.parameters)
-    n_angles_opt = len(data.get("phi_angles_list", []))  # Angles used in optimization
+    n_angles = len(phi_angles)
 
-    # Expected params for laminar_flow: 7 physical + 2 scaling = 9 (scalar mode)
-    # Expected params for per-angle: 7 physical + 2*n_angles scaling = 13 for 3 angles
-    if n_params > 9:
-        # Per-angle scaling detected
-        # Structure: [c0, c1, ..., cN, o0, o1, ..., oN, physical...]
-        n_angles_from_params = (n_params - 7) // 2  # 7 physical params in laminar_flow
-        physical_params = result.parameters[2 * n_angles_from_params :]
-        logger.debug(
-            f"Per-angle scaling detected in theoretical fits: {n_params} parameters, "
-            f"extracting physical params from index {2*n_angles_from_params}"
+    # Calculate expected parameter count for per-angle mode
+    n_physical = 7  # D0, alpha, D_offset, gamma_dot_t0, beta, gamma_dot_t_offset, phi0
+    expected_params_per_angle = 2 * n_angles + n_physical
+
+    if n_params != expected_params_per_angle:
+        raise ValueError(
+            f"Parameter count mismatch! Expected {expected_params_per_angle} "
+            f"(2×{n_angles} scaling + {n_physical} physical), got {n_params}. "
+            f"Per-angle scaling is REQUIRED in v2.4.0+"
         )
-    else:
-        # Legacy scalar scaling
-        # Structure: [contrast, offset, physical...]
-        physical_params = result.parameters[2:]
-        logger.debug(
-            f"Scalar scaling detected in theoretical fits: {n_params} parameters, "
-            f"extracting physical params from index 2"
-        )
+
+    # Extract fitted per-angle scaling parameters
+    fitted_contrasts = result.parameters[0:n_angles]  # First n_angles params
+    fitted_offsets = result.parameters[n_angles:2*n_angles]  # Next n_angles params
+    physical_params = result.parameters[2*n_angles:]  # Remaining 7 physical params
+
+    logger.info(
+        f"Per-angle scaling: {n_angles} angles, using FITTED scaling parameters from NLSQ optimization"
+    )
+    logger.debug(
+        f"Extracted fitted parameters - "
+        f"contrasts: mean={np.mean(fitted_contrasts):.4f}, "
+        f"offsets: mean={np.mean(fitted_offsets):.4f}"
+    )
+    logger.debug(
+        f"DEBUG: result.parameters shape: {result.parameters.shape}, "
+        f"n_angles={n_angles}, 2*n_angles={2*n_angles}"
+    )
+    logger.debug(
+        f"DEBUG: physical_params extracted = {physical_params}"
+    )
 
     # Extract metadata with defaults
     L = metadata["L"]
@@ -2866,16 +2879,19 @@ def _compute_nlsq_fits(
     if q is None:
         raise ValueError("q (wavevector) is required but was not found")
 
-    logger.debug(
-        f"Computing theoretical fits for {len(phi_angles)} angles using L={L:.1f} Å, q={q:.6f} Å⁻¹",
+    logger.info(
+        f"Computing theoretical fits for {len(phi_angles)} angles using L={L:.1f} Å, q={q:.6f} Å⁻¹"
+    )
+    logger.info(
+        "Using FITTED per-angle scaling parameters (contrast, offset) from NLSQ optimization"
     )
     logger.info(
         "Diagonal correction will be applied to theoretical fits to match experimental data processing"
     )
 
     # Sequential per-angle computation
-    c2_theoretical_raw = []
-    per_angle_scaling = []
+    c2_theoretical_fitted = []
+    per_angle_scaling = []  # Store for compatibility
 
     for i, phi_angle in enumerate(phi_angles):
         # Convert to JAX arrays
@@ -2884,11 +2900,14 @@ def _compute_nlsq_fits(
         t2_jax = jnp.array(t2)
         params_jax = jnp.array(physical_params)
 
-        # Compute theoretical fit using physical homodyne equation g₂ = 1 + β×g₁²
-        # ✅ FIXED (Nov 11, 2025): Use offset=1.0 to include the baseline from physics
-        # The homodyne baseline "1" is included in the offset parameter
-        # For theoretical predictions: offset=1.0, contrast=1.0 gives g₂ = 1 + g₁²
-        # The least squares fitting will then find: experimental = fitted_contrast*theory + fitted_offset
+        # Extract FITTED scaling parameters for this angle
+        contrast_fitted = float(fitted_contrasts[i])
+        offset_fitted = float(fitted_offsets[i])
+
+        # ✅ FIXED (Nov 11, 2025): Use FITTED scaling parameters from NLSQ optimization
+        # This eliminates the need for post-hoc lstsq scaling!
+        # The NLSQ optimization already found the optimal contrast and offset for each angle.
+        # Formula: g₂ = offset + contrast × g₁²
         g2_theory = compute_g2_scaled(
             params=params_jax,
             t1=t1_jax,
@@ -2896,8 +2915,8 @@ def _compute_nlsq_fits(
             phi=phi_jax,
             q=float(q),
             L=float(L),
-            contrast=1.0,  # Full contrast for theoretical prediction
-            offset=1.0,    # ✅ FIXED: Include baseline "1" from homodyne physics
+            contrast=contrast_fitted,  # ✅ Use FITTED contrast from NLSQ!
+            offset=offset_fitted,      # ✅ Use FITTED offset from NLSQ!
             dt=float(dt),
         )
 
@@ -2917,154 +2936,29 @@ def _compute_nlsq_fits(
             f"after: [{diag_after[0]:.3f}, {diag_after[1]:.3f}, ..., {diag_after[-1]:.3f}]"
         )
 
-        c2_theoretical_raw.append(g2_theory_np)
+        # Store fitted theoretical g2 (already includes correct scaling from NLSQ!)
+        c2_theoretical_fitted.append(g2_theory_np)
 
-        # Least squares scaling: c2_exp = contrast * c2_theory + offset
-        # Solve: [c2_theory, ones] @ [contrast, offset] = c2_exp
-        #
-        # IMPORTANT: After diagonal correction, both experimental and theoretical
-        # matrices have modified diagonal elements. To avoid rank deficiency in
-        # the lstsq problem, we extract only off-diagonal elements for fitting.
-        # This provides ~1M clean data points with full rank for robust estimation.
+        # Store scaling parameters for compatibility with output format
+        per_angle_scaling.append([contrast_fitted, offset_fitted])
 
-        # Create mask for off-diagonal elements
-        size = g2_theory_np.shape[0]
-        off_diag_mask = ~np.eye(size, dtype=bool)
-
-        # Extract off-diagonal elements (1D arrays)
-        c2_exp_off_diag = c2_exp[i][off_diag_mask]
-        c2_theory_off_diag = g2_theory_np[off_diag_mask]
-
-        # Design matrix: [c2_theory, ones] using only off-diagonal elements
-        A = np.column_stack([c2_theory_off_diag, np.ones_like(c2_theory_off_diag)])
-        b = c2_exp_off_diag
-
-        # Robust least squares solution with comprehensive validation
-        # Using ~N^2-N points (off-diagonal elements) for robust fitting
-        n_points = len(b)
+        # Log fitted scaling parameters
         logger.debug(
-            f"Angle {phi_angle:.1f}°: Fitting scaling using {n_points:,} off-diagonal points"
-        )
-
-        # Phase 1: Data validation (prevent SVD convergence failures)
-        theory_mean = np.mean(c2_theory_off_diag)
-        theory_std = np.std(c2_theory_off_diag)
-        theory_min = np.min(c2_theory_off_diag)
-        theory_max = np.max(c2_theory_off_diag)
-
-        exp_mean = np.mean(c2_exp_off_diag)
-        exp_std = np.std(c2_exp_off_diag)
-
-        # Check for invalid values
-        has_nan_inf = not (np.all(np.isfinite(c2_theory_off_diag)) and np.all(np.isfinite(c2_exp_off_diag)))
-        has_low_variance = theory_std < 1e-8  # Theory is essentially constant
-
-        # Diagnostics
-        logger.debug(
-            f"Angle {phi_angle:.1f}°: Theory stats - mean={theory_mean:.6f}, std={theory_std:.6f}, "
-            f"range=[{theory_min:.6f}, {theory_max:.6f}]"
-        )
-        logger.debug(
-            f"Angle {phi_angle:.1f}°: Exp stats - mean={exp_mean:.6f}, std={exp_std:.6f}"
-        )
-
-        # Phase 2: Choose estimation method based on data quality
-        method_used = "lstsq"
-
-        if has_nan_inf:
-            logger.warning(
-                f"Angle {phi_angle:.1f}°: NaN/Inf detected in data, using default scaling"
-            )
-            contrast_fit = 0.5
-            offset_fit = 1.0
-            method_used = "default_nan"
-        elif has_low_variance:
-            logger.warning(
-                f"Angle {phi_angle:.1f}°: Theory variance too low (std={theory_std:.2e}), "
-                f"using simple ratio estimation"
-            )
-            # Simple fallback: Use variance ratio and mean matching
-            if exp_std > 1e-8:
-                # Estimate contrast from variance ratio (with safety bounds)
-                contrast_fit = np.clip(exp_std / max(theory_std, 1e-8), 0.01, 10.0)
-                offset_fit = exp_mean - contrast_fit * theory_mean
-            else:
-                # Both flat, use defaults
-                contrast_fit = 0.5
-                offset_fit = exp_mean
-            method_used = "ratio"
-        else:
-            # Phase 3: Try normalized lstsq for better numerical stability
-            try:
-                # Standardize columns to improve conditioning
-                # x_normalized = (x - mean) / std
-                theory_normalized = (c2_theory_off_diag - theory_mean) / theory_std
-
-                # Build normalized design matrix
-                A_normalized = np.column_stack([theory_normalized, np.ones_like(theory_normalized)])
-
-                # Solve normalized problem
-                scaling_norm, residuals_lstsq, rank, s = np.linalg.lstsq(
-                    A_normalized, b, rcond=None
-                )
-                contrast_norm, offset_norm = scaling_norm
-
-                # Denormalize solution:
-                # y = c_norm * x_norm + o_norm
-                # y = c_norm * (x - mean_x)/std_x + o_norm
-                # y = (c_norm/std_x) * x + (o_norm - c_norm*mean_x/std_x)
-                contrast_fit = contrast_norm / theory_std
-                offset_fit = offset_norm - contrast_norm * theory_mean / theory_std
-
-                logger.debug(
-                    f"Angle {phi_angle:.1f}°: Normalized lstsq succeeded "
-                    f"(rank={rank}, cond≈{s[0]/s[-1]:.2e})"
-                )
-                method_used = "lstsq_normalized"
-
-            except np.linalg.LinAlgError as e:
-                logger.warning(
-                    f"Angle {phi_angle:.1f}°: Normalized lstsq failed ({e}), "
-                    f"trying pinv with regularization..."
-                )
-                try:
-                    # Fallback: Use pseudo-inverse with stronger regularization
-                    A_pinv = np.linalg.pinv(A, rcond=1e-3)  # More aggressive cutoff
-                    scaling = A_pinv @ b
-                    contrast_fit, offset_fit = scaling
-                    logger.info(
-                        f"Angle {phi_angle:.1f}°: Successfully used pinv fallback"
-                    )
-                    method_used = "pinv"
-                except Exception as e2:
-                    logger.warning(
-                        f"Angle {phi_angle:.1f}°: Pinv failed ({e2}), using ratio estimation"
-                    )
-                    # Ratio-based fallback
-                    if exp_std > 1e-8:
-                        contrast_fit = np.clip(exp_std / max(theory_std, 1e-8), 0.01, 10.0)
-                        offset_fit = exp_mean - contrast_fit * theory_mean
-                    else:
-                        contrast_fit = 0.5
-                        offset_fit = exp_mean
-                    method_used = "ratio_fallback"
-
-        per_angle_scaling.append([contrast_fit, offset_fit])
-
-        logger.debug(
-            f"Angle {phi_angle:.1f}°: contrast={contrast_fit:.3f}, offset={offset_fit:.3f} "
-            f"(method={method_used})",
+            f"Angle {phi_angle:.1f}°: contrast={contrast_fitted:.4f}, offset={offset_fitted:.4f} "
+            f"(from NLSQ optimization)"
         )
 
     # Stack arrays
-    c2_theoretical_raw = np.array(c2_theoretical_raw)
+    # Note: c2_theoretical_fitted already includes the FITTED scaling parameters from NLSQ
+    # No need for post-hoc scaling - we computed with correct contrast/offset!
+    c2_theoretical_fitted = np.array(c2_theoretical_fitted)
     per_angle_scaling = np.array(per_angle_scaling)
 
-    # Apply per-angle scaling
-    c2_theoretical_scaled = np.zeros_like(c2_theoretical_raw)
-    for i in range(len(phi_angles)):
-        contrast, offset = per_angle_scaling[i]
-        c2_theoretical_scaled[i] = contrast * c2_theoretical_raw[i] + offset
+    # Since we computed theory with fitted scaling, this IS the final scaled result
+    c2_theoretical_scaled = c2_theoretical_fitted
+
+    # For backward compatibility, keep raw as a copy (though conceptually it's the same now)
+    c2_theoretical_raw = c2_theoretical_fitted
 
     # Compute residuals
     residuals = c2_exp - c2_theoretical_scaled

@@ -574,6 +574,11 @@ def _compute_g2_scaled_meshgrid(
 
     # Homodyne physics: g₂ = offset + contrast × [g₁]²
     # The baseline "1" is included in the offset parameter (offset ≈ 1.0 for physical data)
+    # NOTE: Bounds enforcement is handled by NLSQ optimization bounds, NOT by clipping here.
+    # Clipping parameters inside the physics function creates a mismatch between:
+    # - The parameter values NLSQ stores (unclipped)
+    # - The parameter values actually used in computation (clipped)
+    # This causes visualization to use different values than optimization used!
     g2 = offset + contrast * g1**2
 
     # Apply physical bounds: 0.5 < g2 ≤ 2.5
