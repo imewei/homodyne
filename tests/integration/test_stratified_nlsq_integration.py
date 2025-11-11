@@ -252,7 +252,7 @@ def test_stratification_with_balanced_data(balanced_test_data):
     assert stats.imbalance_ratio <= 2.0  # Good balance
 
     # Apply stratification
-    phi_s, t1_s, t2_s, g2_s = create_angle_stratified_data(
+    phi_s, t1_s, t2_s, g2_s, chunk_sizes = create_angle_stratified_data(
         data["phi"],
         data["t1"],
         data["t2"],
@@ -299,7 +299,7 @@ def test_stratification_preserves_all_data_points():
     g2_exp = np.random.uniform(1.0, 1.5, n_points)
 
     # Apply stratification
-    phi_s, t1_s, t2_s, g2_s = create_angle_stratified_data(
+    phi_s, t1_s, t2_s, g2_s, chunk_sizes = create_angle_stratified_data(
         phi, t1, t2, g2_exp, target_chunk_size=100_000
     )
 
@@ -363,7 +363,7 @@ def test_integration_stratification_with_strategy_selector():
     assert should_stratify is True
 
     # Apply stratification
-    phi_s, t1_s, t2_s, g2_s = create_angle_stratified_data(
+    phi_s, t1_s, t2_s, g2_s, chunk_sizes = create_angle_stratified_data(
         data["phi"],
         data["t1"],
         data["t2"],

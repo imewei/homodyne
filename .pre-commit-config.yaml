@@ -64,7 +64,7 @@ repos:
 
   # Modern linting and formatting
   - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.14.1 # Updated to match local: ruff 0.14.1
+    rev: v0.13.1 # Updated to match local: ruff 0.13.1
     hooks:
       - id: ruff
         name: ruff
@@ -232,7 +232,7 @@ repos:
 
 # Global configuration
 default_language_version:
-  python: python3.12 # Updated to match local: Python 3.12.3
+  python: python3.13 # Updated to match local: Python 3.13.7
 
 # Exclude certain directories and files
 exclude: |

@@ -150,14 +150,17 @@ class PhysicsFactors:
         318.30988618379064
         """
         # Compute derived factors
-        wavevector_q_squared_half_dt = 0.5 * (q**2) * dt
-        sinc_prefactor = 0.5 / np.pi * q * L * dt
+        # IMPORTANT: Config dt value will OVERRIDE this default
+        # Default dt = 0.001s if not provided (APS-U standard XPCS frame rate: 1ms)
+        dt_value = dt if dt is not None else 0.001
+        wavevector_q_squared_half_dt = 0.5 * (q**2) * dt_value
+        sinc_prefactor = 0.5 / np.pi * q * L * dt_value
 
         # Create instance (validation happens in __post_init__)
         instance = cls(
             wavevector_q=q,
             stator_rotor_gap=L,
-            dt=dt,
+            dt=dt_value,
             wavevector_q_squared_half_dt=wavevector_q_squared_half_dt,
             sinc_prefactor=sinc_prefactor,
         )
@@ -165,7 +168,7 @@ class PhysicsFactors:
         if validate:
             instance._validate()
 
-        logger.debug(f"Created PhysicsFactors: q={q:.6e}, L={L:.6e}, dt={dt:.6e}")
+        logger.debug(f"Created PhysicsFactors: q={q:.6e}, L={L:.6e}, dt={dt_value:.6e}")
         logger.debug(f"  q²dt/2 = {wavevector_q_squared_half_dt:.6e}")
         logger.debug(f"  qLdt/2π = {sinc_prefactor:.6e}")
 

@@ -71,7 +71,8 @@ class ParameterSpace:
 
     # Physical parameter bounds (mode-dependent) - STANDARDIZED VALUES
     D0_bounds: tuple[float, float] = (1.0, 1000000.0)
-    alpha_bounds: tuple[float, float] = (-10.0, 10.0)  # Consistent with physics.py
+    alpha_bounds: tuple[float, float] = (-2.0, 2.0)  # ✅ FIXED: Was (-10, 10)
+    # Extreme values like alpha=-4.96 cause numerical underflow: exp(-q²*D₀*t^α*dt/2) → 0
     D_offset_bounds: tuple[float, float] = (
         -100000.0,
         100000.0,
@@ -79,7 +80,7 @@ class ParameterSpace:
 
     # Laminar flow parameters (only for laminar_flow mode) - STANDARDIZED VALUES
     gamma_dot_t0_bounds: tuple[float, float] = (1e-5, 1.0)
-    beta_bounds: tuple[float, float] = (-10.0, 10.0)  # Consistent with physics.py
+    beta_bounds: tuple[float, float] = (-2.0, 2.0)  # ✅ FIXED: Was (-10, 10)
     gamma_dot_t_offset_bounds: tuple[float, float] = (
         -1.0,
         1.0,

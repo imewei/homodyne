@@ -290,7 +290,7 @@ class StratifiedResidualFunction:
 
         return residuals
 
-    def __call__(self, params: np.ndarray) -> jnp.ndarray:
+    def __call__(self, params: np.ndarray) -> np.ndarray:
         """
         Compute residuals across all stratified chunks.
 
@@ -304,13 +304,13 @@ class StratifiedResidualFunction:
                 - If legacy: [contrast, offset, *physical]
 
         Returns:
-            JAX array of concatenated residuals from all chunks (1D array).
-            Returns JAX array (not numpy) for LeastSquares JIT compilation compatibility.
+            NumPy array of concatenated residuals from all chunks (1D array).
+            Converted from JAX to NumPy to prevent memory accumulation.
 
         Notes:
             - Each chunk is processed independently with JIT-compiled computation
             - All chunks must contain all phi angles for correct gradients
-            - Result is converted to numpy array for NLSQ compatibility
+            - JAX arrays converted to NumPy immediately to release device memory
         """
         params_jax = jnp.asarray(params)
         all_residuals = []
@@ -323,7 +323,7 @@ class StratifiedResidualFunction:
             metadata = self.chunk_metadata[i]
 
             # JIT-compiled computation for this chunk
-            chunk_residuals = self.compute_chunk_jit(
+            chunk_residuals_jax = self.compute_chunk_jit(
                 phi=jnp.asarray(chunk.phi),
                 t1=jnp.asarray(chunk.t1),
                 t2=jnp.asarray(chunk.t2),
@@ -337,10 +337,23 @@ class StratifiedResidualFunction:
                 L=float(chunk.L),
                 dt=float(chunk.dt) if chunk.dt is not None else None,
             )
-            all_residuals.append(chunk_residuals)
 
-        # Concatenate and return as JAX array (required for LeastSquares JIT compilation)
-        return jnp.concatenate(all_residuals)
+            # CRITICAL FIX (Nov 10, 2025): Convert JAX array to NumPy immediately
+            # to release device memory and prevent accumulation across iterations.
+            # Each iteration creates ~690 MB of JAX arrays that must be freed.
+            chunk_residuals_np = np.asarray(chunk_residuals_jax)
+            all_residuals.append(chunk_residuals_np)
+
+            # Explicitly delete JAX array to help garbage collection
+            del chunk_residuals_jax
+
+        # Concatenate as NumPy array (prevents JAX device memory accumulation)
+        result = np.concatenate(all_residuals)
+
+        # Clean up temporary list
+        del all_residuals
+
+        return result
 
     def validate_chunk_structure(self) -> bool:
         """

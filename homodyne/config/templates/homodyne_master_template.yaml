@@ -239,11 +239,12 @@ parameter_space:
       # Typical range: 100-10000 for colloidal systems
 
     - name: alpha
-      min: -10.0                              # Minimum power-law exponent
-      max: 10.0                               # Maximum power-law exponent
+      min: -2.0                               # ✅ FIXED: Physically realistic minimum (was -10.0)
+      max: 2.0                                # ✅ FIXED: Physically realistic maximum (was 10.0)
       type: TruncatedNormal                   # ✅ FIXED: Changed from Normal to enforce bounds
       prior_mu: -1.2                          # Prior mean
       prior_sigma: 0.3                        # Prior std dev
+      # ✅ Bounds tightened: [-10,10] caused numerical underflow (alpha=-4.96 → theory≈0)
       unit: "dimensionless"
       # Physical meaning: Anomalous diffusion exponent
       # 0 = normal diffusion, <0 = subdiffusion, >0 = superdiffusion

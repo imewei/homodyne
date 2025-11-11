@@ -1,7 +1,7 @@
 # Homodyne Analysis Package - Development Makefile
 # ================================================
 # JAX-accelerated XPCS analysis with NLSQ and MCMC (CPU-only)
-# Updated: 2025-11-07 - CPU-only JAX 0.8.0
+# Updated: 2025-11-10 - CPU-only (JAX 0.7.2 local, 0.8.0 target)
 
 .PHONY: help clean clean-all clean-build clean-pyc clean-test clean-cache install dev test test-all test-unit test-integration test-performance lint format type-check type-check-strict quality docs build check benchmark env-info
 
@@ -115,16 +115,17 @@ help:
 install:
 	$(PIP) install -e .
 	@echo "✓ Package installed (CPU-only)"
-	@echo "  JAX version: 0.8.0 (CPU-only)"
+	@echo "  JAX version: $(shell $(PYTHON) -c 'import jax; print(jax.__version__)' 2>/dev/null || echo 'not installed')"
 
 dev:
 	$(PIP) install -e ".[dev,docs]"
 	@echo "✓ Development environment ready (CPU-only)"
 	@echo "  Platform: $(PLATFORM)"
-	@echo "  JAX: 0.8.0 (CPU-only)"
-	@echo "  NLSQ: Ready"
-	@echo "  MCMC (NumPyro): Ready"
-	@$(PYTHON) -c "from homodyne import get_package_info; info = get_package_info(); print('\nDependency Status:'); [print(f'  {k}: ✓' if v else f'  {k}: ✗') for k,v in info['dependencies'].items()]"
+	@echo "  Python: $(shell $(PYTHON) --version 2>&1)"
+	@echo "  JAX: $(shell $(PYTHON) -c 'import jax; print(jax.__version__)' 2>/dev/null || echo 'not installed')"
+	@echo "  NLSQ: $(shell $(PYTHON) -c 'import nlsq; print(nlsq.__version__)' 2>/dev/null || echo 'not installed')"
+	@echo "  NumPyro: $(shell $(PYTHON) -c 'import numpyro; print(numpyro.__version__)' 2>/dev/null || echo 'not installed')"
+	@$(PYTHON) -c "from homodyne import get_package_info; info = get_package_info(); print('\nDependency Status:'); [print(f'  {k}: ✓' if v else f'  {k}: ✗') for k,v in info['dependencies'].items()]" 2>/dev/null || echo "  Homodyne not fully installed yet"
 
 env-info:
 	@echo "Homodyne Environment Information"
@@ -162,7 +163,8 @@ endif
 	@echo "  pip: $(shell which pip 2>/dev/null || echo 'not found')"
 	@echo
 	@echo "JAX Configuration:"
-	@echo "  JAX version: 0.8.0 (CPU-only)"
+	@echo "  JAX version: $(shell $(PYTHON) -c 'import jax; print(jax.__version__)' 2>/dev/null || echo 'not installed')"
+	@echo "  JAX target: 0.8.0 (CPU-only per v2.3.0)"
 	@echo "  GPU support: Not available (CPU-only installation)"
 	@echo
 	@echo "Installation Commands:"

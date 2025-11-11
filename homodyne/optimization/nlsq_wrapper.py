@@ -508,12 +508,20 @@ class NLSQWrapper:
         # 1. Stratified data was created (has phi_flat attribute)
         # 2. Per-angle scaling is enabled
         # 3. Dataset is large enough to benefit (>1M points)
-        use_stratified_least_squares = (
-            hasattr(stratified_data, "phi_flat")
-            and per_angle_scaling
-            and hasattr(stratified_data, "g2_flat")
-            and len(stratified_data.g2_flat) >= 1_000_000
-        )
+        #
+        # TEMPORARY DISABLE (Nov 11, 2025): StratifiedResidualFunction incompatible with JAX JIT
+        # Root cause: Python loops over chunks with dynamic shapes cannot be JIT-compiled
+        # Error at NLSQ least_squares.py:197: "__array__() was called on traced array"
+        # This is NOT an NLSQ bug - StratifiedResidualFunction design is incompatible with JIT
+        # Solution: Falls back to curve_fit_large (working correctly)
+        # TODO: Redesign StratifiedResidualFunction to be JIT-compatible (use static shapes/vmap)
+        use_stratified_least_squares = False  # DISABLED - JAX JIT incompatibility
+        # use_stratified_least_squares = (
+        #     hasattr(stratified_data, "phi_flat")
+        #     and per_angle_scaling
+        #     and hasattr(stratified_data, "g2_flat")
+        #     and len(stratified_data.g2_flat) >= 1_000_000
+        # )
 
         if use_stratified_least_squares:
             logger.info("=" * 80)
@@ -1800,6 +1808,7 @@ class NLSQWrapper:
                 execution_time_ms=stratification_time_ms,
                 use_index_based=use_index_based,
                 target_chunk_size=target_chunk_size,
+                chunk_sizes=chunk_sizes,  # Pass actual chunk boundaries
             )
 
             # Optionally log diagnostic report

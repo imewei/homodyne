@@ -1154,8 +1154,11 @@ def compute_g1_total(
             t2 = t2_grid
 
     # Compute the physics factors using configuration dt
-    wavevector_q_squared_half_dt = 0.5 * (q**2) * dt
-    sinc_prefactor = 0.5 / PI * q * L * dt
+    # IMPORTANT: Config dt value will OVERRIDE this default
+    # Default dt = 0.001s if not in config (APS-U standard XPCS frame rate: 1ms)
+    dt_value = dt if dt is not None else 0.001
+    wavevector_q_squared_half_dt = 0.5 * (q**2) * dt_value
+    sinc_prefactor = 0.5 / PI * q * L * dt_value
 
     return _compute_g1_total_core(
         params,
@@ -1164,7 +1167,7 @@ def compute_g1_total(
         phi,
         wavevector_q_squared_half_dt,
         sinc_prefactor,
-        dt,
+        dt_value,
     )
 
 
@@ -1223,8 +1226,11 @@ def compute_g2_scaled(
             t2 = t2_grid
 
     # Compute the physics factors using configuration dt
-    wavevector_q_squared_half_dt = 0.5 * (q**2) * dt
-    sinc_prefactor = 0.5 / PI * q * L * dt
+    # IMPORTANT: Config dt value will OVERRIDE this default
+    # Default dt = 0.001s if not in config (APS-U standard XPCS frame rate: 1ms)
+    dt_value = dt if dt is not None else 0.001
+    wavevector_q_squared_half_dt = 0.5 * (q**2) * dt_value
+    sinc_prefactor = 0.5 / PI * q * L * dt_value
 
     return _compute_g2_scaled_core(
         params,

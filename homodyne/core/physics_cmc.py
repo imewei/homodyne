@@ -473,8 +473,11 @@ def compute_g1_total(
         )
 
     # Compute the physics factors using configuration dt
-    wavevector_q_squared_half_dt = 0.5 * (q**2) * dt
-    sinc_prefactor = 0.5 / PI * q * L * dt
+    # IMPORTANT: Config dt value will OVERRIDE this default
+    # Default dt = 0.001s if not in config (APS-U standard XPCS frame rate: 1ms)
+    dt_value = dt if dt is not None else 0.001
+    wavevector_q_squared_half_dt = 0.5 * (q**2) * dt_value
+    sinc_prefactor = 0.5 / PI * q * L * dt_value
 
     # CRITICAL FIX (Nov 2025): Removed jnp.unique() call to prevent JAX concretization error
     # The caller MUST pre-compute unique phi values before calling this function

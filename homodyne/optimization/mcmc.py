@@ -1671,18 +1671,25 @@ def _create_numpyro_model(
             contrast_per_point = contrast[phi_indices]
             offset_per_point = offset[phi_indices]
 
-            # CRITICAL FIX (Nov 2025): Extract correct c2_theory values for each data point
-            # c2_theory from physics_cmc.py has shape (n_phi_unique, n_points) = (23, 2M)
-            # We need to select the appropriate angle's row for each data point
-            # Advanced indexing: c2_theory[phi_indices, range(len)] → shape (2M,)
-            # CRITICAL: Use .shape[0] instead of len() for JAX compatibility during tracing
-
-            # Validate c2_theory shape before indexing
-            # c2_theory should be (n_phi_unique, n_data_points)
-            # If shapes don't match, the advanced indexing will fail
+            # CRITICAL FIX (Nov 10, 2025): Handle both 1D and 2D c2_theory
+            # - laminar_flow mode: c2_theory is 2D (n_phi, n_data) - angle-dependent
+            # - static_isotropic mode: c2_theory is 1D (n_data,) - angle-independent
+            #
+            # For static mode, c2_theory is the same for all angles (diffusion only),
+            # so we don't need phi indexing - just use it directly.
+            # Only the contrast/offset scaling is per-angle.
             n_data_points = phi_indices.shape[0]
 
-            c2_theory_per_point = c2_theory[phi_indices, jnp.arange(n_data_points)]
+            if c2_theory.ndim == 2:
+                # laminar_flow mode: 2D theory (n_phi, n_data)
+                # Extract the appropriate angle's row for each data point
+                # Advanced indexing: c2_theory[phi_indices, range(len)] → shape (n_data,)
+                c2_theory_per_point = c2_theory[phi_indices, jnp.arange(n_data_points)]
+            else:
+                # static_isotropic mode: 1D theory (n_data,)
+                # Theory is angle-independent (same for all phi)
+                # No indexing needed - use directly
+                c2_theory_per_point = c2_theory
 
             # DIAGNOSTIC: Check c2_theory_per_point extraction
             def check_c2_extraction():
@@ -1700,17 +1707,31 @@ def _create_numpyro_model(
                     "c2_theory_per_point[0:10]={sample}",
                     sample=c2_theory_per_point[:10]
                 )
-                # Also check the raw c2_theory matrix for comparison
-                jax.debug.print(
-                    "c2_theory[0, 0:10]={row0}, c2_theory[0, -10:]={row0_end}",
-                    row0=c2_theory[0, :10],
-                    row0_end=c2_theory[0, -10:]
-                )
-                jax.debug.print(
-                    "c2_theory[0, middle]={mid}, unique_vals_approx={uniq}",
-                    mid=c2_theory[0, n_data_points//2:n_data_points//2+10],
-                    uniq=jnp.array([jnp.min(c2_theory), jnp.max(c2_theory), jnp.mean(c2_theory)])
-                )
+                # Also check the raw c2_theory for comparison (handle both 1D and 2D)
+                if c2_theory.ndim == 2:
+                    # laminar_flow: 2D c2_theory
+                    jax.debug.print(
+                        "c2_theory[0, 0:10]={row0}, c2_theory[0, -10:]={row0_end}",
+                        row0=c2_theory[0, :10],
+                        row0_end=c2_theory[0, -10:]
+                    )
+                    jax.debug.print(
+                        "c2_theory[0, middle]={mid}, unique_vals_approx={uniq}",
+                        mid=c2_theory[0, n_data_points//2:n_data_points//2+10],
+                        uniq=jnp.array([jnp.min(c2_theory), jnp.max(c2_theory), jnp.mean(c2_theory)])
+                    )
+                else:
+                    # static_isotropic: 1D c2_theory
+                    jax.debug.print(
+                        "c2_theory[0:10]={start}, c2_theory[-10:]={end}",
+                        start=c2_theory[:10],
+                        end=c2_theory[-10:]
+                    )
+                    jax.debug.print(
+                        "c2_theory[middle]={mid}, unique_vals_approx={uniq}",
+                        mid=c2_theory[n_data_points//2:n_data_points//2+10],
+                        uniq=jnp.array([jnp.min(c2_theory), jnp.max(c2_theory), jnp.mean(c2_theory)])
+                    )
             check_c2_extraction()
 
             # Apply per-angle scaling to flattened c2_theory
@@ -1928,6 +1949,16 @@ def _run_numpyro_sampling(model, config, initial_values=None):
                 logger.info(
                     f"Set host device count to {n_chains} for CPU parallel chains",
                 )
+
+                # Verify that device count actually increased
+                new_n_devices = jax.local_device_count()
+                if new_n_devices < n_chains:
+                    logger.warning(
+                        f"Failed to set host device count to {n_chains} (still only {new_n_devices} device). "
+                        f"Falling back to num_chains=1 to avoid parallel chain errors."
+                    )
+                    n_chains = 1
+                    config["n_chains"] = 1  # Update config to reflect fallback
             elif platform == "gpu":
                 # GPU mode: use available GPU devices
                 logger.info(
@@ -2010,8 +2041,41 @@ def _run_numpyro_sampling(model, config, initial_values=None):
         _log_warmup_diagnostics(mcmc)
 
     except Exception as e:
-        logger.error(f"MCMC sampling failed: {e}")
-        raise
+        error_msg = str(e)
+
+        # Check if this is the "not enough devices" error
+        if "not enough devices" in error_msg.lower() and config["n_chains"] > 1:
+            logger.warning(
+                f"Parallel chains failed ({config['n_chains']} chains requested but only 1 device available). "
+                f"Retrying with num_chains=1 (sequential execution)..."
+            )
+
+            # Recreate MCMC with num_chains=1
+            mcmc = MCMC(
+                nuts_kernel,
+                num_warmup=config["n_warmup"],
+                num_samples=config["n_samples"],
+                num_chains=1,  # Fall back to single chain
+                progress_bar=True,
+            )
+
+            # Retry with single chain
+            mcmc.run(
+                rng_key,
+                init_params=initial_values,
+                extra_fields=(
+                    "potential_energy",
+                    "accept_prob",
+                    "diverging",
+                    "num_steps",
+                ),
+            )
+
+            logger.info("MCMC completed successfully with num_chains=1")
+            _log_warmup_diagnostics(mcmc)
+        else:
+            logger.error(f"MCMC sampling failed: {e}")
+            raise
 
     return mcmc
 

@@ -376,7 +376,8 @@ class TestMemoryUsage:
         gc.collect()
         memory_before = get_memory_usage_mb()
 
-        phi_s, t1_s, t2_s, g2_s = create_angle_stratified_data(
+        # Nov 10, 2025: create_angle_stratified_data now returns 5 values (added chunk_sizes)
+        phi_s, t1_s, t2_s, g2_s, _ = create_angle_stratified_data(
             phi, t1, t2, g2_exp, target_chunk_size=100_000
         )
 
@@ -400,7 +401,8 @@ class TestMemoryUsage:
         memory_initial = get_memory_usage_mb()
 
         # Run stratification
-        phi_s, t1_s, t2_s, g2_s = create_angle_stratified_data(
+        # Nov 10, 2025: create_angle_stratified_data now returns 5 values (added chunk_sizes)
+        phi_s, t1_s, t2_s, g2_s, _ = create_angle_stratified_data(
             phi, t1, t2, g2_exp, target_chunk_size=100_000
         )
 

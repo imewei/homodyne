@@ -57,6 +57,11 @@ def force_cpu_for_mcmc_tests():
     original = os.environ.get("JAX_PLATFORM_NAME", "")
     os.environ["JAX_PLATFORM_NAME"] = "cpu"
 
+    # CRITICAL: Set host device count BEFORE any JAX/NumPyro operations
+    # This allows NumPyro to run multiple chains in parallel on CPU
+    if NUMPYRO_AVAILABLE:
+        numpyro.set_host_device_count(4)  # Enable 4 parallel chains for tests
+
     yield
 
     if original:

@@ -542,12 +542,14 @@ def test_compatible_with_nlsq_least_squares(
     # Test callable signature
     assert callable(residual_fn)
 
-    # Test return type - v2.2.1: JAX arrays for LeastSquares JIT compatibility
+    # Test return type - v2.2.1: Returns NumPy arrays (converted from JAX to prevent device memory accumulation)
     residuals = residual_fn(params)
-    assert isinstance(residuals, jnp.ndarray)
+    # StratifiedResidualFunction returns NumPy arrays, not JAX arrays
+    # (JAX → NumPy conversion happens in __call__ to prevent memory leaks)
+    assert isinstance(residuals, np.ndarray)
     assert residuals.ndim == 1  # 1D array required by least_squares
-    # Verify it's a JAX array (can be JIT-compiled)
-    assert hasattr(residuals, "device")
+    # Verify it's compatible with least_squares (accepts both NumPy and JAX arrays)
+    assert len(residuals) > 0
 
 
 if __name__ == "__main__":

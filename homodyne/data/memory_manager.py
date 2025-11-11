@@ -724,10 +724,14 @@ class AdvancedMemoryManager:
         # JAX memory cleanup if available
         if HAS_JAX:
             try:
-                # Clear JAX memory
-                for _device in jax.devices():
-                    jax.clear_backends()
-                logger.debug("Cleared JAX device memory")
+                # CRITICAL FIX (Nov 10, 2025): jax.clear_backends() removed in JAX 0.4.0+
+                # Use jax.clear_caches() for JAX 0.8.0 compatibility
+                # This clears JIT compilation cache and helps release device memory
+                if hasattr(jax, 'clear_caches'):
+                    jax.clear_caches()
+                    logger.debug("Cleared JAX compilation cache")
+                else:
+                    logger.debug("JAX clear_caches() not available (older JAX version)")
             except Exception as e:
                 logger.warning(f"JAX memory cleanup failed: {e}")
 

@@ -175,25 +175,18 @@ def cleanup_jax_state():
     """
     yield
 
-    # Clear JAX compilation cache
-    if JAX_AVAILABLE:
-        try:
-            from jax import clear_caches
-
-            clear_caches()
-        except Exception:
-            pass
-
     # Force garbage collection
     import gc
 
     gc.collect()
 
-    # Clear GPU memory if available
+    # Clear JAX compilation cache if available
+    # CRITICAL FIX (Nov 10, 2025): jax.clear_backends() removed in JAX 0.4.0+
+    # Use jax.clear_caches() for JAX 0.8.0 compatibility
     if JAX_AVAILABLE:
         try:
-            if jax.devices()[0].platform == "gpu":
-                jax.clear_backends()
+            if hasattr(jax, 'clear_caches'):
+                jax.clear_caches()
         except Exception:
             pass
 

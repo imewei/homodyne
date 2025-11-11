@@ -149,6 +149,8 @@ class TestCMCConfigOverride:
             "sharding": {"num_shards": 10}  # Config file value
         }
         mock_config.config = {"analysis_mode": "laminar_flow"}
+        # Nov 10, 2025: Mock get_initial_parameters to return None (no initial values)
+        mock_config.get_initial_parameters.return_value = None
 
         # Fix: Ensure phi_angles_list matches c2_exp first dimension
         # Also provide 2D meshgrids for t1/t2 (required by data pooling code)
@@ -201,6 +203,8 @@ class TestCMCConfigOverride:
             "backend": {"name": "pjit"}  # Config file value
         }
         mock_config.config = {"analysis_mode": "laminar_flow"}
+        # Nov 10, 2025: Mock get_initial_parameters to return None (no initial values)
+        mock_config.get_initial_parameters.return_value = None
 
         # Fix: Ensure phi_angles_list matches c2_exp first dimension
         # Also provide 2D meshgrids for t1/t2 (required by data pooling code)

@@ -232,8 +232,8 @@ parameter_space:
       # Typical range: 100-10000 for colloidal systems (may be higher under shear)
 
     - name: alpha
-      min: -10.0                              # Minimum power-law exponent
-      max: 10.0                               # Maximum power-law exponent
+      min: -2.0                               # ✅ FIXED: Physically realistic minimum (was -10.0)
+      max: 2.0                                # ✅ FIXED: Physically realistic maximum (was 10.0)
       type: TruncatedNormal                   # ✅ FIXED: Changed from Normal to enforce bounds
       prior_mu: 0.5                           # Prior mean (superdiffusion common under shear)
       prior_sigma: 0.5                        # Prior std dev
@@ -241,6 +241,7 @@ parameter_space:
       # Physical meaning: Anomalous diffusion exponent
       # 0 = normal diffusion, <0 = subdiffusion, >0 = superdiffusion
       # Shear often induces superdiffusion (α > 0)
+      # ✅ Bounds tightened: [-10,10] caused numerical underflow (alpha=-4.96 → theory≈0)
 
     - name: D_offset
       min: -100000.0                          # Minimum baseline diffusion [Å²/s]
