@@ -2183,9 +2183,23 @@ class NLSQWrapper:
                 )
 
         # Extract data attributes and convert to JAX arrays
-        phi = jnp.asarray(data.phi)
-        t1 = jnp.asarray(data.t1)  # Keep as 1D
-        t2 = jnp.asarray(data.t2)  # Keep as 1D
+        # CRITICAL FIX (Nov 11, 2025): Handle stratified vs non-stratified data differently
+        #
+        # Stratified data: phi_flat, t1_flat, t2_flat are all per-point arrays (same length)
+        # Non-stratified data: phi, t1, t2 are unique grid values (different lengths)
+        is_stratified = hasattr(data, 'phi_flat')
+
+        if is_stratified:
+            # Stratified data: use per-point flat arrays
+            phi = jnp.asarray(data.phi_flat)  # Shape: (n_data,)
+            t1 = jnp.asarray(data.t1_flat)    # Shape: (n_data,)
+            t2 = jnp.asarray(data.t2_flat)    # Shape: (n_data,)
+        else:
+            # Non-stratified data: use unique grid values
+            phi = jnp.asarray(data.phi)       # Shape: (n_phi,)
+            t1 = jnp.asarray(data.t1)         # Shape: (n_t1,)
+            t2 = jnp.asarray(data.t2)         # Shape: (n_t2,)
+
         q = float(data.q)
         L = float(data.L)
 
@@ -2242,87 +2256,96 @@ class NLSQWrapper:
             offset = params_array[n_phi : 2 * n_phi]  # Array of shape (n_phi,)
             physical_params = params_array[2 * n_phi :]
 
-            # Compute theoretical g2 for each phi angle using JAX vmap
-            # This vectorizes the computation and maintains proper gradient flow
-            # CRITICAL FIX: Python for-loops break JAX autodiff, causing NaN gradients
-
-            # Per-angle scaling: pass different contrast/offset to each unique phi (legacy mode removed Nov 2025)
-            # Create vectorized version that takes unique phi angles and scaling parameters
-            # contrast[i] and offset[i] are used for phi_unique[i]
-            compute_g2_scaled_vmap = jax.vmap(
-                lambda phi_val, contrast_val, offset_val: jnp.squeeze(
-                    compute_g2_scaled(
-                        params=physical_params,
-                        t1=t1,  # 1D arrays
-                        t2=t2,
-                        phi=phi_val,  # Single phi value
-                        q=q,
-                        L=L,
-                        contrast=contrast_val,  # Per-angle contrast
-                        offset=offset_val,  # Per-angle offset
-                        dt=dt,
-                    ),
-                    axis=0,  # Squeeze the phi dimension
-                ),
-                in_axes=(0, 0, 0),  # Vectorize over all three arrays
-            )
-
-            # Compute all UNIQUE phi angles with their corresponding contrast/offset
-            # CRITICAL FIX (Nov 11, 2025): Use phi_unique (23 values), NOT phi (23M repeated values)
-            # Bug: vmap with in_axes=(0,0,0) requires all arrays to have same length
-            #   - phi: shape (23M,) - full repeated array
-            #   - contrast: shape (23,) - per-angle values
-            #   - offset: shape (23,) - per-angle values
-            # This dimensional mismatch caused zero gradients for 22/23 angles
-            # Fix: Use phi_unique to match contrast/offset dimensions
-            # Shape: (n_phi, n_t1, n_t2) = (23, 1001, 1001)
-            g2_theory = compute_g2_scaled_vmap(phi_unique, contrast, offset)
-
-            # CRITICAL: Apply diagonal correction to match experimental data preprocessing
-            # The experimental data is diagonal-corrected in xpcs_loader.py:530-540.
-            # We MUST apply the same correction to theoretical model to prevent mismatch.
-            # Without this, NLSQ fails silently with 0 iterations.
-            from homodyne.core.physics_nlsq import apply_diagonal_correction
-
-            apply_diagonal_vmap = jax.vmap(apply_diagonal_correction, in_axes=0)
-            g2_theory = apply_diagonal_vmap(g2_theory)
-
-            # CRITICAL FIX (Nov 11, 2025): Data structure and indexing
-            #
-            # Data structure (stratified):
-            #   - phi: shape (n_data,) - which angle each data point belongs to
-            #   - t1: shape (n_t1,) - UNIQUE t1 grid values (NOT per-point!)
-            #   - t2: shape (n_t2,) - UNIQUE t2 grid values (NOT per-point!)
-            #   - g2: shape (n_data,) - experimental values (SPARSE - not all grid points have data!)
-            #
-            # g2_theory: shape (n_phi, n_t1, n_t2) - computed on FULL GRID
-            #
-            # xdata contains FLAT INDICES into the (n_phi, n_t1, n_t2) grid
-            # BUT these indices assume ANGLE-MAJOR ordering: [phi0_all_t1t2, phi1_all_t1t2, ...]
-            #
-            # Problem: Stratified data has MIXED angle ordering in chunks!
-            # Each chunk has points from ALL angles interleaved.
-            #
-            # Solution: Reconstruct which grid point each data point corresponds to
-            # using phi array to map data points to their angle index
-
             # Get requested data point indices
             indices = xdata.astype(jnp.int32)
 
-            # For each requested index, determine its (phi_idx, t1_idx, t2_idx) in the grid
-            # xdata assumes flattened grid in angle-major order
-            n_t1 = len(t1)
-            n_t2 = len(t2)
-            grid_size_per_angle = n_t1 * n_t2  # 1001 × 1001 = 1,002,001
+            # CRITICAL FIX (Nov 11, 2025): Handle stratified vs non-stratified data
+            if is_stratified:
+                # STRATIFIED DATA PATH (per-point arrays)
+                # Extract per-point values for requested indices
+                phi_requested = phi[indices]  # Shape: (chunk_size,)
+                t1_requested = t1[indices]    # Shape: (chunk_size,)
+                t2_requested = t2[indices]    # Shape: (chunk_size,)
 
-            # Decompose flat indices into grid coordinates
-            phi_idx = indices // grid_size_per_angle  # Which angle (0-22)
-            remaining = indices % grid_size_per_angle
-            t1_idx = remaining // n_t2  # Which t1 index (0-1000)
-            t2_idx = remaining % n_t2  # Which t2 index (0-1000)
+                # Map phi values to indices in phi_unique to get correct contrast/offset
+                # Find which unique phi each requested phi corresponds to
+                # Since phi values come from phi_unique, we can use searchsorted
+                # CRITICAL: Keep all arrays in JAX (no np.asarray) for JIT compatibility
+                phi_idx = jnp.searchsorted(phi_unique, phi_requested)  # Shape: (chunk_size,)
 
-            # Use advanced indexing to select theory values
-            return g2_theory[phi_idx, t1_idx, t2_idx]  # Shape: (chunk_size,)
+                # Select per-angle contrast and offset for each data point
+                contrast_requested = contrast[phi_idx]  # Shape: (chunk_size,)
+                offset_requested = offset[phi_idx]      # Shape: (chunk_size,)
+
+                # Compute g2 per-point using vmap
+                # Each point has its own (phi, t1, t2, contrast, offset)
+                compute_g2_per_point = jax.vmap(
+                    lambda phi_val, t1_val, t2_val, c_val, o_val: compute_g2_scaled(
+                        params=physical_params,
+                        t1=jnp.array([t1_val]),  # Single value as 1D array
+                        t2=jnp.array([t2_val]),
+                        phi=phi_val,
+                        q=q,
+                        L=L,
+                        contrast=c_val,
+                        offset=o_val,
+                        dt=dt,
+                    )[0, 0],  # Extract scalar from (1, 1) output
+                    in_axes=(0, 0, 0, 0, 0),  # Vmap over all arrays
+                )
+
+                g2_theory = compute_g2_per_point(
+                    phi_requested, t1_requested, t2_requested,
+                    contrast_requested, offset_requested
+                )  # Shape: (chunk_size,) or possibly (chunk_size, 1)
+
+                # Ensure 1D output by squeezing any trailing dimensions
+                g2_theory = jnp.squeeze(g2_theory)
+
+                return g2_theory
+
+            else:
+                # NON-STRATIFIED DATA PATH (grid-based computation)
+                # Original grid-based logic for non-stratified data
+                compute_g2_scaled_vmap = jax.vmap(
+                    lambda phi_val, contrast_val, offset_val: jnp.squeeze(
+                        compute_g2_scaled(
+                            params=physical_params,
+                            t1=t1,  # 1D arrays
+                            t2=t2,
+                            phi=phi_val,  # Single phi value
+                            q=q,
+                            L=L,
+                            contrast=contrast_val,  # Per-angle contrast
+                            offset=offset_val,  # Per-angle offset
+                            dt=dt,
+                        ),
+                        axis=0,  # Squeeze the phi dimension
+                    ),
+                    in_axes=(0, 0, 0),  # Vectorize over all three arrays
+                )
+
+                # Compute on grid for all unique angles
+                g2_theory = compute_g2_scaled_vmap(phi_unique, contrast, offset)
+                # Shape: (n_phi, n_t1, n_t2)
+
+                # Apply diagonal correction
+                from homodyne.core.physics_nlsq import apply_diagonal_correction
+                apply_diagonal_vmap = jax.vmap(apply_diagonal_correction, in_axes=0)
+                g2_theory = apply_diagonal_vmap(g2_theory)
+
+                # Grid-based indexing for non-stratified data
+                n_t1 = len(t1)
+                n_t2 = len(t2)
+                grid_size_per_angle = n_t1 * n_t2
+
+                # Decompose flat indices into grid coordinates
+                phi_idx = indices // grid_size_per_angle
+                remaining = indices % grid_size_per_angle
+                t1_idx = remaining // n_t2
+                t2_idx = remaining % n_t2
+
+                return g2_theory[phi_idx, t1_idx, t2_idx]
 
         return model_function
 
