@@ -2942,16 +2942,18 @@ def _compute_nlsq_fits(
         # Find optimal contrast/offset that maps theory → experiment for visualization
         # Solve: c2_exp = contrast * c2_theory_raw + offset (per-angle)
         # This matches the old working version approach (homodyne-analysis)
-        theory_flat = c2_theory_raw_np.flatten()
-        exp_flat = c2_exp[i].flatten()
+        # JAX-first implementation for consistency with codebase
+        theory_flat_jax = jnp.array(c2_theory_raw_np.flatten())
+        exp_flat_jax = jnp.array(c2_exp[i].flatten())
 
-        # Build design matrix A = [theory, ones]
-        A = np.column_stack([theory_flat, np.ones_like(theory_flat)])
-        # Solve: A @ [contrast, offset] = exp
-        solution, _, _, _ = np.linalg.lstsq(A, exp_flat, rcond=None)
-        contrast_lstsq, offset_lstsq = solution
+        # Build design matrix A = [theory, ones] using JAX
+        A_jax = jnp.column_stack([theory_flat_jax, jnp.ones_like(theory_flat_jax)])
+        # Solve: A @ [contrast, offset] = exp using JAX lstsq
+        solution_jax, _, _, _ = jnp.linalg.lstsq(A_jax, exp_flat_jax, rcond=None)
+        contrast_lstsq = float(solution_jax[0])
+        offset_lstsq = float(solution_jax[1])
 
-        # Apply lstsq scaling
+        # Apply lstsq scaling (keep as NumPy for storage)
         c2_theoretical_scaled_angle = contrast_lstsq * c2_theory_raw_np + offset_lstsq
         c2_theoretical_fitted.append(c2_theoretical_scaled_angle)
 
