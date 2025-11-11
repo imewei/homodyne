@@ -253,6 +253,7 @@ def _compute_g1_diffusion_meshgrid(
     t1: jnp.ndarray,
     t2: jnp.ndarray,
     wavevector_q_squared_half_dt: float,
+    dt: float,
 ) -> jnp.ndarray:
     """Meshgrid diffusion computation for NLSQ optimization.
 
@@ -261,12 +262,18 @@ def _compute_g1_diffusion_meshgrid(
 
     Args:
         params: Physical parameters [D0, alpha, D_offset, ...]
-        t1: Time meshgrid (2D) or 1D time array
-        t2: Time meshgrid (2D) or 1D time array
+        t1: Time meshgrid (2D) or 1D time array (PHYSICAL TIME in seconds)
+        t2: Time meshgrid (2D) or 1D time array (PHYSICAL TIME in seconds)
         wavevector_q_squared_half_dt: Pre-computed factor 0.5 * q² * dt
+        dt: Time step [seconds] - used ONLY for wavevector_q_squared_half_dt calculation
 
     Returns:
         Diffusion contribution to g1 (2D array: (n_times, n_times))
+
+    Note:
+        The data loader (xpcs_loader.py) converts frame indices to physical time:
+        time_1d = np.linspace(0, dt * (end_frame - start_frame), matrix_size)
+        So t1/t2 arrays contain physical time [0.0, 0.1, 0.2, ...], NOT frame indices.
     """
     D0, alpha, D_offset = params[0], params[1], params[2]
 
@@ -275,7 +282,7 @@ def _compute_g1_diffusion_meshgrid(
     if t1.ndim == 2:
         # For meshgrid with indexing="ij": t1 varies along rows (axis 0), constant along columns
         # So extract first COLUMN to get unique t1 values
-        time_array = t1[:, 0]  # Extract first column for unique t1 values
+        time_array = t1[:, 0]  # Extract first column for unique t1 values (in seconds)
     elif t1.ndim == 0:
         # Handle 0-dimensional (scalar) input
         time_array = jnp.atleast_1d(t1)
@@ -283,7 +290,12 @@ def _compute_g1_diffusion_meshgrid(
         # Handle 1D and other cases
         time_array = jnp.atleast_1d(t1)
 
-    # Calculate D(t) at each time point
+    # ✅ CRITICAL FIX (Nov 11, 2025): time_array is ALREADY physical time in seconds
+    # Data loader converts: time_1d = np.linspace(0, dt*(end-start), size)
+    # Result: time_array = [0.0, 0.1, 0.2, ...] seconds (NOT frame indices!)
+    # DO NOT multiply by dt - that would cause 10× time scale error!
+
+    # Calculate D(t) at each time point (time_array already in seconds)
     D_t = _calculate_diffusion_coefficient_impl_jax(time_array, D0, alpha, D_offset)
 
     # Create diffusion integral matrix using cumulative sums
@@ -322,6 +334,7 @@ def _compute_g1_shear_meshgrid(
     t2: jnp.ndarray,
     phi: jnp.ndarray,
     sinc_prefactor: float,
+    dt: float,
 ) -> jnp.ndarray:
     """Meshgrid shear computation for NLSQ optimization.
 
@@ -330,13 +343,18 @@ def _compute_g1_shear_meshgrid(
 
     Args:
         params: Physical parameters [D0, alpha, D_offset, gamma_dot_0, beta, gamma_dot_offset, phi0]
-        t1: Time meshgrid (2D) or 1D time array
-        t2: Time meshgrid (2D) or 1D time array
+        t1: Time meshgrid (2D) or 1D time array (PHYSICAL TIME in seconds)
+        t2: Time meshgrid (2D) or 1D time array (PHYSICAL TIME in seconds)
         phi: Scattering angles (1D array)
         sinc_prefactor: Pre-computed factor 0.5/π * q * L * dt
+        dt: Time step [seconds] - used ONLY for sinc_prefactor calculation
 
     Returns:
         Shear contribution to g1 (3D array: (n_phi, n_times, n_times))
+
+    Note:
+        The data loader (xpcs_loader.py) converts frame indices to physical time.
+        So t1/t2 arrays contain physical time [0.0, 0.1, 0.2, ...], NOT frame indices.
     """
     # Check params length - if < 7, we're in static mode (no shear)
     if safe_len(params) < 7:
@@ -357,12 +375,12 @@ def _compute_g1_shear_meshgrid(
         params[6],
     )
 
-    # Extract time array (t1 and t2 should be identical)
+    # Extract time array from t1 and t2 (should be identical)
     # Handle all dimensionality cases: 0D (scalar), 1D arrays, and 2D meshgrids
     if t1.ndim == 2:
         # For meshgrid with indexing="ij": t1 varies along rows (axis 0), constant along columns
         # So extract first COLUMN to get unique t1 values
-        time_array = t1[:, 0]  # Extract first column for unique t1 values
+        time_array = t1[:, 0]  # Extract first column for unique t1 values (in seconds)
     elif t1.ndim == 0:
         # Handle 0-dimensional (scalar) input
         time_array = jnp.atleast_1d(t1)
@@ -370,7 +388,12 @@ def _compute_g1_shear_meshgrid(
         # Handle 1D and other cases
         time_array = jnp.atleast_1d(t1)
 
-    # Calculate γ̇(t) at each time point
+    # ✅ CRITICAL FIX (Nov 11, 2025): time_array is ALREADY physical time in seconds
+    # Data loader converts: time_1d = np.linspace(0, dt*(end-start), size)
+    # Result: time_array = [0.0, 0.1, 0.2, ...] seconds (NOT frame indices!)
+    # DO NOT multiply by dt - that would cause 10× time scale error!
+
+    # Calculate γ̇(t) at each time point (time_array already in seconds)
     gamma_t = _calculate_shear_rate_impl_jax(
         time_array,
         gamma_dot_0,
@@ -448,6 +471,7 @@ def _compute_g1_total_meshgrid(
     phi: jnp.ndarray,
     wavevector_q_squared_half_dt: float,
     sinc_prefactor: float,
+    dt: float,
 ) -> jnp.ndarray:
     """Meshgrid total g1 computation for NLSQ optimization.
 
@@ -456,22 +480,23 @@ def _compute_g1_total_meshgrid(
 
     Args:
         params: Physical parameters [D0, alpha, D_offset, gamma_dot_0, beta, gamma_dot_offset, phi0]
-        t1: Time meshgrid (2D) or 1D time array
-        t2: Time meshgrid (2D) or 1D time array
+        t1: Time meshgrid (2D) or 1D time array (FRAME INDICES)
+        t2: Time meshgrid (2D) or 1D time array (FRAME INDICES)
         phi: Scattering angles
         wavevector_q_squared_half_dt: Pre-computed factor 0.5 * q² * dt
         sinc_prefactor: Pre-computed factor 0.5/π * q * L * dt
+        dt: Time step per frame [seconds] - for frame→time conversion
 
     Returns:
         Total g1 correlation function (3D array: (n_phi, n_times, n_times))
     """
     # Compute diffusion contribution: shape (n_times, n_times)
     g1_diff = _compute_g1_diffusion_meshgrid(
-        params, t1, t2, wavevector_q_squared_half_dt
+        params, t1, t2, wavevector_q_squared_half_dt, dt
     )
 
     # Compute shear contribution: shape (n_phi, n_times, n_times)
-    g1_shear = _compute_g1_shear_meshgrid(params, t1, t2, phi, sinc_prefactor)
+    g1_shear = _compute_g1_shear_meshgrid(params, t1, t2, phi, sinc_prefactor, dt)
 
     # Broadcast g1_diff from (n_times, n_times) to (n_phi, n_times, n_times)
     n_phi = g1_shear.shape[0]
@@ -508,6 +533,7 @@ def _compute_g2_scaled_meshgrid(
     sinc_prefactor: float,
     contrast: float,
     offset: float,
+    dt: float,
 ) -> jnp.ndarray:
     """Meshgrid g2 computation for NLSQ optimization.
 
@@ -516,12 +542,13 @@ def _compute_g2_scaled_meshgrid(
 
     Args:
         params: Physical parameters [D0, alpha, D_offset, gamma_dot_0, beta, gamma_dot_offset, phi0]
-        t1, t2: Time points for correlation calculation
+        t1, t2: Time points for correlation calculation (FRAME INDICES)
         phi: Scattering angles
         wavevector_q_squared_half_dt: Pre-computed factor 0.5 * q² * dt
         sinc_prefactor: Pre-computed factor 0.5/π * q * L * dt
         contrast: Contrast parameter (β in literature)
         offset: Baseline offset
+        dt: Time step per frame [seconds] - for frame→time conversion
 
     Returns:
         g2 correlation function with scaled fitting and physical bounds applied
@@ -533,6 +560,7 @@ def _compute_g2_scaled_meshgrid(
         phi,
         wavevector_q_squared_half_dt,
         sinc_prefactor,
+        dt,
     )
     g2 = offset + contrast * g1**2
 
@@ -660,8 +688,11 @@ def compute_g2_scaled(
         t2 = t2_grid
 
     # Compute the physics factors using configuration dt
-    wavevector_q_squared_half_dt = 0.5 * (q**2) * dt
-    sinc_prefactor = 0.5 / PI * q * L * dt
+    # IMPORTANT: Config dt value will OVERRIDE this default
+    # Default dt = 0.001s if not in config (APS-U standard XPCS frame rate: 1ms)
+    dt_value = dt if dt is not None else 0.001
+    wavevector_q_squared_half_dt = 0.5 * (q**2) * dt_value
+    sinc_prefactor = 0.5 / PI * q * L * dt_value
 
     return _compute_g2_scaled_meshgrid(
         params,
@@ -672,6 +703,7 @@ def compute_g2_scaled(
         sinc_prefactor,
         contrast,
         offset,
+        dt_value,
     )
 
 
@@ -685,6 +717,7 @@ def compute_g2_scaled_with_factors(
     sinc_prefactor: float,
     contrast: float,
     offset: float,
+    dt: float,
 ) -> jnp.ndarray:
     """JIT-optimized g2 computation using pre-computed physics factors.
 
@@ -694,12 +727,13 @@ def compute_g2_scaled_with_factors(
 
     Args:
         params: Physical parameters [D0, alpha, D_offset, gamma_dot_0, beta, gamma_dot_offset, phi0]
-        t1, t2: Time grids for correlation calculation
+        t1, t2: Time grids for correlation calculation (FRAME INDICES)
         phi: Scattering angles [degrees]
         wavevector_q_squared_half_dt: Pre-computed factor (0.5 * q² * dt)
         sinc_prefactor: Pre-computed factor (q * L * dt / 2π)
         contrast: Contrast parameter (β in literature)
         offset: Baseline offset
+        dt: Time step per frame [seconds] - for frame→time conversion
 
     Returns:
         g2 correlation function with scaled fitting
@@ -719,4 +753,5 @@ def compute_g2_scaled_with_factors(
         sinc_prefactor,
         contrast,
         offset,
+        dt,
     )
