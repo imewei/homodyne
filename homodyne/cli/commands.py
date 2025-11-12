@@ -2203,9 +2203,23 @@ def _generate_and_plot_fitted_simulations(
     import matplotlib.pyplot as plt
     import numpy as np
 
+    from homodyne.config.manager import ConfigManager
     from homodyne.core.models import CombinedModel
 
     logger.info("Generating fitted C₂ simulations...")
+
+    # Apply phi filtering to data (if enabled in config)
+    # Convert config dict to ConfigManager if needed for filtering function
+    if isinstance(config, dict):
+        config_for_filtering = ConfigManager(config_dict=config)
+    else:
+        config_for_filtering = config
+
+    filtered_data = _apply_angle_filtering_for_optimization(data, config_for_filtering)
+    logger.debug(
+        f"Applied phi filtering for fitted simulation plots: "
+        f"{len(filtered_data['phi_angles_list'])} angles selected"
+    )
 
     # Create simulated_data subdirectory
     simulated_data_dir = output_dir / "simulated_data"
@@ -2258,10 +2272,10 @@ def _generate_and_plot_fitted_simulations(
     # Create model
     model = CombinedModel(analysis_mode)
 
-    # Get experimental data structure
-    phi_angles_list = data.get("phi_angles_list", None)
-    t1 = data.get("t1", None)
-    t2 = data.get("t2", None)
+    # Get experimental data structure (using filtered data)
+    phi_angles_list = filtered_data.get("phi_angles_list", None)
+    t1 = filtered_data.get("t1", None)
+    t2 = filtered_data.get("t2", None)
 
     if phi_angles_list is None or t1 is None or t2 is None:
         logger.warning("Missing experimental data structure (phi_angles_list, t1, t2)")
@@ -2449,7 +2463,7 @@ def _plot_fit_comparison(result: Any, data: dict[str, Any], plots_dir) -> None:
         axes[0].set_xlabel("Data Point Index")
         axes[0].set_ylabel("C₂")
     else:
-        im0 = axes[0].imshow(c2_exp, aspect="auto", cmap="viridis")
+        im0 = axes[0].imshow(c2_exp, aspect="auto", cmap="viridis", vmin=1.0, vmax=1.5)
         plt.colorbar(im0, ax=axes[0], label="C₂")
         axes[0].set_xlabel("t₂ Index")
         axes[0].set_ylabel("φ Index")
@@ -2736,53 +2750,6 @@ def _prepare_parameter_data(result: Any, analysis_mode: str) -> dict[str, Any]:
     return param_dict
 
 
-def _apply_diagonal_correction_to_c2(c2_mat: np.ndarray) -> np.ndarray:
-    """Apply diagonal correction to correlation matrix.
-
-    Matches the diagonal correction applied to experimental data in xpcs_loader.py.
-    Replaces diagonal values with average of adjacent off-diagonal values.
-
-    Based on pyXPCSViewer's correct_diagonal_c2 function.
-
-    Parameters
-    ----------
-    c2_mat : np.ndarray
-        Correlation matrix with shape (n_times, n_times)
-
-    Returns
-    -------
-    np.ndarray
-        Correlation matrix with corrected diagonal
-
-    Notes
-    -----
-    This correction:
-    - Removes systematic artifacts in diagonal C2(t,t) values
-    - Ensures fitted data matches experimental data processing
-    - Fixes constant diagonal issue in theoretical model
-
-    Reference: homodyne/data/xpcs_loader.py lines 925-953
-    """
-    size = c2_mat.shape[0]
-
-    # Extract side band (one off-diagonal: i,i+1 elements)
-    side_band = c2_mat[(np.arange(size - 1), np.arange(1, size))]
-
-    # Create diagonal values as average of adjacent off-diagonal elements
-    diag_val = np.zeros(size)
-    diag_val[:-1] += side_band  # Upper side
-    diag_val[1:] += side_band  # Lower side (same as upper for symmetric matrix)
-
-    # Normalization: edge elements averaged once, interior elements averaged twice
-    norm = np.ones(size)
-    norm[1:-1] = 2
-
-    # Create corrected matrix (copy to avoid modifying input)
-    c2_corrected = c2_mat.copy()
-    c2_corrected[np.diag_indices(size)] = diag_val / norm
-
-    return c2_corrected
-
 
 def _compute_nlsq_fits(
     result: Any,
@@ -2926,14 +2893,9 @@ def _compute_nlsq_fits(
 
         # Apply diagonal correction to match experimental data processing
         # This fixes the constant diagonal issue in theoretical model (c1(t,t) = 1 always)
-        diag_before = np.diag(c2_theory_raw_np).copy()
-        c2_theory_raw_np = _apply_diagonal_correction_to_c2(c2_theory_raw_np)
-        diag_after = np.diag(c2_theory_raw_np).copy()
+        
 
-        logger.debug(
-            f"Angle {phi_angle:.1f}°: Diagonal correction - before: [{diag_before[0]:.3f}, {diag_before[1]:.3f}, ..., {diag_before[-1]:.3f}], "
-            f"after: [{diag_after[0]:.3f}, {diag_after[1]:.3f}, ..., {diag_after[-1]:.3f}]"
-        )
+
 
         # Store raw theory
         c2_theoretical_raw_list.append(c2_theory_raw_np)
@@ -3162,9 +3124,17 @@ def save_nlsq_results(
     # Get analysis mode
     analysis_mode = config.config.get("analysis_mode", "static_isotropic")
 
+    # Apply phi filtering to data (if enabled in config)
+    # This ensures saved data and plots respect phi_filtering configuration
+    filtered_data = _apply_angle_filtering_for_optimization(data, config)
+    logger.debug(
+        f"Applied phi filtering for NLSQ saving: "
+        f"{len(filtered_data['phi_angles_list'])} angles selected"
+    )
+
     # Step 1: Extract metadata
     logger.debug("Extracting metadata (L, dt, q)")
-    metadata = _extract_nlsq_metadata(config, data)
+    metadata = _extract_nlsq_metadata(config, filtered_data)
 
     # Step 2: Prepare parameter data
     logger.debug(f"Preparing parameter data for {analysis_mode} mode")
@@ -3182,11 +3152,11 @@ def save_nlsq_results(
 
     # Step 3: Compute theoretical fits with per-angle scaling
     logger.info("Computing theoretical fits with per-angle scaling")
-    fits_dict = _compute_nlsq_fits(result, data, metadata)
+    fits_dict = _compute_nlsq_fits(result, filtered_data, metadata)
 
     # Step 4: Prepare analysis results dictionary
-    phi_angles = np.asarray(data["phi_angles_list"])
-    c2_exp = np.asarray(data["c2_exp"])
+    phi_angles = np.asarray(filtered_data["phi_angles_list"])
+    c2_exp = np.asarray(filtered_data["c2_exp"])
     n_angles = len(phi_angles)
     n_data_points = c2_exp.size
     n_params = len(result.parameters)
@@ -3621,16 +3591,24 @@ def save_mcmc_results(
     try:
         logger.info("Generating comparison heatmap plots")
 
+        # Apply phi filtering to data (if enabled in config)
+        # This ensures plots respect phi_filtering configuration
+        filtered_data = _apply_angle_filtering_for_optimization(data, config)
+        logger.debug(
+            f"Applied phi filtering for MCMC plotting: "
+            f"{len(filtered_data['phi_angles_list'])} angles selected"
+        )
+
         # Compute theoretical C2 using posterior mean parameters
-        c2_theoretical_scaled = _compute_theoretical_c2_from_mcmc(result, data, config)
+        c2_theoretical_scaled = _compute_theoretical_c2_from_mcmc(result, filtered_data, config)
 
         # Calculate residuals
-        c2_exp = data["c2_exp"]
+        c2_exp = filtered_data["c2_exp"]
         residuals = c2_exp - c2_theoretical_scaled
 
         # Convert time arrays
-        t1 = np.asarray(data["t1"])
-        t2 = np.asarray(data["t2"])
+        t1 = np.asarray(filtered_data["t1"])
+        t2 = np.asarray(filtered_data["t2"])
         if t1.ndim == 2:
             t1 = t1[:, 0]
         if t2.ndim == 2:
@@ -3638,7 +3616,7 @@ def save_mcmc_results(
 
         # Generate plots using NLSQ plotting function
         generate_nlsq_plots(
-            phi_angles=data["phi_angles_list"],
+            phi_angles=filtered_data["phi_angles_list"],
             c2_exp=c2_exp,
             c2_theoretical_scaled=c2_theoretical_scaled,
             residuals=residuals,
@@ -3647,7 +3625,7 @@ def save_mcmc_results(
             output_dir=method_dir,
             config=config,
         )
-        logger.info(f"  - {len(data['phi_angles_list'])} PNG heatmap plots")
+        logger.info(f"  - {len(filtered_data['phi_angles_list'])} PNG heatmap plots")
     except Exception as e:
         logger.warning(f"Heatmap plot generation failed (data files still saved): {e}")
         logger.debug("Plot error details:", exc_info=True)
@@ -4456,7 +4434,7 @@ def _generate_plots_matplotlib(
         # Create 3-panel figure
         fig, axes = plt.subplots(1, 3, figsize=(15, 5))
 
-        # Panel 1: Experimental data
+        # Panel 1: Experimental data with fixed color scale [1.0, 1.5]
         # Transpose because data is structured as c2[t1_index, t2_index] with indexing="ij"
         # but we want x-axis=t1, y-axis=t2 for display
         im0 = axes[0].imshow(
@@ -4465,6 +4443,8 @@ def _generate_plots_matplotlib(
             aspect="equal",
             cmap="viridis",
             extent=[t1[0], t1[-1], t2[0], t2[-1]],
+            vmin=1.0,
+            vmax=1.5,
         )
         axes[0].set_title(f"Experimental C₂ (φ={phi:.1f}°)", fontsize=12)
         axes[0].set_xlabel("t₁ (s)", fontsize=10)
@@ -4472,13 +4452,15 @@ def _generate_plots_matplotlib(
         cbar0 = plt.colorbar(im0, ax=axes[0], label="C₂(t₁,t₂)")
         cbar0.ax.tick_params(labelsize=8)
 
-        # Panel 2: Theoretical fit
+        # Panel 2: Theoretical fit with fixed color scale [1.0, 1.5]
         im1 = axes[1].imshow(
             c2_theoretical_scaled[i].T,
             origin="lower",
             aspect="equal",
             cmap="viridis",
             extent=[t1[0], t1[-1], t2[0], t2[-1]],
+            vmin=1.0,
+            vmax=1.5,
         )
         axes[1].set_title(f"Classical Fit (φ={phi:.1f}°)", fontsize=12)
         axes[1].set_xlabel("t₁ (s)", fontsize=10)

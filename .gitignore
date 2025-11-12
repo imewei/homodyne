@@ -248,6 +248,7 @@ __marimo__/
 agent-os/
 .specify/
 specs/
+.code/
 
 # OS files
 .DS_Store
@@ -262,6 +263,7 @@ Thumbs.db
 *.bak
 *.orig
 
+AGENTS.md
 CLAUDE.md
 WARP.md
 .serena/

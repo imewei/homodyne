@@ -377,7 +377,7 @@ class HomodyneModel:
             # Create figure
             fig, ax = plt.subplots(figsize=(8, 6))
 
-            # Create heatmap
+            # Create heatmap with fixed color scale [1.0, 1.5]
             im = ax.imshow(
                 c2_matrix,
                 aspect="equal",
@@ -389,6 +389,8 @@ class HomodyneModel:
                     self.time_array[-1],
                 ),
                 cmap="viridis",
+                vmin=1.0,
+                vmax=1.5,
             )
 
             # Add colorbar

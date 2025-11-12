@@ -281,8 +281,8 @@ def plot_c2_heatmap_fast(
 
     # Transpose to match matplotlib convention: c2[t1_idx, t2_idx] → c2.T for correct axes
     # After transpose: dim 0=t2, dim 1=t1, matching x=t1 (horizontal), y=t2 (vertical)
-    # Rasterize with Datashader (FAST!)
-    img_pil = renderer.rasterize_heatmap(c2_data.T, t1, t2, cmap=cmap)
+    # Rasterize with Datashader (FAST!) with fixed color scale [1.0, 1.5]
+    img_pil = renderer.rasterize_heatmap(c2_data.T, t1, t2, cmap=cmap, vmin=1.0, vmax=1.5)
 
     # Convert PIL to numpy array for matplotlib display
     img_array = np.array(img_pil)
@@ -307,9 +307,9 @@ def plot_c2_heatmap_fast(
         title = f"{title} at φ={phi_angle:.1f}°" if title else f"φ={phi_angle:.1f}°"
     ax.set_title(title, fontsize=13, fontweight="bold")
 
-    # Add colorbar using original data values
+    # Add colorbar using fixed color scale [1.0, 1.5]
     # Create ScalarMappable with same colormap and data range
-    norm = Normalize(vmin=c2_data.min(), vmax=c2_data.max())
+    norm = Normalize(vmin=1.0, vmax=1.5)
     sm = ScalarMappable(cmap=cm.get_cmap(cmap), norm=norm)
     sm.set_array([])  # Required for colorbar
 
@@ -377,11 +377,10 @@ def plot_c2_comparison_fast(
     # Transpose to match matplotlib convention: c2[t1_idx, t2_idx] → c2.T for correct axes
     # After transpose: dim 0=t2, dim 1=t1, matching x=t1 (horizontal), y=t2 (vertical)
 
-    # CRITICAL: Use SHARED color normalization for experimental and theoretical panels
-    # Without this, each panel auto-normalizes to its own range, making visual comparison impossible
-    # E.g., exp=[1.0,1.2] and fit=[1.1,1.5] would both span full colormap but represent different values
-    vmin_shared = min(c2_exp.min(), c2_fit.min())
-    vmax_shared = max(c2_exp.max(), c2_fit.max())
+    # Fixed color scale [1.0, 1.5] for experimental and theoretical panels
+    # This provides consistent visualization across all C2 heatmaps
+    vmin_shared = 1.0
+    vmax_shared = 1.5
 
     # Rasterize all three panels using Datashader for speed
     img_exp = renderer.rasterize_heatmap(
