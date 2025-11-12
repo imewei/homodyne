@@ -555,6 +555,15 @@ plotting:
   # Controls speed vs quality tradeoff for C2 heatmap plots
   preview_mode: false                         # false = publication quality (matplotlib, slower)
                                               # true = fast preview (Datashader, 5-10x faster)
+  fit_surface: "solver"                       # Options: "solver" | "posthoc"
+
+  color_scale:
+    mode: "legacy"                           # Options: "legacy" | "adaptive"
+    pin_legacy_range: true                    # When true, pin to [1.0, 1.5]
+    percentile_min: 1.0                       # Adaptive lower percentile
+    percentile_max: 99.0                      # Adaptive upper percentile
+    fixed_min: 1.0                            # Optional explicit minimum
+    fixed_max: 1.5                            # Optional explicit maximum
 
   # Datashader configuration (used when preview_mode: true)
   datashader:

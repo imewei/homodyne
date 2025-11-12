@@ -319,6 +319,18 @@ Example 7: Angle Filtering for Anisotropic Analysis
 .. code-block:: bash
 
    python examples/angle_filtering.py
+
+Solver/Post-hoc Diagonal Overlay
+--------------------------------
+
+**Example script:** ``examples/overlay_solver_vs_posthoc.py``
+
+This helper compares diagonals from the experimental cube, the solver-evaluated
+surface, and the legacy post-hoc surface saved inside ``fitted_data.npz``.
+
+.. code-block:: bash
+
+   python examples/overlay_solver_vs_posthoc.py homodyne_results/nlsq/fitted_data.npz --phi-index 0
    homodyne --config config_angle_filtering.yaml
 
 **Expected output:**

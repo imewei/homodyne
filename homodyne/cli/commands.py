@@ -2755,6 +2755,8 @@ def _compute_nlsq_fits(
     result: Any,
     data: dict[str, Any],
     metadata: dict[str, Any],
+    *,
+    include_solver_surface: bool = True,
 ) -> dict[str, Any]:
     """Compute theoretical fits with per-angle least squares scaling.
 
@@ -2859,7 +2861,9 @@ def _compute_nlsq_fits(
     # Sequential per-angle computation
     c2_theoretical_raw_list = []
     c2_theoretical_fitted = []
-    per_angle_scaling = []  # Store for compatibility
+    solver_surface = []
+    per_angle_scaling_posthoc = []  # Preserve legacy behavior
+    solver_scaling = np.column_stack((fitted_contrasts, fitted_offsets))
 
     for i, phi_angle in enumerate(phi_angles):
         # Convert to JAX arrays
@@ -2900,6 +2904,24 @@ def _compute_nlsq_fits(
         # Store raw theory
         c2_theoretical_raw_list.append(c2_theory_raw_np)
 
+        if include_solver_surface:
+            # Evaluate solver surface using original per-angle contrast/offset
+            c2_solver = compute_g2_scaled(
+                params=params_jax,
+                t1=t1_jax,
+                t2=t2_jax,
+                phi=phi_jax,
+                q=float(q),
+                L=float(L),
+                contrast=float(fitted_contrasts[i]),
+                offset=float(fitted_offsets[i]),
+                dt=float(dt),
+            )
+            c2_solver_np = np.asarray(c2_solver)
+            if c2_solver_np.ndim == 3:
+                c2_solver_np = c2_solver_np[0]
+            solver_surface.append(c2_solver_np)
+
         # ✅ POST-HOC LEAST-SQUARES SCALING (Nov 11, 2025)
         # Find optimal contrast/offset that maps theory → experiment for visualization
         # Solve: c2_exp = contrast * c2_theory_raw + offset (per-angle)
@@ -2920,7 +2942,7 @@ def _compute_nlsq_fits(
         c2_theoretical_fitted.append(c2_theoretical_scaled_angle)
 
         # Store lstsq scaling parameters (for visualization, not from optimization)
-        per_angle_scaling.append([contrast_lstsq, offset_lstsq])
+        per_angle_scaling_posthoc.append([contrast_lstsq, offset_lstsq])
 
         # Log scaling parameters
         logger.debug(
@@ -2931,7 +2953,12 @@ def _compute_nlsq_fits(
     # Stack arrays
     c2_theoretical_raw = np.array(c2_theoretical_raw_list)  # Raw theory (contrast=1.0, offset=1.0)
     c2_theoretical_fitted = np.array(c2_theoretical_fitted)  # Scaled via lstsq
-    per_angle_scaling = np.array(per_angle_scaling)
+    c2_solver_surface = (
+        np.array(solver_surface)
+        if include_solver_surface and solver_surface
+        else None
+    )
+    per_angle_scaling = np.array(per_angle_scaling_posthoc)
 
     # Scaled version is the lstsq-fitted result for visualization
     c2_theoretical_scaled = c2_theoretical_fitted
@@ -2946,7 +2973,9 @@ def _compute_nlsq_fits(
     return {
         "c2_theoretical_raw": c2_theoretical_raw,
         "c2_theoretical_scaled": c2_theoretical_scaled,
+        "c2_solver_scaled": c2_solver_surface,
         "per_angle_scaling": per_angle_scaling,
+        "per_angle_scaling_solver": solver_scaling,
         "residuals": residuals,
     }
 
@@ -3008,15 +3037,18 @@ def _save_nlsq_npz_file(
     c2_exp: np.ndarray,
     c2_raw: np.ndarray,
     c2_scaled: np.ndarray,
+    c2_solver: np.ndarray | None,
     per_angle_scaling: np.ndarray,
+    per_angle_scaling_solver: np.ndarray,
     residuals: np.ndarray,
     residuals_norm: np.ndarray,
     t1: np.ndarray,
     t2: np.ndarray,
     q: float,
     output_dir: Path,
+
 ) -> None:
-    """Save NPZ file with 10 arrays: experimental + theoretical + residuals + coordinates.
+    """Save NPZ file with experimental/theoretical data and metadata.
 
     Parameters
     ----------
@@ -3028,8 +3060,12 @@ def _save_nlsq_npz_file(
         Raw theoretical fits before scaling (n_angles, n_t1, n_t2)
     c2_scaled : np.ndarray
         Scaled theoretical fits (n_angles, n_t1, n_t2)
+    c2_solver : np.ndarray | None
+        Solver-evaluated theoretical fits (optional, n_angles, n_t1, n_t2)
     per_angle_scaling : np.ndarray
         Per-angle scaling parameters (n_angles, 2) [contrast, offset]
+    per_angle_scaling_solver : np.ndarray
+        Original per-angle scaling parameters from the solver (n_angles, 2)
     residuals : np.ndarray
         Residuals: exp - scaled (n_angles, n_t1, n_t2)
     residuals_norm : np.ndarray
@@ -3039,7 +3075,7 @@ def _save_nlsq_npz_file(
     t2 : np.ndarray
         Time array 2 (n_t2,)
     q : float
-        Wavevector magnitude [Å⁻¹]
+        Wavevector magnitude [1/Å]
     output_dir : Path
         Output directory
 
@@ -3047,10 +3083,6 @@ def _save_nlsq_npz_file(
     -------
     None
         NPZ file saved to disk
-
-    Notes
-    -----
-    Creates fitted_data.npz with 10 arrays matching classical implementation format.
     """
     npz_file = output_dir / "fitted_data.npz"
 
@@ -3060,10 +3092,12 @@ def _save_nlsq_npz_file(
         phi_angles=phi_angles,
         c2_exp=c2_exp,
         # Note: sigma (uncertainties) not included - would need to pass from data if available
-        # Theoretical fits (3 arrays)
+        # Theoretical fits (4 arrays)
         c2_theoretical_raw=c2_raw,
         c2_theoretical_scaled=c2_scaled,
+        c2_solver_scaled=c2_solver,
         per_angle_scaling=per_angle_scaling,
+        per_angle_scaling_solver=per_angle_scaling_solver,
         # Residuals (2 arrays)
         residuals=residuals,
         residuals_normalized=residuals_norm,
@@ -3152,7 +3186,12 @@ def save_nlsq_results(
 
     # Step 3: Compute theoretical fits with per-angle scaling
     logger.info("Computing theoretical fits with per-angle scaling")
-    fits_dict = _compute_nlsq_fits(result, filtered_data, metadata)
+    fits_dict = _compute_nlsq_fits(
+        result,
+        filtered_data,
+        metadata,
+        include_solver_surface=True,
+    )
 
     # Step 4: Prepare analysis results dictionary
     phi_angles = np.asarray(filtered_data["phi_angles_list"])
@@ -3241,7 +3280,9 @@ def save_nlsq_results(
         c2_exp=c2_exp,
         c2_raw=fits_dict["c2_theoretical_raw"],
         c2_scaled=fits_dict["c2_theoretical_scaled"],
+        c2_solver=fits_dict["c2_solver_scaled"],
         per_angle_scaling=fits_dict["per_angle_scaling"],
+        per_angle_scaling_solver=fits_dict["per_angle_scaling_solver"],
         residuals=fits_dict["residuals"],
         residuals_norm=residuals_norm,
         t1=t1,
@@ -3284,6 +3325,8 @@ def generate_nlsq_plots(
     config: Any = None,
     use_datashader: bool = True,
     parallel: bool = True,
+    *,
+    c2_solver_scaled: np.ndarray | None = None,
 ) -> None:
     """Generate 3-panel heatmap plots for NLSQ fit visualization.
 
@@ -3295,6 +3338,10 @@ def generate_nlsq_plots(
     1. Config file: output.plots.preview_mode
     2. Legacy parameter: use_datashader (backward compatible)
     3. Default: Publication mode (matplotlib)
+
+    The displayed surface is selected via ``output.plots.fit_surface``
+    ("solver" or "posthoc"). Adaptive color scaling can be enabled via
+    ``output.plots.color_scale``.
 
     Performance:
         - Publication (matplotlib): ~150-300ms per plot
@@ -3362,6 +3409,8 @@ def generate_nlsq_plots(
     preview_mode = use_datashader  # Default to legacy parameter
     width = 1200
     height = 1200
+    fit_surface_mode = "solver"
+    color_scale_cfg: dict[str, Any] = {}
 
     if config is not None:
         # Extract config dict if ConfigManager object
@@ -3371,6 +3420,8 @@ def generate_nlsq_plots(
         output_config = config_dict.get("output", {})
         plots_config = output_config.get("plots", {})
         preview_mode = plots_config.get("preview_mode", preview_mode)
+        fit_surface_mode = plots_config.get("fit_surface", fit_surface_mode)
+        color_scale_cfg = plots_config.get("color_scale", {})
 
         # Read Datashader canvas resolution
         datashader_config = plots_config.get("datashader", {})
@@ -3382,20 +3433,56 @@ def generate_nlsq_plots(
             f"canvas={width}×{height}, parallel={parallel}",
         )
 
+    # Determine which fit surface to display
+    use_solver_surface = (
+        fit_surface_mode == "solver" and c2_solver_scaled is not None
+    )
+    c2_fit_display = c2_solver_scaled if use_solver_surface else c2_theoretical_scaled
+    residuals_display = c2_exp - c2_fit_display
+
+    color_mode = color_scale_cfg.get("mode", "legacy")
+    pin_legacy_range = color_scale_cfg.get(
+        "pin_legacy_range",
+        color_mode != "adaptive",
+    )
+    percentile_min = color_scale_cfg.get("percentile_min", 1.0)
+    percentile_max = color_scale_cfg.get("percentile_max", 99.0)
+
+    if pin_legacy_range:
+        color_options = {
+            "vmin": 1.0,
+            "vmax": 1.5,
+            "adaptive": False,
+            "percentile_min": percentile_min,
+            "percentile_max": percentile_max,
+        }
+    else:
+        color_options = {
+            "vmin": color_scale_cfg.get("fixed_min"),
+            "vmax": color_scale_cfg.get("fixed_max"),
+            "adaptive": color_mode == "adaptive",
+            "percentile_min": percentile_min,
+            "percentile_max": percentile_max,
+        }
+
+    surface_label = "solver" if use_solver_surface else "posthoc"
+    logger.info(f"Plotting fit surface: {surface_label}")
+
     # Select backend based on mode
     if preview_mode and DATASHADER_AVAILABLE:
         logger.info("Using Datashader backend (preview mode, fast rendering)")
         _generate_plots_datashader(
             phi_angles,
             c2_exp,
-            c2_theoretical_scaled,
-            residuals,
+            c2_fit_display,
+            residuals_display,
             t1,
             t2,
             output_dir,
             parallel=parallel,
             width=1200,
             height=1200,
+            color_options=color_options,
         )
     else:
         if preview_mode and not DATASHADER_AVAILABLE:
@@ -3410,11 +3497,12 @@ def generate_nlsq_plots(
         _generate_plots_matplotlib(
             phi_angles,
             c2_exp,
-            c2_theoretical_scaled,
-            residuals,
+            c2_fit_display,
+            residuals_display,
             t1,
             t2,
             output_dir,
+            color_options=color_options,
         )
 
 
@@ -3624,6 +3712,7 @@ def save_mcmc_results(
             t2=t2,
             output_dir=method_dir,
             config=config,
+            c2_solver_scaled=None,
         )
         logger.info(f"  - {len(filtered_data['phi_angles_list'])} PNG heatmap plots")
     except Exception as e:
@@ -4278,7 +4367,19 @@ def _plot_single_angle_datashader(args):
     from homodyne.viz.datashader_backend import plot_c2_comparison_fast
     import numpy as np
 
-    i, phi_angles, c2_exp, c2_fit, residuals, t1, t2, output_dir, width, height = args
+    (
+        i,
+        phi_angles,
+        c2_exp,
+        c2_fit,
+        residuals,
+        t1,
+        t2,
+        output_dir,
+        width,
+        height,
+        color_options,
+    ) = args
     phi = phi_angles[i]
     output_file = output_dir / f"c2_heatmaps_phi_{phi:.1f}deg.png"
 
@@ -4302,6 +4403,7 @@ def _plot_single_angle_datashader(args):
         phi_angle=phi,
         width=width,
         height=height,
+        **color_options,
     )
 
     return output_file
@@ -4310,7 +4412,7 @@ def _plot_single_angle_datashader(args):
 def _generate_plots_datashader(
     phi_angles: np.ndarray,
     c2_exp: np.ndarray,
-    c2_theoretical_scaled: np.ndarray,
+    c2_fit_display: np.ndarray,
     residuals: np.ndarray,
     t1: np.ndarray,
     t2: np.ndarray,
@@ -4318,6 +4420,7 @@ def _generate_plots_datashader(
     parallel: bool = True,
     width: int = 1200,
     height: int = 1200,
+    color_options: dict[str, Any] | None = None,
 ) -> None:
     """Generate plots using Datashader backend with optional parallelization.
 
@@ -4349,13 +4452,14 @@ def _generate_plots_datashader(
                 i,
                 phi_angles,
                 c2_exp[i],
-                c2_theoretical_scaled[i],
+                c2_fit_display[i],
                 residuals[i],
                 t1,
                 t2,
                 output_dir,
                 width,
                 height,
+                color_options or {},
             )
             for i in range(len(phi_angles))
         ]
@@ -4385,13 +4489,14 @@ def _generate_plots_datashader(
                     i,
                     phi_angles,
                     c2_exp[i],
-                    c2_theoretical_scaled[i],
+                    c2_fit_display[i],
                     residuals[i],
                     t1,
                     t2,
                     output_dir,
                     width,
                     height,
+                    color_options or {},
                 )
                 _plot_single_angle_datashader(args)
 
@@ -4405,13 +4510,14 @@ def _generate_plots_datashader(
                 i,
                 phi_angles,
                 c2_exp[i],
-                c2_theoretical_scaled[i],
+                c2_fit_display[i],
                 residuals[i],
                 t1,
                 t2,
                 output_dir,
                 width,
                 height,
+                color_options or {},
             )
             _plot_single_angle_datashader(args)
 
@@ -4421,11 +4527,12 @@ def _generate_plots_datashader(
 def _generate_plots_matplotlib(
     phi_angles: np.ndarray,
     c2_exp: np.ndarray,
-    c2_theoretical_scaled: np.ndarray,
+    c2_fit_display: np.ndarray,
     residuals: np.ndarray,
     t1: np.ndarray,
     t2: np.ndarray,
     output_dir: Path,
+    color_options: dict[str, Any] | None = None,
 ) -> None:
     """Generate plots using matplotlib backend (original implementation)."""
     logger.info(f"Generating heatmap plots for {len(phi_angles)} angles")
@@ -4437,14 +4544,19 @@ def _generate_plots_matplotlib(
         # Panel 1: Experimental data with fixed color scale [1.0, 1.5]
         # Transpose because data is structured as c2[t1_index, t2_index] with indexing="ij"
         # but we want x-axis=t1, y-axis=t2 for display
+        vmin_use, vmax_use = _resolve_color_limits(
+            c2_exp[i],
+            color_options,
+        )
+
         im0 = axes[0].imshow(
             c2_exp[i].T,
             origin="lower",
             aspect="equal",
             cmap="viridis",
             extent=[t1[0], t1[-1], t2[0], t2[-1]],
-            vmin=1.0,
-            vmax=1.5,
+            vmin=vmin_use,
+            vmax=vmax_use,
         )
         axes[0].set_title(f"Experimental C₂ (φ={phi:.1f}°)", fontsize=12)
         axes[0].set_xlabel("t₁ (s)", fontsize=10)
@@ -4454,13 +4566,13 @@ def _generate_plots_matplotlib(
 
         # Panel 2: Theoretical fit with fixed color scale [1.0, 1.5]
         im1 = axes[1].imshow(
-            c2_theoretical_scaled[i].T,
+            c2_fit_display[i].T,
             origin="lower",
             aspect="equal",
             cmap="viridis",
             extent=[t1[0], t1[-1], t2[0], t2[-1]],
-            vmin=1.0,
-            vmax=1.5,
+            vmin=vmin_use,
+            vmax=vmax_use,
         )
         axes[1].set_title(f"Classical Fit (φ={phi:.1f}°)", fontsize=12)
         axes[1].set_xlabel("t₁ (s)", fontsize=10)
@@ -4494,6 +4606,31 @@ def _generate_plots_matplotlib(
         logger.debug(f"Saved plot: {plot_file}")
 
     logger.info(f"✓ Generated {len(phi_angles)} heatmap plots (matplotlib)")
+
+
+def _resolve_color_limits(
+    matrix: np.ndarray,
+    color_options: dict[str, Any] | None,
+) -> tuple[float, float]:
+    opts = color_options or {}
+    adaptive = opts.get("adaptive", False)
+    vmin = opts.get("vmin")
+    vmax = opts.get("vmax")
+    percentile_min = opts.get("percentile_min", 1.0)
+    percentile_max = opts.get("percentile_max", 99.0)
+
+    if adaptive and matrix.size > 0:
+        if vmin is None:
+            vmin = float(np.percentile(matrix, percentile_min))
+        if vmax is None:
+            vmax = float(np.percentile(matrix, percentile_max))
+
+    if vmin is None:
+        vmin = 1.0
+    if vmax is None:
+        vmax = 1.5
+
+    return vmin, vmax
 
 
 def _json_serializer(obj):

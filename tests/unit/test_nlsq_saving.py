@@ -258,7 +258,9 @@ class TestComputeNLSQFits:
         # Verify output structure
         assert "c2_theoretical_raw" in fits_dict
         assert "c2_theoretical_scaled" in fits_dict
+        assert "c2_solver_scaled" in fits_dict
         assert "per_angle_scaling" in fits_dict
+        assert "per_angle_scaling_solver" in fits_dict
         assert "residuals" in fits_dict
 
     def test_compute_nlsq_fits_shape_validation(self):
@@ -277,7 +279,9 @@ class TestComputeNLSQFits:
         # Verify shapes match experimental data
         assert fits_dict["c2_theoretical_raw"].shape == (n_angles, n_t1, n_t2)
         assert fits_dict["c2_theoretical_scaled"].shape == (n_angles, n_t1, n_t2)
+        assert fits_dict["c2_solver_scaled"].shape == (n_angles, n_t1, n_t2)
         assert fits_dict["per_angle_scaling"].shape == (n_angles, 2)
+        assert fits_dict["per_angle_scaling_solver"].shape == (n_angles, 2)
         assert fits_dict["residuals"].shape == (n_angles, n_t1, n_t2)
 
     def test_compute_nlsq_fits_least_squares_scaling(self):
@@ -294,11 +298,15 @@ class TestComputeNLSQFits:
 
         # Verify scaling parameters exist for each angle
         scaling = fits_dict["per_angle_scaling"]
+        solver_scaling = fits_dict["per_angle_scaling_solver"]
         assert scaling.shape == (3, 2)  # (n_angles, 2) for [contrast, offset]
+        assert solver_scaling.shape == (3, 2)
 
         # Verify scaling values are reasonable (contrast > 0, offset near 1)
-        assert np.all(scaling[:, 0] > 0)  # Contrast should be positive
-        assert np.all(np.abs(scaling[:, 1] - 1.0) < 2.0)  # Offset near 1
+        assert np.all(scaling[:, 0] > 0)
+        assert np.all(np.abs(scaling[:, 1] - 1.0) < 2.0)
+        assert np.all(solver_scaling[:, 0] > 0)
+        assert np.all(np.abs(solver_scaling[:, 1] - 1.0) < 2.0)
 
 
 # ==============================================================================
@@ -395,10 +403,10 @@ class TestSaveNLSQJSONFiles:
 
 
 class TestSaveNLSQNPZFile:
-    """Test NPZ file creation with 11 arrays."""
+    """Test NPZ file creation with solver/post-hoc surfaces."""
 
     def test_save_nlsq_npz_file_arrays_present(self):
-        """Test that all 11 arrays are present in NPZ file."""
+        """Test that all expected arrays are present in NPZ file."""
         import tempfile
 
         from homodyne.cli.commands import _save_nlsq_npz_file
@@ -412,7 +420,9 @@ class TestSaveNLSQNPZFile:
             c2_exp = np.random.rand(n_angles, n_t1, n_t2)
             c2_raw = np.random.rand(n_angles, n_t1, n_t2)
             c2_scaled = np.random.rand(n_angles, n_t1, n_t2)
+            c2_solver = np.random.rand(n_angles, n_t1, n_t2)
             per_angle_scaling = np.random.rand(n_angles, 2)
+            per_angle_scaling_solver = np.random.rand(n_angles, 2)
             residuals = c2_exp - c2_scaled
             residuals_norm = residuals / 0.05
             t1 = np.linspace(0.01, 1.0, n_t1)
@@ -425,7 +435,9 @@ class TestSaveNLSQNPZFile:
                 c2_exp,
                 c2_raw,
                 c2_scaled,
+                c2_solver,
                 per_angle_scaling,
+                per_angle_scaling_solver,
                 residuals,
                 residuals_norm,
                 t1,
@@ -441,7 +453,9 @@ class TestSaveNLSQNPZFile:
                 "c2_exp",
                 "c2_theoretical_raw",
                 "c2_theoretical_scaled",
+                "c2_solver_scaled",
                 "per_angle_scaling",
+                "per_angle_scaling_solver",
                 "residuals",
                 "residuals_normalized",
                 "t1",
@@ -466,7 +480,9 @@ class TestSaveNLSQNPZFile:
             c2_exp = np.ones((n_angles, n_t1, n_t2)) * 1.5
             c2_raw = np.ones((n_angles, n_t1, n_t2)) * 1.4
             c2_scaled = c2_raw * 0.5 + 1.0
+            c2_solver = c2_raw * 0.6 + 0.9
             per_angle_scaling = np.array([[0.5, 1.0], [0.5, 1.0], [0.5, 1.0]])
+            per_angle_scaling_solver = np.array([[0.6, 1.1], [0.55, 1.05], [0.5, 1.0]])
             residuals = c2_exp - c2_scaled
             residuals_norm = residuals / 0.05
             t1 = np.linspace(0.01, 1.0, n_t1)
@@ -479,7 +495,9 @@ class TestSaveNLSQNPZFile:
                 c2_exp,
                 c2_raw,
                 c2_scaled,
+                c2_solver,
                 per_angle_scaling,
+                per_angle_scaling_solver,
                 residuals,
                 residuals_norm,
                 t1,
@@ -494,6 +512,7 @@ class TestSaveNLSQNPZFile:
             assert data["c2_exp"].shape == (3, 10, 10)
             assert np.allclose(data["phi_angles"], phi_angles)
             assert np.allclose(data["c2_exp"], c2_exp)
+            assert np.allclose(data["per_angle_scaling_solver"], per_angle_scaling_solver)
 
 
 # ==============================================================================

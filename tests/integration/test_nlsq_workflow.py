@@ -101,16 +101,18 @@ class TestNLSQFullWorkflow:
             assert "c2_exp" in npz_data, "Missing c2_exp"
             assert "c2_theoretical_raw" in npz_data, "Missing c2_theoretical_raw"
             assert "c2_theoretical_scaled" in npz_data, "Missing c2_theoretical_scaled"
+            assert "c2_solver_scaled" in npz_data, "Missing c2_solver_scaled"
             assert "per_angle_scaling" in npz_data, "Missing per_angle_scaling"
+            assert "per_angle_scaling_solver" in npz_data, "Missing per_angle_scaling_solver"
             assert "residuals" in npz_data, "Missing residuals"
             assert "residuals_normalized" in npz_data, "Missing residuals_normalized"
             assert "t1" in npz_data, "Missing t1"
             assert "t2" in npz_data, "Missing t2"
             assert "q" in npz_data, "Missing q"
-            # Total should be 10 arrays: 2 experimental + 3 theoretical + 2 residuals + 3 coordinates
+            # Total should be 12 arrays: 2 experimental + 4 theoretical + 2 scaling + 2 residuals + 3 coordinates
             assert (
-                len(npz_data.files) == 10
-            ), f"Expected 10 arrays in NPZ, got {len(npz_data.files)}"
+                len(npz_data.files) == 12
+            ), f"Expected 12 arrays in NPZ, got {len(npz_data.files)}"
 
             # Verify array shapes
             assert npz_data["phi_angles"].shape == (5,), "Wrong phi_angles shape"
@@ -120,6 +122,11 @@ class TestNLSQFullWorkflow:
                 20,
                 20,
             ), "Wrong c2_theoretical_raw shape"
+            assert npz_data["c2_solver_scaled"].shape == (
+                5,
+                20,
+                20,
+            ), "Wrong c2_solver_scaled shape"
             assert npz_data["residuals"].shape == (5, 20, 20), "Wrong residuals shape"
 
             # Verify analysis_results_nlsq.json structure

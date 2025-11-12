@@ -175,6 +175,12 @@ if result.is_cmc_result():
 - User Guide: [`docs/advanced-topics/cmc-large-datasets.rst`](docs/advanced-topics/cmc-large-datasets.rst)
 - MCMC Guide: [`docs/advanced-topics/mcmc-uncertainty.rst`](docs/advanced-topics/mcmc-uncertainty.rst)
 
+### Result Artifacts & Diagnostics (v2.3.1)
+
+- `fitted_data.npz` now stores both the **solver-evaluated** surface (`c2_solver_scaled`) and the legacy **post-hoc** surface, plus the original per-angle contrast/offset pairs (`per_angle_scaling_solver`). Existing consumers that rely on `c2_theoretical_scaled` continue to work unchanged.
+- Plotting defaults to the solver surface and supports adaptive color scaling via `output.plots.color_scale` (`mode: legacy|adaptive`, optional percentiles/fixed ranges). Set `output.plots.fit_surface` to `"posthoc"` to retain the previous behavior or pin `[1.0, 1.5]` via `pin_legacy_range: true`.
+- Use `examples/overlay_solver_vs_posthoc.py` (or the helper in `homodyne.viz.diagnostics`) to print baseline oscillation stats and overlay solver/post-hoc diagonals for any saved `fitted_data.npz`.
+
 ## Platform Support
 
 ### CPU-Only Architecture (All Platforms) ✅

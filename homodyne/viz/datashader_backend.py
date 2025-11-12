@@ -227,6 +227,12 @@ def plot_c2_heatmap_fast(
     cmap: str = "viridis",
     width: int = 800,
     height: int = 800,
+    *,
+    vmin: float | None = None,
+    vmax: float | None = None,
+    adaptive: bool = False,
+    percentile_min: float = 1.0,
+    percentile_max: float = 99.0,
 ) -> None:
     """Plot C2 heatmap using Datashader for fast rendering.
 
@@ -279,10 +285,28 @@ def plot_c2_heatmap_fast(
     # Create Datashader renderer
     renderer = DatashaderRenderer(width=width, height=height)
 
+    auto_vmin = vmin
+    auto_vmax = vmax
+    if adaptive and c2_data.size > 0:
+        if vmin is None:
+            auto_vmin = float(np.percentile(c2_data, percentile_min))
+        if vmax is None:
+            auto_vmax = float(np.percentile(c2_data, percentile_max))
+
+    vmin_use = auto_vmin if auto_vmin is not None else 1.0
+    vmax_use = auto_vmax if auto_vmax is not None else 1.5
+
     # Transpose to match matplotlib convention: c2[t1_idx, t2_idx] → c2.T for correct axes
     # After transpose: dim 0=t2, dim 1=t1, matching x=t1 (horizontal), y=t2 (vertical)
-    # Rasterize with Datashader (FAST!) with fixed color scale [1.0, 1.5]
-    img_pil = renderer.rasterize_heatmap(c2_data.T, t1, t2, cmap=cmap, vmin=1.0, vmax=1.5)
+    # Rasterize with Datashader (FAST!) using the requested color scale
+    img_pil = renderer.rasterize_heatmap(
+        c2_data.T,
+        t1,
+        t2,
+        cmap=cmap,
+        vmin=vmin_use,
+        vmax=vmax_use,
+    )
 
     # Convert PIL to numpy array for matplotlib display
     img_array = np.array(img_pil)
@@ -307,9 +331,9 @@ def plot_c2_heatmap_fast(
         title = f"{title} at φ={phi_angle:.1f}°" if title else f"φ={phi_angle:.1f}°"
     ax.set_title(title, fontsize=13, fontweight="bold")
 
-    # Add colorbar using fixed color scale [1.0, 1.5]
+    # Add colorbar using the resolved color scale
     # Create ScalarMappable with same colormap and data range
-    norm = Normalize(vmin=1.0, vmax=1.5)
+    norm = Normalize(vmin=vmin_use, vmax=vmax_use)
     sm = ScalarMappable(cmap=cm.get_cmap(cmap), norm=norm)
     sm.set_array([])  # Required for colorbar
 
@@ -333,6 +357,12 @@ def plot_c2_comparison_fast(
     phi_angle: float,
     width: int = 800,
     height: int = 800,
+    *,
+    vmin: float | None = None,
+    vmax: float | None = None,
+    adaptive: bool = False,
+    percentile_min: float = 1.0,
+    percentile_max: float = 99.0,
 ) -> None:
     """Generate 3-panel comparison plot using Datashader.
 
@@ -377,10 +407,16 @@ def plot_c2_comparison_fast(
     # Transpose to match matplotlib convention: c2[t1_idx, t2_idx] → c2.T for correct axes
     # After transpose: dim 0=t2, dim 1=t1, matching x=t1 (horizontal), y=t2 (vertical)
 
-    # Fixed color scale [1.0, 1.5] for experimental and theoretical panels
-    # This provides consistent visualization across all C2 heatmaps
-    vmin_shared = 1.0
-    vmax_shared = 1.5
+    vmin_shared = vmin
+    vmax_shared = vmax
+    if adaptive and c2_exp.size > 0:
+        if vmin_shared is None:
+            vmin_shared = float(np.percentile(c2_exp, percentile_min))
+        if vmax_shared is None:
+            vmax_shared = float(np.percentile(c2_exp, percentile_max))
+
+    vmin_shared = 1.0 if vmin_shared is None else vmin_shared
+    vmax_shared = 1.5 if vmax_shared is None else vmax_shared
 
     # Rasterize all three panels using Datashader for speed
     img_exp = renderer.rasterize_heatmap(
