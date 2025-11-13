@@ -96,7 +96,9 @@ class StratifiedResidualFunction:
             ValueError: If stratified_data.chunks is empty or invalid.
         """
         self.chunks = stratified_data.chunks
-        self.sigma = stratified_data.sigma  # Get sigma from parent object (metadata)
+        sigma_array = np.asarray(stratified_data.sigma, dtype=np.float64)
+        self.sigma = sigma_array  # Keep numpy view for legacy paths
+        self._sigma_jax = jnp.asarray(sigma_array)
         self.per_angle_scaling = per_angle_scaling
         self.physical_param_names = physical_param_names
         self.logger = logger or logging.getLogger(__name__)
@@ -290,40 +292,14 @@ class StratifiedResidualFunction:
 
         return residuals
 
-    def __call__(self, params: np.ndarray) -> np.ndarray:
-        """
-        Compute residuals across all stratified chunks.
-
-        This method is called by NLSQ's least_squares() at each optimization iteration.
-        It processes each angle-stratified chunk independently and concatenates the results.
-
-        Args:
-            params: Current parameter values (1D array)
-                Format: [scaling_params, physical_params]
-                - If per_angle_scaling: [contrast_0, ..., offset_0, ..., *physical]
-                - If legacy: [contrast, offset, *physical]
-
-        Returns:
-            NumPy array of concatenated residuals from all chunks (1D array).
-            Converted from JAX to NumPy to prevent memory accumulation.
-
-        Notes:
-            - Each chunk is processed independently with JIT-compiled computation
-            - All chunks must contain all phi angles for correct gradients
-            - JAX arrays converted to NumPy immediately to release device memory
-        """
+    def _call_jax(self, params: jnp.ndarray) -> jnp.ndarray:
+        """JAX-native residuals for use in JIT/Jacobian contexts."""
         params_jax = jnp.asarray(params)
-        all_residuals = []
-
-        # Get sigma from parent object (metadata, shared across all chunks)
-        sigma_full = jnp.asarray(self.sigma)
-
+        sigma_full = self._sigma_jax
+        residuals = []
         for i, chunk in enumerate(self.chunks):
-            # Get pre-computed unique values for this chunk
             metadata = self.chunk_metadata[i]
-
-            # JIT-compiled computation for this chunk
-            chunk_residuals_jax = self.compute_chunk_jit(
+            chunk_residuals = self.compute_chunk_jit(
                 phi=jnp.asarray(chunk.phi),
                 t1=jnp.asarray(chunk.t1),
                 t2=jnp.asarray(chunk.t2),
@@ -337,23 +313,16 @@ class StratifiedResidualFunction:
                 L=float(chunk.L),
                 dt=float(chunk.dt) if chunk.dt is not None else None,
             )
+            residuals.append(chunk_residuals)
+        return jnp.concatenate(residuals, axis=0)
 
-            # CRITICAL FIX (Nov 10, 2025): Convert JAX array to NumPy immediately
-            # to release device memory and prevent accumulation across iterations.
-            # Each iteration creates ~690 MB of JAX arrays that must be freed.
-            chunk_residuals_np = np.asarray(chunk_residuals_jax)
-            all_residuals.append(chunk_residuals_np)
+    def jax_residual(self, params: jnp.ndarray) -> jnp.ndarray:
+        return self._call_jax(params)
 
-            # Explicitly delete JAX array to help garbage collection
-            del chunk_residuals_jax
-
-        # Concatenate as NumPy array (prevents JAX device memory accumulation)
-        result = np.concatenate(all_residuals)
-
-        # Clean up temporary list
-        del all_residuals
-
-        return result
+    def __call__(self, params: np.ndarray) -> np.ndarray:
+        params_jax = jnp.asarray(params)
+        residuals_jax = self._call_jax(params_jax)
+        return np.asarray(np.array(residuals_jax))
 
     def validate_chunk_structure(self) -> bool:
         """

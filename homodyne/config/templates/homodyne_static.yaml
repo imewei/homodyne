@@ -269,6 +269,18 @@ optimization:
     trust_region_scale: 1.0                   # Trust region scaling factor (0.1-10.0)
     verbose: false                            # Print iteration details
 
+    # Parameter-Specific Scaling (Optional for Static Mode)
+    # ------------------------------------------------------
+    # Less critical than laminar flow, but can help if alpha has large gradients
+    # Use gradient diagnostics if optimization shows signs of premature convergence:
+    #   python scripts/diagnose_gradients.py --results-dir ./homodyne_results/nlsq
+    x_scale_map: null                         # Per-parameter scaling (null = uniform scaling)
+    # Example if gradient diagnostics shows imbalance:
+    # x_scale_map:
+    #   D0: 1.0
+    #   alpha: 0.01                            # If alpha gradient is 100× larger
+    #   D_offset: 1.0
+
   # ---------------------------------------------------------------------------
   # STRATIFICATION - Angle-Stratified Chunking (v2.2+)
   # ---------------------------------------------------------------------------

@@ -38,7 +38,7 @@ References:
 """
 
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, Callable
 
 import jax
 import jax.numpy as jnp
@@ -82,6 +82,7 @@ from homodyne.optimization.stratified_residual import (
 from homodyne.optimization.sequential_angle import (
     optimize_per_angle_sequential,
     split_data_by_angle,
+    JAC_SAMPLE_SIZE,
 )
 from homodyne.optimization.batch_statistics import BatchStatistics
 from homodyne.optimization.recovery_strategies import RecoveryStrategyApplicator
@@ -93,6 +94,325 @@ from homodyne.optimization.exceptions import (
     NLSQNumericalError,
     NLSQCheckpointError,
 )
+
+DEFAULT_SHEAR_X_SCALE = {
+    "gamma_dot_0": 524.0,
+    "beta": 4.0,
+    "gamma_dot_offset": 771.0,
+}
+
+PARAMETER_NAME_ALIASES = {
+    "gamma_dot_t0": "gamma_dot_0",
+    "gamma_dot_t_0": "gamma_dot_0",
+    "gamma_dot_t_offset": "gamma_dot_offset",
+    "gamma_dot_offset": "gamma_dot_offset",
+    "phi_0": "phi0",
+}
+
+
+@dataclass
+class FunctionEvaluationCounter:
+    """Wraps a callable and counts invocations."""
+
+    fn: Callable[..., Any]
+    count: int = 0
+
+    def __call__(self, *args, **kwargs):
+        self.count += 1
+        return self.fn(*args, **kwargs)
+
+
+def _build_parameter_labels(
+    per_angle_scaling: bool,
+    n_phi: int,
+    physical_param_names: list[str],
+) -> list[str]:
+    labels: list[str] = []
+    if per_angle_scaling:
+        labels.extend([f"contrast[{i}]" for i in range(n_phi)])
+        labels.extend([f"offset[{i}]" for i in range(n_phi)])
+    labels.extend(physical_param_names)
+    return labels
+
+
+def _classify_parameter_status(
+    values: np.ndarray,
+    lower: np.ndarray | None,
+    upper: np.ndarray | None,
+    atol: float = 1e-9,
+) -> list[str]:
+    if lower is None or upper is None:
+        return ["active"] * len(values)
+
+    statuses: list[str] = []
+    for value, lo, hi in zip(values, lower, upper):
+        if np.isclose(value, lo, atol=atol * (1.0 + abs(lo))):
+            statuses.append("at_lower_bound")
+        elif np.isclose(value, hi, atol=atol * (1.0 + abs(hi))):
+            statuses.append("at_upper_bound")
+        else:
+            statuses.append("active")
+    return statuses
+
+
+def _sample_xdata(xdata: np.ndarray, max_points: int) -> np.ndarray:
+    if max_points <= 0 or xdata.size <= max_points:
+        return xdata
+    indices = np.linspace(0, xdata.size - 1, max_points, dtype=np.int64)
+    return xdata[indices]
+
+
+def _normalize_param_key(name: str | None) -> str:
+    if not name:
+        return ""
+    key = str(name).strip()
+    return PARAMETER_NAME_ALIASES.get(key, key)
+
+
+def _normalize_x_scale_map(raw_map: Any) -> dict[str, float]:
+    if not isinstance(raw_map, dict):
+        return {}
+    normalized: dict[str, float] = {}
+    for raw_key, raw_value in raw_map.items():
+        key = _normalize_param_key(raw_key)
+        if not key:
+            continue
+        try:
+            normalized[key] = float(raw_value)
+        except (TypeError, ValueError):
+            continue
+    return normalized
+
+
+def _build_per_parameter_x_scale(
+    per_angle_scaling: bool,
+    n_angles: int,
+    physical_param_names: list[str],
+    analysis_mode: str,
+    override_map: dict[str, float],
+) -> np.ndarray | None:
+    effective_physical: dict[str, float] = {name: 1.0 for name in physical_param_names}
+    if analysis_mode == "laminar_flow":
+        for alias_key, scale in DEFAULT_SHEAR_X_SCALE.items():
+            canonical = _normalize_param_key(alias_key)
+            if canonical in effective_physical:
+                effective_physical[canonical] = scale
+    for key, value in override_map.items():
+        canonical = _normalize_param_key(key)
+        if canonical in effective_physical:
+            effective_physical[canonical] = value
+
+    contrast_scale = float(override_map.get("contrast", 1.0))
+    offset_scale = float(override_map.get("offset", 1.0))
+
+    has_nonunity = (
+        any(abs(scale - 1.0) > 1e-12 for scale in effective_physical.values())
+        or abs(contrast_scale - 1.0) > 1e-12
+        or abs(offset_scale - 1.0) > 1e-12
+    )
+    if not has_nonunity:
+        return None
+
+    scales: list[float] = []
+    if per_angle_scaling:
+        if n_angles <= 0:
+            return None
+        scales.extend([contrast_scale] * n_angles)
+        scales.extend([offset_scale] * n_angles)
+    else:
+        scales.extend([contrast_scale, offset_scale])
+
+    for name in physical_param_names:
+        scales.append(effective_physical.get(name, 1.0))
+
+    return np.asarray(scales, dtype=float)
+
+
+def _format_x_scale_for_log(value: Any) -> str:
+    if isinstance(value, np.ndarray):
+        return f"array(len={value.size})"
+    return str(value)
+
+
+def _parse_shear_transform_config(config: Any | None) -> dict[str, Any]:
+    if not isinstance(config, dict):
+        return {
+            "enable_gamma_dot_log": False,
+            "enable_beta_centering": False,
+            "beta_reference": 0.0,
+        }
+    return {
+        "enable_gamma_dot_log": bool(config.get("enable_gamma_dot_log", False)),
+        "enable_beta_centering": bool(config.get("enable_beta_centering", False)),
+        "beta_reference": float(config.get("beta_reference", 0.0)),
+    }
+
+
+def _build_physical_index_map(
+    per_angle_scaling: bool,
+    n_angles: int,
+    physical_param_names: list[str],
+) -> dict[str, int]:
+    start = 2 * n_angles if per_angle_scaling else 2
+    return {name: start + idx for idx, name in enumerate(physical_param_names)}
+
+
+def _apply_forward_shear_transforms_to_vector(
+    params: np.ndarray,
+    index_map: dict[str, int],
+    transform_cfg: dict[str, Any],
+) -> tuple[np.ndarray, dict[str, Any]]:
+    vector = np.asarray(params, dtype=float).copy()
+    state: dict[str, Any] = {
+        "gamma_log_idx": None,
+        "beta_center_idx": None,
+        "beta_reference": float(transform_cfg.get("beta_reference", 0.0)),
+    }
+
+    if transform_cfg.get("enable_gamma_dot_log", False):
+        idx = index_map.get("gamma_dot_0")
+        if idx is not None:
+            value = vector[idx]
+            if value <= 0:
+                raise ValueError(
+                    "gamma_dot_t0 must be > 0 when enable_gamma_dot_log is true"
+                )
+            vector[idx] = np.log(value)
+            state["gamma_log_idx"] = idx
+
+    if transform_cfg.get("enable_beta_centering", False):
+        idx = index_map.get("beta")
+        if idx is not None:
+            vector[idx] = vector[idx] - state["beta_reference"]
+            state["beta_center_idx"] = idx
+
+    if state["gamma_log_idx"] is None and state["beta_center_idx"] is None:
+        return params, {}
+
+    return vector, state
+
+
+def _apply_forward_shear_transforms_to_bounds(
+    bounds: tuple[np.ndarray, np.ndarray] | None,
+    state: dict[str, Any],
+) -> tuple[np.ndarray, np.ndarray] | None:
+    if not bounds or not state:
+        return bounds
+    lower, upper = (np.asarray(bounds[0], dtype=float).copy(), np.asarray(bounds[1], dtype=float).copy())
+    gamma_idx = state.get("gamma_log_idx")
+    if gamma_idx is not None:
+        if lower[gamma_idx] <= 0 or upper[gamma_idx] <= 0:
+            raise ValueError(
+                "gamma_dot_t0 bounds must be > 0 when enable_gamma_dot_log is true"
+            )
+        lower[gamma_idx] = np.log(lower[gamma_idx])
+        upper[gamma_idx] = np.log(upper[gamma_idx])
+    beta_idx = state.get("beta_center_idx")
+    if beta_idx is not None:
+        beta_ref = state.get("beta_reference", 0.0)
+        lower[beta_idx] = lower[beta_idx] - beta_ref
+        upper[beta_idx] = upper[beta_idx] - beta_ref
+    return (lower, upper)
+
+
+def _apply_inverse_shear_transforms_to_vector(
+    params: np.ndarray,
+    state: dict[str, Any] | None,
+) -> np.ndarray:
+    if not state:
+        return params
+    vector = np.asarray(params, dtype=float).copy()
+    gamma_idx = state.get("gamma_log_idx")
+    if gamma_idx is not None:
+        vector[gamma_idx] = np.exp(vector[gamma_idx])
+    beta_idx = state.get("beta_center_idx")
+    if beta_idx is not None:
+        vector[beta_idx] = vector[beta_idx] + state.get("beta_reference", 0.0)
+    return vector
+
+
+def _adjust_covariance_for_transforms(
+    covariance: np.ndarray,
+    transformed_params: np.ndarray,
+    physical_params: np.ndarray,
+    state: dict[str, Any] | None,
+) -> np.ndarray:
+    if not state or covariance.size == 0:
+        return covariance
+    adjusted = np.asarray(covariance, dtype=float).copy()
+    gamma_idx = state.get("gamma_log_idx")
+    if gamma_idx is not None:
+        scale = physical_params[gamma_idx]
+        adjusted[gamma_idx, :] *= scale
+        adjusted[:, gamma_idx] *= scale
+    # beta centering derivative is 1, so covariance unchanged
+    return adjusted
+
+
+def _wrap_model_function_with_transforms(
+    model_fn: Any,
+    state: dict[str, Any] | None,
+) -> Any:
+    if not state:
+        return model_fn
+
+    if hasattr(model_fn, "__call__") and not callable(model_fn):
+        return model_fn
+
+    def wrapped_model(xdata: np.ndarray, *solver_params):
+        physical = _apply_inverse_shear_transforms_to_vector(np.asarray(solver_params), state)
+        return model_fn(xdata, *physical)
+
+    # Preserve helpful attributes for downstream logging/diagnostics
+    for attr in ["n_phi", "n_angles", "per_angle_scaling"]:
+        if hasattr(model_fn, attr):
+            setattr(wrapped_model, attr, getattr(model_fn, attr))
+    return wrapped_model
+
+
+def _wrap_stratified_function_with_transforms(
+    residual_fn: Any,
+    state: dict[str, Any] | None,
+) -> Any:
+    if not state:
+        return residual_fn
+
+    class _TransformedStratified:
+        def __init__(self, base_fn: Any, transform_state: dict[str, Any]):
+            self._base_fn = base_fn
+            self._state = transform_state
+
+        def __call__(self, params: np.ndarray) -> np.ndarray:
+            physical = _apply_inverse_shear_transforms_to_vector(params, self._state)
+            return self._base_fn(physical)
+
+        def __getattr__(self, item):
+            return getattr(self._base_fn, item)
+
+    return _TransformedStratified(residual_fn, state)
+
+def _compute_jacobian_stats(
+    residual_fn: Callable[..., Any],
+    x_subset: np.ndarray,
+    params: np.ndarray,
+    scaling_factor: float,
+) -> tuple[np.ndarray | None, np.ndarray | None]:
+    try:
+        params_jnp = jnp.asarray(params)
+        if hasattr(residual_fn, "jax_residual"):
+            def residual_vector(p):
+                return jnp.asarray(residual_fn.jax_residual(jnp.asarray(p))).reshape(-1)
+        else:
+            def residual_vector(p):
+                return jnp.asarray(residual_fn(x_subset, *tuple(p))).reshape(-1)
+
+        jac = jax.jacfwd(residual_vector)(params_jnp)
+        jac_np = np.asarray(jac)
+        jtj = jac_np.T @ jac_np * scaling_factor
+        col_norms = np.linalg.norm(jac_np, axis=0) * np.sqrt(scaling_factor)
+        return jtj, col_norms
+    except Exception:
+        return None, None
 
 
 @dataclass
@@ -134,6 +454,7 @@ class OptimizationResult:
     stratification_diagnostics: StratificationDiagnostics | None = (
         None  # v2.2.1: Stratification diagnostics
     )
+    nlsq_diagnostics: dict[str, Any] | None = None
 
     # Backward compatibility attributes (FR-002)
     @property
@@ -248,6 +569,22 @@ class NLSQWrapper:
                 f"Unknown analysis_mode: '{analysis_mode}'. "
                 f"Expected 'static_isotropic' or 'laminar_flow'"
             )
+
+    @staticmethod
+    def _extract_nlsq_settings(config: Any) -> dict[str, Any]:
+        """Return NLSQ-specific settings from the config tree (if present)."""
+
+        config_dict = None
+        if hasattr(config, "config") and isinstance(config.config, dict):
+            config_dict = config.config
+        elif isinstance(config, dict):
+            config_dict = config
+
+        if not config_dict:
+            return {}
+
+        return config_dict.get("optimization", {}).get("nlsq", {})
+
 
     @staticmethod
     def _handle_nlsq_result(
@@ -433,6 +770,9 @@ class NLSQWrapper:
         bounds: tuple[np.ndarray, np.ndarray] | None = None,
         analysis_mode: str = "static_isotropic",
         per_angle_scaling: bool = True,  # REQUIRED: per-angle is physically correct
+        diagnostics_enabled: bool = False,
+        shear_transforms: dict[str, Any] | None = None,
+        per_angle_scaling_initial: dict[str, list[float]] | None = None,
     ) -> OptimizationResult:
         """Execute NLSQ optimization with automatic strategy selection and per-angle scaling.
 
@@ -476,6 +816,25 @@ class NLSQWrapper:
         # Start timing
         start_time = time.time()
 
+        physical_param_names = self._get_physical_param_names(analysis_mode)
+
+        nlsq_settings = self._extract_nlsq_settings(config)
+        loss_name = nlsq_settings.get("loss", "soft_l1")
+        trust_region_scale = float(nlsq_settings.get("trust_region_scale", 1.0))
+        if trust_region_scale <= 0:
+            trust_region_scale = 1.0
+        x_scale_override = nlsq_settings.get("x_scale")
+        x_scale_value = x_scale_override if x_scale_override is not None else trust_region_scale
+        x_scale_map_config = _normalize_x_scale_map(
+            nlsq_settings.get("x_scale_map")
+        )
+        diagnostics_cfg = nlsq_settings.get("diagnostics", {})
+        diagnostics_enabled = diagnostics_enabled or bool(
+            diagnostics_cfg.get("enabled", False),
+        )
+        diagnostics_sample_size = int(diagnostics_cfg.get("sample_size", 2048))
+        diagnostics_payload = {"solver_settings": {"loss": loss_name}} if diagnostics_enabled else None
+        transform_cfg = _parse_shear_transform_config(shear_transforms)
         # Step 1: Apply angle-stratified chunking if needed (BEFORE data preparation)
         # This fixes per-angle parameter incompatibility with NLSQ chunking (ultra-think-20251106-012247)
         stratified_data = self._apply_stratification_if_needed(
@@ -488,6 +847,8 @@ class NLSQWrapper:
             stratification_diagnostics = stratified_data.stratification_diagnostics
 
         # Check if sequential optimization is required
+        transform_state: dict[str, Any] | None = None
+
         if isinstance(stratified_data, UseSequentialOptimization):
             logger.info(
                 f"Using sequential per-angle optimization: {stratified_data.reason}"
@@ -501,6 +862,10 @@ class NLSQWrapper:
                 per_angle_scaling,
                 logger,
                 start_time,
+                x_scale_value=x_scale_value,
+                transform_cfg=transform_cfg,
+                physical_param_names=physical_param_names,
+                per_angle_scaling_initial=per_angle_scaling_initial,
             )
 
         # NEW: Check if stratified least_squares should be used (v2.2.0 double-chunking fix)
@@ -743,6 +1108,7 @@ class NLSQWrapper:
                     recovery_actions=[f"stratified_least_squares_method"],
                     streaming_diagnostics=None,
                     stratification_diagnostics=stratification_diagnostics,
+                    diagnostics_payload=None,
                 )
 
                 logger.info("=" * 80)
@@ -813,14 +1179,48 @@ class NLSQWrapper:
         residual_fn = self._create_residual_function(
             stratified_data, analysis_mode, per_angle_scaling
         )
+        base_residual_fn = residual_fn
+        physical_param_names = self._get_physical_param_names(analysis_mode)
+        phi_values = np.asarray(stratified_data.phi)
+        n_phi_unique = len(np.unique(phi_values)) if phi_values.size else 0
+
+        per_angle_contrast_override: np.ndarray | None = None
+        per_angle_offset_override: np.ndarray | None = None
+        if per_angle_scaling_initial:
+            contrast_override = per_angle_scaling_initial.get("contrast")
+            if contrast_override is not None:
+                try:
+                    arr = np.asarray(contrast_override, dtype=np.float64)
+                    if arr.size == n_phi_unique:
+                        per_angle_contrast_override = arr.copy()
+                    else:
+                        logger.warning(
+                            "per_angle_scaling contrast override has %d entries (expected %d); ignoring override",
+                            arr.size,
+                            n_phi_unique,
+                        )
+                except (TypeError, ValueError):
+                    logger.warning("Invalid per-angle contrast override; ignoring")
+            offset_override = per_angle_scaling_initial.get("offset")
+            if offset_override is not None:
+                try:
+                    arr = np.asarray(offset_override, dtype=np.float64)
+                    if arr.size == n_phi_unique:
+                        per_angle_offset_override = arr.copy()
+                    else:
+                        logger.warning(
+                            "per_angle_scaling offset override has %d entries (expected %d); ignoring override",
+                            arr.size,
+                            n_phi_unique,
+                        )
+                except (TypeError, ValueError):
+                    logger.warning("Invalid per-angle offset override; ignoring")
 
         # Step 6.5: Expand parameters for per-angle scaling if needed
         # This is CRITICAL: the residual function expects per-angle parameters,
         # but validated_params is still in compact form [contrast, offset, *physical]
         if per_angle_scaling:
-            # Get number of unique phi angles
-            phi_array = np.asarray(stratified_data.phi)
-            n_phi = len(np.unique(phi_array))
+            n_phi = n_phi_unique
 
             # Expand parameters from compact to per-angle form
             # Input:  [contrast, offset, *physical] (e.g., 5 params)
@@ -832,8 +1232,14 @@ class NLSQWrapper:
             physical_params = validated_params[2:]
 
             # Replicate contrast and offset for each angle
-            contrast_per_angle = np.full(n_phi, contrast_single)
-            offset_per_angle = np.full(n_phi, offset_single)
+            if per_angle_contrast_override is not None:
+                contrast_per_angle = per_angle_contrast_override
+            else:
+                contrast_per_angle = np.full(n_phi, contrast_single)
+            if per_angle_offset_override is not None:
+                offset_per_angle = per_angle_offset_override
+            else:
+                offset_per_angle = np.full(n_phi, offset_single)
 
             # Concatenate: [contrasts, offsets, physical]
             validated_params = np.concatenate([
@@ -883,6 +1289,100 @@ class NLSQWrapper:
                     f"Expanded bounds for per-angle scaling:\n"
                     f"  Bounds: compact {2 + len(physical_lower)} → per-angle {len(expanded_lower)}"
                 )
+
+        n_angles_for_map = n_phi_unique if per_angle_scaling else 1
+        physical_index_map = _build_physical_index_map(
+            per_angle_scaling,
+            n_angles_for_map,
+            physical_param_names,
+        )
+        validated_params, transform_state = _apply_forward_shear_transforms_to_vector(
+            validated_params,
+            physical_index_map,
+            transform_cfg,
+        )
+        if transform_state:
+            nlsq_bounds = _apply_forward_shear_transforms_to_bounds(
+                nlsq_bounds,
+                transform_state,
+            )
+
+        solver_residual_fn = base_residual_fn
+        if transform_state:
+            if isinstance(base_residual_fn, StratifiedResidualFunction):
+                solver_residual_fn = _wrap_stratified_function_with_transforms(
+                    base_residual_fn,
+                    transform_state,
+                )
+            else:
+                solver_residual_fn = _wrap_model_function_with_transforms(
+                    base_residual_fn,
+                    transform_state,
+                )
+
+        param_labels = _build_parameter_labels(
+            per_angle_scaling,
+            n_phi_unique if per_angle_scaling else 0,
+            physical_param_names,
+        )
+
+        per_param_x_scale = _build_per_parameter_x_scale(
+            per_angle_scaling,
+            n_phi_unique if per_angle_scaling else 0,
+            physical_param_names,
+            analysis_mode,
+            x_scale_map_config,
+        )
+        if per_param_x_scale is not None:
+            x_scale_value = per_param_x_scale
+
+        if diagnostics_enabled:
+            diagnostics_payload = diagnostics_payload or {"solver_settings": {"loss": loss_name}}
+            solver_settings = diagnostics_payload.setdefault("solver_settings", {"loss": loss_name})
+            solver_settings["x_scale"] = (
+                x_scale_value.tolist()
+                if isinstance(x_scale_value, np.ndarray)
+                else x_scale_value
+            )
+            logger.info(
+                "Diagnostics enabled: loss=%s, x_scale=%s, sample_size=%d",
+                loss_name,
+                _format_x_scale_for_log(x_scale_value),
+                diagnostics_sample_size,
+            )
+
+        diagnostics_sample_x: np.ndarray | None = None
+        sample_scaling = 1.0
+        if diagnostics_enabled:
+            diagnostics_payload = diagnostics_payload or {}
+            diagnostics_sample_x = _sample_xdata(xdata, diagnostics_sample_size)
+            if diagnostics_sample_x.size == 0:
+                diagnostics_sample_x = xdata
+            sample_scaling = max(1.0, xdata.size / max(diagnostics_sample_x.size, 1))
+            initial_jtj, initial_norms = _compute_jacobian_stats(
+                solver_residual_fn,
+                diagnostics_sample_x,
+                validated_params,
+                sample_scaling,
+            )
+            if initial_norms is not None:
+                diagnostics_payload.setdefault("initial_jacobian_norms", {})
+                diagnostics_payload["initial_jacobian_norms"] = dict(
+                    zip(param_labels, initial_norms.tolist()),
+                )
+                logger.info(
+                    "Initial Jacobian column norms: %s",
+                    ", ".join(
+                        f"{label}={norm:.3e}" for label, norm in diagnostics_payload["initial_jacobian_norms"].items()
+                    ),
+                )
+
+        residual_counter: FunctionEvaluationCounter | None = None
+        if diagnostics_enabled:
+            residual_counter = FunctionEvaluationCounter(solver_residual_fn)
+            residual_fn = residual_counter
+        else:
+            residual_fn = solver_residual_fn
 
         # Step 7: Select optimization strategy using intelligent strategy selector
         # Following NLSQ best practices: estimate memory first, then select strategy
@@ -995,6 +1495,8 @@ class NLSQWrapper:
                             bounds=nlsq_bounds,
                             strategy=current_strategy,
                             logger=logger,
+                            loss_name=loss_name,
+                            x_scale_value=x_scale_value,
                         )
                     )
                 else:
@@ -1009,7 +1511,8 @@ class NLSQWrapper:
                             ydata,
                             p0=validated_params.tolist(),
                             bounds=nlsq_bounds,
-                            loss="soft_l1",
+                            loss=loss_name,
+                            x_scale=x_scale_value,
                             gtol=1e-6,
                             ftol=1e-6,
                             max_nfev=5000,
@@ -1025,7 +1528,8 @@ class NLSQWrapper:
                             ydata,
                             p0=validated_params.tolist(),
                             bounds=nlsq_bounds,
-                            loss="soft_l1",
+                            loss=loss_name,
+                            x_scale=x_scale_value,
                             gtol=1e-6,
                             ftol=1e-6,
                             max_nfev=5000,
@@ -1083,25 +1587,90 @@ class NLSQWrapper:
                             f"Optimization failed with all strategies: {[s.value for s in strategy_attempts]}"
                         ) from e
 
-        # Compute final residuals
-        final_residuals = residual_fn(xdata, *popt)
-
-        # Extract iteration count (if available)
-        # Note: Some NLSQ functions don't return iteration count
-        # Use -1 to indicate "unknown" rather than 0 which implies no iterations
-        if isinstance(info, dict):
-            iterations = info.get("nfev", info.get("nit", -1))
+        solver_params = np.asarray(popt, dtype=float)
+        if transform_state:
+            physical_params = _apply_inverse_shear_transforms_to_vector(
+                solver_params,
+                transform_state,
+            )
+            popt = physical_params
+            if pcov is not None:
+                pcov = _adjust_covariance_for_transforms(
+                    np.asarray(pcov, dtype=float),
+                    solver_params,
+                    physical_params,
+                    transform_state,
+                )
         else:
-            iterations = -1
+            popt = np.asarray(popt, dtype=float)
 
-        # Log if iterations are unknown
-        if iterations == -1:
+        reported_nfev = info.get("nfev", -1)
+        corrected_nfev = (
+            residual_counter.count if residual_counter is not None else reported_nfev
+        )
+        if diagnostics_enabled:
+            diagnostics_payload = diagnostics_payload or {}
+            diagnostics_payload["nfev_reported"] = reported_nfev
+            diagnostics_payload["nfev_actual"] = corrected_nfev
+            logger.info(
+                "Diagnostics: nfev reported=%s actual=%s",
+                reported_nfev,
+                corrected_nfev,
+            )
+
+        # Compute final residuals using the base function (avoid counter side-effects)
+        final_residuals = base_residual_fn(xdata, *popt)
+
+        reported_iterations = -1
+        if isinstance(info, dict):
+            reported_iterations = info.get("nit", info.get("nfev", -1))
+        iterations = corrected_nfev
+
+        if reported_iterations == -1:
             logger.debug(
                 "Iteration count not available from NLSQ (curve_fit_large does not return this info)"
             )
 
         # Step 8: Measure execution time
         execution_time = time.time() - start_time
+
+        if diagnostics_enabled and diagnostics_sample_x is not None:
+            final_jtj, final_norms = _compute_jacobian_stats(
+                solver_residual_fn,
+                diagnostics_sample_x,
+                solver_params,
+                sample_scaling,
+            )
+            if final_norms is not None:
+                diagnostics_payload["final_jacobian_norms"] = dict(
+                    zip(param_labels, final_norms.tolist()),
+                )
+                logger.info(
+                    "Final Jacobian column norms: %s",
+                    ", ".join(
+                        f"{label}={norm:.3e}" for label, norm in diagnostics_payload["final_jacobian_norms"].items()
+                    ),
+                )
+            if nlsq_bounds is not None:
+                statuses = _classify_parameter_status(
+                    popt,
+                    nlsq_bounds[0],
+                    nlsq_bounds[1],
+                )
+                diagnostics_payload["parameter_status"] = dict(
+                    zip(param_labels, statuses),
+                )
+                clips = [label for label, st in diagnostics_payload["parameter_status"].items() if st != "active"]
+                if clips:
+                    logger.warning(
+                        "Diagnostics: parameters at bounds → %s",
+                        ", ".join(clips),
+                    )
+            if final_jtj is not None:
+                pcov = np.linalg.pinv(final_jtj, rcond=1e-10)
+                diagnostics_payload["jtj_condition"] = float(
+                    np.linalg.cond(final_jtj)
+                ) if final_jtj.size > 0 else None
 
         # Compute costs for success determination
         initial_cost = info.get("initial_cost", 0) if isinstance(info, dict) else 0
@@ -1112,7 +1681,7 @@ class NLSQWrapper:
         # 1. Function evaluations > 10 suggests optimization actually ran
         # 2. Cost reduction > 5% suggests parameters were actually optimized
         # 3. Parameters changed suggests optimization didn't immediately declare convergence
-        function_evals = iterations  # nfev = number of function evaluations
+        function_evals = iterations  # corrected function evaluations
         cost_reduction = (
             (initial_cost - final_cost) / initial_cost if initial_cost > 0 else 0
         )
@@ -1135,7 +1704,7 @@ class NLSQWrapper:
             f"{status_indicator}: {status_msg} in {execution_time:.2f}s\n"
             f"  Function evaluations: {function_evals}\n"
             f"  Cost: {initial_cost:.4e} → {final_cost:.4e} ({cost_reduction * 100:+.1f}%)\n"
-            f"  Iterations reported: {iterations} (note: NLSQ trust-region may show 0)"
+            f"  Iterations reported: {reported_iterations} (NLSQ may report 0)"
         )
         if recovery_actions:
             logger.info(f"Recovery actions applied: {len(recovery_actions)}")
@@ -1159,6 +1728,7 @@ class NLSQWrapper:
             recovery_actions=recovery_actions,
             streaming_diagnostics=streaming_diagnostics,  # Task 5.4
             stratification_diagnostics=stratification_diagnostics,  # v2.2.1
+            diagnostics_payload=diagnostics_payload if diagnostics_enabled else None,
         )
 
         logger.info(
@@ -1177,6 +1747,8 @@ class NLSQWrapper:
         bounds: tuple[np.ndarray, np.ndarray] | None,
         strategy: OptimizationStrategy,
         logger,
+        loss_name: str,
+        x_scale_value: float | str,
     ) -> tuple[np.ndarray, np.ndarray, dict, list[str], str]:
         """Execute optimization with automatic error recovery (T022-T024).
 
@@ -1236,7 +1808,8 @@ class NLSQWrapper:
                         ydata,
                         p0=current_params.tolist(),  # Convert to list to avoid NLSQ boolean bug
                         bounds=bounds,
-                        loss="soft_l1",  # Robust loss for outliers
+                        loss=loss_name,  # Configurable loss
+                        x_scale=x_scale_value,
                         gtol=1e-6,  # Relaxed gradient tolerance
                         ftol=1e-6,  # Relaxed function tolerance
                         max_nfev=5000,  # Increased max function evaluations
@@ -1257,7 +1830,8 @@ class NLSQWrapper:
                         ydata,
                         p0=current_params.tolist(),  # Convert to list to avoid NLSQ boolean bug
                         bounds=bounds,
-                        loss="soft_l1",  # Robust loss for outliers
+                        loss=loss_name,
+                        x_scale=x_scale_value,
                         gtol=1e-6,  # Relaxed gradient tolerance
                         ftol=1e-6,  # Relaxed function tolerance
                         max_nfev=5000,  # Increased max function evaluations
@@ -1573,8 +2147,8 @@ class NLSQWrapper:
         # Check if this is already stratified data (has phi_flat attribute)
         if hasattr(data, "phi_flat"):
             # Stratified data is already flattened - use directly
-            g2_flat = data.g2_flat
-            xdata = np.arange(len(g2_flat), dtype=np.float64)
+            g2_flat = np.asarray(data.g2_flat, dtype=np.float64)
+            xdata = np.arange(len(g2_flat), dtype=np.int32)
             ydata = g2_flat
             return xdata, ydata
 
@@ -1596,10 +2170,10 @@ class NLSQWrapper:
         # Flatten all arrays to 1D
         # For NLSQ curve_fit interface, xdata is typically just indices
         # We'll use a simple index array matching the data size
-        xdata = np.arange(g2.size, dtype=np.float64)
+        xdata = np.arange(g2.size, dtype=np.int32)
 
         # Flatten observations
-        ydata = g2.flatten()
+        ydata = g2.flatten().astype(np.float64, copy=False)
 
         return xdata, ydata
 
@@ -1883,6 +2457,10 @@ class NLSQWrapper:
         per_angle_scaling: bool,
         logger: Any,
         start_time: float,
+        x_scale_value: Any,
+        transform_cfg: dict[str, Any],
+        physical_param_names: list[str],
+        per_angle_scaling_initial: dict[str, list[float]] | None = None,
     ) -> OptimizationResult:
         """Run sequential per-angle optimization as a fallback strategy.
 
@@ -1927,11 +2505,19 @@ class NLSQWrapper:
         t2_flat = t2_grid.flatten()
         g2_flat = g2.flatten()
 
+        from homodyne.config.parameter_manager import ParameterManager
+
+        param_manager = ParameterManager(config.config, analysis_mode)
+        base_param_names = param_manager.get_all_parameter_names()
+        config_lower_bounds, config_upper_bounds = param_manager.get_bounds_as_arrays(
+            base_param_names
+        )
+        config_lower_bounds = np.asarray(config_lower_bounds, dtype=float)
+        config_upper_bounds = np.asarray(config_upper_bounds, dtype=float)
+        physical_names = self._get_physical_param_names(analysis_mode)
+
         # Load initial parameters if not provided
         if initial_params is None:
-            from homodyne.config.parameter_manager import ParameterManager
-
-            param_manager = ParameterManager(config.config, analysis_mode)
             initial_params = param_manager.get_initial_values()
             logger.info(
                 f"Loaded initial parameters from config: {len(initial_params)} parameters"
@@ -1939,37 +2525,292 @@ class NLSQWrapper:
 
         # Load bounds if not provided
         if bounds is None:
-            from homodyne.config.parameter_manager import ParameterManager
-
-            param_manager = ParameterManager(config.config, analysis_mode)
-            param_names = param_manager.get_parameter_names()
             bounds = param_manager.get_parameter_bounds(param_names)
-            logger.info(f"Loaded parameter bounds from config")
+            logger.info("Loaded parameter bounds from config")
 
-        # Create residual function
-        from homodyne.core.jax_backend import compute_residuals
+        if initial_params is not None:
+            initial_params = np.asarray(initial_params, dtype=np.float64)
+
+        if bounds is not None:
+            bounds = (
+                np.asarray(bounds[0], dtype=np.float64),
+                np.asarray(bounds[1], dtype=np.float64),
+            )
+            try:
+                logger.debug(
+                    "Sequential bounds dtype: lower=%s upper=%s",
+                    getattr(bounds[0], "dtype", type(bounds[0])),
+                    getattr(bounds[1], "dtype", type(bounds[1])),
+                )
+                logger.debug(
+                    "Sequential bounds values: lower=%s upper=%s",
+                    np.array2string(bounds[0], precision=3),
+                    np.array2string(bounds[1], precision=3),
+                )
+            except Exception as exc:  # pragma: no cover - logging safeguard
+                logger.debug(f"Sequential bounds dtype logging failed: {exc}")
+
+        # Create residual function using physics kernels (local shim)
+        from homodyne.core.physics_nlsq import (
+            apply_diagonal_correction,
+            compute_g2_scaled,
+        )
+
+        phi_unique_all = np.unique(np.round(phi_flat, decimals=6))
+        t1_unique_all = np.unique(np.asarray(t1))
+        t2_unique_all = np.unique(np.asarray(t2))
+        n_phi_total = len(phi_unique_all)
+
+        per_angle_contrast_override: np.ndarray | None = None
+        per_angle_offset_override: np.ndarray | None = None
+        if per_angle_scaling_initial:
+            contrast_override = per_angle_scaling_initial.get("contrast")
+            if contrast_override is not None:
+                try:
+                    arr = np.asarray(contrast_override, dtype=np.float64)
+                    if arr.size == n_phi_total:
+                        per_angle_contrast_override = arr.copy()
+                    else:
+                        logger.warning(
+                            "Sequential per-angle contrast override has %d entries (expected %d); ignoring override",
+                            arr.size,
+                            n_phi_total,
+                        )
+                except (TypeError, ValueError):
+                    logger.warning("Invalid sequential per-angle contrast override; ignoring")
+            offset_override = per_angle_scaling_initial.get("offset")
+            if offset_override is not None:
+                try:
+                    arr = np.asarray(offset_override, dtype=np.float64)
+                    if arr.size == n_phi_total:
+                        per_angle_offset_override = arr.copy()
+                    else:
+                        logger.warning(
+                            "Sequential per-angle offset override has %d entries (expected %d); ignoring override",
+                            arr.size,
+                            n_phi_total,
+                        )
+                except (TypeError, ValueError):
+                    logger.warning("Invalid sequential per-angle offset override; ignoring")
+
+        scalar_layout_len = len(physical_param_names) + 2
+        expected_per_angle_len = 2 * n_phi_total + len(physical_param_names)
+
+        def _expand_compact_layout(vector: np.ndarray) -> np.ndarray:
+            """Replicate scalar contrast/offset entries across all angles."""
+
+            arr = np.asarray(vector, dtype=np.float64)
+            if expected_per_angle_len == scalar_layout_len or arr.size == expected_per_angle_len:
+                return arr
+            if n_phi_total == 0 or arr.size != scalar_layout_len:
+                return arr
+            contrast_val = arr[0]
+            offset_val = arr[1]
+            physical_vals = arr[2:]
+            contrast_block = np.full(n_phi_total, contrast_val, dtype=np.float64)
+            offset_block = np.full(n_phi_total, offset_val, dtype=np.float64)
+            return np.concatenate([contrast_block, offset_block, physical_vals])
+
+        solver_initial_params = initial_params.copy()
+        solver_per_angle_scaling = False
+        solver_per_angle_expanded = False
+
+        if per_angle_scaling:
+            if solver_initial_params.size == expected_per_angle_len:
+                solver_per_angle_scaling = True
+            elif (
+                expected_per_angle_len > scalar_layout_len
+                and solver_initial_params.size == scalar_layout_len
+            ):
+                solver_initial_params = _expand_compact_layout(solver_initial_params)
+                solver_per_angle_scaling = True
+                solver_per_angle_expanded = True
+                logger.info(
+                    "Expanded scalar contrast/offset to per-angle layout for sequential solver (%d angles)",
+                    n_phi_total,
+                )
+                if bounds is not None and bounds[0].size == scalar_layout_len:
+                    bounds = (
+                        _expand_compact_layout(bounds[0]),
+                        _expand_compact_layout(bounds[1]),
+                    )
+            else:
+                logger.warning(
+                    "Per-angle scaling requested but parameter vector has %d entries (expected %d); "
+                    "sequential solver will operate with scalar scaling",
+                    solver_initial_params.size,
+                    expected_per_angle_len,
+                )
+
+        if solver_per_angle_scaling and solver_initial_params.size == expected_per_angle_len:
+            if per_angle_contrast_override is not None:
+                solver_initial_params[:n_phi_total] = per_angle_contrast_override
+            if per_angle_offset_override is not None:
+                solver_initial_params[n_phi_total : 2 * n_phi_total] = (
+                    per_angle_offset_override
+                )
+
+        param_lower_bounds = config_lower_bounds.copy()
+        param_upper_bounds = config_upper_bounds.copy()
+        if solver_per_angle_scaling and expected_per_angle_len > scalar_layout_len:
+            param_lower_bounds = _expand_compact_layout(param_lower_bounds)
+            param_upper_bounds = _expand_compact_layout(param_upper_bounds)
+
+        if solver_per_angle_scaling:
+            param_names = _build_parameter_labels(
+                True,
+                n_phi_total,
+                physical_param_names,
+            )
+        else:
+            param_names = base_param_names
+
+        def _maybe_expand_x_scale(value: Any) -> Any:
+            if value is None or not solver_per_angle_scaling:
+                return value
+            if isinstance(value, (str, bytes, dict)):
+                return value
+            try:
+                array = np.asarray(value, dtype=np.float64)
+            except (TypeError, ValueError):
+                return value
+            if array.ndim == 0:
+                if expected_per_angle_len > 0:
+                    return np.full(
+                        expected_per_angle_len,
+                        float(array),
+                        dtype=np.float64,
+                    )
+                return float(array)
+            if array.size == expected_per_angle_len:
+                return array
+            if (
+                expected_per_angle_len > scalar_layout_len
+                and array.size == scalar_layout_len
+            ):
+                return _expand_compact_layout(array)
+            return value
+
+        x_scale_value = _maybe_expand_x_scale(x_scale_value)
+        sigma_source = getattr(data, "sigma", None)
+        if sigma_source is None:
+            sigma_array = np.ones(
+                (n_phi_total, len(t1_unique_all), len(t2_unique_all)),
+                dtype=np.float64,
+            )
+        else:
+            sigma_array = np.asarray(sigma_source, dtype=np.float64)
+
+        q_value = float(getattr(data, "q", 1.0))
+        L_value = float(getattr(data, "L", 1.0))
+        dt_attr = getattr(data, "dt", None)
+        dt_value = float(dt_attr) if dt_attr is not None else None
+
+        t1_unique_jnp = jnp.asarray(t1_unique_all)
+        t2_unique_jnp = jnp.asarray(t2_unique_all)
+
+        physical_index_map = _build_physical_index_map(
+            solver_per_angle_scaling,
+            n_phi_total if solver_per_angle_scaling else 0,
+            physical_param_names,
+        )
+
+        transform_state = {}
+        if transform_cfg:
+            solver_initial_params, transform_state = _apply_forward_shear_transforms_to_vector(
+                solver_initial_params,
+                physical_index_map,
+                transform_cfg,
+            )
+            if bounds is not None:
+                bounds = _apply_forward_shear_transforms_to_bounds(
+                    bounds,
+                    transform_state,
+                )
+
+        def _compute_g2_grid_for_phi(
+            phi_index: int,
+            physical_params: np.ndarray,
+            contrast_params: np.ndarray | float,
+            offset_params: np.ndarray | float,
+        ) -> np.ndarray:
+            phi_val = float(phi_unique_all[phi_index])
+            if solver_per_angle_scaling:
+                contrast_val = float(contrast_params[phi_index])
+                offset_val = float(offset_params[phi_index])
+            else:
+                contrast_val = float(contrast_params)
+                offset_val = float(offset_params)
+
+            g2_grid = compute_g2_scaled(
+                params=jnp.asarray(physical_params),
+                t1=t1_unique_jnp,
+                t2=t2_unique_jnp,
+                phi=phi_val,
+                q=q_value,
+                L=L_value,
+                contrast=contrast_val,
+                offset=offset_val,
+                dt=dt_value,
+            )
+            g2_grid = jnp.squeeze(g2_grid, axis=0)
+            g2_grid = apply_diagonal_correction(g2_grid)
+            return np.asarray(g2_grid, dtype=np.float64)
+
+        residual_debug_logged = False
 
         def residual_func(params, phi_vals, t1_vals, t2_vals, g2_vals):
             """Residual function compatible with sequential optimization."""
-            # Convert to JAX arrays
-            phi_jax = jnp.array(phi_vals)
-            t1_jax = jnp.array(t1_vals)
-            t2_jax = jnp.array(t2_vals)
-            g2_jax = jnp.array(g2_vals)
-            params_jax = jnp.array(params)
 
-            # Compute residuals
-            residuals = compute_residuals(
-                params_jax,
-                phi_jax,
-                t1_jax,
-                t2_jax,
-                g2_jax,
-                analysis_mode,
-                per_angle_scaling,
+            params_np = np.asarray(params, dtype=np.float64)
+            if transform_state:
+                params_np = _apply_inverse_shear_transforms_to_vector(
+                    params_np,
+                    transform_state,
+                )
+            phi_section = np.asarray(phi_vals, dtype=np.float64)
+            t1_section = np.asarray(t1_vals, dtype=np.float64)
+            t2_section = np.asarray(t2_vals, dtype=np.float64)
+            g2_section = np.asarray(g2_vals, dtype=np.float64)
+
+            if solver_per_angle_scaling:
+                contrast_params = params_np[:n_phi_total]
+                offset_params = params_np[n_phi_total : 2 * n_phi_total]
+                physical_params = params_np[2 * n_phi_total :]
+            else:
+                contrast_params = float(params_np[0])
+                offset_params = float(params_np[1])
+                physical_params = params_np[2:]
+
+            phi_indices = np.searchsorted(
+                phi_unique_all, np.round(phi_section, decimals=6)
             )
+            t1_indices = np.searchsorted(t1_unique_all, t1_section)
+            t2_indices = np.searchsorted(t2_unique_all, t2_section)
 
-            return np.array(residuals)
+            g2_model = np.empty_like(g2_section, dtype=np.float64)
+            sigma_vals = np.empty_like(g2_section, dtype=np.float64)
+
+            nonlocal residual_debug_logged
+            if not residual_debug_logged:
+                logger.debug(
+                    "Sequential residual call: params_shape=%s, phi_unique=%d",
+                    params_np.shape,
+                    len(np.unique(phi_section)),
+                )
+                residual_debug_logged = True
+
+            for phi_idx in np.unique(phi_indices):
+                mask = phi_indices == phi_idx
+                g2_grid = _compute_g2_grid_for_phi(
+                    phi_idx, physical_params, contrast_params, offset_params
+                )
+                g2_model[mask] = g2_grid[t1_indices[mask], t2_indices[mask]]
+                sigma_slice = sigma_array[phi_idx]
+                sigma_vals[mask] = sigma_slice[t1_indices[mask], t2_indices[mask]]
+
+            residuals = (g2_section - g2_model) / (sigma_vals + 1e-10)
+            return residuals
 
         # Get optimizer configuration
         opt_config = config.config.get("optimization", {})
@@ -1985,18 +2826,29 @@ class NLSQWrapper:
             f"Starting per-angle optimization with {len(np.unique(phi_flat))} angles..."
         )
 
+        least_squares_kwargs: dict[str, Any] = {
+            "max_nfev": nlsq_config.get("max_iterations", 1000),
+            "ftol": nlsq_config.get("tolerance", 1e-8),
+        }
+        if "diff_step" in nlsq_config:
+            least_squares_kwargs["diff_step"] = nlsq_config["diff_step"]
+        if "f_scale" in nlsq_config:
+            least_squares_kwargs["f_scale"] = nlsq_config["f_scale"]
+        if x_scale_value is not None:
+            least_squares_kwargs["x_scale"] = x_scale_value
+
         sequential_result = optimize_per_angle_sequential(
             phi=phi_flat,
             t1=t1_flat,
             t2=t2_flat,
             g2_exp=g2_flat,
             residual_func=residual_func,
-            initial_params=initial_params,
+            initial_params=solver_initial_params,
             bounds=bounds,
             weighting=weighting,
             min_success_rate=min_success_rate,
-            max_nfev=nlsq_config.get("max_iterations", 1000),
-            ftol=nlsq_config.get("tolerance", 1e-8),
+            parameter_names=param_names,
+            **least_squares_kwargs,
         )
 
         # Convert SequentialResult to OptimizationResult
@@ -2010,13 +2862,80 @@ class NLSQWrapper:
         }
 
         # Compute chi-squared
+        combined_solver = sequential_result.combined_parameters.copy()
+        combined_physical = combined_solver.copy()
+        if transform_state:
+            combined_physical = _apply_inverse_shear_transforms_to_vector(
+                combined_physical,
+                transform_state,
+            )
+
         final_residuals = residual_func(
-            sequential_result.combined_parameters, phi_flat, t1_flat, t2_flat, g2_flat
+            combined_physical, phi_flat, t1_flat, t2_flat, g2_flat
         )
         chi_squared = float(np.sum(final_residuals**2))
         n_data = len(phi_flat)
         n_params = len(sequential_result.combined_parameters)
         reduced_chi_squared = chi_squared / (n_data - n_params)
+
+        # Diagnostics payload
+        param_status = {}
+        for idx, name in enumerate(param_names):
+            value = combined_physical[idx]
+            if np.isclose(value, param_lower_bounds[idx]):
+                status = "at_lower_bound"
+            elif np.isclose(value, param_upper_bounds[idx]):
+                status = "at_upper_bound"
+            else:
+                status = "active"
+            param_status[name] = status
+
+        def _norm_array_to_dict(array: np.ndarray | None) -> dict[str, float] | None:
+            if array is None:
+                return None
+            return {name: float(array[idx]) for idx, name in enumerate(param_names)}
+
+        per_angle_jac = {}
+        for angle_result in sequential_result.per_angle_results:
+            angle_label = f"phi_{angle_result['phi_angle']:.2f}"
+            per_angle_jac[angle_label] = {
+                "initial": None,
+                "final": None,
+            }
+            if angle_result.get("jac_initial_norms") is not None:
+                per_angle_jac[angle_label]["initial"] = {
+                    name: float(angle_result["jac_initial_norms"][idx])
+                    for idx, name in enumerate(param_names)
+                }
+            if angle_result.get("jac_final_norms") is not None:
+                per_angle_jac[angle_label]["final"] = {
+                    name: float(angle_result["jac_final_norms"][idx])
+                    for idx, name in enumerate(param_names)
+                }
+
+        total_nfev = sum(r.get("n_iterations", 0) for r in sequential_result.per_angle_results)
+
+        diagnostics_payload = {
+            "solver_settings": {
+                "loss": nlsq_config.get("loss", "linear"),
+                "x_scale": nlsq_config.get("x_scale", "jac"),
+                "strategy": "sequential_per_angle",
+                "jac_sample_size": JAC_SAMPLE_SIZE,
+            },
+            "nfev_reported": total_nfev,
+            "nfev_actual": total_nfev,
+            "parameter_status": param_status,
+            "initial_jacobian_norms": _norm_array_to_dict(
+                sequential_result.initial_jacobian_norms
+            ),
+            "final_jacobian_norms": _norm_array_to_dict(
+                sequential_result.final_jacobian_norms
+            ),
+            "per_angle_jacobian_norms": per_angle_jac,
+            "solver_per_angle_expanded": solver_per_angle_expanded,
+            "chi_squared": chi_squared,
+            "reduced_chi_squared": reduced_chi_squared,
+        }
 
         # Determine convergence status
         if sequential_result.success_rate >= min_success_rate:
@@ -2045,7 +2964,7 @@ class NLSQWrapper:
         logger.info("=" * 80)
 
         return OptimizationResult(
-            parameters=sequential_result.combined_parameters,
+            parameters=combined_physical,
             uncertainties=uncertainties,
             covariance=sequential_result.combined_covariance,
             chi_squared=chi_squared,
@@ -2060,6 +2979,7 @@ class NLSQWrapper:
                 f"Sequential per-angle optimization: {sequential_result.n_angles_optimized} angles converged"
             ],
             quality_flag=quality_flag,
+            nlsq_diagnostics=diagnostics_payload,
         )
 
     def _validate_initial_params(
@@ -2214,7 +3134,7 @@ class NLSQWrapper:
                 raise ValueError(f"dt must be finite, got {dt}")
 
         # Pre-compute phi_unique for per-angle parameter mapping
-        phi_unique = np.unique(np.asarray(phi))
+        phi_unique = jnp.asarray(np.unique(np.asarray(phi)))
         n_phi = len(phi_unique)
 
         # Determine parameter structure based on analysis mode and per_angle_scaling
@@ -2248,7 +3168,7 @@ class NLSQWrapper:
                 Theoretical g2 values at requested indices (size matches xdata)
             """
             # Convert params tuple to array
-            params_array = jnp.array(params_tuple)
+            params_array = jnp.asarray(params_tuple)
 
             # Extract per-angle scaling parameters (legacy mode removed Nov 2025)
             # Per-angle mode: first n_phi are contrasts, next n_phi are offsets
@@ -2257,7 +3177,7 @@ class NLSQWrapper:
             physical_params = params_array[2 * n_phi :]
 
             # Get requested data point indices
-            indices = xdata.astype(jnp.int32)
+            indices = jnp.asarray(xdata, dtype=jnp.int32)
 
             # CRITICAL FIX (Nov 11, 2025): Handle stratified vs non-stratified data
             if is_stratified:
@@ -3113,6 +4033,7 @@ class NLSQWrapper:
         recovery_actions: list[str] | None = None,
         streaming_diagnostics: dict[str, Any] | None = None,
         stratification_diagnostics: StratificationDiagnostics | None = None,
+        diagnostics_payload: dict[str, Any] | None = None,
     ) -> OptimizationResult:
         """Convert NLSQ output to OptimizationResult.
 
@@ -3211,6 +4132,7 @@ class NLSQWrapper:
             quality_flag=quality_flag,
             streaming_diagnostics=enhanced_streaming_diagnostics,  # Task 5.4
             stratification_diagnostics=stratification_diagnostics,  # v2.2.1: Stratification diagnostics
+            nlsq_diagnostics=diagnostics_payload,
         )
 
         return result

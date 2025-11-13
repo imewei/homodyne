@@ -2799,27 +2799,36 @@ def _compute_nlsq_fits(
     if t2.ndim == 2:
         t2 = t2[0, :]  # Extract first row
 
-    # Extract fitted parameters - MUST use per-angle scaling (v2.4.0+)
-    # Structure: [c0, c1, ..., cN-1, o0, o1, ..., oN-1, D0, alpha, D_offset, ...]
-    # For laminar_flow: 7 physical params
+    # Extract fitted parameters - prefer per-angle scaling but tolerate scalar fallback
     n_params = len(result.parameters)
     n_angles = len(phi_angles)
-
-    # Calculate expected parameter count for per-angle mode
-    n_physical = 7  # D0, alpha, D_offset, gamma_dot_t0, beta, gamma_dot_t_offset, phi0
+    n_physical = 7  # laminar_flow physical parameters
     expected_params_per_angle = 2 * n_angles + n_physical
 
-    if n_params != expected_params_per_angle:
+    scalar_per_angle_expansion = False
+    if n_params == expected_params_per_angle:
+        fitted_contrasts = result.parameters[0:n_angles]
+        fitted_offsets = result.parameters[n_angles : 2 * n_angles]
+        physical_params = result.parameters[2 * n_angles :]
+    elif n_params == (n_physical + 2):
+        logger.warning(
+            "Solver returned scalar contrast/offset (parameter count %d). Expanding "
+            "scalars across %d filtered angles for result saving.",
+            n_params,
+            n_angles,
+        )
+        scalar_per_angle_expansion = True
+        scalar_contrast = float(result.parameters[0])
+        scalar_offset = float(result.parameters[1])
+        fitted_contrasts = np.full(n_angles, scalar_contrast, dtype=float)
+        fitted_offsets = np.full(n_angles, scalar_offset, dtype=float)
+        physical_params = result.parameters[2:]
+    else:
         raise ValueError(
             f"Parameter count mismatch! Expected {expected_params_per_angle} "
             f"(2×{n_angles} scaling + {n_physical} physical), got {n_params}. "
             f"Per-angle scaling is REQUIRED in v2.4.0+"
         )
-
-    # Extract fitted per-angle scaling parameters
-    fitted_contrasts = result.parameters[0:n_angles]  # First n_angles params
-    fitted_offsets = result.parameters[n_angles:2*n_angles]  # Next n_angles params
-    physical_params = result.parameters[2*n_angles:]  # Remaining 7 physical params
 
     logger.info(
         f"Per-angle scaling: {n_angles} angles, using FITTED scaling parameters from NLSQ optimization"
@@ -2977,7 +2986,25 @@ def _compute_nlsq_fits(
         "per_angle_scaling": per_angle_scaling,
         "per_angle_scaling_solver": solver_scaling,
         "residuals": residuals,
+        "scalar_per_angle_expansion": scalar_per_angle_expansion,
     }
+
+
+
+def _json_safe(value: Any) -> Any:
+    """Convert nested objects to JSON-serializable primitives."""
+
+    if isinstance(value, dict):
+        return {str(k): _json_safe(v) for k, v in value.items()}
+    if isinstance(value, (list, tuple, set)):
+        return [_json_safe(v) for v in value]
+    if isinstance(value, (np.generic,)):
+        return value.item()
+    if isinstance(value, jnp.ndarray):
+        return _json_safe(np.asarray(value))
+    if isinstance(value, np.ndarray):
+        return value.tolist()
+    return value
 
 
 def _save_nlsq_json_files(
@@ -3192,6 +3219,15 @@ def save_nlsq_results(
         metadata,
         include_solver_surface=True,
     )
+    scalar_expanded = fits_dict.pop("scalar_per_angle_expansion", False)
+    if scalar_expanded:
+        logger.warning(
+            "Recorded scalar_per_angle_expansion=true in diagnostics (scalar contrast/offset replicated per angle)."
+        )
+        if getattr(result, "nlsq_diagnostics", None) is None:
+            result.nlsq_diagnostics = {"scalar_per_angle_expansion": True}
+        elif isinstance(result.nlsq_diagnostics, dict):
+            result.nlsq_diagnostics["scalar_per_angle_expansion"] = True
 
     # Step 4: Prepare analysis results dictionary
     phi_angles = np.asarray(filtered_data["phi_angles_list"])
@@ -3294,6 +3330,21 @@ def save_nlsq_results(
     logger.info(f"✓ NLSQ results saved successfully to {nlsq_dir}")
     logger.info("  - 3 JSON files (parameters, analysis results, convergence metrics)")
     logger.info("  - 1 NPZ file (10 arrays: experimental + theoretical + residuals)")
+
+    # Step 8b: Persist diagnostics payload if available
+    diagnostics_payload = getattr(result, "nlsq_diagnostics", None)
+    if diagnostics_payload:
+        diagnostics_file = nlsq_dir / "diagnostics.json"
+        try:
+            with open(diagnostics_file, "w") as f:
+                json.dump(_json_safe(diagnostics_payload), f, indent=2)
+            logger.info(f"Saved diagnostics to {diagnostics_file}")
+        except TypeError as exc:
+            logger.warning(
+                "Failed to save diagnostics.json (%s). Payload keys: %s",
+                exc,
+                list(diagnostics_payload.keys()),
+            )
 
     # Step 9: Generate plots with graceful degradation
     try:

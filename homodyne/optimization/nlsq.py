@@ -213,15 +213,22 @@ def fit_nlsq_jax(
     logger.info(f"Analysis mode: {analysis_mode}")
 
     # Set up initial parameters
+    per_angle_scaling_initial: dict[str, list[float]] | None = None
     if initial_params is None:
         # Try to load from config first
-        initial_params = _load_initial_params_from_config(config, analysis_mode)
+        initial_params, per_angle_scaling_initial = _load_initial_params_from_config(
+            config, analysis_mode
+        )
         if initial_params is None:
             # Fallback to defaults
             initial_params = _get_default_initial_params(analysis_mode)
             logger.info("Using default initial parameters")
         else:
             logger.info("Using initial parameters from configuration")
+    else:
+        # Make a copy so we don't mutate caller-provided dict
+        initial_params = initial_params.copy()
+        per_angle_scaling_initial = initial_params.pop("per_angle_scaling", None)
 
     # Convert initial params dict to array
     x0 = _params_to_array(initial_params, analysis_mode)
@@ -376,9 +383,13 @@ def fit_nlsq_jax(
 
         data = data_obj
 
+    diagnostics_enabled = _is_nlsq_diagnostics_enabled(config)
+
     # Create wrapper and run optimization
     # Note: enable_recovery=True provides automatic error recovery for production use
     wrapper = NLSQWrapper(enable_large_dataset=True, enable_recovery=True)
+
+    shear_transform_cfg = _extract_shear_transform_config(config)
 
     result = wrapper.fit(
         data=data,
@@ -387,6 +398,9 @@ def fit_nlsq_jax(
         bounds=bounds,
         analysis_mode=analysis_mode,
         per_angle_scaling=per_angle_scaling,
+        diagnostics_enabled=diagnostics_enabled,
+        shear_transforms=shear_transform_cfg,
+        per_angle_scaling_initial=per_angle_scaling_initial,
     )
 
     logger.info(f"NLSQ optimization completed in {result.execution_time:.3f}s")
@@ -415,10 +429,49 @@ def _get_analysis_mode(config: ConfigManager) -> str:
     return "static_isotropic"
 
 
+def _is_nlsq_diagnostics_enabled(config: ConfigManager | dict[str, Any]) -> bool:
+    """Return True if optimization.nlsq.diagnostics.enabled is truthy."""
+
+    config_dict: dict[str, Any] | None = None
+    if hasattr(config, "config") and config.config:
+        config_dict = config.config
+    elif isinstance(config, dict):
+        config_dict = config
+
+    if not config_dict:
+        return False
+
+    return bool(
+        config_dict
+        .get("optimization", {})
+        .get("nlsq", {})
+        .get("diagnostics", {})
+        .get("enabled", False)
+    )
+
+
+def _extract_shear_transform_config(config: ConfigManager | dict[str, Any]) -> dict[str, Any]:
+    config_dict: dict[str, Any] | None = None
+    if hasattr(config, "config") and config.config:
+        config_dict = config.config
+    elif isinstance(config, dict):
+        config_dict = config
+
+    if not config_dict:
+        return {}
+
+    return (
+        config_dict
+        .get("optimization", {})
+        .get("nlsq", {})
+        .get("shear_transforms", {})
+    )
+
+
 def _load_initial_params_from_config(
     config: ConfigManager,
     analysis_mode: str,
-) -> dict[str, float] | None:
+) -> tuple[dict[str, float] | None, dict[str, list[float]] | None]:
     """Load initial parameters from configuration file.
 
     Handles parameter name mapping between config format and code format.
@@ -436,18 +489,18 @@ def _load_initial_params_from_config(
         Dictionary of initial parameters, or None if not found in config
     """
     if not hasattr(config, "config") or not config.config:
-        return None
+        return None, None
 
     config_dict = config.config
     if "initial_parameters" not in config_dict:
-        return None
+        return None, None
 
     init_params = config_dict["initial_parameters"]
     if "parameter_names" not in init_params or "values" not in init_params:
         logger.warning(
             "Initial parameters in config missing 'parameter_names' or 'values'",
         )
-        return None
+        return None, None
 
     names = init_params["parameter_names"]
     values = init_params["values"]
@@ -456,7 +509,7 @@ def _load_initial_params_from_config(
         logger.warning(
             f"Parameter name/value count mismatch: {len(names)} names, {len(values)} values",
         )
-        return None
+        return None, None
 
     # Map config parameter names to code parameter names
     NAME_MAP = {
@@ -491,8 +544,37 @@ def _load_initial_params_from_config(
         )
         # Don't return None - let validation/clipping handle it
 
+    per_angle_scaling: dict[str, list[float]] | None = None
+    per_angle_cfg = init_params.get("per_angle_scaling")
+    if isinstance(per_angle_cfg, dict):
+        contrast_vals = per_angle_cfg.get("contrast")
+        offset_vals = per_angle_cfg.get("offset")
+        try:
+            contrast_array = (
+                [float(x) for x in contrast_vals]
+                if isinstance(contrast_vals, (list, tuple))
+                else None
+            )
+            offset_array = (
+                [float(x) for x in offset_vals]
+                if isinstance(offset_vals, (list, tuple))
+                else None
+            )
+        except (TypeError, ValueError):
+            contrast_array = offset_array = None
+
+        if contrast_array and offset_array and len(contrast_array) == len(offset_array):
+            per_angle_scaling = {
+                "contrast": contrast_array,
+                "offset": offset_array,
+            }
+        elif contrast_array or offset_array:
+            logger.warning(
+                "per_angle_scaling in initial_parameters must provide equal-length contrast/offset arrays; ignoring overrides",
+            )
+
     logger.debug(f"Loaded {len(params)} parameters from config: {list(params.keys())}")
-    return params
+    return params, per_angle_scaling
 
 
 def _get_default_initial_params(analysis_mode: str) -> dict[str, float]:

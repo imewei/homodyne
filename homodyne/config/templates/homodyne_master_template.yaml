@@ -7,8 +7,8 @@
 # This template includes EVERYTHING supported by homodyne v2.4.0.
 # Use homodyne_static.yaml or homodyne_laminar_flow.yaml for simpler starts.
 #
-# VERSION: 2.4.0
-# UPDATED: 2025-11-08
+# VERSION: 2.4.1
+# UPDATED: 2025-11-13
 # ==============================================================================
 
 # ==============================================================================
@@ -16,8 +16,8 @@
 # ==============================================================================
 # Template metadata describing analysis configuration
 metadata:
-  config_version: "2.4.0"                     # Configuration file format version
-  description: "Master template - comprehensive reference (v2.4.0: CPU-only, per-angle scaling mandatory, automatic NUTS/CMC)"
+  config_version: "2.4.1"                     # Configuration file format version
+  description: "Master template - comprehensive reference (v2.4.1: gradient imbalance fix, CPU-only, per-angle scaling mandatory, automatic NUTS/CMC)"
   analysis_mode: "laminar_flow"               # Options: "static" | "laminar_flow"
   parameter_count: 7                          # 3 for static, 7 for laminar_flow
 
@@ -37,14 +37,19 @@ metadata:
   # Key features of this configuration
   key_features:
     - "Complete parameter documentation for static and laminar_flow modes"
+    - "Gradient imbalance fix (v2.4.1) - x_scale_map for laminar flow"
+    - "Gradient diagnostics tool - automatic detection and fixing"
     - "CPU-only architecture (v2.3.0) with JAX 0.8.0 - GPU support removed"
     - "Per-angle scaling mandatory (v2.4.0) - legacy scalar mode removed"
     - "Automatic NUTS/CMC selection in MCMC (v2.1.0) - dual criteria logic"
     - "All optimization methods (NLSQ, MCMC with auto NUTS/CMC, Streaming)"
+    - "Angle-stratified chunking (v2.2.0) - fixes silent NLSQ failures"
     - "Advanced phi angle filtering with quality control"
+    - "Shear parameter transforms for improved conditioning"
+    - "Comprehensive diagnostics and validation"
     - "Noise estimation with multiple models"
-    - "Comprehensive validation and quality control"
     - "HPC CPU optimization for multi-core systems"
+    - "Comprehensive troubleshooting guidance and diagnostic tools"
 
   # Optional: Generation metadata (filled by homodyne-config)
   generated_at: null                          # ISO timestamp when config generated
@@ -329,6 +334,153 @@ optimization:
     tolerance: 1e-8                           # Convergence tolerance
     trust_region_scale: 1.0                   # Trust region scaling factor (0.1-10.0)
     verbose: false                            # Print iteration details
+    loss: "soft_l1"                           # Loss function: "linear" | "soft_l1" | "huber" | "cauchy" | "arctan"
+
+    # -------------------------------------------------------------------------
+    # PARAMETER-SPECIFIC SCALING (CRITICAL FOR LAMINAR FLOW)
+    # -------------------------------------------------------------------------
+    # Fixes gradient imbalance where shear parameters can have gradients
+    # 100-10,000× larger than diffusion parameters, causing:
+    #   - Premature convergence (optimizer stops while shear params need work)
+    #   - Missing oscillations in fitted c2 heatmaps (key homodyne feature!)
+    #   - Poor fit quality despite low chi-squared values
+    #
+    # GRADIENT IMBALANCE BACKGROUND:
+    # -------------------------------
+    # In laminar flow systems, shear parameters (gamma_dot_t0, beta, gamma_dot_t_offset)
+    # have drastically larger gradients than diffusion parameters (D0, alpha, D_offset).
+    # This causes the optimizer to take huge steps in shear space (overshooting) and
+    # tiny steps in diffusion space (frozen), leading to premature termination when
+    # trust region limits are reached, even though the cost function still has steep
+    # descent directions in the shear parameter subspace.
+    #
+    # SOLUTION: Apply parameter-specific x_scale values inversely proportional to
+    # gradient magnitudes to normalize optimization steps across all parameters.
+    #
+    # WHEN TO USE:
+    # ------------
+    # MANDATORY for laminar_flow mode (shear parameters always have large gradients)
+    # OPTIONAL for static mode (gradient imbalance less severe)
+    #
+    # HOW TO COMPUTE OPTIMAL VALUES:
+    # -------------------------------
+    # Step 1: Run initial NLSQ optimization without x_scale_map
+    #   homodyne --config config.yaml --method nlsq
+    #
+    # Step 2: Diagnose gradient imbalance using diagnostic tool
+    #   python scripts/diagnose_gradients.py --results-dir ./homodyne_results/nlsq --output x_scale_fix.yaml
+    #
+    # Step 3: Apply recommended x_scale_map to config and re-run
+    #   (merge x_scale_fix.yaml values into this section)
+    #
+    # Step 4: Verify improved fit quality
+    #   - Check fitted c2 heatmaps show decay oscillations
+    #   - Verify chi-squared improvement (typically 10-50% reduction)
+    #   - Confirm more iterations completed (proper convergence, not premature stop)
+    #
+    x_scale_map:                              # Per-parameter scaling (dict or null)
+      # LAMINAR FLOW MODE: Apply these values to fix gradient imbalance
+      # (derived from C020 dataset analysis, Nov 2025)
+      D0: 1.20                                # Baseline diffusion (1.0× scaling)
+      alpha: 0.000761                         # Anomalous exponent (1,313× reduction)
+      D_offset: 1.13                          # Baseline diffusion offset (1.0× scaling)
+      gamma_dot_t0: 0.00000371                # Shear rate (269,251× reduction)
+      beta: 0.000314                          # Shear exponent (3,188× reduction)
+      gamma_dot_t_offset: 0.0000000930        # Shear offset (10,755,776× reduction!)
+      phi0: 0.739                             # Flow angle (1.0× scaling)
+    # STATIC MODE: Uncomment and adjust if gradient diagnostics shows imbalance
+    # x_scale_map:
+    #   D0: 1.0
+    #   alpha: 0.01                            # If alpha gradient 100× larger
+    #   D_offset: 1.0
+    # Or set to null for uniform scaling:
+    # x_scale_map: null
+
+    # -------------------------------------------------------------------------
+    # SHEAR TRANSFORM CONFIGURATION (OPTIONAL)
+    # -------------------------------------------------------------------------
+    # Applies coordinate transformations to shear parameters to improve conditioning
+    # Helps normalize parameter magnitudes for better optimization
+    # Recommended for systems with extreme shear rate values or time-dependent shear
+    shear_transforms:
+      enabled: false                          # Enable shear parameter transforms
+      gamma_dot_t0_ref: 0.01                  # Reference shear rate [s⁻¹]
+                                              # Shifts beta constraint to reduce correlation
+      beta_ref: 0.0                           # Reference beta exponent
+                                              # Centers beta around physically meaningful value
+      # Technical details:
+      #   Forward: beta_transformed = beta - beta_ref
+      #           gamma_dot_t0_transformed = gamma_dot_t0 - gamma_dot_t0_ref * t^beta_ref
+      #   Inverse: Automatically applied to results
+      # Use when: shear parameters hit bounds or show high correlation
+
+    # -------------------------------------------------------------------------
+    # DIAGNOSTICS AND VALIDATION (RECOMMENDED)
+    # -------------------------------------------------------------------------
+    # Enable detailed diagnostics for gradient analysis and convergence monitoring
+    # Helps detect issues early and provides insights for parameter scaling
+    diagnostics:
+      enabled: false                          # Enable NLSQ diagnostics
+      sample_size: 2048                       # Sample size for Jacobian diagnostics
+                                              # Larger = more accurate but slower
+      check_gradients: true                   # Verify gradient computations via finite differences
+                                              # Detects autodiff issues, minimal overhead
+      log_jacobian_norms: false               # Log parameter sensitivity (Jacobian column norms)
+                                              # Reveals which parameters have large gradients
+                                              # Set to true if experiencing convergence issues
+
+  # ---------------------------------------------------------------------------
+  # STRATIFICATION - Angle-Stratified Chunking (v2.2+)
+  # ---------------------------------------------------------------------------
+  # Fixes per-angle parameter compatibility with NLSQ chunking for large datasets
+  # Automatically reorganizes data to ensure all chunks contain all phi angles
+  # Prevents silent optimization failures (0 iterations, zero gradients)
+  # CRITICAL for datasets >100k points with per-angle scaling
+  stratification:
+    enabled: "auto"                           # Options: "auto" | true | false
+                                              # "auto" activates when: per_angle_scaling=True AND n_points>=100k
+    target_chunk_size: 100000                 # Target size for stratified chunks [points]
+                                              # Should match NLSQ's internal chunk size
+    max_imbalance_ratio: 5.0                  # Maximum angle imbalance ratio before fallback
+                                              # Fallback to sequential if max_count/min_count > threshold
+    force_sequential_fallback: false          # Force sequential per-angle optimization
+                                              # Useful for highly imbalanced angle distributions
+    check_memory_safety: true                 # Check available memory before stratification
+                                              # Warns if peak memory > 70% of available
+    use_index_based: false                    # Use zero-copy index-based stratification
+                                              # Reduces memory overhead from 2x to ~1%
+                                              # Recommended for very large datasets (>10M points)
+    collect_diagnostics: false                # Collect detailed stratification diagnostics
+                                              # Performance metrics, chunk balance, angle coverage
+                                              # Minimal overhead (~0.01s)
+    log_diagnostics: false                    # Log diagnostic report to console
+                                              # Requires collect_diagnostics=true
+                                              # Useful for troubleshooting and validation
+
+  # Performance Impact:
+  # - Time overhead: <1% (0.15s for 3M points)
+  # - Memory overhead: 2x peak (temporary) or ~1% (index-based)
+  # - Diagnostics overhead: <0.1% (0.01s for 3M points)
+  # - Fixes: Silent failures with per-angle scaling on large datasets
+
+  # ---------------------------------------------------------------------------
+  # SEQUENTIAL - Sequential Per-Angle Optimization (v2.2+)
+  # ---------------------------------------------------------------------------
+  # Fallback strategy when stratification cannot be applied
+  # Optimizes each phi angle independently and combines results
+  # Used when: angle imbalance > threshold OR force_sequential_fallback=true
+  sequential:
+    min_success_rate: 0.5                     # Minimum fraction of angles that must converge
+                                              # Optimization fails if fewer angles converge
+    weighting: "inverse_variance"             # Result combination method
+                                              # Options: "inverse_variance" | "uniform" | "n_points"
+                                              # "inverse_variance" provides optimal statistical weighting
+
+  # Usage Notes:
+  # - Automatically activated when: imbalance_ratio > max_imbalance_ratio
+  # - Can be forced via: optimization.stratification.force_sequential_fallback=true
+  # - Uses scipy.optimize.least_squares per angle (CPU only)
+  # - Combines results using weighted averaging
 
   # ---------------------------------------------------------------------------
   # MCMC - Markov Chain Monte Carlo (Uncertainty Quantification)
@@ -660,6 +812,7 @@ validation:
 #   - Automatic strategy based on dataset size
 #   - Good for parameter estimation and exploration
 #   - Runtime: seconds to minutes
+#   - ⚠ CRITICAL FOR LAMINAR FLOW: Use x_scale_map to fix gradient imbalance
 #
 # MCMC (Recommended for publication with uncertainty quantification):
 #   - Full posterior distributions with credible intervals
@@ -670,6 +823,37 @@ validation:
 #   - Manual workflow (v2.1.0+): Run NLSQ → copy results → update YAML → run MCMC
 #   - No automatic NLSQ/SVI initialization (removed in v2.1.0)
 #   - Runtime: minutes to hours (NUTS), hours to days (CMC)
+#
+# CRITICAL: GRADIENT IMBALANCE IN LAMINAR FLOW
+# ---------------------------------------------
+# Shear parameters (gamma_dot_t0, beta, gamma_dot_t_offset) can have gradients
+# 100-10,000× larger than diffusion parameters (D0, alpha, D_offset).
+#
+# This causes:
+#   - Premature convergence (optimizer stops while shear params still need work)
+#   - Missing fine-scale features (decay oscillations near baseline)
+#   - Poor fit quality despite low chi-squared values
+#
+# SOLUTION: Apply parameter-specific scaling via x_scale_map
+#
+# Step-by-step fix:
+#   1. Run initial NLSQ optimization (without x_scale_map):
+#      homodyne --config this_file.yaml --method nlsq
+#
+#   2. Diagnose gradient imbalance:
+#      python scripts/diagnose_gradients.py --results-dir ./homodyne_results/nlsq --output x_scale_fix.yaml
+#
+#   3. Add recommended x_scale_map to optimization.nlsq section
+#      (copy from diagnostic report output or x_scale_fix.yaml)
+#
+#   4. Re-run optimization with proper scaling:
+#      homodyne --config this_file.yaml --method nlsq
+#
+#   5. Verify improved fit quality:
+#      - Check that fitted c2 heatmaps show decay oscillations
+#      - Verify chi-squared improvement (typically 10-50% reduction)
+#      - Confirm more iterations completed (proper convergence, not premature)
+#      - Ensure all parameters converged properly (not frozen at initial values)
 #
 # Streaming (Automatic for large datasets):
 #   - Constant memory footprint
@@ -780,6 +964,101 @@ validation:
 #
 # Test with example data:
 #   homodyne --config homodyne_static.yaml --plot-experimental-data
+#
+# DIAGNOSTIC TOOLS (NEW in v2.3.1):
+# ----------------------------------
+# Gradient imbalance diagnostic:
+#   python scripts/diagnose_gradients.py --results-dir ./homodyne_results/nlsq
+#   python scripts/diagnose_gradients.py --results-dir ./homodyne_results/nlsq --output x_scale_fix.yaml
+#   python scripts/diagnose_gradients.py --quiet  # Just show recommendations
+#
+# Usage:
+#   - Run AFTER initial NLSQ optimization
+#   - Detects gradient imbalance causing missing oscillations
+#   - Computes optimal x_scale_map values
+#   - Saves recommendations to YAML for easy merging
+#
+# TROUBLESHOOTING COMMON ISSUES:
+# -------------------------------
+# Issue 1: Missing oscillations in fitted c2 heatmaps
+#   Symptom: Smooth decay without characteristic homodyne oscillations near baseline
+#   Cause: Gradient imbalance in laminar flow (shear params have 10,000× larger gradients)
+#   Solution: Run gradient diagnostics and apply x_scale_map
+#   Reference: docs/troubleshooting/gradient_imbalance_solution.md
+#
+# Issue 2: Premature convergence (optimizer stops early)
+#   Symptom: Low iteration count (~50), parameters unchanged, chi-squared stagnant
+#   Cause: Gradient imbalance causing trust region limits
+#   Solution: Apply x_scale_map to normalize parameter steps
+#   Check: diagnostics.log_jacobian_norms: true to see gradient magnitudes
+#
+# Issue 3: Silent NLSQ failure (0 iterations, zero gradients)
+#   Symptom: Optimization returns immediately, parameters = initial values
+#   Cause: Per-angle parameter incompatibility with NLSQ chunking (>100k points)
+#   Solution: optimization.stratification.enabled: "auto" (default, should fix automatically)
+#   Check: Verify stratification activated in logs
+#   Reference: docs/releases/v2.2-stratification-release-notes.md
+#
+# Issue 4: High chi-squared despite convergence
+#   Symptom: Optimization converged but fit quality poor
+#   Cause: Wrong parameter bounds, missing x_scale_map, or physics model mismatch
+#   Solution:
+#     1. Check bounds are physically reasonable for your system
+#     2. Run gradient diagnostics to check for imbalance
+#     3. Verify analysis_mode matches system (static vs laminar_flow)
+#     4. Check data quality (no NaN/Inf values)
+#
+# Issue 5: Out of memory errors
+#   Symptom: Killed by OS, memory errors during optimization
+#   Cause: Dataset too large for available memory
+#   Solution:
+#     1. Enable stratification.use_index_based: true (reduces memory 2x → ~1%)
+#     2. Reduce stratification.target_chunk_size (e.g., 50000 instead of 100000)
+#     3. Use streaming mode for >100M points (automatic)
+#     4. For CMC: reduce cmc.backend_config.num_workers
+#
+# Issue 6: MCMC convergence failures (high R-hat, low ESS)
+#   Symptom: R-hat > 1.1, ESS < 400, divergences present
+#   Cause: Poor initialization, difficult posterior geometry, or insufficient warmup
+#   Solution:
+#     1. Initialize from NLSQ results (manual workflow v2.1.0+)
+#     2. Increase mcmc.num_warmup (try 2000 for 7-parameter laminar flow)
+#     3. Lower mcmc.target_accept_prob (try 0.65 if too many divergences)
+#     4. Check parameter bounds not too restrictive
+#     5. Verify priors are reasonable
+#
+# Issue 7: Very slow optimization (hours for NLSQ)
+#   Symptom: Expected seconds/minutes, taking hours
+#   Cause: Large dataset without proper chunking, or CPU underutilization
+#   Solution:
+#     1. Verify JAX JIT compilation enabled (performance.computation.enable_jit: true)
+#     2. Check CPU thread usage (performance.computation.cpu_threads: "auto")
+#     3. Use stratification for >100k points with per-angle scaling
+#     4. Monitor memory usage - swapping causes severe slowdown
+#
+# DOCUMENTATION REFERENCES:
+# -------------------------
+# Gradient imbalance:
+#   - docs/troubleshooting/gradient_imbalance_solution.md (complete guide)
+#   - GRADIENT_IMBALANCE_FIX_SUMMARY.md (quick start)
+#   - docs/troubleshooting/shear_gradient_check_20251112.md (original discovery)
+#
+# Stratification:
+#   - docs/releases/v2.2-stratification-release-notes.md
+#   - docs/architecture/nlsq-least-squares-solution.md
+#
+# NLSQ optimization:
+#   - docs/troubleshooting/silent-failure-diagnosis.md
+#   - docs/troubleshooting/nlsq-zero-iterations-investigation.md
+#
+# MCMC methods:
+#   - docs/architecture/cmc-dual-mode-strategy.md
+#   - docs/architecture/nuts-chain-parallelization.md
+#   - docs/migration/v2.0-to-v2.1.md (NUTS/CMC auto-selection)
+#
+# Version history:
+#   - docs/migration/v2.2-to-v2.3-gpu-removal.md (CPU-only transition)
+#   - docs/migration/v2.0-to-v2.1.md (MCMC workflow changes)
 #
 # ==============================================================================
 # END OF MASTER TEMPLATE

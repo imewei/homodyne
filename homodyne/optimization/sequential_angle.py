@@ -17,12 +17,172 @@ Date: 2025-11-06
 
 import logging
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, Mapping, Sequence
 
 import jax.numpy as jnp
 import numpy as np
+from scipy.optimize._numdiff import approx_derivative
 
 logger = logging.getLogger(__name__)
+
+
+def _coerce_mapping_to_array(
+    mapping: Mapping[Any, Any],
+    n_params: int,
+    parameter_names: Sequence[str] | None,
+    label: str,
+) -> np.ndarray:
+    """Convert a parameter mapping to a float64 array aligned with solver order."""
+
+    if parameter_names and len(parameter_names) == n_params:
+        index_map = {name: idx for idx, name in enumerate(parameter_names)}
+        array = np.ones(n_params, dtype=np.float64)
+        for key, value in mapping.items():
+            if key not in index_map:
+                logger.warning(
+                    "%s mapping key '%s' not found in parameter_names; ignoring",
+                    label,
+                    key,
+                )
+                continue
+            array[index_map[key]] = float(value)
+        return array
+
+    # Fallback: assume integer indices
+    array = np.ones(n_params, dtype=np.float64)
+    for key, value in mapping.items():
+        try:
+            idx = int(key)
+        except (TypeError, ValueError) as exc:
+            raise ValueError(
+                f"Cannot align {label} mapping without parameter names; "
+                f"invalid key: {key}"
+            ) from exc
+        if idx < 0 or idx >= n_params:
+            raise ValueError(
+                f"{label} mapping index {idx} out of range for {n_params} parameters"
+            )
+        array[idx] = float(value)
+    return array
+
+
+def _coerce_numeric_array(
+    value: Any,
+    n_params: int,
+    label: str,
+) -> np.ndarray:
+    """Ensure a numeric array of length n_params."""
+
+    arr = np.asarray(value, dtype=np.float64)
+    if arr.ndim == 0:
+        arr = np.full(n_params, float(arr), dtype=np.float64)
+    elif arr.size != n_params:
+        raise ValueError(
+            f"{label} must have {n_params} entries (got shape {arr.shape})"
+        )
+    if not np.all(np.isfinite(arr)):
+        raise ValueError(f"{label} must contain finite float64 values")
+    return arr.reshape(n_params)
+
+
+def _normalize_least_squares_kwargs(
+    optimizer_kwargs: dict[str, Any],
+    n_params: int,
+    parameter_names: Sequence[str] | None,
+) -> dict[str, Any]:
+    """Normalize SciPy least_squares kwargs to numeric-friendly forms."""
+
+    if not optimizer_kwargs:
+        return {}
+
+    normalized: dict[str, Any] = {}
+
+    for key, value in optimizer_kwargs.items():
+        normalized[key] = value
+
+    if "x_scale" in normalized:
+        x_scale_value = normalized["x_scale"]
+        try:
+            if isinstance(x_scale_value, Mapping):
+                normalized["x_scale"] = _coerce_mapping_to_array(
+                    x_scale_value, n_params, parameter_names, "x_scale"
+                )
+            else:
+                normalized["x_scale"] = _coerce_numeric_array(
+                    x_scale_value, n_params, "x_scale"
+                )
+        except (TypeError, ValueError) as exc:
+            logger.warning(
+                "Dropping non-numeric x_scale due to %s; reverting to SciPy default",
+                exc,
+            )
+            normalized.pop("x_scale", None)
+
+    for scalar_key in ("diff_step", "f_scale"):
+        if scalar_key not in normalized:
+            continue
+        raw_value = normalized[scalar_key]
+        try:
+            if isinstance(raw_value, Mapping):
+                normalized[scalar_key] = _coerce_mapping_to_array(
+                    raw_value, n_params, parameter_names, scalar_key
+                )
+            else:
+                arr = np.asarray(raw_value, dtype=np.float64)
+                if arr.ndim == 0:
+                    normalized[scalar_key] = float(arr)
+                elif arr.size == n_params:
+                    normalized[scalar_key] = _coerce_numeric_array(
+                        arr, n_params, scalar_key
+                    )
+                else:
+                    raise ValueError(
+                        f"{scalar_key} must be scalar or length {n_params}, got {arr.shape}"
+                    )
+        except (TypeError, ValueError) as exc:
+            logger.warning(
+                "Dropping non-numeric %s due to %s; reverting to SciPy default",
+                scalar_key,
+                exc,
+            )
+            normalized.pop(scalar_key, None)
+
+    for tol_key in ("ftol", "xtol", "gtol"):
+        if tol_key not in normalized:
+            continue
+        try:
+            normalized[tol_key] = float(normalized[tol_key])
+        except (TypeError, ValueError) as exc:
+            logger.warning(
+                "Dropping non-numeric %s due to %s; reverting to SciPy default",
+                tol_key,
+                exc,
+            )
+            normalized.pop(tol_key, None)
+
+    if "max_nfev" in normalized:
+        try:
+            normalized["max_nfev"] = int(normalized["max_nfev"])
+        except (TypeError, ValueError) as exc:
+            logger.warning(
+                "Dropping non-numeric max_nfev due to %s; reverting to SciPy default",
+                exc,
+            )
+            normalized.pop("max_nfev", None)
+
+    if normalized:
+        summary = []
+        for key, value in normalized.items():
+            if isinstance(value, np.ndarray):
+                summary.append(f"{key}=array(shape={value.shape}, dtype={value.dtype})")
+            else:
+                summary.append(f"{key}={type(value).__name__}")
+        logger.debug(
+            "Sequential least_squares kwargs sanitized: %s",
+            "; ".join(summary),
+        )
+
+    return normalized
 
 
 @dataclass
@@ -85,6 +245,91 @@ class SequentialResult:
     n_angles_failed: int
     total_cost: float
     success_rate: float
+    initial_jacobian_norms: np.ndarray | None = None
+    final_jacobian_norms: np.ndarray | None = None
+
+
+JAC_SAMPLE_SIZE = 4096
+
+
+def _select_jacobian_sample(subset: AngleSubset, sample_size: int) -> dict[str, Any]:
+    """Select a representative subset of rows for Jacobian diagnostics."""
+
+    size = min(sample_size, subset.n_points)
+    if size <= 0:
+        return {
+            "phi": subset.phi,
+            "t1": subset.t1,
+            "t2": subset.t2,
+            "g2": subset.g2_exp,
+            "scale": 1.0,
+            "indices": slice(None),
+        }
+
+    if size == subset.n_points:
+        idx = slice(None)
+        scale = 1.0
+    else:
+        idx = np.linspace(0, subset.n_points - 1, size, dtype=int)
+        scale = np.sqrt(subset.n_points / float(size))
+
+    return {
+        "phi": subset.phi[idx],
+        "t1": subset.t1[idx],
+        "t2": subset.t2[idx],
+        "g2": subset.g2_exp[idx],
+        "scale": scale,
+        "indices": idx,
+        "size": size,
+    }
+
+
+def _estimate_initial_jacobian_norms(
+    residual_func: callable,
+    params: np.ndarray,
+    sample: dict[str, Any],
+) -> np.ndarray | None:
+    """Estimate column norms at the starting point via finite differences."""
+
+    if sample["phi"].size == 0:
+        return None
+
+    def sample_residual_vector(p: np.ndarray) -> np.ndarray:
+        return residual_func(p, sample["phi"], sample["t1"], sample["t2"], sample["g2"])
+
+    try:
+        jac = approx_derivative(sample_residual_vector, params, method="2-point")
+        norms = np.linalg.norm(jac, axis=0) * sample.get("scale", 1.0)
+        return norms
+    except Exception as exc:  # pragma: no cover - purely diagnostic
+        logger.debug(f"Initial Jacobian estimation failed: {exc}")
+        return None
+
+
+def _compute_final_jacobian_norms(
+    jacobian: np.ndarray | None,
+    sample: dict[str, Any],
+    total_rows: int,
+) -> np.ndarray | None:
+    """Compute column norms from SciPy's final Jacobian, using subsampling."""
+
+    if jacobian is None:
+        return None
+
+    try:
+        if isinstance(sample["indices"], slice):
+            jac_subset = jacobian
+            scale = 1.0
+        else:
+            idx = sample["indices"]
+            jac_subset = jacobian[idx]
+            scale = np.sqrt(total_rows / float(len(idx)))
+
+        norms = np.linalg.norm(jac_subset, axis=0) * scale
+        return norms
+    except Exception as exc:  # pragma: no cover - diagnostic path only
+        logger.debug(f"Final Jacobian norm computation failed: {exc}")
+        return None
 
 
 def split_data_by_angle(
@@ -222,6 +467,46 @@ def optimize_single_angle(
     )
 
     try:
+        # Sanitize dtypes for SciPy: enforce float64 arrays
+        initial_params = np.asarray(initial_params, dtype=np.float64)
+        lower_bounds, upper_bounds = bounds
+        lower_bounds = np.asarray(lower_bounds, dtype=np.float64)
+        upper_bounds = np.asarray(upper_bounds, dtype=np.float64)
+
+        if (
+            initial_params.shape[0] != lower_bounds.shape[0]
+            or initial_params.shape[0] != upper_bounds.shape[0]
+        ):
+            raise ValueError(
+                "Initial parameters and bounds must have matching shapes: "
+                f"init={initial_params.shape}, lower={lower_bounds.shape}, upper={upper_bounds.shape}"
+            )
+
+        if not (np.all(np.isfinite(initial_params)) and np.all(np.isfinite(lower_bounds)) and np.all(np.isfinite(upper_bounds))):
+            raise ValueError("Initial parameters and bounds must be finite float64 values")
+
+        if not np.all(lower_bounds < upper_bounds):
+            raise ValueError(
+                "Sequential optimizer requires strict lower < upper bounds for all parameters"
+            )
+
+        logger.debug(
+            "Angle %.2f° dtype check: init=%s%s lower=%s%s upper=%s%s",
+            subset.phi_angle,
+            initial_params.dtype,
+            initial_params.shape,
+            lower_bounds.dtype,
+            lower_bounds.shape,
+            upper_bounds.dtype,
+            upper_bounds.shape,
+        )
+
+        # Prepare Jacobian sampling subset for diagnostics
+        jac_sample = _select_jacobian_sample(subset, JAC_SAMPLE_SIZE)
+        initial_jacobian_norms = _estimate_initial_jacobian_norms(
+            residual_func, initial_params, jac_sample
+        )
+
         # Define residual function for this angle
         def residuals(params):
             return residual_func(
@@ -232,8 +517,12 @@ def optimize_single_angle(
         result = least_squares(
             residuals,
             initial_params,
-            bounds=bounds,
+            bounds=(lower_bounds, upper_bounds),
             **optimizer_kwargs,
+        )
+
+        final_jacobian_norms = _compute_final_jacobian_norms(
+            getattr(result, "jac", None), jac_sample, subset.n_points
         )
 
         # Compute covariance if possible
@@ -261,6 +550,8 @@ def optimize_single_angle(
             "message": result.message,
             "n_points": subset.n_points,
             "phi_angle": subset.phi_angle,
+            "jac_initial_norms": initial_jacobian_norms,
+            "jac_final_norms": final_jacobian_norms,
         }
 
     except Exception as e:
@@ -274,6 +565,8 @@ def optimize_single_angle(
             "message": f"Failed: {str(e)}",
             "n_points": subset.n_points,
             "phi_angle": subset.phi_angle,
+            "jac_initial_norms": None,
+            "jac_final_norms": None,
         }
 
 
@@ -377,6 +670,7 @@ def optimize_per_angle_sequential(
     bounds: tuple[np.ndarray, np.ndarray],
     weighting: str = "inverse_variance",
     min_success_rate: float = 0.5,
+    parameter_names: Sequence[str] | None = None,
     **optimizer_kwargs,
 ) -> SequentialResult:
     """Optimize parameters sequentially for each phi angle.
@@ -403,6 +697,8 @@ def optimize_per_angle_sequential(
         Result combination weighting: 'inverse_variance' | 'uniform' | 'n_points'
     min_success_rate : float, optional
         Minimum fraction of angles that must converge (0.0-1.0), default: 0.5
+    parameter_names : Sequence[str], optional
+        Parameter ordering used to align per-parameter kwargs (e.g., x_scale)
     **optimizer_kwargs
         Additional arguments passed to scipy.optimize.least_squares
 
@@ -447,6 +743,12 @@ def optimize_per_angle_sequential(
         f"  Weighting: {weighting}"
     )
 
+    optimizer_kwargs = _normalize_least_squares_kwargs(
+        optimizer_kwargs,
+        n_params=len(initial_params),
+        parameter_names=parameter_names,
+    )
+
     # Split data by angle
     subsets = split_data_by_angle(phi, t1, t2, g2_exp)
 
@@ -468,6 +770,17 @@ def optimize_per_angle_sequential(
             f"cost={result['cost']:.4f}, "
             f"iterations={result['n_iterations']}"
         )
+
+    # Aggregate Jacobian diagnostics
+    def _aggregate_norms(key: str) -> np.ndarray | None:
+        values = [r[key] for r in per_angle_results if r.get(key) is not None]
+        if not values:
+            return None
+        stacked = np.vstack(values)
+        return stacked.mean(axis=0)
+
+    aggregated_initial = _aggregate_norms("jac_initial_norms")
+    aggregated_final = _aggregate_norms("jac_final_norms")
 
     # Check success rate
     n_success = sum(1 for r in per_angle_results if r["success"])
@@ -500,4 +813,6 @@ def optimize_per_angle_sequential(
         n_angles_failed=n_total - n_success,
         total_cost=total_cost,
         success_rate=success_rate,
+        initial_jacobian_norms=aggregated_initial,
+        final_jacobian_norms=aggregated_final,
     )
