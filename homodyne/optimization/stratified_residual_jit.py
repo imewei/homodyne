@@ -297,8 +297,9 @@ class StratifiedResidualFunctionJIT:
             )
             g2_theory_grid = compute_g2_vmap(self.phi_unique)
 
-        # Apply diagonal correction
-        g2_theory_grid = apply_diagonal_correction(g2_theory_grid)
+        # Apply diagonal correction (vmap over phi dimension)
+        apply_diagonal_vmap = jax.vmap(apply_diagonal_correction, in_axes=0)
+        g2_theory_grid = apply_diagonal_vmap(g2_theory_grid)
 
         # Flatten theory grid for indexing
         g2_theory_flat = g2_theory_grid.flatten()
@@ -339,7 +340,8 @@ class StratifiedResidualFunctionJIT:
             params: All parameters (scaling + physical)
 
         Returns:
-            Flattened residuals with padding removed (n_real_points,)
+            Flattened residuals INCLUDING padding (will be filtered in __call__)
+            Shape: (n_chunks * max_chunk_size,) with zeros for padded values
         """
         # Vectorize over chunks (first dimension)
         vmap_fn = jax.vmap(
@@ -358,28 +360,30 @@ class StratifiedResidualFunctionJIT:
             self.mask,
         )  # Shape: (n_chunks, max_chunk_size)
 
-        # Flatten and filter out padded values
+        # Flatten residuals (padding is already masked to zero in _compute_single_chunk_residuals)
         residuals_flat = residuals_padded.flatten()  # Shape: (n_chunks * max_chunk_size,)
-        mask_flat = self.mask.flatten()  # Shape: (n_chunks * max_chunk_size,)
 
-        # Extract only real data points
-        residuals_real = residuals_flat[mask_flat]  # Shape: (n_real_points,)
+        # Return full array (filtering happens in __call__ to avoid JIT boolean indexing)
+        return residuals_flat
 
-        return residuals_real
-
-    def __call__(self, params: np.ndarray) -> np.ndarray:
+    def __call__(self, params):
         """
         Compute residuals (interface for NLSQ least_squares).
 
+        This method is JIT-traced by NLSQ, so it must use JAX operations only.
+        Padded values are already masked to zero, so they don't contribute to
+        the optimization objective (sum of squared residuals).
+
         Args:
-            params: Parameters as numpy array
+            params: Parameters (numpy or JAX array)
 
         Returns:
-            Residuals as numpy array (n_real_points,)
+            Residuals as JAX array (n_chunks * max_chunk_size,) with zeros for padding
+            Note: Padding zeros don't affect optimization but increase array size
         """
         params_jax = jnp.asarray(params, dtype=jnp.float64)
         residuals_jax = self._residual_fn_jit(params_jax)
-        return np.asarray(residuals_jax, dtype=np.float64)
+        return residuals_jax  # Keep as JAX array for JIT compatibility
 
     def validate_chunk_structure(self) -> bool:
         """

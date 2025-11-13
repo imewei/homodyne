@@ -138,18 +138,43 @@ class StratifiedResidualFunction:
 
     def _precompute_chunk_metadata(self):
         """
-        Pre-compute unique values for each chunk to avoid jnp.unique() in JIT.
+        Pre-compute GLOBAL unique values from ALL chunks to avoid jnp.unique() in JIT.
 
-        This method extracts unique phi, t1, t2 values for each chunk and stores
-        them as metadata. This avoids ConcretizationTypeError when using jnp.unique()
-        inside JIT-compiled functions.
+        This method extracts unique phi, t1, t2 values from ALL chunks combined
+        and stores them as metadata. Each chunk gets the SAME global unique arrays
+        to ensure correct flat indexing when accessing sigma_full array.
+
+        This avoids ConcretizationTypeError when using jnp.unique() inside
+        JIT-compiled functions.
+
+        CRITICAL: Must use global unique values, not per-chunk subsets, because
+        sigma_full dimensions are based on ALL data points across all chunks.
         """
+        # Extract GLOBAL unique values from ALL chunks combined
+        # This ensures grid dimensions match sigma_full dimensions
+        all_phi = np.concatenate([chunk.phi for chunk in self.chunks])
+        all_t1 = np.concatenate([chunk.t1 for chunk in self.chunks])
+        all_t2 = np.concatenate([chunk.t2 for chunk in self.chunks])
+
+        global_phi_unique = jnp.sort(jnp.unique(jnp.asarray(all_phi)))
+        global_t1_unique = jnp.sort(jnp.unique(jnp.asarray(all_t1)))
+        global_t2_unique = jnp.sort(jnp.unique(jnp.asarray(all_t2)))
+
+        self.logger.debug(
+            f"Global unique values extracted from all chunks: "
+            f"{len(global_phi_unique)} phi, "
+            f"{len(global_t1_unique)} t1, "
+            f"{len(global_t2_unique)} t2"
+        )
+
+        # Store SAME global unique arrays for ALL chunks
+        # This ensures flat indexing calculations use correct dimensions
         self.chunk_metadata = []
         for chunk in self.chunks:
             metadata = {
-                "phi_unique": jnp.sort(jnp.unique(jnp.asarray(chunk.phi))),
-                "t1_unique": jnp.sort(jnp.unique(jnp.asarray(chunk.t1))),
-                "t2_unique": jnp.sort(jnp.unique(jnp.asarray(chunk.t2))),
+                "phi_unique": global_phi_unique,  # Same for all chunks
+                "t1_unique": global_t1_unique,    # Same for all chunks
+                "t2_unique": global_t2_unique,    # Same for all chunks
             }
             self.chunk_metadata.append(metadata)
 
