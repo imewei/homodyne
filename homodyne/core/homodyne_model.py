@@ -388,7 +388,7 @@ class HomodyneModel:
                     self.time_array[0],
                     self.time_array[-1],
                 ),
-                cmap="viridis",
+                cmap="jet",
                 vmin=1.0,
                 vmax=1.5,
             )

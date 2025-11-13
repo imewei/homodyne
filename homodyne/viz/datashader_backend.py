@@ -78,7 +78,7 @@ class DatashaderRenderer:
         data: np.ndarray,
         x_coords: np.ndarray,
         y_coords: np.ndarray,
-        cmap: str = "viridis",
+        cmap: str = "jet",
         vmin: float | None = None,
         vmax: float | None = None,
     ) -> Image.Image:
@@ -104,10 +104,11 @@ class DatashaderRenderer:
         y_coords : np.ndarray
             Y-axis (vertical) coordinates, shape (n_y,)
             For C2 data: pass t2 time array
-        cmap : str, default='viridis'
+        cmap : str, default='jet'
             Colormap name. Supported:
+            - 'jet' (default for all plots including residuals)
             - 'viridis', 'plasma', 'inferno', 'magma' (matplotlib perceptually uniform)
-            - 'coolwarm', 'RdBu_r' (diverging, for residuals)
+            - 'coolwarm', 'RdBu_r' (diverging, alternative for residuals)
             - Any matplotlib or colorcet colormap name
         vmin, vmax : float, optional
             Color scale limits. If None, auto-computed from data min/max.
@@ -128,7 +129,7 @@ class DatashaderRenderer:
         >>> c2_data = np.random.rand(50, 50)
         >>> t1 = np.linspace(0, 1, 50)
         >>> t2 = np.linspace(0, 1, 50)
-        >>> img = renderer.rasterize_heatmap(c2_data, t2, t1, cmap='viridis')
+        >>> img = renderer.rasterize_heatmap(c2_data, t2, t1, cmap='jet')
         >>> img.save('c2_heatmap.png')
         """
         # Validate input dimensions
@@ -205,9 +206,9 @@ class DatashaderRenderer:
         try:
             mpl_cmap = cm.get_cmap(cmap)
         except ValueError:
-            # Fallback to viridis if colormap not found
-            logger.warning(f"Colormap '{cmap}' not found, using 'viridis'")
-            mpl_cmap = cm.get_cmap("viridis")
+            # Fallback to jet if colormap not found
+            logger.warning(f"Colormap '{cmap}' not found, using 'jet'")
+            mpl_cmap = cm.get_cmap("jet")
 
         # Convert to list of hex colors (Datashader format)
         # Sample 256 colors from the colormap
@@ -224,7 +225,7 @@ def plot_c2_heatmap_fast(
     output_path: Path,
     title: str = "",
     phi_angle: float | None = None,
-    cmap: str = "viridis",
+    cmap: str = "jet",
     width: int = 800,
     height: int = 800,
     *,
@@ -261,7 +262,7 @@ def plot_c2_heatmap_fast(
         Plot title (phi_angle will be appended if provided)
     phi_angle : float, optional
         Scattering angle in degrees (added to title)
-    cmap : str, default='viridis'
+    cmap : str, default='jet'
         Colormap name
     width, height : int, default=800
         Output image size in pixels (rasterization resolution)
@@ -420,20 +421,21 @@ def plot_c2_comparison_fast(
 
     # Rasterize all three panels using Datashader for speed
     img_exp = renderer.rasterize_heatmap(
-        c2_exp.T, t1, t2, cmap="viridis", vmin=vmin_shared, vmax=vmax_shared
+        c2_exp.T, t1, t2, cmap="jet", vmin=vmin_shared, vmax=vmax_shared
     )
     img_fit = renderer.rasterize_heatmap(
-        c2_fit.T, t1, t2, cmap="viridis", vmin=vmin_shared, vmax=vmax_shared
+        c2_fit.T, t1, t2, cmap="jet", vmin=vmin_shared, vmax=vmax_shared
     )
 
-    # Symmetric colormap for residuals (diverging)
-    res_max = np.abs(residuals).max()
+    # Residuals colormap using actual min/max
+    res_min = float(residuals.min())
+    res_max = float(residuals.max())
     img_res = renderer.rasterize_heatmap(
         residuals.T,
         t1,
         t2,
-        cmap="RdBu_r",
-        vmin=-res_max,
+        cmap="jet",
+        vmin=res_min,
         vmax=res_max,
     )
 
@@ -466,7 +468,7 @@ def plot_c2_comparison_fast(
 
     # Use SHARED normalization for both experimental and fit colorbars
     norm_shared = Normalize(vmin=vmin_shared, vmax=vmax_shared)
-    sm_exp = ScalarMappable(cmap=cm.get_cmap("viridis"), norm=norm_shared)
+    sm_exp = ScalarMappable(cmap=cm.get_cmap("jet"), norm=norm_shared)
     sm_exp.set_array([])
     cbar0 = plt.colorbar(sm_exp, ax=axes[0], label="C₂(t₁,t₂)")
     cbar0.ax.tick_params(labelsize=8)
@@ -478,7 +480,7 @@ def plot_c2_comparison_fast(
     axes[1].set_ylabel("t₂ (s)", fontsize=10)
 
     # Add colorbar for fit panel (same normalization as experimental)
-    sm_fit = ScalarMappable(cmap=cm.get_cmap("viridis"), norm=norm_shared)
+    sm_fit = ScalarMappable(cmap=cm.get_cmap("jet"), norm=norm_shared)
     sm_fit.set_array([])
     cbar1 = plt.colorbar(sm_fit, ax=axes[1], label="C₂(t₁,t₂)")
     cbar1.ax.tick_params(labelsize=8)
@@ -489,9 +491,9 @@ def plot_c2_comparison_fast(
     axes[2].set_xlabel("t₁ (s)", fontsize=10)
     axes[2].set_ylabel("t₂ (s)", fontsize=10)
 
-    # Add colorbar for residuals panel (symmetric)
-    norm_res = Normalize(vmin=-res_max, vmax=res_max)
-    sm_res = ScalarMappable(cmap=cm.get_cmap("RdBu_r"), norm=norm_res)
+    # Add colorbar for residuals panel using actual min/max
+    norm_res = Normalize(vmin=res_min, vmax=res_max)
+    sm_res = ScalarMappable(cmap=cm.get_cmap("jet"), norm=norm_res)
     sm_res.set_array([])
     cbar2 = plt.colorbar(sm_res, ax=axes[2], label="ΔC₂")
     cbar2.ax.tick_params(labelsize=8)

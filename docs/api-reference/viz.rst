@@ -95,7 +95,7 @@ Plotting Utilities
        origin='lower',
        extent=[t1[0], t1[-1], t2[0], t2[-1]],
        aspect='auto',
-       cmap='viridis'
+       cmap='jet'
    )
 
    ax.set_xlabel('t₁ (s)')
@@ -135,9 +135,9 @@ Plotting Utilities
    im = ax.imshow(
        residuals[0].T,
        origin='lower',
-       cmap='RdBu_r',
-       vmin=-0.1,
-       vmax=0.1
+       cmap='jet',
+       vmin=residuals[0].min(),
+       vmax=residuals[0].max()
    )
    ax.set_title('Fit Residuals')
    plt.colorbar(im, ax=ax, label='Residual')
@@ -160,9 +160,9 @@ Plot Customization
 .. code-block:: python
 
    # Use perceptually uniform colormaps
-   colormaps = ['viridis', 'plasma', 'inferno', 'magma', 'cividis']
+   colormaps = ['jet', 'viridis', 'plasma', 'inferno', 'magma', 'cividis']
 
-   # For diverging data (residuals)
+   # For diverging data (residuals) - alternative to jet
    diverging = ['RdBu_r', 'seismic', 'coolwarm']
 
 **LaTeX Rendering:**

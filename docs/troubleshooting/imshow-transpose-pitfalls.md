@@ -79,7 +79,7 @@ ax.imshow(c2.T, origin='lower')
 ax.imshow(
     c2,  # Missing transpose!
     aspect='equal',
-    cmap='viridis',
+    cmap='jet',
     origin='lower',
     extent=[t1[0], t1[-1], t2[0], t2[-1]]
 )
@@ -88,7 +88,7 @@ ax.imshow(
 ax.imshow(
     c2.T,  # Transpose applied
     aspect='equal',
-    cmap='viridis',
+    cmap='jet',
     origin='lower',
     extent=[t1[0], t1[-1], t2[0], t2[-1]]
 )
@@ -258,7 +258,7 @@ ax2.set_title('With .T (mirrored)')
 im = ax.imshow(
     angle_data.T,  # ✓ Transpose applied
     aspect='equal',
-    cmap='viridis',
+    cmap='jet',
     origin='lower',
     extent=extent,
 )
@@ -268,7 +268,7 @@ im = ax.imshow(
     c2_simulated[idx].T,  # ✓ Transpose applied
     extent=[t_vals[0], t_vals[-1], t_vals[0], t_vals[-1]],
     aspect='equal',
-    cmap='viridis',
+    cmap='jet',
     origin='lower',
 )
 ax.set_xlabel('t₁ (s)', fontsize=11)  # ✓ Correct label
@@ -278,7 +278,7 @@ ax.set_ylabel('t₂ (s)', fontsize=11)  # ✓ Correct label
 im = ax.imshow(
     c2_fitted[i].T,  # ✓ Transpose applied
     aspect='equal',
-    cmap='viridis',
+    cmap='jet',
     origin='lower',
     extent=extent,
 )

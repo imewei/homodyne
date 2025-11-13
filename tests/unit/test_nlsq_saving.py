@@ -668,24 +668,20 @@ class TestGenerateNLSQPlots:
                     output_dir=output_dir,
                 )
 
-                # Verify third axis (residuals) uses symmetric colormap
+                # Verify third axis (residuals) uses actual min/max range
                 residuals_imshow_call = mock_axes[2].imshow.call_args
                 if residuals_imshow_call:
                     kwargs = residuals_imshow_call[1]
                     if "vmin" in kwargs and "vmax" in kwargs:
                         vmin = kwargs["vmin"]
                         vmax = kwargs["vmax"]
-                        # Verify symmetric: vmin = -vmax
-                        assert (
-                            vmin == -vmax
-                        ), f"Residuals colormap not symmetric: vmin={vmin}, vmax={vmax}"
-                        # Verify vmax is positive
-                        assert (
-                            vmax > 0
-                        ), f"Residuals vmax should be positive, got {vmax}"
-                    # Verify diverging colormap (RdBu_r)
+                        # Verify vmin and vmax are set (actual min/max of residuals)
+                        assert vmin is not None, "Residuals vmin should be set"
+                        assert vmax is not None, "Residuals vmax should be set"
+                        assert vmin <= vmax, f"Residuals vmin ({vmin}) should be <= vmax ({vmax})"
+                    # Verify jet colormap for residuals
                     if "cmap" in kwargs:
-                        assert "RdBu" in str(kwargs["cmap"])
+                        assert "jet" in str(kwargs["cmap"]).lower()
         pass  # To be implemented in T032
 
 

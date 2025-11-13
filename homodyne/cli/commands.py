@@ -1767,7 +1767,7 @@ def _plot_experimental_data(data: dict[str, Any], plots_dir) -> None:
             im = ax.imshow(
                 angle_data.T,
                 aspect="equal",
-                cmap="viridis",
+                cmap="jet",
                 origin="lower",
                 extent=extent,
             )
@@ -1846,7 +1846,7 @@ def _plot_experimental_data(data: dict[str, Any], plots_dir) -> None:
         im = ax.imshow(
             c2_exp.T,
             aspect="equal",
-            cmap="viridis",
+            cmap="jet",
             origin="lower",
             extent=extent,
         )
@@ -2087,7 +2087,7 @@ def _plot_simulated_data(
             c2_simulated[idx].T,
             extent=[t_vals[0], t_vals[-1], t_vals[0], t_vals[-1]],
             aspect="equal",
-            cmap="viridis",
+            cmap="jet",
             origin="lower",
         )
         ax.set_xlabel("t₁ (s)", fontsize=11)
@@ -2389,7 +2389,7 @@ def _generate_and_plot_fitted_simulations(
         im = ax.imshow(
             c2_fitted[i].T,
             aspect="equal",
-            cmap="viridis",
+            cmap="jet",
             origin="lower",
             extent=extent,
         )
@@ -2463,7 +2463,7 @@ def _plot_fit_comparison(result: Any, data: dict[str, Any], plots_dir) -> None:
         axes[0].set_xlabel("Data Point Index")
         axes[0].set_ylabel("C₂")
     else:
-        im0 = axes[0].imshow(c2_exp, aspect="auto", cmap="viridis", vmin=1.0, vmax=1.5)
+        im0 = axes[0].imshow(c2_exp, aspect="auto", cmap="jet", vmin=1.0, vmax=1.5)
         plt.colorbar(im0, ax=axes[0], label="C₂")
         axes[0].set_xlabel("t₂ Index")
         axes[0].set_ylabel("φ Index")
@@ -3432,7 +3432,7 @@ def generate_nlsq_plots(
     -----
     - Creates one PNG per angle: c2_heatmaps_phi_{angle:.1f}deg.png
     - Layout: 3 panels (experimental, fitted, residuals)
-    - Colormaps: viridis (exp, fit), RdBu_r (residuals, symmetric)
+    - Colormaps: jet (exp, fit, residuals)
     - Resolution: 300 DPI for publication quality
     - Datashader canvas: 1200×1200 pixels (configurable via output.plots.datashader.canvas_width)
     - Matplotlib interpolation: bilinear (configurable via output.plots.matplotlib.interpolation)
@@ -4604,7 +4604,7 @@ def _generate_plots_matplotlib(
             c2_exp[i].T,
             origin="lower",
             aspect="equal",
-            cmap="viridis",
+            cmap="jet",
             extent=[t1[0], t1[-1], t2[0], t2[-1]],
             vmin=vmin_use,
             vmax=vmax_use,
@@ -4620,7 +4620,7 @@ def _generate_plots_matplotlib(
             c2_fit_display[i].T,
             origin="lower",
             aspect="equal",
-            cmap="viridis",
+            cmap="jet",
             extent=[t1[0], t1[-1], t2[0], t2[-1]],
             vmin=vmin_use,
             vmax=vmax_use,
@@ -4631,14 +4631,15 @@ def _generate_plots_matplotlib(
         cbar1 = plt.colorbar(im1, ax=axes[1], label="C₂(t₁,t₂)")
         cbar1.ax.tick_params(labelsize=8)
 
-        # Panel 3: Residuals (symmetric colormap)
-        residual_max = np.max(np.abs(residuals[i]))
+        # Panel 3: Residuals using actual min/max
+        residual_min = float(np.min(residuals[i]))
+        residual_max = float(np.max(residuals[i]))
         im2 = axes[2].imshow(
             residuals[i].T,
             origin="lower",
             aspect="equal",
-            cmap="RdBu_r",
-            vmin=-residual_max,
+            cmap="jet",
+            vmin=residual_min,
             vmax=residual_max,
             extent=[t1[0], t1[-1], t2[0], t2[-1]],
         )
