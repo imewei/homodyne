@@ -76,6 +76,145 @@ import os
 import numpy as np
 
 from homodyne.optimization.cmc.backends.base import CMCBackend
+
+
+def _log_numpyro_init_diagnostics(model, init_param_values, log_fn, shard_idx):
+    """Inspect site-level constraints when initialize_model fails.
+
+    Parameters
+    ----------
+    model : callable
+        NumPyro model closure produced by `_create_numpyro_model`.
+    init_param_values : dict[str, float]
+        Dictionary passed to `init_to_value` (already expanded per angle).
+    log_fn : Callable[[str], None]
+        Logger function (e.g., worker_logger.error).
+    shard_idx : int
+        Shard identifier for contextual logging.
+    """
+
+    try:
+        import numpy as np
+        import jax
+        import jax.numpy as jnp
+        from numpyro import handlers
+        from numpyro.infer import init_to_value, util as infer_util
+    except ImportError as exc:  # pragma: no cover - diagnostics only
+        log_fn(
+            f"Shard {shard_idx}: diagnostics skipped (numpyro unavailable: {exc})"
+        )
+        return
+
+    # Convert init params to JAX arrays so constraint checks broadcast cleanly
+    value_dict = {k: jnp.asarray(v) for k, v in init_param_values.items()}
+
+    rng_key = jax.random.PRNGKey(0)
+    try:
+        # Try the exact initialize_model call (non-JIT) to capture potential function
+        infer_util.initialize_model(
+            rng_key,
+            model,
+            init_strategy=init_to_value(values=value_dict),
+            dynamic_args=False,
+        )
+        log_fn(
+            f"Shard {shard_idx}: initialize_model succeeded under diagnostics; "
+            "failure likely occurs downstream."
+        )
+    except Exception as exc:  # pragma: no cover - diagnostics only
+        log_fn(
+            f"Shard {shard_idx}: initialize_model(debug) still failed: {exc}"
+        )
+
+    # Trace the model with the provided values to inspect each sample site
+    try:
+        seeded_model = handlers.seed(model, rng_key)
+        substituted = handlers.substitute(seeded_model, data=value_dict)
+        trace = handlers.trace(substituted).get_trace()
+    except Exception as exc:  # pragma: no cover - diagnostics only
+        log_fn(
+            f"Shard {shard_idx}: unable to trace model for diagnostics: {exc}"
+        )
+        return
+
+    for site_name, site in trace.items():
+        if site.get("type") != "sample":
+            continue
+
+        dist = site.get("fn")
+        dist_type_name = type(dist).__name__.lower()
+        base_dist_name = getattr(getattr(dist, "base_dist", None), "__class__", None)
+        base_dist_name = (
+            base_dist_name.__name__.lower() if base_dist_name is not None else ""
+        )
+        if "transformeddistribution" in dist_type_name and "beta" in base_dist_name:
+            bounds = None
+            for transform in getattr(dist, "transforms", []):
+                if hasattr(transform, "loc") and hasattr(transform, "scale"):
+                    loc = float(np.asarray(transform.loc))
+                    scale = float(np.asarray(transform.scale))
+                    bounds = (loc, loc + scale)
+                    break
+            if bounds is not None:
+                log_fn(
+                    f"Shard {shard_idx}: site '{site_name}' uses BetaScaled support="
+                    f"[{bounds[0]:.6g}, {bounds[1]:.6g}]"
+                )
+        value = np.asarray(site.get("value"))
+        support = getattr(dist, "support", None)
+        support_ok = None
+        support_bounds = None
+        if support is not None:
+            try:
+                support_ok = bool(np.all(support.check(value)))
+                # Capture explicit lower/upper bounds when available (interval constraints)
+                low = getattr(support, "lower_bound", None)
+                high = getattr(support, "upper_bound", None)
+                if low is not None or high is not None:
+                    support_bounds = (
+                        np.asarray(low).tolist() if low is not None else None,
+                        np.asarray(high).tolist() if high is not None else None,
+                    )
+            except Exception:  # pragma: no cover
+                support_ok = False
+
+        log_prob = site.get("log_prob")
+        if log_prob is not None:
+            log_prob = np.asarray(log_prob)
+            log_prob_min = float(np.nanmin(log_prob))
+            log_prob_max = float(np.nanmax(log_prob))
+        else:
+            log_prob_min = log_prob_max = float("nan")
+
+        manual_lp = float("nan")
+        manual_has_nan = None
+        manual_has_inf = None
+        try:
+            manual_val = np.asarray(dist.log_prob(site["value"]))
+            manual_lp = float(np.nanmean(manual_val))
+            manual_has_nan = bool(np.any(np.isnan(manual_val)))
+            manual_has_inf = bool(np.any(np.isinf(manual_val)))
+        except Exception:
+            manual_lp = float("nan")
+
+        log_fn(
+            "Shard %s init diagnostics -- site=%s, value=%s, support_ok=%s, "
+            "support_bounds=%s, log_prob=[%.3e, %.3e], manual_log_prob=%.3e, "
+            "manual_has_nan=%s, manual_has_inf=%s, dist=%s"
+            % (
+                shard_idx,
+                site_name,
+                np.array2string(value, precision=6, floatmode="fixed"),
+                support_ok,
+                support_bounds,
+                log_prob_min,
+                log_prob_max,
+                manual_lp,
+                manual_has_nan,
+                manual_has_inf,
+                dist,
+            )
+        )
 from homodyne.utils.logging import get_logger
 
 logger = get_logger(__name__)
@@ -554,6 +693,15 @@ def _worker_function(args: tuple) -> Dict[str, Any]:
         q = float(shard["q"])
         L = float(shard["L"])
 
+        stable_prior_config = bool(mcmc_config.get("stable_prior_fallback", False))
+        stable_prior_env = os.environ.get("HOMODYNE_STABLE_PRIOR", "0") == "1"
+        stable_prior_enabled = stable_prior_config or stable_prior_env
+        worker_logger = get_logger(__name__)
+        worker_logger.info(
+            f"Multiprocessing shard {shard_idx}: stable_prior_fallback="
+            f"{stable_prior_enabled} (config={stable_prior_config}, env={stable_prior_env})"
+        )
+
         # Compute dt from t1 array (required for physics computation)
         if len(t1_jax) > 1:
             dt = float(np.median(np.diff(np.unique(t1_jax))))
@@ -632,9 +780,6 @@ def _worker_function(args: tuple) -> Dict[str, Any]:
         estimated_contrast = max(0.01, data_p95 - data_p05)  # At least 0.01 for numerical stability
         estimated_offset = max(0.5, data_p05 - estimated_contrast)  # At least 0.5 (physical minimum)
 
-        # Use logger from worker process
-        from homodyne.utils.logging import get_logger
-        worker_logger = get_logger(__name__)
         worker_logger.info(
             f"Multiprocessing shard {shard_idx}: Data statistics (robust): "
             f"p05={data_p05:.4f}, p95={data_p95:.4f}, mean={data_mean:.4f}"
@@ -644,10 +789,28 @@ def _worker_function(args: tuple) -> Dict[str, Any]:
             f"contrast={estimated_contrast:.4f}, offset={estimated_offset:.4f}"
         )
 
+        # CRITICAL FIX (Nov 2025): Clamp per-angle values to open intervals
+        # NumPyro's TruncatedNormal transform requires values strictly inside (min, max)
+        # If estimated values equal boundaries, NumPyro initialization will fail
+        # Use ParameterSpace.clamp_to_open_interval() to ensure epsilon distance from bounds
         for phi_idx in range(len(phi_unique)):
-            # Data-driven initial values (closer to experimental observations)
-            init_param_values[f"contrast_{phi_idx}"] = estimated_contrast
-            init_param_values[f"offset_{phi_idx}"] = estimated_offset
+            # Clamp contrast to open interval (e.g., if bounds are [0.0, 1.0])
+            clamped_contrast = parameter_space.clamp_to_open_interval(
+                "contrast", estimated_contrast, epsilon=1e-6
+            )
+            # Clamp offset to open interval (e.g., if bounds are [0.5, 1.5])
+            clamped_offset = parameter_space.clamp_to_open_interval(
+                "offset", estimated_offset, epsilon=1e-6
+            )
+
+            init_param_values[f"contrast_{phi_idx}"] = clamped_contrast
+            init_param_values[f"offset_{phi_idx}"] = clamped_offset
+
+        worker_logger.info(
+            f"Multiprocessing shard {shard_idx}: Data-driven per-angle scaling: "
+            f"contrast={estimated_contrast:.6f} → {clamped_contrast:.6f}, "
+            f"offset={estimated_offset:.6f} → {clamped_offset:.6f} (clamped to open intervals)"
+        )
 
         # CRITICAL: Remove base contrast/offset parameters when using per-angle scaling
         # NumPyro model expects ONLY per-angle parameters (contrast_0, contrast_1, ...)
@@ -666,6 +829,29 @@ def _worker_function(args: tuple) -> Dict[str, Any]:
         sample_params = {k: v for i, (k, v) in enumerate(init_param_values.items()) if i < 10}
         worker_logger.info(
             f"Multiprocessing shard {shard_idx}: init_param_values (first 10): {sample_params}"
+        )
+
+        # CRITICAL FIX (Nov 2025): Preflight validation of initial parameters
+        # Validate and repair any boundary violations before NumPyro initialization
+        # This prevents initialize_model failures across all shards
+        from homodyne.optimization.mcmc import _validate_and_repair_init_params
+
+        init_param_values_original = dict(init_param_values)
+        init_param_values = _validate_and_repair_init_params(
+            init_param_values,
+            parameter_space,
+            phi_unique=phi_unique,
+            epsilon=1e-6,
+        )
+
+        worker_logger.info(
+            f"Multiprocessing shard {shard_idx}: Preflight validation complete, "
+            f"parameters ready for NUTS initialization"
+        )
+
+        # Log per-shard seed for reproducibility and debugging
+        worker_logger.info(
+            f"Multiprocessing shard {shard_idx}: Using PRNG seed={shard_idx} for MCMC sampling"
         )
 
         # Create NUTS sampler
@@ -705,9 +891,90 @@ def _worker_function(args: tuple) -> Dict[str, Any]:
             progress_bar=False,
         )
 
-        # Run MCMC
+        # Run MCMC with optional diagnostics hook
         rng_key = jax.random.PRNGKey(shard_idx)
-        mcmc.run(rng_key)
+        diagnostics_enabled = os.environ.get("HOMODYNE_DEBUG_INIT", "0") not in (
+            "0",
+            "",
+        )
+
+        try:
+            mcmc.run(rng_key)
+        except RuntimeError as exc:
+            init_fail = "Cannot find valid initial parameters" in str(exc)
+            if diagnostics_enabled and init_fail:
+                _log_numpyro_init_diagnostics(
+                    model,
+                    init_param_values,
+                    worker_logger.error,
+                    shard_idx,
+                )
+
+            if stable_prior_enabled and init_fail:
+                worker_logger.warning(
+                    f"Shard {shard_idx}: initialize_model failed; retrying with BetaScaled priors"
+                )
+
+                beta_parameter_space = parameter_space.convert_to_beta_scaled_priors()
+                beta_init_values = _validate_and_repair_init_params(
+                    dict(init_param_values_original),
+                    beta_parameter_space,
+                    phi_unique=phi_unique,
+                    epsilon=1e-6,
+                )
+
+                model = _create_numpyro_model(
+                    data=data_jax,
+                    sigma=sigma_jax,
+                    t1=t1_jax,
+                    t2=t2_jax,
+                    phi=phi_unique,
+                    q=q,
+                    L=L,
+                    analysis_mode=analysis_mode,
+                    parameter_space=beta_parameter_space,
+                    use_simplified=True,
+                    dt=dt,
+                    phi_full=phi_jax,
+                    per_angle_scaling=True,
+                )
+
+                nuts_kernel = NUTS(
+                    model,
+                    target_accept_prob=target_accept_prob,
+                    max_tree_depth=max_tree_depth,
+                    init_strategy=numpyro.infer.init_to_value(
+                        values=beta_init_values
+                    ),
+                )
+                mcmc = MCMC(
+                    nuts_kernel,
+                    num_warmup=num_warmup,
+                    num_samples=num_samples,
+                    num_chains=num_chains,
+                    progress_bar=False,
+                )
+
+                try:
+                    mcmc.run(rng_key)
+                    init_param_values = beta_init_values
+                    worker_logger.info(
+                        f"Shard {shard_idx}: BetaScaled retry succeeded"
+                    )
+                except RuntimeError as exc_beta:
+                    if (
+                        diagnostics_enabled
+                        and "Cannot find valid initial parameters" in str(exc_beta)
+                    ):
+                        _log_numpyro_init_diagnostics(
+                            model,
+                            beta_init_values,
+                            worker_logger.error,
+                            shard_idx,
+                        )
+                    raise
+            else:
+                raise
 
         # Extract samples
         samples_dict = mcmc.get_samples()

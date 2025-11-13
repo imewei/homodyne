@@ -59,6 +59,8 @@ import time
 
 import numpy as np
 
+from homodyne.config.types import SCALING_PARAM_NAMES
+
 from homodyne.utils.logging import get_logger
 
 logger = get_logger(__name__)
@@ -425,8 +427,16 @@ class CMCBackend(ABC):
             )
             return
 
-        # Count parameters from bounds dictionary
-        actual_param_count = len(parameter_space.bounds)
+        # Count physical parameters only (exclude scaling like contrast/offset)
+        # Scaling parameters were added to ParameterSpace bounds in v2.4.0 so we
+        # explicitly drop them here to maintain legacy expectations for
+        # laminar_flow/static counts.
+        physical_param_names = [
+            name
+            for name in parameter_space.bounds
+            if name not in SCALING_PARAM_NAMES
+        ]
+        actual_param_count = len(physical_param_names)
 
         # Validate consistency
         if actual_param_count != expected_param_count:

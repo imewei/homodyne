@@ -20,6 +20,63 @@ from homodyne.utils.logging import get_logger
 
 logger = get_logger(__name__)
 
+_BETA_DEFAULT_CONC = 2.0
+
+
+def _compute_beta_concentrations(
+    mu: float,
+    sigma: float,
+    min_val: float,
+    max_val: float,
+    epsilon: float = 1e-6,
+) -> tuple[float, float]:
+    """Derive Beta concentration parameters on a scaled interval.
+
+    Parameters
+    ----------
+    mu, sigma : float
+        Original prior mean/std defined over [min_val, max_val]
+    min_val, max_val : float
+        Parameter bounds (finite, min < max)
+    epsilon : float
+        Minimum offset used to keep normalized mean inside (0, 1)
+
+    Returns
+    -------
+    tuple[float, float]
+        (alpha, beta) concentrations for Beta(alpha, beta)
+    """
+
+    width = max_val - min_val
+    if not np.isfinite(width) or width <= 0.0:
+        raise ValueError("BetaScaled priors require finite, positive interval width")
+
+    # Normalize statistics to [0, 1]
+    mean_norm = (mu - min_val) / width
+    mean_norm = float(np.clip(mean_norm, epsilon, 1.0 - epsilon))
+
+    sigma_norm = abs(sigma) / width if width > 0 else 0.0
+    variance_norm = sigma_norm**2
+
+    # Maximum admissible variance for Beta distribution at given mean
+    max_variance = mean_norm * (1.0 - mean_norm)
+
+    if variance_norm <= 0.0 or variance_norm >= max_variance:
+        # Fallback to gentle prior centered in the interval
+        return _BETA_DEFAULT_CONC, _BETA_DEFAULT_CONC
+
+    alpha_plus_beta = (mean_norm * (1.0 - mean_norm) / variance_norm) - 1.0
+    if alpha_plus_beta <= 0.0:
+        return _BETA_DEFAULT_CONC, _BETA_DEFAULT_CONC
+
+    alpha = mean_norm * alpha_plus_beta
+    beta = (1.0 - mean_norm) * alpha_plus_beta
+
+    if not np.isfinite(alpha) or not np.isfinite(beta) or alpha <= 0.0 or beta <= 0.0:
+        return _BETA_DEFAULT_CONC, _BETA_DEFAULT_CONC
+
+    return float(alpha), float(beta)
+
 
 @dataclass
 class PriorDistribution:
@@ -39,11 +96,13 @@ class PriorDistribution:
         Maximum bound (for truncated distributions)
     """
 
-    dist_type: str  # 'Normal', 'TruncatedNormal', 'Uniform', 'LogNormal'
+    dist_type: str  # 'Normal', 'TruncatedNormal', 'Uniform', 'LogNormal', 'BetaScaled'
     mu: float = 0.0
     sigma: float = 1.0
     min_val: float = -np.inf
     max_val: float = np.inf
+    alpha: float | None = None
+    beta: float | None = None
 
     def __post_init__(self):
         """Validate distribution parameters."""
@@ -52,6 +111,7 @@ class PriorDistribution:
             "TruncatedNormal",
             "Uniform",
             "LogNormal",
+            "BetaScaled",
         ]:
             logger.warning(
                 f"Unknown distribution type '{self.dist_type}', defaulting to TruncatedNormal"
@@ -65,11 +125,21 @@ class PriorDistribution:
             )
 
         # For TruncatedNormal/Uniform, bounds must be finite
-        if self.dist_type in ["TruncatedNormal", "Uniform"]:
+        if self.dist_type in ["TruncatedNormal", "Uniform", "BetaScaled"]:
             if np.isinf(self.min_val) or np.isinf(self.max_val):
                 raise ValueError(
                     f"{self.dist_type} requires finite bounds, got [{self.min_val}, {self.max_val}]"
                 )
+        if self.dist_type == "BetaScaled":
+            if self.alpha is None or self.beta is None:
+                self.alpha, self.beta = _compute_beta_concentrations(
+                    self.mu,
+                    self.sigma,
+                    self.min_val,
+                    self.max_val,
+                )
+            if self.alpha <= 0 or self.beta <= 0:
+                raise ValueError("BetaScaled concentration parameters must be positive")
 
     def to_numpyro_kwargs(self) -> dict[str, Any]:
         """Convert to NumPyro distribution kwargs.
@@ -92,6 +162,13 @@ class PriorDistribution:
             return {"low": self.min_val, "high": self.max_val}
         elif self.dist_type == "LogNormal":
             return {"loc": self.mu, "scale": self.sigma}
+        elif self.dist_type == "BetaScaled":
+            return {
+                "concentration1": self.alpha,
+                "concentration0": self.beta,
+                "low": self.min_val,
+                "high": self.max_val,
+            }
         else:
             # Fallback to TruncatedNormal
             return {
@@ -242,7 +319,14 @@ class ParameterSpace:
             config_bounds_lookup[canonical_name] = bound_entry
 
         # Load bounds and priors for each parameter
-        for param_name in parameter_names:
+        # Also include contrast and offset (scaling parameters) for MCMC per-angle initialization
+        params_to_load = list(parameter_names) + ["contrast", "offset"]
+
+        for param_name in params_to_load:
+            # Skip if already processed (avoid duplicates)
+            if param_name in bounds_dict:
+                continue
+
             # Get config entry (if exists)
             config_entry = config_bounds_lookup.get(param_name, {})
 
@@ -260,11 +344,22 @@ class ParameterSpace:
                         f"Using default bounds for '{param_name}': [{min_val}, {max_val}]"
                     )
                 else:
-                    # Ultimate fallback
-                    min_val, max_val = 0.0, 1.0
-                    logger.warning(
-                        f"No bounds found for '{param_name}', using [0.0, 1.0]"
-                    )
+                    # Ultimate fallback with special defaults for scaling parameters
+                    if param_name == "contrast":
+                        min_val, max_val = 0.0, 1.0
+                        logger.debug(
+                            f"Using default bounds for '{param_name}': [{min_val}, {max_val}]"
+                        )
+                    elif param_name == "offset":
+                        min_val, max_val = 0.5, 1.5
+                        logger.debug(
+                            f"Using default bounds for '{param_name}': [{min_val}, {max_val}]"
+                        )
+                    else:
+                        min_val, max_val = 0.0, 1.0
+                        logger.warning(
+                            f"No bounds found for '{param_name}', using [0.0, 1.0]"
+                        )
 
             bounds_dict[param_name] = (min_val, max_val)
 
@@ -492,6 +587,54 @@ class ParameterSpace:
         is_valid = len(violations) == 0
         return is_valid, violations
 
+    def convert_to_beta_scaled_priors(self) -> "ParameterSpace":
+        """Return a copy of the ParameterSpace with BetaScaled priors on bounded params."""
+
+        new_priors: dict[str, PriorDistribution] = {}
+        for param_name in self.parameter_names:
+            prior = self.priors[param_name]
+            has_finite_bounds = np.isfinite(prior.min_val) and np.isfinite(prior.max_val)
+            if prior.dist_type in {"TruncatedNormal", "Uniform", "BetaScaled"} and has_finite_bounds:
+                alpha, beta = _compute_beta_concentrations(
+                    prior.mu,
+                    prior.sigma,
+                    prior.min_val,
+                    prior.max_val,
+                )
+                new_priors[param_name] = PriorDistribution(
+                    dist_type="BetaScaled",
+                    mu=prior.mu,
+                    sigma=prior.sigma,
+                    min_val=prior.min_val,
+                    max_val=prior.max_val,
+                    alpha=alpha,
+                    beta=beta,
+                )
+                logger.debug(
+                    "Converted %s prior to BetaScaled on [%s, %s] (alpha=%.3f, beta=%.3f)",
+                    param_name,
+                    prior.min_val,
+                    prior.max_val,
+                    alpha,
+                    beta,
+                )
+            else:
+                # Leave unbounded priors untouched (Normal / LogNormal)
+                new_priors[param_name] = prior
+
+        return ParameterSpace(
+            model_type=self.model_type,
+            parameter_names=self.parameter_names.copy(),
+            bounds=self.bounds.copy(),
+            priors=new_priors,
+            units=self.units.copy(),
+        )
+
+    def convert_to_beta_priors(self) -> "ParameterSpace":
+        """Backward compatible alias for BetaScaled conversion."""
+
+        return self.convert_to_beta_scaled_priors()
+
     def __repr__(self) -> str:
         """String representation."""
         return (
@@ -499,6 +642,58 @@ class ParameterSpace:
             f"n_params={len(self.parameter_names)}, "
             f"params={self.parameter_names})"
         )
+
+    def clamp_to_open_interval(
+        self, param_name: str, value: float, epsilon: float = 1e-6
+    ) -> float:
+        """Clamp parameter value to strictly inside bounds (open interval).
+
+        NumPyro's TruncatedNormal transform requires values strictly inside (min, max)
+        - not equal to the boundaries. This method ensures values are at least epsilon
+        away from both bounds.
+
+        Parameters
+        ----------
+        param_name : str
+            Parameter name
+        value : float
+            Value to clamp
+        epsilon : float, default 1e-6
+            Minimum distance from boundaries
+
+        Returns
+        -------
+        float
+            Clamped value strictly inside (min + epsilon, max - epsilon)
+
+        Examples
+        --------
+        >>> param_space = ParameterSpace.from_defaults('static')
+        >>> # If offset bounds are [0.5, 1.5] and value equals 0.5 (boundary violation)
+        >>> clamped = param_space.clamp_to_open_interval('offset', 0.5)
+        >>> # Returns 0.500001 (0.5 + 1e-6), strictly inside bounds
+        >>> clamped > 0.5 and clamped < 1.5
+        True
+        """
+        if param_name not in self.bounds:
+            raise KeyError(
+                f"Parameter '{param_name}' not in parameter space. "
+                f"Available: {list(self.bounds.keys())}"
+            )
+
+        min_val, max_val = self.bounds[param_name]
+
+        # Ensure epsilon doesn't exceed half the interval width
+        interval_width = max_val - min_val
+        safe_epsilon = min(epsilon, interval_width / 10.0)
+
+        # Clamp to open interval: (min + epsilon, max - epsilon)
+        # Step 1: Clamp value to be at least min_val + epsilon
+        value_clamped_min = max(value, min_val + safe_epsilon)
+        # Step 2: Clamp value to be at most max_val - epsilon
+        clamped_value = min(value_clamped_min, max_val - safe_epsilon)
+
+        return float(clamped_value)
 
     def __str__(self) -> str:
         """Human-readable string representation."""

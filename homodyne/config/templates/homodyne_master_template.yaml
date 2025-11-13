@@ -505,6 +505,7 @@ optimization:
     min_samples_for_cmc: 15                   # Parallelism threshold (samples/angles >= 15)
     memory_threshold_pct: 0.30                # Memory threshold (30% of available)
     dense_mass_matrix: false                  # False: diagonal (faster), True: full covariance
+    stable_prior_fallback: false              # Retry with BetaScaled priors if init fails
 
     # Chain starting values (NOT automatic NLSQ/SVI initialization - removed in v2.1.0)
     init_strategy: "median"                   # Options: "median" | "uniform" | "prior"
@@ -547,6 +548,12 @@ optimization:
     min_points_for_cmc: 1000000               # Minimum dataset size to trigger CMC (legacy parameter)
     backend: "jax"                            # Options: "jax" (CPU-only in v2.3.0+) | "numpy"
     diagonal_correction: true                 # Apply diagonal correction to correlation matrix
+
+    # RNG seeding (for reproducibility)
+    # Note: Each shard uses deterministic seed = shard_idx by default
+    # See docs/developer-guide/cmc_rng_and_initialization.md for details
+    # rng_seed_offset: null                   # Optional: offset all shard seeds (future extension)
+                                              # Example: offset=42 → shard 0 uses seed 42, shard 1 uses seed 43, etc.
 
     # Data sharding configuration
     sharding:

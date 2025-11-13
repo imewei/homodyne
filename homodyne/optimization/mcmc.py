@@ -87,6 +87,7 @@ Automatic Selection Logic
 
 from __future__ import annotations
 
+import os
 import time
 from typing import Any, Dict
 
@@ -98,6 +99,7 @@ logger = get_logger(__name__)
 
 # JAX imports with intelligent fallback
 try:
+    import jax
     import jax.numpy as jnp
     from jax import jit, random
 
@@ -105,6 +107,7 @@ try:
     HAS_NUMPY_GRADIENTS = False  # Use JAX when available
 except ImportError:
     JAX_AVAILABLE = False
+    jax = None
     jnp = np
     HAS_NUMPY_GRADIENTS = False
     logger.warning(
@@ -131,6 +134,7 @@ except ImportError:
 try:
     import numpyro
     import numpyro.distributions as dist
+    from numpyro.distributions import transforms as dist_transforms
     from numpyro import sample
     from numpyro.infer import MCMC, NUTS
 
@@ -278,6 +282,222 @@ def _calculate_midpoint_defaults(parameter_space: ParameterSpace) -> dict[str, f
             initial_values[param_name] = midpoint
 
     return initial_values
+
+
+def _validate_and_repair_init_params(
+    init_params: dict[str, float],
+    parameter_space: ParameterSpace,
+    phi_unique: np.ndarray | None = None,
+    epsilon: float = 1e-6,
+) -> dict[str, float]:
+    """Validate and repair initial parameters for NumPyro initialization.
+
+    NumPyro's TruncatedNormal transform requires values strictly inside (min, max)
+    - not equal to the boundaries. This function detects violations and repairs
+    them by clamping to open intervals or using midpoints when necessary.
+
+    This is a centralized preflight validation that prevents initialize_model
+    failures across all MCMC code paths (NUTS and CMC).
+
+    Parameters
+    ----------
+    init_params : dict[str, float]
+        Initial parameter values (may include per-angle parameters like contrast_0)
+    parameter_space : ParameterSpace
+        Parameter space with bounds for validation
+    phi_unique : np.ndarray, optional
+        Unique phi angles (for validation of per-angle parameter count)
+    epsilon : float, default 1e-6
+        Minimum distance from boundaries for open interval
+
+    Returns
+    -------
+    dict[str, float]
+        Validated and repaired parameter dictionary
+
+    Notes
+    -----
+    **Detection and Repair Logic:**
+
+    1. **Boundary-Equal Values**: If value equals min or max, clamp to open interval
+    2. **Out-of-Bounds Values**: If value < min or > max, clamp to open interval
+    3. **Missing Per-Angle Parameters**: If phi_unique provided but per-angle params
+       missing, rebuild using midpoint of bounds
+    4. **Invalid Per-Angle Parameters**: If per-angle param count doesn't match
+       n_phi, rebuild using midpoint of bounds
+
+    **Examples of Repairs:**
+
+    - offset = 0.5 (equals min_val=0.5) → 0.500001 (min_val + epsilon)
+    - contrast = 1.0 (equals max_val=1.0) → 0.999999 (max_val - epsilon)
+    - contrast_0 = -0.1 (< min_val=0.0) → 0.000001 (min_val + epsilon)
+    - Missing contrast_0, contrast_1, contrast_2 → Rebuild using midpoint (0.5)
+
+    See Also
+    --------
+    ParameterSpace.clamp_to_open_interval : Open-interval clamping helper
+    """
+    def _coerce_to_float(value: Any) -> float:
+        """Best-effort conversion of config-provided values to float."""
+        import numbers
+
+        if isinstance(value, numbers.Real):
+            return float(value)
+
+        if isinstance(value, np.ndarray):
+            if value.size != 1:
+                raise ValueError("Cannot coerce array-valued initial parameter to float")
+            return float(value.reshape(()))
+
+        if isinstance(value, str):
+            return float(value.strip())
+
+        # Fall back to standard float conversion (may raise)
+        return float(value)
+
+    repaired_params: dict[str, float] = {}
+    for key, raw_value in init_params.items():
+        try:
+            repaired_params[key] = _coerce_to_float(raw_value)
+        except (TypeError, ValueError) as exc:
+            logger.warning(
+                "Skipping clamp for %s: unable to coerce value %r to float (%s)",
+                key,
+                raw_value,
+                exc,
+            )
+            continue
+    violations_detected = []
+    repairs_applied = []
+
+    # Extract base parameter names (without _0, _1, etc. suffixes)
+    def get_base_param_name(param_name: str) -> tuple[str, int | None]:
+        """Extract base name and index from param like 'contrast_0'."""
+        parts = param_name.rsplit("_", 1)
+        if len(parts) == 2 and parts[1].isdigit():
+            return parts[0], int(parts[1])
+        return param_name, None
+
+    # Group parameters by base name
+    param_groups: dict[str, list[tuple[str, float]]] = {}
+    for param_name, value in repaired_params.items():
+        base_name, idx = get_base_param_name(param_name)
+        if base_name not in param_groups:
+            param_groups[base_name] = []
+        param_groups[base_name].append((param_name, value))
+
+    # Validate and repair each parameter group
+    for base_name, param_list in param_groups.items():
+        # Check if this is a per-angle parameter (contrast, offset)
+        is_per_angle = base_name in ["contrast", "offset"] and any(
+            "_" in name for name, _ in param_list
+        )
+
+        if is_per_angle and phi_unique is not None:
+            # Per-angle parameter: check count matches n_phi
+            n_phi = len(phi_unique)
+            if len(param_list) != n_phi:
+                violations_detected.append(
+                    f"{base_name}: expected {n_phi} per-angle values, got {len(param_list)}"
+                )
+
+                # Rebuild using midpoint of bounds
+                try:
+                    min_val, max_val = parameter_space.get_bounds(base_name)
+                    midpoint = (min_val + max_val) / 2.0
+                    # Use epsilon to ensure strictly inside bounds
+                    safe_value = parameter_space.clamp_to_open_interval(
+                        base_name, midpoint, epsilon
+                    )
+
+                    # Remove old per-angle params and add new ones
+                    for param_name, _ in param_list:
+                        if param_name in repaired_params:
+                            del repaired_params[param_name]
+
+                    for phi_idx in range(n_phi):
+                        param_name_phi = f"{base_name}_{phi_idx}"
+                        repaired_params[param_name_phi] = safe_value
+
+                    repairs_applied.append(
+                        f"{base_name}: rebuilt {n_phi} per-angle values using midpoint={safe_value:.6f}"
+                    )
+                except KeyError:
+                    # Base parameter not in parameter_space, skip repair
+                    logger.warning(
+                        f"Cannot repair {base_name}: not found in parameter_space"
+                    )
+                continue
+
+        # Validate and clamp each parameter value
+        for param_name, value in param_list:
+            # Get base name for bounds lookup
+            base_name_for_bounds, _ = get_base_param_name(param_name)
+
+            try:
+                min_val, max_val = parameter_space.get_bounds(base_name_for_bounds)
+                original_value = value
+                if not np.isfinite(original_value):
+                    candidate_value = min_val + epsilon
+                else:
+                    candidate_value = original_value
+
+                repaired_value = parameter_space.clamp_to_open_interval(
+                    base_name_for_bounds,
+                    candidate_value,
+                    epsilon,
+                )
+
+                violation_reason = None
+                if not np.isfinite(original_value):
+                    violation_reason = "non-finite"
+                elif original_value <= min_val:
+                    violation_reason = "≤ min"
+                elif original_value >= max_val:
+                    violation_reason = "≥ max"
+                elif abs(original_value - min_val) < epsilon:
+                    violation_reason = "min boundary"
+                elif abs(original_value - max_val) < epsilon:
+                    violation_reason = "max boundary"
+                elif repaired_value != original_value:
+                    violation_reason = "open-interval clamp"
+
+                if violation_reason is not None and repaired_value != original_value:
+                    violations_detected.append(
+                        f"{param_name}={original_value:.6g} outside open interval "
+                        f"[{min_val:.6g}, {max_val:.6g}] ({violation_reason})"
+                    )
+                    repaired_params[param_name] = repaired_value
+                    repairs_applied.append(
+                        f"{param_name}: {original_value:.6g} → {repaired_value:.6g} ({violation_reason})"
+                    )
+            except KeyError:
+                # Parameter not in parameter_space (e.g., base contrast/offset)
+                # Skip validation for these
+                continue
+
+    # Log diagnostics
+    if violations_detected:
+        logger.warning(
+            f"Preflight validation detected {len(violations_detected)} boundary violations:"
+        )
+        for violation in violations_detected[:5]:  # Show first 5
+            logger.warning(f"  - {violation}")
+        if len(violations_detected) > 5:
+            logger.warning(f"  ... and {len(violations_detected) - 5} more")
+
+    if repairs_applied:
+        logger.info(
+            f"Preflight validation applied {len(repairs_applied)} repairs to prevent initialize_model failure:"
+        )
+        for repair in repairs_applied[:5]:  # Show first 5
+            logger.info(f"  - {repair}")
+        if len(repairs_applied) > 5:
+            logger.info(f"  ... and {len(repairs_applied) - 5} more")
+    else:
+        logger.debug("Preflight validation: all parameters valid, no repairs needed")
+
+    return repaired_params
 
 
 @log_performance(threshold=10.0)
@@ -541,6 +761,21 @@ def fit_mcmc_jax(
 
     # Extract config dict once from kwargs (avoid duplicate pop)
     config_dict = kwargs.pop("config", None)
+
+    # Resolve stable prior fallback knob (kwargs > config > default False)
+    env_stable_prior = os.environ.get("HOMODYNE_STABLE_PRIOR", "0") == "1"
+    stable_prior_flag = kwargs.get("stable_prior_fallback")
+    if stable_prior_flag is None:
+        if config_dict is not None:
+            stable_prior_flag = (
+                config_dict.get("optimization", {})
+                .get("mcmc", {})
+                .get("stable_prior_fallback", False)
+            )
+        else:
+            stable_prior_flag = False
+
+    kwargs["stable_prior_fallback"] = bool(stable_prior_flag or env_stable_prior)
 
     # Step 1: Load parameter_space from config if None
     # Contains parameter bounds and prior distributions for Bayesian sampling
@@ -1027,27 +1262,6 @@ def _run_standard_nuts(
                 f"(reduction: {len(phi) / len(phi_unique):.1f}x)"
             )
 
-        # Create NumPyro model using physics-informed priors from ParameterSpace
-        # Pass phi_unique (if available) instead of full phi array to avoid JIT tracing jnp.unique()
-        # Also pass phi_full for per-angle contrast/offset scaling
-        model = _create_numpyro_model(
-            data,
-            sigma,
-            t1,
-            t2,
-            (
-                phi_unique if phi_unique is not None else phi
-            ),  # Use pre-computed unique values
-            q,
-            L,
-            analysis_mode,
-            parameter_space,
-            use_simplified=use_simplified_likelihood,
-            dt=dt_computed,
-            phi_full=phi,  # Full replicated phi array for per-angle scaling mapping
-            per_angle_scaling=True,  # Enable per-angle contrast/offset
-        )
-
         # Log initial values if provided (for MCMC chain initialization)
         if initial_values is not None:
             logger.info(
@@ -1058,11 +1272,64 @@ def _run_standard_nuts(
         else:
             logger.info("MCMC chains will use default initialization (NumPyro random)")
 
-        # Run MCMC sampling
-        if NUMPYRO_AVAILABLE:
-            result = _run_numpyro_sampling(model, mcmc_config, initial_values)
-        else:
-            result = _run_blackjax_sampling(model, mcmc_config)
+        stable_prior_config = bool(kwargs.get("stable_prior_fallback", False))
+        stable_prior_env = os.environ.get("HOMODYNE_STABLE_PRIOR", "0") == "1"
+        stable_prior_enabled = stable_prior_config or stable_prior_env
+        logger.debug(
+            "Stable prior fallback: enabled=%s (config=%s, env=%s)",
+            stable_prior_enabled,
+            stable_prior_config,
+            stable_prior_env,
+        )
+
+        def _build_model(space: ParameterSpace):
+            return _create_numpyro_model(
+                data,
+                sigma,
+                t1,
+                t2,
+                (phi_unique if phi_unique is not None else phi),
+                q,
+                L,
+                analysis_mode,
+                space,
+                use_simplified=use_simplified_likelihood,
+                dt=dt_computed,
+                phi_full=phi,
+                per_angle_scaling=True,
+            )
+
+        def _execute_sampling(space: ParameterSpace):
+            model_local = _build_model(space)
+            if NUMPYRO_AVAILABLE:
+                return _run_numpyro_sampling(
+                    model_local,
+                    mcmc_config,
+                    initial_values,
+                    parameter_space=space,
+                    phi_unique=phi_unique,
+                )
+            return _run_blackjax_sampling(model_local, mcmc_config)
+
+        retry_trigger = "Cannot find valid initial parameters"
+        try:
+            result = _execute_sampling(parameter_space)
+        except RuntimeError as exc:
+            message = str(exc)
+            initialize_failure = retry_trigger in message
+            if stable_prior_enabled and initialize_failure:
+                logger.warning(
+                    "initialize_model failed (%s). Retrying with BetaScaled priors...",
+                    message,
+                )
+                beta_space = parameter_space.convert_to_beta_scaled_priors()
+                result = _execute_sampling(beta_space)
+                logger.info("BetaScaled retry succeeded")
+            else:
+                raise
+
+        if result is None:
+            raise RuntimeError("MCMC sampling did not return a result")
 
         # Process results
         posterior_summary = _process_posterior_samples(result, analysis_mode)
@@ -1196,9 +1463,17 @@ def _get_mcmc_config(kwargs: dict[str, Any]) -> dict[str, Any]:
         "rng_key": 42,
     }
 
-    # Update with provided kwargs
-    default_config.update(kwargs)
-    return default_config
+    # Update with provided kwargs (support both snake_case variants)
+    config = default_config.copy()
+    config.update(kwargs)
+
+    # Mirror short-form keys to long-form equivalents so that downstream
+    # components (CMC coordinator) that expect num_* receive the overrides.
+    config["num_samples"] = config.get("num_samples", config["n_samples"])
+    config["num_warmup"] = config.get("num_warmup", config["n_warmup"])
+    config["num_chains"] = config.get("num_chains", config["n_chains"])
+
+    return config
 
 
 def _create_numpyro_model(
@@ -1372,12 +1647,68 @@ def _create_numpyro_model(
     homodyne.config.parameter_space.ParameterSpace : Parameter space configuration
     homodyne.config.parameter_space.PriorDistribution : Prior distribution specs
     """
+    dtype_flag = os.environ.get("HOMODYNE_MCMC_DTYPE", "float64").lower()
+    if dtype_flag in {"float32", "fp32", "32", "single"}:
+        target_dtype = jnp.float32
+    elif dtype_flag in {"bfloat16", "bf16"}:
+        target_dtype = jnp.bfloat16
+    else:
+        target_dtype = jnp.float64
+
+    def _normalize_array(value, name, allow_none=False):
+        if value is None:
+            if allow_none:
+                return None
+            raise ValueError(f"{name} cannot be None for _create_numpyro_model")
+        return jnp.asarray(value, dtype=target_dtype)
+
+    def _normalize_scalar(value, allow_none=False):
+        if value is None:
+            if allow_none:
+                return None
+            raise ValueError("Scalar value required for _create_numpyro_model")
+        return float(jnp.asarray(value, dtype=target_dtype))
+
+    # Capture phi uniqueness using numpy before converting to JAX arrays
+    phi_unique_np = np.unique(np.asarray(phi))
+    n_phi = len(phi_unique_np)
+
+    data = _normalize_array(data, "data")
+    sigma = _normalize_array(sigma, "sigma")
+    t1 = _normalize_array(t1, "t1")
+    t2 = _normalize_array(t2, "t2")
+    phi = _normalize_array(phi, "phi")
+    phi_full = _normalize_array(phi_full, "phi_full", allow_none=True)
+    phi_array_for_mapping = phi_full if phi_full is not None else phi
+    phi_unique_for_sampling = jnp.asarray(phi_unique_np, dtype=target_dtype)
+    q = _normalize_scalar(q)
+    L = _normalize_scalar(L)
+    dt = _normalize_scalar(dt, allow_none=True)
+
+    dtype_debug_enabled = os.environ.get("HOMODYNE_DEBUG_INIT", "0") not in (
+        "0",
+        "",
+        "false",
+        "False",
+    )
+    if dtype_debug_enabled:
+        logger.info(
+            "MCMC dtype normalization: target=%s data=%s sigma=%s t1=%s t2=%s phi=%s",
+            target_dtype,
+            data.dtype,
+            sigma.dtype,
+            t1.dtype,
+            t2.dtype,
+            phi.dtype,
+        )
+
     # Map distribution type names to NumPyro distribution classes
     DIST_TYPE_MAP = {
         "Normal": dist.Normal,
         "TruncatedNormal": dist.TruncatedNormal,
         "Uniform": dist.Uniform,
         "LogNormal": dist.LogNormal,
+        "BetaScaled": dist.Beta,
     }
 
     # =========================================================================
@@ -1391,9 +1722,6 @@ def _create_numpyro_model(
     # function is defined. These values are captured by the closure.
     #
     # Using numpy (not jax.numpy) ensures we get concrete values:
-    phi_array_for_mapping = phi_full if phi_full is not None else phi
-    phi_unique_for_sampling = np.unique(np.asarray(phi))  # numpy, not jnp!
-    n_phi = len(phi_unique_for_sampling)  # Python int, not JAX tracer
 
     def homodyne_model():
         """Inner NumPyro model function with config-driven priors."""
@@ -1479,23 +1807,122 @@ def _create_numpyro_model(
             # Get distribution kwargs
             dist_kwargs = prior_spec.to_numpyro_kwargs()
 
+            def _cast_dist_value(value):
+                if isinstance(value, (int, float, np.number)):
+                    return jnp.asarray(value, dtype=target_dtype)
+                if isinstance(value, np.ndarray):
+                    return jnp.asarray(value, dtype=target_dtype)
+                return value
+
+            dist_kwargs = {
+                key: _cast_dist_value(val) for key, val in dist_kwargs.items()
+            }
+
+            dist_instance = None
+            if prior_spec.dist_type == "BetaScaled":
+                low = jnp.asarray(dist_kwargs.pop("low"), dtype=target_dtype)
+                high = jnp.asarray(dist_kwargs.pop("high"), dtype=target_dtype)
+                scale = jnp.maximum(
+                    high - low,
+                    jnp.asarray(jnp.finfo(target_dtype).tiny, dtype=target_dtype),
+                )
+                base_dist = dist.Beta(**dist_kwargs)
+                transform = dist_transforms.AffineTransform(loc=low, scale=scale)
+                dist_instance = dist.TransformedDistribution(base_dist, transform)
+                if dtype_debug_enabled and JAX_AVAILABLE:
+                    jax.debug.print(
+                        "Parameter '{name}': BetaScaled support=[{low}, {high}]",
+                        name=param_name,
+                        low=low,
+                        high=high,
+                    )
+
+            if dist_instance is not None:
+                def _sample_from_instance(site_name: str) -> jnp.ndarray:
+                    return jnp.asarray(
+                        sample(site_name, dist_instance), dtype=target_dtype
+                    )
+
+                if per_angle_scaling and param_name in ["contrast", "offset"]:
+                    param_values = [
+                        _sample_from_instance(f"{param_name}_{phi_idx}")
+                        for phi_idx in range(n_phi)
+                    ]
+                    sampled_params.append(jnp.stack(param_values, axis=0))
+                else:
+                    sampled_params.append(_sample_from_instance(param_name))
+                continue
+
+            if dist_class is dist.TruncatedNormal:
+                truncated_keys = ("loc", "scale", "low", "high")
+
+                def _ensure_tensor(val_name: str) -> jnp.ndarray:
+                    value = dist_kwargs.get(val_name)
+                    if value is None:
+                        return None
+                    return jnp.asarray(value, dtype=target_dtype)
+
+                truncated_tensors = {
+                    key: _ensure_tensor(key)
+                    for key in truncated_keys
+                    if dist_kwargs.get(key) is not None
+                }
+
+                shapes = [tuple(tensor.shape) for tensor in truncated_tensors.values()]
+                broadcast_shape = ()
+                for shape in shapes:
+                    broadcast_shape = np.broadcast_shapes(broadcast_shape, shape)
+
+                def _broadcast(value: jnp.ndarray) -> jnp.ndarray:
+                    if value is None:
+                        return value
+                    if broadcast_shape == ():
+                        return jnp.asarray(value, dtype=target_dtype).reshape(())
+                    if value.shape == broadcast_shape:
+                        return value
+                    return jnp.broadcast_to(value, broadcast_shape)
+
+                tiny = jnp.asarray(jnp.finfo(target_dtype).tiny, dtype=target_dtype)
+                if "scale" in truncated_tensors:
+                    truncated_tensors["scale"] = jnp.maximum(
+                        jnp.abs(truncated_tensors["scale"]), tiny
+                    )
+                if "low" in truncated_tensors and "high" in truncated_tensors:
+                    min_interval = tiny
+                    truncated_tensors["high"] = jnp.maximum(
+                        truncated_tensors["high"],
+                        truncated_tensors["low"] + min_interval,
+                    )
+
+                for key, tensor in truncated_tensors.items():
+                    if tensor is None:
+                        continue
+                    dist_kwargs[key] = _broadcast(tensor)
+
+                if dtype_debug_enabled and JAX_AVAILABLE:
+                    jax.debug.print(
+                        "Parameter '{name}': TruncatedNormal support=[{low}, {high}] dtype={dtype} shape={shape}",
+                        name=param_name,
+                        low=dist_kwargs.get("low"),
+                        high=dist_kwargs.get("high"),
+                        dtype=str(target_dtype),
+                        shape=broadcast_shape,
+                    )
+
             # PER-ANGLE SAMPLING: contrast and offset as separate parameters per phi angle
             if per_angle_scaling and param_name in ["contrast", "offset"]:
-                # Sample separate parameters for each phi angle
-                # This ensures clean sample extraction and backward compatibility
                 param_values = []
                 for phi_idx in range(n_phi):
-                    # Name: contrast_0, contrast_1, ..., offset_0, offset_1, ...
                     param_name_phi = f"{param_name}_{phi_idx}"
                     param_value_phi = sample(param_name_phi, dist_class(**dist_kwargs))
-                    param_values.append(param_value_phi)
-                # Stack into array for per-point indexing
-                param_value = jnp.array(param_values)
+                    param_values.append(
+                        jnp.asarray(param_value_phi, dtype=target_dtype)
+                    )
+                param_value = jnp.array(param_values, dtype=target_dtype)
                 sampled_params.append(param_value)
             else:
-                # Sample scalar parameter (standard behavior for physics params)
-                # Note: Unbounded distributions have been auto-converted to Truncated versions above
                 param_value = sample(param_name, dist_class(**dist_kwargs))
+                param_value = jnp.asarray(param_value, dtype=target_dtype)
                 sampled_params.append(param_value)
 
         # Extract contrast and offset for scaling (always first two parameters)
@@ -1506,16 +1933,21 @@ def _create_numpyro_model(
         # Build params array for physics computation (physics params only, no scaling)
         # Physics parameters start at index 2 (after contrast and offset)
         physics_params = sampled_params[2:]
-        params = jnp.array(physics_params)
+        params = jnp.array(physics_params, dtype=target_dtype)
 
         # For backward compatibility with physics functions that expect full params array,
         # we need to prepend mean values of contrast and offset
         if per_angle_scaling:
             # Use mean values for physics computation (theory doesn't need per-angle scaling)
-            contrast_mean = jnp.mean(contrast)
-            offset_mean = jnp.mean(offset)
+            contrast_mean = jnp.mean(contrast, dtype=target_dtype)
+            offset_mean = jnp.mean(offset, dtype=target_dtype)
             params_full = jnp.concatenate(
-                [jnp.array([contrast_mean, offset_mean]), params]
+                [
+                    jnp.array(
+                        [contrast_mean, offset_mean], dtype=target_dtype
+                    ),
+                    params,
+                ]
             )
         else:
             # Standard behavior: contrast and offset are scalars
@@ -1567,7 +1999,7 @@ def _create_numpyro_model(
         #
         # The phi_array_for_mapping (replicated) is ONLY used for per-angle scaling
         # indexing after c2_theory is computed, NOT for physics computation.
-        phi_for_theory = phi  # Always use unique phi (23 elements, not 2M replicated)
+        phi_for_theory = phi  # Already normalized to target dtype
 
         # DIAGNOSTIC: Log parameter values AND data before physics computation
         # This helps identify which sampled values cause NaN/inf in c2_theory
@@ -1735,10 +2167,14 @@ def _create_numpyro_model(
             check_c2_extraction()
 
             # Apply per-angle scaling to flattened c2_theory
-            c2_fitted = contrast_per_point * c2_theory_per_point + offset_per_point
+            c2_theory_for_likelihood = c2_theory_per_point
+            c2_fitted = contrast_per_point * c2_theory_for_likelihood + offset_per_point
         else:
             # LEGACY BEHAVIOR: Global contrast and offset (shared across all angles)
-            c2_fitted = contrast * c2_theory + offset
+            c2_theory_for_likelihood = c2_theory
+            c2_fitted = contrast * c2_theory_for_likelihood + offset
+
+        c2_fitted_raw = c2_fitted
 
         # CRITICAL VALIDATION: Ensure c2_fitted matches data shape before sampling
         # If shapes mismatch, NumPyro will fail with "invalid loc parameter" error
@@ -1786,8 +2222,91 @@ def _create_numpyro_model(
             )
         check_likelihood_inputs()
 
-        # Likelihood
-        sample("obs", dist.Normal(c2_fitted, sigma), obs=data)
+        # ------------------------------------------------------------------
+        # Likelihood guards + targeted diagnostics (behind HOMODYNE_DEBUG_INIT)
+        # ------------------------------------------------------------------
+
+        def _ensure_finite(values):
+            """Replace non-finite entries with the mean of finite values (or 1.0)."""
+            finite_mask = jnp.isfinite(values)
+            finite_sum = jnp.sum(jnp.where(finite_mask, values, 0.0), dtype=values.dtype)
+            finite_count = jnp.sum(finite_mask)
+            finite_count_safe = jnp.maximum(
+                jnp.asarray(finite_count, dtype=values.dtype),
+                jnp.asarray(1.0, dtype=values.dtype),
+            )
+            safe_mean = jnp.where(
+                finite_count > 0,
+                finite_sum / finite_count_safe,
+                jnp.asarray(1.0, dtype=values.dtype),
+            )
+            sanitized = jnp.where(finite_mask, values, safe_mean)
+            invalid_count = jnp.sum(~finite_mask)
+            return sanitized, invalid_count, finite_mask
+
+        def _ensure_positive_sigma(values):
+            sigma_arr = jnp.asarray(values)
+            eps = jnp.asarray(1e-12, dtype=sigma_arr.dtype)
+            nan_mask = ~jnp.isfinite(sigma_arr)
+            nonpos_mask = sigma_arr <= eps
+            invalid_mask = jnp.logical_or(nan_mask, nonpos_mask)
+            sigma_safe = jnp.where(invalid_mask, eps, sigma_arr)
+            invalid_count = jnp.sum(invalid_mask)
+            return sigma_safe, invalid_count, invalid_mask
+
+        sigma_safe, sigma_invalid_count, _ = _ensure_positive_sigma(sigma)
+        c2_theory_safe, c2_theory_invalid_count, _ = _ensure_finite(c2_theory_for_likelihood)
+
+        if per_angle_scaling:
+            c2_fitted_from_theory = contrast_per_point * c2_theory_safe + offset_per_point
+        else:
+            c2_fitted_from_theory = contrast * c2_theory_safe + offset
+
+        c2_fitted_safe, c2_fitted_invalid_count, _ = _ensure_finite(c2_fitted_from_theory)
+
+        def log_obs_site_stats():
+            """Emit lightweight diagnostics for the obs site under debug flag."""
+            debug_flag = os.environ.get("HOMODYNE_DEBUG_INIT", "0").lower()
+            diagnostics_enabled = debug_flag not in {"", "0", "false"}
+            if not diagnostics_enabled:
+                return
+
+            import jax
+
+            raw_theory = c2_theory_for_likelihood
+            raw_fitted = c2_fitted_raw
+
+            jax.debug.print(
+                "OBS DEBUG :: sigma invalid={n_bad}, clamp_min={mn:.6e}, clamp_max={mx:.6e}",
+                n_bad=sigma_invalid_count,
+                mn=jnp.nanmin(sigma_safe),
+                mx=jnp.nanmax(sigma_safe),
+            )
+            jax.debug.print(
+                "OBS DEBUG :: c2_theory raw_has_nan={raw_nan}, raw_has_inf={raw_inf}, "
+                "sanitized_invalid={n_bad}",
+                raw_nan=jnp.any(jnp.isnan(raw_theory)),
+                raw_inf=jnp.any(jnp.isinf(raw_theory)),
+                n_bad=c2_theory_invalid_count,
+            )
+            jax.debug.print(
+                "OBS DEBUG :: c2_fitted raw_has_nan={raw_nan}, raw_has_inf={raw_inf}, "
+                "sanitized_invalid={n_bad}",
+                raw_nan=jnp.any(jnp.isnan(raw_fitted)),
+                raw_inf=jnp.any(jnp.isinf(raw_fitted)),
+                n_bad=c2_fitted_invalid_count,
+            )
+            jax.debug.print(
+                "OBS DEBUG :: c2_fitted_safe range=[{mn:.6e}, {mx:.6e}], mean={mean:.6e}",
+                mn=jnp.nanmin(c2_fitted_safe),
+                mx=jnp.nanmax(c2_fitted_safe),
+                mean=jnp.nanmean(c2_fitted_safe),
+            )
+
+        log_obs_site_stats()
+
+        # Likelihood with guarded inputs
+        sample("obs", dist.Normal(c2_fitted_safe, sigma_safe), obs=data)
 
     return homodyne_model
 
@@ -1900,7 +2419,7 @@ def _compute_simple_theory(params, t1, t2, phi, q, analysis_mode, L=None, dt=Non
 _compute_simple_theory_jit = _compute_simple_theory  # No JIT wrapper
 
 
-def _run_numpyro_sampling(model, config, initial_values=None):
+def _run_numpyro_sampling(model, config, initial_values=None, parameter_space=None, phi_unique=None):
     """Run NumPyro MCMC sampling with parallel chains and comprehensive diagnostics.
 
     Parameters
@@ -1919,6 +2438,10 @@ def _run_numpyro_sampling(model, config, initial_values=None):
         Initial parameter values for MCMC chains (e.g., from NLSQ results).
         If provided, chains will be initialized near these values.
         If None, NumPyro uses random initialization from priors.
+    parameter_space : ParameterSpace, optional
+        Parameter space for bounds and preflight validation
+    phi_unique : np.ndarray, optional
+        Unique phi angles for per-angle parameter expansion
 
     Returns
     -------
@@ -1931,6 +2454,7 @@ def _run_numpyro_sampling(model, config, initial_values=None):
     - Extracts acceptance probability and divergence info
     - Logs warmup diagnostics for debugging
     - Initial values improve convergence when starting from good point estimates
+    - Applies preflight validation to prevent NumPyro initialization failures
     """
     # Configure parallel chains - must be done before creating MCMC object
     # For CPU parallelization, set host device count
@@ -2001,27 +2525,92 @@ def _run_numpyro_sampling(model, config, initial_values=None):
         f"{config['n_warmup']} warmup, {config['n_samples']} samples"
     )
 
-    # Log initialization strategy
-    # TEMPORARY FIX: Disable init_params for per-angle scaling compatibility
+    # CRITICAL FIX (Nov 2025): Expand initial_values for per-angle scaling
     # The model expects contrast_0, contrast_1, ..., offset_0, offset_1, ... for each phi angle
     # but config initial_values only provides physical parameters (D0, alpha, etc.)
-    # NumPyro can't match these names, so initialization fails
+    # We need to add per-angle parameters using data statistics or midpoints
     #
-    # Solution: Use None for init_params and let NumPyro sample from priors
-    # The priors are physics-informed (TruncatedNormal with sensible bounds) so this should work
-    #
-    # TODO: Future improvement - expand initial_values to include per-angle parameters
-    if initial_values is not None:
-        logger.warning(
-            f"initial_values provided ({list(initial_values.keys())}), but per-angle scaling mode "
-            "expects contrast_0, contrast_1, ..., offset_0, offset_1, ... parameters. "
-            "Using NumPyro default initialization from priors instead. "
-            "For faster convergence, disable per_angle_scaling or add per-angle parameters to config."
+    # Solution: Expand initial_values with per-angle parameters and apply preflight validation
+    if initial_values is not None and parameter_space is not None:
+        logger.info(
+            f"Expanding initial_values for per-angle scaling: {list(initial_values.keys())}"
         )
-        # Disable init_params - use priors instead
-        initial_values = None
 
-    logger.info("Using NumPyro default initialization (sampling from priors)")
+        # Determine how many per-angle parameters are required
+        if phi_unique is not None:
+            n_phi = len(phi_unique)
+        else:
+            # Infer from any existing per-angle entries (contrast_0, offset_0, ...)
+            inferred = [
+                name
+                for name in initial_values
+                if name.startswith("contrast_") or name.startswith("offset_")
+            ]
+            n_phi = len({name.split("_")[-1] for name in inferred if name.count("_") == 1})
+
+        if n_phi > 0:
+            for phi_idx in range(n_phi):
+                contrast_key = f"contrast_{phi_idx}"
+                offset_key = f"offset_{phi_idx}"
+
+                if contrast_key not in initial_values:
+                    try:
+                        contrast_midpoint = sum(parameter_space.get_bounds("contrast")) / 2.0
+                        initial_values[contrast_key] = parameter_space.clamp_to_open_interval(
+                            "contrast", contrast_midpoint, epsilon=1e-6
+                        )
+                    except KeyError:
+                        initial_values[contrast_key] = 0.5
+
+                if offset_key not in initial_values:
+                    try:
+                        offset_midpoint = sum(parameter_space.get_bounds("offset")) / 2.0
+                        initial_values[offset_key] = parameter_space.clamp_to_open_interval(
+                            "offset", offset_midpoint, epsilon=1e-6
+                        )
+                    except KeyError:
+                        initial_values[offset_key] = 1.0
+
+            # Remove base contrast/offset if present (NumPyro model only uses per-angle)
+            removed = False
+            if initial_values.pop("contrast", None) is not None:
+                removed = True
+            if initial_values.pop("offset", None) is not None:
+                removed = True
+
+            if removed:
+                logger.info("Removed base contrast/offset entries after per-angle expansion")
+
+            logger.info(
+                f"Ensured {n_phi} per-angle parameters for contrast and offset in initial_values"
+            )
+        else:
+            logger.debug("No per-angle expansion needed (n_phi=0)")
+    elif initial_values is not None:
+        logger.debug(
+            "ParameterSpace not available; skipping per-angle initial value expansion"
+        )
+
+    # Apply preflight validation to ensure all parameters are strictly inside bounds
+    # This prevents NumPyro initialize_model failures from boundary violations
+    if initial_values is not None and parameter_space is not None:
+        try:
+            # Validate and repair any boundary violations
+            initial_values = _validate_and_repair_init_params(
+                initial_values,
+                parameter_space,
+                phi_unique=phi_unique,
+                epsilon=1e-6,
+            )
+            logger.info("Preflight validation complete, parameters ready for NUTS initialization")
+        except Exception as e:
+            logger.warning(f"Preflight validation failed: {e}, using default initialization")
+            initial_values = None
+
+    if initial_values is None:
+        logger.info("Using NumPyro default initialization (sampling from priors)")
+    else:
+        logger.info(f"Using validated initial_values with {len(initial_values)} parameters")
 
     try:
         # Pass initial_values to mcmc.run() for chain initialization
