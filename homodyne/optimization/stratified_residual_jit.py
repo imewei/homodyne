@@ -125,15 +125,40 @@ class StratifiedResidualFunctionJIT:
         return q, L, dt
 
     def _extract_unique_values(self) -> Tuple[jnp.ndarray, jnp.ndarray, jnp.ndarray]:
-        """Extract unique phi, t1, t2 values (should be same for all chunks)."""
-        first_chunk = self.chunks[0]
-        phi_unique = jnp.sort(jnp.unique(jnp.asarray(first_chunk.phi)))
-        t1_unique = jnp.sort(jnp.unique(jnp.asarray(first_chunk.t1)))
-        t2_unique = jnp.sort(jnp.unique(jnp.asarray(first_chunk.t2)))
+        """Extract unique phi, t1, t2 values from ALL chunks.
+
+        CRITICAL: Must extract from all chunks, not just first chunk, because
+        stratified chunking may distribute different subsets of t1/t2 values
+        across different chunks.
+        """
+        # Concatenate values from all chunks to get complete set
+        all_phi = np.concatenate([chunk.phi for chunk in self.chunks])
+        all_t1 = np.concatenate([chunk.t1 for chunk in self.chunks])
+        all_t2 = np.concatenate([chunk.t2 for chunk in self.chunks])
+
+        # Extract unique values across all chunks
+        phi_unique = jnp.sort(jnp.unique(jnp.asarray(all_phi)))
+        t1_unique = jnp.sort(jnp.unique(jnp.asarray(all_t1)))
+        t2_unique = jnp.sort(jnp.unique(jnp.asarray(all_t2)))
 
         self.logger.debug(
-            f"Unique values: {len(phi_unique)} phi, {len(t1_unique)} t1, {len(t2_unique)} t2"
+            f"Unique values (from all chunks): {len(phi_unique)} phi, {len(t1_unique)} t1, {len(t2_unique)} t2"
         )
+
+        # Validation: check if we missed any values by comparing with first chunk
+        first_chunk = self.chunks[0]
+        phi_first = jnp.sort(jnp.unique(jnp.asarray(first_chunk.phi)))
+        t1_first = jnp.sort(jnp.unique(jnp.asarray(first_chunk.t1)))
+        t2_first = jnp.sort(jnp.unique(jnp.asarray(first_chunk.t2)))
+
+        if len(t1_unique) != len(t1_first) or len(t2_unique) != len(t2_first):
+            self.logger.warning(
+                f"Unique value mismatch detected (chunks have different subsets):\n"
+                f"  First chunk: {len(t1_first)} t1, {len(t2_first)} t2\n"
+                f"  All chunks:  {len(t1_unique)} t1, {len(t2_unique)} t2\n"
+                f"  This is EXPECTED with stratified chunking - using complete set from all chunks."
+            )
+
         return phi_unique, t1_unique, t2_unique
 
     def _create_padded_arrays(self) -> Tuple[
