@@ -1,0 +1,95 @@
+{
+  "analysis_summary": {
+    "goal": "Correlate log failures with model sites/dtypes and provide a JSON-like summary.",
+    "log_files_analyzed": [
+      "/home/wei/Documents/Projects/data/C020/homodyne_results/logs/homodyne_analysis_20251113_095622.log",
+      "/tmp/homodyne_minirepro_beta4/logs/homodyne_analysis_20251113_132851.log"
+    ]
+  },
+  "structured_timeline": [
+    {
+      "timestamp": "2025-11-13 09:57:10",
+      "level": "ERROR",
+      "message": "[multiprocessing] Shard 1/11 error details: Worker MCMC failed: Cannot find valid initial parameters. Please check your model again.",
+      "source": "homodyne.optimization.cmc.backends.multiprocessing",
+      "details": {
+        "error_type": "RuntimeError",
+        "specific_error": "Cannot find valid initial parameters.",
+        "traceback_snippet": "File \"/home/wei/Documents/GitHub/homodyne/.venv/lib/python3.13/site-packages/numpyro/infer/util.py\", line 796, in initialize_model\n    raise RuntimeError(\"Cannot find valid initial parameters. Please check your model again.\")\nRuntimeError: Cannot find valid initial parameters. Please check your model again."
+      }
+    },
+    {
+      "timestamp": "2025-11-13 09:57:29",
+      "level": "ERROR",
+      "message": "AUTO optimization failed after 65.290s: All shards failed to converge. Cannot combine posteriors.",
+      "source": "homodyne.cli.commands",
+      "details": {
+        "error_type": "RuntimeError",
+        "specific_error": "All shards failed to converge. Cannot combine posteriors.",
+        "traceback_snippet": "File \"/home/wei/Documents/GitHub/homodyne/homodyne/optimization/cmc/coordinator.py\", line 523, in run_cmc\n    raise RuntimeError(\"All shards failed to converge. Cannot combine posteriors.\")\nRuntimeError: All shards failed to converge. Cannot combine posteriors."
+      }
+    },
+    {
+      "timestamp": "2025-11-13 13:28:52",
+      "level": "WARNING",
+      "message": "Using CMC with only 3 samples (< 15 threshold). CMC adds 10-20% overhead; NUTS is faster for <15 samples if memory permits. Triggered by: JAX broadcasting protection (3,006,003 > 1,000,000)",
+      "source": "homodyne.device.config"
+    },
+    {
+      "timestamp": "2025-11-13 13:28:52",
+      "level": "WARNING",
+      "message": "Using CMC with very few samples (3 samples). CMC adds 10-20% overhead; NUTS is faster for <15 samples if memory permits. (Likely triggered by memory criterion: estimated_memory > 30.0%)",
+      "source": "homodyne.optimization.mcmc"
+    },
+    {
+      "timestamp": "2025-11-13 13:29:15",
+      "level": "ERROR",
+      "message": "[multiprocessing] Shard 1/1 error details: Worker MCMC failed: The numpy.ndarray conversion method __array__() was called on traced array with shape float64[]",
+      "source": "homodyne.optimization.cmc.backends.multiprocessing",
+      "details": {
+        "error_type": "jax.errors.TracerArrayConversionError",
+        "specific_error": "The numpy.ndarray conversion method __array__() was called on traced array with shape float64[]",
+        "traceback_snippet": "File \"/home/wei/Documents/GitHub/homodyne/homodyne/optimization/mcmc.py\", line 1834, in homodyne_model\n    float(np.asarray(low)),\njax.errors.TracerArrayConversionError: The numpy.ndarray conversion method __array__() was called on traced array with shape float64[]"
+      }
+    },
+    {
+      "timestamp": "2025-11-13 13:29:16",
+      "level": "ERROR",
+      "message": "AUTO optimization failed after 23.371s: All shards failed to converge. Cannot combine posteriors.",
+      "source": "homodyne.cli.commands",
+      "details": {
+        "error_type": "RuntimeError",
+        "specific_error": "All shards failed to converge. Cannot combine posteriors.",
+        "traceback_snippet": "File \"/home/wei/Documents/GitHub/homodyne/homodyne/optimization/cmc/coordinator.py\", line 523, in run_cmc\n    raise RuntimeError(\"All shards failed to converge. Cannot combine posteriors.\")\nRuntimeError: All shards failed to converge. Cannot combine posteriors."
+      }
+    }
+  ],
+  "first_failing_site": {
+    "timestamp": "2025-11-13 13:29:15",
+    "message": "[multiprocessing] Shard 1/1 error details: Worker MCMC failed: The numpy.ndarray conversion method __array__() was called on traced array with shape float64[]",
+    "location": "homodyne/optimization/mcmc.py:1834",
+    "dist_type_inferred": "NumPyro model parameters (e.g., Normal, HalfNormal, Beta, etc. for D0, alpha, D_offset, gamma_dot_t0, beta, gamma_dot_t_offset, phi0)",
+    "support_interval_context": "Log indicates 'Initial parameter values validated successfully (all within bounds)' and 'Using default bounds for 'contrast': [0.0, 1.0]', 'offset': [0.5, 2.5]'. Specific bounds for D0, alpha, etc., are not explicitly logged but are checked.",
+    "provided_value": "['D0', 'alpha', 'D_offset', 'gamma_dot_t0', 'beta', 'gamma_dot_t_offset', 'phi0'] = ['1324', '-0.014', '-0.6743', '0.003', '-0.909', '0', '0']",
+    "dtype": "float64 (inferred from jax.errors.TracerArrayConversionError message)",
+    "log_prob_finiteness": "Issue during compiled log_prob evaluation due to JAX tracing error.",
+    "transforms_involved": "Likely, as the error occurs when handling parameter bounds ('low'), which are often managed by transforms (e.g., TransformedDistribution) in probabilistic programming with NumPyro."
+  },
+  "top_3_root_causes": [
+    {
+      "rank": 1,
+      "cause": "JAX TracerArrayConversionError: Direct cause is the attempt to convert a JAX traced array to a Python float (`float(np.asarray(low))`) within a JAX-transformed function, breaking JAX's compilation process. This prevents proper model initialization.",
+      "fix_suggestion": "Refactor the code at `homodyne/optimization/mcmc.py:1834` to avoid converting JAX arrays to NumPy arrays or Python scalars within JAX-transformed functions. Use JAX-compatible operations (e.g., `jnp.asarray`, `jnp.array`, `jnp.float64`) or ensure the values are concrete before entering the JAX-transformed context."
+    },
+    {
+      "rank": 2,
+      "cause": "Invalid Initial Parameters (Numerical Instability): The JAX tracing error might be masking a deeper numerical instability where the `log_prob` function evaluates to `NaN` or `inf` for the initial parameter values, even if they are within defined bounds. This would prevent the HMC sampler from initializing.",
+      "fix_suggestion": "Investigate the `log_prob` function for numerical stability with the provided initial parameters. Add explicit checks for `NaN` or `inf` values in the `log_prob` output during debugging. Consider adjusting initial parameter values or model reparameterization."
+    },
+    {
+      "rank": 3,
+      "cause": "Incorrect Handling of Parameter Bounds/Transforms: The error at `float(np.asarray(low))` suggests a mismatch in how parameter bounds are accessed or processed within the JAX-compiled model, potentially related to `TransformedDistribution` or custom transforms. If `low` is expected to be a static Python float but is a JAX array, it indicates an architectural issue.",
+      "fix_suggestion": "Review the implementation of parameter bounds and transforms in the model. Ensure that parameter bounds are handled in a JAX-compatible way, either by making them static Python values before JAX tracing or by using JAX operations throughout the bound handling logic."
+    }
+  ]
+}

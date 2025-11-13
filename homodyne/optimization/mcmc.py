@@ -1807,6 +1807,7 @@ def _create_numpyro_model(
             # Get distribution kwargs
             dist_kwargs = prior_spec.to_numpyro_kwargs()
 
+<<<<<<< HEAD
             def _cast_dist_value(value):
                 if isinstance(value, (int, float, np.number)):
                     return jnp.asarray(value, dtype=target_dtype)
@@ -1817,6 +1818,13 @@ def _create_numpyro_model(
             dist_kwargs = {
                 key: _cast_dist_value(val) for key, val in dist_kwargs.items()
             }
+            # Ensure bounds stay as JAX arrays to avoid tracer conversion errors
+            if "low" in dist_kwargs and dist_kwargs["low"] is not None:
+                dist_kwargs["low"] = jnp.asarray(dist_kwargs["low"], dtype=target_dtype)
+            if "high" in dist_kwargs and dist_kwargs["high"] is not None:
+                dist_kwargs["high"] = jnp.asarray(
+                    dist_kwargs["high"], dtype=target_dtype
+                )
 
             dist_instance = None
             if prior_spec.dist_type == "BetaScaled":
@@ -1908,6 +1916,15 @@ def _create_numpyro_model(
                         dtype=str(target_dtype),
                         shape=broadcast_shape,
                     )
+=======
+            # CRITICAL FIX: Ensure 'low' and 'high' are JAX arrays if they exist
+            # This prevents jax.errors.TracerArrayConversionError when NumPyro
+            # internally tries to convert a JAX tracer to a Python float using np.asarray
+            if 'low' in dist_kwargs and dist_kwargs['low'] is not None:
+                dist_kwargs['low'] = jnp.array(dist_kwargs['low'])
+            if 'high' in dist_kwargs and dist_kwargs['high'] is not None:
+                dist_kwargs['high'] = jnp.array(dist_kwargs['high'])
+>>>>>>> b9ff341 (FIX: Resolve JAX TracerArrayConversionError in MCMC model and add log analysis summary.)
 
             # PER-ANGLE SAMPLING: contrast and offset as separate parameters per phi angle
             if per_angle_scaling and param_name in ["contrast", "offset"]:
