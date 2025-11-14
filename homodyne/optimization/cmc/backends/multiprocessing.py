@@ -831,21 +831,12 @@ def _worker_function(args: tuple) -> Dict[str, Any]:
             f"Multiprocessing shard {shard_idx}: init_param_values (first 10): {sample_params}"
         )
 
-        # CRITICAL FIX (Nov 2025): Preflight validation of initial parameters
-        # Validate and repair any boundary violations before NumPyro initialization
-        # This prevents initialize_model failures across all shards
-        from homodyne.optimization.mcmc import _validate_and_repair_init_params
-
+        # Use parameters directly without validation/repair
+        # Per user request: Do not limit parameter space or auto-correct for numerical instability
         init_param_values_original = dict(init_param_values)
-        init_param_values = _validate_and_repair_init_params(
-            init_param_values,
-            parameter_space,
-            phi_unique=phi_unique,
-            epsilon=1e-6,
-        )
 
         worker_logger.info(
-            f"Multiprocessing shard {shard_idx}: Preflight validation complete, "
+            f"Multiprocessing shard {shard_idx}: Using init parameters directly (no validation), "
             f"parameters ready for NUTS initialization"
         )
 
@@ -916,12 +907,8 @@ def _worker_function(args: tuple) -> Dict[str, Any]:
                 )
 
                 beta_parameter_space = parameter_space.convert_to_beta_scaled_priors()
-                beta_init_values = _validate_and_repair_init_params(
-                    dict(init_param_values_original),
-                    beta_parameter_space,
-                    phi_unique=phi_unique,
-                    epsilon=1e-6,
-                )
+                # Use parameters directly without validation/repair
+                beta_init_values = dict(init_param_values_original)
 
                 model = _create_numpyro_model(
                     data=data_jax,

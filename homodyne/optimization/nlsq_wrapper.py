@@ -99,16 +99,16 @@ from homodyne.optimization.exceptions import (
 )
 
 DEFAULT_SHEAR_X_SCALE = {
-    "gamma_dot_0": 524.0,
+    "gamma_dot_t0": 524.0,         # Canonical name (was gamma_dot_0)
     "beta": 4.0,
-    "gamma_dot_offset": 771.0,
+    "gamma_dot_t_offset": 771.0,   # Canonical name (was gamma_dot_offset)
 }
 
 PARAMETER_NAME_ALIASES = {
-    "gamma_dot_t0": "gamma_dot_0",
-    "gamma_dot_t_0": "gamma_dot_0",
-    "gamma_dot_t_offset": "gamma_dot_offset",
-    "gamma_dot_offset": "gamma_dot_offset",
+    # Legacy names → canonical names (for backwards compatibility)
+    "gamma_dot_0": "gamma_dot_t0",
+    "gamma_dot_t_0": "gamma_dot_t0",
+    "gamma_dot_offset": "gamma_dot_t_offset",
     "phi_0": "phi0",
 }
 
@@ -273,7 +273,8 @@ def _apply_forward_shear_transforms_to_vector(
     }
 
     if transform_cfg.get("enable_gamma_dot_log", False):
-        idx = index_map.get("gamma_dot_0")
+        # Try canonical name first, fallback to old name for backwards compatibility
+        idx = index_map.get("gamma_dot_t0") or index_map.get("gamma_dot_0")
         if idx is not None:
             value = vector[idx]
             if value <= 0:
@@ -562,9 +563,9 @@ class NLSQWrapper:
                 "D0",
                 "alpha",
                 "D_offset",
-                "gamma_dot_0",
+                "gamma_dot_t0",         # Canonical name (was gamma_dot_0)
                 "beta",
-                "gamma_dot_offset",
+                "gamma_dot_t_offset",   # Canonical name (was gamma_dot_offset)
                 "phi0",
             ]
         else:

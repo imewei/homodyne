@@ -198,7 +198,7 @@ class ShearModel(PhysicsModelBase):
     def __init__(self):
         super().__init__(
             name="time_dependent_shear",
-            parameter_names=["gamma_dot_0", "beta", "gamma_dot_offset", "phi0"],
+            parameter_names=["gamma_dot_t0", "beta", "gamma_dot_t_offset", "phi0"],
         )
 
     @log_calls(include_args=False)
@@ -230,9 +230,9 @@ class ShearModel(PhysicsModelBase):
     def get_parameter_bounds(self) -> list[tuple[float, float]]:
         """Standard bounds for shear parameters."""
         return [
-            (1e-5, 1.0),  # gamma_dot_0: 1e-5 to 1.0 s⁻¹ (consistent with physics.py)
+            (1e-5, 1.0),  # gamma_dot_t0: 1e-5 to 1.0 s⁻¹ (consistent with physics.py)
             (-10.0, 10.0),  # beta: -10 to 10 (consistent with physics.py)
-            (-1.0, 1.0),  # gamma_dot_offset: -1 to 1 s⁻¹ (consistent with physics.py)
+            (-1.0, 1.0),  # gamma_dot_t_offset: -1 to 1 s⁻¹ (consistent with physics.py)
             (-30.0, 30.0),  # phi0: -30 to 30 degrees (consistent with physics.py)
         ]
 
@@ -273,9 +273,9 @@ class CombinedModel(PhysicsModelBase):
                 "D0",
                 "alpha",
                 "D_offset",
-                "gamma_dot_0",
+                "gamma_dot_t0",
                 "beta",
-                "gamma_dot_offset",
+                "gamma_dot_t_offset",
                 "phi0",
             ]
             name = "laminar_flow_complete"

@@ -129,12 +129,12 @@ def parameter_bounds() -> dict[str, list[tuple[float, float]]]:
             (
                 PhysicsConstants.SHEAR_RATE_MIN,
                 PhysicsConstants.SHEAR_RATE_MAX,
-            ),  # gamma_dot_0
+            ),  # gamma_dot_t0
             (PhysicsConstants.BETA_MIN, PhysicsConstants.BETA_MAX),  # beta
             (
                 PhysicsConstants.SHEAR_OFFSET_MIN,
                 PhysicsConstants.SHEAR_OFFSET_MAX,
-            ),  # gamma_dot_offset
+            ),  # gamma_dot_t_offset
             (PhysicsConstants.ANGLE_MIN, PhysicsConstants.ANGLE_MAX),  # phi0
         ],
         "combined": [
@@ -149,12 +149,12 @@ def parameter_bounds() -> dict[str, list[tuple[float, float]]]:
             (
                 PhysicsConstants.SHEAR_RATE_MIN,
                 PhysicsConstants.SHEAR_RATE_MAX,
-            ),  # gamma_dot_0
+            ),  # gamma_dot_t0
             (PhysicsConstants.BETA_MIN, PhysicsConstants.BETA_MAX),  # beta
             (
                 PhysicsConstants.SHEAR_OFFSET_MIN,
                 PhysicsConstants.SHEAR_OFFSET_MAX,
-            ),  # gamma_dot_offset
+            ),  # gamma_dot_t_offset
             (PhysicsConstants.ANGLE_MIN, PhysicsConstants.ANGLE_MAX),  # phi0
         ],
     }
@@ -358,9 +358,9 @@ def get_default_parameters(model_type: str) -> np.ndarray:
         ),
         "shear": np.array(
             [
-                PhysicsConstants.SHEAR_RATE_TYPICAL,  # gamma_dot_0 = 1 s⁻¹
+                PhysicsConstants.SHEAR_RATE_TYPICAL,  # gamma_dot_t0 = 1 s⁻¹
                 0.0,  # beta = 0 (constant shear)
-                0.0,  # gamma_dot_offset = 0
+                0.0,  # gamma_dot_t_offset = 0
                 0.0,  # phi0 = 0 degrees
             ],
         ),
@@ -371,9 +371,9 @@ def get_default_parameters(model_type: str) -> np.ndarray:
                 0.0,  # alpha = 0
                 PhysicsConstants.DIFFUSION_TYPICAL / 10,  # D_offset = 10 Å²/s
                 # Shear defaults
-                PhysicsConstants.SHEAR_RATE_TYPICAL,  # gamma_dot_0 = 1 s⁻¹
+                PhysicsConstants.SHEAR_RATE_TYPICAL,  # gamma_dot_t0 = 1 s⁻¹
                 0.0,  # beta = 0
-                0.0,  # gamma_dot_offset = 0
+                0.0,  # gamma_dot_t_offset = 0
                 0.0,  # phi0 = 0 degrees
             ],
         ),
@@ -473,7 +473,7 @@ def get_parameter_info(model_type: str) -> dict[str, Any]:
             ],
         },
         "shear": {
-            "names": ["gamma_dot_0", "beta", "gamma_dot_offset", "phi0"],
+            "names": ["gamma_dot_t0", "beta", "gamma_dot_t_offset", "phi0"],
             "descriptions": [
                 "Reference shear rate (s⁻¹)",
                 "Shear rate time-dependence exponent (-)",
@@ -492,9 +492,9 @@ def get_parameter_info(model_type: str) -> dict[str, Any]:
                 "D0",
                 "alpha",
                 "D_offset",
-                "gamma_dot_0",
+                "gamma_dot_t0",
                 "beta",
-                "gamma_dot_offset",
+                "gamma_dot_t_offset",
                 "phi0",
             ],
             "descriptions": [

@@ -1933,16 +1933,16 @@ def _plot_simulated_data(
         )
     else:
         # Laminar flow: 7 parameters
-        # Use correct parameter names matching config (gamma_dot_0, phi_0 with underscores)
+        # Use canonical parameter names matching config
         params = jnp.array(
             [
                 params_dict.get("D0", 100.0),
                 params_dict.get("alpha", -0.5),
                 params_dict.get("D_offset", 0.0),
-                params_dict.get("gamma_dot_0", 0.01),
+                params_dict.get("gamma_dot_t0", 0.01),         # Canonical (was gamma_dot_0)
                 params_dict.get("beta", 0.5),
-                params_dict.get("gamma_dot_offset", 0.0),
-                params_dict.get("phi_0", 0.0),
+                params_dict.get("gamma_dot_t_offset", 0.0),    # Canonical (was gamma_dot_offset)
+                params_dict.get("phi0", 0.0),
             ],
         )
 

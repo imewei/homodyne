@@ -237,7 +237,7 @@ def _compute_g1_shear_elementwise(
     This is the ONLY shear function for CMC - no meshgrid mode.
 
     Args:
-        params: Physical parameters [D0, alpha, D_offset, gamma_dot_0, beta, gamma_dot_offset, phi0]
+        params: Physical parameters [D0, alpha, D_offset, gamma_dot_t0, beta, gamma_dot_t_offset, phi0]
         t1: Time array (1D, element-wise paired with t2)
         t2: Time array (1D, element-wise paired with t1)
         phi_unique: UNIQUE scattering angles (1D array, pre-filtered for unique values only)
@@ -312,7 +312,7 @@ def _compute_g1_total_elementwise(
     This is the ONLY g1_total function for CMC - no meshgrid mode.
 
     Args:
-        params: Physical parameters [D0, alpha, D_offset, gamma_dot_0, beta, gamma_dot_offset, phi0]
+        params: Physical parameters [D0, alpha, D_offset, gamma_dot_t0, beta, gamma_dot_t_offset, phi0]
         t1: Time array (1D, element-wise paired with t2)
         t2: Time array (1D, element-wise paired with t1)
         phi_unique: UNIQUE scattering angles (1D array, pre-filtered)
@@ -442,7 +442,7 @@ def compute_g1_total(
     removed as of Nov 2025, so callers must ensure phi contains unique values.
 
     Args:
-        params: Physical parameters [D0, alpha, D_offset, gamma_dot_0, beta, gamma_dot_offset, phi0]
+        params: Physical parameters [D0, alpha, D_offset, gamma_dot_t0, beta, gamma_dot_t_offset, phi0]
         t1: Time array (1D, element-wise paired with t2)
         t2: Time array (1D, element-wise paired with t1)
         phi: Scattering angles (MUST be unique values, not replicated array)

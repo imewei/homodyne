@@ -342,7 +342,7 @@ def _compute_g1_shear_meshgrid(
     across all phi angles. This is the ONLY shear function for NLSQ - no element-wise mode.
 
     Args:
-        params: Physical parameters [D0, alpha, D_offset, gamma_dot_0, beta, gamma_dot_offset, phi0]
+        params: Physical parameters [D0, alpha, D_offset, gamma_dot_t0, beta, gamma_dot_t_offset, phi0]
         t1: Time meshgrid (2D) or 1D time array (PHYSICAL TIME in seconds)
         t2: Time meshgrid (2D) or 1D time array (PHYSICAL TIME in seconds)
         phi: Scattering angles (1D array)
@@ -479,7 +479,7 @@ def _compute_g1_total_meshgrid(
     This is the ONLY g1_total function for NLSQ - no element-wise mode.
 
     Args:
-        params: Physical parameters [D0, alpha, D_offset, gamma_dot_0, beta, gamma_dot_offset, phi0]
+        params: Physical parameters [D0, alpha, D_offset, gamma_dot_t0, beta, gamma_dot_t_offset, phi0]
         t1: Time meshgrid (2D) or 1D time array (FRAME INDICES)
         t2: Time meshgrid (2D) or 1D time array (FRAME INDICES)
         phi: Scattering angles
@@ -550,7 +550,7 @@ def _compute_g2_scaled_meshgrid(
     For experimental fits: offset and contrast are free parameters centered around 1.0 and 0.5
 
     Args:
-        params: Physical parameters [D0, alpha, D_offset, gamma_dot_0, beta, gamma_dot_offset, phi0]
+        params: Physical parameters [D0, alpha, D_offset, gamma_dot_t0, beta, gamma_dot_t_offset, phi0]
         t1, t2: Time points for correlation calculation (FRAME INDICES)
         phi: Scattering angles
         wavevector_q_squared_half_dt: Pre-computed factor 0.5 * q² * dt
@@ -682,7 +682,7 @@ def compute_g2_scaled(
     No element-wise mode, direct meshgrid computation only.
 
     Args:
-        params: Physical parameters [D0, alpha, D_offset, gamma_dot_0, beta, gamma_dot_offset, phi0]
+        params: Physical parameters [D0, alpha, D_offset, gamma_dot_t0, beta, gamma_dot_t_offset, phi0]
         t1, t2: Time points for correlation calculation (1D arrays will be converted to meshgrid)
         phi: Scattering angles
         q: Scattering wave vector magnitude
@@ -741,7 +741,7 @@ def compute_g2_scaled_with_factors(
     HomodyneModel where factors are computed once at initialization.
 
     Args:
-        params: Physical parameters [D0, alpha, D_offset, gamma_dot_0, beta, gamma_dot_offset, phi0]
+        params: Physical parameters [D0, alpha, D_offset, gamma_dot_t0, beta, gamma_dot_t_offset, phi0]
         t1, t2: Time grids for correlation calculation (FRAME INDICES)
         phi: Scattering angles [degrees]
         wavevector_q_squared_half_dt: Pre-computed factor (0.5 * q² * dt)

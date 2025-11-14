@@ -179,7 +179,7 @@ class HomodyneModel:
         ----------
         params : np.ndarray
             Physical parameters:
-            - For laminar_flow (7 params): [D0, alpha, D_offset, gamma_dot_0, beta, gamma_dot_offset, phi0]
+            - For laminar_flow (7 params): [D0, alpha, D_offset, gamma_dot_t0, beta, gamma_dot_t_offset, phi0]
             - For static (3 params): [D0, alpha, D_offset]
         phi_angles : np.ndarray
             Scattering angles [degrees], shape (n_phi,)

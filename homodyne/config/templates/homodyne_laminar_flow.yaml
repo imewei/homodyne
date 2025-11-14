@@ -183,10 +183,10 @@ initial_parameters:
     - D0                                      # Diffusion coefficient prefactor
     - alpha                                   # Anomalous diffusion exponent
     - D_offset                                # Baseline diffusion
-    - gamma_dot_0                             # Initial shear rate (maps to gamma_dot_t0 in code)
+    - gamma_dot_t0                            # Initial shear rate at t=0
     - beta                                    # Shear rate exponent
-    - gamma_dot_offset                        # Baseline shear rate (maps to gamma_dot_t_offset)
-    - phi_0                                   # Initial angle (maps to phi0 in code)
+    - gamma_dot_t_offset                      # Baseline shear rate offset
+    - phi0                                    # Initial angle offset
 
   # Optional: Initial values (if not provided, uses mid-point of bounds)
   values: null                                # List of 7 floats matching parameter_names order
@@ -197,18 +197,18 @@ initial_parameters:
     - "Å²/s"                                  # D0
     - "dimensionless"                         # alpha
     - "Å²/s"                                  # D_offset
-    - "s⁻¹"                                   # gamma_dot_0
+    - "s⁻¹"                                   # gamma_dot_t0
     - "dimensionless"                         # beta
-    - "s⁻¹"                                   # gamma_dot_offset
-    - "degrees"                               # phi_0
+    - "s⁻¹"                                   # gamma_dot_t_offset
+    - "degrees"                               # phi0
 
   # Optional: Optimize only a subset of parameters (rest held at initial values)
   active_parameters: null                     # List of parameter names to actively optimize
-  # Example: ["D0", "alpha", "gamma_dot_0", "phi_0"]  # Fix beta and offsets
+  # Example: ["D0", "alpha", "gamma_dot_t0", "phi0"]  # Fix beta and offsets
 
   # Optional: Fix specific parameters at given values
   fixed_parameters: null                      # Dict mapping parameter names to fixed values
-  # Example: {"beta": 0.0, "gamma_dot_offset": 0.0}  # Constant shear, no offset
+  # Example: {"beta": 0.0, "gamma_dot_t_offset": 0.0}  # Constant shear, no offset
 
 # ==============================================================================
 # PARAMETER SPACE (Required)
@@ -256,7 +256,7 @@ parameter_space:
     # -------------------------------------------------------------------------
     # FLOW PARAMETERS (Required for laminar_flow mode only)
     # -------------------------------------------------------------------------
-    - name: gamma_dot_0                       # Maps to gamma_dot_t0 in code
+    - name: gamma_dot_t0                      # Initial shear rate at t=0
       min: 1e-6                               # Minimum initial shear rate [s⁻¹]
       max: 0.5                                # Maximum initial shear rate [s⁻¹]
       type: TruncatedNormal
@@ -276,7 +276,7 @@ parameter_space:
       # Physical meaning: Shear rate time evolution exponent
       # 0 = constant shear, >0 = increasing shear, <0 = decreasing shear
 
-    - name: gamma_dot_offset
+    - name: gamma_dot_t_offset                # Baseline shear rate offset
       min: -0.1                               # Minimum baseline shear [s⁻¹]
       max: 0.1                                # Maximum baseline shear [s⁻¹]
       type: TruncatedNormal                   # ✅ FIXED: Changed from Normal to enforce bounds
@@ -286,7 +286,7 @@ parameter_space:
       # Physical meaning: Constant shear contribution
       # Typically small or zero
 
-    - name: phi_0                             # Maps to phi0 in code
+    - name: phi0                              # Initial angle offset
       min: -180.0                             # Minimum initial angle [degrees]
       max: 180.0                              # Maximum initial angle [degrees]
       type: TruncatedNormal                   # ✅ FIXED: Changed from Normal to enforce bounds

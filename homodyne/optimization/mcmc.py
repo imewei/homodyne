@@ -284,220 +284,6 @@ def _calculate_midpoint_defaults(parameter_space: ParameterSpace) -> dict[str, f
     return initial_values
 
 
-def _validate_and_repair_init_params(
-    init_params: dict[str, float],
-    parameter_space: ParameterSpace,
-    phi_unique: np.ndarray | None = None,
-    epsilon: float = 1e-6,
-) -> dict[str, float]:
-    """Validate and repair initial parameters for NumPyro initialization.
-
-    NumPyro's TruncatedNormal transform requires values strictly inside (min, max)
-    - not equal to the boundaries. This function detects violations and repairs
-    them by clamping to open intervals or using midpoints when necessary.
-
-    This is a centralized preflight validation that prevents initialize_model
-    failures across all MCMC code paths (NUTS and CMC).
-
-    Parameters
-    ----------
-    init_params : dict[str, float]
-        Initial parameter values (may include per-angle parameters like contrast_0)
-    parameter_space : ParameterSpace
-        Parameter space with bounds for validation
-    phi_unique : np.ndarray, optional
-        Unique phi angles (for validation of per-angle parameter count)
-    epsilon : float, default 1e-6
-        Minimum distance from boundaries for open interval
-
-    Returns
-    -------
-    dict[str, float]
-        Validated and repaired parameter dictionary
-
-    Notes
-    -----
-    **Detection and Repair Logic:**
-
-    1. **Boundary-Equal Values**: If value equals min or max, clamp to open interval
-    2. **Out-of-Bounds Values**: If value < min or > max, clamp to open interval
-    3. **Missing Per-Angle Parameters**: If phi_unique provided but per-angle params
-       missing, rebuild using midpoint of bounds
-    4. **Invalid Per-Angle Parameters**: If per-angle param count doesn't match
-       n_phi, rebuild using midpoint of bounds
-
-    **Examples of Repairs:**
-
-    - offset = 0.5 (equals min_val=0.5) → 0.500001 (min_val + epsilon)
-    - contrast = 1.0 (equals max_val=1.0) → 0.999999 (max_val - epsilon)
-    - contrast_0 = -0.1 (< min_val=0.0) → 0.000001 (min_val + epsilon)
-    - Missing contrast_0, contrast_1, contrast_2 → Rebuild using midpoint (0.5)
-
-    See Also
-    --------
-    ParameterSpace.clamp_to_open_interval : Open-interval clamping helper
-    """
-    def _coerce_to_float(value: Any) -> float:
-        """Best-effort conversion of config-provided values to float."""
-        import numbers
-
-        if isinstance(value, numbers.Real):
-            return float(value)
-
-        if isinstance(value, np.ndarray):
-            if value.size != 1:
-                raise ValueError("Cannot coerce array-valued initial parameter to float")
-            return float(value.reshape(()))
-
-        if isinstance(value, str):
-            return float(value.strip())
-
-        # Fall back to standard float conversion (may raise)
-        return float(value)
-
-    repaired_params: dict[str, float] = {}
-    for key, raw_value in init_params.items():
-        try:
-            repaired_params[key] = _coerce_to_float(raw_value)
-        except (TypeError, ValueError) as exc:
-            logger.warning(
-                "Skipping clamp for %s: unable to coerce value %r to float (%s)",
-                key,
-                raw_value,
-                exc,
-            )
-            continue
-    violations_detected = []
-    repairs_applied = []
-
-    # Extract base parameter names (without _0, _1, etc. suffixes)
-    def get_base_param_name(param_name: str) -> tuple[str, int | None]:
-        """Extract base name and index from param like 'contrast_0'."""
-        parts = param_name.rsplit("_", 1)
-        if len(parts) == 2 and parts[1].isdigit():
-            return parts[0], int(parts[1])
-        return param_name, None
-
-    # Group parameters by base name
-    param_groups: dict[str, list[tuple[str, float]]] = {}
-    for param_name, value in repaired_params.items():
-        base_name, idx = get_base_param_name(param_name)
-        if base_name not in param_groups:
-            param_groups[base_name] = []
-        param_groups[base_name].append((param_name, value))
-
-    # Validate and repair each parameter group
-    for base_name, param_list in param_groups.items():
-        # Check if this is a per-angle parameter (contrast, offset)
-        is_per_angle = base_name in ["contrast", "offset"] and any(
-            "_" in name for name, _ in param_list
-        )
-
-        if is_per_angle and phi_unique is not None:
-            # Per-angle parameter: check count matches n_phi
-            n_phi = len(phi_unique)
-            if len(param_list) != n_phi:
-                violations_detected.append(
-                    f"{base_name}: expected {n_phi} per-angle values, got {len(param_list)}"
-                )
-
-                # Rebuild using midpoint of bounds
-                try:
-                    min_val, max_val = parameter_space.get_bounds(base_name)
-                    midpoint = (min_val + max_val) / 2.0
-                    # Use epsilon to ensure strictly inside bounds
-                    safe_value = parameter_space.clamp_to_open_interval(
-                        base_name, midpoint, epsilon
-                    )
-
-                    # Remove old per-angle params and add new ones
-                    for param_name, _ in param_list:
-                        if param_name in repaired_params:
-                            del repaired_params[param_name]
-
-                    for phi_idx in range(n_phi):
-                        param_name_phi = f"{base_name}_{phi_idx}"
-                        repaired_params[param_name_phi] = safe_value
-
-                    repairs_applied.append(
-                        f"{base_name}: rebuilt {n_phi} per-angle values using midpoint={safe_value:.6f}"
-                    )
-                except KeyError:
-                    # Base parameter not in parameter_space, skip repair
-                    logger.warning(
-                        f"Cannot repair {base_name}: not found in parameter_space"
-                    )
-                continue
-
-        # Validate and clamp each parameter value
-        for param_name, value in param_list:
-            # Get base name for bounds lookup
-            base_name_for_bounds, _ = get_base_param_name(param_name)
-
-            try:
-                min_val, max_val = parameter_space.get_bounds(base_name_for_bounds)
-                original_value = value
-                if not np.isfinite(original_value):
-                    candidate_value = min_val + epsilon
-                else:
-                    candidate_value = original_value
-
-                repaired_value = parameter_space.clamp_to_open_interval(
-                    base_name_for_bounds,
-                    candidate_value,
-                    epsilon,
-                )
-
-                violation_reason = None
-                if not np.isfinite(original_value):
-                    violation_reason = "non-finite"
-                elif original_value <= min_val:
-                    violation_reason = "≤ min"
-                elif original_value >= max_val:
-                    violation_reason = "≥ max"
-                elif abs(original_value - min_val) < epsilon:
-                    violation_reason = "min boundary"
-                elif abs(original_value - max_val) < epsilon:
-                    violation_reason = "max boundary"
-                elif repaired_value != original_value:
-                    violation_reason = "open-interval clamp"
-
-                if violation_reason is not None and repaired_value != original_value:
-                    violations_detected.append(
-                        f"{param_name}={original_value:.6g} outside open interval "
-                        f"[{min_val:.6g}, {max_val:.6g}] ({violation_reason})"
-                    )
-                    repaired_params[param_name] = repaired_value
-                    repairs_applied.append(
-                        f"{param_name}: {original_value:.6g} → {repaired_value:.6g} ({violation_reason})"
-                    )
-            except KeyError:
-                # Parameter not in parameter_space (e.g., base contrast/offset)
-                # Skip validation for these
-                continue
-
-    # Log diagnostics
-    if violations_detected:
-        logger.warning(
-            f"Preflight validation detected {len(violations_detected)} boundary violations:"
-        )
-        for violation in violations_detected[:5]:  # Show first 5
-            logger.warning(f"  - {violation}")
-        if len(violations_detected) > 5:
-            logger.warning(f"  ... and {len(violations_detected) - 5} more")
-
-    if repairs_applied:
-        logger.info(
-            f"Preflight validation applied {len(repairs_applied)} repairs to prevent initialize_model failure:"
-        )
-        for repair in repairs_applied[:5]:  # Show first 5
-            logger.info(f"  - {repair}")
-        if len(repairs_applied) > 5:
-            logger.info(f"  ... and {len(repairs_applied) - 5} more")
-    else:
-        logger.debug("Preflight validation: all parameters valid, no repairs needed")
-
-    return repaired_params
 
 
 @log_performance(threshold=10.0)
@@ -1807,7 +1593,6 @@ def _create_numpyro_model(
             # Get distribution kwargs
             dist_kwargs = prior_spec.to_numpyro_kwargs()
 
-<<<<<<< HEAD
             def _cast_dist_value(value):
                 if isinstance(value, (int, float, np.number)):
                     return jnp.asarray(value, dtype=target_dtype)
@@ -1916,15 +1701,6 @@ def _create_numpyro_model(
                         dtype=str(target_dtype),
                         shape=broadcast_shape,
                     )
-=======
-            # CRITICAL FIX: Ensure 'low' and 'high' are JAX arrays if they exist
-            # This prevents jax.errors.TracerArrayConversionError when NumPyro
-            # internally tries to convert a JAX tracer to a Python float using np.asarray
-            if 'low' in dist_kwargs and dist_kwargs['low'] is not None:
-                dist_kwargs['low'] = jnp.array(dist_kwargs['low'])
-            if 'high' in dist_kwargs and dist_kwargs['high'] is not None:
-                dist_kwargs['high'] = jnp.array(dist_kwargs['high'])
->>>>>>> b9ff341 (FIX: Resolve JAX TracerArrayConversionError in MCMC model and add log analysis summary.)
 
             # PER-ANGLE SAMPLING: contrast and offset as separate parameters per phi angle
             if per_angle_scaling and param_name in ["contrast", "offset"]:
@@ -2456,7 +2232,7 @@ def _run_numpyro_sampling(model, config, initial_values=None, parameter_space=No
         If provided, chains will be initialized near these values.
         If None, NumPyro uses random initialization from priors.
     parameter_space : ParameterSpace, optional
-        Parameter space for bounds and preflight validation
+        Parameter space defining priors and parameter bounds
     phi_unique : np.ndarray, optional
         Unique phi angles for per-angle parameter expansion
 
@@ -2471,7 +2247,7 @@ def _run_numpyro_sampling(model, config, initial_values=None, parameter_space=No
     - Extracts acceptance probability and divergence info
     - Logs warmup diagnostics for debugging
     - Initial values improve convergence when starting from good point estimates
-    - Applies preflight validation to prevent NumPyro initialization failures
+    - Parameters are used directly without validation (user responsible for physical validity)
     """
     # Configure parallel chains - must be done before creating MCMC object
     # For CPU parallelization, set host device count
@@ -2547,7 +2323,7 @@ def _run_numpyro_sampling(model, config, initial_values=None, parameter_space=No
     # but config initial_values only provides physical parameters (D0, alpha, etc.)
     # We need to add per-angle parameters using data statistics or midpoints
     #
-    # Solution: Expand initial_values with per-angle parameters and apply preflight validation
+    # Solution: Expand initial_values with per-angle parameters
     if initial_values is not None and parameter_space is not None:
         logger.info(
             f"Expanding initial_values for per-angle scaling: {list(initial_values.keys())}"
@@ -2608,26 +2384,14 @@ def _run_numpyro_sampling(model, config, initial_values=None, parameter_space=No
             "ParameterSpace not available; skipping per-angle initial value expansion"
         )
 
-    # Apply preflight validation to ensure all parameters are strictly inside bounds
-    # This prevents NumPyro initialize_model failures from boundary violations
+    # Use parameters directly without validation/repair
+    # Per user request: Do not limit parameter space or auto-correct for numerical instability
     if initial_values is not None and parameter_space is not None:
-        try:
-            # Validate and repair any boundary violations
-            initial_values = _validate_and_repair_init_params(
-                initial_values,
-                parameter_space,
-                phi_unique=phi_unique,
-                epsilon=1e-6,
-            )
-            logger.info("Preflight validation complete, parameters ready for NUTS initialization")
-        except Exception as e:
-            logger.warning(f"Preflight validation failed: {e}, using default initialization")
-            initial_values = None
-
-    if initial_values is None:
+        logger.info(f"Using init parameters directly (no validation), {len(initial_values)} parameters ready for NUTS initialization")
+    elif initial_values is None:
         logger.info("Using NumPyro default initialization (sampling from priors)")
     else:
-        logger.info(f"Using validated initial_values with {len(initial_values)} parameters")
+        logger.info(f"Using initial_values with {len(initial_values)} parameters")
 
     try:
         # Pass initial_values to mcmc.run() for chain initialization

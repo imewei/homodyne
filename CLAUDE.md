@@ -982,3 +982,13 @@ ______________________________________________________________________
 - `.pre-commit-config.yaml` - Black, ruff, mypy, bandit
 - Requires: `python >= 3.12`
 - Float32 recommended for MCMC and Homodyne supports both float32 and float64
+- use canonical names
+  Static Isotropic Mode (3 parameters):
+  ['D0', 'alpha', 'D_offset']
+
+  Laminar Flow Mode (7 parameters):
+  ['D0', 'alpha', 'D_offset', 'gamma_dot_t0', 'beta', 'gamma_dot_t_offset', 'phi0']
+
+  All Parameters (including scaling):
+  ['contrast', 'offset', 'D0', 'alpha', 'D_offset', 'gamma_dot_t0', 'beta',
+  'gamma_dot_t_offset', 'phi0']

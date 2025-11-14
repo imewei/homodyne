@@ -274,7 +274,7 @@ def plot_c2_heatmap_fast(
     >>> t2 = np.linspace(0, 1, 50)
     >>> plot_c2_heatmap_fast(
     ...     c2_data, t1, t2,
-    ...     Path('c2_phi_0.png'),
+    ...     Path('c2_phi0.png'),
     ...     phi_angle=0.0
     ... )
     """

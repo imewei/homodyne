@@ -611,7 +611,7 @@ def _compute_g1_shear_core(
     Where L = stator_rotor_gap (sample-detector distance)
 
     Args:
-        params: Physical parameters [D0, alpha, D_offset, gamma_dot_0, beta, gamma_dot_offset, phi0]
+        params: Physical parameters [D0, alpha, D_offset, gamma_dot_t0, beta, gamma_dot_t_offset, phi0]
         t1, t2: Time grids (should be identical: t1 = t2 = t)
         phi: Scattering angles
         sinc_prefactor: Pre-computed factor 0.5/π * q * L * dt from configuration
@@ -791,7 +791,7 @@ def _compute_g1_total_core(
     Physical constraint: 0 < g₁(t) ≤ 1
 
     Args:
-        params: Physical parameters [D0, alpha, D_offset, gamma_dot_0, beta, gamma_dot_offset, phi0]
+        params: Physical parameters [D0, alpha, D_offset, gamma_dot_t0, beta, gamma_dot_t_offset, phi0]
         t1, t2: Time grids (should be identical: t1 = t2 = t)
         phi: Scattering angles
         wavevector_q_squared_half_dt: Pre-computed factor 0.5 * q² * dt from configuration
@@ -880,7 +880,7 @@ def _compute_g2_scaled_core(
     Physical constraint: 0.5 < g2 ≤ 2.5
 
     Args:
-        params: Physical parameters [D0, alpha, D_offset, gamma_dot_0, beta, gamma_dot_offset, phi0]
+        params: Physical parameters [D0, alpha, D_offset, gamma_dot_t0, beta, gamma_dot_t_offset, phi0]
         t1, t2: Time points for correlation calculation
         phi: Scattering angles
         wavevector_q_squared_half_dt: Pre-computed factor 0.5 * q² * dt from configuration
@@ -1061,7 +1061,7 @@ def compute_g1_shear(
     No fallback estimation - explicit dt is required for correct physics.
 
     Args:
-        params: Physical parameters [D0, alpha, D_offset, gamma_dot_0, beta, gamma_dot_offset, phi0]
+        params: Physical parameters [D0, alpha, D_offset, gamma_dot_t0, beta, gamma_dot_t_offset, phi0]
         t1, t2: Time grids (should be identical: t1 = t2 = t)
         phi: Scattering angles
         q: Scattering wave vector magnitude
@@ -1117,7 +1117,7 @@ def compute_g1_total(
     No fallback estimation - explicit dt is required for correct physics.
 
     Args:
-        params: Physical parameters [D0, alpha, D_offset, gamma_dot_0, beta, gamma_dot_offset, phi0]
+        params: Physical parameters [D0, alpha, D_offset, gamma_dot_t0, beta, gamma_dot_t_offset, phi0]
         t1, t2: Time grids (should be identical: t1 = t2 = t)
         phi: Scattering angles
         q: Scattering wave vector magnitude
@@ -1187,7 +1187,7 @@ def compute_g2_scaled(
     No fallback estimation - explicit dt is required for correct physics.
 
     Args:
-        params: Physical parameters [D0, alpha, D_offset, gamma_dot_0, beta, gamma_dot_offset, phi0]
+        params: Physical parameters [D0, alpha, D_offset, gamma_dot_t0, beta, gamma_dot_t_offset, phi0]
         t1, t2: Time points for correlation calculation
         phi: Scattering angles
         q: Scattering wave vector magnitude
@@ -1263,7 +1263,7 @@ def compute_g2_scaled_with_factors(
     HomodyneModel where factors are computed once at initialization.
 
     Args:
-        params: Physical parameters [D0, alpha, D_offset, gamma_dot_0, beta, gamma_dot_offset, phi0]
+        params: Physical parameters [D0, alpha, D_offset, gamma_dot_t0, beta, gamma_dot_t_offset, phi0]
         t1, t2: Time grids for correlation calculation
         phi: Scattering angles [degrees]
         wavevector_q_squared_half_dt: Pre-computed factor (0.5 * q² * dt)
