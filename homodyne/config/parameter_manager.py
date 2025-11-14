@@ -78,7 +78,7 @@ class ParameterManager:
         self._default_bounds: dict[str, BoundDict] = {
             # Scaling parameters (always included)
             "contrast": {"min": 0.0, "max": 1.0, "name": "contrast", "type": "TruncatedNormal"},
-            "offset": {"min": 0.5, "max": 2.5, "name": "offset", "type": "TruncatedNormal"},
+            "offset": {"min": 0.5, "max": 1.5, "name": "offset", "type": "TruncatedNormal"},
             # Physical parameters - diffusion
             "D0": {"min": 1.0, "max": 1e6, "name": "D0", "type": "TruncatedNormal"},
             "alpha": {"min": -2.0, "max": 2.0, "name": "alpha", "type": "TruncatedNormal"},

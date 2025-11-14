@@ -66,9 +66,9 @@ class ParameterSpace:
     # Scaling parameters (always present)
     # ✅ FIXED (Nov 11, 2025): Updated bounds to match homodyne physics g₂ = 1 + β×g₁²
     # - contrast (β): Physical range [0, 1] where 0=no signal, 1=perfect contrast
-    # - offset: Deviation from baseline=1.0, range [0.5, 2.5] allows ±50% variation
+    # - offset: Deviation from baseline=1.0, range [0.5, 1.5] allows ±50% variation
     contrast_bounds: tuple[float, float] = (0.0, 1.0)  # Physical contrast range
-    offset_bounds: tuple[float, float] = (0.5, 2.5)    # Baseline ± significant deviation
+    offset_bounds: tuple[float, float] = (0.5, 1.5)    # Baseline ± 50% deviation (tighter for MCMC stability)
     contrast_prior: tuple[float, float] = (0.5, 0.2)   # (mu, sigma) centered at 0.5, wider sigma
     offset_prior: tuple[float, float] = (1.0, 0.3)     # (mu, sigma) centered at 1.0, wider sigma
 
