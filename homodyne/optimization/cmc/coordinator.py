@@ -473,17 +473,62 @@ class CMCCoordinator:
                 )
 
         # Determine number of parameters from parameter_space
-        num_params = len(parameter_space.parameter_names)
+        # Note: parameter_space.parameter_names contains only physical parameters
+        # Per-angle scaling adds 2*n_phi additional parameters (contrast_i, offset_i)
+        # Total = len(physical_params) + 2*n_phi
+        import numpy as np
+
+        phi_unique_temp = np.unique(np.asarray(phi))
+        n_phi_temp = len(phi_unique_temp)
+        num_params = len(parameter_space.parameter_names) + (2 * n_phi_temp)
 
         # Create init_params dict for backend (includes scaling parameters)
         # Note: Backends expect dict[str, float] for all parameters
         init_params = initial_values.copy()
 
-        # Add scaling parameters if not present (contrast, offset)
-        if "contrast" not in init_params:
-            init_params["contrast"] = 0.5  # Default contrast
-        if "offset" not in init_params:
-            init_params["offset"] = 1.0  # Default offset
+        # CRITICAL FIX (Nov 13, 2025): Expand per-angle scaling parameters
+        # MCMC model expects contrast_0, contrast_1, ..., offset_0, offset_1, ...
+        # but config only provides physical parameters
+        import numpy as np
+
+        # Determine number of unique phi angles
+        phi_unique = np.unique(np.asarray(phi))
+        n_phi = len(phi_unique)
+
+        logger.info(f"Expanding initial_values for {n_phi} unique phi angles (per-angle scaling)")
+
+        # Get default scaling values (or use config values if present)
+        default_contrast = init_params.pop("contrast", 0.5)
+        default_offset = init_params.pop("offset", 1.0)
+
+        # Add per-angle contrast and offset parameters
+        for phi_idx in range(n_phi):
+            contrast_key = f"contrast_{phi_idx}"
+            offset_key = f"offset_{phi_idx}"
+
+            # Use midpoint from parameter_space if available, otherwise use defaults
+            if contrast_key not in init_params:
+                try:
+                    contrast_midpoint = sum(parameter_space.get_bounds("contrast")) / 2.0
+                    init_params[contrast_key] = parameter_space.clamp_to_open_interval(
+                        "contrast", contrast_midpoint, epsilon=1e-6
+                    )
+                except (KeyError, AttributeError):
+                    init_params[contrast_key] = default_contrast
+
+            if offset_key not in init_params:
+                try:
+                    offset_midpoint = sum(parameter_space.get_bounds("offset")) / 2.0
+                    init_params[offset_key] = parameter_space.clamp_to_open_interval(
+                        "offset", offset_midpoint, epsilon=1e-6
+                    )
+                except (KeyError, AttributeError):
+                    init_params[offset_key] = default_offset
+
+        logger.info(
+            f"✓ Expanded initial_values: {len(initial_values)} physical params + "
+            f"{n_phi * 2} per-angle params = {len(init_params)} total parameters"
+        )
 
         # Use identity mass matrix (diagonal covariance)
         # CMC uses simple initialization - mass matrix adapted during warmup
