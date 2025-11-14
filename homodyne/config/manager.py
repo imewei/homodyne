@@ -818,7 +818,7 @@ class ConfigManager:
                 logger.warning(f"Missing recommended section: {section}")
 
         # Validate analysis_mode value
-        valid_modes = ["static_isotropic", "static_anisotropic", "laminar_flow"]
+        valid_modes = ["static", "laminar_flow"]
         mode = self.config.get("analysis_mode", "")
         if mode and mode not in valid_modes:
             logger.warning(

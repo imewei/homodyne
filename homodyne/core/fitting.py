@@ -114,7 +114,7 @@ class ParameterSpace:
         Parameters
         ----------
         analysis_mode : str
-            Analysis mode: "static_isotropic", "static_anisotropic", or "laminar_flow"
+            Analysis mode: "static" or "laminar_flow"
 
         Returns
         -------
@@ -405,7 +405,7 @@ class UnifiedHomodyneEngine:
         """Initialize unified homodyne engine.
 
         Args:
-            analysis_mode: "static_isotropic", "static_anisotropic", or "laminar_flow"
+            analysis_mode: "static" or "laminar_flow"
             parameter_space: Parameter space definition (uses default if None)
         """
         self.analysis_mode = analysis_mode

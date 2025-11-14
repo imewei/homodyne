@@ -556,7 +556,7 @@ class NLSQWrapper:
         Raises:
             ValueError: If analysis_mode is not recognized
         """
-        if analysis_mode == "static_isotropic":
+        if analysis_mode == "static":
             return ["D0", "alpha", "D_offset"]
         elif analysis_mode == "laminar_flow":
             return [
@@ -571,7 +571,7 @@ class NLSQWrapper:
         else:
             raise ValueError(
                 f"Unknown analysis_mode: '{analysis_mode}'. "
-                f"Expected 'static_isotropic' or 'laminar_flow'"
+                f"Expected 'static' or 'laminar_flow'"
             )
 
     @staticmethod

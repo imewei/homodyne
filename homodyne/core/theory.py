@@ -49,7 +49,7 @@ class TheoryEngine:
         """Initialize theory engine with specified analysis mode.
 
         Args:
-            analysis_mode: "static_isotropic", "static_anisotropic", or "laminar_flow"
+            analysis_mode: "static" or "laminar_flow"
         """
         self.analysis_mode = analysis_mode
         self.model = create_model(analysis_mode)

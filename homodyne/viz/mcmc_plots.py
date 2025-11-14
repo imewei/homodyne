@@ -113,7 +113,7 @@ def plot_trace_plots(
 
     # Generate parameter names if not provided
     if param_names is None:
-        if result.analysis_mode == "static_isotropic":
+        if result.analysis_mode == "static":
             param_names = ["D0", "alpha", "D_offset"]
         elif result.analysis_mode == "laminar_flow":
             param_names = [
@@ -459,7 +459,7 @@ def plot_convergence_diagnostics(
 
     # Extract parameter names
     num_params = len(result.mean_params)
-    if result.analysis_mode == "static_isotropic":
+    if result.analysis_mode == "static":
         param_names = ["D0", "alpha", "D_offset"][:num_params]
     elif result.analysis_mode == "laminar_flow":
         param_names = [
@@ -791,7 +791,7 @@ def plot_posterior_comparison(
     axes = axes.flatten()
 
     # Get parameter names
-    if result.analysis_mode == "static_isotropic":
+    if result.analysis_mode == "static":
         param_names = ["D0", "alpha", "D_offset"]
     elif result.analysis_mode == "laminar_flow":
         param_names = [
@@ -1006,7 +1006,7 @@ def plot_cmc_summary_dashboard(
             num_params = len(result.mean_params)
 
             # Get parameter names
-            if result.analysis_mode == "static_isotropic":
+            if result.analysis_mode == "static":
                 param_names = ["D0", "alpha", "D_offset"][:num_params]
             else:
                 param_names = [f"P{i}" for i in range(num_params)]
@@ -1093,7 +1093,7 @@ def plot_cmc_summary_dashboard(
                                 trace, color=colors[shard_idx], alpha=0.6, linewidth=0.5
                             )
 
-                if result.analysis_mode == "static_isotropic":
+                if result.analysis_mode == "static":
                     param_names = ["D0", "alpha", "D_offset"]
                 else:
                     param_names = [f"param_{i}" for i in range(len(result.mean_params))]
@@ -1142,7 +1142,7 @@ def plot_cmc_summary_dashboard(
                     label=f"Mean: {mean_val:.2f}",
                 )
 
-                if result.analysis_mode == "static_isotropic":
+                if result.analysis_mode == "static":
                     param_names = ["D0", "alpha", "D_offset"]
                 else:
                     param_names = [f"param_{i}" for i in range(len(result.mean_params))]

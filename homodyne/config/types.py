@@ -474,7 +474,7 @@ class HomodyneConfig(TypedDict, total=False):
     config_version : str
         Configuration file version
     analysis_mode : str
-        Analysis mode ("static_isotropic", "static_anisotropic", "laminar_flow")
+        Analysis mode ("static", "laminar_flow")
     experimental_data : ExperimentalDataConfig
         Experimental data specification
     parameter_space : ParameterSpaceConfig
@@ -488,7 +488,7 @@ class HomodyneConfig(TypedDict, total=False):
     """
 
     config_version: str
-    analysis_mode: Literal["static_isotropic", "static_anisotropic", "laminar_flow"]
+    analysis_mode: Literal["static", "laminar_flow"]
     experimental_data: ExperimentalDataConfig
     parameter_space: ParameterSpaceConfig
     initial_parameters: InitialParametersConfig
@@ -497,7 +497,7 @@ class HomodyneConfig(TypedDict, total=False):
 
 
 # Analysis mode literal type
-AnalysisMode = Literal["static_isotropic", "static_anisotropic", "laminar_flow"]
+AnalysisMode = Literal["static", "laminar_flow"]
 
 # Parameter names for different modes
 STATIC_PARAM_NAMES: list[str] = ["D0", "alpha", "D_offset"]

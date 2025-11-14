@@ -47,7 +47,7 @@ def create_mock_optimization_result(
     >>> result.convergence_status
     'converged'
     """
-    if analysis_mode == "static_isotropic":
+    if analysis_mode == "static":
         # 5 parameters: contrast, offset, D0, alpha, D_offset
         parameters = np.array([0.45, 1.02, 1234.5, 0.567, 12.34])
         uncertainties = (
