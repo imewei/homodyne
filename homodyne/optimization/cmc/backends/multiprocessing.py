@@ -739,6 +739,17 @@ def _worker_function(args: tuple) -> Dict[str, Any]:
         # Note: init_params keys should match parameter names from parameter_space
         init_param_values = {k: float(v) for k, v in init_params.items()}
 
+        # DEBUG: Log what worker received from coordinator
+        worker_logger.debug(
+            f"Multiprocessing shard {shard_idx}: Received init_params with {len(init_param_values)} parameters: "
+            f"{list(init_param_values.keys())}"
+        )
+        per_angle_received = [k for k in init_param_values.keys() if 'contrast_' in k or 'offset_' in k]
+        if per_angle_received:
+            worker_logger.debug(
+                f"Multiprocessing shard {shard_idx}: Per-angle parameters received: {per_angle_received}"
+            )
+
         # CRITICAL FIX (Nov 2025): Add per-angle scaling initial values
         # When per_angle_scaling=True, NumPyro model expects separate parameters
         # for each phi angle: contrast_0, contrast_1, ..., offset_0, offset_1, ...
@@ -789,28 +800,58 @@ def _worker_function(args: tuple) -> Dict[str, Any]:
             f"contrast={estimated_contrast:.4f}, offset={estimated_offset:.4f}"
         )
 
-        # CRITICAL FIX (Nov 2025): Clamp per-angle values to open intervals
-        # NumPyro's TruncatedNormal transform requires values strictly inside (min, max)
-        # If estimated values equal boundaries, NumPyro initialization will fail
-        # Use ParameterSpace.clamp_to_open_interval() to ensure epsilon distance from bounds
-        for phi_idx in range(len(phi_unique)):
-            # Clamp contrast to open interval (e.g., if bounds are [0.0, 1.0])
-            clamped_contrast = parameter_space.clamp_to_open_interval(
-                "contrast", estimated_contrast, epsilon=1e-6
+        # CRITICAL FIX (Nov 14, 2025): Check if coordinator already provided per-angle parameters
+        # Root cause: Coordinator (coordinator.py) now expands parameters from 7→13 (7 + 2*n_phi)
+        # If worker unconditionally overwrites these with data-driven estimates, initialization fails
+        # Solution: Detect coordinator-provided params and skip data-driven computation
+        if f"contrast_0" in init_param_values:
+            worker_logger.info(
+                f"Multiprocessing shard {shard_idx}: Using coordinator-provided per-angle parameters "
+                f"(skipping data-driven estimation to preserve coordinator values)"
             )
-            # Clamp offset to open interval (e.g., if bounds are [0.5, 1.5])
-            clamped_offset = parameter_space.clamp_to_open_interval(
-                "offset", estimated_offset, epsilon=1e-6
+            # Verify all expected per-angle params are present
+            missing_params = []
+            for phi_idx in range(len(phi_unique)):
+                if f"contrast_{phi_idx}" not in init_param_values:
+                    missing_params.append(f"contrast_{phi_idx}")
+                if f"offset_{phi_idx}" not in init_param_values:
+                    missing_params.append(f"offset_{phi_idx}")
+
+            if missing_params:
+                worker_logger.error(
+                    f"Multiprocessing shard {shard_idx}: Incomplete per-angle parameters from coordinator! "
+                    f"Missing: {missing_params}. This indicates a coordinator bug."
+                )
+        else:
+            # Original behavior: Compute data-driven per-angle parameters
+            # (Backward compatibility for old code paths without coordinator expansion)
+            worker_logger.info(
+                f"Multiprocessing shard {shard_idx}: No coordinator-provided per-angle params detected, "
+                f"using data-driven estimation (legacy mode)"
             )
 
-            init_param_values[f"contrast_{phi_idx}"] = clamped_contrast
-            init_param_values[f"offset_{phi_idx}"] = clamped_offset
+            # CRITICAL FIX (Nov 2025): Clamp per-angle values to open intervals
+            # NumPyro's TruncatedNormal transform requires values strictly inside (min, max)
+            # If estimated values equal boundaries, NumPyro initialization will fail
+            # Use ParameterSpace.clamp_to_open_interval() to ensure epsilon distance from bounds
+            for phi_idx in range(len(phi_unique)):
+                # Clamp contrast to open interval (e.g., if bounds are [0.0, 1.0])
+                clamped_contrast = parameter_space.clamp_to_open_interval(
+                    "contrast", estimated_contrast, epsilon=1e-6
+                )
+                # Clamp offset to open interval (e.g., if bounds are [0.5, 1.5])
+                clamped_offset = parameter_space.clamp_to_open_interval(
+                    "offset", estimated_offset, epsilon=1e-6
+                )
 
-        worker_logger.info(
-            f"Multiprocessing shard {shard_idx}: Data-driven per-angle scaling: "
-            f"contrast={estimated_contrast:.6f} → {clamped_contrast:.6f}, "
-            f"offset={estimated_offset:.6f} → {clamped_offset:.6f} (clamped to open intervals)"
-        )
+                init_param_values[f"contrast_{phi_idx}"] = clamped_contrast
+                init_param_values[f"offset_{phi_idx}"] = clamped_offset
+
+            worker_logger.info(
+                f"Multiprocessing shard {shard_idx}: Data-driven per-angle scaling: "
+                f"contrast={estimated_contrast:.6f} → {clamped_contrast:.6f}, "
+                f"offset={estimated_offset:.6f} → {clamped_offset:.6f} (clamped to open intervals)"
+            )
 
         # CRITICAL: Remove base contrast/offset parameters when using per-angle scaling
         # NumPyro model expects ONLY per-angle parameters (contrast_0, contrast_1, ...)

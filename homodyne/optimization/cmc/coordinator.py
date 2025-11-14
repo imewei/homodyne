@@ -530,6 +530,12 @@ class CMCCoordinator:
             f"{n_phi * 2} per-angle params = {len(init_params)} total parameters"
         )
 
+        # DEBUG: Log actual parameter values being sent to worker
+        logger.debug(f"Coordinator sending init_params to worker: {list(init_params.keys())}")
+        per_angle_params = {k: v for k, v in init_params.items() if 'contrast_' in k or 'offset_' in k}
+        if per_angle_params:
+            logger.debug(f"Per-angle parameters: {per_angle_params}")
+
         # Use identity mass matrix (diagonal covariance)
         # CMC uses simple initialization - mass matrix adapted during warmup
         inv_mass_matrix = jnp.eye(num_params)
