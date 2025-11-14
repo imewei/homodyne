@@ -2611,7 +2611,7 @@ def _extract_nlsq_metadata(config: Any, data: dict[str, Any]) -> dict[str, Any]:
     return metadata
 
 
-def _prepare_parameter_data(result: Any, analysis_mode: str) -> dict[str, Any]:
+def _prepare_parameter_data(result: Any, analysis_mode: str, n_angles: int) -> dict[str, Any]:
     """Prepare parameter data dictionary for JSON saving.
 
     Extracts parameter values and uncertainties from OptimizationResult and
@@ -2622,9 +2622,11 @@ def _prepare_parameter_data(result: Any, analysis_mode: str) -> dict[str, Any]:
     Parameters
     ----------
     result : OptimizationResult
-        NLSQ optimization result with parameters and uncertainties
+        NLSQ optimization result
     analysis_mode : str
-        "static_isotropic" (5 params) or "laminar_flow" (9 params)
+        Analysis mode ("static" or "laminar_flow")
+    n_angles : int
+        Number of angles in the data (used to detect per-angle scaling)
 
     Returns
     -------
@@ -2650,7 +2652,7 @@ def _prepare_parameter_data(result: Any, analysis_mode: str) -> dict[str, Any]:
 
     Examples
     --------
-    >>> param_dict = _prepare_parameter_data(result, "laminar_flow")
+    >>> param_dict = _prepare_parameter_data(result, "laminar_flow", n_angles=3)
     >>> param_dict["D0"]
     {'value': 1234.5, 'uncertainty': 45.6}
     >>> param_dict["gamma_dot_t0"]
@@ -2667,16 +2669,17 @@ def _prepare_parameter_data(result: Any, analysis_mode: str) -> dict[str, Any]:
         raise ValueError(f"Unknown analysis_mode: {analysis_mode}")
 
     # Detect if per-angle scaling was used
-    n_params_expected = len(param_names)  # 9 for laminar_flow, 5 for static
+    n_params_expected_legacy = len(param_names)  # 9 for laminar_flow, 5 for static
+    n_params_expected_per_angle = 2 * n_angles + n_physical  # Per-angle scaling format
     n_params_actual = len(result.parameters)
 
-    if n_params_actual > n_params_expected:
+    # Check if per-angle scaling was used
+    # Note: When n_angles=1, per-angle (5 params) equals legacy (5 params),
+    # so we explicitly check for the per-angle count first (v2.4.0 mandates per-angle)
+    if n_params_actual == n_params_expected_per_angle:
         # Per-angle scaling detected
         # Structure: [c0, c1, ..., cN, o0, o1, ..., oN, physical_params...]
-        # where N = n_angles - 1
-
-        # Calculate number of angles
-        n_angles = (n_params_actual - n_physical) // 2
+        # where N = n_angles
 
         logger.info(
             f"Detected per-angle scaling: {n_params_actual} parameters for {n_angles} angles"
@@ -2748,21 +2751,12 @@ def _prepare_parameter_data(result: Any, analysis_mode: str) -> dict[str, Any]:
         )
 
     else:
-        # Legacy scalar scaling (or exact match)
-        logger.debug(
-            f"Using direct parameter extraction (legacy scalar scaling): {n_params_actual} parameters"
+        # Unexpected parameter count - should not happen in v2.4.0+
+        raise ValueError(
+            f"Unexpected parameter count: got {n_params_actual}, expected {n_params_expected_per_angle} "
+            f"for per-angle scaling with {n_angles} angles. "
+            f"(Legacy scalar scaling with {n_params_expected_legacy} params is no longer supported in v2.4.0+)"
         )
-
-        param_dict = {}
-        for i, name in enumerate(param_names):
-            param_dict[name] = {
-                "value": float(result.parameters[i]),
-                "uncertainty": (
-                    float(result.uncertainties[i])
-                    if result.uncertainties is not None
-                    else None
-                ),
-            }
 
     return param_dict
 
@@ -3225,8 +3219,9 @@ def save_nlsq_results(
     metadata = _extract_nlsq_metadata(config, filtered_data)
 
     # Step 2: Prepare parameter data
-    logger.debug(f"Preparing parameter data for {analysis_mode} mode")
-    param_dict = _prepare_parameter_data(result, analysis_mode)
+    n_angles = len(filtered_data['phi_angles_list'])
+    logger.debug(f"Preparing parameter data for {analysis_mode} mode with {n_angles} angles")
+    param_dict = _prepare_parameter_data(result, analysis_mode, n_angles)
 
     # Add timestamp and convergence info to parameters
     param_dict_complete = {
@@ -3386,6 +3381,7 @@ def save_nlsq_results(
             t2=t2,
             output_dir=nlsq_dir,
             config=config,  # Pass config for preview_mode setting
+            c2_solver_scaled=fits_dict["c2_solver_scaled"],  # Use FITTED solver surface
         )
         logger.info(f"  - {len(phi_angles)} PNG plots")
     except Exception as e:
