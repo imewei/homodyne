@@ -482,13 +482,16 @@ class CMCCoordinator:
         n_phi_temp = len(phi_unique_temp)
         num_params = len(parameter_space.parameter_names) + (2 * n_phi_temp)
 
-        # Create init_params dict for backend (includes scaling parameters)
-        # Note: Backends expect dict[str, float] for all parameters
-        init_params = initial_values.copy()
-
-        # CRITICAL FIX (Nov 13, 2025): Expand per-angle scaling parameters
-        # MCMC model expects contrast_0, contrast_1, ..., offset_0, offset_1, ...
-        # but config only provides physical parameters
+        # CRITICAL FIX (Nov 14, 2025): Parameter ordering for NumPyro initialization
+        # NumPyro's init_to_value() strategy requires parameters in the EXACT ORDER
+        # that the model samples them. For per-angle scaling, the model samples:
+        #   1. contrast_0, contrast_1, ..., contrast_{n_phi-1}
+        #   2. offset_0, offset_1, ..., offset_{n_phi-1}
+        #   3. Physical parameters (D0, alpha, D_offset, ...)
+        #
+        # This ordering is determined by parameter_space.parameter_names iteration
+        # in mcmc.py:1706-1720. If we send parameters in wrong order, NumPyro assigns
+        # wrong values (e.g., D0 → contrast_0), causing initialization failure.
         import numpy as np
 
         # Determine number of unique phi angles
@@ -497,41 +500,51 @@ class CMCCoordinator:
 
         logger.info(f"Expanding initial_values for {n_phi} unique phi angles (per-angle scaling)")
 
-        # Get default scaling values (or use config values if present)
-        default_contrast = init_params.pop("contrast", 0.5)
-        default_offset = init_params.pop("offset", 1.0)
+        # Get default scaling values from config (will be removed from physical params)
+        default_contrast = initial_values.get("contrast", 0.5)
+        default_offset = initial_values.get("offset", 1.0)
 
-        # Add per-angle contrast and offset parameters
+        # Create NEW dict with CORRECT ORDER: per-angle params FIRST, then physical params
+        init_params = {}
+
+        # STEP 1: Add per-angle contrast parameters FIRST (contrast_0, contrast_1, ...)
         for phi_idx in range(n_phi):
             contrast_key = f"contrast_{phi_idx}"
-            offset_key = f"offset_{phi_idx}"
 
             # Use midpoint from parameter_space if available, otherwise use defaults
-            if contrast_key not in init_params:
-                try:
-                    contrast_midpoint = sum(parameter_space.get_bounds("contrast")) / 2.0
-                    init_params[contrast_key] = parameter_space.clamp_to_open_interval(
-                        "contrast", contrast_midpoint, epsilon=1e-6
-                    )
-                except (KeyError, AttributeError):
-                    init_params[contrast_key] = default_contrast
+            try:
+                contrast_midpoint = sum(parameter_space.get_bounds("contrast")) / 2.0
+                init_params[contrast_key] = parameter_space.clamp_to_open_interval(
+                    "contrast", contrast_midpoint, epsilon=1e-6
+                )
+            except (KeyError, AttributeError):
+                init_params[contrast_key] = default_contrast
 
-            if offset_key not in init_params:
-                try:
-                    offset_midpoint = sum(parameter_space.get_bounds("offset")) / 2.0
-                    init_params[offset_key] = parameter_space.clamp_to_open_interval(
-                        "offset", offset_midpoint, epsilon=1e-6
-                    )
-                except (KeyError, AttributeError):
-                    init_params[offset_key] = default_offset
+        # STEP 2: Add per-angle offset parameters SECOND (offset_0, offset_1, ...)
+        for phi_idx in range(n_phi):
+            offset_key = f"offset_{phi_idx}"
+
+            try:
+                offset_midpoint = sum(parameter_space.get_bounds("offset")) / 2.0
+                init_params[offset_key] = parameter_space.clamp_to_open_interval(
+                    "offset", offset_midpoint, epsilon=1e-6
+                )
+            except (KeyError, AttributeError):
+                init_params[offset_key] = default_offset
+
+        # STEP 3: Add physical parameters LAST (D0, alpha, D_offset, ...)
+        # Exclude base 'contrast' and 'offset' as they're replaced by per-angle versions
+        for param_name, param_value in initial_values.items():
+            if param_name not in ["contrast", "offset"]:
+                init_params[param_name] = param_value
 
         logger.info(
             f"✓ Expanded initial_values: {len(initial_values)} physical params + "
             f"{n_phi * 2} per-angle params = {len(init_params)} total parameters"
         )
 
-        # DEBUG: Log actual parameter values being sent to worker
-        logger.debug(f"Coordinator sending init_params to worker: {list(init_params.keys())}")
+        # DEBUG: Log actual parameter ordering being sent to worker
+        logger.debug(f"Coordinator sending init_params to worker (ORDERED): {list(init_params.keys())}")
         per_angle_params = {k: v for k, v in init_params.items() if 'contrast_' in k or 'offset_' in k}
         if per_angle_params:
             logger.debug(f"Per-angle parameters: {per_angle_params}")

@@ -1818,7 +1818,8 @@ def _create_numpyro_model(
                 "t1[0:10]={t1_sample}, t2[0:10]={t2_sample}",
                 t1_sample=t1[:10], t2_sample=t2[:10]
             )
-        log_params_and_data()
+        # DISABLED: Excessive output during initialization
+        # log_params_and_data()
 
         c2_theory = _compute_simple_theory_jit(
             params_full, t1, t2, phi_for_theory, q, analysis_mode, L, dt
@@ -1835,7 +1836,8 @@ def _create_numpyro_model(
                 shape=c2_theory.shape, nan=has_nan, inf=has_inf,
                 mn=jnp.nanmin(c2_theory), mx=jnp.nanmax(c2_theory)
             )
-        check_c2_theory()
+        # DISABLED: Excessive output during initialization
+        # check_c2_theory()
 
         # PER-ANGLE SCALING: Apply different contrast/offset for each phi angle
         if per_angle_scaling:
@@ -1891,7 +1893,8 @@ def _create_numpyro_model(
                     shape=contrast.shape,
                     vals=contrast
                 )
-            log_phi_indices()
+            # DISABLED: Excessive output during initialization
+            # log_phi_indices()
 
             contrast_per_point = contrast[phi_indices]
             offset_per_point = offset[phi_indices]
@@ -1957,7 +1960,8 @@ def _create_numpyro_model(
                         mid=c2_theory[n_data_points//2:n_data_points//2+10],
                         uniq=jnp.array([jnp.min(c2_theory), jnp.max(c2_theory), jnp.mean(c2_theory)])
                     )
-            check_c2_extraction()
+            # DISABLED: Excessive output during initialization
+            # check_c2_extraction()
 
             # Apply per-angle scaling to flattened c2_theory
             c2_theory_for_likelihood = c2_theory_per_point
@@ -2013,7 +2017,8 @@ def _create_numpyro_model(
                 s_nan=jnp.any(jnp.isnan(sigma)), s_inf=jnp.any(jnp.isinf(sigma)),
                 s_min=jnp.nanmin(sigma), s_max=jnp.nanmax(sigma)
             )
-        check_likelihood_inputs()
+        # DISABLED: Excessive output during initialization
+        # check_likelihood_inputs()
 
         # ------------------------------------------------------------------
         # Likelihood guards + targeted diagnostics (behind HOMODYNE_DEBUG_INIT)
@@ -2096,7 +2101,8 @@ def _create_numpyro_model(
                 mean=jnp.nanmean(c2_fitted_safe),
             )
 
-        log_obs_site_stats()
+        # DISABLED: Excessive output during initialization
+        # log_obs_site_stats()
 
         # Likelihood with guarded inputs
         sample("obs", dist.Normal(c2_fitted_safe, sigma_safe), obs=data)

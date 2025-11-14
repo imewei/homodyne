@@ -403,7 +403,7 @@ class CMCBackend(ABC):
         # (contrast and offset are scaling parameters added separately in MCMC)
         if "static" in analysis_mode.lower():
             expected_param_count = 3  # D0, alpha, D_offset
-            expected_mode_name = "static_isotropic"
+            expected_mode_name = "static"
         elif "laminar" in analysis_mode.lower():
             expected_param_count = (
                 7  # D0, alpha, D_offset, gamma_dot_t0, beta, gamma_dot_t_offset, phi0
@@ -413,7 +413,7 @@ class CMCBackend(ABC):
             # Unknown mode, log warning but don't fail
             logger.warning(
                 f"Unknown analysis_mode '{analysis_mode}'. "
-                f"Expected 'static_isotropic' or 'laminar_flow'. "
+                f"Expected 'static' or 'laminar_flow'. "
                 f"Skipping validation."
             )
             return

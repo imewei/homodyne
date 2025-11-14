@@ -872,6 +872,49 @@ def _worker_function(args: tuple) -> Dict[str, Any]:
             f"Multiprocessing shard {shard_idx}: init_param_values (first 10): {sample_params}"
         )
 
+        # CRITICAL VALIDATION (Nov 14, 2025): Verify parameter ordering matches NumPyro model
+        # NumPyro's init_to_value() requires parameters in EXACT ORDER as model samples them:
+        #   1. contrast_0, contrast_1, ..., contrast_{n_phi-1}
+        #   2. offset_0, offset_1, ..., offset_{n_phi-1}
+        #   3. Physical parameters (D0, alpha, D_offset, ...) - EXCLUDING base contrast/offset
+        #
+        # If coordinator sends wrong order, NumPyro assigns wrong values (e.g., D0 → contrast_0)
+        # causing initialization failure: "Cannot find valid initial parameters"
+        from homodyne.config.parameter_names import get_parameter_names
+
+        param_names_base = get_parameter_names(analysis_mode)
+        n_phi_unique = len(phi_unique)
+
+        # CRITICAL: Exclude 'contrast' and 'offset' from base params (replaced by per-angle versions)
+        param_names_physical = [p for p in param_names_base if p not in ['contrast', 'offset']]
+
+        # Expected ordering for per-angle scaling
+        expected_order = (
+            [f"contrast_{i}" for i in range(n_phi_unique)]
+            + [f"offset_{i}" for i in range(n_phi_unique)]
+            + param_names_physical
+        )
+
+        actual_order = list(init_param_values.keys())
+
+        if actual_order != expected_order:
+            worker_logger.error(
+                f"Multiprocessing shard {shard_idx}: PARAMETER ORDERING MISMATCH!\n"
+                f"  Expected: {expected_order[:10]}...\n"
+                f"  Actual:   {actual_order[:10]}...\n"
+                f"  This will cause NumPyro initialization failure."
+            )
+            raise ValueError(
+                f"Parameter ordering mismatch in shard {shard_idx}. "
+                f"NumPyro expects per-angle params (contrast_*, offset_*) FIRST, "
+                f"then physical params. Got: {actual_order[:5]}... "
+                f"Expected: {expected_order[:5]}..."
+            )
+
+        worker_logger.info(
+            f"Multiprocessing shard {shard_idx}: ✓ Parameter ordering validated successfully"
+        )
+
         # Use parameters directly without validation/repair
         # Per user request: Do not limit parameter space or auto-correct for numerical instability
         init_param_values_original = dict(init_param_values)
@@ -931,7 +974,13 @@ def _worker_function(args: tuple) -> Dict[str, Any]:
         )
 
         try:
-            mcmc.run(rng_key)
+            # Enable NumPyro validation for better error messages when debugging
+            if diagnostics_enabled:
+                import numpyro
+                with numpyro.validation_enabled():
+                    mcmc.run(rng_key)
+            else:
+                mcmc.run(rng_key)
         except RuntimeError as exc:
             init_fail = "Cannot find valid initial parameters" in str(exc)
             if diagnostics_enabled and init_fail:
