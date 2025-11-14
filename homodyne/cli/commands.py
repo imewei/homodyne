@@ -1066,13 +1066,6 @@ def _run_optimization(args, config: ConfigManager, data: dict[str, Any]) -> Any:
     """Run the specified optimization method."""
     method = args.method
 
-    # Normalize method aliases: mcmc → auto
-    if method == "mcmc":
-        method = "auto"
-        logger.debug(
-            "Method 'mcmc' is an alias for 'auto' (automatic NUTS/CMC selection)"
-        )
-
     logger.info(f"Running {method.upper()} optimization...")
 
     start_time = time.perf_counter()
@@ -1087,7 +1080,7 @@ def _run_optimization(args, config: ConfigManager, data: dict[str, Any]) -> Any:
         if method == "nlsq":
             # Run NLSQ optimization (CPU-only in v2.3.0+)
             result = fit_nlsq_jax(filtered_data, config)
-        elif method == "auto":
+        elif method == "mcmc":
             # MCMC with automatic NUTS/CMC selection
             # Get CMC configuration from config file
             cmc_config = config.get_cmc_config()
@@ -1107,10 +1100,9 @@ def _run_optimization(args, config: ConfigManager, data: dict[str, Any]) -> Any:
 
             # Log CMC configuration being used
             logger.info(f"MCMC method: {method}")
-            if method == "auto":
-                logger.info(
-                    "Automatic method selection: CMC if (samples >= 15) OR (memory > 30%), else NUTS",
-                )
+            logger.info(
+                "Automatic NUTS/CMC selection: CMC if (samples >= 15) OR (memory > 30%), else NUTS"
+            )
 
             # Log key CMC parameters
             sharding = cmc_config.get("sharding", {})
@@ -1238,7 +1230,7 @@ def _run_optimization(args, config: ConfigManager, data: dict[str, Any]) -> Any:
                 n_samples=args.n_samples,
                 n_warmup=args.n_warmup,
                 n_chains=args.n_chains,
-                method=method,  # Pass method to fit_mcmc_jax for auto/nuts/cmc selection
+                method=method,  # Pass "mcmc" for automatic NUTS/CMC selection
                 cmc_config=cmc_config,  # Pass CMC configuration
                 initial_values=initial_values,  # ✅ FIXED: Load from config initial_parameters.values
                 parameter_space=parameter_space,  # ✅ Pass config-aware ParameterSpace
@@ -1254,7 +1246,7 @@ def _run_optimization(args, config: ConfigManager, data: dict[str, Any]) -> Any:
                 else:
                     logger.warning(
                         "CMC diagnostic plots requested but result is not a CMC result "
-                        "(use --method cmc or ensure dataset is large enough for auto-selection)"
+                        "(ensure dataset is large enough for CMC auto-selection: samples >= 15 OR memory > 30%)"
                     )
         else:
             raise ValueError(f"Unknown optimization method: {method}")
@@ -1381,7 +1373,7 @@ def _save_results(
         # Also save legacy format for backward compatibility if requested
         if args.output_format != "json":
             logger.info("Saving legacy results summary for backward compatibility")
-    elif args.method in ["auto", "nuts", "cmc", "mcmc"]:
+    elif args.method == "mcmc":
         # Use comprehensive MCMC/CMC saving (4 files: 3 JSON + 1 NPZ + plots)
         logger.info("Using comprehensive MCMC result saving")
         save_mcmc_results(result, data, config, args.output_dir)
@@ -1903,7 +1895,7 @@ def _plot_simulated_data(
     )
 
     # Determine analysis mode
-    analysis_mode = config.get("analysis_mode", "static_isotropic")
+    analysis_mode = config.get("analysis_mode", "static")
     logger.info(f"Analysis mode: {analysis_mode}")
 
     # Create model
@@ -1996,11 +1988,18 @@ def _plot_simulated_data(
     # This matches the data loader convention: n = end - start + 1
     n_time_points = end_frame - start_frame + 1
 
-    # Generate time array starting at t=0 (matches experimental data convention)
-    # The JAX backend handles t=0 singularity internally via epsilon protection
-    # in _calculate_shear_rate_impl_jax() when beta < 0
-    time_max = dt * (end_frame - start_frame)
-    t_vals = np.linspace(0, time_max, n_time_points)
+    # Generate time array starting at t=dt (EXCLUDE t=0 to match experimental data)
+    # The data loader removes t1=t2=0 from c2_exp to avoid singularities
+    # We must do the same for simulated data for consistency
+    #
+    # CRITICAL FIX (Nov 14, 2025): Three critical issues fixed:
+    # 1. Use arange instead of linspace to ensure EXACT dt spacing
+    #    Problem: linspace(0, time_max, n) creates spacing = time_max/(n-1) ≠ dt
+    # 2. Start at t=dt instead of t=0 to avoid alpha<0 singularity
+    #    Problem: D(t=0) = D₀*0^α = ∞ when α<0, causing NaN/Inf in C₂
+    # 3. Match experimental data loader convention (removes t=0 points)
+    t_vals = dt * np.arange(1, n_time_points + 1)  # Start at dt, not 0
+    time_max = t_vals[-1]  # Actual maximum time (dt * n_time_points)
     t1_grid, t2_grid = np.meshgrid(t_vals, t_vals, indexing="ij")
 
     logger.debug(
@@ -2064,9 +2063,22 @@ def _plot_simulated_data(
     logger.info(f"Generated simulated C₂ with shape: {c2_simulated.shape}")
 
     # Compute global color scale across all angles for consistent visualization
-    # CRITICAL: Use same vmin/vmax for all subplots to make them comparable
-    vmin = c2_simulated.min()
-    vmax = c2_simulated.max()
+    # ADAPTIVE COLOR SCALING (Nov 14, 2025):
+    # Independently check data min/max against [1.0, 1.6] boundaries
+    # vmin = max(1.0, data_min): use data_min if >= 1.0, else 1.0
+    # vmax = min(1.6, data_max): use data_max if <= 1.6, else 1.6
+    c2_min = float(c2_simulated.min())
+    c2_max = float(c2_simulated.max())
+
+    # Independent boundary checks (OR relation, not AND)
+    vmin = max(1.0, c2_min)  # Clamp lower bound to 1.0
+    vmax = min(1.6, c2_max)  # Clamp upper bound to 1.6
+
+    logger.debug(
+        f"Simulated C2 range [{c2_min:.4f}, {c2_max:.4f}] → "
+        f"color scale [{vmin:.4f}, {vmax:.4f}] (clamped to [1.0, 1.6])"
+    )
+
     logger.debug(f"Global color scale: vmin={vmin:.6f}, vmax={vmax:.6f}")
 
     # Save individual C₂ heatmap for EACH phi angle
@@ -2080,15 +2092,20 @@ def _plot_simulated_data(
         fig, ax = plt.subplots(figsize=(8, 7))
 
         # Create C2 heatmap
-        # Note: No vmin/vmax for individual plots - auto-scale each plot
-        # for optimal visualization (like experimental plots)
         # Transpose to show diagonal from bottom-left to top-right
+        #
+        # CRITICAL FIXES (Nov 14, 2025):
+        # 1. Add explicit interpolation='bilinear' (smooth rendering, no blocky artifacts)
+        # 2. Apply adaptive vmin/vmax (better contrast when data fits [1.0, 1.6])
         im = ax.imshow(
             c2_simulated[idx].T,
             extent=[t_vals[0], t_vals[-1], t_vals[0], t_vals[-1]],
             aspect="equal",
             cmap="jet",
             origin="lower",
+            interpolation="bilinear",  # Smooth interpolation for continuous C₂
+            vmin=vmin,  # Adaptive color scaling
+            vmax=vmax,  # Adaptive color scaling
         )
         ax.set_xlabel("t₁ (s)", fontsize=11)
         ax.set_ylabel("t₂ (s)", fontsize=11)
@@ -2640,7 +2657,7 @@ def _prepare_parameter_data(result: Any, analysis_mode: str) -> dict[str, Any]:
     {'value': 0.000123, 'uncertainty': 0.000012}
     """
     # Get parameter names for analysis mode
-    if analysis_mode == "static_isotropic":
+    if analysis_mode == "static":
         param_names = SCALING_PARAM_NAMES + STATIC_PARAM_NAMES
         n_physical = len(STATIC_PARAM_NAMES)
     elif analysis_mode == "laminar_flow":
@@ -2650,7 +2667,7 @@ def _prepare_parameter_data(result: Any, analysis_mode: str) -> dict[str, Any]:
         raise ValueError(f"Unknown analysis_mode: {analysis_mode}")
 
     # Detect if per-angle scaling was used
-    n_params_expected = len(param_names)  # 9 for laminar_flow, 5 for static_isotropic
+    n_params_expected = len(param_names)  # 9 for laminar_flow, 5 for static
     n_params_actual = len(result.parameters)
 
     if n_params_actual > n_params_expected:
@@ -2706,7 +2723,7 @@ def _prepare_parameter_data(result: Any, analysis_mode: str) -> dict[str, Any]:
 
         # Add physical parameters
         physical_param_names = (
-            STATIC_PARAM_NAMES if analysis_mode == "static_isotropic" else LAMINAR_FLOW_PARAM_NAMES
+            STATIC_PARAM_NAMES if analysis_mode == "static" else LAMINAR_FLOW_PARAM_NAMES
         )
         for i, name in enumerate(physical_param_names):
             param_dict[name] = {
@@ -2756,6 +2773,7 @@ def _compute_nlsq_fits(
     data: dict[str, Any],
     metadata: dict[str, Any],
     *,
+    analysis_mode: str = "static",
     include_solver_surface: bool = True,
 ) -> dict[str, Any]:
     """Compute theoretical fits with per-angle least squares scaling.
@@ -2802,7 +2820,16 @@ def _compute_nlsq_fits(
     # Extract fitted parameters - prefer per-angle scaling but tolerate scalar fallback
     n_params = len(result.parameters)
     n_angles = len(phi_angles)
-    n_physical = 7  # laminar_flow physical parameters
+
+    # Determine number of physical parameters based on analysis mode
+    # CRITICAL FIX (Nov 14, 2025): Was hard-coded to 7 (laminar_flow), causing static mode to fail
+    if analysis_mode == "static":
+        n_physical = 3  # D0, alpha, D_offset
+    elif analysis_mode == "laminar_flow":
+        n_physical = 7  # D0, alpha, D_offset, gamma_dot_t0, beta, gamma_dot_t_offset, phi0
+    else:
+        raise ValueError(f"Unknown analysis_mode: '{analysis_mode}'. Expected 'static' or 'laminar_flow'")
+
     expected_params_per_angle = 2 * n_angles + n_physical
 
     scalar_per_angle_expansion = False
@@ -3217,6 +3244,7 @@ def save_nlsq_results(
         result,
         filtered_data,
         metadata,
+        analysis_mode=analysis_mode,  # Pass analysis_mode to fix parameter count detection
         include_solver_surface=True,
     )
     scalar_expanded = fits_dict.pop("scalar_per_angle_expansion", False)
@@ -3499,18 +3527,34 @@ def generate_nlsq_plots(
     percentile_min = color_scale_cfg.get("percentile_min", 1.0)
     percentile_max = color_scale_cfg.get("percentile_max", 99.0)
 
+    # ADAPTIVE COLOR SCALING (Nov 14, 2025):
+    # Independently check data min/max against [1.0, 1.6] boundaries
+    # vmin = max(1.0, data_min): use data_min if >= 1.0, else 1.0
+    # vmax = min(1.6, data_max): use data_max if <= 1.6, else 1.6
+    c2_min = min(np.min(c2_exp), np.min(c2_fit_display))
+    c2_max = max(np.max(c2_exp), np.max(c2_fit_display))
+
+    # Independent boundary checks (OR relation, not AND)
+    vmin_adaptive = float(max(1.0, c2_min))  # Clamp lower bound to 1.0
+    vmax_adaptive = float(min(1.6, c2_max))  # Clamp upper bound to 1.6
+
+    logger.debug(
+        f"C2 data range [{c2_min:.4f}, {c2_max:.4f}] → "
+        f"color scale [{vmin_adaptive:.4f}, {vmax_adaptive:.4f}] (clamped to [1.0, 1.6])"
+    )
+
     if pin_legacy_range:
         color_options = {
-            "vmin": 1.0,
-            "vmax": 1.5,
+            "vmin": vmin_adaptive,
+            "vmax": vmax_adaptive,
             "adaptive": False,
             "percentile_min": percentile_min,
             "percentile_max": percentile_max,
         }
     else:
         color_options = {
-            "vmin": color_scale_cfg.get("fixed_min"),
-            "vmax": color_scale_cfg.get("fixed_max"),
+            "vmin": color_scale_cfg.get("fixed_min", vmin_adaptive),
+            "vmax": color_scale_cfg.get("fixed_max", vmax_adaptive),
             "adaptive": color_mode == "adaptive",
             "percentile_min": percentile_min,
             "percentile_max": percentile_max,
@@ -4264,7 +4308,7 @@ def _get_parameter_names(analysis_mode: str) -> list[str]:
     ValueError
         If analysis mode is unknown
     """
-    if analysis_mode == "static_isotropic":
+    if analysis_mode == "static":
         return ["D0", "alpha", "D_offset"]
     elif analysis_mode == "laminar_flow":
         return [

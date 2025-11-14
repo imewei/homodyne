@@ -661,12 +661,31 @@ class XPCSDataLoader:
                 self._validate_cache_q_vector(metadata)
                 logger.debug(f"Cache metadata validation passed: {metadata}")
 
+            # Extract correlation data to determine matrix size
+            c2_exp = data["c2_exp"]
+            matrix_size = c2_exp.shape[-1]
+
+            # ALWAYS regenerate t1/t2 meshgrids from matrix size
+            # This makes cache loading robust to format changes (1D vs 2D arrays)
+            t1, t2 = self._calculate_time_arrays(matrix_size)
+
+            # Log warning if cached version had incorrect shape
+            cached_t1 = data["t1"]
+            expected_shape = (matrix_size, matrix_size)
+            if cached_t1.shape != expected_shape:
+                logger.warning(
+                    f"Regenerated t1/t2 meshgrids from matrix size {matrix_size}: "
+                    f"cached shape {cached_t1.shape} → correct shape {expected_shape}"
+                )
+            else:
+                logger.debug(f"Verified t1/t2 meshgrid shapes: {expected_shape}")
+
             return {
                 "wavevector_q_list": data["wavevector_q_list"],
                 "phi_angles_list": data["phi_angles_list"],
-                "t1": data["t1"],
-                "t2": data["t2"],
-                "c2_exp": data["c2_exp"],
+                "t1": t1,  # Fresh 2D meshgrid (matrix_size, matrix_size)
+                "t2": t2,  # Fresh 2D meshgrid (matrix_size, matrix_size)
+                "c2_exp": c2_exp,
             }
 
     @log_performance(threshold=1.0)

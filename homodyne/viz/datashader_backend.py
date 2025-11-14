@@ -1,10 +1,10 @@
-"""Datashader backend for fast C2 heatmap visualization.
+"""Datashader backend for fast C2 heatmap visualization (CPU-only in v2.3.0+).
 
-This module provides high-performance heatmap rendering using Datashader,
+This module provides high-performance CPU-optimized heatmap rendering using Datashader,
 offering 5-10x speedup over matplotlib for C2 correlation data visualization.
 
 Key features:
-- GPU acceleration support (automatic if CuPy available)
+- CPU-optimized rendering for HPC environments
 - Fast PNG generation for large datasets
 - Backward compatible with matplotlib output format
 - Parallel processing support for multi-angle plots
@@ -23,16 +23,16 @@ logger = logging.getLogger(__name__)
 
 
 class DatashaderRenderer:
-    """Fast heatmap rendering using Datashader with GPU acceleration support.
+    """Fast heatmap rendering using Datashader (CPU-only in v2.3.0+).
 
-    This renderer uses Datashader's optimized rasterization pipeline to convert
+    This renderer uses Datashader's optimized CPU rasterization pipeline to convert
     2D gridded data (C2 correlation matrices) into RGB images much faster than
     matplotlib's imshow() + savefig() workflow.
 
     Performance:
         - Typical speedup: 5-10x over matplotlib
-        - GPU acceleration: Additional 2-3x if CuPy available
         - Recommended for grids >100x100 or multiple plots
+        - CPU-optimized for HPC environments
 
     Examples
     --------
@@ -45,9 +45,8 @@ class DatashaderRenderer:
         self,
         width: int = 800,
         height: int = 800,
-        use_gpu: bool = True,
     ):
-        """Initialize Datashader renderer.
+        """Initialize Datashader renderer (CPU-only in v2.3.0+).
 
         Parameters
         ----------
@@ -55,23 +54,9 @@ class DatashaderRenderer:
             Output image width in pixels
         height : int, default=800
             Output image height in pixels
-        use_gpu : bool, default=True
-            Use GPU acceleration if CuPy is available.
-            Automatically falls back to CPU if unavailable.
         """
         self.width = width
         self.height = height
-        self.use_gpu = use_gpu
-
-        # Check for GPU availability
-        if use_gpu:
-            try:
-                import cupy  # noqa: F401
-
-                logger.info("Datashader: GPU acceleration enabled (CuPy detected)")
-            except ImportError:
-                logger.debug("Datashader: GPU not available, using CPU")
-                self.use_gpu = False
 
     def rasterize_heatmap(
         self,
@@ -160,7 +145,7 @@ class DatashaderRenderer:
             y_range=(float(y_coords.min()), float(y_coords.max())),
         )
 
-        # Rasterize (GPU-accelerated if available)
+        # Rasterize (CPU-optimized for HPC)
         # For gridded data, canvas.raster() resamples to canvas resolution
         agg = canvas.raster(xr_data)
 
@@ -235,20 +220,20 @@ def plot_c2_heatmap_fast(
     percentile_min: float = 1.0,
     percentile_max: float = 99.0,
 ) -> None:
-    """Plot C2 heatmap using Datashader for fast rendering.
+    """Plot C2 heatmap using Datashader for fast CPU rendering.
 
     This function uses Datashader for rasterization (5-10x faster than matplotlib)
     and matplotlib for annotations (colorbars, titles, labels).
 
     Workflow:
-    1. Rasterize C2 data to RGB image with Datashader (fast, GPU if available)
+    1. Rasterize C2 data to RGB image with Datashader (fast CPU rendering)
     2. Display RGB image in matplotlib figure (minimal overhead)
     3. Add colorbar using original data values (not RGB)
     4. Add title, labels, save PNG
 
     Performance:
         - Matplotlib only: ~150ms per plot
-        - Datashader hybrid: ~30ms per plot (5x speedup)
+        - Datashader CPU hybrid: ~30ms per plot (5x speedup)
 
     Parameters
     ----------
@@ -365,14 +350,14 @@ def plot_c2_comparison_fast(
     percentile_min: float = 1.0,
     percentile_max: float = 99.0,
 ) -> None:
-    """Generate 3-panel comparison plot using Datashader.
+    """Generate 3-panel comparison plot using Datashader CPU rendering.
 
     Replaces generate_nlsq_plots() with faster Datashader rendering.
     Creates side-by-side comparison: Experimental | Fitted | Residuals
 
     Performance:
         - Matplotlib only: ~300ms per 3-panel plot
-        - Datashader hybrid: ~60ms per 3-panel plot (5x speedup)
+        - Datashader CPU hybrid: ~60ms per 3-panel plot (5x speedup)
 
     Parameters
     ----------
