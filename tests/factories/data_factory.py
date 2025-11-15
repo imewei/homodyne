@@ -630,7 +630,7 @@ class ConfigFactory:
                 "method": optimization_method,
                 "lsq": {"max_iterations": 100, "tolerance": 1e-6},
             },
-            "hardware": {"force_cpu": True, "gpu_memory_fraction": 0.8},
+            "hardware": {"force_cpu": True},
             "output": {"save_plots": False, "verbose": False},
         }
 
@@ -656,25 +656,6 @@ class ConfigFactory:
                 "verbose": False,
                 "save_intermediate": False,
             },
-        }
-
-    @staticmethod
-    def create_gpu_config(
-        memory_fraction: float = 0.8, force_gpu: bool = False
-    ) -> dict[str, Any]:
-        """Create configuration for GPU testing."""
-        return {
-            "analysis_mode": "static_isotropic",
-            "optimization": {
-                "method": "nlsq",
-                "lsq": {"max_iterations": 100, "tolerance": 1e-6},
-            },
-            "hardware": {
-                "force_cpu": False,
-                "force_gpu": force_gpu,
-                "gpu_memory_fraction": memory_fraction,
-            },
-            "output": {"save_plots": False, "verbose": True},
         }
 
     @staticmethod

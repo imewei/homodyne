@@ -405,8 +405,8 @@ class TestDiagonalCorrectionJAX:
             # Diagonal should have changed
             assert not jnp.allclose(original_diag, corrected_diag)
 
-    def test_device_consistency_cpu_gpu(self, simple_matrix):
-        """Test consistency across CPU/GPU devices"""
+    def test_device_consistency(self, simple_matrix):
+        """Test consistency across CPU devices"""
         results = {}
 
         for device in jax.devices():

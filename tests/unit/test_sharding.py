@@ -32,22 +32,6 @@ from homodyne.optimization.cmc.sharding import (
 
 
 @pytest.fixture
-def mock_hardware_gpu():
-    """Mock GPU hardware configuration."""
-    return HardwareConfig(
-        platform="gpu",
-        num_devices=4,
-        memory_per_device_gb=16.0,
-        num_nodes=1,
-        cores_per_node=32,
-        total_memory_gb=64.0,
-        cluster_type="standalone",
-        recommended_backend="pjit",
-        max_parallel_shards=4,
-    )
-
-
-@pytest.fixture
 def mock_hardware_cpu():
     """Mock CPU hardware configuration."""
     return HardwareConfig(
@@ -206,40 +190,6 @@ def synthetic_data_discrete_phi_angles():
 # ============================================================================
 
 
-@pytest.mark.skip(reason="GPU support removed in v2.3.0 (CPU-only architecture)")
-def test_optimal_num_shards_gpu_small_dataset(mock_hardware_gpu):
-    """Test optimal shard calculation for GPU with small dataset."""
-    dataset_size = 500_000  # 500k points
-    num_shards = calculate_optimal_num_shards(dataset_size, mock_hardware_gpu)
-
-    # For GPU: target 1M points/shard, but dataset is only 500k
-    # Should return 1 shard
-    assert num_shards == 1
-
-
-@pytest.mark.skip(reason="GPU support removed in v2.3.0 (CPU-only architecture)")
-def test_optimal_num_shards_gpu_medium_dataset(mock_hardware_gpu):
-    """Test optimal shard calculation for GPU with medium dataset."""
-    dataset_size = 5_000_000  # 5M points
-    num_shards = calculate_optimal_num_shards(dataset_size, mock_hardware_gpu)
-
-    # For GPU: target 1M points/shard
-    # 5M / 1M = 5 shards
-    assert num_shards == 5
-
-
-@pytest.mark.skip(reason="GPU support removed in v2.3.0 (CPU-only architecture)")
-def test_optimal_num_shards_gpu_large_dataset(mock_hardware_gpu):
-    """Test optimal shard calculation for GPU with large dataset."""
-    dataset_size = 50_000_000  # 50M points
-    num_shards = calculate_optimal_num_shards(dataset_size, mock_hardware_gpu)
-
-    # For GPU: target 1M points/shard
-    # 50M / 1M = 50 shards (exceeds max_parallel_shards=4)
-    # Should log warning but still return 50
-    assert num_shards == 50
-
-
 def test_optimal_num_shards_cpu_medium_dataset(mock_hardware_cpu):
     """Test optimal shard calculation for CPU with medium dataset."""
     dataset_size = 10_000_000  # 10M points
@@ -250,11 +200,11 @@ def test_optimal_num_shards_cpu_medium_dataset(mock_hardware_cpu):
     assert num_shards == 5
 
 
-def test_optimal_num_shards_respects_min_shard_size(mock_hardware_gpu):
+def test_optimal_num_shards_respects_min_shard_size(mock_hardware_cpu):
     """Test that min_shard_size is respected."""
     dataset_size = 100_000  # 100k points
     num_shards = calculate_optimal_num_shards(
-        dataset_size, mock_hardware_gpu, min_shard_size=50_000
+        dataset_size, mock_hardware_cpu, min_shard_size=50_000
     )
 
     # With 100k points and min_shard_size=50k, max 2 shards

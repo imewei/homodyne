@@ -6,7 +6,6 @@ Comprehensive test runner with different test profiles:
 - Quick tests for development
 - Full test suite for CI/CD
 - Performance benchmarks
-- GPU validation tests
 - Statistical validation tests
 """
 
@@ -81,19 +80,6 @@ class HomodyneTestRunner:
         ]
         return subprocess.call(cmd)
 
-    def run_gpu_tests(self) -> int:
-        """Run GPU acceleration tests."""
-        cmd = [
-            "python",
-            "-m",
-            "pytest",
-            str(self.test_dir / "gpu"),
-            "-m",
-            "gpu",
-            "--tb=short",
-        ]
-        return subprocess.call(cmd)
-
     def run_mcmc_tests(self) -> int:
         """Run MCMC statistical tests."""
         cmd = [
@@ -158,8 +144,6 @@ class HomodyneTestRunner:
             "-m",
             "pytest",
             str(self.test_dir),
-            "-m",
-            "not (gpu and requires_gpu)",  # Skip GPU tests in CI
             "--cov=homodyne",
             "--cov-report=xml:coverage.xml",
             "--cov-report=term",
@@ -227,17 +211,6 @@ class HomodyneTestRunner:
             env_info["jax_backend"] = "not_available"
             env_info["jax_devices"] = []
 
-        # Check GPU availability
-        try:
-            import jax
-
-            gpu_devices = jax.devices("gpu")
-            env_info["gpu_available"] = len(gpu_devices) > 0
-            env_info["gpu_devices"] = [str(d) for d in gpu_devices]
-        except:
-            env_info["gpu_available"] = False
-            env_info["gpu_devices"] = []
-
         return env_info
 
     def print_environment_info(self) -> None:
@@ -251,15 +224,11 @@ class HomodyneTestRunner:
         print(f"Python Version: {env_info['python_version']}")
         print(f"Test Directory: {env_info['test_directory']}")
         print(f"JAX Backend: {env_info.get('jax_backend', 'unknown')}")
-        print(f"GPU Available: {env_info.get('gpu_available', False)}")
 
         print("\nDependencies:")
         for dep, version in env_info["dependencies"].items():
             status = "✓" if version != "not_installed" else "✗"
             print(f"  {status} {dep}: {version}")
-
-        if env_info.get("gpu_devices"):
-            print(f"\nGPU Devices: {env_info['gpu_devices']}")
 
         print("=" * 60)
 
@@ -275,7 +244,6 @@ def main():
             "unit",
             "integration",
             "performance",
-            "gpu",
             "mcmc",
             "property",
             "api",
@@ -308,7 +276,6 @@ def main():
         "unit": runner.run_unit_tests,
         "integration": runner.run_integration_tests,
         "performance": runner.run_performance_tests,
-        "gpu": runner.run_gpu_tests,
         "mcmc": runner.run_mcmc_tests,
         "property": runner.run_property_tests,
         "api": runner.run_api_tests,

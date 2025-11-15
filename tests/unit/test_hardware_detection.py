@@ -3,8 +3,7 @@
 
 Test Coverage:
 - HardwareConfig dataclass creation
-- JAX device detection (GPU/CPU)
-- GPU memory detection with fallback
+- JAX device detection (CPU)
 - Cluster environment detection (PBS/Slurm)
 - CPU core counting
 - Backend recommendation logic
@@ -289,57 +288,6 @@ class TestShouldUseCMC:
         result = should_use_cmc(5_000_000, config)
         assert result is True
 
-    def test_hardware_threshold_16gb_gpu(self):
-        """Test hardware-specific threshold for 16GB GPU with dual-criteria logic."""
-        config = HardwareConfig(
-            platform="gpu",
-            num_devices=1,
-            memory_per_device_gb=16.0,
-            num_nodes=1,
-            cores_per_node=8,
-            total_memory_gb=32.0,
-            cluster_type="standalone",
-            recommended_backend="pjit",
-            max_parallel_shards=1,
-        )
-
-        # With min_samples_for_cmc=15, parallelism criterion dominates
-        # Any num_samples >= 15 will trigger CMC regardless of memory
-        result = should_use_cmc(1_000_000, config)
-        assert result is True  # Parallelism criterion: 1M >= 15
-
-        result = should_use_cmc(900_000, config)
-        assert result is True  # Parallelism criterion: 900k >= 15
-
-        # Only very small sample counts test memory criterion independently
-        result = should_use_cmc(10, config)
-        assert result is False  # Parallelism: 10 < 15, Memory: OK
-
-    def test_hardware_threshold_80gb_gpu(self):
-        """Test hardware-specific threshold for 80GB GPU with dual-criteria logic."""
-        config = HardwareConfig(
-            platform="gpu",
-            num_devices=1,
-            memory_per_device_gb=80.0,
-            num_nodes=1,
-            cores_per_node=36,
-            total_memory_gb=256.0,
-            cluster_type="standalone",
-            recommended_backend="pjit",
-            max_parallel_shards=1,
-        )
-
-        # With min_samples_for_cmc=15, parallelism criterion dominates
-        result = should_use_cmc(10_000_000, config)
-        assert result is True  # Parallelism criterion: 10M >= 15
-
-        result = should_use_cmc(5_000_000, config)
-        assert result is True  # Parallelism criterion: 5M >= 15
-
-        # Test memory criterion with small sample count
-        result = should_use_cmc(10, config)
-        assert result is False  # Parallelism: 10 < 15, Memory: OK on 80GB
-
     def test_hardware_threshold_cpu(self):
         """Test hardware-specific threshold for CPU system with dual-criteria logic."""
         config = HardwareConfig(
@@ -445,40 +393,6 @@ class TestBackendRecommendation:
 
         assert config.recommended_backend == "slurm"
         assert config.max_parallel_shards == 1024
-
-    def test_multigpu_pjit_recommendation(self):
-        """Test pjit backend recommendation for multi-GPU system."""
-        config = HardwareConfig(
-            platform="gpu",
-            num_devices=8,
-            memory_per_device_gb=80.0,
-            num_nodes=1,
-            cores_per_node=128,
-            total_memory_gb=512.0,
-            cluster_type="standalone",
-            recommended_backend="pjit",
-            max_parallel_shards=8,
-        )
-
-        assert config.recommended_backend == "pjit"
-        assert config.max_parallel_shards == 8
-
-    def test_single_gpu_pjit_recommendation(self):
-        """Test pjit backend recommendation for single GPU (sequential)."""
-        config = HardwareConfig(
-            platform="gpu",
-            num_devices=1,
-            memory_per_device_gb=24.0,
-            num_nodes=1,
-            cores_per_node=16,
-            total_memory_gb=64.0,
-            cluster_type="standalone",
-            recommended_backend="pjit",
-            max_parallel_shards=1,
-        )
-
-        assert config.recommended_backend == "pjit"
-        assert config.max_parallel_shards == 1
 
     def test_cpu_multiprocessing_recommendation(self):
         """Test multiprocessing backend recommendation for CPU-only."""
