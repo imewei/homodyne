@@ -457,6 +457,45 @@ hm-nlsq --<TAB>                # Shows all available options
 - Full anisotropic analysis with shear flow
 - Comprehensive characterization of complex systems
 
+## Parameter Constraints
+
+### Physical Parameters
+
+Default bounds for NLSQ optimization and MCMC priors (updated Nov 15, 2025):
+
+| Parameter | Min | Max | Units | Physical Meaning | Notes |
+|-----------|-----|-----|-------|------------------|-------|
+| **D0** | 1×10² | 1×10⁵ | Å²/s | Diffusion coefficient prefactor | Typical colloidal range |
+| **alpha** | -2.0 | 2.0 | - | Diffusion time exponent | Anomalous diffusion |
+| **D_offset** | -1×10⁵ | 1×10⁵ | Å²/s | Diffusion baseline correction | **Negative for jammed systems** |
+| **gamma_dot_t0** | 1×10⁻⁶ | 0.5 | s⁻¹ | Initial shear rate | Laminar flow only |
+| **beta** | -2.0 | 2.0 | - | Shear rate time exponent | Laminar flow only |
+| **gamma_dot_t_offset** | -0.1 | 0.1 | s⁻¹ | Shear rate baseline correction | Laminar flow only |
+| **phi0** | -10 | 10 | degrees | Initial flow angle | **Uses degrees, not radians** |
+
+### Scaling Parameters
+
+| Parameter | Min | Max | Physical Meaning | Notes |
+|-----------|-----|-----|------------------|-------|
+| **contrast** | 0.0 | 1.0 | Visibility parameter | Homodyne detection efficiency |
+| **offset** | 0.5 | 1.5 | Baseline level | ±50% from theoretical g2=1.0 |
+
+### Correlation Function Constraints
+
+Physics-enforced constraints applied during optimization:
+
+| Function | Min | Max | Notes |
+|----------|-----|-----|-------|
+| **g1 (c1)** | 0.0 | 1.0 | Normalized correlation function<br>Log-space clipping: `log(g1) ∈ [-700, 0]` |
+| **g2 (c2)** | 0.5 | 2.5 | Experimental range with headroom<br>Theoretical: g2 = 1 + contrast × g1² |
+
+**Important Notes:**
+- **D_offset** can be negative for arrested/jammed systems (caging, jamming transitions)
+- **phi0** uses degrees throughout the codebase (templates, physics modules)
+- **gamma_dot_t_offset** allows negative values (baseline correction)
+- All bounds align with template files: `homodyne_static.yaml`, `homodyne_laminar_flow.yaml`
+- User configs override these default bounds (no breaking changes)
+
 ## Configuration
 
 The package uses YAML-based configuration with preserved template compatibility:
