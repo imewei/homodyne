@@ -249,6 +249,7 @@ homodyne.core.physics_factors
    :undoc-members:
    :show-inheritance:
    :exclude-members: __weakref__
+   :no-index:
 
 Physics factor calculations for advanced analysis.
 

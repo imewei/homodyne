@@ -356,6 +356,7 @@ def should_use_cmc(
     Decision Logic (OR condition)
     ------------------------------
     Use CMC if:
+
     1. num_samples >= min_samples_for_cmc (parallelism mode), OR
     2. estimated_memory_gb > threshold × available_memory (memory mode), OR
     3. dataset_size > large_dataset_threshold

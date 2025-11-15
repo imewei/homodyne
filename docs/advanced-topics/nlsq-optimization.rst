@@ -889,4 +889,4 @@ References
 
 **XPCS Theory:**
 
-- He et al. (2024). "Transport coefficient approach for characterizing nonequilibrium dynamics in soft matter", *PNAS* **121**(31), e2401162121. DOI: `10.1073/pnas.2401162121 <https://doi.org/10.1073/pnas.2401162121>`_
+- He et al. (2024). "Transport coefficient approach for characterizing nonequilibrium dynamics in soft matter", *PNAS* **121**\ (31), e2401162121. DOI: `10.1073/pnas.2401162121 <https://doi.org/10.1073/pnas.2401162121>`_

@@ -1,5 +1,5 @@
 """Advanced Data Preprocessing Pipeline for Homodyne v2
-==================================================
+======================================================
 
 Intelligent data transformation system that builds on config-based filtering to provide
 sophisticated preprocessing capabilities for XPCS correlation data.

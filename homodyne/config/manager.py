@@ -1,5 +1,5 @@
 """Minimal Configuration Management for Homodyne v2
-===============================================
+===================================================
 
 Simplified configuration system with preserved API compatibility.
 Provides essential YAML/JSON loading with the same interface as the original

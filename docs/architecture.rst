@@ -1,5 +1,5 @@
 Architecture Documentation
-=========================
+==========================
 
 This section contains detailed architectural documentation for advanced features of the Homodyne XPCS analysis package.
 

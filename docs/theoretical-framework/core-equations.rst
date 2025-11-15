@@ -4,7 +4,7 @@ Core Equations
 Introduction
 ------------
 
-Homodyne v2 implements the theoretical framework from He et al., *PNAS* **121**(31), e2401162121 (2024) for characterizing transport properties in flowing soft matter systems using X-ray Photon Correlation Spectroscopy (XPCS). The framework enables direct extraction of time-dependent transport coefficients from two-time correlation functions without requiring temporal averaging or assumptions of pseudo-equilibrium.
+Homodyne v2 implements the theoretical framework from He et al., *PNAS* **121**\ (31), e2401162121 (2024) for characterizing transport properties in flowing soft matter systems using X-ray Photon Correlation Spectroscopy (XPCS). The framework enables direct extraction of time-dependent transport coefficients from two-time correlation functions without requiring temporal averaging or assumptions of pseudo-equilibrium.
 
 **Key Innovation:** By formulating Langevin dynamics with Markovian (memoryless) non-equilibrium processes, the theory derives analytical expressions for the second-order intensity autocorrelation function :math:`c_2(\vec{q}, t_1, t_2)` that capture both intrinsic random motion (diffusion) and externally driven motion (flow/shear).
 
@@ -17,7 +17,7 @@ The two-time correlation function :math:`c_2(\vec{q}, t_1, t_2)` measures tempor
    **Reference:**
    He, H., Liang, H., Chu, M., Jiang, Z., de Pablo, J. J., Tirrell, M. V., Narayanan, S., & Chen, W. (2024).
    "Transport coefficient approach for characterizing nonequilibrium dynamics in soft matter."
-   *Proceedings of the National Academy of Sciences*, **121**(31), e2401162121.
+   *Proceedings of the National Academy of Sciences*, **121**\ (31), e2401162121.
    DOI: `10.1073/pnas.2401162121 <https://doi.org/10.1073/pnas.2401162121>`_
 
 

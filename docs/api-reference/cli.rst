@@ -39,6 +39,7 @@ homodyne.cli.main
    :undoc-members:
    :show-inheritance:
    :exclude-members: __weakref__
+   :no-index:
 
 Main CLI entry point.
 

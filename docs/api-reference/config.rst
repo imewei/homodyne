@@ -40,6 +40,7 @@ homodyne.config.manager
    :undoc-members:
    :show-inheritance:
    :exclude-members: __weakref__
+   :no-index:
 
 Main configuration loading and management.
 
@@ -127,6 +128,7 @@ homodyne.config.parameter_manager
    :undoc-members:
    :show-inheritance:
    :exclude-members: __weakref__
+   :no-index:
 
 Centralized parameter bounds, validation, and management.
 
@@ -184,6 +186,7 @@ homodyne.config.parameter_space
    :undoc-members:
    :show-inheritance:
    :exclude-members: __weakref__
+   :no-index:
 
 .. versionadded:: 2.1.0
    ParameterSpace class for config-driven parameter bounds and prior distributions in MCMC.
@@ -279,6 +282,7 @@ homodyne.config.types
    :undoc-members:
    :show-inheritance:
    :exclude-members: __weakref__
+   :no-index:
 
 TypedDict definitions for configuration structures.
 

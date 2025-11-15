@@ -321,14 +321,15 @@ def create_physics_factors_from_config_dict(config: dict) -> PhysicsFactors:
     Parameters
     ----------
     config : dict
-        Homodyne configuration dictionary with structure:
-        {
-            'analyzer_parameters': {
-                'temporal': {'dt': float},
-                'scattering': {'wavevector_q': float},
-                'geometry': {'stator_rotor_gap': float}
+        Homodyne configuration dictionary with structure::
+
+            {
+                'analyzer_parameters': {
+                    'temporal': {'dt': float},
+                    'scattering': {'wavevector_q': float},
+                    'geometry': {'stator_rotor_gap': float}
+                }
             }
-        }
 
     Returns
     -------

@@ -62,7 +62,9 @@ autodoc_typehints_description_target = "documented"
 autodoc_preserve_defaults = True
 
 # Mock imports for dependencies that might not be available during build
-autodoc_mock_imports = []
+autodoc_mock_imports = [
+    "homodyne.device.gpu",  # GPU module removed in v2.3.0
+]
 
 # -- Options for autosummary extension ---------------------------------------
 autosummary_generate = True

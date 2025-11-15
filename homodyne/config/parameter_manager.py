@@ -534,6 +534,7 @@ class ParameterManager:
         -------
         int
             Number of physical parameters used in the analysis:
+
             - Static mode: 3 (D0, alpha, D_offset)
             - Laminar flow mode: 7 (D0, alpha, D_offset, gamma_dot_t0, beta,
               gamma_dot_t_offset, phi0)

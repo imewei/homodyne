@@ -104,15 +104,16 @@ class HomodyneModel:
         Parameters
         ----------
         config : dict
-            Homodyne configuration dictionary with structure:
-            {
-                'analyzer_parameters': {
-                    'temporal': {'dt': float, 'start_frame': int, 'end_frame': int},
-                    'scattering': {'wavevector_q': float},
-                    'geometry': {'stator_rotor_gap': float}
-                },
-                'analysis_settings': {...}  # Optional
-            }
+            Homodyne configuration dictionary with structure::
+
+                {
+                    'analyzer_parameters': {
+                        'temporal': {'dt': float, 'start_frame': int, 'end_frame': int},
+                        'scattering': {'wavevector_q': float},
+                        'geometry': {'stator_rotor_gap': float}
+                    },
+                    'analysis_settings': {...}  # Optional
+                }
 
         Raises
         ------

@@ -1,5 +1,5 @@
 """Data Loading and Management for Homodyne v2
-==========================================
+=============================================
 
 Comprehensive data loading infrastructure supporting XPCS experimental data
 from multiple synchrotron sources with YAML-first configuration, intelligent

@@ -236,9 +236,10 @@ class SequentialConfig(TypedDict, total=False):
     weighting : str
         Method for combining per-angle results (default: "inverse_variance")
         Options:
-          - "inverse_variance": Optimal statistical weighting (w_i = 1/σ²_i)
-          - "uniform": Equal weights for all angles
-          - "n_points": Weight by number of data points per angle
+
+        - "inverse_variance": Optimal statistical weighting (w_i = 1/σ²_i)
+        - "uniform": Equal weights for all angles
+        - "n_points": Weight by number of data points per angle
 
     Examples
     --------

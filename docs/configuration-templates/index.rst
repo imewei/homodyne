@@ -1,5 +1,5 @@
 Configuration Templates
-======================
+=======================
 
 Homodyne provides three comprehensive configuration templates organized by physical model, not analysis method. Each template includes **all optimization methods** (NLSQ, MCMC, streaming, CMC) and is ready for production use.
 

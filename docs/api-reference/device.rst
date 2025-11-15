@@ -87,6 +87,7 @@ homodyne.device.gpu
    :undoc-members:
    :show-inheritance:
    :exclude-members: __weakref__
+   :no-index:
 
 GPU/CUDA configuration and management.
 
@@ -144,6 +145,7 @@ homodyne.device.cpu
    :undoc-members:
    :show-inheritance:
    :exclude-members: __weakref__
+   :no-index:
 
 CPU threading configuration for HPC environments.
 
@@ -191,6 +193,7 @@ homodyne.device.config
    :undoc-members:
    :show-inheritance:
    :exclude-members: __weakref__
+   :no-index:
 
 Device configuration management.
 
