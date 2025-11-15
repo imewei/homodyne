@@ -1136,8 +1136,8 @@ def _run_optimization(args, config: ConfigManager, data: dict[str, Any]) -> Any:
 
             # Extract raw data from filtered_data
             c2_3d = filtered_data["c2_exp"]  # Shape: (n_phi, n_t, n_t)
-            t1_2d = filtered_data.get("t1")  # Shape: (n_t, n_t) meshgrid
-            t2_2d = filtered_data.get("t2")  # Shape: (n_t, n_t) meshgrid
+            t1_raw = filtered_data.get("t1")  # Could be 1D (n_t,) or 2D (n_t, n_t)
+            t2_raw = filtered_data.get("t2")  # Could be 1D (n_t,) or 2D (n_t, n_t)
             phi_angles = filtered_data.get("phi_angles_list")  # Shape: (n_phi,)
 
             # Get dimensions
@@ -1147,6 +1147,23 @@ def _run_optimization(args, config: ConfigManager, data: dict[str, Any]) -> Any:
 
             # Pool/flatten correlation data: (n_phi, n_t, n_t) → (n_phi * n_t * n_t,)
             mcmc_data = c2_3d.ravel()  # Flattens to 1D
+
+            # Handle both 1D and 2D time arrays
+            # If t1/t2 are 1D, create 2D meshgrids; if already 2D, use as-is
+            if t1_raw.ndim == 1 and t2_raw.ndim == 1:
+                # Create 2D meshgrids from 1D arrays
+                t2_2d, t1_2d = np.meshgrid(t1_raw, t2_raw, indexing='ij')
+                logger.debug(f"Created 2D meshgrids from 1D arrays: t1={t1_raw.shape} → {t1_2d.shape}")
+            elif t1_raw.ndim == 2 and t2_raw.ndim == 2:
+                # Already 2D meshgrids
+                t1_2d = t1_raw
+                t2_2d = t2_raw
+                logger.debug(f"Using existing 2D meshgrids: t1={t1_2d.shape}, t2={t2_2d.shape}")
+            else:
+                raise ValueError(
+                    f"Inconsistent t1/t2 dimensions: t1.ndim={t1_raw.ndim}, t2.ndim={t2_raw.ndim}. "
+                    f"Expected both 1D or both 2D."
+                )
 
             # Create corresponding t1, t2, phi arrays of same length
             # Tile the 2D meshgrid for each phi angle
@@ -1211,11 +1228,13 @@ def _run_optimization(args, config: ConfigManager, data: dict[str, Any]) -> Any:
             )
 
             # Run MCMC with pooled 1D arrays (all same length)
+            # NOTE: Pass unique phi_angles (n_phi,) not phi_pooled (n_total,)
+            # The MCMC model needs unique angles to determine n_phi for per-angle scaling
             result = fit_mcmc_jax(
                 mcmc_data,
                 t1=t1_pooled,
                 t2=t2_pooled,
-                phi=phi_pooled,
+                phi=phi_angles,  # FIXED: Use unique angles (n_phi,), not pooled (n_total,)
                 q=(
                     filtered_data.get("wavevector_q_list", [1.0])[0]
                     if filtered_data.get("wavevector_q_list") is not None
@@ -4354,6 +4373,24 @@ def _compute_theoretical_c2_from_mcmc(
     offset = getattr(result, "mean_offset", 1.0)
     mean_params = np.asarray(result.mean_params)
 
+    # Log parameter values for debugging
+    logger.info(f"Computing theoretical C2 with posterior means:")
+    logger.info(f"  Contrast: {contrast:.6f}")
+    logger.info(f"  Offset: {offset:.6f}")
+    logger.info(f"  Physical params: D0={mean_params[0]:.2f}, alpha={mean_params[1]:.4f}, D_offset={mean_params[2]:.4f}")
+
+    # Validate parameters for reasonable theoretical prediction
+    if contrast < 0.05:
+        logger.warning(
+            f"Very small contrast ({contrast:.4f} < 0.05) may produce nearly constant c2_theory. "
+            "This suggests poor MCMC convergence or inappropriate initial values."
+        )
+    if mean_params[0] >= 99990:  # Near D0 upper bound
+        logger.warning(
+            f"D0 ({mean_params[0]:.1f}) near upper bound (100000). "
+            "Consider increasing max D0 bound or improving initial values."
+        )
+
     # Get data arrays
     phi_angles = np.asarray(data["phi_angles_list"])
     t1 = np.asarray(data["t1"])
@@ -4402,6 +4439,26 @@ def _compute_theoretical_c2_from_mcmc(
 
     # Stack all angles
     c2_theoretical_scaled = np.array(c2_theoretical_list)
+
+    # Validate theoretical prediction quality
+    c2_min = float(np.min(c2_theoretical_scaled))
+    c2_max = float(np.max(c2_theoretical_scaled))
+    c2_range = c2_max - c2_min
+    logger.info(f"Theoretical C2 range: [{c2_min:.6f}, {c2_max:.6f}], variation: {c2_range:.6f}")
+
+    if c2_range < 0.01:
+        logger.warning(
+            f"Theoretical C2 has very low variation ({c2_range:.6f} < 0.01). "
+            f"The model prediction is nearly constant (c2 ≈ {c2_min:.4f}). "
+            "This indicates:\n"
+            "  1. Poor MCMC convergence to local minimum\n"
+            "  2. Inappropriate initial parameter values\n"
+            "  3. Physical parameters may have hit bounds\n"
+            "Recommendations:\n"
+            "  - Run NLSQ first to get better initial values\n"
+            "  - Check parameter bounds (especially D0 upper limit)\n"
+            "  - Verify initial_parameters.values in config are reasonable"
+        )
 
     return c2_theoretical_scaled
 

@@ -206,7 +206,7 @@ except ImportError:
             n_iterations: int = 0,
             computation_time: float = 0.0,
             backend: str = "JAX",
-            analysis_mode: str = "static_isotropic",
+            analysis_mode: str = "static",
             dataset_size: str = "unknown",
             n_chains: int = 4,
             n_warmup: int = 1000,
@@ -295,7 +295,7 @@ def fit_mcmc_jax(
     phi: np.ndarray = None,
     q: float = None,
     L: float = None,
-    analysis_mode: str = "static_isotropic",
+    analysis_mode: str = "static",
     parameter_space: ParameterSpace | None = None,
     initial_values: dict[str, float] | None = None,
     enable_dataset_optimization: bool = True,
@@ -365,9 +365,9 @@ def fit_mcmc_jax(
         Scattering wavevector magnitude [Å⁻¹]
     L : float
         Sample-detector distance [Å] (required for laminar_flow mode)
-    analysis_mode : str, default "static_isotropic"
+    analysis_mode : str, default "static"
         Physics model selection:
-        - "static_isotropic": Diffusion-only (3 physical params)
+        - "static": Diffusion-only (3 physical params)
         - "laminar_flow": Diffusion + shear flow (7 physical params)
     parameter_space : ParameterSpace, optional
         Parameter bounds and prior distributions. If None, loaded from config or defaults.
@@ -949,7 +949,7 @@ def _run_standard_nuts(
     phi: np.ndarray = None,
     q: float = None,
     L: float = None,
-    analysis_mode: str = "static_isotropic",
+    analysis_mode: str = "static",
     parameter_space: ParameterSpace | None = None,
     initial_values: dict[str, float] | None = None,
     use_simplified_likelihood: bool = True,
@@ -997,12 +997,19 @@ def _run_standard_nuts(
         # Configure MCMC parameters
         mcmc_config = _get_mcmc_config(kwargs)
 
-        # Determine analysis mode
-        if analysis_mode not in ["static_isotropic", "laminar_flow"]:
+        # Determine analysis mode (normalize shorthand names)
+        # Map common shortcuts to canonical names
+        mode_mapping = {
+            "static_isotropic": "static",  # Legacy compatibility: map old name to new
+            "laminar": "laminar_flow",
+        }
+        analysis_mode = mode_mapping.get(analysis_mode, analysis_mode)
+
+        if analysis_mode not in ["static", "laminar_flow"]:
             logger.warning(
-                f"Unknown analysis mode {analysis_mode}, using static_isotropic",
+                f"Unknown analysis mode {analysis_mode}, using static",
             )
-            analysis_mode = "static_isotropic"
+            analysis_mode = "static"
 
         logger.info(f"Analysis mode: {analysis_mode}")
 
@@ -1038,8 +1045,9 @@ def _run_standard_nuts(
         # CMC pooled data replicates phi for each time point (e.g., 3 angles × 100K points = 300K array)
         # We need unique phi values for broadcasting, but jnp.unique() doesn't work during JIT tracing
         # Extract unique values HERE (non-JIT context) and pass to model as closure variable
+        # v2.4.0: Per-angle scaling is MANDATORY for all modes, so always compute phi_unique
         phi_unique = None
-        if phi is not None and "laminar" in analysis_mode.lower():
+        if phi is not None:
             import numpy as np  # Use numpy (not jax.numpy) for pre-computation
 
             phi_unique = np.unique(np.asarray(phi))
@@ -1123,7 +1131,10 @@ def _run_standard_nuts(
         computation_time = time.perf_counter() - start_time
 
         logger.info(f"MCMC sampling completed in {computation_time:.3f}s")
-        logger.info(f"Posterior summary: {len(posterior_summary['samples'])} samples")
+        # Get actual sample count from one of the parameter arrays (not dict key count)
+        sample_count = len(next(iter(posterior_summary['samples'].values())))
+        param_count = len(posterior_summary['samples'])
+        logger.info(f"Posterior summary: {sample_count} samples × {param_count} parameters")
 
         return MCMCResult(
             mean_params=posterior_summary["mean_params"],
@@ -1151,7 +1162,9 @@ def _run_standard_nuts(
 
     except Exception as e:
         computation_time = time.perf_counter() - start_time
-        logger.error(f"MCMC sampling failed after {computation_time:.3f}s: {e}")
+        import traceback
+        logger.error(f"MCMC sampling failed after {computation_time:.3f}s: {str(e)}")
+        logger.debug(f"Full traceback:\n{traceback.format_exc()}")
 
         # Return failed result
         n_params = 3 if "static" in analysis_mode else 7
@@ -1306,7 +1319,7 @@ def _create_numpyro_model(
     L : float
         Sample-detector distance (for laminar_flow)
     analysis_mode : str
-        Analysis mode: 'static_isotropic' or 'laminar_flow'
+        Analysis mode: 'static' or 'laminar_flow'
     parameter_space : ParameterSpace
         Parameter space configuration with bounds and prior distributions
         loaded from YAML config file. Contains:
@@ -1402,7 +1415,7 @@ def _create_numpyro_model(
 
     The function automatically orders parameters correctly for the physics
     engine based on analysis_mode:
-    - static_isotropic: [contrast, offset, D0, alpha, D_offset]
+    - static: [contrast, offset, D0, alpha, D_offset]
     - laminar_flow: [contrast, offset, D0, alpha, D_offset,
                      gamma_dot_t0, beta, gamma_dot_t_offset, phi0]
 
@@ -1901,7 +1914,7 @@ def _create_numpyro_model(
 
             # CRITICAL FIX (Nov 10, 2025): Handle both 1D and 2D c2_theory
             # - laminar_flow mode: c2_theory is 2D (n_phi, n_data) - angle-dependent
-            # - static_isotropic mode: c2_theory is 1D (n_data,) - angle-independent
+            # - static mode: c2_theory is 1D (n_data,) - angle-independent
             #
             # For static mode, c2_theory is the same for all angles (diffusion only),
             # so we don't need phi indexing - just use it directly.
@@ -1914,7 +1927,7 @@ def _create_numpyro_model(
                 # Advanced indexing: c2_theory[phi_indices, range(len)] → shape (n_data,)
                 c2_theory_per_point = c2_theory[phi_indices, jnp.arange(n_data_points)]
             else:
-                # static_isotropic mode: 1D theory (n_data,)
+                # static mode: 1D theory (n_data,)
                 # Theory is angle-independent (same for all phi)
                 # No indexing needed - use directly
                 c2_theory_per_point = c2_theory
@@ -1949,7 +1962,7 @@ def _create_numpyro_model(
                         uniq=jnp.array([jnp.min(c2_theory), jnp.max(c2_theory), jnp.mean(c2_theory)])
                     )
                 else:
-                    # static_isotropic: 1D c2_theory
+                    # static: 1D c2_theory
                     jax.debug.print(
                         "c2_theory[0:10]={start}, c2_theory[-10:]={end}",
                         start=c2_theory[:10],
@@ -1964,12 +1977,20 @@ def _create_numpyro_model(
             # check_c2_extraction()
 
             # Apply per-angle scaling to flattened c2_theory
+            # CRITICAL FIX: c2_theory = 1 + g1², so g1² = c2_theory - 1
+            # Correct physics: c2_fitted = offset + contrast * g1²
+            #                            = offset + contrast * (c2_theory - 1)
+            # WRONG (previous): c2_fitted = contrast * c2_theory + offset
+            #                              = contrast * (1 + g1²) + offset
+            #                              = contrast + contrast*g1² + offset  ← Extra "contrast" term!
             c2_theory_for_likelihood = c2_theory_per_point
-            c2_fitted = contrast_per_point * c2_theory_for_likelihood + offset_per_point
+            g1_squared = c2_theory_for_likelihood - 1.0
+            c2_fitted = offset_per_point + contrast_per_point * g1_squared
         else:
             # LEGACY BEHAVIOR: Global contrast and offset (shared across all angles)
             c2_theory_for_likelihood = c2_theory
-            c2_fitted = contrast * c2_theory_for_likelihood + offset
+            g1_squared = c2_theory_for_likelihood - 1.0
+            c2_fitted = offset + contrast * g1_squared
 
         c2_fitted_raw = c2_fitted
 
@@ -2128,7 +2149,7 @@ def _compute_simple_theory(params, t1, t2, phi, q, analysis_mode, L=None, dt=Non
     q : scalar
         Wavevector magnitude
     analysis_mode : str
-        Analysis mode: 'static_isotropic' or 'laminar_flow'
+        Analysis mode: 'static' or 'laminar_flow'
     L : float, optional
         Sample-detector distance for laminar_flow mode [Å]
     dt : float, optional
@@ -2266,22 +2287,28 @@ def _run_numpyro_sampling(model, config, initial_values=None, parameter_space=No
             # Check actual platform - single GPU also has n_devices=1
             platform = jax.devices()[0].platform if jax.devices() else "cpu"
 
-            if platform == "cpu" and n_devices == 1:
-                # CPU mode: use host device count for parallel chains
-                numpyro.set_host_device_count(n_chains)
-                logger.info(
-                    f"Set host device count to {n_chains} for CPU parallel chains",
-                )
-
-                # Verify that device count actually increased
-                new_n_devices = jax.local_device_count()
-                if new_n_devices < n_chains:
+            if platform == "cpu":
+                # CPU mode: check if XLA_FLAGS configured multiple devices
+                # XLA_FLAGS should be set in homodyne/__init__.py before JAX import
+                if n_devices >= n_chains:
+                    logger.info(
+                        f"Using {n_devices} CPU devices for {n_chains} parallel MCMC chains",
+                    )
+                elif n_devices == 1:
                     logger.warning(
-                        f"Failed to set host device count to {n_chains} (still only {new_n_devices} device). "
-                        f"Falling back to num_chains=1 to avoid parallel chain errors."
+                        f"Only 1 CPU device detected, but {n_chains} chains requested. "
+                        f"XLA_FLAGS may not be set correctly. "
+                        f"Set environment variable before running homodyne:\n"
+                        f"  export XLA_FLAGS='--xla_force_host_platform_device_count={n_chains}'\n"
+                        f"Falling back to num_chains=1."
                     )
                     n_chains = 1
                     config["n_chains"] = 1  # Update config to reflect fallback
+                else:
+                    logger.info(
+                        f"Using {n_devices} CPU devices for {n_chains} parallel chains "
+                        f"(fewer devices than requested)"
+                    )
             elif platform == "gpu":
                 # GPU mode: use available GPU devices
                 logger.info(
@@ -2399,12 +2426,24 @@ def _run_numpyro_sampling(model, config, initial_values=None, parameter_space=No
     else:
         logger.info(f"Using initial_values with {len(initial_values)} parameters")
 
+    # CRITICAL FIX: NumPyro init_params requires arrays of shape (num_chains, ...)
+    # Convert scalar initial values to broadcasted arrays for each chain
+    init_params_formatted = None
+    if initial_values is not None:
+        import jax.numpy as jnp
+        n_chains = config["n_chains"]
+        init_params_formatted = {
+            param: jnp.full((n_chains,), value, dtype=jnp.float64)
+            for param, value in initial_values.items()
+        }
+        logger.debug(f"Formatted init_params for {n_chains} chains: {list(init_params_formatted.keys())}")
+
     try:
         # Pass initial_values to mcmc.run() for chain initialization
         # NumPyro will use these as starting points for all chains
         mcmc.run(
             rng_key,
-            init_params=initial_values,  # Initialize chains at these parameter values
+            init_params=init_params_formatted,  # Initialize chains at these parameter values (broadc asted)
             extra_fields=(
                 "potential_energy",
                 "accept_prob",
@@ -2435,10 +2474,18 @@ def _run_numpyro_sampling(model, config, initial_values=None, parameter_space=No
                 progress_bar=True,
             )
 
-            # Retry with single chain
+            # Retry with single chain - reformat init_params for 1 chain
+            init_params_single = None
+            if initial_values is not None:
+                import jax.numpy as jnp
+                init_params_single = {
+                    param: jnp.full((1,), value, dtype=jnp.float64)
+                    for param, value in initial_values.items()
+                }
+
             mcmc.run(
                 rng_key,
-                init_params=initial_values,
+                init_params=init_params_single,
                 extra_fields=(
                     "potential_energy",
                     "accept_prob",
@@ -2450,7 +2497,10 @@ def _run_numpyro_sampling(model, config, initial_values=None, parameter_space=No
             logger.info("MCMC completed successfully with num_chains=1")
             _log_warmup_diagnostics(mcmc)
         else:
-            logger.error(f"MCMC sampling failed: {e}")
+            # Log full error details including traceback for debugging
+            import traceback
+            logger.error(f"MCMC sampling failed: {str(e)}")
+            logger.debug(f"Full traceback:\n{traceback.format_exc()}")
             raise
 
     return mcmc
