@@ -37,8 +37,9 @@ References:
 - Documentation: See CHANGELOG.md and CLAUDE.md for detailed status
 """
 
+from collections.abc import Callable
 from dataclasses import dataclass, field
-from typing import Any, Callable
+from typing import Any
 
 import jax
 import jax.numpy as jnp
@@ -84,7 +85,6 @@ from homodyne.optimization.stratified_residual_jit import (
 )
 from homodyne.optimization.sequential_angle import (
     optimize_per_angle_sequential,
-    split_data_by_angle,
     JAC_SAMPLE_SIZE,
 )
 from homodyne.optimization.batch_statistics import BatchStatistics
@@ -93,8 +93,6 @@ from homodyne.optimization.numerical_validation import NumericalValidator
 from homodyne.optimization.checkpoint_manager import CheckpointManager
 from homodyne.optimization.exceptions import (
     NLSQOptimizationError,
-    NLSQConvergenceError,
-    NLSQNumericalError,
     NLSQCheckpointError,
 )
 
@@ -148,7 +146,7 @@ def _classify_parameter_status(
         return ["active"] * len(values)
 
     statuses: list[str] = []
-    for value, lo, hi in zip(values, lower, upper):
+    for value, lo, hi in zip(values, lower, upper, strict=False):
         if np.isclose(value, lo, atol=atol * (1.0 + abs(lo))):
             statuses.append("at_lower_bound")
         elif np.isclose(value, hi, atol=atol * (1.0 + abs(hi))):
@@ -194,7 +192,7 @@ def _build_per_parameter_x_scale(
     analysis_mode: str,
     override_map: dict[str, float],
 ) -> np.ndarray | None:
-    effective_physical: dict[str, float] = {name: 1.0 for name in physical_param_names}
+    effective_physical: dict[str, float] = dict.fromkeys(physical_param_names, 1.0)
     if analysis_mode == "laminar_flow":
         for alias_key, scale in DEFAULT_SHEAR_X_SCALE.items():
             canonical = _normalize_param_key(alias_key)
@@ -360,7 +358,7 @@ def _wrap_model_function_with_transforms(
     if not state:
         return model_fn
 
-    if hasattr(model_fn, "__call__") and not callable(model_fn):
+    if not callable(model_fn):
         return model_fn
 
     def wrapped_model(xdata: np.ndarray, *solver_params):
@@ -709,7 +707,7 @@ class NLSQWrapper:
             if pcov is None:
                 # No covariance available, create identity matrix
                 logger.warning(
-                    f"No pcov attribute in result object. Using identity matrix."
+                    "No pcov attribute in result object. Using identity matrix."
                 )
                 pcov = np.eye(len(popt))
 
@@ -942,7 +940,7 @@ class NLSQWrapper:
                 n_angles = len(np.unique(stratified_data.phi_flat))
                 n_physical = len(physical_param_names)
 
-                logger.info(f"Expanding scaling parameters for per-angle scaling:")
+                logger.info("Expanding scaling parameters for per-angle scaling:")
                 logger.info(f"  Angles: {n_angles}")
                 logger.info(f"  Physical parameters: {n_physical}")
                 logger.info(
@@ -1114,7 +1112,7 @@ class NLSQWrapper:
                     convergence_status=(
                         "converged" if info.get("success", True) else "failed"
                     ),
-                    recovery_actions=[f"stratified_least_squares_method"],
+                    recovery_actions=["stratified_least_squares_method"],
                     streaming_diagnostics=None,
                     stratification_diagnostics=stratification_diagnostics,
                     diagnostics_payload=None,
@@ -1377,7 +1375,7 @@ class NLSQWrapper:
             if initial_norms is not None:
                 diagnostics_payload.setdefault("initial_jacobian_norms", {})
                 diagnostics_payload["initial_jacobian_norms"] = dict(
-                    zip(param_labels, initial_norms.tolist()),
+                    zip(param_labels, initial_norms.tolist(), strict=False),
                 )
                 logger.info(
                     "Initial Jacobian column norms: %s",
@@ -1448,7 +1446,6 @@ class NLSQWrapper:
         # Try selected strategy first, then fallback to simpler strategies if needed
         current_strategy = strategy
         strategy_attempts = []
-        last_error = None
 
         while current_strategy is not None:
             try:
@@ -1546,6 +1543,34 @@ class NLSQWrapper:
                         )
                         info = {}
 
+                    # DEBUG: Check for optimization failures (frozen parameters, degenerate covariance)
+                    logger.info("🔍 NLSQ Result Analysis:")
+                    logger.info(f"  p0 (initial):  {validated_params}")
+                    logger.info(f"  popt (fitted): {popt}")
+                    logger.info(f"  bounds lower:  {nlsq_bounds[0] if nlsq_bounds else 'None'}")
+                    logger.info(f"  bounds upper:  {nlsq_bounds[1] if nlsq_bounds else 'None'}")
+                    logger.info(f"  pcov diagonal: {np.diag(pcov)}")
+
+                    # Check for frozen parameters (unchanged + zero uncertainty)
+                    params_unchanged = np.allclose(popt, validated_params, rtol=1e-10, atol=1e-14)
+                    uncertainties_zero = np.any(np.abs(np.diag(pcov)) < 1e-15)
+
+                    if params_unchanged:
+                        logger.warning(
+                            "⚠️  Optimization failure: Parameters unchanged from initial guess!\n"
+                            "   This suggests curve_fit returned immediately without optimizing.\n"
+                            "   Possible causes: (1) Already at optimum, (2) Singular Jacobian, (3) Bounds too tight"
+                        )
+
+                    if uncertainties_zero:
+                        zero_unc_indices = np.where(np.abs(np.diag(pcov)) < 1e-15)[0]
+                        logger.warning(
+                            f"⚠️  Degenerate covariance: Zero uncertainties for parameters at indices {zero_unc_indices}\n"
+                            f"   pcov diagonal: {np.diag(pcov)}\n"
+                            f"   This indicates singular/ill-conditioned Jacobian matrix.\n"
+                            f"   Affected parameters may not have been optimized properly."
+                        )
+
                     recovery_actions = []
                     convergence_status = "converged"
 
@@ -1561,7 +1586,6 @@ class NLSQWrapper:
                 break  # Exit fallback loop on success
 
             except Exception as e:
-                last_error = e
                 strategy_attempts.append(current_strategy)
 
                 # Try fallback strategy
@@ -1652,7 +1676,7 @@ class NLSQWrapper:
             )
             if final_norms is not None:
                 diagnostics_payload["final_jacobian_norms"] = dict(
-                    zip(param_labels, final_norms.tolist()),
+                    zip(param_labels, final_norms.tolist(), strict=False),
                 )
                 logger.info(
                     "Final Jacobian column norms: %s",
@@ -1667,7 +1691,7 @@ class NLSQWrapper:
                     nlsq_bounds[1],
                 )
                 diagnostics_payload["parameter_status"] = dict(
-                    zip(param_labels, statuses),
+                    zip(param_labels, statuses, strict=False),
                 )
                 clips = [label for label, st in diagnostics_payload["parameter_status"].items() if st != "active"]
                 if clips:
@@ -1809,6 +1833,22 @@ class NLSQWrapper:
                         "Using curve_fit_large with NLSQ automatic memory management"
                     )
 
+                    # ✅ CRITICAL FIX (Nov 14, 2025): Use parameter magnitude-based scaling
+                    # Same issue as curve_fit: x_scale from config may be scalar or "jac"
+                    # which fails with 6+ orders of magnitude gradient disparity
+                    if isinstance(x_scale_value, (int, float)):
+                        # Config provided scalar x_scale: replace with magnitude-based
+                        x_scale_large = np.abs(current_params) + 1e-3
+                        logger.info(
+                            f"Replacing scalar x_scale={x_scale_value} with magnitude-based scaling"
+                        )
+                    elif isinstance(x_scale_value, np.ndarray):
+                        # Config provided per-parameter x_scale: use as-is
+                        x_scale_large = x_scale_value
+                    else:
+                        # Fallback: magnitude-based
+                        x_scale_large = np.abs(current_params) + 1e-3
+
                     # Note: curve_fit_large may return (popt, pcov) or OptimizeResult object
                     # depending on NLSQ version. Use _handle_nlsq_result for normalization.
                     result = curve_fit_large(
@@ -1818,7 +1858,7 @@ class NLSQWrapper:
                         p0=current_params.tolist(),  # Convert to list to avoid NLSQ boolean bug
                         bounds=bounds,
                         loss=loss_name,  # Configurable loss
-                        x_scale=x_scale_value,
+                        x_scale=x_scale_large,  # MAGNITUDE-BASED SCALING
                         gtol=1e-6,  # Relaxed gradient tolerance
                         ftol=1e-6,  # Relaxed function tolerance
                         max_nfev=5000,  # Increased max function evaluations
@@ -1833,6 +1873,41 @@ class NLSQWrapper:
                     info["initial_cost"] = initial_cost
                 else:
                     # Use standard curve_fit for small datasets
+                    # ✅ CRITICAL FIX (Nov 14, 2025): Use parameter magnitude-based scaling
+                    # PROBLEM: x_scale="jac" fails when gradient magnitudes span 6+ orders
+                    #   - D0 gradient: ~1e-4 (physics: D0*t^alpha with alpha<0 suppresses sensitivity)
+                    #   - offset gradient: ~600 (direct additive term)
+                    #   - Result: x_scale[D0]=1e-4 makes D0 steps tiny, condition number 8.81e+14
+                    #   - Consequence: Singular pcov matrix, zero uncertainties for alpha
+                    #
+                    # SOLUTION: Scale by parameter magnitudes, not gradients
+                    #   - x_scale[i] = |p0[i]| + epsilon ensures reasonable step sizes
+                    #   - D0~16830 → steps of ~16830 (appropriate for range [100, 1e6])
+                    #   - alpha~1.57 → steps of ~1.57 (appropriate for range [-3, 0])
+                    #   - Expected: condition number 1e+6 (8 orders better), non-zero uncertainties
+
+                    # Compute parameter magnitude-based scaling
+                    x_scale_array = np.abs(current_params) + 1e-3  # Avoid zero scale for small params
+
+                    # DEBUG: Print bounds and scaling for diagnostics
+                    logger.info("DEBUG: Bounds and scaling being passed to curve_fit:")
+                    if bounds is not None:
+                        lower, upper = bounds
+                        param_names = ['contrast', 'offset', 'D0', 'alpha', 'D_offset']
+                        for i, name in enumerate(param_names[:len(current_params)]):
+                            logger.info(
+                                f"  {name}: [{lower[i]:.6f}, {upper[i]:.6f}], "
+                                f"initial={current_params[i]:.6f}, x_scale={x_scale_array[i]:.6e}"
+                            )
+                    else:
+                        logger.info("  bounds=None (unbounded)")
+                        param_names = ['contrast', 'offset', 'D0', 'alpha', 'D_offset']
+                        for i, name in enumerate(param_names[:len(current_params)]):
+                            logger.info(
+                                f"  {name}: initial={current_params[i]:.6f}, "
+                                f"x_scale={x_scale_array[i]:.6e}"
+                            )
+
                     popt, pcov = curve_fit(
                         residual_fn,
                         xdata,
@@ -1840,13 +1915,39 @@ class NLSQWrapper:
                         p0=current_params.tolist(),  # Convert to list to avoid NLSQ boolean bug
                         bounds=bounds,
                         loss=loss_name,
-                        x_scale=x_scale_value,
+                        x_scale=x_scale_array,  # MAGNITUDE-BASED SCALING (not "jac")
                         gtol=1e-6,  # Relaxed gradient tolerance
                         ftol=1e-6,  # Relaxed function tolerance
                         max_nfev=5000,  # Increased max function evaluations
                         verbose=2,  # Show iteration details
                     )
                     info = {"initial_cost": initial_cost}
+
+                    # DEBUG: Check pcov for singular/degenerate covariance
+                    logger.info("=" * 80)
+                    logger.info("🔍 NLSQ curve_fit RESULT DIAGNOSTICS")
+                    logger.info("=" * 80)
+                    logger.info(f"  Initial params (p0):  {current_params}")
+                    logger.info(f"  Fitted params (popt): {popt}")
+                    logger.info(f"  Params changed: {not np.allclose(popt, current_params, rtol=1e-10)}")
+                    logger.info(f"  pcov shape: {pcov.shape}")
+                    logger.info(f"  pcov diagonal (uncertainties²): {np.diag(pcov)}")
+                    logger.info(f"  pcov condition number: {np.linalg.cond(pcov):.2e}")
+
+                    # Check for zero/near-zero uncertainties
+                    zero_unc_mask = np.abs(np.diag(pcov)) < 1e-15
+                    if np.any(zero_unc_mask):
+                        zero_indices = np.where(zero_unc_mask)[0]
+                        logger.warning(
+                            f"⚠️  ZERO UNCERTAINTIES detected for parameters at indices: {zero_indices}"
+                        )
+                        logger.warning(
+                            "   This indicates singular/ill-conditioned Jacobian matrix!"
+                        )
+                        logger.warning(
+                            "   Affected parameters were likely NOT optimized by NLSQ."
+                        )
+                    logger.info("=" * 80)
 
                 # Validate result: Check for NLSQ streaming bug (returns p0 instead of best_params)
                 # This bug can occur when streaming optimization fails internally
@@ -2168,6 +2269,14 @@ class NLSQWrapper:
         t2 = np.asarray(data.t2)
         g2 = np.asarray(data.g2)
 
+        # CRITICAL FIX (Nov 14, 2025): Extract 1D arrays from 2D meshgrids if needed
+        # Same issue as in _apply_stratification_if_needed - cache loader returns 2D
+        # but meshgrid expects 1D inputs
+        if t1.ndim == 2:
+            t1 = t1[:, 0] if t1.size > 0 else np.array([])
+        if t2.ndim == 2:
+            t2 = t2[0, :] if t2.size > 0 else np.array([])
+
         # Validate non-empty arrays
         if phi.size == 0 or t1.size == 0 or t2.size == 0:
             raise ValueError("Data arrays cannot be empty")
@@ -2255,6 +2364,28 @@ class NLSQWrapper:
         t1 = np.asarray(data.t1)
         t2 = np.asarray(data.t2)
         g2 = np.asarray(data.g2)
+
+        # CRITICAL FIX (Nov 14, 2025): Extract 1D arrays from 2D meshgrids if needed
+        # ROOT CAUSE: After commit e5ac926, cache loader returns 2D meshgrids (600, 600)
+        # but np.meshgrid() at line 2428 expects 1D input arrays (600,)
+        # Calling meshgrid on already-meshgridded data produces wrong structure!
+        # This was breaking alpha parameter gradient computation.
+        if t1.ndim == 2:
+            # t1_2d[i, j] = time[i] (constant along j), extract first column
+            if t1.size > 0:
+                t1 = t1[:, 0]
+                logger.debug(f"Extracted 1D t1 array from 2D meshgrid: shape {t1.shape}")
+            else:
+                t1 = np.array([])
+                logger.debug("Empty 2D t1 array converted to empty 1D array")
+        if t2.ndim == 2:
+            # t2_2d[i, j] = time[j] (constant along i), extract first row
+            if t2.size > 0:
+                t2 = t2[0, :]
+                logger.debug(f"Extracted 1D t2 array from 2D meshgrid: shape {t2.shape}")
+            else:
+                t2 = np.array([])
+                logger.debug("Empty 2D t2 array converted to empty 1D array")
 
         # Calculate total points (meshgrid creates n_phi × n_t1 × n_t2 points)
         n_points = len(phi) * len(t1) * len(t2)
@@ -2523,7 +2654,6 @@ class NLSQWrapper:
         )
         config_lower_bounds = np.asarray(config_lower_bounds, dtype=float)
         config_upper_bounds = np.asarray(config_upper_bounds, dtype=float)
-        physical_names = self._get_physical_param_names(analysis_mode)
 
         # Load initial parameters if not provided
         if initial_params is None:
@@ -2534,7 +2664,7 @@ class NLSQWrapper:
 
         # Load bounds if not provided
         if bounds is None:
-            bounds = param_manager.get_parameter_bounds(param_names)
+            bounds = param_manager.get_parameter_bounds(base_param_names)
             logger.info("Loaded parameter bounds from config")
 
         if initial_params is not None:
@@ -3641,7 +3771,7 @@ class NLSQWrapper:
             chunks = []
             current_idx = 0
 
-            for i, chunk_size in enumerate(chunk_sizes_attr):
+            for _, chunk_size in enumerate(chunk_sizes_attr):
                 start_idx = current_idx
                 end_idx = current_idx + chunk_size
 

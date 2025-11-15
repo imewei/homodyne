@@ -665,26 +665,41 @@ class XPCSDataLoader:
             c2_exp = data["c2_exp"]
             matrix_size = c2_exp.shape[-1]
 
-            # ALWAYS regenerate t1/t2 meshgrids from matrix size
-            # This makes cache loading robust to format changes (1D vs 2D arrays)
-            t1, t2 = self._calculate_time_arrays(matrix_size)
+            # CRITICAL FIX (Nov 14, 2025): Return 1D arrays, not 2D meshgrids
+            # ROOT CAUSE: Commit e5ac926 changed to always return 2D meshgrids,
+            # but nlsq_wrapper.py calls np.meshgrid() on t1/t2, expecting 1D inputs.
+            # Calling meshgrid on already-meshgridded data produces wrong structure.
+            # SOLUTION: Return 1D arrays like the original code did.
 
-            # Log warning if cached version had incorrect shape
             cached_t1 = data["t1"]
-            expected_shape = (matrix_size, matrix_size)
-            if cached_t1.shape != expected_shape:
-                logger.warning(
-                    f"Regenerated t1/t2 meshgrids from matrix size {matrix_size}: "
-                    f"cached shape {cached_t1.shape} → correct shape {expected_shape}"
-                )
+            cached_t2 = data["t2"]
+
+            # If cached data has 1D arrays, use them directly
+            if cached_t1.ndim == 1 and cached_t2.ndim == 1:
+                t1 = cached_t1
+                t2 = cached_t2
+                logger.debug(f"Using cached 1D time arrays: shape {t1.shape}")
             else:
-                logger.debug(f"Verified t1/t2 meshgrid shapes: {expected_shape}")
+                # If cached data has wrong shape (2D), regenerate as 1D
+                logger.warning(
+                    f"Cached t1/t2 have wrong shape {cached_t1.shape}, "
+                    f"regenerating as 1D arrays"
+                )
+                t1_2d, t2_2d = self._calculate_time_arrays(matrix_size)
+                # Extract 1D arrays from 2D meshgrids
+                # Handle edge case: empty arrays
+                if t1_2d.size > 0:
+                    t1 = t1_2d[:, 0]  # First column (time increases along rows)
+                    t2 = t2_2d[0, :]  # First row (time increases along columns)
+                else:
+                    t1 = np.array([])
+                    t2 = np.array([])
 
             return {
                 "wavevector_q_list": data["wavevector_q_list"],
                 "phi_angles_list": data["phi_angles_list"],
-                "t1": t1,  # Fresh 2D meshgrid (matrix_size, matrix_size)
-                "t2": t2,  # Fresh 2D meshgrid (matrix_size, matrix_size)
+                "t1": t1,  # 1D array (matrix_size,)
+                "t2": t2,  # 1D array (matrix_size,)
                 "c2_exp": c2_exp,
             }
 
