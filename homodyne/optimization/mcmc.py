@@ -23,7 +23,7 @@ Key Features
   - Convergence diagnostics: R-hat, ESS, acceptance rate
   - Auto-retry mechanism with different random seeds (max 3 retries)
 
-- **JAX Acceleration**: Transparent CPU/GPU execution with JIT compilation
+- **JAX Acceleration**: CPU-only execution with JIT compilation (v2.3.0+)
   - Single-device NUTS for small datasets (<1M points)
   - Multi-shard CMC for large datasets or many samples
   - Hardware-adaptive selection using HardwareConfig
@@ -2309,11 +2309,6 @@ def _run_numpyro_sampling(model, config, initial_values=None, parameter_space=No
                         f"Using {n_devices} CPU devices for {n_chains} parallel chains "
                         f"(fewer devices than requested)"
                     )
-            elif platform == "gpu":
-                # GPU mode: use available GPU devices
-                logger.info(
-                    f"Using GPU with {n_chains} chains on {n_devices} device(s)"
-                )
             else:
                 logger.info(f"Using {min(n_chains, n_devices)} parallel devices")
         except Exception as e:

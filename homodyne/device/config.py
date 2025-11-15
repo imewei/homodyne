@@ -8,8 +8,8 @@ a tri-criteria OR logic system.
 
 Key Features
 ------------
-- Automatic JAX device detection (GPU/CPU)
-- GPU memory detection with graceful fallback
+- Automatic CPU device detection (CPU-only in v2.3.0+)
+- System memory detection with psutil
 - Cluster environment detection (PBS/Slurm)
 - Hardware-adaptive CMC threshold selection
 - Tri-criteria decision logic (parallelism OR memory OR large dataset)
@@ -71,12 +71,12 @@ class HardwareConfig:
 
     Attributes
     ----------
-    platform : {'gpu', 'cpu'}
-        Primary compute platform detected by JAX
+    platform : {'cpu'}
+        Primary compute platform (CPU-only in v2.3.0+)
     num_devices : int
-        Number of available devices (GPUs or CPU cores)
+        Number of available CPU devices
     memory_per_device_gb : float
-        Available memory per device in GB
+        Available system memory in GB
     num_nodes : int
         Number of cluster nodes (1 for standalone)
     cores_per_node : int
@@ -91,22 +91,20 @@ class HardwareConfig:
     max_parallel_shards : int
         Maximum number of shards that can run in parallel
         - Multi-node cluster: num_nodes * cores_per_node
-        - Multi-GPU: num_devices
-        - Single GPU: 1 (sequential execution)
         - CPU: cores_per_node
 
     Examples
     --------
     >>> hw = detect_hardware()
     >>> print(hw.platform)
-    'gpu'
+    'cpu'
     >>> print(hw.max_parallel_shards)
     4
     >>> print(hw.recommended_backend)
-    'pjit'
+    'multiprocessing'
     """
 
-    platform: Literal["gpu", "cpu"]
+    platform: Literal["cpu"]
     num_devices: int
     memory_per_device_gb: float
     num_nodes: int
@@ -125,9 +123,9 @@ def detect_hardware() -> HardwareConfig:
 
     Detection Logic
     ---------------
-    1. **JAX Devices**: Query JAX for available devices (GPU/CPU)
-    2. **GPU Memory**: Attempt to query GPU memory via JAX/CUDA
-       - Fallback: Assume 16GB per GPU if query fails
+    1. **JAX Devices**: Query JAX for CPU devices (v2.3.0+ is CPU-only)
+    2. **System Memory**: Query total system memory via psutil
+       - Fallback: Assume 32GB if psutil unavailable
     3. **Cluster Environment**: Check environment variables
        - PBS: PBS_JOBID, PBS_NODEFILE
        - Slurm: SLURM_JOB_NUM_NODES, SLURM_CPUS_ON_NODE
@@ -135,9 +133,7 @@ def detect_hardware() -> HardwareConfig:
     4. **CPU Resources**: Count physical cores using psutil
     5. **Backend Recommendation**: Select optimal backend based on:
        - Multi-node cluster → PBS/Slurm backend
-       - Multi-GPU → pjit backend
-       - Single GPU → pjit backend (sequential)
-       - CPU-only → multiprocessing backend
+       - CPU standalone → multiprocessing backend
 
     Returns
     -------
@@ -148,11 +144,11 @@ def detect_hardware() -> HardwareConfig:
     --------
     >>> hw = detect_hardware()
     >>> print(hw.platform)
-    'gpu'
+    'cpu'
     >>> print(hw.num_devices)
     4
     >>> print(hw.memory_per_device_gb)
-    80.0
+    64.0
     >>> print(hw.cluster_type)
     'pbs'
     >>> print(hw.recommended_backend)
@@ -161,9 +157,9 @@ def detect_hardware() -> HardwareConfig:
     Notes
     -----
     - Detection is robust with multiple fallback mechanisms
-    - GPU memory detection may fail on some systems (uses fallback)
     - Cluster detection requires environment variables set by scheduler
     - CPU core count excludes hyperthreading for accurate parallelism
+    - v2.3.0+ is CPU-only; JAX will always report platform='cpu'
     """
     logger.info("Detecting hardware configuration for CMC...")
 
@@ -191,32 +187,13 @@ def detect_hardware() -> HardwareConfig:
         platform = "cpu"
         num_devices = 1
 
-    # Step 2: Estimate memory per device
-    memory_gb = 16.0  # Default fallback for GPU
-    if platform == "gpu":
-        try:
-            # Try to query GPU memory from JAX/CUDA
-            from jax.lib import xla_bridge
-
-            backend = xla_bridge.get_backend()
-            if hasattr(backend, "devices"):
-                device = backend.devices()[0]
-                if hasattr(device, "memory_stats"):
-                    memory_info = device.memory_stats()
-                    if "bytes_limit" in memory_info:
-                        memory_gb = memory_info["bytes_limit"] / 1e9
-                        logger.info(f"GPU memory detected: {memory_gb:.2f} GB")
-        except Exception as e:
-            logger.debug(f"GPU memory detection failed: {e}. Using fallback (16 GB)")
-            memory_gb = 16.0
+    # Step 2: Query system memory (CPU-only in v2.3.0+)
+    if HAS_PSUTIL:
+        memory_gb = psutil.virtual_memory().total / 1e9
+        logger.info(f"System memory detected: {memory_gb:.2f} GB")
     else:
-        # CPU: Use total system memory
-        if HAS_PSUTIL:
-            memory_gb = psutil.virtual_memory().total / 1e9
-            logger.info(f"System memory detected: {memory_gb:.2f} GB")
-        else:
-            logger.warning("psutil not available. Assuming 32 GB system memory")
-            memory_gb = 32.0
+        logger.warning("psutil not available. Assuming 32 GB system memory")
+        memory_gb = 32.0
 
     # Step 3: Detect cluster environment
     cluster_type = None
@@ -263,7 +240,7 @@ def detect_hardware() -> HardwareConfig:
         cores_per_node = multiprocessing.cpu_count()
         total_memory_gb = memory_gb  # Use previously detected value
 
-    # Step 5: Recommend backend and calculate max parallel shards
+    # Step 5: Recommend backend and calculate max parallel shards (CPU-only in v2.3.0+)
     if cluster_type in ["pbs", "slurm"] and num_nodes > 1:
         # Multi-node cluster: Use PBS/Slurm backend
         recommended_backend = cluster_type
@@ -272,24 +249,8 @@ def detect_hardware() -> HardwareConfig:
             f"Recommended backend: {recommended_backend} "
             f"(max {max_parallel_shards} parallel shards)"
         )
-
-    elif platform == "gpu" and num_devices > 1:
-        # Multi-GPU: Use pjit backend for parallel GPU execution
-        recommended_backend = "pjit"
-        max_parallel_shards = num_devices
-        logger.info(
-            f"Recommended backend: pjit (multi-GPU, "
-            f"max {max_parallel_shards} parallel shards)"
-        )
-
-    elif platform == "gpu" and num_devices == 1:
-        # Single GPU: Use pjit but sequential execution
-        recommended_backend = "pjit"
-        max_parallel_shards = 1
-        logger.info("Recommended backend: pjit (single GPU, sequential execution)")
-
     else:
-        # CPU-only: Use multiprocessing backend
+        # CPU standalone: Use multiprocessing backend
         recommended_backend = "multiprocessing"
         max_parallel_shards = cores_per_node
         logger.info(

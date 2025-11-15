@@ -170,7 +170,7 @@ def calculate_optimal_num_shards(
 
     Algorithm
     ---------
-    1. Determine target shard size based on platform (GPU/CPU)
+    1. Use CPU target shard size (v2.3.0+ is CPU-only)
     2. Calculate number of shards: dataset_size / target_shard_size
     3. Cap at hardware parallelism limit (max_parallel_shards)
     4. Ensure minimum shard size (>10k points)
@@ -183,11 +183,9 @@ def calculate_optimal_num_shards(
     hardware_config : HardwareConfig
         Detected hardware configuration from detect_hardware()
     target_shard_size_gpu : int, default 50_000
-        Target points per shard for GPU (50K points to avoid kernel launch limits)
-        Reduced from 1M to prevent JAX kernel grid dimension overflow:
-        Max grid: (2^31-1, 65535), large shards exceed these limits
+        (Unused in v2.3.0+ CPU-only, kept for backward compatibility)
     target_shard_size_cpu : int, default 2_000_000
-        Target points per shard for CPU (2M points typical)
+        Target points per shard for CPU (v2.3.0+ uses this exclusively)
     min_shard_size : int, default 10_000
         Minimum shard size to ensure statistical robustness
 
@@ -202,29 +200,23 @@ def calculate_optimal_num_shards(
     >>> hw = detect_hardware()
     >>> num_shards = calculate_optimal_num_shards(5_000_000, hw)
     >>> print(num_shards)
-    100  # For GPU: 5M / 50K = 100 shards (avoids kernel launch limits)
+    2  # For CPU (v2.3.0+): 5M / 2M = 2-3 shards
 
     Notes
     -----
-    - GPU limits based on JAX kernel grid dimensions: max (2^31-1, 65535) blocks
-    - GPU default 50K points/shard prevents kernel launch overflow
-    - CPU limits more relaxed (more memory, no kernel launch limits)
+    - v2.3.0+ is CPU-only (no GPU support)
+    - CPU target: 2M points/shard (relaxed memory limits, no kernel constraints)
     - Warnings logged if num_shards > max_parallel_shards (sequential execution)
     - Returns 1 if dataset is too small for sharding
-    - Many shards executed sequentially on single GPU (pjit backend)
     """
     logger.info(
         f"Calculating optimal num_shards for {dataset_size:,} points on "
         f"{hardware_config.platform} platform"
     )
 
-    # Step 1: Determine target shard size based on platform
-    if hardware_config.platform == "gpu":
-        target_shard_size = target_shard_size_gpu
-        logger.debug(f"GPU platform: target shard size = {target_shard_size:,} points")
-    else:
-        target_shard_size = target_shard_size_cpu
-        logger.debug(f"CPU platform: target shard size = {target_shard_size:,} points")
+    # Step 1: Use CPU target shard size (v2.3.0+ is CPU-only)
+    target_shard_size = target_shard_size_cpu
+    logger.debug(f"CPU platform: target shard size = {target_shard_size:,} points")
 
     # Step 2: Calculate initial number of shards
     num_shards = max(1, dataset_size // target_shard_size)

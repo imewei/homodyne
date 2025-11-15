@@ -5,20 +5,14 @@ This module implements intelligent backend selection based on detected hardware
 configuration and user preferences. It provides automatic backend selection with
 sensible defaults and supports manual override for advanced users.
 
-Selection Strategy
-------------------
+Selection Strategy (v2.3.0+ CPU-only)
+--------------------------------------
 Auto-selection follows this priority order:
 
 1. **Multi-node HPC cluster** (PBS/Slurm detected, num_nodes > 1):
    → PBS/Slurm backend (virtually unlimited parallelism)
 
-2. **Multi-GPU system** (num_gpus > 1):
-   → pjit backend (parallel GPU execution)
-
-3. **Single GPU** (num_gpus == 1):
-   → pjit backend (sequential execution on single GPU)
-
-4. **CPU-only** (no GPUs detected):
+2. **CPU standalone** (single-node system):
    → multiprocessing backend (parallel CPU execution)
 
 User Override
@@ -173,27 +167,7 @@ def select_backend(
         backend = get_backend_by_name(backend_name)
         return backend
 
-    # Priority 2: Multi-GPU system
-    if hardware_config.platform == "gpu" and hardware_config.num_devices > 1:
-        backend_name = "pjit"
-        logger.info(
-            f"Multi-GPU system detected ({hardware_config.num_devices} GPUs). "
-            f"Selecting '{backend_name}' backend for parallel GPU execution."
-        )
-        backend = get_backend_by_name(backend_name)
-        return backend
-
-    # Priority 3: Single GPU
-    if hardware_config.platform == "gpu" and hardware_config.num_devices == 1:
-        backend_name = "pjit"
-        logger.info(
-            f"Single GPU detected. Selecting '{backend_name}' backend "
-            f"(sequential execution)."
-        )
-        backend = get_backend_by_name(backend_name)
-        return backend
-
-    # Priority 4: CPU-only
+    # Priority 2: CPU standalone (v2.3.0+ is CPU-only)
     backend_name = "multiprocessing"
     logger.info(
         f"CPU-only system detected ({hardware_config.cores_per_node} cores). "
@@ -322,18 +296,7 @@ def _validate_backend_compatibility(
         logger.warning(
             f"Using '{backend_name}' backend on standalone system. "
             f"PBS/Slurm scheduler may not be available. "
-            f"Consider using 'pjit' (GPU) or 'multiprocessing' (CPU) backend."
-        )
-
-    # Check multiprocessing on GPU system
-    if (
-        backend_name == "multiprocessing"
-        and hardware_config.platform == "gpu"
-        and hardware_config.num_devices > 1
-    ):
-        logger.warning(
-            f"Using '{backend_name}' backend on multi-GPU system. "
-            f"Consider using 'pjit' backend to leverage GPU acceleration."
+            f"Consider using 'multiprocessing' backend instead (v2.3.0+ is CPU-only)."
         )
 
 
