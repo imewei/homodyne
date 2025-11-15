@@ -128,6 +128,7 @@ Issues = "https://github.com/your-org/homodyne/issues"
 [project.scripts]
 homodyne = "homodyne.cli.main:main"
 homodyne-config = "homodyne.cli.config_generator:main"
+homodyne-config-xla = "homodyne.cli.xla_config:main"
 homodyne-post-install = "homodyne.post_install:main"
 homodyne-cleanup = "homodyne.uninstall_scripts:main"
 

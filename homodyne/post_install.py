@@ -190,6 +190,175 @@ end
     return modified_scripts
 
 
+def create_xla_activation_scripts(venv_path):
+    """Create XLA_FLAGS activation scripts for bash/zsh and fish.
+
+    Parameters
+    ----------
+    venv_path : Path
+        Path to virtual environment
+
+    Returns
+    -------
+    list[Path]
+        List of created XLA activation script paths
+    """
+    created_scripts = []
+
+    try:
+        # Find homodyne package to copy activation scripts
+        import homodyne
+        homodyne_pkg = Path(homodyne.__file__).parent
+
+        # Source XLA activation scripts
+        xla_bash_src = homodyne_pkg / "runtime" / "shell" / "activation" / "xla_config.bash"
+        xla_fish_src = homodyne_pkg / "runtime" / "shell" / "activation" / "xla_config.fish"
+
+        if not xla_bash_src.exists() or not xla_fish_src.exists():
+            print("   ⚠️  XLA activation scripts not found in homodyne package")
+            return created_scripts
+
+        # Create activation directory
+        activation_dir = venv_path / "etc" / "homodyne" / "activation"
+        activation_dir.mkdir(parents=True, exist_ok=True)
+
+        # Copy bash/zsh activation script
+        xla_bash_dest = activation_dir / "xla_config.bash"
+        xla_bash_dest.write_text(xla_bash_src.read_text())
+        xla_bash_dest.chmod(0o644)
+        created_scripts.append(xla_bash_dest)
+
+        # Copy fish activation script
+        xla_fish_dest = activation_dir / "xla_config.fish"
+        xla_fish_dest.write_text(xla_fish_src.read_text())
+        xla_fish_dest.chmod(0o644)
+        created_scripts.append(xla_fish_dest)
+
+        print(f"   ✅ Created XLA activation scripts in {activation_dir}")
+
+    except Exception as e:
+        print(f"   ⚠️  Could not create XLA activation scripts: {e}")
+
+    return created_scripts
+
+
+def integrate_xla_with_venv_activate(venv_path):
+    """Integrate XLA_FLAGS configuration with virtual environment's activate scripts.
+
+    Parameters
+    ----------
+    venv_path : Path
+        Path to virtual environment
+
+    Returns
+    -------
+    list[Path]
+        List of modified activation script paths
+    """
+    bin_dir = venv_path / "bin"
+    modified_scripts = []
+
+    # First create the XLA activation scripts
+    create_xla_activation_scripts(venv_path)
+
+    # Bash/Zsh activation integration
+    bash_activate = bin_dir / "activate"
+    if bash_activate.exists():
+        try:
+            content = bash_activate.read_text()
+
+            # Check if already integrated
+            if "homodyne XLA configuration" not in content:
+                # Append XLA configuration sourcing
+                xla_code = """
+# Homodyne XLA configuration (auto-added by homodyne-post-install)
+if [[ -f "$VIRTUAL_ENV/etc/homodyne/activation/xla_config.bash" ]]; then
+    source "$VIRTUAL_ENV/etc/homodyne/activation/xla_config.bash"
+fi
+"""
+                with bash_activate.open("a") as f:
+                    f.write(xla_code)
+
+                modified_scripts.append(bash_activate)
+                print(f"   ✅ Integrated XLA config with {bash_activate.name}")
+            else:
+                print(f"   ℹ️  XLA config already integrated with {bash_activate.name}")
+
+        except Exception as e:
+            print(f"   ⚠️  Could not integrate XLA config with {bash_activate.name}: {e}")
+
+    # Fish activation integration
+    fish_activate = bin_dir / "activate.fish"
+    if fish_activate.exists():
+        try:
+            content = fish_activate.read_text()
+
+            # Check if already integrated
+            if "homodyne XLA configuration" not in content:
+                # Append XLA configuration sourcing
+                xla_code = """
+# Homodyne XLA configuration (auto-added by homodyne-post-install)
+if test -f "$VIRTUAL_ENV/etc/homodyne/activation/xla_config.fish"
+    source "$VIRTUAL_ENV/etc/homodyne/activation/xla_config.fish"
+end
+"""
+                with fish_activate.open("a") as f:
+                    f.write(xla_code)
+
+                modified_scripts.append(fish_activate)
+                print(f"   ✅ Integrated XLA config with {fish_activate.name}")
+            else:
+                print(f"   ℹ️  XLA config already integrated with {fish_activate.name}")
+
+        except Exception as e:
+            print(f"   ⚠️  Could not integrate XLA config with {fish_activate.name}: {e}")
+
+    return modified_scripts
+
+
+def configure_xla_mode(xla_mode=None):
+    """Configure XLA_FLAGS mode for the current environment.
+
+    Parameters
+    ----------
+    xla_mode : str, optional
+        XLA mode to configure (mcmc, mcmc-hpc, nlsq, auto)
+        If None, prompts user interactively
+
+    Returns
+    -------
+    bool
+        True if configuration succeeded, False otherwise
+    """
+    from homodyne.cli.xla_config import VALID_MODES, set_mode, CONFIG_FILE
+
+    if xla_mode is None:
+        print("\n🔧 XLA Configuration")
+        print("Select XLA device mode:")
+        print("  mcmc       - 4 devices (multi-core workstations)")
+        print("  mcmc-hpc   - 8 devices (HPC with 36+ cores)")
+        print("  nlsq       - 1 device (NLSQ-only workflows)")
+        print("  auto       - Auto-detect based on CPU cores")
+
+        xla_mode = input("\nXLA mode [mcmc]: ").strip() or "mcmc"
+
+    if xla_mode not in VALID_MODES:
+        print(f"   ❌ Invalid XLA mode: {xla_mode}")
+        print(f"   Valid modes: {', '.join(VALID_MODES)}")
+        return False
+
+    try:
+        if set_mode(xla_mode):
+            print("   ✅ XLA mode configured successfully")
+            return True
+        else:
+            print("   ❌ Failed to configure XLA mode")
+            return False
+    except Exception as e:
+        print(f"   ❌ XLA configuration failed: {e}")
+        return False
+
+
 def install_shell_completion(shell_type=None, force=False):
     """Install unified shell completion system.
 
@@ -221,6 +390,9 @@ def install_shell_completion(shell_type=None, force=False):
             activate_dir = venv_path / "etc" / "conda" / "activate.d"
             activate_dir.mkdir(parents=True, exist_ok=True)
 
+            # Create XLA activation scripts
+            create_xla_activation_scripts(venv_path)
+
             completion_script = activate_dir / "homodyne-completion.sh"
             completion_content = f"""#!/bin/bash
 # Homodyne completion activation
@@ -233,6 +405,11 @@ fi
 # Bash completion
 if [[ -n "$BASH_VERSION" ]] && [[ -f "{venv_path}/etc/zsh/homodyne-completion.zsh" ]]; then
     source "{venv_path}/etc/zsh/homodyne-completion.zsh"
+fi
+
+# XLA configuration
+if [[ -f "{venv_path}/etc/homodyne/activation/xla_config.bash" ]]; then
+    source "{venv_path}/etc/homodyne/activation/xla_config.bash"
 fi
 """
             completion_script.write_text(completion_content)
@@ -251,10 +428,15 @@ fi
             # Integrate with venv/uv/virtualenv activation scripts
             modified_scripts = integrate_with_venv_activate(venv_path)
 
+            # Also integrate XLA configuration
+            xla_modified = integrate_xla_with_venv_activate(venv_path)
+            modified_scripts.extend(xla_modified)
+
             print("✅ Shell completion installed (uv/venv/virtualenv)")
             print("   • Aliases: hm, hconfig, hm-nlsq, hm-mcmc")
             print("   • Config: hc-stat, hc-flow")
             print("   • Plotting: hexp, hsim")
+            print("   • XLA_FLAGS: Auto-configured on activation")
             print()
             print(
                 "📋 Completion activates automatically when you activate this environment"
@@ -426,8 +608,22 @@ def interactive_setup():
             else (current_shell or "bash")
         )
 
+    # XLA configuration
+    print("\n2. XLA_FLAGS Configuration")
+    print("   - Auto-configures JAX CPU devices on venv activation")
+    print("   - Modes: mcmc (4 devices), mcmc-hpc (8 devices), nlsq (1 device), auto")
+    print("   - Essential for MCMC parallelization and optimal CPU usage")
+
+    configure_xla = (
+        input("   Configure XLA_FLAGS? [Y/n]: ").lower() != "n"
+    )
+
+    xla_mode = None
+    if configure_xla:
+        xla_mode = None  # Will be prompted in configure_xla_mode()
+
     # Advanced features (Phases 4-6)
-    print("\n2. Advanced Features (Phases 4-6)")
+    print("\n3. Advanced Features (Phases 4-6)")
     print("   - Phase 4: Advanced shell completion with caching")
     print("   - Phase 6: Comprehensive system validation")
     print("   - Adds homodyne-validate command")
@@ -444,6 +640,12 @@ def interactive_setup():
             results.append(f"✅ {shell_type.title()} completion")
         else:
             results.append(f"❌ {shell_type.title()} completion failed")
+
+    if configure_xla:
+        if configure_xla_mode(xla_mode):
+            results.append("✅ XLA configuration")
+        else:
+            results.append("❌ XLA configuration failed")
 
     if install_advanced:
         if install_advanced_features():
@@ -529,7 +731,7 @@ def main():
     success = True
 
     # Determine what to install
-    if args.shell or (not args.shell and not args.advanced):
+    if args.shell or (not args.shell and not args.advanced and not args.xla_mode):
         # Install shell completion by default or if specified
         print("\n📝 Installing shell completion...")
         shell_type = args.shell if args.shell else None
@@ -537,6 +739,15 @@ def main():
             results.append("✅ Shell completion")
         else:
             results.append("❌ Shell completion failed")
+            success = False
+
+    if args.xla_mode:
+        # Configure XLA if requested
+        print("\n🔧 Configuring XLA_FLAGS...")
+        if configure_xla_mode(args.xla_mode):
+            results.append("✅ XLA configuration")
+        else:
+            results.append("❌ XLA configuration failed")
             success = False
 
     if args.advanced:
@@ -577,12 +788,15 @@ def parse_args():
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
-  homodyne-post-install --interactive    # Interactive setup (recommended)
-  homodyne-post-install                  # Install shell completion only
-  homodyne-post-install --force          # Force install outside venv
+  homodyne-post-install --interactive              # Interactive setup (recommended)
+  homodyne-post-install                            # Install shell completion only
+  homodyne-post-install --xla-mode auto            # Configure XLA with auto-detection
+  homodyne-post-install --shell bash --xla-mode mcmc  # Shell completion + XLA
+  homodyne-post-install --force                    # Force install outside venv
 
 The script provides optional installation of:
 - Shell completion (bash/zsh/fish) with safe aliases
+- XLA_FLAGS auto-configuration for JAX CPU devices
 - Advanced features (Phases 4-6): completion caching, system validation
 - Virtual environment integration
 
@@ -601,6 +815,12 @@ Version 2.3.0: GPU support removed - CPU-only architecture
         "--shell",
         choices=["bash", "zsh", "fish"],
         help="Specify shell type for completion",
+    )
+
+    parser.add_argument(
+        "--xla-mode",
+        choices=["mcmc", "mcmc-hpc", "nlsq", "auto"],
+        help="Configure XLA_FLAGS mode (mcmc, mcmc-hpc, nlsq, auto)",
     )
 
     parser.add_argument(

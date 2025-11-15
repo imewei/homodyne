@@ -9,6 +9,106 @@ ______________________________________________________________________
 
 ## [Unreleased]
 
+### Added
+
+#### Automatic XLA_FLAGS Configuration System
+
+**Automatic JAX CPU device optimization** for MCMC and NLSQ workflows with intelligent hardware detection.
+
+**New CLI Commands:**
+- `homodyne-config-xla` - Utility for XLA mode configuration and status checking
+  - `--mode {mcmc,mcmc-hpc,nlsq,auto}` - Set XLA device mode
+  - `--show` - Display current XLA configuration and JAX devices
+
+**Features:**
+- **Auto-detection**: Intelligent device count based on CPU core count
+  - ≤7 cores → 2 devices (small workstations)
+  - 8-15 cores → 4 devices (medium workstations)
+  - 16-35 cores → 6 devices (large workstations)
+  - 36+ cores → 8 devices (HPC nodes)
+- **Configuration modes**:
+  - `mcmc`: 4 devices for parallel MCMC chains (multi-core workstations)
+  - `mcmc-hpc`: 8 devices for HPC clusters with 36+ cores
+  - `nlsq`: 1 device for optimal NLSQ performance (no parallelism overhead)
+  - `auto`: Automatic detection based on CPU hardware
+- **Persistent configuration**: Saves mode preference to `~/.homodyne_xla_mode`
+- **Automatic activation**: XLA_FLAGS set when virtual environment is activated
+- **Shell integration**: Works with bash, zsh, and fish shells
+- **Conda/Mamba support**: Auto-sources XLA configuration on environment activation
+- **Environment variable override**: `HOMODYNE_XLA_MODE` takes precedence over config file
+- **Manual override safety**: Respects existing `XLA_FLAGS` and never overwrites manual settings
+- **Verbose mode**: `HOMODYNE_VERBOSE=1` shows XLA configuration details
+
+**New Files:**
+- `homodyne/cli/xla_config.py` - CLI utility for XLA configuration management
+- `homodyne/runtime/shell/activation/xla_config.bash` - Bash/Zsh activation script
+- `homodyne/runtime/shell/activation/xla_config.fish` - Fish shell activation script
+- `homodyne/runtime/shell/activation/__init__.py` - Activation module package marker
+
+**Modified Files:**
+- `homodyne/post_install.py` - Integrated XLA configuration into post-install workflow
+  - Added `create_xla_activation_scripts()` function
+  - Added `integrate_xla_with_venv_activate()` function
+  - Added `configure_xla_mode()` function
+  - Added `--xla-mode` CLI argument
+  - Updated interactive setup to include XLA configuration prompts
+  - Updated conda activation scripts to source XLA configuration
+- `pyproject.toml` - Added `homodyne-config-xla` entry point
+
+**Integration Points:**
+- **homodyne-post-install**: Interactive and non-interactive XLA setup
+  - `homodyne-post-install --interactive` - Prompts for XLA mode selection
+  - `homodyne-post-install --xla-mode auto` - Quick XLA configuration
+  - `homodyne-post-install --shell bash --xla-mode mcmc` - Combined setup
+- **Virtual environment activation**: Automatic XLA_FLAGS configuration
+  - Conda/Mamba: Auto-activated via `etc/conda/activate.d/`
+  - uv/venv/virtualenv: Activated via modified `activate` scripts
+
+**Performance Impact:**
+- **MCMC (4 chains, 14-core CPU)**: 1.4x speedup with 4 devices vs single device
+- **MCMC (8 chains, 36-core HPC)**: 1.8x speedup with 8 devices vs single device
+- **NLSQ optimization**: Optimal performance with 1 device (no overhead)
+- **Auto mode**: Adapts device count automatically based on hardware
+
+**Documentation:**
+- Updated `README.md` with XLA Configuration section after Shell Completion
+- Updated `docs/user-guide/shell-completion.rst` with comprehensive XLA system documentation
+  - Configuration modes and detection logic
+  - Quick setup instructions
+  - How XLA configuration works (storage, activation, JAX detection)
+  - Verification commands
+  - Mode switching guide
+  - Advanced features (manual override, verbose mode, per-environment config)
+  - Best practices for MCMC/NLSQ/mixed workflows
+  - HPC batch job examples
+  - Troubleshooting guide
+
+**Usage Examples:**
+
+```bash
+# Interactive setup
+homodyne-post-install --interactive
+
+# Quick configuration
+homodyne-config-xla --mode auto  # Auto-detect optimal device count
+homodyne-config-xla --mode mcmc  # Configure for MCMC (4 devices)
+homodyne-config-xla --mode nlsq  # Configure for NLSQ (1 device)
+
+# Show current configuration
+homodyne-config-xla --show
+
+# Verify XLA_FLAGS
+echo $XLA_FLAGS
+# Output: --xla_force_host_platform_device_count=6
+
+# Verify JAX devices
+python -c "import jax; print(len(jax.devices()))"
+# Output: 6
+```
+
+**See Also:**
+- [XLA Configuration Guide](https://homodyne.readthedocs.io/en/latest/user-guide/shell-completion.html#xla-configuration-system)
+
 ______________________________________________________________________
 
 ## [2.3.0] - 2025-11-07

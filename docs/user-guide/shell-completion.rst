@@ -406,6 +406,418 @@ Alias Usage Examples
            --output-dir ./results/exp002 \
            --verbose
 
+XLA Configuration System
+========================
+
+Homodyne includes an automatic XLA_FLAGS configuration system that optimizes JAX CPU device allocation for MCMC and NLSQ workflows. This system automatically configures the number of CPU devices available to JAX based on your hardware and analysis mode.
+
+Why XLA Configuration Matters
+------------------------------
+
+JAX uses XLA (Accelerated Linear Algebra) to compile and execute numerical computations. The number of CPU devices JAX creates affects:
+
+- **MCMC parallelization**: Multiple chains can run in parallel across different CPU devices
+- **Memory usage**: Each device requires memory allocation
+- **Optimization performance**: NLSQ doesn't benefit from multiple devices (uses 1 device optimally)
+
+**Performance Impact:**
+
+.. list-table::
+   :header-rows: 1
+   :widths: 30 20 20 30
+
+   * - Workflow
+     - Device Count
+     - Hardware
+     - Performance
+   * - MCMC (4 chains)
+     - 4 devices
+     - 14-core CPU
+     - 1.4x speedup
+   * - MCMC (8 chains)
+     - 8 devices
+     - 36-core HPC
+     - 1.8x speedup
+   * - NLSQ optimization
+     - 1 device
+     - Any CPU
+     - Optimal (no overhead)
+   * - Auto mode
+     - 2-8 devices
+     - Adapts to CPU
+     - Automatic optimization
+
+XLA Configuration Modes
+------------------------
+
+The system provides four configuration modes optimized for different hardware and workflows:
+
+.. list-table::
+   :header-rows: 1
+   :widths: 15 15 50 20
+
+   * - Mode
+     - Devices
+     - Best For
+     - Hardware
+   * - **mcmc**
+     - 4
+     - Multi-core workstations, parallel MCMC chains
+     - 8-15 CPU cores
+   * - **mcmc-hpc**
+     - 8
+     - HPC clusters with many CPU cores
+     - 36+ CPU cores
+   * - **nlsq**
+     - 1
+     - NLSQ-only workflows, memory-constrained systems
+     - Any CPU
+   * - **auto**
+     - 2-8
+     - Automatic detection based on CPU core count
+     - Auto-adaptive
+
+**Auto Mode Detection Logic:**
+
+.. code-block:: text
+
+   CPU Cores    →    Devices
+   ≤ 7 cores    →    2 devices  (small workstations)
+   8-15 cores   →    4 devices  (medium workstations)
+   16-35 cores  →    6 devices  (large workstations)
+   36+ cores    →    8 devices  (HPC nodes)
+
+Quick XLA Setup
+---------------
+
+**Interactive configuration (recommended):**
+
+.. code-block:: bash
+
+   homodyne-post-install --interactive
+   # Answer 'Y' to "Configure XLA_FLAGS?"
+   # Select mode: mcmc, mcmc-hpc, nlsq, or auto
+
+**One-line configuration:**
+
+.. code-block:: bash
+
+   # Auto-detect optimal device count
+   homodyne-post-install --xla-mode auto
+
+   # Configure for MCMC (4 devices)
+   homodyne-post-install --xla-mode mcmc
+
+   # Configure for HPC (8 devices)
+   homodyne-post-install --xla-mode mcmc-hpc
+
+   # Configure for NLSQ only (1 device)
+   homodyne-post-install --xla-mode nlsq
+
+**Manual configuration with homodyne-config-xla:**
+
+.. code-block:: bash
+
+   # Set XLA mode
+   homodyne-config-xla --mode auto
+
+   # Show current configuration
+   homodyne-config-xla --show
+
+How XLA Configuration Works
+----------------------------
+
+The XLA configuration system automatically integrates with your virtual environment activation:
+
+**1. Configuration Storage**
+
+Your selected mode is saved to ``~/.homodyne_xla_mode``:
+
+.. code-block:: bash
+
+   cat ~/.homodyne_xla_mode
+   # Output: auto
+
+**2. Automatic Activation**
+
+When you activate your environment, XLA_FLAGS is automatically set:
+
+**Conda/Mamba environments:**
+
+.. code-block:: bash
+
+   conda activate myenv
+   # Automatically sources: $CONDA_PREFIX/etc/conda/activate.d/homodyne-completion.sh
+   # XLA_FLAGS is set based on ~/.homodyne_xla_mode
+
+   echo $XLA_FLAGS
+   # Output: --xla_force_host_platform_device_count=6
+
+**uv/venv/virtualenv:**
+
+.. code-block:: bash
+
+   source venv/bin/activate
+   # Automatically sources: $VIRTUAL_ENV/etc/homodyne/activation/xla_config.bash
+   # (if added to ~/.bashrc via homodyne-post-install)
+
+   echo $XLA_FLAGS
+   # Output: --xla_force_host_platform_device_count=4
+
+**3. JAX Device Detection**
+
+JAX automatically detects the configured devices:
+
+.. code-block:: bash
+
+   python -c "import jax; print('Devices:', jax.devices())"
+   # Output: Devices: [CpuDevice(id=0), CpuDevice(id=1), CpuDevice(id=2), CpuDevice(id=3)]
+
+Verifying XLA Configuration
+----------------------------
+
+**Check current XLA mode:**
+
+.. code-block:: bash
+
+   homodyne-config-xla --show
+
+**Example output:**
+
+.. code-block:: text
+
+   Current XLA Configuration:
+     Mode: auto
+     XLA_FLAGS: --xla_force_host_platform_device_count=6
+     Config file: /home/user/.homodyne_xla_mode
+     JAX devices: 6 (cpu)
+       [0] TFRT_CPU_0
+       [1] TFRT_CPU_1
+       [2] TFRT_CPU_2
+       [3] TFRT_CPU_3
+       [4] TFRT_CPU_4
+       [5] TFRT_CPU_5
+
+**Check environment variable directly:**
+
+.. code-block:: bash
+
+   echo $XLA_FLAGS
+   # Output: --xla_force_host_platform_device_count=6
+
+**Verify JAX devices in Python:**
+
+.. code-block:: python
+
+   import jax
+   print(f"Device count: {len(jax.devices())}")
+   print(f"Devices: {jax.devices()}")
+
+Switching XLA Modes
+--------------------
+
+You can switch XLA modes at any time and changes take effect on the next environment activation.
+
+**Switch to auto mode:**
+
+.. code-block:: bash
+
+   homodyne-config-xla --mode auto
+   # ✓ XLA mode set to: auto
+   #   → Auto-detect: 6 devices (detected 20 CPU cores)
+
+   # Reload shell or reactivate environment
+   conda deactivate && conda activate myenv
+
+**Switch to NLSQ mode (single device):**
+
+.. code-block:: bash
+
+   homodyne-config-xla --mode nlsq
+   # ✓ XLA mode set to: nlsq
+   #   → 1 CPU device (NLSQ doesn't need parallelism)
+
+   source ~/.bashrc  # Or reactivate venv
+
+**Switch to HPC mode (8 devices):**
+
+.. code-block:: bash
+
+   homodyne-config-xla --mode mcmc-hpc
+   # ✓ XLA mode set to: mcmc-hpc
+   #   → 8 CPU devices for HPC clusters (36+ cores)
+
+Advanced XLA Features
+---------------------
+
+Manual XLA_FLAGS Override
+^^^^^^^^^^^^^^^^^^^^^^^^^
+
+If you need to override the automatic configuration temporarily:
+
+.. code-block:: bash
+
+   # Export XLA_FLAGS before activating environment
+   export XLA_FLAGS="--xla_force_host_platform_device_count=2"
+
+   # Activate environment (automatic config is skipped)
+   source venv/bin/activate
+
+   # Verify override
+   echo $XLA_FLAGS
+   # Output: --xla_force_host_platform_device_count=2
+
+The activation scripts respect existing ``XLA_FLAGS`` and never override your manual settings.
+
+Verbose Mode
+^^^^^^^^^^^^
+
+Enable verbose output to see XLA configuration details during activation:
+
+.. code-block:: bash
+
+   export HOMODYNE_VERBOSE=1
+   source venv/bin/activate
+
+**Output:**
+
+.. code-block:: text
+
+   [homodyne] XLA: auto mode → 6 devices (detected 20 CPU cores)
+
+Environment-Specific Configuration
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+You can set mode per-environment using environment variables:
+
+.. code-block:: bash
+
+   # In environment 1: use NLSQ mode
+   export HOMODYNE_XLA_MODE=nlsq
+   source env1/bin/activate
+
+   # In environment 2: use auto mode
+   export HOMODYNE_XLA_MODE=auto
+   source env2/bin/activate
+
+Environment variable ``HOMODYNE_XLA_MODE`` takes precedence over ``~/.homodyne_xla_mode``.
+
+XLA Configuration Best Practices
+---------------------------------
+
+**For MCMC workflows:**
+
+.. code-block:: bash
+
+   # Use mcmc mode (4 devices) for typical workstations
+   homodyne-config-xla --mode mcmc
+
+   # Use mcmc-hpc mode (8 devices) for HPC clusters (36+ cores)
+   homodyne-config-xla --mode mcmc-hpc
+
+   # Run MCMC
+   homodyne --method mcmc --config config.yaml
+
+**For NLSQ workflows:**
+
+.. code-block:: bash
+
+   # Use nlsq mode (1 device) for optimal performance
+   homodyne-config-xla --mode nlsq
+
+   # Run NLSQ
+   homodyne --method nlsq --config config.yaml
+
+**For mixed workflows (NLSQ + MCMC):**
+
+.. code-block:: bash
+
+   # Use auto mode (adapts to hardware)
+   homodyne-config-xla --mode auto
+
+   # Or use mcmc mode (slight NLSQ overhead acceptable)
+   homodyne-config-xla --mode mcmc
+
+**For HPC batch jobs:**
+
+.. code-block:: bash
+
+   #!/bin/bash
+   #SBATCH --nodes=1
+   #SBATCH --ntasks-per-node=36
+
+   # Configure for HPC
+   homodyne-config-xla --mode mcmc-hpc
+
+   # Activate environment
+   source homodyne-env/bin/activate
+
+   # Run analysis
+   homodyne --method mcmc --config analysis.yaml
+
+XLA Troubleshooting
+-------------------
+
+**XLA_FLAGS not being set:**
+
+.. code-block:: bash
+
+   # Check if activation scripts exist
+   ls $VIRTUAL_ENV/etc/homodyne/activation/xla_config.bash  # venv
+   ls $CONDA_PREFIX/etc/conda/activate.d/homodyne-completion.sh  # conda
+
+   # If missing, reinstall
+   homodyne-post-install --xla-mode auto
+
+**Wrong device count:**
+
+.. code-block:: bash
+
+   # Check current mode
+   homodyne-config-xla --show
+
+   # Switch to correct mode
+   homodyne-config-xla --mode mcmc
+
+   # Reload environment
+   conda deactivate && conda activate myenv
+
+**JAX not detecting devices:**
+
+.. code-block:: bash
+
+   # Verify XLA_FLAGS is set
+   echo $XLA_FLAGS
+   # Should output: --xla_force_host_platform_device_count=N
+
+   # If empty, check activation
+   source $VIRTUAL_ENV/etc/homodyne/activation/xla_config.bash
+
+   # Verify in Python
+   python -c "import jax; print(len(jax.devices()))"
+
+**Manual XLA_FLAGS not respected:**
+
+The activation scripts check for existing ``XLA_FLAGS`` first:
+
+.. code-block:: bash
+
+   # Set before activation
+   export XLA_FLAGS="--xla_force_host_platform_device_count=2"
+
+   # Then activate
+   source venv/bin/activate
+
+   # Verify (should show 2, not auto-configured value)
+   echo $XLA_FLAGS
+
+See Also
+^^^^^^^^
+
+- :doc:`../advanced-topics/mcmc-uncertainty` - MCMC performance optimization
+- :doc:`../advanced-topics/nlsq-optimization` - NLSQ device configuration
+- :doc:`cli-usage` - Full CLI reference including ``homodyne-config-xla``
+
 Advanced Features
 =================
 

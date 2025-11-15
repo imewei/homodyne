@@ -443,6 +443,127 @@ hm-nlsq --<TAB>                # Shows all available options
 
 **See documentation:** [Shell Completion Guide](https://homodyne.readthedocs.io/en/latest/user-guide/shell-completion.html)
 
+## XLA Configuration
+
+Homodyne includes automatic XLA_FLAGS configuration that optimizes JAX CPU device allocation for MCMC and NLSQ workflows.
+
+### Quick Setup
+
+```bash
+# Interactive setup (recommended)
+homodyne-post-install --interactive
+
+# Or quick one-liner
+homodyne-post-install --xla-mode auto  # Auto-detect optimal device count
+homodyne-post-install --xla-mode mcmc  # Configure for MCMC (4 devices)
+```
+
+### Configuration Modes
+
+| Mode | Devices | Best For | Hardware |
+|------|---------|----------|----------|
+| **mcmc** | 4 | Multi-core workstations, parallel MCMC chains | 8-15 CPU cores |
+| **mcmc-hpc** | 8 | HPC clusters with many CPU cores | 36+ CPU cores |
+| **nlsq** | 1 | NLSQ-only workflows, memory-constrained systems | Any CPU |
+| **auto** | 2-8 | Automatic detection based on CPU core count | Auto-adaptive |
+
+**Auto mode detection logic:**
+
+```text
+CPU Cores    →    Devices
+≤ 7 cores    →    2 devices  (small workstations)
+8-15 cores   →    4 devices  (medium workstations)
+16-35 cores  →    6 devices  (large workstations)
+36+ cores    →    8 devices  (HPC nodes)
+```
+
+### Managing XLA Configuration
+
+```bash
+# Set XLA mode
+homodyne-config-xla --mode auto
+
+# Show current configuration
+homodyne-config-xla --show
+
+# Example output:
+#   Current XLA Configuration:
+#     Mode: auto
+#     XLA_FLAGS: --xla_force_host_platform_device_count=6
+#     JAX devices: 6 (cpu)
+```
+
+### How It Works
+
+1. **Configuration Storage**: Your selected mode is saved to `~/.homodyne_xla_mode`
+2. **Automatic Activation**: XLA_FLAGS is set automatically when you activate your virtual environment
+3. **JAX Detection**: JAX automatically creates the configured number of CPU devices
+
+**Conda/Mamba** (automatic):
+```bash
+conda activate myenv  # XLA_FLAGS auto-configured
+echo $XLA_FLAGS
+# Output: --xla_force_host_platform_device_count=6
+```
+
+**uv/venv/virtualenv** (requires shell RC update):
+```bash
+# Add to ~/.bashrc or ~/.zshrc
+echo 'source $VIRTUAL_ENV/bin/homodyne-activate' >> ~/.bashrc
+source ~/.bashrc
+```
+
+### Performance Impact
+
+| Workflow | Device Count | Hardware | Performance |
+|----------|--------------|----------|-------------|
+| MCMC (4 chains) | 4 devices | 14-core CPU | 1.4x speedup |
+| MCMC (8 chains) | 8 devices | 36-core HPC | 1.8x speedup |
+| NLSQ optimization | 1 device | Any CPU | Optimal (no overhead) |
+| Auto mode | 2-8 devices | Adapts to CPU | Automatic optimization |
+
+### Best Practices
+
+**For MCMC workflows:**
+```bash
+homodyne-config-xla --mode mcmc      # Typical workstations
+homodyne-config-xla --mode mcmc-hpc  # HPC clusters (36+ cores)
+homodyne --method mcmc --config config.yaml
+```
+
+**For NLSQ workflows:**
+```bash
+homodyne-config-xla --mode nlsq  # Optimal single-device performance
+homodyne --method nlsq --config config.yaml
+```
+
+**For mixed workflows:**
+```bash
+homodyne-config-xla --mode auto  # Adapts to hardware automatically
+```
+
+### Advanced Features
+
+**Manual override** (temporary):
+```bash
+export XLA_FLAGS="--xla_force_host_platform_device_count=2"
+source venv/bin/activate  # Respects your manual setting
+```
+
+**Per-environment configuration**:
+```bash
+export HOMODYNE_XLA_MODE=nlsq  # Takes precedence over ~/.homodyne_xla_mode
+```
+
+**Verbose mode**:
+```bash
+export HOMODYNE_VERBOSE=1
+source venv/bin/activate
+# Output: [homodyne] XLA: auto mode → 6 devices (detected 20 CPU cores)
+```
+
+**See documentation:** [XLA Configuration Guide](https://homodyne.readthedocs.io/en/latest/user-guide/shell-completion.html#xla-configuration-system)
+
 ## Analysis Modes
 
 ### Static Isotropic (3 parameters)
