@@ -222,7 +222,7 @@ class PjitBackend(CMCBackend):
         mcmc_config: Dict[str, Any],
         init_params: Dict[str, float],
         inv_mass_matrix: np.ndarray,
-        analysis_mode: str = "static_isotropic",
+        analysis_mode: str = "static",
         parameter_space: Optional["ParameterSpace"] = None,
     ) -> List[Dict[str, Any]]:
         """Execute shards sequentially on single device.
@@ -238,7 +238,7 @@ class PjitBackend(CMCBackend):
         inv_mass_matrix : np.ndarray
             Mass matrix
         analysis_mode : str, optional
-            Analysis mode ('static_isotropic' or 'laminar_flow')
+            Analysis mode ('static' or 'laminar_flow')
         parameter_space : ParameterSpace, optional
             Parameter space with configuration-specific bounds
 
@@ -302,6 +302,8 @@ class PjitBackend(CMCBackend):
         mcmc_config: Dict[str, Any],
         init_params: Dict[str, float],
         inv_mass_matrix: np.ndarray,
+        analysis_mode: str = "static",
+        parameter_space: Optional["ParameterSpace"] = None,
     ) -> List[Dict[str, Any]]:
         """Execute shards in parallel across multiple GPUs using pmap.
 
@@ -350,6 +352,8 @@ class PjitBackend(CMCBackend):
                 init_params,
                 inv_mass_matrix,
                 start_shard_idx=start_idx,
+                analysis_mode=analysis_mode,
+                parameter_space=parameter_space,
             )
 
             results.extend(batch_results)
@@ -363,6 +367,8 @@ class PjitBackend(CMCBackend):
         init_params: Dict[str, float],
         inv_mass_matrix: np.ndarray,
         start_shard_idx: int,
+        analysis_mode: str = "static",
+        parameter_space: Optional["ParameterSpace"] = None,
     ) -> List[Dict[str, Any]]:
         """Execute a batch of shards in parallel using pmap.
 
@@ -407,7 +413,13 @@ class PjitBackend(CMCBackend):
 
             try:
                 result = self._run_single_shard_mcmc(
-                    shard, mcmc_config, init_params, inv_mass_matrix, shard_idx
+                    shard,
+                    mcmc_config,
+                    init_params,
+                    inv_mass_matrix,
+                    analysis_mode,
+                    parameter_space,
+                    shard_idx,
                 )
                 result["elapsed_time"] = self._get_elapsed_time(start_time)
                 self._validate_shard_result(result, shard_idx)

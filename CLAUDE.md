@@ -338,3 +338,4 @@ ______________________________________________________________________
 - Per-angle scaling mandatory in v2.4.0
 - CPU-only in v2.3.0+ (GPU support removed)
 - All C2 heatmap plots now use adaptive color scaling with the conditional logic: vmin = max(1.0, c2_min)  # Use data_min if >= 1.0, else clamp to 1.0; vmax = min(1.6, c2_max)  # Use data_max if <= 1.6, else clamp to 1.6
+- Only two modes, "static" and "laminar_flow", are available in the current codebase. No "static_isotropic" and "static_anisotropic" modes exist in the current codebase.

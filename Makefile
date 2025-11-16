@@ -3,7 +3,7 @@
 # JAX-accelerated XPCS analysis with NLSQ and MCMC (CPU-only)
 # Updated: 2025-11-10 - CPU-only (JAX 0.7.2 local, 0.8.0 target)
 
-.PHONY: help clean clean-all clean-build clean-pyc clean-test clean-cache install dev test test-all test-unit test-integration test-performance lint format type-check type-check-strict quality docs build check benchmark env-info
+.PHONY: help clean clean-all clean-build clean-pyc clean-test clean-cache install dev test test-all test-parallel test-all-parallel test-unit test-integration test-performance lint format type-check type-check-strict quality docs build check benchmark env-info
 
 # Variables
 PYTHON := python
@@ -70,6 +70,8 @@ help:
 	@echo "Testing:"
 	@echo "  test            Run core unit tests"
 	@echo "  test-all        Run all tests with coverage"
+	@echo "  test-parallel   Run core unit tests in parallel (requires pytest-xdist)"
+	@echo "  test-all-parallel Run all tests with coverage in parallel (requires pytest-xdist)"
 	@echo "  test-unit       Run unit tests only"
 	@echo "  test-integration Run integration tests only"
 	@echo "  test-performance Run performance benchmarks"
@@ -197,6 +199,12 @@ test:
 
 test-all:
 	$(PYTEST) tests/ -v --cov=homodyne --cov-report=html --cov-report=term
+
+test-parallel:
+	$(PYTEST) tests/unit -v --tb=short -n auto
+
+test-all-parallel:
+	$(PYTEST) tests/ -v --cov=homodyne --cov-report=html --cov-report=term -n auto
 
 test-unit:
 	$(PYTEST) tests/unit -v --tb=short
