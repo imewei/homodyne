@@ -21,7 +21,7 @@ class TestInitialParametersLoading:
     def test_load_explicit_values_static(self):
         """Test loading explicit values for static mode."""
         config = {
-            "analysis_mode": "static_isotropic",
+            "analysis_mode": "static",
             "initial_parameters": {
                 "parameter_names": ["D0", "alpha", "D_offset"],
                 "values": [1000.0, 0.5, 10.0],
@@ -91,7 +91,7 @@ class TestInitialParametersLoading:
     def test_values_type_coercion(self):
         """Test that values are coerced to float."""
         config = {
-            "analysis_mode": "static_isotropic",
+            "analysis_mode": "static",
             "initial_parameters": {
                 "parameter_names": ["D0", "alpha"],
                 "values": [1000, 0],  # Integers, should be converted to float
@@ -113,7 +113,7 @@ class TestMidpointDefaultCalculation:
     def test_null_values_uses_midpoint(self):
         """Test that null values trigger mid-point calculation."""
         config = {
-            "analysis_mode": "static_isotropic",
+            "analysis_mode": "static",
             "initial_parameters": {
                 "parameter_names": ["D0", "alpha", "D_offset"],
                 "values": None,  # Null values
@@ -139,7 +139,7 @@ class TestMidpointDefaultCalculation:
     def test_missing_values_uses_midpoint(self):
         """Test that missing values field triggers mid-point calculation."""
         config = {
-            "analysis_mode": "static_isotropic",
+            "analysis_mode": "static",
             "initial_parameters": {
                 "parameter_names": ["D0", "alpha", "D_offset"],
                 # No 'values' field
@@ -164,7 +164,7 @@ class TestMidpointDefaultCalculation:
     def test_no_initial_parameters_section(self):
         """Test that missing initial_parameters section uses mid-point defaults."""
         config = {
-            "analysis_mode": "static_isotropic",
+            "analysis_mode": "static",
             "parameter_space": {
                 "model": "static",
                 "bounds": [
@@ -204,7 +204,7 @@ class TestMidpointDefaultCalculation:
     def test_midpoint_with_custom_bounds(self):
         """Test mid-point calculation with custom bounds in config."""
         config = {
-            "analysis_mode": "static_isotropic",
+            "analysis_mode": "static",
             "initial_parameters": {
                 "values": None,
             },
@@ -287,7 +287,7 @@ class TestFixedParametersFiltering:
     def test_fixed_parameters_excluded(self):
         """Test that fixed_parameters are excluded from initial parameters."""
         config = {
-            "analysis_mode": "static_isotropic",
+            "analysis_mode": "static",
             "initial_parameters": {
                 "parameter_names": ["D0", "alpha", "D_offset"],
                 "values": [1000.0, 0.5, 10.0],
@@ -356,7 +356,7 @@ class TestErrorHandling:
     def test_values_length_mismatch(self):
         """Test error when values length doesn't match parameter_names."""
         config = {
-            "analysis_mode": "static_isotropic",
+            "analysis_mode": "static",
             "initial_parameters": {
                 "parameter_names": ["D0", "alpha", "D_offset"],
                 "values": [1000.0, 0.5],  # Only 2 values, need 3
@@ -371,7 +371,7 @@ class TestErrorHandling:
     def test_values_not_list(self):
         """Test error when values is not a list."""
         config = {
-            "analysis_mode": "static_isotropic",
+            "analysis_mode": "static",
             "initial_parameters": {
                 "parameter_names": ["D0", "alpha"],
                 "values": "invalid",  # String instead of list
@@ -386,7 +386,7 @@ class TestErrorHandling:
     def test_null_values_without_midpoint(self):
         """Test error when values are null and use_midpoint_defaults is False."""
         config = {
-            "analysis_mode": "static_isotropic",
+            "analysis_mode": "static",
             "initial_parameters": {
                 "parameter_names": ["D0", "alpha"],
                 "values": None,
@@ -407,7 +407,7 @@ class TestErrorHandling:
         initial_params = config_mgr.get_initial_parameters()
 
         # Empty config should still return mid-point defaults from package defaults
-        # Default mode is "static_isotropic" with 3 parameters
+        # Default mode is "static" with 3 parameters
         assert len(initial_params) >= 0  # May be empty or have defaults
         assert isinstance(initial_params, dict)
 
@@ -419,7 +419,7 @@ class TestIntegrationScenarios:
         """Test loading NLSQ results as initial values for MCMC."""
         # Simulate NLSQ results manually copied to config
         config = {
-            "analysis_mode": "static_isotropic",
+            "analysis_mode": "static",
             "initial_parameters": {
                 "parameter_names": ["D0", "alpha", "D_offset"],
                 "values": [1234.5, 0.567, 12.34],  # From NLSQ output
@@ -438,7 +438,7 @@ class TestIntegrationScenarios:
         """Test partial optimization (fixing some parameters)."""
         # User wants to optimize D0 and alpha, but fix D_offset
         config = {
-            "analysis_mode": "static_isotropic",
+            "analysis_mode": "static",
             "initial_parameters": {
                 "parameter_names": ["D0", "alpha", "D_offset"],
                 "values": [1000.0, 0.5, 10.0],
@@ -531,7 +531,7 @@ class TestEdgeCases:
     def test_single_parameter(self):
         """Test with single parameter."""
         config = {
-            "analysis_mode": "static_isotropic",
+            "analysis_mode": "static",
             "initial_parameters": {
                 "parameter_names": ["D0"],
                 "values": [1000.0],
@@ -546,7 +546,7 @@ class TestEdgeCases:
     def test_negative_values(self):
         """Test that negative values are handled correctly."""
         config = {
-            "analysis_mode": "static_isotropic",
+            "analysis_mode": "static",
             "initial_parameters": {
                 "parameter_names": ["alpha", "D_offset"],
                 "values": [-1.5, -10.0],  # Negative values
@@ -562,7 +562,7 @@ class TestEdgeCases:
     def test_very_large_values(self):
         """Test that very large values are handled correctly."""
         config = {
-            "analysis_mode": "static_isotropic",
+            "analysis_mode": "static",
             "initial_parameters": {
                 "parameter_names": ["D0"],
                 "values": [1e10],  # Very large value

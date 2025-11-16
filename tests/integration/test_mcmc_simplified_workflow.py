@@ -170,7 +170,7 @@ class TestManualNLSQMCMCWorkflow:
         """Test full workflow: NLSQ → manual copy → MCMC."""
         # Arrange - Simulate NLSQ results
         nlsq_result = create_mock_optimization_result(
-            analysis_mode="static_isotropic", converged=True
+            analysis_mode="static", converged=True
         )
 
         # NLSQ returns: [contrast, offset, D0, alpha, D_offset]
@@ -273,18 +273,18 @@ class TestConvergenceAndErrorHandling:
 class TestParameterRegimeConvergence:
     """Test convergence across different parameter regimes."""
 
-    def test_static_isotropic_parameter_regime(self):
-        """Test MCMC works for static_isotropic mode (3 physics params)."""
+    def test_static_mode_parameter_regime(self):
+        """Test MCMC works for static_mode mode (3 physics params)."""
         # Arrange - Static isotropic data
         data = create_mock_data_dict(n_angles=10, n_t1=25, n_t2=25)
-        config = create_mock_config_manager(analysis_mode="static_isotropic")
+        config = create_mock_config_manager(analysis_mode="static")
 
         # Physics parameters: [D0, alpha, D_offset]
         n_physics_params = 3
         n_total_params = 5  # Add contrast, offset
 
         # Assert - Parameter counts correct
-        assert config["analysis_mode"] == "static_isotropic"
+        assert config["analysis_mode"] == "static"
         assert n_physics_params == 3, "Static isotropic has 3 physics params"
         assert n_total_params == 5, "Total with scaling is 5 params"
 

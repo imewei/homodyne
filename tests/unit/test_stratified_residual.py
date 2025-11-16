@@ -102,7 +102,7 @@ def mock_stratified_data_small():
 
 @pytest.fixture
 def physical_param_names_static():
-    """Physical parameter names for static_isotropic mode."""
+    """Physical parameter names for static_mode mode."""
     return ["D0", "alpha", "D_offset"]
 
 
@@ -384,7 +384,7 @@ def test_factory_validation_can_be_disabled(
 # Test 6: Parameter Structure
 def test_per_angle_parameter_structure():
     """Test that per-angle parameters are structured correctly."""
-    # For 3 angles, static_isotropic mode:
+    # For 3 angles, static_mode mode:
     # params = [contrast_0, contrast_1, contrast_2, offset_0, offset_1, offset_2, D0, alpha, D_offset]
     n_phi = 3
     n_scaling = 2 * n_phi  # 6

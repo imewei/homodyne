@@ -30,7 +30,7 @@ from homodyne.config.parameter_names import (
 class TestParameterNameConstants:
     """Test parameter name constant definitions."""
 
-    def test_static_isotropic_params_count(self):
+    def test_static_mode_params_count(self):
         """Verify static mode has 5 parameters."""
         assert len(STATIC_ISOTROPIC_PARAMS) == 5
 
@@ -60,7 +60,7 @@ class TestParameterNameConstants:
 
     def test_get_parameter_names_static(self):
         """Test get_parameter_names for static mode."""
-        params = get_parameter_names("static_isotropic")
+        params = get_parameter_names("static")
         assert params == STATIC_ISOTROPIC_PARAMS
 
     def test_get_parameter_names_laminar(self):
@@ -70,7 +70,7 @@ class TestParameterNameConstants:
 
     def test_get_num_parameters(self):
         """Test get_num_parameters function."""
-        assert get_num_parameters("static_isotropic") == 5
+        assert get_num_parameters("static") == 5
         assert get_num_parameters("laminar_flow") == 9
 
 
@@ -80,7 +80,7 @@ class TestParameterNameValidation:
     def test_validate_correct_static_params(self):
         """Validate correct static parameter names."""
         params = ["contrast", "offset", "D0", "alpha", "D_offset"]
-        validate_parameter_names(params, "static_isotropic")  # Should not raise
+        validate_parameter_names(params, "static")  # Should not raise
 
     def test_validate_correct_laminar_params(self):
         """Validate correct laminar flow parameter names."""
@@ -101,19 +101,19 @@ class TestParameterNameValidation:
         """Test validation fails with wrong order (strict mode)."""
         params = ["offset", "contrast", "D0", "alpha", "D_offset"]  # Wrong order
         with pytest.raises(ValueError, match="don't match expected order"):
-            validate_parameter_names(params, "static_isotropic", strict=True)
+            validate_parameter_names(params, "static", strict=True)
 
     def test_validate_missing_params(self):
         """Test validation fails with missing parameters."""
         params = ["contrast", "D0", "alpha"]  # Missing offset, D_offset
         with pytest.raises(ValueError, match="Missing parameters"):
-            validate_parameter_names(params, "static_isotropic", strict=False)
+            validate_parameter_names(params, "static", strict=False)
 
     def test_validate_extra_params(self):
         """Test validation fails with extra parameters."""
         params = ["contrast", "offset", "D0", "alpha", "D_offset", "extra_param"]
         with pytest.raises(ValueError, match="Unexpected parameters"):
-            validate_parameter_names(params, "static_isotropic", strict=False)
+            validate_parameter_names(params, "static", strict=False)
 
     def test_verify_samples_dict_complete(self):
         """Test verify_samples_dict with complete samples."""
@@ -124,7 +124,7 @@ class TestParameterNameValidation:
             "alpha": np.array([0.5]),
             "D_offset": np.array([10.0]),
         }
-        verify_samples_dict(samples, "static_isotropic")  # Should not raise
+        verify_samples_dict(samples, "static")  # Should not raise
 
     def test_verify_samples_dict_missing(self):
         """Test verify_samples_dict fails with missing parameters."""
@@ -134,7 +134,7 @@ class TestParameterNameValidation:
             # Missing: offset, alpha, D_offset
         }
         with pytest.raises(KeyError, match="Missing parameters in MCMC samples"):
-            verify_samples_dict(samples, "static_isotropic")
+            verify_samples_dict(samples, "static")
 
 
 class TestMCMCModelConsistency:
@@ -170,7 +170,7 @@ class TestMCMCModelConsistency:
                 phi=np.array([0.0]),
                 q=0.005,
                 L=1.0,
-                analysis_mode="static_isotropic",
+                analysis_mode="static",
                 parameter_space=param_space,
                 dt=1.0,
             )

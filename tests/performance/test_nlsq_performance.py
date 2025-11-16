@@ -279,7 +279,7 @@ class TestCheckpointSaveTiming:
             enable_compression=True,
         )
 
-        # Small state (5 parameters for static_isotropic)
+        # Small state (5 parameters for static_mode)
         batch_idx = 10
         parameters = np.random.randn(5)
         optimizer_state = {

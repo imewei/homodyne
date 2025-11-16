@@ -261,6 +261,7 @@ class TestCMCDiagnosticPlotGeneration:
         mock_config = Mock()
         mock_config.get_cmc_config.return_value = {}
         mock_config.config = {"analysis_mode": "laminar_flow"}
+        mock_config.get_initial_parameters.return_value = None  # Prevent Mock iteration error
 
         # Fix: Ensure phi_angles_list matches c2_exp first dimension
         # Also provide 2D meshgrids for t1/t2 (required by data pooling code)
@@ -317,6 +318,7 @@ class TestCMCDiagnosticPlotGeneration:
         mock_config = Mock()
         mock_config.get_cmc_config.return_value = {}
         mock_config.config = {"analysis_mode": "laminar_flow"}
+        mock_config.get_initial_parameters.return_value = None  # Prevent Mock iteration error
 
         # Fix: Ensure phi_angles_list matches c2_exp first dimension
         # Also provide 2D meshgrids for t1/t2 (required by data pooling code)
@@ -369,6 +371,7 @@ class TestCMCDiagnosticPlotGeneration:
         mock_config = Mock()
         mock_config.get_cmc_config.return_value = {}
         mock_config.config = {"analysis_mode": "laminar_flow"}
+        mock_config.get_initial_parameters.return_value = None  # Prevent Mock iteration error
 
         # Fix: Ensure phi_angles_list matches c2_exp first dimension
         # Also provide 2D meshgrids for t1/t2 (required by data pooling code)

@@ -11,16 +11,16 @@ import pytest
 from homodyne.optimization.nlsq_wrapper import NLSQWrapper
 from tests.factories.synthetic_data import (
     generate_laminar_flow_dataset,
-    generate_static_isotropic_dataset,
+    generate_static_mode_dataset,
 )
 
 
 class TestParameterRecoveryAccuracy:
     """Test parameter recovery from synthetic data (T035)."""
 
-    def test_static_isotropic_parameter_recovery(self):
+    def test_static_mode_parameter_recovery(self):
         """
-        T035: Test recovery of static isotropic parameters within 5% error.
+        T035: Test recovery of static mode parameters within 5% error.
 
         Acceptance: All 5 parameters (contrast, offset, D0, alpha, D_offset)
         recovered within 5% relative error from known ground truth.
@@ -34,7 +34,7 @@ class TestParameterRecoveryAccuracy:
             "D_offset": 10.0,
         }
 
-        data = generate_static_isotropic_dataset(
+        data = generate_static_mode_dataset(
             **ground_truth,
             noise_level=0.02,  # Low noise for accurate recovery
             n_phi=10,
@@ -78,7 +78,7 @@ class TestParameterRecoveryAccuracy:
             config=mock_config,
             initial_params=initial_params,
             bounds=bounds,
-            analysis_mode="static_isotropic",
+            analysis_mode="static",
         )
 
         # Extract recovered parameters (per-angle scaling: take mean across angles)

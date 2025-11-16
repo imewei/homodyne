@@ -38,7 +38,7 @@ class TestCMCConfigParsing:
     def test_parse_minimal_cmc_config(self):
         """Test parsing minimal CMC configuration with defaults."""
         config_yaml = """
-analysis_mode: static_isotropic
+analysis_mode: static_mode
 
 optimization:
   method: cmc
@@ -150,7 +150,7 @@ optimization:
     def test_parse_partial_cmc_config_with_defaults(self):
         """Test that partial config merges correctly with defaults."""
         config_yaml = """
-analysis_mode: static_isotropic
+analysis_mode: static_mode
 
 optimization:
   method: cmc
@@ -189,7 +189,7 @@ class TestCMCConfigDefaults:
     def test_defaults_without_cmc_section(self):
         """Test that defaults are returned when no CMC section exists."""
         config_yaml = """
-analysis_mode: static_isotropic
+analysis_mode: static_mode
 """
         with tempfile.NamedTemporaryFile(mode="w", suffix=".yaml", delete=False) as f:
             f.write(config_yaml)
@@ -215,7 +215,7 @@ analysis_mode: static_isotropic
     def test_defaults_with_empty_cmc_section(self):
         """Test defaults applied when CMC section is empty."""
         config_yaml = """
-analysis_mode: static_isotropic
+analysis_mode: static_mode
 
 optimization:
   method: cmc
@@ -245,7 +245,7 @@ class TestCMCConfigValidation:
     def test_invalid_enable_value(self):
         """Test validation catches invalid enable value."""
         config_yaml = """
-analysis_mode: static_isotropic
+analysis_mode: static_mode
 
 optimization:
   cmc:
@@ -267,7 +267,7 @@ optimization:
     def test_invalid_sharding_strategy(self):
         """Test validation catches invalid sharding strategy."""
         config_yaml = """
-analysis_mode: static_isotropic
+analysis_mode: static_mode
 
 optimization:
   cmc:
@@ -290,7 +290,7 @@ optimization:
     def test_invalid_num_shards(self):
         """Test validation catches invalid num_shards."""
         config_yaml = """
-analysis_mode: static_isotropic
+analysis_mode: static_mode
 
 optimization:
   cmc:
@@ -310,40 +310,10 @@ optimization:
         finally:
             Path(config_path).unlink()
 
-    @pytest.mark.skip(
-        reason="v2.1.0 removed mcmc.initialization section and initialization.method field"
-    )
-    def test_invalid_initialization_method(self):
-        """Test validation catches invalid initialization method.
-
-        DEPRECATED in v2.1.0: The initialization section was removed.
-        Tests now use physics-informed priors directly from ParameterSpace.
-        """
-        config_yaml = """
-analysis_mode: static_isotropic
-
-optimization:
-  cmc:
-    initialization:
-      method: random_init
-"""
-        with tempfile.NamedTemporaryFile(mode="w", suffix=".yaml", delete=False) as f:
-            f.write(config_yaml)
-            f.flush()
-            config_path = f.name
-
-        try:
-            config_mgr = ConfigManager(config_path)
-            with pytest.raises(ValueError, match="Initialization method must be"):
-                config_mgr.get_cmc_config()
-
-        finally:
-            Path(config_path).unlink()
-
     def test_invalid_backend_name(self):
         """Test validation catches invalid backend name."""
         config_yaml = """
-analysis_mode: static_isotropic
+analysis_mode: static_mode
 
 optimization:
   cmc:
@@ -366,7 +336,7 @@ optimization:
     def test_invalid_min_success_rate(self):
         """Test validation catches invalid min_success_rate."""
         config_yaml = """
-analysis_mode: static_isotropic
+analysis_mode: static_mode
 
 optimization:
   cmc:
@@ -389,7 +359,7 @@ optimization:
     def test_invalid_per_shard_num_warmup(self):
         """Test validation catches invalid num_warmup."""
         config_yaml = """
-analysis_mode: static_isotropic
+analysis_mode: static_mode
 
 optimization:
   cmc:
@@ -414,7 +384,7 @@ optimization:
     def test_invalid_rhat_threshold(self):
         """Test validation catches invalid max_per_shard_rhat."""
         config_yaml = """
-analysis_mode: static_isotropic
+analysis_mode: static_mode
 
 optimization:
   cmc:
@@ -441,7 +411,7 @@ class TestCMCConfigManagerMethod:
     def test_get_cmc_config_returns_dict(self):
         """Test that get_cmc_config() returns a dictionary."""
         config_yaml = """
-analysis_mode: static_isotropic
+analysis_mode: static_mode
 
 optimization:
   cmc:
@@ -471,7 +441,7 @@ optimization:
     def test_get_cmc_config_with_config_override(self):
         """Test get_cmc_config() with config_override parameter."""
         config_dict = {
-            "analysis_mode": "static_isotropic",
+            "analysis_mode": "static",
             "optimization": {
                 "cmc": {
                     "enable": True,
@@ -569,7 +539,7 @@ class TestCMCDeprecationWarnings:
     def test_deprecated_consensus_monte_carlo_key(self, caplog):
         """Test warning for deprecated 'consensus_monte_carlo' key."""
         config_yaml = """
-analysis_mode: static_isotropic
+analysis_mode: static_mode
 
 optimization:
   consensus_monte_carlo:
@@ -597,7 +567,7 @@ optimization:
     def test_deprecated_optimal_shard_size_key(self, caplog):
         """Test warning for deprecated 'optimal_shard_size' key."""
         config_yaml = """
-analysis_mode: static_isotropic
+analysis_mode: static_mode
 
 optimization:
   cmc:
@@ -628,7 +598,7 @@ class TestCMCBackwardCompatibility:
     def test_old_config_without_cmc_still_works(self):
         """Test that old configs without CMC section still work."""
         config_yaml = """
-analysis_mode: static_isotropic
+analysis_mode: static_mode
 
 optimization:
   method: nlsq
@@ -652,7 +622,7 @@ optimization:
     def test_nlsq_method_with_cmc_config(self):
         """Test NLSQ method can coexist with CMC config."""
         config_yaml = """
-analysis_mode: static_isotropic
+analysis_mode: static_mode
 
 optimization:
   method: nlsq

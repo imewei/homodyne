@@ -81,7 +81,7 @@ def laminar_parameter_space():
 
 @pytest.fixture
 def static_parameter_space():
-    """Create parameter_space for static_isotropic mode (3 physical params).
+    """Create parameter_space for static_mode mode (3 physical params).
 
     NOTE: contrast and offset are NOT included in ParameterSpace.
     They are scaling parameters added automatically by the MCMC model.
@@ -123,7 +123,7 @@ def test_backend_validation_fails_for_mode_mismatch(
     """Test that validation fails when analysis_mode doesn't match parameter_space.
 
     Verifies:
-    - analysis_mode='static_isotropic' with 9-parameter space raises ValueError
+    - analysis_mode='static' with 9-parameter space raises ValueError
     - analysis_mode='laminar_flow' with 5-parameter space raises ValueError
     - Error message is descriptive
     """
@@ -132,7 +132,7 @@ def test_backend_validation_fails_for_mode_mismatch(
     # Test 1: Static mode with laminar parameter space (9 params but expects 5)
     with pytest.raises(ValueError, match="Analysis mode mismatch"):
         backend._validate_analysis_mode_consistency(
-            analysis_mode="static_isotropic", parameter_space=laminar_parameter_space
+            analysis_mode="static", parameter_space=laminar_parameter_space
         )
 
     # Test 2: Laminar mode with static parameter space (5 params but expects 9)
@@ -146,14 +146,14 @@ def test_backend_validation_passes_for_static_flow(static_parameter_space):
     """Test that validation passes for static mode with correct parameter count.
 
     Verifies:
-    - analysis_mode='static_isotropic' with 5-parameter parameter_space passes
+    - analysis_mode='static' with 5-parameter parameter_space passes
     """
     backend = MultiprocessingBackend(num_workers=2)
 
     # Should not raise ValueError
     try:
         backend._validate_analysis_mode_consistency(
-            analysis_mode="static_isotropic", parameter_space=static_parameter_space
+            analysis_mode="static", parameter_space=static_parameter_space
         )
     except ValueError as e:
         pytest.fail(f"Validation should pass but raised ValueError: {e}")

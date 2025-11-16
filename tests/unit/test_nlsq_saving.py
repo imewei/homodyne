@@ -70,7 +70,7 @@ class TestExtractNLSQMetadata:
 
         # Create config without stator_rotor_gap (will fall back to sample_detector_distance)
         config_dict = {
-            "analysis_mode": "static_isotropic",
+            "analysis_mode": "static",
             "analyzer_parameters": {},
             "experimental_data": {"sample_detector_distance": 5000000.0, "dt": 0.1},
         }
@@ -92,7 +92,7 @@ class TestExtractNLSQMetadata:
         from homodyne.config.manager import ConfigManager
 
         # Create config
-        config_dict = create_mock_config_manager("static_isotropic")
+        config_dict = create_mock_config_manager("static")
         config = Mock(spec=ConfigManager)
         config.config = config_dict
 
@@ -114,7 +114,7 @@ class TestExtractNLSQMetadata:
         from homodyne.config.manager import ConfigManager
 
         # Create config
-        config_dict = create_mock_config_manager("static_isotropic")
+        config_dict = create_mock_config_manager("static")
         config = Mock(spec=ConfigManager)
         config.config = config_dict
 
@@ -149,19 +149,19 @@ class TestExtractNLSQMetadata:
 class TestPrepareParameterData:
     """Test parameter data preparation for JSON saving."""
 
-    def test_prepare_parameter_data_static_isotropic(self):
-        """Test parameter extraction for static isotropic mode (5 params)."""
+    def test_prepare_parameter_data_static_mode(self):
+        """Test parameter extraction for static mode mode (5 params)."""
         from homodyne.cli.commands import _prepare_parameter_data
 
-        # Create mock result for static isotropic (5 parameters)
+        # Create mock result for static mode (5 parameters)
         result = create_mock_optimization_result(
-            analysis_mode="static_isotropic",
+            analysis_mode="static",
             converged=True,
             include_uncertainties=True,
         )
 
         # Prepare parameter data
-        param_dict = _prepare_parameter_data(result, "static_isotropic")
+        param_dict = _prepare_parameter_data(result, "static")
 
         # Verify structure
         assert "contrast" in param_dict
@@ -215,13 +215,13 @@ class TestPrepareParameterData:
 
         # Create result without uncertainties
         result = create_mock_optimization_result(
-            analysis_mode="static_isotropic",
+            analysis_mode="static",
             converged=True,
             include_uncertainties=False,
         )
 
         # Prepare parameter data
-        param_dict = _prepare_parameter_data(result, "static_isotropic")
+        param_dict = _prepare_parameter_data(result, "static")
 
         # Verify values present but uncertainties are None
         assert param_dict["D0"]["value"] == pytest.approx(1234.5)
@@ -242,7 +242,7 @@ class TestComputeNLSQFits:
         from homodyne.cli.commands import _compute_nlsq_fits
 
         # Create mock result and data
-        result = create_mock_optimization_result("static_isotropic")
+        result = create_mock_optimization_result("static")
         data = create_mock_data_dict(n_angles=3, n_t1=10, n_t2=10)
         metadata = {"L": 2000000.0, "dt": 0.1, "q": 0.0123}
 
@@ -289,7 +289,7 @@ class TestComputeNLSQFits:
         from homodyne.cli.commands import _compute_nlsq_fits
 
         # Create data where we know the expected scaling
-        result = create_mock_optimization_result("static_isotropic")
+        result = create_mock_optimization_result("static")
         data = create_mock_data_dict(n_angles=3, n_t1=15, n_t2=15)
         metadata = {"L": 2000000.0, "dt": 0.1, "q": 0.0123}
 
@@ -523,67 +523,6 @@ class TestSaveNLSQNPZFile:
 class TestGenerateNLSQPlots:
     """Test 3-panel heatmap plot generation."""
 
-    @pytest.mark.skip(
-        reason="Plotting now uses Datashader backend instead of direct matplotlib; "
-        "mocking plt.subplots no longer works. Plotting functionality verified by "
-        "test_generate_nlsq_plots_file_created. TODO: Update test for Datashader backend"
-    )
-    def test_generate_nlsq_plots_mocked_matplotlib(self):
-        """Test plot generation with mocked matplotlib calls."""
-        import tempfile
-        from pathlib import Path
-        from unittest.mock import patch
-
-        from homodyne.cli.commands import generate_nlsq_plots
-
-        with tempfile.TemporaryDirectory() as tmpdir:
-            output_dir = Path(tmpdir)
-
-            # Create test data
-            phi_angles = np.array([0.0, 45.0, 90.0])
-            c2_exp = np.random.rand(3, 20, 20) * 0.3 + 1.0
-            c2_theoretical_scaled = np.random.rand(3, 20, 20) * 0.3 + 1.0
-            residuals = c2_exp - c2_theoretical_scaled
-            t1 = np.linspace(0.1, 2.0, 20)
-            t2 = np.linspace(0.1, 2.0, 20)
-
-            # Mock matplotlib
-            with patch("homodyne.cli.commands.plt") as mock_plt:
-                mock_fig = MagicMock()
-                mock_axes = [MagicMock() for _ in range(3)]
-                mock_plt.subplots.return_value = (mock_fig, mock_axes)
-
-                # Call function
-                generate_nlsq_plots(
-                    phi_angles=phi_angles,
-                    c2_exp=c2_exp,
-                    c2_theoretical_scaled=c2_theoretical_scaled,
-                    residuals=residuals,
-                    t1=t1,
-                    t2=t2,
-                    output_dir=output_dir,
-                )
-
-                # Verify plt.subplots called for each angle (3 times)
-                assert mock_plt.subplots.call_count == 3
-                # Check the last call
-                args, kwargs = mock_plt.subplots.call_args
-                assert args == (1, 3)  # 1 row, 3 columns
-                assert kwargs["figsize"] == (15, 5)
-
-                # Verify 3 plots created (one per angle)
-                assert mock_plt.savefig.call_count == 3
-                assert mock_plt.close.call_count == 3
-
-                # Verify each plot saved with correct naming
-                for i, phi in enumerate(phi_angles):
-                    call_args = mock_plt.savefig.call_args_list[i]
-                    filename = call_args[0][0]
-                    assert f"phi_{phi:.1f}deg" in str(filename)
-                    # Verify DPI
-                    assert call_args[1]["dpi"] == 300
-                    assert call_args[1]["bbox_inches"] == "tight"
-
     def test_generate_nlsq_plots_file_created(self):
         """Test that PNG files are created on disk."""
         pytest.importorskip("matplotlib")  # Skip if matplotlib not available
@@ -626,63 +565,6 @@ class TestGenerateNLSQPlots:
             # Verify correct number of files
             png_files = list(output_dir.glob("*.png"))
             assert len(png_files) == len(phi_angles)
-
-    @pytest.mark.skip(
-        reason="Datashader backend requires matching array dimensions; test data has "
-        "shape mismatch (data.shape[0]=10 vs y_coords.length=2). TODO: Fix test data "
-        "dimensions to match Datashader requirements"
-    )
-    def test_generate_nlsq_plots_residuals_symmetric_colormap(self):
-        """Test that residuals use symmetric colormap (vmin=-vmax, vmax=vmax)."""
-        import tempfile
-        from pathlib import Path
-        from unittest.mock import patch
-
-        from homodyne.cli.commands import generate_nlsq_plots
-
-        with tempfile.TemporaryDirectory() as tmpdir:
-            output_dir = Path(tmpdir)
-
-            # Create test data with known residuals
-            phi_angles = np.array([0.0])
-            c2_exp = np.ones((1, 10, 10))
-            c2_theoretical_scaled = np.ones((1, 10, 10))
-            residuals = np.array([[[-0.5, 0.3], [0.7, -0.2]]])  # Asymmetric residuals
-            t1 = np.array([0.1, 0.2])
-            t2 = np.array([0.1, 0.2])
-
-            # Mock matplotlib to capture imshow calls
-            with patch("homodyne.cli.commands.plt") as mock_plt:
-                mock_fig = MagicMock()
-                mock_axes = [MagicMock(), MagicMock(), MagicMock()]
-                mock_plt.subplots.return_value = (mock_fig, mock_axes)
-
-                # Call function
-                generate_nlsq_plots(
-                    phi_angles=phi_angles,
-                    c2_exp=c2_exp,
-                    c2_theoretical_scaled=c2_theoretical_scaled,
-                    residuals=residuals,
-                    t1=t1,
-                    t2=t2,
-                    output_dir=output_dir,
-                )
-
-                # Verify third axis (residuals) uses actual min/max range
-                residuals_imshow_call = mock_axes[2].imshow.call_args
-                if residuals_imshow_call:
-                    kwargs = residuals_imshow_call[1]
-                    if "vmin" in kwargs and "vmax" in kwargs:
-                        vmin = kwargs["vmin"]
-                        vmax = kwargs["vmax"]
-                        # Verify vmin and vmax are set (actual min/max of residuals)
-                        assert vmin is not None, "Residuals vmin should be set"
-                        assert vmax is not None, "Residuals vmax should be set"
-                        assert vmin <= vmax, f"Residuals vmin ({vmin}) should be <= vmax ({vmax})"
-                    # Verify jet colormap for residuals
-                    if "cmap" in kwargs:
-                        assert "jet" in str(kwargs["cmap"]).lower()
-        pass  # To be implemented in T032
 
 
 # ==============================================================================

@@ -52,7 +52,7 @@ class TestNumPyroModelCreation:
 
     @pytest.fixture
     def static_parameter_space(self):
-        """Create ParameterSpace for static_isotropic mode."""
+        """Create ParameterSpace for static_mode mode."""
         config = {
             "parameter_space": {
                 "model": "static",
@@ -190,7 +190,7 @@ class TestNumPyroModelCreation:
         return ParameterSpace.from_config(config, analysis_mode="laminar_flow")
 
     def test_model_creation_static_mode(self, simple_data, static_parameter_space):
-        """Test model creation for static_isotropic mode."""
+        """Test model creation for static_mode mode."""
         model = _create_numpyro_model(
             data=simple_data["data"],
             sigma=simple_data["sigma"],
@@ -199,7 +199,7 @@ class TestNumPyroModelCreation:
             phi=simple_data["phi"],
             q=simple_data["q"],
             L=simple_data["L"],
-            analysis_mode="static_isotropic",
+            analysis_mode="static",
             parameter_space=static_parameter_space,
             dt=simple_data["dt"],
         )
@@ -279,7 +279,7 @@ class TestNumPyroModelCreation:
             phi=simple_data["phi"],
             q=simple_data["q"],
             L=simple_data["L"],
-            analysis_mode="static_isotropic",
+            analysis_mode="static",
             parameter_space=static_parameter_space,
             dt=simple_data["dt"],
         )
@@ -403,7 +403,7 @@ class TestMCMCConfigMassMatrix:
             phi=phi,
             q=0.001,
             L=1e10,
-            analysis_mode="static_isotropic",
+            analysis_mode="static",
             parameter_space=param_space,
             dt=0.1,
         )
@@ -504,7 +504,7 @@ class TestParameterOrdering:
             phi=np.zeros(n),
             q=0.001,
             L=1e10,
-            analysis_mode="static_isotropic",
+            analysis_mode="static",
             parameter_space=param_space,
             dt=0.1,
         )

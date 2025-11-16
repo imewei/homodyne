@@ -43,8 +43,8 @@ class TestHomodyneModelInitialization:
         assert model.t1_grid.shape == (100, 100)
         assert model.t2_grid.shape == (100, 100)
 
-    def test_initialization_static_isotropic(self):
-        """Test initialization with static isotropic configuration."""
+    def test_initialization_static_mode(self):
+        """Test initialization with static mode configuration."""
         config = {
             "analyzer_parameters": {
                 "temporal": {"dt": 0.05, "start_frame": 0, "end_frame": 49},
@@ -59,7 +59,7 @@ class TestHomodyneModelInitialization:
 
         model = HomodyneModel(config)
 
-        assert model.analysis_mode == "static_isotropic"
+        assert model.analysis_mode == "static"
         assert len(model.time_array) == 50
 
     def test_physics_factors_precomputed(self):

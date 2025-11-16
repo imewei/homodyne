@@ -43,7 +43,7 @@ class TestResidualFunctionCreation:
         wrapper = NLSQWrapper()
 
         residual_fn = wrapper._create_residual_function(
-            mock_data, analysis_mode="static_isotropic"
+            mock_data, analysis_mode="static"
         )
 
         # Try to JIT compile (should not raise)
@@ -130,5 +130,5 @@ class TestResidualFunctionCreation:
 
         with pytest.raises((AttributeError, ValueError)):
             wrapper._create_residual_function(
-                IncompleteData(), analysis_mode="static_isotropic"
+                IncompleteData(), analysis_mode="static"
             )

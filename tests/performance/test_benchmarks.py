@@ -7,7 +7,7 @@ Comprehensive performance benchmarks for computational kernels:
 - NLSQ optimization performance
 - Data loading and preprocessing
 - Memory usage and scaling
-- CPU vs GPU performance comparison
+- CPU performance benchmarking (GPU removed in v2.3.0)
 """
 
 import gc
@@ -341,7 +341,7 @@ class TestDataLoadingBenchmarks:
 
         # Create test config files of different sizes
         base_config = {
-            "analysis_mode": "static_isotropic",
+            "analysis_mode": "static",
             "optimization": {"method": "nlsq", "lsq": {"max_iterations": 100}},
         }
 

@@ -33,7 +33,7 @@ class TestConfigDrivenMCMC:
 
         # Step 2: User manually copies to config YAML (simulated here as dict)
         config = {
-            "analysis_mode": "static_isotropic",
+            "analysis_mode": "static",
             "initial_parameters": {
                 "parameter_names": ["D0", "alpha", "D_offset"],
                 "values": [
@@ -161,7 +161,7 @@ class TestConfigDrivenMCMC:
 
         # Config: Optimize D0 and alpha, fix D_offset at NLSQ value
         config = {
-            "analysis_mode": "static_isotropic",
+            "analysis_mode": "static",
             "initial_parameters": {
                 "parameter_names": ["D0", "alpha", "D_offset"],
                 "values": [
@@ -256,7 +256,7 @@ class TestConfigDrivenMCMC:
         mid-point defaults as initial values.
         """
         config = {
-            "analysis_mode": "static_isotropic",
+            "analysis_mode": "static",
             "initial_parameters": {
                 "parameter_names": ["D0", "alpha", "D_offset"],
                 "values": None,  # Use mid-point defaults
@@ -298,7 +298,7 @@ class TestConfigDrivenMCMC:
         # -----------------------
         # Step 1: NLSQ default initialization (mid-point)
         nlsq_config = {
-            "analysis_mode": "static_isotropic",
+            "analysis_mode": "static",
             "initial_parameters": {
                 "values": None,  # NLSQ uses mid-point defaults
             },
@@ -330,7 +330,7 @@ class TestConfigDrivenMCMC:
         # -------------
         # Step 3: User manually copies NLSQ results to config YAML
         mcmc_config = {
-            "analysis_mode": "static_isotropic",
+            "analysis_mode": "static",
             "initial_parameters": {
                 "parameter_names": ["D0", "alpha", "D_offset"],
                 "values": [
@@ -473,7 +473,7 @@ class TestConfigValidation:
     def test_initial_values_within_bounds(self):
         """Test that loaded initial values are validated against bounds."""
         config = {
-            "analysis_mode": "static_isotropic",
+            "analysis_mode": "static",
             "initial_parameters": {
                 "parameter_names": ["D0", "alpha"],
                 "values": [1000.0, 0.5],
@@ -499,7 +499,7 @@ class TestConfigValidation:
     def test_initial_values_outside_bounds_detected(self):
         """Test that out-of-bounds initial values are detected."""
         config = {
-            "analysis_mode": "static_isotropic",
+            "analysis_mode": "static",
             "initial_parameters": {
                 "parameter_names": ["D0", "alpha"],
                 "values": [1000.0, 5.0],  # alpha out of bounds
@@ -574,7 +574,7 @@ class TestFullMCMCWorkflow:
 
         # User config with NLSQ results copied to initial_parameters.values
         config = {
-            "analysis_mode": "static_isotropic",
+            "analysis_mode": "static",
             "initial_parameters": {
                 "parameter_names": ["D0", "alpha", "D_offset"],
                 "values": [
@@ -652,7 +652,7 @@ class TestFullMCMCWorkflow:
 
         # Config with null initial_values (trigger mid-point calculation)
         config = {
-            "analysis_mode": "static_isotropic",
+            "analysis_mode": "static",
             "initial_parameters": {
                 "parameter_names": ["D0", "alpha", "D_offset"],
                 "values": None,  # Null → use mid-points

@@ -302,7 +302,7 @@ class TestPerAngleScalingInitialization:
 
     @pytest.fixture
     def minimal_static_data(self):
-        """Generate minimal static isotropic data."""
+        """Generate minimal static mode data."""
         ground_truth_params = {
             "contrast": 0.5,
             "offset": 1.0,
@@ -317,7 +317,7 @@ class TestPerAngleScalingInitialization:
             n_t1=10,
             n_t2=10,
             noise_level=0.01,
-            analysis_mode="static_isotropic",
+            analysis_mode="static",
             random_seed=42,
         )
 
@@ -351,7 +351,7 @@ class TestPerAngleScalingInitialization:
             ),
             q=minimal_static_data.q,
             L=minimal_static_data.L,
-            analysis_mode="static_isotropic",
+            analysis_mode="static",
             parameter_space=param_space,
             dt=minimal_static_data.dt,
         )
@@ -414,7 +414,7 @@ class TestPerAngleScalingInitialization:
             phi=phi_coords,
             q=minimal_static_data.q,
             L=minimal_static_data.L,
-            analysis_mode="static_isotropic",
+            analysis_mode="static",
             parameter_space=param_space,
             initial_values=physical_only_initial_values,
             n_samples=5,

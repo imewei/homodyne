@@ -530,42 +530,6 @@ class TestCMCConsistencyAnalysis:
         assert combined_few is not None
         assert combined_many is not None
 
-    @pytest.mark.skip(
-        reason="v2.1.0 API change: CMC validation now enforces balanced shards "
-        "(all shards must have same sample count). Imbalanced shards no longer supported."
-    )
-    def test_consistency_degrades_with_imbalanced_shards(self):
-        """
-        Test that consistency is affected by imbalanced shards.
-
-        If shards have very different sample counts, agreement may suffer.
-
-        NOTE: This test is skipped in v2.1.0 because CMC validation now requires
-        all shards to have the same number of samples (validation at combination.py:423-427).
-        """
-        # Balanced
-        balanced = create_large_shard_results(
-            n_shards=4, n_samples_per_shard=1000, n_params=5
-        )
-
-        # Imbalanced
-        imbalanced = [
-            *create_large_shard_results(
-                n_shards=3, n_samples_per_shard=5000, n_params=5, seed=42
-            ),
-            # Add shard with few samples
-            create_large_shard_results(
-                n_shards=1, n_samples_per_shard=100, n_params=5, seed=99
-            )[0],
-        ]
-
-        combined_balanced = combine_subposteriors(balanced)
-        combined_imbalanced = combine_subposteriors(imbalanced)
-
-        # Both should be valid even if imbalanced
-        assert combined_balanced is not None
-        assert combined_imbalanced is not None
-
 
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])

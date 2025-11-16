@@ -51,7 +51,7 @@ def generate_synthetic_xpcs_data(
     q: float = 0.01,
     L: float = 1.0,
     dt: float = 0.1,
-    analysis_mode: str = "static_isotropic",
+    analysis_mode: str = "static",
     random_seed: int | None = 42,
 ) -> SyntheticXPCSData:
     """
@@ -63,7 +63,7 @@ def generate_synthetic_xpcs_data(
     ----------
     ground_truth_params : dict
         Ground truth parameter values. Should include:
-        - For static isotropic: contrast, offset, D0, alpha, D_offset
+        - For static mode: contrast, offset, D0, alpha, D_offset
         - For laminar flow: add gamma_dot_t0, beta, gamma_dot_offset, phi0
     n_phi : int
         Number of phi angles
@@ -80,7 +80,7 @@ def generate_synthetic_xpcs_data(
     dt : float
         Time step
     analysis_mode : str
-        'static_isotropic' or 'laminar_flow'
+        'static' or 'laminar_flow'
     random_seed : int, optional
         Random seed for reproducibility
 
@@ -167,7 +167,7 @@ def generate_synthetic_xpcs_data(
     return data
 
 
-def generate_static_isotropic_dataset(
+def generate_static_mode_dataset(
     D0: float = 1000.0,
     alpha: float = 0.5,
     D_offset: float = 10.0,
@@ -180,7 +180,7 @@ def generate_static_isotropic_dataset(
     **kwargs,
 ) -> SyntheticXPCSData:
     """
-    Generate static isotropic synthetic dataset with default parameters.
+    Generate static mode synthetic dataset with default parameters.
 
     Parameters
     ----------
@@ -220,7 +220,7 @@ def generate_static_isotropic_dataset(
         n_t1=n_t1,
         n_t2=n_t2,
         noise_level=noise_level,
-        analysis_mode="static_isotropic",
+        analysis_mode="static",
         **kwargs,
     )
 

@@ -177,7 +177,7 @@ class TestParameterAcceptance:
 
     def test_parameter_space_parameter_accepted(self):
         """Test parameter_space parameter is accepted."""
-        param_space = ParameterSpace.from_defaults("static_isotropic")
+        param_space = ParameterSpace.from_defaults("static")
 
         # Should not raise TypeError about unexpected keyword argument
         try:
@@ -283,8 +283,8 @@ class TestKwargsAcceptance:
 class TestAnalysisModesSupported:
     """Test that different analysis modes are supported."""
 
-    def test_static_isotropic_mode_accepted(self):
-        """Test static_isotropic analysis mode doesn't raise ValueError."""
+    def test_static_mode_mode_accepted(self):
+        """Test static_mode analysis mode doesn't raise ValueError."""
         try:
             fit_mcmc_jax(
                 data=np.array([1.0]),
@@ -293,7 +293,7 @@ class TestAnalysisModesSupported:
                 phi=np.array([0.1]),
                 q=0.01,
                 L=3.5,
-                analysis_mode="static_isotropic",
+                analysis_mode="static",
                 n_samples=10,
                 n_warmup=5,
                 min_samples_for_cmc=10000,

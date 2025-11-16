@@ -10,7 +10,7 @@ Test Categories:
 - Performance Tests: Benchmarks and regression
 - Property Tests: Mathematical invariants
 - Statistical Tests: MCMC convergence and validation
-- GPU Tests: Acceleration validation
+- CPU Tests: Performance validation (GPU removed in v2.3.0)
 - API Tests: Compatibility validation
 
 Requirements:

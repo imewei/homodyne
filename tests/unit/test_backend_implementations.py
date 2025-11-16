@@ -2,7 +2,7 @@
 ============================================
 
 This module tests the three CMC backend implementations:
-1. PjitBackend (GPU execution with JAX)
+1. PjitBackend (JAX execution - CPU-only in v2.3.0+)
 2. MultiprocessingBackend (CPU parallel execution)
 3. PBSBackend (HPC cluster execution)
 
@@ -112,12 +112,12 @@ def inv_mass_matrix():
 
 @pytest.fixture
 def parameter_space():
-    """Create parameter space for static_isotropic model."""
+    """Create parameter space for static_mode model."""
     from homodyne.config.parameter_space import ParameterSpace
 
-    # Create minimal config dict for static_isotropic mode
+    # Create minimal config dict for static_mode mode
     config_dict = {
-        "analysis_mode": "static_isotropic",
+        "analysis_mode": "static",
         "parameter_space": {
             "model": "static",
             "bounds": [
@@ -128,7 +128,7 @@ def parameter_space():
         },
     }
 
-    return ParameterSpace.from_config(config_dict, analysis_mode="static_isotropic")
+    return ParameterSpace.from_config(config_dict, analysis_mode="static")
 
 
 @pytest.fixture
@@ -260,7 +260,7 @@ def test_pjit_backend_single_shard(
         mcmc_config=mcmc_config,
         init_params=init_params,
         inv_mass_matrix=inv_mass_matrix,
-        analysis_mode="static_isotropic",
+        analysis_mode="static",
         parameter_space=parameter_space,
     )
 
@@ -292,7 +292,7 @@ def test_pjit_backend_multiple_shards(
         mcmc_config=mcmc_config,
         init_params=init_params,
         inv_mass_matrix=inv_mass_matrix,
-        analysis_mode="static_isotropic",
+        analysis_mode="static",
         parameter_space=parameter_space,
     )
 
@@ -326,7 +326,7 @@ def test_multiprocessing_backend_single_shard(
         mcmc_config=mcmc_config,
         init_params=init_params,
         inv_mass_matrix=inv_mass_matrix,
-        analysis_mode="static_isotropic",
+        analysis_mode="static",
         parameter_space=parameter_space,
     )
 
@@ -352,7 +352,7 @@ def test_multiprocessing_backend_parallel_execution(
         mcmc_config=mcmc_config,
         init_params=init_params,
         inv_mass_matrix=inv_mass_matrix,
-        analysis_mode="static_isotropic",
+        analysis_mode="static",
         parameter_space=parameter_space,
     )
 
@@ -395,7 +395,7 @@ def test_multiprocessing_backend_timeout(parameter_space):
         mcmc_config=mcmc_config,
         init_params={"D0": 1000.0},
         inv_mass_matrix=np.eye(5),
-        analysis_mode="static_isotropic",
+        analysis_mode="static",
         parameter_space=parameter_space,
     )
 
@@ -537,7 +537,7 @@ def test_pjit_backend_handles_errors(init_params, inv_mass_matrix, parameter_spa
         mcmc_config=mcmc_config,
         init_params=init_params,
         inv_mass_matrix=inv_mass_matrix,
-        analysis_mode="static_isotropic",
+        analysis_mode="static",
         parameter_space=parameter_space,
     )
 
@@ -607,7 +607,7 @@ def test_pjit_backend_diagnostics_collection(
         mcmc_config=mcmc_config,
         init_params=init_params,
         inv_mass_matrix=inv_mass_matrix,
-        analysis_mode="static_isotropic",
+        analysis_mode="static",
         parameter_space=parameter_space,
     )
 
@@ -729,7 +729,7 @@ def test_backend_integration_comparison(
 
     # Use single shard for comparison
     shards = [synthetic_shards[0]]
-    analysis_mode = "static_isotropic"
+    analysis_mode = "static"
 
     # Run with pjit backend
     pjit_backend = get_backend_by_name("pjit")

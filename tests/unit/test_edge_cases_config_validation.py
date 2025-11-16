@@ -34,7 +34,7 @@ class TestMalformedConfigFiles:
     def test_config_missing_initial_parameters_section(self):
         """Test config without initial_parameters section entirely."""
         config = {
-            "analysis_mode": "static_isotropic",
+            "analysis_mode": "static",
             # Missing initial_parameters section
             "parameter_space": {"bounds": {"D0": {"min": 100, "max": 5000}}},
         }
@@ -46,14 +46,14 @@ class TestMalformedConfigFiles:
     def test_config_missing_parameter_space_section(self):
         """Test config without parameter_space section."""
         config = {
-            "analysis_mode": "static_isotropic",
+            "analysis_mode": "static",
             "initial_parameters": {"parameter_names": ["D0"], "values": [1000.0]},
             # Missing parameter_space section
         }
         # Should not raise, fallback to defaults
         config_mgr = ConfigManager(config_override=config)
         param_space = ParameterSpace.from_config(
-            config, analysis_mode="static_isotropic"
+            config, analysis_mode="static"
         )
         assert param_space is not None
 
@@ -72,7 +72,7 @@ class TestMissingRequiredFields:
     def test_initial_parameters_missing_parameter_names(self):
         """Test initial_parameters without parameter_names."""
         config = {
-            "analysis_mode": "static_isotropic",
+            "analysis_mode": "static",
             "initial_parameters": {
                 # Missing parameter_names
                 "values": [1000.0, 0.5, 10.0]
@@ -86,7 +86,7 @@ class TestMissingRequiredFields:
     def test_initial_parameters_missing_values(self):
         """Test initial_parameters without values."""
         config = {
-            "analysis_mode": "static_isotropic",
+            "analysis_mode": "static",
             "initial_parameters": {
                 "parameter_names": ["D0", "alpha", "D_offset"],
                 # Missing values
@@ -100,7 +100,7 @@ class TestMissingRequiredFields:
     def test_mismatched_parameter_names_and_values_length(self):
         """Test when parameter_names and values have different lengths."""
         config = {
-            "analysis_mode": "static_isotropic",
+            "analysis_mode": "static",
             "initial_parameters": {
                 "parameter_names": ["D0", "alpha"],  # 2 parameters
                 "values": [1000.0, 0.5, 10.0],  # 3 values
@@ -114,13 +114,13 @@ class TestMissingRequiredFields:
     def test_parameter_space_missing_bounds(self):
         """Test parameter_space without bounds section."""
         config = {
-            "analysis_mode": "static_isotropic",
+            "analysis_mode": "static",
             "parameter_space": {
                 # Missing bounds section
                 "priors": {"D0": {"type": "TruncatedNormal", "mu": 1000, "sigma": 100}}
             },
         }
-        param_space = ParameterSpace.from_config(config, "static_isotropic")
+        param_space = ParameterSpace.from_config(config, "static")
         # Should use defaults
         assert param_space is not None
 
@@ -131,7 +131,7 @@ class TestInvalidParameterValues:
     def test_nan_parameter_values(self):
         """Test with NaN values in initial parameters."""
         config = {
-            "analysis_mode": "static_isotropic",
+            "analysis_mode": "static",
             "initial_parameters": {
                 "parameter_names": ["D0", "alpha", "D_offset"],
                 "values": [float("nan"), 0.5, 10.0],
@@ -146,7 +146,7 @@ class TestInvalidParameterValues:
     def test_infinity_parameter_values(self):
         """Test with infinity values."""
         config = {
-            "analysis_mode": "static_isotropic",
+            "analysis_mode": "static",
             "initial_parameters": {
                 "parameter_names": ["D0", "alpha", "D_offset"],
                 "values": [float("inf"), 0.5, 10.0],
@@ -160,13 +160,13 @@ class TestInvalidParameterValues:
     def test_negative_d0_parameter_invalid(self):
         """Test that negative D0 values should be caught during validation."""
         config = {
-            "analysis_mode": "static_isotropic",
+            "analysis_mode": "static",
             "initial_parameters": {
                 "parameter_names": ["D0", "alpha", "D_offset"],
                 "values": [-1000.0, 0.5, 10.0],  # Negative D0 is invalid
             },
         }
-        param_space = ParameterSpace.from_defaults("static_isotropic")
+        param_space = ParameterSpace.from_defaults("static")
         initial_params = {"D0": -1000.0, "alpha": 0.5, "D_offset": 10.0}
 
         # Validation should catch this
@@ -177,7 +177,7 @@ class TestInvalidParameterValues:
     def test_string_instead_of_float_parameter(self):
         """Test type mismatch: string instead of float."""
         config = {
-            "analysis_mode": "static_isotropic",
+            "analysis_mode": "static",
             "initial_parameters": {
                 "parameter_names": ["D0", "alpha", "D_offset"],
                 "values": ["1000.0", 0.5, 10.0],  # First value is string
@@ -196,7 +196,7 @@ class TestInvalidParameterValues:
     def test_very_large_parameter_values(self):
         """Test with very large parameter values."""
         config = {
-            "analysis_mode": "static_isotropic",
+            "analysis_mode": "static",
             "initial_parameters": {
                 "parameter_names": ["D0", "alpha", "D_offset"],
                 "values": [1e20, 0.5, 10.0],  # Very large D0
@@ -209,7 +209,7 @@ class TestInvalidParameterValues:
     def test_very_small_positive_parameter_values(self):
         """Test with very small but positive parameter values."""
         config = {
-            "analysis_mode": "static_isotropic",
+            "analysis_mode": "static",
             "initial_parameters": {
                 "parameter_names": ["D0", "alpha", "D_offset"],
                 "values": [1e-20, 0.5, 10.0],  # Very small D0
@@ -221,7 +221,7 @@ class TestInvalidParameterValues:
 
     def test_zero_d0_parameter_invalid(self):
         """Test that zero D0 should be invalid (requires positive diffusion)."""
-        param_space = ParameterSpace.from_defaults("static_isotropic")
+        param_space = ParameterSpace.from_defaults("static")
         initial_params = {"D0": 0.0, "alpha": 0.5, "D_offset": 10.0}
 
         errors = param_space.validate_values(initial_params)
@@ -412,7 +412,7 @@ class TestParameterSpaceEdgeCases:
     def test_parameter_space_empty_config(self):
         """Test ParameterSpace with completely empty config."""
         config = {}
-        param_space = ParameterSpace.from_config(config, "static_isotropic")
+        param_space = ParameterSpace.from_config(config, "static")
         # Should use defaults
         assert param_space is not None
         # Check it has parameters by trying to access them
@@ -429,7 +429,7 @@ class TestParameterSpaceEdgeCases:
                 }
             }
         }
-        param_space = ParameterSpace.from_config(config, "static_isotropic")
+        param_space = ParameterSpace.from_config(config, "static")
         # Should fallback to default bounds
         assert param_space is not None
         # Check D0 has default bounds
@@ -439,7 +439,7 @@ class TestParameterSpaceEdgeCases:
     def test_parameter_space_single_parameter(self):
         """Test ParameterSpace with only one parameter."""
         config = {"parameter_space": {"bounds": {"D0": {"min": 100, "max": 5000}}}}
-        param_space = ParameterSpace.from_config(config, "static_isotropic")
+        param_space = ParameterSpace.from_config(config, "static")
         # Should still work
         assert param_space is not None
         # Can get D0 bounds
@@ -453,7 +453,7 @@ class TestComplexIntegrationEdgeCases:
     def test_all_parameters_at_bounds_lower(self):
         """Test all parameters at their minimum bounds."""
         config = {
-            "analysis_mode": "static_isotropic",
+            "analysis_mode": "static",
             "initial_parameters": {
                 "parameter_names": ["D0", "alpha", "D_offset"],
                 "values": [100.0, 0.0, 0.0],  # All at minimum
@@ -476,7 +476,7 @@ class TestComplexIntegrationEdgeCases:
     def test_all_parameters_at_bounds_upper(self):
         """Test all parameters at their maximum bounds."""
         config = {
-            "analysis_mode": "static_isotropic",
+            "analysis_mode": "static",
             "initial_parameters": {
                 "parameter_names": ["D0", "alpha", "D_offset"],
                 "values": [5000.0, 1.0, 1000.0],  # All at maximum
@@ -499,7 +499,7 @@ class TestComplexIntegrationEdgeCases:
     def test_midpoint_with_infinite_bounds(self):
         """Test midpoint calculation with infinite bounds."""
         config = {
-            "analysis_mode": "static_isotropic",
+            "analysis_mode": "static",
             "initial_parameters": {
                 "parameter_names": ["D0"],
                 "values": None,  # Will calculate midpoint

@@ -13,13 +13,13 @@ from dataclasses import dataclass
 
 import numpy as np
 
-from tests.factories.synthetic_data import generate_static_isotropic_dataset
+from tests.factories.synthetic_data import generate_static_mode_dataset
 
 # Module-level storage for validation results (shared across all tests)
 _VALIDATION_RESULTS = []
 
 
-def extract_scalar_params_from_per_angle_result(data, result, analysis_mode="static_isotropic"):
+def extract_scalar_params_from_per_angle_result(data, result, analysis_mode="static"):
     """
     Extract scalar parameter values from per-angle optimization result.
 
@@ -29,23 +29,23 @@ def extract_scalar_params_from_per_angle_result(data, result, analysis_mode="sta
     Args:
         data: XPCSData object (used to get n_phi)
         result: OptimizationResult with per-angle parameters
-        analysis_mode: Analysis mode ("static_isotropic" or "laminar_flow")
+        analysis_mode: Analysis mode ("static" or "laminar_flow")
 
     Returns:
         dict: Scalar parameter values {param_name: value}
 
     Example:
-        For static_isotropic with n_phi=10:
+        For static_mode with n_phi=10:
         - Input: [c0...c9, o0...o9, D0, alpha, D_offset] (23 params)
         - Output: {"contrast": mean(c0...c9), "offset": mean(o0...o9), "D0": ..., "alpha": ..., "D_offset": ...}
     """
     n_phi = data.phi.shape[0]
 
-    if analysis_mode == "static_isotropic":
+    if analysis_mode == "static":
         # Per-angle structure: [c0...cN, o0...oN, D0, alpha, D_offset]
         expected_length = 2 * n_phi + 3
         assert len(result.parameters) == expected_length, (
-            f"Expected {expected_length} parameters for static_isotropic with {n_phi} angles, "
+            f"Expected {expected_length} parameters for static_mode with {n_phi} angles, "
             f"got {len(result.parameters)}"
         )
 
@@ -143,7 +143,7 @@ class TestScientificValidation:
             print(f"\n--- Testing {case['name']} ---")
 
             # Generate synthetic data with known parameters
-            data = generate_static_isotropic_dataset(
+            data = generate_static_mode_dataset(
                 **case["params"],
                 noise_level=case["noise_level"],
                 n_phi=10,
@@ -185,7 +185,7 @@ class TestScientificValidation:
                 config=MockConfig(),
                 initial_params=initial_params,
                 bounds=bounds,
-                analysis_mode="static_isotropic",
+                analysis_mode="static",
             )
             execution_time = time.time() - start_time
 
@@ -193,7 +193,7 @@ class TestScientificValidation:
             recovered = extract_scalar_params_from_per_angle_result(
                 data=data,
                 result=result,
-                analysis_mode="static_isotropic"
+                analysis_mode="static"
             )
 
             # Compute relative errors
@@ -274,7 +274,7 @@ class TestScientificValidation:
             "D_offset": 10.0,
         }
 
-        data = generate_static_isotropic_dataset(
+        data = generate_static_mode_dataset(
             **ground_truth, noise_level=0.02, n_phi=10, n_t1=25, n_t2=25, random_seed=42
         )
 
@@ -306,7 +306,7 @@ class TestScientificValidation:
                 config=MockConfig(),
                 initial_params=initial_params,
                 bounds=bounds,
-                analysis_mode="static_isotropic",
+                analysis_mode="static",
             )
             results_all.append((name, result))
             print(
@@ -393,7 +393,7 @@ class TestScientificValidation:
 
         for name, n_phi, n_t1, n_t2, expected_points in test_sizes:
             # Generate data
-            data = generate_static_isotropic_dataset(
+            data = generate_static_mode_dataset(
                 **ground_truth,
                 noise_level=0.02,
                 n_phi=n_phi,
@@ -417,7 +417,7 @@ class TestScientificValidation:
                 config=MockConfig(),
                 initial_params=initial_params,
                 bounds=bounds,
-                analysis_mode="static_isotropic",
+                analysis_mode="static",
             )
             execution_time = time.time() - start_time
 
@@ -473,7 +473,7 @@ class TestScientificValidation:
             "D_offset": 5.0,  # Near lower bound
         }
 
-        data = generate_static_isotropic_dataset(
+        data = generate_static_mode_dataset(
             **ground_truth,
             noise_level=0.03,  # Higher noise
             n_phi=8,
@@ -505,7 +505,7 @@ class TestScientificValidation:
             config=MockConfig(),
             initial_params=poor_initial,
             bounds=bounds,
-            analysis_mode="static_isotropic",
+            analysis_mode="static",
         )
 
         print(f"Convergence: {result_recovery.convergence_status}")
@@ -528,7 +528,7 @@ class TestScientificValidation:
         recovered = extract_scalar_params_from_per_angle_result(
             data=data,
             result=result_recovery,
-            analysis_mode="static_isotropic"
+            analysis_mode="static"
         )
 
         param_names = ["contrast", "offset", "D0", "alpha", "D_offset"]
@@ -575,7 +575,7 @@ class TestScientificValidation:
             "D_offset": 10.0,
         }
 
-        data = generate_static_isotropic_dataset(
+        data = generate_static_mode_dataset(
             **ground_truth, noise_level=0.02, n_phi=10, n_t1=25, n_t2=25, random_seed=42
         )
 
@@ -595,7 +595,7 @@ class TestScientificValidation:
             config=MockConfig(),
             initial_params=initial_params,
             bounds=bounds,
-            analysis_mode="static_isotropic",
+            analysis_mode="static",
         )
 
         print("\n--- Physics Validation ---")
@@ -604,7 +604,7 @@ class TestScientificValidation:
         params = extract_scalar_params_from_per_angle_result(
             data=data,
             result=result,
-            analysis_mode="static_isotropic"
+            analysis_mode="static"
         )
         contrast = params["contrast"]
         offset = params["offset"]

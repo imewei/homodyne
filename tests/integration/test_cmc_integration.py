@@ -90,7 +90,7 @@ def generate_synthetic_xpcs_data(
     n_angles : int
         Number of phi angles
     analysis_mode : str
-        'laminar_flow' or 'static_isotropic'
+        'laminar_flow' or 'static'
     seed : int
         Random seed for reproducibility
 
@@ -127,7 +127,7 @@ def generate_synthetic_xpcs_data(
             "gamma_dot_offset": 0.01,
             "phi0": np.pi / 4,
         }
-    else:  # static_isotropic
+    else:  # static_mode
         true_params = {
             "D0": 1000.0,
             "alpha": 1.5,
@@ -262,7 +262,7 @@ class TestCMCIntegrationBasic:
         """
         n_points = 10000
         c2_exp, t1, t2, phi, q, L, true_params = generate_synthetic_xpcs_data(
-            n_points=n_points, n_angles=8, analysis_mode="static_isotropic"
+            n_points=n_points, n_angles=8, analysis_mode="static"
         )
 
         # This test structure validates integration
@@ -737,7 +737,7 @@ class TestCMCEndToEndStructure:
 @pytest.mark.parametrize(
     "analysis_mode",
     [
-        "static_isotropic",
+        "static",
         "laminar_flow",
     ],
 )

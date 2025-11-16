@@ -94,8 +94,8 @@ class ReferenceResults:
 class TestParameterRecoveryQuality:
     """Test that parameter recovery quality is unchanged."""
 
-    def test_static_isotropic_recovery_quality(self):
-        """Test static isotropic parameter recovery meets quality standards."""
+    def test_static_mode_recovery_quality(self):
+        """Test static mode parameter recovery meets quality standards."""
         ref = ReferenceResults.STATIC_ISOTROPIC_REFERENCE
         true_params = ref["true_params"]
         max_errors = ref["expected_recovery_error_pct"]

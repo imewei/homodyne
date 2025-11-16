@@ -97,8 +97,8 @@ def mock_config():
 
 
 @pytest.fixture
-def static_isotropic_params():
-    """Initial parameters for static isotropic mode.
+def static_mode_params():
+    """Initial parameters for static mode mode.
 
     Parameters: [contrast, offset, D0, alpha, D_offset]
     """
@@ -106,8 +106,8 @@ def static_isotropic_params():
 
 
 @pytest.fixture
-def static_isotropic_bounds():
-    """Bounds for static isotropic parameters."""
+def static_mode_bounds():
+    """Bounds for static mode parameters."""
     lower = np.array([0.1, 0.5, 100.0, 0.1, 1.0])
     upper = np.array([1.0, 2.0, 10000.0, 2.0, 100.0])
     return (lower, upper)
@@ -119,7 +119,7 @@ def static_isotropic_bounds():
 
 
 def test_large_strategy_medium_dataset(
-    mock_xpcs_data, mock_config, static_isotropic_params, static_isotropic_bounds
+    mock_xpcs_data, mock_config, static_mode_params, static_mode_bounds
 ):
     """Test LARGE strategy selection for medium datasets.
 
@@ -150,7 +150,7 @@ def test_large_strategy_medium_dataset(
 
 
 def test_streaming_strategy_huge_dataset(
-    mock_xpcs_data, mock_config, static_isotropic_params, static_isotropic_bounds
+    mock_xpcs_data, mock_config, static_mode_params, static_mode_bounds
 ):
     """Test STREAMING strategy selection for huge datasets (> 100M points).
 
@@ -199,7 +199,7 @@ def test_fallback_chain_standard_to_none():
 
 
 def test_fallback_chain_execution(
-    mock_xpcs_data, mock_config, static_isotropic_params, static_isotropic_bounds
+    mock_xpcs_data, mock_config, static_mode_params, static_mode_bounds
 ):
     """Test fallback chain executes when strategy fails.
 
@@ -227,9 +227,9 @@ def test_fallback_chain_execution(
         result = wrapper.fit(
             data=data,
             config=mock_config,
-            initial_params=static_isotropic_params,
-            bounds=static_isotropic_bounds,
-            analysis_mode="static_isotropic",
+            initial_params=static_mode_params,
+            bounds=static_mode_bounds,
+            analysis_mode="static",
         )
 
         # Should succeed via fallback
@@ -245,7 +245,7 @@ def test_fallback_chain_execution(
 
 
 def test_error_recovery_perturb_parameters(
-    mock_xpcs_data, mock_config, static_isotropic_params, static_isotropic_bounds
+    mock_xpcs_data, mock_config, static_mode_params, static_mode_bounds
 ):
     """Test automatic parameter perturbation recovery."""
     data = mock_xpcs_data(n_phi=5, n_t1=10, n_t2=10)
@@ -253,14 +253,14 @@ def test_error_recovery_perturb_parameters(
     wrapper = NLSQWrapper(enable_large_dataset=True, enable_recovery=True)
 
     # Use poor initial guess to trigger recovery
-    poor_params = static_isotropic_params * 0.1  # 10x smaller, likely to fail
+    poor_params = static_mode_params * 0.1  # 10x smaller, likely to fail
 
     result = wrapper.fit(
         data=data,
         config=mock_config,
         initial_params=poor_params,
-        bounds=static_isotropic_bounds,
-        analysis_mode="static_isotropic",
+        bounds=static_mode_bounds,
+        analysis_mode="static",
     )
 
     # Should eventually converge with recovery
@@ -268,7 +268,7 @@ def test_error_recovery_perturb_parameters(
 
 
 def test_error_recovery_detects_stagnation(
-    mock_xpcs_data, mock_config, static_isotropic_params, static_isotropic_bounds
+    mock_xpcs_data, mock_config, static_mode_params, static_mode_bounds
 ):
     """Test detection of parameter stagnation (NLSQ bug workaround)."""
     data = mock_xpcs_data(n_phi=5, n_t1=10, n_t2=10)
@@ -279,8 +279,8 @@ def test_error_recovery_detects_stagnation(
     with patch("homodyne.optimization.nlsq_wrapper.curve_fit") as mock_fit:
         # Return unchanged parameters and identity covariance
         mock_fit.return_value = (
-            static_isotropic_params.copy(),  # Unchanged
-            np.eye(len(static_isotropic_params)),  # Identity
+            static_mode_params.copy(),  # Unchanged
+            np.eye(len(static_mode_params)),  # Identity
         )
 
         # Should detect stagnation and retry
@@ -288,9 +288,9 @@ def test_error_recovery_detects_stagnation(
             result = wrapper.fit(
                 data=data,
                 config=mock_config,
-                initial_params=static_isotropic_params,
-                bounds=static_isotropic_bounds,
-                analysis_mode="static_isotropic",
+                initial_params=static_mode_params,
+                bounds=static_mode_bounds,
+                analysis_mode="static",
             )
 
             # Check if stagnation was detected
@@ -303,7 +303,7 @@ def test_error_recovery_detects_stagnation(
 
 
 def test_diagnose_error_oom(
-    mock_xpcs_data, mock_config, static_isotropic_params, static_isotropic_bounds
+    mock_xpcs_data, mock_config, static_mode_params, static_mode_bounds
 ):
     """Test OOM error diagnosis provides actionable guidance."""
     wrapper = NLSQWrapper()
@@ -313,8 +313,8 @@ def test_diagnose_error_oom(
 
     diagnostic = wrapper._diagnose_error(
         error=oom_error,
-        params=static_isotropic_params,
-        bounds=static_isotropic_bounds,
+        params=static_mode_params,
+        bounds=static_mode_bounds,
         attempt=0,
     )
 
@@ -324,7 +324,7 @@ def test_diagnose_error_oom(
 
 
 def test_diagnose_error_convergence(
-    mock_xpcs_data, mock_config, static_isotropic_params, static_isotropic_bounds
+    mock_xpcs_data, mock_config, static_mode_params, static_mode_bounds
 ):
     """Test convergence failure diagnosis suggests perturbation."""
     wrapper = NLSQWrapper()
@@ -333,8 +333,8 @@ def test_diagnose_error_convergence(
 
     diagnostic = wrapper._diagnose_error(
         error=conv_error,
-        params=static_isotropic_params,
-        bounds=static_isotropic_bounds,
+        params=static_mode_params,
+        bounds=static_mode_bounds,
         attempt=0,
     )
 
@@ -342,7 +342,7 @@ def test_diagnose_error_convergence(
     assert "perturb" in diagnostic["recovery_strategy"]["action"].lower()
     assert (
         diagnostic["recovery_strategy"]["new_params"].shape
-        == static_isotropic_params.shape
+        == static_mode_params.shape
     )
 
 
@@ -443,7 +443,7 @@ def test_handle_nlsq_result_invalid_format():
 
 
 def test_optimization_result_includes_diagnostics(
-    mock_xpcs_data, mock_config, static_isotropic_params, static_isotropic_bounds
+    mock_xpcs_data, mock_config, static_mode_params, static_mode_bounds
 ):
     """Test OptimizationResult contains enhanced diagnostics."""
     data = mock_xpcs_data(n_phi=5, n_t1=10, n_t2=10)
@@ -453,9 +453,9 @@ def test_optimization_result_includes_diagnostics(
     result = wrapper.fit(
         data=data,
         config=mock_config,
-        initial_params=static_isotropic_params,
-        bounds=static_isotropic_bounds,
-        analysis_mode="static_isotropic",
+        initial_params=static_mode_params,
+        bounds=static_mode_bounds,
+        analysis_mode="static",
     )
 
     # Check diagnostic fields exist
@@ -659,7 +659,7 @@ def test_numerical_validator_detects_nan_loss():
 
 
 def test_fast_mode_minimal_overhead(
-    mock_xpcs_data, mock_config, static_isotropic_params, static_isotropic_bounds
+    mock_xpcs_data, mock_config, static_mode_params, static_mode_bounds
 ):
     """Test fast mode has < 1% overhead (placeholder for future implementation).
 

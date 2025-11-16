@@ -62,7 +62,7 @@ class TestBackwardCompatibility:
             "n_iterations": 1000,
             "computation_time": 45.5,
             "backend": "JAX",
-            "analysis_mode": "static_isotropic",
+            "analysis_mode": "static",
             "dataset_size": "medium",
             "n_chains": 4,
             "n_warmup": 500,

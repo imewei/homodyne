@@ -88,7 +88,7 @@ class TestAutomaticCMCSelectionParallelism:
         """
         # Create minimal config
         config = {
-            "analysis_mode": "static_isotropic",
+            "analysis_mode": "static",
             "data": {
                 "phi_indices": list(range(10)),  # Small dataset
             },
@@ -326,7 +326,7 @@ class TestCMCWithConfigLoadedParameters:
         - CMC shards initialized with these values
         """
         config = {
-            "analysis_mode": "static_isotropic",
+            "analysis_mode": "static",
             "initial_parameters": {
                 "parameter_names": ["D0", "alpha", "D_offset"],
                 "values": [1500.0, 0.8, 25.0],  # Explicit NLSQ-like values
@@ -657,7 +657,7 @@ class TestCMCBackends:
         # This would require actual MCMC execution
         # Placeholder for integration test
         config = {
-            "analysis_mode": "static_isotropic",
+            "analysis_mode": "static",
             "optimization": {
                 "mcmc": {
                     "n_warmup": 50,

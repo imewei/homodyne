@@ -334,7 +334,7 @@ def test_override_priority_multiple_parameters(mock_config):
 
 def test_parameter_override_static_mode_d0(mock_config):
     """Test overriding D0 in static mode."""
-    mock_config.config["analysis_mode"] = "static_isotropic"
+    mock_config.config["analysis_mode"] = "static"
 
     args = argparse.Namespace(
         data_file=None,

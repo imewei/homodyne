@@ -250,7 +250,7 @@ class TestRealDataWorkflow:
 
         # Verify stratification integration doesn't break existing workflow
         assert len(phi_angles) > 0
-        assert config_dict["analysis_mode"] in ["static_isotropic", "laminar_flow"]
+        assert config_dict["analysis_mode"] in ["static", "laminar_flow"]
 
         logger.info("  Workflow compatibility: PASS")
 

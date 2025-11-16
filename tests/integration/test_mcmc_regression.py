@@ -179,7 +179,7 @@ class TestMCMCConvergenceQuality:
         """
         # Old v2.0 config format
         v20_config = {
-            "analysis_mode": "static_isotropic",
+            "analysis_mode": "static",
             "initial_parameters": {
                 "parameter_names": ["D0", "alpha", "D_offset"],
                 "values": [1200.0, 0.65, 10.0],

@@ -55,12 +55,12 @@ class TestParameterExpansion:
         assert expanded_params[7] == 0.6  # alpha
         assert np.allclose(expanded_params[6:], physical_params)
 
-    def test_expansion_static_isotropic(self):
-        """Test parameter expansion for static_isotropic mode."""
+    def test_expansion_static_mode(self):
+        """Test parameter expansion for static_mode mode."""
         # Static: [contrast, offset, D0, alpha, D_offset]
         validated_params = np.array([0.4, 1.1, 200.0, 0.7, 15.0])
         n_angles = 5
-        n_physical = 3  # static_isotropic
+        n_physical = 3  # static_mode
 
         base_contrast = validated_params[0]
         base_offset = validated_params[1]

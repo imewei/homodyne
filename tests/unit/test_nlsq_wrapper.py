@@ -20,9 +20,9 @@ from homodyne.optimization.nlsq_wrapper import NLSQWrapper, OptimizationResult
 class TestNLSQWrapperFit:
     """Test NLSQWrapper.fit() method (T014-T016)."""
 
-    def test_static_isotropic_fit_small_dataset(self):
+    def test_static_mode_fit_small_dataset(self):
         """
-        T014: Test fit() with static isotropic mode, <1M points.
+        T014: Test fit() with static mode mode, <1M points.
 
         Acceptance: Converges in <10 iterations, chi_squared < 2.0,
         uses curve_fit (not curve_fit_large).
@@ -70,7 +70,7 @@ class TestNLSQWrapperFit:
             config=mock_config,
             initial_params=initial_params,
             bounds=bounds,
-            analysis_mode="static_isotropic",
+            analysis_mode="static",
         )
 
         # Assertions
@@ -238,7 +238,7 @@ class TestNLSQWrapperFit:
             config=mock_config,
             initial_params=initial_params,
             bounds=bounds,
-            analysis_mode="static_isotropic",
+            analysis_mode="static",
         )
 
         # Verify clipping occurred (indirectly through successful fit)
@@ -259,10 +259,10 @@ class TestNLSQWrapperErrorRecovery:
         second attempt succeeds, recovery_actions list populated,
         warning logged.
         """
-        from tests.factories.synthetic_data import generate_static_isotropic_dataset
+        from tests.factories.synthetic_data import generate_static_mode_dataset
 
         # Generate synthetic data
-        synthetic_data = generate_static_isotropic_dataset(
+        synthetic_data = generate_static_mode_dataset(
             D0=1000.0,
             alpha=0.5,
             D_offset=10.0,
@@ -312,7 +312,7 @@ class TestNLSQWrapperErrorRecovery:
                 config=mock_config,
                 initial_params=poor_initial_params,
                 bounds=bounds,
-                analysis_mode="static_isotropic",
+                analysis_mode="static",
             )
 
         # Assertions
@@ -340,10 +340,10 @@ class TestNLSQWrapperErrorRecovery:
         - Suggested tolerance adjustments
         - "Suggested next steps" section
         """
-        from tests.factories.synthetic_data import generate_static_isotropic_dataset
+        from tests.factories.synthetic_data import generate_static_mode_dataset
 
         # Generate synthetic data
-        synthetic_data = generate_static_isotropic_dataset(
+        synthetic_data = generate_static_mode_dataset(
             D0=1000.0,
             alpha=0.5,
             D_offset=10.0,
@@ -383,7 +383,7 @@ class TestNLSQWrapperErrorRecovery:
                     config=mock_config,
                     initial_params=poor_initial_params,
                     bounds=bounds,
-                    analysis_mode="static_isotropic",
+                    analysis_mode="static",
                 )
 
         error_message = str(exc_info.value)
@@ -410,10 +410,10 @@ class TestNLSQWrapperErrorRecovery:
         NOTE (v2.4.0): per_angle_scaling=True is now MANDATORY.
         With 5 angles: 2*n_angles + n_physical = 2*5 + 3 = 11 parameters
         """
-        from tests.factories.synthetic_data import generate_static_isotropic_dataset
+        from tests.factories.synthetic_data import generate_static_mode_dataset
 
         # Generate synthetic data
-        synthetic_data = generate_static_isotropic_dataset(
+        synthetic_data = generate_static_mode_dataset(
             D0=1000.0,
             alpha=0.5,
             D_offset=10.0,
@@ -446,7 +446,7 @@ class TestNLSQWrapperErrorRecovery:
             config=mock_config,
             initial_params=violating_params,
             bounds=bounds,
-            analysis_mode="static_isotropic",
+            analysis_mode="static",
         )
 
         # Assertions
@@ -492,12 +492,12 @@ class TestNLSQWrapperErrorRecovery:
         - Eventually succeeds with STANDARD strategy
         - Logs fallback attempts
         """
-        from tests.factories.synthetic_data import generate_static_isotropic_dataset
+        from tests.factories.synthetic_data import generate_static_mode_dataset
         from homodyne.optimization.strategy import OptimizationStrategy
 
         # Generate large synthetic dataset to trigger STREAMING strategy
         # (Need > 100M points, but we'll override in config)
-        synthetic_data = generate_static_isotropic_dataset(
+        synthetic_data = generate_static_mode_dataset(
             D0=1000.0,
             alpha=0.5,
             D_offset=10.0,
@@ -562,7 +562,7 @@ class TestNLSQWrapperErrorRecovery:
                     config=mock_config,
                     initial_params=initial_params,
                     bounds=bounds,
-                    analysis_mode="static_isotropic",
+                    analysis_mode="static",
                 )
 
         # Assertions

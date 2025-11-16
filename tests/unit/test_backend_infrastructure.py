@@ -5,7 +5,7 @@ Tests for Task Group 4: Parallel MCMC Execution - Backend Infrastructure
 
 Test Coverage
 -------------
-1. Backend selection logic (GPU → pjit, PBS → pbs, CPU → multiprocessing)
+1. Backend selection logic (CPU → multiprocessing, PBS → pbs, CPU → multiprocessing)
 2. User override functionality
 3. Invalid backend name error handling
 4. Backend interface compliance (ABC)

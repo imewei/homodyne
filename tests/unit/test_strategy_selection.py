@@ -354,8 +354,8 @@ class TestEdgeCases:
 class TestParameterVariations:
     """Test with different parameter counts for different analysis modes."""
 
-    def test_static_isotropic_5_parameters(self):
-        """Test with 5 parameters (static_isotropic: 3 physical + 2 scaling)."""
+    def test_static_mode_5_parameters(self):
+        """Test with 5 parameters (static_mode: 3 physical + 2 scaling)."""
         selector = DatasetSizeStrategy()
         strategy = selector.select_strategy(5_000_000, n_parameters=5)
         assert strategy == OptimizationStrategy.LARGE

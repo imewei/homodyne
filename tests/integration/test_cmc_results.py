@@ -50,7 +50,7 @@ class TestMCMCResultMetadata:
                 "alpha": {"type": "TruncatedNormal", "mu": 1.0, "sigma": 0.3},
                 "D_offset": {"type": "TruncatedNormal", "mu": 10.0, "sigma": 5.0},
             },
-            "model_type": "static_isotropic",
+            "model_type": "static",
         }
 
         # Create result with metadata
@@ -63,7 +63,7 @@ class TestMCMCResultMetadata:
 
         # Verify metadata stored correctly
         assert result.parameter_space_metadata is not None
-        assert result.parameter_space_metadata["model_type"] == "static_isotropic"
+        assert result.parameter_space_metadata["model_type"] == "static"
         assert "D0" in result.parameter_space_metadata["bounds"]
         assert "D0" in result.parameter_space_metadata["priors"]
         assert (
@@ -128,7 +128,7 @@ class TestMCMCResultMetadata:
         param_space_metadata = {
             "bounds": {"D0": [50.0, 500.0]},
             "priors": {"D0": {"type": "TruncatedNormal", "mu": 200.0, "sigma": 50.0}},
-            "model_type": "static_isotropic",
+            "model_type": "static",
         }
         initial_values_metadata = {"D0": 1234.5, "alpha": 0.567, "D_offset": 12.34}
         selection_decision_metadata = {
@@ -169,7 +169,7 @@ class TestResultSerialization:
             mean_params=np.array([200.0, 1.0, 10.0]),
             mean_contrast=0.5,
             mean_offset=1.0,
-            parameter_space_metadata={"model_type": "static_isotropic"},
+            parameter_space_metadata={"model_type": "static"},
             initial_values_metadata={"D0": 1234.5},
             selection_decision_metadata={"selected_method": "NUTS"},
         )
@@ -181,7 +181,7 @@ class TestResultSerialization:
         assert "parameter_space_metadata" in data
         assert "initial_values_metadata" in data
         assert "selection_decision_metadata" in data
-        assert data["parameter_space_metadata"]["model_type"] == "static_isotropic"
+        assert data["parameter_space_metadata"]["model_type"] == "static"
         assert data["initial_values_metadata"]["D0"] == 1234.5
         assert data["selection_decision_metadata"]["selected_method"] == "NUTS"
 
@@ -194,7 +194,7 @@ class TestResultSerialization:
             "mean_offset": 1.0,
             "parameter_space_metadata": {
                 "bounds": {"D0": [50.0, 500.0]},
-                "model_type": "static_isotropic",
+                "model_type": "static",
             },
             "initial_values_metadata": {"D0": 1234.5, "alpha": 0.567},
             "selection_decision_metadata": {
@@ -208,7 +208,7 @@ class TestResultSerialization:
 
         # Verify metadata reconstructed correctly
         assert result.parameter_space_metadata is not None
-        assert result.parameter_space_metadata["model_type"] == "static_isotropic"
+        assert result.parameter_space_metadata["model_type"] == "static"
         assert result.initial_values_metadata["D0"] == 1234.5
         assert result.selection_decision_metadata["selected_method"] == "CMC"
 
@@ -248,7 +248,7 @@ class TestResultSerialization:
             parameter_space_metadata={
                 "bounds": {"D0": [50.0, 500.0]},
                 "priors": {"D0": {"type": "TruncatedNormal", "mu": 200.0}},
-                "model_type": "static_isotropic",
+                "model_type": "static",
             },
             initial_values_metadata={"D0": 1234.5, "alpha": 0.567, "D_offset": 12.34},
             selection_decision_metadata={
@@ -303,7 +303,7 @@ class TestResultFileSaving:
                     "D0": {"type": "TruncatedNormal", "mu": 200.0, "sigma": 50.0},
                     "alpha": {"type": "TruncatedNormal", "mu": 1.0, "sigma": 0.3},
                 },
-                "model_type": "static_isotropic",
+                "model_type": "static",
             },
             initial_values_metadata={"D0": 1234.5, "alpha": 0.567, "D_offset": 12.34},
             selection_decision_metadata={
@@ -335,7 +335,7 @@ class TestResultFileSaving:
             assert "selection_decision_metadata" in loaded_data
             assert (
                 loaded_data["parameter_space_metadata"]["model_type"]
-                == "static_isotropic"
+                == "static"
             )
             assert loaded_data["initial_values_metadata"]["D0"] == 1234.5
             assert (
@@ -357,7 +357,7 @@ class TestResultFileSaving:
             "n_iterations": 2000,
             "computation_time": 45.3,
             "backend": "JAX",
-            "analysis_mode": "static_isotropic",
+            "analysis_mode": "static",
             "n_chains": 4,
             "n_warmup": 1000,
             "n_samples": 1000,

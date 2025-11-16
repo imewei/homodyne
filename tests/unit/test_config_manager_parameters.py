@@ -50,7 +50,7 @@ parameter_space:
     def test_get_parameter_bounds_static_mode(self):
         """Test getting bounds for static mode."""
         config_content = """
-analysis_mode: static_isotropic
+analysis_mode: static_mode
 """
         with tempfile.NamedTemporaryFile(mode="w", suffix=".yaml", delete=False) as f:
             f.write(config_content)
@@ -117,7 +117,7 @@ analysis_mode: laminar_flow
     def test_get_active_parameters_static_mode(self):
         """Test getting active parameters for static mode."""
         config_content = """
-analysis_mode: static_isotropic
+analysis_mode: static_mode
 """
         with tempfile.NamedTemporaryFile(mode="w", suffix=".yaml", delete=False) as f:
             f.write(config_content)

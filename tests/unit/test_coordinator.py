@@ -68,7 +68,7 @@ def full_config():
             "sharding": {
                 "strategy": "stratified",
                 "num_shards": 4,
-                "target_shard_size_gpu": 1_000_000,
+                "target_shard_size_gpu": 1_000_000,  # Unused in v2.3.0+ (backward compat)
                 "target_shard_size_cpu": 2_000_000,
                 "min_shard_size": 10_000,
             },
@@ -256,7 +256,7 @@ class TestEndToEndPipeline:
                 # Create parameter space for v2.1.0
                 from homodyne.config.parameter_space import ParameterSpace
 
-                param_space = ParameterSpace.from_defaults("static_isotropic")
+                param_space = ParameterSpace.from_defaults("static")
 
                 result = coordinator.run_cmc(
                     data=synthetic_data["data"],
@@ -265,7 +265,7 @@ class TestEndToEndPipeline:
                     phi=synthetic_data["phi"],
                     q=synthetic_data["q"],
                     L=synthetic_data["L"],
-                    analysis_mode="static_isotropic",
+                    analysis_mode="static",
                     parameter_space=param_space,
                     initial_values=mock_nlsq_params,
                 )
@@ -278,68 +278,6 @@ class TestEndToEndPipeline:
             assert result.per_shard_diagnostics is not None
             assert result.cmc_diagnostics is not None
             assert len(result.per_shard_diagnostics) == 2
-
-    @pytest.mark.skip(
-        reason="v2.1.0 removed SVI initialization - use physics priors directly"
-    )
-    def test_pipeline_with_svi_disabled(
-        self, minimal_config, synthetic_data, mock_nlsq_params, mock_hardware_cpu
-    ):
-        """Test pipeline with SVI initialization disabled.
-
-        DEPRECATED in v2.1.0: SVI initialization was removed.
-        MCMC now uses physics-informed priors from ParameterSpace directly.
-        """
-        with patch(
-            "homodyne.optimization.cmc.coordinator.detect_hardware"
-        ) as mock_detect:
-            mock_detect.return_value = mock_hardware_cpu
-
-            coordinator = CMCCoordinator(minimal_config)
-
-            # Mock backend execution - match actual number of shards created
-            def mock_run_mcmc(
-                shards,
-                mcmc_config,
-                init_params,
-                inv_mass_matrix,
-                analysis_mode,
-                parameter_space,
-            ):
-                return [
-                    {
-                        "samples": np.random.randn(20, 5),
-                        "converged": True,
-                        "acceptance_rate": 0.80,
-                    }
-                    for _ in shards
-                ]
-
-            with patch.object(
-                coordinator.backend, "run_parallel_mcmc", side_effect=mock_run_mcmc
-            ):
-                # Create parameter space for v2.1.0
-                from homodyne.config.parameter_space import ParameterSpace
-
-                param_space = ParameterSpace.from_defaults("static_isotropic")
-
-                result = coordinator.run_cmc(
-                    data=synthetic_data["data"],
-                    t1=synthetic_data["t1"],
-                    t2=synthetic_data["t2"],
-                    phi=synthetic_data["phi"],
-                    q=synthetic_data["q"],
-                    L=synthetic_data["L"],
-                    analysis_mode="static_isotropic",
-                    parameter_space=param_space,
-                    initial_values=mock_nlsq_params,
-                )
-
-            # With small dataset (1000 points), only 1 shard is created
-            # is_cmc_result() returns False for num_shards=1 by design
-            assert result.num_shards >= 1
-            assert result.converged  # Should still converge with identity matrix
-            assert result.combination_method in ["weighted", "average", "single_shard"]
 
 
 # ============================================================================
@@ -451,7 +389,7 @@ class TestErrorHandling:
             # Create parameter space for v2.1.0
             from homodyne.config.parameter_space import ParameterSpace
 
-            param_space = ParameterSpace.from_defaults("static_isotropic")
+            param_space = ParameterSpace.from_defaults("static")
 
             with pytest.raises(ValueError, match="empty dataset"):
                 coordinator.run_cmc(
@@ -461,7 +399,7 @@ class TestErrorHandling:
                     phi=np.array([]),
                     q=0.01,
                     L=3.5,
-                    analysis_mode="static_isotropic",
+                    analysis_mode="static",
                     parameter_space=param_space,
                     initial_values={"D0": 1000.0},
                 )
@@ -584,7 +522,7 @@ class TestMCMCResultPackaging:
                 combination_method="weighted",
                 combination_time=5.0,
                 validation_diagnostics={},
-                analysis_mode="static_isotropic",
+                analysis_mode="static",
                 mcmc_config={"num_warmup": 100, "num_samples": 200, "num_chains": 1},
             )
 

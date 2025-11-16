@@ -18,7 +18,7 @@ import numpy as np
 import pytest
 
 from homodyne.optimization.nlsq_wrapper import NLSQWrapper
-from tests.factories.synthetic_data import generate_static_isotropic_dataset
+from tests.factories.synthetic_data import generate_static_mode_dataset
 
 # Check if NLSQ is available
 try:
@@ -42,7 +42,7 @@ class TestNLSQWrapperOverhead:
         fixed costs (data prep, validation, result packaging).
         """
         # Generate small synthetic dataset (5 x 10 x 10 = 500 points)
-        data = generate_static_isotropic_dataset(
+        data = generate_static_mode_dataset(
             D0=1000.0,
             alpha=0.5,
             D_offset=10.0,
@@ -69,7 +69,7 @@ class TestNLSQWrapperOverhead:
 
         # Warm up JIT compilation (run once, don't time)
         try:
-            _ = wrapper.fit(data, config, initial_params, bounds, "static_isotropic")
+            _ = wrapper.fit(data, config, initial_params, bounds, "static")
         except Exception:
             pass  # Ignore convergence failures in warm-up
 
@@ -79,7 +79,7 @@ class TestNLSQWrapperOverhead:
             start = time.perf_counter()
             try:
                 result = wrapper.fit(
-                    data, config, initial_params, bounds, "static_isotropic"
+                    data, config, initial_params, bounds, "static"
                 )
                 elapsed = time.perf_counter() - start
                 wrapper_times.append(elapsed)
@@ -112,7 +112,7 @@ class TestNLSQWrapperOverhead:
         Acceptance: Wrapper overhead <5% per NFR-003.
         """
         # Generate medium synthetic dataset (10 x 30 x 30 = 9,000 points)
-        data = generate_static_isotropic_dataset(
+        data = generate_static_mode_dataset(
             D0=1000.0,
             alpha=0.5,
             D_offset=10.0,
@@ -139,7 +139,7 @@ class TestNLSQWrapperOverhead:
 
         # Warm up JIT compilation
         try:
-            _ = wrapper.fit(data, config, initial_params, bounds, "static_isotropic")
+            _ = wrapper.fit(data, config, initial_params, bounds, "static")
         except Exception:
             pass
 
@@ -149,7 +149,7 @@ class TestNLSQWrapperOverhead:
             start = time.perf_counter()
             try:
                 result = wrapper.fit(
-                    data, config, initial_params, bounds, "static_isotropic"
+                    data, config, initial_params, bounds, "static"
                 )
                 elapsed = time.perf_counter() - start
                 wrapper_times.append(elapsed)
@@ -187,7 +187,7 @@ class TestNLSQWrapperOverhead:
         This test may take 30-60 seconds to run.
         """
         # Generate large synthetic dataset (20 x 50 x 50 = 50,000 points)
-        data = generate_static_isotropic_dataset(
+        data = generate_static_mode_dataset(
             D0=1000.0,
             alpha=0.5,
             D_offset=10.0,
@@ -214,7 +214,7 @@ class TestNLSQWrapperOverhead:
 
         # Warm up JIT compilation
         try:
-            _ = wrapper.fit(data, config, initial_params, bounds, "static_isotropic")
+            _ = wrapper.fit(data, config, initial_params, bounds, "static")
         except Exception:
             pass
 
@@ -222,7 +222,7 @@ class TestNLSQWrapperOverhead:
         start = time.perf_counter()
         try:
             result = wrapper.fit(
-                data, config, initial_params, bounds, "static_isotropic"
+                data, config, initial_params, bounds, "static"
             )
             wrapper_time = time.perf_counter() - start
         except Exception as e:
@@ -252,7 +252,7 @@ class TestNLSQWrapperOverhead:
         - Result creation (_create_fit_result)
         """
         # Generate medium dataset for profiling
-        data = generate_static_isotropic_dataset(
+        data = generate_static_mode_dataset(
             D0=1000.0, alpha=0.5, D_offset=10.0, n_phi=10, n_t1=30, n_t2=30
         )
 
@@ -270,7 +270,7 @@ class TestNLSQWrapperOverhead:
 
         # Warm up
         try:
-            _ = wrapper.fit(data, config, initial_params, bounds, "static_isotropic")
+            _ = wrapper.fit(data, config, initial_params, bounds, "static")
         except Exception:
             pass
 
@@ -286,7 +286,7 @@ class TestNLSQWrapperOverhead:
         start = time.perf_counter()
         try:
             result = wrapper.fit(
-                data, config, initial_params, bounds, "static_isotropic"
+                data, config, initial_params, bounds, "static"
             )
             timings["total"] = time.perf_counter() - start
         except Exception as e:

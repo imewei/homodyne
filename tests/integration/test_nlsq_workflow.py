@@ -10,7 +10,7 @@ Test Coverage
 - Metadata extraction with missing values (fallback behavior)
 - Plotting failure recovery (data files still saved)
 - Large dataset handling (180 angles × 100×100)
-- Device array conversion (JAX/GPU → NumPy)
+- Device array conversion (JAX → NumPy)
 - Method comparison (NLSQ vs classical file structure)
 """
 
@@ -43,15 +43,15 @@ class TestNLSQFullWorkflow:
         with tempfile.TemporaryDirectory() as tmpdir:
             output_dir = Path(tmpdir)
 
-            # Test with static_isotropic mode
+            # Test with static_mode mode
             result = create_mock_optimization_result(
-                analysis_mode="static_isotropic",
+                analysis_mode="static",
                 converged=True,
                 include_uncertainties=True,
             )
             data = create_mock_data_dict(n_angles=5, n_t1=20, n_t2=20)
             config_dict = create_mock_config_manager(
-                analysis_mode="static_isotropic",
+                analysis_mode="static",
                 include_all_metadata=True,
             )
             # Wrap in Mock to simulate ConfigManager with .config attribute
@@ -82,7 +82,7 @@ class TestNLSQFullWorkflow:
                 params = json.load(f)
             assert "timestamp" in params, "Missing timestamp in parameters.json"
             assert "analysis_mode" in params, "Missing analysis_mode"
-            assert params["analysis_mode"] == "static_isotropic"
+            assert params["analysis_mode"] == "static"
             assert "chi_squared" in params, "Missing chi_squared"
             assert "parameters" in params, "Missing parameters dict"
             # Static isotropic has 5 parameters
@@ -188,12 +188,12 @@ class TestNLSQFullWorkflow:
 
             # Create mock data
             result = create_mock_optimization_result(
-                analysis_mode="static_isotropic",
+                analysis_mode="static",
                 converged=True,
             )
             data = create_mock_data_dict(n_angles=5, n_t1=20, n_t2=20)
             config_dict = create_mock_config_manager(
-                analysis_mode="static_isotropic",
+                analysis_mode="static",
                 include_all_metadata=True,
             )
             config = Mock()
@@ -242,14 +242,14 @@ class TestNLSQErrorRecovery:
 
             # Create mock data and result
             result = create_mock_optimization_result(
-                analysis_mode="static_isotropic",
+                analysis_mode="static",
                 converged=True,
             )
             data = create_mock_data_dict(n_angles=3, n_t1=15, n_t2=15)
 
             # Create config with minimal metadata (no L, no dt)
             config_dict = {
-                "analysis_mode": "static_isotropic",
+                "analysis_mode": "static",
                 "experimental_data": {},  # No sample_detector_distance
                 "analyzer_parameters": {},  # No geometry or dt
             }
@@ -279,12 +279,12 @@ class TestNLSQErrorRecovery:
 
             # Create mock data and result
             result = create_mock_optimization_result(
-                analysis_mode="static_isotropic",
+                analysis_mode="static",
                 converged=True,
             )
             data = create_mock_data_dict(n_angles=3, n_t1=15, n_t2=15)
             config_dict = create_mock_config_manager(
-                analysis_mode="static_isotropic",
+                analysis_mode="static",
                 include_all_metadata=True,
             )
             config = Mock()
@@ -337,12 +337,12 @@ class TestNLSQPerformance:
             n_t2 = 100
 
             result = create_mock_optimization_result(
-                analysis_mode="static_isotropic",
+                analysis_mode="static",
                 converged=True,
             )
             data = create_mock_data_dict(n_angles=n_angles, n_t1=n_t1, n_t2=n_t2)
             config_dict = create_mock_config_manager(
-                analysis_mode="static_isotropic",
+                analysis_mode="static",
                 include_all_metadata=True,
             )
             config = Mock()
@@ -374,7 +374,7 @@ class TestNLSQPerformance:
             )
 
     def test_save_nlsq_results_device_array_conversion(self):
-        """Test conversion of JAX/GPU arrays to NumPy for saving."""
+        """Test conversion of JAX arrays to NumPy for saving."""
         import jax.numpy as jnp
 
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -382,18 +382,18 @@ class TestNLSQPerformance:
 
             # Create mock data with JAX arrays
             result = create_mock_optimization_result(
-                analysis_mode="static_isotropic",
+                analysis_mode="static",
                 converged=True,
             )
 
-            # Convert some arrays to JAX arrays (simulating GPU data)
+            # Convert some arrays to JAX arrays (simulating JAX data)
             data = create_mock_data_dict(n_angles=3, n_t1=20, n_t2=20)
             data["c2_exp"] = jnp.array(data["c2_exp"])  # Convert to JAX array
             data["t1"] = jnp.array(data["t1"])
             data["t2"] = jnp.array(data["t2"])
 
             config_dict = create_mock_config_manager(
-                analysis_mode="static_isotropic",
+                analysis_mode="static",
                 include_all_metadata=True,
             )
             config = Mock()
@@ -465,9 +465,9 @@ class TestNLSQCLIIntegration:
             args.output_format = "json"
 
             # Create mock result, data, config
-            result = create_mock_optimization_result(analysis_mode="static_isotropic")
+            result = create_mock_optimization_result(analysis_mode="static")
             data = create_mock_data_dict(n_angles=3, n_t1=10, n_t2=10)
-            config_dict = create_mock_config_manager(analysis_mode="static_isotropic")
+            config_dict = create_mock_config_manager(analysis_mode="static")
             config = Mock()
             config.config = config_dict
             device_config = {"device": "cpu"}
@@ -516,7 +516,7 @@ class TestNLSQCLIIntegration:
             result.samples_params = None
 
             data = create_mock_data_dict(n_angles=3, n_t1=10, n_t2=10)
-            config_dict = create_mock_config_manager(analysis_mode="static_isotropic")
+            config_dict = create_mock_config_manager(analysis_mode="static")
             config = Mock()
             config.config = config_dict
             device_config = {"device": "cpu"}
@@ -539,7 +539,7 @@ class TestNLSQCLIIntegration:
         pass  # Deferred - requires full CLI with real config file
 
     def test_nlsq_workflow_both_analysis_modes(self):
-        """Test with both static_isotropic and laminar_flow modes."""
+        """Test with both static_mode and laminar_flow modes."""
         # This is already tested in test_nlsq_full_workflow_files
         # which tests both modes
         pass  # Covered by test_nlsq_full_workflow_files

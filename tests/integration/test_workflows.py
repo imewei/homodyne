@@ -105,7 +105,7 @@ class TestEndToEndWorkflows:
         workflow_config = test_config.copy()
         workflow_config.update(
             {
-                "analysis_mode": "static_isotropic",
+                "analysis_mode": "static",
                 "output_directory": str(temp_dir),
                 "optimization": {
                     "method": "nlsq",
@@ -172,7 +172,7 @@ class TestEndToEndWorkflows:
             {
                 "data_file": str(h5_file),
                 "output_directory": str(temp_dir),
-                "analysis_mode": "static_isotropic",
+                "analysis_mode": "static",
             }
         )
 
@@ -220,7 +220,7 @@ class TestEndToEndWorkflows:
         # Create YAML configuration
         yaml_config = {
             "data_file": "synthetic",  # Use synthetic data
-            "analysis_mode": "static_isotropic",
+            "analysis_mode": "static",
             "output_directory": str(temp_dir),
             "optimization": {
                 "method": "nlsq",
@@ -242,7 +242,7 @@ class TestEndToEndWorkflows:
             loaded_config = config_manager.get_config()
 
             # Validate configuration loading
-            assert loaded_config["analysis_mode"] == "static_isotropic"
+            assert loaded_config["analysis_mode"] == "static"
             assert loaded_config["optimization"]["method"] == "nlsq"
 
             # Create synthetic data for this workflow
@@ -318,7 +318,7 @@ class TestEndToEndWorkflows:
         # Configure for multi-q analysis
         multi_q_config = test_config.copy()
         multi_q_config.update(
-            {"analysis_mode": "static_isotropic", "multi_q_analysis": True}
+            {"analysis_mode": "static", "multi_q_analysis": True}
         )
 
         # Run optimization
@@ -410,7 +410,7 @@ class TestModuleInteraction:
         complex_config = {
             "data": {"file_format": "hdf5", "cache_enabled": True, "validation": True},
             "analysis": {
-                "mode": "static_isotropic",
+                "mode": "static",
                 "parameters": ["offset", "contrast", "diffusion_coefficient"],
             },
             "optimization": {
@@ -572,7 +572,7 @@ class TestCrossplatformCompatibility:
 
         config_data = {
             "output_directory": str(temp_dir),
-            "analysis_mode": "static_isotropic",
+            "analysis_mode": "static",
         }
 
         for path_format in path_formats:
@@ -584,7 +584,7 @@ class TestCrossplatformCompatibility:
             config_manager = ConfigManager(path_format)
             loaded_config = config_manager.get_config()
 
-            assert loaded_config["analysis_mode"] == "static_isotropic"
+            assert loaded_config["analysis_mode"] == "static"
             assert Path(loaded_config["output_directory"]).exists()
 
     def test_numerical_precision_consistency(self):

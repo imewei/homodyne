@@ -203,12 +203,12 @@ def temp_dir():
 def test_config():
     """Basic test configuration dictionary."""
     return {
-        "analysis_mode": "static_isotropic",
+        "analysis_mode": "static",
         "optimization": {
             "method": "nlsq",
             "lsq": {"max_iterations": 100, "tolerance": 1e-6},
         },
-        "hardware": {"force_cpu": True, "gpu_memory_fraction": 0.8},
+        "hardware": {"force_cpu": True},  # GPU support removed in v2.3.0
         "output": {"save_plots": False, "verbose": False},
     }
 
@@ -376,7 +376,7 @@ def mock_yaml_config(temp_dir):
     config_path = temp_dir / "test_config.yaml"
     config = {
         "data_file": "test_data.h5",
-        "analysis_mode": "static_isotropic",
+        "analysis_mode": "static",
         "output_directory": str(temp_dir),
         "optimization": {"method": "nlsq", "lsq": {"max_iterations": 50}},
     }

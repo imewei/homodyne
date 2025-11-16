@@ -52,28 +52,6 @@ class TestNLSQOptimization:
                 nlsq, "curve_fit_large"
             ), "NLSQ should have curve_fit_large function"
 
-    @pytest.mark.skip(reason="NLSQResult deprecated, replaced by OptimizationResult")
-    def test_nlsq_result_structure(self):
-        """Test NLSQResult data structure."""
-        # Test that we can create a result object
-        result = NLSQResult(
-            parameters={"offset": 1.0, "contrast": 0.5},
-            parameter_errors={"offset": 0.1, "contrast": 0.05},
-            chi_squared=0.1,
-            reduced_chi_squared=0.12,
-            success=True,
-            message="Test result",
-            n_iterations=10,
-            optimization_time=0.5,
-        )
-
-        assert result.parameters == {"offset": 1.0, "contrast": 0.5}
-        assert result.chi_squared == 0.1
-        assert result.success is True
-        assert result.message == "Test result"
-        assert result.n_iterations == 10
-        assert result.optimization_time == 0.5
-
     @pytest.mark.skipif(not NLSQ_AVAILABLE, reason="NLSQ package not available")
     def test_nlsq_synthetic_data_fit(self, synthetic_xpcs_data, test_config):
         """
@@ -334,7 +312,7 @@ class TestNLSQOptimization:
         result = fit_nlsq_jax(data, test_config)
 
         assert result.success, f"Multi-q optimization failed: {result.message}"
-        # static_isotropic: [contrast, offset, D0, alpha, D_offset]
+        # static_mode: [contrast, offset, D0, alpha, D_offset]
         D0 = result.parameters[2]  # diffusion_coefficient
         assert D0 > 0, "Diffusion coefficient should be positive"
 
@@ -362,38 +340,6 @@ class TestNLSQFallback:
         # Error message should mention NLSQ
         error_msg = str(exc_info.value).lower()
         assert "nlsq" in error_msg, f"Expected 'nlsq' in error message: {error_msg}"
-
-    @pytest.mark.skip(reason="NLSQResult deprecated, replaced by OptimizationResult")
-    def test_nlsq_result_serialization(self):
-        """Test that NLSQResult can be serialized/deserialized."""
-        import json
-
-        result = NLSQResult(
-            parameters={"offset": 1.0, "contrast": 0.5},
-            chi_squared=0.1,
-            success=True,
-            message="Test",
-            n_iterations=10,
-            optimization_time=0.5,
-        )
-
-        # Convert to dict for serialization
-        result_dict = {
-            "parameters": result.parameters,
-            "chi_squared": result.chi_squared,
-            "success": result.success,
-            "message": result.message,
-            "n_iterations": result.n_iterations,
-            "optimization_time": result.optimization_time,
-        }
-
-        # Test JSON serialization
-        json_str = json.dumps(result_dict)
-        loaded_dict = json.loads(json_str)
-
-        assert loaded_dict["parameters"] == result.parameters
-        assert loaded_dict["chi_squared"] == result.chi_squared
-        assert loaded_dict["success"] == result.success
 
 
 @pytest.mark.unit
@@ -510,7 +456,7 @@ class TestParameterHelpers:
         from homodyne.optimization.nlsq import _get_param_names
 
         # Test static mode
-        param_names = _get_param_names("static_isotropic")
+        param_names = _get_param_names("static")
         assert param_names == ["contrast", "offset", "D0", "alpha", "D_offset"]
         assert len(param_names) == 5
 
@@ -541,7 +487,7 @@ class TestParameterHelpers:
         # Should work with different cases
         assert _get_param_names("STATIC") == _get_param_names("static")
         assert _get_param_names("Static_Isotropic") == _get_param_names(
-            "static_isotropic"
+            "static"
         )
 
 

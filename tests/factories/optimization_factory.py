@@ -12,7 +12,7 @@ from homodyne.optimization.nlsq_wrapper import OptimizationResult
 
 
 def create_mock_optimization_result(
-    analysis_mode: str = "static_isotropic",
+    analysis_mode: str = "static",
     converged: bool = True,
     include_uncertainties: bool = True,
     include_covariance: bool = True,
@@ -24,7 +24,7 @@ def create_mock_optimization_result(
     Parameters
     ----------
     analysis_mode : str
-        "static_isotropic" (5 params) or "laminar_flow" (9 params)
+        "static" (5 params) or "laminar_flow" (9 params)
     converged : bool
         Whether optimization converged
     include_uncertainties : bool
@@ -69,7 +69,7 @@ def create_mock_optimization_result(
         )
         n_params = 9
     else:
-        raise ValueError(f"Unknown analysis_mode: {analysis_mode}")
+        raise ValueError(f"Unknown analysis_mode: {analysis_mode}. Expected 'static' or 'laminar_flow'")
 
     # Covariance matrix (identity scaled by variance for simplicity)
     if include_covariance:
@@ -107,7 +107,7 @@ def create_mock_optimization_result(
 
 
 def create_mock_config_manager(
-    analysis_mode: str = "static_isotropic", include_all_metadata: bool = True
+    analysis_mode: str = "static", include_all_metadata: bool = True
 ) -> dict:
     """
     Create mock ConfigManager dict for testing metadata extraction.
@@ -115,7 +115,7 @@ def create_mock_config_manager(
     Parameters
     ----------
     analysis_mode : str
-        "static_isotropic" or "laminar_flow"
+        "static" or "laminar_flow"
     include_all_metadata : bool
         If True, include all metadata fields. If False, omit some for
         testing fallback behavior.

@@ -53,7 +53,7 @@ class TestXPCSDataLoaderCore:
         """Test XPCSDataLoader class initialization."""
         # Basic initialization with minimal config
         basic_config = {
-            "analysis_mode": "static_isotropic",
+            "analysis_mode": "static",
             "experimental_data": {
                 "data_folder_path": "/tmp",
                 "data_file_name": "test.h5",
@@ -66,12 +66,12 @@ class TestXPCSDataLoaderCore:
 
         # Test configuration is loaded
         assert loader.config is not None
-        assert loader.config["analysis_mode"] == "static_isotropic"
+        assert loader.config["analysis_mode"] == "static"
 
     def test_config_loading_dict(self):
         """Test configuration loading from dictionary."""
         config_dict = {
-            "analysis_mode": "static_isotropic",
+            "analysis_mode": "static",
             "experimental_data": {
                 "data_folder_path": "/tmp",
                 "data_file_name": "test.h5",
@@ -85,7 +85,7 @@ class TestXPCSDataLoaderCore:
         loaded_config = loader.config
 
         assert loaded_config["experimental_data"]["data_file_name"] == "test.h5"
-        assert loaded_config["analysis_mode"] == "static_isotropic"
+        assert loaded_config["analysis_mode"] == "static"
         assert loaded_config["output_directory"] == "/tmp/test"
 
     @pytest.mark.skipif(not HAS_YAML, reason="PyYAML not available")
@@ -99,7 +99,7 @@ class TestXPCSDataLoaderCore:
         assert isinstance(config, dict)
         assert "data_file" in config
         assert "analysis_mode" in config
-        assert config["analysis_mode"] == "static_isotropic"
+        assert config["analysis_mode"] == "static"
 
     def test_config_loading_json(self, temp_dir):
         """Test JSON configuration file loading."""
@@ -199,7 +199,7 @@ class TestHDF5FormatDetection:
 
         # Test that we can create a loader and it detects the format internally
         basic_config = {
-            "analysis_mode": "static_isotropic",
+            "analysis_mode": "static",
             "experimental_data": {
                 "data_folder_path": "/tmp",
                 "data_file_name": "test.h5",
@@ -221,7 +221,7 @@ class TestHDF5FormatDetection:
         self.create_mock_aps_u_format(file_path)
 
         basic_config = {
-            "analysis_mode": "static_isotropic",
+            "analysis_mode": "static",
             "experimental_data": {
                 "data_folder_path": "/tmp",
                 "data_file_name": "test.h5",
@@ -239,7 +239,7 @@ class TestHDF5FormatDetection:
         """Test format detection error handling."""
         # Test with non-existent file
         basic_config = {
-            "analysis_mode": "static_isotropic",
+            "analysis_mode": "static",
             "experimental_data": {
                 "data_folder_path": "/tmp",
                 "data_file_name": "test.h5",
@@ -270,7 +270,7 @@ class TestHDF5FormatDetection:
             pass  # Empty file
 
         basic_config = {
-            "analysis_mode": "static_isotropic",
+            "analysis_mode": "static",
             "experimental_data": {
                 "data_folder_path": "/tmp",
                 "data_file_name": "test.h5",
@@ -295,7 +295,7 @@ class TestXPCSDataLoading:
         # Create config for the mock file
         config = {
             "data_file": str(mock_hdf5_file),
-            "analysis_mode": "static_isotropic",
+            "analysis_mode": "static",
             "output_directory": str(temp_dir),
         }
 
@@ -325,7 +325,7 @@ class TestXPCSDataLoading:
         """Test data loading with NPZ caching."""
         config = {
             "data_file": str(mock_hdf5_file),
-            "analysis_mode": "static_isotropic",
+            "analysis_mode": "static",
             "output_directory": str(temp_dir),
             "cache_strategy": "intelligent",  # Enable caching with new v2.1.0 API
         }
@@ -354,7 +354,7 @@ class TestXPCSDataLoading:
         """Test data validation during loading."""
         config = {
             "data_file": str(mock_hdf5_file),
-            "analysis_mode": "static_isotropic",
+            "analysis_mode": "static",
             "output_directory": str(temp_dir),
             "validate_data": True,  # Validation is enabled via config
         }
@@ -401,7 +401,7 @@ class TestXPCSDataLoading:
 
         config = {
             "data_file": str(test_file),
-            "analysis_mode": "static_isotropic",
+            "analysis_mode": "static",
             "output_directory": str(temp_dir),
             "apply_diagonal_correction": True,
         }
@@ -450,7 +450,7 @@ class TestXPCSDataLoaderFallback:
             pytest.skip("PyYAML is available, cannot test fallback")
 
         # Should still be able to load JSON configs
-        config_dict = {"data_file": "test.h5", "analysis_mode": "static_isotropic"}
+        config_dict = {"data_file": "test.h5", "analysis_mode": "static"}
 
         loader = XPCSDataLoader()
         processed_config = loader._process_config(config_dict)
@@ -475,7 +475,7 @@ class TestXPCSDataLoaderFallback:
         try:
             # Provide minimal config for v2.1.0 API
             minimal_config = {
-                "analysis_mode": "static_isotropic",
+                "analysis_mode": "static",
                 "experimental_data": {
                     "data_folder_path": str(temp_dir),
                     "data_file_name": "dummy.h5",

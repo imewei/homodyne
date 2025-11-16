@@ -69,7 +69,7 @@ class TestNLSQWithAngleFiltering:
         )
 
         # Add required optimization configuration
-        config_dict["analysis_mode"] = "static_isotropic"
+        config_dict["analysis_mode"] = "static"
         config_dict["initial_parameters"] = {
             "parameter_names": ["D0", "alpha", "D_offset"],
             "values": [1000.0, 0.5, 10.0],
@@ -84,7 +84,7 @@ class TestNLSQWithAngleFiltering:
                 return config_dict.get(key, default)
 
             def get_parameter_bounds(self, param_names=None):
-                # Return default bounds for static_isotropic mode
+                # Return default bounds for static_mode mode
                 return [
                     {"name": "D0", "min": 100.0, "max": 10000.0},
                     {"name": "alpha", "min": 0.1, "max": 2.0},
@@ -159,7 +159,7 @@ class TestNLSQWithAngleFiltering:
 
         # Configure with filtering disabled
         config_dict = create_disabled_filtering_config()
-        config_dict["analysis_mode"] = "static_isotropic"
+        config_dict["analysis_mode"] = "static"
         config_dict["initial_parameters"] = {
             "parameter_names": ["D0", "alpha", "D_offset"],
             "values": [1000.0, 0.5, 10.0],
@@ -305,7 +305,7 @@ class TestNLSQWithAngleFiltering:
                 {"min_angle": 85.0, "max_angle": 100.0, "description": "Near 90"}
             ],
         )
-        config_dict["analysis_mode"] = "static_isotropic"
+        config_dict["analysis_mode"] = "static"
         config_dict["initial_parameters"] = {
             "parameter_names": ["D0", "alpha", "D_offset"],
             "values": [1000.0, 0.5, 10.0],

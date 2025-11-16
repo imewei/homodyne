@@ -619,7 +619,7 @@ class ConfigFactory:
 
     @staticmethod
     def create_basic_config(
-        analysis_mode: str = "static_isotropic",
+        analysis_mode: str = "static",
         optimization_method: str = "nlsq",
         output_dir: str | None = None,
     ) -> dict[str, Any]:
@@ -645,7 +645,7 @@ class ConfigFactory:
     ) -> dict[str, Any]:
         """Create configuration optimized for performance testing."""
         return {
-            "analysis_mode": "static_isotropic",
+            "analysis_mode": "static",
             "optimization": {
                 "method": "nlsq",
                 "lsq": {"max_iterations": max_iterations, "tolerance": tolerance},
@@ -664,7 +664,7 @@ class ConfigFactory:
     ) -> dict[str, Any]:
         """Create configuration for MCMC testing."""
         return {
-            "analysis_mode": "static_isotropic",
+            "analysis_mode": "static",
             "optimization": {
                 "method": "mcmc",
                 "mcmc": {

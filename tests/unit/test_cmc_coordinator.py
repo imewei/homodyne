@@ -44,7 +44,7 @@ except ImportError:
 
 @pytest.fixture
 def static_parameter_space():
-    """Create parameter_space for static_isotropic mode."""
+    """Create parameter_space for static_mode mode."""
     config = {
         "parameter_space": {
             "model": "static",
@@ -205,7 +205,7 @@ def test_parameter_space_propagation(
             phi=phi,
             q=q,
             L=L,
-            analysis_mode="static_isotropic",
+            analysis_mode="static",
             parameter_space=static_parameter_space,
             initial_values=initial_values_static,
         )
@@ -220,7 +220,7 @@ def test_parameter_space_propagation(
 
     # Check analysis_mode propagation
     assert "analysis_mode" in call_kwargs
-    assert call_kwargs["analysis_mode"] == "static_isotropic"
+    assert call_kwargs["analysis_mode"] == "static"
 
     # Check init_params includes initial_values
     assert "init_params" in call_kwargs
@@ -229,9 +229,9 @@ def test_parameter_space_propagation(
     assert init_params["alpha"] == 0.567
     assert init_params["D_offset"] == 12.34
 
-    # Check scaling parameters added
-    assert "contrast" in init_params
-    assert "offset" in init_params
+    # Check scaling parameters added (per-angle in v2.4.0+)
+    assert "contrast_0" in init_params
+    assert "offset_0" in init_params
 
     print("✓ parameter_space successfully propagated through CMC pipeline")
 
@@ -298,9 +298,9 @@ def test_initial_values_usage(
     assert init_params["gamma_dot_t_offset"] == 0.45
     assert init_params["phi0"] == 0.12
 
-    # Check scaling parameters added automatically
-    assert init_params["contrast"] == 0.5  # Default
-    assert init_params["offset"] == 1.0  # Default
+    # Check scaling parameters added automatically (per-angle in v2.4.0+)
+    assert init_params["contrast_0"] == 0.5  # Default per-angle
+    assert init_params["offset_0"] == 1.0  # Default per-angle
 
     print("✓ initial_values successfully used for shard initialization")
 
@@ -348,7 +348,7 @@ def test_midpoint_defaults_when_no_initial_values(
             phi=phi,
             q=q,
             L=L,
-            analysis_mode="static_isotropic",
+            analysis_mode="static",
             parameter_space=static_parameter_space,
             initial_values=None,  # Trigger mid-point calculation
         )
@@ -419,7 +419,7 @@ def test_parameter_validation_against_bounds(
                 phi=phi,
                 q=q,
                 L=L,
-                analysis_mode="static_isotropic",
+                analysis_mode="static",
                 parameter_space=static_parameter_space,
                 initial_values=invalid_initial_values,
             )
@@ -479,7 +479,7 @@ def test_automatic_cmc_selection_logging(
             phi=phi,
             q=q,
             L=L,
-            analysis_mode="static_isotropic",
+            analysis_mode="static",
             parameter_space=static_parameter_space,
             initial_values=initial_values_static,
         )

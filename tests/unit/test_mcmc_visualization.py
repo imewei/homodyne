@@ -67,7 +67,7 @@ def standard_mcmc_result():
         n_chains=4,
         n_warmup=1000,
         n_samples=1000,
-        analysis_mode="static_isotropic",
+        analysis_mode="static",
         r_hat={"D0": 1.02, "alpha": 1.03, "D_offset": 1.01},
         effective_sample_size={"D0": 850.0, "alpha": 920.0, "D_offset": 880.0},
         acceptance_rate=0.85,
@@ -152,7 +152,7 @@ def cmc_result():
         samples_params=combined_samples,
         converged=True,
         n_iterations=1000,
-        analysis_mode="static_isotropic",
+        analysis_mode="static",
         num_shards=num_shards,
         combination_method="weighted",
         per_shard_diagnostics=per_shard_diagnostics,
@@ -497,7 +497,7 @@ class TestEdgeCases:
             num_shards=1,
             per_shard_diagnostics=per_shard_diagnostics,
             cmc_diagnostics={"kl_matrix": kl_matrix.tolist()},
-            analysis_mode="static_isotropic",
+            analysis_mode="static",
         )
 
         # Should not be considered a CMC result (single shard)
@@ -535,7 +535,7 @@ class TestEdgeCases:
             samples_params=np.random.randn(num_samples, num_params),
             num_shards=2,
             per_shard_diagnostics=per_shard_diagnostics,
-            analysis_mode="static_isotropic",
+            analysis_mode="static",
         )
 
         fig = plot_trace_plots(result)
@@ -642,7 +642,7 @@ def test_visualization_module_summary():
     print("  ✅ Comprehensive CMC summary dashboard")
     print("  ✅ File saving (PNG, PDF, SVG)")
     print("  ✅ Edge case handling (single shard, multi-chain)")
-    print("  ✅ Multiple analysis modes (static_isotropic, laminar_flow)")
+    print("  ✅ Multiple analysis modes (static_mode, laminar_flow)")
 
     print("\n" + "=" * 70)
 

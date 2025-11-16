@@ -8,7 +8,7 @@ Tests cover:
 - Realistic synthetic data validation
 """
 
-from tests.factories.synthetic_data import generate_static_isotropic_dataset
+from tests.factories.synthetic_data import generate_static_mode_dataset
 
 
 class TestFitNlsqJaxAPI:
@@ -27,7 +27,7 @@ class TestFitNlsqJaxAPI:
         # Generate realistic synthetic data with known parameters
         # Note: Using larger dimensions and lower noise for robust convergence
         # Small datasets (<2000 points) can cause numerical instabilities
-        synthetic_data = generate_static_isotropic_dataset(
+        synthetic_data = generate_static_mode_dataset(
             D0=1000.0,
             alpha=0.5,
             D_offset=10.0,
@@ -43,7 +43,7 @@ class TestFitNlsqJaxAPI:
         class MockConfig:
             def __init__(self):
                 self.config = {
-                    "analysis_mode": "static_isotropic",
+                    "analysis_mode": "static",
                     "optimization": {
                         "lsq": {"max_iterations": 1000, "tolerance": 1e-6}
                     },

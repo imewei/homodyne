@@ -235,7 +235,7 @@ def test_integration_static_mode_with_overrides(temp_config_file, parser):
     _apply_cli_overrides(config, args)
 
     # Step 3: Verify analysis mode changed to static
-    assert config.config["analysis_mode"] == "static_isotropic"
+    assert config.config["analysis_mode"] == "static"
 
     # Step 4: Verify parameter overrides
     param_names = config.config["initial_parameters"]["parameter_names"]

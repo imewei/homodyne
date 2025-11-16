@@ -69,7 +69,7 @@ class TestMCMCConvergence:
 
         # Basic MCMC configuration
         mcmc_config = {
-            "analysis_mode": "static_isotropic",
+            "analysis_mode": "static",
             "optimization": {
                 "method": "mcmc",
                 "mcmc": {
@@ -97,7 +97,7 @@ class TestMCMCConvergence:
                 phi,
                 q,
                 L,
-                analysis_mode="static_isotropic",
+                analysis_mode="static",
                 num_samples=200,
                 num_warmup=100,
             )
@@ -160,7 +160,7 @@ class TestMCMCConvergence:
                 data["phi_angles_list"],
                 data["wavevector_q_list"][0],
                 true_params["L"],
-                analysis_mode="static_isotropic",
+                analysis_mode="static",
                 num_samples=500,
                 num_warmup=200,
             )
@@ -207,7 +207,7 @@ class TestMCMCConvergence:
                 data["phi_angles_list"],
                 data["wavevector_q_list"][0],
                 1.0,
-                analysis_mode="static_isotropic",
+                analysis_mode="static",
                 num_samples=300,
                 num_warmup=150,
                 num_chains=2,
@@ -266,7 +266,7 @@ class TestMCMCConvergence:
                 data["phi_angles_list"],
                 data["wavevector_q_list"][0],
                 1.0,
-                analysis_mode="static_isotropic",
+                analysis_mode="static",
                 num_samples=400,
                 num_warmup=200,
                 num_chains=2,
@@ -346,7 +346,7 @@ class TestMCMCStatisticalProperties:
                 data["phi_angles_list"],
                 data["wavevector_q_list"][0],
                 1.0,
-                analysis_mode="static_isotropic",
+                analysis_mode="static",
                 num_samples=300,
                 num_warmup=150,
             )
@@ -421,7 +421,7 @@ class TestMCMCStatisticalProperties:
                 data["phi_angles_list"],
                 data["wavevector_q_list"][0],
                 1.0,
-                analysis_mode="static_isotropic",
+                analysis_mode="static",
                 num_samples=400,
                 num_warmup=200,
             )
@@ -493,7 +493,7 @@ class TestMCMCStatisticalProperties:
                 "phi_angles_list": data["phi_angles_list"],
                 "q": data["wavevector_q_list"][0],
                 "L": 1.0,
-                "analysis_mode": "static_isotropic",
+                "analysis_mode": "static",
                 "num_samples": 200,
                 "num_warmup": 100,
                 "rng_key": 42,  # Fixed seed
@@ -544,7 +544,7 @@ class TestMCMCStatisticalProperties:
                 data["phi_angles_list"],
                 data["wavevector_q_list"][0],
                 1.0,
-                analysis_mode="static_isotropic",
+                analysis_mode="static",
                 num_samples=300,
                 num_warmup=150,
             )
@@ -613,7 +613,7 @@ class TestMCMCEdgeCases:
                 data["phi_angles_list"],
                 data["wavevector_q_list"][0],
                 1.0,
-                analysis_mode="static_isotropic",
+                analysis_mode="static",
                 num_samples=300,
                 num_warmup=200,
             )
@@ -655,7 +655,7 @@ class TestMCMCEdgeCases:
                 data["phi_angles_list"],
                 data["wavevector_q_list"][0],
                 1.0,
-                analysis_mode="static_isotropic",
+                analysis_mode="static",
                 num_samples=250,
                 num_warmup=150,
             )
@@ -700,7 +700,7 @@ class TestMCMCEdgeCases:
                 data["phi_angles_list"],
                 data["wavevector_q_list"][0],
                 1.0,
-                analysis_mode="static_isotropic",
+                analysis_mode="static",
                 num_samples=200,
                 num_warmup=100,
             )
