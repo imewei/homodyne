@@ -2,20 +2,65 @@
 Unit Tests for Parameter Manager Core
 ======================================
 
+**Consolidation**: Week 5 (2025-11-15)
+
 Consolidated from:
 - test_parameter_manager.py (Core functionality, 38 tests, 515 lines)
 - test_parameter_manager_advanced.py (Advanced features, 17 tests, 275 lines)
 - test_parameter_manager_physics.py (Physics-specific, 32 tests, 471 lines)
 
-Tests cover:
-- Core ParameterManager functionality and caching
-- Name mapping and validation
+Test Categories:
+---------------
+**Core Functionality** (38 tests):
+- ParameterManager initialization and configuration
+- Name mapping and validation (canonical names)
 - Bounds checking and parameter space operations
-- Advanced features (array operations, batch processing)
-- Physics-specific parameter handling
+- Caching mechanism (~10-100x speedup)
+
+**Advanced Features** (17 tests):
+- Array operations and batch processing
+- Parameter expansion for per-angle scaling
+- Complex bound calculations
+- Edge case handling
+
+**Physics-Specific** (32 tests):
 - Mode-specific parameter sets (static, laminar_flow)
+- Physics parameter validation
+- Parameter constraints and dependencies
+- Domain-specific bound checking
+
+Test Coverage:
+-------------
+- Core ParameterManager functionality with efficient caching
+- Canonical name mapping: gamma_dot_0 → gamma_dot_t0, etc.
+- Bounds validation and parameter space operations
+- Advanced array operations and batch parameter processing
+- Physics-specific parameter handling for different analysis modes
+- Mode-specific parameter sets (static: 3 params, laminar_flow: 7 params)
+- Parameter expansion for per-angle scaling (3 angles: 5→9 params)
+- Constraint validation and dependency checking
 
 Total: 87 tests
+
+Usage Example:
+-------------
+```python
+# Run all parameter manager tests
+pytest tests/unit/test_parameter_manager_core.py -v
+
+# Run specific category
+pytest tests/unit/test_parameter_manager_core.py -k "physics" -v
+pytest tests/unit/test_parameter_manager_core.py::TestParameterManagerInit -v
+
+# Test caching functionality
+pytest tests/unit/test_parameter_manager_core.py -k "cache" -v
+```
+
+See Also:
+---------
+- docs/WEEK5_CONSOLIDATION_SUMMARY.md: Consolidation details
+- homodyne/config/parameter_manager.py: ParameterManager implementation
+- homodyne/config/types.py: Parameter name mappings and constants
 """
 
 import pytest

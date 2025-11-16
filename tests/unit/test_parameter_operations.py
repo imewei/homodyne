@@ -2,20 +2,71 @@
 Unit Tests for Parameter Operations
 ====================================
 
+**Consolidation**: Week 5 (2025-11-15)
+
 Consolidated from:
 - test_parameter_expansion.py (Parameter expansion logic, 11 tests, 317 lines)
 - test_parameter_transformation.py (Parameter transformations, 6 tests, 147 lines)
 - test_parameter_gradients.py (Gradient calculations, 4 tests, 315 lines)
 - test_parameter_names_consistency.py (Name consistency validation, 22 tests, 321 lines)
 
-Tests cover:
-- Parameter expansion (per-angle scaling, array construction)
-- Parameter transformations (log/exp, bounds mapping)
-- Gradient calculations for optimization
-- Parameter name consistency and mapping validation
-- Canonical name enforcement
+Test Categories:
+---------------
+**Parameter Expansion** (11 tests):
+- Per-angle scaling expansion (5→9 params for 3 angles)
+- Array construction from scalar parameters
+- Expansion validation and correctness
+
+**Parameter Transformations** (6 tests):
+- Log/exp transformations for bounded optimization
+- Bounds mapping (physical space ↔ unbounded space)
+- Transformation correctness and invertibility
+
+**Gradient Calculations** (4 tests):
+- Gradient calculations for optimization algorithms
+- Numerical gradient validation
+- Gradient accuracy and stability
+
+**Name Consistency** (22 tests):
+- Parameter name consistency validation
+- Canonical name enforcement (gamma_dot_0 → gamma_dot_t0)
+- Name mapping validation across system
+- Consistency checks between components
+
+Test Coverage:
+-------------
+- Parameter expansion for per-angle scaling (critical for v2.4.0+)
+- Array construction from scalar physical parameters
+- Log/exp transformations for bounded parameter optimization
+- Bounds mapping between physical and unbounded spaces
+- Gradient calculations for trust-region optimization
+- Numerical gradient validation and stability checking
+- Parameter name consistency validation across entire system
+- Canonical name enforcement (ensures gamma_dot_0 → gamma_dot_t0)
+- Name mapping validation between ParameterManager and other components
+- Cross-component consistency checking
 
 Total: 43 tests
+
+Usage Example:
+-------------
+```python
+# Run all parameter operation tests
+pytest tests/unit/test_parameter_operations.py -v
+
+# Run specific category
+pytest tests/unit/test_parameter_operations.py -k "expansion" -v
+pytest tests/unit/test_parameter_operations.py -k "gradient" -v
+
+# Test name consistency
+pytest tests/unit/test_parameter_operations.py -k "consistency" -v
+```
+
+See Also:
+---------
+- docs/WEEK5_CONSOLIDATION_SUMMARY.md: Consolidation details
+- homodyne/config/parameter_manager.py: Parameter expansion and transformations
+- homodyne/config/types.py: PARAMETER_NAME_MAPPING dictionary
 """
 
 import pytest

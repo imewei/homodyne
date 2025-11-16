@@ -2,20 +2,61 @@
 Unit Tests for Configuration Validation
 ========================================
 
+**Consolidation**: Week 6 (2025-11-15)
+
 Consolidated from:
 - test_device_config.py (Hardware config & CMC/NUTS selection, 10 tests, 307 lines)
 - test_edge_cases_config_validation.py (Config validation edge cases, 34 tests, 513 lines)
 
-Tests cover:
+Test Categories:
+---------------
+**Hardware Configuration** (10 tests):
 - Hardware detection and CMC/NUTS selection logic
 - Dual-criteria OR logic: (num_samples >= 15) OR (memory > 30%)
-- Platform-specific configurations
+- Platform-specific configurations (CPU, PBS, SLURM)
+- Threshold configurability from YAML
+
+**Config Validation Edge Cases** (34 tests):
 - Malformed config file handling
 - Parameter value validation edge cases
 - Threshold validation and extreme values
 - Invalid data types and boundary conditions
+- Missing config sections and graceful degradation
+
+Test Coverage:
+-------------
+- Hardware detection and automatic CMC/NUTS selection
+- Dual-criteria OR logic for CMC selection (parallelism or memory triggers)
+- Platform-specific configurations and recommendations
+- Malformed config file handling with clear error messages
+- Parameter value validation: type checking, range validation, physics constraints
+- Threshold validation: min_samples_for_cmc, memory_threshold_pct
+- Extreme value handling and boundary condition testing
+- Invalid data type detection and conversion attempts
+- Missing config sections with intelligent fallback behavior
+- Graceful degradation when config is incomplete
 
 Total: 44 tests
+
+Usage Example:
+-------------
+```python
+# Run all config validation tests
+pytest tests/unit/test_config_validation.py -v
+
+# Run specific category
+pytest tests/unit/test_config_validation.py -k "hardware" -v
+pytest tests/unit/test_config_validation.py -k "edge" -v
+
+# Test CMC selection logic
+pytest tests/unit/test_config_validation.py::TestCMCSelectionLogic -v
+```
+
+See Also:
+---------
+- docs/WEEK6_CONSOLIDATION_SUMMARY.md: Consolidation details
+- homodyne/device/config.py: Hardware detection and should_use_cmc()
+- homodyne/config/manager.py: ConfigManager validation logic
 """
 
 import pytest

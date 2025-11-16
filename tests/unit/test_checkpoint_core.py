@@ -2,23 +2,67 @@
 Unit Tests for Checkpoint Management
 =====================================
 
+**Consolidation**: Week 6 (2025-11-15)
+
 Consolidated from:
 - test_checkpoint_manager.py (Checkpoint save/resume functionality, 22 tests, 534 lines)
 - test_checkpoint_manager_coverage.py (Extended checkpoint coverage, 28 tests, 619 lines)
 
-Tests cover:
-- Checkpoint save/load with HDF5 format
-- Checkpoint save/load with and without compression
+Test Categories:
+---------------
+**Save/Resume Functionality** (22 tests):
+- Checkpoint save with HDF5 format
+- Checkpoint load and validation
 - Resume from partial optimization
+- Checkpoint file permissions and structure
+
+**Extended Coverage** (28 tests):
+- Checkpoint save/load with and without compression
 - Metadata handling (dict, list, numpy arrays)
 - Checksum validation and corruption detection
 - Automatic cleanup of old checkpoints
-- Cleanup edge cases and error handling
-- Validation method edge cases
-- Save time warnings
-- Missing fields and invalid checksums
+- Save time warnings and performance monitoring
+- Error handling for missing/corrupted checkpoints
+
+Test Coverage:
+-------------
+- Checkpoint save/load with HDF5 format and optional compression
+- Resume from partial optimization (batch continuation)
+- Metadata handling: dictionaries, lists, numpy arrays
+- Checksum validation: MD5 hashing for corruption detection
+- Automatic cleanup: keep last N checkpoints, disk space management
+- Checkpoint validation: required fields, version compatibility
+- Corruption detection: checksum mismatch, incomplete files
+- Save time warnings: alert on slow checkpoint operations
+- Error handling: missing files, corrupted checksums, decode errors
+- Graceful degradation: continue on non-critical checkpoint errors
 
 Total: 50 tests
+
+Critical Fix (Week 6):
+---------------------
+Renamed duplicate TestCheckpointManagerIntegration class to
+TestCheckpointManagerWorkflow to prevent 3-test loss during consolidation.
+
+Usage Example:
+-------------
+```python
+# Run all checkpoint tests
+pytest tests/unit/test_checkpoint_core.py -v
+
+# Run specific category
+pytest tests/unit/test_checkpoint_core.py -k "save" -v
+pytest tests/unit/test_checkpoint_core.py -k "cleanup" -v
+
+# Test corruption detection
+pytest tests/unit/test_checkpoint_core.py::TestCheckpointCorruptionDetection -v
+```
+
+See Also:
+---------
+- docs/WEEK6_CONSOLIDATION_SUMMARY.md: Consolidation details
+- homodyne/optimization/checkpoint_manager.py: CheckpointManager implementation
+- homodyne/optimization/exceptions.py: NLSQCheckpointError exception
 """
 
 import json

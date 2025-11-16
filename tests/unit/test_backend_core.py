@@ -2,30 +2,71 @@
 Unit Tests for Backend Infrastructure
 ======================================
 
+**Consolidation**: Week 7 (2025-11-15)
+
 Consolidated from:
 - test_backend_implementations.py (Backend implementations, 22 tests, 772 lines)
 - test_backend_infrastructure.py (Backend infrastructure, 15 tests, 494 lines)
 - test_coordinator.py (CMC Coordinator, 15 tests, 601 lines)
 
-Tests cover:
+Test Categories:
+---------------
+**Backend Implementations** (22 tests):
+- Backend instantiation (Pjit, Multiprocessing, PBS)
+- Single shard and parallel execution
+- Error handling and timeout detection
+- Result format validation and diagnostics collection
+
+**Backend Infrastructure** (15 tests):
+- Backend selection logic (CPU, PBS, SLURM)
+- User override functionality
+- Abstract base class compliance
+- Backend compatibility validation
+
+**CMC Coordinator** (14 tests):
+- Coordinator initialization and backend selection
+- End-to-end pipeline execution
+- Individual step validation
+- Error handling and recovery
+
+Test Coverage:
+-------------
 - CMC backend implementations (PjitBackend, MultiprocessingBackend, PBSBackend)
 - Backend initialization and configuration
-- Sequential and parallel execution
-- Error handling and retry logic
-- Timeout detection
+- Sequential and parallel execution patterns
+- Error handling and retry logic with timeout detection
 - Checkpoint save/resume integration
 - Convergence diagnostics collection
 - Backend selection logic (auto-selection based on hardware)
-- User override functionality
-- Backend interface compliance (ABC)
+- User override functionality and validation
+- Backend interface compliance (ABC pattern)
 - CMC Coordinator orchestration (6-step pipeline)
-- End-to-end pipeline execution
-- Error recovery mechanisms
+- End-to-end pipeline execution and error recovery
 - Configuration parsing and validation
-- MCMCResult packaging
-- Progress logging
+- MCMCResult packaging and progress logging
 
-Total: 52 tests
+Total: 51 tests
+Note: 1 test discrepancy from source files (52 expected). See WEEK7_CONSOLIDATION_SUMMARY.md.
+
+Usage Example:
+-------------
+```python
+# Run all backend tests
+pytest tests/unit/test_backend_core.py -v
+
+# Run specific category
+pytest tests/unit/test_backend_core.py -k "coordinator" -v
+pytest tests/unit/test_backend_core.py::TestCoordinatorInitialization -v
+
+# Run backend implementation tests only
+pytest tests/unit/test_backend_core.py -k "backend" -v
+```
+
+See Also:
+---------
+- docs/WEEK7_CONSOLIDATION_SUMMARY.md: Consolidation details
+- homodyne/optimization/cmc/coordinator.py: CMC Coordinator implementation
+- homodyne/optimization/cmc/backends/: Backend implementations
 """
 
 import json

@@ -2,24 +2,63 @@
 Unit Tests for CLI Workflows
 =============================
 
+**Consolidation**: Week 7 (2025-11-15)
+
 Consolidated from:
 - test_cli_integration.py (CMC CLI integration, 22 tests, 570 lines)
 - test_cli_overrides.py (CLI parameter overrides, 25 tests, 744 lines)
 
-Tests cover:
-- CMC argument parsing (num-shards, backend, diagnostics)
-- CMC argument validation
-- CMC config overrides via CLI
+Test Categories:
+---------------
+**CMC Integration** (22 tests):
+- CMC argument parsing (--cmc-num-shards, --cmc-backend, --cmc-plot-diagnostics)
+- CMC argument validation and error handling
+- CMC config overrides via CLI arguments
 - CMC diagnostic plot generation
-- Backward compatibility with existing CLI
+- Backward compatibility with existing CLI workflows
+
+**Parameter Overrides** (25 tests):
 - CLI parameter override mechanism (v2.1+)
-- Override priority: CLI args > config file > package defaults
-- Validation of override values
-- Initial parameter overrides
+- Override priority validation (CLI > config > defaults)
+- Initial parameter overrides (D0, alpha, gamma_dot_t0, etc.)
 - MCMC threshold overrides (min-samples-cmc, memory-threshold-pct)
-- Override logging
+- Override logging and user feedback
+
+Test Coverage:
+-------------
+- CMC-specific argument parsing and validation
+- Config override precedence: CLI arguments > config file > package defaults
+- Initial parameter overrides for all physics parameters
+- MCMC threshold overrides with validation
+- Diagnostic plot generation workflow
+- Backward compatibility with pre-v2.1 CLI usage
+- Override logging and clear user feedback
+- Integration with ConfigManager and ParameterManager
+- End-to-end CLI workflow validation
 
 Total: 47 tests
+
+Usage Example:
+-------------
+```python
+# Run all CLI workflow tests
+pytest tests/unit/test_cli_workflows.py -v
+
+# Run CMC integration tests only
+pytest tests/unit/test_cli_workflows.py -k "CMC" -v
+
+# Run parameter override tests
+pytest tests/unit/test_cli_workflows.py -k "override" -v
+
+# Test specific override functionality
+pytest tests/unit/test_cli_workflows.py::test_override_priority_cli_beats_config -v
+```
+
+See Also:
+---------
+- docs/WEEK7_CONSOLIDATION_SUMMARY.md: Consolidation details
+- homodyne/cli/commands.py: CLI command workflow implementations
+- homodyne/cli/args_parser.py: Argument parsing with override support
 """
 
 import argparse

@@ -2,24 +2,66 @@
 Unit Tests for CLI Core Functionality
 ======================================
 
+**Consolidation**: Week 7 (2025-11-15)
+
 Consolidated from:
 - test_cli_args.py (CLI argument parsing, 17 tests, 273 lines)
 - test_cli_validation.py (CLI validation & edge cases, 46 tests, 881 lines)
 - test_cli_data_loading.py (CLI data loading, 14 tests, 345 lines)
 
-Tests cover:
+Test Categories:
+---------------
+**Argument Parsing** (17 tests):
 - Method argument parsing (nlsq, mcmc)
-- Method validation after v2.1.0 simplification
 - Deprecated method rejection (nuts, cmc, auto)
-- CMC-specific CLI options (min-samples-cmc, memory-threshold-pct)
-- CLI parameter overrides
+- Default values and argument combinations
+
+**Validation** (46 tests):
+- Method validation after v2.1.0 simplification
+- CMC-specific CLI options validation
 - Shell alias existence and correctness
+- Error handling for invalid inputs
+
+**Data Loading** (14 tests):
 - Config schema normalization
 - XPCSDataLoader integration
-- CLI argument overrides for data loading
-- Edge case handling
+- CLI argument overrides for data paths
+- Edge case handling (missing files, invalid paths)
+
+Test Coverage:
+-------------
+- CLI argument parsing (--method, --config, --output)
+- Method validation after v2.1.0 simplification
+- Deprecated method rejection with clear error messages
+- CMC-specific options (--min-samples-cmc, --memory-threshold-pct)
+- CLI parameter overrides (precedence: CLI > config > defaults)
+- Shell alias existence and correctness (homodyne, homodyne-config)
+- Config schema normalization (legacy → modern format)
+- XPCSDataLoader integration via CLI
+- CLI argument overrides for data loading paths
+- Comprehensive edge case handling
 
 Total: 77 tests
+
+Usage Example:
+-------------
+```python
+# Run all CLI core tests
+pytest tests/unit/test_cli_core.py -v
+
+# Run specific category
+pytest tests/unit/test_cli_core.py -k "validation" -v
+pytest tests/unit/test_cli_core.py -k "data_loading" -v
+
+# Run argument parsing tests only
+pytest tests/unit/test_cli_core.py::TestMethodArgumentParsing -v
+```
+
+See Also:
+---------
+- docs/WEEK7_CONSOLIDATION_SUMMARY.md: Consolidation details
+- homodyne/cli/args_parser.py: Argument parser implementation
+- homodyne/cli/commands.py: CLI command implementations
 """
 
 import subprocess

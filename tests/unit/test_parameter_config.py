@@ -2,20 +2,64 @@
 Unit Tests for Parameter Configuration
 =======================================
 
+**Consolidation**: Week 5 (2025-11-15)
+
 Consolidated from:
 - test_config_initial_params.py (Initial parameter config, 26 tests, 591 lines)
 - test_config_manager_parameters.py (ConfigManager integration, 8 tests, 246 lines)
 - test_parameter_space_config.py (Parameter space configuration, 35 tests, 789 lines)
 
-Tests cover:
-- Initial parameter configuration and validation
-- ConfigManager integration with parameters
+Test Categories:
+---------------
+**Initial Parameter Configuration** (26 tests):
+- Initial parameter loading from YAML config
+- Parameter value validation and type checking
+- Default value handling and fallback behavior
+
+**ConfigManager Integration** (8 tests):
+- ConfigManager integration with parameter system
+- Config-driven parameter workflows
+- Parameter override mechanisms
+
+**Parameter Space Configuration** (35 tests):
 - Parameter space configuration from YAML
 - Bounds configuration and validation
-- Prior distribution configuration
-- Config-driven parameter workflows
+- Prior distribution configuration (uniform, normal, log-normal)
+- Config-driven parameter space workflows
+
+Test Coverage:
+-------------
+- Initial parameter configuration and validation from YAML
+- ConfigManager integration with parameter subsystem
+- Parameter space configuration with bounds and priors
+- Bounds configuration: min/max validation, physical constraints
+- Prior distribution configuration: uniform, normal, log-normal
+- Config-driven parameter workflows (YAML → ParameterSpace)
+- Parameter value type checking and conversion
+- Default value handling and intelligent fallback behavior
+- Integration testing with full config pipeline
 
 Total: 69 tests
+
+Usage Example:
+-------------
+```python
+# Run all parameter config tests
+pytest tests/unit/test_parameter_config.py -v
+
+# Run specific category
+pytest tests/unit/test_parameter_config.py -k "initial" -v
+pytest tests/unit/test_parameter_config.py -k "space" -v
+
+# Test ConfigManager integration
+pytest tests/unit/test_parameter_config.py::TestConfigManagerParameters -v
+```
+
+See Also:
+---------
+- docs/WEEK5_CONSOLIDATION_SUMMARY.md: Consolidation details
+- homodyne/config/manager.py: ConfigManager implementation
+- homodyne/config/parameter_space.py: ParameterSpace and prior distributions
 """
 
 import pytest
