@@ -76,6 +76,7 @@ jobs:
         run: |
           pytest tests/unit/ \
             -v \
+            -n auto \
             --tb=short \
             --maxfail=5 \
             -m "not slow and not gpu" \
@@ -88,6 +89,7 @@ jobs:
         run: |
           pytest tests/integration/ \
             -v \
+            -n auto \
             --tb=short \
             -m "not slow and not gpu"
 

@@ -185,6 +185,17 @@ initial_parameters:
   values: null                                # List of 3 floats matching parameter_names order
   # Example: [1000.0, -1.2, 0.0]
 
+  # Per-angle scaling initialization (v2.4.0 mandatory)
+  # IMPORTANT: Initialize from NLSQ results or estimate from data to prevent MCMC convergence failures
+  # For NLSQ→MCMC workflow: Run NLSQ first, copy contrast/offset from results
+  # For data estimation: contrast ≈ (C2_max - C2_min), offset ≈ C2_min
+  per_angle_scaling:
+    contrast: null                            # List of N floats (one per angle)
+    offset: null                              # List of N floats (one per angle)
+    # Example for 3 angles: contrast: [0.05, 0.06, 0.05], offset: [1.0, 0.99, 1.01]
+    # Example for 1 angle:  contrast: [0.06], offset: [0.99]
+    # Typical ranges: contrast [0.01-0.2], offset [0.9-1.1] for XPCS data
+
   # Optional: Units for documentation
   units:                                      # Parameter units (for reference)
     - "Å²/s"                                  # D0
@@ -344,20 +355,21 @@ optimization:
   # No automatic NLSQ/SVI initialization (v2.1.0+) - manual workflow required
   # For static mode with 3 parameters: faster convergence than laminar_flow
   mcmc:
-    num_warmup: 1000                          # NUTS warmup/adaptation samples
-    num_samples: 2000                         # Posterior samples per chain
+    num_warmup: 2000                          # NUTS warmup/adaptation samples (increased for stability)
+    num_samples: 5000                         # Posterior samples per chain (increased for ESS > 400)
     num_chains: 4                             # Number of parallel chains (recommended: 4)
     progress_bar: true                        # Show sampling progress
-    target_accept_prob: 0.8                   # NUTS target acceptance probability (0.6-0.9)
-    max_tree_depth: 10                        # Maximum NUTS tree depth
+    target_accept_prob: 0.90                  # NUTS target acceptance probability (0.90 for funnel stability)
+    max_tree_depth: 12                        # Maximum NUTS tree depth (increased for complex geometry)
     backend: "numpyro"                        # Options: "numpyro" | "blackjax"
 
     # Automatic NUTS/CMC selection thresholds (v2.1.0)
     # CMC selected when: (num_samples >= min_samples_for_cmc) OR (memory > memory_threshold_pct)
     min_samples_for_cmc: 15                   # Parallelism threshold (samples/angles >= 15)
     memory_threshold_pct: 0.30                # Memory threshold (30% of available)
-    dense_mass_matrix: false                  # False: diagonal (faster), True: full covariance
+    dense_mass_matrix: true                   # True: full covariance (handles D0-α funnel correlations)
     stable_prior_fallback: false              # Retry with BetaScaled priors if init fails
+    n_retries: 5                              # Maximum retry attempts (increased from default 3)
 
     # Chain starting values (NOT automatic NLSQ/SVI initialization - removed in v2.1.0)
     init_strategy: "median"                   # Options: "median" | "uniform" | "prior"
