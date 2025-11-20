@@ -443,20 +443,23 @@ class HomodyneModel:
 
     def _determine_analysis_mode(self, config: dict) -> str:
         """Determine analysis mode from configuration."""
-        # Check for explicit analysis_settings
-        if "analysis_settings" in config:
-            settings = config["analysis_settings"]
-            is_static = settings.get("static_mode", False)
-            is_isotropic = settings.get("isotropic_mode", False)
+        analysis_settings = config.get("analysis_settings", {})
+        if analysis_settings:
+            is_static = bool(analysis_settings.get("static_mode", False))
+            is_isotropic = bool(analysis_settings.get("isotropic_mode", False))
 
-            if is_static and is_isotropic:
-                return "static_isotropic"
-            elif is_static and not is_isotropic:
-                return "static_anisotropic"
-            else:
+            if is_static:
+                return "static_isotropic" if is_isotropic else "static_anisotropic"
+            return "laminar_flow"
+
+        mode = config.get("analysis_mode")
+        if mode:
+            mode_lower = str(mode).lower()
+            if "static" in mode_lower:
+                return "static_isotropic" if "isotropic" in mode_lower else "static_anisotropic"
+            if mode_lower in {"laminar", "laminar_flow"}:
                 return "laminar_flow"
 
-        # Default to laminar flow
         return "laminar_flow"
 
     @property

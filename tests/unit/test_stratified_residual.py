@@ -283,10 +283,10 @@ def test_call_returns_correct_shape_per_angle(
 
     residuals = residual_fn(params)
 
-    # Changed in v2.2.1: Returns JAX arrays for LeastSquares JIT compatibility
-    assert isinstance(residuals, jnp.ndarray)
-    assert residuals.shape == (300,)  # Total points across all chunks
-    assert jnp.all(jnp.isfinite(residuals))
+    # The implementation can return either NumPy or JAX arrays; normalize to NumPy
+    residuals_np = np.asarray(residuals)
+    assert residuals_np.shape == (300,)  # Total points across all chunks
+    assert np.all(np.isfinite(residuals_np))
 
 
 

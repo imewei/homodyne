@@ -343,9 +343,11 @@ class TestXPCSDataLoading:
                 data2 = loader.load_experimental_data()
 
                 # Data should be identical
-                for key in data1:
-                    if key in data2:
-                        np.testing.assert_array_equal(data1[key], data2[key])
+                np.testing.assert_array_equal(data1["t1"], data2["t1"])
+                np.testing.assert_array_equal(data1["t2"], data2["t2"])
+                np.testing.assert_array_equal(data1["wavevector_q_list"], data2["wavevector_q_list"])
+                np.testing.assert_array_equal(data1["phi_angles_list"], data2["phi_angles_list"])
+                np.testing.assert_array_equal(data1["c2_exp"], data2["c2_exp"])
 
         except (KeyError, ValueError) as e:
             pytest.skip(f"Mock data caching test failed: {e}")

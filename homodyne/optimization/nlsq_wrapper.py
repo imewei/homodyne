@@ -554,9 +554,11 @@ class NLSQWrapper:
         Raises:
             ValueError: If analysis_mode is not recognized
         """
-        if analysis_mode == "static":
+        normalized_mode = analysis_mode.lower()
+
+        if normalized_mode in {"static", "static_isotropic"}:
             return ["D0", "alpha", "D_offset"]
-        elif analysis_mode == "laminar_flow":
+        elif normalized_mode == "laminar_flow":
             return [
                 "D0",
                 "alpha",
@@ -569,7 +571,7 @@ class NLSQWrapper:
         else:
             raise ValueError(
                 f"Unknown analysis_mode: '{analysis_mode}'. "
-                f"Expected 'static' or 'laminar_flow'"
+                f"Expected 'static_isotropic'/'static' or 'laminar_flow'"
             )
 
     @staticmethod
@@ -2839,6 +2841,17 @@ class NLSQWrapper:
             )
         else:
             sigma_array = np.asarray(sigma_source, dtype=np.float64)
+            if not np.all(np.isfinite(sigma_array)):
+                raise ValueError(
+                    "sigma values must be finite; received NaN/inf entries"
+                )
+            if np.any(sigma_array <= 0):
+                non_positive = float(np.count_nonzero(sigma_array <= 0))
+                raise ValueError(
+                    "sigma values must be strictly positive for least-squares "
+                    "weighting; found "
+                    f"{non_positive:.0f} non-positive entries"
+                )
 
         q_value = float(getattr(data, "q", 1.0))
         L_value = float(getattr(data, "L", 1.0))

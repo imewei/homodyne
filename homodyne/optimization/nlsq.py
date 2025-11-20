@@ -262,6 +262,16 @@ def fit_nlsq_jax(
     lower_bounds, upper_bounds = _bounds_to_arrays(bounds_dict, analysis_mode)
     bounds = (lower_bounds, upper_bounds)
 
+    def _ensure_positive_sigma(obj: Any) -> None:
+        if not hasattr(obj, "sigma"):
+            return
+        sigma_array = np.asarray(obj.sigma, dtype=np.float64)
+        if not np.all(np.isfinite(sigma_array)):
+            raise ValueError("sigma values must be finite")
+        if np.any(sigma_array <= 0):
+            raise ValueError("sigma values must be strictly positive")
+        obj.sigma = sigma_array
+
     # Convert data dict to object if needed (NLSQWrapper expects object attributes)
     if isinstance(data, dict):
 
@@ -297,6 +307,7 @@ def fit_nlsq_jax(
             # Use 1% relative uncertainty as default
             data_obj.sigma = 0.01 * np.ones_like(g2_array)
             logger.debug(f"Generated default sigma: shape {data_obj.sigma.shape}")
+        _ensure_positive_sigma(data_obj)
 
         # Extract 1D time vectors from 2D meshgrids if needed
         # Data loader returns t1_2d, t2_2d as (N, N) meshgrids, but NLSQWrapper expects 1D vectors
@@ -386,6 +397,8 @@ def fit_nlsq_jax(
                 # dt is optional, no problem if missing
 
         data = data_obj
+    else:
+        _ensure_positive_sigma(data)
 
     diagnostics_enabled = _is_nlsq_diagnostics_enabled(config)
 

@@ -91,6 +91,7 @@ from homodyne.optimization.cmc.backends.base import CMCBackend
 from homodyne.optimization.cmc.backends.selection import (
     select_backend,
     get_backend_by_name,
+    _validate_backend_compatibility,
 )
 
 # Import backend implementations for direct access
@@ -124,6 +125,7 @@ __all__ = [
     # Selection functions
     "select_backend",
     "get_backend_by_name",
+    "_validate_backend_compatibility",
     # Backend implementations (if available)
     "PjitBackend",
     "MultiprocessingBackend",

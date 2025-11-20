@@ -1228,13 +1228,14 @@ def _run_optimization(args, config: ConfigManager, data: dict[str, Any]) -> Any:
             )
 
             # Run MCMC with pooled 1D arrays (all same length)
-            # NOTE: Pass unique phi_angles (n_phi,) not phi_pooled (n_total,)
-            # The MCMC model needs unique angles to determine n_phi for per-angle scaling
+            # Pass the flattened phi array (same length as data). The MCMC runner
+            # extracts the unique angles internally but also needs the per-point
+            # mapping to apply contrast/offset scaling correctly.
             result = fit_mcmc_jax(
                 mcmc_data,
                 t1=t1_pooled,
                 t2=t2_pooled,
-                phi=phi_angles,  # FIXED: Use unique angles (n_phi,), not pooled (n_total,)
+                phi=phi_pooled,
                 q=(
                     filtered_data.get("wavevector_q_list", [1.0])[0]
                     if filtered_data.get("wavevector_q_list") is not None
@@ -2630,7 +2631,11 @@ def _extract_nlsq_metadata(config: Any, data: dict[str, Any]) -> dict[str, Any]:
     return metadata
 
 
-def _prepare_parameter_data(result: Any, analysis_mode: str, n_angles: int) -> dict[str, Any]:
+def _prepare_parameter_data(
+    result: Any,
+    analysis_mode: str,
+    n_angles: int | None = None,
+) -> dict[str, Any]:
     """Prepare parameter data dictionary for JSON saving.
 
     Extracts parameter values and uncertainties from OptimizationResult and
@@ -2643,9 +2648,11 @@ def _prepare_parameter_data(result: Any, analysis_mode: str, n_angles: int) -> d
     result : OptimizationResult
         NLSQ optimization result
     analysis_mode : str
-        Analysis mode ("static" or "laminar_flow")
-    n_angles : int
-        Number of angles in the data (used to detect per-angle scaling)
+        Analysis mode ("static_isotropic"/"static" or "laminar_flow")
+    n_angles : int, optional
+        Number of angles in the data (used to detect per-angle scaling).
+        If omitted, it is inferred from the parameter vector assuming the
+        canonical 2*n_angles + n_physical layout.
 
     Returns
     -------
@@ -2678,17 +2685,33 @@ def _prepare_parameter_data(result: Any, analysis_mode: str, n_angles: int) -> d
     {'value': 0.000123, 'uncertainty': 0.000012}
     """
     # Get parameter names for analysis mode
-    if analysis_mode == "static":
+    normalized_mode = analysis_mode.lower()
+
+    if normalized_mode in {"static", "static_isotropic"}:
         param_names = SCALING_PARAM_NAMES + STATIC_PARAM_NAMES
         n_physical = len(STATIC_PARAM_NAMES)
-    elif analysis_mode == "laminar_flow":
+        mode_key = "static"
+    elif normalized_mode == "laminar_flow":
         param_names = SCALING_PARAM_NAMES + LAMINAR_FLOW_PARAM_NAMES
         n_physical = len(LAMINAR_FLOW_PARAM_NAMES)
+        mode_key = "laminar_flow"
     else:
         raise ValueError(f"Unknown analysis_mode: {analysis_mode}")
 
     # Detect if per-angle scaling was used
     n_params_expected_legacy = len(param_names)  # 9 for laminar_flow, 5 for static
+
+    if n_angles is None:
+        remainder = max(0, len(result.parameters) - n_physical)
+        inferred = remainder // 2 if remainder % 2 == 0 and remainder else 1
+        n_angles = max(1, inferred)
+        logger.debug(
+            "Inferred n_angles=%s for _prepare_parameter_data (mode=%s, params=%s)",
+            n_angles,
+            mode_key,
+            len(result.parameters),
+        )
+
     n_params_expected_per_angle = 2 * n_angles + n_physical  # Per-angle scaling format
     n_params_actual = len(result.parameters)
 
@@ -2745,7 +2768,7 @@ def _prepare_parameter_data(result: Any, analysis_mode: str, n_angles: int) -> d
 
         # Add physical parameters
         physical_param_names = (
-            STATIC_PARAM_NAMES if analysis_mode == "static" else LAMINAR_FLOW_PARAM_NAMES
+            STATIC_PARAM_NAMES if mode_key == "static" else LAMINAR_FLOW_PARAM_NAMES
         )
         for i, name in enumerate(physical_param_names):
             param_dict[name] = {
@@ -2786,7 +2809,7 @@ def _compute_nlsq_fits(
     data: dict[str, Any],
     metadata: dict[str, Any],
     *,
-    analysis_mode: str = "static",
+    analysis_mode: str | None = None,
     include_solver_surface: bool = True,
 ) -> dict[str, Any]:
     """Compute theoretical fits with per-angle least squares scaling.
@@ -2834,14 +2857,44 @@ def _compute_nlsq_fits(
     n_params = len(result.parameters)
     n_angles = len(phi_angles)
 
+    def _normalize_mode(mode: str | None) -> str:
+        """Resolve analysis mode, inferring from parameter counts if needed."""
+
+        if mode:
+            mode_lower = mode.lower()
+            if mode_lower in {"static", "static_isotropic"}:
+                return "static"
+            if mode_lower == "laminar_flow":
+                return "laminar_flow"
+
+        # Infer from parameter counts (legacy scalar vs per-angle layout)
+        candidates = {
+            "static": 3,
+            "laminar_flow": 7,
+        }
+        for candidate_mode, n_phys in candidates.items():
+            if n_params in {n_phys + 2, 2 * n_angles + n_phys}:
+                return candidate_mode
+
+        # Default to static for backward compatibility
+        logger.debug(
+            "Unable to infer analysis_mode from params=%s angles=%s; defaulting to static",
+            n_params,
+            n_angles,
+        )
+        return "static"
+
+    normalized_mode = _normalize_mode(analysis_mode or getattr(result, "analysis_mode", None))
+
     # Determine number of physical parameters based on analysis mode
-    # CRITICAL FIX (Nov 14, 2025): Was hard-coded to 7 (laminar_flow), causing static mode to fail
-    if analysis_mode == "static":
+    if normalized_mode == "static":
         n_physical = 3  # D0, alpha, D_offset
-    elif analysis_mode == "laminar_flow":
+    elif normalized_mode == "laminar_flow":
         n_physical = 7  # D0, alpha, D_offset, gamma_dot_t0, beta, gamma_dot_t_offset, phi0
     else:
-        raise ValueError(f"Unknown analysis_mode: '{analysis_mode}'. Expected 'static' or 'laminar_flow'")
+        raise ValueError(
+            f"Unknown analysis_mode: '{analysis_mode}'. Expected 'static' or 'laminar_flow'"
+        )
 
     expected_params_per_angle = 2 * n_angles + n_physical
 

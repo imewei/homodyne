@@ -161,7 +161,7 @@ class TestParameterBounds:
         assert len(bounds) == 2
         assert isinstance(bounds[0], tuple)
         assert len(bounds[0]) == 2
-        assert bounds[0] == (1.0, 1e6)  # Default D0 bounds
+        assert bounds[0] == (1e2, 1e5)  # Updated default D0 bounds
 
     def test_get_bounds_as_arrays(self):
         """Test getting bounds as numpy arrays."""
@@ -172,8 +172,8 @@ class TestParameterBounds:
         assert isinstance(upper, np.ndarray)
         assert len(lower) == 3
         assert len(upper) == 3
-        assert lower[0] == 1.0  # D0 min
-        assert upper[0] == 1e6  # D0 max
+        assert lower[0] == 1e2  # D0 min
+        assert upper[0] == 1e5  # D0 max
 
 
 class TestActiveParameters:
@@ -389,7 +389,7 @@ class TestEdgeCases:
 
         # Should fall back to defaults without crashing
         assert len(bounds) == 1
-        assert bounds[0]["min"] == 1.0  # Default D0 min
+        assert bounds[0]["min"] == 1e2  # Default D0 min
 
 
 class TestCaching:
@@ -452,12 +452,12 @@ class TestCaching:
         bounds1[0]["min"] = -9999.0
 
         # Second result should be unchanged
-        assert bounds2[0]["min"] == 1.0  # Original D0 min
+        assert bounds2[0]["min"] == 1e2  # Original D0 min
 
         # Cache should also be unchanged
         cache_key = tuple(sorted(param_names))
         cached_bounds = pm._bounds_cache[cache_key]
-        assert cached_bounds[0]["min"] == 1.0
+        assert cached_bounds[0]["min"] == 1e2
 
     def test_active_params_cache_hit(self):
         """Test that repeated active parameters queries use cache."""
@@ -1314,4 +1314,3 @@ class TestPhysicsValidationIntegration:
 
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])
-

@@ -476,7 +476,6 @@ class CMCCoordinator:
         # Note: parameter_space.parameter_names contains only physical parameters
         # Per-angle scaling adds 2*n_phi additional parameters (contrast_i, offset_i)
         # Total = len(physical_params) + 2*n_phi
-        import numpy as np
 
         phi_unique_temp = np.unique(np.asarray(phi))
         n_phi_temp = len(phi_unique_temp)
@@ -492,7 +491,6 @@ class CMCCoordinator:
         # This ordering is determined by parameter_space.parameter_names iteration
         # in mcmc.py:1706-1720. If we send parameters in wrong order, NumPyro assigns
         # wrong values (e.g., D0 → contrast_0), causing initialization failure.
-        import numpy as np
 
         # Determine number of unique phi angles
         phi_unique = np.unique(np.asarray(phi))

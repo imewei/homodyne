@@ -284,6 +284,79 @@ def _calculate_midpoint_defaults(parameter_space: ParameterSpace) -> dict[str, f
     return initial_values
 
 
+def _prepare_phi_mapping(
+    phi_array: np.ndarray | None,
+    *,
+    data_size: int,
+    n_phi: int,
+    phi_unique_np: np.ndarray,
+    target_dtype,
+) -> jnp.ndarray | None:
+    """Ensure phi mapping array matches flattened data size.
+
+    The NumPyro model needs a 1D array whose length matches the pooled
+    data array so that each data point can be mapped back to its source
+    phi angle when applying per-angle contrast/offset scaling. Some
+    callers (notably older CLI code paths) accidentally pass only the
+    list of unique phi angles rather than the full replicated mapping.
+    This helper auto-expands that list to the expected length when the
+    relationship between ``data`` and ``phi`` is unambiguous.
+
+    Parameters
+    ----------
+    phi_array : np.ndarray | None
+        Raw phi array provided by the caller (may already be replicated).
+    data_size : int
+        Flattened data length used by the likelihood.
+    n_phi : int
+        Number of unique phi angles present in the dataset.
+    phi_unique_np : np.ndarray
+        Array of unique phi values computed outside of JIT tracing.
+    target_dtype : jnp.dtype
+        Target dtype for JAX computations (float64 by default).
+
+    Returns
+    -------
+    jnp.ndarray | None
+        Phi mapping array with ``data_size`` elements when inference is
+        possible, otherwise the original array (mismatch will be
+        validated downstream).
+    """
+
+    if phi_array is None:
+        return None
+
+    phi_mapping = jnp.ravel(jnp.asarray(phi_array, dtype=target_dtype))
+    phi_length = int(phi_mapping.size)
+
+    # Nothing to do if either length is zero or already matches data size
+    if data_size <= 0 or phi_length == data_size:
+        return phi_mapping
+
+    # Auto-expand when we only received the list of unique angles but can
+    # infer how many data points belong to each angle deterministically.
+    if (
+        n_phi > 0
+        and phi_length == n_phi
+        and data_size % n_phi == 0
+        and phi_unique_np.size == n_phi
+    ):
+        points_per_angle = data_size // n_phi
+        expanded = np.repeat(phi_unique_np, points_per_angle)
+        logger.warning(
+            "phi array length (%d) does not match data size (%d). "
+            "Auto-expanding by repeating each of the %d unique angles for "
+            "%d points. Update caller to pass the flattened phi array.",
+            phi_length,
+            data_size,
+            n_phi,
+            points_per_angle,
+        )
+        return jnp.asarray(expanded, dtype=target_dtype)
+
+    return phi_mapping
+
+
 
 
 @log_performance(threshold=10.0)
@@ -1785,9 +1858,24 @@ def _create_numpyro_model(
 
         # CRITICAL: phi_array_for_mapping must also match data size for per-angle scaling
         if per_angle_scaling:
-            phi_mapping_size = len(phi_array_for_mapping)
+            phi_mapping_for_scaling = phi_array_for_mapping
+            phi_mapping_for_scaling = _prepare_phi_mapping(
+                phi_mapping_for_scaling,
+                data_size=data_size,
+                n_phi=n_phi,
+                phi_unique_np=phi_unique_np,
+                target_dtype=target_dtype,
+            )
+
+            if phi_mapping_for_scaling is None:
+                raise ValueError(
+                    "Per-angle scaling requires phi values, but phi array is None"
+                )
+
+            phi_mapping_size = len(phi_mapping_for_scaling)
             if phi_mapping_size != data_size:
                 import warnings
+
                 warnings.warn(
                     f"Per-angle scaling size mismatch: phi_array_for_mapping={phi_mapping_size}, "
                     f"data={data_size}. This will cause phi indexing errors.",
@@ -1876,7 +1964,7 @@ def _create_numpyro_model(
             # - Handles floating-point mismatches (e.g., -154.48506165 vs -154.485)
             # - Always finds the CLOSEST phi value, not insertion point
             # - Memory: (n_data × n_phi × 8 bytes) ≈ 368 MB for 2M points × 23 angles
-            phi_array_for_mapping_jax = jnp.atleast_1d(phi_array_for_mapping)
+            phi_array_for_mapping_jax = jnp.atleast_1d(phi_mapping_for_scaling)
 
             # Compute pairwise distances: shape (n_data, n_phi)
             # Broadcasting: phi_array[:,None] - phi_unique[None,:] creates distance matrix

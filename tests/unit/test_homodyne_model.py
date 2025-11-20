@@ -59,7 +59,7 @@ class TestHomodyneModelInitialization:
 
         model = HomodyneModel(config)
 
-        assert model.analysis_mode == "static"
+        assert model.analysis_mode == "static_isotropic"
         assert len(model.time_array) == 50
 
     def test_physics_factors_precomputed(self):

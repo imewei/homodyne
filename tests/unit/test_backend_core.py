@@ -86,6 +86,7 @@ from homodyne.optimization.cmc.backends import (
     CMCBackend,
     select_backend,
     get_backend_by_name,
+    _validate_backend_compatibility,
     PJIT_AVAILABLE,
     MULTIPROCESSING_AVAILABLE,
     PBS_AVAILABLE,
@@ -1852,4 +1853,3 @@ def test_summary():
     print("  ✓ Configuration parsing")
     print("  ✓ MCMCResult packaging with CMC fields")
     print("=" * 70)
-

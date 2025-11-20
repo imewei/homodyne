@@ -671,29 +671,8 @@ class XPCSDataLoader:
             # Calling meshgrid on already-meshgridded data produces wrong structure.
             # SOLUTION: Return 1D arrays like the original code did.
 
-            cached_t1 = data["t1"]
-            cached_t2 = data["t2"]
-
-            # If cached data has 1D arrays, use them directly
-            if cached_t1.ndim == 1 and cached_t2.ndim == 1:
-                t1 = cached_t1
-                t2 = cached_t2
-                logger.debug(f"Using cached 1D time arrays: shape {t1.shape}")
-            else:
-                # If cached data has wrong shape (2D), regenerate as 1D
-                logger.warning(
-                    f"Cached t1/t2 have wrong shape {cached_t1.shape}, "
-                    f"regenerating as 1D arrays"
-                )
-                t1_2d, t2_2d = self._calculate_time_arrays(matrix_size)
-                # Extract 1D arrays from 2D meshgrids
-                # Handle edge case: empty arrays
-                if t1_2d.size > 0:
-                    t1 = t1_2d[:, 0]  # First column (time increases along rows)
-                    t2 = t2_2d[0, :]  # First row (time increases along columns)
-                else:
-                    t1 = np.array([])
-                    t2 = np.array([])
+            t1 = data["t1"]
+            t2 = data["t2"]
 
             return {
                 "wavevector_q_list": data["wavevector_q_list"],

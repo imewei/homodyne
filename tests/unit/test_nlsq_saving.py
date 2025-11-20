@@ -252,8 +252,8 @@ class TestComputeNLSQFits:
         # Compute fits
         fits_dict = _compute_nlsq_fits(result, data, metadata)
 
-        # Verify compute_g2_scaled was called once per angle
-        assert mock_compute_g2.call_count == 3
+        # Verify compute_g2_scaled was called twice per angle (raw + solver surface)
+        assert mock_compute_g2.call_count == 6
 
         # Verify output structure
         assert "c2_theoretical_raw" in fits_dict
@@ -274,7 +274,12 @@ class TestComputeNLSQFits:
         metadata = {"L": 2000000.0, "dt": 0.1, "q": 0.0123}
 
         # Compute fits
-        fits_dict = _compute_nlsq_fits(result, data, metadata)
+        fits_dict = _compute_nlsq_fits(
+            result,
+            data,
+            metadata,
+            analysis_mode="laminar_flow",
+        )
 
         # Verify shapes match experimental data
         assert fits_dict["c2_theoretical_raw"].shape == (n_angles, n_t1, n_t2)

@@ -1319,8 +1319,10 @@ class TestParameterSpaceFromConfig:
         # Should create parameter space with package defaults
         assert param_space.model_type == "static"
         assert len(param_space.parameter_names) == 3
-        assert len(param_space.bounds) == 3
-        assert len(param_space.priors) == 3
+        # Includes scaling parameters (contrast/offset) alongside physical ones
+        assert len(param_space.bounds) == 5
+        assert len(param_space.priors) == 5
+        assert {"contrast", "offset"}.issubset(param_space.bounds.keys())
 
     def test_auto_detect_analysis_mode(self):
         """Test automatic detection of analysis mode from config."""
@@ -1379,11 +1381,10 @@ class TestParameterSpaceFromDefaults:
         assert "alpha" in param_space.parameter_names
         assert "D_offset" in param_space.parameter_names
 
-        # Should have bounds
-        assert len(param_space.bounds) == 3
-
-        # Should have priors (with defaults)
-        assert len(param_space.priors) == 3
+        # Should have bounds/prior entries for physical + scaling parameters
+        assert len(param_space.bounds) == 5
+        assert len(param_space.priors) == 5
+        assert {"contrast", "offset"}.issubset(param_space.bounds.keys())
 
     def test_from_defaults_laminar_flow(self):
         """Test creating laminar flow parameter space from defaults."""
@@ -1667,4 +1668,3 @@ class TestParameterSpaceIntegration:
             elif prior.dist_type == "Normal":
                 assert "loc" in kwargs
                 assert "scale" in kwargs
-

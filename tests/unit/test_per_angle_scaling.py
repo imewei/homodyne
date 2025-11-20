@@ -21,11 +21,12 @@ Created: November 2025
 
 import numpy as np
 import pytest
+import jax.numpy as jnp
 from jax import random
 from numpyro.infer import Predictive
 
 from homodyne.config.parameter_space import ParameterSpace
-from homodyne.optimization.mcmc import _create_numpyro_model
+from homodyne.optimization.mcmc import _create_numpyro_model, _prepare_phi_mapping
 
 
 class TestPerAngleMCMC:
@@ -331,6 +332,44 @@ class TestBackwardCompatibility:
         assert "contrast_0" in samples, "Default should be per-angle mode"
         assert "offset_0" in samples, "Default should be per-angle mode"
         assert "contrast" not in samples, "Default should not be legacy mode"
+
+
+class TestPhiMappingPreparation:
+    """Unit tests for the phi mapping auto-expansion helper."""
+
+    def test_auto_expands_unique_angles(self):
+        """Unique phi list should expand to match data length when possible."""
+        phi_unique = np.array([0.0, 45.0, 90.0])
+        n_phi = len(phi_unique)
+        data_size = 300  # 100 points per angle
+
+        expanded = _prepare_phi_mapping(
+            phi_unique,
+            data_size=data_size,
+            n_phi=n_phi,
+            phi_unique_np=phi_unique,
+            target_dtype=jnp.float64,
+        )
+
+        assert expanded.shape[0] == data_size
+        expected = np.repeat(phi_unique, data_size // n_phi)
+        np.testing.assert_allclose(np.asarray(expanded), expected)
+
+    def test_no_change_when_lengths_match(self):
+        """Helper should return the same array when already aligned."""
+        phi_full = np.repeat(np.array([0.0, 90.0]), 5)
+        data_size = phi_full.size
+
+        prepared = _prepare_phi_mapping(
+            phi_full,
+            data_size=data_size,
+            n_phi=2,
+            phi_unique_np=np.array([0.0, 90.0]),
+            target_dtype=jnp.float32,
+        )
+
+        np.testing.assert_array_equal(np.asarray(prepared), phi_full)
+        assert prepared.dtype == jnp.float32
 
 
 if __name__ == "__main__":
