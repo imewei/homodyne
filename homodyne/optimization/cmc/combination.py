@@ -45,7 +45,7 @@ Fallback to averaging on failure:
 """
 
 import logging
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional, Tuple
 
 import numpy as np
 
@@ -56,6 +56,7 @@ def combine_subposteriors(
     shard_results: List[Dict[str, Any]],
     method: str = "weighted",
     fallback_enabled: bool = True,
+    diagnostics_config: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, np.ndarray]:
     """Combine subposteriors from all shards into a single posterior.
 
@@ -78,6 +79,11 @@ def combine_subposteriors(
     fallback_enabled : bool, default=True
         If True and weighted method fails, automatically fall back to averaging.
         If False, raise exception on failure.
+    diagnostics_config : dict, optional
+        Validation settings (typically ``cmc.validation`` from the config). When
+        provided, shard agreement is checked before combining the samples using
+        the configured KL divergence threshold.  Strict modes raise an error
+        instead of returning misleading combined draws.
 
     Returns
     -------
@@ -131,6 +137,9 @@ def combine_subposteriors(
     # Validate inputs
     _validate_shard_results(shard_results)
 
+    diagnostics_config = diagnostics_config or {}
+    _validate_shard_agreement(shard_results, diagnostics_config)
+
     # Handle single shard edge case
     if len(shard_results) == 1:
         logger.info("Single shard detected, returning shard samples directly")
@@ -160,6 +169,68 @@ def combine_subposteriors(
             return _simple_averaging(shard_results)
         else:
             raise
+
+
+def _validate_shard_agreement(
+    shard_results: List[Dict[str, Any]],
+    diagnostics_config: Dict[str, Any],
+) -> Dict[str, float]:
+    """Check whether shard posteriors agree before combination.
+
+    Computes pairwise KL divergence between Gaussian approximations of the
+    shard posteriors.  When ``strict_mode`` is enabled and the maximum
+    divergence exceeds the configured threshold we raise a ``ValueError`` to
+    signal a hard failure.  Otherwise we emit a warning but continue.
+    """
+
+    if len(shard_results) < 2:
+        return {"max_kl": 0.0, "threshold": 0.0}
+
+    strict_mode = bool(diagnostics_config.get("strict_mode", False))
+    max_allowed = diagnostics_config.get("max_between_shard_kl", 2.0)
+    max_allowed = max(float(max_allowed), 0.0)
+
+    kl_values: List[Tuple[float, Tuple[int, int]]] = []
+
+    summaries = []
+    for idx, shard in enumerate(shard_results):
+        samples = shard.get("samples")
+        if samples is None:
+            continue
+        mean, cov = _compute_gaussian_summary(samples)
+        summaries.append((idx, mean, cov))
+
+    if len(summaries) < 2:
+        return {"max_kl": 0.0, "threshold": max_allowed}
+
+    for i in range(len(summaries)):
+        idx_i, mean_i, cov_i = summaries[i]
+        for j in range(i + 1, len(summaries)):
+            idx_j, mean_j, cov_j = summaries[j]
+            kl_ij = _gaussian_kl(mean_i, cov_i, mean_j, cov_j)
+            kl_ji = _gaussian_kl(mean_j, cov_j, mean_i, cov_i)
+            worst = max(kl_ij, kl_ji)
+            kl_values.append((worst, (idx_i, idx_j)))
+
+    if not kl_values:
+        return {"max_kl": 0.0, "threshold": max_allowed}
+
+    max_kl, (bad_i, bad_j) = max(kl_values, key=lambda item: item[0])
+    if max_kl > max_allowed:
+        message = (
+            f"Shard disagreement detected: max KL={max_kl:.3f} between shards "
+            f"{bad_i} and {bad_j} (threshold={max_allowed:.3f})."
+        )
+        guidance = (
+            " Consider lowering cmc.enable, forcing NUTS, or increasing per-shard"
+            " warmup/samples before retrying."
+        )
+        full_message = message + guidance
+        if strict_mode:
+            raise ValueError(full_message)
+        logger.warning(full_message)
+
+    return {"max_kl": max_kl, "threshold": max_allowed}
 
 
 def _weighted_gaussian_product(shard_results: List[Dict[str, Any]]) -> Dict[str, Any]:
@@ -346,6 +417,46 @@ def _simple_averaging(shard_results: List[Dict[str, Any]]) -> Dict[str, Any]:
         "cov": combined_cov,
         "method": "average",
     }
+
+
+def _compute_gaussian_summary(samples: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
+    mean = np.mean(samples, axis=0)
+    cov = np.cov(samples.T)
+    if cov.ndim == 0:
+        cov = np.array([[float(cov)]])
+    jitter = 1e-6
+    cov = cov + np.eye(cov.shape[0]) * jitter
+    return mean, cov
+
+
+def _gaussian_kl(
+    mean_p: np.ndarray,
+    cov_p: np.ndarray,
+    mean_q: np.ndarray,
+    cov_q: np.ndarray,
+) -> float:
+    """KL divergence between two multivariate Gaussians."""
+
+    dim = mean_p.shape[0]
+    try:
+        cov_q_inv = np.linalg.inv(cov_q)
+    except np.linalg.LinAlgError:
+        cov_q_inv = np.linalg.pinv(cov_q)
+
+    diff = (mean_q - mean_p).reshape(-1, 1)
+    trace_term = np.trace(cov_q_inv @ cov_p)
+    mahal_term = float((diff.T @ cov_q_inv @ diff).item())
+
+    sign_p, logdet_p = np.linalg.slogdet(cov_p)
+    sign_q, logdet_q = np.linalg.slogdet(cov_q)
+    if sign_p <= 0 or sign_q <= 0:
+        det_ratio = np.log(abs(np.linalg.det(cov_q)) + 1e-12) - np.log(
+            abs(np.linalg.det(cov_p)) + 1e-12
+        )
+    else:
+        det_ratio = logdet_q - logdet_p
+
+    return 0.5 * (trace_term + mahal_term - dim + det_ratio)
 
 
 def _validate_shard_results(shard_results: List[Dict[str, Any]]) -> None:

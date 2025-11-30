@@ -593,20 +593,23 @@ class CMCCoordinator:
         logger.info("STEP 3: Combining subposteriors")
         logger.info("=" * 70)
 
-        combination_method = (
-            self.config.get("cmc", {}).get("combination", {}).get("method", "weighted")
-        )
-        fallback_enabled = (
-            self.config.get("cmc", {})
-            .get("combination", {})
-            .get("fallback_enabled", True)
-        )
+        combination_section = self.config.get("combination")
+        if not isinstance(combination_section, dict) or not combination_section:
+            combination_section = self.config.get("cmc", {}).get("combination", {})
+
+        combination_method = combination_section.get("method", "weighted")
+        fallback_enabled = combination_section.get("fallback_enabled", True)
+
+        validation_section = self.config.get("validation")
+        if not isinstance(validation_section, dict) or not validation_section:
+            validation_section = self.config.get("cmc", {}).get("validation", {})
 
         combination_start = time.time()
         combined_posterior = combine_subposteriors(
             shard_results,
             method=combination_method,
             fallback_enabled=fallback_enabled,
+            diagnostics_config=validation_section,
         )
         combination_time = time.time() - combination_start
 

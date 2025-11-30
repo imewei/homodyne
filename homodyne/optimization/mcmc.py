@@ -89,13 +89,241 @@ from __future__ import annotations
 
 import os
 import time
-from typing import Any, Dict
+from typing import Any, Dict, Tuple
 
 import numpy as np
 
 from homodyne.utils.logging import get_logger, log_performance
 
 logger = get_logger(__name__)
+
+_FIXED_CONTRAST_RANGE = (0.01, 0.2)
+_FIXED_OFFSET_RANGE = (0.9, 1.1)
+
+
+def _get_physical_param_order(analysis_mode: str) -> list[str]:
+    """Return canonical ordering of physical parameters for diagnostics."""
+
+    mode = (analysis_mode or "").lower()
+    if "laminar" in mode:
+        return [
+            "D0",
+            "alpha",
+            "D_offset",
+            "gamma_dot_t0",
+            "beta",
+            "gamma_dot_t_offset",
+            "phi0",
+        ]
+    return ["D0", "alpha", "D_offset"]
+
+
+def _estimate_single_angle_scaling(data: Any) -> Tuple[float, float]:
+    """Estimate deterministic contrast/offset for phi_count==1 fallback."""
+
+    try:
+        data_arr = np.asarray(data).astype(float, copy=False).ravel()
+    except Exception:  # noqa: BLE001 - fallback for unexpected dtypes
+        data_arr = np.asarray(data, dtype=float).ravel()
+
+    finite = data_arr[np.isfinite(data_arr)]
+    if finite.size == 0:
+        return 0.5, 1.0
+
+    low = float(np.percentile(finite, 1.0))
+    high = float(np.percentile(finite, 99.0))
+    span = max(high - low, 1e-4)
+
+    contrast = 0.8 * span
+    contrast = float(np.clip(contrast, *_FIXED_CONTRAST_RANGE))
+    offset = float(np.clip(low, *_FIXED_OFFSET_RANGE))
+    return contrast, offset
+
+
+def _build_single_angle_surrogate_settings(
+    parameter_space: ParameterSpace | None, tier: str
+) -> dict[str, Any]:
+    """Construct surrogate configuration for phi_count==1."""
+
+    if parameter_space is None or PriorDistribution is None:
+        return {}
+
+    tier_normalized = (tier or "2").strip()
+    if tier_normalized not in {"2", "3", "4"}:
+        tier_normalized = "2"
+
+    try:
+        d0_bounds = parameter_space.get_bounds("D0")
+        d0_prior = parameter_space.get_prior("D0")
+    except KeyError:
+        return {}
+
+    min_d0 = max(d0_bounds[0], 1e-6)
+    max_d0 = max(d0_bounds[1], min_d0 * 10.0)
+    if tier_normalized == "4":
+        constrained_max = max(min_d0 * 50.0, min_d0 * 2.0)
+        max_d0 = min(max_d0, constrained_max)
+
+    log_low = float(np.log(min_d0))
+    log_high = float(np.log(max_d0))
+
+    prior_mu_clamped = float(np.clip(d0_prior.mu, min_d0, max_d0))
+    if tier_normalized == "4":
+        prior_mu_clamped = min(prior_mu_clamped, max_d0 * 0.6)
+    log_loc = float(np.log(max(prior_mu_clamped, 1e-6)))
+    log_scale = 0.5
+
+    alpha_prior_override: PriorDistribution | None = None
+    fixed_alpha = None
+
+    log_scale = 0.5
+    trust_radius = None
+    sample_log_d0 = True
+
+    if tier_normalized == "2":
+        alpha_prior_override = PriorDistribution(
+            dist_type="TruncatedNormal",
+            mu=-1.0,
+            sigma=0.15,
+            min_val=-1.5,
+            max_val=0.5,
+        )
+        log_scale = 0.35
+    elif tier_normalized == "3":
+        fixed_alpha = -1.2
+        log_scale = 0.3
+    elif tier_normalized == "4":
+        # Tier-4: Keep log-space sampling but with tighter bounds
+        # Avoid deterministic clamp (fixed_d0_value) to enable proper MCMC
+        fixed_alpha = -1.2
+        log_scale = 0.12
+        trust_radius = None  # Remove trust_radius - not needed with ExpTransform
+        sample_log_d0 = True  # Changed from False - use log-space sampling
+
+    nuts_overrides = {
+        "target_accept_prob": 0.99 if tier_normalized == "2" else 0.995,
+        "max_tree_depth": 8 if tier_normalized == "2" else 6,
+        "n_warmup": 1500 if tier_normalized == "2" else 2000,
+    }
+    if tier_normalized == "4":
+        nuts_overrides.update({"max_tree_depth": 6, "n_warmup": 2000})
+
+    diagnostic_thresholds = {
+        "focus_params": ["D0", "alpha"],
+        "min_ess": 25.0 if tier_normalized == "2" else 40.0,
+        "max_rhat": 1.2,
+    }
+    if tier_normalized == "4":
+        diagnostic_thresholds["min_ess"] = 50.0
+
+    return {
+        "tier": tier_normalized,
+        "drop_d_offset": True,
+        "sample_log_d0": sample_log_d0,
+        "log_d0_prior": {
+            "loc": log_loc,
+            "scale": log_scale,
+            "low": log_low,
+            "high": log_high,
+            "trust_radius": trust_radius,
+        },
+        "alpha_prior_override": alpha_prior_override,
+        "fixed_alpha": fixed_alpha,
+        "fixed_d_offset": 0.0,
+        "fixed_d0_value": None,  # Removed tier-4 deterministic clamp
+        "disable_reparam": True,
+        "nuts_overrides": nuts_overrides,
+        "diagnostic_thresholds": diagnostic_thresholds,
+    }
+
+
+def _sample_single_angle_log_d0(
+    prior_cfg: dict[str, float], target_dtype
+) -> jnp.ndarray:
+    """Sample D0 via truncated Normal in log-space with ExpTransform.
+
+    For single-angle static/static_isotropic models (n_phi==1), this function
+    samples D0 using a truncated Normal distribution in log-space, then
+    automatically transforms to linear space via ExpTransform. This provides
+    better MCMC sampling geometry compared to linear-space sampling, as
+    diffusion coefficients naturally span multiple orders of magnitude.
+
+    The sampled parameter is named 'D0' (not 'log_D0') to maintain API
+    consistency with multi-angle paths.
+
+    Parameters
+    ----------
+    prior_cfg : dict
+        Prior configuration with keys:
+        - 'loc': Mean of log-D0 (e.g., np.log(1000) ≈ 6.9)
+        - 'scale': Standard deviation in log-space (e.g., 0.5)
+        - 'low': Lower bound in log-space (e.g., np.log(100) ≈ 4.6)
+        - 'high': Upper bound in log-space (e.g., np.log(10000) ≈ 9.2)
+        - 'trust_radius': Optional additional clipping radius (for tier-4)
+    target_dtype : jnp.dtype
+        Target JAX dtype (float32 or float64)
+
+    Returns
+    -------
+    jnp.ndarray
+        D0 value in linear space (automatically exp-transformed)
+
+    Notes
+    -----
+    **Log-space sampling advantages:**
+    - More efficient exploration of scale parameters spanning orders of magnitude
+    - Better MCMC geometry (symmetric proposals in log-space)
+    - Improved ESS and R-hat convergence diagnostics
+    - Natural handling of positivity constraint
+
+    **Implementation:**
+    Uses NumPyro's TransformedDistribution with ExpTransform to sample
+    in log-space and automatically convert to linear space. The latent
+    variable is sampled from TruncatedNormal(loc, scale, low, high) in
+    log-space, then exp-transformed to produce D0.
+
+    **Multi-angle compatibility:**
+    This function is ONLY used when n_phi==1. Multi-angle paths use
+    the standard linear TruncatedNormal sampling.
+    """
+
+    loc_value = float(prior_cfg.get("loc", 0.0))
+    scale_value = max(float(prior_cfg.get("scale", 1.0)), 1e-6)
+    low_value = float(prior_cfg.get("low", loc_value - 5.0))
+    high_value = float(prior_cfg.get("high", loc_value + 5.0))
+
+    # Ensure proper bounds with small epsilon for numerical stability
+    interval_width = max(high_value - low_value, 1e-6)
+    eps = 1e-6
+
+    loc = jnp.asarray(loc_value, dtype=target_dtype)
+    scale = jnp.asarray(scale_value, dtype=target_dtype)
+    low = jnp.asarray(low_value + eps, dtype=target_dtype)
+    high = jnp.asarray(high_value - eps, dtype=target_dtype)
+
+    # Create truncated Normal distribution in log-space
+    log_space_dist = dist.TruncatedNormal(
+        loc=loc,
+        scale=scale,
+        low=low,
+        high=high
+    )
+
+    # Apply ExpTransform to get linear-space D0
+    # This creates: D0 = exp(log_D0) where log_D0 ~ TruncatedNormal(...)
+    from numpyro.distributions.transforms import ExpTransform
+    d0_dist = dist.TransformedDistribution(log_space_dist, ExpTransform())
+
+    # Sample D0 directly (already in linear space due to transform)
+    # Keep parameter name as 'D0' for API consistency
+    d0_value = sample("D0", d0_dist)
+
+    # Emit the log-space latent as a deterministic node for diagnostics
+    # This allows post-hoc analysis of the log-space sampling
+    log_d0_value = jnp.log(d0_value)
+    deterministic("log_D0_latent", log_d0_value)
+
+    return d0_value
 
 # JAX imports with intelligent fallback
 try:
@@ -135,7 +363,7 @@ try:
     import numpyro
     import numpyro.distributions as dist
     from numpyro.distributions import transforms as dist_transforms
-    from numpyro import sample
+    from numpyro import sample, deterministic, prng_key
     from numpyro.infer import MCMC, NUTS
 
     NUMPYRO_AVAILABLE = True
@@ -177,6 +405,7 @@ except ImportError:
 # Import extended MCMCResult with CMC support
 # This provides backward compatibility while supporting CMC
 try:
+    from homodyne.optimization.cmc.bypass import evaluate_cmc_bypass
     from homodyne.optimization.cmc.result import MCMCResult
 
     HAS_CMC_RESULT = True
@@ -250,6 +479,15 @@ except ImportError:
             self.acceptance_rate = acceptance_rate
             self.r_hat = r_hat
             self.effective_sample_size = effective_sample_size
+
+    class _DummyBypassDecision:
+        should_bypass = False
+        reason = None
+        triggered_by = None
+        mode = "force_cmc"
+
+    def evaluate_cmc_bypass(*_, **__):  # type: ignore[override]
+        return _DummyBypassDecision()
 
 
 def _calculate_midpoint_defaults(parameter_space: ParameterSpace) -> dict[str, float]:
@@ -851,37 +1089,55 @@ def fit_mcmc_jax(
         # Extract CMC configuration
         cmc_config = kwargs.pop("cmc_config", {})
 
-        # Add MCMC config to cmc_config if not already present
-        if "mcmc" not in cmc_config:
-            cmc_config["mcmc"] = _get_mcmc_config(kwargs)
-
-        # Create CMC coordinator
-        coordinator = CMCCoordinator(cmc_config)
-
-        # Run CMC pipeline with config-driven parameters
-        result = coordinator.run_cmc(
-            data=data,
-            t1=t1,
-            t2=t2,
+        bypass_decision = evaluate_cmc_bypass(
+            cmc_config,
+            num_samples=num_samples,
+            dataset_size=dataset_size,
             phi=phi,
-            q=q,
-            L=L,
-            analysis_mode=analysis_mode,
-            parameter_space=parameter_space,
-            initial_values=initial_values,
         )
 
-        logger.info(f"CMC execution completed. Used {result.num_shards} shards.")
-        return result
+        if bypass_decision.should_bypass:
+            reason = bypass_decision.reason or "heuristic bypass triggered"
+            logger.warning(
+                "Bypassing CMC (%s): %s",
+                bypass_decision.triggered_by or bypass_decision.mode,
+                reason,
+            )
+            actual_method = "nuts"
+        else:
+            # Add MCMC config to cmc_config if not already present
+            if "mcmc" not in cmc_config:
+                cmc_config["mcmc"] = _get_mcmc_config(kwargs)
 
-    else:
+            # Create CMC coordinator
+            coordinator = CMCCoordinator(cmc_config)
+
+            # Run CMC pipeline with config-driven parameters
+            result = coordinator.run_cmc(
+                data=data,
+                t1=t1,
+                t2=t2,
+                phi=phi,
+                q=q,
+                L=L,
+                analysis_mode=analysis_mode,
+                parameter_space=parameter_space,
+                initial_values=initial_values,
+            )
+
+            logger.info(f"CMC execution completed. Used {result.num_shards} shards.")
+            return result
+
+    if actual_method != "cmc":
         # Use standard NUTS with automatic retry on convergence failure
         logger.info("=" * 70)
         logger.info("Executing standard NUTS MCMC")
         logger.info("=" * 70)
 
         # Implement auto-retry mechanism for poor convergence
-        max_retries = 3
+        max_retries = int(kwargs.get("n_retries") or kwargs.get("max_retries") or 3)
+        default_max_rhat = float(kwargs.get("max_rhat_threshold", 1.1))
+        default_min_ess = float(kwargs.get("min_ess_threshold", 100))
         for attempt in range(max_retries):
             # Use different random seed for each retry
             retry_kwargs = kwargs.copy()
@@ -894,29 +1150,26 @@ def fit_mcmc_jax(
                 # Enhanced logging with diagnostics from previous attempt
                 # Get diagnostics from previous attempt (if available)
                 if "result" in locals():
-                    max_rhat = (
-                        max(
-                            [v for v in result.r_hat.values() if v is not None],
-                            default=0.0,
-                        )
-                        if result.r_hat is not None
-                        else 0.0
+                    prev_eval = _evaluate_convergence_thresholds(
+                        result,
+                        default_max_rhat,
+                        default_min_ess,
                     )
-                    min_ess = (
-                        min(
-                            [
-                                v
-                                for v in result.effective_sample_size.values()
-                                if v is not None
-                            ],
-                            default=0.0,
-                        )
-                        if result.effective_sample_size is not None
-                        else 0.0
+                    prev_rhat = prev_eval.get("max_rhat_observed")
+                    prev_ess = prev_eval.get("min_ess_observed")
+                    rhat_text = (
+                        f"{prev_rhat:.3f}"
+                        if (prev_rhat is not None and np.isfinite(prev_rhat))
+                        else "N/A"
+                    )
+                    ess_text = (
+                        f"{prev_ess:.0f}"
+                        if (prev_ess is not None and np.isfinite(prev_ess))
+                        else "N/A"
                     )
                     logger.warning(
                         f"🔄 Retry {attempt}/{max_retries - 1} - Convergence poor "
-                        f"(R-hat={max_rhat:.3f}, ESS={min_ess:.0f}). "
+                        f"(R-hat={rhat_text}, ESS={ess_text}). "
                         f"Changing random seed to {new_seed}..."
                     )
                 else:
@@ -942,34 +1195,36 @@ def fit_mcmc_jax(
 
             # Check convergence quality
             if result.converged:
-                # Check R-hat if available
-                poor_rhat = False
-                if result.r_hat is not None:
-                    max_rhat = max(
-                        [v for v in result.r_hat.values() if v is not None], default=0.0
+                eval_report = _evaluate_convergence_thresholds(
+                    result,
+                    default_max_rhat,
+                    default_min_ess,
+                )
+                poor_rhat = eval_report["poor_rhat"]
+                poor_ess = eval_report["poor_ess"]
+                max_rhat = eval_report.get("max_rhat_observed")
+                min_ess = eval_report.get("min_ess_observed")
+                thresholds = eval_report.get("thresholds", {})
+                rhat_text = (
+                    f"{max_rhat:.3f}"
+                    if (max_rhat is not None and np.isfinite(max_rhat))
+                    else "N/A"
+                )
+                ess_text = (
+                    f"{min_ess:.0f}"
+                    if (min_ess is not None and np.isfinite(min_ess))
+                    else "N/A"
+                )
+                if poor_rhat:
+                    logger.warning(
+                        f"Poor convergence detected: max R-hat = {rhat_text} > "
+                        f"{thresholds.get('max_rhat', default_max_rhat):.3f}"
                     )
-                    if max_rhat > 1.1:
-                        poor_rhat = True
-                        logger.warning(
-                            f"Poor convergence detected: max R-hat = {max_rhat:.3f} > 1.1"
-                        )
-
-                # Check ESS if available
-                poor_ess = False
-                if result.effective_sample_size is not None:
-                    min_ess = min(
-                        [
-                            v
-                            for v in result.effective_sample_size.values()
-                            if v is not None
-                        ],
-                        default=float("inf"),
+                if poor_ess:
+                    logger.warning(
+                        f"Low effective sample size: min ESS = {ess_text} < "
+                        f"{thresholds.get('min_ess', default_min_ess):.0f}"
                     )
-                    if min_ess < 100:
-                        poor_ess = True
-                        logger.warning(
-                            f"Low effective sample size: min ESS = {min_ess:.0f} < 100"
-                        )
 
                 # Retry if convergence is poor and we have retries left
                 if (poor_rhat or poor_ess) and attempt < max_retries - 1:
@@ -983,7 +1238,7 @@ def fit_mcmc_jax(
                         # All retries failed - provide actionable suggestions
                         logger.warning(
                             f"❌ All {max_retries} retry attempts failed. "
-                            f"Final diagnostics: R-hat={max_rhat:.3f}, ESS={min_ess:.0f}. "
+                            f"Final diagnostics: R-hat={rhat_text}, ESS={ess_text}. "
                             f"Consider: (1) Increase n_warmup/n_samples, "
                             f"(2) Reparameterize model, (3) Check data quality"
                         )
@@ -1063,12 +1318,11 @@ def _run_standard_nuts(
     start_time = time.perf_counter()
 
     try:
+        import numpy as _np
+
         # Set up parameter space
         if parameter_space is None:
             parameter_space = ParameterSpace()
-
-        # Configure MCMC parameters
-        mcmc_config = _get_mcmc_config(kwargs)
 
         # Determine analysis mode (normalize shorthand names)
         # Map common shortcuts to canonical names
@@ -1100,14 +1354,12 @@ def _run_standard_nuts(
         # Pre-compute dt
         dt_computed = None
         if t1 is not None:
-            import numpy as np  # Use numpy (not jax.numpy) for pre-computation
-
             if t1.ndim == 2:
-                time_array = np.asarray(t1[:, 0] if t1.shape[1] > 0 else t1[0, :])
+                time_array = _np.asarray(t1[:, 0] if t1.shape[1] > 0 else t1[0, :])
             else:
-                time_array = np.asarray(t1)
+                time_array = _np.asarray(t1)
             # Estimate from first two unique time points
-            unique_times = np.unique(time_array)
+            unique_times = _np.unique(time_array)
             if len(unique_times) > 1:
                 dt_computed = float(unique_times[1] - unique_times[0])
             else:
@@ -1118,15 +1370,142 @@ def _run_standard_nuts(
         # CMC pooled data replicates phi for each time point (e.g., 3 angles × 100K points = 300K array)
         # We need unique phi values for broadcasting, but jnp.unique() doesn't work during JIT tracing
         # Extract unique values HERE (non-JIT context) and pass to model as closure variable
-        # v2.4.0: Per-angle scaling is MANDATORY for all modes, so always compute phi_unique
         phi_unique = None
         if phi is not None:
-            import numpy as np  # Use numpy (not jax.numpy) for pre-computation
-
-            phi_unique = np.unique(np.asarray(phi))
+            phi_unique = _np.unique(_np.asarray(phi))
             logger.debug(
                 f"Pre-computed phi_unique: {len(phi_unique)} unique angles from {len(phi)} total values "
                 f"(reduction: {len(phi) / len(phi_unique):.1f}x)"
+            )
+
+        n_unique_phi = len(phi_unique) if phi_unique is not None else 0
+        single_angle_static = (
+            analysis_mode.lower().startswith("static") and n_unique_phi == 1
+        )
+        per_angle_scaling_enabled = not single_angle_static
+        single_angle_geom_priors = None
+        t_reference_value = None
+        single_angle_scaling_override: dict[str, float] | None = None
+        single_angle_surrogate_cfg: dict[str, Any] | None = None
+        surrogate_tier_env = os.environ.get("HOMODYNE_SINGLE_ANGLE_TIER", "2")
+        user_scaling_override = kwargs.pop("fixed_scaling_overrides", None)
+
+        if single_angle_static:
+            logger.info(
+                "Single-angle static dataset detected → disabling per-angle scaling and enabling stabilized priors",
+            )
+            if not kwargs.get("stable_prior_fallback", False):
+                kwargs["stable_prior_fallback"] = True
+            try:
+                t1_array = _np.asarray(t1)
+                positive = t1_array[t1_array > 0]
+                if positive.size:
+                    t_reference_value = float(_np.median(positive))
+                elif t1_array.size:
+                    t_reference_value = float(_np.mean(_np.abs(t1_array)))
+            except Exception:  # noqa: BLE001 - heuristic fallback
+                t_reference_value = None
+
+            contrast_fixed, offset_fixed = _estimate_single_angle_scaling(data)
+            single_angle_scaling_override = {
+                "contrast": contrast_fixed,
+                "offset": offset_fixed,
+            }
+            logger.info(
+                "Single-angle fallback: fixing contrast=%.4f, offset=%.4f based on data percentiles",
+                contrast_fixed,
+                offset_fixed,
+            )
+
+        if user_scaling_override:
+            single_angle_scaling_override = {
+                key: float(value)
+                for key, value in user_scaling_override.items()
+            }
+            logger.info(
+                "Single-angle fallback: using user-provided scaling overrides %s",
+                ", ".join(
+                    f"{name}={val:.4g}" for name, val in single_angle_scaling_override.items()
+                ),
+            )
+
+        stable_prior_config = bool(kwargs.get("stable_prior_fallback", False))
+        stable_prior_env = os.environ.get("HOMODYNE_STABLE_PRIOR", "0") == "1"
+        stable_prior_enabled = stable_prior_config or stable_prior_env
+
+        if single_angle_static and parameter_space is not None:
+            parameter_space = parameter_space.with_single_angle_stabilization(
+                enable_beta_fallback=stable_prior_enabled,
+            )
+            logger.debug(
+                "Applied single-angle stabilization priors (beta_fallback=%s)",
+                stable_prior_enabled,
+            )
+            single_angle_geom_priors = parameter_space.get_single_angle_geometry_config()
+            if t_reference_value is not None:
+                single_angle_geom_priors["t_reference"] = t_reference_value
+            single_angle_surrogate_cfg = _build_single_angle_surrogate_settings(
+                parameter_space, surrogate_tier_env
+            )
+            if single_angle_surrogate_cfg:
+                logger.info(
+                    "Single-angle surrogate tier %s active (drop_d_offset=%s)",
+                    single_angle_surrogate_cfg.get("tier"),
+                    single_angle_surrogate_cfg.get("drop_d_offset"),
+                )
+                if single_angle_surrogate_cfg.get("drop_d_offset"):
+                    parameter_space = parameter_space.drop_parameters({"D_offset"})
+                    if initial_values is not None:
+                        initial_values.pop("D_offset", None)
+                alpha_override = single_angle_surrogate_cfg.get(
+                    "alpha_prior_override"
+                )
+                if alpha_override is not None:
+                    parameter_space = parameter_space.with_prior_overrides(
+                        {"alpha": alpha_override}
+                    )
+                if (
+                    single_angle_surrogate_cfg.get("fixed_alpha") is not None
+                    and initial_values is not None
+                ):
+                    initial_values.pop("alpha", None)
+
+        per_angle_param_count = (
+            len(phi_unique) * 2
+            if phi_unique is not None and per_angle_scaling_enabled
+            else 0
+        )
+        base_param_count = len(parameter_space.parameter_names) if parameter_space else 0
+        override_param_count = len(single_angle_scaling_override or {})
+        total_param_count = max(0, base_param_count - override_param_count) + per_angle_param_count
+
+        # Configure MCMC parameters
+        config_kwargs = dict(kwargs)
+        config_kwargs.setdefault("n_params", total_param_count)
+        user_config_overrides = {
+            "n_warmup": config_kwargs.get("n_warmup") is not None,
+        }
+        mcmc_config = _get_mcmc_config(config_kwargs)
+        if single_angle_surrogate_cfg:
+            nuts_overrides = single_angle_surrogate_cfg.get("nuts_overrides") or {}
+            if "target_accept_prob" in nuts_overrides:
+                mcmc_config["target_accept_prob"] = max(
+                    mcmc_config["target_accept_prob"],
+                    nuts_overrides["target_accept_prob"],
+                )
+            if "max_tree_depth" in nuts_overrides:
+                mcmc_config["max_tree_depth"] = min(
+                    mcmc_config["max_tree_depth"], nuts_overrides["max_tree_depth"]
+                )
+            if "n_warmup" in nuts_overrides and not user_config_overrides["n_warmup"]:
+                mcmc_config["n_warmup"] = max(
+                    mcmc_config["n_warmup"], nuts_overrides["n_warmup"]
+                )
+            logger.info(
+                "Single-angle NUTS overrides applied: target_accept=%.3f, max_tree_depth=%d, n_warmup=%d",
+                mcmc_config["target_accept_prob"],
+                mcmc_config["max_tree_depth"],
+                mcmc_config["n_warmup"],
             )
 
         # Log initial values if provided (for MCMC chain initialization)
@@ -1139,9 +1518,20 @@ def _run_standard_nuts(
         else:
             logger.info("MCMC chains will use default initialization (NumPyro random)")
 
-        stable_prior_config = bool(kwargs.get("stable_prior_fallback", False))
-        stable_prior_env = os.environ.get("HOMODYNE_STABLE_PRIOR", "0") == "1"
-        stable_prior_enabled = stable_prior_config or stable_prior_env
+        if single_angle_static and initial_values is not None:
+            d0_init = initial_values.get("D0")
+            d_offset_init = initial_values.get("D_offset")
+            if d0_init is not None and d_offset_init is not None:
+                center_value = d0_init + d_offset_init
+                if not np.isfinite(center_value) or center_value <= 0:
+                    center_value = max(1.0, abs(d0_init))
+                log_center_init = float(np.log(max(center_value, 1e-6)))
+                frac = d0_init / max(center_value, 1e-6)
+                frac = float(np.clip(frac, 1e-6, 5.0))
+                delta_raw_init = float(np.log(np.expm1(frac)))
+                initial_values.setdefault("log_D_center", log_center_init)
+                initial_values.setdefault("delta_raw", delta_raw_init)
+
         logger.debug(
             "Stable prior fallback: enabled=%s (config=%s, env=%s)",
             stable_prior_enabled,
@@ -1163,7 +1553,10 @@ def _run_standard_nuts(
                 use_simplified=use_simplified_likelihood,
                 dt=dt_computed,
                 phi_full=phi,
-                per_angle_scaling=True,
+                per_angle_scaling=per_angle_scaling_enabled,
+                single_angle_reparam_config=single_angle_geom_priors,
+                fixed_scaling_overrides=single_angle_scaling_override,
+                single_angle_surrogate_config=single_angle_surrogate_cfg,
             )
 
         def _execute_sampling(space: ParameterSpace):
@@ -1175,6 +1568,7 @@ def _run_standard_nuts(
                     initial_values,
                     parameter_space=space,
                     phi_unique=phi_unique,
+                    per_angle_scaling=per_angle_scaling_enabled,
                 )
             return _run_blackjax_sampling(model_local, mcmc_config)
 
@@ -1199,7 +1593,43 @@ def _run_standard_nuts(
             raise RuntimeError("MCMC sampling did not return a result")
 
         # Process results
-        posterior_summary = _process_posterior_samples(result, analysis_mode)
+        surrogate_thresholds = None
+        if single_angle_surrogate_cfg:
+            diag_cfg = single_angle_surrogate_cfg.get("diagnostic_thresholds") or {}
+            surrogate_thresholds = {
+                "active": True,
+                "focus_params": diag_cfg.get("focus_params") or ["D0", "alpha"],
+                "min_ess": float(diag_cfg.get("min_ess", 25.0)),
+                "max_rhat": float(diag_cfg.get("max_rhat", 1.2)),
+            }
+
+        deterministic_param_overrides: set[str] = set()
+        if single_angle_scaling_override:
+            deterministic_param_overrides.update(single_angle_scaling_override.keys())
+        if single_angle_surrogate_cfg:
+            if single_angle_surrogate_cfg.get("drop_d_offset") or single_angle_surrogate_cfg.get(
+                "fixed_d_offset"
+            ) is not None:
+                deterministic_param_overrides.add("D_offset")
+            if single_angle_surrogate_cfg.get("fixed_alpha") is not None:
+                deterministic_param_overrides.add("alpha")
+            if single_angle_surrogate_cfg.get("fixed_d0_value") is not None:
+                deterministic_param_overrides.add("D0")
+
+        diag_settings = {
+            "max_rhat": mcmc_config.get("max_rhat_threshold", 1.1),
+            "min_ess": mcmc_config.get("min_ess_threshold", 100),
+            "check_hmc_diagnostics": mcmc_config.get("check_hmc_diagnostics", True),
+            "single_angle_surrogate": single_angle_surrogate_cfg,
+            "scaling_overrides": single_angle_scaling_override or {},
+            "expected_params": _get_physical_param_order(analysis_mode),
+            "deterministic_params": sorted(deterministic_param_overrides),
+            "surrogate_thresholds": surrogate_thresholds,
+        }
+
+        posterior_summary = _process_posterior_samples(
+            result, analysis_mode, diag_settings
+        )
 
         computation_time = time.perf_counter() - start_time
 
@@ -1209,7 +1639,7 @@ def _run_standard_nuts(
         param_count = len(posterior_summary['samples'])
         logger.info(f"Posterior summary: {sample_count} samples × {param_count} parameters")
 
-        return MCMCResult(
+        result_obj = MCMCResult(
             mean_params=posterior_summary["mean_params"],
             mean_contrast=posterior_summary["mean_contrast"],
             mean_offset=posterior_summary["mean_offset"],
@@ -1232,6 +1662,13 @@ def _run_standard_nuts(
             r_hat=posterior_summary.get("r_hat"),
             effective_sample_size=posterior_summary.get("ess"),
         )
+
+        diag_summary = posterior_summary.get("diagnostic_summary", {})
+        result_obj.diagnostic_summary = diag_summary
+        result_obj.deterministic_params = diag_summary.get("deterministic_params", [])
+        result_obj.surrogate_thresholds = surrogate_thresholds
+
+        return result_obj
 
     except Exception as e:
         computation_time = time.perf_counter() - start_time
@@ -1325,19 +1762,50 @@ def _get_mcmc_config(kwargs: dict[str, Any]) -> dict[str, Any]:
     The mass matrix is learned during warmup via adaptation and affects
     the proposal distribution geometry in HMC/NUTS sampling.
     """
+    adaptive_param_count = kwargs.get("n_params")
+    default_warmup = 1000
+    if isinstance(adaptive_param_count, int) and adaptive_param_count > 0:
+        default_warmup = max(default_warmup, adaptive_param_count * 200)
+
     default_config = {
-        "n_samples": 1000,
-        "n_warmup": 500,  # Reduced warmup for faster testing
-        "n_chains": 4,  # Enable parallel chains by default
-        "target_accept_prob": 0.8,
-        "max_tree_depth": 10,
-        "dense_mass_matrix": False,  # Diagonal mass matrix (faster)
+        "n_samples": 2000,
+        "n_warmup": default_warmup,
+        "n_chains": 4,
+        "target_accept_prob": 0.9,
+        "max_tree_depth": 12,
+        "dense_mass_matrix": "auto",
         "rng_key": 42,
+        "init_jitter_scale": 0.02,
+        "max_retries": 3,
     }
 
     # Update with provided kwargs (support both snake_case variants)
     config = default_config.copy()
     config.update(kwargs)
+
+    dense_setting = config.get("dense_mass_matrix", "auto")
+    if isinstance(dense_setting, str) and dense_setting.lower() == "auto":
+        if isinstance(adaptive_param_count, int) and adaptive_param_count > 0:
+            config["dense_mass_matrix"] = adaptive_param_count <= 10
+        else:
+            config["dense_mass_matrix"] = False
+
+    min_ess_threshold = config.pop("min_ess", None)
+    max_rhat_threshold = config.pop("max_rhat", None)
+    if min_ess_threshold is not None:
+        config["min_ess_threshold"] = min_ess_threshold
+    if max_rhat_threshold is not None:
+        config["max_rhat_threshold"] = max_rhat_threshold
+    if "min_ess_threshold" not in config:
+        config["min_ess_threshold"] = 100
+    if "max_rhat_threshold" not in config:
+        config["max_rhat_threshold"] = 1.1
+
+    if "n_retries" in config and "max_retries" not in config:
+        config["max_retries"] = config["n_retries"]
+
+    if "check_hmc_diagnostics" not in config:
+        config["check_hmc_diagnostics"] = kwargs.get("check_hmc_diagnostics", True)
 
     # Mirror short-form keys to long-form equivalents so that downstream
     # components (CMC coordinator) that expect num_* receive the overrides.
@@ -1346,6 +1814,78 @@ def _get_mcmc_config(kwargs: dict[str, Any]) -> dict[str, Any]:
     config["num_chains"] = config.get("num_chains", config["n_chains"])
 
     return config
+
+
+def _evaluate_convergence_thresholds(
+    result: Any, default_max_rhat: float = 1.1, default_min_ess: float = 100.0
+) -> dict[str, Any]:
+    """Assess convergence metrics with surrogate-aware thresholds."""
+
+    diag_summary = getattr(result, "diagnostic_summary", {}) or {}
+    deterministic_params = set(diag_summary.get("deterministic_params") or [])
+    per_param_stats = diag_summary.get("per_param_stats") or {}
+    surrogate_ctx = diag_summary.get("surrogate_thresholds") or {}
+
+    def _collect_stat(values: list[float], reducer, default_value):
+        finite_vals = [v for v in values if v is not None and np.isfinite(v)]
+        return reducer(finite_vals) if finite_vals else default_value
+
+    per_param_items = list(per_param_stats.items())
+    max_rhat = _collect_stat(
+        [stats.get("r_hat") for name, stats in per_param_items if not stats.get("deterministic")],
+        max,
+        None,
+    )
+    min_ess = _collect_stat(
+        [stats.get("ess") for name, stats in per_param_items if not stats.get("deterministic")],
+        min,
+        None,
+    )
+
+    thresholds = {
+        "mode": "default",
+        "max_rhat": default_max_rhat,
+        "min_ess": default_min_ess,
+    }
+    poor_rhat = False
+    poor_ess = False
+    focus_details: dict[str, dict[str, Any]] = {}
+
+    if surrogate_ctx.get("active"):
+        thresholds.update(
+            {
+                "mode": "single_angle_surrogate",
+                "max_rhat": float(surrogate_ctx.get("max_rhat", default_max_rhat)),
+                "min_ess": float(surrogate_ctx.get("min_ess", default_min_ess)),
+            }
+        )
+        focus_params = surrogate_ctx.get("focus_params") or diag_summary.get("focus_params") or []
+        for name in focus_params:
+            stats = per_param_stats.get(name, {})
+            focus_details[name] = stats
+            if stats.get("deterministic"):
+                continue
+            rhat_val = stats.get("r_hat")
+            ess_val = stats.get("ess")
+            if rhat_val is not None and rhat_val > thresholds["max_rhat"]:
+                poor_rhat = True
+            if ess_val is None or ess_val < thresholds["min_ess"]:
+                poor_ess = True
+    else:
+        if max_rhat is not None and max_rhat > thresholds["max_rhat"]:
+            poor_rhat = True
+        if min_ess is not None and min_ess < thresholds["min_ess"]:
+            poor_ess = True
+
+    return {
+        "poor_rhat": poor_rhat,
+        "poor_ess": poor_ess,
+        "max_rhat_observed": max_rhat,
+        "min_ess_observed": min_ess,
+        "thresholds": thresholds,
+        "deterministic_params": deterministic_params,
+        "focus_param_details": focus_details,
+    }
 
 
 def _create_numpyro_model(
@@ -1362,6 +1902,9 @@ def _create_numpyro_model(
     dt=None,
     phi_full=None,
     per_angle_scaling=True,  # Default True: Physically correct per-angle scaling
+    single_angle_reparam_config: dict[str, float] | None = None,
+    fixed_scaling_overrides: dict[str, float] | None = None,
+    single_angle_surrogate_config: dict[str, Any] | None = None,
 ):
     """Create NumPyro probabilistic model using config-driven priors.
 
@@ -1399,7 +1942,7 @@ def _create_numpyro_model(
         - parameter_names: list of parameter names
         - bounds: dict mapping param_name -> (min, max)
         - priors: dict mapping param_name -> PriorDistribution
-    use_simplified : bool, default=True
+        use_simplified : bool, default=True
         Use simplified likelihood for faster computation
     dt : float, optional
         Time step (pre-computed to avoid JAX concretization errors)
@@ -1415,6 +1958,20 @@ def _create_numpyro_model(
         If False, use legacy behavior with scalar contrast and offset (shared across all angles).
         This mode is provided for backward compatibility testing only and is not recommended
         for production analysis.
+
+    single_angle_reparam_config : dict, optional
+        When provided (phi_count == 1 static mode), enables the centered diffusion
+        reparameterization using keys emitted by
+        ``ParameterSpace.get_single_angle_geometry_config``.
+    single_angle_surrogate_config : dict, optional
+        Configuration for reduced-dimension single-angle surrogate models.
+        Allows deterministic/fixed parameters and log-space sampling when
+        ``phi_count == 1`` without affecting multi-angle execution paths.
+    fixed_scaling_overrides : dict, optional
+        Deterministic values for scaling parameters (contrast/offset) used when
+        single-angle fallback removes those degrees of freedom. When provided,
+        the corresponding parameters are emitted as deterministic nodes instead
+        of sampled latents, so NUTS no longer explores those dimensions.
 
     Returns
     -------
@@ -1527,6 +2084,16 @@ def _create_numpyro_model(
     else:
         target_dtype = jnp.float64
 
+    reparam_cfg = {}
+    surrogate_cfg = {}
+    use_single_angle_reparam = False
+    log_center_loc = 8.0
+    log_center_scale = 1.0
+    delta_loc = 0.0
+    delta_scale = 1.0
+    delta_floor_value = 1e-3
+    t_ref_candidate = None
+
     def _normalize_array(value, name, allow_none=False):
         if value is None:
             if allow_none:
@@ -1544,6 +2111,32 @@ def _create_numpyro_model(
     # Capture phi uniqueness using numpy before converting to JAX arrays
     phi_unique_np = np.unique(np.asarray(phi))
     n_phi = len(phi_unique_np)
+    analysis_lower = (analysis_mode or "").lower()
+    single_angle_static_mode = analysis_lower.startswith("static") and n_phi == 1
+
+    reparam_cfg = dict(single_angle_reparam_config or {})
+    surrogate_cfg = single_angle_surrogate_config or {}
+    if single_angle_static_mode:
+        reparam_cfg["enabled"] = False
+    use_single_angle_reparam = bool(reparam_cfg.get("enabled")) and not surrogate_cfg.get(
+        "disable_reparam", False
+    )
+    log_center_loc = float(reparam_cfg.get("log_center_loc", 8.0))
+    log_center_scale = max(0.1, float(reparam_cfg.get("log_center_scale", 1.0)))
+    delta_loc = float(reparam_cfg.get("delta_loc", 0.0))
+    delta_scale = max(0.25, float(reparam_cfg.get("delta_scale", 1.0)))
+    delta_floor_value = float(reparam_cfg.get("delta_floor", 1e-3))
+    t_ref_candidate = reparam_cfg.get("t_reference")
+    if not (
+        isinstance(t_ref_candidate, (int, float))
+        and np.isfinite(t_ref_candidate)
+        and t_ref_candidate > 0
+    ):
+        fallback_dt = dt if dt is not None else 1.0
+        if isinstance(fallback_dt, (int, float)) and np.isfinite(fallback_dt) and fallback_dt > 0:
+            t_ref_candidate = float(fallback_dt)
+        else:
+            t_ref_candidate = 1.0
 
     data = _normalize_array(data, "data")
     sigma = _normalize_array(sigma, "sigma")
@@ -1595,6 +2188,8 @@ def _create_numpyro_model(
     #
     # Using numpy (not jax.numpy) ensures we get concrete values:
 
+    scaling_overrides = fixed_scaling_overrides or {}
+
     def homodyne_model():
         """Inner NumPyro model function with config-driven priors."""
         # Import parameter name constants to ensure consistency
@@ -1614,9 +2209,84 @@ def _create_numpyro_model(
         # pre-computed above (before model definition) and captured by closure
 
         # Sample parameters dynamically using config-driven priors
-        # Loop through all parameters in correct order (scaling + physics)
-        sampled_params = []
+        sampled_values: dict[str, jnp.ndarray] = {}
+        reparam_active = use_single_angle_reparam and analysis_mode.lower().startswith("static")
+        single_angle_latents: dict[str, jnp.ndarray] = {}
+        if reparam_active:
+            log_center_site = sample(
+                "log_D_center",
+                dist.Normal(
+                    loc=jnp.asarray(log_center_loc, dtype=target_dtype),
+                    scale=jnp.asarray(log_center_scale, dtype=target_dtype),
+                ),
+            )
+            delta_raw_site = sample(
+                "delta_raw",
+                dist.Normal(
+                    loc=jnp.asarray(delta_loc, dtype=target_dtype),
+                    scale=jnp.asarray(delta_scale, dtype=target_dtype),
+                ),
+            )
+            single_angle_latents = {
+                "log_center": jnp.asarray(log_center_site, dtype=target_dtype),
+                "delta_raw": jnp.asarray(delta_raw_site, dtype=target_dtype),
+                "delta_floor": jnp.asarray(delta_floor_value, dtype=target_dtype),
+                "t_reference": jnp.asarray(
+                    max(t_ref_candidate, 1e-6), dtype=target_dtype
+                ),
+            }
+
         for i, param_name in enumerate(param_names_ordered):
+            if (
+                surrogate_cfg.get("fixed_d0_value") is not None
+                and param_name == "D0"
+            ):
+                value = jnp.asarray(
+                    surrogate_cfg["fixed_d0_value"], dtype=target_dtype
+                )
+                sampled_values[param_name] = value
+                deterministic("D0", value)
+                continue
+            if (
+                surrogate_cfg.get("sample_log_d0")
+                and param_name == "D0"
+                and surrogate_cfg.get("log_d0_prior") is not None
+            ):
+                log_prior = surrogate_cfg["log_d0_prior"]
+                # _sample_single_angle_log_d0 now returns D0 in linear space
+                # (already exp-transformed via ExpTransform)
+                d0_value = _sample_single_angle_log_d0(log_prior, target_dtype)
+                sampled_values[param_name] = d0_value
+                # No need for additional deterministic node - already emitted in function
+                continue
+            if (
+                surrogate_cfg.get("fixed_alpha") is not None
+                and param_name == "alpha"
+            ):
+                alpha_value = jnp.asarray(
+                    surrogate_cfg["fixed_alpha"], dtype=target_dtype
+                )
+                sampled_values[param_name] = alpha_value
+                deterministic("alpha", alpha_value)
+                continue
+            if (
+                surrogate_cfg.get("fixed_d_offset") is not None
+                and param_name == "D_offset"
+            ):
+                d_offset_value = jnp.asarray(
+                    surrogate_cfg["fixed_d_offset"], dtype=target_dtype
+                )
+                sampled_values[param_name] = d_offset_value
+                deterministic("D_offset", d_offset_value)
+                continue
+            if param_name in scaling_overrides and not per_angle_scaling:
+                value = jnp.asarray(scaling_overrides[param_name], dtype=target_dtype)
+                sampled_values[param_name] = value
+                deterministic(param_name, value)
+                continue
+            if reparam_active and param_name in {"D0", "D_offset"}:
+                sampled_values[param_name] = None
+                continue
             # Get prior distribution from parameter space (loaded from YAML config)
             # Handle missing scaling parameters (contrast, offset) with fallback defaults
             try:
@@ -1649,6 +2319,12 @@ def _create_numpyro_model(
                         f"and no default available. Available parameters: "
                         f"{list(parameter_space.priors.keys())}"
                     )
+
+            if (
+                surrogate_cfg.get("alpha_prior_override") is not None
+                and param_name == "alpha"
+            ):
+                prior_spec = surrogate_cfg["alpha_prior_override"]
 
             # Get NumPyro distribution class
             dist_class = DIST_TYPE_MAP.get(
@@ -1697,6 +2373,39 @@ def _create_numpyro_model(
                     dist_kwargs["high"], dtype=target_dtype
                 )
 
+            single_angle_log_sampling = (
+                single_angle_static_mode
+                and param_name == "D0"
+                and parameter_space is not None
+                and not surrogate_cfg.get("sample_log_d0")
+                and surrogate_cfg.get("fixed_d0_value") is None
+                and not reparam_active
+            )
+            if single_angle_log_sampling:
+                d0_bounds = parameter_space.get_bounds("D0")
+
+                def _extract_scalar(name: str, fallback: float) -> float:
+                    value = dist_kwargs.get(name)
+                    if value is None:
+                        return fallback
+                    return float(jnp.asarray(value).reshape(()))
+
+                linear_loc = _extract_scalar("loc", float(d0_bounds[0]))
+                linear_scale = abs(_extract_scalar("scale", float(d0_bounds[1] - d0_bounds[0]) / 4.0))
+                linear_low = max(_extract_scalar("low", float(d0_bounds[0])), 1e-6)
+                linear_high = max(_extract_scalar("high", float(d0_bounds[1])), linear_low + 1e-6)
+
+                log_prior_cfg = {
+                    "loc": float(np.log(max(linear_loc, 1e-6))),
+                    "scale": float(np.clip(linear_scale / max(linear_loc, 1e-6), 1e-6, 5.0)),
+                    "low": float(np.log(max(linear_low, 1e-6))),
+                    "high": float(np.log(max(linear_high, linear_low + 1e-6))),
+                }
+
+                d0_value = _sample_single_angle_log_d0(log_prior_cfg, target_dtype)
+                sampled_values[param_name] = d0_value
+                continue
+
             dist_instance = None
             if prior_spec.dist_type == "BetaScaled":
                 low = jnp.asarray(dist_kwargs.pop("low"), dtype=target_dtype)
@@ -1727,9 +2436,9 @@ def _create_numpyro_model(
                         _sample_from_instance(f"{param_name}_{phi_idx}")
                         for phi_idx in range(n_phi)
                     ]
-                    sampled_params.append(jnp.stack(param_values, axis=0))
+                    sampled_values[param_name] = jnp.stack(param_values, axis=0)
                 else:
-                    sampled_params.append(_sample_from_instance(param_name))
+                    sampled_values[param_name] = _sample_from_instance(param_name)
                 continue
 
             if dist_class is dist.TruncatedNormal:
@@ -1797,22 +2506,44 @@ def _create_numpyro_model(
                     param_values.append(
                         jnp.asarray(param_value_phi, dtype=target_dtype)
                     )
-                param_value = jnp.array(param_values, dtype=target_dtype)
-                sampled_params.append(param_value)
+                sampled_values[param_name] = jnp.array(param_values, dtype=target_dtype)
             else:
                 param_value = sample(param_name, dist_class(**dist_kwargs))
                 param_value = jnp.asarray(param_value, dtype=target_dtype)
-                sampled_params.append(param_value)
+                sampled_values[param_name] = param_value
 
-        # Extract contrast and offset for scaling (always first two parameters)
-        # These are now arrays of shape (n_phi,) if per_angle_scaling=True
-        contrast = sampled_params[0]
-        offset = sampled_params[1]
+        if reparam_active:
+            alpha_value = sampled_values.get("alpha")
+            if alpha_value is None:
+                raise ValueError(
+                    "Single-angle reparameterization requires alpha parameter to be present"
+                )
+            d_center = jnp.exp(single_angle_latents["log_center"])
+            delta_rel = jax.nn.softplus(single_angle_latents["delta_raw"]) + single_angle_latents[
+                "delta_floor"
+            ]
+            reference_time = jnp.maximum(
+                single_angle_latents["t_reference"],
+                jnp.asarray(1e-6, dtype=target_dtype),
+            )
+            alpha_clamped = jnp.clip(alpha_value, -10.0, 10.0)
+            denom = jnp.power(reference_time, alpha_clamped)
+            denom = jnp.maximum(denom, jnp.asarray(1e-6, dtype=target_dtype))
+            d0_reparam = d_center * delta_rel / denom
+            d_offset_reparam = d_center * (1.0 - delta_rel)
+            deterministic("D0", d0_reparam)
+            deterministic("D_offset", d_offset_reparam)
+            sampled_values["D0"] = d0_reparam
+            sampled_values["D_offset"] = d_offset_reparam
 
-        # Build params array for physics computation (physics params only, no scaling)
-        # Physics parameters start at index 2 (after contrast and offset)
-        physics_params = sampled_params[2:]
-        params = jnp.array(physics_params, dtype=target_dtype)
+        contrast = sampled_values["contrast"]
+        offset = sampled_values["offset"]
+
+        physics_params: list[jnp.ndarray] = []
+        for name in param_names_ordered[2:]:
+            value = sampled_values[name]
+            physics_params.append(jnp.reshape(value, ()))
+        params = jnp.stack(physics_params).astype(target_dtype)
 
         # For backward compatibility with physics functions that expect full params array,
         # we need to prepend mean values of contrast and offset
@@ -2327,7 +3058,54 @@ def _compute_simple_theory(params, t1, t2, phi, q, analysis_mode, L=None, dt=Non
 _compute_simple_theory_jit = _compute_simple_theory  # No JIT wrapper
 
 
-def _run_numpyro_sampling(model, config, initial_values=None, parameter_space=None, phi_unique=None):
+def _format_init_params_for_chains(
+    initial_values: dict[str, float] | None,
+    n_chains: int,
+    jitter_scale: float,
+    rng_key,
+    parameter_space: ParameterSpace | None = None,
+):
+    """Broadcast initial parameters across chains with optional jitter."""
+    if initial_values is None:
+        return None, rng_key
+
+    jitter_scale = max(float(jitter_scale or 0.0), 0.0)
+    formatted: dict[str, Any] = {}
+    current_key = rng_key
+
+    for param, value in initial_values.items():
+        base = jnp.full((n_chains,), float(value), dtype=jnp.float64)
+
+        if jitter_scale > 0.0 and np.isfinite(value):
+            current_key, subkey = random.split(current_key)
+            perturb = jitter_scale * random.normal(subkey, shape=(n_chains,))
+            if value != 0.0:
+                base = base * (1.0 + perturb)
+            else:
+                base = base + perturb
+
+        if parameter_space is not None:
+            try:
+                lower, upper = parameter_space.get_bounds(param)
+            except KeyError:
+                lower = upper = None
+            if lower is not None and upper is not None:
+                epsilon = 1e-9 * max(1.0, abs(upper - lower))
+                base = jnp.clip(base, lower + epsilon, upper - epsilon)
+
+        formatted[param] = base
+
+    return formatted, current_key
+
+
+def _run_numpyro_sampling(
+    model,
+    config,
+    initial_values=None,
+    parameter_space=None,
+    phi_unique=None,
+    per_angle_scaling: bool = True,
+):
     """Run NumPyro MCMC sampling with parallel chains and comprehensive diagnostics.
 
     Parameters
@@ -2350,6 +3128,9 @@ def _run_numpyro_sampling(model, config, initial_values=None, parameter_space=No
         Parameter space defining priors and parameter bounds
     phi_unique : np.ndarray, optional
         Unique phi angles for per-angle parameter expansion
+    per_angle_scaling : bool, default True
+        Whether the NumPyro model samples per-angle contrast/offset parameters. Disabled
+        automatically for single-angle static datasets to prevent over-parameterization.
 
     Returns
     -------
@@ -2434,22 +3215,32 @@ def _run_numpyro_sampling(model, config, initial_values=None, parameter_space=No
         f"{config['n_warmup']} warmup, {config['n_samples']} samples"
     )
 
-    # CRITICAL FIX (Nov 2025): Expand initial_values for per-angle scaling
-    # The model expects contrast_0, contrast_1, ..., offset_0, offset_1, ... for each phi angle
-    # but config initial_values only provides physical parameters (D0, alpha, etc.)
-    # We need to add per-angle parameters using data statistics or midpoints
-    #
-    # Solution: Expand initial_values with per-angle parameters
-    if initial_values is not None and parameter_space is not None:
+    if not per_angle_scaling and initial_values is not None and parameter_space is not None:
+        # Ensure scalar contrast/offset exist for deterministic initialization
+        if "contrast" not in initial_values:
+            try:
+                contrast_midpoint = sum(parameter_space.get_bounds("contrast")) / 2.0
+                initial_values["contrast"] = parameter_space.clamp_to_open_interval(
+                    "contrast", contrast_midpoint, epsilon=1e-6
+                )
+            except KeyError:
+                initial_values["contrast"] = 0.5
+        if "offset" not in initial_values:
+            try:
+                offset_midpoint = sum(parameter_space.get_bounds("offset")) / 2.0
+                initial_values["offset"] = parameter_space.clamp_to_open_interval(
+                    "offset", offset_midpoint, epsilon=1e-6
+                )
+            except KeyError:
+                initial_values["offset"] = 1.0
+    if per_angle_scaling and initial_values is not None and parameter_space is not None:
         logger.info(
             f"Expanding initial_values for per-angle scaling: {list(initial_values.keys())}"
         )
 
-        # Determine how many per-angle parameters are required
         if phi_unique is not None:
             n_phi = len(phi_unique)
         else:
-            # Infer from any existing per-angle entries (contrast_0, offset_0, ...)
             inferred = [
                 name
                 for name in initial_values
@@ -2480,7 +3271,6 @@ def _run_numpyro_sampling(model, config, initial_values=None, parameter_space=No
                     except KeyError:
                         initial_values[offset_key] = 1.0
 
-            # Remove base contrast/offset if present (NumPyro model only uses per-angle)
             removed = False
             if initial_values.pop("contrast", None) is not None:
                 removed = True
@@ -2495,6 +3285,8 @@ def _run_numpyro_sampling(model, config, initial_values=None, parameter_space=No
             )
         else:
             logger.debug("No per-angle expansion needed (n_phi=0)")
+    elif not per_angle_scaling and initial_values is not None:
+        logger.debug("Per-angle scaling disabled; using scalar contrast/offset initial values")
     elif initial_values is not None:
         logger.debug(
             "ParameterSpace not available; skipping per-angle initial value expansion"
@@ -2511,15 +3303,17 @@ def _run_numpyro_sampling(model, config, initial_values=None, parameter_space=No
 
     # CRITICAL FIX: NumPyro init_params requires arrays of shape (num_chains, ...)
     # Convert scalar initial values to broadcasted arrays for each chain
-    init_params_formatted = None
-    if initial_values is not None:
-        import jax.numpy as jnp
-        n_chains = config["n_chains"]
-        init_params_formatted = {
-            param: jnp.full((n_chains,), value, dtype=jnp.float64)
-            for param, value in initial_values.items()
-        }
-        logger.debug(f"Formatted init_params for {n_chains} chains: {list(init_params_formatted.keys())}")
+    init_params_formatted, rng_key = _format_init_params_for_chains(
+        initial_values,
+        config["n_chains"],
+        config.get("init_jitter_scale", 0.0),
+        rng_key,
+        parameter_space,
+    )
+    if init_params_formatted is not None:
+        logger.debug(
+            f"Formatted init_params for {config['n_chains']} chains: {list(init_params_formatted.keys())}"
+        )
 
     try:
         # Pass initial_values to mcmc.run() for chain initialization
@@ -2603,9 +3397,11 @@ def _log_warmup_diagnostics(mcmc):
         # Log divergence information
         if "diverging" in extra_fields:
             n_divergences = int(jnp.sum(extra_fields["diverging"]))
+            total_transitions = extra_fields["diverging"].size
             if n_divergences > 0:
+                divergence_pct = (n_divergences / max(total_transitions, 1)) * 100.0
                 logger.warning(
-                    f"MCMC had {n_divergences} divergent transitions! "
+                    f"MCMC had {n_divergences} divergent transitions ({divergence_pct:.1f}%). "
                     "Consider increasing target_accept_prob or reparameterizing model."
                 )
             else:
@@ -2620,7 +3416,49 @@ def _log_warmup_diagnostics(mcmc):
         if "num_steps" in extra_fields:
             mean_steps = float(jnp.mean(extra_fields["num_steps"]))
             max_steps = int(jnp.max(extra_fields["num_steps"]))
-            logger.info(f"Mean tree depth: {mean_steps:.1f}, Max: {max_steps}")
+            max_hits = float(jnp.mean(extra_fields["num_steps"] == max_steps)) * 100.0
+            logger.info(
+                f"Mean tree depth: {mean_steps:.1f}, Max: {max_steps} (chains hit max {max_hits:.1f}% of the time)"
+            )
+
+        # Log adaptation state (step size + mass matrix conditioning)
+        last_state = getattr(mcmc, "last_state", None)
+        adapt_state = getattr(last_state, "adapt_state", None)
+        if adapt_state is not None:
+            try:
+                step_size = float(np.asarray(adapt_state.step_size))
+                logger.info(f"Final step size after adaptation: {step_size:.4e}")
+            except Exception:
+                logger.debug("Could not read adapted step size")
+
+            try:
+                inv_mass = np.asarray(adapt_state.inverse_mass_matrix)
+                if inv_mass.ndim == 1:
+                    positive = inv_mass[inv_mass > 0]
+                    if positive.size:
+                        ratio = float(np.max(positive) / np.min(positive))
+                        logger.info(
+                            f"Mass matrix diagonal range: [{np.min(positive):.3e}, {np.max(positive):.3e}] (ratio={ratio:.2e})"
+                        )
+                        if ratio > 1e4:
+                            logger.warning(
+                                "Mass matrix diagonal is ill-conditioned. "
+                                "Consider rescaling parameters or enabling dense mass matrix."
+                            )
+                else:
+                    eigenvalues = np.linalg.eigvalsh(inv_mass)
+                    positive = eigenvalues[eigenvalues > 0]
+                    if positive.size:
+                        cond_number = float(np.max(positive) / np.min(positive))
+                        logger.info(
+                            f"Mass matrix condition number: {cond_number:.2e} (dense)"
+                        )
+                        if cond_number > 1e4:
+                            logger.warning(
+                                "Dense mass matrix is ill-conditioned. Consider reparameterization or stronger priors."
+                            )
+            except Exception as exc:
+                logger.debug(f"Could not inspect mass matrix conditioning: {exc}")
 
     except Exception as e:
         logger.debug(f"Could not extract warmup diagnostics: {e}")
@@ -2633,91 +3471,152 @@ def _run_blackjax_sampling(model, config):
     raise NotImplementedError("BlackJAX sampling not yet implemented")
 
 
-def _process_posterior_samples(mcmc_result, analysis_mode):
-    """Process posterior samples to extract summary statistics and diagnostics.
+def _process_posterior_samples(
+    mcmc_result, analysis_mode, diagnostic_settings: dict[str, Any] | None = None
+):
+    """Process posterior samples to extract summary statistics and diagnostics."""
+    diagnostic_settings = diagnostic_settings or {}
+    max_rhat_threshold = float(diagnostic_settings.get("max_rhat", 1.1))
+    min_ess_threshold = float(diagnostic_settings.get("min_ess", 100))
+    check_hmc = bool(diagnostic_settings.get("check_hmc_diagnostics", True))
 
-    Computes:
-    - Mean and std for all parameters
-    - R-hat convergence diagnostic (if multiple chains)
-    - Effective Sample Size (ESS)
-    - Acceptance rate
-    - Full sample arrays for trace plots
-    """
-    samples = mcmc_result.get_samples()
+    raw_samples = mcmc_result.get_samples()
+    samples: dict[str, Any] = {}
+    invalid_params: list[str] = []
+    scaling_overrides = diagnostic_settings.get("scaling_overrides") or {}
+    surrogate_cfg = diagnostic_settings.get("single_angle_surrogate") or {}
+    deterministic_params: set[str] = set(
+        diagnostic_settings.get("deterministic_params") or []
+    )
+    deterministic_params.update(scaling_overrides.keys())
+    if surrogate_cfg.get("drop_d_offset") or surrogate_cfg.get("fixed_d_offset") is not None:
+        deterministic_params.add("D_offset")
+    if surrogate_cfg.get("fixed_alpha") is not None:
+        deterministic_params.add("alpha")
+    constructed_deterministic: set[str] = set()
 
-    # Extract parameter samples
-    if "static" in analysis_mode:
-        param_samples = jnp.column_stack(
-            [samples["D0"], samples["alpha"], samples["D_offset"]],
+    for param_name, param_values in raw_samples.items():
+        arr_np = np.asarray(param_values)
+        finite_mask = np.isfinite(arr_np)
+        if not finite_mask.all():
+            invalid_count = arr_np.size - np.count_nonzero(finite_mask)
+            invalid_params.append(f"{param_name} ({invalid_count} invalid)")
+            if np.any(finite_mask):
+                replacement = float(np.median(arr_np[finite_mask]))
+            else:
+                replacement = 0.0
+            arr_np = np.where(finite_mask, arr_np, replacement)
+        samples[param_name] = jnp.asarray(arr_np)
+
+    sample_count = len(next(iter(samples.values()))) if samples else 0
+    expected_params = diagnostic_settings.get("expected_params") or _get_physical_param_order(
+        analysis_mode
+    )
+
+    # Handle log-space D0 sampling (legacy and new implementations)
+    if "D0" not in samples:
+        # New implementation (ExpTransform): log_D0_latent is emitted as deterministic
+        if "log_D0_latent" in samples:
+            samples["D0"] = jnp.exp(samples["log_D0_latent"])
+        # Legacy implementation: single_angle_log_d0_value
+        elif "single_angle_log_d0_value" in samples:
+            samples["D0"] = jnp.exp(samples["single_angle_log_d0_value"])
+
+    if "D_offset" not in samples and surrogate_cfg.get("fixed_d_offset") is not None:
+        fixed_offset = float(surrogate_cfg["fixed_d_offset"])
+        if sample_count:
+            samples["D_offset"] = jnp.full((sample_count,), fixed_offset, dtype=jnp.float64)
+            constructed_deterministic.add("D_offset")
+
+    def _ensure_param_array(name: str) -> jnp.ndarray | None:
+        arr = samples.get(name)
+        if arr is None:
+            return None
+        return jnp.asarray(arr)
+
+    # Extract parameter samples using expected order but skipping missing entries.
+    param_arrays: list[jnp.ndarray] = []
+    used_param_names: list[str] = []
+    for param_name in expected_params:
+        arr = _ensure_param_array(param_name)
+        filled_constant = False
+        if arr is None:
+            if param_name == "D_offset" and surrogate_cfg.get("fixed_d_offset") is not None:
+                fixed_offset = float(surrogate_cfg["fixed_d_offset"])
+                arr = jnp.full((sample_count,), fixed_offset, dtype=jnp.float64)
+                samples[param_name] = arr
+                filled_constant = True
+            else:
+                logger.debug("Skipping missing parameter '%s' in summary", param_name)
+                continue
+        param_arrays.append(arr)
+        used_param_names.append(param_name)
+        if filled_constant:
+            constructed_deterministic.add(param_name)
+
+    if param_arrays:
+        param_samples = jnp.column_stack(param_arrays)
+    else:
+        param_samples = jnp.empty((sample_count, 0), dtype=jnp.float64)
+
+    per_angle_scaling_detected = any(k.startswith("contrast_") for k in samples)
+
+    if per_angle_scaling_detected:
+        contrast_keys = sorted([k for k in samples.keys() if k.startswith("contrast_")])
+        offset_keys = sorted([k for k in samples.keys() if k.startswith("offset_")])
+
+        if not contrast_keys or not offset_keys:
+            logger.error(
+                "Incomplete per-angle parameters: contrast_keys=%s, offset_keys=%s",
+                contrast_keys,
+                offset_keys,
+            )
+            raise ValueError(
+                f"Incomplete per-angle scaling parameters. "
+                f"Found {len(contrast_keys)} contrast parameters and {len(offset_keys)} offset parameters. "
+                f"Expected matching counts for all phi angles."
+            )
+
+        contrast_samples_per_angle = jnp.stack(
+            [samples[k] for k in contrast_keys], axis=1
+        )
+        offset_samples_per_angle = jnp.stack([samples[k] for k in offset_keys], axis=1)
+
+        contrast_samples = contrast_samples_per_angle.flatten()
+        offset_samples = offset_samples_per_angle.flatten()
+
+        logger.debug(
+            f"Per-angle scaling validated: {len(contrast_keys)} angles, "
+            f"{contrast_samples_per_angle.shape[0]} samples per angle, total {len(contrast_samples)} contrast samples",
         )
     else:
-        param_samples = jnp.column_stack(
+        contrast_samples = samples.get("contrast")
+        offset_samples = samples.get("offset")
+        if contrast_samples is None or offset_samples is None:
+            available_keys = list(samples.keys())
+            logger.error(
+                "Scalar contrast/offset parameters not found in MCMC samples. Available keys: %s",
+                available_keys,
+            )
+            raise ValueError(
+                "MCMC sampling failed: Expected scalar 'contrast'/'offset' parameters for single-angle mode."
+            )
+        logger.debug(
+            "Scalar scaling mode detected: using %s contrast samples and %s offset samples",
+            len(contrast_samples),
+            len(offset_samples),
+        )
+        constructed_deterministic.update(
             [
-                samples["D0"],
-                samples["alpha"],
-                samples["D_offset"],
-                samples["gamma_dot_t0"],
-                samples["beta"],
-                samples["gamma_dot_t_offset"],
-                samples["phi0"],
-            ],
+                name
+                for name in ["contrast", "offset"]
+                if name in scaling_overrides or name in deterministic_params
+            ]
         )
-
-    # Extract fitting parameter samples (per-angle scaling ONLY)
-    # BREAKING CHANGE (Nov 2025): Legacy scalar contrast/offset removed - not physically meaningful
-    # MCMC MUST use per-angle scaling: contrast_0, contrast_1, ..., offset_0, offset_1, ...
-    per_angle_scaling_detected = "contrast_0" in samples
-
-    if not per_angle_scaling_detected:
-        # ERROR: Per-angle scaling parameters not found
-        available_keys = list(samples.keys())
-        logger.error(
-            "Per-angle scaling parameters not found in MCMC samples. "
-            "Expected 'contrast_0', 'contrast_1', ... but found: %s. "
-            "Legacy scalar contrast/offset is no longer supported as it is not physically meaningful.",
-            available_keys
-        )
-        raise ValueError(
-            "Per-angle scaling MCMC sampling failed: 'contrast_0' parameter not found. "
-            "This indicates the NumPyro model did not use per-angle scaling. "
-            f"Available parameters: {available_keys}"
-        )
-
-    # PER-ANGLE SCALING: Extract all contrast_i and offset_i parameters
-    contrast_keys = sorted([k for k in samples.keys() if k.startswith("contrast_")])
-    offset_keys = sorted([k for k in samples.keys() if k.startswith("offset_")])
-
-    if not contrast_keys or not offset_keys:
-        logger.error(
-            "Incomplete per-angle parameters: contrast_keys=%s, offset_keys=%s",
-            contrast_keys, offset_keys
-        )
-        raise ValueError(
-            f"Incomplete per-angle scaling parameters. "
-            f"Found {len(contrast_keys)} contrast parameters and {len(offset_keys)} offset parameters. "
-            f"Expected matching counts for all phi angles."
-        )
-
-    # Stack samples: shape (n_samples, n_angles)
-    contrast_samples_per_angle = jnp.stack(
-        [samples[k] for k in contrast_keys], axis=1
-    )
-    offset_samples_per_angle = jnp.stack([samples[k] for k in offset_keys], axis=1)
-
-    # Flatten across angles for global statistics
-    # This gives us all samples from all angles: shape (n_samples * n_angles,)
-    contrast_samples = contrast_samples_per_angle.flatten()
-    offset_samples = offset_samples_per_angle.flatten()
-
-    logger.debug(
-        f"Per-angle scaling validated: {len(contrast_keys)} angles, "
-        f"{contrast_samples_per_angle.shape[0]} samples per angle, "
-        f"total {len(contrast_samples)} contrast samples"
-    )
 
     # Compute summary statistics
-    mean_params = jnp.mean(param_samples, axis=0)
-    std_params = jnp.std(param_samples, axis=0)
+    mean_params = jnp.mean(param_samples, axis=0) if param_arrays else jnp.array([])
+    std_params = jnp.std(param_samples, axis=0) if param_arrays else jnp.array([])
     mean_contrast = float(jnp.mean(contrast_samples))
     std_contrast = float(jnp.std(contrast_samples))
     mean_offset = float(jnp.mean(offset_samples))
@@ -2725,97 +3624,141 @@ def _process_posterior_samples(mcmc_result, analysis_mode):
 
     # Compute MCMC diagnostics
     try:
-        # Extract diagnostic information from MCMC result
         extra_fields = mcmc_result.get_extra_fields()
+    except Exception:
+        extra_fields = {}
 
-        # Acceptance rate
-        if "accept_prob" in extra_fields:
-            acceptance_rate = float(jnp.mean(extra_fields["accept_prob"]))
-        else:
-            acceptance_rate = None
-            logger.warning("Acceptance probability not available in MCMC diagnostics")
+    acceptance_rate = None
+    if "accept_prob" in extra_fields:
+        acceptance_rate = float(jnp.mean(extra_fields["accept_prob"]))
+    else:
+        logger.warning("Acceptance probability not available in MCMC diagnostics")
 
-        # Compute R-hat and ESS using numpyro diagnostics
-        r_hat_dict = {}
-        ess_dict = {}
+    diagnostics_blocked = bool(invalid_params)
+    if diagnostics_blocked:
+        logger.error(
+            "Detected invalid MCMC samples: %s. Skipping convergence diagnostics.",
+            ", ".join(invalid_params),
+        )
 
-        # Get samples with chain dimension preserved
-        samples_with_chains = mcmc_result.get_samples(group_by_chain=True)
+    deterministic_params.update(constructed_deterministic)
 
-        # Check dimensionality using a representative parameter (handle per-angle scaling)
-        # Use the first available contrast parameter or D0 as reference
-        ref_param_key = "contrast_0" if per_angle_scaling_detected else "contrast"
-        if ref_param_key not in samples_with_chains:
-            ref_param_key = "D0"  # Fallback to physics parameter
+    r_hat_dict = {name: None for name in samples.keys()}
+    ess_dict = {name: None for name in samples.keys()}
+    per_param_stats: dict[str, dict[str, Any]] = {
+        name: {"deterministic": name in deterministic_params}
+        for name in samples.keys()
+    }
+    converged = not diagnostics_blocked
 
-        if samples_with_chains[ref_param_key].ndim > 1:
-            # Multiple chains available - compute convergence diagnostics
+    try:
+        samples_with_chains = (
+            mcmc_result.get_samples(group_by_chain=True) if not diagnostics_blocked else {}
+        )
+    except Exception:
+        samples_with_chains = {}
+
+    def _samples_with_chain_dim(param_name: str):
+        if param_name in samples_with_chains:
+            return samples_with_chains[param_name]
+        value = samples.get(param_name)
+        if value is None:
+            return None
+        return jnp.reshape(value, (1,) + value.shape)
+
+    chain_example = None
+    if samples_with_chains:
+        chain_example = next(iter(samples_with_chains.values()))
+    elif samples:
+        first = next(iter(samples.values()))
+        chain_example = jnp.reshape(first, (1,) + first.shape)
+
+    num_chains = chain_example.shape[0] if chain_example is not None else 0
+    multi_chain = num_chains > 1
+
+    if diagnostics_blocked:
+        pass
+    elif not check_hmc:
+        logger.info("HMC diagnostics disabled by configuration; treating run as converged")
+    else:
+        try:
             from numpyro.diagnostics import effective_sample_size, gelman_rubin
 
-            for param_name in samples.keys():
-                try:
-                    # R-hat (Gelman-Rubin statistic)
-                    r_hat_dict[param_name] = float(
-                        gelman_rubin(samples_with_chains[param_name])
-                    )
+            if not multi_chain:
+                logger.info("Single chain detected - R-hat not available; computing ESS only")
 
-                    # ESS (Effective Sample Size)
-                    ess_dict[param_name] = float(
-                        effective_sample_size(samples_with_chains[param_name])
-                    )
-                except Exception as e:
-                    logger.warning(
-                        f"Could not compute diagnostics for {param_name}: {e}"
-                    )
+            for param_name in samples.keys():
+                arr = _samples_with_chain_dim(param_name)
+                if arr is None:
+                    per_param_stats[param_name]["r_hat"] = None
+                    per_param_stats[param_name]["ess"] = None
+                    continue
+                if param_name in deterministic_params:
                     r_hat_dict[param_name] = None
                     ess_dict[param_name] = None
-        else:
-            # Single chain - cannot compute R-hat
-            logger.info("Single chain detected - R-hat not available")
-            for param_name in samples.keys():
-                r_hat_dict[param_name] = None
-                # Compute ESS for single chain using autocorrelation
+                    per_param_stats[param_name]["r_hat"] = None
+                    per_param_stats[param_name]["ess"] = None
+                    continue
                 try:
-                    ess_dict[param_name] = float(
-                        effective_sample_size(samples_with_chains[param_name])
+                    if multi_chain:
+                        r_hat_dict[param_name] = float(gelman_rubin(arr))
+                        ess_val = float(effective_sample_size(arr))
+                    else:
+                        ess_val = float(effective_sample_size(arr))
+                    if not np.isfinite(ess_val) or ess_val < 0:
+                        ess_val = 0.0
+                    ess_dict[param_name] = ess_val
+                    per_param_stats[param_name]["r_hat"] = r_hat_dict.get(param_name)
+                    per_param_stats[param_name]["ess"] = ess_val
+                except Exception as exc:
+                    logger.warning(
+                        f"Could not compute diagnostics for {param_name}: {exc}"
                     )
-                except:
-                    ess_dict[param_name] = None
+                    r_hat_dict[param_name] = None
+                    ess_dict[param_name] = ess_dict.get(param_name)
+                    per_param_stats[param_name]["r_hat"] = None
+                    per_param_stats[param_name]["ess"] = ess_dict.get(param_name)
 
-        # Check convergence based on diagnostics
-        converged = True
-        if any(r_hat_dict.values()):
-            # Check if any R-hat > 1.1 (indicates non-convergence)
-            max_r_hat = max(
-                [v for v in r_hat_dict.values() if v is not None], default=0.0
-            )
-            if max_r_hat > 1.1:
-                logger.warning(
-                    f"Poor convergence detected: max R-hat = {max_r_hat:.3f} > 1.1"
-                )
-                converged = False
+            diag_rhat_values = [v for v in r_hat_dict.values() if v is not None]
+            if diag_rhat_values:
+                max_r_hat = max(diag_rhat_values)
+                if max_r_hat > max_rhat_threshold:
+                    logger.warning(
+                        f"Poor convergence detected: max R-hat = {max_r_hat:.3f} > {max_rhat_threshold:.3f}"
+                    )
+                    converged = False
 
-        if any(ess_dict.values()):
-            # Check if any ESS < 100 (indicates poor mixing)
-            min_ess = min(
-                [v for v in ess_dict.values() if v is not None], default=float("inf")
-            )
-            if min_ess < 100:
-                logger.warning(
-                    f"Poor sampling efficiency: min ESS = {min_ess:.0f} < 100"
-                )
-                # Don't set converged=False for low ESS, just warn
+            diag_ess_values = [v for v in ess_dict.values() if v is not None]
+            if diag_ess_values:
+                min_ess = min(diag_ess_values)
+                if min_ess < min_ess_threshold:
+                    logger.warning(
+                        f"Poor sampling efficiency: min ESS = {min_ess:.0f} < {min_ess_threshold:.0f}"
+                    )
+                    converged = False
 
-    except Exception as e:
-        logger.error(f"Failed to compute MCMC diagnostics: {e}")
-        acceptance_rate = None
-        r_hat_dict = None
-        ess_dict = None
-        converged = True  # Default to converged if diagnostics fail
+        except Exception as e:
+            logger.error(f"Failed to compute MCMC diagnostics: {e}")
+            converged = False
+
+    for stats in per_param_stats.values():
+        stats.setdefault("r_hat", None)
+        stats.setdefault("ess", None)
+
+    diagnostic_summary = {
+        "deterministic_params": sorted(deterministic_params),
+        "per_param_stats": per_param_stats,
+        "multi_chain": multi_chain,
+        "surrogate_thresholds": diagnostic_settings.get("surrogate_thresholds"),
+        "focus_params": (
+            (diagnostic_settings.get("surrogate_thresholds") or {}).get("focus_params")
+        ),
+    }
 
     return {
         "mean_params": np.array(mean_params),
         "std_params": np.array(std_params),
+        "param_names": used_param_names,
         "mean_contrast": mean_contrast,
         "std_contrast": std_contrast,
         "mean_offset": mean_offset,
@@ -2828,4 +3771,7 @@ def _process_posterior_samples(mcmc_result, analysis_mode):
         "acceptance_rate": acceptance_rate,
         "r_hat": r_hat_dict,
         "ess": ess_dict,
+        "diagnostic_summary": diagnostic_summary,
+        "deterministic_params": diagnostic_summary["deterministic_params"],
+        "multi_chain": multi_chain,
     }

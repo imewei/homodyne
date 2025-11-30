@@ -21,6 +21,9 @@ from homodyne.utils.logging import get_logger
 logger = get_logger(__name__)
 
 _BETA_DEFAULT_CONC = 2.0
+_SINGLE_ANGLE_CONTRAST_BOUNDS = (0.3, 0.7)
+_SINGLE_ANGLE_OFFSET_BOUNDS = (0.9, 1.1)
+_SINGLE_ANGLE_SCALAR_SIGMA = 0.05
 
 
 def _compute_beta_concentrations(
@@ -447,6 +450,53 @@ class ParameterSpace:
 
         return cls.from_config(empty_config, analysis_mode=analysis_mode)
 
+    def copy(self) -> "ParameterSpace":
+        """Return a shallow copy safe for localized mutations."""
+
+        return ParameterSpace(
+            model_type=self.model_type,
+            parameter_names=self.parameter_names.copy(),
+            bounds=self.bounds.copy(),
+            priors=self.priors.copy(),
+            units=self.units.copy(),
+        )
+
+    def drop_parameters(self, names: set[str]) -> "ParameterSpace":
+        """Return a copy with specific parameters removed."""
+
+        if not names:
+            return self.copy()
+
+        filtered_names = [name for name in self.parameter_names if name not in names]
+        filtered_bounds = {k: v for k, v in self.bounds.items() if k not in names}
+        filtered_priors = {k: v for k, v in self.priors.items() if k not in names}
+        filtered_units = {k: v for k, v in self.units.items() if k not in names}
+
+        return ParameterSpace(
+            model_type=self.model_type,
+            parameter_names=filtered_names,
+            bounds=filtered_bounds,
+            priors=filtered_priors,
+            units=filtered_units,
+        )
+
+    def with_prior_overrides(
+        self, overrides: dict[str, PriorDistribution]
+    ) -> "ParameterSpace":
+        """Return a copy with select priors replaced."""
+
+        if not overrides:
+            return self.copy()
+
+        cloned = self.copy()
+        for name, prior in overrides.items():
+            if name not in cloned.priors:
+                raise KeyError(
+                    f"Cannot override prior for unknown parameter '{name}'"
+                )
+            cloned.priors[name] = prior
+        return cloned
+
     def get_bounds(self, param_name: str) -> tuple[float, float]:
         """Get bounds for a specific parameter.
 
@@ -634,6 +684,133 @@ class ParameterSpace:
         """Backward compatible alias for BetaScaled conversion."""
 
         return self.convert_to_beta_scaled_priors()
+
+    def get_single_angle_fallback_prior(self, param_name: str) -> PriorDistribution:
+        """Return a gentle BetaScaled prior for single-angle stabilization.
+
+        Parameters
+        ----------
+        param_name : str
+            Target parameter (e.g., 'D0', 'alpha', 'D_offset').
+
+        Returns
+        -------
+        PriorDistribution
+            BetaScaled prior centered within the configured bounds.
+        """
+
+        if param_name not in self.bounds:
+            raise KeyError(
+                f"Parameter '{param_name}' not available for single-angle fallback"
+            )
+
+        min_val, max_val = self.bounds[param_name]
+        center = (min_val + max_val) / 2.0
+        sigma = (max_val - min_val) / 4.0
+
+        return PriorDistribution(
+            dist_type="BetaScaled",
+            mu=center,
+            sigma=sigma,
+            min_val=min_val,
+            max_val=max_val,
+            alpha=_BETA_DEFAULT_CONC,
+            beta=_BETA_DEFAULT_CONC,
+        )
+
+    def with_single_angle_stabilization(
+        self,
+        *,
+        enable_beta_fallback: bool = False,
+    ) -> "ParameterSpace":
+        """Return a copy with priors tightened for the single-angle regime."""
+
+        new_bounds = self.bounds.copy()
+        new_priors = self.priors.copy()
+
+        def _tighten_scalar(
+            name: str,
+            bounds: tuple[float, float],
+        ) -> None:
+            min_val, max_val = bounds
+            new_bounds[name] = bounds
+            base_prior = self.priors.get(name)
+            mu = base_prior.mu if base_prior else (min_val + max_val) / 2.0
+            mu = float(np.clip(mu, min_val + 1e-6, max_val - 1e-6))
+            new_priors[name] = PriorDistribution(
+                dist_type="TruncatedNormal",
+                mu=mu,
+                sigma=_SINGLE_ANGLE_SCALAR_SIGMA,
+                min_val=min_val,
+                max_val=max_val,
+            )
+
+        _tighten_scalar("contrast", _SINGLE_ANGLE_CONTRAST_BOUNDS)
+        _tighten_scalar("offset", _SINGLE_ANGLE_OFFSET_BOUNDS)
+
+        if enable_beta_fallback:
+            for param_name in ("D0", "alpha", "D_offset"):
+                if param_name in self.bounds:
+                    new_priors[param_name] = self.get_single_angle_fallback_prior(
+                        param_name
+                    )
+
+        return ParameterSpace(
+            model_type=self.model_type,
+            parameter_names=self.parameter_names.copy(),
+            bounds=new_bounds,
+            priors=new_priors,
+            units=self.units.copy(),
+        )
+
+    def get_single_angle_geometry_config(self) -> dict[str, float]:
+        """Return heuristic priors for single-angle diffusion reparameterization."""
+
+        try:
+            d0_prior = self.get_prior("D0")
+            d_offset_prior = self.get_prior("D_offset")
+        except KeyError:
+            return {
+                "enabled": True,
+                "log_center_loc": 8.0,
+                "log_center_scale": 1.0,
+                "delta_loc": 0.0,
+                "delta_scale": 1.0,
+                "delta_floor": 1e-3,
+            }
+
+        d0_bounds = self.bounds.get("D0", (1.0, 1e5))
+        d_offset_bounds = self.bounds.get("D_offset", (-1e3, 1e3))
+        center_mu = d0_prior.mu + d_offset_prior.mu
+        if center_mu <= 0:
+            center_mu = max(
+                1e-6,
+                (d0_bounds[0] + d0_bounds[1] + d_offset_bounds[0] + d_offset_bounds[1]) / 4.0,
+            )
+        center_sigma = abs(d0_prior.sigma) + abs(d_offset_prior.sigma)
+        if not np.isfinite(center_sigma) or center_sigma <= 0:
+            center_sigma = max(d0_bounds[1] - d0_bounds[0], 1.0)
+
+        log_center_loc = float(np.log(max(center_mu, 1e-6)))
+        log_center_scale = float(
+            max(0.25, np.log1p(center_sigma / max(center_mu, 1e-6)))
+        )
+
+        target_delta = d0_prior.mu / max(center_mu, 1e-6)
+        target_delta = float(np.clip(target_delta, 1e-3, 5.0))
+        delta_loc = float(np.log(np.expm1(target_delta))) if target_delta > 1e-3 else -5.0
+        delta_scale = float(
+            max(0.5, abs(d0_prior.sigma) / max(center_mu, 1e-6))
+        )
+
+        return {
+            "enabled": True,
+            "log_center_loc": log_center_loc,
+            "log_center_scale": log_center_scale,
+            "delta_loc": delta_loc,
+            "delta_scale": delta_scale,
+            "delta_floor": 1e-3,
+        }
 
     def __repr__(self) -> str:
         """String representation."""

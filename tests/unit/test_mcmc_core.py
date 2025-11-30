@@ -20,10 +20,12 @@ Total: 70 tests
 """
 
 import json
+import math
 import numpy as np
 import pytest
 from unittest.mock import patch, MagicMock
 import inspect
+from types import SimpleNamespace
 
 # JAX and NumPyro imports with availability checking
 try:
@@ -38,6 +40,7 @@ except ImportError:
 try:
     import numpyro
     import numpyro.distributions as dist
+    from numpyro import handlers
     from numpyro.infer import MCMC, NUTS, Predictive
     NUMPYRO_AVAILABLE = True
 except ImportError:
@@ -46,10 +49,19 @@ except ImportError:
 # Homodyne imports
 from homodyne.config.parameter_space import ParameterSpace, PriorDistribution
 from homodyne.device.config import HardwareConfig, should_use_cmc
+from homodyne.cli.commands import (
+    _create_mcmc_diagnostics_dict,
+    _create_mcmc_parameters_dict,
+)
 from homodyne.optimization.mcmc import (
+    _build_single_angle_surrogate_settings,
     _calculate_midpoint_defaults,
     _create_numpyro_model,
     _get_mcmc_config,
+    _format_init_params_for_chains,
+    _process_posterior_samples,
+    _estimate_single_angle_scaling,
+    _evaluate_convergence_thresholds,
     fit_mcmc_jax,
     MCMCResult,
 )
@@ -189,6 +201,50 @@ class TestMCMCInitializationValidation:
         D0_bounds = laminar_flow_param_space.bounds["D0"]
         expected_D0_midpoint = (D0_bounds[0] + D0_bounds[1]) / 2
         assert abs(midpoint_defaults["D0"] - expected_D0_midpoint) < 1e-6
+
+
+class TestMCMCConfigDefaults:
+    def test_get_mcmc_config_adaptive_defaults(self):
+        config_small = _get_mcmc_config({"n_params": 6})
+        assert config_small["n_warmup"] >= 1200
+        assert config_small["target_accept_prob"] == 0.9
+        assert config_small["dense_mass_matrix"] is True
+
+        config_large = _get_mcmc_config({"n_params": 20})
+        assert config_large["n_warmup"] >= 4000
+        assert config_large["dense_mass_matrix"] is False
+
+    @pytest.mark.skipif(not JAX_AVAILABLE, reason="JAX not available")
+    def test_format_init_params_for_chains_applies_jitter(self):
+        init_values = {"D0": 10.0, "alpha": -1.0}
+        rng_key = random.PRNGKey(0)
+        formatted, _ = _format_init_params_for_chains(
+            init_values,
+            n_chains=2,
+            jitter_scale=0.1,
+            rng_key=rng_key,
+            parameter_space=None,
+        )
+
+        assert formatted is not None
+        assert "D0" in formatted
+        assert formatted["D0"].shape == (2,)
+        assert not np.allclose(
+            np.asarray(formatted["D0"])[0], np.asarray(formatted["D0"])[1]
+        )
+
+
+def test_estimate_single_angle_scaling_clamps():
+    values = np.linspace(0.95, 1.2, 1000)
+    contrast, offset = _estimate_single_angle_scaling(values)
+
+    assert offset == pytest.approx(0.95, abs=5e-3)
+    assert contrast == pytest.approx(0.196, abs=5e-3)
+
+    high_values = np.full(256, 1.5)
+    contrast_hi, offset_hi = _estimate_single_angle_scaling(high_values)
+    assert contrast_hi == pytest.approx(0.01, rel=1e-2)
+    assert offset_hi == pytest.approx(1.1, rel=1e-6)
 
 
 @pytest.mark.skipif(not NUMPYRO_AVAILABLE, reason="NumPyro not available")
@@ -755,6 +811,108 @@ class TestNumPyroModelCreation:
         assert prior_samples["offset_0"].shape == (10,)
         assert prior_samples["D0"].shape == (10,)
         assert prior_samples["obs"].shape == (10, len(simple_data["data"]))
+
+    def test_single_angle_fixed_scaling_overrides(
+        self, simple_data, static_parameter_space
+    ):
+        model = _create_numpyro_model(
+            data=simple_data["data"],
+            sigma=simple_data["sigma"],
+            t1=simple_data["t1"],
+            t2=simple_data["t2"],
+            phi=simple_data["phi"],
+            q=simple_data["q"],
+            L=simple_data["L"],
+            analysis_mode="static",
+            parameter_space=static_parameter_space,
+            dt=simple_data["dt"],
+            per_angle_scaling=False,
+            fixed_scaling_overrides={"contrast": 0.05, "offset": 0.97},
+        )
+
+        seeded = handlers.seed(model, random.PRNGKey(0))
+        trace = handlers.trace(seeded).get_trace()
+
+        assert trace["contrast"]["type"] == "deterministic"
+        assert trace["offset"]["type"] == "deterministic"
+        assert float(trace["contrast"]["value"]) == pytest.approx(0.05)
+        assert float(trace["offset"]["value"]) == pytest.approx(0.97)
+
+    def test_single_angle_surrogate_initializes_and_runs(
+        self, simple_data, static_parameter_space
+    ):
+        surrogate_cfg = _build_single_angle_surrogate_settings(
+            static_parameter_space, tier="2"
+        )
+        assert surrogate_cfg, "Surrogate config should be constructed for tier 2"
+
+        model = _create_numpyro_model(
+            data=simple_data["data"],
+            sigma=simple_data["sigma"],
+            t1=simple_data["t1"],
+            t2=simple_data["t2"],
+            phi=simple_data["phi"],
+            q=simple_data["q"],
+            L=simple_data["L"],
+            analysis_mode="static",
+            parameter_space=static_parameter_space,
+            dt=simple_data["dt"],
+            per_angle_scaling=False,
+            fixed_scaling_overrides={"contrast": 0.05, "offset": 1.0},
+            single_angle_surrogate_config=surrogate_cfg,
+        )
+
+        seeded = handlers.seed(model, random.PRNGKey(0))
+        trace = handlers.trace(seeded).get_trace()
+
+        assert "log_D0_latent" in trace
+        assert trace["log_D0_latent"]["type"] == "deterministic"
+
+        nuts_kernel = NUTS(model, target_accept_prob=0.8, dense_mass=False)
+        mcmc = MCMC(
+            nuts_kernel,
+            num_warmup=5,
+            num_samples=5,
+            num_chains=1,
+            progress_bar=False,
+        )
+        mcmc.run(random.PRNGKey(1))
+        samples = mcmc.get_samples()
+        assert "log_D0_latent" in samples
+        assert "alpha" in samples
+
+    def test_single_angle_surrogate_tier4_trust_region(
+        self, simple_data, static_parameter_space
+    ):
+        surrogate_cfg = _build_single_angle_surrogate_settings(
+            static_parameter_space, tier="4"
+        )
+        assert surrogate_cfg.get("fixed_d0_value") is None
+
+        model = _create_numpyro_model(
+            data=simple_data["data"],
+            sigma=simple_data["sigma"],
+            t1=simple_data["t1"],
+            t2=simple_data["t2"],
+            phi=simple_data["phi"],
+            q=simple_data["q"],
+            L=simple_data["L"],
+            analysis_mode="static",
+            parameter_space=static_parameter_space,
+            dt=simple_data["dt"],
+            per_angle_scaling=False,
+            fixed_scaling_overrides={"contrast": 0.05, "offset": 1.0},
+            single_angle_surrogate_config=surrogate_cfg,
+        )
+
+        predictive = Predictive(model, num_samples=50)
+        samples = predictive(random.PRNGKey(5))
+        d0_samples = np.array(samples["D0"])
+        log_prior = surrogate_cfg["log_d0_prior"]
+        d0_min = np.exp(log_prior["low"])
+        d0_max = np.exp(log_prior["high"])
+        assert np.all(d0_samples >= d0_min * 0.9)
+        assert np.all(d0_samples <= d0_max * 1.1)
 
     def test_model_creation_laminar_mode(self, simple_data, laminar_parameter_space):
         """Test model creation for laminar_flow mode."""
@@ -2180,7 +2338,240 @@ class TestMCMCResultStructure:
         assert result.num_shards == 10
 
 
+@pytest.mark.skipif(not NUMPYRO_AVAILABLE, reason="NumPyro not available")
+class TestProcessPosteriorSamples:
+    class _DummyResult:
+        def __init__(self, samples, grouped_samples, extra_fields):
+            self._samples = samples
+            self._grouped = grouped_samples
+            self._extra = extra_fields
+
+        def get_samples(self, group_by_chain=False):
+            return self._grouped if group_by_chain else self._samples
+
+        def get_extra_fields(self):
+            return self._extra
+
+    def test_invalid_samples_disable_diagnostics(self):
+        samples = {
+            "D0": jnp.array([np.nan, 1.0]),
+            "alpha": jnp.array([0.0, 0.1]),
+            "D_offset": jnp.array([0.5, 0.6]),
+            "contrast_0": jnp.array([np.nan, np.nan]),
+            "offset_0": jnp.array([1.0, 1.0]),
+        }
+        grouped = {
+            key: jnp.reshape(value, (1, value.shape[0])) for key, value in samples.items()
+        }
+        extra = {"accept_prob": jnp.array([0.5]), "diverging": jnp.array([0])}
+        dummy = self._DummyResult(samples, grouped, extra)
+
+        summary = _process_posterior_samples(
+            dummy,
+            "static",
+            {"max_rhat": 1.1, "min_ess": 100, "check_hmc_diagnostics": True},
+        )
+
+        assert summary["converged"] is False
+        assert summary["r_hat"]["D0"] is None
+
+    def test_custom_thresholds_trigger_non_convergence(self, monkeypatch):
+        samples = {
+            "D0": jnp.array([1.0, 2.0]),
+            "alpha": jnp.array([-1.0, -0.9]),
+            "D_offset": jnp.array([0.5, 0.6]),
+            "contrast_0": jnp.array([0.5, 0.6]),
+            "offset_0": jnp.array([1.0, 1.0]),
+        }
+        grouped = {
+            key: jnp.stack([value, value + 0.01]) for key, value in samples.items()
+        }
+        extra = {
+            "accept_prob": jnp.array([0.5, 0.6]),
+            "diverging": jnp.array([0, 0]),
+            "num_steps": jnp.array([5, 5]),
+        }
+        dummy = self._DummyResult(samples, grouped, extra)
+
+        monkeypatch.setattr(
+            "numpyro.diagnostics.gelman_rubin",
+            lambda _: jnp.array(1.2),
+        )
+        monkeypatch.setattr(
+            "numpyro.diagnostics.effective_sample_size",
+            lambda _: jnp.array(20.0),
+        )
+
+        summary = _process_posterior_samples(
+            dummy,
+            "static",
+            {"max_rhat": 1.05, "min_ess": 100, "check_hmc_diagnostics": True},
+        )
+
+        assert summary["converged"] is False
+        assert summary["r_hat"]["D0"] == pytest.approx(1.2)
+
+    def test_scalar_contrast_offset_supported(self):
+        samples = {
+            "D0": jnp.array([1.0, 2.0, 1.5]),
+            "alpha": jnp.array([-1.0, -0.9, -0.95]),
+            "D_offset": jnp.array([0.5, 0.6, 0.55]),
+            "contrast": jnp.array([0.55, 0.6, 0.65]),
+            "offset": jnp.array([1.0, 1.05, 1.1]),
+        }
+        grouped = {
+            key: jnp.stack([value, value]) for key, value in samples.items()
+        }
+        extra = {
+            "accept_prob": jnp.array([0.8, 0.82]),
+            "diverging": jnp.array([0, 0]),
+            "num_steps": jnp.array([10, 10]),
+        }
+        dummy = self._DummyResult(samples, grouped, extra)
+
+        summary = _process_posterior_samples(
+            dummy,
+            "static",
+            {"max_rhat": 10.0, "min_ess": 0, "check_hmc_diagnostics": False},
+        )
+
+        assert summary["converged"] is True
+        assert math.isclose(summary["mean_contrast"], float(jnp.mean(samples["contrast"])))
+        assert math.isclose(summary["mean_offset"], float(jnp.mean(samples["offset"])))
+
+    def test_single_angle_surrogate_samples_are_supported(self):
+        log_d0 = jnp.array([1.0, 1.1, 0.9])
+        samples = {
+            "log_D0_latent": log_d0,
+            "alpha": jnp.array([-1.2, -1.1, -1.15]),
+            "contrast": jnp.array([0.05, 0.051, 0.049]),
+            "offset": jnp.array([1.0, 1.0, 1.0]),
+        }
+        grouped = {
+            key: jnp.reshape(value, (1,) + value.shape) for key, value in samples.items()
+        }
+        extra = {"accept_prob": jnp.array([0.9]), "diverging": jnp.array([0])}
+        dummy = self._DummyResult(samples, grouped, extra)
+
+        diag_settings = {
+            "max_rhat": 10.0,
+            "min_ess": 0,
+            "check_hmc_diagnostics": True,
+            "single_angle_surrogate": {
+                "drop_d_offset": True,
+                "fixed_d_offset": 0.0,
+                "sample_log_d0": True,
+            },
+            "expected_params": ["D0", "alpha", "D_offset"],
+        }
+
+        summary = _process_posterior_samples(dummy, "static", diag_settings)
+
+        assert "D0" in summary["samples"]
+        assert math.isclose(
+            float(summary["samples"]["D0"][0]), float(jnp.exp(log_d0[0]))
+        )
+        assert summary["param_names"] == ["D0", "alpha", "D_offset"]
+        assert summary["mean_params"].shape[0] == 3
+        assert math.isclose(summary["mean_params"][2], 0.0, abs_tol=1e-9)
+        assert summary["ess"]["log_D0_latent"] is not None
+        assert summary["ess"]["D_offset"] is None
+        assert "D_offset" in summary["deterministic_params"]
+        assert summary["diagnostic_summary"]["per_param_stats"]["D_offset"][
+            "deterministic"
+        ]
+
+    def test_surrogate_thresholds_focus_on_physics_parameters(self):
+        dummy = SimpleNamespace()
+        dummy.r_hat = {"D0": 1.05, "alpha": None, "D_offset": None}
+        dummy.effective_sample_size = {"D0": 22.0, "alpha": 5.0, "D_offset": None}
+        dummy.diagnostic_summary = {
+            "deterministic_params": ["D_offset"],
+            "per_param_stats": {
+                "D0": {"r_hat": 1.05, "ess": 22.0, "deterministic": False},
+                "alpha": {"r_hat": None, "ess": 5.0, "deterministic": False},
+                "D_offset": {"r_hat": None, "ess": None, "deterministic": True},
+            },
+            "surrogate_thresholds": {
+                "active": True,
+                "focus_params": ["D0", "alpha"],
+                "min_ess": 20.0,
+                "max_rhat": 1.2,
+            },
+        }
+
+        report = _evaluate_convergence_thresholds(dummy, 1.1, 100)
+
+        assert report["poor_rhat"] is False
+        assert report["poor_ess"] is True  # alpha ESS violates surrogate threshold
+        assert "alpha" in report["focus_param_details"]
+
+
+def test_diagnostics_json_surfaces_surrogate_metrics():
+    result = SimpleNamespace()
+    result.r_hat = {"D0": 1.07, "alpha": None, "D_offset": None}
+    result.effective_sample_size = {"D0": 30.0, "alpha": 8.0, "D_offset": None}
+    result.acceptance_rate = 0.9
+    result.divergences = 0
+    result.tree_depth_warnings = 0
+    result.ess = np.array([30.0])
+    result.n_samples = 40
+    result.n_chains = 1
+    result.analysis_mode = "static"
+    result.diagnostic_summary = {
+        "deterministic_params": ["D_offset"],
+        "per_param_stats": {
+            "D0": {"r_hat": 1.07, "ess": 30.0, "deterministic": False},
+            "alpha": {"r_hat": None, "ess": 8.0, "deterministic": False},
+            "D_offset": {"r_hat": None, "ess": None, "deterministic": True},
+        },
+        "surrogate_thresholds": {
+            "active": True,
+            "focus_params": ["D0", "alpha"],
+            "min_ess": 25.0,
+            "max_rhat": 1.2,
+        },
+    }
+
+    diag = _create_mcmc_diagnostics_dict(result)
+    per_param = {
+        entry["name"]: entry
+        for entry in diag["convergence"]["per_parameter_diagnostics"]
+    }
+
+    assert per_param["alpha"]["r_hat"] is None
+    assert per_param["D_offset"]["deterministic"] is True
+    assert "surrogate_thresholds" in diag["convergence"]
+
+
+def test_parameters_json_handles_deterministic_surrogate_fields():
+    result = SimpleNamespace(
+        mean_params=np.array([17000.0, -0.26, 0.0]),
+        std_params=np.array([10.0, 0.01, 0.0]),
+        mean_contrast=0.5,
+        std_contrast=0.02,
+        mean_offset=1.0,
+        std_offset=0.0,
+        n_samples=40,
+        n_warmup=80,
+        n_chains=2,
+        computation_time=12.0,
+        r_hat={"D0": 1.05, "alpha": None, "D_offset": None},
+        effective_sample_size={"D0": 30.0, "alpha": 60.0, "D_offset": None},
+        acceptance_rate=0.93,
+        analysis_mode="static",
+        diagnostic_summary={
+            "deterministic_params": ["D_offset"],
+            "surrogate_thresholds": {"active": True, "min_ess": 25.0},
+        },
+    )
+
+    param_dict = _create_mcmc_parameters_dict(result)
+
+    assert param_dict["parameters"]["D_offset"]["mean"] == 0.0
+    assert param_dict["convergence"]["surrogate_thresholds"]["active"] is True
+
+
 # Run all tests
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])
-

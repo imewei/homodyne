@@ -774,6 +774,52 @@ def _apply_cli_overrides(config: ConfigManager, args) -> None:
     # No hardware overrides needed
 
 
+def _build_mcmc_runtime_kwargs(args, config: ConfigManager) -> dict[str, Any]:
+    """Collect runtime kwargs for fit_mcmc_jax from CLI args and YAML config."""
+
+    cfg_dict = config.config if hasattr(config, "config") else {}
+    optimization_cfg = cfg_dict.get("optimization", {}) if cfg_dict else {}
+    mcmc_cfg = optimization_cfg.get("mcmc", {}) if optimization_cfg else {}
+
+    runtime_kwargs: dict[str, Any] = {
+        "n_samples": args.n_samples,
+        "n_warmup": args.n_warmup,
+        "n_chains": args.n_chains,
+    }
+
+    if cfg_dict:
+        runtime_kwargs["config"] = cfg_dict
+
+    def _set_runtime_value(dest: str, *aliases: str) -> None:
+        for key in (dest, *aliases):
+            if key in mcmc_cfg and mcmc_cfg[key] is not None:
+                runtime_kwargs[dest] = mcmc_cfg[key]
+                return
+
+    _set_runtime_value("target_accept_prob")
+    _set_runtime_value("max_tree_depth")
+    _set_runtime_value("dense_mass_matrix", "dense_mass")
+    _set_runtime_value("rng_key")
+    _set_runtime_value("min_samples_for_cmc")
+    _set_runtime_value("memory_threshold_pct")
+    _set_runtime_value("stable_prior_fallback")
+    _set_runtime_value("min_ess")
+    _set_runtime_value("max_rhat")
+    _set_runtime_value("n_retries")
+    _set_runtime_value("check_hmc_diagnostics")
+
+    if args.min_samples_cmc is not None:
+        runtime_kwargs["min_samples_for_cmc"] = args.min_samples_cmc
+
+    if args.memory_threshold_pct is not None:
+        runtime_kwargs["memory_threshold_pct"] = args.memory_threshold_pct
+
+    if args.dense_mass_matrix:
+        runtime_kwargs["dense_mass_matrix"] = True
+
+    return runtime_kwargs
+
+
 def _load_data(args, config: ConfigManager) -> dict[str, Any]:
     """Load experimental data using XPCSDataLoader.
 
@@ -1231,6 +1277,8 @@ def _run_optimization(args, config: ConfigManager, data: dict[str, Any]) -> Any:
             # Pass the flattened phi array (same length as data). The MCMC runner
             # extracts the unique angles internally but also needs the per-point
             # mapping to apply contrast/offset scaling correctly.
+            mcmc_runtime_kwargs = _build_mcmc_runtime_kwargs(args, config)
+
             result = fit_mcmc_jax(
                 mcmc_data,
                 t1=t1_pooled,
@@ -1247,13 +1295,11 @@ def _run_optimization(args, config: ConfigManager, data: dict[str, Any]) -> Any:
                     if hasattr(config, "config")
                     else "static_isotropic"
                 ),
-                n_samples=args.n_samples,
-                n_warmup=args.n_warmup,
-                n_chains=args.n_chains,
                 method=method,  # Pass "mcmc" for automatic NUTS/CMC selection
                 cmc_config=cmc_config,  # Pass CMC configuration
                 initial_values=initial_values,  # ✅ FIXED: Load from config initial_parameters.values
                 parameter_space=parameter_space,  # ✅ Pass config-aware ParameterSpace
+                **mcmc_runtime_kwargs,
             )
 
             # Generate CMC diagnostic plots if requested
@@ -3912,6 +3958,10 @@ def _create_mcmc_parameters_dict(result: Any) -> dict:
     import numpy as np
     from datetime import datetime
 
+    diag_summary = getattr(result, "diagnostic_summary", {}) or {}
+    deterministic_params = set(diag_summary.get("deterministic_params") or [])
+    surrogate_thresholds = diag_summary.get("surrogate_thresholds")
+
     param_dict = {
         "timestamp": datetime.now().isoformat(),
         "analysis_mode": getattr(result, "analysis_mode", "unknown"),
@@ -3937,7 +3987,11 @@ def _create_mcmc_parameters_dict(result: Any) -> dict:
         # r_hat can be either dict or array
         if isinstance(result.r_hat, dict):
             # Filter out None values
-            r_hat_values = [v for v in result.r_hat.values() if v is not None]
+            r_hat_values = [
+                v
+                for name, v in result.r_hat.items()
+                if v is not None and name not in deterministic_params
+            ]
             if r_hat_values:
                 param_dict["convergence"]["all_chains_converged"] = bool(
                     all(v < 1.1 for v in r_hat_values)
@@ -3970,6 +4024,9 @@ def _create_mcmc_parameters_dict(result: Any) -> dict:
 
     if hasattr(result, "acceptance_rate") and result.acceptance_rate is not None:
         param_dict["convergence"]["acceptance_rate"] = float(result.acceptance_rate)
+
+    if surrogate_thresholds:
+        param_dict["convergence"]["surrogate_thresholds"] = surrogate_thresholds
 
     # Add scaling parameters (contrast, offset)
     if hasattr(result, "mean_contrast"):
@@ -4164,6 +4221,10 @@ def _create_mcmc_diagnostics_dict(result: Any) -> dict:
         "posterior_checks": {},
     }
 
+    diag_summary = getattr(result, "diagnostic_summary", {}) or {}
+    deterministic_params = set(diag_summary.get("deterministic_params") or [])
+    per_param_stats = diag_summary.get("per_param_stats") or {}
+
     # Convergence diagnostics
     if hasattr(result, "r_hat") and result.r_hat is not None:
         # r_hat can be either dict or array
@@ -4176,13 +4237,9 @@ def _create_mcmc_diagnostics_dict(result: Any) -> dict:
                 )
                 diagnostics_dict["convergence"]["r_hat_threshold"] = 1.1
 
-            # Add per-parameter diagnostics using dict keys (only for non-None values)
+            # Add per-parameter diagnostics using dict keys (include None to surface N/A)
             per_param = []
             for param_name, r_hat_val in result.r_hat.items():
-                # Skip None values
-                if r_hat_val is None:
-                    continue
-
                 ess_val = None
                 if hasattr(result, "effective_sample_size") and isinstance(
                     result.effective_sample_size, dict
@@ -4192,9 +4249,12 @@ def _create_mcmc_diagnostics_dict(result: Any) -> dict:
                 per_param.append(
                     {
                         "name": param_name,
-                        "r_hat": float(r_hat_val),
-                        "ess": float(ess_val) if ess_val is not None else 0.0,
-                        "converged": bool(r_hat_val < 1.1),
+                        "r_hat": float(r_hat_val) if r_hat_val is not None else None,
+                        "ess": float(ess_val) if ess_val is not None else None,
+                        "converged": bool(
+                            r_hat_val is not None and r_hat_val < 1.1
+                        ),
+                        "deterministic": param_name in deterministic_params,
                     }
                 )
             if per_param:
@@ -4235,6 +4295,7 @@ def _create_mcmc_diagnostics_dict(result: Any) -> dict:
                             "r_hat": float(r_hat[i]),
                             "ess": float(ess_val),
                             "converged": bool(r_hat[i] < 1.1),
+                            "deterministic": name in deterministic_params,
                         }
                     )
 
@@ -4245,6 +4306,11 @@ def _create_mcmc_diagnostics_dict(result: Any) -> dict:
         and result.effective_sample_size is not None
     ):
         diagnostics_dict["convergence"]["ess_threshold"] = 400
+
+    if diag_summary.get("surrogate_thresholds"):
+        diagnostics_dict["convergence"]["surrogate_thresholds"] = diag_summary[
+            "surrogate_thresholds"
+        ]
 
     # Sampling efficiency
     if hasattr(result, "acceptance_rate") and result.acceptance_rate is not None:
@@ -4270,6 +4336,45 @@ def _create_mcmc_diagnostics_dict(result: Any) -> dict:
             diagnostics_dict["posterior_checks"][
                 "effective_sample_size_ratio"
             ] = ess_ratio
+
+    if "per_parameter_diagnostics" not in diagnostics_dict["convergence"]:
+        param_keys = set(per_param_stats.keys())
+        if isinstance(result.r_hat, dict):
+            param_keys.update(result.r_hat.keys())
+        if isinstance(result.effective_sample_size, dict):
+            param_keys.update(result.effective_sample_size.keys())
+        if param_keys:
+            fallback_entries = []
+            for name in sorted(param_keys):
+                stats = per_param_stats.get(name, {})
+                r_hat_val = None
+                if isinstance(result.r_hat, dict):
+                    r_hat_val = result.r_hat.get(name)
+                elif "r_hat" in stats:
+                    r_hat_val = stats.get("r_hat")
+                ess_val = None
+                if isinstance(result.effective_sample_size, dict):
+                    ess_val = result.effective_sample_size.get(name)
+                elif "ess" in stats:
+                    ess_val = stats.get("ess")
+
+                fallback_entries.append(
+                    {
+                        "name": name,
+                        "r_hat": float(r_hat_val) if r_hat_val is not None else None,
+                        "ess": float(ess_val) if ess_val is not None else None,
+                        "converged": bool(
+                            r_hat_val is not None
+                            and r_hat_val
+                            < diagnostics_dict["convergence"].get("r_hat_threshold", 1.1)
+                        ),
+                        "deterministic": name in deterministic_params
+                        or stats.get("deterministic", False),
+                    }
+                )
+            diagnostics_dict["convergence"][
+                "per_parameter_diagnostics"
+            ] = fallback_entries
 
     # CMC-specific diagnostics
     if hasattr(result, "is_cmc_result") and result.is_cmc_result():
