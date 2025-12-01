@@ -149,7 +149,9 @@ def _build_single_angle_surrogate_settings(
         return {}
 
     tier_normalized = (tier or "2").strip()
-    if tier_normalized not in {"2", "3", "4"}:
+    # Tier 1: NLSQ-friendly mode (keeps all params, no log-space sampling)
+    # Tier 2-4: Difficult cases (drop D_offset, use log-space D0)
+    if tier_normalized not in {"1", "2", "3", "4"}:
         tier_normalized = "2"
 
     try:
@@ -157,6 +159,31 @@ def _build_single_angle_surrogate_settings(
         d0_prior = parameter_space.get_prior("D0")
     except KeyError:
         return {}
+
+    # Tier 1 uses simplified setup - no log-space configuration needed
+    if tier_normalized == "1":
+        nuts_overrides = {
+            "target_accept_prob": 0.95,  # Less aggressive than tier 2
+            "max_tree_depth": 10,
+            "n_warmup": 1000,
+        }
+        diagnostic_thresholds = {
+            "focus_params": ["D0", "alpha", "D_offset"],
+            "min_ess": 20.0,
+            "max_rhat": 1.2,
+        }
+        return {
+            "tier": "1",
+            "drop_d_offset": False,  # Keep all 3 parameters
+            "sample_log_d0": False,  # Use standard linear-space sampling
+            "fixed_d_offset": None,  # Sample D_offset, don't fix it
+            "alpha_prior_override": None,  # Use default alpha prior
+            "fixed_alpha": None,
+            "fixed_d0_value": None,
+            "disable_reparam": True,
+            "nuts_overrides": nuts_overrides,
+            "diagnostic_thresholds": diagnostic_thresholds,
+        }
 
     min_d0 = max(d0_bounds[0], 1e-6)
     max_d0 = max(d0_bounds[1], min_d0 * 10.0)
@@ -1390,6 +1417,21 @@ def _run_standard_nuts(
         surrogate_tier_env = os.environ.get("HOMODYNE_SINGLE_ANGLE_TIER", "2")
         user_scaling_override = kwargs.pop("fixed_scaling_overrides", None)
 
+        # Extract user-provided contrast/offset from initial_values if present
+        # This allows configured values to override data-derived percentiles
+        if user_scaling_override is None and initial_values is not None:
+            extracted_scaling = {}
+            if "contrast" in initial_values:
+                extracted_scaling["contrast"] = float(initial_values["contrast"])
+            if "offset" in initial_values:
+                extracted_scaling["offset"] = float(initial_values["offset"])
+            if extracted_scaling:
+                user_scaling_override = extracted_scaling
+                logger.info(
+                    "Using contrast/offset from initial_values: %s",
+                    ", ".join(f"{k}={v:.4g}" for k, v in extracted_scaling.items()),
+                )
+
         if single_angle_static:
             logger.info(
                 "Single-angle static dataset detected → disabling per-angle scaling and enabling stabilized priors",
@@ -1454,9 +1496,21 @@ def _run_standard_nuts(
                     single_angle_surrogate_cfg.get("drop_d_offset"),
                 )
                 if single_angle_surrogate_cfg.get("drop_d_offset"):
+                    # Preserve D_offset value from initial_values before dropping it
+                    # This allows MCMC to use the NLSQ-fitted value instead of hardcoded 0.0
+                    if initial_values is not None and "D_offset" in initial_values:
+                        d_offset_from_init = initial_values.pop("D_offset")
+                        # Update surrogate config to use the initial value
+                        single_angle_surrogate_cfg["fixed_d_offset"] = float(d_offset_from_init)
+                        logger.info(
+                            "Using D_offset=%.4f from initial_values for single-angle surrogate (not sampled)",
+                            d_offset_from_init,
+                        )
+                    else:
+                        # Fallback to default if no initial value provided
+                        if initial_values is not None:
+                            initial_values.pop("D_offset", None)
                     parameter_space = parameter_space.drop_parameters({"D_offset"})
-                    if initial_values is not None:
-                        initial_values.pop("D_offset", None)
                 alpha_override = single_angle_surrogate_cfg.get(
                     "alpha_prior_override"
                 )
@@ -1518,7 +1572,12 @@ def _run_standard_nuts(
         else:
             logger.info("MCMC chains will use default initialization (NumPyro random)")
 
-        if single_angle_static and initial_values is not None:
+        # Only add reparameterization parameters if not disabled by surrogate config
+        # Tier 1 and others with disable_reparam=True skip this initialization
+        reparam_disabled = (
+            single_angle_surrogate_cfg and single_angle_surrogate_cfg.get("disable_reparam", False)
+        )
+        if single_angle_static and initial_values is not None and not reparam_disabled:
             d0_init = initial_values.get("D0")
             d_offset_init = initial_values.get("D_offset")
             if d0_init is not None and d_offset_init is not None:
@@ -2373,6 +2432,9 @@ def _create_numpyro_model(
                     dist_kwargs["high"], dtype=target_dtype
                 )
 
+            # Tier 1 uses standard linear-space sampling, no log-space conversion needed
+            # Only use alternative log-space sampling for cases without surrogate log sampling
+            tier_allows_log_fallback = surrogate_cfg.get("tier") != "1"
             single_angle_log_sampling = (
                 single_angle_static_mode
                 and param_name == "D0"
@@ -2380,26 +2442,32 @@ def _create_numpyro_model(
                 and not surrogate_cfg.get("sample_log_d0")
                 and surrogate_cfg.get("fixed_d0_value") is None
                 and not reparam_active
+                and tier_allows_log_fallback  # Don't use for tier 1
             )
             if single_angle_log_sampling:
                 d0_bounds = parameter_space.get_bounds("D0")
 
-                def _extract_scalar(name: str, fallback: float) -> float:
+                def _extract_scalar(name: str, fallback: float):
+                    """Extract value from dist_kwargs, keeping as JAX array to avoid tracer errors."""
                     value = dist_kwargs.get(name)
                     if value is None:
-                        return fallback
-                    return float(jnp.asarray(value).reshape(()))
+                        return jnp.asarray(fallback, dtype=target_dtype)
+                    # Don't call float() - keep as JAX array to avoid tracer concretization
+                    return jnp.asarray(value, dtype=target_dtype).reshape(())
 
-                linear_loc = _extract_scalar("loc", float(d0_bounds[0]))
-                linear_scale = abs(_extract_scalar("scale", float(d0_bounds[1] - d0_bounds[0]) / 4.0))
-                linear_low = max(_extract_scalar("low", float(d0_bounds[0])), 1e-6)
-                linear_high = max(_extract_scalar("high", float(d0_bounds[1])), linear_low + 1e-6)
+                linear_loc = _extract_scalar("loc", d0_bounds[0])
+                linear_scale = jnp.abs(_extract_scalar("scale", (d0_bounds[1] - d0_bounds[0]) / 4.0))
+                linear_low = jnp.maximum(_extract_scalar("low", d0_bounds[0]), 1e-6)
+                linear_high = jnp.maximum(_extract_scalar("high", d0_bounds[1]), linear_low + 1e-6)
 
+                # Convert to Python scalars for log_prior_cfg (static configuration, not traced)
+                # Use .item() to extract concrete values outside of traced region
+                import numpy as _np
                 log_prior_cfg = {
-                    "loc": float(np.log(max(linear_loc, 1e-6))),
-                    "scale": float(np.clip(linear_scale / max(linear_loc, 1e-6), 1e-6, 5.0)),
-                    "low": float(np.log(max(linear_low, 1e-6))),
-                    "high": float(np.log(max(linear_high, linear_low + 1e-6))),
+                    "loc": float(_np.log(max(float(linear_loc), 1e-6))),
+                    "scale": float(_np.clip(float(linear_scale) / max(float(linear_loc), 1e-6), 1e-6, 5.0)),
+                    "low": float(_np.log(max(float(linear_low), 1e-6))),
+                    "high": float(_np.log(max(float(linear_high), float(linear_low) + 1e-6))),
                 }
 
                 d0_value = _sample_single_angle_log_d0(log_prior_cfg, target_dtype)

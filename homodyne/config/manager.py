@@ -483,6 +483,35 @@ class ConfigManager:
                 f"{len(initial_params_dict)} remaining"
             )
 
+        # Load per-angle scaling parameters (contrast, offset) if present
+        per_angle_scaling = initial_params.get("per_angle_scaling")
+        if per_angle_scaling and isinstance(per_angle_scaling, dict):
+            # Extract contrast and offset arrays
+            contrast_values = per_angle_scaling.get("contrast")
+            offset_values = per_angle_scaling.get("offset")
+
+            if contrast_values is not None and isinstance(contrast_values, list):
+                if len(contrast_values) == 1:
+                    # Single-angle: use scalar contrast
+                    initial_params_dict["contrast"] = float(contrast_values[0])
+                    logger.info(f"Loaded scalar contrast from per_angle_scaling: {contrast_values[0]}")
+                else:
+                    # Multi-angle: use per-angle contrast_0, contrast_1, ...
+                    for idx, val in enumerate(contrast_values):
+                        initial_params_dict[f"contrast_{idx}"] = float(val)
+                    logger.info(f"Loaded {len(contrast_values)} per-angle contrast values")
+
+            if offset_values is not None and isinstance(offset_values, list):
+                if len(offset_values) == 1:
+                    # Single-angle: use scalar offset
+                    initial_params_dict["offset"] = float(offset_values[0])
+                    logger.info(f"Loaded scalar offset from per_angle_scaling: {offset_values[0]}")
+                else:
+                    # Multi-angle: use per-angle offset_0, offset_1, ...
+                    for idx, val in enumerate(offset_values):
+                        initial_params_dict[f"offset_{idx}"] = float(val)
+                    logger.info(f"Loaded {len(offset_values)} per-angle offset values")
+
         logger.info(
             f"Loaded initial parameters from config: {list(initial_params_dict.keys())}"
         )
