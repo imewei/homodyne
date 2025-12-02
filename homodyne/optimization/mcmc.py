@@ -1417,20 +1417,28 @@ def _run_standard_nuts(
         surrogate_tier_env = os.environ.get("HOMODYNE_SINGLE_ANGLE_TIER", "2")
         user_scaling_override = kwargs.pop("fixed_scaling_overrides", None)
 
-        # Extract user-provided contrast/offset from initial_values if present
-        # This allows configured values to override data-derived percentiles
-        if user_scaling_override is None and initial_values is not None:
-            extracted_scaling = {}
-            if "contrast" in initial_values:
-                extracted_scaling["contrast"] = float(initial_values["contrast"])
-            if "offset" in initial_values:
-                extracted_scaling["offset"] = float(initial_values["offset"])
-            if extracted_scaling:
-                user_scaling_override = extracted_scaling
-                logger.info(
-                    "Using contrast/offset from initial_values: %s",
-                    ", ".join(f"{k}={v:.4g}" for k, v in extracted_scaling.items()),
-                )
+        # BUG FIX (2025-12-01): DO NOT extract contrast/offset from initial_values
+        # and treat them as fixed overrides. initial_values are STARTING POINTS for MCMC,
+        # not values to fix! The previous code incorrectly assumed that providing
+        # initial_values for contrast/offset meant "fix these parameters", when it
+        # actually meant "start MCMC sampling from these values".
+        #
+        # REMOVED BUGGY CODE (lines 1420-1433):
+        # This code extracted contrast/offset from initial_values into user_scaling_override,
+        # causing them to be treated as fixed/deterministic when they should be sampled.
+        #
+        # if user_scaling_override is None and initial_values is not None:
+        #     extracted_scaling = {}
+        #     if "contrast" in initial_values:
+        #         extracted_scaling["contrast"] = float(initial_values["contrast"])
+        #     if "offset" in initial_values:
+        #         extracted_scaling["offset"] = float(initial_values["offset"])
+        #     if extracted_scaling:
+        #         user_scaling_override = extracted_scaling
+        #         logger.info(
+        #             "Using contrast/offset from initial_values: %s",
+        #             ", ".join(f"{k}={v:.4g}" for k, v in extracted_scaling.items()),
+        #         )
 
         if single_angle_static:
             logger.info(
@@ -1448,27 +1456,70 @@ def _run_standard_nuts(
             except Exception:  # noqa: BLE001 - heuristic fallback
                 t_reference_value = None
 
-            contrast_fixed, offset_fixed = _estimate_single_angle_scaling(data)
-            single_angle_scaling_override = {
-                "contrast": contrast_fixed,
-                "offset": offset_fixed,
-            }
-            logger.info(
-                "Single-angle fallback: fixing contrast=%.4f, offset=%.4f based on data percentiles",
-                contrast_fixed,
-                offset_fixed,
+            # CORRECT LOGIC (2025-12-01):
+            # For single-angle data, we need initial values for contrast/offset.
+            # Priority:
+            #   1. Use initial_values from config (if provided)
+            #   2. Fallback to data-derived estimates from percentiles
+            # These are used as MCMC STARTING POINTS, NOT as fixed parameters!
+
+            # Compute data-derived estimates as fallback
+            contrast_data_derived, offset_data_derived = _estimate_single_angle_scaling(data)
+            logger.debug(
+                "Data-derived scaling estimates: contrast=%.4f, offset=%.4f (from 1st/99th percentile)",
+                contrast_data_derived,
+                offset_data_derived,
             )
 
+            # Check if user provided initial_values for contrast/offset
+            has_contrast_init = initial_values is not None and "contrast" in initial_values
+            has_offset_init = initial_values is not None and "offset" in initial_values
+
+            # Use initial_values if available, otherwise use data-derived as fallback
+            if not has_contrast_init and initial_values is not None:
+                initial_values["contrast"] = contrast_data_derived
+                logger.info(
+                    "Using data-derived contrast=%.4f as MCMC starting point (no initial_values provided)",
+                    contrast_data_derived
+                )
+            elif has_contrast_init:
+                logger.info(
+                    "Using config initial_values contrast=%.4f as MCMC starting point",
+                    initial_values["contrast"]
+                )
+
+            if not has_offset_init and initial_values is not None:
+                initial_values["offset"] = offset_data_derived
+                logger.info(
+                    "Using data-derived offset=%.4f as MCMC starting point (no initial_values provided)",
+                    offset_data_derived
+                )
+            elif has_offset_init:
+                logger.info(
+                    "Using config initial_values offset=%.4f as MCMC starting point",
+                    initial_values["offset"]
+                )
+
+            # IMPORTANT: Do NOT create scaling_overrides for single-angle data!
+            # We want contrast/offset to be SAMPLED, not FIXED.
+            # The old code incorrectly fixed these parameters.
+            single_angle_scaling_override = None
+
+        # Only use user_scaling_override if explicitly passed via fixed_scaling_overrides parameter
+        # This is for cases where user WANTS to fix contrast/offset (rare)
         if user_scaling_override:
             single_angle_scaling_override = {
                 key: float(value)
                 for key, value in user_scaling_override.items()
             }
-            logger.info(
-                "Single-angle fallback: using user-provided scaling overrides %s",
+            logger.warning(
+                "Explicitly fixing contrast/offset as deterministic parameters: %s",
                 ", ".join(
                     f"{name}={val:.4g}" for name, val in single_angle_scaling_override.items()
                 ),
+            )
+            logger.warning(
+                "These parameters will NOT be sampled! Use initial_values instead if you want them fitted."
             )
 
         stable_prior_config = bool(kwargs.get("stable_prior_fallback", False))
@@ -2338,10 +2389,20 @@ def _create_numpyro_model(
                 sampled_values[param_name] = d_offset_value
                 deterministic("D_offset", d_offset_value)
                 continue
+            # DEBUG: Check scaling override condition
+            if param_name in ["contrast", "offset"]:
+                logger.debug(
+                    f"DEBUG: Checking {param_name}: in_scaling_overrides={param_name in scaling_overrides}, "
+                    f"per_angle_scaling={per_angle_scaling}, "
+                    f"scaling_overrides={scaling_overrides}"
+                )
             if param_name in scaling_overrides and not per_angle_scaling:
                 value = jnp.asarray(scaling_overrides[param_name], dtype=target_dtype)
                 sampled_values[param_name] = value
                 deterministic(param_name, value)
+                logger.info(
+                    f"Created deterministic node for {param_name} = {value}"
+                )
                 continue
             if reparam_active and param_name in {"D0", "D_offset"}:
                 sampled_values[param_name] = None
