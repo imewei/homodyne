@@ -50,6 +50,18 @@ from homodyne.config.manager import ConfigManager
 from homodyne.config.parameter_space import ParameterSpace
 from homodyne.optimization.mcmc import MCMCResult, fit_mcmc_jax
 
+# Test factory imports
+from tests.factories.config_factory import (
+    create_disabled_filtering_config,
+    create_phi_filtering_config,
+)
+from tests.factories.data_factory import create_specific_angles_test_data
+from tests.factories.optimization_factory import (
+    create_mock_config_manager,
+    create_mock_data_dict,
+    create_mock_optimization_result,
+)
+
 # ==============================================================================
 # Config-Driven MCMC Tests (from test_config_driven_mcmc.py)
 # ==============================================================================
@@ -796,17 +808,6 @@ class TestFullMCMCWorkflow:
 # Simplified Workflow Tests (from test_mcmc_simplified_workflow.py)
 # ==============================================================================
 
-
-import numpy as np
-
-from tests.factories.config_factory import create_phi_filtering_config
-from tests.factories.data_factory import create_specific_angles_test_data
-from tests.factories.optimization_factory import (
-    create_mock_config_manager,
-    create_mock_data_dict,
-    create_mock_optimization_result,
-)
-
 # Note: TestAutomaticNUTSCMCSelection removed in v3.0 (CMC-only architecture)
 # should_use_cmc() is now a deprecated shim that always returns True
 # See docs/migration/v3_cmc_only.md for migration details
@@ -1235,10 +1236,6 @@ if __name__ == "__main__":
 # ==============================================================================
 # MCMC Regression Tests (from test_mcmc_regression.py)
 # ==============================================================================
-
-
-import numpy as np
-import pytest
 
 
 class TestMCMCConvergenceQuality:
@@ -1717,9 +1714,9 @@ def test_automatic_nuts_selection_small_dataset(simple_static_data):
     assert isinstance(result, MCMCResult)
     assert result.sampler == "NUTS"  # Should use NUTS
 
-    # Verify it's not a CMC result
+    # In v3.0 CMC-only architecture, even NUTS sampler still flows through CMC
     if hasattr(result, "is_cmc_result"):
-        assert not result.is_cmc_result()
+        assert result.is_cmc_result()
 
 
 @pytest.mark.skip(reason="MCMC implementation needs full testing setup")

@@ -176,32 +176,11 @@ class TestEndToEndWorkflows:
             }
         )
 
-        try:
-            # Step 1: Load data
-            # Note: load_xpcs_data now expects a config_path (str), not a config dict
-            # Skipping this test as it requires proper HDF5 files
-            pytest.skip(
-                "load_xpcs_data API changed: requires config_path, not config dict"
-            )
-
-            # Step 2: Validate loaded data
-            assert isinstance(data, dict)
-            required_keys = ["t1", "t2", "phi_angles_list", "c2_exp"]
-            for key in required_keys:
-                if key not in data:
-                    pytest.skip(f"Required key {key} not in loaded data")
-
-            # Step 3: Run optimization
-            result = fit_nlsq_jax(data, h5_config)
-
-            # Step 4: Validate results
-            if result.success:
-                assert hasattr(result, "parameters")
-                assert result.chi_squared >= 0.0
-                assert result.computation_time > 0.0
-
-        except (KeyError, ValueError, AttributeError) as e:
-            pytest.skip(f"HDF5 workflow test failed with mock data: {e}")
+        # Note: load_xpcs_data now expects a config_path (str), not a config dict
+        # Skipping this test as it requires proper HDF5 files
+        pytest.skip(
+            "load_xpcs_data API changed: requires config_path, not config dict"
+        )
 
     @pytest.mark.skipif(not HAS_YAML, reason="PyYAML not available")
     def test_yaml_config_workflow(self, temp_dir):

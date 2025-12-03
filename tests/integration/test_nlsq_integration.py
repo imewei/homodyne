@@ -56,6 +56,26 @@ from homodyne.optimization.numerical_validation import NumericalValidator
 from homodyne.optimization.strategy import DatasetSizeStrategy
 from tests.factories.large_dataset_factory import LargeDatasetFactory
 
+# Import missing test helpers
+import json
+
+from homodyne.cli.commands import save_nlsq_results
+from homodyne.optimization.stratified_chunking import (
+    analyze_angle_distribution,
+    create_angle_stratified_data,
+    should_use_stratification,
+)
+from tests.factories.config_factory import (
+    create_disabled_filtering_config,
+    create_phi_filtering_config,
+)
+from tests.factories.data_factory import create_specific_angles_test_data
+from tests.factories.optimization_factory import (
+    create_mock_config_manager,
+    create_mock_data_dict,
+    create_mock_optimization_result,
+)
+
 # ==============================================================================
 # End-to-end Workflows (from test_nlsq_end_to_end.py)
 # ==============================================================================

@@ -1630,15 +1630,16 @@ class TestIsCMCResult:
         )
         assert result.is_cmc_result() is False
 
-    def test_is_cmc_result_false_when_one(self):
-        """Test is_cmc_result() returns False when num_shards=1."""
+    def test_is_cmc_result_true_when_one(self):
+        """Single-shard runs still use CMC pipeline in v3.0."""
         result = MCMCResult(
             mean_params=np.array([1.0]),
             mean_contrast=0.5,
             mean_offset=1.0,
-            num_shards=1,  # Single shard is standard MCMC
+            num_shards=1,
+            selection_decision_metadata={"method": "CMC"},
         )
-        assert result.is_cmc_result() is False
+        assert result.is_cmc_result() is True
 
     def test_is_cmc_result_true_when_multiple(self):
         """Test is_cmc_result() returns True when num_shards > 1."""

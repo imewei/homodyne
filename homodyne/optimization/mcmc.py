@@ -1107,6 +1107,10 @@ def fit_mcmc_jax(
             f"CMC may provide additional parallelization on multi-core CPU."
         )
 
+    # Optional metadata for downstream consumers (e.g., visualization, CLI)
+    selection_decision_metadata: dict[str, Any] | None = None
+    requested_method = actual_method  # Remember pre-bypass intent
+
     # Step 5: Execute selected method
     if actual_method == "cmc":
         # Use Consensus Monte Carlo
@@ -1141,6 +1145,14 @@ def fit_mcmc_jax(
                 reason,
             )
             actual_method = "nuts"
+            selection_decision_metadata = {
+                "method": "CMC",
+                "bypassed_to": "NUTS",
+                "bypass_reason": reason,
+                "bypass_trigger": bypass_decision.triggered_by,
+                "bypass_mode": bypass_decision.mode,
+                "num_shards": 1,  # single-shard equivalent
+            }
         else:
             # Add MCMC config to cmc_config if not already present
             if "mcmc" not in cmc_config:
@@ -1227,6 +1239,8 @@ def fit_mcmc_jax(
                 parameter_space=parameter_space,
                 initial_values=initial_values,
                 use_simplified_likelihood=use_simplified_likelihood,
+                selection_decision_metadata=selection_decision_metadata,
+                requested_method=requested_method,
                 **retry_kwargs,
             )
 
@@ -1318,6 +1332,8 @@ def _run_standard_nuts(
     parameter_space: ParameterSpace | None = None,
     initial_values: dict[str, float] | None = None,
     use_simplified_likelihood: bool = True,
+    selection_decision_metadata: dict[str, Any] | None = None,
+    requested_method: str | None = None,
     **kwargs,
 ) -> MCMCResult:
     """Execute standard NUTS MCMC sampling.
@@ -1742,6 +1758,16 @@ def _run_standard_nuts(
             effective_sample_size=posterior_summary.get("ess"),
         )
 
+        sel_meta = selection_decision_metadata
+        if sel_meta is None and requested_method == "cmc":
+            # Fallback tagging in case metadata wasn't set (e.g., bypass path)
+            sel_meta = {"method": "CMC", "bypassed_to": "NUTS", "num_shards": 1}
+        if sel_meta:
+            result_obj.selection_decision_metadata = sel_meta
+            # Ensure single-shard CMC bypasses are still tagged as CMC
+            if getattr(result_obj, "num_shards", None) is None:
+                result_obj.num_shards = sel_meta.get("num_shards")
+
         diag_summary = posterior_summary.get("diagnostic_summary", {})
         result_obj.diagnostic_summary = diag_summary
         result_obj.deterministic_params = diag_summary.get("deterministic_params", [])
@@ -1756,9 +1782,9 @@ def _run_standard_nuts(
         logger.error(f"MCMC sampling failed after {computation_time:.3f}s: {str(e)}")
         logger.debug(f"Full traceback:\n{traceback.format_exc()}")
 
-        # Return failed result
+        # Return failed result (still tag selection metadata if present)
         n_params = 3 if "static" in analysis_mode else 7
-        return MCMCResult(
+        failed_result = MCMCResult(
             mean_params=np.zeros(n_params),
             mean_contrast=0.5,
             mean_offset=1.0,
@@ -1768,6 +1794,16 @@ def _run_standard_nuts(
             backend="JAX",
             analysis_mode=analysis_mode,
         )
+
+        sel_meta = selection_decision_metadata
+        if sel_meta is None and requested_method == "cmc":
+            sel_meta = {"method": "CMC", "bypassed_to": "NUTS", "num_shards": 1}
+        if sel_meta:
+            failed_result.selection_decision_metadata = sel_meta
+            if getattr(failed_result, "num_shards", None) is None:
+                failed_result.num_shards = sel_meta.get("num_shards")
+
+        return failed_result
 
 
 def _validate_mcmc_data(data, t1, t2, phi, q, L):

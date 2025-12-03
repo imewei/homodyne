@@ -253,16 +253,23 @@ class MCMCResult:
         self.selection_decision_metadata = selection_decision_metadata
 
     def is_cmc_result(self) -> bool:
-        """Check if this result is from Consensus Monte Carlo.
+        """Return True when the result came from the CMC pipeline.
+
+        v3.0 made CMC the only MCMC path, and single-shard runs still flow
+        through the CMC machinery (per-shard NUTS + combiner bypass). We treat a
+        result as CMC if any of the following holds:
+        - selection_decision_metadata.method == "CMC"
+        - cmc_diagnostics is present
+        - num_shards is not None (including the single-shard case)
 
         Returns
         -------
         bool
-            True if result is from CMC (num_shards > 1), False otherwise
+            True if produced by CMC; False for legacy/standard MCMC results.
 
         Examples
         --------
-        >>> # Standard MCMC result
+        >>> # Standard MCMC result (legacy)
         >>> result = MCMCResult(mean_params=np.array([1.0]), mean_contrast=0.5, mean_offset=1.0)
         >>> result.is_cmc_result()
         False
@@ -277,17 +284,30 @@ class MCMCResult:
         >>> result.is_cmc_result()
         True
 
-        >>> # Edge case: num_shards=1 is still standard MCMC
+        >>> # Single-shard CMC (combiner bypassed but still CMC pipeline)
         >>> result = MCMCResult(
         ...     mean_params=np.array([1.0]),
         ...     mean_contrast=0.5,
         ...     mean_offset=1.0,
-        ...     num_shards=1
+        ...     num_shards=1,
+        ...     selection_decision_metadata={"method": "CMC"},
         ... )
         >>> result.is_cmc_result()
-        False
+        True
         """
-        return self.num_shards is not None and self.num_shards > 1
+        if self.selection_decision_metadata:
+            method = str(self.selection_decision_metadata.get("method", "")).lower()
+            if method == "cmc":
+                return True
+
+        if self.cmc_diagnostics is not None:
+            return True
+
+        if self.num_shards is not None:
+            # In CMC-only architecture, any explicit shard count signals CMC.
+            return True
+
+        return False
 
     def to_dict(self) -> dict[str, Any]:
         """Convert MCMCResult to dictionary for serialization.

@@ -496,8 +496,8 @@ class TestEdgeCases:
             analysis_mode="static",
         )
 
-        # Should not be considered a CMC result (single shard)
-        assert not result.is_cmc_result()
+        # Single-shard still counts as CMC in v3.0 pipeline
+        assert result.is_cmc_result()
 
         # Trace plots should still work
         fig = plot_trace_plots(result)

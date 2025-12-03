@@ -1005,8 +1005,8 @@ def test_backend_selection_cpu_only(cpu_hardware_config):
         assert backend.get_backend_name() == "multiprocessing"
 
 
-def test_backend_selection_pbs_cluster(pbs_cluster_hardware_config):
-    """Test auto-selection chooses pbs for PBS cluster."""
+def test_backend_selection_pbs_cluster_with_mock(pbs_cluster_hardware_config):
+    """Test auto-selection chooses pbs for PBS cluster (with mocked backend)."""
     with patch(
         "homodyne.optimization.cmc.backends.selection.get_backend_by_name"
     ) as mock_get:
@@ -1349,8 +1349,8 @@ def full_config():
 
 
 @pytest.fixture
-def mock_hardware_cpu():
-    """Mock CPU-only hardware configuration."""
+def mock_hardware_cpu_standalone():
+    """Mock CPU-only hardware configuration for standalone tests."""
     return HardwareConfig(
         platform="cpu",
         num_devices=1,

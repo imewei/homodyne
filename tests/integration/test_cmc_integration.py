@@ -788,12 +788,7 @@ if __name__ == "__main__":
 # CMC Result Processing Tests (from test_cmc_results.py)
 # =============================================================================
 
-import tempfile
-
-import numpy as np
-import pytest
-
-from homodyne.optimization.cmc.result import MCMCResult
+import tempfile  # noqa: E402 - Already imported, kept for consolidated file clarity
 
 # ==============================================================================
 # Test Class: Result Structure with New Metadata

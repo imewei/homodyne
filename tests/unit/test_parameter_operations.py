@@ -72,6 +72,28 @@ See Also:
 import numpy as np
 import pytest
 
+from homodyne.config.parameter_names import (
+    LAMINAR_FLOW_PARAMS,
+    STATIC_ISOTROPIC_PARAMS,
+    get_num_parameters,
+    get_parameter_names,
+    validate_parameter_names,
+    verify_samples_dict,
+)
+from homodyne.core.jax_backend import compute_g2_scaled
+from homodyne.optimization.nlsq_wrapper import NLSQWrapper
+
+# Handle JAX imports
+try:
+    import jax
+    import jax.numpy as jnp
+
+    JAX_AVAILABLE = True
+except ImportError:
+    JAX_AVAILABLE = False
+    jax = None  # type: ignore[assignment]
+    jnp = np
+
 # ==============================================================================
 # Parameter Expansion Tests (from test_parameter_expansion.py)
 # ==============================================================================
@@ -385,8 +407,6 @@ if __name__ == "__main__":
 # Parameter Transformation Tests (from test_parameter_transformation.py)
 # ==============================================================================
 
-from homodyne.optimization.nlsq_wrapper import NLSQWrapper
-
 
 class TestDataFlattening:
     """Test data flattening transformation (T006)."""
@@ -525,18 +545,6 @@ class TestBoundsFormatConversion:
 # ==============================================================================
 # Parameter Gradient Tests (from test_parameter_gradients.py)
 # ==============================================================================
-
-
-try:
-    import jax
-    import jax.numpy as jnp
-
-    JAX_AVAILABLE = True
-except ImportError:
-    JAX_AVAILABLE = False
-    jnp = np
-
-from homodyne.core.jax_backend import compute_g2_scaled
 
 
 @pytest.mark.unit
@@ -828,20 +836,6 @@ if __name__ == "__main__":
 # ==============================================================================
 # Name Consistency Tests (from test_parameter_names_consistency.py)
 # ==============================================================================
-
-
-import numpy as np
-import pytest
-
-# Import parameter constants
-from homodyne.config.parameter_names import (
-    LAMINAR_FLOW_PARAMS,
-    STATIC_ISOTROPIC_PARAMS,
-    get_num_parameters,
-    get_parameter_names,
-    validate_parameter_names,
-    verify_samples_dict,
-)
 
 
 class TestParameterNameConstants:

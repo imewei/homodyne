@@ -1250,8 +1250,8 @@ optimization:
 
 
 @pytest.fixture
-def laminar_parameter_space():
-    """Create parameter_space for laminar_flow mode (7 physical params).
+def laminar_parameter_space_extended():
+    """Create parameter_space for laminar_flow mode (7 physical params) with priors.
 
     NOTE: contrast and offset are NOT included in ParameterSpace.
     They are scaling parameters added automatically by the MCMC model.
@@ -1298,8 +1298,8 @@ def laminar_parameter_space():
 
 
 @pytest.fixture
-def static_parameter_space():
-    """Create parameter_space for static_mode mode (3 physical params).
+def static_parameter_space_extended():
+    """Create parameter_space for static_mode mode (3 physical params) extended.
 
     NOTE: contrast and offset are NOT included in ParameterSpace.
     They are scaling parameters added automatically by the MCMC model.
