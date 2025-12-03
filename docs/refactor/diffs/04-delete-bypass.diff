@@ -1,0 +1,38 @@
+# Diff 4: Delete cmc/bypass.py
+# Apply with: rm homodyne/optimization/cmc/bypass.py
+#
+# This file is no longer needed - CMC is always used
+# No bypass logic required when there's only one code path
+
+# Also update cmc/__init__.py to remove bypass imports:
+
+--- a/homodyne/optimization/cmc/__init__.py
++++ b/homodyne/optimization/cmc/__init__.py
+@@ -1,17 +1,15 @@
+ """Consensus Monte Carlo (CMC) Module.
+
+ This module implements Consensus Monte Carlo for scalable Bayesian
+ uncertainty quantification on large XPCS datasets.
+
+ Exports
+ -------
+ CMCCoordinator : class
+     Main orchestrator for CMC pipeline
+ MCMCResult : class
+     Extended MCMC result with CMC-specific fields
+-CMCBypassDecision : class
+-    Decision result from bypass heuristics
+-evaluate_cmc_bypass : function
+-    Evaluate whether to bypass CMC for a dataset
+ """
+
+ from homodyne.optimization.cmc.coordinator import CMCCoordinator
+ from homodyne.optimization.cmc.result import MCMCResult
+-from homodyne.optimization.cmc.bypass import evaluate_cmc_bypass, CMCBypassDecision
+
+ __all__ = [
+     "CMCCoordinator",
+     "MCMCResult",
+-    "evaluate_cmc_bypass",
+-    "CMCBypassDecision",
+ ]

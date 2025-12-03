@@ -3,11 +3,12 @@ Unit Tests for CLI Core Functionality
 ======================================
 
 **Consolidation**: Week 7 (2025-11-15)
+**Updated**: v3.0 CMC-only migration
 
 Consolidated from:
-- test_cli_args.py (CLI argument parsing, 17 tests, 273 lines)
-- test_cli_validation.py (CLI validation & edge cases, 46 tests, 881 lines)
-- test_cli_data_loading.py (CLI data loading, 14 tests, 345 lines)
+- test_cli_args.py (CLI argument parsing, 17 tests)
+- test_cli_validation.py (CLI validation & edge cases)
+- test_cli_data_loading.py (CLI data loading, 14 tests)
 
 Test Categories:
 ---------------
@@ -16,9 +17,9 @@ Test Categories:
 - Deprecated method rejection (nuts, cmc, auto)
 - Default values and argument combinations
 
-**Validation** (46 tests):
-- Method validation after v2.1.0 simplification
-- CMC-specific CLI options validation
+**Validation** (~40 tests):
+- Method validation
+- CMC sharding CLI options validation
 - Shell alias existence and correctness
 - Error handling for invalid inputs
 
@@ -31,9 +32,9 @@ Test Categories:
 Test Coverage:
 -------------
 - CLI argument parsing (--method, --config, --output)
-- Method validation after v2.1.0 simplification
+- Method validation
 - Deprecated method rejection with clear error messages
-- CMC-specific options (--min-samples-cmc, --memory-threshold-pct)
+- CMC sharding options (--cmc-num-shards, --cmc-backend)
 - CLI parameter overrides (precedence: CLI > config > defaults)
 - Shell alias existence and correctness (homodyne, homodyne-config)
 - Config schema normalization (legacy → modern format)
@@ -41,7 +42,9 @@ Test Coverage:
 - CLI argument overrides for data loading paths
 - Comprehensive edge case handling
 
-Total: 77 tests
+Note: --min-samples-cmc and --memory-threshold-pct removed in v3.0 (CMC-only)
+
+Total: ~65 tests
 
 Usage Example:
 -------------
@@ -59,7 +62,7 @@ pytest tests/unit/test_cli_core.py::TestMethodArgumentParsing -v
 
 See Also:
 ---------
-- docs/WEEK7_CONSOLIDATION_SUMMARY.md: Consolidation details
+- docs/migration/v3_cmc_only.md: CMC-only migration guide
 - homodyne/cli/args_parser.py: Argument parser implementation
 - homodyne/cli/commands.py: CLI command implementations
 """
@@ -284,10 +287,10 @@ class TestCMCOptions:
 
 
 class TestHelpTextDocumentation:
-    """Test that help text properly documents automatic selection."""
+    """Test that help text properly documents CMC options."""
 
-    def test_method_help_mentions_automatic_selection(self):
-        """Test that --method help text mentions automatic NUTS/CMC selection."""
+    def test_method_help_mentions_mcmc(self):
+        """Test that --method help text mentions mcmc option."""
         parser = create_parser()
 
         # Find the --method argument
@@ -300,13 +303,11 @@ class TestHelpTextDocumentation:
         assert method_action is not None
         help_text = method_action.help
 
-        # Check that help text mentions key concepts
-        assert "automatic NUTS/CMC selection" in help_text or "automatic" in help_text
-        assert "num_samples" in help_text or "dual criteria" in help_text
-        assert "config" in help_text.lower()
+        # Check that help text mentions mcmc
+        assert "mcmc" in help_text.lower() or "MCMC" in help_text
 
-    def test_cmc_group_has_description_with_selection_info(self):
-        """Test that CMC argument group has a descriptive title and/or description."""
+    def test_cmc_group_has_description(self):
+        """Test that CMC argument group has a descriptive title."""
         parser = create_parser()
 
         # Find CMC argument group
@@ -320,21 +321,15 @@ class TestHelpTextDocumentation:
         # Check group title mentions CMC
         assert "CMC" in cmc_group.title or "Consensus Monte Carlo" in cmc_group.title
 
-        # If description exists, it should explain automatic selection
-        # Note: argparse may not populate description in all cases
-        if cmc_group.description:
-            description_lower = cmc_group.description.lower()
-            assert "automatic" in description_lower or "selected" in description_lower
-
-    def test_epilog_documents_automatic_selection_criteria(self):
-        """Test that epilog documents the dual-criteria selection logic."""
+    def test_epilog_documents_cmc_sharding(self):
+        """Test that epilog documents CMC sharding options."""
         parser = create_parser()
         epilog = parser.epilog
 
+        # Epilog should exist and document CMC options
         assert epilog is not None
-        # Check for dual-criteria documentation
-        assert "num_samples >= 15" in epilog or "memory > 30%" in epilog
-        assert "Automatic selection" in epilog or "automatic" in epilog.lower()
+        # Check for CMC/sharding documentation
+        assert "CMC" in epilog or "shard" in epilog.lower() or "mcmc" in epilog.lower()
 
 
 # ==============================================================================
@@ -441,73 +436,10 @@ class TestAcceptedMethodsFunctionality:
 
 
 class TestCMCSpecificOptions:
-    """Test CMC-specific CLI options work with --method mcmc."""
+    """Test CMC-specific CLI options work with --method mcmc.
 
-    def test_min_samples_cmc_override_accepted(self, tmp_path):
-        """Test that --min-samples-cmc override is accepted with mcmc method."""
-        parser = create_parser()
-        config_file = tmp_path / "test_config.yaml"
-        config_file.write_text("# Test config")
-
-        args = parser.parse_args(
-            [
-                "--method",
-                "mcmc",
-                "--min-samples-cmc",
-                "20",
-                "--config",
-                str(config_file),
-            ]
-        )
-
-        assert args.method == "mcmc"
-        assert args.min_samples_cmc == 20
-        assert validate_args(args) is True
-
-    def test_memory_threshold_pct_override_accepted(self, tmp_path):
-        """Test that --memory-threshold-pct override is accepted with mcmc method."""
-        parser = create_parser()
-        config_file = tmp_path / "test_config.yaml"
-        config_file.write_text("# Test config")
-
-        args = parser.parse_args(
-            [
-                "--method",
-                "mcmc",
-                "--memory-threshold-pct",
-                "0.35",
-                "--config",
-                str(config_file),
-            ]
-        )
-
-        assert args.method == "mcmc"
-        assert args.memory_threshold_pct == 0.35
-        assert validate_args(args) is True
-
-    def test_both_cmc_thresholds_accepted_together(self, tmp_path):
-        """Test that both CMC threshold overrides work together."""
-        parser = create_parser()
-        config_file = tmp_path / "test_config.yaml"
-        config_file.write_text("# Test config")
-
-        args = parser.parse_args(
-            [
-                "--method",
-                "mcmc",
-                "--min-samples-cmc",
-                "25",
-                "--memory-threshold-pct",
-                "0.40",
-                "--config",
-                str(config_file),
-            ]
-        )
-
-        assert args.method == "mcmc"
-        assert args.min_samples_cmc == 25
-        assert args.memory_threshold_pct == 0.40
-        assert validate_args(args) is True
+    Note: --min-samples-cmc and --memory-threshold-pct removed in v3.0 (CMC-only)
+    """
 
     def test_cmc_num_shards_accepted_with_mcmc(self, tmp_path):
         """Test that --cmc-num-shards is accepted with mcmc method."""
@@ -552,7 +484,7 @@ class TestCMCSpecificOptions:
         assert validate_args(args) is True
 
     def test_all_cmc_options_together(self, tmp_path):
-        """Test that all CMC options can be used together."""
+        """Test that all CMC sharding options can be used together."""
         parser = create_parser()
         config_file = tmp_path / "test_config.yaml"
         config_file.write_text("# Test config")
@@ -561,10 +493,6 @@ class TestCMCSpecificOptions:
             [
                 "--method",
                 "mcmc",
-                "--min-samples-cmc",
-                "20",
-                "--memory-threshold-pct",
-                "0.35",
                 "--cmc-num-shards",
                 "8",
                 "--cmc-backend",
@@ -576,8 +504,6 @@ class TestCMCSpecificOptions:
         )
 
         assert args.method == "mcmc"
-        assert args.min_samples_cmc == 20
-        assert args.memory_threshold_pct == 0.35
         assert args.cmc_num_shards == 8
         assert args.cmc_backend == "multiprocessing"
         assert args.cmc_plot_diagnostics is True
@@ -739,7 +665,10 @@ class TestCLIParameterOverrides:
 
 
 class TestParameterOverrideValidation:
-    """Test validation of parameter override values."""
+    """Test validation of parameter override values.
+
+    Note: memory_threshold_pct tests removed in v3.0 (CMC-only)
+    """
 
     def test_negative_d0_rejected(self, tmp_path):
         """Test that negative D0 values are rejected."""
@@ -758,52 +687,6 @@ class TestParameterOverrideValidation:
 
         # Validation should fail for negative D0
         assert validate_args(args) is False
-
-    def test_invalid_memory_threshold_rejected(self, tmp_path):
-        """Test that invalid memory threshold values are rejected."""
-        parser = create_parser()
-        config_file = tmp_path / "test_config.yaml"
-        config_file.write_text("# Test config")
-
-        args = parser.parse_args(
-            [
-                "--memory-threshold-pct",
-                "1.5",  # > 1.0
-                "--config",
-                str(config_file),
-            ]
-        )
-
-        # Validation should fail for out-of-range threshold
-        assert validate_args(args) is False
-
-    def test_memory_threshold_boundaries(self, tmp_path):
-        """Test memory threshold at valid boundaries."""
-        parser = create_parser()
-        config_file = tmp_path / "test_config.yaml"
-        config_file.write_text("# Test config")
-
-        # Test 0.0 boundary
-        args = parser.parse_args(
-            [
-                "--memory-threshold-pct",
-                "0.0",
-                "--config",
-                str(config_file),
-            ]
-        )
-        assert validate_args(args) is True
-
-        # Test 1.0 boundary
-        args = parser.parse_args(
-            [
-                "--memory-threshold-pct",
-                "1.0",
-                "--config",
-                str(config_file),
-            ]
-        )
-        assert validate_args(args) is True
 
 
 class TestShellAliasDefinitions:
@@ -850,7 +733,10 @@ class TestShellAliasDefinitions:
 
 
 class TestHelpTextValidation:
-    """Test help text properly documents CLI changes."""
+    """Test help text properly documents CLI options.
+
+    Note: Auto-selection tests removed in v3.0 (CMC-only architecture)
+    """
 
     def test_help_text_method_choices_correct(self):
         """Test that help text shows only nlsq and mcmc as choices."""
@@ -870,29 +756,8 @@ class TestHelpTextValidation:
         assert "nlsq" in help_text or "NLSQ" in help_text
         assert "mcmc" in help_text or "MCMC" in help_text
 
-    def test_help_mentions_automatic_selection(self):
-        """Test that help text documents automatic NUTS/CMC selection."""
-        parser = create_parser()
-
-        # Find the --method argument
-        method_action = None
-        for action in parser._actions:
-            if "--method" in action.option_strings:
-                method_action = action
-                break
-
-        assert method_action is not None
-        help_text = method_action.help
-
-        # Should mention dual criteria selection
-        assert (
-            "automatic NUTS/CMC selection" in help_text
-            or "automatic" in help_text.lower()
-            or "dual criteria" in help_text.lower()
-        )
-
-    def test_cmc_group_describes_automatic_selection(self):
-        """Test that CMC argument group describes automatic selection."""
+    def test_cmc_group_exists(self):
+        """Test that CMC argument group exists with proper title."""
         parser = create_parser()
 
         # Find CMC argument group
@@ -906,22 +771,14 @@ class TestHelpTextValidation:
         # Check group title/description mentions CMC
         assert "CMC" in cmc_group.title or "Consensus" in cmc_group.title
 
-    def test_epilog_documents_dual_criteria(self):
-        """Test that epilog documents the dual-criteria selection logic."""
+    def test_epilog_documents_cmc(self):
+        """Test that epilog documents CMC options."""
         parser = create_parser()
         epilog = parser.epilog
 
         assert epilog is not None
-        # Check for dual-criteria documentation
-        assert "num_samples >= 15" in epilog or "memory > 30%" in epilog
-
-    def test_epilog_mentions_automatic_selection(self):
-        """Test that epilog mentions automatic selection."""
-        parser = create_parser()
-        epilog = parser.epilog
-
-        assert epilog is not None
-        assert "automatic" in epilog.lower() or "Automatic" in epilog
+        # Check for CMC documentation
+        assert "CMC" in epilog or "mcmc" in epilog.lower() or "shard" in epilog.lower()
 
 
 class TestMCMCSpecificOptionsValidation:

@@ -17,7 +17,7 @@
 # Template metadata describing analysis configuration
 metadata:
   config_version: "2.4.0"                     # Configuration file format version
-  description: "Static diffusion analysis - 3-parameter model (v2.4.0: CPU-only, per-angle mandatory, auto NUTS/CMC)"
+  description: "Static diffusion analysis - 3-parameter model (v3.0: CPU-only, per-angle mandatory, CMC-only MCMC)"
   analysis_mode: "static"                     # Static diffusion mode
   parameter_count: 3                          # D₀, α, D_offset
 
@@ -348,76 +348,25 @@ optimization:
   # MCMC - Markov Chain Monte Carlo (Uncertainty Quantification)
   # ---------------------------------------------------------------------------
   # Provides full posterior distributions and uncertainty estimates
-  # Automatic NUTS/CMC selection based on dual criteria (v2.1.0):
-  #   - (num_samples >= 15) OR (memory > 30%) → CMC (parallel sampling)
-  #   - Otherwise → NUTS (sequential sampling)
-  # Uses NumPyro or BlackJAX backend
-  # No automatic NLSQ/SVI initialization (v2.1.0+) - manual workflow required
-  # For static mode with 3 parameters: faster convergence than laminar_flow
+  # CMC-only pipeline with per-shard NumPyro/BlackJAX NUTS
   mcmc:
-    num_warmup: 2000                          # NUTS warmup/adaptation samples (increased for stability)
-    num_samples: 5000                         # Posterior samples per chain (increased for ESS > 400)
-    num_chains: 4                             # Number of parallel chains (recommended: 4)
-    progress_bar: true                        # Show sampling progress
-    target_accept_prob: 0.90                  # NUTS target acceptance probability (0.90 for funnel stability)
-    max_tree_depth: 12                        # Maximum NUTS tree depth (increased for complex geometry)
     backend: "numpyro"                        # Options: "numpyro" | "blackjax"
-
-    # Automatic NUTS/CMC selection thresholds (v2.1.0)
-    # CMC selected when: (num_samples >= min_samples_for_cmc) OR (memory > memory_threshold_pct)
-    min_samples_for_cmc: 15                   # Parallelism threshold (samples/angles >= 15)
-    memory_threshold_pct: 0.30                # Memory threshold (30% of available)
-    dense_mass_matrix: true                   # True: full covariance (handles D0-α funnel correlations)
-    stable_prior_fallback: false              # Retry with BetaScaled priors if init fails
-    n_retries: 5                              # Maximum retry attempts (increased from default 3)
-
-    # Chain starting values (NOT automatic NLSQ/SVI initialization - removed in v2.1.0)
-    init_strategy: "median"                   # Options: "median" | "uniform" | "prior"
-                                              # Uses physics-informed priors from ParameterSpace
-
-    # Diagnostics and quality control
-    check_hmc_diagnostics: true               # Verify convergence diagnostics
-    min_ess: 400                              # Minimum effective sample size per parameter
-    max_rhat: 1.1                             # Maximum R-hat for convergence
-
-  # ---------------------------------------------------------------------------
-  # STREAMING - For Large Datasets (> 100M points)
-  # ---------------------------------------------------------------------------
-  # Constant memory footprint with checkpoint/resume capability
-  streaming:
-    enable_checkpoints: true                  # Enable HDF5 checkpoint save/resume
-    checkpoint_dir: "./checkpoints"           # Directory for checkpoint files
-    checkpoint_frequency: 10                  # Save checkpoint every N batches
-    resume_from_checkpoint: true              # Auto-detect and resume from latest checkpoint
-    keep_last_checkpoints: 3                  # Number of recent checkpoints to keep (older deleted)
-
-    # Fault tolerance and error recovery
-    enable_fault_tolerance: true              # Enable numerical validation and recovery
-    max_retries_per_batch: 2                  # Maximum retry attempts per failed batch
-    min_success_rate: 0.5                     # Minimum batch success rate (0.0-1.0) before failing
-
-    # Batch processing
-    batch_size: null                          # Batch size in points (null = auto-detect based on memory)
-    adaptive_batching: true                   # Dynamically adjust batch size based on performance
-
-  # ---------------------------------------------------------------------------
-  # CMC - Consensus Monte Carlo (Automatically Selected by MCMC)
-  # ---------------------------------------------------------------------------
-  # CMC is automatically selected when MCMC dual criteria met (v2.1.0):
-  #   (num_samples >= 15) OR (memory > 30%)
-  # This section configures CMC behavior when auto-selected
-  # Parallelizes MCMC across data shards and combines subposteriors
-  cmc:
-    enable: "auto"                            # Options: false | true | "auto" (recommended: "auto")
-    min_points_for_cmc: 1000000               # Minimum dataset size to trigger CMC (legacy parameter)
-    backend: "jax"                            # Options: "jax" (CPU-only in v2.3.0+) | "numpy"
-    diagonal_correction: true                 # Apply diagonal correction to correlation matrix
-
-    # RNG seeding (for reproducibility)
-    # Note: Each shard uses deterministic seed = shard_idx by default
-    # See docs/developer-guide/cmc_rng_and_initialization.md for details
-    # rng_seed_offset: null                   # Optional: offset all shard seeds (future extension)
-                                              # Example: offset=42 → shard 0 uses seed 42, shard 1 uses seed 43, etc.
+    num_warmup: 2000                          # NUTS warmup/adaptation samples
+    num_samples: 5000                         # Posterior samples per chain
+    num_chains: 4                             # Parallel chains
+    progress_bar: true                        # Show sampling progress
+    target_accept_prob: 0.90                  # NUTS target acceptance probability
+    max_tree_depth: 12                        # Maximum NUTS tree depth
+    dense_mass_matrix: true                   # Full covariance mass matrix
+    sharding:
+      num_shards: auto                        # auto = choose based on hardware
+      seed_base: 0                            # Base RNG seed for shard seeds
+    initial_values:
+      phi: {}                                 # Optional per-phi overrides: angle_deg: {contrast, offset}
+      percentile_fallback:
+        contrast_low_pct: 5
+        contrast_high_pct: 95
+        offset_pct: 50
 
     # Data sharding configuration
     sharding:

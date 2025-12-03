@@ -967,7 +967,8 @@ def _worker_function(args: tuple) -> Dict[str, Any]:
         )
 
         # Run MCMC with optional diagnostics hook
-        rng_key = jax.random.PRNGKey(shard_idx)
+        shard_seed = shard.get("seed", shard_idx)
+        rng_key = jax.random.PRNGKey(shard_seed)
         diagnostics_enabled = os.environ.get("HOMODYNE_DEBUG_INIT", "0") not in (
             "0",
             "",

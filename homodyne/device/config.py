@@ -1,46 +1,23 @@
-"""Hardware Detection and Configuration for Consensus Monte Carlo
-================================================================
+"""Hardware detection and configuration helpers for CMC.
+=======================================================
 
-This module provides hardware-adaptive detection and decision-making for
-CMC (Consensus Monte Carlo) optimization. It determines when to use CMC
-based on available hardware resources and dataset characteristics using
-a tri-criteria OR logic system.
-
-Key Features
-------------
-- Automatic CPU device detection (CPU-only in v2.3.0+)
-- System memory detection with psutil
-- Cluster environment detection (PBS/Slurm)
-- Hardware-adaptive CMC threshold selection
-- Tri-criteria decision logic (parallelism OR memory OR large dataset)
-- Backend recommendation based on hardware capabilities
+This module now only detects hardware characteristics to size shards and
+recommend the execution backend for Consensus Monte Carlo (CMC). Method
+selection is handled upstream and CMC is always used for MCMC paths.
 
 Usage
 -----
-    from homodyne.device.config import detect_hardware, should_use_cmc
+    from homodyne.device.config import detect_hardware
 
-    # Detect hardware capabilities
     hw_config = detect_hardware()
     print(f"Platform: {hw_config.platform}")
     print(f"Recommended backend: {hw_config.recommended_backend}")
 
-    # Decide whether to use CMC for a dataset
-    dataset_size = 5_000_000
-    use_cmc = should_use_cmc(dataset_size, hw_config)
-    print(f"Use CMC for {dataset_size} points: {use_cmc}")
-
 Integration
 -----------
-This module is called by:
-- fit_mcmc_jax() to determine method selection (NUTS vs CMC)
-- CMC coordinator to select optimal backend
-- Shard sizing calculations in CMC pipeline
-
-Notes
------
-- Hardware detection is performed once at import time
-- Results can be cached for performance
-- Fallback mechanisms ensure robustness
+- CMC coordinator reads :class:`HardwareConfig` for backend selection and
+  shard sizing.
+- No method-selection logic remains here; CMC is the only MCMC path.
 """
 
 from dataclasses import dataclass
@@ -275,251 +252,22 @@ def detect_hardware() -> HardwareConfig:
     return hw_config
 
 
-def should_use_cmc(
-    num_samples: int,
-    hardware_config: HardwareConfig,
-    dataset_size: Optional[int] = None,
-    memory_threshold_pct: float = 0.20,
-    min_samples_for_cmc: int = 15,
-    large_dataset_threshold: int = 1_000_000,
-    large_dataset_threshold_low_sample: int = 10_000_000,
-) -> bool:
-    """Determine if CMC should be used based on samples AND/OR dataset size.
+def should_use_cmc(*_args, **_kwargs) -> bool:
+    """Deprecated shim; CMC is always selected.
 
-    CMC serves FOUR distinct purposes requiring different triggering conditions:
-
-    **Use Case 1: Parallelism** (many independent samples)
-    - Trigger: num_samples >= min_samples_for_cmc (default: 15)
-    - Sharding: Split samples (phi angles) across shards
-    - Benefit: Parallel MCMC chains on multi-core CPU, faster convergence
-    - Example: 20 phi angles on 14-core CPU → ~1.4x speedup via parallelization
-
-    **Use Case 2: Memory Management** (few samples, huge data)
-    - Trigger: dataset_size causes estimated memory > threshold (default: 20%)
-    - Sharding: Keep all samples in each shard, split data points
-    - Benefit: Avoid OOM errors, enable large dataset analysis
-    - Example: 2 phi × 50M points → CMC triggered (50% memory) → avoid OOM
-
-    **Use Case 3: JAX Broadcasting Protection** (very large pooled datasets)
-    - Trigger: dataset_size > large_dataset_threshold (default: 1M)
-    - Reason: JAX broadcasting in compute_g1_total can create impossible arrays
-    - Example: 3 phi × 3M points → JAX broadcasting overflow → CMC prevents crash
-    - Benefit: CMC sharding prevents catastrophic memory overflow
-    - Trade-off: Accept 10-20% CMC overhead to prevent JAX crash (overflow independent of sample count)
-
-    **Use Case 4: Large Dataset, Few Samples** (proactive OOM prevention)
-    - Trigger: dataset_size > large_dataset_threshold_low_sample (default: 10M) AND 2 <= num_samples < min_samples_for_cmc
-    - Sharding: Split data points (no parallelism benefit)
-    - Benefit: Proactively prevent OOM before it happens
-    - Trade-off: Accept 10-20% CMC overhead to avoid OOM failure
-    - Example: 2 phi × 24M points → CMC triggered proactively → memory per shard halved
-
-    Decision Logic (OR condition)
-    ------------------------------
-    Use CMC if:
-
-    1. num_samples >= min_samples_for_cmc (parallelism mode), OR
-    2. estimated_memory_gb > threshold × available_memory (memory mode), OR
-    3. dataset_size > large_dataset_threshold
-       (JAX broadcasting protection - independent of sample count), OR
-    4. (dataset_size > large_dataset_threshold_low_sample AND 2 <= num_samples < min_samples_for_cmc)
-       (proactive OOM prevention for large datasets with few samples)
-
-    Parameters
-    ----------
-    num_samples : int
-        Number of independent samples (e.g., phi angles in XPCS)
-    hardware_config : HardwareConfig
-        Detected hardware configuration
-    dataset_size : int, optional
-        Total number of data points (for memory estimation)
-        If None, only sample-based decision is used
-    memory_threshold_pct : float, default 0.20
-        Use CMC if estimated memory > this fraction of available (0.20 = 20%)
-        Lowered from 0.30 to trigger earlier for proactive OOM prevention
-        Calibrated for 16 GB GPUs with safety margin for OS/driver overhead
-    min_samples_for_cmc : int, default 15
-        Minimum samples for parallelism-mode CMC
-        Optimized for multi-core CPU workloads (14+ cores)
-        15 samples / 14 cores = 1.07 samples/core (acceptable minimum)
-    large_dataset_threshold : int, default 1_000_000
-        Force CMC if dataset_size > threshold (JAX broadcasting protection)
-        Prevents catastrophic memory overflow from JAX broadcasting in compute_g1_total
-        Critical for pooled datasets >1M points in laminar flow analysis
-    large_dataset_threshold_low_sample : int, default 10_000_000
-        Proactively trigger CMC for very large datasets even with few samples (Criterion 4)
-        Prevents OOM before it happens when num_samples < min_samples_for_cmc
-        Optimized for common XPCS use case: 2 phi angles × 10M-100M points
-        Trade-off: Accept CMC overhead to avoid OOM failure
-
-    Returns
-    -------
-    bool
-        True if CMC should be used, False for standard NUTS
-
-    Examples
-    --------
-    >>> hw = detect_hardware()
-    >>> # Case 1: Few samples, small data → NUTS (all criteria fail)
-    >>> should_use_cmc(10, hw, dataset_size=5_000_000)
-    False
-
-    >>> # Case 2: Moderate samples → CMC (Criterion 1: parallelism, 23 ≥ 15)
-    >>> should_use_cmc(23, hw, dataset_size=23_000_000)
-    True
-
-    >>> # Case 3: Few samples, very large data → CMC (Criterion 4: 24M > 10M, 2 < 15)
-    >>> should_use_cmc(2, hw, dataset_size=24_000_000)
-    True
-
-    >>> # Case 4: Few samples, HUGE data → CMC (Criteria 2 & 4: memory > 20%, dataset > 10M)
-    >>> should_use_cmc(2, hw, dataset_size=50_000_000)
-    True
-
-    >>> # Case 5: Borderline → CMC (Criterion 1: 20 samples triggers parallelism)
-    >>> should_use_cmc(20, hw, dataset_size=10_000_000)
-    True
-
-    Notes
-    -----
-    - For typical XPCS: 2-100 phi angles, 1M-100M+ points per angle
-    - Memory estimate: dataset_size × 8 bytes × 30 (empirically calibrated)
-      Components: data + gradients (9 params) + NUTS tree + JAX overhead + MCMC state
-    - CMC sharding strategy adapts based on which condition triggered it
-    - Calibration: 23M points → ~12-14 GB actual NUTS memory usage on GPU
-    - Large dataset threshold protects against JAX broadcasting edge cases
+    Left temporarily to avoid import errors while downstream surfaces migrate.
+    Logs a warning and returns ``True`` unconditionally.
     """
-    # Step 1: Evaluate quad-criteria OR logic
-    # Criterion 1 (Parallelism): num_samples >= min_samples_for_cmc
-    use_cmc_for_parallelism = num_samples >= min_samples_for_cmc
 
-    # Criterion 2 (Memory): estimated_memory > memory_threshold_pct
-    use_cmc_for_memory = False
-    estimated_memory_gb = 0.0
-    memory_fraction = 0.0
-
-    # Criterion 3 (Large Dataset with Parallelism): dataset_size > large_dataset_threshold AND sufficient samples
-    use_cmc_for_large_dataset = False
-
-    # Criterion 4 (Large Dataset, Few Samples): dataset_size > large_dataset_threshold_low_sample AND 2 <= num_samples < min_samples_for_cmc
-    use_cmc_large_low_sample = False
-
-    if dataset_size is not None:
-        # Estimate memory requirement for MCMC
-        # Formula: dataset_size × 8 bytes/float × 30 (data + gradients + NUTS tree + JAX overhead + MCMC state)
-        # Multiplier calibrated empirically: 23M points → ~12-14 GB actual usage
-        # Components: data (1x) + gradients for 9 params (9x) + NUTS trajectory storage (15x) + overhead (5x)
-        estimated_memory_gb = (dataset_size * 8 * 30) / 1e9
-        available_memory_gb = hardware_config.memory_per_device_gb
-        memory_fraction = estimated_memory_gb / available_memory_gb
-        use_cmc_for_memory = memory_fraction > memory_threshold_pct
-
-        # Criterion 3: JAX Broadcasting Protection (large datasets)
-        # Critical for pooled datasets >1M that can cause JAX broadcasting overflow
-        # JAX overflow is physics-based (array size), NOT dependent on sample count
-        # Trade-off: Accept 10-20% CMC overhead to prevent catastrophic JAX crash
-        # Example: 3M points / 3 samples → triggers CMC → prevents overflow
-        use_cmc_for_large_dataset = dataset_size > large_dataset_threshold
-
-        # Criterion 4 (NEW): Proactive OOM prevention for large datasets with few samples
-        # Purpose: Prevent OOM before it happens when parallelism doesn't apply
-        # Trade-off: Accept 10-20% CMC overhead to avoid OOM failure
-        # Common XPCS use case: 2 phi angles × 10M-100M points
-        use_cmc_large_low_sample = (
-            dataset_size > large_dataset_threshold_low_sample
-            and num_samples >= 2  # Minimum for CMC
-            and num_samples < min_samples_for_cmc  # Only if parallelism doesn't apply
-        )
-
-    # Step 2: Log comprehensive quad-criteria evaluation
-    logger.info("=" * 70)
-    logger.info("Automatic NUTS/CMC Selection - Quad-Criteria Evaluation")
-    logger.info("=" * 70)
-    logger.info(
-        f"Criterion 1 (Parallelism): num_samples={num_samples:,} >= "
-        f"min_samples_for_cmc={min_samples_for_cmc} → {use_cmc_for_parallelism}"
+    logger.warning(
+        "should_use_cmc is deprecated; CMC is the only MCMC path now. "
+        "This helper will be removed in a future release."
     )
-
-    if dataset_size is not None:
-        logger.info(
-            f"Criterion 2 (Memory): {memory_fraction:.1%} "
-            f"({estimated_memory_gb:.2f}/{hardware_config.memory_per_device_gb:.2f} GB) > "
-            f"{memory_threshold_pct:.1%} → {use_cmc_for_memory}"
-        )
-        logger.info(
-            f"Criterion 3 (JAX Broadcasting Protection): dataset_size={dataset_size:,} > "
-            f"threshold={large_dataset_threshold:,} → {use_cmc_for_large_dataset}"
-        )
-        logger.info(
-            f"Criterion 4 (Large Dataset, Few Samples): (dataset_size={dataset_size:,} > "
-            f"threshold={large_dataset_threshold_low_sample:,}) AND (2 <= num_samples={num_samples} < "
-            f"min={min_samples_for_cmc}) → {use_cmc_large_low_sample}"
-        )
-    else:
-        logger.info("Criterion 2 (Memory): dataset_size=None → False (not evaluated)")
-        logger.info(
-            "Criterion 3 (JAX Broadcasting Protection): dataset_size=None → False (not evaluated)"
-        )
-        logger.info(
-            "Criterion 4 (Large Dataset, Few Samples): dataset_size=None → False (not evaluated)"
-        )
-
-    # Step 3: Apply OR logic and make decision (any criterion triggers CMC)
-    use_cmc = (
-        use_cmc_for_parallelism
-        or use_cmc_for_memory
-        or use_cmc_for_large_dataset
-        or use_cmc_large_low_sample
-    )
-
-    logger.info("-" * 70)
-
-    # Build mode string based on which criteria triggered CMC
-    if use_cmc:
-        mode_parts = []
-        if use_cmc_for_parallelism:
-            mode_parts.append("Parallelism")
-        if use_cmc_for_memory:
-            mode_parts.append("Memory")
-        if use_cmc_for_large_dataset:
-            mode_parts.append("JAX Broadcasting Protection")
-        if use_cmc_large_low_sample:
-            mode_parts.append("Large Dataset, Few Samples")
-        mode_string = " + ".join(mode_parts) + " mode"
-    else:
-        mode_string = "All criteria failed mode"
-
-    logger.info(f"Final decision: Using {'CMC' if use_cmc else 'NUTS'} ({mode_string})")
-    logger.info("=" * 70)
-
-    # Step 4: Log warnings for edge cases
-    if use_cmc and num_samples < min_samples_for_cmc:
-        # CMC triggered by memory, large dataset, or low-sample criterion, not parallelism
-        trigger_reason = []
-        if use_cmc_for_memory:
-            trigger_reason.append(
-                f"memory ({memory_fraction:.1%} > {memory_threshold_pct:.1%})"
-            )
-        if use_cmc_for_large_dataset:
-            trigger_reason.append(
-                f"JAX broadcasting protection ({dataset_size:,} > {large_dataset_threshold:,})"
-            )
-        if use_cmc_large_low_sample:
-            trigger_reason.append(
-                f"large dataset, few samples ({dataset_size:,} > {large_dataset_threshold_low_sample:,})"
-            )
-        logger.warning(
-            f"Using CMC with only {num_samples} samples (< {min_samples_for_cmc} threshold). "
-            f"CMC adds 10-20% overhead; NUTS is faster for <{min_samples_for_cmc} samples if memory permits. "
-            f"Triggered by: {', '.join(trigger_reason)}"
-        )
-
-    return use_cmc
+    return True
 
 
 # Export public API
 __all__ = [
     "HardwareConfig",
     "detect_hardware",
-    "should_use_cmc",
 ]

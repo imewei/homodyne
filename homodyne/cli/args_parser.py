@@ -56,10 +56,9 @@ Optimization Methods:
   nlsq:    NLSQ trust-region nonlinear least squares (PRIMARY)
           Use for: Fast, reliable parameter estimation
 
-  mcmc:    Automatic NUTS/CMC selection based on dataset characteristics (SECONDARY)
+  mcmc:    Consensus Monte Carlo (CMC-only) with stratified sharding (SECONDARY)
           Use for: Uncertainty quantification, publication-quality analysis
-          Automatic selection: (num_samples >= 15) OR (memory > 30%%) → CMC, else NUTS
-          Configure thresholds in config file: min_samples_for_cmc, memory_threshold_pct
+          Per-phi initial values from config or percentile fallback; single shard runs NUTS inside each shard.
 
 Physical Model:
   c₂(φ,t₁,t₂) = 1 + contrast × [c₁(φ,t₁,t₂)]²
@@ -90,10 +89,9 @@ Homodyne v{__version__} - CPU-Optimized JAX Architecture
         choices=["nlsq", "mcmc"],
         default="nlsq",
         help=(
-            "Optimization method: nlsq (NLSQ trust-region), mcmc (automatic NUTS/CMC selection). "
-            "For MCMC, selection uses dual criteria: (num_samples >= min_samples_for_cmc) OR "
-            "(memory > memory_threshold_pct). Control via config: optimization.mcmc.min_samples_for_cmc "
-            "and optimization.mcmc.memory_threshold_pct (default: %(default)s)"
+            "Optimization method: nlsq (NLSQ trust-region), mcmc (CMC-only). "
+            "MCMC always uses Consensus Monte Carlo with per-shard NumPyro/BlackJAX NUTS; "
+            "configure sharding and per-phi initial values via config."
         ),
     )
 
@@ -257,21 +255,6 @@ Homodyne v{__version__} - CPU-Optimized JAX Architecture
         help="Override initial phi0 (flow direction angle, radians) from config (laminar flow only)",
     )
 
-    # MCMC threshold overrides
-    override_group.add_argument(
-        "--min-samples-cmc",
-        type=int,
-        default=None,
-        help="Override min_samples_for_cmc threshold for CMC selection (default: 15)",
-    )
-
-    override_group.add_argument(
-        "--memory-threshold-pct",
-        type=float,
-        default=None,
-        help="Override memory_threshold_pct for CMC selection (0.0-1.0, default: 0.30)",
-    )
-
     # MCMC/CMC mass matrix option
     override_group.add_argument(
         "--dense-mass-matrix",
@@ -423,15 +406,6 @@ def validate_args(args) -> bool:
     if args.initial_d0 is not None and args.initial_d0 <= 0:
         print("Error: --initial-d0 must be positive")
         return False
-
-    if args.min_samples_cmc is not None and args.min_samples_cmc <= 0:
-        print("Error: --min-samples-cmc must be positive")
-        return False
-
-    if args.memory_threshold_pct is not None:
-        if not (0.0 <= args.memory_threshold_pct <= 1.0):
-            print("Error: --memory-threshold-pct must be between 0.0 and 1.0")
-            return False
 
     # Check config file exists if provided and not default
     if args.config != Path("./homodyne_config.yaml") and not args.config.exists():

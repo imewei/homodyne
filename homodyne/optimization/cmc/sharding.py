@@ -377,6 +377,7 @@ def shard_data_stratified(
     q: float,
     L: float,
     sigma: np.ndarray = None,
+    seed_base: int = 0,
 ) -> List[Dict[str, np.ndarray]]:
     """Create data shards using stratified assignment strategy (PRIMARY).
 
@@ -454,28 +455,42 @@ def shard_data_stratified(
     - Shard sizes balanced within 10% tolerance
     - Recommended as default strategy for XPCS data
     """
+    if num_shards <= 1:
+        logger.info("Single-shard CMC path – combiner bypassed")
+        shard = {
+            "data": data,
+            "t1": t1,
+            "t2": t2,
+            "phi": phi,
+            "q": q,
+            "L": L,
+            "shard_id": 0,
+            "shard_size": len(data),
+            "phi_unique": np.unique(phi),
+            "combiner_required": False,
+            "seed": int(seed_base),
+        }
+        if sigma is not None:
+            shard["sigma"] = sigma
+        return [shard]
+
     logger.info(
         f"Creating {num_shards} stratified shards from {len(data):,} datapoints "
-        f"(round-robin phi sampling)"
+        f"(phi-preserving round-robin)"
     )
 
-    # Step 1: Sort by phi angle
-    sort_indices = np.argsort(phi)
-    logger.debug(f"Sorted {len(sort_indices):,} datapoints by phi angle")
-
-    # Step 2: Round-robin assignment - every Nth point to each shard
-    # This ensures each shard samples evenly across the phi distribution
+    phi_unique, phi_inverse = np.unique(phi, return_inverse=True)
     shard_indices_list = [[] for _ in range(num_shards)]
-    for i, idx in enumerate(sort_indices):
-        shard_id = i % num_shards
-        shard_indices_list[shard_id].append(idx)
 
-    # Convert to numpy arrays
-    shard_indices = [np.array(indices) for indices in shard_indices_list]
+    # Assign each phi group round-robin to preserve angle coverage per shard
+    for angle_idx, _angle in enumerate(phi_unique):
+        angle_indices = np.nonzero(phi_inverse == angle_idx)[0]
+        for local_rank, idx in enumerate(angle_indices):
+            shard_indices_list[local_rank % num_shards].append(idx)
 
-    # Step 3: Create shard dictionaries
-    shards = []
-    for i, shard_idx in enumerate(shard_indices):
+    shards: List[Dict[str, np.ndarray]] = []
+    for i, shard_indices in enumerate(shard_indices_list):
+        shard_idx = np.array(sorted(shard_indices))
         shard = {
             "data": data[shard_idx],
             "t1": t1[shard_idx],
@@ -485,9 +500,9 @@ def shard_data_stratified(
             "L": L,
             "shard_id": i,
             "shard_size": len(shard_idx),
+            "seed": int(seed_base + i),
         }
 
-        # Add sigma if provided
         if sigma is not None:
             shard["sigma"] = sigma[shard_idx]
 

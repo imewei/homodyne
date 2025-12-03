@@ -649,8 +649,6 @@ def mock_config():
         },
         "optimization": {
             "mcmc": {
-                "min_samples_for_cmc": 15,
-                "memory_threshold_pct": 0.30,
                 "dense_mass": False,
             }
         },
@@ -678,8 +676,6 @@ def test_cli_args_parameter_overrides_exist(parser):
     assert hasattr(args, "initial_beta")
     assert hasattr(args, "initial_gamma_dot_offset")
     assert hasattr(args, "initial_phi0")
-    assert hasattr(args, "min_samples_cmc")
-    assert hasattr(args, "memory_threshold_pct")
     assert hasattr(args, "dense_mass_matrix")
 
 
@@ -695,8 +691,6 @@ def test_cli_args_defaults_are_none(parser):
     assert args.initial_beta is None
     assert args.initial_gamma_dot_offset is None
     assert args.initial_phi0 is None
-    assert args.min_samples_cmc is None
-    assert args.memory_threshold_pct is None
 
 
 def test_cli_args_dense_mass_matrix_default_false(parser):
@@ -723,21 +717,6 @@ def test_cli_args_parse_parameter_overrides(parser):
     assert args.initial_d_offset == 20.0
 
 
-def test_cli_args_parse_threshold_overrides(parser):
-    """Test parsing MCMC threshold overrides from CLI."""
-    args = parser.parse_args(
-        [
-            "--min-samples-cmc",
-            "20",
-            "--memory-threshold-pct",
-            "0.40",
-        ]
-    )
-
-    assert args.min_samples_cmc == 20
-    assert args.memory_threshold_pct == 0.40
-
-
 # ============================================================================
 # Test Validation
 # ============================================================================
@@ -747,43 +726,6 @@ def test_validation_rejects_negative_d0(parser):
     """Test that validation rejects negative D0."""
     args = parser.parse_args(["--initial-d0", "-100.0"])
     assert not validate_args(args)
-
-
-def test_validation_rejects_negative_min_samples(parser):
-    """Test that validation rejects negative min_samples_for_cmc."""
-    args = parser.parse_args(["--min-samples-cmc", "-5"])
-    assert not validate_args(args)
-
-
-def test_validation_rejects_invalid_memory_threshold_low(parser):
-    """Test that validation rejects memory_threshold_pct < 0."""
-    args = parser.parse_args(["--memory-threshold-pct", "-0.1"])
-    assert not validate_args(args)
-
-
-def test_validation_rejects_invalid_memory_threshold_high(parser):
-    """Test that validation rejects memory_threshold_pct > 1."""
-    args = parser.parse_args(["--memory-threshold-pct", "1.5"])
-    assert not validate_args(args)
-
-
-def test_validation_accepts_valid_overrides(parser):
-    """Test that validation accepts all valid override values."""
-    args = parser.parse_args(
-        [
-            "--initial-d0",
-            "1500.0",
-            "--initial-alpha",
-            "0.75",
-            "--initial-d-offset",
-            "20.0",
-            "--min-samples-cmc",
-            "25",
-            "--memory-threshold-pct",
-            "0.40",
-        ]
-    )
-    assert validate_args(args)
 
 
 # ============================================================================
@@ -810,8 +752,6 @@ def test_override_priority_cli_beats_config(mock_config):
         initial_beta=None,
         initial_gamma_dot_offset=None,
         initial_phi0=None,
-        min_samples_cmc=None,
-        memory_threshold_pct=None,
         dense_mass_matrix=False,
     )
 
@@ -845,8 +785,6 @@ def test_override_priority_config_beats_default(mock_config):
         initial_beta=None,
         initial_gamma_dot_offset=None,
         initial_phi0=None,
-        min_samples_cmc=None,
-        memory_threshold_pct=None,
         dense_mass_matrix=False,
     )
 
@@ -857,36 +795,6 @@ def test_override_priority_config_beats_default(mock_config):
     param_values = mock_config.config["initial_parameters"]["values"]
     assert param_values == [1000.0, 0.5, 10.0]  # Original config values
 
-
-def test_override_priority_threshold_cli_beats_config(mock_config):
-    """Test that CLI threshold overrides beat config values."""
-    args = argparse.Namespace(
-        data_file=None,
-        static_mode=False,
-        laminar_flow=False,
-        method="mcmc",
-        n_samples=None,
-        n_warmup=None,
-        n_chains=None,
-        force_cpu=False,
-        initial_d0=None,
-        initial_alpha=None,
-        initial_d_offset=None,
-        initial_gamma_dot_t0=None,
-        initial_beta=None,
-        initial_gamma_dot_offset=None,
-        initial_phi0=None,
-        min_samples_cmc=25,  # Override from config 15
-        memory_threshold_pct=0.40,  # Override from config 0.30
-        dense_mass_matrix=False,
-    )
-
-    # Apply overrides
-    _apply_cli_overrides(mock_config, args)
-
-    # Check that CLI overrides were applied
-    assert mock_config.config["optimization"]["mcmc"]["min_samples_for_cmc"] == 25
-    assert mock_config.config["optimization"]["mcmc"]["memory_threshold_pct"] == 0.40
 
 
 def test_override_priority_multiple_parameters(mock_config):
@@ -907,8 +815,6 @@ def test_override_priority_multiple_parameters(mock_config):
         initial_beta=None,
         initial_gamma_dot_offset=None,
         initial_phi0=None,
-        min_samples_cmc=None,
-        memory_threshold_pct=None,
         dense_mass_matrix=False,
     )
 
@@ -948,8 +854,6 @@ def test_parameter_override_static_mode_d0(mock_config):
         initial_beta=None,
         initial_gamma_dot_offset=None,
         initial_phi0=None,
-        min_samples_cmc=None,
-        memory_threshold_pct=None,
         dense_mass_matrix=False,
     )
 
@@ -1000,8 +904,6 @@ def test_parameter_override_laminar_flow_gamma_dot(mock_config):
         initial_beta=None,
         initial_gamma_dot_offset=None,
         initial_phi0=None,
-        min_samples_cmc=None,
-        memory_threshold_pct=None,
         dense_mass_matrix=False,
     )
 
@@ -1035,8 +937,6 @@ def test_parameter_override_creates_initial_parameters_section(mock_config):
         initial_beta=None,
         initial_gamma_dot_offset=None,
         initial_phi0=None,
-        min_samples_cmc=None,
-        memory_threshold_pct=None,
         dense_mass_matrix=False,
     )
 
@@ -1076,8 +976,6 @@ def test_parameter_override_handles_null_values(mock_config):
         initial_beta=None,
         initial_gamma_dot_offset=None,
         initial_phi0=None,
-        min_samples_cmc=None,
-        memory_threshold_pct=None,
         dense_mass_matrix=False,
     )
 
@@ -1113,8 +1011,6 @@ def test_parameter_override_partial_override(mock_config):
         initial_beta=None,
         initial_gamma_dot_offset=None,
         initial_phi0=None,
-        min_samples_cmc=None,
-        memory_threshold_pct=None,
         dense_mass_matrix=False,
     )
 
@@ -1168,8 +1064,6 @@ def test_parameter_override_all_seven_parameters(mock_config):
         initial_beta=0.3,
         initial_gamma_dot_offset=0.0005,
         initial_phi0=0.5,
-        min_samples_cmc=None,
-        memory_threshold_pct=None,
         dense_mass_matrix=False,
     )
 
@@ -1179,67 +1073,6 @@ def test_parameter_override_all_seven_parameters(mock_config):
 
     # All values should be overridden
     assert param_values == [1500.0, 0.75, 20.0, 0.005, 0.3, 0.0005, 0.5]
-
-
-# ============================================================================
-# Test MCMC Threshold Overrides
-# ============================================================================
-
-
-def test_threshold_override_min_samples_cmc(mock_config):
-    """Test overriding min_samples_for_cmc threshold."""
-    args = argparse.Namespace(
-        data_file=None,
-        static_mode=False,
-        laminar_flow=False,
-        method="mcmc",
-        n_samples=None,
-        n_warmup=None,
-        n_chains=None,
-        force_cpu=False,
-        initial_d0=None,
-        initial_alpha=None,
-        initial_d_offset=None,
-        initial_gamma_dot_t0=None,
-        initial_beta=None,
-        initial_gamma_dot_offset=None,
-        initial_phi0=None,
-        min_samples_cmc=30,  # Override from 15
-        memory_threshold_pct=None,
-        dense_mass_matrix=False,
-    )
-
-    _apply_cli_overrides(mock_config, args)
-
-    assert mock_config.config["optimization"]["mcmc"]["min_samples_for_cmc"] == 30
-
-
-def test_threshold_override_memory_threshold(mock_config):
-    """Test overriding memory_threshold_pct."""
-    args = argparse.Namespace(
-        data_file=None,
-        static_mode=False,
-        laminar_flow=False,
-        method="mcmc",
-        n_samples=None,
-        n_warmup=None,
-        n_chains=None,
-        force_cpu=False,
-        initial_d0=None,
-        initial_alpha=None,
-        initial_d_offset=None,
-        initial_gamma_dot_t0=None,
-        initial_beta=None,
-        initial_gamma_dot_offset=None,
-        initial_phi0=None,
-        min_samples_cmc=None,
-        memory_threshold_pct=0.50,  # Override from 0.30
-        dense_mass_matrix=False,
-    )
-
-    _apply_cli_overrides(mock_config, args)
-
-    assert mock_config.config["optimization"]["mcmc"]["memory_threshold_pct"] == 0.50
 
 
 def test_threshold_override_dense_mass_matrix(mock_config):
@@ -1260,8 +1093,6 @@ def test_threshold_override_dense_mass_matrix(mock_config):
         initial_beta=None,
         initial_gamma_dot_offset=None,
         initial_phi0=None,
-        min_samples_cmc=None,
-        memory_threshold_pct=None,
         dense_mass_matrix=True,  # Override from False
     )
 
@@ -1294,8 +1125,6 @@ def test_logging_parameter_override(mock_logger, mock_config):
         initial_beta=None,
         initial_gamma_dot_offset=None,
         initial_phi0=None,
-        min_samples_cmc=None,
-        memory_threshold_pct=None,
         dense_mass_matrix=False,
     )
 
@@ -1307,35 +1136,5 @@ def test_logging_parameter_override(mock_logger, mock_config):
 
 @patch("homodyne.cli.commands.logger")
 def test_logging_threshold_override(mock_logger, mock_config):
-    """Test that threshold overrides are logged clearly."""
-    args = argparse.Namespace(
-        data_file=None,
-        static_mode=False,
-        laminar_flow=False,
-        method="mcmc",
-        n_samples=None,
-        n_warmup=None,
-        n_chains=None,
-        force_cpu=False,
-        initial_d0=None,
-        initial_alpha=None,
-        initial_d_offset=None,
-        initial_gamma_dot_t0=None,
-        initial_beta=None,
-        initial_gamma_dot_offset=None,
-        initial_phi0=None,
-        min_samples_cmc=25,
-        memory_threshold_pct=0.40,
-        dense_mass_matrix=False,
-    )
-
-    _apply_cli_overrides(mock_config, args)
-
-    # Check that logger.info was called for both threshold overrides
-    mock_logger.info.assert_any_call(
-        "Overriding config min_samples_for_cmc=15 with CLI value min_samples_for_cmc=25"
-    )
-    mock_logger.info.assert_any_call(
-        "Overriding config memory_threshold_pct=0.30 with CLI value memory_threshold_pct=0.40"
-    )
-
+    """Deprecated: threshold overrides removed in CMC-only CLI."""
+    return

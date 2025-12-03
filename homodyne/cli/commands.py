@@ -605,7 +605,7 @@ def _apply_cli_overrides(config: ConfigManager, args) -> None:
     - Data file path
     - Analysis mode
     - MCMC sampling parameters (n_samples, n_warmup, n_chains)
-    - MCMC threshold parameters (min_samples_for_cmc, memory_threshold_pct)
+    - CMC sharding/backend parameters
     - Initial parameter values (D0, alpha, D_offset, gamma_dot_t0, beta, gamma_dot_t_offset, phi0)
     - Mass matrix type (dense_mass_matrix flag)
     """
@@ -641,29 +641,9 @@ def _apply_cli_overrides(config: ConfigManager, args) -> None:
     if args.n_chains is None:
         args.n_chains = mcmc_config.get("num_chains", 4)
 
-    # Override MCMC threshold parameters
+    # CMC-only: selection thresholds removed; ensure mcmc section exists
     if "mcmc" not in config.config["optimization"]:
         config.config["optimization"]["mcmc"] = {}
-
-    if args.min_samples_cmc is not None:
-        old_value = config.config["optimization"]["mcmc"].get("min_samples_for_cmc", 15)
-        config.config["optimization"]["mcmc"][
-            "min_samples_for_cmc"
-        ] = args.min_samples_cmc
-        logger.info(
-            f"Overriding config min_samples_for_cmc={old_value} with CLI value min_samples_for_cmc={args.min_samples_cmc}"
-        )
-
-    if args.memory_threshold_pct is not None:
-        old_value = config.config["optimization"]["mcmc"].get(
-            "memory_threshold_pct", 0.30
-        )
-        config.config["optimization"]["mcmc"][
-            "memory_threshold_pct"
-        ] = args.memory_threshold_pct
-        logger.info(
-            f"Overriding config memory_threshold_pct={old_value:.2f} with CLI value memory_threshold_pct={args.memory_threshold_pct:.2f}"
-        )
 
     # Override dense mass matrix flag
     if args.dense_mass_matrix:
@@ -800,19 +780,11 @@ def _build_mcmc_runtime_kwargs(args, config: ConfigManager) -> dict[str, Any]:
     _set_runtime_value("max_tree_depth")
     _set_runtime_value("dense_mass_matrix", "dense_mass")
     _set_runtime_value("rng_key")
-    _set_runtime_value("min_samples_for_cmc")
-    _set_runtime_value("memory_threshold_pct")
     _set_runtime_value("stable_prior_fallback")
     _set_runtime_value("min_ess")
     _set_runtime_value("max_rhat")
     _set_runtime_value("n_retries")
     _set_runtime_value("check_hmc_diagnostics")
-
-    if args.min_samples_cmc is not None:
-        runtime_kwargs["min_samples_for_cmc"] = args.min_samples_cmc
-
-    if args.memory_threshold_pct is not None:
-        runtime_kwargs["memory_threshold_pct"] = args.memory_threshold_pct
 
     if args.dense_mass_matrix:
         runtime_kwargs["dense_mass_matrix"] = True
@@ -1127,7 +1099,7 @@ def _run_optimization(args, config: ConfigManager, data: dict[str, Any]) -> Any:
             # Run NLSQ optimization (CPU-only in v2.3.0+)
             result = fit_nlsq_jax(filtered_data, config)
         elif method == "mcmc":
-            # MCMC with automatic NUTS/CMC selection
+            # CMC-only MCMC
             # Get CMC configuration from config file
             cmc_config = config.get_cmc_config()
 
@@ -1145,10 +1117,7 @@ def _run_optimization(args, config: ConfigManager, data: dict[str, Any]) -> Any:
                 cmc_config.setdefault("backend", {})["name"] = args.cmc_backend
 
             # Log CMC configuration being used
-            logger.info(f"MCMC method: {method}")
-            logger.info(
-                "Automatic NUTS/CMC selection: CMC if (samples >= 15) OR (memory > 30%), else NUTS"
-            )
+            logger.info(f"MCMC method: {method} (CMC-only)")
 
             # Log key CMC parameters
             sharding = cmc_config.get("sharding", {})
@@ -1295,7 +1264,7 @@ def _run_optimization(args, config: ConfigManager, data: dict[str, Any]) -> Any:
                     if hasattr(config, "config")
                     else "static_isotropic"
                 ),
-                method=method,  # Pass "mcmc" for automatic NUTS/CMC selection
+                method=method,  # Pass "mcmc" for CMC-only path
                 cmc_config=cmc_config,  # Pass CMC configuration
                 initial_values=initial_values,  # ✅ FIXED: Load from config initial_parameters.values
                 parameter_space=parameter_space,  # ✅ Pass config-aware ParameterSpace

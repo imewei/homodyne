@@ -201,6 +201,7 @@ class CMCCoordinator:
         parameter_space: Optional["ParameterSpace"] = None,
         initial_values: Optional[Dict[str, float]] = None,
         model_fn: Optional[Callable] = None,
+        seed_base: int = 0,
     ) -> MCMCResult:
         """Run complete CMC pipeline.
 
@@ -382,6 +383,7 @@ class CMCCoordinator:
             num_shards=num_shards,
             q=q,
             L=L,
+            seed_base=seed_base,
         )
 
         # Validate shards (pass min_shard_size from config)

@@ -888,7 +888,8 @@ def run_shard_task(temp_dir: str, shard_idx: int) -> None:
             progress_bar=False,
         )
 
-        rng_key = jax.random.PRNGKey(shard_idx)
+        shard_seed = shard.get("seed", shard_idx)
+        rng_key = jax.random.PRNGKey(shard_seed)
         mcmc.run(
             rng_key,
             data=data_jax,

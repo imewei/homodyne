@@ -594,7 +594,8 @@ class PjitBackend(CMCBackend):
         )
 
         # Run MCMC
-        rng_key = jax.random.PRNGKey(shard_idx)
+        shard_seed = shard.get("seed", shard_idx)
+        rng_key = jax.random.PRNGKey(shard_seed)
 
         try:
             # Model is a closure with data already captured, so no extra args needed
