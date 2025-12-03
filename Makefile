@@ -297,6 +297,7 @@ clean-test:
 	rm -rf .ruff_cache/
 	rm -rf .benchmarks/
 	rm -f coverage.xml
+	rm -f .coverage.*
 	rm -f test-results.xml
 	rm -rf .nlsq_cache/
 	rm -rf .hypothesis/
