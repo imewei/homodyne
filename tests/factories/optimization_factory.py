@@ -17,6 +17,7 @@ def create_mock_optimization_result(
     include_uncertainties: bool = True,
     include_covariance: bool = True,
     quality_flag: str = "good",
+    n_angles: int = 5,
 ) -> OptimizationResult:
     """
     Create mock OptimizationResult for testing.
@@ -24,7 +25,7 @@ def create_mock_optimization_result(
     Parameters
     ----------
     analysis_mode : str
-        "static" (5 params) or "laminar_flow" (9 params)
+        "static" (per-angle + 3 physical params) or "laminar_flow" (per-angle + 7 physical params)
     converged : bool
         Whether optimization converged
     include_uncertainties : bool
@@ -33,6 +34,9 @@ def create_mock_optimization_result(
         Whether to include covariance matrix
     quality_flag : str
         "good", "marginal", or "poor"
+    n_angles : int
+        Number of angles (for per-angle scaling parameters).
+        v2.4.0+ requires per-angle scaling, so parameter count = 2*n_angles + n_physical
 
     Returns
     -------
@@ -41,37 +45,49 @@ def create_mock_optimization_result(
 
     Examples
     --------
-    >>> result = create_mock_optimization_result("laminar_flow", converged=True)
-    >>> len(result.parameters)
-    9
+    >>> result = create_mock_optimization_result("static", n_angles=5)
+    >>> len(result.parameters)  # 5 contrasts + 5 offsets + 3 physical = 13
+    13
     >>> result.convergence_status
     'converged'
+
+    Notes
+    -----
+    v2.4.0 mandates per-angle scaling. Parameter structure:
+    [contrast_0, ..., contrast_N, offset_0, ..., offset_N, physical_params...]
     """
+    # Per-angle scaling parameters (contrast, offset for each angle)
+    # Realistic values with slight variation per angle
+    contrast_per_angle = 0.45 + 0.01 * np.random.randn(n_angles)
+    offset_per_angle = 1.02 + 0.005 * np.random.randn(n_angles)
+
     if analysis_mode == "static":
-        # 5 parameters: contrast, offset, D0, alpha, D_offset
-        parameters = np.array([0.45, 1.02, 1234.5, 0.567, 12.34])
-        uncertainties = (
-            np.array([0.012, 0.008, 45.6, 0.012, 1.23])
-            if include_uncertainties
-            else None
-        )
-        n_params = 5
+        # 3 physical parameters: D0, alpha, D_offset
+        physical_params = np.array([1234.5, 0.567, 12.34])
+        physical_uncertainties = np.array([45.6, 0.012, 1.23])
+        n_physical = 3
     elif analysis_mode == "laminar_flow":
-        # 9 parameters: contrast, offset, D0, alpha, D_offset,
-        # gamma_dot_t0, beta, gamma_dot_t_offset, phi0
-        parameters = np.array(
-            [0.45, 1.02, 1234.5, 0.567, 12.34, 1.23e-4, 0.456, 5.6e-6, 0.123]
-        )
-        uncertainties = (
-            np.array([0.012, 0.008, 45.6, 0.012, 1.23, 1.2e-5, 0.023, 1.2e-6, 0.023])
-            if include_uncertainties
-            else None
-        )
-        n_params = 9
+        # 7 physical parameters: D0, alpha, D_offset, gamma_dot_t0, beta, gamma_dot_t_offset, phi0
+        physical_params = np.array([1234.5, 0.567, 12.34, 1.23e-4, 0.456, 5.6e-6, 0.123])
+        physical_uncertainties = np.array([45.6, 0.012, 1.23, 1.2e-5, 0.023, 1.2e-6, 0.023])
+        n_physical = 7
     else:
         raise ValueError(
             f"Unknown analysis_mode: {analysis_mode}. Expected 'static' or 'laminar_flow'"
         )
+
+    # Build per-angle scaling parameter array: [contrasts..., offsets..., physical...]
+    parameters = np.concatenate([contrast_per_angle, offset_per_angle, physical_params])
+    n_params = len(parameters)  # 2*n_angles + n_physical
+
+    if include_uncertainties:
+        contrast_uncertainties = np.full(n_angles, 0.012)
+        offset_uncertainties = np.full(n_angles, 0.008)
+        uncertainties = np.concatenate([
+            contrast_uncertainties, offset_uncertainties, physical_uncertainties
+        ])
+    else:
+        uncertainties = None
 
     # Covariance matrix (identity scaled by variance for simplicity)
     if include_covariance:
@@ -139,6 +155,8 @@ def create_mock_config_manager(
         "analysis_mode": analysis_mode,
         "analyzer_parameters": {},
         "experimental_data": {},
+        # Disable phi_filtering by default to avoid Mock iteration errors
+        "phi_filtering": {"enabled": False, "target_ranges": []},
     }
 
     if include_all_metadata:

@@ -28,7 +28,7 @@ def create_parser() -> argparse.ArgumentParser:
 Examples:
   %(prog)s                                    # Run with default NLSQ method
   %(prog)s --method nlsq                      # NLSQ trust-region least squares (default)
-  %(prog)s --method mcmc                      # MCMC with automatic NUTS/CMC selection
+  %(prog)s --method mcmc                      # MCMC with CMC (per-shard NUTS)
   %(prog)s --config my_config.yaml            # Use custom config file
   %(prog)s --output-dir ./results             # Custom output directory
   %(prog)s --verbose                          # Enable verbose logging

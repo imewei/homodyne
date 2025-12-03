@@ -817,19 +817,28 @@ class TestManualNLSQMCMCWorkflow:
     """Test manual NLSQ → MCMC workflow with parameter copying."""
 
     def test_manual_parameter_initialization_workflow(self):
-        """Test full workflow: NLSQ → manual copy → MCMC."""
-        # Arrange - Simulate NLSQ results
+        """Test full workflow: NLSQ → manual copy → MCMC.
+
+        v2.4.0: Per-angle scaling is mandatory. Parameter structure:
+        [contrast_0, ..., contrast_{n-1}, offset_0, ..., offset_{n-1}, D0, alpha, D_offset]
+        """
+        # Arrange - Simulate NLSQ results with per-angle scaling
+        n_angles = 5
         nlsq_result = create_mock_optimization_result(
-            analysis_mode="static", converged=True
+            analysis_mode="static", converged=True, n_angles=n_angles
         )
 
-        # NLSQ returns: [contrast, offset, D0, alpha, D_offset]
+        # v2.4.0: Per-angle scaling structure
+        # NLSQ returns: [contrast_0..4, offset_0..4, D0, alpha, D_offset]
+        # Total: 2*n_angles + 3 = 13 parameters
         nlsq_params = nlsq_result.parameters
-        assert len(nlsq_params) == 5, "NLSQ should return 5 params"
+        expected_total = 2 * n_angles + 3  # Per-angle scaling + 3 physical params
+        assert len(nlsq_params) == expected_total, f"NLSQ should return {expected_total} params"
 
         # Act - User manually copies NLSQ results to YAML config
-        # Extract physics parameters (skip contrast, offset)
-        initial_values = nlsq_params[2:]  # [D0, alpha, D_offset]
+        # Extract physics parameters (skip per-angle contrast and offset)
+        n_scaling_params = 2 * n_angles  # contrast + offset for each angle
+        initial_values = nlsq_params[n_scaling_params:]  # [D0, alpha, D_offset]
 
         # Assert - Initial values ready for MCMC
         assert len(initial_values) == 3, "Should have 3 physics params"

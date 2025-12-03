@@ -205,7 +205,9 @@ class TestComputationalBenchmarks:
         success_rate = sum(successes) / len(successes)
 
         # Performance expectations
-        assert avg_time < 30.0, f"Optimization too slow: {avg_time:.3f}s"
+        # Note: v2.4.0 mandates per-angle scaling which increases parameter count
+        # (2*n_angles + n_physical), resulting in longer optimization times
+        assert avg_time < 45.0, f"Optimization too slow: {avg_time:.3f}s"
         assert success_rate >= 0.8, f"Success rate too low: {success_rate:.2f}"
 
         # Report performance metrics
@@ -656,7 +658,9 @@ class TestRegressionBenchmarks:
         success_rate = sum(successes) / len(successes)
 
         # Baseline expectations for optimization
-        BASELINE_OPT_TIME = 20.0  # maximum seconds
+        # Note: v2.4.0 mandates per-angle scaling which increases parameter count
+        # (2*n_angles + n_physical), resulting in longer optimization times
+        BASELINE_OPT_TIME = 30.0  # maximum seconds (increased for per-angle scaling)
         BASELINE_SUCCESS_RATE = 0.8  # minimum success rate
 
         assert avg_time < BASELINE_OPT_TIME, (

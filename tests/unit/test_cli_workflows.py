@@ -237,6 +237,7 @@ class TestCMCConfigOverride:
             n_warmup=100,
             n_chains=2,
             output_dir=Path("/tmp/test"),
+            dense_mass_matrix=False,  # Required by _build_mcmc_runtime_kwargs
         )
 
         # Run optimization
@@ -290,6 +291,7 @@ class TestCMCConfigOverride:
             n_warmup=100,
             n_chains=2,
             output_dir=Path("/tmp/test"),
+            dense_mass_matrix=False,  # Required by _build_mcmc_runtime_kwargs
         )
 
         # Run optimization
@@ -351,6 +353,7 @@ class TestCMCDiagnosticPlotGeneration:
             n_warmup=100,
             n_chains=2,
             output_dir=Path("/tmp/test"),
+            dense_mass_matrix=False,  # Required by _build_mcmc_runtime_kwargs
         )
 
         # Run optimization
@@ -409,6 +412,7 @@ class TestCMCDiagnosticPlotGeneration:
             n_warmup=100,
             n_chains=2,
             output_dir=Path("/tmp/test"),
+            dense_mass_matrix=False,  # Required by _build_mcmc_runtime_kwargs
         )
 
         # Run optimization
@@ -465,6 +469,7 @@ class TestCMCDiagnosticPlotGeneration:
             n_warmup=100,
             n_chains=2,
             output_dir=Path("/tmp/test"),
+            dense_mass_matrix=False,  # Required by _build_mcmc_runtime_kwargs
         )
 
         # Run optimization

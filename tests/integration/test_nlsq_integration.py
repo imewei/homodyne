@@ -582,6 +582,7 @@ class TestNLSQFullWorkflow:
             # Wrap in Mock to simulate ConfigManager with .config attribute
             config = Mock()
             config.config = config_dict
+            config.get_config.return_value = config_dict
 
             # Call save_nlsq_results
             save_nlsq_results(result, data, config, output_dir)
@@ -686,6 +687,7 @@ class TestNLSQFullWorkflow:
             # Wrap in Mock to simulate ConfigManager with .config attribute
             config_lf = Mock()
             config_lf.config = config_dict_lf
+            config_lf.get_config.return_value = config_dict_lf
 
             # Save to different subdirectory
             output_dir_lf = Path(tmpdir) / "test_lf"
@@ -725,6 +727,7 @@ class TestNLSQFullWorkflow:
             )
             config = Mock()
             config.config = config_dict
+            config.get_config.return_value = config_dict
 
             # Call save_nlsq_results (which should call generate_nlsq_plots)
             save_nlsq_results(result, data, config, output_dir)
@@ -767,10 +770,11 @@ class TestNLSQErrorRecovery:
         with tempfile.TemporaryDirectory() as tmpdir:
             output_dir = Path(tmpdir)
 
-            # Create mock data and result
+            # Create mock data and result (n_angles must match)
             result = create_mock_optimization_result(
                 analysis_mode="static",
                 converged=True,
+                n_angles=3,
             )
             data = create_mock_data_dict(n_angles=3, n_t1=15, n_t2=15)
 
@@ -779,9 +783,11 @@ class TestNLSQErrorRecovery:
                 "analysis_mode": "static",
                 "experimental_data": {},  # No sample_detector_distance
                 "analyzer_parameters": {},  # No geometry or dt
+                "phi_filtering": {"enabled": False, "target_ranges": []},
             }
             config = Mock()
             config.config = config_dict
+            config.get_config.return_value = config_dict
 
             # Call save_nlsq_results - should use fallback defaults
             save_nlsq_results(result, data, config, output_dir)
@@ -804,10 +810,11 @@ class TestNLSQErrorRecovery:
         with tempfile.TemporaryDirectory() as tmpdir:
             output_dir = Path(tmpdir)
 
-            # Create mock data and result
+            # Create mock data and result (n_angles must match)
             result = create_mock_optimization_result(
                 analysis_mode="static",
                 converged=True,
+                n_angles=3,
             )
             data = create_mock_data_dict(n_angles=3, n_t1=15, n_t2=15)
             config_dict = create_mock_config_manager(
@@ -816,6 +823,7 @@ class TestNLSQErrorRecovery:
             )
             config = Mock()
             config.config = config_dict
+            config.get_config.return_value = config_dict
 
             # Patch generate_nlsq_plots to raise an exception
             with patch(
@@ -864,6 +872,7 @@ class TestNLSQPerformance:
             result = create_mock_optimization_result(
                 analysis_mode="static",
                 converged=True,
+                n_angles=n_angles,
             )
             data = create_mock_data_dict(n_angles=n_angles, n_t1=n_t1, n_t2=n_t2)
             config_dict = create_mock_config_manager(
@@ -872,6 +881,7 @@ class TestNLSQPerformance:
             )
             config = Mock()
             config.config = config_dict
+            config.get_config.return_value = config_dict
 
             # Measure execution time
             start_time = time.time()
@@ -905,10 +915,11 @@ class TestNLSQPerformance:
         with tempfile.TemporaryDirectory() as tmpdir:
             output_dir = Path(tmpdir)
 
-            # Create mock data with JAX arrays
+            # Create mock data with JAX arrays (n_angles must match)
             result = create_mock_optimization_result(
                 analysis_mode="static",
                 converged=True,
+                n_angles=3,
             )
 
             # Convert some arrays to JAX arrays (simulating JAX data)
@@ -923,6 +934,7 @@ class TestNLSQPerformance:
             )
             config = Mock()
             config.config = config_dict
+            config.get_config.return_value = config_dict
 
             # Call save_nlsq_results - should handle JAX arrays
             save_nlsq_results(result, data, config, output_dir)
@@ -989,12 +1001,13 @@ class TestNLSQCLIIntegration:
             args.output_dir = output_dir
             args.output_format = "json"
 
-            # Create mock result, data, config
-            result = create_mock_optimization_result(analysis_mode="static")
+            # Create mock result, data, config (n_angles must match)
+            result = create_mock_optimization_result(analysis_mode="static", n_angles=3)
             data = create_mock_data_dict(n_angles=3, n_t1=10, n_t2=10)
             config_dict = create_mock_config_manager(analysis_mode="static")
             config = Mock()
             config.config = config_dict
+            config.get_config.return_value = config_dict
             device_config = {"device": "cpu"}
 
             # Call _save_results which should route to save_nlsq_results()
@@ -1044,6 +1057,7 @@ class TestNLSQCLIIntegration:
             config_dict = create_mock_config_manager(analysis_mode="static")
             config = Mock()
             config.config = config_dict
+            config.get_config.return_value = config_dict
             device_config = {"device": "cpu"}
 
             # Call _save_results which should use legacy format
@@ -1863,14 +1877,12 @@ class TestNLSQWithAngleFiltering:
         caplog.clear()  # Clear logs before filtering
         filtered_data = _apply_angle_filtering_for_optimization(data, config)
 
-        # Convert filtered dict to data object for NLSQ
-        filtered_data_obj = dict_to_data_object(filtered_data)
-
         # Act - Run NLSQ optimization with filtered data
-        # Note: Optimization may not converge with synthetic data,
+        # Note: fit_nlsq_jax expects a dict, not SimpleNamespace
+        # Optimization may not converge with synthetic data,
         # but we verify filtering works and optimization is attempted
         try:
-            result = fit_nlsq_jax(filtered_data_obj, config)
+            result = fit_nlsq_jax(filtered_data, config)
         except Exception:
             # Optimization failure is OK - we're testing filtering, not convergence
             result = None
@@ -2096,25 +2108,22 @@ class TestNLSQWithAngleFiltering:
 
         filtered_data = _apply_angle_filtering_for_optimization(data, config)
 
-        # Convert to data object for NLSQ
-        filtered_data_obj = dict_to_data_object(filtered_data)
-
-        # Verify data object has all required attributes for NLSQ
-        assert hasattr(filtered_data_obj, "phi"), "Should have phi attribute"
-        assert hasattr(filtered_data_obj, "t1"), "Should have t1 attribute"
-        assert hasattr(filtered_data_obj, "t2"), "Should have t2 attribute"
-        assert hasattr(filtered_data_obj, "g2"), "Should have g2 attribute"
-        assert hasattr(filtered_data_obj, "sigma"), "Should have sigma attribute"
-        assert hasattr(filtered_data_obj, "q"), "Should have q attribute"
-        assert hasattr(filtered_data_obj, "L"), "Should have L attribute"
+        # Verify filtered data dict has all required keys for NLSQ (CLI format)
+        # fit_nlsq_jax expects dict with keys: phi_angles_list, c2_exp, t1, t2, wavevector_q_list
+        assert "phi_angles_list" in filtered_data, "Should have phi_angles_list key"
+        assert "t1" in filtered_data, "Should have t1 key"
+        assert "t2" in filtered_data, "Should have t2 key"
+        assert "c2_exp" in filtered_data, "Should have c2_exp key"
+        assert "wavevector_q_list" in filtered_data, "Should have wavevector_q_list key"
 
         # Verify filtered data dimensions
-        assert len(filtered_data_obj.phi) == 3, "Should have 3 filtered angles"
-        assert filtered_data_obj.g2.shape[0] == 3, "g2 first dimension should be 3"
+        assert len(filtered_data["phi_angles_list"]) == 3, "Should have 3 filtered angles"
+        assert filtered_data["c2_exp"].shape[0] == 3, "c2_exp first dimension should be 3"
 
         # Act - Attempt optimization (may not converge, but should accept data structure)
+        # Note: fit_nlsq_jax expects a dict, not SimpleNamespace
         try:
-            result = fit_nlsq_jax(filtered_data_obj, config)
+            result = fit_nlsq_jax(filtered_data, config)
             # If we get here, optimization at least started
             optimization_attempted = True
         except Exception as e:
