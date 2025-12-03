@@ -53,14 +53,13 @@ Integration
 - Results are passed to combination.py for subposterior merging
 """
 
-from abc import ABC, abstractmethod
-from typing import List, Dict, Any, Optional
 import time
+from abc import ABC, abstractmethod
+from typing import Any
 
 import numpy as np
 
 from homodyne.config.types import SCALING_PARAM_NAMES
-
 from homodyne.utils.logging import get_logger
 
 logger = get_logger(__name__)
@@ -106,13 +105,13 @@ class CMCBackend(ABC):
     @abstractmethod
     def run_parallel_mcmc(
         self,
-        shards: List[Dict[str, np.ndarray]],
-        mcmc_config: Dict[str, Any],
-        init_params: Dict[str, float],
+        shards: list[dict[str, np.ndarray]],
+        mcmc_config: dict[str, Any],
+        init_params: dict[str, float],
         inv_mass_matrix: np.ndarray,
         analysis_mode: str,
         parameter_space,
-    ) -> List[Dict[str, Any]]:
+    ) -> list[dict[str, Any]]:
         """Run MCMC on all shards in parallel or sequentially.
 
         This is the main entry point for backend execution. Implementations
@@ -258,7 +257,7 @@ class CMCBackend(ABC):
             f"{status} in {elapsed_time:.2f}s"
         )
 
-    def _validate_shard_result(self, result: Dict[str, Any], shard_idx: int) -> None:
+    def _validate_shard_result(self, result: dict[str, Any], shard_idx: int) -> None:
         """Validate that a shard result contains required fields.
 
         Parameters
@@ -305,7 +304,7 @@ class CMCBackend(ABC):
                     f"Shard {shard_idx} marked as failed but missing 'error' message"
                 )
 
-    def _handle_shard_error(self, error: Exception, shard_idx: int) -> Dict[str, Any]:
+    def _handle_shard_error(self, error: Exception, shard_idx: int) -> dict[str, Any]:
         """Log and wrap a shard execution error.
 
         Parameters
@@ -422,8 +421,8 @@ class CMCBackend(ABC):
         # Check if parameter_space has the expected attributes
         if not hasattr(parameter_space, "bounds"):
             logger.warning(
-                f"ParameterSpace missing 'bounds' attribute. "
-                f"Cannot validate analysis_mode consistency."
+                "ParameterSpace missing 'bounds' attribute. "
+                "Cannot validate analysis_mode consistency."
             )
             return
 
@@ -432,9 +431,7 @@ class CMCBackend(ABC):
         # explicitly drop them here to maintain legacy expectations for
         # laminar_flow/static counts.
         physical_param_names = [
-            name
-            for name in parameter_space.bounds
-            if name not in SCALING_PARAM_NAMES
+            name for name in parameter_space.bounds if name not in SCALING_PARAM_NAMES
         ]
         actual_param_count = len(physical_param_names)
 

@@ -69,7 +69,7 @@ class HomodyneModel:
         Time array for correlation calculations [s]
     t1_grid, t2_grid : jnp.ndarray
         2D time grids for correlation matrices
-    model : CombinedModel
+    model : homodyne.core.models.CombinedModel
         Underlying physics model (for backward compatibility)
     dt : float
         Time step [s]
@@ -456,7 +456,11 @@ class HomodyneModel:
         if mode:
             mode_lower = str(mode).lower()
             if "static" in mode_lower:
-                return "static_isotropic" if "isotropic" in mode_lower else "static_anisotropic"
+                return (
+                    "static_isotropic"
+                    if "isotropic" in mode_lower
+                    else "static_anisotropic"
+                )
             if mode_lower in {"laminar", "laminar_flow"}:
                 return "laminar_flow"
 

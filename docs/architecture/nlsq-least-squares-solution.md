@@ -1,32 +1,34 @@
 # NLSQ least_squares() Solution for Stratified Chunks
 
-**Date**: 2025-11-06
-**Status**: Recommended Implementation
-**Confidence**: 95%
+**Date**: 2025-11-06 **Status**: Recommended Implementation **Confidence**: 95%
 
----
+______________________________________________________________________
 
 ## Executive Summary
 
-Use NLSQ's `least_squares()` function directly (not `curve_fit_large()`) with a stratified residual function. This gives us:
+Use NLSQ's `least_squares()` function directly (not `curve_fit_large()`) with a
+stratified residual function. This gives us:
+
 - ✅ Full NLSQ optimization power (not scipy)
 - ✅ JAX acceleration + GPU support
 - ✅ Control over chunking (we handle it in residual function)
 - ✅ Scales to >100M points
 - ✅ No double-chunking problem
 
----
+______________________________________________________________________
 
 ## The Solution
 
 ### Core Insight
 
 NLSQ has a `least_squares()` function (similar to scipy's) that accepts:
+
 - **Residual function**: `fun(params) → residuals`
 - **Optional xdata/ydata**: Only for convenience, not required
 - **JAX autodiff**: Automatic Jacobian computation
 
-This is what `curve_fit_large()` wraps internally, but `curve_fit_large()` requires model function format.
+This is what `curve_fit_large()` wraps internally, but `curve_fit_large()` requires
+model function format.
 
 ### Architecture
 
@@ -95,7 +97,7 @@ result = least_squares(
 # Result: popt = result['x'], pcov from Jacobian
 ```
 
----
+______________________________________________________________________
 
 ## Implementation Details
 
@@ -468,35 +470,39 @@ def fit(self, data, config, per_angle_scaling, ...):
         # ... existing code ...
 ```
 
----
+______________________________________________________________________
 
 ## Key Advantages
 
 ### 1. NLSQ's Full Power
+
 - ✅ JAX-accelerated optimization
 - ✅ GPU support (if available)
 - ✅ Trust-region algorithm (same as curve_fit_large)
 - ✅ Scales to >100M points
 
 ### 2. Control Over Chunking
+
 - ✅ We handle chunking in residual function
 - ✅ NLSQ never sees raw data (only residuals)
 - ✅ No double-chunking problem
 - ✅ Angle completeness guaranteed
 
 ### 3. Performance
+
 - ✅ JIT compilation of chunk computation
 - ✅ JAX autodiff for Jacobian (no numerical estimation)
-- ✅ Memory efficient (<500 MB for 3M points)
+- ✅ Memory efficient (\<500 MB for 3M points)
 - ✅ GPU acceleration for compute_residuals
 
 ### 4. Clean Architecture
+
 - ✅ Separation of concerns (stratification vs optimization)
 - ✅ Reusable StratifiedResidualFunction class
 - ✅ Easy to test and validate
 - ✅ CMC can use same pattern
 
----
+______________________________________________________________________
 
 ## Memory Analysis
 
@@ -505,6 +511,7 @@ def fit(self, data, config, per_angle_scaling, ...):
 **Stratification**: 31 chunks × ~100k points/chunk
 
 **Memory per residual_fn call**:
+
 ```
 Single chunk processing:
   - Input arrays: 100k × 5 = 2 MB (phi, t1, t2, g2, sigma)
@@ -516,6 +523,7 @@ Total with NLSQ state: <100 MB
 ```
 
 **JAX Autodiff Memory**:
+
 ```
 Jacobian computation:
   - NLSQ uses JAX autodiff internally
@@ -524,28 +532,31 @@ Jacobian computation:
   - Peak: ~200 MB for 3M × 9 Jacobian
 ```
 
-**Total Peak**: <500 MB (vs 48 GB available)
+**Total Peak**: \<500 MB (vs 48 GB available)
 
----
+______________________________________________________________________
 
 ## Performance Estimates
 
 **Baseline (NLSQ least_squares, no extra optimization)**:
+
 - JAX JIT compilation: automatic
 - GPU acceleration: automatic (if available)
 - Estimated: **20-40s for 3M points** (GPU) or **60-120s** (CPU)
 
 **vs curve_fit_large (when it worked)**:
+
 - curve_fit_large: ~5-10s (GPU, direct chunking)
 - Our solution: 20-40s (GPU, indirect via residual_fn)
 - **Trade-off**: 2-4x slower but **works correctly**
 
 **vs scipy.optimize.least_squares**:
+
 - scipy: 180s (CPU-only, no JAX acceleration)
 - NLSQ: 20-40s (GPU) or 60-120s (CPU with JAX)
 - **NLSQ 3-9x faster than scipy**
 
----
+______________________________________________________________________
 
 ## Testing Strategy
 
@@ -603,7 +614,7 @@ def test_gpu_vs_cpu_speedup():
     """Compare GPU vs CPU performance (if GPU available)."""
 ```
 
----
+______________________________________________________________________
 
 ## CMC Integration (Same Pattern)
 
@@ -649,75 +660,81 @@ def cmc_with_stratified_shards(data, n_shards, per_angle_scaling):
     return consensus_combine(shard_posteriors)
 ```
 
----
+______________________________________________________________________
 
 ## Implementation Timeline
 
 ### Week 1: Core Implementation
+
 - **Day 1-2**: Implement `StratifiedResidualFunction` class
 - **Day 3**: Integrate `_fit_with_stratified_least_squares()` in `NLSQWrapper`
 - **Day 4**: Unit tests (15 tests)
 - **Day 5**: Integration tests (10 tests)
 
 ### Week 2: Validation & Optimization
+
 - **Day 1-2**: Test on 3M point dataset, verify convergence
 - **Day 3**: Performance benchmarking
 - **Day 4**: Memory profiling
 - **Day 5**: Documentation and examples
 
 ### Week 3-4: CMC Integration
+
 - **Week 3**: Implement CMC stratified sharding
 - **Week 4**: CMC tests and validation
 
----
+______________________________________________________________________
 
 ## Success Criteria
 
 ### Phase 1 (Week 1)
+
 - ✅ `StratifiedResidualFunction` class complete
 - ✅ NLSQ `least_squares()` integrated
 - ✅ 25 tests passing
 - ✅ 3M points with per-angle scaling completes
 
 ### Phase 2 (Week 2)
+
 - ✅ Optimization converges (non-zero iterations)
 - ✅ Cost decreases from initial
 - ✅ Parameters change from initial guess
 - ✅ Performance: 20-120s for 3M points (GPU/CPU)
-- ✅ Memory: <500 MB peak
+- ✅ Memory: \<500 MB peak
 
 ### Phase 3 (Week 3-4)
+
 - ✅ CMC works with per-angle scaling
 - ✅ All shards have all angles
 - ✅ Posteriors converge
 - ✅ 20+ CMC tests passing
 
----
+______________________________________________________________________
 
 ## Comparison: curve_fit_large vs least_squares
 
 | Aspect | curve_fit_large | least_squares (with stratified residual) |
-|--------|----------------|------------------------------------------|
-| **API** | Model function f(x, *params)→y | Residual function fun(params)→residuals |
-| **xdata/ydata** | Required | Optional (not used in our case) |
-| **Chunking** | Automatic (breaks our structure) | Manual (we control in residual_fn) |
-| **Per-angle scaling** | ❌ Fails (0 iterations) | ✅ Works (correct gradients) |
-| **Performance** | Fast (if it worked) | Comparable (2-4x slower) |
-| **Scalability** | >100M points | >100M points |
-| **GPU Support** | ✅ Yes | ✅ Yes |
+|--------|----------------|------------------------------------------| | **API** | Model
+function f(x, \*params)→y | Residual function fun(params)→residuals | | **xdata/ydata**
+| Required | Optional (not used in our case) | | **Chunking** | Automatic (breaks our
+structure) | Manual (we control in residual_fn) | | **Per-angle scaling** | ❌ Fails (0
+iterations) | ✅ Works (correct gradients) | | **Performance** | Fast (if it worked) |
+Comparable (2-4x slower) | | **Scalability** | >100M points | >100M points | | **GPU
+Support** | ✅ Yes | ✅ Yes |
 
----
+______________________________________________________________________
 
 ## Conclusion
 
 **Recommended Solution**: Use NLSQ's `least_squares()` with `StratifiedResidualFunction`
 
 **Why This Works**:
+
 1. NLSQ's optimization engine (not scipy)
-2. We control chunking (in residual function)
-3. JAX acceleration + GPU support
-4. Scales to >100M points
-5. Works for NLSQ and CMC
+1. We control chunking (in residual function)
+1. JAX acceleration + GPU support
+1. Scales to >100M points
+1. Works for NLSQ and CMC
 
 **Timeline**: 1-2 weeks for full implementation and testing
 

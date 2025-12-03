@@ -1,28 +1,28 @@
 # Consensus Monte Carlo API Reference
 
-**Version:** 3.0+
-**Last Updated:** 2025-10-24
+**Version:** 3.0+ **Last Updated:** 2025-10-24
 
----
+______________________________________________________________________
 
 ## Table of Contents
 
 1. [Overview](#overview)
-2. [Main Entry Point](#main-entry-point)
-3. [CMCCoordinator Class](#cmccoordinator-class)
-4. [Sharding Module](#sharding-module)
-5. [SVI Initialization Module](#svi-initialization-module)
-6. [Backend Interface](#backend-interface)
-7. [Combination Module](#combination-module)
-8. [Diagnostics Module](#diagnostics-module)
-9. [Configuration Schema](#configuration-schema)
-10. [Extended MCMCResult](#extended-mcmcresult)
+1. [Main Entry Point](#main-entry-point)
+1. [CMCCoordinator Class](#cmccoordinator-class)
+1. [Sharding Module](#sharding-module)
+1. [SVI Initialization Module](#svi-initialization-module)
+1. [Backend Interface](#backend-interface)
+1. [Combination Module](#combination-module)
+1. [Diagnostics Module](#diagnostics-module)
+1. [Configuration Schema](#configuration-schema)
+1. [Extended MCMCResult](#extended-mcmcresult)
 
----
+______________________________________________________________________
 
 ## Overview
 
-The Consensus Monte Carlo (CMC) API provides a complete framework for scalable Bayesian inference on large XPCS datasets. The API is organized into several modules:
+The Consensus Monte Carlo (CMC) API provides a complete framework for scalable Bayesian
+inference on large XPCS datasets. The API is organized into several modules:
 
 ```
 homodyne.optimization.cmc/
@@ -35,7 +35,7 @@ homodyne.optimization.cmc/
 └── result.py           # Extended MCMCResult class
 ```
 
----
+______________________________________________________________________
 
 ## Main Entry Point
 
@@ -66,52 +66,64 @@ def fit_mcmc_jax(
 #### Parameters
 
 - **`data`** (*np.ndarray*): Experimental c2 values (flattened)
+
   - Shape: `(n_points,)`
   - Must not contain NaN or Inf
 
 - **`t1`** (*np.ndarray*): First time delay array
+
   - Shape: `(n_t1,)`
   - Units: seconds
 
 - **`t2`** (*np.ndarray*): Second time delay array
+
   - Shape: `(n_t2,)`
   - Units: seconds
 
 - **`phi`** (*np.ndarray*): Azimuthal angle array
+
   - Shape: `(n_phi,)`
   - Units: degrees, normalized to [-180°, 180°]
 
 - **`q`** (*float*): Wavevector magnitude
+
   - Units: Å⁻¹
   - Typical range: 0.001 - 0.1
 
 - **`L`** (*float*): Sample-detector distance (stator-rotor gap)
+
   - Units: Angstroms
   - Typical value: 2,000,000 Å
 
 - **`analysis_mode`** (*str*): Analysis mode
+
   - Options: `'static_isotropic'` (5 parameters), `'laminar_flow'` (9 parameters)
 
 - **`initial_params`** (*Dict[str, float]*): Initial parameter values
+
   - Keys: Parameter names (e.g., `'D0'`, `'alpha'`, `'D_offset'`)
   - Values: Initial guesses
 
 - **`method`** (*str*, optional): MCMC method selection
+
   - Options: `'auto'` (default), `'nuts'`, `'cmc'`
   - Default: `'auto'` (automatic hardware-adaptive selection)
 
 - **`cmc_config`** (*Dict[str, Any]*, optional): CMC configuration
+
   - If None, uses defaults from configuration system
   - See [Configuration Schema](#configuration-schema)
 
 - **`**kwargs`**: Additional MCMC parameters
+
   - `num_warmup`, `num_samples`, `num_chains`, etc.
 
 #### Returns
 
 - **`MCMCResult`**: Extended MCMC result object
   - Standard fields: `mean_params`, `std_params`, `samples_params`, etc.
-  - CMC fields (if CMC used): `num_shards`, `combination_method`, `per_shard_diagnostics`, `cmc_diagnostics`
+  - CMC fields (if CMC used): `num_shards`, `combination_method`,
+    `per_shard_diagnostics`, `cmc_diagnostics`
 
 #### Raises
 
@@ -166,7 +178,7 @@ result = fit_mcmc_jax(
 )
 ```
 
----
+______________________________________________________________________
 
 ## CMCCoordinator Class
 
@@ -232,11 +244,11 @@ class CMCCoordinator:
 Executes the 6-step CMC workflow:
 
 1. **Create shards** - Partition data using specified strategy
-2. **Run SVI initialization** - Estimate inverse mass matrix
-3. **Execute parallel MCMC** - Run NUTS on each shard
-4. **Combine subposteriors** - Weighted Gaussian product or averaging
-5. **Validate results** - Check convergence criteria
-6. **Return MCMCResult** - Package results with diagnostics
+1. **Run SVI initialization** - Estimate inverse mass matrix
+1. **Execute parallel MCMC** - Run NUTS on each shard
+1. **Combine subposteriors** - Weighted Gaussian product or averaging
+1. **Validate results** - Check convergence criteria
+1. **Return MCMCResult** - Package results with diagnostics
 
 **Pipeline Flow:**
 
@@ -296,7 +308,7 @@ print(f"Combination method: {result.combination_method}")
 print(f"Converged shards: {result.cmc_diagnostics['n_shards_converged']}")
 ```
 
----
+______________________________________________________________________
 
 ## Sharding Module
 
@@ -350,14 +362,17 @@ def shard_data_stratified(
 **Sharding Strategies:**
 
 - **`stratified`**: Stratified sampling across (t1, t2, phi) bins
+
   - Ensures each shard is representative of full dataset
   - Best for heterogeneous data
 
 - **`random`**: Random permutation before splitting
+
   - Simpler and faster
   - Good for homogeneous data
 
 - **`contiguous`**: Split into contiguous blocks
+
   - Fastest (no reordering)
   - Assumes data is pre-shuffled
 
@@ -476,7 +491,7 @@ is_valid, diagnostics = validate_shards(shards, len(data))
 assert is_valid, f"Shard validation failed: {diagnostics}"
 ```
 
----
+______________________________________________________________________
 
 ## SVI Initialization Module
 
@@ -603,7 +618,7 @@ else:
     print("SVI failed, using identity matrix")
 ```
 
----
+______________________________________________________________________
 
 ## Backend Interface
 
@@ -717,6 +732,7 @@ shard_results = backend.run_parallel_mcmc(
 ```
 
 **Features:**
+
 - Parallel execution on multi-GPU systems
 - Sequential execution on single GPU
 - JAX-native implementation
@@ -733,6 +749,7 @@ shard_results = backend.run_parallel_mcmc(...)
 ```
 
 **Features:**
+
 - CPU-only execution
 - Uses `multiprocessing.Pool`
 - Good for high-core-count workstations
@@ -753,11 +770,12 @@ shard_results = backend.run_parallel_mcmc(...)
 ```
 
 **Features:**
+
 - PBS Pro job submission
 - Job array for parallel execution
 - Checkpoint/resume capability
 
----
+______________________________________________________________________
 
 ## Combination Module
 
@@ -802,6 +820,7 @@ def combine_subposteriors(
 **Combination Methods:**
 
 - **`weighted`**: Weighted Gaussian product (Scott et al. 2016)
+
   ```
   Given M shards with Gaussians N(μᵢ, Σᵢ):
   1. Compute precisions: Λᵢ = Σᵢ⁻¹
@@ -811,6 +830,7 @@ def combine_subposteriors(
   ```
 
 - **`average`**: Simple concatenation and resampling
+
   ```
   1. Concatenate all samples: S = [S₁, S₂, ..., Sₘ]
   2. Resample uniformly: sample N points from S
@@ -838,7 +858,7 @@ cov = combined['cov']          # Posterior covariance
 method_used = combined['method']  # 'weighted' or 'average'
 ```
 
----
+______________________________________________________________________
 
 ## Diagnostics Module
 
@@ -989,7 +1009,7 @@ if not is_valid:
     print(f"Validation failed: {diagnostics['validation_errors']}")
 ```
 
----
+______________________________________________________________________
 
 ## Configuration Schema
 
@@ -1112,7 +1132,7 @@ DEFAULT_CMC_CONFIG = {
 }
 ```
 
----
+______________________________________________________________________
 
 ## Extended MCMCResult
 
@@ -1286,21 +1306,18 @@ with open('result.json', 'r') as f:
 result_loaded = MCMCResult.from_dict(data)
 ```
 
----
+______________________________________________________________________
 
 ## Summary
 
 **Quick API Reference:**
 
-| Task | API Call |
-|------|----------|
-| **Run CMC** | `fit_mcmc_jax(..., method='cmc')` |
-| **Check if CMC** | `result.is_cmc_result()` |
-| **Create shards** | `shard_data_stratified(...)` |
-| **Run SVI** | `run_svi_initialization(...)` |
-| **Combine posteriors** | `combine_subposteriors(...)` |
-| **Validate results** | `validate_cmc_results(...)` |
-| **Select backend** | `select_backend(hardware_config)` |
+| Task | API Call | |------|----------| | **Run CMC** |
+`fit_mcmc_jax(..., method='cmc')` | | **Check if CMC** | `result.is_cmc_result()` | |
+**Create shards** | `shard_data_stratified(...)` | | **Run SVI** |
+`run_svi_initialization(...)` | | **Combine posteriors** | `combine_subposteriors(...)`
+| | **Validate results** | `validate_cmc_results(...)` | | **Select backend** |
+`select_backend(hardware_config)` |
 
 **Module Organization:**
 
@@ -1321,6 +1338,7 @@ homodyne.optimization.cmc/
 ```
 
 For more information:
+
 - **User Guide**: `docs/user-guide/cmc_guide.md`
 - **Developer Guide**: `docs/developer-guide/cmc_architecture.md`
 - **Troubleshooting**: `docs/troubleshooting/cmc_troubleshooting.md`

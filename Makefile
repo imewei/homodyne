@@ -268,6 +268,7 @@ profile-mcmc:
 
 # Cleanup targets
 clean: clean-build clean-pyc clean-test
+	rm -rf node_modules/
 	@echo "✓ Cleaned build artifacts and cache"
 
 clean-all: clean clean-cache

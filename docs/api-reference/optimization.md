@@ -1,29 +1,29 @@
 # Optimization API Reference
 
-**Version:** 3.0 (NLSQ API Alignment)
-**Module:** `homodyne.optimization`
-**Date:** October 2025
+**Version:** 3.0 (NLSQ API Alignment) **Module:** `homodyne.optimization` **Date:**
+October 2025
 
----
+______________________________________________________________________
 
 ## Table of Contents
 
 1. [NLSQWrapper](#nlsqwrapper)
-2. [DatasetSizeStrategy](#datasetsizestrategy)
-3. [CheckpointManager](#checkpointmanager)
-4. [BatchStatistics](#batchstatistics)
-5. [NumericalValidator](#numericalvalidator)
-6. [RecoveryStrategyApplicator](#recoverystrategyapplicator)
-7. [Data Structures](#data-structures)
-8. [Exceptions](#exceptions)
+1. [DatasetSizeStrategy](#datasetsizestrategy)
+1. [CheckpointManager](#checkpointmanager)
+1. [BatchStatistics](#batchstatistics)
+1. [NumericalValidator](#numericalvalidator)
+1. [RecoveryStrategyApplicator](#recoverystrategyapplicator)
+1. [Data Structures](#data-structures)
+1. [Exceptions](#exceptions)
 
----
+______________________________________________________________________
 
 ## NLSQWrapper
 
 **Module:** `homodyne.optimization.nlsq_wrapper`
 
-Main optimization interface providing unified access to all NLSQ strategies (STANDARD, LARGE, CHUNKED, STREAMING).
+Main optimization interface providing unified access to all NLSQ strategies (STANDARD,
+LARGE, CHUNKED, STREAMING).
 
 ### Class Definition
 
@@ -174,7 +174,7 @@ def fit(
     """
 ```
 
-#### _handle_nlsq_result()
+#### \_handle_nlsq_result()
 
 Internal method for normalizing NLSQ return types.
 
@@ -214,7 +214,7 @@ def _handle_nlsq_result(
     """
 ```
 
----
+______________________________________________________________________
 
 ## DatasetSizeStrategy
 
@@ -373,7 +373,7 @@ def build_streaming_config(
     """
 ```
 
----
+______________________________________________________________________
 
 ## CheckpointManager
 
@@ -599,7 +599,7 @@ def validate_checkpoint(self, checkpoint_path: Path) -> bool:
     """
 ```
 
----
+______________________________________________________________________
 
 ## BatchStatistics
 
@@ -734,7 +734,7 @@ def get_statistics(self) -> dict[str, Any]:
     """
 ```
 
----
+______________________________________________________________________
 
 ## NumericalValidator
 
@@ -877,7 +877,7 @@ def validate_loss(self, loss_value: Any) -> None:
     """
 ```
 
----
+______________________________________________________________________
 
 ## RecoveryStrategyApplicator
 
@@ -972,7 +972,7 @@ def get_recovery_strategy(
     """
 ```
 
----
+______________________________________________________________________
 
 ## Data Structures
 
@@ -1036,7 +1036,7 @@ class OptimizationStrategy(Enum):
     STREAMING = "streaming"  # > 100M points
 ```
 
----
+______________________________________________________________________
 
 ## Exceptions
 
@@ -1111,54 +1111,51 @@ class NLSQCheckpointError(NLSQOptimizationError):
     """
 ```
 
----
+______________________________________________________________________
 
 ## Performance Characteristics
 
 ### Strategy Overhead
 
 | Strategy | Memory Scaling | Time Overhead | Recommended For |
-|----------|----------------|---------------|-----------------|
-| STANDARD | Linear | 0% (baseline) | < 1M points |
-| LARGE | Linear | ~10% | 1M-10M points |
-| CHUNKED | Linear | ~15% | 10M-100M points |
-| STREAMING | **Constant** | ~25% | > 100M points |
+|----------|----------------|---------------|-----------------| | STANDARD | Linear | 0%
+(baseline) | < 1M points | | LARGE | Linear | ~10% | 1M-10M points | | CHUNKED | Linear
+| ~15% | 10M-100M points | | STREAMING | **Constant** | ~25% | > 100M points |
 
 ### Fault Tolerance Overhead
 
-| Mode | Overhead | Features |
-|------|----------|----------|
-| No validation | 0% | No error detection |
-| Numerical validation | ~0.5% | NaN/Inf detection |
-| Full fault tolerance | < 5% | Validation + recovery |
-| Fast mode | < 1% | Minimal checks |
+| Mode | Overhead | Features | |------|----------|----------| | No validation | 0% | No
+error detection | | Numerical validation | ~0.5% | NaN/Inf detection | | Full fault
+tolerance | < 5% | Validation + recovery | | Fast mode | < 1% | Minimal checks |
 
 ### Memory Requirements
 
 **STREAMING mode (constant memory):**
+
 - **Batch size:** 10% of available RAM
 - **Typical usage:** 1-2 GB regardless of dataset size
 - **Coefficient of variation:** < 20% across batches
 
 **Other modes (linear scaling):**
+
 - **STANDARD:** ~2.5× data size
 - **LARGE:** ~3.0× data size (memory optimized)
 - **CHUNKED:** ~3.5× data size (with progress tracking)
 
----
+______________________________________________________________________
 
 ## Migration Notes
 
 ### Breaking Changes from v2.0
 
 1. **Removed:** `performance.subsampling` configuration section
-2. **Changed:** StreamingOptimizer now required for > 100M points
-3. **Added:** `streaming_diagnostics` field in OptimizationResult
-4. **Added:** `fast_mode` parameter to NLSQWrapper
+1. **Changed:** StreamingOptimizer now required for > 100M points
+1. **Added:** `streaming_diagnostics` field in OptimizationResult
+1. **Added:** `fast_mode` parameter to NLSQWrapper
 
 See `/docs/migration/v2_to_v3_migration.md` for complete migration guide.
 
----
+______________________________________________________________________
 
 ## References
 
@@ -1167,8 +1164,6 @@ See `/docs/migration/v2_to_v3_migration.md` for complete migration guide.
 - **Migration Guide:** `/docs/migration/v2_to_v3_migration.md`
 - **Performance Tuning:** `/docs/guides/performance_tuning.md`
 
----
+______________________________________________________________________
 
-**Last Updated:** October 22, 2025
-**Homodyne Version:** 3.0+
-**NLSQ Version:** 0.1.5+
+**Last Updated:** October 22, 2025 **Homodyne Version:** 3.0+ **NLSQ Version:** 0.1.5+

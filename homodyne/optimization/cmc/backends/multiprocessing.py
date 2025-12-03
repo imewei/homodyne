@@ -68,10 +68,9 @@ Error Handling
 - Pool shutdown: Always ensures clean cleanup
 """
 
-from typing import List, Dict, Any, Optional
 import multiprocessing
-import time
 import os
+from typing import Any
 
 import numpy as np
 
@@ -94,15 +93,14 @@ def _log_numpyro_init_diagnostics(model, init_param_values, log_fn, shard_idx):
     """
 
     try:
-        import numpy as np
         import jax
         import jax.numpy as jnp
+        import numpy as np
         from numpyro import handlers
-        from numpyro.infer import init_to_value, util as infer_util
+        from numpyro.infer import init_to_value
+        from numpyro.infer import util as infer_util
     except ImportError as exc:  # pragma: no cover - diagnostics only
-        log_fn(
-            f"Shard {shard_idx}: diagnostics skipped (numpyro unavailable: {exc})"
-        )
+        log_fn(f"Shard {shard_idx}: diagnostics skipped (numpyro unavailable: {exc})")
         return
 
     # Convert init params to JAX arrays so constraint checks broadcast cleanly
@@ -122,9 +120,7 @@ def _log_numpyro_init_diagnostics(model, init_param_values, log_fn, shard_idx):
             "failure likely occurs downstream."
         )
     except Exception as exc:  # pragma: no cover - diagnostics only
-        log_fn(
-            f"Shard {shard_idx}: initialize_model(debug) still failed: {exc}"
-        )
+        log_fn(f"Shard {shard_idx}: initialize_model(debug) still failed: {exc}")
 
     # Trace the model with the provided values to inspect each sample site
     try:
@@ -132,9 +128,7 @@ def _log_numpyro_init_diagnostics(model, init_param_values, log_fn, shard_idx):
         substituted = handlers.substitute(seeded_model, data=value_dict)
         trace = handlers.trace(substituted).get_trace()
     except Exception as exc:  # pragma: no cover - diagnostics only
-        log_fn(
-            f"Shard {shard_idx}: unable to trace model for diagnostics: {exc}"
-        )
+        log_fn(f"Shard {shard_idx}: unable to trace model for diagnostics: {exc}")
         return
 
     for site_name, site in trace.items():
@@ -215,13 +209,15 @@ def _log_numpyro_init_diagnostics(model, init_param_values, log_fn, shard_idx):
                 dist,
             )
         )
-from homodyne.utils.logging import get_logger
+
+
+from homodyne.utils.logging import get_logger  # noqa: E402 - After NUTS import
 
 logger = get_logger(__name__)
 
 # Try to import cloudpickle for better serialization
 try:
-    import cloudpickle
+    import cloudpickle  # noqa: F401 - Availability check
 
     CLOUDPICKLE_AVAILABLE = True
 except ImportError:
@@ -266,7 +262,7 @@ class MultiprocessingBackend(CMCBackend):
 
     def __init__(
         self,
-        num_workers: Optional[int] = None,
+        num_workers: int | None = None,
         timeout_minutes: float = 30.0,
         max_memory_per_worker_gb: float = 8.0,  # Increased to match actual usage (7.96 GB observed)
     ):
@@ -322,7 +318,9 @@ class MultiprocessingBackend(CMCBackend):
             available_memory_gb = psutil.virtual_memory().available / (1024**3)
 
             # Calculate workers based on memory
-            memory_based_workers = max(1, int(available_memory_gb / max_memory_per_worker_gb))
+            memory_based_workers = max(
+                1, int(available_memory_gb / max_memory_per_worker_gb)
+            )
 
             # Get CPU count (physical cores only, not logical/hyperthreading)
             cpu_count = psutil.cpu_count(logical=False) or 1
@@ -356,13 +354,13 @@ class MultiprocessingBackend(CMCBackend):
 
     def run_parallel_mcmc(
         self,
-        shards: List[Dict[str, np.ndarray]],
-        mcmc_config: Dict[str, Any],
-        init_params: Dict[str, float],
+        shards: list[dict[str, np.ndarray]],
+        mcmc_config: dict[str, Any],
+        init_params: dict[str, float],
         inv_mass_matrix: np.ndarray,
         analysis_mode: str,
         parameter_space,
-    ) -> List[Dict[str, Any]]:
+    ) -> list[dict[str, Any]]:
         """Run MCMC on all shards using multiprocessing.Pool.
 
         Creates a pool of worker processes and distributes shards across them.
@@ -471,7 +469,9 @@ class MultiprocessingBackend(CMCBackend):
                 )
 
                 # Phase 2: Collect batch results as they complete
-                for i, (async_result, start_time) in enumerate(zip(async_results, start_times)):
+                for i, (async_result, start_time) in enumerate(
+                    zip(async_results, start_times, strict=False)
+                ):
                     shard_idx = batch_start + i
                     try:
                         # Wait for this specific result with timeout
@@ -486,13 +486,16 @@ class MultiprocessingBackend(CMCBackend):
                         # Log error details if shard failed
                         if not result["converged"] and result.get("error"):
                             logger.error(
-                                f"[{self.get_backend_name()}] Shard {shard_idx+1}/{len(shards)} error details:\n"
+                                f"[{self.get_backend_name()}] Shard {shard_idx + 1}/{len(shards)} error details:\n"
                                 f"{result['error']}"
                             )
 
                         # Log completion
                         self._log_shard_complete(
-                            shard_idx, len(shards), result["elapsed_time"], result["converged"]
+                            shard_idx,
+                            len(shards),
+                            result["elapsed_time"],
+                            result["converged"],
                         )
 
                         results.append(result)
@@ -519,7 +522,9 @@ class MultiprocessingBackend(CMCBackend):
                     except Exception as e:
                         # Handle other errors
                         error_result = self._handle_shard_error(e, shard_idx)
-                        error_result["elapsed_time"] = self._get_elapsed_time(start_time)
+                        error_result["elapsed_time"] = self._get_elapsed_time(
+                            start_time
+                        )
                         results.append(error_result)
 
                 logger.info(
@@ -542,13 +547,13 @@ class MultiprocessingBackend(CMCBackend):
 
     def run_parallel_mcmc_batch(
         self,
-        shards: List[Dict[str, np.ndarray]],
-        mcmc_config: Dict[str, Any],
-        init_params: Dict[str, float],
+        shards: list[dict[str, np.ndarray]],
+        mcmc_config: dict[str, Any],
+        init_params: dict[str, float],
         inv_mass_matrix: np.ndarray,
         analysis_mode: str,
         parameter_space,
-    ) -> List[Dict[str, Any]]:
+    ) -> list[dict[str, Any]]:
         """Alternative implementation using Pool.map for batch execution.
 
         This method processes all shards in a single batch using Pool.map,
@@ -621,7 +626,7 @@ class MultiprocessingBackend(CMCBackend):
 # -----------------------------------------------------------------------------
 
 
-def _worker_function(args: tuple) -> Dict[str, Any]:
+def _worker_function(args: tuple) -> dict[str, Any]:
     """Worker function executed in separate process.
 
     This function runs in a separate process and executes MCMC on a single
@@ -648,10 +653,11 @@ def _worker_function(args: tuple) -> Dict[str, Any]:
     ) = args
 
     # Import modules locally (avoids serialization issues)
-    import numpy as np
-
     # Configure XLA for memory-constrained environments (before JAX import)
     import os
+
+    import numpy as np
+
     os.environ["XLA_PYTHON_CLIENT_PREALLOCATE"] = "false"
     os.environ["XLA_PYTHON_CLIENT_ALLOCATOR"] = "platform"
     os.environ["XLA_PYTHON_CLIENT_MEM_FRACTION"] = "0.25"
@@ -660,10 +666,10 @@ def _worker_function(args: tuple) -> Dict[str, Any]:
     import jax.numpy as jnp
 
     try:
-        import numpyro
-        import numpyro.distributions as dist
+        import numpyro  # noqa: F401
+        import numpyro.distributions as dist  # noqa: F401
+        from numpyro import sample  # noqa: F401
         from numpyro.infer import MCMC, NUTS
-        from numpyro import sample
     except ImportError as e:
         return {
             "converged": False,
@@ -744,7 +750,9 @@ def _worker_function(args: tuple) -> Dict[str, Any]:
             f"Multiprocessing shard {shard_idx}: Received init_params with {len(init_param_values)} parameters: "
             f"{list(init_param_values.keys())}"
         )
-        per_angle_received = [k for k in init_param_values.keys() if 'contrast_' in k or 'offset_' in k]
+        per_angle_received = [
+            k for k in init_param_values.keys() if "contrast_" in k or "offset_" in k
+        ]
         if per_angle_received:
             worker_logger.debug(
                 f"Multiprocessing shard {shard_idx}: Per-angle parameters received: {per_angle_received}"
@@ -779,7 +787,7 @@ def _worker_function(args: tuple) -> Dict[str, Any]:
 
         # Use percentiles instead of min/max to avoid outliers
         # Data contains extreme values (>3.0) that corrupt initialization
-        data_p05 = float(np.percentile(data_valid, 5))   # 5th percentile
+        data_p05 = float(np.percentile(data_valid, 5))  # 5th percentile
         data_p95 = float(np.percentile(data_valid, 95))  # 95th percentile
         data_mean = float(np.mean(data_valid))
 
@@ -788,8 +796,12 @@ def _worker_function(args: tuple) -> Dict[str, Any]:
         # At c2_theory=1.0: c2_fitted ≈ data_p05
         # At c2_theory=2.0: c2_fitted ≈ data_p95
         # Solving: contrast = (data_p95 - data_p05), offset = data_p05 - contrast
-        estimated_contrast = max(0.01, data_p95 - data_p05)  # At least 0.01 for numerical stability
-        estimated_offset = max(0.5, data_p05 - estimated_contrast)  # At least 0.5 (physical minimum)
+        estimated_contrast = max(
+            0.01, data_p95 - data_p05
+        )  # At least 0.01 for numerical stability
+        estimated_offset = max(
+            0.5, data_p05 - estimated_contrast
+        )  # At least 0.5 (physical minimum)
 
         worker_logger.info(
             f"Multiprocessing shard {shard_idx}: Data statistics (robust): "
@@ -804,7 +816,7 @@ def _worker_function(args: tuple) -> Dict[str, Any]:
         # Root cause: Coordinator (coordinator.py) now expands parameters from 7→13 (7 + 2*n_phi)
         # If worker unconditionally overwrites these with data-driven estimates, initialization fails
         # Solution: Detect coordinator-provided params and skip data-driven computation
-        if f"contrast_0" in init_param_values:
+        if "contrast_0" in init_param_values:
             worker_logger.info(
                 f"Multiprocessing shard {shard_idx}: Using coordinator-provided per-angle parameters "
                 f"(skipping data-driven estimation to preserve coordinator values)"
@@ -867,7 +879,9 @@ def _worker_function(args: tuple) -> Dict[str, Any]:
         )
 
         # Log first few parameter values to verify
-        sample_params = {k: v for i, (k, v) in enumerate(init_param_values.items()) if i < 10}
+        sample_params = {
+            k: v for i, (k, v) in enumerate(init_param_values.items()) if i < 10
+        }
         worker_logger.info(
             f"Multiprocessing shard {shard_idx}: init_param_values (first 10): {sample_params}"
         )
@@ -886,7 +900,9 @@ def _worker_function(args: tuple) -> Dict[str, Any]:
         n_phi_unique = len(phi_unique)
 
         # CRITICAL: Exclude 'contrast' and 'offset' from base params (replaced by per-angle versions)
-        param_names_physical = [p for p in param_names_base if p not in ['contrast', 'offset']]
+        param_names_physical = [
+            p for p in param_names_base if p not in ["contrast", "offset"]
+        ]
 
         # Expected ordering for per-angle scaling
         expected_order = (
@@ -978,6 +994,7 @@ def _worker_function(args: tuple) -> Dict[str, Any]:
             # Enable NumPyro validation for better error messages when debugging
             if diagnostics_enabled:
                 import numpyro
+
                 with numpyro.validation_enabled():
                     mcmc.run(rng_key)
             else:
@@ -1021,9 +1038,7 @@ def _worker_function(args: tuple) -> Dict[str, Any]:
                     model,
                     target_accept_prob=target_accept_prob,
                     max_tree_depth=max_tree_depth,
-                    init_strategy=numpyro.infer.init_to_value(
-                        values=beta_init_values
-                    ),
+                    init_strategy=numpyro.infer.init_to_value(values=beta_init_values),
                 )
                 mcmc = MCMC(
                     nuts_kernel,
@@ -1036,9 +1051,7 @@ def _worker_function(args: tuple) -> Dict[str, Any]:
                 try:
                     mcmc.run(rng_key)
                     init_param_values = beta_init_values
-                    worker_logger.info(
-                        f"Shard {shard_idx}: BetaScaled retry succeeded"
-                    )
+                    worker_logger.info(f"Shard {shard_idx}: BetaScaled retry succeeded")
                 except RuntimeError as exc_beta:
                     if (
                         diagnostics_enabled
@@ -1110,9 +1123,9 @@ def _worker_function(args: tuple) -> Dict[str, Any]:
 
 
 def _compute_diagnostics_worker(
-    samples_dict: Dict[str, np.ndarray],
+    samples_dict: dict[str, np.ndarray],
     mcmc,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """Compute MCMC diagnostics in worker process.
 
     Parameters
@@ -1166,7 +1179,7 @@ def _compute_diagnostics_worker(
                 ess_dict[param_name] = len(samples_dict[param_name])
 
             diagnostics["ess"] = ess_dict
-            diagnostics["rhat"] = {k: 1.0 for k in samples_dict.keys()}
+            diagnostics["rhat"] = dict.fromkeys(samples_dict.keys(), 1.0)
 
         return diagnostics
 
@@ -1178,7 +1191,7 @@ def _compute_diagnostics_worker(
         }
 
 
-def _check_convergence_worker(diagnostics: Dict[str, Any]) -> bool:
+def _check_convergence_worker(diagnostics: dict[str, Any]) -> bool:
     """Check convergence in worker process.
 
     Parameters

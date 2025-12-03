@@ -15,26 +15,19 @@ Author: Testing Engineer (Task Group 6.3)
 Date: 2025-10-22
 """
 
-import pytest
-import numpy as np
-import tempfile
-from pathlib import Path
-from unittest.mock import Mock, patch, MagicMock
-import h5py
+from unittest.mock import patch
 
-from homodyne.optimization.nlsq_wrapper import NLSQWrapper, OptimizationResult
+import h5py
+import numpy as np
+import pytest
+
+from homodyne.optimization.batch_statistics import BatchStatistics
 from homodyne.optimization.checkpoint_manager import CheckpointManager
+from homodyne.optimization.exceptions import NLSQCheckpointError
+from homodyne.optimization.nlsq_wrapper import NLSQWrapper
 from homodyne.optimization.numerical_validation import NumericalValidator
 from homodyne.optimization.recovery_strategies import RecoveryStrategyApplicator
-from homodyne.optimization.batch_statistics import BatchStatistics
-from homodyne.optimization.exceptions import (
-    NLSQOptimizationError,
-    NLSQConvergenceError,
-    NLSQNumericalError,
-    NLSQCheckpointError,
-)
 from tests.factories.large_dataset_factory import LargeDatasetFactory
-
 
 # ============================================================================
 # Test Group 1: NaN/Inf Injection Tests

@@ -65,25 +65,23 @@ See Also:
 - homodyne/optimization/exceptions.py: NLSQCheckpointError exception
 """
 
+import hashlib
 import json
-import pickle
 import time
+from pathlib import Path
+from unittest.mock import patch
+
+import h5py
 import numpy as np
 import pytest
-import tempfile
-import shutil
-from pathlib import Path
-from unittest.mock import Mock, patch, MagicMock
-import h5py
-import hashlib
 
 from homodyne.optimization.checkpoint_manager import CheckpointManager
 from homodyne.optimization.exceptions import NLSQCheckpointError
 
-
 # ==============================================================================
 # Checkpoint Save/Resume Tests (from test_checkpoint_manager.py)
 # ==============================================================================
+
 
 class TestCheckpointSaveHDF5:
     """Test checkpoint save functionality with HDF5 format."""
@@ -596,8 +594,6 @@ if __name__ == "__main__":
 # ==============================================================================
 # Checkpoint Coverage Tests (from test_checkpoint_manager_coverage.py)
 # ==============================================================================
-
-from homodyne.optimization.exceptions import NLSQCheckpointError
 
 
 class TestCheckpointManagerSave:
@@ -1193,4 +1189,3 @@ class TestCheckpointManagerIntegration:
         loaded = manager.load_checkpoint(latest)
         assert loaded["batch_idx"] == 40
         assert loaded["optimizer_state"]["iteration"] == 400
-

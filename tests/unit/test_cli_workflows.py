@@ -72,10 +72,10 @@ from homodyne.cli.args_parser import create_parser, validate_args
 from homodyne.cli.commands import _apply_cli_overrides
 from homodyne.config.manager import ConfigManager
 
-
 # ==============================================================================
 # CMC CLI Integration Tests (from test_cli_integration.py)
 # ==============================================================================
+
 
 class TestCMCArgumentParsing:
     """Test CMC-specific CLI argument parsing."""
@@ -210,7 +210,7 @@ class TestCMCConfigOverride:
         n_phi = 3
         n_t = 10
         t_vals = np.linspace(0, 1, n_t)
-        t1_2d, t2_2d = np.meshgrid(t_vals, t_vals, indexing='ij')
+        t1_2d, t2_2d = np.meshgrid(t_vals, t_vals, indexing="ij")
         mock_data = {
             "c2_exp": np.random.rand(n_phi, n_t, n_t),  # (3, 10, 10)
             "t1": t1_2d,  # 2D meshgrid (10, 10)
@@ -264,7 +264,7 @@ class TestCMCConfigOverride:
         n_phi = 3
         n_t = 10
         t_vals = np.linspace(0, 1, n_t)
-        t1_2d, t2_2d = np.meshgrid(t_vals, t_vals, indexing='ij')
+        t1_2d, t2_2d = np.meshgrid(t_vals, t_vals, indexing="ij")
         mock_data = {
             "c2_exp": np.random.rand(n_phi, n_t, n_t),  # (3, 10, 10)
             "t1": t1_2d,  # 2D meshgrid (10, 10)
@@ -314,14 +314,16 @@ class TestCMCDiagnosticPlotGeneration:
         mock_config = Mock()
         mock_config.get_cmc_config.return_value = {}
         mock_config.config = {"analysis_mode": "laminar_flow"}
-        mock_config.get_initial_parameters.return_value = None  # Prevent Mock iteration error
+        mock_config.get_initial_parameters.return_value = (
+            None  # Prevent Mock iteration error
+        )
 
         # Fix: Ensure phi_angles_list matches c2_exp first dimension
         # Also provide 2D meshgrids for t1/t2 (required by data pooling code)
         n_phi = 3
         n_t = 10
         t_vals = np.linspace(0, 1, n_t)
-        t1_2d, t2_2d = np.meshgrid(t_vals, t_vals, indexing='ij')
+        t1_2d, t2_2d = np.meshgrid(t_vals, t_vals, indexing="ij")
         mock_data = {
             "c2_exp": np.random.rand(n_phi, n_t, n_t),  # (3, 10, 10)
             "t1": t1_2d,  # 2D meshgrid (10, 10)
@@ -371,14 +373,16 @@ class TestCMCDiagnosticPlotGeneration:
         mock_config = Mock()
         mock_config.get_cmc_config.return_value = {}
         mock_config.config = {"analysis_mode": "laminar_flow"}
-        mock_config.get_initial_parameters.return_value = None  # Prevent Mock iteration error
+        mock_config.get_initial_parameters.return_value = (
+            None  # Prevent Mock iteration error
+        )
 
         # Fix: Ensure phi_angles_list matches c2_exp first dimension
         # Also provide 2D meshgrids for t1/t2 (required by data pooling code)
         n_phi = 3
         n_t = 10
         t_vals = np.linspace(0, 1, n_t)
-        t1_2d, t2_2d = np.meshgrid(t_vals, t_vals, indexing='ij')
+        t1_2d, t2_2d = np.meshgrid(t_vals, t_vals, indexing="ij")
         mock_data = {
             "c2_exp": np.random.rand(n_phi, n_t, n_t),  # (3, 10, 10)
             "t1": t1_2d,  # 2D meshgrid (10, 10)
@@ -424,14 +428,16 @@ class TestCMCDiagnosticPlotGeneration:
         mock_config = Mock()
         mock_config.get_cmc_config.return_value = {}
         mock_config.config = {"analysis_mode": "laminar_flow"}
-        mock_config.get_initial_parameters.return_value = None  # Prevent Mock iteration error
+        mock_config.get_initial_parameters.return_value = (
+            None  # Prevent Mock iteration error
+        )
 
         # Fix: Ensure phi_angles_list matches c2_exp first dimension
         # Also provide 2D meshgrids for t1/t2 (required by data pooling code)
         n_phi = 3
         n_t = 10
         t_vals = np.linspace(0, 1, n_t)
-        t1_2d, t2_2d = np.meshgrid(t_vals, t_vals, indexing='ij')
+        t1_2d, t2_2d = np.meshgrid(t_vals, t_vals, indexing="ij")
         mock_data = {
             "c2_exp": np.random.rand(n_phi, n_t, n_t),  # (3, 10, 10)
             "t1": t1_2d,  # 2D meshgrid (10, 10)
@@ -794,7 +800,6 @@ def test_override_priority_config_beats_default(mock_config):
     # Check that config values are preserved
     param_values = mock_config.config["initial_parameters"]["values"]
     assert param_values == [1000.0, 0.5, 10.0]  # Original config values
-
 
 
 def test_override_priority_multiple_parameters(mock_config):

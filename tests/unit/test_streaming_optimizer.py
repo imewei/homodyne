@@ -15,21 +15,13 @@ Test Coverage:
 8. Batch statistics with circular buffer
 """
 
+from unittest.mock import Mock
+
 import numpy as np
 import pytest
-from unittest.mock import Mock, patch, MagicMock
-import time
 
-from homodyne.optimization.nlsq_wrapper import (
-    NLSQWrapper,
-    OptimizationStrategy,
-    OptimizationResult,
-)
-from homodyne.optimization.exceptions import (
-    NLSQOptimizationError,
-    NLSQConvergenceError,
-    NLSQNumericalError,
-)
+from homodyne.optimization.exceptions import NLSQConvergenceError, NLSQNumericalError
+from homodyne.optimization.nlsq_wrapper import OptimizationStrategy
 
 
 class TestStreamingOptimizerLargeDatasets:
@@ -272,7 +264,6 @@ class TestStreamingOptimizerErrorRecovery:
 
     def test_retry_on_numerical_error(self):
         """Test retry when NaN/Inf detected."""
-        from homodyne.optimization.exceptions import NLSQNumericalError
 
         attempt_count = [0]
 
@@ -365,7 +356,6 @@ class TestStreamingOptimizerNumericalValidation:
 
     def test_gradient_validation_nan_detection(self):
         """Test NaN detection in gradients."""
-        from homodyne.optimization.exceptions import NLSQNumericalError
         import jax.numpy as jnp
 
         # Valid gradients

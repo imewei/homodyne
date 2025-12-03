@@ -10,9 +10,10 @@ These validations help catch numerical instabilities early and enable
 targeted recovery strategies.
 """
 
+from typing import Any
+
 import jax.numpy as jnp
 import numpy as np
-from typing import Any
 
 from homodyne.optimization.exceptions import NLSQNumericalError
 

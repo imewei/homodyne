@@ -6,19 +6,19 @@ on:
       - main
       - develop
     paths:
-      - 'docs/**'
-      - 'homodyne/**'
-      - '.github/workflows/docs.yml'
-      - 'pyproject.toml'
+      - "docs/**"
+      - "homodyne/**"
+      - ".github/workflows/docs.yml"
+      - "pyproject.toml"
   pull_request:
     branches:
       - main
       - develop
     paths:
-      - 'docs/**'
-      - 'homodyne/**'
-      - '.github/workflows/docs.yml'
-      - 'pyproject.toml'
+      - "docs/**"
+      - "homodyne/**"
+      - ".github/workflows/docs.yml"
+      - "pyproject.toml"
   workflow_dispatch:
 
 concurrency:
@@ -39,8 +39,8 @@ jobs:
       - name: Set up Python 3.12
         uses: actions/setup-python@v5
         with:
-          python-version: '3.12'
-          cache: 'pip'
+          python-version: "3.12"
+          cache: "pip"
 
       - name: Install system dependencies
         run: |
@@ -156,8 +156,8 @@ jobs:
       - name: Set up Python 3.12
         uses: actions/setup-python@v5
         with:
-          python-version: '3.12'
-          cache: 'pip'
+          python-version: "3.12"
+          cache: "pip"
 
       - name: Install linting tools
         run: |

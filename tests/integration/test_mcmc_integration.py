@@ -2,35 +2,36 @@
 Integration Tests for MCMC Workflows
 =====================================
 
+**Updated**: v3.0 CMC-only migration
+
 Consolidated from:
-- test_config_driven_mcmc.py (Config-driven workflows, 13 tests, 754 lines)
-- test_mcmc_simplified_workflow.py (Simplified API workflows, 11 tests, 367 lines)
-- test_mcmc_filtering.py (Angle filtering integration, 5 tests, 247 lines)
-- test_mcmc_regression.py (Regression tests, 9 tests, 350 lines)
-- test_mcmc_simplified.py (Simplified MCMC API, 8 tests from mcmc/, 510 lines)
+- test_config_driven_mcmc.py (Config-driven workflows, 13 tests)
+- test_mcmc_simplified_workflow.py (Simplified API workflows, 11 tests)
+- test_mcmc_filtering.py (Angle filtering integration, 5 tests)
+- test_mcmc_regression.py (Regression tests, 9 tests)
+- test_mcmc_simplified.py (Simplified MCMC API, 8 tests)
 
 Tests cover:
-- Config-driven MCMC workflows with automatic NUTS/CMC selection
+- Config-driven MCMC workflows with CMC sharding
 - Simplified MCMC API workflows and user experience
 - Angle filtering integration with MCMC optimization
 - MCMC regression tests for stability
 - End-to-end MCMC execution scenarios
 
-Total: 46 tests
+Note: NUTS/CMC auto-selection tests removed in v3.0 (CMC-only architecture)
+
+Total: ~45 tests
 """
 
-import json
-import tempfile
 import numpy as np
 import pytest
-from pathlib import Path
-from unittest.mock import Mock, patch, MagicMock
 
 # JAX and NumPyro imports
 try:
     import jax
     import jax.numpy as jnp
     from jax import random
+
     JAX_AVAILABLE = True
 except ImportError:
     JAX_AVAILABLE = False
@@ -39,6 +40,7 @@ except ImportError:
 try:
     import numpyro
     from numpyro.infer import MCMC, NUTS
+
     NUMPYRO_AVAILABLE = True
 except ImportError:
     NUMPYRO_AVAILABLE = False
@@ -46,10 +48,7 @@ except ImportError:
 # Homodyne imports
 from homodyne.config.manager import ConfigManager
 from homodyne.config.parameter_space import ParameterSpace
-from homodyne.optimization.mcmc import fit_mcmc_jax, MCMCResult
-from homodyne.device.config import HardwareConfig
-from tests.factories.synthetic_data import generate_synthetic_xpcs_data
-
+from homodyne.optimization.mcmc import MCMCResult, fit_mcmc_jax
 
 # ==============================================================================
 # Config-Driven MCMC Tests (from test_config_driven_mcmc.py)
@@ -606,7 +605,6 @@ class TestFullMCMCWorkflow:
     def test_config_driven_parameter_loading_static_mode(self):
         """Test full workflow: config → parameter_space + initial_values → fit_mcmc_jax()."""
         import numpy as np
-        from homodyne.optimization.mcmc import fit_mcmc_jax
 
         # Simulated NLSQ results (what user would have from previous run)
         nlsq_best_fit = {
@@ -690,8 +688,6 @@ class TestFullMCMCWorkflow:
 
     def test_config_driven_parameter_loading_with_null_values(self):
         """Test workflow with null initial_values (mid-point defaults)."""
-        import numpy as np
-        from homodyne.optimization.mcmc import _calculate_midpoint_defaults
 
         # Config with null initial_values (trigger mid-point calculation)
         config = {
@@ -726,7 +722,6 @@ class TestFullMCMCWorkflow:
 
     def test_config_driven_parameter_loading_laminar_flow(self):
         """Test workflow with laminar flow mode (7 parameters)."""
-        import numpy as np
 
         # NLSQ results for laminar flow
         nlsq_best_fit = {
@@ -803,9 +798,7 @@ class TestFullMCMCWorkflow:
 
 
 import numpy as np
-import pytest
 
-from homodyne.device.config import HardwareConfig, should_use_cmc
 from tests.factories.config_factory import create_phi_filtering_config
 from tests.factories.data_factory import create_specific_angles_test_data
 from tests.factories.optimization_factory import (
@@ -814,138 +807,9 @@ from tests.factories.optimization_factory import (
     create_mock_optimization_result,
 )
 
-
-class TestAutomaticNUTSCMCSelection:
-    """Test automatic NUTS/CMC selection based on dual-criteria OR logic."""
-
-    def test_automatic_nuts_selection_for_small_datasets(self):
-        """Test NUTS selected for small datasets (10 samples, 500K points)."""
-        # Arrange - Small dataset (below all thresholds)
-        num_samples = 10  # Below min_samples_for_cmc (15)
-        dataset_size = 500_000  # Below JAX broadcasting threshold (1M)
-        hw_config = HardwareConfig(
-            platform="cpu",
-            num_devices=1,
-            memory_per_device_gb=32.0,
-            num_nodes=1,
-            cores_per_node=14,
-            total_memory_gb=32.0,
-            cluster_type="standalone",
-            recommended_backend="multiprocessing",
-            max_parallel_shards=14,
-        )
-
-        # Act
-        use_cmc = should_use_cmc(
-            num_samples=num_samples,
-            hardware_config=hw_config,
-            dataset_size=dataset_size,
-            min_samples_for_cmc=15,
-            memory_threshold_pct=0.30,
-        )
-
-        # Assert - Should use NUTS (both conditions fail)
-        assert use_cmc is False, "Should use NUTS for small dataset"
-
-    def test_automatic_cmc_selection_for_many_samples(self):
-        """Test CMC selected for many samples (20 samples, parallelism mode)."""
-        # Arrange - Many samples (triggers parallelism)
-        num_samples = 20  # Above min_samples_for_cmc (15)
-        dataset_size = 10_000_000  # Moderate data
-        hw_config = HardwareConfig(
-            platform="cpu",
-            num_devices=1,
-            memory_per_device_gb=32.0,
-            num_nodes=1,
-            cores_per_node=14,
-            total_memory_gb=32.0,
-            cluster_type="standalone",
-            recommended_backend="multiprocessing",
-            max_parallel_shards=14,
-        )
-
-        # Act
-        use_cmc = should_use_cmc(
-            num_samples=num_samples,
-            hardware_config=hw_config,
-            dataset_size=dataset_size,
-            min_samples_for_cmc=15,
-            memory_threshold_pct=0.30,
-        )
-
-        # Assert - Should use CMC (parallelism condition met)
-        assert use_cmc is True, "Should use CMC for many samples (parallelism)"
-
-    def test_automatic_cmc_selection_for_large_memory(self):
-        """Test CMC selected for large memory (5 samples, 50M points, memory mode)."""
-        # Arrange - Few samples but huge data (triggers memory management)
-        num_samples = 5  # Below min_samples_for_cmc
-        dataset_size = 50_000_000  # Large data (triggers memory threshold)
-        hw_config = HardwareConfig(
-            platform="cpu",
-            num_devices=1,
-            memory_per_device_gb=32.0,
-            num_nodes=1,
-            cores_per_node=14,
-            total_memory_gb=32.0,
-            cluster_type="standalone",
-            recommended_backend="multiprocessing",
-            max_parallel_shards=14,
-        )
-
-        # Memory estimate: 50M × 8 bytes × 30 = 12 GB
-        # 12 GB / 32 GB = 37.5% > 30% threshold
-
-        # Act
-        use_cmc = should_use_cmc(
-            num_samples=num_samples,
-            hardware_config=hw_config,
-            dataset_size=dataset_size,
-            min_samples_for_cmc=15,
-            memory_threshold_pct=0.30,
-        )
-
-        # Assert - Should use CMC (memory condition met)
-        assert use_cmc is True, "Should use CMC for large memory requirement"
-
-    def test_configurable_thresholds_from_yaml(self):
-        """Test that thresholds are configurable via YAML config."""
-        # Arrange - Custom thresholds (stricter than defaults)
-        num_samples = 12
-        dataset_size = 800_000  # Below JAX broadcasting threshold (1M)
-        hw_config = HardwareConfig(
-            platform="cpu",
-            num_devices=1,
-            memory_per_device_gb=32.0,
-            num_nodes=1,
-            cores_per_node=14,
-            total_memory_gb=32.0,
-            cluster_type="standalone",
-            recommended_backend="multiprocessing",
-            max_parallel_shards=14,
-        )
-
-        # Act - Default thresholds (15 samples, 30% memory)
-        use_cmc_default = should_use_cmc(
-            num_samples=num_samples,
-            hardware_config=hw_config,
-            dataset_size=dataset_size,
-            min_samples_for_cmc=15,
-            memory_threshold_pct=0.30,
-        )
-
-        # Act - Custom thresholds (10 samples, 20% memory)
-        use_cmc_custom = should_use_cmc(
-            num_samples=num_samples,
-            hardware_config=hw_config,
-            dataset_size=dataset_size,
-            min_samples_for_cmc=10,  # Lower threshold
-            memory_threshold_pct=0.20,  # Stricter threshold
-        )
-
-        # Assert - Default should use NUTS, custom should use CMC
-        assert use_cmc_default is False, "Default thresholds → NUTS"
-        assert use_cmc_custom is True, "Custom thresholds → CMC (12 >= 10)"
+# Note: TestAutomaticNUTSCMCSelection removed in v3.0 (CMC-only architecture)
+# should_use_cmc() is now a deprecated shim that always returns True
+# See docs/migration/v3_cmc_only.md for migration details
 
 
 class TestManualNLSQMCMCWorkflow:
@@ -984,8 +848,7 @@ class TestManualNLSQMCMCWorkflow:
                     "num_warmup": 1000,
                     "num_samples": 2000,
                     "num_chains": 4,
-                    "min_samples_for_cmc": 15,
-                    "memory_threshold_pct": 0.30,
+                    # Note: min_samples_for_cmc/memory_threshold_pct removed in v3.0
                 }
             },
         }
@@ -1123,29 +986,9 @@ class TestIntegrationWithAngleFiltering:
             filtered_data["phi_angles_list"], [85.0, 90.0, 95.0], decimal=1
         )
 
-        # Test automatic NUTS/CMC selection with filtered data
-        num_samples = len(filtered_data["phi_angles_list"])  # 3 samples
-        hw_config = HardwareConfig(
-            platform="cpu",
-            num_devices=1,
-            memory_per_device_gb=32.0,
-            num_nodes=1,
-            cores_per_node=14,
-            total_memory_gb=32.0,
-            cluster_type="standalone",
-            recommended_backend="multiprocessing",
-            max_parallel_shards=14,
-        )
-
-        use_cmc = should_use_cmc(
-            num_samples=num_samples,
-            hardware_config=hw_config,
-            min_samples_for_cmc=15,
-            memory_threshold_pct=0.30,
-        )
-
-        # Assert - Should use NUTS for 3 filtered samples
-        assert use_cmc is False, "Should use NUTS for 3 filtered samples"
+        # Note: NUTS/CMC auto-selection test removed in v3.0 (CMC-only architecture)
+        # In v3.0, all MCMC runs use CMC framework regardless of sample count
+        # CMC with num_shards=1 is equivalent to legacy NUTS behavior
 
 
 if __name__ == "__main__":
@@ -1155,7 +998,6 @@ if __name__ == "__main__":
 # ==============================================================================
 # MCMC Filtering Integration Tests (from test_mcmc_filtering.py)
 # ==============================================================================
-
 
 
 class TestMCMCWithAngleFiltering:
@@ -1188,9 +1030,9 @@ class TestMCMCWithAngleFiltering:
         filtered_data = _apply_angle_filtering_for_optimization(data, config)
 
         # Assert - Dataset size reduction (filtering worked)
-        assert (
-            len(filtered_data["phi_angles_list"]) == 3
-        ), "Should have 3 filtered angles"
+        assert len(filtered_data["phi_angles_list"]) == 3, (
+            "Should have 3 filtered angles"
+        )
         np.testing.assert_array_almost_equal(
             filtered_data["phi_angles_list"], [85.0, 90.0, 95.0], decimal=1
         )
@@ -1242,9 +1084,9 @@ class TestMCMCWithAngleFiltering:
         filtered_data = _apply_angle_filtering_for_optimization(data, config)
 
         # Assert - All 9 angles used (no filtering)
-        assert (
-            len(filtered_data["phi_angles_list"]) == 9
-        ), "Should use all 9 angles when disabled"
+        assert len(filtered_data["phi_angles_list"]) == 9, (
+            "Should use all 9 angles when disabled"
+        )
         np.testing.assert_array_almost_equal(
             filtered_data["phi_angles_list"], angles, decimal=1
         )
@@ -1394,12 +1236,9 @@ if __name__ == "__main__":
 # MCMC Regression Tests (from test_mcmc_regression.py)
 # ==============================================================================
 
-import pytest
-import numpy as np
-from unittest.mock import MagicMock
 
-from homodyne.config.parameter_space import ParameterSpace
-from homodyne.config.manager import ConfigManager
+import numpy as np
+import pytest
 
 
 class TestMCMCConvergenceQuality:
@@ -1429,12 +1268,12 @@ class TestMCMCConvergenceQuality:
         }
 
         # Assert convergence standards met
-        assert (
-            v21_diagnostics["r_hat"] < expected_diagnostics["r_hat_threshold"]
-        ), "R-hat should indicate convergence"
-        assert (
-            v21_diagnostics["ess"] >= expected_diagnostics["ess_min"]
-        ), "ESS should indicate adequate samples"
+        assert v21_diagnostics["r_hat"] < expected_diagnostics["r_hat_threshold"], (
+            "R-hat should indicate convergence"
+        )
+        assert v21_diagnostics["ess"] >= expected_diagnostics["ess_min"], (
+            "ESS should indicate adequate samples"
+        )
         assert (
             expected_diagnostics["acceptance_rate_min"]
             <= v21_diagnostics["acceptance_rate"]
@@ -1478,9 +1317,9 @@ class TestMCMCConvergenceQuality:
             error = abs(recovered_val - truth_val) / truth_val
             tolerance = tolerances[param]
 
-            assert (
-                error < tolerance
-            ), f"{param}: error {error:.2%} exceeds tolerance {tolerance:.2%}"
+            assert error < tolerance, (
+                f"{param}: error {error:.2%} exceeds tolerance {tolerance:.2%}"
+            )
 
     def test_automatic_selection_convergence_not_degraded(self):
         """Verify automatic NUTS/CMC selection doesn't degrade convergence.
@@ -1542,9 +1381,9 @@ class TestMCMCConvergenceQuality:
         config_init_r_hat = 1.03
 
         # Verify improvement or maintenance
-        assert (
-            config_init_r_hat < random_init_r_hat
-        ), "Config-driven initialization should improve convergence"
+        assert config_init_r_hat < random_init_r_hat, (
+            "Config-driven initialization should improve convergence"
+        )
 
     def test_backward_compatibility_initial_parameters_structure(self):
         """Verify v2.1.0 handles v2.0 config format correctly.
@@ -1617,9 +1456,9 @@ class TestCMCConvergencePreservation:
 
         # Verify they're comparable (within 0.02)
         difference = abs(nuts_r_hat - cmc_r_hat)
-        assert (
-            difference < 0.02
-        ), f"NUTS and CMC R-hat differ by {difference:.3f} (should be < 0.02)"
+        assert difference < 0.02, (
+            f"NUTS and CMC R-hat differ by {difference:.3f} (should be < 0.02)"
+        )
 
 
 class TestParameterSpaceLoadingRegression:
@@ -1825,7 +1664,7 @@ def test_mcmc_with_manual_initial_params(simple_static_data):
         analysis_mode="static",
         parameter_space=param_space,
         initial_params=initial_params,  # Manual initialization
-        method="auto",  # Will select NUTS for small dataset
+        # Uses CMC framework (CMC-only in v3.0)
         n_samples=200,  # Small for speed
         n_warmup=100,
         n_chains=1,  # Single chain for speed
@@ -1849,10 +1688,10 @@ def test_mcmc_with_manual_initial_params(simple_static_data):
 
 
 def test_automatic_nuts_selection_small_dataset(simple_static_data):
-    """Test automatic NUTS selection for small dataset.
+    """Test MCMC on small dataset.
 
-    With num_samples < min_samples_for_cmc (default 15) and low memory,
-    should automatically select NUTS method.
+    Small dataset (12 samples) - in v3.0 uses CMC framework with NUTS per-shard.
+    Note: NUTS auto-selection removed in v3.0 (CMC-only architecture).
     """
     data = simple_static_data
     param_space = ParameterSpace.from_defaults("static")
@@ -1868,7 +1707,7 @@ def test_automatic_nuts_selection_small_dataset(simple_static_data):
         L=data["L"],
         analysis_mode="static",
         parameter_space=param_space,
-        method="auto",  # Automatic selection
+        # Uses CMC framework (CMC-only in v3.0)
         n_samples=100,
         n_warmup=50,
         n_chains=1,
@@ -1905,7 +1744,7 @@ def test_convergence_with_physics_priors_only(simple_static_data):
         analysis_mode="static",
         parameter_space=param_space,
         initial_params=None,  # NO initialization
-        method="auto",
+        # CMC framework (CMC-only in v3.0)
         n_samples=500,  # More samples to ensure convergence
         n_warmup=300,
         n_chains=2,  # Multiple chains for diagnostics
@@ -1919,9 +1758,9 @@ def test_convergence_with_physics_priors_only(simple_static_data):
     if result.r_hat is not None:
         for param_name, r_hat_value in result.r_hat.items():
             if r_hat_value is not None:
-                assert (
-                    r_hat_value < 1.2
-                ), f"Poor convergence for {param_name}: R-hat={r_hat_value}"
+                assert r_hat_value < 1.2, (
+                    f"Poor convergence for {param_name}: R-hat={r_hat_value}"
+                )
 
     # Verify ESS if available
     if result.effective_sample_size is not None:
@@ -1948,7 +1787,7 @@ def test_auto_retry_on_poor_convergence():
     If it fails intermittently, it's working correctly (detecting poor convergence).
     """
     # Create challenging dataset (high noise)
-    # Use 12 points to stay below min_samples_for_cmc (15) → NUTS
+    # 12 points - uses CMC framework with NUTS per-shard in v3.0
     n_points = 12
     t1 = np.linspace(0.1, 2.0, n_points)
     t2 = t1.copy()
@@ -1973,7 +1812,7 @@ def test_auto_retry_on_poor_convergence():
         analysis_mode="static",
         parameter_space=param_space,
         initial_params=None,
-        method="auto",
+        # CMC framework (CMC-only in v3.0)
         n_samples=50,  # Very few samples
         n_warmup=20,  # Very short warmup
         n_chains=2,
@@ -2015,7 +1854,7 @@ def test_warning_on_poor_convergence_metrics(simple_static_data, caplog):
         analysis_mode="static",
         parameter_space=param_space,
         initial_params=None,
-        method="auto",
+        # CMC framework (CMC-only in v3.0)
         n_samples=30,  # Very few samples → low ESS
         n_warmup=10,  # Very short warmup → poor convergence
         n_chains=2,
@@ -2029,45 +1868,8 @@ def test_warning_on_poor_convergence_metrics(simple_static_data, caplog):
     assert result.mean_params is not None
 
 
-def test_configurable_cmc_thresholds():
-    """Test that CMC thresholds can be configured via kwargs.
-
-    Verifies that min_samples_for_cmc and memory_threshold_pct
-    can be passed through to should_use_cmc() decision logic.
-    """
-    # Create small dataset (12 samples)
-    n_points = 12
-    t1 = np.linspace(0.1, 2.0, n_points)
-    t2 = t1.copy()
-    phi = np.zeros(n_points)
-    q = 0.01
-    L = 2000000.0
-    c2_data = 1.0 + 0.5 * np.exp(-0.001 * t1**1.5)
-
-    param_space = ParameterSpace.from_defaults("static")
-
-    # Test 1: Force NUTS by setting very high min_samples_for_cmc
-    # With min_samples_for_cmc=100, dataset of 12 points should use NUTS
-    result_nuts = fit_mcmc_jax(
-        data=c2_data,
-        t1=t1,
-        t2=t2,
-        phi=phi,
-        q=q,
-        L=L,
-        analysis_mode="static",
-        parameter_space=param_space,
-        method="auto",
-        min_samples_for_cmc=100,  # Threshold configured via kwargs
-        memory_threshold_pct=0.30,
-        n_samples=100,
-        n_warmup=50,
-        n_chains=1,
-    )
-
-    assert isinstance(result_nuts, MCMCResult)
-    # With high threshold (100), 12 samples should use NUTS
-    assert result_nuts.sampler == "NUTS"
+# Note: test_configurable_cmc_thresholds removed in v3.0 (CMC-only architecture)
+# min_samples_for_cmc and memory_threshold_pct are no longer used
 
 
 def test_no_automatic_nlsq_initialization():
@@ -2081,7 +1883,6 @@ def test_no_automatic_nlsq_initialization():
     # This test is more of a code inspection verification
     # We verify by running MCMC and checking it completes without NLSQ
 
-    # Use 12 points to stay below min_samples_for_cmc (15) → NUTS
     n_points = 12
     t1 = np.linspace(0.1, 2.0, n_points)
     t2 = t1.copy()
@@ -2103,7 +1904,6 @@ def test_no_automatic_nlsq_initialization():
         analysis_mode="static",
         parameter_space=param_space,
         initial_params=None,  # Explicitly no initialization
-        method="auto",
         n_samples=100,
         n_warmup=50,
         n_chains=1,
@@ -2135,7 +1935,7 @@ def test_enhanced_retry_logging(caplog):
     caplog.set_level(logging.WARNING)
 
     # Create challenging dataset with high noise
-    # Use 12 points to stay below min_samples_for_cmc (15) → NUTS
+    # 12 points - uses CMC framework with NUTS per-shard in v3.0
     n_points = 12
     t1 = np.linspace(0.1, 1.0, n_points)
     t2 = t1.copy()
@@ -2160,7 +1960,7 @@ def test_enhanced_retry_logging(caplog):
         analysis_mode="static",
         parameter_space=param_space,
         initial_params=None,
-        method="auto",
+        # CMC framework (CMC-only in v3.0)
         n_samples=20,  # Very few samples → poor convergence
         n_warmup=10,  # Very short warmup → poor convergence
         n_chains=2,  # Need multiple chains for R-hat
@@ -2198,4 +1998,3 @@ def test_enhanced_retry_logging(caplog):
     # Verify result structure regardless of retry
     assert result.mean_params is not None
     assert len(result.mean_params) == 3
-

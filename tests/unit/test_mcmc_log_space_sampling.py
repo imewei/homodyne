@@ -9,6 +9,7 @@ try:
     import jax
     import jax.numpy as jnp
     from jax import random
+
     JAX_AVAILABLE = True
 except ImportError:
     JAX_AVAILABLE = False
@@ -18,17 +19,17 @@ try:
     import numpyro
     from numpyro import handlers
     from numpyro.infer import MCMC, NUTS
+
     NUMPYRO_AVAILABLE = True
 except ImportError:
     NUMPYRO_AVAILABLE = False
 
-from homodyne.config.parameter_space import ParameterSpace, PriorDistribution
+from homodyne.config.parameter_space import ParameterSpace
 from homodyne.optimization.mcmc import (
     _build_single_angle_surrogate_settings,
-    _sample_single_angle_log_d0,
     _create_numpyro_model,
     _process_posterior_samples,
-    fit_mcmc_jax,
+    _sample_single_angle_log_d0,
 )
 
 
@@ -153,11 +154,13 @@ class TestLogSpaceModelIntegration:
 class TestLogSpaceDiagnostics:
     def test_process_posterior_samples_handles_log_latent(self):
         samples = {
-            "log_D0_latent": jnp.array([
-                np.log(800.0),
-                np.log(900.0),
-                np.log(1000.0),
-            ]),
+            "log_D0_latent": jnp.array(
+                [
+                    np.log(800.0),
+                    np.log(900.0),
+                    np.log(1000.0),
+                ]
+            ),
             "alpha": jnp.array([-1.2, -1.15, -1.1]),
             "contrast": jnp.array([0.05, 0.051, 0.049]),
             "offset": jnp.array([1.0, 1.0, 1.0]),
@@ -176,7 +179,10 @@ class TestLogSpaceDiagnostics:
                 "min_ess": 0,
                 "check_hmc_diagnostics": False,
                 "expected_params": ["D0", "alpha", "D_offset"],
-                "single_angle_surrogate": {"drop_d_offset": True, "fixed_d_offset": 0.0},
+                "single_angle_surrogate": {
+                    "drop_d_offset": True,
+                    "fixed_d_offset": 0.0,
+                },
             },
         )
         assert "D0" in summary["samples"]
@@ -225,7 +231,9 @@ class TestLogSpaceMultiChainESS:
             loc=np.log(ground_truth["D0"] * 1.01), scale=0.015, size=draws_per_chain
         )
         alpha_chain_a = rng.normal(ground_truth["alpha"], 0.01, size=draws_per_chain)
-        alpha_chain_b = rng.normal(ground_truth["alpha"] * 1.002, 0.01, size=draws_per_chain)
+        alpha_chain_b = rng.normal(
+            ground_truth["alpha"] * 1.002, 0.01, size=draws_per_chain
+        )
 
         def _stack(a_values, b_values):
             return np.stack([a_values, b_values], axis=0)
@@ -246,8 +254,7 @@ class TestLogSpaceMultiChainESS:
         class DummyResult:
             def __init__(self, sample_dict):
                 self._by_chain = {
-                    name: jnp.asarray(values)
-                    for name, values in sample_dict.items()
+                    name: jnp.asarray(values) for name, values in sample_dict.items()
                 }
                 self._flat = {
                     name: jnp.reshape(values, (-1,))

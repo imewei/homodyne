@@ -19,9 +19,9 @@ Test Coverage:
 Created: November 2025
 """
 
+import jax.numpy as jnp
 import numpy as np
 import pytest
-import jax.numpy as jnp
 from jax import random
 from numpyro.infer import Predictive
 
@@ -109,9 +109,9 @@ class TestPerAngleMCMC:
         # Verify all per-angle contrast parameters exist
         for i in range(n_phi):
             assert f"contrast_{i}" in samples, f"Missing contrast_{i}"
-            assert samples[f"contrast_{i}"].shape == (
-                10,
-            ), f"Wrong shape for contrast_{i}"
+            assert samples[f"contrast_{i}"].shape == (10,), (
+                f"Wrong shape for contrast_{i}"
+            )
 
         # Verify all per-angle offset parameters exist
         for i in range(n_phi):
@@ -156,16 +156,16 @@ class TestPerAngleMCMC:
 
             # Pearson correlation should not be perfect (< 0.99)
             correlation = np.corrcoef(contrast_i, contrast_j)[0, 1]
-            assert (
-                abs(correlation) < 0.99
-            ), f"contrast_{i} and contrast_{i + 1} are too correlated: {correlation}"
+            assert abs(correlation) < 0.99, (
+                f"contrast_{i} and contrast_{i + 1} are too correlated: {correlation}"
+            )
 
             offset_i = samples[f"offset_{i}"]
             offset_j = samples[f"offset_{i + 1}"]
             correlation = np.corrcoef(offset_i, offset_j)[0, 1]
-            assert (
-                abs(correlation) < 0.99
-            ), f"offset_{i} and offset_{i + 1} are too correlated: {correlation}"
+            assert abs(correlation) < 0.99, (
+                f"offset_{i} and offset_{i + 1} are too correlated: {correlation}"
+            )
 
     def test_legacy_mode_single_contrast_offset(
         self, multi_angle_data, static_param_space
@@ -241,9 +241,9 @@ class TestPerAngleMCMC:
 
             # Expected: 2*n_phi (contrast/offset per angle) + 3 (D0, alpha, D_offset)
             expected_params = 2 * n_phi + 3
-            assert (
-                n_params == expected_params
-            ), f"n_phi={n_phi}: Expected {expected_params} params, got {n_params}"
+            assert n_params == expected_params, (
+                f"n_phi={n_phi}: Expected {expected_params} params, got {n_params}"
+            )
 
 
 class TestPerAngleNLSQ:
@@ -286,7 +286,7 @@ class TestPerAnglePhysics:
 
         # Generate data with different scaling per angle
         data_list = []
-        for contrast, offset in zip(true_contrasts, true_offsets):
+        for contrast, offset in zip(true_contrasts, true_offsets, strict=False):
             # c2 = contrast * c1^2 + offset
             # For constant c1 = 1.0: c2 = contrast + offset
             c2 = np.ones(n_points) * (contrast + offset)

@@ -39,7 +39,7 @@ Version: 1.0.0
 """
 
 import logging
-from typing import Any, Dict, Optional
+from typing import Any
 
 import jax
 import jax.numpy as jnp
@@ -117,11 +117,11 @@ def _create_residual_function(
 
 
 def compute_gradient_norms(
-    parameters: Dict[str, float],
+    parameters: dict[str, float],
     data: Any,
     config: Any,
     analysis_mode: str,
-) -> Dict[str, float]:
+) -> dict[str, float]:
     """
     Compute gradient L2 norms for each parameter at given point.
 
@@ -160,22 +160,23 @@ def compute_gradient_norms(
 
     # Create gradient norms dictionary
     gradient_norms = {
-        name: float(abs(grad)) for name, grad in zip(param_names, gradients)
+        name: float(abs(grad))
+        for name, grad in zip(param_names, gradients, strict=False)
     }
 
     return gradient_norms
 
 
 def compute_optimal_x_scale(
-    parameters: Dict[str, float],
+    parameters: dict[str, float],
     data: Any,
     config: Any,
     analysis_mode: str,
-    baseline_params: Optional[list[str]] = None,
+    baseline_params: list[str] | None = None,
     safety_factor: float = 1.0,
     min_scale: float = 1e-8,
     max_scale: float = 1e2,
-) -> Dict[str, float]:
+) -> dict[str, float]:
     """
     Compute optimal x_scale map based on gradient norms.
 
@@ -217,9 +218,13 @@ def compute_optimal_x_scale(
     gradient_norms = compute_gradient_norms(parameters, data, config, analysis_mode)
 
     # Compute baseline gradient (geometric mean of baseline parameters)
-    baseline_grads = [gradient_norms[name] for name in baseline_params if name in gradient_norms]
+    baseline_grads = [
+        gradient_norms[name] for name in baseline_params if name in gradient_norms
+    ]
     if not baseline_grads:
-        logger.warning(f"No baseline parameters found in gradient norms: {baseline_params}")
+        logger.warning(
+            f"No baseline parameters found in gradient norms: {baseline_params}"
+        )
         baseline_grads = [1.0]
 
     baseline_grad = np.exp(np.mean(np.log(np.maximum(baseline_grads, 1e-10))))
@@ -257,12 +262,12 @@ def compute_optimal_x_scale(
 
 
 def diagnose_gradient_imbalance(
-    parameters: Dict[str, float],
+    parameters: dict[str, float],
     data: Any,
     config: Any,
     analysis_mode: str,
     threshold: float = 10.0,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """
     Diagnose gradient imbalance and provide recommendations.
 
@@ -307,9 +312,7 @@ def diagnose_gradient_imbalance(
     recommendations = {}
     if imbalance_detected:
         # Compute optimal x_scale
-        x_scale_map = compute_optimal_x_scale(
-            parameters, data, config, analysis_mode
-        )
+        x_scale_map = compute_optimal_x_scale(parameters, data, config, analysis_mode)
 
         recommendations["x_scale_map"] = x_scale_map
         recommendations["summary"] = (
@@ -324,7 +327,9 @@ def diagnose_gradient_imbalance(
 
         recommendations["action"] = "apply_x_scale_map"
     else:
-        recommendations["summary"] = f"No significant gradient imbalance detected ({max_ratio:.1f}× ratio)"
+        recommendations["summary"] = (
+            f"No significant gradient imbalance detected ({max_ratio:.1f}× ratio)"
+        )
         recommendations["action"] = "no_action_needed"
 
     return {
@@ -338,7 +343,7 @@ def diagnose_gradient_imbalance(
 
 
 def print_gradient_report(
-    parameters: Dict[str, float],
+    parameters: dict[str, float],
     data: Any,
     config: Any,
     analysis_mode: str,

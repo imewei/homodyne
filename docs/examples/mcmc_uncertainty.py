@@ -1,15 +1,15 @@
 #!/usr/bin/env python
 """
-Example 3: MCMC Uncertainty Quantification (v2.1.0)
+Example 3: MCMC Uncertainty Quantification (v3.0 CMC-only)
 
-Demonstrates MCMC sampling with automatic NUTS/CMC selection for obtaining
-posterior distributions and uncertainty estimates.
+Demonstrates MCMC sampling using CMC (Consensus Monte Carlo) framework for
+obtaining posterior distributions and uncertainty estimates.
 
-Key concepts:
-- MCMC sampling vs NLSQ point estimates
-- Automatic NUTS/CMC selection based on dataset characteristics
-  - NUTS: Small datasets (< 15 samples AND < 30% memory)
-  - CMC: Large datasets (>= 15 samples OR >= 30% memory)
+Key concepts (v3.0 CMC-only architecture):
+- All MCMC runs use CMC framework
+- CMC uses NUTS as per-shard sampler internally
+- Single-shard CMC (num_shards=1) equivalent to legacy NUTS behavior
+- Automatic sharding based on hardware and dataset size
 - Convergence diagnostics (R-hat, ESS)
 - Posterior distributions and credible intervals
 - Physics-informed priors from ParameterSpace (no initialization needed)
@@ -19,8 +19,8 @@ Configuration example:
   num_samples: 2000
   num_chains: 4
   backend: "numpyro"
-  min_samples_for_cmc: 15        # Parallelism threshold
-  memory_threshold_pct: 0.30     # Memory threshold (30%)
+  cmc_num_shards: auto        # Auto-determined based on hardware
+  cmc_backend: multiprocessing
 """
 
 from pathlib import Path
@@ -63,14 +63,17 @@ optimization:
   method: "mcmc"
 
   mcmc:
-    num_warmup: 1000                # NUTS warmup samples
-    num_samples: 2000               # Posterior samples
-    num_chains: 4                   # Parallel chains
+    num_warmup: 1000                # NUTS warmup samples per shard
+    num_samples: 2000               # Posterior samples per shard
+    num_chains: 4                   # Chains per shard
     progress_bar: true              # Show progress
     backend: "numpyro"              # or "blackjax"
-    min_samples_for_cmc: 15         # Parallelism threshold
-    memory_threshold_pct: 0.30      # Memory threshold (30%)
     dense_mass_matrix: false        # Use diagonal mass matrix
+
+  cmc:
+    num_shards: auto                # Auto-determined from hardware
+    backend: multiprocessing        # or pjit, pbs
+    sharding_strategy: stratified   # Per-phi stratified sharding
 
 phi_filtering:
   enabled: true
@@ -89,24 +92,25 @@ output:
 
 def main():
     """Run MCMC uncertainty example."""
-    print("MCMC Uncertainty Quantification Example (v2.1.0)")
+    print("MCMC Uncertainty Quantification Example (v3.0 CMC-only)")
     print("=" * 60)
 
     config_path = Path("homodyne_config_mcmc.yaml")
     config_path.write_text(CONFIG_MCMC)
-    print(f"✓ Created configuration: {config_path}")
+    print(f"Created configuration: {config_path}")
 
-    print("\nMCMC Configuration:")
-    print("  Warmup samples: 1000 (tuning phase)")
-    print("  Posterior samples: 2000 (for inference)")
-    print("  Parallel chains: 4 (for convergence diagnostics)")
-    print("  Automatic selection: NUTS/CMC based on dataset size")
+    print("\nMCMC Configuration (v3.0 CMC-only):")
+    print("  Warmup samples: 1000 (tuning phase per shard)")
+    print("  Posterior samples: 2000 (per shard)")
+    print("  Parallel chains: 4 (per shard)")
+    print("  CMC backend: multiprocessing")
     print("  Backend: NumPyro (with progress bars)")
 
-    print("\nAutomatic NUTS/CMC Selection (v2.1.0):")
-    print("  Criterion 1: num_samples >= 15 → CMC for parallelism")
-    print("  Criterion 2: memory > 30% → CMC for memory management")
-    print("  Default: NUTS if both criteria fail")
+    print("\nCMC Sharding (v3.0):")
+    print("  - All MCMC runs use CMC framework")
+    print("  - Single-shard CMC equivalent to legacy NUTS")
+    print("  - Shards determined automatically from hardware")
+    print("  - Stratified sharding preserves per-phi structure")
 
     print("\nExpected output:")
     print("  - parameters.json: Mean, median, std of posterior")
@@ -118,15 +122,16 @@ def main():
     print("  R-hat: Should be < 1.01 (indicates convergence)")
     print("  ESS: Effective sample size (>>1 means efficient sampling)")
 
-    print("\nMigration note (v2.0 → v2.1):")
-    print("  - No automatic NLSQ initialization (manual workflow required)")
-    print("  - Physics-informed priors from ParameterSpace")
-    print("  - Run NLSQ first, then manually update config with results")
+    print("\nMigration note (v2.x -> v3.0):")
+    print("  - CMC-only architecture (NUTS runs inside CMC shards)")
+    print("  - Removed: min_samples_for_cmc, memory_threshold_pct")
+    print("  - Added: cmc.num_shards, cmc.backend, cmc.sharding_strategy")
+    print("  - See docs/migration/v3_cmc_only.md for details")
 
     print("\nTo run:")
     print(f"  homodyne --config {config_path}")
 
-    print("\n✓ MCMC configuration ready!")
+    print("\nMCMC configuration ready!")
 
 
 if __name__ == "__main__":

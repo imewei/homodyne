@@ -789,9 +789,9 @@ class AdvancedDatasetOptimizer:
                             data_keys[: len(data_keys) // 2],
                             priority=3,
                         )
-                        advanced_config["advanced_features"][
-                            "prefetch_future"
-                        ] = prefetch_future
+                        advanced_config["advanced_features"]["prefetch_future"] = (
+                            prefetch_future
+                        )
                         logger.info(
                             f"Scheduled prefetching for {len(data_keys) // 2} correlation matrices",
                         )
@@ -802,9 +802,9 @@ class AdvancedDatasetOptimizer:
 
             except Exception as e:
                 logger.warning(f"Performance engine optimization failed: {e}")
-                advanced_config["advanced_features"][
-                    "performance_engine_available"
-                ] = False
+                advanced_config["advanced_features"]["performance_engine_available"] = (
+                    False
+                )
         else:
             advanced_config["advanced_features"]["performance_engine_available"] = False
 
@@ -1046,8 +1046,10 @@ def optimize_for_method_advanced(
 
 # Import guard for new dependencies
 try:
-    import time  # noqa: F401 - Already imported globally
-    from collections import deque  # noqa: F401 - Already imported globally
+    import time  # noqa: F811 - Re-import check for dependency verification
+    from collections import (  # noqa: F811 - Re-import check for dependency verification
+        deque,
+    )
 
     HAS_ADVANCED_DEPS = True
 except ImportError:

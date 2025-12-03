@@ -30,13 +30,12 @@ except ImportError:
     # Will log warning later when plotting is attempted
 
 from homodyne.cli.args_parser import validate_args  # noqa: E402
-from homodyne.config.parameter_manager import ParameterManager  # noqa: E402
+from homodyne.config.parameter_space import ParameterSpace  # noqa: E402
 from homodyne.config.types import (  # noqa: E402
     LAMINAR_FLOW_PARAM_NAMES,
     SCALING_PARAM_NAMES,
     STATIC_PARAM_NAMES,
 )
-from homodyne.config.parameter_space import ParameterSpace  # noqa: E402
 from homodyne.core.jax_backend import compute_g2_scaled  # noqa: E402
 from homodyne.utils.logging import get_logger  # noqa: E402
 
@@ -457,7 +456,6 @@ def _configure_logging(args) -> None:
 
 def _configure_device(args) -> dict[str, Any]:
     """Configure optimal device based on CLI arguments."""
-    import os
 
     logger.info("Configuring computational device...")
 
@@ -522,7 +520,8 @@ def _check_deprecated_config(config: "ConfigManager") -> None:
             "Migration: NLSQ v3.0+ uses native large dataset handling.\n"
             "Simply remove the deprecated sections - no replacement needed.\n"
             "See: https://nlsq.readthedocs.io/en/latest/guides/large_datasets.html\n"
-            + "=" * 70
+            + "="
+            * 70
         )
 
 
@@ -697,7 +696,7 @@ def _apply_cli_overrides(config: ConfigManager, args) -> None:
 
             # Build current param dict with name mapping
             current_params = {}
-            for pname, pval in zip(param_names, param_values):
+            for pname, pval in zip(param_names, param_values, strict=False):
                 # Map config name to canonical name
                 canonical_name = pm._param_name_mapping.get(pname, pname)
                 current_params[canonical_name] = pval
@@ -1108,9 +1107,9 @@ def _run_optimization(args, config: ConfigManager, data: dict[str, Any]) -> Any:
                 logger.info(
                     f"Overriding CMC num_shards from CLI: {args.cmc_num_shards}",
                 )
-                cmc_config.setdefault("sharding", {})[
-                    "num_shards"
-                ] = args.cmc_num_shards
+                cmc_config.setdefault("sharding", {})["num_shards"] = (
+                    args.cmc_num_shards
+                )
 
             if args.cmc_backend is not None:
                 logger.info(f"Overriding CMC backend from CLI: {args.cmc_backend}")
@@ -1167,13 +1166,17 @@ def _run_optimization(args, config: ConfigManager, data: dict[str, Any]) -> Any:
             # If t1/t2 are 1D, create 2D meshgrids; if already 2D, use as-is
             if t1_raw.ndim == 1 and t2_raw.ndim == 1:
                 # Create 2D meshgrids from 1D arrays
-                t2_2d, t1_2d = np.meshgrid(t1_raw, t2_raw, indexing='ij')
-                logger.debug(f"Created 2D meshgrids from 1D arrays: t1={t1_raw.shape} → {t1_2d.shape}")
+                t2_2d, t1_2d = np.meshgrid(t1_raw, t2_raw, indexing="ij")
+                logger.debug(
+                    f"Created 2D meshgrids from 1D arrays: t1={t1_raw.shape} → {t1_2d.shape}"
+                )
             elif t1_raw.ndim == 2 and t2_raw.ndim == 2:
                 # Already 2D meshgrids
                 t1_2d = t1_raw
                 t2_2d = t2_raw
-                logger.debug(f"Using existing 2D meshgrids: t1={t1_2d.shape}, t2={t2_2d.shape}")
+                logger.debug(
+                    f"Using existing 2D meshgrids: t1={t1_2d.shape}, t2={t2_2d.shape}"
+                )
             else:
                 raise ValueError(
                     f"Inconsistent t1/t2 dimensions: t1.ndim={t1_raw.ndim}, t2.ndim={t2_raw.ndim}. "
@@ -1189,18 +1192,18 @@ def _run_optimization(args, config: ConfigManager, data: dict[str, Any]) -> Any:
             )  # Each phi repeated n_t*n_t times
 
             # Verify all arrays have matching lengths (CRITICAL for MCMC)
-            assert (
-                mcmc_data.shape[0] == n_total
-            ), f"Data pooling failed: mcmc_data={mcmc_data.shape[0]}, expected={n_total}"
-            assert (
-                t1_pooled.shape[0] == n_total
-            ), f"Data pooling failed: t1={t1_pooled.shape[0]}, expected={n_total}"
-            assert (
-                t2_pooled.shape[0] == n_total
-            ), f"Data pooling failed: t2={t2_pooled.shape[0]}, expected={n_total}"
-            assert (
-                phi_pooled.shape[0] == n_total
-            ), f"Data pooling failed: phi={phi_pooled.shape[0]}, expected={n_total}"
+            assert mcmc_data.shape[0] == n_total, (
+                f"Data pooling failed: mcmc_data={mcmc_data.shape[0]}, expected={n_total}"
+            )
+            assert t1_pooled.shape[0] == n_total, (
+                f"Data pooling failed: t1={t1_pooled.shape[0]}, expected={n_total}"
+            )
+            assert t2_pooled.shape[0] == n_total, (
+                f"Data pooling failed: t2={t2_pooled.shape[0]}, expected={n_total}"
+            )
+            assert phi_pooled.shape[0] == n_total, (
+                f"Data pooling failed: phi={phi_pooled.shape[0]}, expected={n_total}"
+            )
 
             logger.debug(
                 f"Pooled MCMC data: {n_phi} angles × {n_t}×{n_t} = {n_total:,} data points"
@@ -1213,7 +1216,11 @@ def _run_optimization(args, config: ConfigManager, data: dict[str, Any]) -> Any:
             # ✅ v2.1.0 BREAKING CHANGE: Removed automatic NLSQ/SVI initialization
             # Manual workflow required: Run NLSQ separately, copy results to YAML, then run MCMC
             # Load initial values from config YAML (initial_parameters.values section)
-            initial_values = config.get_initial_parameters() if hasattr(config, 'get_initial_parameters') else None
+            initial_values = (
+                config.get_initial_parameters()
+                if hasattr(config, "get_initial_parameters")
+                else None
+            )
             if initial_values:
                 logger.debug(
                     f"MCMC initial values from config: {list(initial_values.keys())} = "
@@ -1966,9 +1973,11 @@ def _plot_simulated_data(
                 params_dict.get("D0", 100.0),
                 params_dict.get("alpha", -0.5),
                 params_dict.get("D_offset", 0.0),
-                params_dict.get("gamma_dot_t0", 0.01),         # Canonical (was gamma_dot_0)
+                params_dict.get("gamma_dot_t0", 0.01),  # Canonical (was gamma_dot_0)
                 params_dict.get("beta", 0.5),
-                params_dict.get("gamma_dot_t_offset", 0.0),    # Canonical (was gamma_dot_offset)
+                params_dict.get(
+                    "gamma_dot_t_offset", 0.0
+                ),  # Canonical (was gamma_dot_offset)
                 params_dict.get("phi0", 0.0),
             ],
         )
@@ -2034,7 +2043,7 @@ def _plot_simulated_data(
     #    Problem: D(t=0) = D₀*0^α = ∞ when α<0, causing NaN/Inf in C₂
     # 3. Match experimental data loader convention (removes t=0 points)
     t_vals = dt * np.arange(1, n_time_points + 1)  # Start at dt, not 0
-    time_max = t_vals[-1]  # Actual maximum time (dt * n_time_points)
+    _time_max = t_vals[-1]  # Actual maximum time (dt * n_time_points)  # noqa: F841
     t1_grid, t2_grid = np.meshgrid(t_vals, t_vals, indexing="ij")
 
     logger.debug(
@@ -2758,7 +2767,7 @@ def _prepare_parameter_data(
         )
 
         logger.debug(
-            f"Physical params array (indices {2*n_angles}-{len(result.parameters)-1}): {physical_params[:7]}"
+            f"Physical params array (indices {2 * n_angles}-{len(result.parameters) - 1}): {physical_params[:7]}"
         )
 
         # Use mean contrast/offset for JSON (representative value)
@@ -2816,7 +2825,6 @@ def _prepare_parameter_data(
         )
 
     return param_dict
-
 
 
 def _compute_nlsq_fits(
@@ -2899,13 +2907,17 @@ def _compute_nlsq_fits(
         )
         return "static"
 
-    normalized_mode = _normalize_mode(analysis_mode or getattr(result, "analysis_mode", None))
+    normalized_mode = _normalize_mode(
+        analysis_mode or getattr(result, "analysis_mode", None)
+    )
 
     # Determine number of physical parameters based on analysis mode
     if normalized_mode == "static":
         n_physical = 3  # D0, alpha, D_offset
     elif normalized_mode == "laminar_flow":
-        n_physical = 7  # D0, alpha, D_offset, gamma_dot_t0, beta, gamma_dot_t_offset, phi0
+        n_physical = (
+            7  # D0, alpha, D_offset, gamma_dot_t0, beta, gamma_dot_t_offset, phi0
+        )
     else:
         raise ValueError(
             f"Unknown analysis_mode: '{analysis_mode}'. Expected 'static' or 'laminar_flow'"
@@ -2948,11 +2960,9 @@ def _compute_nlsq_fits(
     )
     logger.debug(
         f"DEBUG: result.parameters shape: {result.parameters.shape}, "
-        f"n_angles={n_angles}, 2*n_angles={2*n_angles}"
+        f"n_angles={n_angles}, 2*n_angles={2 * n_angles}"
     )
-    logger.debug(
-        f"DEBUG: physical_params extracted = {physical_params}"
-    )
+    logger.debug(f"DEBUG: physical_params extracted = {physical_params}")
 
     # Extract metadata with defaults
     L = metadata["L"]
@@ -3003,7 +3013,7 @@ def _compute_nlsq_fits(
             q=float(q),
             L=float(L),
             contrast=1.0,  # ✅ No contrast scaling for raw theory
-            offset=1.0,    # ✅ Normalized baseline (homodyne c2 baseline)
+            offset=1.0,  # ✅ Normalized baseline (homodyne c2 baseline)
             dt=float(dt),
         )
 
@@ -3014,9 +3024,6 @@ def _compute_nlsq_fits(
 
         # Apply diagonal correction to match experimental data processing
         # This fixes the constant diagonal issue in theoretical model (c1(t,t) = 1 always)
-        
-
-
 
         # Store raw theory
         c2_theoretical_raw_list.append(c2_theory_raw_np)
@@ -3068,12 +3075,12 @@ def _compute_nlsq_fits(
         )
 
     # Stack arrays
-    c2_theoretical_raw = np.array(c2_theoretical_raw_list)  # Raw theory (contrast=1.0, offset=1.0)
+    c2_theoretical_raw = np.array(
+        c2_theoretical_raw_list
+    )  # Raw theory (contrast=1.0, offset=1.0)
     c2_theoretical_fitted = np.array(c2_theoretical_fitted)  # Scaled via lstsq
     c2_solver_surface = (
-        np.array(solver_surface)
-        if include_solver_surface and solver_surface
-        else None
+        np.array(solver_surface) if include_solver_surface and solver_surface else None
     )
     per_angle_scaling = np.array(per_angle_scaling_posthoc)
 
@@ -3096,7 +3103,6 @@ def _compute_nlsq_fits(
         "residuals": residuals,
         "scalar_per_angle_expansion": scalar_per_angle_expansion,
     }
-
 
 
 def _json_safe(value: Any) -> Any:
@@ -3181,7 +3187,6 @@ def _save_nlsq_npz_file(
     t2: np.ndarray,
     q: float,
     output_dir: Path,
-
 ) -> None:
     """Save NPZ file with experimental/theoretical data and metadata.
 
@@ -3306,8 +3311,10 @@ def save_nlsq_results(
     metadata = _extract_nlsq_metadata(config, filtered_data)
 
     # Step 2: Prepare parameter data
-    n_angles = len(filtered_data['phi_angles_list'])
-    logger.debug(f"Preparing parameter data for {analysis_mode} mode with {n_angles} angles")
+    n_angles = len(filtered_data["phi_angles_list"])
+    logger.debug(
+        f"Preparing parameter data for {analysis_mode} mode with {n_angles} angles"
+    )
     param_dict = _prepare_parameter_data(result, analysis_mode, n_angles)
 
     # Add timestamp and convergence info to parameters
@@ -3596,9 +3603,7 @@ def generate_nlsq_plots(
         )
 
     # Determine which fit surface to display
-    use_solver_surface = (
-        fit_surface_mode == "solver" and c2_solver_scaled is not None
-    )
+    use_solver_surface = fit_surface_mode == "solver" and c2_solver_scaled is not None
     c2_fit_display = c2_solver_scaled if use_solver_surface else c2_theoretical_scaled
     residuals_display = c2_exp - c2_fit_display
 
@@ -3866,7 +3871,9 @@ def save_mcmc_results(
         )
 
         # Compute theoretical C2 using posterior mean parameters
-        c2_theoretical_scaled = _compute_theoretical_c2_from_mcmc(result, filtered_data, config)
+        c2_theoretical_scaled = _compute_theoretical_c2_from_mcmc(
+            result, filtered_data, config
+        )
 
         # Calculate residuals
         c2_exp = filtered_data["c2_exp"]
@@ -3924,8 +3931,9 @@ def _create_mcmc_parameters_dict(result: Any) -> dict:
     dict
         Structured parameter dictionary with posterior mean ± std
     """
-    import numpy as np
     from datetime import datetime
+
+    import numpy as np
 
     diag_summary = getattr(result, "diagnostic_summary", {}) or {}
     deterministic_params = set(diag_summary.get("deterministic_params") or [])
@@ -4051,8 +4059,9 @@ def _create_mcmc_analysis_dict(
     dict
         Analysis summary dictionary
     """
-    import numpy as np
     from datetime import datetime
+
+    import numpy as np
 
     # Get dataset dimensions
     c2_exp = data.get("c2_exp", [])
@@ -4220,9 +4229,7 @@ def _create_mcmc_diagnostics_dict(result: Any) -> dict:
                         "name": param_name,
                         "r_hat": float(r_hat_val) if r_hat_val is not None else None,
                         "ess": float(ess_val) if ess_val is not None else None,
-                        "converged": bool(
-                            r_hat_val is not None and r_hat_val < 1.1
-                        ),
+                        "converged": bool(r_hat_val is not None and r_hat_val < 1.1),
                         "deterministic": param_name in deterministic_params,
                     }
                 )
@@ -4302,9 +4309,9 @@ def _create_mcmc_diagnostics_dict(result: Any) -> dict:
         total_samples = result.n_samples * getattr(result, "n_chains", 1)
         if total_samples > 0:
             ess_ratio = float(np.mean(ess) / total_samples)
-            diagnostics_dict["posterior_checks"][
-                "effective_sample_size_ratio"
-            ] = ess_ratio
+            diagnostics_dict["posterior_checks"]["effective_sample_size_ratio"] = (
+                ess_ratio
+            )
 
     if "per_parameter_diagnostics" not in diagnostics_dict["convergence"]:
         param_keys = set(per_param_stats.keys())
@@ -4335,15 +4342,17 @@ def _create_mcmc_diagnostics_dict(result: Any) -> dict:
                         "converged": bool(
                             r_hat_val is not None
                             and r_hat_val
-                            < diagnostics_dict["convergence"].get("r_hat_threshold", 1.1)
+                            < diagnostics_dict["convergence"].get(
+                                "r_hat_threshold", 1.1
+                            )
                         ),
                         "deterministic": name in deterministic_params
                         or stats.get("deterministic", False),
                     }
                 )
-            diagnostics_dict["convergence"][
-                "per_parameter_diagnostics"
-            ] = fallback_entries
+            diagnostics_dict["convergence"]["per_parameter_diagnostics"] = (
+                fallback_entries
+            )
 
     # CMC-specific diagnostics
     if hasattr(result, "is_cmc_result") and result.is_cmc_result():
@@ -4415,9 +4424,9 @@ def _create_mcmc_diagnostics_dict(result: Any) -> dict:
                     overall_metrics["success_rate"] = float(cmc_diag["success_rate"])
 
                 # Include full diagnostics if available
-                diagnostics_dict["cmc_specific"][
-                    "overall_diagnostics"
-                ] = overall_metrics
+                diagnostics_dict["cmc_specific"]["overall_diagnostics"] = (
+                    overall_metrics
+                )
 
         # Combination method
         if hasattr(result, "combination_method") and result.combination_method:
@@ -4501,10 +4510,12 @@ def _compute_theoretical_c2_from_mcmc(
     mean_params = np.asarray(result.mean_params)
 
     # Log parameter values for debugging
-    logger.info(f"Computing theoretical C2 with posterior means:")
+    logger.info("Computing theoretical C2 with posterior means:")
     logger.info(f"  Contrast: {contrast:.6f}")
     logger.info(f"  Offset: {offset:.6f}")
-    logger.info(f"  Physical params: D0={mean_params[0]:.2f}, alpha={mean_params[1]:.4f}, D_offset={mean_params[2]:.4f}")
+    logger.info(
+        f"  Physical params: D0={mean_params[0]:.2f}, alpha={mean_params[1]:.4f}, D_offset={mean_params[2]:.4f}"
+    )
 
     # Validate parameters for reasonable theoretical prediction
     if contrast < 0.05:
@@ -4532,7 +4543,7 @@ def _compute_theoretical_c2_from_mcmc(
 
     # Get analysis mode
     config_dict = config.get_config() if hasattr(config, "get_config") else config
-    analysis_mode = config_dict.get("analysis_mode", "static_isotropic")
+    _analysis_mode = config_dict.get("analysis_mode", "static_isotropic")  # noqa: F841
 
     # Get L parameter (stator-rotor gap)
     L = config_dict.get("model_params", {}).get("L", 2000000.0)
@@ -4571,7 +4582,9 @@ def _compute_theoretical_c2_from_mcmc(
     c2_min = float(np.min(c2_theoretical_scaled))
     c2_max = float(np.max(c2_theoretical_scaled))
     c2_range = c2_max - c2_min
-    logger.info(f"Theoretical C2 range: [{c2_min:.6f}, {c2_max:.6f}], variation: {c2_range:.6f}")
+    logger.info(
+        f"Theoretical C2 range: [{c2_min:.6f}, {c2_max:.6f}], variation: {c2_range:.6f}"
+    )
 
     if c2_range < 0.01:
         logger.warning(
@@ -4639,8 +4652,9 @@ def _plot_single_angle_datashader(args):
     os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
 
     # Lazy import to ensure environment variables take effect
-    from homodyne.viz.datashader_backend import plot_c2_comparison_fast
     import numpy as np
+
+    from homodyne.viz.datashader_backend import plot_c2_comparison_fast
 
     (
         i,

@@ -1,30 +1,36 @@
 # MCMC CMC-Only Refactor Prototype
 
-**Goal:** Refactor `mcmc.py` to be CMC-only. Remove auto-selection heuristics, standalone NUTS runner/retries, surrogate blocks. All MCMC entrypoints route through CMC coordinator; `shard=1` behaves like legacy NUTS inside CMC.
+**Goal:** Refactor `mcmc.py` to be CMC-only. Remove auto-selection heuristics,
+standalone NUTS runner/retries, surrogate blocks. All MCMC entrypoints route through CMC
+coordinator; `shard=1` behaves like legacy NUTS inside CMC.
 
 ## Executive Summary
 
 ### What Changes
+
 1. **`fit_mcmc_jax()`**: Becomes thin wrapper that always calls CMC coordinator
-2. **`should_use_cmc()` in device/config.py**: DELETED - no longer needed
-3. **`_run_standard_nuts()`**: DELETED - NUTS runs inside CMC workers only
-4. **`bypass.py`**: DELETED - no bypass logic needed
-5. **Single-angle surrogates**: Moved INTO CMC worker (shard-level handling)
+1. **`should_use_cmc()` in device/config.py**: DELETED - no longer needed
+1. **`_run_standard_nuts()`**: DELETED - NUTS runs inside CMC workers only
+1. **`bypass.py`**: DELETED - no bypass logic needed
+1. **Single-angle surrogates**: Moved INTO CMC worker (shard-level handling)
 
 ### What Stays
+
 - **`CMCCoordinator.run_cmc()`**: Unchanged API, handles all MCMC
 - **`_worker_function`**: Still runs NUTS per-shard (no change to worker logic)
 - **`_create_numpyro_model()`**: Unchanged, used by workers
 - **NLSQ stack**: Completely untouched
 
 ### Single-Shard Path (Critical)
+
 When `num_shards=1`:
+
 - CMC coordinator creates 1 shard with ALL data
 - Worker runs NUTS on that shard (same as legacy standalone NUTS)
 - No consensus combination (just returns shard result directly)
 - Overhead: ~5-10% vs standalone NUTS (pool creation, serialization)
 
----
+______________________________________________________________________
 
 ## Architecture After Refactor
 
@@ -46,7 +52,7 @@ combine_subposteriors()  ← Identity for single shard
 MCMCResult
 ```
 
----
+______________________________________________________________________
 
 ## File Changes
 
@@ -175,6 +181,7 @@ def fit_mcmc_jax(
 #### DELETE: `should_use_cmc()` function (lines 278-517)
 
 The entire function is no longer needed. Only keep:
+
 - `HardwareConfig` dataclass (used by CMC coordinator for backend selection)
 - `detect_hardware()` (used by CMC coordinator)
 
@@ -267,7 +274,8 @@ def _calculate_num_shards(self, dataset_size: int) -> int:
 
 #### Move single-angle surrogate handling INTO worker
 
-The single-angle surrogate configuration (tier 1-4, log-space D0, etc.) currently lives in `_run_standard_nuts()`. This needs to move into `_worker_function()`:
+The single-angle surrogate configuration (tier 1-4, log-space D0, etc.) currently lives
+in `_run_standard_nuts()`. This needs to move into `_worker_function()`:
 
 ```python
 def _worker_function(args: tuple) -> Dict[str, Any]:
@@ -301,17 +309,16 @@ def _worker_function(args: tuple) -> Dict[str, Any]:
     # ... rest of worker function unchanged ...
 ```
 
----
+______________________________________________________________________
 
 ## API Changes Summary
 
-| Before | After | Notes |
-|--------|-------|-------|
-| `fit_mcmc_jax(..., method='mcmc')` | `fit_mcmc_jax(...)` | Always CMC, no method param |
-| `should_use_cmc(num_samples, hw)` | DELETED | No selection logic |
-| `evaluate_cmc_bypass(config, ...)` | DELETED | No bypass logic |
-| `_run_standard_nuts(...)` | DELETED | NUTS only in workers |
-| Auto-retry in fit_mcmc_jax | DELETED | Retry logic in worker if needed |
+| Before | After | Notes | |--------|-------|-------| |
+`fit_mcmc_jax(..., method='mcmc')` | `fit_mcmc_jax(...)` | Always CMC, no method param |
+| `should_use_cmc(num_samples, hw)` | DELETED | No selection logic | |
+`evaluate_cmc_bypass(config, ...)` | DELETED | No bypass logic | |
+`_run_standard_nuts(...)` | DELETED | NUTS only in workers | | Auto-retry in
+fit_mcmc_jax | DELETED | Retry logic in worker if needed |
 
 ### Configuration Changes
 
@@ -344,53 +351,61 @@ optimization:
       fallback_enabled: true
 ```
 
----
+______________________________________________________________________
 
 ## Pitfalls and Edge Cases
 
 ### 1. Single-Shard Path Must Handle All Cases
 
 **Problem:** When `num_shards=1`, the single worker must handle:
+
 - Single-angle static datasets (surrogate tiers)
 - Multi-angle static datasets
 - Laminar flow datasets
 - All per-angle scaling variations
 
-**Solution:** Move ALL preprocessing logic that was in `_run_standard_nuts()` into `_worker_function()`. The worker becomes the "universal NUTS executor".
+**Solution:** Move ALL preprocessing logic that was in `_run_standard_nuts()` into
+`_worker_function()`. The worker becomes the "universal NUTS executor".
 
 ### 2. Pool Creation Overhead for Single Shard
 
 **Problem:** Creating multiprocessing.Pool for 1 worker adds ~1-2s overhead.
 
 **Solutions:**
-1. Accept overhead (simplest, consistent architecture)
-2. Special-case `num_shards=1` to skip pool (hybrid, adds complexity)
-3. Use ThreadPoolExecutor for single shard (avoids spawn cost)
 
-**Recommendation:** Accept overhead. The architectural simplicity is worth 1-2s on small datasets.
+1. Accept overhead (simplest, consistent architecture)
+1. Special-case `num_shards=1` to skip pool (hybrid, adds complexity)
+1. Use ThreadPoolExecutor for single shard (avoids spawn cost)
+
+**Recommendation:** Accept overhead. The architectural simplicity is worth 1-2s on small
+datasets.
 
 ### 3. Retry Logic Migration
 
 **Before:** `fit_mcmc_jax` had 3 retries with different seeds.
 
 **After options:**
-1. Move retry logic INTO worker (per-shard retry)
-2. Move retry logic INTO coordinator (re-run failed shards)
-3. Remove retry, rely on CMC combination to be robust
 
-**Recommendation:** Option 2 - Coordinator-level retry for failed shards. This is more natural for CMC architecture.
+1. Move retry logic INTO worker (per-shard retry)
+1. Move retry logic INTO coordinator (re-run failed shards)
+1. Remove retry, rely on CMC combination to be robust
+
+**Recommendation:** Option 2 - Coordinator-level retry for failed shards. This is more
+natural for CMC architecture.
 
 ### 4. Diagnostics and Convergence Thresholds
 
 **Before:** `_evaluate_convergence_thresholds()` in mcmc.py evaluated result.
 
 **After:** This logic should move to:
+
 - `CMCCoordinator._basic_validation()` (already exists, expand it)
 - OR return in MCMCResult and let caller evaluate
 
 ### 5. Import Cleanup
 
 Many imports in mcmc.py become unused:
+
 ```python
 # DELETE these imports
 from homodyne.optimization.cmc.bypass import evaluate_cmc_bypass
@@ -400,42 +415,43 @@ from homodyne.device.config import should_use_cmc
 from homodyne.device.config import detect_hardware, HardwareConfig
 ```
 
----
+______________________________________________________________________
 
 ## Migration Path
 
 ### Phase 1: Prototype (This Document)
+
 - Document all changes
 - Validate single-shard path works
 
 ### Phase 2: Implementation
+
 1. Delete `bypass.py`
-2. Delete `should_use_cmc()` from device/config.py
-3. Refactor `fit_mcmc_jax()` to always use CMC
-4. Move surrogate logic to worker
-5. Add single-shard identity combination
+1. Delete `should_use_cmc()` from device/config.py
+1. Refactor `fit_mcmc_jax()` to always use CMC
+1. Move surrogate logic to worker
+1. Add single-shard identity combination
 
 ### Phase 3: Testing
+
 - Unit tests for single-shard path
 - Integration tests for migration from v2.4
 - Performance benchmarks (single-shard overhead)
 
 ### Phase 4: Documentation
+
 - Update CLAUDE.md
 - Update CLI help strings
 - Deprecation notices for removed config options
 
----
+______________________________________________________________________
 
 ## Diff Summary
 
 | File | Lines Added | Lines Removed | Net Change |
-|------|-------------|---------------|------------|
-| mcmc.py | ~150 | ~1200 | -1050 |
-| device/config.py | 0 | ~240 | -240 |
-| cmc/bypass.py | 0 | 183 | -183 (delete) |
-| cmc/coordinator.py | ~20 | 0 | +20 |
-| cmc/backends/multiprocessing.py | ~100 | 0 | +100 |
-| **Total** | ~270 | ~1623 | **-1353** |
+|------|-------------|---------------|------------| | mcmc.py | ~150 | ~1200 | -1050 | |
+device/config.py | 0 | ~240 | -240 | | cmc/bypass.py | 0 | 183 | -183 (delete) | |
+cmc/coordinator.py | ~20 | 0 | +20 | | cmc/backends/multiprocessing.py | ~100 | 0 | +100
+| | **Total** | ~270 | ~1623 | **-1353** |
 
 Net reduction of ~1350 lines while maintaining all functionality.

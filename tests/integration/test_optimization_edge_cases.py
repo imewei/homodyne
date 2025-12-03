@@ -44,9 +44,9 @@ class TestOptimizationEdgeCases:
         filtered_data = _apply_angle_filtering_for_optimization(data, config)
 
         # Assert - All angles used (fallback behavior)
-        assert (
-            len(filtered_data["phi_angles_list"]) == 9
-        ), "Should use all 9 angles when no matches"
+        assert len(filtered_data["phi_angles_list"]) == 9, (
+            "Should use all 9 angles when no matches"
+        )
         np.testing.assert_array_almost_equal(
             filtered_data["phi_angles_list"], angles, decimal=1
         )
@@ -82,9 +82,9 @@ class TestOptimizationEdgeCases:
         filtered_data = _apply_angle_filtering_for_optimization(data, config)
 
         # Assert - All angles used (fallback behavior)
-        assert (
-            len(filtered_data["phi_angles_list"]) == 9
-        ), "Should use all 9 angles when no matches"
+        assert len(filtered_data["phi_angles_list"]) == 9, (
+            "Should use all 9 angles when no matches"
+        )
 
         # Assert - Core behavior verified (fallback to all angles)
         # Warning logging is secondary to the correct fallback behavior
@@ -115,9 +115,9 @@ class TestOptimizationEdgeCases:
         filtered_data = _apply_angle_filtering_for_optimization(data, config)
 
         # Assert - Only 1 angle selected (90.0), no error raised
-        assert (
-            len(filtered_data["phi_angles_list"]) == 1
-        ), "Should select exactly 1 angle"
+        assert len(filtered_data["phi_angles_list"]) == 1, (
+            "Should select exactly 1 angle"
+        )
         np.testing.assert_array_almost_equal(
             filtered_data["phi_angles_list"], [90.0], decimal=1
         )
@@ -220,15 +220,15 @@ class TestOptimizationEdgeCases:
         filtered_data = _apply_angle_filtering_for_optimization(data, config)
 
         # Assert - All angles selected (all match overlapping ranges)
-        assert (
-            len(filtered_data["phi_angles_list"]) == 7
-        ), "Should have 7 angles (all match)"
+        assert len(filtered_data["phi_angles_list"]) == 7, (
+            "Should have 7 angles (all match)"
+        )
 
         # Assert - No duplicates
         unique_angles = np.unique(filtered_data["phi_angles_list"])
-        assert len(unique_angles) == len(
-            filtered_data["phi_angles_list"]
-        ), "Filtered angles contain duplicates"
+        assert len(unique_angles) == len(filtered_data["phi_angles_list"]), (
+            "Filtered angles contain duplicates"
+        )
 
 
 if __name__ == "__main__":

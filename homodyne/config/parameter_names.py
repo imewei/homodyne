@@ -19,7 +19,7 @@ Version History:
 - Fixed bug where pjit backend used gamma_dot_0 instead of gamma_dot_t0
 """
 
-from typing import List, Literal
+from typing import Literal
 
 # =============================================================================
 # PARAMETER NAME CONSTANTS
@@ -68,7 +68,7 @@ PARAMETER_DESCRIPTIONS = {
 AnalysisMode = Literal["static_isotropic", "laminar_flow"]
 
 
-def get_parameter_names(analysis_mode: AnalysisMode) -> List[str]:
+def get_parameter_names(analysis_mode: AnalysisMode) -> list[str]:
     """Get parameter names for specified analysis mode.
 
     Parameters
@@ -126,7 +126,7 @@ def get_num_parameters(analysis_mode: AnalysisMode) -> int:
 
 
 def validate_parameter_names(
-    param_names: List[str], analysis_mode: AnalysisMode, strict: bool = True
+    param_names: list[str], analysis_mode: AnalysisMode, strict: bool = True
 ) -> None:
     """Validate parameter names against expected names for analysis mode.
 

@@ -1,23 +1,27 @@
 # CMC Dual-Mode Strategy
 
-**Status**: Dual-criteria decision logic IMPLEMENTED ✓ | Dual-mode sharding PLANNED
+**Status**: CMC-only architecture IMPLEMENTED ✓ (v2.4.1)
 
-**Last Updated**: October 31, 2025 (v2.1.0)
+**Last Updated**: December 2, 2025 (v2.4.1)
+
+> **Note**: As of v2.4.1, MCMC always uses CMC. The NUTS auto-selection logic described
+> in earlier versions has been removed. Single-shard runs still use NUTS internally.
 
 ## Overview
 
-Consensus Monte Carlo (CMC) serves two distinct purposes in XPCS analysis, requiring different triggering conditions and sharding strategies. This document describes the implemented dual-criteria decision logic and plans for future dual-mode sharding enhancement.
+Consensus Monte Carlo (CMC) is the mandatory MCMC backend in Homodyne v2.4.1+. All MCMC
+runs use CMC with automatic sharding based on dataset characteristics and hardware.
 
 ## Table of Contents
 
 1. [Dual-Criteria Decision Logic (IMPLEMENTED)](#dual-criteria-decision-logic-implemented)
-2. [Current Sharding Strategy (IMPLEMENTED)](#current-sharding-strategy-implemented)
-3. [Future Enhancement: Dual-Mode Sharding (PLANNED)](#future-enhancement-dual-mode-sharding-planned)
-4. [Implementation Details](#implementation-details)
-5. [Testing](#testing)
-6. [References](#references)
+1. [Current Sharding Strategy (IMPLEMENTED)](#current-sharding-strategy-implemented)
+1. [Future Enhancement: Dual-Mode Sharding (PLANNED)](#future-enhancement-dual-mode-sharding-planned)
+1. [Implementation Details](#implementation-details)
+1. [Testing](#testing)
+1. [References](#references)
 
----
+______________________________________________________________________
 
 ## Dual-Criteria Decision Logic (IMPLEMENTED)
 
@@ -26,6 +30,7 @@ Consensus Monte Carlo (CMC) serves two distinct purposes in XPCS analysis, requi
 CMC addresses two distinct computational challenges:
 
 #### Use Case 1: Parallelism (Many Independent Samples)
+
 - **Trigger**: `num_samples >= min_samples_for_cmc` (default: **15** in v2.1.0)
 - **Scenario**: 20 phi angles × 10M points each
 - **Sharding**: Split samples (phi angles) across shards
@@ -33,6 +38,7 @@ CMC addresses two distinct computational challenges:
 - **Example**: 20 phi → 4 shards × 5 phi each on 14-core CPU
 
 #### Use Case 2: Memory Management (Few Samples, Huge Data)
+
 - **Trigger**: `dataset_size` causes estimated memory > **30%** threshold (v2.1.0)
 - **Scenario**: 5 phi angles × 50M+ points each
 - **Sharding**: Keep all samples in each shard, split data points (NOT YET IMPLEMENTED)
@@ -42,8 +48,9 @@ CMC addresses two distinct computational challenges:
 ### Decision Logic (OR Condition)
 
 **Use CMC if EITHER:**
+
 1. `num_samples >= min_samples_for_cmc` (parallelism mode), OR
-2. `estimated_memory_gb > threshold × available_memory` (memory mode)
+1. `estimated_memory_gb > threshold × available_memory` (memory mode)
 
 **Otherwise:** Use standard NUTS
 
@@ -54,20 +61,25 @@ estimated_memory_gb = (dataset_size × 8 bytes × 30) / 1e9
 ```
 
 **Multiplier Breakdown (v2.1.0 - empirically calibrated):**
+
 - Original data: 1×
 - Gradients for 9 params: 9×
 - NUTS trajectory storage: 15×
 - JAX overhead + MCMC state: 5×
 
-**Default Threshold**: **30%** of available GPU/CPU memory (v2.1.0, conservative for OOM prevention)
+**Default Threshold**: **30%** of available GPU/CPU memory (v2.1.0, conservative for OOM
+prevention)
 
 ### Implementation
 
 **File**: `homodyne/device/config.py`
 
-**Function**: `should_use_cmc(num_samples, hardware_config, dataset_size=None, memory_threshold_pct=0.30, min_samples_for_cmc=15)` (v2.1.0)
+**Function**:
+`should_use_cmc(num_samples, hardware_config, dataset_size=None, memory_threshold_pct=0.30, min_samples_for_cmc=15)`
+(v2.1.0)
 
 **Example (v2.1.0)**:
+
 ```python
 from homodyne.device.config import detect_hardware, should_use_cmc
 
@@ -86,15 +98,17 @@ use_cmc = should_use_cmc(5, hw, dataset_size=50_000_000)
 # Result: True (12 GB = 37.5% > 30% threshold, memory mode)
 ```
 
----
+______________________________________________________________________
 
 ## Current Sharding Strategy (IMPLEMENTED)
 
 ### Sample-Level Sharding Only
 
-**Current Implementation**: CMC coordinator shards by **independent samples** (phi angles) only.
+**Current Implementation**: CMC coordinator shards by **independent samples** (phi
+angles) only.
 
 **How It Works**:
+
 ```python
 # For 200 phi angles with 10 shards:
 shard_size = 200 // 10 = 20 phi per shard
@@ -107,23 +121,30 @@ shard_size = 200 // 10 = 20 phi per shard
 ```
 
 **Pros**:
+
 - Simple, well-tested implementation
 - Natural parallelism for XPCS (phi angles are independent)
 - Works perfectly for Use Case 1 (many samples)
 
 **Cons**:
-- Cannot split data within samples for Use Case 2
-- Memory-triggered CMC currently triggers sample sharding, which doesn't help if you only have 2 phi angles
 
----
+- Cannot split data within samples for Use Case 2
+- Memory-triggered CMC currently triggers sample sharding, which doesn't help if you
+  only have 2 phi angles
+
+______________________________________________________________________
 
 ## Future Enhancement: Dual-Mode Sharding (PLANNED)
 
 ### Problem Statement
 
-**Current Limitation**: When CMC is triggered by memory (Use Case 2), the system still uses sample-level sharding. For datasets with few samples (e.g., 2 phi) but massive data (100M+ points), this provides NO memory benefit because each shard still gets all data points.
+**Current Limitation**: When CMC is triggered by memory (Use Case 2), the system still
+uses sample-level sharding. For datasets with few samples (e.g., 2 phi) but massive data
+(100M+ points), this provides NO memory benefit because each shard still gets all data
+points.
 
 **Example Failure**:
+
 ```
 Dataset: 2 phi × 100M points = 200M total
 Memory requirement: 9.6 GB (triggers CMC via memory threshold)
@@ -136,18 +157,21 @@ Problem: Each shard still needs 4.8 GB (doesn't solve OOM issue!)
 Implement **two distinct sharding modes** based on which condition triggered CMC:
 
 #### Mode 1: Sample-Level Sharding (Parallelism Mode)
+
 - **Triggered by**: `num_samples >= min_samples_for_cmc`
 - **Strategy**: Split samples (phi angles) across shards
 - **Implementation**: CURRENT (already exists)
 - **Example**: 200 phi × 1M → 10 shards × 20 phi × 1M
 
 #### Mode 2: Data-Level Sharding (Memory Mode)
+
 - **Triggered by**: Memory threshold exceeded
 - **Strategy**: Split data points (time indices) within each sample
 - **Implementation**: FUTURE ENHANCEMENT
 - **Example**: 2 phi × 100M → 4 shards × 2 phi × 25M points
 
 #### Hybrid Mode: Combined Sharding
+
 - **Triggered by**: BOTH conditions met
 - **Strategy**: Split both samples AND data
 - **Implementation**: FUTURE ENHANCEMENT (low priority)
@@ -290,52 +314,59 @@ def combine_data_level_results(
 Before merging data-level sharding, validate:
 
 1. **Convergence**: Data-level shards converge to same parameters
-2. **Uncertainty Quantification**: Combined variance properly accounts for sharding
-3. **Memory Reduction**: Actual memory usage reduced proportionally
-4. **Performance**: Overhead from sharding < benefit from parallelism
-5. **Edge Cases**: Single-shard fallback, unequal shard sizes
+1. **Uncertainty Quantification**: Combined variance properly accounts for sharding
+1. **Memory Reduction**: Actual memory usage reduced proportionally
+1. **Performance**: Overhead from sharding < benefit from parallelism
+1. **Edge Cases**: Single-shard fallback, unequal shard sizes
 
----
+______________________________________________________________________
 
 ## Implementation Details
 
 ### Files Modified (Current Implementation)
 
 1. **`homodyne/device/config.py`** (lines 312-418)
+
    - Function: `should_use_cmc()`
    - Added `dataset_size` parameter
    - Implemented dual-criteria OR logic
    - Memory estimation and threshold checking
 
-2. **`homodyne/optimization/mcmc.py`** (lines 336-373)
+1. **`homodyne/optimization/mcmc.py`** (lines 336-373)
+
    - Added `num_samples` calculation from data shape
    - Pass `dataset_size` to `should_use_cmc()`
    - Enhanced logging for transparency
 
-3. **`homodyne/optimization/cmc/backends/selection.py`** (lines 150-158)
+1. **`homodyne/optimization/cmc/backends/selection.py`** (lines 150-158)
+
    - Fixed 'auto' backend selection handling
    - Added explicit logging for 'auto' mode
 
 ### Files to Modify (Future Enhancement)
 
 1. **`homodyne/optimization/cmc/coordinator.py`**
+
    - Add `CMCShardConfig` dataclass
    - Implement `create_data_level_shards()`
    - Add sharding mode selection logic
    - Update shard validation for data-level shards
 
-2. **`homodyne/optimization/cmc/consensus.py`**
+1. **`homodyne/optimization/cmc/consensus.py`**
+
    - Implement `combine_data_level_results()`
    - Add weighted variance calculation
    - Handle mixed sharding modes
 
-3. **`homodyne/optimization/mcmc.py`**
+1. **`homodyne/optimization/mcmc.py`**
+
    - Pass sharding mode hint to CMC coordinator
    - Add configuration option for manual mode override
 
 ### Configuration Options (Future)
 
 Add to YAML config:
+
 ```yaml
 mcmc:
   # v2.1.0: Automatic NUTS/CMC selection thresholds
@@ -351,7 +382,7 @@ mcmc:
       max_shard_size_gb: 2.0
 ```
 
----
+______________________________________________________________________
 
 ## Testing
 
@@ -360,16 +391,18 @@ mcmc:
 **Test Script**: `/home/wei/Desktop/test_cmc_decision.py`
 
 **Test Cases**:
+
 1. Few samples (2 phi), small data (1M) → NUTS ✓
-2. Many samples (200 phi), moderate data (10M) → CMC (parallelism) ✓
-3. Few samples (2 phi), huge data (200M) → CMC (memory) ✓
-4. Moderate samples (23 phi), no dataset_size → NUTS ✓
+1. Many samples (200 phi), moderate data (10M) → CMC (parallelism) ✓
+1. Few samples (2 phi), huge data (200M) → CMC (memory) ✓
+1. Moderate samples (23 phi), no dataset_size → NUTS ✓
 
 **Test Results**: ALL TESTS PASSED
 
 ### Future Tests (Planned)
 
 1. **Unit Tests** for data-level sharding:
+
    ```python
    def test_data_level_shard_creation():
        """Verify data chunks preserve all samples."""
@@ -383,7 +416,8 @@ mcmc:
        assert sum(s.size for s in shards) == data.size
    ```
 
-2. **Integration Tests** for MCMC convergence:
+1. **Integration Tests** for MCMC convergence:
+
    ```python
    def test_data_sharding_convergence():
        """Verify data-level shards converge to same parameters."""
@@ -405,7 +439,8 @@ mcmc:
        )
    ```
 
-3. **Memory Tests**:
+1. **Memory Tests**:
+
    ```python
    def test_memory_reduction():
        """Verify actual memory usage reduced with data sharding."""
@@ -426,31 +461,37 @@ mcmc:
        assert mem_used_gb < hw.memory_per_device_gb * 0.5
    ```
 
----
+______________________________________________________________________
 
 ## References
 
 ### Internal Documentation
+
 - `homodyne/device/config.py` - Hardware detection and CMC decision logic
 - `homodyne/optimization/mcmc.py` - MCMC fitting with automatic method selection
 - `homodyne/optimization/cmc/coordinator.py` - CMC workflow orchestration
 - `docs/troubleshooting/cmc-decision-flowchart.md` - Visual decision tree (TODO)
 
 ### Scientific Background
-- Consensus Monte Carlo (Scott et al., 2016): "Bayes and big data: The consensus Monte Carlo algorithm"
+
+- Consensus Monte Carlo (Scott et al., 2016): "Bayes and big data: The consensus Monte
+  Carlo algorithm"
 - XPCS Theory (He et al., 2024): https://doi.org/10.1073/pnas.2401162121
 
 ### Implementation Notes
-- Current implementation prioritizes sample-level sharding (well-tested, natural for XPCS)
+
+- Current implementation prioritizes sample-level sharding (well-tested, natural for
+  XPCS)
 - Data-level sharding requires careful validation of likelihood factorization
 - Hybrid mode (both sample AND data sharding) is low priority—rare use case
 
----
+______________________________________________________________________
 
 **Document Status**: Living document. Update when implementation progresses.
 
 **Next Steps**:
+
 1. Validate current dual-criteria logic with real XPCS datasets
-2. Design detailed API for data-level sharding
-3. Implement prototype and benchmark memory usage
-4. Add comprehensive tests before merging
+1. Design detailed API for data-level sharding
+1. Implement prototype and benchmark memory usage
+1. Add comprehensive tests before merging

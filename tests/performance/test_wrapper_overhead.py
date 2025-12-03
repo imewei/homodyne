@@ -78,9 +78,7 @@ class TestNLSQWrapperOverhead:
         for _ in range(3):
             start = time.perf_counter()
             try:
-                result = wrapper.fit(
-                    data, config, initial_params, bounds, "static"
-                )
+                result = wrapper.fit(data, config, initial_params, bounds, "static")
                 elapsed = time.perf_counter() - start
                 wrapper_times.append(elapsed)
             except Exception as e:
@@ -101,9 +99,9 @@ class TestNLSQWrapperOverhead:
         print("  NFR-003 (<5%) applies to medium/large datasets")
 
         # Sanity check: should complete in reasonable time
-        assert (
-            avg_wrapper_time < 10.0
-        ), f"Small dataset took too long: {avg_wrapper_time:.2f}s"
+        assert avg_wrapper_time < 10.0, (
+            f"Small dataset took too long: {avg_wrapper_time:.2f}s"
+        )
 
     def test_overhead_medium_dataset(self):
         """
@@ -148,9 +146,7 @@ class TestNLSQWrapperOverhead:
         for _ in range(3):
             start = time.perf_counter()
             try:
-                result = wrapper.fit(
-                    data, config, initial_params, bounds, "static"
-                )
+                result = wrapper.fit(data, config, initial_params, bounds, "static")
                 elapsed = time.perf_counter() - start
                 wrapper_times.append(elapsed)
             except Exception as e:
@@ -175,9 +171,9 @@ class TestNLSQWrapperOverhead:
         # We can't measure direct NLSQ easily without duplicating wrapper logic,
         # so we validate that total time is reasonable (throughput > 1000 pts/s)
         throughput = 9000 / avg_wrapper_time
-        assert (
-            throughput > 1000
-        ), f"Throughput too low: {throughput:.0f} pts/s (expected >1000 pts/s)"
+        assert throughput > 1000, (
+            f"Throughput too low: {throughput:.0f} pts/s (expected >1000 pts/s)"
+        )
 
     def test_overhead_large_dataset(self):
         """
@@ -221,9 +217,7 @@ class TestNLSQWrapperOverhead:
         # Benchmark wrapper (single run for large dataset to save time)
         start = time.perf_counter()
         try:
-            result = wrapper.fit(
-                data, config, initial_params, bounds, "static"
-            )
+            result = wrapper.fit(data, config, initial_params, bounds, "static")
             wrapper_time = time.perf_counter() - start
         except Exception as e:
             pytest.skip(f"Optimization failed: {e}")
@@ -236,9 +230,9 @@ class TestNLSQWrapperOverhead:
         # For large datasets, overhead should be negligible
         # Validate throughput is reasonable (>2000 pts/s)
         throughput = 50000 / wrapper_time
-        assert (
-            throughput > 2000
-        ), f"Throughput too low: {throughput:.0f} pts/s (expected >2000 pts/s)"
+        assert throughput > 2000, (
+            f"Throughput too low: {throughput:.0f} pts/s (expected >2000 pts/s)"
+        )
 
     @pytest.mark.skipif(not NLSQ_AVAILABLE, reason="NLSQ not available")
     def test_wrapper_operations_breakdown(self):
@@ -285,9 +279,7 @@ class TestNLSQWrapperOverhead:
         # 2. Total fit time (includes all operations)
         start = time.perf_counter()
         try:
-            result = wrapper.fit(
-                data, config, initial_params, bounds, "static"
-            )
+            result = wrapper.fit(data, config, initial_params, bounds, "static")
             timings["total"] = time.perf_counter() - start
         except Exception as e:
             pytest.skip(f"Optimization failed: {e}")
@@ -304,6 +296,6 @@ class TestNLSQWrapperOverhead:
         print("  Note: Remaining time includes NLSQ optimization + result creation")
 
         # Data prep should be fast (<10% of total time)
-        assert (
-            data_prep_overhead < 10.0
-        ), f"Data prep overhead too high: {data_prep_overhead:.1f}% (expected <10%)"
+        assert data_prep_overhead < 10.0, (
+            f"Data prep overhead too high: {data_prep_overhead:.1f}% (expected <10%)"
+        )

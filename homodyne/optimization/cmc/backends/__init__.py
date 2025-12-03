@@ -89,9 +89,9 @@ Implementation Status
 
 from homodyne.optimization.cmc.backends.base import CMCBackend
 from homodyne.optimization.cmc.backends.selection import (
-    select_backend,
-    get_backend_by_name,
     _validate_backend_compatibility,
+    get_backend_by_name,
+    select_backend,
 )
 
 # Import backend implementations for direct access

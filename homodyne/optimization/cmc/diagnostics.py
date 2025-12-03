@@ -12,23 +12,22 @@ References:
 """
 
 import logging
-from typing import Any, Dict, List, Tuple
+from typing import Any
 
 import jax.numpy as jnp
 import numpy as np
-from scipy import stats
 
 logger = logging.getLogger(__name__)
 
 
 def validate_cmc_results(
-    shard_results: List[Dict[str, Any]],
+    shard_results: list[dict[str, Any]],
     strict_mode: bool = True,
     min_success_rate: float = 0.90,
     max_kl_divergence: float = 2.0,
     max_rhat: float = 1.1,
     min_ess: float = 100.0,
-) -> Tuple[bool, Dict[str, Any]]:
+) -> tuple[bool, dict[str, Any]]:
     """Validate CMC results against convergence and consistency criteria.
 
     This is the main validation function that checks:
@@ -234,9 +233,9 @@ def validate_cmc_results(
 
 
 def compute_per_shard_diagnostics(
-    shard_result: Dict[str, Any],
+    shard_result: dict[str, Any],
     shard_idx: int = 0,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """Compute convergence diagnostics for a single shard.
 
     Parameters
@@ -369,7 +368,7 @@ def compute_per_shard_diagnostics(
 
 
 def compute_between_shard_kl_divergence(
-    shard_results: List[Dict[str, Any]],
+    shard_results: list[dict[str, Any]],
 ) -> np.ndarray:
     """Compute pairwise KL divergence matrix between shards.
 
@@ -398,7 +397,7 @@ def compute_between_shard_kl_divergence(
     - We return the average: 0.5 * (KL(p||q) + KL(q||p)) for symmetry
     - Regularization (1e-6 * I) is added to covariances for numerical stability
     """
-    num_shards = len(shard_results)
+    _num_shards = len(shard_results)  # noqa: F841 - Reserved for diagnostic logging
 
     # Extract samples and fit Gaussians to each shard
     gaussians = []
@@ -439,8 +438,8 @@ def compute_between_shard_kl_divergence(
 
 
 def compute_combined_posterior_diagnostics(
-    shard_results: List[Dict[str, Any]],
-) -> Dict[str, Any]:
+    shard_results: list[dict[str, Any]],
+) -> dict[str, Any]:
     """Compute diagnostics for the combined posterior.
 
     Parameters
@@ -555,12 +554,12 @@ def compute_combined_posterior_diagnostics(
 
 
 def _validate_single_shard(
-    shard_result: Dict[str, Any],
+    shard_result: dict[str, Any],
     shard_idx: int,
     max_rhat: float = 1.1,
     min_ess: float = 100.0,
     strict_mode: bool = True,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """Validate convergence for a single shard.
 
     Parameters
@@ -628,7 +627,7 @@ def _validate_single_shard(
     return validation
 
 
-def _fit_gaussian_to_samples(samples: np.ndarray) -> Dict[str, np.ndarray]:
+def _fit_gaussian_to_samples(samples: np.ndarray) -> dict[str, np.ndarray]:
     """Fit a Gaussian distribution to samples.
 
     Parameters
@@ -672,7 +671,7 @@ def _fit_gaussian_to_samples(samples: np.ndarray) -> Dict[str, np.ndarray]:
 
 
 def _compute_kl_divergence_matrix(
-    gaussians: List[Dict[str, np.ndarray]],
+    gaussians: list[dict[str, np.ndarray]],
 ) -> np.ndarray:
     """Compute pairwise KL divergence matrix between Gaussians.
 

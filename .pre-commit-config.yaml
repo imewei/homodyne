@@ -1,10 +1,11 @@
-# Pre-commit hooks for Homodyne Analysis Package
+# Pre-commit hooks for Homodyne Analysis Package v2.4+
 # Install with: pip install pre-commit && pre-commit install
+# Tested with pre-commit 4.3.0
 
 repos:
   # Built-in hooks
   - repo: https://github.com/pre-commit/pre-commit-hooks
-    rev: v4.6.0
+    rev: v5.0.0
     hooks:
       - id: trailing-whitespace
         args: [--markdown-linebreak-ext=md]
@@ -23,66 +24,56 @@ repos:
 
   # Python code formatting
   - repo: https://github.com/psf/black
-    rev: 25.9.0 # Updated to match local: black 25.9.0
+    rev: 25.1.0 # Tested: black 25.9.0
     hooks:
       - id: black
         name: black
         description: "Black: The uncompromising Python code formatter"
-        entry: black
         language: python
-        minimum_pre_commit_version: 2.9.2
         require_serial: true
         types_or: [python, pyi]
         args: [--line-length=88]
 
   # Import sorting
   - repo: https://github.com/pycqa/isort
-    rev: 5.13.2
+    rev: 6.0.1
     hooks:
       - id: isort
         name: isort (python)
         description: "Sort Python imports"
-        entry: isort
-        language: python
         types: [python]
         args: [--profile=black, --line-length=88]
 
-  # Linting
+  # Linting (legacy - prefer ruff)
   - repo: https://github.com/pycqa/flake8
-    rev: 7.1.1
+    rev: 7.2.0
     hooks:
       - id: flake8
         name: flake8
         description: "Tool For Style Guide Enforcement"
-        entry: flake8
-        language: python
         types: [python]
         args:
           - --max-line-length=88
           - --extend-ignore=E203,W503,E501
           - --exclude=build,dist,.eggs,*.egg-info,.tox,.venv,venv
 
-  # Modern linting and formatting
+  # Modern linting and formatting (preferred)
   - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.13.1 # Updated to match local: ruff 0.13.1
+    rev: v0.13.1 # Tested: ruff 0.13.1
     hooks:
       - id: ruff
         name: ruff
         description: "An extremely fast Python linter, written in Rust"
-        entry: ruff check
-        language: python
         types: [python]
         args: [--fix, --exit-non-zero-on-fix]
       - id: ruff-format
         name: ruff-format
         description: "An extremely fast Python formatter, written in Rust"
-        entry: ruff format
-        language: python
         types: [python]
 
   # Security scanning
   - repo: https://github.com/PyCQA/bandit
-    rev: 1.7.10
+    rev: 1.8.3
     hooks:
       - id: bandit
         name: bandit
@@ -104,25 +95,23 @@ repos:
 
   # Type checking
   - repo: https://github.com/pre-commit/mirrors-mypy
-    rev: v1.18.2 # Updated to match local: mypy 1.18.2
+    rev: v1.18.2 # Tested: mypy 1.18.2
     hooks:
       - id: mypy
         name: mypy
         description: "Optional static typing for Python"
-        entry: mypy
-        language: python
         types: [python]
         args: [--config-file=pyproject.toml, --ignore-missing-imports]
         additional_dependencies:
-          - types-psutil
-          - types-requests
-          - numpy
-          - matplotlib
-          - scipy-stubs
-          - types-Pygments
-          - types-colorama
-          - types-decorator
-          - types-setuptools
+          - types-psutil>=5.9
+          - types-requests>=2.31
+          - numpy>=2.0
+          - matplotlib>=3.8
+          - types-Pygments>=2.16
+          - types-colorama>=0.4
+          - types-decorator>=5.1
+          - types-setuptools>=68.0
+          - types-pyyaml>=6.0
         exclude: ^(homodyne/tests/|tests/|build/|dist/|docs/)
 
   # Scientific computing quality checks
@@ -189,50 +178,42 @@ repos:
 
   # Markdown formatting
   - repo: https://github.com/executablebooks/mdformat
-    rev: 0.7.19
+    rev: 0.7.21
     hooks:
       - id: mdformat
         name: mdformat
         description: "CommonMark compliant Markdown formatter"
-        entry: mdformat
-        language: python
         types: [markdown]
         args: [--wrap=88]
 
-  # YAML formatting
+  # YAML/JSON formatting
   - repo: https://github.com/pre-commit/mirrors-prettier
     rev: v4.0.0-alpha.8
     hooks:
       - id: prettier
         name: prettier
         description: "Prettier formatter for various file types"
-        entry: prettier
-        language: node
         types_or: [yaml, json]
         args: [--write, --tab-width=2]
 
   # Jupyter notebook cleaning
   - repo: https://github.com/nbQA-dev/nbQA
-    rev: 1.8.7
+    rev: 1.9.1
     hooks:
       - id: nbqa-black
         name: nbqa-black
         description: "Run black on Jupyter notebooks"
-        entry: nbqa
-        language: python
         types: [jupyter]
         args: [black, --line-length=88]
       - id: nbqa-isort
         name: nbqa-isort
         description: "Run isort on Jupyter notebooks"
-        entry: nbqa
-        language: python
         types: [jupyter]
         args: [isort, --profile=black]
 
 # Global configuration
 default_language_version:
-  python: python3.13 # Updated to match local: Python 3.13.7
+  python: python3.13 # Tested: Python 3.13
 
 # Exclude certain directories and files
 exclude: |

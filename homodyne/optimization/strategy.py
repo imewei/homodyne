@@ -15,7 +15,7 @@ from __future__ import annotations
 
 import logging
 from enum import Enum
-from typing import Any, Optional
+from typing import Any
 
 import psutil
 
@@ -93,7 +93,7 @@ class DatasetSizeStrategy:
     THRESHOLD_MEDIUM = 10_000_000  # 10M points
     THRESHOLD_LARGE = 100_000_000  # 100M points
 
-    def __init__(self, config: Optional[dict[str, Any]] = None):
+    def __init__(self, config: dict[str, Any] | None = None):
         """Initialize strategy selector.
 
         Parameters
@@ -307,7 +307,7 @@ class DatasetSizeStrategy:
         self,
         n_points: int,
         n_parameters: int = 9,
-        checkpoint_config: Optional[dict[str, Any]] = None,
+        checkpoint_config: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         """Build optimized StreamingOptimizer configuration.
 

@@ -1,25 +1,24 @@
 # Consensus Monte Carlo Architecture - Developer Guide
 
-**Version:** 3.0+
-**Last Updated:** 2025-10-24
-**Target Audience:** Contributors, Maintainers, Advanced Users
+**Version:** 3.0+ **Last Updated:** 2025-10-24 **Target Audience:** Contributors,
+Maintainers, Advanced Users
 
----
+______________________________________________________________________
 
 ## Table of Contents
 
 1. [Architecture Overview](#architecture-overview)
-2. [Module Structure](#module-structure)
-3. [Design Principles](#design-principles)
-4. [Core Components](#core-components)
-5. [Backend Implementation](#backend-implementation)
-6. [Adding New Features](#adding-new-features)
-7. [Testing Guidelines](#testing-guidelines)
-8. [Code Style](#code-style)
-9. [Contributing](#contributing)
-10. [Performance Optimization](#performance-optimization)
+1. [Module Structure](#module-structure)
+1. [Design Principles](#design-principles)
+1. [Core Components](#core-components)
+1. [Backend Implementation](#backend-implementation)
+1. [Adding New Features](#adding-new-features)
+1. [Testing Guidelines](#testing-guidelines)
+1. [Code Style](#code-style)
+1. [Contributing](#contributing)
+1. [Performance Optimization](#performance-optimization)
 
----
+______________________________________________________________________
 
 ## Architecture Overview
 
@@ -28,8 +27,9 @@
 Consensus Monte Carlo (CMC) is built on three foundational principles:
 
 1. **Modularity**: Each component has a single, well-defined responsibility
-2. **Extensibility**: Easy to add new backends, combination methods, or sharding strategies
-3. **Reliability**: Comprehensive validation, error handling, and fallback mechanisms
+1. **Extensibility**: Easy to add new backends, combination methods, or sharding
+   strategies
+1. **Reliability**: Comprehensive validation, error handling, and fallback mechanisms
 
 ### High-Level Architecture
 
@@ -101,7 +101,7 @@ Validation → Diagnostics (convergence, KL divergence)
 Output → MCMCResult (extended with CMC fields)
 ```
 
----
+______________________________________________________________________
 
 ## Module Structure
 
@@ -130,18 +130,17 @@ homodyne/optimization/cmc/
 ### Module Responsibilities
 
 | Module | Responsibility | Lines | Key Functions |
-|--------|---------------|-------|---------------|
-| `coordinator.py` | Orchestrate CMC pipeline | 648 | `CMCCoordinator.run_cmc()` |
-| `sharding.py` | Data partitioning | 450 | `shard_data_stratified()` |
-| `svi_init.py` | NUTS initialization | 380 | `run_svi_initialization()` |
-| `combination.py` | Posterior combination | 509 | `combine_subposteriors()` |
-| `diagnostics.py` | Validation | 820 | `validate_cmc_results()` |
-| `result.py` | Result data class | 449 | `MCMCResult` |
-| `backends/base.py` | Abstract backend | 361 | `CMCBackend` |
-| `backends/selection.py` | Backend selection | 333 | `select_backend()` |
-| `backends/pjit.py` | GPU execution | 527 | `PjitBackend` |
-| `backends/multiprocessing.py` | CPU execution | 418 | `MultiprocessingBackend` |
-| `backends/pbs.py` | Cluster execution | 631 | `PBSBackend` |
+|--------|---------------|-------|---------------| | `coordinator.py` | Orchestrate CMC
+pipeline | 648 | `CMCCoordinator.run_cmc()` | | `sharding.py` | Data partitioning | 450
+| `shard_data_stratified()` | | `svi_init.py` | NUTS initialization | 380 |
+`run_svi_initialization()` | | `combination.py` | Posterior combination | 509 |
+`combine_subposteriors()` | | `diagnostics.py` | Validation | 820 |
+`validate_cmc_results()` | | `result.py` | Result data class | 449 | `MCMCResult` | |
+`backends/base.py` | Abstract backend | 361 | `CMCBackend` | | `backends/selection.py` |
+Backend selection | 333 | `select_backend()` | | `backends/pjit.py` | GPU execution |
+527 | `PjitBackend` | | `backends/multiprocessing.py` | CPU execution | 418 |
+`MultiprocessingBackend` | | `backends/pbs.py` | Cluster execution | 631 | `PBSBackend`
+|
 
 ### Dependency Graph
 
@@ -182,7 +181,7 @@ diagnostics.py
     └─→ numpy (KL divergence calculations)
 ```
 
----
+______________________________________________________________________
 
 ## Design Principles
 
@@ -334,7 +333,7 @@ class StatefulBackend(CMCBackend):
         ...
 ```
 
----
+______________________________________________________________________
 
 ## Core Components
 
@@ -381,9 +380,9 @@ class CMCCoordinator:
 **Design Decisions:**
 
 1. **Single entry point**: `run_cmc()` orchestrates entire pipeline
-2. **Private helper methods**: `_create_shards()`, `_run_svi()`, etc. (not public API)
-3. **Hardware-adaptive**: Auto-detects hardware in `__init__()`
-4. **Error handling**: Each step has try/except with fallbacks
+1. **Private helper methods**: `_create_shards()`, `_run_svi()`, etc. (not public API)
+1. **Hardware-adaptive**: Auto-detects hardware in `__init__()`
+1. **Error handling**: Each step has try/except with fallbacks
 
 ### 2. Data Sharding
 
@@ -633,7 +632,7 @@ def _kl_divergence_gaussian(mu_p, Sigma_p, mu_q, Sigma_q):
     """
 ```
 
----
+______________________________________________________________________
 
 ## Backend Implementation
 
@@ -859,7 +858,7 @@ class PBSBackend(CMCBackend):
         """Poll qstat until job completes."""
 ```
 
----
+______________________________________________________________________
 
 ## Adding New Features
 
@@ -868,11 +867,13 @@ class PBSBackend(CMCBackend):
 **Steps:**
 
 1. **Create backend file**:
+
 ```bash
 touch homodyne/optimization/cmc/backends/ray.py
 ```
 
 2. **Implement CMCBackend interface**:
+
 ```python
 from homodyne.optimization.cmc.backends.base import CMCBackend
 
@@ -905,6 +906,7 @@ class RayBackend(CMCBackend):
 ```
 
 3. **Register in backend registry**:
+
 ```python
 # homodyne/optimization/cmc/backends/__init__.py
 _BACKEND_REGISTRY = {
@@ -916,6 +918,7 @@ _BACKEND_REGISTRY = {
 ```
 
 4. **Add tests**:
+
 ```python
 # tests/unit/test_ray_backend.py
 def test_ray_backend_execution():
@@ -925,6 +928,7 @@ def test_ray_backend_execution():
 ```
 
 5. **Update documentation**:
+
 - Add to API reference
 - Add to user guide
 - Update configuration template
@@ -934,6 +938,7 @@ def test_ray_backend_execution():
 **Steps:**
 
 1. **Implement combination function**:
+
 ```python
 # homodyne/optimization/cmc/combination.py
 
@@ -972,6 +977,7 @@ def _hierarchical_combination(shard_results, tree_depth=2):
 ```
 
 2. **Update combine_subposteriors()**:
+
 ```python
 def combine_subposteriors(shard_results, method='weighted', ...):
     if method == 'weighted':
@@ -985,6 +991,7 @@ def combine_subposteriors(shard_results, method='weighted', ...):
 ```
 
 3. **Add configuration support**:
+
 ```yaml
 # homodyne/config/templates/homodyne_cmc_config.yaml
 combination:
@@ -993,6 +1000,7 @@ combination:
 ```
 
 4. **Add tests**:
+
 ```python
 def test_hierarchical_combination():
     # Create 128 synthetic shard results
@@ -1011,6 +1019,7 @@ def test_hierarchical_combination():
 **Steps:**
 
 1. **Implement sharding function**:
+
 ```python
 # homodyne/optimization/cmc/sharding.py
 
@@ -1049,6 +1058,7 @@ def shard_data_time_stratified(data, t1, t2, phi, num_shards, ...):
 ```
 
 2. **Update shard_data_stratified() dispatcher**:
+
 ```python
 def shard_data_stratified(data, t1, t2, phi, num_shards, q, L, strategy='stratified'):
     if strategy == 'stratified':
@@ -1063,7 +1073,7 @@ def shard_data_stratified(data, t1, t2, phi, num_shards, q, L, strategy='stratif
         raise ValueError(f"Invalid strategy: {strategy}")
 ```
 
----
+______________________________________________________________________
 
 ## Testing Guidelines
 
@@ -1239,7 +1249,7 @@ def test_all_sharding_strategies(strategy):
     assert validate_shards(shards, original_size)[0]
 ```
 
----
+______________________________________________________________________
 
 ## Code Style
 
@@ -1364,7 +1374,7 @@ def process_shard(shard, config):
     return result
 ```
 
----
+______________________________________________________________________
 
 ## Contributing
 
@@ -1462,7 +1472,7 @@ repos:
 - [ ] Backward compatibility maintained
 - [ ] Security considerations addressed
 
----
+______________________________________________________________________
 
 ## Performance Optimization
 
@@ -1512,6 +1522,7 @@ jax.profiler.stop_trace()
 **Problem:** SVI takes > 5 minutes for 10M points
 
 **Solution:**
+
 ```python
 # Reduce SVI steps
 config['cmc']['initialization']['svi_steps'] = 5000  # Down from 20000
@@ -1525,6 +1536,7 @@ config['cmc']['initialization']['method'] = 'nlsq'
 **Problem:** Sharding takes > 30 seconds for 50M points
 
 **Solution:**
+
 ```python
 # Use random sharding (faster)
 config['cmc']['sharding']['strategy'] = 'random'
@@ -1538,6 +1550,7 @@ config['cmc']['sharding']['num_shards'] = 16  # Down from 50
 **Problem:** Matrix inversion fails for large parameter spaces
 
 **Solution:**
+
 ```python
 # Enable fallback
 config['cmc']['combination']['fallback_enabled'] = True
@@ -1575,17 +1588,18 @@ advanced:
   jax_enable_x64: false
 ```
 
----
+______________________________________________________________________
 
 ## Summary
 
 **Key Takeaways:**
 
 1. **Modular Architecture**: Each component has a single responsibility
-2. **Extensible Design**: Easy to add new backends, combination methods, or sharding strategies
-3. **Comprehensive Testing**: 232 tests with 100% pass rate
-4. **Production-Ready**: Fault-tolerant, observable, and well-documented
-5. **Performance-Optimized**: Linear speedup with hardware parallelization
+1. **Extensible Design**: Easy to add new backends, combination methods, or sharding
+   strategies
+1. **Comprehensive Testing**: 232 tests with 100% pass rate
+1. **Production-Ready**: Fault-tolerant, observable, and well-documented
+1. **Performance-Optimized**: Linear speedup with hardware parallelization
 
 **For Contributors:**
 
@@ -1603,7 +1617,7 @@ advanced:
 - Keep documentation up-to-date
 - Respond to issues promptly
 
----
+______________________________________________________________________
 
 **Further Reading:**
 

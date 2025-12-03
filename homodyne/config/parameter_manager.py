@@ -78,16 +78,34 @@ class ParameterManager:
         # UPDATED: Nov 15, 2025 - Aligned with template bounds for consistency and physical realism
         self._default_bounds: dict[str, BoundDict] = {
             # Scaling parameters (always included) - UNCHANGED
-            "contrast": {"min": 0.0, "max": 1.0, "name": "contrast", "type": "TruncatedNormal"},
-            "offset": {"min": 0.5, "max": 1.5, "name": "offset", "type": "TruncatedNormal"},
-
+            "contrast": {
+                "min": 0.0,
+                "max": 1.0,
+                "name": "contrast",
+                "type": "TruncatedNormal",
+            },
+            "offset": {
+                "min": 0.5,
+                "max": 1.5,
+                "name": "offset",
+                "type": "TruncatedNormal",
+            },
             # Physical parameters - diffusion
             # UPDATED: D0 [1.0, 1e6] → [1e2, 1e5] - More realistic range for colloidal systems
             "D0": {"min": 1e2, "max": 1e5, "name": "D0", "type": "TruncatedNormal"},
-            "alpha": {"min": -2.0, "max": 2.0, "name": "alpha", "type": "TruncatedNormal"},
+            "alpha": {
+                "min": -2.0,
+                "max": 2.0,
+                "name": "alpha",
+                "type": "TruncatedNormal",
+            },
             # CRITICAL UPDATE: D_offset [0.0, 1e6] → [-1e5, 1e5] - Allow negative for jammed/arrested systems
-            "D_offset": {"min": -1e5, "max": 1e5, "name": "D_offset", "type": "TruncatedNormal"},
-
+            "D_offset": {
+                "min": -1e5,
+                "max": 1e5,
+                "name": "D_offset",
+                "type": "TruncatedNormal",
+            },
             # Physical parameters - shear flow
             # UPDATED: gamma_dot_t0 [1e-10, 1.0] → [1e-6, 0.5] - Realistic shear rates for XPCS
             "gamma_dot_t0": {
@@ -96,7 +114,12 @@ class ParameterManager:
                 "name": "gamma_dot_t0",
                 "type": "TruncatedNormal",
             },
-            "beta": {"min": -2.0, "max": 2.0, "name": "beta", "type": "TruncatedNormal"},
+            "beta": {
+                "min": -2.0,
+                "max": 2.0,
+                "name": "beta",
+                "type": "TruncatedNormal",
+            },
             # UPDATED: gamma_dot_t_offset [1e-10, 1.0] → [-0.1, 0.1] - Allow negative, tighter range
             "gamma_dot_t_offset": {
                 "min": -0.1,
@@ -106,7 +129,12 @@ class ParameterManager:
             },
             # UPDATED: phi0 [-π, π] rad → [-10, 10] deg - Tighter bounds for MCMC convergence
             # Assumes flow alignment within ±10° of primary axis (typical for laminar flow XPCS)
-            "phi0": {"min": -10.0, "max": 10.0, "name": "phi0", "type": "TruncatedNormal"},
+            "phi0": {
+                "min": -10.0,
+                "max": 10.0,
+                "name": "phi0",
+                "type": "TruncatedNormal",
+            },
         }
 
         # Parameter name aliases/mappings (use constant from types)

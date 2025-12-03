@@ -1,44 +1,50 @@
 # Migration Guide: v2.x → v3.0 (Consensus Monte Carlo)
 
-**Version:** 3.0
-**Last Updated:** 2025-10-24
-**Migration Complexity:** Low (100% backward compatible)
+**Version:** 3.0 **Last Updated:** 2025-10-24 **Migration Complexity:** Low (100%
+backward compatible)
 
----
+______________________________________________________________________
 
 ## Overview
 
-Homodyne v3.0 introduces Consensus Monte Carlo (CMC) for scalable Bayesian inference on large datasets (> 500k points). This migration guide helps users upgrade from v2.x to v3.0 and adopt CMC features.
+Homodyne v3.0 introduces Consensus Monte Carlo (CMC) for scalable Bayesian inference on
+large datasets (> 500k points). This migration guide helps users upgrade from v2.x to
+v3.0 and adopt CMC features.
 
-**Key Point:** **100% backward compatible** - Existing v2.x code continues to work without modification.
+**Key Point:** **100% backward compatible** - Existing v2.x code continues to work
+without modification.
 
----
+______________________________________________________________________
 
 ## What's New in v3.0
 
 ### Major Features
 
 1. **Consensus Monte Carlo (CMC)**
+
    - Scalable Bayesian inference for unlimited dataset sizes
    - Automatic method selection based on dataset size and hardware
    - Linear speedup with hardware parallelization
 
-2. **Hardware-Adaptive Optimization**
+1. **Hardware-Adaptive Optimization**
+
    - Automatic backend selection (pjit, multiprocessing, PBS)
    - Optimal shard sizing based on available memory
    - GPU/CPU/cluster execution
 
-3. **SVI Initialization**
+1. **SVI Initialization**
+
    - Stochastic Variational Inference for better NUTS convergence
    - Automatic inverse mass matrix estimation
    - Reduces MCMC warmup time by ~50%
 
-4. **Extended MCMCResult**
+1. **Extended MCMCResult**
+
    - CMC-specific diagnostics (per-shard convergence, KL divergence)
    - Backward-compatible with v2.x results
    - `is_cmc_result()` method for detection
 
----
+______________________________________________________________________
 
 ## Backward Compatibility
 
@@ -97,7 +103,7 @@ else:
 
 **All new fields default to `None` for standard NUTS results.**
 
----
+______________________________________________________________________
 
 ## Migration Scenarios
 
@@ -106,17 +112,19 @@ else:
 **No changes needed.** v3.0 automatically uses standard NUTS.
 
 **Before (v2.x):**
+
 ```python
 result = fit_mcmc_jax(data=small_dataset, ...)
 ```
 
 **After (v3.0):**
+
 ```python
 # Identical - no changes required
 result = fit_mcmc_jax(data=small_dataset, ...)
 ```
 
----
+______________________________________________________________________
 
 ### Scenario 2: Medium Datasets (500k - 5M points)
 
@@ -145,7 +153,7 @@ result = fit_mcmc_jax(
 result = fit_mcmc_jax(data=medium_dataset, ..., method='cmc')
 ```
 
----
+______________________________________________________________________
 
 ### Scenario 3: Large Datasets (> 5M points)
 
@@ -172,7 +180,7 @@ result = fit_mcmc_jax(
 # 100% data utilization, no subsampling needed
 ```
 
----
+______________________________________________________________________
 
 ### Scenario 4: Production Pipelines
 
@@ -202,7 +210,7 @@ def run_mcmc_pipeline(data, ...):
     return result  # Works for any dataset size!
 ```
 
----
+______________________________________________________________________
 
 ## Configuration Migration
 
@@ -262,7 +270,7 @@ optimization:
       max_kl_divergence: 2.0
 ```
 
----
+______________________________________________________________________
 
 ## Code Examples
 
@@ -350,7 +358,7 @@ if result.is_cmc_result():
     print(f"Max KL divergence: {cmc_diag.get('max_kl_divergence', 'N/A')}")
 ```
 
----
+______________________________________________________________________
 
 ## Testing Migration
 
@@ -382,19 +390,17 @@ def test_mcmc_uses_cmc_for_large_dataset():
     assert 'convergence_rate' in result.cmc_diagnostics
 ```
 
----
+______________________________________________________________________
 
 ## Performance Comparison
 
 ### v2.x vs v3.0 Performance
 
 | Dataset Size | v2.x (NUTS) | v3.0 (CMC) | Speedup |
-|--------------|-------------|------------|---------|
-| 100k points | 5 min | 6 min (10% overhead) | 0.83x |
-| 500k points | 25 min | 20 min | 1.25x |
-| 1M points | OOM ❌ | 30 min ✅ | N/A |
-| 10M points | Not possible | 2 hours ✅ | N/A |
-| 50M points | Not possible | 4 hours ✅ | N/A |
+|--------------|-------------|------------|---------| | 100k points | 5 min | 6 min (10%
+overhead) | 0.83x | | 500k points | 25 min | 20 min | 1.25x | | 1M points | OOM ❌ | 30
+min ✅ | N/A | | 10M points | Not possible | 2 hours ✅ | N/A | | 50M points | Not
+possible | 4 hours ✅ | N/A |
 
 **Key Takeaways:**
 
@@ -402,7 +408,7 @@ def test_mcmc_uses_cmc_for_large_dataset():
 - Medium datasets (500k - 5M): CMC comparable → Either works
 - Large datasets (> 5M): CMC only option → v2.x not feasible
 
----
+______________________________________________________________________
 
 ## Common Migration Issues
 
@@ -449,7 +455,7 @@ cmc:
     max_points_per_shard: 500000  # Down from default 1M
 ```
 
----
+______________________________________________________________________
 
 ## Rollout Strategy
 
@@ -481,7 +487,7 @@ optimization:
   method: auto  # CMC auto-enabled
 ```
 
----
+______________________________________________________________________
 
 ## Deprecation Warnings
 
@@ -492,7 +498,7 @@ optimization:
 - Manual subsampling for large datasets (replaced by CMC)
 - Fixed MCMC method without auto-detection
 
----
+______________________________________________________________________
 
 ## Support and Resources
 
@@ -509,7 +515,7 @@ optimization:
 - Discussion Forum: https://github.com/your-org/homodyne/discussions
 - Email: support@homodyne-xpcs.org
 
----
+______________________________________________________________________
 
 ## Summary
 
@@ -525,10 +531,9 @@ optimization:
 
 **Key Benefits:**
 
-✅ **100% backward compatible** - Existing code works without changes
-✅ **Automatic adoption** - CMC enabled for large datasets by default
-✅ **Scalability** - Handle unlimited dataset sizes
-✅ **Performance** - Linear speedup with parallelization
-✅ **Reliability** - Comprehensive validation and error handling
+✅ **100% backward compatible** - Existing code works without changes ✅ **Automatic
+adoption** - CMC enabled for large datasets by default ✅ **Scalability** - Handle
+unlimited dataset sizes ✅ **Performance** - Linear speedup with parallelization ✅
+**Reliability** - Comprehensive validation and error handling
 
 **Questions?** Open an issue on GitHub or contact the development team.

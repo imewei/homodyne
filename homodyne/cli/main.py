@@ -29,15 +29,16 @@ os.environ.setdefault("NLSQ_SKIP_GPU_CHECK", "1")
 
 # Suppress JAX backend logs (set to ERROR to hide GPU fallback warnings)
 # This must be done before any imports that trigger JAX initialization
-import logging
+import logging  # noqa: E402 - Must import after os.environ configuration
+
 logging.getLogger("jax._src.xla_bridge").setLevel(logging.ERROR)
 logging.getLogger("jax._src.compiler").setLevel(logging.ERROR)
 
 # Note: GPU support removed in v2.3.0 (CPU-only)
 
-from homodyne.cli.args_parser import create_parser
-from homodyne.cli.commands import dispatch_command
-from homodyne.utils.logging import get_logger
+from homodyne.cli.args_parser import create_parser  # noqa: E402
+from homodyne.cli.commands import dispatch_command  # noqa: E402
+from homodyne.utils.logging import get_logger  # noqa: E402
 
 logger = get_logger(__name__)
 

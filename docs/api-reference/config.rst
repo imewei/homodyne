@@ -2,9 +2,7 @@ homodyne.config - Configuration Management
 ==========================================
 
 .. automodule:: homodyne.config
-   :members:
-   :undoc-members:
-   :show-inheritance:
+   :no-members:
 
 Overview
 --------

@@ -66,25 +66,26 @@ Error Handling
 - Timeouts: Not implemented (rely on MCMC convergence)
 """
 
-from typing import List, Dict, Any, Optional
-import time
+from typing import TYPE_CHECKING, Any, Optional
 
-import numpy as np
 import jax
 import jax.numpy as jnp
-from jax import pmap, vmap
+import numpy as np
 
 from homodyne.optimization.cmc.backends.base import CMCBackend
 from homodyne.utils.logging import get_logger
+
+if TYPE_CHECKING:
+    from homodyne.config.parameter_space import ParameterSpace
 
 logger = get_logger(__name__)
 
 # Import NumPyro components
 try:
-    import numpyro
-    import numpyro.distributions as dist
+    import numpyro  # noqa: F401
+    import numpyro.distributions as dist  # noqa: F401
+    from numpyro import sample  # noqa: F401
     from numpyro.infer import MCMC, NUTS
-    from numpyro import sample
 
     NUMPYRO_AVAILABLE = True
 except ImportError:
@@ -159,13 +160,13 @@ class PjitBackend(CMCBackend):
 
     def run_parallel_mcmc(
         self,
-        shards: List[Dict[str, np.ndarray]],
-        mcmc_config: Dict[str, Any],
-        init_params: Dict[str, float],
+        shards: list[dict[str, np.ndarray]],
+        mcmc_config: dict[str, Any],
+        init_params: dict[str, float],
         inv_mass_matrix: np.ndarray,
         analysis_mode: str,
         parameter_space,
-    ) -> List[Dict[str, Any]]:
+    ) -> list[dict[str, Any]]:
         """Run MCMC on all shards using JAX pmap or sequential execution.
 
         For multi-GPU systems, distributes shards across GPUs using pmap.
@@ -218,13 +219,13 @@ class PjitBackend(CMCBackend):
 
     def _run_sequential(
         self,
-        shards: List[Dict[str, np.ndarray]],
-        mcmc_config: Dict[str, Any],
-        init_params: Dict[str, float],
+        shards: list[dict[str, np.ndarray]],
+        mcmc_config: dict[str, Any],
+        init_params: dict[str, float],
         inv_mass_matrix: np.ndarray,
         analysis_mode: str = "static",
         parameter_space: Optional["ParameterSpace"] = None,
-    ) -> List[Dict[str, Any]]:
+    ) -> list[dict[str, Any]]:
         """Execute shards sequentially on single device.
 
         Parameters
@@ -277,7 +278,7 @@ class PjitBackend(CMCBackend):
                 # Log error details if shard failed
                 if not result["converged"] and result.get("error"):
                     logger.error(
-                        f"[{self.get_backend_name()}] Shard {i+1}/{len(shards)} error details:\n"
+                        f"[{self.get_backend_name()}] Shard {i + 1}/{len(shards)} error details:\n"
                         f"{result['error']}"
                     )
 
@@ -298,13 +299,13 @@ class PjitBackend(CMCBackend):
 
     def _run_parallel(
         self,
-        shards: List[Dict[str, np.ndarray]],
-        mcmc_config: Dict[str, Any],
-        init_params: Dict[str, float],
+        shards: list[dict[str, np.ndarray]],
+        mcmc_config: dict[str, Any],
+        init_params: dict[str, float],
         inv_mass_matrix: np.ndarray,
         analysis_mode: str = "static",
         parameter_space: Optional["ParameterSpace"] = None,
-    ) -> List[Dict[str, Any]]:
+    ) -> list[dict[str, Any]]:
         """Execute shards in parallel across multiple GPUs using pmap.
 
         For multi-GPU execution, we process shards in batches equal to
@@ -362,14 +363,14 @@ class PjitBackend(CMCBackend):
 
     def _run_parallel_batch(
         self,
-        batch_shards: List[Dict[str, np.ndarray]],
-        mcmc_config: Dict[str, Any],
-        init_params: Dict[str, float],
+        batch_shards: list[dict[str, np.ndarray]],
+        mcmc_config: dict[str, Any],
+        init_params: dict[str, float],
         inv_mass_matrix: np.ndarray,
         start_shard_idx: int,
         analysis_mode: str = "static",
         parameter_space: Optional["ParameterSpace"] = None,
-    ) -> List[Dict[str, Any]]:
+    ) -> list[dict[str, Any]]:
         """Execute a batch of shards in parallel using pmap.
 
         Note: For true parallel execution, we would need to use pmap with
@@ -439,14 +440,14 @@ class PjitBackend(CMCBackend):
 
     def _run_single_shard_mcmc(
         self,
-        shard: Dict[str, np.ndarray],
-        mcmc_config: Dict[str, Any],
-        init_params: Dict[str, float],
+        shard: dict[str, np.ndarray],
+        mcmc_config: dict[str, Any],
+        init_params: dict[str, float],
         inv_mass_matrix: np.ndarray,
         analysis_mode: str,
         parameter_space: Optional["ParameterSpace"],
         shard_idx: int,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Run MCMC on a single shard.
 
         This is the core MCMC execution function that runs NumPyro NUTS
@@ -570,7 +571,7 @@ class PjitBackend(CMCBackend):
         for phi_idx in range(n_phi):
             # Default per-angle initial values (physically reasonable)
             init_param_values[f"contrast_{phi_idx}"] = 0.5  # Typical contrast
-            init_param_values[f"offset_{phi_idx}"] = 1.0    # Typical c2 offset
+            init_param_values[f"offset_{phi_idx}"] = 1.0  # Typical c2 offset
         logger.debug(
             f"Shard {shard_idx}: Added {n_phi} per-angle scaling parameters "
             f"(contrast and offset) to init_param_values for NUTS initialization"
@@ -687,9 +688,9 @@ class PjitBackend(CMCBackend):
 
     def _compute_diagnostics(
         self,
-        samples_dict: Dict[str, jnp.ndarray],
+        samples_dict: dict[str, jnp.ndarray],
         mcmc: "MCMC",
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Compute MCMC diagnostics from samples.
 
         Parameters
@@ -747,7 +748,7 @@ class PjitBackend(CMCBackend):
                     ess_dict[param_name] = len(samples_dict[param_name])
 
                 diagnostics["ess"] = ess_dict
-                diagnostics["rhat"] = {k: 1.0 for k in samples_dict.keys()}
+                diagnostics["rhat"] = dict.fromkeys(samples_dict.keys(), 1.0)
 
             return diagnostics
 
@@ -759,7 +760,7 @@ class PjitBackend(CMCBackend):
                 "rhat": {},
             }
 
-    def _check_convergence(self, diagnostics: Dict[str, Any]) -> bool:
+    def _check_convergence(self, diagnostics: dict[str, Any]) -> bool:
         """Check if MCMC has converged based on diagnostics.
 
         Convergence criteria:

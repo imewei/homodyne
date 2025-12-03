@@ -2,9 +2,7 @@ homodyne.core - Core Physics Engine
 ====================================
 
 .. automodule:: homodyne.core
-   :members:
-   :undoc-members:
-   :show-inheritance:
+   :no-members:
 
 Overview
 --------

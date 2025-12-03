@@ -9,9 +9,8 @@ Date: 2025-11-06
 Version: 2.2.0
 """
 
-import pytest
 import numpy as np
-import jax.numpy as jnp
+import pytest
 
 from homodyne.optimization.stratified_residual import (
     StratifiedResidualFunction,
@@ -137,7 +136,6 @@ def test_initialization_per_angle_scaling(
     assert residual_fn.n_scaling_params == 6  # 2 * n_phi (contrast + offset per angle)
     assert residual_fn.n_physical_params == 3
     assert residual_fn.n_total_params == 9  # 6 scaling + 3 physical
-
 
 
 def test_initialization_laminar_flow(
@@ -287,7 +285,6 @@ def test_call_returns_correct_shape_per_angle(
     residuals_np = np.asarray(residuals)
     assert residuals_np.shape == (300,)  # Total points across all chunks
     assert np.all(np.isfinite(residuals_np))
-
 
 
 def test_residuals_are_finite_and_reasonable(

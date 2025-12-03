@@ -24,7 +24,6 @@ Usage:
   from homodyne.core.physics_cmc import compute_g1_diffusion, compute_g1_total
 """
 
-import jax
 import jax.numpy as jnp
 from jax import jit
 
@@ -218,7 +217,7 @@ def _compute_g1_diffusion_elementwise(
     # Solution: sqrt(x² + ε) ≈ |x| but differentiable everywhere
     # Same fix as physics_nlsq.py:240 - this is why NLSQ works but MCMC failed!
     epsilon_abs = 1e-20
-    time_diff_smooth = jnp.sqrt((t2 - t1)**2 + epsilon_abs)
+    time_diff_smooth = jnp.sqrt((t2 - t1) ** 2 + epsilon_abs)
     D_integral_elementwise = time_diff_smooth * (D_t1 + D_t2) / 2.0
 
     # Compute g1 using log-space for numerical stability
@@ -293,7 +292,7 @@ def _compute_g1_shear_elementwise(
     # Solution: sqrt(x² + ε) ≈ |x| but differentiable everywhere
     # Same issue and fix as diffusion integration (line 220-221)
     epsilon_abs = 1e-20
-    time_diff_smooth = jnp.sqrt((t2 - t1)**2 + epsilon_abs)
+    time_diff_smooth = jnp.sqrt((t2 - t1) ** 2 + epsilon_abs)
     gamma_integral_elementwise = time_diff_smooth * (gamma_t1 + gamma_t2) / 2.0
 
     # phi_unique is already filtered to unique values by caller (compute_g1_total)

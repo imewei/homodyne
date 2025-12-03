@@ -74,22 +74,26 @@ Scott et al. (2016): "Bayes and big data: the consensus Monte Carlo algorithm"
 https://arxiv.org/abs/1411.7435
 """
 
-from typing import Dict, Any, Optional, Callable
 import time
+from collections.abc import Callable
+from typing import TYPE_CHECKING, Any, Optional
 
-import numpy as np
 import jax.numpy as jnp
 
-from homodyne.device.config import detect_hardware, HardwareConfig
+if TYPE_CHECKING:
+    from homodyne.config.parameter_space import ParameterSpace
+import numpy as np
+
+from homodyne.device.config import detect_hardware
 from homodyne.optimization.cmc.backends import select_backend
+from homodyne.optimization.cmc.combination import combine_subposteriors
+from homodyne.optimization.cmc.result import MCMCResult
 from homodyne.optimization.cmc.sharding import (
     calculate_adaptive_min_shard_size,
     calculate_optimal_num_shards,
     shard_data_stratified,
     validate_shards,
 )
-from homodyne.optimization.cmc.combination import combine_subposteriors
-from homodyne.optimization.cmc.result import MCMCResult
 from homodyne.utils.logging import get_logger
 
 logger = get_logger(__name__)
@@ -136,7 +140,7 @@ class CMCCoordinator:
     >>> print(f"Used {result.num_shards} shards")
     """
 
-    def __init__(self, config: Dict[str, Any]):
+    def __init__(self, config: dict[str, Any]):
         """Initialize CMC coordinator with configuration.
 
         Parameters
@@ -199,8 +203,8 @@ class CMCCoordinator:
         L: float,
         analysis_mode: str,
         parameter_space: Optional["ParameterSpace"] = None,
-        initial_values: Optional[Dict[str, float]] = None,
-        model_fn: Optional[Callable] = None,
+        initial_values: dict[str, float] | None = None,
+        model_fn: Callable | None = None,
         seed_base: int = 0,
     ) -> MCMCResult:
         """Run complete CMC pipeline.
@@ -467,7 +471,7 @@ class CMCCoordinator:
                 is_valid, violations = parameter_space.validate_values(physical_params)
                 if not is_valid:
                     raise ValueError(
-                        f"Initial parameter values violate bounds:\n"
+                        "Initial parameter values violate bounds:\n"
                         + "\n".join(violations)
                     )
                 logger.info(
@@ -498,7 +502,9 @@ class CMCCoordinator:
         phi_unique = np.unique(np.asarray(phi))
         n_phi = len(phi_unique)
 
-        logger.info(f"Expanding initial_values for {n_phi} unique phi angles (per-angle scaling)")
+        logger.info(
+            f"Expanding initial_values for {n_phi} unique phi angles (per-angle scaling)"
+        )
 
         # Get default scaling values from config (will be removed from physical params)
         default_contrast = initial_values.get("contrast", 0.5)
@@ -544,8 +550,12 @@ class CMCCoordinator:
         )
 
         # DEBUG: Log actual parameter ordering being sent to worker
-        logger.debug(f"Coordinator sending init_params to worker (ORDERED): {list(init_params.keys())}")
-        per_angle_params = {k: v for k, v in init_params.items() if 'contrast_' in k or 'offset_' in k}
+        logger.debug(
+            f"Coordinator sending init_params to worker (ORDERED): {list(init_params.keys())}"
+        )
+        per_angle_params = {
+            k: v for k, v in init_params.items() if "contrast_" in k or "offset_" in k
+        }
         if per_angle_params:
             logger.debug(f"Per-angle parameters: {per_angle_params}")
 
@@ -709,7 +719,7 @@ class CMCCoordinator:
             min_shard_size=min_shard_size,
         )
 
-    def _get_mcmc_config(self) -> Dict[str, Any]:
+    def _get_mcmc_config(self) -> dict[str, Any]:
         """Extract MCMC configuration parameters.
 
         Returns
@@ -731,9 +741,9 @@ class CMCCoordinator:
 
     def _basic_validation(
         self,
-        combined_posterior: Dict[str, Any],
+        combined_posterior: dict[str, Any],
         shard_results: list,
-    ) -> tuple[bool, Dict[str, Any]]:
+    ) -> tuple[bool, dict[str, Any]]:
         """Perform basic validation of CMC results.
 
         This is a placeholder for full validation (Task Group 10).
@@ -774,14 +784,14 @@ class CMCCoordinator:
 
     def _create_mcmc_result(
         self,
-        combined_posterior: Dict[str, Any],
+        combined_posterior: dict[str, Any],
         shard_results: list,
         num_shards: int,
         combination_method: str,
         combination_time: float,
-        validation_diagnostics: Dict[str, Any],
+        validation_diagnostics: dict[str, Any],
         analysis_mode: str,
-        mcmc_config: Dict[str, Any],
+        mcmc_config: dict[str, Any],
     ) -> MCMCResult:
         """Package results into extended MCMCResult.
 

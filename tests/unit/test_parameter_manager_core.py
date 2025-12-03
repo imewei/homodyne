@@ -63,10 +63,8 @@ See Also:
 - homodyne/config/types.py: Parameter name mappings and constants
 """
 
-import pytest
 import numpy as np
-from typing import Any, Dict, List
-from unittest.mock import Mock, patch
+import pytest
 
 from homodyne.config.parameter_manager import ParameterManager
 from homodyne.config.types import (
@@ -75,7 +73,6 @@ from homodyne.config.types import (
     STATIC_PARAM_NAMES,
     BoundDict,
 )
-
 
 # ==============================================================================
 # Core Parameter Manager Tests (from test_parameter_manager.py)

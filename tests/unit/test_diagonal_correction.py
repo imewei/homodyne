@@ -14,10 +14,9 @@ Critical Requirements:
 4. Integration with all optimization methods must be verified
 """
 
-import pytest
 import numpy as np
-from numpy.testing import assert_array_almost_equal, assert_allclose
-import warnings
+import pytest
+from numpy.testing import assert_allclose
 
 # JAX imports
 try:
@@ -32,7 +31,6 @@ except ImportError:
 
 # Import functions under test
 from homodyne.core.jax_backend import apply_diagonal_correction
-
 
 # ============================================================================
 # Fixtures
@@ -543,7 +541,8 @@ class TestDiagonalCorrectionRegression:
 # ============================================================================
 
 try:
-    from hypothesis import given, strategies as st, settings
+    from hypothesis import given, settings
+    from hypothesis import strategies as st
     from hypothesis.extra.numpy import arrays
 
     HYPOTHESIS_AVAILABLE = True
@@ -608,9 +607,9 @@ try:
             for i in range(size):
                 for j in range(size):
                     if i != j:
-                        assert (
-                            corrected[i, j] == matrix_jax[i, j]
-                        ), f"Off-diagonal element [{i},{j}] changed"
+                        assert corrected[i, j] == matrix_jax[i, j], (
+                            f"Off-diagonal element [{i},{j}] changed"
+                        )
 
         @given(
             size=st.integers(2, 100),

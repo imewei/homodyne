@@ -1,38 +1,38 @@
 Homodyne Documentation
 ======================
 
-**Version 2.3.0** - CPU-optimized JAX-first XPCS analysis for nonequilibrium soft matter systems
+**Version 2.4.1** - CPU-optimized JAX-first XPCS analysis for nonequilibrium soft matter systems
 
-.. admonition:: **BREAKING CHANGE in v2.3.0** - GPU Support Removed
+.. admonition:: **BREAKING CHANGES in v2.4.x**
    :class: warning
 
-   **CPU-Only Architecture** - All GPU acceleration support has been removed in v2.3.0
+   **v2.4.1 - CMC-Only MCMC Architecture**
 
-   * **Rationale**: Simplify maintenance, focus on reliable HPC CPU optimization
-   * **Impact**: Removed 9 GPU API functions, GPU examples, runtime modules
-   * **For GPU users**: Stay on v2.2.1 (last GPU-supporting version, available on PyPI)
-   * **For CPU users**: Upgrade to v2.3.0 (recommended, simpler, more reliable)
+   * **CMC mandatory**: All MCMC runs use Consensus Monte Carlo; NUTS auto-selection removed
+   * **Removed CLI flags**: ``--min-samples-cmc``, ``--memory-threshold-pct`` (deprecated)
+   * **Per-phi initialization**: Initial values from config or per-phi percentiles
+   * **Migration guide**: :doc:`migration/v3_cmc_only`
+
+   **v2.4.0 - Per-Angle Scaling Mandatory**
+
+   * **Breaking**: Legacy scalar ``per_angle_scaling=False`` removed
+   * **Impact**: 3 angles: 5 params → 9 params ``[c₀,c₁,c₂, o₀,o₁,o₂, D0,α,D_offset]``
+   * **Rationale**: Per-angle mode is physically correct for heterogeneous samples
+
+   **v2.3.0 - GPU Support Removed**
+
+   * **CPU-Only Architecture** - All GPU acceleration removed
+   * **For GPU users**: Stay on v2.2.1 (last GPU-supporting version)
    * **Migration guide**: :doc:`migration/v2.2-to-v2.3-gpu-removal`
 
-.. admonition:: New in v2.2.1
+.. admonition:: Previous Releases
    :class: note
 
-   **Parameter Expansion Fix** - Resolves silent optimization failures with per-angle scaling
+   **v2.2.1** - Parameter Expansion Fix for per-angle scaling silent failures
 
-   * **Critical fix**: Automatic parameter expansion (9 → 13 params for 3 angles)
-   * **Gradient validation**: Pre-optimization sanity checks prevent zero-gradient issues
-   * **Stratified least-squares**: Direct NLSQ integration with StratifiedResidualFunction
-   * **Performance**: 93.15% cost reduction, 113 function evaluations (vs 0 before fix)
+   **v2.2.0** - Angle-Stratified Chunking for large datasets
 
-.. admonition:: New in v2.2.0
-   :class: note
-
-   **Angle-Stratified Chunking** - Automatic fix for per-angle scaling on large datasets
-
-   * Automatic activation when ``per_angle_scaling=True`` AND ``n_points >= 100k``
-   * Zero regressions - 100% backward compatible
-   * Performance: <1% overhead, O(n^1.01) sub-linear scaling
-   * See :doc:`releases/v2.2-stratification-release-notes` for complete details
+   See :doc:`releases/v2.2-stratification-release-notes` for complete details
 
 .. image:: https://img.shields.io/badge/python-3.12+-blue.svg
    :target: https://www.python.org/downloads/
@@ -95,12 +95,14 @@ Documentation Sections
    :maxdepth: 2
    :caption: User Guide
 
+   user-guide/index
    user-guide/installation
    user-guide/quickstart
    user-guide/configuration
    user-guide/cli-usage
    user-guide/shell-completion
    user-guide/examples
+   user-guide/cmc_guide
 
 .. toctree::
    :maxdepth: 2
@@ -109,6 +111,7 @@ Documentation Sections
    api-reference/index
    api-reference/core
    api-reference/optimization
+   api-reference/cmc_api
    api-reference/data
    api-reference/device
    api-reference/config
@@ -135,12 +138,20 @@ Documentation Sections
    developer-guide/contributing
    developer-guide/code-quality
    developer-guide/performance
+   developer-guide/cmc_architecture
+   developer-guide/cmc_rng_and_initialization
 
 .. toctree::
    :maxdepth: 2
    :caption: Architecture
 
    architecture
+   architecture/cmc-dual-mode-strategy
+   architecture/cmc-decision-quick-reference
+   architecture/nlsq-least-squares-solution
+   architecture/nuts-chain-parallelization
+   architecture/nuts-chain-parallelization-quick-reference
+   architecture/ultra-think-nlsq-solution-20251106
 
 .. toctree::
    :maxdepth: 2
@@ -156,12 +167,67 @@ Documentation Sections
 
 .. toctree::
    :maxdepth: 2
+   :caption: Guides
+
+   guides/performance_tuning
+   guides/streaming_optimizer_usage
+   guides/readthedocs-setup
+   guides/readthedocs-troubleshooting
+
+.. toctree::
+   :maxdepth: 2
    :caption: Configuration Templates
 
    configuration-templates/index
    configuration-templates/master-template
    configuration-templates/static-isotropic
    configuration-templates/laminar-flow
+
+.. toctree::
+   :maxdepth: 2
+   :caption: Migration Guides
+
+   migration/v2.0-to-v2.1
+   migration/v2.2-to-v2.3-gpu-removal
+   migration/v2_to_v3_migration
+   migration/v3_cmc_migration
+   migration/v3_cmc_only
+
+.. toctree::
+   :maxdepth: 2
+   :caption: Performance
+
+   performance/onednn_benchmark_results
+   performance/v2.3-cpu-optimizations
+
+.. toctree::
+   :maxdepth: 2
+   :caption: Troubleshooting
+
+   troubleshooting/silent-failure-diagnosis
+   troubleshooting/cmc_troubleshooting
+   troubleshooting/gradient_imbalance_solution
+   troubleshooting/imshow-transpose-pitfalls
+   troubleshooting/nlsq-zero-iterations-investigation
+   troubleshooting/numerical-stability-mitigation-plan
+   troubleshooting/per_angle_scaling_guide
+   troubleshooting/shear_gradient_check_20251112
+   troubleshooting/stratification-nlsq-incompatibility-analysis
+
+.. toctree::
+   :maxdepth: 2
+   :caption: Testing
+
+   testing/RELEASE_NOTES_v2.1.0_TEST_STATUS
+   testing/test_fixing_final_report
+   testing/v2.1.1_test_fixes_tracking
+
+.. toctree::
+   :maxdepth: 2
+   :caption: Refactoring Notes
+   :hidden:
+
+   refactor/mcmc-cmc-only-prototype
 
 .. toctree::
    :maxdepth: 2

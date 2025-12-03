@@ -20,7 +20,6 @@ Output:
 """
 
 import time
-from pathlib import Path
 
 import numpy as np
 
@@ -38,9 +37,9 @@ def run_benchmark(enable_onednn: bool, num_iterations: int = 5) -> dict:
     Returns:
         Benchmark results with timing information
     """
-    print(f"\n{'='*60}")
+    print(f"\n{'=' * 60}")
     print(f"Benchmarking with oneDNN: {enable_onednn}")
-    print('='*60)
+    print("=" * 60)
 
     # Configure CPU with oneDNN setting
     config = configure_cpu_hpc(
@@ -96,11 +95,7 @@ def run_benchmark(enable_onednn: bool, num_iterations: int = 5) -> dict:
         # Angular dependence
         phi_reshaped = phi[:, None, None]
         phase = 0.5 / jnp.pi * 0.01 * 1.0 * gamma_diff * jnp.cos(phi_reshaped)
-        sinc_term = jnp.where(
-            jnp.abs(phase) > 1e-10,
-            jnp.sin(phase) / phase,
-            1.0
-        )
+        sinc_term = jnp.where(jnp.abs(phase) > 1e-10, jnp.sin(phase) / phase, 1.0)
         g1_shear = sinc_term**2
 
         # Total g1
@@ -132,14 +127,14 @@ def run_benchmark(enable_onednn: bool, num_iterations: int = 5) -> dict:
 
         elapsed = time.perf_counter() - start_time
         results["timings"].append(elapsed)
-        print(f"  Iteration {i+1}/{num_iterations}: {elapsed:.4f}s")
+        print(f"  Iteration {i + 1}/{num_iterations}: {elapsed:.4f}s")
 
     # Calculate statistics
     results["mean_time"] = np.mean(results["timings"])
     results["std_time"] = np.std(results["timings"])
     results["min_time"] = np.min(results["timings"])
 
-    print(f"\nResults:")
+    print("\nResults:")
     print(f"  Mean time: {results['mean_time']:.4f}s ± {results['std_time']:.4f}s")
     print(f"  Best time: {results['min_time']:.4f}s")
 
@@ -148,13 +143,13 @@ def run_benchmark(enable_onednn: bool, num_iterations: int = 5) -> dict:
 
 def main():
     """Main benchmark function."""
-    print("\n" + "="*60)
+    print("\n" + "=" * 60)
     print(" Intel oneDNN Performance Benchmark for XPCS Analysis")
-    print("="*60)
+    print("=" * 60)
 
     # Detect CPU
     cpu_info = detect_cpu_info()
-    print(f"\nCPU Information:")
+    print("\nCPU Information:")
     print(f"  Brand: {cpu_info.get('cpu_brand', 'Unknown')}")
     print(f"  Physical cores: {cpu_info['physical_cores']}")
     print(f"  Logical cores: {cpu_info['logical_cores']}")
@@ -167,9 +162,9 @@ def main():
         print("   Exiting benchmark.")
         return
 
-    print("\n" + "="*60)
+    print("\n" + "=" * 60)
     print("Running benchmarks (this may take a few minutes)...")
-    print("="*60)
+    print("=" * 60)
 
     # Run without oneDNN
     results_without = run_benchmark(enable_onednn=False, num_iterations=5)
@@ -178,26 +173,34 @@ def main():
     results_with = run_benchmark(enable_onednn=True, num_iterations=5)
 
     # Compare results
-    print("\n" + "="*60)
+    print("\n" + "=" * 60)
     print("COMPARISON")
-    print("="*60)
+    print("=" * 60)
 
     speedup = results_without["mean_time"] / results_with["mean_time"]
-    improvement_pct = (1 - results_with["mean_time"] / results_without["mean_time"]) * 100
+    improvement_pct = (
+        1 - results_with["mean_time"] / results_without["mean_time"]
+    ) * 100
 
-    print(f"\nWithout oneDNN: {results_without['mean_time']:.4f}s ± {results_without['std_time']:.4f}s")
-    print(f"With oneDNN:    {results_with['mean_time']:.4f}s ± {results_with['std_time']:.4f}s")
+    print(
+        f"\nWithout oneDNN: {results_without['mean_time']:.4f}s ± {results_without['std_time']:.4f}s"
+    )
+    print(
+        f"With oneDNN:    {results_with['mean_time']:.4f}s ± {results_with['std_time']:.4f}s"
+    )
     print(f"\nSpeedup:        {speedup:.3f}x")
     print(f"Improvement:    {improvement_pct:+.2f}%")
 
     # Recommendation
-    print("\n" + "="*60)
+    print("\n" + "=" * 60)
     print("RECOMMENDATION")
-    print("="*60)
+    print("=" * 60)
 
     if improvement_pct > 10:
         print("\n✅ ENABLE oneDNN")
-        print(f"   Significant performance improvement detected ({improvement_pct:+.2f}%)")
+        print(
+            f"   Significant performance improvement detected ({improvement_pct:+.2f}%)"
+        )
         print("   Set enable_onednn=True in configure_cpu_hpc()")
     elif improvement_pct > 5:
         print("\n⚠️  CONSIDER oneDNN")
@@ -218,9 +221,9 @@ def main():
     print("  Expected improvement for XPCS: minimal (< 5%)")
     print("  Your specific results may vary based on dataset characteristics")
 
-    print("\n" + "="*60)
+    print("\n" + "=" * 60)
     print("Benchmark completed!")
-    print("="*60)
+    print("=" * 60)
 
 
 if __name__ == "__main__":

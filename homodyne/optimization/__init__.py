@@ -33,9 +33,13 @@ except ImportError as e:
 
 # Handle MCMC imports with intelligent fallback
 try:
-    from homodyne.optimization.mcmc import BLACKJAX_AVAILABLE
+    from homodyne.optimization.mcmc import (
+        BLACKJAX_AVAILABLE,
+        NUMPYRO_AVAILABLE,
+        MCMCResult,
+        fit_mcmc_jax,
+    )
     from homodyne.optimization.mcmc import JAX_AVAILABLE as MCMC_JAX_AVAILABLE
-    from homodyne.optimization.mcmc import NUMPYRO_AVAILABLE, MCMCResult, fit_mcmc_jax
 
     MCMC_AVAILABLE = True
 except ImportError as e:

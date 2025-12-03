@@ -22,13 +22,11 @@ See docs/migration/v2.0-to-v2.1.md for upgrade details.
 """
 
 import logging
+
 from homodyne.device.config import HardwareConfig, should_use_cmc
 
 # Configure logging to see INFO level messages
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(name)s - %(levelname)s - %(message)s'
-)
+logging.basicConfig(level=logging.INFO, format="%(name)s - %(levelname)s - %(message)s")
 
 # Create a mock hardware configuration (typical workstation)
 hardware_config = HardwareConfig(
@@ -46,7 +44,7 @@ hardware_config = HardwareConfig(
 print("=" * 80)
 print("MCMC Automatic Selection Demonstration")
 print("=" * 80)
-print(f"\nHardware Configuration:")
+print("\nHardware Configuration:")
 print(f"  Platform: {hardware_config.platform}")
 print(f"  Memory: {hardware_config.memory_per_device_gb:.1f} GB")
 print(f"  CPU Cores: {hardware_config.cores_per_node}")

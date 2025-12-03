@@ -30,9 +30,9 @@ from homodyne.core.jax_backend import (
     compute_g1_diffusion_jax,
     compute_g1_shear,
     compute_g2_scaled,
+    residuals_jax,
 )
 from homodyne.core.jax_backend import jax_available as BACKEND_JAX_AVAILABLE
-from homodyne.core.jax_backend import residuals_jax
 
 
 @pytest.mark.unit
@@ -251,9 +251,9 @@ class TestJAXBackendCore:
 
         # Imperfect fit should have positive chi-squared
         assert chi2_imperfect > 0, "Imperfect fit should have positive chi-squared"
-        assert (
-            chi2_imperfect > chi2_perfect
-        ), "Imperfect fit should have higher chi-squared"
+        assert chi2_imperfect > chi2_perfect, (
+            "Imperfect fit should have higher chi-squared"
+        )
 
     def test_jax_jit_compilation(self, jax_backend):
         """Test JAX JIT compilation works correctly."""
@@ -412,9 +412,9 @@ class TestJAXBackendProperties:
         result = compute_g1_diffusion_jax(t1_base, t2_varying, q, D)
 
         # Should be monotonically decreasing
-        assert jnp.all(
-            result[:-1] >= result[1:]
-        ), "g1_diffusion should decrease with tau"
+        assert jnp.all(result[:-1] >= result[1:]), (
+            "g1_diffusion should decrease with tau"
+        )
 
     @pytest.mark.requires_jax
     def test_c2_model_scaling(self, jax_backend):
@@ -476,9 +476,9 @@ class TestJAXBackendProperties:
 
         # Mean residual should be very close to zero
         mean_residual = jnp.mean(residuals)
-        assert (
-            abs(mean_residual) < 1e-10
-        ), "Mean residual should be zero for perfect fit"
+        assert abs(mean_residual) < 1e-10, (
+            "Mean residual should be zero for perfect fit"
+        )
 
 
 @pytest.mark.unit
@@ -620,9 +620,9 @@ class TestParameterDependency:
 
         # Verify gradient is non-zero
         gradient_norm = jnp.linalg.norm(gradient)
-        assert (
-            gradient_norm > 1e-6
-        ), f"Gradient norm {gradient_norm:.6e} is too small (should be >1e-6)"
+        assert gradient_norm > 1e-6, (
+            f"Gradient norm {gradient_norm:.6e} is too small (should be >1e-6)"
+        )
         assert jnp.all(jnp.isfinite(gradient)), "Gradient must be finite"
 
     # Note: More detailed parameter sensitivity tests with ACTUAL config parameters

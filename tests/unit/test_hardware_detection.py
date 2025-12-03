@@ -14,13 +14,9 @@ Test Coverage:
 Note: should_use_cmc() tests removed in v3.0 (CMC-only architecture)
 """
 
-import os
-import unittest
-from unittest.mock import MagicMock, Mock, patch, mock_open
-
 import pytest
 
-from homodyne.device.config import HardwareConfig, detect_hardware
+from homodyne.device.config import HardwareConfig
 
 
 class TestHardwareConfig:

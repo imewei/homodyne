@@ -18,7 +18,6 @@ homodyne-specific state (batch statistics, recovery actions, best parameters).
 import hashlib
 import time
 from pathlib import Path
-from typing import Any
 
 import h5py
 import numpy as np
@@ -262,7 +261,7 @@ class CheckpointManager:
                 computed_checksum = self._compute_checksum(optimizer_bytes)
                 if computed_checksum != stored_checksum:
                     raise NLSQCheckpointError(
-                        f"Checkpoint checksum mismatch. File may be corrupted.",
+                        "Checkpoint checksum mismatch. File may be corrupted.",
                         error_context={
                             "checkpoint_path": str(checkpoint_path),
                             "stored_checksum": stored_checksum,

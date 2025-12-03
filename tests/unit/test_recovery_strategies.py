@@ -10,16 +10,15 @@ This test suite covers:
 """
 
 import numpy as np
-import pytest
 
-from homodyne.optimization.recovery_strategies import (
-    ERROR_RECOVERY_STRATEGIES,
-    RecoveryStrategyApplicator,
-)
 from homodyne.optimization.exceptions import (
     NLSQConvergenceError,
     NLSQNumericalError,
     NLSQOptimizationError,
+)
+from homodyne.optimization.recovery_strategies import (
+    ERROR_RECOVERY_STRATEGIES,
+    RecoveryStrategyApplicator,
 )
 
 

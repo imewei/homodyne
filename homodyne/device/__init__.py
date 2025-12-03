@@ -20,7 +20,6 @@ Usage:
 """
 
 import logging
-import os
 
 # Suppress JAX backend warnings and messages (CPU-only in v2.3.0)
 # - TPU backend warnings (not available on standard systems)
@@ -32,13 +31,13 @@ import os
 logging.getLogger("jax._src.xla_bridge").setLevel(logging.ERROR)
 logging.getLogger("jax._src.compiler").setLevel(logging.ERROR)
 
-from homodyne.utils.logging import get_logger
+from homodyne.utils.logging import get_logger  # noqa: E402 - After logging config
 
 logger = get_logger(__name__)
 
-# Import CPU-specific module
+# Import CPU-specific module (re-exported for public API)
 try:
-    from homodyne.device.cpu import (
+    from homodyne.device.cpu import (  # noqa: F401
         benchmark_cpu_performance,
         configure_cpu_hpc,
         detect_cpu_info,

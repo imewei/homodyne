@@ -45,12 +45,13 @@ Version: 2.2.0
 """
 
 import logging
-from typing import Optional, Dict, Any, List
-import numpy as np
+from typing import Any
+
 import jax
 import jax.numpy as jnp
+import numpy as np
 
-from homodyne.core.physics_nlsq import compute_g2_scaled, apply_diagonal_correction
+from homodyne.core.physics_nlsq import apply_diagonal_correction, compute_g2_scaled
 
 
 class StratifiedResidualFunction:
@@ -78,8 +79,8 @@ class StratifiedResidualFunction:
         self,
         stratified_data: Any,
         per_angle_scaling: bool,
-        physical_param_names: List[str],
-        logger: Optional[logging.Logger] = None,
+        physical_param_names: list[str],
+        logger: logging.Logger | None = None,
     ):
         """
         Initialize the stratified residual function.
@@ -173,8 +174,8 @@ class StratifiedResidualFunction:
         for chunk in self.chunks:
             metadata = {
                 "phi_unique": global_phi_unique,  # Same for all chunks
-                "t1_unique": global_t1_unique,    # Same for all chunks
-                "t2_unique": global_t2_unique,    # Same for all chunks
+                "t1_unique": global_t1_unique,  # Same for all chunks
+                "t2_unique": global_t2_unique,  # Same for all chunks
             }
             self.chunk_metadata.append(metadata)
 
@@ -201,7 +202,7 @@ class StratifiedResidualFunction:
         t2_unique: jnp.ndarray,
         q: float,
         L: float,
-        dt: Optional[float],
+        dt: float | None,
     ) -> jnp.ndarray:
         """
         Raw chunk residual computation (JIT-compiled).
@@ -407,7 +408,7 @@ class StratifiedResidualFunction:
         self.logger.info("✓ Chunk structure validation passed")
         return True
 
-    def get_diagnostics(self) -> Dict[str, Any]:
+    def get_diagnostics(self) -> dict[str, Any]:
         """
         Get diagnostic information about the residual function.
 
@@ -458,8 +459,8 @@ class StratifiedResidualFunction:
 def create_stratified_residual_function(
     stratified_data: Any,
     per_angle_scaling: bool,
-    physical_param_names: List[str],
-    logger: Optional[logging.Logger] = None,
+    physical_param_names: list[str],
+    logger: logging.Logger | None = None,
     validate: bool = True,
 ) -> StratifiedResidualFunction:
     """

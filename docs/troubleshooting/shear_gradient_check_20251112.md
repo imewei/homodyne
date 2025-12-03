@@ -1,6 +1,7 @@
 # Shear Gradient Check (2025-11-12)
 
-Data source: `/home/wei/Documents/Projects/data/C020/homodyne_results/nlsq` from the 2025-11-12 laminar-flow run. Script executed from repo root:
+Data source: `/home/wei/Documents/Projects/data/C020/homodyne_results/nlsq` from the
+2025-11-12 laminar-flow run. Script executed from repo root:
 
 ```python
 import json
@@ -47,5 +48,6 @@ gamma_dot_t_offset value=+0.000000e+00 grad=+3.469348e+08
 phi0               value=-4.529225e-02 grad=-4.363216e+01
 ```
 
-All three shear parameters report multi-order-of-magnitude larger gradients than the diffusion terms, confirming the optimizer stopped while the cost function still has steep descent directions in the shear subspace.
-
+All three shear parameters report multi-order-of-magnitude larger gradients than the
+diffusion terms, confirming the optimizer stopped while the cost function still has
+steep descent directions in the shear subspace.

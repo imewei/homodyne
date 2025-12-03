@@ -1,42 +1,58 @@
-# Homodyne v2.3: CPU-Optimized JAX-First XPCS Analysis
+# Homodyne v2.4: CPU-Optimized JAX-First XPCS Analysis
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Python](https://img.shields.io/badge/Python-3.12%2B-blue)](https://www.python.org/)
-[![Version](https://img.shields.io/badge/Version-2.3.0-green.svg)](#)
+[![Version](https://img.shields.io/badge/Version-2.4.1-green.svg)](#)
 [![Documentation](https://img.shields.io/badge/docs-sphinx-blue.svg)](https://homodyne.readthedocs.io)
 [![ReadTheDocs](https://readthedocs.org/projects/homodyne/badge/?version=latest)](https://homodyne.readthedocs.io/en/latest/)
 [![GitHub Actions](https://github.com/imewei/homodyne/actions/workflows/docs.yml/badge.svg)](https://github.com/imewei/homodyne/actions/workflows/docs.yml)
 [![DOI](https://zenodo.org/badge/DOI/10.1073/pnas.2401162121.svg)](https://doi.org/10.1073/pnas.2401162121)
 
-## ⚠️ **BREAKING CHANGE: v2.3.0 - GPU Support Removed**
+## ⚠️ **BREAKING CHANGES: v2.4.x**
 
-**v2.3.0 transitions to CPU-only architecture** - All GPU acceleration support has been removed.
+### v2.4.1 - CMC-Only MCMC Architecture
+
+**MCMC now always uses Consensus Monte Carlo (CMC)** - NUTS auto-selection removed.
 
 **Key Changes:**
+
+- **CMC mandatory**: All MCMC runs use CMC; single-shard runs still use NUTS internally
+- **Removed CLI flags**: `--min-samples-cmc`, `--memory-threshold-pct` (deprecated)
+- **Per-phi initialization**: Initial values derived from config or per-phi percentiles
+- **Migration guide**: See [CMC-Only Migration](docs/migration/v3_cmc_only.md)
+
+### v2.4.0 - Per-Angle Scaling Mandatory
+
+**Per-angle scaling is now mandatory** - Legacy scalar `per_angle_scaling=False` removed.
+
+**Key Changes:**
+
+- **Breaking**: Remove `per_angle_scaling` parameter or set to `True`
+- **Impact**: 3 angles: 5 params → 9 params `[c₀,c₁,c₂, o₀,o₁,o₂, D0,α,D_offset]`
+- **Rationale**: Per-angle mode is physically correct for heterogeneous samples
+
+### v2.3.0 - GPU Support Removed
+
+**v2.3.0 transitions to CPU-only architecture** - All GPU acceleration support has been
+removed.
+
+**Key Changes:**
+
 - **Rationale**: Simplify maintenance, focus on reliable HPC CPU optimization
-- **Impact**: Removed 9 GPU API functions, GPU-specific CLI flags, GPU examples, and runtime modules
+- **Impact**: Removed 9 GPU API functions, GPU-specific CLI flags, GPU examples
 - **For GPU users**: Stay on **v2.2.1** (last GPU-supporting version, available on PyPI)
-- **For CPU users**: Upgrade to **v2.3.0** (recommended, simpler, more reliable)
-- **Migration guide**: See [v2.2-to-v2.3 GPU Removal Guide](docs/migration/v2.2-to-v2.3-gpu-removal.md)
-
-**What's Removed:**
-- CLI flags: `--force-cpu`, `--gpu-memory-fraction`
-- Config keys: `gpu_memory_fraction`, `force_cpu`, `cuda_device_id`
-- 9 GPU API functions from `homodyne.device`
-- All GPU examples and runtime modules
-
-**What's New:**
-- CPU-optimized JAX 0.8.0 for all platforms (Linux, macOS, Windows)
-- Enhanced multi-core CPU optimization for HPC clusters (36/128-core nodes)
-- Simplified installation and maintenance
-- Consistent CPU-only behavior across all platforms
+- **Migration guide**: See
+  [v2.2-to-v2.3 GPU Removal Guide](docs/migration/v2.2-to-v2.3-gpu-removal.md)
 
 ## 🎉 v2.2.1 Critical Fix
 
-**Parameter Expansion for Per-Angle Scaling** - Resolves silent NLSQ optimization failures
+**Parameter Expansion for Per-Angle Scaling** - Resolves silent NLSQ optimization
+failures
 
 Key fixes:
-- **Automatic parameter expansion**: 9 → 13 parameters for 3 angles (7 physical + 3×2 scaling)
+
+- **Automatic parameter expansion**: 9 → 13 parameters for 3 angles (7 physical + 3×2
+  scaling)
 - **Gradient sanity check**: Pre-optimization validation detects zero-gradient issues
 - **Stratified least-squares**: Direct NLSQ integration with StratifiedResidualFunction
 - **Performance**: 93.15% cost reduction, 113 function evaluations (vs 0 before fix)
@@ -46,13 +62,17 @@ Key fixes:
 **Angle-Stratified Chunking** - Automatic fix for per-angle scaling on large datasets
 
 Key improvements:
-- **Automatic activation**: No configuration required - activates when `per_angle_scaling=True` AND `n_points>=100k`
-- **Zero regressions**: 100% backward compatible with existing configurations
-- **Performance**: <1% overhead (0.15s for 3M points), sub-linear O(n^1.01) scaling
-- **Reliability**: Fixes silent optimization failures caused by arbitrary chunking
-- **Fallbacks**: Sequential per-angle optimization for extreme angle imbalance (>5.0 ratio)
 
-See [v2.2 Release Notes](docs/releases/v2.2-stratification-release-notes.md) for complete details.
+- **Automatic activation**: No configuration required - activates when
+  `per_angle_scaling=True` AND `n_points>=100k`
+- **Zero regressions**: 100% backward compatible with existing configurations
+- **Performance**: \<1% overhead (0.15s for 3M points), sub-linear O(n^1.01) scaling
+- **Reliability**: Fixes silent optimization failures caused by arbitrary chunking
+- **Fallbacks**: Sequential per-angle optimization for extreme angle imbalance (>5.0
+  ratio)
+
+See [v2.2 Release Notes](docs/releases/v2.2-stratification-release-notes.md) for
+complete details.
 
 **High-performance JAX-first package for X-ray Photon Correlation Spectroscopy (XPCS)
 analysis**, implementing the theoretical framework from
@@ -60,7 +80,10 @@ analysis**, implementing the theoretical framework from
 transport properties in flowing soft matter systems through time-dependent intensity
 correlation functions.
 
-📚 **[Read the Full Documentation](https://homodyne.readthedocs.io)** | **[Quick Start Guide](https://homodyne.readthedocs.io/en/latest/user-guide/quickstart.html)** | **[API Reference](https://homodyne.readthedocs.io/en/latest/api-reference/index.html)**
+📚 **[Read the Full Documentation](https://homodyne.readthedocs.io)** |
+**[Quick Start Guide](https://homodyne.readthedocs.io/en/latest/user-guide/quickstart.html)**
+|
+**[API Reference](https://homodyne.readthedocs.io/en/latest/api-reference/index.html)**
 
 A completely rebuilt homodyne package with JAX-first architecture, optimized for HPC and
 supercomputer environments.
@@ -109,24 +132,22 @@ compatibility** for all validated components:
 
 ### Consensus Monte Carlo (CMC) for Large-Scale Bayesian Inference
 
-**New in v2.0**: Scalable Bayesian uncertainty quantification with **dual-criteria automatic selection**
+**v2.4.1+**: CMC-only architecture - all MCMC runs use Consensus Monte Carlo.
 
-**Automatic NUTS/CMC Selection** (v2.1.0 - October 2025):
-- **Sample-based parallelism**: Triggers when `num_samples >= 15` (e.g., 20+ phi angles)
-  - Optimized for multi-core CPU workloads (14+ cores)
-  - Example: 20 samples on 14-core CPU → ~1.4x speedup via CMC
-- **Memory management**: Triggers when `memory usage > 30%` of available memory
-  - Conservative OOM prevention for large datasets
-  - Example: 100M+ points → automatic data sharding
-- **Simplified CLI**: Only `--method mcmc` needed (automatic NUTS/CMC selection)
-- **No initialization required**: Physics-informed priors from `ParameterSpace`
+**CMC-Only Architecture** (v2.4.1 - December 2025):
+
+- **CMC mandatory**: All MCMC runs use CMC with automatic sharding
+- **Single-shard NUTS**: Small datasets run as single-shard CMC (NUTS internally)
+- **Per-phi initialization**: Initial values from config or per-phi percentiles
+- **Simplified CLI**: Only `--method mcmc` needed (CMC always used)
 
 **Key Features:**
-- **Dual-criteria OR logic**: Triggers on EITHER many samples OR large memory footprint
+
 - **Hardware-adaptive**: Automatic backend selection (pjit/multiprocessing/PBS/Slurm)
 - **Linear speedup**: Perfect parallelization across CPU cores or cluster nodes
 - **Memory efficient**: Each shard fits in available memory with 40% safety margin
-- **Production-ready**: Comprehensive validation, fault tolerance, and convergence diagnostics
+- **Production-ready**: Comprehensive validation, fault tolerance, and convergence
+  diagnostics
 
 **Quick Example:**
 
@@ -134,52 +155,53 @@ compatibility** for all validated components:
 from homodyne.optimization.mcmc import fit_mcmc_jax
 from homodyne.config.parameter_space import ParameterSpace
 
-# Example 1: Many samples (23 angles) → CMC for parallelism
+# All MCMC runs use CMC (v2.4.1+)
 parameter_space = ParameterSpace.from_config(config_dict)
 result = fit_mcmc_jax(
     data=data['c2'],
-    t1=data['t1'], t2=data['t2'], phi=data['phi'],  # 23 angles
+    t1=data['t1'], t2=data['t2'], phi=data['phi'],
     q=0.0054, L=2000000,
-    analysis_mode='static_isotropic',
+    analysis_mode='static',
     parameter_space=parameter_space,
     initial_values={'D0': 10000.0, 'alpha': 0.8, 'D_offset': 100.0},
-    # Automatic NUTS/CMC selection: ≥15 samples OR ≥30% memory → CMC
 )
 
-# Example 2: Few samples, huge dataset → CMC for memory
-result = fit_mcmc_jax(
-    data=huge_data['c2'],  # 100M+ points
-    t1=huge_data['t1'], t2=huge_data['t2'], phi=huge_data['phi'],  # 2 angles
-    parameter_space=parameter_space,
-    # Automatic selection: 2 samples < 15 but memory > 30% → CMC for OOM prevention
-)
-
-# Check which method was used
-if result.is_cmc_result():
-    print(f"✓ CMC used with {result.num_shards} shards")
-    print(f"  Reason: {result.cmc_trigger_reason}")  # 'parallelism' or 'memory'
+# CMC is always used
+print(f"✓ CMC used with {result.num_shards} shards")
 ```
 
 **Performance:**
 
-| Scenario | Samples | Data Size | Method | Runtime | Speedup |
-|----------|---------|-----------|--------|---------|---------|
-| Multi-core CPU (14 cores) | 23 | 50M | CMC | ~40 min | 1.4x |
-| Multi-core CPU (14 cores) | 23 | 50M | NUTS | ~60 min | baseline |
-| HPC CPU (36 cores) | 5 | 200M | CMC | ~2 hours | 1.5x |
-| HPC CPU (36 cores) | 5 | 200M | NUTS | ~3 hours | baseline |
+| Scenario | Shards | Data Size | Runtime | Speedup |
+|----------|--------|-----------|---------|---------|
+| Multi-core CPU (14 cores) | 4 | 50M | ~40 min | 1.4x |
+| HPC CPU (36 cores) | 8 | 200M | ~2 hours | 1.5x |
+| Single-shard (small data) | 1 | 5M | ~10 min | baseline |
 
 **Documentation:**
-- Architecture Guide: [`docs/architecture/cmc-dual-mode-strategy.md`](docs/architecture/cmc-dual-mode-strategy.md)
-- Quick Reference: [`docs/architecture/cmc-decision-quick-reference.md`](docs/architecture/cmc-decision-quick-reference.md)
-- User Guide: [`docs/advanced-topics/cmc-large-datasets.rst`](docs/advanced-topics/cmc-large-datasets.rst)
-- MCMC Guide: [`docs/advanced-topics/mcmc-uncertainty.rst`](docs/advanced-topics/mcmc-uncertainty.rst)
+
+- Architecture Guide:
+  [`docs/architecture/cmc-dual-mode-strategy.md`](docs/architecture/cmc-dual-mode-strategy.md)
+- Quick Reference:
+  [`docs/architecture/cmc-decision-quick-reference.md`](docs/architecture/cmc-decision-quick-reference.md)
+- User Guide:
+  [`docs/advanced-topics/cmc-large-datasets.rst`](docs/advanced-topics/cmc-large-datasets.rst)
+- MCMC Guide:
+  [`docs/advanced-topics/mcmc-uncertainty.rst`](docs/advanced-topics/mcmc-uncertainty.rst)
 
 ### Result Artifacts & Diagnostics (v2.3.1)
 
-- `fitted_data.npz` now stores both the **solver-evaluated** surface (`c2_solver_scaled`) and the legacy **post-hoc** surface, plus the original per-angle contrast/offset pairs (`per_angle_scaling_solver`). Existing consumers that rely on `c2_theoretical_scaled` continue to work unchanged.
-- Plotting defaults to the solver surface and supports adaptive color scaling via `output.plots.color_scale` (`mode: legacy|adaptive`, optional percentiles/fixed ranges). Set `output.plots.fit_surface` to `"posthoc"` to retain the previous behavior or pin `[1.0, 1.5]` via `pin_legacy_range: true`.
-- Use `examples/overlay_solver_vs_posthoc.py` (or the helper in `homodyne.viz.diagnostics`) to print baseline oscillation stats and overlay solver/post-hoc diagonals for any saved `fitted_data.npz`.
+- `fitted_data.npz` now stores both the **solver-evaluated** surface
+  (`c2_solver_scaled`) and the legacy **post-hoc** surface, plus the original per-angle
+  contrast/offset pairs (`per_angle_scaling_solver`). Existing consumers that rely on
+  `c2_theoretical_scaled` continue to work unchanged.
+- Plotting defaults to the solver surface and supports adaptive color scaling via
+  `output.plots.color_scale` (`mode: legacy|adaptive`, optional percentiles/fixed
+  ranges). Set `output.plots.fit_surface` to `"posthoc"` to retain the previous behavior
+  or pin `[1.0, 1.5]` via `pin_legacy_range: true`.
+- Use `examples/overlay_solver_vs_posthoc.py` (or the helper in
+  `homodyne.viz.diagnostics`) to print baseline oscillation stats and overlay
+  solver/post-hoc diagonals for any saved `fitted_data.npz`.
 
 ## Platform Support
 
@@ -205,6 +227,7 @@ pip install homodyne
 ```
 
 This installs Homodyne with CPU-optimized JAX 0.8.0, suitable for:
+
 - Development and prototyping
 - Datasets up to 100M points on multi-core CPUs
 - HPC clusters with 36-128 CPU cores
@@ -230,11 +253,13 @@ python -c "import jax; print('Devices:', jax.devices())"
 **GPU support removed in v2.3.0.** If you need GPU acceleration:
 
 1. **Stay on v2.2.1** (last GPU-supporting version):
+
    ```bash
    pip install homodyne==2.2.1
    ```
 
-2. **See migration guide**: [`docs/migration/v2.2-to-v2.3-gpu-removal.md`](docs/migration/v2.2-to-v2.3-gpu-removal.md)
+1. **See migration guide**:
+   [`docs/migration/v2.2-to-v2.3-gpu-removal.md`](docs/migration/v2.2-to-v2.3-gpu-removal.md)
 
 ### System Validation
 
@@ -386,7 +411,8 @@ The notebook covers:
 
 ## Shell Completion & CLI Tools
 
-Homodyne provides four CLI commands and intelligent shell completion for faster workflows.
+Homodyne provides four CLI commands and intelligent shell completion for faster
+workflows.
 
 ### Available Commands
 
@@ -407,7 +433,8 @@ homodyne-post-install --interactive
 homodyne-post-install --shell $(basename $SHELL)
 ```
 
-**Conda/Mamba users:** Completion auto-activates with your environment - no extra setup needed!
+**Conda/Mamba users:** Completion auto-activates with your environment - no extra setup
+needed!
 
 **uv/venv/virtualenv users:** Add activation to your shell RC file:
 
@@ -441,11 +468,13 @@ homodyne --method <TAB>        # Shows: nlsq, mcmc (v2.1.0: nuts/cmc removed)
 hm-nlsq --<TAB>                # Shows all available options
 ```
 
-**See documentation:** [Shell Completion Guide](https://homodyne.readthedocs.io/en/latest/user-guide/shell-completion.html)
+**See documentation:**
+[Shell Completion Guide](https://homodyne.readthedocs.io/en/latest/user-guide/shell-completion.html)
 
 ## XLA Configuration
 
-Homodyne includes automatic XLA_FLAGS configuration that optimizes JAX CPU device allocation for MCMC and NLSQ workflows.
+Homodyne includes automatic XLA_FLAGS configuration that optimizes JAX CPU device
+allocation for MCMC and NLSQ workflows.
 
 ### Quick Setup
 
@@ -460,12 +489,11 @@ homodyne-post-install --xla-mode mcmc  # Configure for MCMC (4 devices)
 
 ### Configuration Modes
 
-| Mode | Devices | Best For | Hardware |
-|------|---------|----------|----------|
-| **mcmc** | 4 | Multi-core workstations, parallel MCMC chains | 8-15 CPU cores |
-| **mcmc-hpc** | 8 | HPC clusters with many CPU cores | 36+ CPU cores |
-| **nlsq** | 1 | NLSQ-only workflows, memory-constrained systems | Any CPU |
-| **auto** | 2-8 | Automatic detection based on CPU core count | Auto-adaptive |
+| Mode | Devices | Best For | Hardware | |------|---------|----------|----------| |
+**mcmc** | 4 | Multi-core workstations, parallel MCMC chains | 8-15 CPU cores | |
+**mcmc-hpc** | 8 | HPC clusters with many CPU cores | 36+ CPU cores | | **nlsq** | 1 |
+NLSQ-only workflows, memory-constrained systems | Any CPU | | **auto** | 2-8 | Automatic
+detection based on CPU core count | Auto-adaptive |
 
 **Auto mode detection logic:**
 
@@ -496,10 +524,12 @@ homodyne-config-xla --show
 ### How It Works
 
 1. **Configuration Storage**: Your selected mode is saved to `~/.homodyne_xla_mode`
-2. **Automatic Activation**: XLA_FLAGS is set automatically when you activate your virtual environment
-3. **JAX Detection**: JAX automatically creates the configured number of CPU devices
+1. **Automatic Activation**: XLA_FLAGS is set automatically when you activate your
+   virtual environment
+1. **JAX Detection**: JAX automatically creates the configured number of CPU devices
 
 **Conda/Mamba** (automatic):
+
 ```bash
 conda activate myenv  # XLA_FLAGS auto-configured
 echo $XLA_FLAGS
@@ -507,6 +537,7 @@ echo $XLA_FLAGS
 ```
 
 **uv/venv/virtualenv** (requires shell RC update):
+
 ```bash
 # Add to ~/.bashrc or ~/.zshrc
 echo 'source $VIRTUAL_ENV/bin/homodyne-activate' >> ~/.bashrc
@@ -516,15 +547,15 @@ source ~/.bashrc
 ### Performance Impact
 
 | Workflow | Device Count | Hardware | Performance |
-|----------|--------------|----------|-------------|
-| MCMC (4 chains) | 4 devices | 14-core CPU | 1.4x speedup |
-| MCMC (8 chains) | 8 devices | 36-core HPC | 1.8x speedup |
-| NLSQ optimization | 1 device | Any CPU | Optimal (no overhead) |
-| Auto mode | 2-8 devices | Adapts to CPU | Automatic optimization |
+|----------|--------------|----------|-------------| | MCMC (4 chains) | 4 devices |
+14-core CPU | 1.4x speedup | | MCMC (8 chains) | 8 devices | 36-core HPC | 1.8x speedup
+| | NLSQ optimization | 1 device | Any CPU | Optimal (no overhead) | | Auto mode | 2-8
+devices | Adapts to CPU | Automatic optimization |
 
 ### Best Practices
 
 **For MCMC workflows:**
+
 ```bash
 homodyne-config-xla --mode mcmc      # Typical workstations
 homodyne-config-xla --mode mcmc-hpc  # HPC clusters (36+ cores)
@@ -532,12 +563,14 @@ homodyne --method mcmc --config config.yaml
 ```
 
 **For NLSQ workflows:**
+
 ```bash
 homodyne-config-xla --mode nlsq  # Optimal single-device performance
 homodyne --method nlsq --config config.yaml
 ```
 
 **For mixed workflows:**
+
 ```bash
 homodyne-config-xla --mode auto  # Adapts to hardware automatically
 ```
@@ -545,24 +578,28 @@ homodyne-config-xla --mode auto  # Adapts to hardware automatically
 ### Advanced Features
 
 **Manual override** (temporary):
+
 ```bash
 export XLA_FLAGS="--xla_force_host_platform_device_count=2"
 source venv/bin/activate  # Respects your manual setting
 ```
 
 **Per-environment configuration**:
+
 ```bash
 export HOMODYNE_XLA_MODE=nlsq  # Takes precedence over ~/.homodyne_xla_mode
 ```
 
 **Verbose mode**:
+
 ```bash
 export HOMODYNE_VERBOSE=1
 source venv/bin/activate
 # Output: [homodyne] XLA: auto mode → 6 devices (detected 20 CPU cores)
 ```
 
-**See documentation:** [XLA Configuration Guide](https://homodyne.readthedocs.io/en/latest/user-guide/shell-completion.html#xla-configuration-system)
+**See documentation:**
+[XLA Configuration Guide](https://homodyne.readthedocs.io/en/latest/user-guide/shell-completion.html#xla-configuration-system)
 
 ## Analysis Modes
 
@@ -585,36 +622,39 @@ source venv/bin/activate
 Default bounds for NLSQ optimization and MCMC priors (updated Nov 15, 2025):
 
 | Parameter | Min | Max | Units | Physical Meaning | Notes |
-|-----------|-----|-----|-------|------------------|-------|
-| **D0** | 1×10² | 1×10⁵ | Å²/s | Diffusion coefficient prefactor | Typical colloidal range |
-| **alpha** | -2.0 | 2.0 | - | Diffusion time exponent | Anomalous diffusion |
-| **D_offset** | -1×10⁵ | 1×10⁵ | Å²/s | Diffusion baseline correction | **Negative for jammed systems** |
-| **gamma_dot_t0** | 1×10⁻⁶ | 0.5 | s⁻¹ | Initial shear rate | Laminar flow only |
-| **beta** | -2.0 | 2.0 | - | Shear rate time exponent | Laminar flow only |
-| **gamma_dot_t_offset** | -0.1 | 0.1 | s⁻¹ | Shear rate baseline correction | Laminar flow only |
-| **phi0** | -10 | 10 | degrees | Initial flow angle | **Uses degrees, not radians** |
+|-----------|-----|-----|-------|------------------|-------| | **D0** | 1×10² | 1×10⁵ |
+Å²/s | Diffusion coefficient prefactor | Typical colloidal range | | **alpha** | -2.0 |
+2.0 | - | Diffusion time exponent | Anomalous diffusion | | **D_offset** | -1×10⁵ |
+1×10⁵ | Å²/s | Diffusion baseline correction | **Negative for jammed systems** | |
+**gamma_dot_t0** | 1×10⁻⁶ | 0.5 | s⁻¹ | Initial shear rate | Laminar flow only | |
+**beta** | -2.0 | 2.0 | - | Shear rate time exponent | Laminar flow only | |
+**gamma_dot_t_offset** | -0.1 | 0.1 | s⁻¹ | Shear rate baseline correction | Laminar
+flow only | | **phi0** | -10 | 10 | degrees | Initial flow angle | **Uses degrees, not
+radians** |
 
 ### Scaling Parameters
 
 | Parameter | Min | Max | Physical Meaning | Notes |
-|-----------|-----|-----|------------------|-------|
-| **contrast** | 0.0 | 1.0 | Visibility parameter | Homodyne detection efficiency |
-| **offset** | 0.5 | 1.5 | Baseline level | ±50% from theoretical g2=1.0 |
+|-----------|-----|-----|------------------|-------| | **contrast** | 0.0 | 1.0 |
+Visibility parameter | Homodyne detection efficiency | | **offset** | 0.5 | 1.5 |
+Baseline level | ±50% from theoretical g2=1.0 |
 
 ### Correlation Function Constraints
 
 Physics-enforced constraints applied during optimization:
 
-| Function | Min | Max | Notes |
-|----------|-----|-----|-------|
-| **g1 (c1)** | 0.0 | 1.0 | Normalized correlation function<br>Log-space clipping: `log(g1) ∈ [-700, 0]` |
-| **g2 (c2)** | 0.5 | 2.5 | Experimental range with headroom<br>Theoretical: g2 = 1 + contrast × g1² |
+| Function | Min | Max | Notes | |----------|-----|-----|-------| | **g1 (c1)** | 0.0 |
+1.0 | Normalized correlation function<br>Log-space clipping: `log(g1) ∈ [-700, 0]` | |
+**g2 (c2)** | 0.5 | 2.5 | Experimental range with headroom<br>Theoretical: g2 = 1 +
+contrast × g1² |
 
 **Important Notes:**
+
 - **D_offset** can be negative for arrested/jammed systems (caging, jamming transitions)
 - **phi0** uses degrees throughout the codebase (templates, physics modules)
 - **gamma_dot_t_offset** allows negative values (baseline correction)
-- All bounds align with template files: `homodyne_static.yaml`, `homodyne_laminar_flow.yaml`
+- All bounds align with template files: `homodyne_static.yaml`,
+  `homodyne_laminar_flow.yaml`
 - User configs override these default bounds (no breaking changes)
 
 ## Configuration
@@ -715,46 +755,47 @@ performance:
 
 ## Pipeline Architecture: CPU-Optimized (v2.3.0+)
 
-The NLSQ analysis pipeline uses **JAX-accelerated CPU processing** for all operations, optimized for multi-core systems and HPC clusters.
+The NLSQ analysis pipeline uses **JAX-accelerated CPU processing** for all operations,
+optimized for multi-core systems and HPC clusters.
 
 ### Computational Stages
 
 **All stages run on CPU** with JAX JIT compilation:
 
 1. **Configuration Loading**: YAML parsing with PyYAML (\<1s)
-2. **Data Loading**: HDF5 file reading with h5py + NumPy (2-3s for cached data)
-3. **Data Validation**: Statistical quality checks with NumPy + SciPy (\<1s)
-4. **Angle Filtering**: Array slicing and indexing (\<1ms)
-5. **NLSQ Optimization**: JIT-compiled JAX physics functions (30-60s on 14-core CPU)
+1. **Data Loading**: HDF5 file reading with h5py + NumPy (2-3s for cached data)
+1. **Data Validation**: Statistical quality checks with NumPy + SciPy (\<1s)
+1. **Angle Filtering**: Array slicing and indexing (\<1ms)
+1. **NLSQ Optimization**: JIT-compiled JAX physics functions (30-60s on 14-core CPU)
    - Residual calculations called hundreds of times per iteration
    - Data volume: 3 angles × 1001 × 1001 = 3M+ points per iteration
    - Automatic parallelization across CPU cores
-6. **Theoretical Fit Computation**: JAX backend with per-angle scaling (~2-3s on CPU)
-7. **Result Saving**: JSON serialization + NPZ compression (~1s)
-8. **Parallel Plotting**: 20 parallel workers using Datashader (CPU-optimized, ~12s)
+1. **Theoretical Fit Computation**: JAX backend with per-angle scaling (~2-3s on CPU)
+1. **Result Saving**: JSON serialization + NPZ compression (~1s)
+1. **Parallel Plotting**: 20 parallel workers using Datashader (CPU-optimized, ~12s)
 
 ### Performance Summary (14-Core CPU)
 
-| Stage | Backend | Duration | Notes |
-|-------|---------|----------|-------|
-| Config Loading | PyYAML | <1s | I/O bound |
-| Data Loading | h5py+NumPy | ~2s | I/O bound |
-| Data Validation | NumPy+SciPy | <1s | Fast validation |
-| Angle Filtering | NumPy | <1ms | Array operations |
-| **NLSQ Optimization** | **JAX JIT** | **30-60s** | **Multi-core parallel** |
-| **Theoretical Fits** | **JAX JIT** | **~2-3s** | **CPU-accelerated** |
-| Result Saving | json+npz | ~1s | I/O bound |
-| Plotting (Workers) | Datashader | ~12s | Parallel workers |
+| Stage | Backend | Duration | Notes | |-------|---------|----------|-------| | Config
+Loading | PyYAML | \<1s | I/O bound | | Data Loading | h5py+NumPy | ~2s | I/O bound | |
+Data Validation | NumPy+SciPy | \<1s | Fast validation | | Angle Filtering | NumPy |
+\<1ms | Array operations | | **NLSQ Optimization** | **JAX JIT** | **30-60s** |
+**Multi-core parallel** | | **Theoretical Fits** | **JAX JIT** | **~2-3s** |
+**CPU-accelerated** | | Result Saving | json+npz | ~1s | I/O bound | | Plotting
+(Workers) | Datashader | ~12s | Parallel workers |
 
-**Total Runtime**: ~50-80 seconds (14-core CPU)
-**HPC Speedup**: ~2-3x faster on 36-core nodes
+**Total Runtime**: ~50-80 seconds (14-core CPU) **HPC Speedup**: ~2-3x faster on 36-core
+nodes
 
 ### Key Architectural Insights
 
-- **JAX JIT Compilation**: All compute-intensive operations use JAX's JIT compiler for CPU optimization
-- **Multi-Core Parallelization**: Automatic thread distribution across available CPU cores
+- **JAX JIT Compilation**: All compute-intensive operations use JAX's JIT compiler for
+  CPU optimization
+- **Multi-Core Parallelization**: Automatic thread distribution across available CPU
+  cores
 - **Memory Efficiency**: Optimized memory usage for datasets up to 100M+ points
-- **Parallel Visualization**: CPU workers efficiently handle batch plotting without memory constraints
+- **Parallel Visualization**: CPU workers efficiently handle batch plotting without
+  memory constraints
 
 ## System Requirements (v2.3.0+)
 
@@ -891,7 +932,8 @@ os.environ['OMP_NUM_THREADS'] = str(optimal_threads)
 os.environ['JAX_NUM_THREADS'] = str(optimal_threads)
 ```
 
-See [`examples/cpu_optimization.py`](examples/cpu_optimization.py) for comprehensive HPC setup guide.
+See [`examples/cpu_optimization.py`](examples/cpu_optimization.py) for comprehensive HPC
+setup guide.
 
 ### Progress Tracking
 

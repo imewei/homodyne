@@ -1,8 +1,10 @@
 # Homodyne v2.3 Examples
 
-This directory contains practical examples demonstrating how to use Homodyne for XPCS analysis.
+This directory contains practical examples demonstrating how to use Homodyne for XPCS
+analysis.
 
-**Note:** GPU support has been removed in v2.3.0. All examples are CPU-optimized. See [GPU Removal Notice](#gpu-removal-notice) below.
+**Note:** GPU support has been removed in v2.3.0. All examples are CPU-optimized. See
+[GPU Removal Notice](#gpu-removal-notice) below.
 
 ## Quick Start
 
@@ -26,9 +28,11 @@ make run-example  # Runs the current default example
 ### CPU-Optimized Examples (v2.3.0+)
 
 #### 1. `cpu_optimization.py` (NEW)
+
 **Best for:** HPC cluster users, multi-core personal computers
 
 Demonstrates CPU-optimized XPCS analysis with:
+
 - Multi-core CPU thread management
 - HPC cluster configuration (Slurm, PBS, LSF)
 - CPU performance benchmarking
@@ -37,28 +41,33 @@ Demonstrates CPU-optimized XPCS analysis with:
 - Example job submission scripts
 
 **Key Topics:**
+
 - Detecting HPC environment and CPU capabilities
 - Configuring OpenMP threads and XLA flags
 - Batch sizing for optimal throughput
 - Example Slurm/PBS job scripts
 
 **Run it:**
+
 ```bash
 python examples/cpu_optimization.py
 ```
 
 **Expected output:**
+
 - CPU information detection
 - Performance benchmarking results
 - Example HPC submission scripts
 - Configuration recommendations
 
----
+______________________________________________________________________
 
 #### 2. `multi_core_batch_processing.py` (NEW)
+
 **Best for:** Processing multiple datasets efficiently, batch analysis
 
 Demonstrates parallel processing patterns with:
+
 - Multi-core batch processing of multiple datasets
 - Intelligent work distribution across cores
 - Memory-efficient parallel execution
@@ -67,6 +76,7 @@ Demonstrates parallel processing patterns with:
 - Scaling analysis and performance profiling
 
 **Key Topics:**
+
 - Parallel dataset processing with ProcessPoolExecutor
 - Adaptive worker scaling based on CPU cores
 - Performance monitoring and reporting
@@ -74,100 +84,117 @@ Demonstrates parallel processing patterns with:
 - Memory management for parallel workloads
 
 **Run it:**
+
 ```bash
 python examples/multi_core_batch_processing.py
 ```
 
 **Expected output:**
+
 - Parallel processing progress
 - Per-dataset timing and throughput
 - Performance summary and scaling analysis
 - JSON results file: `batch_processing_results.json`
 
----
+______________________________________________________________________
 
 ### Standard NLSQ Examples
 
 #### 3. `static_isotropic_nlsq.py`
+
 **Best for:** First-time users, simple isotropic systems
 
 Single dataset NLSQ optimization for static isotropic systems:
+
 - 3 physical parameters (D₀, α, D_offset)
 - Per-angle scaling parameters
 - Configuration setup and parameter bounds
 
----
+______________________________________________________________________
 
 #### 4. `laminar_flow_nlsq.py`
+
 **Best for:** Laminar flow analysis, shear-induced alignment
 
 NLSQ optimization for laminar flow systems:
+
 - 7 physical parameters (includes flow parameters)
 - Anisotropic diffusion analysis
 - Flow effect on diffusion
 
----
+______________________________________________________________________
 
 ### MCMC & Uncertainty Quantification
 
 #### 5. `mcmc_uncertainty.py`
+
 **Best for:** Uncertainty quantification, posterior distributions
 
 Bayesian MCMC sampling with NumPyro:
+
 - NUTS sampler for small datasets
 - CMC parallel sampling for large datasets
 - Posterior distribution analysis
 - Posterior predictive checks
 
----
+______________________________________________________________________
 
 #### 6. `mcmc_integration_demo.py`
+
 **Best for:** Combining NLSQ results with MCMC, workflow demonstrations
 
 Integrated workflow showing:
+
 - NLSQ optimization → MCMC initialization
 - Manual parameter transfer between methods
 - Posterior sampling with informed priors
 
----
+______________________________________________________________________
 
 ### Advanced Examples
 
 #### 7. `cmc_large_dataset.py`
+
 **Best for:** Large datasets (>15 samples), CMC parallelization
 
 CMC (Correlated Monte Carlo) parallel sampling:
+
 - Many-core parallelization strategies
 - Memory management for large datasets
 - Convergence monitoring
 
----
+______________________________________________________________________
 
 #### 8. `streaming_100m_points.py`
+
 **Best for:** Very large datasets (100M+ points), memory constraints
 
 Streaming optimization for massive datasets:
+
 - Chunked data processing
 - Memory-efficient streaming strategies
 - Checkpoint/resume capability
 
----
+______________________________________________________________________
 
 #### 9. `angle_filtering.py`
+
 **Best for:** Selective angle analysis, data filtering
 
 Phi angle filtering and selection:
+
 - Filtering by angle range
 - Weighted angle filtering
 - Selective analysis
 
----
+______________________________________________________________________
 
 ## GPU Removal Notice
 
 **Version 2.3.0: GPU Support Removed**
 
 GPU acceleration support has been removed in v2.3.0 to:
+
 - Simplify maintenance and reduce failure modes
 - Focus on reliable CPU-only execution
 - Remove GPU memory limitations encountered with large datasets
@@ -178,16 +205,19 @@ GPU acceleration support has been removed in v2.3.0 to:
 **If you were using GPU acceleration (v2.2.x):**
 
 1. **Option 1: Stay on v2.2.x**
+
    - v2.2.x continues to support GPU
    - Install with: `pip install 'homodyne<2.3'`
 
-2. **Option 2: Upgrade to v2.3 with CPU optimization**
+1. **Option 2: Upgrade to v2.3 with CPU optimization**
+
    - Remove GPU-related config options
    - Use CPU optimization examples
    - Leverage multi-core parallelism (see `multi_core_batch_processing.py`)
    - Typical performance: 1-3 hours for 10M point analysis on 36-core HPC
 
-3. **Option 3: Use JAX GPU capabilities**
+1. **Option 3: Use JAX GPU capabilities**
+
    - JAX still has native GPU support
    - Homodyne uses CPU-only configuration by default
    - See JAX documentation for manual GPU configuration
@@ -209,14 +239,17 @@ The following GPU-specific features were removed:
 For improved throughput on CPU systems:
 
 1. **Multi-Core Parallelism** (see `multi_core_batch_processing.py`)
+
    - Process multiple datasets in parallel
    - Linear scaling up to ~36 cores
 
-2. **HPC Cluster Submission** (see `cpu_optimization.py`)
+1. **HPC Cluster Submission** (see `cpu_optimization.py`)
+
    - Run on dedicated HPC nodes
    - Automatic thread management
 
-3. **Batch Processing with Slurm/PBS**
+1. **Batch Processing with Slurm/PBS**
+
    - Submit jobs to queue systems
    - Example scripts included
 
@@ -231,6 +264,7 @@ homodyne --config my_config.yaml
 ```
 
 See `homodyne/config/templates/` for example YAML templates:
+
 - `homodyne_static.yaml` - Static isotropic analysis
 - `homodyne_laminar_flow.yaml` - Laminar flow analysis
 - `homodyne_master_template.yaml` - Full template with all options
@@ -253,6 +287,7 @@ homodyne --config config.yaml
 ### HPC Cluster Setup
 
 Slurm example:
+
 ```bash
 #SBATCH --cpus-per-task=36
 #SBATCH --mem=128G
@@ -262,6 +297,7 @@ homodyne --config config.yaml
 ```
 
 PBS example:
+
 ```bash
 #PBS -l select=1:ncpus=128:mem=256gb
 
@@ -315,11 +351,9 @@ Each example creates output in its current directory:
 Typical performance on different systems (NLSQ optimization):
 
 | System | Configuration | 100k Points | 1M Points | 10M Points |
-|--------|---------------|-------------|-----------|------------|
-| Laptop | 8 core i7 | <1s | 5-10s | 1-2 min |
-| Workstation | 16 core Ryzen | <1s | 2-5s | 30-60s |
-| HPC 36-core | Xeon E5 | <1s | 1-3s | 10-20s |
-| HPC 128-core | EPYC | <1s | 1s | 5-10s |
+|--------|---------------|-------------|-----------|------------| | Laptop | 8 core i7 |
+\<1s | 5-10s | 1-2 min | | Workstation | 16 core Ryzen | \<1s | 2-5s | 30-60s | | HPC
+36-core | Xeon E5 | \<1s | 1-3s | 10-20s | | HPC 128-core | EPYC | \<1s | 1s | 5-10s |
 
 *Timing varies by algorithm complexity and number of angles*
 
@@ -328,12 +362,14 @@ Typical performance on different systems (NLSQ optimization):
 ### Common Issues
 
 **ImportError: Cannot import homodyne**
+
 ```bash
 # Install in development mode
 pip install -e /path/to/homodyne[dev]
 ```
 
 **Example runs very slowly**
+
 ```bash
 # Check CPU thread count
 python -c "import os; print(f'OMP_NUM_THREADS={os.environ.get(\"OMP_NUM_THREADS\", \"not set\")}')"
@@ -343,12 +379,14 @@ export OMP_NUM_THREADS=14  # For 16-core system
 ```
 
 **Out of memory errors**
+
 ```bash
 # Use streaming strategy for very large datasets
 # See streaming_100m_points.py example
 ```
 
 **Parallel batch processing slower than sequential**
+
 ```bash
 # Check if max_workers is set correctly
 # Too many workers causes context switching overhead
@@ -357,19 +395,21 @@ export OMP_NUM_THREADS=14  # For 16-core system
 
 ## Next Steps
 
-1. **Try the examples** in order: `static_isotropic_nlsq.py` → `cpu_optimization.py` → `multi_core_batch_processing.py`
+1. **Try the examples** in order: `static_isotropic_nlsq.py` → `cpu_optimization.py` →
+   `multi_core_batch_processing.py`
 
-2. **Adapt to your data:** Replace synthetic data with real HDF5 files
+1. **Adapt to your data:** Replace synthetic data with real HDF5 files
 
-3. **Optimize for your system:** Adjust thread counts and batch sizes
+1. **Optimize for your system:** Adjust thread counts and batch sizes
 
-4. **Scale up:** Use HPC cluster submission for production analysis
+1. **Scale up:** Use HPC cluster submission for production analysis
 
-5. **Add post-processing:** Extend examples with custom plotting and analysis
+1. **Add post-processing:** Extend examples with custom plotting and analysis
 
 ## Documentation
 
 For more information:
+
 - Main documentation: `../docs/`
 - API reference: `../docs/api/`
 - Configuration guide: `../homodyne/config/templates/`
@@ -378,6 +418,7 @@ For more information:
 ## Support
 
 For issues or questions:
+
 - Check example docstrings for detailed explanations
 - Review CLAUDE.md for architecture and known issues
 - Run system validation: `python -m homodyne.runtime.utils.system_validator`

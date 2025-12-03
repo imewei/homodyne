@@ -4,7 +4,7 @@ This module provides a circular buffer for tracking batch-level optimization
 statistics, success rates, and error distributions during streaming optimization.
 """
 
-from collections import deque, defaultdict
+from collections import defaultdict, deque
 from typing import Any
 
 

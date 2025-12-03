@@ -45,30 +45,36 @@ class TestParameterRecoveryAccuracy:
 
         # Set up optimization with proper config structure
         # Note: After GPU removal, MockConfig was insufficient. Use proper config object.
-        mock_config = type('MockConfig', (object,), {
-            'optimization': {
-                'lsq': {'max_iterations': 1000, 'tolerance': 1e-8},
-                'stratification': {'enabled': False},  # Disable for small dataset
+        mock_config = type(
+            "MockConfig",
+            (object,),
+            {
+                "optimization": {
+                    "lsq": {"max_iterations": 1000, "tolerance": 1e-8},
+                    "stratification": {"enabled": False},  # Disable for small dataset
+                },
+                "hardware": {},  # CPU-only, no GPU settings needed
             },
-            'hardware': {},  # CPU-only, no GPU settings needed
-        })()
+        )()
 
         wrapper = NLSQWrapper(enable_large_dataset=False, enable_recovery=False)
 
         # Initial guess in COMPACT format (wrapper will expand to per-angle)
         # The wrapper automatically expands [contrast, offset, ...physical] to per-angle format
         # Use moderate perturbations (5-10%) to ensure optimizer can find minimum
-        initial_params = np.array([
-            ground_truth["contrast"] * 1.05,  # Single contrast (will be expanded)
-            ground_truth["offset"] * 1.05,    # Single offset (will be expanded)
-            ground_truth["D0"] * 1.1,         # D0
-            ground_truth["alpha"] * 1.05,     # alpha
-            ground_truth["D_offset"] * 1.1,   # D_offset
-        ])
+        initial_params = np.array(
+            [
+                ground_truth["contrast"] * 1.05,  # Single contrast (will be expanded)
+                ground_truth["offset"] * 1.05,  # Single offset (will be expanded)
+                ground_truth["D0"] * 1.1,  # D0
+                ground_truth["alpha"] * 1.05,  # alpha
+                ground_truth["D_offset"] * 1.1,  # D_offset
+            ]
+        )
 
         # Bounds in COMPACT format (wrapper will expand to per-angle)
         bounds = (
-            np.array([0.2, 0.8, 300.0, 0.3, 2.0]),    # Lower bounds
+            np.array([0.2, 0.8, 300.0, 0.3, 2.0]),  # Lower bounds
             np.array([0.8, 1.2, 3000.0, 0.8, 30.0]),  # Upper bounds
         )
 
@@ -86,11 +92,15 @@ class TestParameterRecoveryAccuracy:
         n_phi_detected = (len(result.parameters) - 3) // 2
 
         recovered = {
-            "contrast": np.mean(result.parameters[:n_phi_detected]),  # Mean of all contrast_i
-            "offset": np.mean(result.parameters[n_phi_detected:2*n_phi_detected]),  # Mean of all offset_i
-            "D0": result.parameters[2*n_phi_detected],
-            "alpha": result.parameters[2*n_phi_detected + 1],
-            "D_offset": result.parameters[2*n_phi_detected + 2],
+            "contrast": np.mean(
+                result.parameters[:n_phi_detected]
+            ),  # Mean of all contrast_i
+            "offset": np.mean(
+                result.parameters[n_phi_detected : 2 * n_phi_detected]
+            ),  # Mean of all offset_i
+            "D0": result.parameters[2 * n_phi_detected],
+            "alpha": result.parameters[2 * n_phi_detected + 1],
+            "D_offset": result.parameters[2 * n_phi_detected + 2],
         }
 
         # Compute relative errors
@@ -117,22 +127,22 @@ class TestParameterRecoveryAccuracy:
 
         # Check core parameters with stricter tolerance
         for name in core_params:
-            assert (
-                relative_errors[name] < tolerance_pct
-            ), f"{name} recovery error {relative_errors[name]:.2f}% exceeds {tolerance_pct}%"
+            assert relative_errors[name] < tolerance_pct, (
+                f"{name} recovery error {relative_errors[name]:.2f}% exceeds {tolerance_pct}%"
+            )
 
         # D_offset can be less constrained - check it separately with relaxed tolerance
-        assert (
-            relative_errors["D_offset"] < 250.0
-        ), f"D_offset recovery error {relative_errors['D_offset']:.2f}% exceeds 250%"
+        assert relative_errors["D_offset"] < 250.0, (
+            f"D_offset recovery error {relative_errors['D_offset']:.2f}% exceeds 250%"
+        )
 
         # Additional checks
-        assert (
-            result.convergence_status == "converged"
-        ), "Optimization should converge for synthetic data"
-        assert (
-            result.reduced_chi_squared < 5.0
-        ), f"Reduced chi-squared {result.reduced_chi_squared:.2f} should be reasonable"
+        assert result.convergence_status == "converged", (
+            "Optimization should converge for synthetic data"
+        )
+        assert result.reduced_chi_squared < 5.0, (
+            f"Reduced chi-squared {result.reduced_chi_squared:.2f} should be reasonable"
+        )
 
     @pytest.mark.slow
     @pytest.mark.skip(
@@ -243,19 +253,19 @@ class TestParameterRecoveryAccuracy:
 
         # Check core parameters with standard tolerance
         for name in core_params:
-            assert (
-                relative_errors[name] < tolerance_pct
-            ), f"{name} recovery error {relative_errors[name]:.2f}% exceeds {tolerance_pct}%"
+            assert relative_errors[name] < tolerance_pct, (
+                f"{name} recovery error {relative_errors[name]:.2f}% exceeds {tolerance_pct}%"
+            )
 
         # Less sensitive parameters get very relaxed tolerance
         less_sensitive = ["D_offset", "gamma_dot_offset", "phi0"]
         relaxed_tolerance = 300.0  # Very relaxed for poorly constrained parameters
         for name in less_sensitive:
-            assert (
-                relative_errors[name] < relaxed_tolerance
-            ), f"{name} recovery error {relative_errors[name]:.2f}% exceeds {relaxed_tolerance}%"
+            assert relative_errors[name] < relaxed_tolerance, (
+                f"{name} recovery error {relative_errors[name]:.2f}% exceeds {relaxed_tolerance}%"
+            )
 
         # Additional checks
-        assert (
-            result.convergence_status == "converged"
-        ), "Optimization should converge for synthetic data"
+        assert result.convergence_status == "converged", (
+            "Optimization should converge for synthetic data"
+        )

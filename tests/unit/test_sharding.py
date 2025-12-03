@@ -12,19 +12,18 @@ Test Coverage:
 - Edge cases: very small datasets, very large datasets, single shard
 """
 
-import pytest
 import numpy as np
+import pytest
 from scipy import stats
 
 from homodyne.device.config import HardwareConfig
 from homodyne.optimization.cmc.sharding import (
     calculate_optimal_num_shards,
+    shard_data_contiguous,
     shard_data_random,
     shard_data_stratified,
-    shard_data_contiguous,
     validate_shards,
 )
-
 
 # ============================================================================
 # Fixtures
@@ -256,7 +255,7 @@ def test_random_sharding_reproducibility(synthetic_data_small):
 
     # Check that shards are identical
     assert len(shards1) == len(shards2)
-    for s1, s2 in zip(shards1, shards2):
+    for s1, s2 in zip(shards1, shards2, strict=False):
         np.testing.assert_array_equal(s1["data"], s2["data"])
         np.testing.assert_array_equal(s1["phi"], s2["phi"])
 
@@ -401,7 +400,7 @@ def test_stratified_sharding_deterministic(synthetic_data_small):
 
     # Check that shards are identical
     assert len(shards1) == len(shards2)
-    for s1, s2 in zip(shards1, shards2):
+    for s1, s2 in zip(shards1, shards2, strict=False):
         np.testing.assert_array_equal(s1["data"], s2["data"])
         np.testing.assert_array_equal(s1["phi"], s2["phi"])
 

@@ -54,22 +54,17 @@ See Also:
 - homodyne/config/manager.py: ConfigManager validation logic
 """
 
-import pytest
 import numpy as np
-import argparse
+import pytest
 
-from homodyne.device.config import HardwareConfig
 from homodyne.config.manager import ConfigManager
 from homodyne.config.parameter_space import ParameterSpace, PriorDistribution
-from homodyne.cli.args_parser import validate_args
-
 
 # ==============================================================================
 # Config Validation Edge Case Tests (from test_edge_cases_config_validation.py)
 # ==============================================================================
 # Note: Hardware/CMC selection tests removed in v3.0 (CMC-only architecture)
 # See test_hardware_detection.py for HardwareConfig tests
-
 
 
 class TestMalformedConfigFiles:
@@ -107,9 +102,7 @@ class TestMalformedConfigFiles:
         }
         # Should not raise, fallback to defaults
         config_mgr = ConfigManager(config_override=config)
-        param_space = ParameterSpace.from_config(
-            config, analysis_mode="static"
-        )
+        param_space = ParameterSpace.from_config(config, analysis_mode="static")
         assert param_space is not None
 
     def test_config_empty_dict(self):
@@ -469,4 +462,3 @@ class TestComplexIntegrationEdgeCases:
         initial_params = config_mgr.get_initial_parameters()
         # Midpoint with infinity might be inf or clamped
         assert isinstance(initial_params["D0"], (int, float, type(np.nan)))
-

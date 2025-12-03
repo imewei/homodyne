@@ -20,7 +20,6 @@ Learning outcomes:
 - Reading parameter uncertainties
 """
 
-import json
 from pathlib import Path
 
 # Create sample configuration for static isotropic analysis

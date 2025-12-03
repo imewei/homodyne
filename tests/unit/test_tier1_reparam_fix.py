@@ -49,7 +49,11 @@ class TestTier1ReparameterizationFix:
         initial_values_copy = initial_values.copy()
 
         # This is the fixed code path
-        if single_angle_static and initial_values_copy is not None and not reparam_disabled:
+        if (
+            single_angle_static
+            and initial_values_copy is not None
+            and not reparam_disabled
+        ):
             d0_init = initial_values_copy.get("D0")
             d_offset_init = initial_values_copy.get("D_offset")
             if d0_init is not None and d_offset_init is not None:
@@ -68,9 +72,7 @@ class TestTier1ReparameterizationFix:
         assert "log_D_center" not in initial_values_copy, (
             "Tier 1 should NOT add log_D_center"
         )
-        assert "delta_raw" not in initial_values_copy, (
-            "Tier 1 should NOT add delta_raw"
-        )
+        assert "delta_raw" not in initial_values_copy, "Tier 1 should NOT add delta_raw"
         assert len(initial_values_copy) == 5, (
             f"Tier 1 should have exactly 5 parameters, not {len(initial_values_copy)}"
         )
@@ -106,7 +108,11 @@ class TestTier1ReparameterizationFix:
         initial_values_copy["D_offset"] = 0.0
 
         # This is the code path that adds reparameterization
-        if single_angle_static and initial_values_copy is not None and not reparam_disabled:
+        if (
+            single_angle_static
+            and initial_values_copy is not None
+            and not reparam_disabled
+        ):
             d0_init = initial_values_copy.get("D0")
             d_offset_init = initial_values_copy.get("D_offset")
             if d0_init is not None and d_offset_init is not None:
@@ -122,12 +128,8 @@ class TestTier1ReparameterizationFix:
 
         # Verify that reparam parameters WERE added for tier 2
         assert reparam_disabled is False, "Tier 2 should have reparam_disabled=False"
-        assert "log_D_center" in initial_values_copy, (
-            "Tier 2 SHOULD add log_D_center"
-        )
-        assert "delta_raw" in initial_values_copy, (
-            "Tier 2 SHOULD add delta_raw"
-        )
+        assert "log_D_center" in initial_values_copy, "Tier 2 SHOULD add log_D_center"
+        assert "delta_raw" in initial_values_copy, "Tier 2 SHOULD add delta_raw"
         assert len(initial_values_copy) == 7, (
             f"Tier 2 should have 7 parameters (5 + 2 reparam), not {len(initial_values_copy)}"
         )

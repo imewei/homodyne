@@ -14,9 +14,9 @@ Acceptance Criteria: Agreement < 15% across different configurations
 """
 
 import time
+
 import numpy as np
 import pytest
-from typing import Dict, Tuple, Optional
 
 # Handle optional dependencies
 try:
@@ -30,11 +30,11 @@ except ImportError:
 
 # Import CMC components
 try:
+    from homodyne.optimization.cmc.combination import combine_subposteriors
     from homodyne.optimization.cmc.sharding import (
         calculate_optimal_num_shards,
         shard_data_stratified,
     )
-    from homodyne.optimization.cmc.combination import combine_subposteriors
 
     CMC_AVAILABLE = True
 except ImportError:
@@ -44,9 +44,9 @@ except ImportError:
 def generate_synthetic_posterior_samples(
     n_samples: int = 2000,
     n_params: int = 5,
-    true_params: Optional[np.ndarray] = None,
+    true_params: np.ndarray | None = None,
     seed: int = 42,
-) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
+) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     """Generate synthetic MCMC posterior samples."""
     np.random.seed(seed)
 
@@ -202,9 +202,9 @@ class TestCMCDifferentShardCounts:
                 mean_diff = np.abs(combined_list[i]["mean"] - combined_list[j]["mean"])
                 rel_diff = mean_diff / (np.abs(combined_list[i]["mean"]) + 1e-10)
 
-                assert np.all(
-                    rel_diff < 0.15
-                ), f"Config {i} and {j} disagree: max {np.max(rel_diff)}"
+                assert np.all(rel_diff < 0.15), (
+                    f"Config {i} and {j} disagree: max {np.max(rel_diff)}"
+                )
 
 
 @pytest.mark.self_consistency

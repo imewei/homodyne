@@ -128,9 +128,9 @@ class TestAngleFilteringPerformance:
         for i, (time_ratio, size_ratio) in enumerate(
             zip(time_ratios, size_ratios, strict=False)
         ):
-            assert (
-                time_ratio < size_ratio * 3
-            ), f"Step {i}: Time scaled by {time_ratio:.2f}x but size by {size_ratio:.2f}x"
+            assert time_ratio < size_ratio * 3, (
+                f"Step {i}: Time scaled by {time_ratio:.2f}x but size by {size_ratio:.2f}x"
+            )
 
     def test_filtering_wrapper_overhead(self):
         """Verify optimization wrapper adds minimal overhead."""
@@ -168,9 +168,9 @@ class TestAngleFilteringPerformance:
 
         # Assert - Wrapper should add < 10ms overhead
         overhead_ms = (wrapper_time - core_time) * 1000
-        assert (
-            overhead_ms < 10
-        ), f"Wrapper added {overhead_ms:.2f}ms overhead, expected < 10ms"
+        assert overhead_ms < 10, (
+            f"Wrapper added {overhead_ms:.2f}ms overhead, expected < 10ms"
+        )
 
     def test_no_filtering_minimal_overhead(self):
         """Verify disabled filtering has near-zero overhead."""
@@ -194,9 +194,9 @@ class TestAngleFilteringPerformance:
         per_call_us = elapsed_ms / 1000  # microseconds per call
 
         # Assert - Each call should take < 10 microseconds when disabled
-        assert (
-            per_call_us < 10
-        ), f"Disabled filtering took {per_call_us:.2f}µs per call, expected < 10µs"
+        assert per_call_us < 10, (
+            f"Disabled filtering took {per_call_us:.2f}µs per call, expected < 10µs"
+        )
 
 
 if __name__ == "__main__":

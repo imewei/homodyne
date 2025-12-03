@@ -18,37 +18,29 @@ Tests cover:
 Total: 32 tests
 """
 
-import pytest
-import numpy as np
-import jax.numpy as jnp
 import tempfile
 from pathlib import Path
-from typing import Any
-from unittest.mock import Mock, patch, MagicMock
+from unittest.mock import Mock, patch
+
+import numpy as np
+import pytest
+
+from homodyne.optimization.cmc.backends.multiprocessing import MultiprocessingBackend
 
 # Import CMC coordinator and backends
 from homodyne.optimization.cmc.coordinator import CMCCoordinator
-from homodyne.optimization.cmc.backends.multiprocessing import MultiprocessingBackend
 
 # Import config infrastructure
 try:
     from homodyne.config.parameter_space import ParameterSpace, PriorDistribution
+
     HAS_PARAMETER_SPACE = True
 except ImportError:
     HAS_PARAMETER_SPACE = False
     pytest.skip("ParameterSpace not available", allow_module_level=True)
 
 from homodyne.config.manager import ConfigManager
-from homodyne.config.types import (
-    CMCConfig,
-    CMCShardingConfig,
-    CMCInitializationConfig,
-    CMCBackendConfig,
-    CMCCombinationConfig,
-    CMCPerShardMCMCConfig,
-    CMCValidationConfig,
-)
-
+from homodyne.config.types import CMCConfig, CMCInitializationConfig, CMCShardingConfig
 
 # ==============================================================================
 # CMC Coordinator Tests (from test_cmc_coordinator.py)
@@ -531,8 +523,9 @@ def test_no_svi_references_in_coordinator():
     Task 4.1.3: Remove any remaining SVI references
     """
     # Read coordinator source code
-    import homodyne.optimization.cmc.coordinator as coordinator_module
     import inspect
+
+    import homodyne.optimization.cmc.coordinator as coordinator_module
 
     source = inspect.getsource(coordinator_module)
     source_lower = source.lower()
@@ -1458,9 +1451,9 @@ def test_multiprocessing_backend_with_laminar_flow_minimal(laminar_parameter_spa
     if result["converged"]:
         assert "samples" in result, "Converged result should have 'samples'"
         samples = result["samples"]
-        assert (
-            samples.shape[1] == 9
-        ), f"Samples should have 9 parameters, got {samples.shape[1]}"
+        assert samples.shape[1] == 9, (
+            f"Samples should have 9 parameters, got {samples.shape[1]}"
+        )
     else:
         # If it didn't converge (which is OK for this minimal test),
         # just verify error is logged
@@ -1470,4 +1463,3 @@ def test_multiprocessing_backend_with_laminar_flow_minimal(laminar_parameter_spa
 if __name__ == "__main__":
     # Run tests with pytest
     pytest.main([__file__, "-v"])
-

@@ -2,53 +2,64 @@
 
 **Last Updated**: October 28, 2025
 
-This directory contains architectural documentation for the homodyne XPCS analysis package, focusing on advanced topics like CMC (Consensus Monte Carlo), NUTS parallelization, and hardware-adaptive optimization.
+This directory contains architectural documentation for the homodyne XPCS analysis
+package, focusing on advanced topics like CMC (Consensus Monte Carlo), NUTS
+parallelization, and hardware-adaptive optimization.
 
----
+______________________________________________________________________
 
 ## Quick Navigation
 
 ### CMC (Consensus Monte Carlo)
 
 **Dual-Criteria Decision Logic**:
-- 📘 [Full Documentation](cmc-dual-mode-strategy.md) - Comprehensive design doc (3,500+ words)
+
+- 📘 [Full Documentation](cmc-dual-mode-strategy.md) - Comprehensive design doc (3,500+
+  words)
 - 📋 [Quick Reference](cmc-decision-quick-reference.md) - Lookup table and examples
 
 **Key Topics**:
+
 - When CMC triggers (parallelism OR memory threshold)
 - Memory estimation formula
 - Current implementation vs future enhancements
 - Sample-level vs data-level sharding (planned)
 
----
+______________________________________________________________________
 
 ### NUTS Chain Parallelization
 
 **Chain Execution Strategy**:
-- 📘 [Full Documentation](nuts-chain-parallelization.md) - Complete guide to chain parallelism
-- 📋 [Quick Reference](nuts-chain-parallelization-quick-reference.md) - Configuration presets and examples
+
+- 📘 [Full Documentation](nuts-chain-parallelization.md) - Complete guide to chain
+  parallelism
+- 📋 [Quick Reference](nuts-chain-parallelization-quick-reference.md) - Configuration
+  presets and examples
 
 **Key Topics**:
+
 - Sequential (1 GPU) vs parallel (CPU/multi-GPU) execution
 - Why 4 chains even on single GPU
 - Convergence diagnostics (R-hat, ESS, divergences)
 - Performance characteristics across platforms
 
----
+______________________________________________________________________
 
 ### Backend Selection
 
 **CMC Backend Strategy**:
+
 - 📄 [Backend Selection Logic](../optimization/cmc/backends/selection.py) - Source code
 - Topics covered in CMC documentation above
 
 **Backends**:
+
 - `pjit` - GPU/JAX backend (single or multi-GPU)
 - `multiprocessing` - CPU parallel backend
 - `pbs` - HPC cluster backend (PBS scheduler)
 - `auto` - Automatic hardware-based selection
 
----
+______________________________________________________________________
 
 ## Document Hierarchy
 
@@ -61,7 +72,7 @@ docs/architecture/
 └── nuts-chain-parallelization-quick-reference.md  # NUTS quick lookup
 ```
 
----
+______________________________________________________________________
 
 ## Key Concepts
 
@@ -70,10 +81,12 @@ docs/architecture/
 **Purpose**: Distributed MCMC for large datasets or many samples
 
 **Triggering Conditions** (OR logic):
+
 1. **Parallelism**: `num_samples >= 100` (many phi angles)
-2. **Memory**: `dataset_size` exceeds 50% of available memory
+1. **Memory**: `dataset_size` exceeds 50% of available memory
 
 **Example**:
+
 ```python
 # 2 phi × 100M each = 200M total
 # Memory: 9.6 GB = 60% of 16 GB → CMC triggered
@@ -86,17 +99,19 @@ use_cmc = should_use_cmc(num_samples=2, hw, dataset_size=200_000_000)
 **Purpose**: Multiple independent MCMC chains for convergence diagnostics
 
 **Default Configuration**:
+
 - 4 chains (enables R-hat, ESS diagnostics)
 - Sequential on single GPU (4× time)
 - Parallel on CPU (1.1× time)
 
 **Why Multiple Chains**:
+
 - ✅ R-hat statistic (convergence detection)
 - ✅ Effective Sample Size (true independent samples)
 - ✅ Divergence detection (problematic regions)
 - ✅ Better uncertainty quantification
 
----
+______________________________________________________________________
 
 ## Decision Trees
 
@@ -126,31 +141,28 @@ Hardware Platform
    └─ Use N chains (1 per GPU, parallel)
 ```
 
----
+______________________________________________________________________
 
 ## Performance Summary
 
 ### Execution Time
 
 | Method | Configuration | Single GPU | CPU (14-core) | Multi-GPU (4) |
-|--------|---------------|------------|---------------|---------------|
-| **NUTS** | 1 chain | T | 4T | T |
-| **NUTS** | 4 chains | 4T | 1.1T | 1.1T |
-| **CMC** | 4 shards | 1.5T* | 1.2T | 1.1T |
+|--------|---------------|------------|---------------|---------------| | **NUTS** | 1
+chain | T | 4T | T | | **NUTS** | 4 chains | 4T | 1.1T | 1.1T | | **CMC** | 4 shards |
+1.5T\* | 1.2T | 1.1T |
 
-*Depends on shard size and overhead
+\*Depends on shard size and overhead
 
 ### Memory Usage
 
-| Method | Configuration | Peak Memory |
-|--------|---------------|-------------|
-| **NUTS** | 4 chains, 1 GPU | M (sequential, 1 at a time) |
-| **NUTS** | 4 chains, CPU | 4M (all in RAM) |
-| **CMC** | 4 shards | M/4 per shard |
+| Method | Configuration | Peak Memory | |--------|---------------|-------------| |
+**NUTS** | 4 chains, 1 GPU | M (sequential, 1 at a time) | | **NUTS** | 4 chains, CPU |
+4M (all in RAM) | | **CMC** | 4 shards | M/4 per shard |
 
 Where M = dataset_size × 8 bytes × 6 (MCMC overhead)
 
----
+______________________________________________________________________
 
 ## Configuration Examples
 
@@ -196,25 +208,29 @@ mcmc:
       type: auto  # → pjit
 ```
 
-**Current Limitation**: Data-level sharding not yet implemented, so CMC won't reduce memory per shard. Workaround: Use NLSQ instead.
+**Current Limitation**: Data-level sharding not yet implemented, so CMC won't reduce
+memory per shard. Workaround: Use NLSQ instead.
 
----
+______________________________________________________________________
 
 ## Implementation Status
 
 ### ✅ Implemented
 
 1. **Dual-Criteria CMC Decision**
+
    - Parallelism-based triggering (num_samples)
    - Memory-based triggering (dataset_size)
    - OR logic (either condition triggers CMC)
 
-2. **NUTS Chain Parallelization**
+1. **NUTS Chain Parallelization**
+
    - CPU parallel chains (via `set_host_device_count`)
    - GPU sequential chains (automatic)
    - Multi-GPU distribution
 
-3. **Backend Selection**
+1. **Backend Selection**
+
    - Auto-detection (hardware-based)
    - Manual override support
    - Platform compatibility validation
@@ -222,67 +238,78 @@ mcmc:
 ### 🚧 Planned
 
 1. **Data-Level Sharding** (v2.1.0)
+
    - Split time points within samples
    - Enable memory reduction for few-sample scenarios
    - Adaptive sharding mode selection
 
-2. **Hybrid Sharding** (v3.0.0)
+1. **Hybrid Sharding** (v3.0.0)
+
    - Both sample AND data sharding
    - Automatic shard size optimization
    - Custom sharding strategies
 
----
+______________________________________________________________________
 
 ## Troubleshooting
 
 ### CMC Issues
 
 **Problem**: CMC triggered but memory not reduced
+
 - **Cause**: Data-level sharding not implemented
 - **Solution**: Use NLSQ for large datasets with few samples
 - **Future**: Data-level sharding in v2.1.0
 
 **Problem**: Backend 'auto' error
+
 - **Cause**: Fixed in current version
 - **Solution**: Update to latest code
 
 ### NUTS Issues
 
 **Problem**: Chains not converging (R-hat > 1.01)
+
 - **Solution 1**: Increase samples (`n_samples: 2000`)
 - **Solution 2**: Increase warmup (`n_warmup: 1000`)
 - **Solution 3**: Use NLSQ initialization (automatic)
 
 **Problem**: Out of memory with 4 chains on CPU
+
 - **Solution**: Reduce chains (`n_chains: 2`)
 
 **Problem**: Slow execution on single GPU
+
 - **Explanation**: Sequential execution is expected
 - **Solution**: Use `n_chains: 1` for faster results (no diagnostics)
 
----
+______________________________________________________________________
 
 ## Related Documentation
 
 ### User Guides
+
 - [Configuration Templates](../configuration-templates/) - YAML examples
 - [CLI Usage](../user-guide/cli-usage.md) - Command-line interface
 - [Optimization Methods](../guides/optimization-methods.md) - NLSQ vs MCMC
 
 ### Developer Guides
+
 - [Contributing](../developer-guide/contributing.md) - Development workflow
 - [Testing](../developer-guide/testing.md) - Test suite organization
 
 ### Theoretical Background
+
 - [XPCS Theory](../theoretical-framework/xpcs-theory.md) - Physics equations
 - [Consensus Monte Carlo](https://arxiv.org/abs/1407.5628) - Scott et al. (2016)
 - [NUTS Algorithm](https://arxiv.org/abs/1111.4246) - Hoffman & Gelman (2014)
 
----
+______________________________________________________________________
 
 ## Changelog
 
 **October 28, 2025**:
+
 - ✅ Implemented dual-criteria CMC decision logic
 - ✅ Fixed backend='auto' handling
 - ✅ Added memory-based CMC triggering
@@ -290,25 +317,28 @@ mcmc:
 - ✅ Created comprehensive architecture docs
 
 **Next Steps**:
+
 - Implement data-level sharding for CMC
 - Add performance benchmarks
 - Create visual decision trees
 - Add troubleshooting examples
 
----
+______________________________________________________________________
 
 ## Questions?
 
 **For Users**:
+
 - Quick lookup: Use quick reference guides
 - Detailed info: Read full documentation
 - Configuration help: See YAML examples in `/configuration-templates`
 
 **For Developers**:
+
 - Implementation: Check source code references in docs
 - Contributing: See `/developer-guide/contributing.md`
 - Testing: Run test suite (`make test-all`)
 
----
+______________________________________________________________________
 
 **Document Status**: Living documentation. Updates as implementation progresses.

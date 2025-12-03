@@ -1,28 +1,30 @@
 # StreamingOptimizer Usage Guide
 
-**Version:** 3.0 (NLSQ API Alignment)
-**Date:** October 2025
-**Status:** Production Ready
+**Version:** 3.0 (NLSQ API Alignment) **Date:** October 2025 **Status:** Production
+Ready
 
----
+______________________________________________________________________
 
 ## Table of Contents
 
 1. [Overview](#overview)
-2. [When to Use Streaming Mode](#when-to-use-streaming-mode)
-3. [Basic Example](#basic-example)
-4. [Checkpoint Configuration](#checkpoint-configuration)
-5. [Performance Tuning](#performance-tuning)
-6. [Troubleshooting](#troubleshooting)
-7. [Advanced Features](#advanced-features)
+1. [When to Use Streaming Mode](#when-to-use-streaming-mode)
+1. [Basic Example](#basic-example)
+1. [Checkpoint Configuration](#checkpoint-configuration)
+1. [Performance Tuning](#performance-tuning)
+1. [Troubleshooting](#troubleshooting)
+1. [Advanced Features](#advanced-features)
 
----
+______________________________________________________________________
 
 ## Overview
 
-Homodyne v3.0 uses NLSQ's `StreamingOptimizer` for processing datasets larger than 100 million points with constant memory usage. This mode processes data in batches with automatic checkpoint/resume capability and fault tolerance.
+Homodyne v3.0 uses NLSQ's `StreamingOptimizer` for processing datasets larger than 100
+million points with constant memory usage. This mode processes data in batches with
+automatic checkpoint/resume capability and fault tolerance.
 
 **Key Features:**
+
 - **Constant Memory:** Memory usage independent of dataset size
 - **Fault Tolerance:** Automatic recovery from batch failures
 - **Checkpointing:** Resume interrupted optimizations
@@ -30,6 +32,7 @@ Homodyne v3.0 uses NLSQ's `StreamingOptimizer` for processing datasets larger th
 - **Best Parameter Tracking:** Preserves best result even if later batches fail
 
 **Strategy Selection (Automatic):**
+
 ```
 < 1M points      → STANDARD (curve_fit)
 1M-10M points    → LARGE (curve_fit_large)
@@ -37,13 +40,14 @@ Homodyne v3.0 uses NLSQ's `StreamingOptimizer` for processing datasets larger th
 > 100M points    → STREAMING (StreamingOptimizer)
 ```
 
----
+______________________________________________________________________
 
 ## When to Use Streaming Mode
 
 ### Automatic Selection
 
-Homodyne automatically selects STREAMING mode for datasets exceeding 100 million points. You don't need to configure anything - just run your analysis normally.
+Homodyne automatically selects STREAMING mode for datasets exceeding 100 million points.
+You don't need to configure anything - just run your analysis normally.
 
 ```bash
 # Homodyne automatically detects dataset size
@@ -62,27 +66,31 @@ performance:
 ### When STREAMING is Beneficial
 
 1. **Large Datasets (> 100M points)**
+
    - Full XPCS datasets with 10,000+ frames
    - High-resolution q-space sampling
    - Multi-angle correlation analysis
 
-2. **Memory-Constrained Environments**
+1. **Memory-Constrained Environments**
+
    - HPC nodes with shared memory
    - Cloud instances with limited RAM
    - Desktop analysis workstations
 
-3. **Long-Running Optimizations**
+1. **Long-Running Optimizations**
+
    - Complex parameter spaces requiring many iterations
    - Noisy data requiring robust fitting
    - Production pipelines requiring fault tolerance
 
----
+______________________________________________________________________
 
 ## Basic Example
 
 ### Minimal Configuration
 
-The simplest streaming optimization requires no special configuration - Homodyne handles everything automatically:
+The simplest streaming optimization requires no special configuration - Homodyne handles
+everything automatically:
 
 ```yaml
 # your_config.yaml
@@ -159,13 +167,14 @@ print(f"Parameters: {result.parameters}")
 print(f"Success rate: {result.streaming_diagnostics['batch_success_rate']}")
 ```
 
----
+______________________________________________________________________
 
 ## Checkpoint Configuration
 
 ### Default Checkpoint Behavior
 
-By default, checkpoints are **disabled** to maximize performance. Enable checkpoints for long-running optimizations:
+By default, checkpoints are **disabled** to maximize performance. Enable checkpoints for
+long-running optimizations:
 
 ```yaml
 optimization:
@@ -200,6 +209,7 @@ Checkpoints are saved as HDF5 files in your configured directory:
 ```
 
 **Checkpoint Contents:**
+
 - Current parameter values
 - Optimizer internal state
 - Batch index for resume
@@ -213,11 +223,13 @@ Checkpoints are saved as HDF5 files in your configured directory:
 Target: < 2 seconds per checkpoint (spec requirement)
 
 **Typical Performance:**
+
 - 5 parameters: < 0.5 seconds
 - 9 parameters: < 1.5 seconds
 - Very large state: May warn if > 2 seconds
 
 If checkpoint saves are slow:
+
 ```yaml
 optimization:
   streaming:
@@ -248,7 +260,7 @@ deleted = manager.cleanup_old_checkpoints()
 print(f"Deleted {len(deleted)} old checkpoints")
 ```
 
----
+______________________________________________________________________
 
 ## Performance Tuning
 
@@ -259,6 +271,7 @@ Homodyne automatically calculates optimal batch size based on available memory:
 **Formula:** `batch_size = 10% of available memory / (data + Jacobian requirements)`
 
 **Typical Batch Sizes:**
+
 - 1 GB RAM → 10,000 points/batch
 - 8 GB RAM → 50,000 points/batch
 - 32 GB RAM → 100,000 points/batch (capped at max)
@@ -304,6 +317,7 @@ optimization:
 ```
 
 **Recovery Strategies:**
+
 - **NaN/Inf in gradients:** Reduce step size
 - **Convergence failure:** Perturb parameters (5% random noise)
 - **Memory error:** Fall back to smaller batch size
@@ -321,6 +335,7 @@ wrapper = NLSQWrapper(
 ```
 
 **Trade-offs:**
+
 - **Enabled (default):** ~0.5% overhead, early NaN detection
 - **Fast mode:** < 1% overhead, no numerical validation
 
@@ -336,13 +351,14 @@ performance:
 ```
 
 **Example Output:**
+
 ```
 Processing XPCS data: 100%|████████████| 200M/200M [05:23<00:00, 618k pts/s]
 Batch 15/50: 100%|████████████████████| 15/50 [02:15<07:15, 12.4s/batch]
 Success rate: 93.3% | Avg loss: 0.0234 | Best loss: 0.0198
 ```
 
----
+______________________________________________________________________
 
 ## Troubleshooting
 
@@ -353,11 +369,13 @@ Success rate: 93.3% | Avg loss: 0.0234 | Best loss: 0.0198
 **Symptom:** `MemoryError` or OOM killer during streaming optimization
 
 **Causes:**
+
 - Batch size too large for available memory
 - Memory leak in model function
 - JAX compilation overhead
 
 **Solutions:**
+
 ```yaml
 # Reduce batch size manually
 performance:
@@ -380,11 +398,13 @@ jax.clear_caches()
 **Symptom:** Streaming diagnostics show < 50% success rate
 
 **Causes:**
+
 - Poor initial parameters
 - Noisy data
 - Ill-conditioned Jacobian
 
 **Solutions:**
+
 ```yaml
 # Relax success rate requirement
 optimization:
@@ -405,11 +425,13 @@ parameter_space:
 **Symptom:** Optimization restarts from beginning despite existing checkpoints
 
 **Causes:**
+
 - `resume_from_checkpoint: false` in config
 - Checkpoints corrupted
 - Checkpoint directory mismatch
 
 **Solutions:**
+
 ```yaml
 optimization:
   streaming:
@@ -434,11 +456,13 @@ if latest:
 **Symptom:** Warning "Checkpoint save took 3.5s (target: < 2s)"
 
 **Causes:**
+
 - Very large parameter count (> 20 parameters)
 - Slow disk I/O
 - HDF5 compression overhead
 
 **Solutions:**
+
 ```yaml
 optimization:
   streaming:
@@ -458,11 +482,13 @@ manager = CheckpointManager(
 **Symptom:** `NLSQNumericalError: Non-finite gradients detected`
 
 **Causes:**
+
 - Learning rate too large
 - Parameters diverging
 - Model function overflow
 
 **Solutions:**
+
 ```yaml
 # Disable validation in fast mode
 optimization:
@@ -507,13 +533,14 @@ if result.recovery_actions:
 ```
 
 Example output:
+
 ```
 Batch 5: perturb_parameters (5% noise)
 Batch 12: reduce_step_size (0.5x)
 Batch 28: tighten_bounds (90% range)
 ```
 
----
+______________________________________________________________________
 
 ## Advanced Features
 
@@ -583,7 +610,7 @@ wrapper = NLSQWrapper(
 )
 ```
 
----
+______________________________________________________________________
 
 ## Performance Characteristics
 
@@ -592,6 +619,7 @@ wrapper = NLSQWrapper(
 Streaming mode provides constant memory usage regardless of dataset size:
 
 **Measured Performance:**
+
 - **Standard (1M points):** 2.5 GB
 - **Large (10M points):** 8.3 GB (linear scaling)
 - **Streaming (100M points):** 1.8 GB (constant)
@@ -604,6 +632,7 @@ Streaming mode provides constant memory usage regardless of dataset size:
 Checkpoint saves have minimal impact on total runtime:
 
 **Overhead Measurements:**
+
 - **No checkpoints:** 0% (baseline)
 - **Checkpoints enabled:** < 2% total runtime increase
 - **Checkpoint frequency=10:** ~0.5% overhead per save
@@ -616,6 +645,7 @@ Checkpoint saves have minimal impact on total runtime:
 Full fault tolerance (validation + recovery) adds minimal overhead:
 
 **Overhead Measurements:**
+
 - **No fault tolerance:** 0% (baseline)
 - **Numerical validation only:** ~0.5%
 - **Full fault tolerance:** < 5% (spec requirement met)
@@ -628,6 +658,7 @@ Full fault tolerance (validation + recovery) adds minimal overhead:
 Streaming mode maintains high throughput:
 
 **Measured Throughput:**
+
 - **Standard (< 1M):** ~500k points/second
 - **Large (1-10M):** ~450k points/second
 - **Chunked (10-100M):** ~400k points/second
@@ -635,45 +666,50 @@ Streaming mode maintains high throughput:
 
 **Regression:** < 25% slower than STANDARD mode (acceptable for 100x larger datasets)
 
----
+______________________________________________________________________
 
 ## Best Practices
 
 1. **Enable Checkpoints for Production**
+
    - Always enable for runs > 30 minutes
    - Use `checkpoint_frequency=10` for good balance
 
-2. **Monitor Batch Success Rate**
+1. **Monitor Batch Success Rate**
+
    - Target > 90% success rate
    - Investigate if < 50%
 
-3. **Use Fast Mode for Validated Pipelines**
+1. **Use Fast Mode for Validated Pipelines**
+
    - Enable after development/testing phase
    - Disable for new datasets
 
-4. **Adjust Memory Limits for Shared Systems**
+1. **Adjust Memory Limits for Shared Systems**
+
    - Use `memory_limit_gb` on HPC nodes
    - Leave headroom for OS (use 80% of total RAM)
 
-5. **Keep Last 3 Checkpoints**
+1. **Keep Last 3 Checkpoints**
+
    - Default `keep_last_checkpoints=3` is optimal
    - Protects against single corrupted checkpoint
 
-6. **Validate Data Quality First**
+1. **Validate Data Quality First**
+
    - Run small subset with STANDARD mode
    - Validate convergence before full STREAMING run
 
----
+______________________________________________________________________
 
 ## References
 
-- **NLSQ Documentation:** https://nlsq.readthedocs.io/en/latest/guides/large_datasets.html
+- **NLSQ Documentation:**
+  https://nlsq.readthedocs.io/en/latest/guides/large_datasets.html
 - **Homodyne Migration Guide:** `/docs/migration/v2_to_v3_migration.md`
 - **API Documentation:** `/docs/api-reference/optimization.md`
 - **Performance Tuning Guide:** `/docs/guides/performance_tuning.md`
 
----
+______________________________________________________________________
 
-**Last Updated:** October 22, 2025
-**Homodyne Version:** 3.0+
-**NLSQ Version:** 0.1.5+
+**Last Updated:** October 22, 2025 **Homodyne Version:** 3.0+ **NLSQ Version:** 0.1.5+

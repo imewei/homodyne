@@ -446,7 +446,7 @@ def _compute_g1_diffusion_core(
         # Use JAX operations for debugging within JIT context
         pass  # Can't print in JIT context easily
     else:
-        import numpy as np
+        import numpy as np  # noqa: F811 - Conditional import for debug path
 
         if hasattr(D0, "item"):
             print(
@@ -502,7 +502,7 @@ def _compute_g1_diffusion_core(
 
         # DEBUG: Check D_t values
         if not jax_available or not hasattr(jnp, "where"):  # Outside JIT
-            import numpy as np
+            import numpy as np  # noqa: F811 - Conditional import for debug path
 
             if hasattr(D_t, "min"):
                 print(
@@ -515,7 +515,7 @@ def _compute_g1_diffusion_core(
 
         # DEBUG: Check D_integral values
         if not jax_available or not hasattr(jnp, "where"):  # Outside JIT
-            import numpy as np
+            import numpy as np  # noqa: F811 - Conditional import for debug path
 
             if hasattr(D_integral, "min"):
                 print(
@@ -665,7 +665,9 @@ def _compute_g1_shear_core(
         # Compute frame separation: |t2[i] - t1[i]| / dt = number of frames
         # For XPCS data, times are always on uniform grid: t = dt * frame_index
         frame_diff = jnp.abs(t2_arr - t1_arr) / dt  # Dimensionless (number of frames)
-        gamma_integral_elementwise = frame_diff * 0.5 * (gamma_t1 + gamma_t2)  # Dimensionless
+        gamma_integral_elementwise = (
+            frame_diff * 0.5 * (gamma_t1 + gamma_t2)
+        )  # Dimensionless
 
         # For consistency with matrix mode, store as 1D array
         gamma_integral = gamma_integral_elementwise  # Shape: (n,)
@@ -802,7 +804,9 @@ def _compute_g1_total_core(
         Total g1 correlation function with shape (n_phi, n_times, n_times)
     """
     # Compute diffusion contribution
-    g1_diff = _compute_g1_diffusion_core(params, t1, t2, wavevector_q_squared_half_dt, dt)
+    g1_diff = _compute_g1_diffusion_core(
+        params, t1, t2, wavevector_q_squared_half_dt, dt
+    )
 
     # Compute shear contribution
     g1_shear = _compute_g1_shear_core(params, t1, t2, phi, sinc_prefactor, dt)

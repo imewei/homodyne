@@ -432,15 +432,16 @@ class ConfigManager:
                 f"number of parameter_names ({len(param_names_config)})"
             )
 
-        # Get ParameterManager for name mapping
-        param_manager = self._get_parameter_manager()
+        # Get ParameterManager for name mapping (used for validation)
+        _param_manager = self._get_parameter_manager()  # noqa: F841
+
+        # Import name mapping once at the top of this section
+        from homodyne.config.types import PARAMETER_NAME_MAPPING
 
         # Build initial parameters dict with name mapping
         initial_params_dict: dict[str, float] = {}
-        for param_name, value in zip(param_names_config, param_values):
+        for param_name, value in zip(param_names_config, param_values, strict=False):
             # Apply name mapping (e.g., gamma_dot_0 → gamma_dot_t0)
-            from homodyne.config.types import PARAMETER_NAME_MAPPING
-
             canonical_name = PARAMETER_NAME_MAPPING.get(param_name, param_name)
             initial_params_dict[canonical_name] = float(value)
 
@@ -450,8 +451,6 @@ class ConfigManager:
             # Map active parameter names to canonical names
             active_canonical = set()
             for name in active_params_config:
-                from homodyne.config.types import PARAMETER_NAME_MAPPING
-
                 canonical = PARAMETER_NAME_MAPPING.get(name, name)
                 active_canonical.add(canonical)
 
@@ -469,8 +468,6 @@ class ConfigManager:
             # Map fixed parameter names to canonical names
             fixed_canonical = set()
             for name in fixed_params.keys():
-                from homodyne.config.types import PARAMETER_NAME_MAPPING
-
                 canonical = PARAMETER_NAME_MAPPING.get(name, name)
                 fixed_canonical.add(canonical)
 
@@ -494,18 +491,24 @@ class ConfigManager:
                 if len(contrast_values) == 1:
                     # Single-angle: use scalar contrast
                     initial_params_dict["contrast"] = float(contrast_values[0])
-                    logger.info(f"Loaded scalar contrast from per_angle_scaling: {contrast_values[0]}")
+                    logger.info(
+                        f"Loaded scalar contrast from per_angle_scaling: {contrast_values[0]}"
+                    )
                 else:
                     # Multi-angle: use per-angle contrast_0, contrast_1, ...
                     for idx, val in enumerate(contrast_values):
                         initial_params_dict[f"contrast_{idx}"] = float(val)
-                    logger.info(f"Loaded {len(contrast_values)} per-angle contrast values")
+                    logger.info(
+                        f"Loaded {len(contrast_values)} per-angle contrast values"
+                    )
 
             if offset_values is not None and isinstance(offset_values, list):
                 if len(offset_values) == 1:
                     # Single-angle: use scalar offset
                     initial_params_dict["offset"] = float(offset_values[0])
-                    logger.info(f"Loaded scalar offset from per_angle_scaling: {offset_values[0]}")
+                    logger.info(
+                        f"Loaded scalar offset from per_angle_scaling: {offset_values[0]}"
+                    )
                 else:
                     # Multi-angle: use per-angle offset_0, offset_1, ...
                     for idx, val in enumerate(offset_values):

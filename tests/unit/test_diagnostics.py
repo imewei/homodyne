@@ -12,17 +12,15 @@ import numpy as np
 import pytest
 
 from homodyne.optimization.cmc.diagnostics import (
-    validate_cmc_results,
-    compute_per_shard_diagnostics,
+    _check_multimodality,
+    _fit_gaussian_to_samples,
+    _kl_divergence_gaussian,
+    _validate_single_shard,
     compute_between_shard_kl_divergence,
     compute_combined_posterior_diagnostics,
-    _fit_gaussian_to_samples,
-    _compute_kl_divergence_matrix,
-    _kl_divergence_gaussian,
-    _check_multimodality,
-    _validate_single_shard,
+    compute_per_shard_diagnostics,
+    validate_cmc_results,
 )
-
 
 # ============================================================================
 # Test Fixtures

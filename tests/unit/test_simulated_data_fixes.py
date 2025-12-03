@@ -34,9 +34,9 @@ class TestTimeGridGeneration:
         t_vals = np.linspace(0, expected_time_max, n_time_points)
         for i in range(len(t_vals)):
             expected_t = dt * i
-            assert t_vals[i] == pytest.approx(
-                expected_t, abs=1e-10
-            ), f"t[{i}] = {t_vals[i]:.10f} != {expected_t:.10f}"
+            assert t_vals[i] == pytest.approx(expected_t, abs=1e-10), (
+                f"t[{i}] = {t_vals[i]:.10f} != {expected_t:.10f}"
+            )
 
     def test_time_grid_spacing_consistency(self):
         """Test that time grid has consistent spacing equal to dt."""
@@ -118,9 +118,9 @@ class TestSimulatedDataIndependence:
         t_vals_2 = np.linspace(0, time_max, n_points)
 
         # Should be identical
-        assert np.array_equal(
-            t_vals_1, t_vals_2
-        ), "Time grid not deterministic from config"
+        assert np.array_equal(t_vals_1, t_vals_2), (
+            "Time grid not deterministic from config"
+        )
 
 
 class TestDtPropagation:
@@ -145,15 +145,15 @@ class TestDtPropagation:
         assert dt_estimated_correct == pytest.approx(dt_correct, abs=1e-10)
 
         # Verify wrong case produces wrong dt
-        assert dt_estimated_wrong != pytest.approx(
-            dt_correct, abs=1e-10
-        ), "Bug simulation failed: wrong time_max should produce wrong dt estimate"
+        assert dt_estimated_wrong != pytest.approx(dt_correct, abs=1e-10), (
+            "Bug simulation failed: wrong time_max should produce wrong dt estimate"
+        )
 
         # Show the error
         dt_error = abs(dt_estimated_wrong - dt_correct) / dt_correct * 100
-        assert (
-            dt_error > 0.5
-        ), f"dt error is {dt_error:.2f}%, should be significant for this test"
+        assert dt_error > 0.5, (
+            f"dt error is {dt_error:.2f}%, should be significant for this test"
+        )
 
 
 class TestRegressionPrevention:

@@ -30,8 +30,9 @@ path once a bypass is requested.
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import dataclass
-from typing import Any, Dict, Optional, Sequence, Tuple
+from typing import Any
 
 import numpy as np
 
@@ -50,17 +51,17 @@ class CMCBypassDecision:
     """Represents the result of the bypass heuristic evaluation."""
 
     should_bypass: bool
-    reason: Optional[str] = None
-    triggered_by: Optional[str] = None
+    reason: str | None = None
+    triggered_by: str | None = None
     mode: str = "auto"
 
 
 def evaluate_cmc_bypass(
-    cmc_config: Dict[str, Any],
+    cmc_config: dict[str, Any],
     *,
     num_samples: int,
     dataset_size: int,
-    phi: Optional[Sequence[float]] = None,
+    phi: Sequence[float] | None = None,
 ) -> CMCBypassDecision:
     """Determine whether the current dataset should bypass CMC.
 
@@ -83,9 +84,9 @@ def evaluate_cmc_bypass(
         mode = "auto"
 
     thresholds = DEFAULT_THRESHOLDS.copy()
-    user_thresholds = cmc_config.get("bypass_thresholds") or cmc_config.get("bypass", {}).get(
-        "thresholds"
-    )
+    user_thresholds = cmc_config.get("bypass_thresholds") or cmc_config.get(
+        "bypass", {}
+    ).get("thresholds")
     if isinstance(user_thresholds, dict):
         for key, value in user_thresholds.items():
             if key in thresholds and isinstance(value, (int, float)) and value > 0:
@@ -153,7 +154,7 @@ def evaluate_cmc_bypass(
     return CMCBypassDecision(should_bypass=False, mode=mode)
 
 
-def _count_unique_phi(phi: Optional[Sequence[float]], fallback: int) -> int:
+def _count_unique_phi(phi: Sequence[float] | None, fallback: int) -> int:
     if phi is None:
         return fallback
 
@@ -166,7 +167,7 @@ def _count_unique_phi(phi: Optional[Sequence[float]], fallback: int) -> int:
         return fallback
 
 
-def _estimate_expected_shards(cmc_config: Dict[str, Any], dataset_size: int) -> int:
+def _estimate_expected_shards(cmc_config: dict[str, Any], dataset_size: int) -> int:
     sharding_cfg = cmc_config.get("sharding", {})
     num_shards_cfg = sharding_cfg.get("num_shards")
     if isinstance(num_shards_cfg, int) and num_shards_cfg > 0:

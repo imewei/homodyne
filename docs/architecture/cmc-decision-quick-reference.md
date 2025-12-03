@@ -1,25 +1,29 @@
 # CMC Decision Logic - Quick Reference
 
-**Last Updated**: October 28, 2025
+**Last Updated**: December 2, 2025 (v2.4.1)
 
-## When Does CMC Trigger? (OR Logic)
+> **v2.4.1 Update**: CMC is now mandatory for all MCMC runs. The NUTS auto-selection
+> logic has been removed. Single-shard runs still use NUTS internally.
+
+## CMC-Only Architecture (v2.4.1+)
 
 ```python
-use_cmc = (num_samples >= 100) OR (estimated_memory > 50% of available)
+# v2.4.1+: CMC is always used
+use_cmc = True  # No decision logic needed
 ```
 
-## Three Scenarios
+## Sharding Scenarios
 
-| Scenario | Samples | Dataset Size | Memory | Result | Reason |
-|----------|---------|--------------|--------|--------|--------|
-| 1. Small | 23 phi | 23M points | 1.1 GB (7%) | **NUTS** | Neither threshold met |
-| 2. Many Samples | 200 phi | 10M points | 0.5 GB (3%) | **CMC** | 200 >= 100 samples |
-| 3. Huge Data | 2 phi | 200M points | 9.6 GB (60%) | **CMC** | 60% > 50% memory |
+| Scenario | Samples | Dataset Size | Shards | Notes |
+|----------|---------|--------------|--------|-------|
+| Small data | 3 phi | 5M points | 1 | Single-shard CMC (NUTS internally) |
+| Medium data | 23 phi | 50M points | 4-8 | Multi-shard CMC |
+| Large data | 5 phi | 200M points | 8+ | Memory-optimized sharding |
 
 ## Memory Calculation
 
 ```python
-# Estimate MCMC memory requirement
+# Estimate MCMC memory requirement per shard
 estimated_memory_gb = (dataset_size × 8 bytes × 6) / 1e9
 
 # Where multiplier 6 accounts for:
@@ -28,45 +32,38 @@ estimated_memory_gb = (dataset_size × 8 bytes × 6) / 1e9
 # - MCMC state: 3×
 ```
 
-## Manual Override
+## Configuration (v2.4.1+)
 
 ```yaml
-# In YAML config
+# In YAML config (method selection removed in v2.4.1)
 mcmc:
-  method: cmc  # Force CMC
-  # OR
-  method: nuts  # Force NUTS
-  # OR
-  method: auto  # Automatic (default)
+  sharding:
+    num_shards: auto  # Automatic shard count
+    seed_base: 42     # RNG seed for reproducibility
 ```
 
 ## Code Reference
 
-**Function**: `homodyne/device/config.py:should_use_cmc()`
+**Note**: `should_use_cmc()` is deprecated and always returns `True` in v2.4.1+.
 
 ```python
-from homodyne.device.config import detect_hardware, should_use_cmc
+from homodyne.optimization.mcmc import fit_mcmc_jax
 
-hw = detect_hardware()
-
-# Typical XPCS scenario: 2 phi × 100M each
-use_cmc = should_use_cmc(
-    num_samples=2,
-    hardware_config=hw,
-    dataset_size=200_000_000,  # Total points
-    memory_threshold_pct=0.5,  # 50% threshold
-    min_samples_for_cmc=100    # Parallelism threshold
-)
-# Result: True (memory mode triggered)
+# All MCMC runs use CMC automatically
+result = fit_mcmc_jax(data, config)
+print(f"Shards used: {result.num_shards}")
 ```
 
 ## Current Limitation
 
 **Data-level sharding NOT YET IMPLEMENTED**
 
-When memory-triggered CMC runs with few samples (e.g., 2 phi), it still uses sample-level sharding, which provides NO memory benefit. Future enhancement will implement data-level sharding (splitting time points within samples).
+When memory-triggered CMC runs with few samples (e.g., 2 phi), it still uses
+sample-level sharding, which provides NO memory benefit. Future enhancement will
+implement data-level sharding (splitting time points within samples).
 
-**Workaround**: Use NLSQ optimization (JAX-based, memory-efficient) instead of MCMC for large datasets with few samples.
+**Workaround**: Use NLSQ optimization (JAX-based, memory-efficient) instead of MCMC for
+large datasets with few samples.
 
 ## See Also
 

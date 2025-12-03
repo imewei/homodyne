@@ -54,13 +54,20 @@ print(f"[DEBUG __init__.py] XLA_FLAGS BEFORE: {_xla_flags_before}", file=sys.std
 if "XLA_FLAGS" not in os.environ:
     # No existing XLA_FLAGS, set default
     os.environ["XLA_FLAGS"] = "--xla_force_host_platform_device_count=4"
-    print("[DEBUG __init__.py] XLA_FLAGS was NOT SET, setting to default", file=sys.stderr)
+    print(
+        "[DEBUG __init__.py] XLA_FLAGS was NOT SET, setting to default", file=sys.stderr
+    )
 elif "xla_force_host_platform_device_count" not in os.environ["XLA_FLAGS"]:
     # XLA_FLAGS exists but doesn't specify device count, append it
     os.environ["XLA_FLAGS"] += " --xla_force_host_platform_device_count=4"
-    print("[DEBUG __init__.py] XLA_FLAGS exists, appending device count", file=sys.stderr)
+    print(
+        "[DEBUG __init__.py] XLA_FLAGS exists, appending device count", file=sys.stderr
+    )
 else:
-    print("[DEBUG __init__.py] XLA_FLAGS already has device count, respecting user setting", file=sys.stderr)
+    print(
+        "[DEBUG __init__.py] XLA_FLAGS already has device count, respecting user setting",
+        file=sys.stderr,
+    )
 
 # DEBUG: Print XLA_FLAGS state AFTER modification
 _xla_flags_after = os.environ.get("XLA_FLAGS", "NOT SET")
@@ -86,15 +93,16 @@ except ImportError:
     __version__ = "2.0.0-dev"
 
 # Core imports with graceful fallback
+# These are re-exported for public API
 try:
-    from homodyne.data import XPCSDataLoader, load_xpcs_data
+    from homodyne.data import XPCSDataLoader, load_xpcs_data  # noqa: F401
 
     HAS_DATA = True
 except ImportError:
     HAS_DATA = False
 
 try:
-    from homodyne.core import (
+    from homodyne.core import (  # noqa: F401
         ParameterSpace,
         ScaledFittingEngine,
         TheoryEngine,
@@ -106,28 +114,35 @@ except ImportError:
     HAS_CORE = False
 
 try:
-    from homodyne.optimization import fit_mcmc_jax, fit_nlsq_jax, get_optimization_info
+    from homodyne.optimization import (  # noqa: F401
+        fit_mcmc_jax,
+        fit_nlsq_jax,
+        get_optimization_info,
+    )
 
     HAS_OPTIMIZATION = True
 except ImportError:
     HAS_OPTIMIZATION = False
 
 try:
-    from homodyne.config import ConfigManager
+    from homodyne.config import ConfigManager  # noqa: F401
 
     HAS_CONFIG = True
 except ImportError:
     HAS_CONFIG = False
 
 try:
-    from homodyne.device import configure_optimal_device, get_device_status
+    from homodyne.device import (  # noqa: F401
+        configure_optimal_device,
+        get_device_status,
+    )
 
     HAS_DEVICE = True
 except ImportError:
     HAS_DEVICE = False
 
 try:
-    from homodyne.cli import main as cli_main
+    from homodyne.cli import main as cli_main  # noqa: F401
 
     HAS_CLI = True
 except ImportError:
@@ -151,8 +166,10 @@ try:
     __features__["jax_acceleration"] = True
 
     # DEBUG: Check how many devices JAX detected
-    print(f"[DEBUG __init__.py] JAX imported successfully", file=sys.stderr)
-    print(f"[DEBUG __init__.py] JAX device count: {jax.device_count()}", file=sys.stderr)
+    print("[DEBUG __init__.py] JAX imported successfully", file=sys.stderr)
+    print(
+        f"[DEBUG __init__.py] JAX device count: {jax.device_count()}", file=sys.stderr
+    )
     print(f"[DEBUG __init__.py] JAX devices: {jax.devices()}", file=sys.stderr)
 except ImportError:
     __features__["jax_acceleration"] = False

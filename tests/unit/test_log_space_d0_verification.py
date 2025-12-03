@@ -21,10 +21,11 @@ import pytest
 try:
     import jax
     import jax.numpy as jnp
-    from jax import random
     import numpyro
-    from numpyro.infer import MCMC, NUTS
+    from jax import random
     from numpyro import handlers
+    from numpyro.infer import MCMC, NUTS
+
     JAX_AVAILABLE = True
 except ImportError:
     JAX_AVAILABLE = False
@@ -63,7 +64,7 @@ def prepare_model_inputs(data):
     """Prepare flattened data for model."""
     c2_flat = data.g2.ravel()
     sigma_flat = data.sigma.ravel()
-    t1_grid, t2_grid = np.meshgrid(data.t1, data.t2, indexing='ij')
+    t1_grid, t2_grid = np.meshgrid(data.t1, data.t2, indexing="ij")
     t1_flat = t1_grid.ravel()
     t2_flat = t2_grid.ravel()
     phi_flat = np.full_like(t1_flat, data.phi[0])
@@ -140,7 +141,9 @@ def test_log_space_sampling_improves_diagnostics():
 
     # Test log-space sampling (new implementation)
     print("Running MCMC with log-space D0 sampling...")
-    mcmc_log = run_mcmc_sampling(model_inputs, param_space, use_log_space=True, tier="2")
+    mcmc_log = run_mcmc_sampling(
+        model_inputs, param_space, use_log_space=True, tier="2"
+    )
 
     # Extract diagnostics
     from numpyro.diagnostics import effective_sample_size, gelman_rubin

@@ -19,10 +19,11 @@ Author: Testing Engineer (Task Group 6.1)
 Date: 2025-10-22
 """
 
-import numpy as np
-from typing import Optional, Tuple, Dict, Any
-from dataclasses import dataclass
 import warnings
+from dataclasses import dataclass
+from typing import Any
+
+import numpy as np
 
 
 @dataclass
@@ -107,9 +108,9 @@ class LargeDatasetFactory:
         n_phi: int,
         n_t1: int,
         n_t2: int,
-        true_params: Optional[Dict[str, float]] = None,
+        true_params: dict[str, float] | None = None,
         allocate_data: bool = True,
-    ) -> Tuple[Any, DatasetMetadata]:
+    ) -> tuple[Any, DatasetMetadata]:
         """Create mock XPCS dataset with specified dimensions.
 
         Parameters
@@ -168,7 +169,7 @@ class LargeDatasetFactory:
         n_phi: int,
         n_t1: int,
         n_t2: int,
-        true_params: Dict[str, float],
+        true_params: dict[str, float],
     ) -> Any:
         """Generate synthetic XPCS correlation data.
 
@@ -236,7 +237,7 @@ class LargeDatasetFactory:
 
     def create_1m_dataset(
         self, allocate_data: bool = True
-    ) -> Tuple[Any, DatasetMetadata]:
+    ) -> tuple[Any, DatasetMetadata]:
         """Create 1M point dataset (boundary: STANDARD → LARGE).
 
         Dataset: 100 phi × 100 t1 × 100 t2 = 1,000,000 points
@@ -262,7 +263,7 @@ class LargeDatasetFactory:
 
     def create_10m_dataset(
         self, allocate_data: bool = False
-    ) -> Tuple[Any, DatasetMetadata]:
+    ) -> tuple[Any, DatasetMetadata]:
         """Create 10M point dataset (boundary: LARGE → CHUNKED).
 
         Dataset: 200 phi × 250 t1 × 200 t2 = 10,000,000 points
@@ -299,7 +300,7 @@ class LargeDatasetFactory:
 
     def create_100m_dataset(
         self, allocate_data: bool = False
-    ) -> Tuple[Any, DatasetMetadata]:
+    ) -> tuple[Any, DatasetMetadata]:
         """Create 100M point dataset (boundary: CHUNKED → STREAMING).
 
         Dataset: 400 phi × 500 t1 × 500 t2 = 100,000,000 points
@@ -337,7 +338,7 @@ class LargeDatasetFactory:
 
     def create_1b_dataset(
         self, allocate_data: bool = False
-    ) -> Tuple[Any, DatasetMetadata]:
+    ) -> tuple[Any, DatasetMetadata]:
         """Create 1B point dataset (extreme STREAMING test).
 
         Dataset: 1000 phi × 1000 t1 × 1000 t2 = 1,000,000,000 points
@@ -429,7 +430,7 @@ def create_test_dataset(
     size: str,
     seed: int = 42,
     allocate_data: bool = True,
-) -> Tuple[Any, DatasetMetadata]:
+) -> tuple[Any, DatasetMetadata]:
     """Create test dataset by size specification.
 
     Parameters

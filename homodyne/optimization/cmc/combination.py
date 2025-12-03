@@ -45,7 +45,7 @@ Fallback to averaging on failure:
 """
 
 import logging
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any
 
 import numpy as np
 
@@ -53,11 +53,11 @@ logger = logging.getLogger(__name__)
 
 
 def combine_subposteriors(
-    shard_results: List[Dict[str, Any]],
+    shard_results: list[dict[str, Any]],
     method: str = "weighted",
     fallback_enabled: bool = True,
-    diagnostics_config: Optional[Dict[str, Any]] = None,
-) -> Dict[str, np.ndarray]:
+    diagnostics_config: dict[str, Any] | None = None,
+) -> dict[str, np.ndarray]:
     """Combine subposteriors from all shards into a single posterior.
 
     This function combines MCMC results from multiple data shards using either
@@ -172,9 +172,9 @@ def combine_subposteriors(
 
 
 def _validate_shard_agreement(
-    shard_results: List[Dict[str, Any]],
-    diagnostics_config: Dict[str, Any],
-) -> Dict[str, float]:
+    shard_results: list[dict[str, Any]],
+    diagnostics_config: dict[str, Any],
+) -> dict[str, float]:
     """Check whether shard posteriors agree before combination.
 
     Computes pairwise KL divergence between Gaussian approximations of the
@@ -190,7 +190,7 @@ def _validate_shard_agreement(
     max_allowed = diagnostics_config.get("max_between_shard_kl", 2.0)
     max_allowed = max(float(max_allowed), 0.0)
 
-    kl_values: List[Tuple[float, Tuple[int, int]]] = []
+    kl_values: list[tuple[float, tuple[int, int]]] = []
 
     summaries = []
     for idx, shard in enumerate(shard_results):
@@ -233,7 +233,7 @@ def _validate_shard_agreement(
     return {"max_kl": max_kl, "threshold": max_allowed}
 
 
-def _weighted_gaussian_product(shard_results: List[Dict[str, Any]]) -> Dict[str, Any]:
+def _weighted_gaussian_product(shard_results: list[dict[str, Any]]) -> dict[str, Any]:
     """Combine subposteriors using weighted Gaussian product.
 
     This implements the Scott et al. (2016) algorithm:
@@ -329,7 +329,9 @@ def _weighted_gaussian_product(shard_results: List[Dict[str, Any]]) -> Dict[str,
         ) from e
 
     # Combined mean (weighted average using precisions)
-    weighted_means = [prec @ mean for prec, mean in zip(precisions, means)]
+    weighted_means = [
+        prec @ mean for prec, mean in zip(precisions, means, strict=False)
+    ]
     combined_mean = combined_cov @ np.sum(weighted_means, axis=0)
 
     # Sample from combined Gaussian
@@ -353,7 +355,7 @@ def _weighted_gaussian_product(shard_results: List[Dict[str, Any]]) -> Dict[str,
     }
 
 
-def _simple_averaging(shard_results: List[Dict[str, Any]]) -> Dict[str, Any]:
+def _simple_averaging(shard_results: list[dict[str, Any]]) -> dict[str, Any]:
     """Combine subposteriors using simple averaging.
 
     This method concatenates all samples from all shards and resamples to
@@ -419,7 +421,7 @@ def _simple_averaging(shard_results: List[Dict[str, Any]]) -> Dict[str, Any]:
     }
 
 
-def _compute_gaussian_summary(samples: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
+def _compute_gaussian_summary(samples: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
     mean = np.mean(samples, axis=0)
     cov = np.cov(samples.T)
     if cov.ndim == 0:
@@ -459,7 +461,7 @@ def _gaussian_kl(
     return 0.5 * (trace_term + mahal_term - dim + det_ratio)
 
 
-def _validate_shard_results(shard_results: List[Dict[str, Any]]) -> None:
+def _validate_shard_results(shard_results: list[dict[str, Any]]) -> None:
     """Validate shard results before combination.
 
     Parameters

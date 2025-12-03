@@ -5,6 +5,7 @@ from the per_angle_scaling section were not being loaded into MCMC initializatio
 """
 
 import pytest
+
 from homodyne.config.manager import ConfigManager
 
 
@@ -18,19 +19,16 @@ class TestPerAngleScalingInitialization:
             "initial_parameters": {
                 "parameter_names": ["D0", "alpha", "D_offset"],
                 "values": [1000.0, -1.5, 3.0],
-                "per_angle_scaling": {
-                    "contrast": [0.05],
-                    "offset": [1.001]
-                }
+                "per_angle_scaling": {"contrast": [0.05], "offset": [1.001]},
             },
             "parameter_space": {
                 "model": "static",
                 "bounds": [
                     {"name": "D0", "min": 100.0, "max": 10000.0},
                     {"name": "alpha", "min": -2.0, "max": 2.0},
-                    {"name": "D_offset", "min": -100.0, "max": 100.0}
-                ]
-            }
+                    {"name": "D_offset", "min": -100.0, "max": 100.0},
+                ],
+            },
         }
 
         config_mgr = ConfigManager(config_override=config)
@@ -56,17 +54,17 @@ class TestPerAngleScalingInitialization:
                 "values": [1000.0, -1.5, 3.0],
                 "per_angle_scaling": {
                     "contrast": [0.05, 0.06, 0.04],
-                    "offset": [1.001, 1.002, 1.000]
-                }
+                    "offset": [1.001, 1.002, 1.000],
+                },
             },
             "parameter_space": {
                 "model": "static",
                 "bounds": [
                     {"name": "D0", "min": 100.0, "max": 10000.0},
                     {"name": "alpha", "min": -2.0, "max": 2.0},
-                    {"name": "D_offset", "min": -100.0, "max": 100.0}
-                ]
-            }
+                    {"name": "D_offset", "min": -100.0, "max": 100.0},
+                ],
+            },
         }
 
         config_mgr = ConfigManager(config_override=config)
@@ -98,16 +96,16 @@ class TestPerAngleScalingInitialization:
             "analysis_mode": "static",
             "initial_parameters": {
                 "parameter_names": ["D0", "alpha", "D_offset"],
-                "values": [1000.0, -1.5, 3.0]
+                "values": [1000.0, -1.5, 3.0],
             },
             "parameter_space": {
                 "model": "static",
                 "bounds": [
                     {"name": "D0", "min": 100.0, "max": 10000.0},
                     {"name": "alpha", "min": -2.0, "max": 2.0},
-                    {"name": "D_offset", "min": -100.0, "max": 100.0}
-                ]
-            }
+                    {"name": "D_offset", "min": -100.0, "max": 100.0},
+                ],
+            },
         }
 
         config_mgr = ConfigManager(config_override=config)
@@ -129,18 +127,16 @@ class TestPerAngleScalingInitialization:
             "initial_parameters": {
                 "parameter_names": ["D0", "alpha", "D_offset"],
                 "values": [1000.0, -1.5, 3.0],
-                "per_angle_scaling": {
-                    "contrast": [0.05]
-                }
+                "per_angle_scaling": {"contrast": [0.05]},
             },
             "parameter_space": {
                 "model": "static",
                 "bounds": [
                     {"name": "D0", "min": 100.0, "max": 10000.0},
                     {"name": "alpha", "min": -2.0, "max": 2.0},
-                    {"name": "D_offset", "min": -100.0, "max": 100.0}
-                ]
-            }
+                    {"name": "D_offset", "min": -100.0, "max": 100.0},
+                ],
+            },
         }
 
         config_mgr = ConfigManager(config_override=config)
@@ -163,18 +159,16 @@ class TestPerAngleScalingInitialization:
             "initial_parameters": {
                 "parameter_names": ["D0", "alpha", "D_offset"],
                 "values": [1000.0, -1.5, 3.0],
-                "per_angle_scaling": {
-                    "offset": [1.001]
-                }
+                "per_angle_scaling": {"offset": [1.001]},
             },
             "parameter_space": {
                 "model": "static",
                 "bounds": [
                     {"name": "D0", "min": 100.0, "max": 10000.0},
                     {"name": "alpha", "min": -2.0, "max": 2.0},
-                    {"name": "D_offset", "min": -100.0, "max": 100.0}
-                ]
-            }
+                    {"name": "D_offset", "min": -100.0, "max": 100.0},
+                ],
+            },
         }
 
         config_mgr = ConfigManager(config_override=config)
@@ -199,17 +193,17 @@ class TestPerAngleScalingInitialization:
                 "values": [16834.85791844444, -1.571278060789398, 3.0262561756929505],
                 "per_angle_scaling": {
                     "contrast": [0.05014977988697604],
-                    "offset": [1.001402641457075]
-                }
+                    "offset": [1.001402641457075],
+                },
             },
             "parameter_space": {
                 "model": "static",
                 "bounds": [
                     {"name": "D0", "min": 100.0, "max": 100000.0},
                     {"name": "alpha", "min": -2.0, "max": 2.0},
-                    {"name": "D_offset", "min": -100000.0, "max": 100000.0}
-                ]
-            }
+                    {"name": "D_offset", "min": -100000.0, "max": 100000.0},
+                ],
+            },
         }
 
         config_mgr = ConfigManager(config_override=config)

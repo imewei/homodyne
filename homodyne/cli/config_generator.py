@@ -15,7 +15,7 @@ import argparse
 import shutil
 import sys
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any
 
 import yaml
 
@@ -152,7 +152,7 @@ def get_template_path(mode: str) -> Path:
 
 def generate_config(
     mode: str, output_path: Path, force: bool = False
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """Generate configuration from template.
 
     Parameters
@@ -191,23 +191,23 @@ def generate_config(
     shutil.copy2(template_path, output_path)
 
     # Load config for return value (without modifying file)
-    with open(template_path, "r") as f:
+    with open(template_path) as f:
         config = yaml.safe_load(f)
 
     print(f"✓ Generated {mode} configuration: {output_path}")
     print(f"  Template: {template_path.name}")
     print(f"  Mode: {mode}")
-    print(f"\nNext steps:")
+    print("\nNext steps:")
     print(f"  1. Edit configuration: {output_path}")
-    print(f"  2. Update data file path")
-    print(f"  3. Adjust parameters and bounds")
+    print("  2. Update data file path")
+    print("  3. Adjust parameters and bounds")
     print(f"  4. Run analysis: homodyne --config {output_path}")
-    print(f"\nNote: All template comments and instructions are preserved.")
+    print("\nNote: All template comments and instructions are preserved.")
 
     return config
 
 
-def interactive_builder() -> Dict[str, Any]:
+def interactive_builder() -> dict[str, Any]:
     """Interactive configuration builder.
 
     Returns
@@ -276,7 +276,7 @@ def interactive_builder() -> Dict[str, Any]:
             print("Configuration not saved.")
             # Still load and return config for reference
             template_path = get_template_path(mode)
-            with open(template_path, "r") as f:
+            with open(template_path) as f:
                 return yaml.safe_load(f)
 
     # Get template
@@ -291,7 +291,7 @@ def interactive_builder() -> Dict[str, Any]:
         yaml_handler.preserve_quotes = True
         yaml_handler.width = 4096  # Prevent line wrapping
 
-        with open(template_path, "r") as f:
+        with open(template_path) as f:
             config = yaml_handler.load(f)
 
         # Customize configuration
@@ -307,7 +307,7 @@ def interactive_builder() -> Dict[str, Any]:
             yaml_handler.dump(config, f)
     else:
         # Fallback: use text replacement to preserve comments
-        with open(template_path, "r") as f:
+        with open(template_path) as f:
             content = f.read()
 
         # Replace key values using simple text substitution
@@ -330,7 +330,7 @@ def interactive_builder() -> Dict[str, Any]:
             f.write(content)
 
         # Load config for return value
-        with open(template_path, "r") as f:
+        with open(template_path) as f:
             config = yaml.safe_load(f)
 
     print()
@@ -397,9 +397,9 @@ def validate_config(config_path: Path) -> bool:
             # Check if data file exists
             data_path = Path(data_file)
             if data_path.exists():
-                print(f"    ✓ Data file exists")
+                print("    ✓ Data file exists")
             else:
-                print(f"    ⚠ Data file not found")
+                print("    ⚠ Data file not found")
 
         # Parameters
         if "initial_parameters" in config:
@@ -423,7 +423,7 @@ def validate_config(config_path: Path) -> bool:
         return True
 
     except Exception as e:
-        print(f"✗ Configuration validation failed:")
+        print("✗ Configuration validation failed:")
         print(f"  {type(e).__name__}: {e}")
         print()
         print("Common issues:")

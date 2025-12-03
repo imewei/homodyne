@@ -18,43 +18,48 @@ ______________________________________________________________________
 
 ## Recent Updates
 
+### v2.4.1 (Dec 2025) - CMC-Only Architecture & Single-Angle Fixes
+
+- **MCMC**: CMC-only path (NUTS auto-selection removed for simplicity)
+- **Single-Angle**: Log-space D0 sampling for convergence stability
+- **Per-Phi Init**: New `homodyne/optimization/initialization/per_phi_initializer.py`
+- **Linting**: Fixed F401/F841/E402/F811 issues across homodyne/
+
 ### v2.4.0 (Nov 2025) - Per-Angle Scaling Mandatory
+
 - **Breaking**: Legacy scalar `per_angle_scaling=False` removed
 - **Required**: Per-angle mode only (physically correct)
 - **Migration**: Remove `per_angle_scaling` parameter or set to `True`
 - **Impact**: 3 angles: 5 params → 9 params `[c₀,c₁,c₂, o₀,o₁,o₂, D0,α,D_offset]`
 
 ### v2.3.0 (Nov 2025) - CPU-Only Architecture
+
 - **Breaking**: GPU support removed (use v2.2.1 for GPU)
 - **Rationale**: Simplify maintenance, reliable HPC CPU optimization
 - **New**: CPU examples, HPC multi-core patterns
 - **Migration**: [v2.2-to-v2.3 Guide](docs/migration/v2.2-to-v2.3-gpu-removal.md)
 
 ### v2.2.1 (Nov 2025) - MCMC Stability Fixes
+
 - **Critical Fixes**:
   - OOM prevention: Worker memory 4.0GB → 5.5GB, physical cores only
   - Parameter expansion: 9 → 13 params (per-angle scaling)
   - Offset bounds: [0.5, 2.5] → [0.5, 1.5] (MCMC stability)
 - **Status**: Production ready, all tests passing
 
-### v2.1.0 (Oct 2025) - Simplified MCMC
-- **Breaking**: Removed `--method nuts/cmc` flags
-- **Use**: `--method mcmc` with auto NUTS/CMC selection
-- **Logic**: CMC if `(samples ≥ 15) OR (memory > 30%)`
-- **Workflow**: Manual NLSQ → MCMC (no auto-initialization)
-
 ______________________________________________________________________
 
 ## Architecture
 
 ### Optimization Stack
+
 1. **Primary**: NLSQ trust-region (Levenberg-Marquardt)
    - JIT-compiled, CPU-optimized
    - Auto strategy: STANDARD → LARGE → CHUNKED → STREAMING
 
-2. **Secondary**: NumPyro/BlackJAX MCMC
-   - Auto NUTS/CMC: `(samples ≥ 15) OR (memory > 30%)` → CMC
+2. **Secondary**: NumPyro/BlackJAX MCMC (CMC-only in v2.4.1+)
    - Physics-informed priors, auto-retry (max 3)
+   - Single-angle: Log-space D0 sampling for stability
 
 ### Analysis Modes
 
@@ -98,17 +103,20 @@ ______________________________________________________________________
 ## Development Commands
 
 ### Essential
+
 ```bash
 make test              # Core tests
 make test-all          # All + coverage
 make quality           # Format + lint + type-check
 make dev               # Install CPU-only
+make clean             # Clean build artifacts, cache, node_modules
 
 # System validation
 python -m homodyne.runtime.utils.system_validator --quick  # ~0.15s
 ```
 
 ### Testing
+
 ```bash
 make test-unit         # Unit tests
 make test-integration  # End-to-end
@@ -117,6 +125,7 @@ make test-mcmc         # MCMC validation
 ```
 
 ### Debugging
+
 ```bash
 # JAX compilation
 JAX_LOG_COMPILES=1 python script.py
@@ -156,13 +165,14 @@ ______________________________________________________________________
 ## CLI Usage
 
 ### Basic Commands
+
 ```bash
 # Standard analysis
 homodyne --config config.yaml
 
 # Method selection
 homodyne --config config.yaml --method nlsq   # Fast optimization
-homodyne --config config.yaml --method mcmc   # Bayesian UQ (auto NUTS/CMC)
+homodyne --config config.yaml --method mcmc   # Bayesian UQ (CMC)
 
 # Visualization
 homodyne --config config.yaml --plot-experimental-data
@@ -172,7 +182,8 @@ homodyne --config config.yaml --verbose  # DEBUG
 homodyne --config config.yaml --quiet    # Errors only
 ```
 
-### NLSQ → MCMC Workflow (v2.1.0+)
+### NLSQ → MCMC Workflow
+
 ```bash
 # 1. Run NLSQ
 homodyne --config config.yaml --method nlsq
@@ -188,6 +199,7 @@ homodyne --config config.yaml --method mcmc
 ```
 
 ### Configuration
+
 ```bash
 homodyne-config --interactive            # Interactive builder
 homodyne-config --mode static            # From template
@@ -209,6 +221,8 @@ homodyne/
 ├── data/          # xpcs_loader.py, preprocessing.py, phi_filtering.py
 ├── device/        # cpu.py (v2.3.0: GPU removed)
 ├── optimization/  # nlsq_wrapper.py, mcmc.py, strategy.py, checkpoint_manager.py
+│   ├── cmc/       # coordinator.py, sharding.py, backends/
+│   └── initialization/  # per_phi_initializer.py (v2.4.1)
 ├── runtime/       # shell/, utils/system_validator.py
 └── utils/         # Logging, progress
 
@@ -282,14 +296,17 @@ ax.imshow(c2.T, origin='lower', extent=[t1[0], t1[-1], t2[0], t2[-1]])
 ```
 
 ### Resources
+
 - Silent failures: `docs/troubleshooting/silent-failure-diagnosis.md`
 - NLSQ docs: https://nlsq.readthedocs.io/en/latest/
+- CMC-only migration: `docs/migration/v3_cmc_only.md`
 
 ______________________________________________________________________
 
 ## Dependencies
 
 ### Core (v2.4.0 - CPU-only)
+
 - **JAX 0.8.0 + jaxlib 0.8.0** (exact match, CPU-only)
 - **nlsq ≥ 0.1.0** - Trust-region optimization
 - **NumPyro ≥ 0.18.0, <0.20.0** - MCMC
@@ -302,11 +319,13 @@ ______________________________________________________________________
 - **psutil ≥ 6.0.0**
 
 ### Platform Support
+
 - **Python**: 3.12+ (all platforms)
 - **CPU**: Linux, macOS, Windows (HPC-optimized: 14+ cores)
 - **GPU**: Not supported (use v2.2.1)
 
 ### Development
+
 - pytest ≥ 8.3.0, black ≥ 25.0.0, ruff ≥ 0.13.0, mypy ≥ 1.18.0
 
 ______________________________________________________________________
@@ -332,10 +351,11 @@ ______________________________________________________________________
 ```
 
 ### Important Notes
+
 - Float32 recommended for MCMC
 - Homodyne supports both float32 and float64
 - **Don't question initial parameter values/bounds - they are verified and physically correct**
 - Per-angle scaling mandatory in v2.4.0
 - CPU-only in v2.3.0+ (GPU support removed)
-- All C2 heatmap plots now use adaptive color scaling with the conditional logic: vmin = max(1.0, c2_min)  # Use data_min if >= 1.0, else clamp to 1.0; vmax = min(1.6, c2_max)  # Use data_max if <= 1.6, else clamp to 1.6
+- All C2 heatmap plots now use adaptive color scaling with the conditional logic: vmin = max(1.0, c2_min) # Use data_min if >= 1.0, else clamp to 1.0; vmax = min(1.6, c2_max) # Use data_max if <= 1.6, else clamp to 1.6
 - Only two modes, "static" and "laminar_flow", are available in the current codebase. No "static_isotropic" and "static_anisotropic" modes exist in the current codebase.

@@ -20,12 +20,10 @@ Integration
 - No method-selection logic remains here; CMC is the only MCMC path.
 """
 
-from dataclasses import dataclass
-from typing import Literal, Optional
-import os
 import multiprocessing
-
-import jax
+import os
+from dataclasses import dataclass
+from typing import Literal
 
 try:
     import psutil
@@ -87,7 +85,7 @@ class HardwareConfig:
     num_nodes: int
     cores_per_node: int
     total_memory_gb: float
-    cluster_type: Optional[Literal["pbs", "slurm", "standalone"]]
+    cluster_type: Literal["pbs", "slurm", "standalone"] | None
     recommended_backend: str
     max_parallel_shards: int
 

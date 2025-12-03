@@ -42,13 +42,12 @@ import json
 import time
 from concurrent.futures import ProcessPoolExecutor, as_completed
 from pathlib import Path
-from typing import Dict, List, Tuple
 
 import numpy as np
 
 # Homodyne imports
 from homodyne.config import ConfigManager
-from homodyne.device import detect_cpu_info, get_optimal_batch_size
+from homodyne.device import detect_cpu_info
 from homodyne.optimization import fit_nlsq_jax
 
 
@@ -56,7 +55,7 @@ def generate_multiple_datasets(
     num_datasets: int = 4,
     n_times: int = 50,
     n_angles: int = 12,
-) -> List[Dict]:
+) -> list[dict]:
     """
     Generate multiple synthetic XPCS datasets for batch processing.
 
@@ -124,7 +123,7 @@ def generate_multiple_datasets(
     return datasets
 
 
-def process_single_dataset(dataset: Dict) -> Tuple[int, Dict]:
+def process_single_dataset(dataset: dict) -> tuple[int, dict]:
     """
     Process a single XPCS dataset with NLSQ optimization.
 
@@ -192,9 +191,9 @@ def process_single_dataset(dataset: Dict) -> Tuple[int, Dict]:
 
 
 def parallel_batch_processing(
-    datasets: List[Dict],
+    datasets: list[dict],
     max_workers: int = None,
-) -> Dict:
+) -> dict:
     """
     Process multiple datasets in parallel using multi-core execution.
 
@@ -256,16 +255,16 @@ def parallel_batch_processing(
 
             # Print progress
             elapsed_dataset = dataset_result.get("elapsed_time", 0)
-            print(f"[{completed}/{len(datasets)}] {status} Dataset {dataset_id}: "
-                  f"{elapsed_dataset:.3f}s "
-                  f"({dataset_result.get('throughput', 0):,.0f} pts/sec)")
+            print(
+                f"[{completed}/{len(datasets)}] {status} Dataset {dataset_id}: "
+                f"{elapsed_dataset:.3f}s "
+                f"({dataset_result.get('throughput', 0):,.0f} pts/sec)"
+            )
 
     overall_time = time.perf_counter() - overall_start
 
     # Calculate performance summary
-    successful_results = [
-        r for r in results["datasets"].values() if r["success"]
-    ]
+    successful_results = [r for r in results["datasets"].values() if r["success"]]
     if successful_results:
         times = [r["elapsed_time"] for r in successful_results]
         throughputs = [r["throughput"] for r in successful_results]
@@ -273,18 +272,19 @@ def parallel_batch_processing(
         results["performance_summary"] = {
             "total_time": overall_time,
             "parallel_efficiency": (
-                sum(times) / overall_time
-            ) if overall_time > 0 else 0,
+                (sum(times) / overall_time) if overall_time > 0 else 0
+            ),
             "average_time_per_dataset": np.mean(times),
             "average_throughput": np.mean(throughputs),
             "total_data_processed": sum(r["data_size"] for r in successful_results),
-            "overall_throughput": sum(r["data_size"] for r in successful_results) / overall_time,
+            "overall_throughput": sum(r["data_size"] for r in successful_results)
+            / overall_time,
         }
 
     return results
 
 
-def print_batch_results(results: Dict) -> None:
+def print_batch_results(results: dict) -> None:
     """
     Print formatted batch processing results.
 
@@ -295,14 +295,14 @@ def print_batch_results(results: Dict) -> None:
     print("Batch Processing Results")
     print("=" * 60)
 
-    print(f"\nSummary:")
+    print("\nSummary:")
     print(f"  Total datasets: {results['total_datasets']}")
     print(f"  Successful: {results['successful']} ✓")
     print(f"  Failed: {results['failed']} ✗")
 
     if results.get("performance_summary"):
         summary = results["performance_summary"]
-        print(f"\nPerformance:")
+        print("\nPerformance:")
         print(f"  Total time: {summary['total_time']:.3f}s")
         print(f"  Parallel efficiency: {summary['parallel_efficiency']:.2%}")
         print(f"  Avg time per dataset: {summary['average_time_per_dataset']:.3f}s")
@@ -310,19 +310,21 @@ def print_batch_results(results: Dict) -> None:
         print(f"  Total data processed: {summary['total_data_processed']:,} points")
         print(f"  Overall throughput: {summary['overall_throughput']:,.0f} pts/sec")
 
-    print(f"\nDataset Details:")
+    print("\nDataset Details:")
     for dataset_id in sorted(results["datasets"].keys()):
         result = results["datasets"][dataset_id]
         if result["success"]:
-            print(f"  Dataset {dataset_id}: {result['elapsed_time']:.3f}s "
-                  f"({result['throughput']:,.0f} pts/sec)")
+            print(
+                f"  Dataset {dataset_id}: {result['elapsed_time']:.3f}s "
+                f"({result['throughput']:,.0f} pts/sec)"
+            )
             if "chi_squared" in result:
                 print(f"    χ² = {result['chi_squared']:.6f}")
         else:
             print(f"  Dataset {dataset_id}: FAILED - {result['error']}")
 
 
-def save_batch_results(results: Dict, output_dir: Path = None) -> None:
+def save_batch_results(results: dict, output_dir: Path = None) -> None:
     """
     Save batch processing results to JSON file.
 
@@ -377,7 +379,7 @@ def save_batch_results(results: Dict, output_dir: Path = None) -> None:
     print(f"\n✓ Results saved to: {output_file}")
 
 
-def demonstrate_dynamic_worker_scaling(datasets: List[Dict]) -> None:
+def demonstrate_dynamic_worker_scaling(datasets: list[dict]) -> None:
     """
     Demonstrate how performance scales with different numbers of workers.
 
@@ -408,7 +410,9 @@ def demonstrate_dynamic_worker_scaling(datasets: List[Dict]) -> None:
             "successful": results["successful"],
         }
 
-        print(f"  Time: {elapsed:.3f}s (Success: {results['successful']}/{len(datasets)})\n")
+        print(
+            f"  Time: {elapsed:.3f}s (Success: {results['successful']}/{len(datasets)})\n"
+        )
 
     # Show scaling efficiency
     print("Scaling Efficiency:")
@@ -417,7 +421,9 @@ def demonstrate_dynamic_worker_scaling(datasets: List[Dict]) -> None:
         time_elapsed = scaling_results[num_workers]["time"]
         speedup = baseline_time / time_elapsed
         efficiency = speedup / num_workers
-        print(f"  {num_workers} workers: {speedup:.2f}x speedup ({efficiency:.1%} efficiency)")
+        print(
+            f"  {num_workers} workers: {speedup:.2f}x speedup ({efficiency:.1%} efficiency)"
+        )
 
 
 def print_usage_guide() -> None:
@@ -425,7 +431,8 @@ def print_usage_guide() -> None:
     print("\n📖 Batch Processing Usage Guide")
     print("=" * 60)
 
-    print("""
+    print(
+        """
 For Small Systems (Personal Computers):
   - Use 1-2 fewer workers than total cores
   - Example: 16-core PC → 14-15 workers
@@ -464,7 +471,8 @@ Debugging:
   - Use try-except to catch per-dataset errors
   - Enable verbose logging for timing analysis
   - Save intermediate results for fault recovery
-""")
+"""
+    )
 
 
 def main():

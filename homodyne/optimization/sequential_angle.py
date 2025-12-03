@@ -16,10 +16,10 @@ Date: 2025-11-06
 """
 
 import logging
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
-from typing import Any, Mapping, Sequence
+from typing import Any
 
-import jax.numpy as jnp
 import numpy as np
 from scipy.optimize._numdiff import approx_derivative
 
@@ -482,8 +482,14 @@ def optimize_single_angle(
                 f"init={initial_params.shape}, lower={lower_bounds.shape}, upper={upper_bounds.shape}"
             )
 
-        if not (np.all(np.isfinite(initial_params)) and np.all(np.isfinite(lower_bounds)) and np.all(np.isfinite(upper_bounds))):
-            raise ValueError("Initial parameters and bounds must be finite float64 values")
+        if not (
+            np.all(np.isfinite(initial_params))
+            and np.all(np.isfinite(lower_bounds))
+            and np.all(np.isfinite(upper_bounds))
+        ):
+            raise ValueError(
+                "Initial parameters and bounds must be finite float64 values"
+            )
 
         if not np.all(lower_bounds < upper_bounds):
             raise ValueError(
@@ -616,7 +622,7 @@ def combine_angle_results(
     # Extract parameters and covariances
     params_list = np.array([r["parameters"] for r in successful])
     cov_list = np.array([r["covariance"] for r in successful])
-    n_params = params_list.shape[1]
+    _n_params = params_list.shape[1]  # noqa: F841 - Reserved for future validation
 
     # Compute weights
     if weighting == "inverse_variance":

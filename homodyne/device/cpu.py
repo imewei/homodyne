@@ -275,10 +275,12 @@ def _configure_jax_cpu(
 
         # Add AVX-512 optimizations if supported
         if cpu_info.get("supports_avx512"):
-            xla_flags.extend([
-                "--xla_cpu_enable_fast_math=true",
-                "--xla_cpu_enable_xla_runtime=false"
-            ])
+            xla_flags.extend(
+                [
+                    "--xla_cpu_enable_fast_math=true",
+                    "--xla_cpu_enable_xla_runtime=false",
+                ]
+            )
             jax_config["optimizations"] = "avx512_enabled"
         else:
             jax_config["optimizations"] = "standard"

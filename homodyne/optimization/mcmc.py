@@ -89,7 +89,7 @@ from __future__ import annotations
 
 import os
 import time
-from typing import Any, Dict, Tuple
+from typing import Any
 
 import numpy as np
 
@@ -118,7 +118,7 @@ def _get_physical_param_order(analysis_mode: str) -> list[str]:
     return ["D0", "alpha", "D_offset"]
 
 
-def _estimate_single_angle_scaling(data: Any) -> Tuple[float, float]:
+def _estimate_single_angle_scaling(data: Any) -> tuple[float, float]:
     """Estimate deterministic contrast/offset for phi_count==1 fallback."""
 
     try:
@@ -320,7 +320,7 @@ def _sample_single_angle_log_d0(
     high_value = float(prior_cfg.get("high", loc_value + 5.0))
 
     # Ensure proper bounds with small epsilon for numerical stability
-    interval_width = max(high_value - low_value, 1e-6)
+    _interval_width = max(high_value - low_value, 1e-6)  # noqa: F841 - Validated bounds
     eps = 1e-6
 
     loc = jnp.asarray(loc_value, dtype=target_dtype)
@@ -329,16 +329,12 @@ def _sample_single_angle_log_d0(
     high = jnp.asarray(high_value - eps, dtype=target_dtype)
 
     # Create truncated Normal distribution in log-space
-    log_space_dist = dist.TruncatedNormal(
-        loc=loc,
-        scale=scale,
-        low=low,
-        high=high
-    )
+    log_space_dist = dist.TruncatedNormal(loc=loc, scale=scale, low=low, high=high)
 
     # Apply ExpTransform to get linear-space D0
     # This creates: D0 = exp(log_D0) where log_D0 ~ TruncatedNormal(...)
     from numpyro.distributions.transforms import ExpTransform
+
     d0_dist = dist.TransformedDistribution(log_space_dist, ExpTransform())
 
     # Sample D0 directly (already in linear space due to transform)
@@ -351,6 +347,7 @@ def _sample_single_angle_log_d0(
     deterministic("log_D0_latent", log_d0_value)
 
     return d0_value
+
 
 # JAX imports with intelligent fallback
 try:
@@ -389,8 +386,8 @@ except ImportError:
 try:
     import numpyro
     import numpyro.distributions as dist
+    from numpyro import deterministic, prng_key, sample  # noqa: F401 - prng_key
     from numpyro.distributions import transforms as dist_transforms
-    from numpyro import sample, deterministic, prng_key
     from numpyro.infer import MCMC, NUTS
 
     NUMPYRO_AVAILABLE = True
@@ -439,6 +436,7 @@ try:
 except ImportError:
     # Fallback to original MCMCResult if CMC module not available
     HAS_CMC_RESULT = False
+    evaluate_cmc_bypass = None
 
     class MCMCResult:
         """MCMC optimization result container.
@@ -513,8 +511,22 @@ except ImportError:
         triggered_by = None
         mode = "force_cmc"
 
-    def evaluate_cmc_bypass(*_, **__):  # type: ignore[override]
+    def evaluate_cmc_bypass(*_, **__):  # type: ignore[override]  # noqa: F811
         return _DummyBypassDecision()
+
+
+# Import per-phi initialization utilities
+try:
+    from homodyne.optimization.initialization.per_phi_initializer import (
+        PerPhiInitConfig,
+        build_per_phi_initial_values,
+    )
+
+    HAS_PER_PHI_INIT = True
+except ImportError:
+    HAS_PER_PHI_INIT = False
+    PerPhiInitConfig = None
+    build_per_phi_initial_values = None
 
 
 def _calculate_midpoint_defaults(parameter_space: ParameterSpace) -> dict[str, float]:
@@ -620,8 +632,6 @@ def _prepare_phi_mapping(
         return jnp.asarray(expanded, dtype=target_dtype)
 
     return phi_mapping
-
-
 
 
 @log_performance(threshold=10.0)
@@ -991,7 +1001,7 @@ def fit_mcmc_jax(
         is_valid, violations = parameter_space.validate_values(initial_values)
         if not is_valid:
             raise ValueError(
-                f"Initial parameter values violate bounds:\n" + "\n".join(violations)
+                "Initial parameter values violate bounds:\n" + "\n".join(violations)
             )
         logger.info(
             "Initial parameter values validated successfully (all within bounds)"
@@ -1256,7 +1266,7 @@ def fit_mcmc_jax(
                 # Retry if convergence is poor and we have retries left
                 if (poor_rhat or poor_ess) and attempt < max_retries - 1:
                     logger.warning(
-                        f"Convergence quality poor. Retrying with different random seed..."
+                        "Convergence quality poor. Retrying with different random seed..."
                     )
                     continue  # Retry
                 else:
@@ -1461,13 +1471,13 @@ def _run_standard_nuts(
 
         if user_scaling_override:
             single_angle_scaling_override = {
-                key: float(value)
-                for key, value in user_scaling_override.items()
+                key: float(value) for key, value in user_scaling_override.items()
             }
             logger.info(
                 "Single-angle fallback: using user-provided scaling overrides %s",
                 ", ".join(
-                    f"{name}={val:.4g}" for name, val in single_angle_scaling_override.items()
+                    f"{name}={val:.4g}"
+                    for name, val in single_angle_scaling_override.items()
                 ),
             )
 
@@ -1483,7 +1493,9 @@ def _run_standard_nuts(
                 "Applied single-angle stabilization priors (beta_fallback=%s)",
                 stable_prior_enabled,
             )
-            single_angle_geom_priors = parameter_space.get_single_angle_geometry_config()
+            single_angle_geom_priors = (
+                parameter_space.get_single_angle_geometry_config()
+            )
             if t_reference_value is not None:
                 single_angle_geom_priors["t_reference"] = t_reference_value
             single_angle_surrogate_cfg = _build_single_angle_surrogate_settings(
@@ -1501,7 +1513,9 @@ def _run_standard_nuts(
                     if initial_values is not None and "D_offset" in initial_values:
                         d_offset_from_init = initial_values.pop("D_offset")
                         # Update surrogate config to use the initial value
-                        single_angle_surrogate_cfg["fixed_d_offset"] = float(d_offset_from_init)
+                        single_angle_surrogate_cfg["fixed_d_offset"] = float(
+                            d_offset_from_init
+                        )
                         logger.info(
                             "Using D_offset=%.4f from initial_values for single-angle surrogate (not sampled)",
                             d_offset_from_init,
@@ -1511,9 +1525,7 @@ def _run_standard_nuts(
                         if initial_values is not None:
                             initial_values.pop("D_offset", None)
                     parameter_space = parameter_space.drop_parameters({"D_offset"})
-                alpha_override = single_angle_surrogate_cfg.get(
-                    "alpha_prior_override"
-                )
+                alpha_override = single_angle_surrogate_cfg.get("alpha_prior_override")
                 if alpha_override is not None:
                     parameter_space = parameter_space.with_prior_overrides(
                         {"alpha": alpha_override}
@@ -1529,9 +1541,13 @@ def _run_standard_nuts(
             if phi_unique is not None and per_angle_scaling_enabled
             else 0
         )
-        base_param_count = len(parameter_space.parameter_names) if parameter_space else 0
+        base_param_count = (
+            len(parameter_space.parameter_names) if parameter_space else 0
+        )
         override_param_count = len(single_angle_scaling_override or {})
-        total_param_count = max(0, base_param_count - override_param_count) + per_angle_param_count
+        total_param_count = (
+            max(0, base_param_count - override_param_count) + per_angle_param_count
+        )
 
         # Configure MCMC parameters
         config_kwargs = dict(kwargs)
@@ -1575,7 +1591,8 @@ def _run_standard_nuts(
         # Only add reparameterization parameters if not disabled by surrogate config
         # Tier 1 and others with disable_reparam=True skip this initialization
         reparam_disabled = (
-            single_angle_surrogate_cfg and single_angle_surrogate_cfg.get("disable_reparam", False)
+            single_angle_surrogate_cfg
+            and single_angle_surrogate_cfg.get("disable_reparam", False)
         )
         if single_angle_static and initial_values is not None and not reparam_disabled:
             d0_init = initial_values.get("D0")
@@ -1666,9 +1683,10 @@ def _run_standard_nuts(
         if single_angle_scaling_override:
             deterministic_param_overrides.update(single_angle_scaling_override.keys())
         if single_angle_surrogate_cfg:
-            if single_angle_surrogate_cfg.get("drop_d_offset") or single_angle_surrogate_cfg.get(
-                "fixed_d_offset"
-            ) is not None:
+            if (
+                single_angle_surrogate_cfg.get("drop_d_offset")
+                or single_angle_surrogate_cfg.get("fixed_d_offset") is not None
+            ):
                 deterministic_param_overrides.add("D_offset")
             if single_angle_surrogate_cfg.get("fixed_alpha") is not None:
                 deterministic_param_overrides.add("alpha")
@@ -1694,9 +1712,11 @@ def _run_standard_nuts(
 
         logger.info(f"MCMC sampling completed in {computation_time:.3f}s")
         # Get actual sample count from one of the parameter arrays (not dict key count)
-        sample_count = len(next(iter(posterior_summary['samples'].values())))
-        param_count = len(posterior_summary['samples'])
-        logger.info(f"Posterior summary: {sample_count} samples × {param_count} parameters")
+        sample_count = len(next(iter(posterior_summary["samples"].values())))
+        param_count = len(posterior_summary["samples"])
+        logger.info(
+            f"Posterior summary: {sample_count} samples × {param_count} parameters"
+        )
 
         result_obj = MCMCResult(
             mean_params=posterior_summary["mean_params"],
@@ -1732,6 +1752,7 @@ def _run_standard_nuts(
     except Exception as e:
         computation_time = time.perf_counter() - start_time
         import traceback
+
         logger.error(f"MCMC sampling failed after {computation_time:.3f}s: {str(e)}")
         logger.debug(f"Full traceback:\n{traceback.format_exc()}")
 
@@ -1891,12 +1912,20 @@ def _evaluate_convergence_thresholds(
 
     per_param_items = list(per_param_stats.items())
     max_rhat = _collect_stat(
-        [stats.get("r_hat") for name, stats in per_param_items if not stats.get("deterministic")],
+        [
+            stats.get("r_hat")
+            for name, stats in per_param_items
+            if not stats.get("deterministic")
+        ],
         max,
         None,
     )
     min_ess = _collect_stat(
-        [stats.get("ess") for name, stats in per_param_items if not stats.get("deterministic")],
+        [
+            stats.get("ess")
+            for name, stats in per_param_items
+            if not stats.get("deterministic")
+        ],
         min,
         None,
     )
@@ -1918,7 +1947,9 @@ def _evaluate_convergence_thresholds(
                 "min_ess": float(surrogate_ctx.get("min_ess", default_min_ess)),
             }
         )
-        focus_params = surrogate_ctx.get("focus_params") or diag_summary.get("focus_params") or []
+        focus_params = (
+            surrogate_ctx.get("focus_params") or diag_summary.get("focus_params") or []
+        )
         for name in focus_params:
             stats = per_param_stats.get(name, {})
             focus_details[name] = stats
@@ -2177,9 +2208,9 @@ def _create_numpyro_model(
     surrogate_cfg = single_angle_surrogate_config or {}
     if single_angle_static_mode:
         reparam_cfg["enabled"] = False
-    use_single_angle_reparam = bool(reparam_cfg.get("enabled")) and not surrogate_cfg.get(
-        "disable_reparam", False
-    )
+    use_single_angle_reparam = bool(
+        reparam_cfg.get("enabled")
+    ) and not surrogate_cfg.get("disable_reparam", False)
     log_center_loc = float(reparam_cfg.get("log_center_loc", 8.0))
     log_center_scale = max(0.1, float(reparam_cfg.get("log_center_scale", 1.0)))
     delta_loc = float(reparam_cfg.get("delta_loc", 0.0))
@@ -2192,7 +2223,11 @@ def _create_numpyro_model(
         and t_ref_candidate > 0
     ):
         fallback_dt = dt if dt is not None else 1.0
-        if isinstance(fallback_dt, (int, float)) and np.isfinite(fallback_dt) and fallback_dt > 0:
+        if (
+            isinstance(fallback_dt, (int, float))
+            and np.isfinite(fallback_dt)
+            and fallback_dt > 0
+        ):
             t_ref_candidate = float(fallback_dt)
         else:
             t_ref_candidate = 1.0
@@ -2269,7 +2304,9 @@ def _create_numpyro_model(
 
         # Sample parameters dynamically using config-driven priors
         sampled_values: dict[str, jnp.ndarray] = {}
-        reparam_active = use_single_angle_reparam and analysis_mode.lower().startswith("static")
+        reparam_active = use_single_angle_reparam and analysis_mode.lower().startswith(
+            "static"
+        )
         single_angle_latents: dict[str, jnp.ndarray] = {}
         if reparam_active:
             log_center_site = sample(
@@ -2296,13 +2333,8 @@ def _create_numpyro_model(
             }
 
         for i, param_name in enumerate(param_names_ordered):
-            if (
-                surrogate_cfg.get("fixed_d0_value") is not None
-                and param_name == "D0"
-            ):
-                value = jnp.asarray(
-                    surrogate_cfg["fixed_d0_value"], dtype=target_dtype
-                )
+            if surrogate_cfg.get("fixed_d0_value") is not None and param_name == "D0":
+                value = jnp.asarray(surrogate_cfg["fixed_d0_value"], dtype=target_dtype)
                 sampled_values[param_name] = value
                 deterministic("D0", value)
                 continue
@@ -2318,10 +2350,7 @@ def _create_numpyro_model(
                 sampled_values[param_name] = d0_value
                 # No need for additional deterministic node - already emitted in function
                 continue
-            if (
-                surrogate_cfg.get("fixed_alpha") is not None
-                and param_name == "alpha"
-            ):
+            if surrogate_cfg.get("fixed_alpha") is not None and param_name == "alpha":
                 alpha_value = jnp.asarray(
                     surrogate_cfg["fixed_alpha"], dtype=target_dtype
                 )
@@ -2394,7 +2423,7 @@ def _create_numpyro_model(
             # CRITICAL FIX (Nov 2025): Auto-convert unbounded distributions to bounded
             # If config specifies Normal/LogNormal with bounds, convert to Truncated version
             # This prevents NumPyro from sampling extreme values that cause physics NaN/inf
-            if hasattr(prior_spec, 'min_val') and hasattr(prior_spec, 'max_val'):
+            if hasattr(prior_spec, "min_val") and hasattr(prior_spec, "max_val"):
                 if prior_spec.min_val is not None and prior_spec.max_val is not None:
                     # Bounds are specified - use truncated distribution regardless of type
                     if prior_spec.dist_type == "Normal":
@@ -2405,7 +2434,9 @@ def _create_numpyro_model(
                         )
                     elif prior_spec.dist_type == "LogNormal":
                         # LogNormal is inherently positive, truncate at bounds
-                        dist_class = dist.TruncatedNormal  # Use TruncatedNormal as fallback
+                        dist_class = (
+                            dist.TruncatedNormal
+                        )  # Use TruncatedNormal as fallback
                         logger.debug(
                             f"Converted {param_name} from LogNormal to TruncatedNormal "
                             f"with bounds [{prior_spec.min_val}, {prior_spec.max_val}]"
@@ -2456,18 +2487,31 @@ def _create_numpyro_model(
                     return jnp.asarray(value, dtype=target_dtype).reshape(())
 
                 linear_loc = _extract_scalar("loc", d0_bounds[0])
-                linear_scale = jnp.abs(_extract_scalar("scale", (d0_bounds[1] - d0_bounds[0]) / 4.0))
+                linear_scale = jnp.abs(
+                    _extract_scalar("scale", (d0_bounds[1] - d0_bounds[0]) / 4.0)
+                )
                 linear_low = jnp.maximum(_extract_scalar("low", d0_bounds[0]), 1e-6)
-                linear_high = jnp.maximum(_extract_scalar("high", d0_bounds[1]), linear_low + 1e-6)
+                linear_high = jnp.maximum(
+                    _extract_scalar("high", d0_bounds[1]), linear_low + 1e-6
+                )
 
                 # Convert to Python scalars for log_prior_cfg (static configuration, not traced)
                 # Use .item() to extract concrete values outside of traced region
                 import numpy as _np
+
                 log_prior_cfg = {
                     "loc": float(_np.log(max(float(linear_loc), 1e-6))),
-                    "scale": float(_np.clip(float(linear_scale) / max(float(linear_loc), 1e-6), 1e-6, 5.0)),
+                    "scale": float(
+                        _np.clip(
+                            float(linear_scale) / max(float(linear_loc), 1e-6),
+                            1e-6,
+                            5.0,
+                        )
+                    ),
                     "low": float(_np.log(max(float(linear_low), 1e-6))),
-                    "high": float(_np.log(max(float(linear_high), float(linear_low) + 1e-6))),
+                    "high": float(
+                        _np.log(max(float(linear_high), float(linear_low) + 1e-6))
+                    ),
                 }
 
                 d0_value = _sample_single_angle_log_d0(log_prior_cfg, target_dtype)
@@ -2494,6 +2538,7 @@ def _create_numpyro_model(
                     )
 
             if dist_instance is not None:
+
                 def _sample_from_instance(site_name: str) -> jnp.ndarray:
                     return jnp.asarray(
                         sample(site_name, dist_instance), dtype=target_dtype
@@ -2587,9 +2632,10 @@ def _create_numpyro_model(
                     "Single-angle reparameterization requires alpha parameter to be present"
                 )
             d_center = jnp.exp(single_angle_latents["log_center"])
-            delta_rel = jax.nn.softplus(single_angle_latents["delta_raw"]) + single_angle_latents[
-                "delta_floor"
-            ]
+            delta_rel = (
+                jax.nn.softplus(single_angle_latents["delta_raw"])
+                + single_angle_latents["delta_floor"]
+            )
             reference_time = jnp.maximum(
                 single_angle_latents["t_reference"],
                 jnp.asarray(1e-6, dtype=target_dtype),
@@ -2621,9 +2667,7 @@ def _create_numpyro_model(
             offset_mean = jnp.mean(offset, dtype=target_dtype)
             params_full = jnp.concatenate(
                 [
-                    jnp.array(
-                        [contrast_mean, offset_mean], dtype=target_dtype
-                    ),
+                    jnp.array([contrast_mean, offset_mean], dtype=target_dtype),
                     params,
                 ]
             )
@@ -2648,6 +2692,7 @@ def _create_numpyro_model(
         # CRITICAL: All arrays must have the same size
         if not (t1_size == t2_size == data_size == sigma_size):
             import warnings
+
             warnings.warn(
                 f"Model closure array size mismatch: data={data_size}, t1={t1_size}, "
                 f"t2={t2_size}, sigma={sigma_size}. This will cause indexing errors.",
@@ -2699,25 +2744,38 @@ def _create_numpyro_model(
         def log_params_and_data():
             """Log parameter values and data stats for debugging."""
             import jax
+
             # params_full has shape (n_params_total,) = (2 + n_physics_params,)
             # For laminar_flow: [contrast_mean, offset_mean, D0, alpha, D_offset, gamma_dot_t0, beta, gamma_dot_t_offset, phi0]
             jax.debug.print(
                 "MCMC params: contrast={c:.4f}, offset={o:.4f}, D0={d0:.2e}, alpha={a:.4f}, D_offset={doff:.2e}, "
                 "gamma_dot_t0={g0:.4e}, beta={b:.4f}, gamma_dot_t_offset={goff:.4e}, phi0={p0:.4f}",
-                c=params_full[0], o=params_full[1], d0=params_full[2], a=params_full[3],
-                doff=params_full[4], g0=params_full[5], b=params_full[6], goff=params_full[7], p0=params_full[8]
+                c=params_full[0],
+                o=params_full[1],
+                d0=params_full[2],
+                a=params_full[3],
+                doff=params_full[4],
+                g0=params_full[5],
+                b=params_full[6],
+                goff=params_full[7],
+                p0=params_full[8],
             )
             jax.debug.print(
                 "Input data: t1 range=[{t1_min:.6e}, {t1_max:.6e}], t2 range=[{t2_min:.6e}, {t2_max:.6e}], "
                 "t1 has_zero={t1z}, t1 has_neg={t1n}",
-                t1_min=jnp.min(t1), t1_max=jnp.max(t1),
-                t2_min=jnp.min(t2), t2_max=jnp.max(t2),
-                t1z=jnp.any(t1 == 0.0), t1n=jnp.any(t1 < 0.0)
+                t1_min=jnp.min(t1),
+                t1_max=jnp.max(t1),
+                t2_min=jnp.min(t2),
+                t2_max=jnp.max(t2),
+                t1z=jnp.any(t1 == 0.0),
+                t1n=jnp.any(t1 < 0.0),
             )
             jax.debug.print(
                 "t1[0:10]={t1_sample}, t2[0:10]={t2_sample}",
-                t1_sample=t1[:10], t2_sample=t2[:10]
+                t1_sample=t1[:10],
+                t2_sample=t2[:10],
             )
+
         # DISABLED: Excessive output during initialization
         # log_params_and_data()
 
@@ -2729,13 +2787,18 @@ def _create_numpyro_model(
         def check_c2_theory():
             """Check for NaN/inf in c2_theory and log diagnostics."""
             import jax
+
             has_nan = jnp.any(jnp.isnan(c2_theory))
             has_inf = jnp.any(jnp.isinf(c2_theory))
             jax.debug.print(
                 "c2_theory: shape={shape}, has_nan={nan}, has_inf={inf}, range=[{mn:.6e}, {mx:.6e}]",
-                shape=c2_theory.shape, nan=has_nan, inf=has_inf,
-                mn=jnp.nanmin(c2_theory), mx=jnp.nanmax(c2_theory)
+                shape=c2_theory.shape,
+                nan=has_nan,
+                inf=has_inf,
+                mn=jnp.nanmin(c2_theory),
+                mx=jnp.nanmax(c2_theory),
             )
+
         # DISABLED: Excessive output during initialization
         # check_c2_theory()
 
@@ -2781,18 +2844,20 @@ def _create_numpyro_model(
             # DIAGNOSTIC: Log phi_indices stats before indexing
             def log_phi_indices():
                 import jax
+
                 # CRITICAL: Do NOT use jnp.unique() here - causes JAX concretization error during JIT tracing
                 jax.debug.print(
                     "phi_indices: shape={shape}, min={mn}, max={mx}",
                     shape=phi_indices.shape,
                     mn=jnp.min(phi_indices),
-                    mx=jnp.max(phi_indices)
+                    mx=jnp.max(phi_indices),
                 )
                 jax.debug.print(
                     "contrast array: shape={shape}, values={vals}",
                     shape=contrast.shape,
-                    vals=contrast
+                    vals=contrast,
                 )
+
             # DISABLED: Excessive output during initialization
             # log_phi_indices()
 
@@ -2823,17 +2888,18 @@ def _create_numpyro_model(
             def check_c2_extraction():
                 """Check if c2_theory extraction is working correctly."""
                 import jax
+
                 jax.debug.print(
                     "c2_theory_per_point: shape={shape}, has_nan={nan}, has_inf={inf}, range=[{mn:.6e}, {mx:.6e}]",
                     shape=c2_theory_per_point.shape,
                     nan=jnp.any(jnp.isnan(c2_theory_per_point)),
                     inf=jnp.any(jnp.isinf(c2_theory_per_point)),
                     mn=jnp.nanmin(c2_theory_per_point),
-                    mx=jnp.nanmax(c2_theory_per_point)
+                    mx=jnp.nanmax(c2_theory_per_point),
                 )
                 jax.debug.print(
                     "c2_theory_per_point[0:10]={sample}",
-                    sample=c2_theory_per_point[:10]
+                    sample=c2_theory_per_point[:10],
                 )
                 # Also check the raw c2_theory for comparison (handle both 1D and 2D)
                 if c2_theory.ndim == 2:
@@ -2841,25 +2907,38 @@ def _create_numpyro_model(
                     jax.debug.print(
                         "c2_theory[0, 0:10]={row0}, c2_theory[0, -10:]={row0_end}",
                         row0=c2_theory[0, :10],
-                        row0_end=c2_theory[0, -10:]
+                        row0_end=c2_theory[0, -10:],
                     )
                     jax.debug.print(
                         "c2_theory[0, middle]={mid}, unique_vals_approx={uniq}",
-                        mid=c2_theory[0, n_data_points//2:n_data_points//2+10],
-                        uniq=jnp.array([jnp.min(c2_theory), jnp.max(c2_theory), jnp.mean(c2_theory)])
+                        mid=c2_theory[0, n_data_points // 2 : n_data_points // 2 + 10],
+                        uniq=jnp.array(
+                            [
+                                jnp.min(c2_theory),
+                                jnp.max(c2_theory),
+                                jnp.mean(c2_theory),
+                            ]
+                        ),
                     )
                 else:
                     # static: 1D c2_theory
                     jax.debug.print(
                         "c2_theory[0:10]={start}, c2_theory[-10:]={end}",
                         start=c2_theory[:10],
-                        end=c2_theory[-10:]
+                        end=c2_theory[-10:],
                     )
                     jax.debug.print(
                         "c2_theory[middle]={mid}, unique_vals_approx={uniq}",
-                        mid=c2_theory[n_data_points//2:n_data_points//2+10],
-                        uniq=jnp.array([jnp.min(c2_theory), jnp.max(c2_theory), jnp.mean(c2_theory)])
+                        mid=c2_theory[n_data_points // 2 : n_data_points // 2 + 10],
+                        uniq=jnp.array(
+                            [
+                                jnp.min(c2_theory),
+                                jnp.max(c2_theory),
+                                jnp.mean(c2_theory),
+                            ]
+                        ),
                     )
+
             # DISABLED: Excessive output during initialization
             # check_c2_extraction()
 
@@ -2900,31 +2979,33 @@ def _create_numpyro_model(
         def check_likelihood_inputs():
             """Check sigma and c2_fitted for issues that would cause likelihood failure."""
             import jax
+
             jax.debug.print(
                 "Likelihood inputs: c2_fitted shape={cf_shape}, sigma shape={s_shape}",
-                cf_shape=c2_fitted.shape, s_shape=sigma.shape
+                cf_shape=c2_fitted.shape,
+                s_shape=sigma.shape,
             )
             jax.debug.print(
                 "c2_fitted: has_nan={cf_nan}, has_inf={cf_inf}, range=[{cf_min:.6e}, {cf_max:.6e}], mean={cf_mean:.6f}",
-                cf_nan=jnp.any(jnp.isnan(c2_fitted)), cf_inf=jnp.any(jnp.isinf(c2_fitted)),
-                cf_min=jnp.nanmin(c2_fitted), cf_max=jnp.nanmax(c2_fitted),
-                cf_mean=jnp.mean(c2_fitted)
+                cf_nan=jnp.any(jnp.isnan(c2_fitted)),
+                cf_inf=jnp.any(jnp.isinf(c2_fitted)),
+                cf_min=jnp.nanmin(c2_fitted),
+                cf_max=jnp.nanmax(c2_fitted),
+                cf_mean=jnp.mean(c2_fitted),
             )
             # Sample values from c2_fitted for detailed inspection
-            jax.debug.print(
-                "c2_fitted[0:10]={sample}",
-                sample=c2_fitted[:10]
-            )
-            jax.debug.print(
-                "data[0:10]={sample}",
-                sample=data[:10]
-            )
+            jax.debug.print("c2_fitted[0:10]={sample}", sample=c2_fitted[:10])
+            jax.debug.print("data[0:10]={sample}", sample=data[:10])
             jax.debug.print(
                 "sigma: has_zero={s_zero}, has_neg={s_neg}, has_nan={s_nan}, has_inf={s_inf}, range=[{s_min:.6e}, {s_max:.6e}]",
-                s_zero=jnp.any(sigma == 0.0), s_neg=jnp.any(sigma < 0.0),
-                s_nan=jnp.any(jnp.isnan(sigma)), s_inf=jnp.any(jnp.isinf(sigma)),
-                s_min=jnp.nanmin(sigma), s_max=jnp.nanmax(sigma)
+                s_zero=jnp.any(sigma == 0.0),
+                s_neg=jnp.any(sigma < 0.0),
+                s_nan=jnp.any(jnp.isnan(sigma)),
+                s_inf=jnp.any(jnp.isinf(sigma)),
+                s_min=jnp.nanmin(sigma),
+                s_max=jnp.nanmax(sigma),
             )
+
         # DISABLED: Excessive output during initialization
         # check_likelihood_inputs()
 
@@ -2935,7 +3016,9 @@ def _create_numpyro_model(
         def _ensure_finite(values):
             """Replace non-finite entries with the mean of finite values (or 1.0)."""
             finite_mask = jnp.isfinite(values)
-            finite_sum = jnp.sum(jnp.where(finite_mask, values, 0.0), dtype=values.dtype)
+            finite_sum = jnp.sum(
+                jnp.where(finite_mask, values, 0.0), dtype=values.dtype
+            )
             finite_count = jnp.sum(finite_mask)
             finite_count_safe = jnp.maximum(
                 jnp.asarray(finite_count, dtype=values.dtype),
@@ -2961,14 +3044,20 @@ def _create_numpyro_model(
             return sigma_safe, invalid_count, invalid_mask
 
         sigma_safe, sigma_invalid_count, _ = _ensure_positive_sigma(sigma)
-        c2_theory_safe, c2_theory_invalid_count, _ = _ensure_finite(c2_theory_for_likelihood)
+        c2_theory_safe, c2_theory_invalid_count, _ = _ensure_finite(
+            c2_theory_for_likelihood
+        )
 
         if per_angle_scaling:
-            c2_fitted_from_theory = contrast_per_point * c2_theory_safe + offset_per_point
+            c2_fitted_from_theory = (
+                contrast_per_point * c2_theory_safe + offset_per_point
+            )
         else:
             c2_fitted_from_theory = contrast * c2_theory_safe + offset
 
-        c2_fitted_safe, c2_fitted_invalid_count, _ = _ensure_finite(c2_fitted_from_theory)
+        c2_fitted_safe, c2_fitted_invalid_count, _ = _ensure_finite(
+            c2_fitted_from_theory
+        )
 
         def log_obs_site_stats():
             """Emit lightweight diagnostics for the obs site under debug flag."""
@@ -3283,7 +3372,11 @@ def _run_numpyro_sampling(
         f"{config['n_warmup']} warmup, {config['n_samples']} samples"
     )
 
-    if not per_angle_scaling and initial_values is not None and parameter_space is not None:
+    if (
+        not per_angle_scaling
+        and initial_values is not None
+        and parameter_space is not None
+    ):
         # Ensure scalar contrast/offset exist for deterministic initialization
         if "contrast" not in initial_values:
             try:
@@ -3314,7 +3407,9 @@ def _run_numpyro_sampling(
                 for name in initial_values
                 if name.startswith("contrast_") or name.startswith("offset_")
             ]
-            n_phi = len({name.split("_")[-1] for name in inferred if name.count("_") == 1})
+            n_phi = len(
+                {name.split("_")[-1] for name in inferred if name.count("_") == 1}
+            )
 
         if n_phi > 0:
             for phi_idx in range(n_phi):
@@ -3323,18 +3418,26 @@ def _run_numpyro_sampling(
 
                 if contrast_key not in initial_values:
                     try:
-                        contrast_midpoint = sum(parameter_space.get_bounds("contrast")) / 2.0
-                        initial_values[contrast_key] = parameter_space.clamp_to_open_interval(
-                            "contrast", contrast_midpoint, epsilon=1e-6
+                        contrast_midpoint = (
+                            sum(parameter_space.get_bounds("contrast")) / 2.0
+                        )
+                        initial_values[contrast_key] = (
+                            parameter_space.clamp_to_open_interval(
+                                "contrast", contrast_midpoint, epsilon=1e-6
+                            )
                         )
                     except KeyError:
                         initial_values[contrast_key] = 0.5
 
                 if offset_key not in initial_values:
                     try:
-                        offset_midpoint = sum(parameter_space.get_bounds("offset")) / 2.0
-                        initial_values[offset_key] = parameter_space.clamp_to_open_interval(
-                            "offset", offset_midpoint, epsilon=1e-6
+                        offset_midpoint = (
+                            sum(parameter_space.get_bounds("offset")) / 2.0
+                        )
+                        initial_values[offset_key] = (
+                            parameter_space.clamp_to_open_interval(
+                                "offset", offset_midpoint, epsilon=1e-6
+                            )
                         )
                     except KeyError:
                         initial_values[offset_key] = 1.0
@@ -3346,7 +3449,9 @@ def _run_numpyro_sampling(
                 removed = True
 
             if removed:
-                logger.info("Removed base contrast/offset entries after per-angle expansion")
+                logger.info(
+                    "Removed base contrast/offset entries after per-angle expansion"
+                )
 
             logger.info(
                 f"Ensured {n_phi} per-angle parameters for contrast and offset in initial_values"
@@ -3354,7 +3459,9 @@ def _run_numpyro_sampling(
         else:
             logger.debug("No per-angle expansion needed (n_phi=0)")
     elif not per_angle_scaling and initial_values is not None:
-        logger.debug("Per-angle scaling disabled; using scalar contrast/offset initial values")
+        logger.debug(
+            "Per-angle scaling disabled; using scalar contrast/offset initial values"
+        )
     elif initial_values is not None:
         logger.debug(
             "ParameterSpace not available; skipping per-angle initial value expansion"
@@ -3363,7 +3470,9 @@ def _run_numpyro_sampling(
     # Use parameters directly without validation/repair
     # Per user request: Do not limit parameter space or auto-correct for numerical instability
     if initial_values is not None and parameter_space is not None:
-        logger.info(f"Using init parameters directly (no validation), {len(initial_values)} parameters ready for NUTS initialization")
+        logger.info(
+            f"Using init parameters directly (no validation), {len(initial_values)} parameters ready for NUTS initialization"
+        )
     elif initial_values is None:
         logger.info("Using NumPyro default initialization (sampling from priors)")
     else:
@@ -3423,6 +3532,7 @@ def _run_numpyro_sampling(
             init_params_single = None
             if initial_values is not None:
                 import jax.numpy as jnp
+
                 init_params_single = {
                     param: jnp.full((1,), value, dtype=jnp.float64)
                     for param, value in initial_values.items()
@@ -3444,6 +3554,7 @@ def _run_numpyro_sampling(
         else:
             # Log full error details including traceback for debugging
             import traceback
+
             logger.error(f"MCMC sampling failed: {str(e)}")
             logger.debug(f"Full traceback:\n{traceback.format_exc()}")
             raise
@@ -3557,7 +3668,10 @@ def _process_posterior_samples(
         diagnostic_settings.get("deterministic_params") or []
     )
     deterministic_params.update(scaling_overrides.keys())
-    if surrogate_cfg.get("drop_d_offset") or surrogate_cfg.get("fixed_d_offset") is not None:
+    if (
+        surrogate_cfg.get("drop_d_offset")
+        or surrogate_cfg.get("fixed_d_offset") is not None
+    ):
         deterministic_params.add("D_offset")
     if surrogate_cfg.get("fixed_alpha") is not None:
         deterministic_params.add("alpha")
@@ -3577,9 +3691,9 @@ def _process_posterior_samples(
         samples[param_name] = jnp.asarray(arr_np)
 
     sample_count = len(next(iter(samples.values()))) if samples else 0
-    expected_params = diagnostic_settings.get("expected_params") or _get_physical_param_order(
-        analysis_mode
-    )
+    expected_params = diagnostic_settings.get(
+        "expected_params"
+    ) or _get_physical_param_order(analysis_mode)
 
     # Handle log-space D0 sampling (legacy and new implementations)
     if "D0" not in samples:
@@ -3593,7 +3707,9 @@ def _process_posterior_samples(
     if "D_offset" not in samples and surrogate_cfg.get("fixed_d_offset") is not None:
         fixed_offset = float(surrogate_cfg["fixed_d_offset"])
         if sample_count:
-            samples["D_offset"] = jnp.full((sample_count,), fixed_offset, dtype=jnp.float64)
+            samples["D_offset"] = jnp.full(
+                (sample_count,), fixed_offset, dtype=jnp.float64
+            )
             constructed_deterministic.add("D_offset")
 
     def _ensure_param_array(name: str) -> jnp.ndarray | None:
@@ -3609,7 +3725,10 @@ def _process_posterior_samples(
         arr = _ensure_param_array(param_name)
         filled_constant = False
         if arr is None:
-            if param_name == "D_offset" and surrogate_cfg.get("fixed_d_offset") is not None:
+            if (
+                param_name == "D_offset"
+                and surrogate_cfg.get("fixed_d_offset") is not None
+            ):
                 fixed_offset = float(surrogate_cfg["fixed_d_offset"])
                 arr = jnp.full((sample_count,), fixed_offset, dtype=jnp.float64)
                 samples[param_name] = arr
@@ -3711,17 +3830,18 @@ def _process_posterior_samples(
 
     deterministic_params.update(constructed_deterministic)
 
-    r_hat_dict = {name: None for name in samples.keys()}
-    ess_dict = {name: None for name in samples.keys()}
+    r_hat_dict = dict.fromkeys(samples.keys())
+    ess_dict = dict.fromkeys(samples.keys())
     per_param_stats: dict[str, dict[str, Any]] = {
-        name: {"deterministic": name in deterministic_params}
-        for name in samples.keys()
+        name: {"deterministic": name in deterministic_params} for name in samples.keys()
     }
     converged = not diagnostics_blocked
 
     try:
         samples_with_chains = (
-            mcmc_result.get_samples(group_by_chain=True) if not diagnostics_blocked else {}
+            mcmc_result.get_samples(group_by_chain=True)
+            if not diagnostics_blocked
+            else {}
         )
     except Exception:
         samples_with_chains = {}
@@ -3747,13 +3867,17 @@ def _process_posterior_samples(
     if diagnostics_blocked:
         pass
     elif not check_hmc:
-        logger.info("HMC diagnostics disabled by configuration; treating run as converged")
+        logger.info(
+            "HMC diagnostics disabled by configuration; treating run as converged"
+        )
     else:
         try:
             from numpyro.diagnostics import effective_sample_size, gelman_rubin
 
             if not multi_chain:
-                logger.info("Single chain detected - R-hat not available; computing ESS only")
+                logger.info(
+                    "Single chain detected - R-hat not available; computing ESS only"
+                )
 
             for param_name in samples.keys():
                 arr = _samples_with_chain_dim(param_name)

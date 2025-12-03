@@ -100,16 +100,16 @@ Error Handling
 - Retry: Up to max_retries per shard (default: 2)
 """
 
-from typing import List, Dict, Any, Optional
-import subprocess
-import time
 import json
 import shutil
-from pathlib import Path
+import subprocess
+import time
 from datetime import datetime
+from pathlib import Path
+from typing import Any
 
-import numpy as np
 import h5py
+import numpy as np
 
 from homodyne.optimization.cmc.backends.base import CMCBackend
 from homodyne.utils.logging import get_logger
@@ -159,12 +159,12 @@ class PBSBackend(CMCBackend):
 
     def __init__(
         self,
-        project_name: Optional[str] = None,
+        project_name: str | None = None,
         walltime: str = "02:00:00",
         queue: str = "batch",
         cores_per_node: int = 36,
-        email: Optional[str] = None,
-        temp_dir: Optional[str] = None,
+        email: str | None = None,
+        temp_dir: str | None = None,
         poll_interval: int = 30,
         max_retries: int = 2,
     ):
@@ -217,13 +217,13 @@ class PBSBackend(CMCBackend):
 
     def run_parallel_mcmc(
         self,
-        shards: List[Dict[str, np.ndarray]],
-        mcmc_config: Dict[str, Any],
-        init_params: Dict[str, float],
+        shards: list[dict[str, np.ndarray]],
+        mcmc_config: dict[str, Any],
+        init_params: dict[str, float],
         inv_mass_matrix: np.ndarray,
         analysis_mode: str,
         parameter_space,
-    ) -> List[Dict[str, Any]]:
+    ) -> list[dict[str, Any]]:
         """Run MCMC on all shards via PBS job array.
 
         Workflow:
@@ -304,9 +304,9 @@ class PBSBackend(CMCBackend):
 
     def _write_shard_data(
         self,
-        shards: List[Dict[str, np.ndarray]],
-        mcmc_config: Dict[str, Any],
-        init_params: Dict[str, float],
+        shards: list[dict[str, np.ndarray]],
+        mcmc_config: dict[str, Any],
+        init_params: dict[str, float],
         inv_mass_matrix: np.ndarray,
     ) -> None:
         """Write shard data to HDF5 files.
@@ -386,7 +386,7 @@ class PBSBackend(CMCBackend):
             )
             template_content = self._get_fallback_template()
         else:
-            with open(template_path, "r") as f:
+            with open(template_path) as f:
                 template_content = f.read()
 
         # Generate job name
@@ -673,7 +673,7 @@ run_shard_task(
 
         return completed
 
-    def _collect_results(self, num_shards: int) -> List[Dict[str, Any]]:
+    def _collect_results(self, num_shards: int) -> list[dict[str, Any]]:
         """Collect results from shard output files.
 
         Parameters
@@ -794,18 +794,18 @@ def run_shard_task(temp_dir: str, shard_idx: int) -> None:
     shard_idx : int
         Index of shard to process (from PBS_ARRAY_INDEX)
     """
-    import sys
     import json
+    import sys
     from pathlib import Path
 
-    import numpy as np
     import h5py
     import jax
     import jax.numpy as jnp
+    import numpy as np
     import numpyro
     import numpyro.distributions as dist
-    from numpyro.infer import MCMC, NUTS
     from numpyro import sample
+    from numpyro.infer import MCMC, NUTS
 
     temp_path = Path(temp_dir)
     start_time = time.time()
@@ -827,14 +827,14 @@ def run_shard_task(temp_dir: str, shard_idx: int) -> None:
 
         # Read MCMC config
         config_path = temp_path / "mcmc_config.json"
-        with open(config_path, "r") as f:
+        with open(config_path) as f:
             config_data = json.load(f)
             mcmc_config = config_data["mcmc_config"]
             init_params = config_data["init_params"]
 
         # Read mass matrix
         mass_matrix_path = temp_path / "inv_mass_matrix.npy"
-        inv_mass_matrix = np.load(mass_matrix_path)
+        _inv_mass_matrix = np.load(mass_matrix_path)  # noqa: F841 - Reserved for advanced NUTS
 
         # Run MCMC (same logic as pjit/multiprocessing backends)
         num_warmup = mcmc_config.get("num_warmup", 500)
@@ -854,9 +854,9 @@ def run_shard_task(temp_dir: str, shard_idx: int) -> None:
         def model(data, sigma, t1, t2, phi, q, L):
             contrast = sample("contrast", dist.Uniform(0.0, 1.0))
             offset = sample("offset", dist.Normal(1.0, 0.1))
-            D0 = sample("D0", dist.Uniform(100.0, 10000.0))
-            alpha = sample("alpha", dist.Uniform(0.0, 2.0))
-            D_offset = sample("D_offset", dist.Uniform(0.0, 100.0))
+            _D0 = sample("D0", dist.Uniform(100.0, 10000.0))  # noqa: F841
+            _alpha = sample("alpha", dist.Uniform(0.0, 2.0))  # noqa: F841
+            _D_offset = sample("D_offset", dist.Uniform(0.0, 100.0))  # noqa: F841
 
             g2_theory = jnp.ones_like(data)
             mu = contrast * g2_theory + offset
@@ -940,7 +940,7 @@ def run_shard_task(temp_dir: str, shard_idx: int) -> None:
             diagnostics["rhat"] = rhat_dict
         else:
             diagnostics["ess"] = {k: len(v) for k, v in samples_dict.items()}
-            diagnostics["rhat"] = {k: 1.0 for k in samples_dict.keys()}
+            diagnostics["rhat"] = dict.fromkeys(samples_dict.keys(), 1.0)
 
         # Check convergence
         converged = True

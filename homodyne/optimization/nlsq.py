@@ -459,15 +459,16 @@ def _is_nlsq_diagnostics_enabled(config: ConfigManager | dict[str, Any]) -> bool
         return False
 
     return bool(
-        config_dict
-        .get("optimization", {})
+        config_dict.get("optimization", {})
         .get("nlsq", {})
         .get("diagnostics", {})
         .get("enabled", False)
     )
 
 
-def _extract_shear_transform_config(config: ConfigManager | dict[str, Any]) -> dict[str, Any]:
+def _extract_shear_transform_config(
+    config: ConfigManager | dict[str, Any],
+) -> dict[str, Any]:
     config_dict: dict[str, Any] | None = None
     if hasattr(config, "config") and config.config:
         config_dict = config.config
@@ -478,10 +479,7 @@ def _extract_shear_transform_config(config: ConfigManager | dict[str, Any]) -> d
         return {}
 
     return (
-        config_dict
-        .get("optimization", {})
-        .get("nlsq", {})
-        .get("shear_transforms", {})
+        config_dict.get("optimization", {}).get("nlsq", {}).get("shear_transforms", {})
     )
 
 
@@ -560,14 +558,18 @@ def _load_initial_params_from_config(
     if "contrast" not in params or "offset" not in params:
         # Use typical homodyne XPCS values (empirically validated)
         contrast_default = 0.3  # Typical range [0.1, 0.5] for homodyne detection
-        offset_default = 0.8    # Typical range [0.5, 1.0] for baseline
+        offset_default = 0.8  # Typical range [0.5, 1.0] for baseline
 
         if "contrast" not in params:
             params["contrast"] = contrast_default
-            logger.info(f"Using default contrast={contrast_default:.3f} (typical homodyne XPCS)")
+            logger.info(
+                f"Using default contrast={contrast_default:.3f} (typical homodyne XPCS)"
+            )
         if "offset" not in params:
             params["offset"] = offset_default
-            logger.info(f"Using default offset={offset_default:.3f} (typical homodyne XPCS)")
+            logger.info(
+                f"Using default offset={offset_default:.3f} (typical homodyne XPCS)"
+            )
 
     # Validate parameter count matches analysis mode
     expected_count = 5 if "static" in analysis_mode.lower() else 9
@@ -679,7 +681,7 @@ def _get_default_initial_params(analysis_mode: str) -> dict[str, float]:
     if "static" in analysis_mode.lower():
         return {
             "contrast": 0.5,  # Generic default - should be replaced with data estimate
-            "offset": 1.0,    # Generic default - should be replaced with data estimate
+            "offset": 1.0,  # Generic default - should be replaced with data estimate
             "D0": 10000.0,
             "alpha": -1.5,
             "D_offset": 0.0,
@@ -688,7 +690,7 @@ def _get_default_initial_params(analysis_mode: str) -> dict[str, float]:
     else:
         return {
             "contrast": 0.5,  # Generic default - should be replaced with data estimate
-            "offset": 1.0,    # Generic default - should be replaced with data estimate
+            "offset": 1.0,  # Generic default - should be replaced with data estimate
             "D0": 10000.0,
             "alpha": -1.5,
             "D_offset": 0.0,

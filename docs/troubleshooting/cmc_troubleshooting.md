@@ -1,35 +1,36 @@
 # Consensus Monte Carlo Troubleshooting Guide
 
-**Version:** 2.0+
-**Last Updated:** 2025-10-24
+**Version:** 2.0+ **Last Updated:** 2025-10-24
 
----
+______________________________________________________________________
 
 ## Table of Contents
 
 1. [Common Error Messages](#common-error-messages)
-2. [Convergence Issues](#convergence-issues)
-3. [Performance Problems](#performance-problems)
-4. [Memory Errors](#memory-errors)
-5. [Backend-Specific Issues](#backend-specific-issues)
-6. [Configuration Errors](#configuration-errors)
-7. [Data Quality Issues](#data-quality-issues)
-8. [Diagnostic Interpretation](#diagnostic-interpretation)
-9. [Debug Mode](#debug-mode)
-10. [Getting Help](#getting-help)
+1. [Convergence Issues](#convergence-issues)
+1. [Performance Problems](#performance-problems)
+1. [Memory Errors](#memory-errors)
+1. [Backend-Specific Issues](#backend-specific-issues)
+1. [Configuration Errors](#configuration-errors)
+1. [Data Quality Issues](#data-quality-issues)
+1. [Diagnostic Interpretation](#diagnostic-interpretation)
+1. [Debug Mode](#debug-mode)
+1. [Getting Help](#getting-help)
 
----
+______________________________________________________________________
 
 ## Common Error Messages
 
 ### Error: "All shards failed to converge"
 
 **Full Message:**
+
 ```
 RuntimeError: All shards failed to converge. Cannot combine posteriors.
 ```
 
 **Cause:**
+
 - Poor initialization (bad initial parameters)
 - Data quality issues (NaN, Inf, outliers)
 - Too few warmup iterations
@@ -86,16 +87,18 @@ outliers = np.abs(data - data.mean()) > 5 * data.std()
 print(f"Outliers: {outliers.sum()} / {len(data)} ({100*outliers.sum()/len(data):.2f}%)")
 ```
 
----
+______________________________________________________________________
 
 ### Error: "High KL divergence between shards"
 
 **Full Message:**
+
 ```
 WARNING: Max KL divergence (7.3) exceeds threshold (2.0)
 ```
 
 **Cause:**
+
 - Multi-modal posterior distribution
 - Non-representative shards (poor sharding strategy)
 - Data heterogeneity across time/angle bins
@@ -139,16 +142,18 @@ validation:
   max_between_shard_kl: 5.0  # Relax threshold
 ```
 
----
+______________________________________________________________________
 
 ### Error: "CUDA out of memory"
 
 **Full Message:**
+
 ```
 RuntimeError: CUDA out of memory. Tried to allocate 2.50 GiB (GPU 0; 15.78 GiB total capacity; 14.12 GiB already allocated; 896.00 MiB free; 14.32 GiB reserved in total by PyTorch)
 ```
 
 **Cause:**
+
 - Shard size too large for GPU memory
 - Multiple chains per shard
 - Memory leak in long-running MCMC
@@ -191,16 +196,18 @@ for shard in shards:
     gc.collect()         # Python garbage collection
 ```
 
----
+______________________________________________________________________
 
 ### Error: "SVI initialization timeout"
 
 **Full Message:**
+
 ```
 WARNING: SVI initialization timed out after 900 seconds
 ```
 
 **Cause:**
+
 - Too many SVI steps
 - Large dataset for pooling
 - Slow convergence
@@ -230,13 +237,14 @@ initialization:
   method: identity  # Fastest but slower MCMC convergence
 ```
 
----
+______________________________________________________________________
 
 ## Convergence Issues
 
 ### Low Effective Sample Size (ESS < 100)
 
 **Symptom:**
+
 ```json
 {
   "shard_id": 3,
@@ -276,11 +284,12 @@ elif result.acceptance_rate > 0.95:
     print("Acceptance too high, NUTS taking tiny steps")
 ```
 
----
+______________________________________________________________________
 
 ### High R-hat (> 1.1)
 
 **Symptom:**
+
 ```json
 {
   "shard_id": 5,
@@ -318,14 +327,14 @@ print(f"Initial D0: {initial_params['D0']}")  # Should be ~1e3-1e5
 print(f"Initial alpha: {initial_params['alpha']}")  # Should be 0.5-2.0
 ```
 
----
+______________________________________________________________________
 
 ## Performance Problems
 
 ### CMC slower than expected
 
-**Expected:** Linear speedup with number of devices
-**Actual:** 2x slower than standard NUTS
+**Expected:** Linear speedup with number of devices **Actual:** 2x slower than standard
+NUTS
 
 **Diagnosis:**
 
@@ -369,7 +378,7 @@ sharding:
   num_shards: 16  # Manual tuning for your hardware
 ```
 
----
+______________________________________________________________________
 
 ### SVI initialization too slow (> 5 minutes)
 
@@ -396,7 +405,7 @@ initialization:
   svi_learning_rate: 0.005  # Up from 0.001 (faster convergence)
 ```
 
----
+______________________________________________________________________
 
 ## Memory Errors
 
@@ -446,7 +455,7 @@ backend:
 config['backend']['max_parallel_shards'] = 4  # Process 4 at a time
 ```
 
----
+______________________________________________________________________
 
 ## Backend-Specific Issues
 
@@ -470,7 +479,7 @@ pip uninstall -y jax jaxlib
 pip install jax[cuda12-local]==0.8.0 jaxlib==0.8.0
 ```
 
----
+______________________________________________________________________
 
 ### MultiprocessingBackend: "Pickling error"
 
@@ -496,7 +505,7 @@ shard['data'] = np.array(shard['data'])  # JAX → NumPy
 shard['t1'] = np.array(shard['t1'])
 ```
 
----
+______________________________________________________________________
 
 ### PBSBackend: "Job submission failed"
 
@@ -533,7 +542,7 @@ pbs:
   cores_per_node: 36  # Match your cluster
 ```
 
----
+______________________________________________________________________
 
 ## Configuration Errors
 
@@ -554,7 +563,7 @@ sharding:
   strategy: stratified  # NOT 'stratify'
 ```
 
----
+______________________________________________________________________
 
 ### Error: "min_success_rate must be between 0 and 1"
 
@@ -573,7 +582,7 @@ combination:
   min_success_rate: 0.90  # NOT 90
 ```
 
----
+______________________________________________________________________
 
 ## Data Quality Issues
 
@@ -629,6 +638,7 @@ parameter_space:
 **⚠️ CRITICAL: CMC Sharding Strategy Requirement**
 
 **Symptom:**
+
 - Parameters unchanged from initial values
 - Zero gradients in optimization
 - "Convergence failure" warnings for some/all shards
@@ -636,13 +646,14 @@ parameter_space:
 
 **Root Cause:**
 
-CMC always uses **per-angle scaling** (separate `contrast[i]` and `offset[i]` for each phi angle).
-This requires that **every shard contains data from all phi angles**. Non-stratified sharding
-(random, contiguous) may create shards with incomplete phi angle coverage, causing:
+CMC always uses **per-angle scaling** (separate `contrast[i]` and `offset[i]` for each
+phi angle). This requires that **every shard contains data from all phi angles**.
+Non-stratified sharding (random, contiguous) may create shards with incomplete phi angle
+coverage, causing:
 
 1. Missing angles in shard → Zero gradient for that angle's parameters
-2. MCMC sampler cannot update parameters with zero gradients
-3. Silent optimization failure (completes but returns initial values)
+1. MCMC sampler cannot update parameters with zero gradients
+1. Silent optimization failure (completes but returns initial values)
 
 **Technical Details:**
 
@@ -692,11 +703,13 @@ cmc:
 ```
 
 **References:**
+
 - Ultra-Think Analysis: `ultra-think-20251106-012247`
 - NLSQ Investigation: `docs/troubleshooting/nlsq-zero-iterations-investigation.md`
-- Code: `homodyne/optimization/cmc/backends/multiprocessing.py:444` (per_angle_scaling=True)
+- Code: `homodyne/optimization/cmc/backends/multiprocessing.py:444`
+  (per_angle_scaling=True)
 
----
+______________________________________________________________________
 
 ## Diagnostic Interpretation
 
@@ -727,7 +740,7 @@ cmc:
 - `r_hat > 1.1` - ❌ Not converged
 - `ess < 100` - ⚠️ High autocorrelation
 
----
+______________________________________________________________________
 
 ### Understanding CMC Diagnostics
 
@@ -754,7 +767,7 @@ cmc:
 - `max_kl_divergence > 5.0` - ❌ Shards diverged
 - `combination_success: false` - ❌ Combination failed
 
----
+______________________________________________________________________
 
 ## Debug Mode
 
@@ -806,7 +819,7 @@ with open('cmc_diagnostics.json', 'w') as f:
     json.dump(diagnostics, f, indent=2)
 ```
 
----
+______________________________________________________________________
 
 ## Getting Help
 
@@ -844,20 +857,23 @@ if result.is_cmc_result():
 ### Where to Get Help
 
 **GitHub Issues:**
+
 - Bug reports: https://github.com/your-org/homodyne/issues
 - Feature requests: https://github.com/your-org/homodyne/issues
 
 **Discussion Forum:**
+
 - Questions: https://github.com/your-org/homodyne/discussions
 - Show & Tell: https://github.com/your-org/homodyne/discussions/categories/show-and-tell
 
 **Email Support:**
+
 - Critical issues: support@homodyne-xpcs.org
 - Security issues: security@homodyne-xpcs.org
 
 ### Issue Template
 
-```markdown
+````markdown
 **Environment:**
 - homodyne version: 2.0.0
 - Platform: Linux, Python 3.12
@@ -870,28 +886,30 @@ if result.is_cmc_result():
 **Configuration:**
 ```yaml
 # Paste relevant config sections
-```
+````
 
 **Error Message:**
+
 ```
 # Paste full error traceback
 ```
 
 **Steps to Reproduce:**
+
 1. Load data: `data = load_xpcs_data(...)`
-2. Run CMC: `result = fit_mcmc_jax(data, ..., method='cmc')`
-3. Error occurs at...
+1. Run CMC: `result = fit_mcmc_jax(data, ..., method='cmc')`
+1. Error occurs at...
 
-**Expected Behavior:**
-[What should happen]
+**Expected Behavior:** [What should happen]
 
-**Actual Behavior:**
-[What actually happens]
+**Actual Behavior:** [What actually happens]
 
 **Diagnostics:**
+
 ```json
 # Paste CMC diagnostics if available
 ```
+
 ```
 
 ---
@@ -923,3 +941,4 @@ For detailed information, see:
 - User Guide: `docs/user-guide/cmc_guide.md`
 - API Reference: `docs/api-reference/cmc_api.md`
 - Migration Guide: `docs/migration/v3_cmc_migration.md`
+```

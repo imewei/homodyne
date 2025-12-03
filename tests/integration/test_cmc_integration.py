@@ -2,20 +2,23 @@
 Integration Tests for Consensus Monte Carlo (CMC)
 ==================================================
 
+**Updated**: v3.0 CMC-only migration
+
 Comprehensive end-to-end integration tests for CMC pipeline:
-- CMC vs NUTS comparison on overlap range (small datasets)
 - Backend equivalence (pjit, multiprocessing, PBS)
 - Configuration integration (YAML, CLI overrides, defaults)
 - Error handling and recovery
+- Sharding strategies and per-phi initialization
 
 Test Tiers:
     Tier 2 (Integration): Complete CMC pipeline with various configurations
     Duration: Minutes per test, ~30 min total suite
+
+Note: CMC vs NUTS comparison tests removed in v3.0 (CMC-only architecture)
 """
 
 import json
 from pathlib import Path
-from typing import Dict, Any, Optional, Tuple
 
 import numpy as np
 import pytest
@@ -47,11 +50,11 @@ except ImportError:
 # Import CMC components
 try:
     from homodyne.optimization.cmc.coordinator import CMCCoordinator
+    from homodyne.optimization.cmc.result import MCMCResult
     from homodyne.optimization.cmc.sharding import (
         calculate_optimal_num_shards,
         shard_data_stratified,
     )
-    from homodyne.optimization.cmc.result import MCMCResult
 
     CMC_AVAILABLE = True
 except ImportError:
@@ -71,14 +74,14 @@ def generate_synthetic_xpcs_data(
     n_angles: int = 8,
     analysis_mode: str = "laminar_flow",
     seed: int = 42,
-) -> Tuple[
+) -> tuple[
     np.ndarray,
     np.ndarray,
     np.ndarray,
     np.ndarray,
     np.ndarray,
     np.ndarray,
-    Dict[str, float],
+    dict[str, float],
 ]:
     """
     Generate synthetic XPCS data for testing.
@@ -165,7 +168,7 @@ def prepare_flattened_data_for_sharding(
     t1: np.ndarray,
     t2: np.ndarray,
     phi: np.ndarray,
-) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
     """
     Prepare data for sharding by flattening to 1D arrays.
 
@@ -254,19 +257,19 @@ class TestCMCIntegrationBasic:
             assert "data" in shard
             assert "phi" in shard
 
-    def test_cmc_small_dataset_vs_nuts(self):
+    def test_cmc_small_dataset_structure(self):
         """
-        Test CMC vs NUTS on small dataset should give similar results.
+        Test CMC pipeline handles small dataset correctly.
 
-        CMC and NUTS should agree on 10k-point dataset within ~10% error.
+        Validates data structure for 10k-point dataset.
+        Note: CMC vs NUTS comparison removed in v3.0 (CMC-only architecture)
         """
         n_points = 10000
         c2_exp, t1, t2, phi, q, L, true_params = generate_synthetic_xpcs_data(
             n_points=n_points, n_angles=8, analysis_mode="static"
         )
 
-        # This test structure validates integration
-        # Actual NUTS/CMC comparison deferred to validation tier
+        # Validate data structure for CMC
         assert c2_exp.shape[0] == 8
         assert c2_exp.shape[1] == c2_exp.shape[2]
         assert len(phi) == 8
@@ -338,8 +341,8 @@ class TestCMCBackendIntegration:
 
     def test_multiprocessing_backend_basic(self):
         """Test multiprocessing backend instantiation."""
-        from homodyne.optimization.cmc.backends import select_backend
         from homodyne.device.config import detect_hardware
+        from homodyne.optimization.cmc.backends import select_backend
 
         hw_config = detect_hardware()
         backend = select_backend(hw_config, user_override="multiprocessing")
@@ -534,9 +537,13 @@ class TestCMCErrorHandling:
 
     def test_empty_data_handling(self):
         """Test handling of edge cases."""
-        # Minimal data
+        # Minimal data with all required arrays
         c2_exp = np.ones((1, 10, 10))
+        t1 = np.linspace(0, 1, 10)
+        t2 = np.linspace(0, 1, 10)
         phi = np.array([0.0])
+        q = 0.0054
+        L = 2000000.0
 
         # Should handle gracefully
         try:
@@ -553,7 +560,7 @@ class TestCMCErrorHandling:
                 L=L,
             )
             assert len(shards) == 1
-        except Exception as e:
+        except Exception:
             # Acceptable to raise error for edge case
             pass
 
@@ -781,15 +788,12 @@ if __name__ == "__main__":
 # CMC Result Processing Tests (from test_cmc_results.py)
 # =============================================================================
 
-import json
 import tempfile
-from pathlib import Path
 
 import numpy as np
 import pytest
 
 from homodyne.optimization.cmc.result import MCMCResult
-
 
 # ==============================================================================
 # Test Class: Result Structure with New Metadata
@@ -856,17 +860,17 @@ class TestMCMCResultMetadata:
         assert result.initial_values_metadata["alpha"] == 0.567
         assert result.initial_values_metadata["D_offset"] == 12.34
 
-    def test_result_with_selection_decision_metadata(self):
-        """Verify selection_decision_metadata field works correctly."""
-        # Create selection decision metadata (from automatic NUTS/CMC selection)
-        selection_decision_metadata = {
-            "selected_method": "CMC",
-            "num_samples": 50,
-            "parallelism_criterion_met": True,
-            "memory_criterion_met": False,
-            "min_samples_for_cmc": 15,
-            "memory_threshold_pct": 0.30,
-            "estimated_memory_fraction": 0.15,
+    def test_result_with_cmc_metadata(self):
+        """Verify CMC-specific metadata field works correctly.
+
+        Note: parallelism_criterion_met/memory_criterion_met removed in v3.0 (CMC-only)
+        """
+        # Create CMC metadata (v3.0 CMC-only)
+        cmc_metadata = {
+            "method": "CMC",
+            "num_shards": 10,
+            "backend": "multiprocessing",
+            "sharding_strategy": "stratified",
         }
 
         # Create result with metadata
@@ -875,14 +879,13 @@ class TestMCMCResultMetadata:
             mean_contrast=0.5,
             mean_offset=1.0,
             num_shards=10,  # CMC result
-            selection_decision_metadata=selection_decision_metadata,
+            selection_decision_metadata=cmc_metadata,
         )
 
         # Verify metadata stored correctly
         assert result.selection_decision_metadata is not None
-        assert result.selection_decision_metadata["selected_method"] == "CMC"
-        assert result.selection_decision_metadata["parallelism_criterion_met"] is True
-        assert result.selection_decision_metadata["memory_criterion_met"] is False
+        assert result.selection_decision_metadata["method"] == "CMC"
+        assert result.selection_decision_metadata["num_shards"] == 10
         assert result.is_cmc_result()  # Should be detected as CMC
 
     def test_result_with_all_metadata_fields(self):
@@ -894,11 +897,10 @@ class TestMCMCResultMetadata:
             "model_type": "static",
         }
         initial_values_metadata = {"D0": 1234.5, "alpha": 0.567, "D_offset": 12.34}
-        selection_decision_metadata = {
-            "selected_method": "NUTS",
-            "num_samples": 10,
-            "parallelism_criterion_met": False,
-            "memory_criterion_met": False,
+        cmc_metadata = {
+            "method": "CMC",
+            "num_shards": 4,
+            "backend": "pjit",
         }
 
         # Create result with all metadata
@@ -908,7 +910,7 @@ class TestMCMCResultMetadata:
             mean_offset=1.0,
             parameter_space_metadata=param_space_metadata,
             initial_values_metadata=initial_values_metadata,
-            selection_decision_metadata=selection_decision_metadata,
+            selection_decision_metadata=cmc_metadata,
         )
 
         # Verify all metadata fields present
@@ -926,7 +928,7 @@ class TestResultSerialization:
     """Test to_dict() and from_dict() with new metadata fields."""
 
     def test_to_dict_includes_new_metadata(self):
-        """Verify to_dict() includes v2.1.0 metadata fields."""
+        """Verify to_dict() includes metadata fields."""
         # Create result with metadata
         result = MCMCResult(
             mean_params=np.array([200.0, 1.0, 10.0]),
@@ -934,7 +936,7 @@ class TestResultSerialization:
             mean_offset=1.0,
             parameter_space_metadata={"model_type": "static"},
             initial_values_metadata={"D0": 1234.5},
-            selection_decision_metadata={"selected_method": "NUTS"},
+            selection_decision_metadata={"method": "CMC", "num_shards": 4},
         )
 
         # Convert to dict
@@ -946,11 +948,11 @@ class TestResultSerialization:
         assert "selection_decision_metadata" in data
         assert data["parameter_space_metadata"]["model_type"] == "static"
         assert data["initial_values_metadata"]["D0"] == 1234.5
-        assert data["selection_decision_metadata"]["selected_method"] == "NUTS"
+        assert data["selection_decision_metadata"]["method"] == "CMC"
 
     def test_from_dict_with_new_metadata(self):
-        """Verify from_dict() reconstructs result with v2.1.0 metadata."""
-        # Create dictionary with new metadata fields
+        """Verify from_dict() reconstructs result with metadata."""
+        # Create dictionary with metadata fields
         data = {
             "mean_params": [200.0, 1.0, 10.0],
             "mean_contrast": 0.5,
@@ -961,8 +963,8 @@ class TestResultSerialization:
             },
             "initial_values_metadata": {"D0": 1234.5, "alpha": 0.567},
             "selection_decision_metadata": {
-                "selected_method": "CMC",
-                "parallelism_criterion_met": True,
+                "method": "CMC",
+                "num_shards": 8,
             },
         }
 
@@ -973,7 +975,7 @@ class TestResultSerialization:
         assert result.parameter_space_metadata is not None
         assert result.parameter_space_metadata["model_type"] == "static"
         assert result.initial_values_metadata["D0"] == 1234.5
-        assert result.selection_decision_metadata["selected_method"] == "CMC"
+        assert result.selection_decision_metadata["method"] == "CMC"
 
     def test_from_dict_backward_compatibility(self):
         """Verify from_dict() handles old results without new metadata (backward compatibility)."""
@@ -1015,9 +1017,9 @@ class TestResultSerialization:
             },
             initial_values_metadata={"D0": 1234.5, "alpha": 0.567, "D_offset": 12.34},
             selection_decision_metadata={
-                "selected_method": "NUTS",
-                "num_samples": 10,
-                "parallelism_criterion_met": False,
+                "method": "CMC",
+                "num_shards": 4,
+                "backend": "multiprocessing",
             },
         )
 
@@ -1070,12 +1072,10 @@ class TestResultFileSaving:
             },
             initial_values_metadata={"D0": 1234.5, "alpha": 0.567, "D_offset": 12.34},
             selection_decision_metadata={
-                "selected_method": "CMC",
-                "num_samples": 50,
-                "parallelism_criterion_met": True,
-                "memory_criterion_met": False,
-                "min_samples_for_cmc": 15,
-                "memory_threshold_pct": 0.30,
+                "method": "CMC",
+                "num_shards": 10,
+                "backend": "multiprocessing",
+                "sharding_strategy": "stratified",
             },
         )
 
@@ -1089,21 +1089,16 @@ class TestResultFileSaving:
 
         try:
             # Load back and verify
-            with open(temp_path, "r") as f:
+            with open(temp_path) as f:
                 loaded_data = json.load(f)
 
             # Verify metadata preserved through JSON serialization
             assert "parameter_space_metadata" in loaded_data
             assert "initial_values_metadata" in loaded_data
             assert "selection_decision_metadata" in loaded_data
-            assert (
-                loaded_data["parameter_space_metadata"]["model_type"]
-                == "static"
-            )
+            assert loaded_data["parameter_space_metadata"]["model_type"] == "static"
             assert loaded_data["initial_values_metadata"]["D0"] == 1234.5
-            assert (
-                loaded_data["selection_decision_metadata"]["selected_method"] == "CMC"
-            )
+            assert loaded_data["selection_decision_metadata"]["method"] == "CMC"
         finally:
             # Clean up
             Path(temp_path).unlink()
@@ -1135,7 +1130,7 @@ class TestResultFileSaving:
 
         try:
             # Load and reconstruct result
-            with open(temp_path, "r") as f:
+            with open(temp_path) as f:
                 loaded_data = json.load(f)
 
             result = MCMCResult.from_dict(loaded_data)
@@ -1159,11 +1154,14 @@ class TestResultFileSaving:
 
 
 class TestCMCResultMetadata:
-    """Test CMC results with combined CMC and config-driven metadata."""
+    """Test CMC results with combined CMC and config-driven metadata.
 
-    def test_cmc_result_with_selection_metadata(self):
-        """Verify CMC results include selection decision metadata."""
-        # Create CMC result with selection decision
+    Note: NUTS-only tests removed in v3.0 (CMC-only architecture)
+    """
+
+    def test_cmc_result_with_sharding_metadata(self):
+        """Verify CMC results include sharding metadata."""
+        # Create CMC result with sharding metadata
         result = MCMCResult(
             mean_params=np.array([200.0, 1.0, 10.0]),
             mean_contrast=0.5,
@@ -1172,11 +1170,10 @@ class TestCMCResultMetadata:
             combination_method="weighted",
             cmc_diagnostics={"combination_success": True, "n_shards_converged": 10},
             selection_decision_metadata={
-                "selected_method": "CMC",
-                "num_samples": 50,
-                "parallelism_criterion_met": True,
-                "memory_criterion_met": False,
-                "min_samples_for_cmc": 15,
+                "method": "CMC",
+                "num_shards": 10,
+                "backend": "multiprocessing",
+                "sharding_strategy": "stratified",
             },
         )
 
@@ -1184,31 +1181,34 @@ class TestCMCResultMetadata:
         assert result.is_cmc_result() is True
         assert result.num_shards == 10
 
-        # Verify selection metadata shows why CMC was chosen
-        assert result.selection_decision_metadata["selected_method"] == "CMC"
-        assert result.selection_decision_metadata["parallelism_criterion_met"] is True
+        # Verify sharding metadata
+        assert result.selection_decision_metadata["method"] == "CMC"
+        assert result.selection_decision_metadata["num_shards"] == 10
 
-    def test_nuts_result_with_selection_metadata(self):
-        """Verify NUTS results include selection decision metadata."""
-        # Create NUTS result with selection decision
+    def test_single_shard_cmc_result(self):
+        """Verify single-shard CMC result (uses NUTS internally).
+
+        In v3.0 CMC-only architecture, even single-shard runs use CMC framework
+        with NUTS as the per-shard sampler.
+        """
+        # Create single-shard CMC result
         result = MCMCResult(
             mean_params=np.array([200.0, 1.0, 10.0]),
             mean_contrast=0.5,
             mean_offset=1.0,
-            num_shards=None,  # Not CMC
+            num_shards=1,  # Single shard CMC
             selection_decision_metadata={
-                "selected_method": "NUTS",
-                "num_samples": 10,
-                "parallelism_criterion_met": False,
-                "memory_criterion_met": False,
-                "min_samples_for_cmc": 15,
+                "method": "CMC",
+                "num_shards": 1,
+                "backend": "pjit",
+                "per_shard_sampler": "NUTS",
             },
         )
 
-        # Verify NUTS detection works
-        assert result.is_cmc_result() is False
+        # Single-shard CMC is still CMC
+        assert result.is_cmc_result() is True
 
-        # Verify selection metadata shows why NUTS was chosen
-        assert result.selection_decision_metadata["selected_method"] == "NUTS"
-        assert result.selection_decision_metadata["parallelism_criterion_met"] is False
-        assert result.selection_decision_metadata["memory_criterion_met"] is False
+        # Verify metadata shows CMC with single shard
+        assert result.selection_decision_metadata["method"] == "CMC"
+        assert result.selection_decision_metadata["num_shards"] == 1
+        assert result.selection_decision_metadata["per_shard_sampler"] == "NUTS"

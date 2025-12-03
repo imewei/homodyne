@@ -21,12 +21,11 @@ import numpy as np
 import pytest
 
 from homodyne.optimization.cmc.combination import (
-    combine_subposteriors,
-    _weighted_gaussian_product,
     _simple_averaging,
     _validate_shard_results,
+    _weighted_gaussian_product,
+    combine_subposteriors,
 )
-
 
 # ============================================================================
 # Test Fixtures

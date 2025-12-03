@@ -16,7 +16,7 @@ Test Coverage
 
 import json
 from pathlib import Path
-from unittest.mock import MagicMock, Mock, patch
+from unittest.mock import Mock, patch
 
 import jax.numpy as jnp
 import numpy as np
@@ -517,7 +517,9 @@ class TestSaveNLSQNPZFile:
             assert data["c2_exp"].shape == (3, 10, 10)
             assert np.allclose(data["phi_angles"], phi_angles)
             assert np.allclose(data["c2_exp"], c2_exp)
-            assert np.allclose(data["per_angle_scaling_solver"], per_angle_scaling_solver)
+            assert np.allclose(
+                data["per_angle_scaling_solver"], per_angle_scaling_solver
+            )
 
 
 # ==============================================================================
@@ -563,9 +565,9 @@ class TestGenerateNLSQPlots:
             for phi in phi_angles:
                 png_file = output_dir / f"c2_heatmaps_phi_{phi:.1f}deg.png"
                 assert png_file.exists(), f"PNG file not created for phi={phi}"
-                assert (
-                    png_file.stat().st_size > 1000
-                ), f"PNG file too small for phi={phi}"
+                assert png_file.stat().st_size > 1000, (
+                    f"PNG file too small for phi={phi}"
+                )
 
             # Verify correct number of files
             png_files = list(output_dir.glob("*.png"))

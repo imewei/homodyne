@@ -39,17 +39,12 @@ reliable CPU execution. v2.2.x remains available for GPU users.
 
 import os
 import time
-from pathlib import Path
 
 import numpy as np
 
 # Homodyne imports
 from homodyne.config import ConfigManager
-from homodyne.device import (
-    configure_cpu_hpc,
-    detect_cpu_info,
-    get_optimal_batch_size,
-)
+from homodyne.device import configure_cpu_hpc, detect_cpu_info, get_optimal_batch_size
 from homodyne.optimization import fit_nlsq_jax
 
 
@@ -136,12 +131,12 @@ def configure_cpu_optimal(cpu_info):
     config = configure_cpu_hpc(
         num_threads=optimal_threads,
         enable_hyperthreading=False,
-        numa_policy='auto' if cpu_info.get("has_numa", False) else 'single',
-        memory_optimization='standard',
+        numa_policy="auto" if cpu_info.get("has_numa", False) else "single",
+        memory_optimization="standard",
         enable_onednn=enable_onednn,
     )
 
-    print(f"\nConfiguration Summary:")
+    print("\nConfiguration Summary:")
     print(f"  Threads: {config.get('threads_configured')} (physical cores)")
     print(f"  oneDNN: {config.get('onednn_enabled', False)}")
     print(f"  Optimizations: {config.get('optimizations', 'standard')}")
@@ -160,7 +155,7 @@ def generate_synthetic_xpcs_data(n_times=100, n_angles=12):
     Returns:
         dict: Synthetic XPCS dataset
     """
-    print(f"\n📊 Generating synthetic XPCS data...")
+    print("\n📊 Generating synthetic XPCS data...")
     print(f"   Time points: {n_times}, Phi angles: {n_angles}")
 
     # Create time arrays
@@ -251,13 +246,13 @@ def run_cpu_optimized_analysis(data, cpu_info):
         result = fit_nlsq_jax(data, config)
         elapsed = time.perf_counter() - start_time
 
-        print(f"\n✅ NLSQ Optimization Completed!")
+        print("\n✅ NLSQ Optimization Completed!")
         print(f"   Time elapsed: {elapsed:.3f}s")
         print(f"   Data points: {data['data_size']:,}")
         print(f"   Throughput: {data['data_size'] / elapsed:,.0f} points/sec")
 
         if hasattr(result, "parameters"):
-            print(f"\n   Fitted parameters:")
+            print("\n   Fitted parameters:")
             for key, val in result.parameters.items():
                 print(f"   - {key}: {val:.6f}")
 
@@ -273,7 +268,7 @@ def run_cpu_optimized_analysis(data, cpu_info):
 
     except Exception as e:
         elapsed = time.perf_counter() - start_time
-        print(f"\n❌ NLSQ Optimization Failed!")
+        print("\n❌ NLSQ Optimization Failed!")
         print(f"   Error: {e}")
         print(f"   Time spent: {elapsed:.3f}s")
 
@@ -296,13 +291,13 @@ def benchmark_and_report():
 
     # Estimate theoretical performance
     base_ghz = 3.0  # Conservative estimate for modern CPUs
-    cores = cpu_info['physical_cores']
+    cores = cpu_info["physical_cores"]
     estimated_ghz = cores * base_ghz
 
-    print(f"\nEstimated peak performance:")
+    print("\nEstimated peak performance:")
     print(f"  Base frequency: ~{base_ghz} GHz per core")
     print(f"  Total: ~{estimated_ghz:.1f} GHz aggregate")
-    print(f"  Note: Actual performance varies with workload and thermal conditions")
+    print("  Note: Actual performance varies with workload and thermal conditions")
 
     return {"cores": cores, "estimated_ghz": estimated_ghz}
 
@@ -314,7 +309,8 @@ def print_hpc_submission_examples():
 
     print("\nExample 1: Slurm Cluster Submission")
     print("-" * 60)
-    print("""#!/bin/bash
+    print(
+        """#!/bin/bash
 #SBATCH --job-name=homodyne_xpcs
 #SBATCH --nodes=1
 #SBATCH --cpus-per-task=36
@@ -343,11 +339,13 @@ homodyne --config config.yaml --verbose
 #   homodyne --config "$config" &
 # done
 # wait
-""")
+"""
+    )
 
     print("\nExample 2: PBS Cluster Submission")
     print("-" * 60)
-    print("""#!/bin/bash
+    print(
+        """#!/bin/bash
 #PBS -N homodyne_xpcs
 #PBS -l select=1:ncpus=128:mem=256gb
 #PBS -l walltime=02:00:00
@@ -373,11 +371,13 @@ homodyne --config config.yaml --verbose
 
 # Generate report
 echo "Analysis completed at $(date)" >> analysis.log
-""")
+"""
+    )
 
     print("\nExample 3: Local Multi-Core Execution (Personal Computer)")
     print("-" * 60)
-    print("""#!/bin/bash
+    print(
+        """#!/bin/bash
 # For a 16-core personal computer
 
 # Set CPU optimization flags
@@ -394,7 +394,8 @@ echo "CPU Usage:"
 top -b -n 1 | grep "Cpu(s)"
 echo "Memory Usage:"
 free -h
-""")
+"""
+    )
 
 
 def main():
@@ -429,7 +430,7 @@ def main():
     print("=" * 60)
 
     if results["success"]:
-        print(f"✅ Analysis successful!")
+        print("✅ Analysis successful!")
         print(f"   Throughput: {results['throughput']:,.0f} points/sec")
         print(f"   Time: {results['elapsed_time']:.3f}s")
     else:
@@ -437,7 +438,9 @@ def main():
 
     print("\nRecommended Configuration for Your System:")
     print(f"- Cores to use: {min(cpu_info['cores_logical'] - 1, 36)}")
-    print(f"- Memory-efficient batch size: {get_optimal_batch_size(data['data_size']):,} points")
+    print(
+        f"- Memory-efficient batch size: {get_optimal_batch_size(data['data_size']):,} points"
+    )
     print(f"- Cluster type: {cpu_info['cluster_type']}")
 
     print("\n✅ CPU-Optimized Example Completed!")

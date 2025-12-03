@@ -24,7 +24,6 @@ Usage:
   from homodyne.core.jax_backend import compute_g2_scaled, apply_diagonal_correction
 """
 
-import jax
 import jax.numpy as jnp
 from jax import jit
 

@@ -16,12 +16,12 @@ Version: 2.4.0
 """
 
 import logging
-from typing import Optional, List, Tuple
-import numpy as np
+
 import jax
 import jax.numpy as jnp
+import numpy as np
 
-from homodyne.core.physics_nlsq import compute_g2_scaled, apply_diagonal_correction
+from homodyne.core.physics_nlsq import apply_diagonal_correction, compute_g2_scaled
 
 
 class StratifiedResidualFunctionJIT:
@@ -51,8 +51,8 @@ class StratifiedResidualFunctionJIT:
         self,
         stratified_data: any,
         per_angle_scaling: bool,
-        physical_param_names: List[str],
-        logger: Optional[logging.Logger] = None,
+        physical_param_names: list[str],
+        logger: logging.Logger | None = None,
     ):
         """
         Initialize JIT-compatible stratified residual function.
@@ -105,11 +105,13 @@ class StratifiedResidualFunctionJIT:
         self._residual_fn_jit = jax.jit(self._compute_all_residuals)
         self.logger.info("✓ JIT compilation setup complete")
 
-    def _extract_global_metadata(self) -> Tuple[float, float, Optional[float]]:
+    def _extract_global_metadata(self) -> tuple[float, float, float | None]:
         """Extract q, L, dt from chunks (should be same for all chunks)."""
         q_values = [float(chunk.q) for chunk in self.chunks]
         L_values = [float(chunk.L) for chunk in self.chunks]
-        dt_values = [float(chunk.dt) if chunk.dt is not None else None for chunk in self.chunks]
+        dt_values = [
+            float(chunk.dt) if chunk.dt is not None else None for chunk in self.chunks
+        ]
 
         # Validate consistency
         if not all(abs(q - q_values[0]) < 1e-9 for q in q_values):
@@ -124,7 +126,7 @@ class StratifiedResidualFunctionJIT:
         self.logger.debug(f"Global metadata: q={q:.6f}, L={L:.1f}, dt={dt}")
         return q, L, dt
 
-    def _extract_unique_values(self) -> Tuple[jnp.ndarray, jnp.ndarray, jnp.ndarray]:
+    def _extract_unique_values(self) -> tuple[jnp.ndarray, jnp.ndarray, jnp.ndarray]:
         """Extract unique phi, t1, t2 values from ALL chunks.
 
         CRITICAL: Must extract from all chunks, not just first chunk, because
@@ -147,7 +149,7 @@ class StratifiedResidualFunctionJIT:
 
         # Validation: check if we missed any values by comparing with first chunk
         first_chunk = self.chunks[0]
-        phi_first = jnp.sort(jnp.unique(jnp.asarray(first_chunk.phi)))
+        _phi_first = jnp.sort(jnp.unique(jnp.asarray(first_chunk.phi)))  # noqa: F841
         t1_first = jnp.sort(jnp.unique(jnp.asarray(first_chunk.t1)))
         t2_first = jnp.sort(jnp.unique(jnp.asarray(first_chunk.t2)))
 
@@ -161,7 +163,9 @@ class StratifiedResidualFunctionJIT:
 
         return phi_unique, t1_unique, t2_unique
 
-    def _create_padded_arrays(self) -> Tuple[
+    def _create_padded_arrays(
+        self,
+    ) -> tuple[
         jnp.ndarray, jnp.ndarray, jnp.ndarray, jnp.ndarray, jnp.ndarray, int, int
     ]:
         """
@@ -175,7 +179,9 @@ class StratifiedResidualFunctionJIT:
         max_chunk_size = max(chunk_sizes)
         n_real_points = sum(chunk_sizes)
 
-        self.logger.debug(f"Max chunk size: {max_chunk_size:,}, total real points: {n_real_points:,}")
+        self.logger.debug(
+            f"Max chunk size: {max_chunk_size:,}, total real points: {n_real_points:,}"
+        )
 
         # Initialize padded arrays
         phi_padded = np.zeros((self.n_chunks, max_chunk_size), dtype=np.float64)
@@ -305,7 +311,7 @@ class StratifiedResidualFunctionJIT:
         g2_theory_flat = g2_theory_grid.flatten()
 
         # Find indices of (phi, t1, t2) in the full grid
-        n_phi = len(self.phi_unique)
+        _n_phi = len(self.phi_unique)  # noqa: F841 - Dimensions for grid validation
         n_t1 = len(self.t1_unique)
         n_t2 = len(self.t2_unique)
 
@@ -361,7 +367,9 @@ class StratifiedResidualFunctionJIT:
         )  # Shape: (n_chunks, max_chunk_size)
 
         # Flatten residuals (padding is already masked to zero in _compute_single_chunk_residuals)
-        residuals_flat = residuals_padded.flatten()  # Shape: (n_chunks * max_chunk_size,)
+        residuals_flat = (
+            residuals_padded.flatten()
+        )  # Shape: (n_chunks * max_chunk_size,)
 
         # Return full array (filtering happens in __call__ to avoid JIT boolean indexing)
         return residuals_flat
@@ -395,7 +403,9 @@ class StratifiedResidualFunctionJIT:
         Raises:
             ValueError: If validation fails
         """
-        expected_angles = set(np.unique(np.round(np.asarray(self.phi_unique), decimals=6)))
+        expected_angles = set(
+            np.unique(np.round(np.asarray(self.phi_unique), decimals=6))
+        )
         n_expected = len(expected_angles)
 
         self.logger.info(
@@ -419,7 +429,9 @@ class StratifiedResidualFunctionJIT:
                     f"  Expected {n_expected} angles, got {len(chunk_angles)}"
                 )
 
-        self.logger.info("✓ Chunk structure validation passed: all chunks angle-complete")
+        self.logger.info(
+            "✓ Chunk structure validation passed: all chunks angle-complete"
+        )
         return True
 
     def get_diagnostics(self) -> dict:

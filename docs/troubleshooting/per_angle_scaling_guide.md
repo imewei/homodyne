@@ -2,16 +2,21 @@
 
 ## Overview
 
-Starting from v2.2.0 (unreleased), Homodyne implements **per-angle scaling** where each scattering angle (φ) has independent contrast and offset parameters. This is the **physically correct behavior** and is now the default mode for both MCMC and NLSQ analyses.
+Starting from v2.2.0 (unreleased), Homodyne implements **per-angle scaling** where each
+scattering angle (φ) has independent contrast and offset parameters. This is the
+**physically correct behavior** and is now the default mode for both MCMC and NLSQ
+analyses.
 
 ### Why Per-Angle Scaling?
 
 Different scattering angles can have different optical properties:
 
-1. **Detector Response Variation**: Detector sensitivity varies across the detector surface
-2. **Optical Path Differences**: Different angles have different beam paths through optics
-3. **Sample Heterogeneity**: Different q-vectors probe different length scales
-4. **Instrumental Artifacts**: Angle-dependent systematic effects
+1. **Detector Response Variation**: Detector sensitivity varies across the detector
+   surface
+1. **Optical Path Differences**: Different angles have different beam paths through
+   optics
+1. **Sample Heterogeneity**: Different q-vectors probe different length scales
+1. **Instrumental Artifacts**: Angle-dependent systematic effects
 
 ## Quick Start
 
@@ -233,7 +238,8 @@ contrast = result.samples["contrast"]  # Single value
 offset = result.samples["offset"]      # Single value
 ```
 
-**Note:** Legacy mode is provided only for backward compatibility testing and is **not recommended for production analysis**.
+**Note:** Legacy mode is provided only for backward compatibility testing and is **not
+recommended for production analysis**.
 
 ## Migration from v2.1.0
 
@@ -284,11 +290,15 @@ plt.legend()
 
 ### Q: Why did the default change?
 
-**A:** Per-angle scaling is the **physically correct behavior**. Different scattering angles genuinely can have different optical properties and detector responses. Using a single global contrast/offset was an oversimplification that could lead to systematic errors.
+**A:** Per-angle scaling is the **physically correct behavior**. Different scattering
+angles genuinely can have different optical properties and detector responses. Using a
+single global contrast/offset was an oversimplification that could lead to systematic
+errors.
 
 ### Q: Will this increase computation time?
 
 **A:** Slightly, due to the increased number of parameters:
+
 - **MCMC**: ~10-20% slower due to higher-dimensional sampling
 - **NLSQ**: Minimal impact (trust-region handles extra parameters efficiently)
 
@@ -297,9 +307,10 @@ The improved physical accuracy is worth the small performance cost.
 ### Q: How do I know if my angles have different scaling?
 
 **A:** Run the analysis and check:
+
 1. Compare contrast/offset values across angles
-2. If they're all similar (within uncertainties), angles are consistent
-3. If they differ significantly, per-angle mode is capturing real physics
+1. If they're all similar (within uncertainties), angles are consistent
+1. If they differ significantly, per-angle mode is capturing real physics
 
 ### Q: Can I constrain angles to have similar scaling?
 
@@ -307,15 +318,17 @@ The improved physical accuracy is worth the small performance cost.
 
 ### Q: What if I only have one phi angle?
 
-**A:** Per-angle mode still works! You'll get `contrast_0` and `offset_0` instead of `contrast` and `offset`. The behavior is equivalent to legacy mode but with consistent naming.
+**A:** Per-angle mode still works! You'll get `contrast_0` and `offset_0` instead of
+`contrast` and `offset`. The behavior is equivalent to legacy mode but with consistent
+naming.
 
 ## Best Practices
 
 1. **Always use per-angle mode** (default) for production analyses
-2. **Inspect per-angle results** to identify problematic angles
-3. **Compare angles** to detect systematic effects
-4. **Use legacy mode** only for backward compatibility testing
-5. **Update tests and plotting code** to handle per-angle parameters
+1. **Inspect per-angle results** to identify problematic angles
+1. **Compare angles** to detect systematic effects
+1. **Use legacy mode** only for backward compatibility testing
+1. **Update tests and plotting code** to handle per-angle parameters
 
 ## Technical Details
 
@@ -352,6 +365,7 @@ This avoids `ConcretizationTypeError` during NumPyro model compilation.
 ## Support
 
 For questions or issues:
+
 1. Check the CHANGELOG for migration examples
-2. Review test files for usage patterns
-3. Open an issue on GitHub with per-angle tag
+1. Review test files for usage patterns
+1. Open an issue on GitHub with per-angle tag

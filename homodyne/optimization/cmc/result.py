@@ -18,7 +18,7 @@ Backward Compatibility:
 - No breaking changes to existing API
 """
 
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 import numpy as np
 
@@ -172,12 +172,12 @@ class MCMCResult:
         mean_params: np.ndarray,
         mean_contrast: float,
         mean_offset: float,
-        std_params: Optional[np.ndarray] = None,
-        std_contrast: Optional[float] = None,
-        std_offset: Optional[float] = None,
-        samples_params: Optional[np.ndarray] = None,
-        samples_contrast: Optional[np.ndarray] = None,
-        samples_offset: Optional[np.ndarray] = None,
+        std_params: np.ndarray | None = None,
+        std_contrast: float | None = None,
+        std_offset: float | None = None,
+        samples_params: np.ndarray | None = None,
+        samples_contrast: np.ndarray | None = None,
+        samples_offset: np.ndarray | None = None,
         converged: bool = True,
         n_iterations: int = 0,
         computation_time: float = 0.0,
@@ -188,18 +188,18 @@ class MCMCResult:
         n_warmup: int = 1000,
         n_samples: int = 1000,
         sampler: str = "NUTS",
-        acceptance_rate: Optional[float] = None,
-        r_hat: Optional[Dict[str, float]] = None,
-        effective_sample_size: Optional[Dict[str, float]] = None,
+        acceptance_rate: float | None = None,
+        r_hat: dict[str, float] | None = None,
+        effective_sample_size: dict[str, float] | None = None,
         # NEW: CMC-specific fields (optional, backward compatible)
-        per_shard_diagnostics: Optional[List[Dict[str, Any]]] = None,
-        cmc_diagnostics: Optional[Dict[str, Any]] = None,
-        combination_method: Optional[str] = None,
-        num_shards: Optional[int] = None,
+        per_shard_diagnostics: list[dict[str, Any]] | None = None,
+        cmc_diagnostics: dict[str, Any] | None = None,
+        combination_method: str | None = None,
+        num_shards: int | None = None,
         # NEW v2.1.0: Config-driven metadata fields (optional, backward compatible)
-        parameter_space_metadata: Optional[Dict[str, Any]] = None,
-        initial_values_metadata: Optional[Dict[str, float]] = None,
-        selection_decision_metadata: Optional[Dict[str, Any]] = None,
+        parameter_space_metadata: dict[str, Any] | None = None,
+        initial_values_metadata: dict[str, float] | None = None,
+        selection_decision_metadata: dict[str, Any] | None = None,
         **kwargs,
     ):
         """Initialize MCMCResult with optional CMC support.
@@ -289,7 +289,7 @@ class MCMCResult:
         """
         return self.num_shards is not None and self.num_shards > 1
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Convert MCMCResult to dictionary for serialization.
 
         Returns dictionary representation suitable for JSON serialization.
@@ -365,7 +365,7 @@ class MCMCResult:
         return data
 
     @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> "MCMCResult":
+    def from_dict(cls, data: dict[str, Any]) -> "MCMCResult":
         """Create MCMCResult from dictionary.
 
         Handles both standard MCMC results and CMC results.

@@ -65,8 +65,6 @@ Error Handling
 - Backend compatibility is validated before instantiation
 """
 
-from typing import Optional
-
 from homodyne.device.config import HardwareConfig
 from homodyne.optimization.cmc.backends.base import CMCBackend
 from homodyne.utils.logging import get_logger
@@ -84,7 +82,7 @@ _BACKEND_REGISTRY = {
 
 def select_backend(
     hardware_config: HardwareConfig,
-    user_override: Optional[str] = None,
+    user_override: str | None = None,
 ) -> CMCBackend:
     """Select optimal CMC backend based on hardware configuration.
 

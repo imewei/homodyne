@@ -5,14 +5,11 @@ when optimization encounters failures. Each error type has a prioritized
 list of recovery actions to attempt.
 """
 
-import numpy as np
 from typing import Any
 
-from homodyne.optimization.exceptions import (
-    NLSQConvergenceError,
-    NLSQNumericalError,
-)
+import numpy as np
 
+from homodyne.optimization.exceptions import NLSQConvergenceError, NLSQNumericalError
 
 # Error-specific recovery strategies
 # Each error type maps to a list of (strategy_name, strategy_param) tuples

@@ -1,33 +1,37 @@
 # Consensus Monte Carlo (CMC) User Guide
 
-**Version:** 3.0+
-**Last Updated:** 2025-10-24
-**Status:** Production Ready
+**Version:** 2.4.1+ **Last Updated:** 2025-12-02 **Status:** Production Ready
 
----
+> **v2.4.1 Update**: CMC is now mandatory for all MCMC runs. NUTS auto-selection has been
+> removed. Single-shard runs still use NUTS internally within CMC.
+
+______________________________________________________________________
 
 ## Table of Contents
 
 1. [Introduction](#introduction)
-2. [When to Use CMC](#when-to-use-cmc)
-3. [Installation](#installation)
-4. [Quick Start](#quick-start)
-5. [Configuration Guide](#configuration-guide)
-6. [CLI Usage](#cli-usage)
-7. [Understanding Diagnostic Output](#understanding-diagnostic-output)
-8. [Performance Tuning](#performance-tuning)
-9. [Troubleshooting](#troubleshooting)
-10. [Advanced Usage](#advanced-usage)
+1. [When to Use CMC](#when-to-use-cmc)
+1. [Installation](#installation)
+1. [Quick Start](#quick-start)
+1. [Configuration Guide](#configuration-guide)
+1. [CLI Usage](#cli-usage)
+1. [Understanding Diagnostic Output](#understanding-diagnostic-output)
+1. [Performance Tuning](#performance-tuning)
+1. [Troubleshooting](#troubleshooting)
+1. [Advanced Usage](#advanced-usage)
 
----
+______________________________________________________________________
 
 ## Introduction
 
 ### What is Consensus Monte Carlo (CMC)?
 
-**Consensus Monte Carlo** is a divide-and-conquer strategy for scalable Bayesian inference that enables full uncertainty quantification on datasets with millions to billions of data points.
+**Consensus Monte Carlo** is a divide-and-conquer strategy for scalable Bayesian
+inference that enables full uncertainty quantification on datasets with millions to
+billions of data points.
 
 **The Core Idea:**
+
 ```
 Large Dataset (50M points)
     ↓
@@ -41,22 +45,27 @@ Final Posterior Distribution (same accuracy as full MCMC)
 ```
 
 **Key Benefits:**
+
 - **Scalability**: Handle datasets that don't fit in memory (unlimited size)
 - **Speed**: Linear speedup with number of shards (50 shards = 50x faster)
 - **Memory Efficiency**: Each shard fits in single GPU memory (~16GB)
 - **Fault Tolerance**: Failed shards can be retried independently
-- **Full Bayesian Uncertainty**: Complete posterior distributions, not just point estimates
+- **Full Bayesian Uncertainty**: Complete posterior distributions, not just point
+  estimates
 
 ### Why Use CMC for XPCS Analysis?
 
-Modern XPCS detectors generate **10M-100M point datasets routinely**. Traditional MCMC NUTS sampling becomes impractical for these large datasets:
+Modern XPCS detectors generate **10M-100M point datasets routinely**. Traditional MCMC
+NUTS sampling becomes impractical for these large datasets:
 
 **Standard NUTS Limitations:**
+
 - Memory bottleneck at ~1M points (16GB GPU)
 - Runtime scales poorly (hours to days for 10M+ points)
 - No parallelization across data
 
 **CMC Solution:**
+
 - Constant memory footprint regardless of dataset size
 - Linear speedup with hardware parallelization
 - Production workflows complete in ~1-2 hours for 50M points
@@ -72,77 +81,78 @@ CMC is based on peer-reviewed research:
 - **Neiswanger et al. (2014)**: "Asymptotically exact, embarrassingly parallel MCMC"
   *ICML 2014*
 
-The method is **asymptotically exact**: as shard size increases, the combined posterior converges to the true full-data posterior.
+The method is **asymptotically exact**: as shard size increases, the combined posterior
+converges to the true full-data posterior.
 
----
+______________________________________________________________________
 
 ## When to Use CMC
 
 ### Decision Matrix
 
 | Dataset Size | Hardware | Recommended Method | Rationale |
-|-------------|----------|-------------------|-----------|
-| < 500k points | Any | **Standard NUTS** | No overhead, standard MCMC sufficient |
-| 500k - 5M points | Single GPU | **Standard NUTS** or **CMC** | Either works; CMC adds ~10% overhead |
-| 5M - 50M points | Single GPU | **CMC** (auto) | Memory-limited NUTS, CMC enables completion |
-| 5M - 50M points | Multi-GPU | **CMC** (parallel) | 4-8x speedup with parallel execution |
-| 50M+ points | Any | **CMC** (required) | Standard NUTS not feasible |
-| Any size | HPC Cluster | **CMC** (PBS/Slurm) | Leverage cluster parallelization |
+|-------------|----------|-------------------|-----------| | < 500k points | Any |
+**Standard NUTS** | No overhead, standard MCMC sufficient | | 500k - 5M points | Single
+GPU | **Standard NUTS** or **CMC** | Either works; CMC adds ~10% overhead | | 5M - 50M
+points | Single GPU | **CMC** (auto) | Memory-limited NUTS, CMC enables completion | |
+5M - 50M points | Multi-GPU | **CMC** (parallel) | 4-8x speedup with parallel execution
+| | 50M+ points | Any | **CMC** (required) | Standard NUTS not feasible | | Any size |
+HPC Cluster | **CMC** (PBS/Slurm) | Leverage cluster parallelization |
 
 ### Use CMC When:
 
-✅ **Dataset > 500k points** and you need Bayesian uncertainty quantification
-✅ **Production pipelines** requiring reproducible uncertainty estimates
-✅ **Multi-GPU systems** or HPC clusters available for parallelization
-✅ **Memory-limited** environments (e.g., 16GB GPU with 10M point dataset)
-✅ **Publication-quality** analysis requiring full posterior distributions
+✅ **Dataset > 500k points** and you need Bayesian uncertainty quantification ✅
+**Production pipelines** requiring reproducible uncertainty estimates ✅ **Multi-GPU
+systems** or HPC clusters available for parallelization ✅ **Memory-limited**
+environments (e.g., 16GB GPU with 10M point dataset) ✅ **Publication-quality** analysis
+requiring full posterior distributions
 
 ### Use Standard NUTS When:
 
-✅ **Dataset < 500k points** (CMC overhead not worth it)
-✅ **Exploratory analysis** where point estimates (NLSQ) are sufficient
-✅ **Single-GPU** system with small datasets (< 1M points)
-✅ **Quick iteration** during development (faster for small data)
+✅ **Dataset < 500k points** (CMC overhead not worth it) ✅ **Exploratory analysis** where
+point estimates (NLSQ) are sufficient ✅ **Single-GPU** system with small datasets (< 1M
+points) ✅ **Quick iteration** during development (faster for small data)
 
 ### Comparison with Other Methods
 
-| Feature | NLSQ | Standard NUTS | CMC |
-|---------|------|---------------|-----|
-| **Dataset Size** | Unlimited | < 1M points | Unlimited |
-| **Uncertainty Quantification** | No (point estimate only) | Yes (full posterior) | Yes (full posterior) |
-| **Speed** | Fast (minutes) | Slow (hours) | Fast (minutes-hours) |
-| **Memory Usage** | Low | High (O(n)) | Constant (O(n/m)) |
-| **Parallelization** | No | No | Yes (linear speedup) |
-| **Use Case** | Point estimates | Small-scale Bayesian | Large-scale Bayesian |
+| Feature | NLSQ | Standard NUTS | CMC | |---------|------|---------------|-----| |
+**Dataset Size** | Unlimited | < 1M points | Unlimited | | **Uncertainty
+Quantification** | No (point estimate only) | Yes (full posterior) | Yes (full
+posterior) | | **Speed** | Fast (minutes) | Slow (hours) | Fast (minutes-hours) | |
+**Memory Usage** | Low | High (O(n)) | Constant (O(n/m)) | | **Parallelization** | No |
+No | Yes (linear speedup) | | **Use Case** | Point estimates | Small-scale Bayesian |
+Large-scale Bayesian |
 
 **Recommended Workflow:**
-1. **Exploratory Analysis**: Use NLSQ for initial parameter estimates
-2. **Uncertainty Quantification**: Use CMC (auto-detection) for final Bayesian analysis
-3. **Small Datasets**: Standard NUTS is simpler if dataset < 500k points
 
----
+1. **Exploratory Analysis**: Use NLSQ for initial parameter estimates
+1. **Uncertainty Quantification**: Use CMC (auto-detection) for final Bayesian analysis
+1. **Small Datasets**: Standard NUTS is simpler if dataset < 500k points
+
+______________________________________________________________________
 
 ## Installation
 
 ### Prerequisites
 
 **Software Requirements:**
+
 - Python 3.12+
 - JAX 0.8.0
 - NumPyro 0.18-0.19
 - homodyne 3.0+
 
 **Hardware Requirements:**
+
 - **Minimum**: 8-core CPU, 32GB RAM
 - **Recommended**: 16GB+ GPU (NVIDIA A100, H100) or HPC cluster
 
 ### Platform Support
 
 | Platform | CPU Support | GPU Support | Status |
-|----------|------------|-------------|--------|
-| Linux | ✅ Full | ✅ Full (CUDA 12+) | Production Ready |
-| macOS | ✅ Full | ❌ No GPU | CPU-only |
-| Windows | ✅ Full | ❌ No GPU | CPU-only |
+|----------|------------|-------------|--------| | Linux | ✅ Full | ✅ Full (CUDA 12+) |
+Production Ready | | macOS | ✅ Full | ❌ No GPU | CPU-only | | Windows | ✅ Full | ❌ No
+GPU | CPU-only |
 
 ### Installation Steps
 
@@ -153,6 +163,7 @@ pip install homodyne
 ```
 
 This works on all platforms (Linux, macOS, Windows) and is suitable for:
+
 - Development and testing
 - Small datasets (< 500k points)
 - HPC CPU clusters
@@ -177,6 +188,7 @@ python -c "import jax; print('Devices:', jax.devices())"
 ```
 
 **GPU Requirements:**
+
 - NVIDIA GPU with CUDA Compute Capability 6.0+
 - CUDA 12.1-12.9 pre-installed on system
 - NVIDIA driver >= 525
@@ -197,6 +209,7 @@ pip install homodyne[dev]
 ```
 
 **Cluster-Specific Configuration:**
+
 - CMC automatically detects PBS/Slurm schedulers
 - Set PBS project name in configuration
 - Configure walltime and resource allocation
@@ -213,7 +226,7 @@ help(fit_mcmc_jax)
 # Should show method='auto', 'nuts', or 'cmc'
 ```
 
----
+______________________________________________________________________
 
 ## Quick Start
 
@@ -257,13 +270,14 @@ samples = result.samples_params
 ```
 
 **What Happened:**
+
 1. Dataset size detected (10M points)
-2. Hardware detected (GPU available)
-3. CMC automatically selected (dataset > 500k threshold)
-4. Data split into ~10 shards (1M points each)
-5. Parallel MCMC executed on all shards
-6. Posteriors combined using weighted Gaussian product
-7. Results validated and returned as extended `MCMCResult`
+1. Hardware detected (GPU available)
+1. CMC automatically selected (dataset > 500k threshold)
+1. Data split into ~10 shards (1M points each)
+1. Parallel MCMC executed on all shards
+1. Posteriors combined using weighted Gaussian product
+1. Results validated and returned as extended `MCMCResult`
 
 ### Example 2: Force CMC with Custom Configuration
 
@@ -342,13 +356,14 @@ homodyne --config cmc_config.yaml --output-dir ./results/cmc_analysis
 # - results/cmc_analysis/cmc/per_shard_diagnostics.json
 ```
 
----
+______________________________________________________________________
 
 ## Configuration Guide
 
 ### Full Configuration Template
 
 CMC configuration is specified in YAML format. See the full template at:
+
 ```
 homodyne/config/templates/homodyne_cmc_config.yaml
 ```
@@ -363,6 +378,7 @@ optimization:
 ```
 
 **Options:**
+
 - `auto`: Automatic selection based on dataset size and hardware (recommended)
 - `nuts`: Force standard NUTS MCMC
 - `cmc`: Force Consensus Monte Carlo
@@ -377,6 +393,7 @@ optimization:
 ```
 
 **Enable Options:**
+
 - `true`: Always use CMC (regardless of dataset size)
 - `false`: Never use CMC (use standard NUTS)
 - `auto`: Use CMC if dataset > `min_points_for_cmc` (recommended)
@@ -395,21 +412,25 @@ optimization:
 **Sharding Strategies:**
 
 - **`stratified`** (RECOMMENDED):
+
   - Ensures each shard is representative of full dataset
   - Stratified sampling across (t1, t2, phi) dimensions
   - Best for heterogeneous data distributions
   - Example: Each shard has proportional samples from all phi angles
-  - **⚠️ REQUIRED for per-angle scaling**: CMC always uses per-angle contrast/offset parameters.
-    Random or contiguous sharding may create shards with incomplete phi angle coverage, causing
-    zero gradients and silent parameter estimation failures. See troubleshooting guide for details.
+  - **⚠️ REQUIRED for per-angle scaling**: CMC always uses per-angle contrast/offset
+    parameters. Random or contiguous sharding may create shards with incomplete phi
+    angle coverage, causing zero gradients and silent parameter estimation failures. See
+    troubleshooting guide for details.
 
 - **`random`**:
+
   - Random permutation before sharding
   - Simpler and faster than stratified
   - Good for homogeneous data
   - Example: Randomly shuffle data, then split
 
 - **`contiguous`**:
+
   - Split data into contiguous blocks
   - Fastest (no reordering)
   - Assumes data is already shuffled
@@ -418,11 +439,13 @@ optimization:
 **Num Shards Selection:**
 
 - **`auto`** (RECOMMENDED): Automatically calculate based on hardware
+
   - GPU: 1M points per shard (fits in 16GB GPU memory)
   - CPU: 2M points per shard (uses available system memory)
   - Cluster: Scales to available nodes × cores_per_node
 
 - **`<integer>`**: Manual specification (advanced users only)
+
   - Example: `num_shards: 16` for 16 shards
   - Useful for reproducibility or hardware-specific tuning
 
@@ -442,6 +465,7 @@ optimization:
 **Initialization Methods:**
 
 - **`svi`** (RECOMMENDED):
+
   - Stochastic Variational Inference on full dataset
   - Estimates inverse mass matrix for NUTS
   - Improves per-shard MCMC convergence
@@ -449,12 +473,14 @@ optimization:
   - Best for: Production workflows requiring optimal convergence
 
 - **`nlsq`**:
+
   - Use NLSQ optimization results for initialization
   - Fast (no additional computation if NLSQ already run)
   - Requires NLSQ to converge successfully
   - Best for: Workflows where NLSQ has already been run
 
 - **`identity`**:
+
   - Use identity matrix for inverse mass matrix
   - Fallback option when SVI/NLSQ fail
   - Slowest convergence (more warmup needed)
@@ -475,6 +501,7 @@ optimization:
 **Backend Options:**
 
 - **`auto`** (RECOMMENDED):
+
   - Automatic selection based on detected hardware
   - Multi-node cluster → pbs or slurm
   - Multi-GPU → pjit (parallel)
@@ -482,16 +509,19 @@ optimization:
   - CPU-only → multiprocessing
 
 - **`pjit`**:
+
   - JAX pjit backend for GPU/CPU execution
   - Parallel execution on multi-GPU systems
   - Sequential execution on single GPU
   - Best for: GPU workstations and servers
 
 - **`multiprocessing`**:
+
   - Python multiprocessing.Pool for CPU parallelism
   - Best for: CPU-only systems, high-core-count workstations
 
 - **`pbs`** / **`slurm`**:
+
   - HPC cluster job array submission
   - Best for: PBS Pro or Slurm clusters with 32+ nodes
 
@@ -509,18 +539,21 @@ optimization:
 **Combination Methods:**
 
 - **`weighted_gaussian`** (RECOMMENDED):
+
   - Weighted Gaussian product (Scott et al. 2016)
   - Optimal for Gaussian-like posteriors
   - Uses precision weighting for better accuracy
   - Example: Combines N(μ₁, Σ₁) and N(μ₂, Σ₂) → N(μ, Σ)
 
 - **`simple_average`**:
+
   - Simple concatenation and resampling
   - More robust to non-Gaussian posteriors
   - Handles multi-modal distributions
   - Less statistically efficient
 
 - **`auto`**:
+
   - Try weighted Gaussian first, fallback to simple average
   - Best for: Unknown posterior shapes or debugging
 
@@ -539,14 +572,17 @@ optimization:
 **Configuration Guidelines:**
 
 - **`num_warmup`**: 500-1000 iterations
+
   - 500: If using SVI initialization (recommended)
   - 1000: If using identity initialization
 
 - **`num_samples`**: 2000-5000 samples
+
   - 2000: Standard (sufficient for most analyses)
   - 5000: High-precision uncertainty estimates
 
 - **`num_chains`**: 1-4 chains per shard
+
   - 1: Maximum parallelism across shards (recommended)
   - 4: Better per-shard diagnostics, slower overall
 
@@ -566,22 +602,27 @@ optimization:
 **Validation Criteria:**
 
 - **`strict_mode`**:
+
   - `true`: Fail optimization if validation criteria not met (production)
   - `false`: Log warnings but continue (exploratory analysis)
 
 - **`min_per_shard_ess`**:
+
   - 100: Standard (sufficient for reliable inference)
   - 200: High-quality (better uncertainty estimates)
 
 - **`max_per_shard_rhat`**:
+
   - 1.1: Standard convergence criterion (Gelman et al. 2013)
   - 1.05: Stricter (more conservative)
 
 - **`max_between_shard_kl`**:
+
   - 2.0: Standard (shards agree reasonably well)
   - 1.0: Stricter (shards must agree very well)
 
 - **`min_success_rate`**:
+
   - 0.90: At least 90% of shards must converge
   - 0.80: More lenient (allows 20% failure)
 
@@ -625,7 +666,7 @@ pbs:
   cores_per_node: 36
 ```
 
----
+______________________________________________________________________
 
 ## CLI Usage
 
@@ -706,7 +747,7 @@ else
 fi
 ```
 
----
+______________________________________________________________________
 
 ## Understanding Diagnostic Output
 
@@ -759,28 +800,32 @@ Overall CMC pipeline diagnostics:
 ### Warning Signs
 
 ⚠️ **Low Success Rate** (`< 0.8`):
+
 - Check data quality (outliers, missing values)
 - Increase `num_warmup` or `num_samples`
 - Try `stratified` sharding strategy
 
 ⚠️ **High KL Divergence** (`> 5.0`):
+
 - Shards converged to different posteriors
 - Check for multi-modal distributions
 - Verify data is homogeneous
 - Try `simple_average` combination method
 
 ⚠️ **Low ESS** (`< 100`):
+
 - Increase `num_samples`
 - Check SVI initialization quality
 - Verify priors are reasonable
 
----
+______________________________________________________________________
 
 ## Performance Tuning
 
 ### Optimizing Shard Size
 
 **Rule of Thumb:**
+
 - GPU: 1M points per shard (fits in 16GB memory)
 - CPU: 2M points per shard (uses available RAM)
 
@@ -815,6 +860,7 @@ initialization:
 ```
 
 **Recommendation:**
+
 - Development: 5000 steps (fast iteration)
 - Production: 10000-20000 steps (better convergence)
 
@@ -823,6 +869,7 @@ initialization:
 **Strategies:**
 
 1. **Reduce per-shard MCMC iterations:**
+
 ```yaml
 per_shard_mcmc:
   num_warmup: 500   # Down from 1000 (with SVI init)
@@ -830,12 +877,14 @@ per_shard_mcmc:
 ```
 
 2. **Increase parallelism:**
+
 ```yaml
 sharding:
   num_shards: 32  # More shards = more parallelism
 ```
 
 3. **Use GPU backend:**
+
 ```yaml
 backend:
   name: pjit  # GPU: 10-20x faster than CPU
@@ -871,7 +920,7 @@ print(results)
 # }
 ```
 
----
+______________________________________________________________________
 
 ## Troubleshooting
 
@@ -880,11 +929,13 @@ print(results)
 #### Issue 1: "All shards failed to converge"
 
 **Symptoms:**
+
 ```
 RuntimeError: All shards failed to converge. Cannot combine posteriors.
 ```
 
 **Causes:**
+
 - Poor initialization (bad initial parameters)
 - Data quality issues (NaN, Inf, outliers)
 - Too few warmup iterations
@@ -892,6 +943,7 @@ RuntimeError: All shards failed to converge. Cannot combine posteriors.
 **Solutions:**
 
 1. Check initial parameters:
+
 ```python
 # Run NLSQ first to get good initial values
 from homodyne.optimization.nlsq import fit_nlsq_jax
@@ -900,12 +952,14 @@ initial_params = nlsq_result.best_fit_parameters
 ```
 
 2. Increase warmup:
+
 ```yaml
 per_shard_mcmc:
   num_warmup: 1000  # Up from 500
 ```
 
 3. Check data quality:
+
 ```python
 import numpy as np
 assert not np.any(np.isnan(data))
@@ -915,11 +969,13 @@ assert not np.any(np.isinf(data))
 #### Issue 2: "High KL divergence between shards"
 
 **Symptoms:**
+
 ```
 WARNING: Max KL divergence (7.3) exceeds threshold (2.0)
 ```
 
 **Causes:**
+
 - Multi-modal posterior
 - Non-representative shards
 - Data heterogeneity
@@ -927,18 +983,21 @@ WARNING: Max KL divergence (7.3) exceeds threshold (2.0)
 **Solutions:**
 
 1. Use stratified sharding:
+
 ```yaml
 sharding:
   strategy: stratified  # Ensures representative shards
 ```
 
 2. Switch to simple averaging:
+
 ```yaml
 combination:
   method: simple_average  # More robust to multi-modality
 ```
 
 3. Increase shard size:
+
 ```yaml
 sharding:
   num_shards: 10  # Fewer, larger shards (more representative)
@@ -947,11 +1006,13 @@ sharding:
 #### Issue 3: "Memory errors during execution"
 
 **Symptoms:**
+
 ```
 RuntimeError: CUDA out of memory
 ```
 
 **Causes:**
+
 - Shard size too large for GPU memory
 - Multiple chains per shard
 - Memory leak
@@ -959,18 +1020,21 @@ RuntimeError: CUDA out of memory
 **Solutions:**
 
 1. Reduce shard size:
+
 ```yaml
 sharding:
   max_points_per_shard: 500000  # Down from 1M
 ```
 
 2. Use 1 chain per shard:
+
 ```yaml
 per_shard_mcmc:
   num_chains: 1  # Down from 4
 ```
 
 3. Switch to CPU backend:
+
 ```yaml
 backend:
   name: multiprocessing  # Use CPU instead of GPU
@@ -979,10 +1043,12 @@ backend:
 #### Issue 4: "Slow SVI initialization"
 
 **Symptoms:**
+
 - SVI takes > 5 minutes
 - No progress after many iterations
 
 **Causes:**
+
 - Too many SVI steps
 - Poor initial parameters
 - Large dataset
@@ -990,18 +1056,21 @@ backend:
 **Solutions:**
 
 1. Reduce SVI steps:
+
 ```yaml
 initialization:
   svi_steps: 5000  # Down from 20000
 ```
 
 2. Use NLSQ initialization instead:
+
 ```yaml
 initialization:
   method: nlsq  # Skip SVI entirely
 ```
 
 3. Set SVI timeout:
+
 ```yaml
 initialization:
   svi_timeout: 300  # 5 minutes max
@@ -1040,14 +1109,14 @@ print(f"Failed shards: {len(failed_shards)}/{result.num_shards}")
 If issues persist:
 
 1. **Check documentation**: `docs/troubleshooting/cmc_troubleshooting.md`
-2. **Search GitHub issues**: https://github.com/your-org/homodyne/issues
-3. **Open new issue**: Include:
+1. **Search GitHub issues**: https://github.com/your-org/homodyne/issues
+1. **Open new issue**: Include:
    - Configuration file
    - Error messages
    - System information (`python -m homodyne.device`)
    - CMC diagnostics output
 
----
+______________________________________________________________________
 
 ## Advanced Usage
 
@@ -1157,6 +1226,7 @@ combination:
 ```
 
 **How it works:**
+
 ```
 128 shards
     ↓
@@ -1165,24 +1235,22 @@ Combine in groups of 16 → 8 intermediate posteriors
 Combine 8 intermediates → Final posterior
 ```
 
----
+______________________________________________________________________
 
 ## Summary
 
 **Quick Reference:**
 
-| Task | Command/Configuration |
-|------|----------------------|
-| **Auto CMC** | `fit_mcmc_jax(..., method='auto')` |
-| **Force CMC** | `fit_mcmc_jax(..., method='cmc')` |
-| **Check if CMC** | `result.is_cmc_result()` |
-| **GPU backend** | `backend: {name: pjit}` |
-| **CPU backend** | `backend: {name: multiprocessing}` |
-| **Cluster backend** | `backend: {name: pbs}` |
-| **Fast mode** | `svi_steps: 5000, num_warmup: 500` |
-| **High quality** | `svi_steps: 20000, num_warmup: 1000` |
+| Task | Command/Configuration | |------|----------------------| | **Auto CMC** |
+`fit_mcmc_jax(..., method='auto')` | | **Force CMC** | `fit_mcmc_jax(..., method='cmc')`
+| | **Check if CMC** | `result.is_cmc_result()` | | **GPU backend** |
+`backend: {name: pjit}` | | **CPU backend** | `backend: {name: multiprocessing}` | |
+**Cluster backend** | `backend: {name: pbs}` | | **Fast mode** |
+`svi_steps: 5000, num_warmup: 500` | | **High quality** |
+`svi_steps: 20000, num_warmup: 1000` |
 
 **Default Thresholds:**
+
 - Minimum dataset size for CMC: 500k points
 - GPU: 1M points per shard
 - CPU: 2M points per shard
@@ -1190,6 +1258,7 @@ Combine 8 intermediates → Final posterior
 - Maximum KL divergence: 2.0
 
 For more information:
+
 - **API Reference**: `docs/api-reference/cmc_api.md`
 - **Developer Guide**: `docs/developer-guide/cmc_architecture.md`
 - **Troubleshooting**: `docs/troubleshooting/cmc_troubleshooting.md`

@@ -11,11 +11,13 @@ sys.path.insert(0, str(Path("..").resolve()))
 project = "Homodyne"
 copyright = "2025, Wei Chen, Hongrui He - Argonne National Laboratory"
 author = "Wei Chen, Hongrui He"
-release = "2.3.0"
-version = "2.3.0"
+release = "2.4.1"
+version = "2.4.1"
 
 # Project metadata
-project_description = "JAX-first high-performance XPCS analysis for nonequilibrium soft matter systems"
+project_description = (
+    "JAX-first high-performance XPCS analysis for nonequilibrium soft matter systems"
+)
 github_url = "https://github.com/imewei/homodyne"
 doi = "10.1073/pnas.2401162121"
 institution = "Argonne National Laboratory"
@@ -24,16 +26,16 @@ institution = "Argonne National Laboratory"
 source_encoding = "utf-8"
 
 extensions = [
-    "sphinx.ext.autodoc",        # Auto-generate API docs
-    "sphinx.ext.autosummary",    # Summary tables
-    "sphinx.ext.napoleon",       # NumPy/Google docstrings
-    "sphinx.ext.viewcode",       # Source code links
-    "sphinx.ext.intersphinx",    # Cross-project links
-    "sphinx.ext.mathjax",        # Math rendering
-    "sphinx.ext.doctest",        # Doctest support
-    "sphinx.ext.todo",           # Todo items
-    "sphinx.ext.coverage",       # Coverage tracking
-    "myst_parser",               # Markdown support
+    "sphinx.ext.autodoc",  # Auto-generate API docs
+    "sphinx.ext.autosummary",  # Summary tables
+    "sphinx.ext.napoleon",  # NumPy/Google docstrings
+    "sphinx.ext.viewcode",  # Source code links
+    "sphinx.ext.intersphinx",  # Cross-project links
+    "sphinx.ext.mathjax",  # Math rendering
+    "sphinx.ext.doctest",  # Doctest support
+    "sphinx.ext.todo",  # Todo items
+    "sphinx.ext.coverage",  # Coverage tracking
+    "myst_parser",  # Markdown support
 ]
 
 # Add any paths that contain templates here, relative to this directory.
@@ -50,11 +52,13 @@ highlight_language = "python3"
 autodoc_default_options = {
     "members": True,
     "member-order": "bysource",
-    "special-members": "__init__",
     "undoc-members": True,
     "exclude-members": "__weakref__",
     "show-inheritance": True,
 }
+
+# Include __init__ methods in class documentation
+autodoc_class_signature = "separated"
 
 # Type hints configuration
 autodoc_typehints = "description"
@@ -62,9 +66,7 @@ autodoc_typehints_description_target = "documented"
 autodoc_preserve_defaults = True
 
 # Mock imports for dependencies that might not be available during build
-autodoc_mock_imports = [
-    "homodyne.device.gpu",  # GPU module removed in v2.3.0
-]
+autodoc_mock_imports = []
 
 # -- Options for autosummary extension ---------------------------------------
 autosummary_generate = True
@@ -124,7 +126,6 @@ html_theme_options = {
     "navigation_depth": 4,
     "includehidden": True,
     "titles_only": False,
-    "display_version": True,
     "prev_next_buttons_location": "bottom",
     "style_external_links": True,
 }
@@ -180,9 +181,7 @@ latex_documents = [
 ]
 
 # -- Options for manual page output ------------------------------------------
-man_pages = [
-    ("index", "homodyne", "Homodyne Documentation", [author], 1)
-]
+man_pages = [("index", "homodyne", "Homodyne Documentation", [author], 1)]
 
 # -- Options for Texinfo output ----------------------------------------------
 texinfo_documents = [

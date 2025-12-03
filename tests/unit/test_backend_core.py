@@ -70,27 +70,27 @@ See Also:
 """
 
 import json
-import pytest
-import numpy as np
-import jax.numpy as jnp
-import tempfile
 import shutil
+import tempfile
 from pathlib import Path
-from typing import List, Dict, Any
-from unittest.mock import Mock, patch, MagicMock
+from typing import Any
+from unittest.mock import Mock, patch
 
-from homodyne.device.config import HardwareConfig, detect_hardware
-from homodyne.optimization.cmc.coordinator import CMCCoordinator
-from homodyne.optimization.cmc.result import MCMCResult
+import numpy as np
+import pytest
+
+from homodyne.device.config import HardwareConfig
 from homodyne.optimization.cmc.backends import (
-    CMCBackend,
-    select_backend,
-    get_backend_by_name,
-    _validate_backend_compatibility,
-    PJIT_AVAILABLE,
     MULTIPROCESSING_AVAILABLE,
     PBS_AVAILABLE,
+    PJIT_AVAILABLE,
+    CMCBackend,
+    _validate_backend_compatibility,
+    get_backend_by_name,
+    select_backend,
 )
+from homodyne.optimization.cmc.coordinator import CMCCoordinator
+from homodyne.optimization.cmc.result import MCMCResult
 
 # Additional imports that might be needed
 try:
@@ -487,7 +487,7 @@ def test_pbs_backend_script_generation(
     assert script_path.exists()
 
     # Validate script content
-    with open(script_path, "r") as f:
+    with open(script_path) as f:
         script_content = f.read()
 
     assert "test_project" in script_content
@@ -500,8 +500,9 @@ def test_pbs_backend_data_serialization(
     temp_dir, synthetic_shards, mcmc_config, init_params, inv_mass_matrix
 ):
     """Test PBS shard data serialization to HDF5."""
-    from homodyne.optimization.cmc.backends.pbs import PBSBackend
     import h5py
+
+    from homodyne.optimization.cmc.backends.pbs import PBSBackend
 
     backend = PBSBackend(
         project_name="test_project",
@@ -539,7 +540,7 @@ def test_pbs_backend_data_serialization(
     config_path = temp_dir / "mcmc_config.json"
     assert config_path.exists()
 
-    with open(config_path, "r") as f:
+    with open(config_path) as f:
         config_data = json.load(f)
         assert "mcmc_config" in config_data
         assert "init_params" in config_data
@@ -609,7 +610,15 @@ def test_result_format_validation():
 
     # Create mock backend
     class MockBackend(CMCBackend):
-        def run_parallel_mcmc(self, shards, mcmc_config, init_params, inv_mass_matrix, analysis_mode, parameter_space):
+        def run_parallel_mcmc(
+            self,
+            shards,
+            mcmc_config,
+            init_params,
+            inv_mass_matrix,
+            analysis_mode,
+            parameter_space,
+        ):
             return []
 
         def get_backend_name(self):
@@ -684,9 +693,9 @@ def test_pjit_backend_diagnostics_collection(
 def test_backend_availability_flags():
     """Test that backend availability flags are set correctly."""
     from homodyne.optimization.cmc.backends import (
-        PJIT_AVAILABLE,
         MULTIPROCESSING_AVAILABLE,
         PBS_AVAILABLE,
+        PJIT_AVAILABLE,
     )
 
     assert isinstance(PJIT_AVAILABLE, bool)
@@ -840,11 +849,11 @@ class MockBackend(CMCBackend):
 
     def run_parallel_mcmc(
         self,
-        shards: List[Dict[str, np.ndarray]],
-        mcmc_config: Dict[str, Any],
-        init_params: Dict[str, float],
+        shards: list[dict[str, np.ndarray]],
+        mcmc_config: dict[str, Any],
+        init_params: dict[str, float],
         inv_mass_matrix: np.ndarray,
-    ) -> List[Dict[str, Any]]:
+    ) -> list[dict[str, Any]]:
         """Mock implementation of run_parallel_mcmc."""
         self.call_count += 1
         results = []
@@ -1274,9 +1283,9 @@ def test_backend_infrastructure_test_count():
     ]
 
     # Should have at least 4-6 tests (we have 20+)
-    assert (
-        len(test_functions) >= 4
-    ), f"Need at least 4 tests, have {len(test_functions)}"
+    assert len(test_functions) >= 4, (
+        f"Need at least 4 tests, have {len(test_functions)}"
+    )
     print(f"✅ Backend infrastructure has {len(test_functions)} comprehensive tests")
 
 

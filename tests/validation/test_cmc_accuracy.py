@@ -16,7 +16,6 @@ Acceptance Criteria: < 10% error on parameter recovery
 
 import numpy as np
 import pytest
-from typing import Dict, Tuple, Optional
 
 # Handle optional dependencies
 try:
@@ -32,9 +31,9 @@ except ImportError:
 try:
     from homodyne.optimization.cmc.combination import combine_subposteriors
     from homodyne.optimization.cmc.diagnostics import (
-        compute_per_shard_diagnostics,
         compute_between_shard_kl_divergence,
         compute_combined_posterior_diagnostics,
+        compute_per_shard_diagnostics,
         validate_cmc_results,
     )
 
@@ -46,9 +45,9 @@ except ImportError:
 def generate_synthetic_posterior_samples(
     n_samples: int = 2000,
     n_params: int = 5,
-    true_params: Optional[np.ndarray] = None,
+    true_params: np.ndarray | None = None,
     seed: int = 42,
-) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
+) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     """
     Generate synthetic MCMC posterior samples from a multivariate normal.
 
@@ -92,7 +91,7 @@ def create_shard_results(
     n_shards: int = 4,
     n_samples: int = 2000,
     n_params: int = 5,
-    true_params: Optional[np.ndarray] = None,
+    true_params: np.ndarray | None = None,
     seed: int = 42,
 ) -> list:
     """

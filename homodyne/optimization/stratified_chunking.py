@@ -171,11 +171,12 @@ def analyze_angle_distribution(phi: jnp.ndarray | np.ndarray) -> AngleDistributi
 
     # Build statistics dictionaries
     counts_dict = {
-        float(angle): int(count) for angle, count in zip(unique_angles, counts)
+        float(angle): int(count)
+        for angle, count in zip(unique_angles, counts, strict=False)
     }
     fractions_dict = {
         float(angle): float(count) / total_points
-        for angle, count in zip(unique_angles, counts)
+        for angle, count in zip(unique_angles, counts, strict=False)
     }
 
     # Calculate imbalance
@@ -547,9 +548,7 @@ def calculate_adaptive_chunk_size(
                 f"Auto-detected available memory: {available_memory_gb:.1f} GB"
             )
         except ImportError:
-            logger.warning(
-                "psutil not available, using conservative default of 16 GB"
-            )
+            logger.warning("psutil not available, using conservative default of 16 GB")
             available_memory_gb = 16.0
 
     # Memory per point for Jacobian (dominant memory consumer)
@@ -787,7 +786,9 @@ def create_angle_stratified_data(
                 "size": chunk_size,
             }
         )
-        logger.debug(f"Chunk {chunk_idx}: {chunk_size:,} points, {stats.n_angles} angles")
+        logger.debug(
+            f"Chunk {chunk_idx}: {chunk_size:,} points, {stats.n_angles} angles"
+        )
 
     # Create final partial chunk with remaining data (if any)
     # This ensures ALL data points are used, not discarded
@@ -847,7 +848,9 @@ def create_angle_stratified_data(
     )
 
     # Ensure we didn't somehow create more data than we had
-    assert n_used <= n_points, f"Data expansion during stratification: {n_used} > {n_points}"
+    assert n_used <= n_points, (
+        f"Data expansion during stratification: {n_used} > {n_points}"
+    )
 
     # Convert back to JAX arrays and return with chunk boundary information
     return (
@@ -1007,7 +1010,9 @@ def create_angle_stratified_indices(
         # All chunks guaranteed to have data (max_safe_chunks ensures this)
         chunk_size = sum(len(arr) for arr in chunk_indices)
         stratified_indices.append(np.concatenate(chunk_indices))
-        logger.debug(f"Chunk {chunk_idx}: {chunk_size:,} points, {stats.n_angles} angles")
+        logger.debug(
+            f"Chunk {chunk_idx}: {chunk_size:,} points, {stats.n_angles} angles"
+        )
 
     # Flatten to single index array
     final_indices = np.concatenate(stratified_indices)

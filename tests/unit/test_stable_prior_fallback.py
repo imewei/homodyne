@@ -9,7 +9,6 @@ import pytest
 
 from homodyne.config.parameter_space import ParameterSpace, PriorDistribution
 
-
 # =============================================================================
 # Test Fixtures
 # =============================================================================

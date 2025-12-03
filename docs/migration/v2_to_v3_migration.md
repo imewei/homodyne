@@ -1,68 +1,71 @@
 # Migration Guide: Homodyne v2.0 → v3.0
 
-**From:** v2.0.0 (NLSQ Native Large Dataset Handling)
-**To:** v3.0.0 (NLSQ API Alignment with StreamingOptimizer)
-**Date:** October 2025
+**From:** v2.0.0 (NLSQ Native Large Dataset Handling) **To:** v3.0.0 (NLSQ API Alignment
+with StreamingOptimizer) **Date:** October 2025
 
----
+______________________________________________________________________
 
 ## Table of Contents
 
 1. [Overview](#overview)
-2. [Breaking Changes Summary](#breaking-changes-summary)
-3. [Configuration Migration](#configuration-migration)
-4. [Code Migration Examples](#code-migration-examples)
-5. [Removed Features](#removed-features)
-6. [New Features](#new-features)
-7. [Upgrade Checklist](#upgrade-checklist)
-8. [Troubleshooting](#troubleshooting)
+1. [Breaking Changes Summary](#breaking-changes-summary)
+1. [Configuration Migration](#configuration-migration)
+1. [Code Migration Examples](#code-migration-examples)
+1. [Removed Features](#removed-features)
+1. [New Features](#new-features)
+1. [Upgrade Checklist](#upgrade-checklist)
+1. [Troubleshooting](#troubleshooting)
 
----
+______________________________________________________________________
 
 ## Overview
 
-Homodyne v3.0 introduces NLSQ `StreamingOptimizer` support for unlimited dataset sizes with enhanced fault tolerance and checkpoint/resume capabilities. The migration primarily involves removing deprecated configuration sections and adopting new streaming features.
+Homodyne v3.0 introduces NLSQ `StreamingOptimizer` support for unlimited dataset sizes
+with enhanced fault tolerance and checkpoint/resume capabilities. The migration
+primarily involves removing deprecated configuration sections and adopting new streaming
+features.
 
-**Migration Difficulty:** LOW - Most users only need to remove deprecated config sections.
+**Migration Difficulty:** LOW - Most users only need to remove deprecated config
+sections.
 
 **Timeline Estimate:**
+
 - **Simple configs:** 5-10 minutes (remove `subsampling` section)
 - **Advanced users:** 30-60 minutes (adopt streaming features)
 - **Custom workflows:** 1-2 hours (update Python API usage)
 
-**Backward Compatibility:** Results are 100% backward compatible - no changes to physics or optimization quality.
+**Backward Compatibility:** Results are 100% backward compatible - no changes to physics
+or optimization quality.
 
----
+______________________________________________________________________
 
 ## Breaking Changes Summary
 
 ### 1. Removed: `performance.subsampling` Configuration Section
 
-**Status:** ❌ REMOVED in v3.0
-**Impact:** HIGH (affects configs using subsampling)
+**Status:** ❌ REMOVED in v3.0 **Impact:** HIGH (affects configs using subsampling)
 **Migration:** Delete section (NLSQ now handles large datasets natively)
 
-**Reason for Removal:** NLSQ v0.1.5 provides native large dataset handling through `curve_fit_large` and `StreamingOptimizer`, eliminating the need for custom subsampling logic.
+**Reason for Removal:** NLSQ v0.1.5 provides native large dataset handling through
+`curve_fit_large` and `StreamingOptimizer`, eliminating the need for custom subsampling
+logic.
 
 ### 2. Removed: `optimization_performance.time_subsampling` (Legacy)
 
-**Status:** ❌ REMOVED in v2.1, confirmed removed in v3.0
-**Impact:** LOW (deprecated since v2.1)
-**Migration:** Delete if still present
+**Status:** ❌ REMOVED in v2.1, confirmed removed in v3.0 **Impact:** LOW (deprecated
+since v2.1) **Migration:** Delete if still present
 
 ### 3. StreamingOptimizer Required for > 100M Points
 
-**Status:** ⚠️ NEW REQUIREMENT in v3.0
-**Impact:** MEDIUM (automatic for most users)
+**Status:** ⚠️ NEW REQUIREMENT in v3.0 **Impact:** MEDIUM (automatic for most users)
 **Migration:** Enable checkpoints for fault tolerance (optional but recommended)
 
 ### 4. New: `streaming_diagnostics` Field in OptimizationResult
 
-**Status:** ✅ ADDED in v3.0
-**Impact:** LOW (additive, backward compatible)
+**Status:** ✅ ADDED in v3.0 **Impact:** LOW (additive, backward compatible)
 **Migration:** Optional - use if you need batch-level diagnostics
 
----
+______________________________________________________________________
 
 ## Configuration Migration
 
@@ -99,6 +102,7 @@ performance:
 ```
 
 **What Changed:**
+
 - Homodyne now processes **100% of data** using NLSQ's native strategies
 - Strategy selection is automatic based on dataset size
 - No data loss from subsampling
@@ -126,6 +130,7 @@ optimization:
 ```
 
 **When to Add:**
+
 - Datasets > 100M points (STREAMING mode)
 - Long-running optimizations (> 30 minutes)
 - Production pipelines requiring robustness
@@ -150,12 +155,13 @@ performance:
 ```
 
 **Strategy Names Changed:**
+
 - `standard` → `standard` (unchanged)
 - `large_dataset` → `large` (renamed)
 - `chunked_processing` → `chunked` (renamed)
 - NEW: `streaming` (for > 100M points)
 
----
+______________________________________________________________________
 
 ## Code Migration Examples
 
@@ -361,7 +367,7 @@ deleted = manager.cleanup_old_checkpoints()
 print(f"Deleted {len(deleted)} old checkpoints")
 ```
 
----
+______________________________________________________________________
 
 ## Removed Features
 
@@ -374,6 +380,7 @@ print(f"Deleted {len(deleted)} old checkpoints")
 **Migration:** No action needed - NLSQ handles this automatically
 
 **What You Gain:**
+
 - 100% data utilization (no sampling)
 - Better convergence (full dataset)
 - Simpler configuration (no subsampling parameters)
@@ -387,12 +394,14 @@ print(f"Deleted {len(deleted)} old checkpoints")
 **Migration:** Remove any references to `enable_sampling`
 
 #### Before:
+
 ```python
 # ❌ OLD
 result = wrapper.fit(..., enable_sampling=True)  # Deprecated
 ```
 
 #### After:
+
 ```python
 # ✅ NEW
 result = wrapper.fit(...)  # Sampling is automatic
@@ -406,7 +415,7 @@ result = wrapper.fit(...)  # Sampling is automatic
 
 **Migration:** Remove from config files
 
----
+______________________________________________________________________
 
 ## New Features
 
@@ -415,12 +424,14 @@ result = wrapper.fit(...)  # Sampling is automatic
 **What's New:** Process unlimited dataset sizes with constant memory
 
 **Benefits:**
+
 - Datasets > 100M points supported
 - Constant memory usage (~2 GB regardless of size)
 - Checkpoint/resume for long optimizations
 - Batch-level fault tolerance
 
 **How to Use:**
+
 ```yaml
 optimization:
   streaming:
@@ -435,12 +446,14 @@ See: `/docs/guides/streaming_optimizer_usage.md`
 **What's New:** `streaming_diagnostics` field in OptimizationResult
 
 **Provides:**
+
 - Batch success rate
 - Failed batch indices
 - Error type distribution
 - Average iterations per batch
 
 **How to Access:**
+
 ```python
 if result.streaming_diagnostics:
     print(f"Success rate: {result.streaming_diagnostics['batch_success_rate']}")
@@ -451,11 +464,13 @@ if result.streaming_diagnostics:
 **What's New:** `fast_mode` parameter for < 1% overhead
 
 **Benefits:**
+
 - Minimal performance impact in production
 - Skips non-essential numerical validation
 - Preserves error recovery
 
 **How to Use:**
+
 ```python
 wrapper = NLSQWrapper(fast_mode=True)
 ```
@@ -467,11 +482,13 @@ wrapper = NLSQWrapper(fast_mode=True)
 **What's New:** Intelligent batch sizing based on available memory
 
 **Benefits:**
+
 - No manual batch size tuning
 - Optimal memory usage (10% of available RAM)
 - Bounded (1k-100k points) for safety
 
 **How it Works:**
+
 ```python
 # Automatic (recommended)
 config = selector.build_streaming_config(
@@ -486,12 +503,14 @@ config = selector.build_streaming_config(
 **What's New:** HDF5-based checkpoints for fault tolerance
 
 **Features:**
+
 - Save/resume optimization state
 - Checksum validation for integrity
 - Automatic cleanup (keep last N)
 - Target save time < 2 seconds
 
 **How to Use:**
+
 ```yaml
 optimization:
   streaming:
@@ -506,16 +525,18 @@ optimization:
 **What's New:** Detect NaN/Inf early at gradient, parameter, and loss calculation points
 
 **Benefits:**
+
 - Early error detection
 - Targeted recovery strategies
 - Can disable via `fast_mode`
 
 **How it Works:** Automatic - just enable recovery:
+
 ```python
 wrapper = NLSQWrapper(enable_numerical_validation=True)
 ```
 
----
+______________________________________________________________________
 
 ## Upgrade Checklist
 
@@ -557,7 +578,7 @@ wrapper = NLSQWrapper(enable_numerical_validation=True)
 - [ ] **Set up checkpoint cleanup** to manage disk space
 - [ ] **Review new diagnostics** for optimization insights
 
----
+______________________________________________________________________
 
 ## Troubleshooting
 
@@ -568,6 +589,7 @@ wrapper = NLSQWrapper(enable_numerical_validation=True)
 **Cause:** Deprecated configuration section still present
 
 **Solution:**
+
 ```bash
 # Remove the entire subsampling section from your config
 sed -i '/subsampling:/,/seed:/d' your_config.yaml
@@ -586,11 +608,13 @@ sed -i '/subsampling:/,/seed:/d' your_config.yaml
 **Symptom:** Parameters or chi-squared values differ from v2.0
 
 **Likely Causes:**
+
 1. **Expected:** v2.0 used subsampling (partial data), v3.0 uses full data
-2. **Expected:** Random initialization differences
-3. **Unexpected:** Bug - please report
+1. **Expected:** Random initialization differences
+1. **Unexpected:** Bug - please report
 
 **Validation:**
+
 ```python
 # Compare on same subsample (for apples-to-apples comparison)
 # Run v2.0 and v3.0 on identical subset:
@@ -598,6 +622,7 @@ sed -i '/subsampling:/,/seed:/d' your_config.yaml
 ```
 
 **If results are truly different:**
+
 - Check that you're using the same initial parameters
 - Verify bounds are identical
 - Ensure same dataset (not subsampled vs full)
@@ -608,11 +633,13 @@ sed -i '/subsampling:/,/seed:/d' your_config.yaml
 **Symptom:** `MemoryError` despite using STREAMING mode
 
 **Causes:**
+
 - Batch size too large for available memory
 - Model function has memory leak
 - JAX compilation overhead
 
 **Solutions:**
+
 ```yaml
 # Force smaller memory limit
 performance:
@@ -635,11 +662,13 @@ jax.clear_caches()
 **Symptom:** "No checkpoint found" despite previous run
 
 **Causes:**
+
 - Checkpoint directory path mismatch
 - Checkpoints deleted or moved
 - `resume_from_checkpoint: false` in config
 
 **Solutions:**
+
 ```yaml
 # Ensure consistent paths across runs
 optimization:
@@ -659,11 +688,14 @@ ls -lh ./checkpoints/
 **Symptom:** v3.0 is slower than v2.0 for same dataset
 
 **Likely Causes:**
-1. **Full data vs subsample:** v3.0 processes 100% of data (expected slower, but better results)
-2. **Numerical validation enabled:** ~0.5% overhead
-3. **Checkpoints enabled:** ~2% overhead with default frequency
+
+1. **Full data vs subsample:** v3.0 processes 100% of data (expected slower, but better
+   results)
+1. **Numerical validation enabled:** ~0.5% overhead
+1. **Checkpoints enabled:** ~2% overhead with default frequency
 
 **Solutions:**
+
 ```python
 # Enable fast mode for production
 wrapper = NLSQWrapper(fast_mode=True)
@@ -677,6 +709,7 @@ optimization:
 ```
 
 **Expected Performance:**
+
 - v3.0 may be 10-25% slower due to processing full dataset
 - Trade-off: Better convergence and no data loss
 - Use fast mode to recover most overhead
@@ -686,6 +719,7 @@ optimization:
 **Symptom:** Warnings about deprecated configuration keys
 
 **Example Warning:**
+
 ```
 WARNING: Configuration key 'performance.subsampling' is deprecated.
 Please remove this section from your configuration file.
@@ -696,22 +730,25 @@ NLSQ now handles large datasets natively.
 
 **Safe to Ignore:** These warnings don't affect functionality, but should be addressed
 
----
+______________________________________________________________________
 
 ## Migration Support
 
 ### Getting Help
 
 1. **Documentation:**
+
    - StreamingOptimizer Usage: `/docs/guides/streaming_optimizer_usage.md`
    - API Reference: `/docs/api-reference/optimization.md`
    - Performance Tuning: `/docs/guides/performance_tuning.md`
 
-2. **Community:**
+1. **Community:**
+
    - GitHub Issues: https://github.com/your-org/homodyne/issues
    - Discussions: https://github.com/your-org/homodyne/discussions
 
-3. **Contact:**
+1. **Contact:**
+
    - Open an issue with `[migration]` tag
    - Provide config file and error messages
    - Include homodyne and NLSQ versions
@@ -719,35 +756,38 @@ NLSQ now handles large datasets natively.
 ### Reporting Migration Issues
 
 Please include:
+
 - Homodyne version (v2.0 → v3.0)
 - NLSQ version (`pip show nlsq`)
 - Configuration file (sanitized)
 - Error messages (full traceback)
 - Expected vs actual behavior
 
----
+______________________________________________________________________
 
 ## Summary
 
 **Key Takeaways:**
-1. ✅ Remove `performance.subsampling` from configs
-2. ✅ NLSQ now processes 100% of data (no subsampling)
-3. ✅ StreamingOptimizer automatically enabled for > 100M points
-4. ✅ Enable checkpoints for fault tolerance (optional but recommended)
-5. ✅ Use `fast_mode` in production for minimal overhead
-6. ✅ Results are backward compatible (better, actually, due to full data)
 
-**Migration is straightforward** for most users - primarily involves removing deprecated configuration sections.
+1. ✅ Remove `performance.subsampling` from configs
+1. ✅ NLSQ now processes 100% of data (no subsampling)
+1. ✅ StreamingOptimizer automatically enabled for > 100M points
+1. ✅ Enable checkpoints for fault tolerance (optional but recommended)
+1. ✅ Use `fast_mode` in production for minimal overhead
+1. ✅ Results are backward compatible (better, actually, due to full data)
+
+**Migration is straightforward** for most users - primarily involves removing deprecated
+configuration sections.
 
 **Upgrade Benefits:**
+
 - 100% data utilization (no sampling loss)
 - Unlimited dataset sizes (constant memory)
 - Enhanced fault tolerance (checkpoints + recovery)
 - Better diagnostics (batch statistics)
 - Faster production workflows (fast mode)
 
----
+______________________________________________________________________
 
-**Last Updated:** October 22, 2025
-**Migration Guide Version:** 1.0
-**Covers:** Homodyne v2.0.0 → v3.0.0
+**Last Updated:** October 22, 2025 **Migration Guide Version:** 1.0 **Covers:** Homodyne
+v2.0.0 → v3.0.0

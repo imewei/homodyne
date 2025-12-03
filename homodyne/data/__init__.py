@@ -77,16 +77,19 @@ except ImportError as e:
         raise ImportError(f"XPCS loader not available: {_loader_error}")
 
 
-# Import additional components when available
+# Import additional components when available (re-exported for public API)
 try:
-    from homodyne.data.validation import DataQualityReport, validate_xpcs_data
+    from homodyne.data.validation import (  # noqa: F401
+        DataQualityReport,
+        validate_xpcs_data,
+    )
 
     HAS_VALIDATION = True
 except ImportError:
     HAS_VALIDATION = False
 
 try:
-    from homodyne.data.phi_filtering import (
+    from homodyne.data.phi_filtering import (  # noqa: F401
         PhiAngleFilter,
         create_anisotropic_ranges,
         create_isotropic_ranges,
@@ -99,7 +102,7 @@ except ImportError:
     HAS_PHI_FILTERING = False
 
 try:
-    from homodyne.data.preprocessing import (
+    from homodyne.data.preprocessing import (  # noqa: F401
         NoiseReductionMethod,
         NormalizationMethod,
         PreprocessingConfigurationError,
@@ -117,7 +120,7 @@ except ImportError:
     HAS_PREPROCESSING = False
 
 try:
-    from homodyne.data.optimization import (
+    from homodyne.data.optimization import (  # noqa: F401
         DatasetInfo,
         DatasetOptimizer,
         ProcessingStrategy,

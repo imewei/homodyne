@@ -50,6 +50,13 @@ NLSQWrapper : Main optimization wrapper using these exceptions
 homodyne.optimization.strategy : Strategy selection and fallback logic
 """
 
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    import numpy as np
+
 
 class NLSQOptimizationError(Exception):
     """Base exception for all NLSQ optimization errors.
@@ -143,7 +150,7 @@ class NLSQConvergenceError(NLSQOptimizationError):
         message: str,
         iteration_count: int | None = None,
         final_loss: float | None = None,
-        parameters: "np.ndarray | None" = None,
+        parameters: np.ndarray | None = None,
         error_context: dict | None = None,
     ):
         """Initialize convergence error.

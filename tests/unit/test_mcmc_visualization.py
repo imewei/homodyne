@@ -13,9 +13,6 @@ Test Coverage:
 - Edge cases (single chain, single shard, missing data)
 """
 
-import tempfile
-from pathlib import Path
-
 import matplotlib
 import matplotlib.pyplot as plt
 import numpy as np
@@ -32,7 +29,6 @@ from homodyne.viz.mcmc_plots import (
     plot_posterior_comparison,
     plot_trace_plots,
 )
-
 
 # ============================================================================
 # Test Fixtures
@@ -206,7 +202,7 @@ class TestTracePlots:
         assert isinstance(fig, plt.Figure)
 
         # Check that parameter names are used
-        for ax, name in zip(fig.axes[:3], param_names):
+        for ax, name in zip(fig.axes[:3], param_names, strict=False):
             assert name in ax.get_ylabel()
 
         plt.close(fig)

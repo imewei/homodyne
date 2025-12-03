@@ -8,18 +8,16 @@ Tests:
 - Diagnostic accuracy verification
 """
 
-import numpy as np
-import pytest
 import jax.numpy as jnp
+import pytest
 
 from homodyne.optimization.stratified_chunking import (
     StratificationDiagnostics,
     compute_stratification_diagnostics,
-    format_diagnostics_report,
     create_angle_stratified_data,
     create_angle_stratified_indices,
+    format_diagnostics_report,
 )
-
 
 # ============================================================================
 # Fixtures

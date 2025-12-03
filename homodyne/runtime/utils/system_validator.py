@@ -495,7 +495,7 @@ alias hc-iso >/dev/null 2>&1 && echo "shortcut_alias_works" || echo "shortcut_al
                                     f"incompatible (expected <{constraints['upper']})",
                                 )
 
-                except Exception as e:
+                except Exception:
                     errors.append(f"{package}: not installed or version check failed")
                     results[package] = "NOT INSTALLED"
 
@@ -700,7 +700,7 @@ alias hc-iso >/dev/null 2>&1 && echo "shortcut_alias_works" || echo "shortcut_al
 
             # Test 2: Core NLSQ functions import
             try:
-                from nlsq import curve_fit, curve_fit_large
+                from nlsq import curve_fit, curve_fit_large  # noqa: F401 - Import test
 
                 details["core_functions"] = "available"
             except ImportError as e:
@@ -711,7 +711,9 @@ alias hc-iso >/dev/null 2>&1 && echo "shortcut_alias_works" || echo "shortcut_al
             # Test 3: StreamingOptimizer availability (v0.1.5+ feature)
             streaming_available = False
             try:
-                from nlsq.streaming import StreamingOptimizer
+                from nlsq.streaming import (  # noqa: F401 - Import test
+                    StreamingOptimizer,
+                )
 
                 details["streaming_optimizer"] = "available"
                 streaming_available = True
@@ -732,7 +734,7 @@ alias hc-iso >/dev/null 2>&1 && echo "shortcut_alias_works" || echo "shortcut_al
             # Test 4: Homodyne NLSQ integration
             homodyne_integration_ok = True
             try:
-                from homodyne.optimization.nlsq_wrapper import NLSQWrapper
+                from homodyne.optimization.nlsq_wrapper import NLSQWrapper  # noqa: F401
 
                 details["nlsq_wrapper"] = "available"
             except ImportError as e:
@@ -742,7 +744,9 @@ alias hc-iso >/dev/null 2>&1 && echo "shortcut_alias_works" || echo "shortcut_al
 
             # Test 5: Strategy selection logic
             try:
-                from homodyne.optimization.strategy import build_streaming_config
+                from homodyne.optimization.strategy import (  # noqa: F401
+                    build_streaming_config,
+                )
 
                 details["strategy_selection"] = "available"
             except ImportError as e:
@@ -753,7 +757,7 @@ alias hc-iso >/dev/null 2>&1 && echo "shortcut_alias_works" || echo "shortcut_al
             # Test 6: Checkpoint manager (if streaming available)
             if streaming_available:
                 try:
-                    from homodyne.optimization.checkpoint_manager import (
+                    from homodyne.optimization.checkpoint_manager import (  # noqa: F401
                         CheckpointManager,
                     )
 
@@ -839,7 +843,9 @@ alias hc-iso >/dev/null 2>&1 && echo "shortcut_alias_works" || echo "shortcut_al
 
             # Test 2: ParameterManager import
             try:
-                from homodyne.config.parameter_manager import ParameterManager
+                from homodyne.config.parameter_manager import (  # noqa: F401
+                    ParameterManager,
+                )
 
                 details["parameter_manager"] = "available"
             except ImportError as e:
@@ -896,7 +902,7 @@ alias hc-iso >/dev/null 2>&1 && echo "shortcut_alias_works" || echo "shortcut_al
 
                     # Test parameter bounds retrieval
                     try:
-                        bounds = config_mgr.get_parameter_bounds()
+                        _bounds = config_mgr.get_parameter_bounds()  # noqa: F841
                         details["parameter_bounds_retrieval"] = "success"
                     except Exception as e:
                         details["parameter_bounds_retrieval"] = "failed"
@@ -995,7 +1001,7 @@ alias hc-iso >/dev/null 2>&1 && echo "shortcut_alias_works" || echo "shortcut_al
 
             # Test 2: XPCSDataLoader import
             try:
-                from homodyne.data.xpcs_loader import XPCSDataLoader
+                from homodyne.data.xpcs_loader import XPCSDataLoader  # noqa: F401
 
                 details["xpcs_dataloader"] = "available"
             except ImportError as e:
@@ -1030,7 +1036,9 @@ alias hc-iso >/dev/null 2>&1 && echo "shortcut_alias_works" || echo "shortcut_al
 
             # Test 4: Memory manager import
             try:
-                from homodyne.data.memory_manager import estimate_memory_usage
+                from homodyne.data.memory_manager import (  # noqa: F401
+                    estimate_memory_usage,
+                )
 
                 details["memory_manager"] = "available"
             except ImportError as e:
@@ -1039,7 +1047,7 @@ alias hc-iso >/dev/null 2>&1 && echo "shortcut_alias_works" || echo "shortcut_al
 
             # Test 5: Data preprocessing import
             try:
-                from homodyne.data.preprocessing import preprocess_data
+                from homodyne.data.preprocessing import preprocess_data  # noqa: F401
 
                 details["preprocessing"] = "available"
             except ImportError as e:
@@ -1256,7 +1264,11 @@ alias hc-iso >/dev/null 2>&1 && echo "shortcut_alias_works" || echo "shortcut_al
         health_emoji = (
             "🟢"
             if health_score >= 90
-            else "🟡" if health_score >= 70 else "🟠" if health_score >= 50 else "🔴"
+            else "🟡"
+            if health_score >= 70
+            else "🟠"
+            if health_score >= 50
+            else "🔴"
         )
         health_status = (
             "Excellent"
@@ -1264,7 +1276,9 @@ alias hc-iso >/dev/null 2>&1 && echo "shortcut_alias_works" || echo "shortcut_al
             else (
                 "Good"
                 if health_score >= 70
-                else "Fair" if health_score >= 50 else "Poor"
+                else "Fair"
+                if health_score >= 50
+                else "Poor"
             )
         )
         report.append(

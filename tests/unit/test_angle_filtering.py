@@ -877,7 +877,7 @@ except ImportError:
 @pytest.mark.skipif(not HAS_JAX, reason="JAX not installed")
 class TestJAXArrayCompatibility:
     """Test angle filtering with JAX arrays.
-    
+
     Regression tests for JAX indexing error:
     "Using a non-tuple sequence for multidimensional indexing is not allowed"
     """
@@ -1062,16 +1062,14 @@ class TestNumpyArrayCompatibility:
 
 class TestAngleFilteringConsistency:
     """Test consistency between optimization and plotting filtering.
-    
+
     Ensures that optimization and plotting use identical filtering logic
     by testing that they return the same filtered results for identical inputs.
     """
 
     def test_optimization_and_plotting_identical_results_anisotropic(self):
         """Verify optimization and plotting return identical results (anisotropic)."""
-        from homodyne.cli.commands import (
-            _apply_angle_filtering_for_plot,
-        )
+        from homodyne.cli.commands import _apply_angle_filtering_for_plot
         from tests.factories.data_factory import create_specific_angles_test_data
 
         # Arrange
@@ -1122,9 +1120,7 @@ class TestAngleFilteringConsistency:
 
     def test_optimization_and_plotting_identical_results_laminar_flow(self):
         """Verify optimization and plotting return identical results (laminar flow)."""
-        from homodyne.cli.commands import (
-            _apply_angle_filtering_for_plot,
-        )
+        from homodyne.cli.commands import _apply_angle_filtering_for_plot
         from tests.factories.data_factory import create_angle_filtering_test_data
 
         # Arrange
@@ -1161,9 +1157,7 @@ class TestAngleFilteringConsistency:
 
     def test_consistency_with_disabled_filtering(self):
         """Verify all methods return original data when filtering disabled."""
-        from homodyne.cli.commands import (
-            _apply_angle_filtering_for_plot,
-        )
+        from homodyne.cli.commands import _apply_angle_filtering_for_plot
         from tests.factories.data_factory import create_angle_filtering_test_data
 
         # Arrange
@@ -1206,9 +1200,7 @@ class TestAngleFilteringConsistency:
 
     def test_consistency_with_single_angle_range(self):
         """Verify consistency with very narrow range (single angle)."""
-        from homodyne.cli.commands import (
-            _apply_angle_filtering_for_plot,
-        )
+        from homodyne.cli.commands import _apply_angle_filtering_for_plot
         from tests.factories.data_factory import create_specific_angles_test_data
 
         # Arrange
@@ -1245,9 +1237,7 @@ class TestAngleFilteringConsistency:
 
     def test_consistency_across_multiple_datasets(self):
         """Verify consistency holds across different dataset sizes."""
-        from homodyne.cli.commands import (
-            _apply_angle_filtering_for_plot,
-        )
+        from homodyne.cli.commands import _apply_angle_filtering_for_plot
         from tests.factories.data_factory import create_angle_filtering_test_data
 
         # Arrange
@@ -1299,9 +1289,7 @@ class TestAngleFilteringConsistency:
 
     def test_consistency_with_overlapping_ranges(self):
         """Verify consistency with overlapping angle ranges."""
-        from homodyne.cli.commands import (
-            _apply_angle_filtering_for_plot,
-        )
+        from homodyne.cli.commands import _apply_angle_filtering_for_plot
         from tests.factories.data_factory import create_specific_angles_test_data
 
         # Arrange
@@ -1338,10 +1326,10 @@ class TestAngleFilteringConsistency:
         np.testing.assert_array_equal(core_c2, plot_c2)
 
         # Verify no duplicates in indices
-        assert len(core_indices) == len(
-            set(core_indices)
-        ), "Core indices contain duplicates"
-        assert len(plot_indices) == len(
-            set(plot_indices)
-        ), "Plot indices contain duplicates"
+        assert len(core_indices) == len(set(core_indices)), (
+            "Core indices contain duplicates"
+        )
+        assert len(plot_indices) == len(set(plot_indices)), (
+            "Plot indices contain duplicates"
+        )
         assert core_indices == plot_indices

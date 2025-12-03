@@ -69,7 +69,9 @@ def create_mock_optimization_result(
         )
         n_params = 9
     else:
-        raise ValueError(f"Unknown analysis_mode: {analysis_mode}. Expected 'static' or 'laminar_flow'")
+        raise ValueError(
+            f"Unknown analysis_mode: {analysis_mode}. Expected 'static' or 'laminar_flow'"
+        )
 
     # Covariance matrix (identity scaled by variance for simplicity)
     if include_covariance:

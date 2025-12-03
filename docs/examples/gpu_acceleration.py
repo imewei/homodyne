@@ -88,7 +88,7 @@ def main():
     print("\nVerification steps:")
     print("  1. Check CUDA: nvcc --version")
     print("  2. Check GPU: nvidia-smi")
-    print("  3. Check JAX: python -c \"import jax; print(jax.devices())\"")
+    print('  3. Check JAX: python -c "import jax; print(jax.devices())"')
     print("  4. Check homodyne: make gpu-check")
 
     print("\nExpected speedup:")

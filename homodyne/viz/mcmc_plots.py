@@ -31,7 +31,6 @@ Examples:
 
 import logging
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Union
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -49,11 +48,11 @@ except ImportError:
 
 def plot_trace_plots(
     result: MCMCResult,
-    param_names: Optional[List[str]] = None,
+    param_names: list[str] | None = None,
     max_params: int = 9,
-    figsize: Optional[tuple] = None,
+    figsize: tuple | None = None,
     show: bool = False,
-    save_path: Optional[Union[str, Path]] = None,
+    save_path: str | Path | None = None,
     dpi: int = 150,
 ) -> Figure:
     """Plot MCMC trace plots for convergence visualization.
@@ -246,7 +245,7 @@ def plot_kl_divergence_matrix(
     cmap: str = "coolwarm",
     threshold: float = 2.0,
     show: bool = False,
-    save_path: Optional[Union[str, Path]] = None,
+    save_path: str | Path | None = None,
     dpi: int = 150,
 ) -> Figure:
     """Plot KL divergence matrix heatmap for CMC results.
@@ -339,7 +338,7 @@ def plot_kl_divergence_matrix(
             text_color = "white" if kl_val > threshold else "black"
 
             # Add text annotation
-            text = ax.text(
+            _text = ax.text(  # noqa: F841 - Text object kept for reference
                 j,
                 i,
                 f"{kl_val:.2f}",
@@ -394,12 +393,12 @@ def plot_kl_divergence_matrix(
 
 def plot_convergence_diagnostics(
     result: MCMCResult,
-    metrics: List[str] = ["rhat", "ess"],
-    figsize: Optional[tuple] = None,
+    metrics: list[str] = ["rhat", "ess"],
+    figsize: tuple | None = None,
     rhat_threshold: float = 1.1,
     ess_threshold: float = 100.0,
     show: bool = False,
-    save_path: Optional[Union[str, Path]] = None,
+    save_path: str | Path | None = None,
     dpi: int = 150,
 ) -> Figure:
     """Plot convergence diagnostics (R-hat and ESS) for MCMC results.
@@ -710,11 +709,11 @@ def _plot_ess(ax, result, param_names, threshold, is_cmc):
 
 def plot_posterior_comparison(
     result: MCMCResult,
-    param_indices: Optional[List[int]] = None,
-    figsize: Optional[tuple] = None,
+    param_indices: list[int] | None = None,
+    figsize: tuple | None = None,
     bins: int = 30,
     show: bool = False,
-    save_path: Optional[Union[str, Path]] = None,
+    save_path: str | Path | None = None,
     dpi: int = 150,
 ) -> Figure:
     """Compare per-shard posteriors with combined posterior (CMC only).
@@ -885,7 +884,7 @@ def plot_cmc_summary_dashboard(
     result: MCMCResult,
     figsize: tuple = (16, 12),
     show: bool = False,
-    save_path: Optional[Union[str, Path]] = None,
+    save_path: str | Path | None = None,
     dpi: int = 150,
 ) -> Figure:
     """Create comprehensive multi-panel CMC summary dashboard.

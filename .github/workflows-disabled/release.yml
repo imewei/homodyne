@@ -3,20 +3,20 @@ name: Release
 on:
   push:
     tags:
-      - 'v*.*.*'
+      - "v*.*.*"
   workflow_dispatch:
     inputs:
       version:
-        description: 'Release version (e.g., v1.2.3)'
+        description: "Release version (e.g., v1.2.3)"
         required: true
         type: string
 
 permissions:
   contents: write
-  id-token: write  # For trusted publishing to PyPI
+  id-token: write # For trusted publishing to PyPI
 
 env:
-  PYTHON_VERSION: '3.12'
+  PYTHON_VERSION: "3.12"
 
 jobs:
   validate:
@@ -76,7 +76,7 @@ jobs:
             --cov-report=term
 
       - name: Verify import
-        run: python -c "import homodyne; print(f'Version: {homodyne.__version__}')"
+        run: python -c "import homodyne; print('Version:', homodyne.__version__)"
 
   build:
     name: Build Distribution

@@ -2,36 +2,42 @@
 Unit Tests for MCMC Core Functionality
 =======================================
 
+**Updated**: v3.0 CMC-only migration
+
 Consolidated from:
-- test_mcmc_init.py (MCMC initialization, 9 tests, 523 lines)
-- test_mcmc_model.py (NumPyro model creation, 14 tests, 558 lines)
-- test_mcmc_selection.py (NUTS vs CMC selection, 10 tests, 298 lines)
-- test_mcmc_result_extension.py (MCMCResult extensions, 19 tests, 457 lines)
-- test_mcmc_integration.py (MCMC API integration, 19 tests from unit/, 385 lines)
+- test_mcmc_init.py (MCMC initialization, 9 tests)
+- test_mcmc_model.py (NumPyro model creation, 14 tests)
+- test_mcmc_selection.py (Selection logic - DEPRECATED in v3.0)
+- test_mcmc_result_extension.py (MCMCResult extensions, 19 tests)
+- test_mcmc_integration.py (MCMC API integration, 19 tests)
 
 Tests cover:
 - MCMC initialization validation and fallback behavior
 - NumPyro model creation with config-driven priors
-- Automatic NUTS/CMC selection logic
 - MCMCResult class with CMC support and backward compatibility
-- MCMC API integration after v2.1.0 refactoring
+- MCMC API integration
 
-Total: 70 tests
+Note: NUTS/CMC selection tests deprecated in v3.0 (CMC-only architecture)
+Tests with min_samples_for_cmc and memory_threshold_pct are legacy tests
+that may still pass but are no longer relevant for v3.0+
+
+Total: ~60 tests
 """
 
+import inspect
 import json
 import math
+from types import SimpleNamespace
+
 import numpy as np
 import pytest
-from unittest.mock import patch, MagicMock
-import inspect
-from types import SimpleNamespace
 
 # JAX and NumPyro imports with availability checking
 try:
     import jax
     import jax.numpy as jnp
     from jax import random
+
     JAX_AVAILABLE = True
 except ImportError:
     JAX_AVAILABLE = False
@@ -42,32 +48,32 @@ try:
     import numpyro.distributions as dist
     from numpyro import handlers
     from numpyro.infer import MCMC, NUTS, Predictive
+
     NUMPYRO_AVAILABLE = True
 except ImportError:
     NUMPYRO_AVAILABLE = False
 
-# Homodyne imports
-from homodyne.config.parameter_space import ParameterSpace, PriorDistribution
-from homodyne.device.config import HardwareConfig, should_use_cmc
 from homodyne.cli.commands import (
     _create_mcmc_diagnostics_dict,
     _create_mcmc_parameters_dict,
 )
+
+# Homodyne imports
+from homodyne.config.parameter_space import ParameterSpace, PriorDistribution
+from homodyne.device.config import HardwareConfig, should_use_cmc
 from homodyne.optimization.mcmc import (
+    MCMCResult,
     _build_single_angle_surrogate_settings,
     _calculate_midpoint_defaults,
     _create_numpyro_model,
-    _get_mcmc_config,
-    _format_init_params_for_chains,
-    _process_posterior_samples,
     _estimate_single_angle_scaling,
     _evaluate_convergence_thresholds,
+    _format_init_params_for_chains,
+    _get_mcmc_config,
+    _process_posterior_samples,
     fit_mcmc_jax,
-    MCMCResult,
 )
-from homodyne.optimization.cmc.result import MCMCResult as CMCResult
 from tests.factories.synthetic_data import generate_synthetic_xpcs_data
-
 
 # ==============================================================================
 # MCMC Initialization Tests (from test_mcmc_init.py)
@@ -430,10 +436,12 @@ class TestPerAngleScalingInitialization:
                 len(minimal_static_data.phi),
             ),
             t2=np.tile(
-                minimal_static_data.t2, len(minimal_static_data.phi) * len(minimal_static_data.t1)
+                minimal_static_data.t2,
+                len(minimal_static_data.phi) * len(minimal_static_data.t1),
             ),
             phi=np.repeat(
-                minimal_static_data.phi, len(minimal_static_data.t1) * len(minimal_static_data.t2)
+                minimal_static_data.phi,
+                len(minimal_static_data.t1) * len(minimal_static_data.t2),
             ),
             q=minimal_static_data.q,
             L=minimal_static_data.L,
@@ -1460,9 +1468,9 @@ class TestMCMCSelectionIntegration:
             dataset_size=dataset_size,
         )
 
-        assert (
-            result is True
-        ), "CMC should be selected at exactly 15 samples (default threshold)"
+        assert result is True, (
+            "CMC should be selected at exactly 15 samples (default threshold)"
+        )
 
     def test_memory_estimation_accuracy(self, mock_hardware_config):
         """
@@ -1537,7 +1545,6 @@ class TestMCMCFallbackBehavior:
 # ==============================================================================
 # MCMCResult Extension Tests (from test_mcmc_result_extension.py)
 # ==============================================================================
-
 
 
 class TestBackwardCompatibility:
@@ -1994,7 +2001,6 @@ class TestAPISignature:
         v2.1.0 breaking change: method parameter was removed.
         Automatic selection handles NUTS/CMC internally based on data characteristics.
         """
-        import inspect
 
         sig = inspect.signature(fit_mcmc_jax)
         assert "method" not in sig.parameters, (
@@ -2004,7 +2010,6 @@ class TestAPISignature:
 
     def test_function_accepts_kwargs(self):
         """Test that fit_mcmc_jax accepts **kwargs for backward compatibility."""
-        import inspect
 
         sig = inspect.signature(fit_mcmc_jax)
         # Should have **kwargs to accept old-style method parameter
@@ -2014,21 +2019,19 @@ class TestAPISignature:
 
     def test_parameter_space_parameter_exists(self):
         """Test that parameter_space parameter exists (v2.1.0 feature)."""
-        import inspect
 
         sig = inspect.signature(fit_mcmc_jax)
-        assert (
-            "parameter_space" in sig.parameters
-        ), "parameter_space parameter should exist in v2.1.0"
+        assert "parameter_space" in sig.parameters, (
+            "parameter_space parameter should exist in v2.1.0"
+        )
 
     def test_initial_values_parameter_exists(self):
         """Test that initial_values parameter exists (v2.1.0 change)."""
-        import inspect
 
         sig = inspect.signature(fit_mcmc_jax)
-        assert (
-            "initial_values" in sig.parameters
-        ), "initial_values parameter should exist in v2.1.0 (renamed from initial_params)"
+        assert "initial_values" in sig.parameters, (
+            "initial_values parameter should exist in v2.1.0 (renamed from initial_params)"
+        )
 
 
 class TestDataValidation:
@@ -2177,9 +2180,9 @@ class TestParameterAcceptance:
             )
         except TypeError as e:
             # Should NOT get "unexpected keyword argument 'method'" error
-            assert (
-                "method" not in str(e).lower()
-            ), "method parameter should be accepted in **kwargs (backward compatibility)"
+            assert "method" not in str(e).lower(), (
+                "method parameter should be accepted in **kwargs (backward compatibility)"
+            )
 
 
 class TestKwargsAcceptance:
@@ -2210,9 +2213,9 @@ class TestKwargsAcceptance:
         except TypeError as e:
             # Should not get unexpected keyword argument errors
             for key in mcmc_kwargs.keys():
-                assert key not in str(
-                    e
-                ), f"Standard MCMC kwarg '{key}' should be accepted"
+                assert key not in str(e), (
+                    f"Standard MCMC kwarg '{key}' should be accepted"
+                )
 
     def test_cmc_threshold_kwargs_accepted(self):
         """Test CMC threshold configuration kwargs are accepted."""
@@ -2361,7 +2364,8 @@ class TestProcessPosteriorSamples:
             "offset_0": jnp.array([1.0, 1.0]),
         }
         grouped = {
-            key: jnp.reshape(value, (1, value.shape[0])) for key, value in samples.items()
+            key: jnp.reshape(value, (1, value.shape[0]))
+            for key, value in samples.items()
         }
         extra = {"accept_prob": jnp.array([0.5]), "diverging": jnp.array([0])}
         dummy = self._DummyResult(samples, grouped, extra)
@@ -2419,9 +2423,7 @@ class TestProcessPosteriorSamples:
             "contrast": jnp.array([0.55, 0.6, 0.65]),
             "offset": jnp.array([1.0, 1.05, 1.1]),
         }
-        grouped = {
-            key: jnp.stack([value, value]) for key, value in samples.items()
-        }
+        grouped = {key: jnp.stack([value, value]) for key, value in samples.items()}
         extra = {
             "accept_prob": jnp.array([0.8, 0.82]),
             "diverging": jnp.array([0, 0]),
@@ -2436,7 +2438,9 @@ class TestProcessPosteriorSamples:
         )
 
         assert summary["converged"] is True
-        assert math.isclose(summary["mean_contrast"], float(jnp.mean(samples["contrast"])))
+        assert math.isclose(
+            summary["mean_contrast"], float(jnp.mean(samples["contrast"]))
+        )
         assert math.isclose(summary["mean_offset"], float(jnp.mean(samples["offset"])))
 
     def test_single_angle_surrogate_samples_are_supported(self):
@@ -2448,7 +2452,8 @@ class TestProcessPosteriorSamples:
             "offset": jnp.array([1.0, 1.0, 1.0]),
         }
         grouped = {
-            key: jnp.reshape(value, (1,) + value.shape) for key, value in samples.items()
+            key: jnp.reshape(value, (1,) + value.shape)
+            for key, value in samples.items()
         }
         extra = {"accept_prob": jnp.array([0.9]), "diverging": jnp.array([0])}
         dummy = self._DummyResult(samples, grouped, extra)

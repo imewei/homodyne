@@ -51,12 +51,12 @@ def extract_scalar_params_from_per_angle_result(data, result, analysis_mode="sta
 
         # Aggregate per-angle scaling parameters
         contrast_mean = np.mean(result.parameters[0:n_phi])
-        offset_mean = np.mean(result.parameters[n_phi:2*n_phi])
+        offset_mean = np.mean(result.parameters[n_phi : 2 * n_phi])
 
         # Extract physical parameters
-        D0 = result.parameters[2*n_phi]
-        alpha = result.parameters[2*n_phi + 1]
-        D_offset = result.parameters[2*n_phi + 2]
+        D0 = result.parameters[2 * n_phi]
+        alpha = result.parameters[2 * n_phi + 1]
+        D_offset = result.parameters[2 * n_phi + 2]
 
         return {
             "contrast": contrast_mean,
@@ -66,7 +66,9 @@ def extract_scalar_params_from_per_angle_result(data, result, analysis_mode="sta
             "D_offset": D_offset,
         }
     else:
-        raise NotImplementedError(f"Parameter extraction for {analysis_mode} not yet implemented")
+        raise NotImplementedError(
+            f"Parameter extraction for {analysis_mode} not yet implemented"
+        )
 
 
 @dataclass
@@ -191,9 +193,7 @@ class TestScientificValidation:
 
             # Extract recovered parameters (v2.4.0: per-angle scaling is mandatory)
             recovered = extract_scalar_params_from_per_angle_result(
-                data=data,
-                result=result,
-                analysis_mode="static"
+                data=data, result=result, analysis_mode="static"
             )
 
             # Compute relative errors
@@ -248,14 +248,14 @@ class TestScientificValidation:
             # Assert core parameters within tolerance
             # Note: D_offset is poorly constrained and often hits bounds (documented in T035)
             for name in core_params:
-                assert (
-                    relative_errors[name] < case["tolerance_pct"]
-                ), f"{case['name']}: {name} error {relative_errors[name]:.2f}% > {case['tolerance_pct']}%"
+                assert relative_errors[name] < case["tolerance_pct"], (
+                    f"{case['name']}: {name} error {relative_errors[name]:.2f}% > {case['tolerance_pct']}%"
+                )
 
             # D_offset gets relaxed tolerance (known to be poorly constrained)
-            assert (
-                relative_errors["D_offset"] < 500.0
-            ), f"{case['name']}: D_offset error {relative_errors['D_offset']:.2f}% > 500% (poorly constrained parameter)"
+            assert relative_errors["D_offset"] < 500.0, (
+                f"{case['name']}: D_offset error {relative_errors['D_offset']:.2f}% > 500% (poorly constrained parameter)"
+            )
 
     def test_T037_numerical_stability(self):
         """
@@ -332,12 +332,12 @@ class TestScientificValidation:
 
             print(f"  {name}: max param diff={max_diff:.2f}%, χ² diff={chi2_diff:.2f}%")
 
-            assert (
-                max_diff < 15.0
-            ), f"{name}: Parameters differ by {max_diff:.2f}% from reference"
-            assert (
-                chi2_diff < 25.0
-            ), f"{name}: Chi-squared differs by {chi2_diff:.2f}% from reference"
+            assert max_diff < 15.0, (
+                f"{name}: Parameters differ by {max_diff:.2f}% from reference"
+            )
+            assert chi2_diff < 25.0, (
+                f"{name}: Chi-squared differs by {chi2_diff:.2f}% from reference"
+            )
 
         # Record validation result
         validation_result = ValidationResult(
@@ -403,9 +403,9 @@ class TestScientificValidation:
             )
 
             actual_points = data.g2.size
-            assert (
-                actual_points == expected_points
-            ), f"Size mismatch: {actual_points} != {expected_points}"
+            assert actual_points == expected_points, (
+                f"Size mismatch: {actual_points} != {expected_points}"
+            )
 
             # Initial parameters
             initial_params = np.array([0.5, 1.0, 1000.0, 0.5, 10.0])
@@ -520,15 +520,13 @@ class TestScientificValidation:
 
         # Check if recovery actions were actually used
         if "converged_with_recovery" in result_recovery.convergence_status:
-            assert (
-                len(result_recovery.recovery_actions) > 0
-            ), "Should have recovery actions if converged with recovery"
+            assert len(result_recovery.recovery_actions) > 0, (
+                "Should have recovery actions if converged with recovery"
+            )
 
         # Compute errors (v2.4.0: per-angle scaling is mandatory)
         recovered = extract_scalar_params_from_per_angle_result(
-            data=data,
-            result=result_recovery,
-            analysis_mode="static"
+            data=data, result=result_recovery, analysis_mode="static"
         )
 
         param_names = ["contrast", "offset", "D0", "alpha", "D_offset"]
@@ -602,9 +600,7 @@ class TestScientificValidation:
 
         # Extract parameters (v2.4.0: per-angle scaling is mandatory)
         params = extract_scalar_params_from_per_angle_result(
-            data=data,
-            result=result,
-            analysis_mode="static"
+            data=data, result=result, analysis_mode="static"
         )
         contrast = params["contrast"]
         offset = params["offset"]
@@ -746,6 +742,6 @@ class TestScientificValidation:
             print(f"⚠ {total_tests - passed_tests} validation tests FAILED")
             print("Review failed tests before production deployment")
 
-        assert (
-            passed_tests == total_tests
-        ), f"Validation incomplete: {passed_tests}/{total_tests} passed"
+        assert passed_tests == total_tests, (
+            f"Validation incomplete: {passed_tests}/{total_tests} passed"
+        )

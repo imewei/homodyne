@@ -43,8 +43,7 @@ def load_nlsq_results(results_dir: Path) -> tuple:
 
     # Extract parameter values
     parameters = {
-        name: data["value"]
-        for name, data in param_data["parameters"].items()
+        name: data["value"] for name, data in param_data["parameters"].items()
     }
 
     # Load fitted data
@@ -138,7 +137,9 @@ For more information, see:
 
     # Check results directory exists
     if not args.results_dir.exists():
-        print(f"Error: Results directory not found: {args.results_dir}", file=sys.stderr)
+        print(
+            f"Error: Results directory not found: {args.results_dir}", file=sys.stderr
+        )
         print("\nPlease run NLSQ optimization first:", file=sys.stderr)
         print("  homodyne --config config.yaml --method nlsq", file=sys.stderr)
         sys.exit(1)
@@ -172,7 +173,9 @@ For more information, see:
 
         # Save output if requested
         if args.output:
-            from homodyne.optimization.gradient_diagnostics import compute_optimal_x_scale
+            from homodyne.optimization.gradient_diagnostics import (
+                compute_optimal_x_scale,
+            )
 
             x_scale_map = compute_optimal_x_scale(
                 parameters, data, config, analysis_mode
@@ -181,9 +184,7 @@ For more information, see:
             output_data = {
                 "optimization": {
                     "nlsq": {
-                        "x_scale_map": {
-                            k: float(v) for k, v in x_scale_map.items()
-                        }
+                        "x_scale_map": {k: float(v) for k, v in x_scale_map.items()}
                     }
                 }
             }
@@ -199,13 +200,16 @@ For more information, see:
             print("  3. Verify improved fit quality in c2 heatmaps")
 
     except ImportError as e:
-        print(f"Error: Could not import gradient diagnostics module: {e}", file=sys.stderr)
+        print(
+            f"Error: Could not import gradient diagnostics module: {e}", file=sys.stderr
+        )
         print("\nMake sure homodyne is properly installed:", file=sys.stderr)
         print("  pip install -e .", file=sys.stderr)
         sys.exit(1)
     except Exception as e:
         print(f"Error during gradient analysis: {e}", file=sys.stderr)
         import traceback
+
         traceback.print_exc()
         sys.exit(1)
 

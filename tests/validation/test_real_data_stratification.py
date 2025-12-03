@@ -72,7 +72,7 @@ class TestRealDataStratification:
         # Test angle distribution analysis
         stats = analyze_angle_distribution(phi=phi_repeated)
 
-        logger.info(f"Angle distribution stats:")
+        logger.info("Angle distribution stats:")
         logger.info(f"  Total angles: {stats.n_angles}")
         logger.info(f"  Min points/angle: {min(stats.counts.values()):,}")
         logger.info(f"  Max points/angle: {max(stats.counts.values()):,}")
@@ -133,7 +133,7 @@ class TestRealDataStratification:
                 points_per_angle=np.full(n_angles, n_time_points * n_time_points),
             )
 
-            logger.info(f"C021 angle distribution:")
+            logger.info("C021 angle distribution:")
             logger.info(f"  Imbalance ratio: {stats.imbalance_ratio:.2f}")
             logger.info(f"  Is balanced: {stats.is_balanced}")
 
@@ -156,16 +156,16 @@ class TestRealDataStratification:
             n_points=n_points_c020, use_index_based=False
         )
 
-        logger.info(f"C020-like memory estimate:")
+        logger.info("C020-like memory estimate:")
         logger.info(f"  Original: {mem_stats['original_memory_mb']:.1f} MB")
         logger.info(f"  Stratified: {mem_stats['stratified_memory_mb']:.1f} MB")
         logger.info(f"  Peak: {mem_stats['peak_memory_mb']:.1f} MB")
         logger.info(f"  Is safe: {mem_stats['is_safe']}")
 
         # Should be safe for 500k points
-        assert mem_stats[
-            "is_safe"
-        ], "Memory estimation should be safe for C020-like data"
+        assert mem_stats["is_safe"], (
+            "Memory estimation should be safe for C020-like data"
+        )
         assert mem_stats["peak_memory_mb"] < 1000, "Peak memory should be reasonable"
 
     def test_existing_config_compatibility(self):
@@ -223,7 +223,6 @@ class TestRealDataWorkflow:
 
         import yaml
 
-        from homodyne.config.manager import ConfigManager
         from homodyne.data.xpcs_loader import XPCSDataLoader
 
         # Load config

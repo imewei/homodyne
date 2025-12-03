@@ -12,10 +12,9 @@ Historical Context:
 See: .ultra-think/ROOT_CAUSE_FOUND.md for full investigation
 """
 
-import pytest
 import jax
 import jax.numpy as jnp
-import numpy as np
+import pytest
 
 
 class TestJAXFancyIndexing:

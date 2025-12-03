@@ -79,10 +79,10 @@ from homodyne.cli.args_parser import create_parser, validate_args
 from homodyne.cli.commands import _load_data
 from homodyne.config.manager import ConfigManager
 
-
 # ==============================================================================
 # CLI Argument Parsing Tests (from test_cli_args.py)
 # ==============================================================================
+
 
 class TestMethodArgumentParsing:
     """Test CLI method argument parsing after simplification."""
@@ -335,6 +335,7 @@ class TestHelpTextDocumentation:
 # ==============================================================================
 # CLI Validation Tests (from test_cli_validation.py)
 # ==============================================================================
+
 
 class TestDeprecatedMethodRejection:
     """Test that deprecated methods are properly rejected with clear errors."""
@@ -1059,6 +1060,7 @@ class TestDefaultConfigBehavior:
 # CLI Data Loading Tests (from test_cli_data_loading.py)
 # ==============================================================================
 
+
 class TestConfigNormalization:
     """Test suite for configuration schema normalization."""
 
@@ -1379,4 +1381,3 @@ class TestIntegrationScenarios:
 
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])
-

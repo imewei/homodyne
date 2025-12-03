@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, Dict, Tuple
+from typing import Any
 
 import numpy as np
 
@@ -12,9 +12,9 @@ logger = get_logger(__name__)
 
 @dataclass(frozen=True)
 class PerPhiInitConfig:
-    percentiles: Tuple[float, float, float] = (5.0, 50.0, 95.0)
-    contrast_bounds: Tuple[float, float] = (0.01, 0.8)
-    offset_bounds: Tuple[float, float] = (0.8, 1.2)
+    percentiles: tuple[float, float, float] = (5.0, 50.0, 95.0)
+    contrast_bounds: tuple[float, float] = (0.01, 0.8)
+    offset_bounds: tuple[float, float] = (0.8, 1.2)
     atol: float = 1e-6
     seed_base: int = 0
 
@@ -34,9 +34,9 @@ def _angle_hash(angle: float) -> int:
 def build_per_phi_initial_values(
     phi: np.ndarray,
     g2: np.ndarray | None,
-    config_per_phi: Dict[str, Dict[str, Any]] | None,
+    config_per_phi: dict[str, dict[str, Any]] | None,
     cfg: PerPhiInitConfig,
-) -> Tuple[Dict[str, float], Dict[str, Any]]:
+) -> tuple[dict[str, float], dict[str, Any]]:
     """Create per-phi initial values with config-first then percentile fallback.
 
     Parameters
@@ -60,8 +60,8 @@ def build_per_phi_initial_values(
     phi = np.asarray(phi, dtype=float).ravel()
     phi_unique = np.unique(phi)
     provided = config_per_phi or {}
-    init_values: Dict[str, float] = {}
-    metadata: Dict[str, Any] = {
+    init_values: dict[str, float] = {}
+    metadata: dict[str, Any] = {
         "phi_unique": phi_unique.tolist(),
         "seed_base": cfg.seed_base,
         "source": {},
@@ -118,7 +118,8 @@ def build_per_phi_initial_values(
                 missing.append(raw_angle_str)
         if missing:
             metadata["missing_phi"] = missing
-            logger.warning("Per-phi config provided for angles not in data: %s", missing)
+            logger.warning(
+                "Per-phi config provided for angles not in data: %s", missing
+            )
 
     return init_values, metadata
-

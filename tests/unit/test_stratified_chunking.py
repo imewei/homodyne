@@ -27,14 +27,12 @@ import pytest
 from numpy.testing import assert_allclose, assert_array_equal
 
 from homodyne.optimization.stratified_chunking import (
-    AngleDistributionStats,
     analyze_angle_distribution,
     create_angle_stratified_data,
     create_angle_stratified_indices,
     estimate_stratification_memory,
     should_use_stratification,
 )
-
 
 # ============================================================================
 # Test Fixtures
@@ -62,7 +60,7 @@ def imbalanced_data():
     angles = [0.0, 45.0, 90.0]
     counts = [100, 50, 10]
 
-    phi = np.concatenate([np.full(c, a) for a, c in zip(angles, counts)])
+    phi = np.concatenate([np.full(c, a) for a, c in zip(angles, counts, strict=False)])
     t1 = np.concatenate([np.linspace(1e-6, 1e-3, c) for c in counts])
     t2 = t1.copy()
     g2_exp = np.random.uniform(1.0, 1.5, len(phi))
@@ -102,10 +100,18 @@ def test_stratification_preserves_data_count(balanced_data):
 
     # Check that at least 95% of points are preserved (balanced chunking may discard some)
     min_expected = int(0.95 * original_count)
-    assert len(phi_s) >= min_expected, f"Expected >= {min_expected} points, got {len(phi_s)}"
-    assert len(t1_s) >= min_expected, f"Expected >= {min_expected} points, got {len(t1_s)}"
-    assert len(t2_s) >= min_expected, f"Expected >= {min_expected} points, got {len(t2_s)}"
-    assert len(g2_s) >= min_expected, f"Expected >= {min_expected} points, got {len(g2_s)}"
+    assert len(phi_s) >= min_expected, (
+        f"Expected >= {min_expected} points, got {len(phi_s)}"
+    )
+    assert len(t1_s) >= min_expected, (
+        f"Expected >= {min_expected} points, got {len(t1_s)}"
+    )
+    assert len(t2_s) >= min_expected, (
+        f"Expected >= {min_expected} points, got {len(t2_s)}"
+    )
+    assert len(g2_s) >= min_expected, (
+        f"Expected >= {min_expected} points, got {len(g2_s)}"
+    )
 
 
 def test_stratification_preserves_data_values(balanced_data):
@@ -129,7 +135,9 @@ def test_stratification_preserves_data_values(balanced_data):
     for strat_point in stratified_data:
         # Find if this point exists in original data
         matches = np.all(np.abs(original_data - strat_point) < 1e-10, axis=1)
-        assert np.any(matches), f"Stratified point {strat_point} not found in original data"
+        assert np.any(matches), (
+            f"Stratified point {strat_point} not found in original data"
+        )
 
 
 def test_stratification_no_duplicates(balanced_data):
@@ -151,14 +159,16 @@ def test_stratification_no_duplicates(balanced_data):
     g2_s_np = np.asarray(g2_s)
 
     # Create unique identifiers for each point
-    original_ids = set(zip(phi, t1, t2, g2_exp))
-    stratified_ids = set(zip(phi_s_np, t1_s_np, t2_s_np, g2_s_np))
+    original_ids = set(zip(phi, t1, t2, g2_exp, strict=False))
+    stratified_ids = set(zip(phi_s_np, t1_s_np, t2_s_np, g2_s_np, strict=False))
 
     # Check no duplicates within stratified data
     assert len(stratified_ids) == len(phi_s_np)
 
     # Check stratified points are a subset of original (may discard some points for balance)
-    assert stratified_ids.issubset(original_ids), "Stratified data contains points not in original"
+    assert stratified_ids.issubset(original_ids), (
+        "Stratified data contains points not in original"
+    )
 
 
 # ============================================================================
@@ -373,7 +383,6 @@ def test_should_use_stratification_disabled_small_dataset():
     assert "100k" in reason.lower() or "standard" in reason.lower()
 
 
-
 def test_should_use_stratification_disabled_imbalanced():
     """Test strategy decision for highly imbalanced angles."""
     use, reason = should_use_stratification(
@@ -470,7 +479,9 @@ def test_stratification_jax_array_input(balanced_data):
 
     # Check result is valid (at least 95% data preserved)
     min_expected = int(0.95 * len(phi))
-    assert len(phi_s) >= min_expected, f"Expected >= {min_expected} points, got {len(phi_s)}"
+    assert len(phi_s) >= min_expected, (
+        f"Expected >= {min_expected} points, got {len(phi_s)}"
+    )
 
 
 def test_stratification_output_numpy_compatible(balanced_data):

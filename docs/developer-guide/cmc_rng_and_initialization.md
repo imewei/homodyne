@@ -1,16 +1,16 @@
 # CMC RNG Seeding and Initialization Behavior
 
-**Version:** 2.4.0+
-**Last Updated:** 2025-11-13
-**Status:** Production
+**Version:** 2.4.0+ **Last Updated:** 2025-11-13 **Status:** Production
 
----
+______________________________________________________________________
 
 ## Overview
 
-This document describes the RNG seeding strategy for CMC parallel execution and the auto-initialization behavior for per-angle scaling parameters when manual values are not provided.
+This document describes the RNG seeding strategy for CMC parallel execution and the
+auto-initialization behavior for per-angle scaling parameters when manual values are not
+provided.
 
----
+______________________________________________________________________
 
 ## Per-Shard RNG Seeding
 
@@ -47,7 +47,8 @@ INFO: Multiprocessing shard 2: Starting MCMC with RNG seed=2
 
 ### Configuration
 
-**Current behavior:** Seeds are automatically derived from shard index (not user-configurable).
+**Current behavior:** Seeds are automatically derived from shard index (not
+user-configurable).
 
 **Future extension:** To support custom seed offsets, add to config:
 
@@ -59,13 +60,15 @@ optimization:
                            # Shard 0 → seed 42, Shard 1 → seed 43, etc.
 ```
 
----
+______________________________________________________________________
 
 ## Per-Angle Scaling Auto-Initialization
 
 ### Open-Interval Clamp with Auto-Init Fallback
 
-When per-angle scaling parameters (contrast/offset) are not provided in `initial_parameters.values`, they are **automatically estimated from data statistics** with a robust open-interval clamping strategy.
+When per-angle scaling parameters (contrast/offset) are not provided in
+`initial_parameters.values`, they are **automatically estimated from data statistics**
+with a robust open-interval clamping strategy.
 
 ### Algorithm (lines 605-669 in multiprocessing.py)
 
@@ -123,15 +126,19 @@ if "offset" in init_param_values:
 ### Clamping Strategy: Open-Interval Bounds
 
 | Parameter | Hard Minimum | Auto-Init Minimum | Justification |
-|-----------|--------------|-------------------|---------------|
-| `contrast` | 0.0 (inclusive) | **0.01 (exclusive)** | Numerical stability: avoid zero gradients |
-| `offset` | -∞ (unbounded) | **0.5 (exclusive)** | Physical constraint: c2 ≥ 1.0 at full decorrelation |
+|-----------|--------------|-------------------|---------------| | `contrast` | 0.0
+(inclusive) | **0.01 (exclusive)** | Numerical stability: avoid zero gradients | |
+`offset` | -∞ (unbounded) | **0.5 (exclusive)** | Physical constraint: c2 ≥ 1.0 at full
+decorrelation |
 
 **Why open-interval?**
 
-- **Prevents edge-case failures**: `contrast=0.0` causes zero gradient, breaking NUTS initialization
-- **Physically motivated**: Real experimental data has non-zero contrast and offset ≥ 1.0
-- **Robust initialization**: Ensures NumPyro can find valid starting point within 10 attempts
+- **Prevents edge-case failures**: `contrast=0.0` causes zero gradient, breaking NUTS
+  initialization
+- **Physically motivated**: Real experimental data has non-zero contrast and offset ≥
+  1.0
+- **Robust initialization**: Ensures NumPyro can find valid starting point within 10
+  attempts
 
 ### Logging Output
 
@@ -173,23 +180,25 @@ initial_parameters:
     - 1.00        # offset_2
 ```
 
-**If not provided:** Auto-initialization estimates from data (recommended for first runs).
+**If not provided:** Auto-initialization estimates from data (recommended for first
+runs).
 
----
+______________________________________________________________________
 
 ## Best Practices
 
 ### For Reproducibility
 
 1. **Check seed logs**: Verify each shard uses expected seed
-2. **Document shard count**: CMC shard count affects seed sequence
-3. **Save RNG state**: Future extension could save/restore full RNG state
+1. **Document shard count**: CMC shard count affects seed sequence
+1. **Save RNG state**: Future extension could save/restore full RNG state
 
 ### For Initialization
 
 1. **First run:** Let auto-init estimate from data (fast, data-driven)
-2. **Refinement:** Use NLSQ results to manually set `initial_parameters.values`
-3. **Validation:** Check logs for estimated contrast/offset values (should be reasonable)
+1. **Refinement:** Use NLSQ results to manually set `initial_parameters.values`
+1. **Validation:** Check logs for estimated contrast/offset values (should be
+   reasonable)
 
 ### Common Issues
 
@@ -199,32 +208,36 @@ initial_parameters:
 
 **Solution:** Manually set `initial_parameters.values` with physically reasonable values
 
----
+______________________________________________________________________
 
 **Issue:** Large variation in per-angle contrast/offset across shards
 
 **Cause:** Dataset has strong angle-dependent properties or outliers
 
-**Solution:** Use stratified sharding (`strategy: "stratified"`) to balance angles across shards
+**Solution:** Use stratified sharding (`strategy: "stratified"`) to balance angles
+across shards
 
----
+______________________________________________________________________
 
 ## Technical References
 
-- **RNG seeding implementation**: `homodyne/optimization/cmc/backends/multiprocessing.py:708-717`
-- **Auto-init implementation**: `homodyne/optimization/cmc/backends/multiprocessing.py:605-669`
+- **RNG seeding implementation**:
+  `homodyne/optimization/cmc/backends/multiprocessing.py:708-717`
+- **Auto-init implementation**:
+  `homodyne/optimization/cmc/backends/multiprocessing.py:605-669`
 - **Open-interval clamp bounds**: Lines 632, 633
 - **Robust statistics**: Percentile-based (5th, 95th) to avoid outliers
 
----
+______________________________________________________________________
 
 ## Version History
 
-- **v2.4.0** (2025-11-13): Added per-shard RNG seed logging and documented auto-init behavior
+- **v2.4.0** (2025-11-13): Added per-shard RNG seed logging and documented auto-init
+  behavior
 - **v2.2.1** (2025-11-10): Introduced data-driven auto-init with open-interval clamps
 - **v2.1.0** (2025-10-31): Removed automatic NLSQ/SVI initialization (manual workflow)
 
----
+______________________________________________________________________
 
 **Next Steps:**
 

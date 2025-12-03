@@ -491,9 +491,7 @@ class ParameterSpace:
         cloned = self.copy()
         for name, prior in overrides.items():
             if name not in cloned.priors:
-                raise KeyError(
-                    f"Cannot override prior for unknown parameter '{name}'"
-                )
+                raise KeyError(f"Cannot override prior for unknown parameter '{name}'")
             cloned.priors[name] = prior
         return cloned
 
@@ -643,8 +641,13 @@ class ParameterSpace:
         new_priors: dict[str, PriorDistribution] = {}
         for param_name in self.parameter_names:
             prior = self.priors[param_name]
-            has_finite_bounds = np.isfinite(prior.min_val) and np.isfinite(prior.max_val)
-            if prior.dist_type in {"TruncatedNormal", "Uniform", "BetaScaled"} and has_finite_bounds:
+            has_finite_bounds = np.isfinite(prior.min_val) and np.isfinite(
+                prior.max_val
+            )
+            if (
+                prior.dist_type in {"TruncatedNormal", "Uniform", "BetaScaled"}
+                and has_finite_bounds
+            ):
                 alpha, beta = _compute_beta_concentrations(
                     prior.mu,
                     prior.sigma,
@@ -785,7 +788,8 @@ class ParameterSpace:
         if center_mu <= 0:
             center_mu = max(
                 1e-6,
-                (d0_bounds[0] + d0_bounds[1] + d_offset_bounds[0] + d_offset_bounds[1]) / 4.0,
+                (d0_bounds[0] + d0_bounds[1] + d_offset_bounds[0] + d_offset_bounds[1])
+                / 4.0,
             )
         center_sigma = abs(d0_prior.sigma) + abs(d_offset_prior.sigma)
         if not np.isfinite(center_sigma) or center_sigma <= 0:
@@ -798,10 +802,10 @@ class ParameterSpace:
 
         target_delta = d0_prior.mu / max(center_mu, 1e-6)
         target_delta = float(np.clip(target_delta, 1e-3, 5.0))
-        delta_loc = float(np.log(np.expm1(target_delta))) if target_delta > 1e-3 else -5.0
-        delta_scale = float(
-            max(0.5, abs(d0_prior.sigma) / max(center_mu, 1e-6))
+        delta_loc = (
+            float(np.log(np.expm1(target_delta))) if target_delta > 1e-3 else -5.0
         )
+        delta_scale = float(max(0.5, abs(d0_prior.sigma) / max(center_mu, 1e-6)))
 
         return {
             "enabled": True,

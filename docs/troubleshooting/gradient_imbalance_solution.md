@@ -1,18 +1,21 @@
 # Gradient Imbalance Solution for Laminar Flow Optimization
 
-**Date:** 2025-11-13
-**Status:** Production Ready
-**Severity:** Critical (affects all laminar flow analyses)
+**Date:** 2025-11-13 **Status:** Production Ready **Severity:** Critical (affects all
+laminar flow analyses)
 
 ## Executive Summary
 
-Laminar flow NLSQ optimizations suffer from gradient imbalance where shear parameters (`gamma_dot_t0`, `beta`, `gamma_dot_t_offset`) have gradients **100-10,000× larger** than diffusion parameters (`D0`, `alpha`, `D_offset`). This causes:
+Laminar flow NLSQ optimizations suffer from gradient imbalance where shear parameters
+(`gamma_dot_t0`, `beta`, `gamma_dot_t_offset`) have gradients **100-10,000× larger**
+than diffusion parameters (`D0`, `alpha`, `D_offset`). This causes:
 
 - ✗ **Premature convergence** - optimizer stops while shear params still need work
-- ✗ **Missing oscillations** - decay oscillations near baseline absent in fitted c2 heatmaps
+- ✗ **Missing oscillations** - decay oscillations near baseline absent in fitted c2
+  heatmaps
 - ✗ **Poor fit quality** - despite low chi-squared values
 
-**Solution:** Apply parameter-specific scaling via `x_scale_map` configuration to normalize gradient magnitudes.
+**Solution:** Apply parameter-specific scaling via `x_scale_map` configuration to
+normalize gradient magnitudes.
 
 ## Problem Diagnosis
 
@@ -31,20 +34,24 @@ gamma_dot_t_offset value=+0.000000e+00 grad=+3.469348e+08     # 12,862,000× lar
 phi0               value=-4.529225e-02 grad=-4.363216e+01     # Baseline
 ```
 
-**Key Observation:** At the point where NLSQ declared convergence, the cost function still has **steep descent directions** in the shear parameter subspace. The optimizer stopped prematurely because:
+**Key Observation:** At the point where NLSQ declared convergence, the cost function
+still has **steep descent directions** in the shear parameter subspace. The optimizer
+stopped prematurely because:
 
 1. Overall gradient norm was dominated by shear parameters
-2. Small steps in shear space looked like large steps overall
-3. Trust region constraints prevented proper convergence
-4. No oscillations could be fitted without proper shear parameter refinement
+1. Small steps in shear space looked like large steps overall
+1. Trust region constraints prevented proper convergence
+1. No oscillations could be fitted without proper shear parameter refinement
 
 ### Visual Evidence
 
 **Problem:** Fitted c2 heatmaps show smooth decay without oscillations:
+
 - `/home/wei/Documents/Projects/data/C020/homodyne_results/nlsq/c2_heatmaps_phi_4.9deg.png`
 - `/home/wei/Documents/Projects/data/C020/homodyne_results/nlsq/c2_heatmaps_phi_-5.8deg.png`
 
-**Expected:** Decay should show characteristic homodyne oscillations near baseline (key XPCS feature).
+**Expected:** Decay should show characteristic homodyne oscillations near baseline (key
+XPCS feature).
 
 ## Solution: Parameter-Specific Scaling
 
@@ -63,6 +70,7 @@ python scripts/diagnose_gradients.py --results-dir ./homodyne_results/nlsq --out
 ```
 
 **Output example:**
+
 ```
 ================================================================================
 GRADIENT DIAGNOSTIC REPORT
@@ -145,6 +153,7 @@ homodyne --config config.yaml --method nlsq
 ### Step 5: Verify Improved Fit
 
 Check fitted c2 heatmaps for:
+
 - ✓ **Decay oscillations** present near baseline
 - ✓ **Chi-squared improvement** (typically 10-50% reduction)
 - ✓ **Parameter convergence** - all params properly refined
@@ -184,11 +193,13 @@ This normalizes all parameters to have similar effective gradient magnitudes.
 ### Why This Fixes Missing Oscillations
 
 1. **Before:** Optimizer takes huge steps in shear space, tiny steps in diffusion space
+
    - Shear params overshoot/oscillate
    - Diffusion params barely move
    - Oscillations never fitted because diffusion params frozen
 
-2. **After:** Optimizer takes balanced steps in all parameter directions
+1. **After:** Optimizer takes balanced steps in all parameter directions
+
    - All params converge simultaneously
    - Fine-scale features (oscillations) properly fitted
    - Chi-squared continues decreasing until true minimum
@@ -198,17 +209,20 @@ This normalizes all parameters to have similar effective gradient magnitudes.
 ### Code Structure
 
 1. **`homodyne/optimization/gradient_diagnostics.py`** - Core diagnostic functions
+
    - `compute_gradient_norms()` - JAX autodiff gradient computation
    - `compute_optimal_x_scale()` - Compute parameter-specific scaling
    - `diagnose_gradient_imbalance()` - Full diagnostic analysis
    - `print_gradient_report()` - User-friendly reporting
 
-2. **`scripts/diagnose_gradients.py`** - CLI tool
+1. **`scripts/diagnose_gradients.py`** - CLI tool
+
    - Load NLSQ results
    - Run diagnostics
    - Save recommended config
 
-3. **`homodyne/config/templates/homodyne_laminar_flow.yaml`** - Updated template
+1. **`homodyne/config/templates/homodyne_laminar_flow.yaml`** - Updated template
+
    - Added `x_scale_map` documentation
    - Added `shear_transforms` section
    - Added `diagnostics` configuration
@@ -261,11 +275,10 @@ optimization:
 Typical results with proper x_scale:
 
 | Metric | Without x_scale | With x_scale | Improvement |
-|--------|----------------|--------------|-------------|
-| Chi-squared | 165,970 | 145,200 | 12.5% better |
-| Iterations | 50 (premature) | 120 (converged) | 2.4× more (necessary) |
-| Oscillations visible | ✗ No | ✓ Yes | Quality restored |
-| Parameter errors | 20-50% | 5-15% | 4× more accurate |
+|--------|----------------|--------------|-------------| | Chi-squared | 165,970 |
+145,200 | 12.5% better | | Iterations | 50 (premature) | 120 (converged) | 2.4× more
+(necessary) | | Oscillations visible | ✗ No | ✓ Yes | Quality restored | | Parameter
+errors | 20-50% | 5-15% | 4× more accurate |
 
 ## Validation Checklist
 
@@ -273,9 +286,9 @@ After applying x_scale fixes, verify:
 
 - [ ] Fitted c2 heatmaps show decay oscillations near baseline
 - [ ] Chi-squared value decreased compared to before
-- [ ] All parameter uncertainties reasonable (<20% of value)
+- [ ] All parameter uncertainties reasonable (\<20% of value)
 - [ ] Residuals show no systematic patterns
-- [ ] Gradient norms balanced (<10× ratio acceptable)
+- [ ] Gradient norms balanced (\<10× ratio acceptable)
 - [ ] Convergence message indicates success
 - [ ] Parameter values physically reasonable
 
@@ -300,19 +313,21 @@ if gradient_imbalance_detected():
 
 ## References
 
-1. **Gradient Check Documentation**: `docs/troubleshooting/shear_gradient_check_20251112.md`
-2. **NLSQ Package**: https://github.com/imewei/NLSQ
-3. **SciPy least_squares**: https://docs.scipy.org/doc/scipy/reference/generated/scipy.optimize.least_squares.html
-4. **Trust Region Methods**: Nocedal & Wright, "Numerical Optimization", Chapter 4
+1. **Gradient Check Documentation**:
+   `docs/troubleshooting/shear_gradient_check_20251112.md`
+1. **NLSQ Package**: https://github.com/imewei/NLSQ
+1. **SciPy least_squares**:
+   https://docs.scipy.org/doc/scipy/reference/generated/scipy.optimize.least_squares.html
+1. **Trust Region Methods**: Nocedal & Wright, "Numerical Optimization", Chapter 4
 
 ## Support
 
 For issues with gradient diagnostics:
 
 1. Check gradient diagnostic output is reasonable
-2. Verify data quality (no NaN/Inf values)
-3. Try manual x_scale values based on gradient report
-4. Report issues to: https://github.com/homodyne/homodyne/issues
+1. Verify data quality (no NaN/Inf values)
+1. Try manual x_scale values based on gradient report
+1. Report issues to: https://github.com/homodyne/homodyne/issues
 
 ## Changelog
 

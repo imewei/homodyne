@@ -13,14 +13,17 @@ ______________________________________________________________________
 
 #### Automatic XLA_FLAGS Configuration System
 
-**Automatic JAX CPU device optimization** for MCMC and NLSQ workflows with intelligent hardware detection.
+**Automatic JAX CPU device optimization** for MCMC and NLSQ workflows with intelligent
+hardware detection.
 
 **New CLI Commands:**
+
 - `homodyne-config-xla` - Utility for XLA mode configuration and status checking
   - `--mode {mcmc,mcmc-hpc,nlsq,auto}` - Set XLA device mode
   - `--show` - Display current XLA configuration and JAX devices
 
 **Features:**
+
 - **Auto-detection**: Intelligent device count based on CPU core count
   - ≤7 cores → 2 devices (small workstations)
   - 8-15 cores → 4 devices (medium workstations)
@@ -35,17 +38,21 @@ ______________________________________________________________________
 - **Automatic activation**: XLA_FLAGS set when virtual environment is activated
 - **Shell integration**: Works with bash, zsh, and fish shells
 - **Conda/Mamba support**: Auto-sources XLA configuration on environment activation
-- **Environment variable override**: `HOMODYNE_XLA_MODE` takes precedence over config file
-- **Manual override safety**: Respects existing `XLA_FLAGS` and never overwrites manual settings
+- **Environment variable override**: `HOMODYNE_XLA_MODE` takes precedence over config
+  file
+- **Manual override safety**: Respects existing `XLA_FLAGS` and never overwrites manual
+  settings
 - **Verbose mode**: `HOMODYNE_VERBOSE=1` shows XLA configuration details
 
 **New Files:**
+
 - `homodyne/cli/xla_config.py` - CLI utility for XLA configuration management
 - `homodyne/runtime/shell/activation/xla_config.bash` - Bash/Zsh activation script
 - `homodyne/runtime/shell/activation/xla_config.fish` - Fish shell activation script
 - `homodyne/runtime/shell/activation/__init__.py` - Activation module package marker
 
 **Modified Files:**
+
 - `homodyne/post_install.py` - Integrated XLA configuration into post-install workflow
   - Added `create_xla_activation_scripts()` function
   - Added `integrate_xla_with_venv_activate()` function
@@ -56,6 +63,7 @@ ______________________________________________________________________
 - `pyproject.toml` - Added `homodyne-config-xla` entry point
 
 **Integration Points:**
+
 - **homodyne-post-install**: Interactive and non-interactive XLA setup
   - `homodyne-post-install --interactive` - Prompts for XLA mode selection
   - `homodyne-post-install --xla-mode auto` - Quick XLA configuration
@@ -65,14 +73,17 @@ ______________________________________________________________________
   - uv/venv/virtualenv: Activated via modified `activate` scripts
 
 **Performance Impact:**
+
 - **MCMC (4 chains, 14-core CPU)**: 1.4x speedup with 4 devices vs single device
 - **MCMC (8 chains, 36-core HPC)**: 1.8x speedup with 8 devices vs single device
 - **NLSQ optimization**: Optimal performance with 1 device (no overhead)
 - **Auto mode**: Adapts device count automatically based on hardware
 
 **Documentation:**
+
 - Updated `README.md` with XLA Configuration section after Shell Completion
-- Updated `docs/user-guide/shell-completion.rst` with comprehensive XLA system documentation
+- Updated `docs/user-guide/shell-completion.rst` with comprehensive XLA system
+  documentation
   - Configuration modes and detection logic
   - Quick setup instructions
   - How XLA configuration works (storage, activation, JAX detection)
@@ -107,6 +118,7 @@ python -c "import jax; print(len(jax.devices()))"
 ```
 
 **See Also:**
+
 - [XLA Configuration Guide](https://homodyne.readthedocs.io/en/latest/user-guide/shell-completion.html#xla-configuration-system)
 
 ______________________________________________________________________
@@ -117,13 +129,16 @@ ______________________________________________________________________
 
 #### 🚨 GPU Support Removed - CPU-Only Architecture
 
-**CRITICAL BREAKING CHANGE**: Homodyne v2.3.0 removes all GPU acceleration support. This is a **hard break** with no migration path.
+**CRITICAL BREAKING CHANGE**: Homodyne v2.3.0 removes all GPU acceleration support. This
+is a **hard break** with no migration path.
 
 **Decision:**
+
 - **Stay on v2.2.1**: If you need GPU acceleration (last GPU-supporting version)
 - **Upgrade to v2.3.0**: For simplified CPU-only workflows on multi-core systems
 
 **Rationale:**
+
 - Simplify maintenance and reduce complexity
 - Focus on reliable HPC CPU optimization for 36/128-core nodes
 - Eliminate GPU OOM errors and CUDA compatibility issues
@@ -132,10 +147,12 @@ ______________________________________________________________________
 ### Removed
 
 #### CLI Flags
+
 - `--force-cpu` - No longer needed (CPU-only by default)
 - `--gpu-memory-fraction` - GPU memory management removed
 
 #### Configuration Keys
+
 - `hardware.force_cpu` - Removed from YAML templates
 - `hardware.gpu_memory_fraction` - Removed from YAML templates
 - `hardware.cuda_device_id` - Removed from YAML templates
@@ -146,6 +163,7 @@ ______________________________________________________________________
 **Note**: Old configs will gracefully ignore these keys (no errors).
 
 #### API Functions (homodyne.device module)
+
 - `configure_system_cuda()` - GPU device configuration
 - `detect_system_cuda()` - GPU detection
 - `get_gpu_memory_info()` - GPU memory queries
@@ -157,23 +175,28 @@ ______________________________________________________________________
 **New API**: `configure_optimal_device()` now CPU-only, no parameters needed.
 
 #### Makefile Targets
+
 - `install-jax-gpu` - GPU JAX installation
 - `gpu-check` - GPU validation
 - `test-gpu` - GPU test suite
 
 #### Examples
+
 - `examples/gpu_accelerated_optimization.py` - Deleted
 - `examples/gpu_acceleration.py` - Deleted
 
 **New Examples:**
+
 - `examples/cpu_optimization.py` - HPC CPU optimization guide
 - `examples/multi_core_batch_processing.py` - Parallel CPU workflows
 
 #### Test Infrastructure
+
 - `tests/gpu/` directory - All GPU tests removed
 - GPU test markers from pytest configuration
 
 #### Runtime Modules
+
 - `homodyne/runtime/gpu/` - Entire GPU runtime module deleted
   - `activation.py`
   - `gpu_wrapper.py`
@@ -181,9 +204,11 @@ ______________________________________________________________________
   - `activation.sh`
 
 #### Device Modules
+
 - `homodyne/device/gpu.py` - GPU device management (637 lines removed)
 
 #### Documentation Sections
+
 - GPU installation instructions from README.md
 - GPU acceleration sections from all YAML templates
 - CUDA setup guides from documentation
@@ -192,6 +217,7 @@ ______________________________________________________________________
 ### Modified
 
 #### Core Modules
+
 - `homodyne/cli/commands.py` - Removed GPU OOM fallback logic (~60 lines)
 - `homodyne/cli/args_parser.py` - Removed GPU CLI flags (~17 lines)
 - `homodyne/cli/main.py` - Removed GPU availability check function
@@ -200,17 +226,20 @@ ______________________________________________________________________
 - `homodyne/device/__init__.py` - Simplified to CPU-only device configuration
 
 #### Configuration Templates
+
 - `homodyne/config/templates/homodyne_static.yaml` - CPU-only updates
 - `homodyne/config/templates/homodyne_laminar_flow.yaml` - CPU-only updates
 - `homodyne/config/templates/homodyne_master_template.yaml` - CPU-only updates
 
 **Changes:**
+
 - Removed `gpu_acceleration` and `gpu_memory_fraction` settings
 - Removed `preferred_device` options (CPU-only now)
 - Updated platform support notes (CPU-only, all platforms)
 - Updated installation instructions (removed GPU steps)
 
 #### System Validator
+
 - `homodyne/runtime/utils/system_validator.py` - Reduced from 10 to 9 tests
   - Removed "GPU Setup" test (test #9, 124 lines)
   - Redistributed test weights (Integration: 2% → 5%)
@@ -219,23 +248,28 @@ ______________________________________________________________________
 ### Added
 
 #### CPU Optimization
+
 - Enhanced multi-core CPU support for HPC clusters
 - NUMA-aware thread allocation recommendations
 - Slurm job script examples for 36/128-core nodes
 
 #### Documentation
+
 - `docs/migration/v2.2-to-v2.3-gpu-removal.md` - Comprehensive migration guide
 - `examples/README.md` - Updated with CPU-focused examples
 - CPU optimization sections in README.md and CLAUDE.md
 
 #### Examples
+
 - `examples/cpu_optimization.py` (457 lines) - HPC CPU setup guide
+
   - Multi-core thread configuration
   - NUMA awareness
   - Slurm/PBS/LSF job scripts
   - Performance profiling
 
 - `examples/multi_core_batch_processing.py` (506 lines) - Parallel CPU workflows
+
   - ProcessPoolExecutor patterns
   - Automatic worker scaling
   - Memory-efficient batch processing
@@ -243,17 +277,20 @@ ______________________________________________________________________
 ### Changed
 
 #### Dependencies
+
 - JAX/jaxlib locked to 0.8.0 (CPU-only, exact version)
 - Removed all CUDA-related optional dependencies
 - Updated platform support: Linux/macOS/Windows (all CPU-only)
 
 #### Performance
+
 - Optimized for 14+ core CPUs (desktop/workstation)
 - HPC cluster support: 36/128-core nodes
 - Memory-efficient processing for datasets up to 100M+ points
 - No GPU OOM errors (CPU memory management more predictable)
 
 #### Platform Support
+
 - ✅ Linux: Full CPU-only support
 - ✅ macOS: Full CPU-only support (Apple Silicon + Intel)
 - ✅ Windows: Full CPU-only support
@@ -263,20 +300,24 @@ ______________________________________________________________________
 **From v2.2.x → v2.3.0:**
 
 1. **Remove GPU JAX** (if installed):
+
    ```bash
    pip uninstall -y jax jaxlib
    ```
 
-2. **Install v2.3.0**:
+1. **Install v2.3.0**:
+
    ```bash
    pip install homodyne==2.3.0
    ```
 
-3. **Update configs** (optional - graceful degradation):
+1. **Update configs** (optional - graceful degradation):
+
    - Remove `--force-cpu` and `--gpu-memory-fraction` from CLI commands
    - GPU settings in YAML files are automatically ignored
 
-4. **Verify**:
+1. **Verify**:
+
    ```bash
    python -c "import jax; print(jax.devices())"
    # Expected: [CpuDevice(id=0)]
@@ -285,6 +326,7 @@ ______________________________________________________________________
 **For GPU Users:**
 
 Stay on v2.2.1 (last GPU-supporting version):
+
 ```bash
 pip install homodyne==2.2.1
 ```
@@ -292,6 +334,7 @@ pip install homodyne==2.2.1
 ### Statistics
 
 **Code Removal:**
+
 - 5 test files deleted (tests/gpu/)
 - 8 test files modified (GPU markers removed)
 - 4 source files deleted (device/gpu.py, runtime/gpu/)
@@ -302,11 +345,13 @@ pip install homodyne==2.2.1
 - 6 configuration keys deprecated
 
 **Code Added:**
+
 - 2 new CPU-focused examples (963 lines)
 - 1 migration guide (450 lines)
 - Enhanced CPU optimization documentation
 
 **Overall Impact:**
+
 - ~2,000 lines of GPU code removed
 - ~1,400 lines of CPU optimization code added
 - Net reduction: ~600 lines
@@ -327,21 +372,30 @@ ______________________________________________________________________
 
 #### 🎯 Angle-Stratified Chunking (Critical Fix for Large Datasets)
 
-**Problem Solved:** Silent NLSQ optimization failures on datasets >1M points with per-angle scaling.
+**Problem Solved:** Silent NLSQ optimization failures on datasets >1M points with
+per-angle scaling.
 
-**Root Cause:** NLSQ's arbitrary chunking created chunks missing certain phi angles, resulting in zero gradients for per-angle parameters and silent optimization failures (0 iterations, unchanged parameters).
+**Root Cause:** NLSQ's arbitrary chunking created chunks missing certain phi angles,
+resulting in zero gradients for per-angle parameters and silent optimization failures (0
+iterations, unchanged parameters).
 
-**Solution:** Automatic data reorganization BEFORE optimization to ensure every chunk contains all phi angles.
+**Solution:** Automatic data reorganization BEFORE optimization to ensure every chunk
+contains all phi angles.
 
 **New Modules:**
-- `homodyne/optimization/stratified_chunking.py` - Core stratification engine (530 lines)
+
+- `homodyne/optimization/stratified_chunking.py` - Core stratification engine (530
+  lines)
+
   - `reorganize_data_stratified()` - Angle-stratified data reorganization
   - `sequential_per_angle_optimization()` - Fallback for extreme imbalance
   - `StratificationDiagnostics` - Performance monitoring
 
-- `homodyne/optimization/sequential_angle.py` - Sequential per-angle optimization fallback
+- `homodyne/optimization/sequential_angle.py` - Sequential per-angle optimization
+  fallback
 
 **Configuration (Auto-activates):**
+
 ```yaml
 optimization:
   stratification:
@@ -356,35 +410,46 @@ optimization:
 ```
 
 **Performance:**
-- Overhead: <1% (0.15s for 3M points)
+
+- Overhead: \<1% (0.15s for 3M points)
 - Scaling: O(n^1.01) sub-linear
 - Memory: 2x peak (temporary during reorganization)
 
 **Testing:**
+
 - 47/47 tests passing (100%)
 - Zero regressions on existing workflows
 
 **References:**
+
 - Release Notes: `docs/releases/v2.2-stratification-release-notes.md`
 - Ultra-Think Analysis: `ultra-think-20251106-012247`
 - Investigation: `docs/troubleshooting/nlsq-zero-iterations-investigation.md`
 
 #### ⚠️ CMC Per-Angle Compatibility Safeguards
 
-**Added validation** to warn users if non-stratified CMC sharding is used with per-angle scaling:
+**Added validation** to warn users if non-stratified CMC sharding is used with per-angle
+scaling:
 
 - Updated `homodyne/optimization/cmc/coordinator.py` with validation check
-- Added comprehensive troubleshooting section in `docs/troubleshooting/cmc_troubleshooting.md`
+- Added comprehensive troubleshooting section in
+  `docs/troubleshooting/cmc_troubleshooting.md`
 - Added warning in `docs/user-guide/cmc_guide.md` about stratified sharding requirement
-- Added test `test_stratified_sharding_per_angle_parameter_compatibility()` to verify angle coverage
+- Added test `test_stratified_sharding_per_angle_parameter_compatibility()` to verify
+  angle coverage
 
-**Why:** CMC always uses `per_angle_scaling=True`. Random/contiguous sharding may create shards with incomplete phi angle coverage, causing zero gradients and silent failures.
+**Why:** CMC always uses `per_angle_scaling=True`. Random/contiguous sharding may create
+shards with incomplete phi angle coverage, causing zero gradients and silent failures.
 
-**Default:** Stratified sharding (safe for per-angle scaling) is already the CMC default.
+**Default:** Stratified sharding (safe for per-angle scaling) is already the CMC
+default.
 
 ### 🎯 Per-Angle Contrast/Offset Feature
 
-Homodyne now implements **per-angle contrast and offset parameters**, allowing each scattering angle (phi) to have independent scaling parameters. This is the **physically correct behavior** as different scattering angles can have different optical properties and detector responses.
+Homodyne now implements **per-angle contrast and offset parameters**, allowing each
+scattering angle (phi) to have independent scaling parameters. This is the **physically
+correct behavior** as different scattering angles can have different optical properties
+and detector responses.
 
 ______________________________________________________________________
 
@@ -392,7 +457,8 @@ ______________________________________________________________________
 
 #### Default Behavior Change: per_angle_scaling=True
 
-**CRITICAL:** Both MCMC and NLSQ now default to per-angle scaling mode (`per_angle_scaling=True`). This is a breaking change in parameter structure and naming.
+**CRITICAL:** Both MCMC and NLSQ now default to per-angle scaling mode
+(`per_angle_scaling=True`). This is a breaking change in parameter structure and naming.
 
 **Parameter Structure Changes:**
 
@@ -438,6 +504,7 @@ parameters = [
 ```
 
 **Total Parameter Counts:**
+
 - **Static Mode (OLD)**: 5 params (2 scaling + 3 physical)
 - **Static Mode (NEW with n_phi=3)**: 9 params (6 scaling + 3 physical)
 - **Laminar Flow (OLD)**: 9 params (2 scaling + 7 physical)
@@ -491,7 +558,8 @@ def fit_nlsq_jax(
 
 **For Existing Code:**
 
-If you have code that expects global `contrast` and `offset` parameters, you have two options:
+If you have code that expects global `contrast` and `offset` parameters, you have two
+options:
 
 **Option 1: Update to Per-Angle (Recommended)**
 
@@ -541,17 +609,20 @@ assert "offset_2" in samples
 #### Rationale
 
 **Physical Correctness:**
+
 - Different scattering angles probe different length scales in the sample
 - Detector response varies across the detector surface
 - Optical path differences affect signal intensity
 - Each angle can have different contrast and baseline levels
 
 **Scientific Validation:**
+
 - Allows fitting data where different angles have genuinely different properties
 - Improves fit quality for heterogeneous samples
 - Enables detection of angle-dependent artifacts
 
 **Implementation:**
+
 - MCMC: Per-angle parameters sampled independently via NumPyro
 - NLSQ: Per-angle parameters optimized via JAX vmap
 - Closure pattern used to avoid JAX concretization errors
@@ -560,22 +631,28 @@ ______________________________________________________________________
 
 ### Added
 
-- **Per-angle scaling for MCMC**: Each phi angle has independent contrast/offset parameters
+- **Per-angle scaling for MCMC**: Each phi angle has independent contrast/offset
+  parameters
 - **Per-angle scaling for NLSQ**: Trust-region optimization with per-angle parameters
-- **Comprehensive per-angle tests**: 8 new tests covering multiple angles, independence, and backward compatibility
+- **Comprehensive per-angle tests**: 8 new tests covering multiple angles, independence,
+  and backward compatibility
   - `tests/unit/test_per_angle_scaling.py`: Full test suite for per-angle functionality
-- **JAX concretization fix**: Pre-compute phi_unique before JIT tracing to avoid abstract tracer errors
+- **JAX concretization fix**: Pre-compute phi_unique before JIT tracing to avoid
+  abstract tracer errors
   - Location: `homodyne/optimization/mcmc.py:1347-1360`
 
 ### Changed
 
-- **Default behavior**: `per_angle_scaling=True` is now the default for both MCMC and NLSQ
-- **Parameter naming**: Contrast/offset now named as `contrast_0`, `offset_0`, etc. by default
+- **Default behavior**: `per_angle_scaling=True` is now the default for both MCMC and
+  NLSQ
+- **Parameter naming**: Contrast/offset now named as `contrast_0`, `offset_0`, etc. by
+  default
 - **Test expectations**: Updated all MCMC unit tests to expect per-angle parameter names
 
 ### Fixed
 
-- **JAX concretization error**: Fixed ConcretizationTypeError when calling `jnp.unique()` inside JIT-traced MCMC model
+- **JAX concretization error**: Fixed ConcretizationTypeError when calling
+  `jnp.unique()` inside JIT-traced MCMC model
 - **MCMC model parameter structure**: Properly handles variable number of phi angles
 
 ______________________________________________________________________
@@ -584,9 +661,13 @@ ______________________________________________________________________
 
 ### 🎉 MCMC/CMC Simplification Release
 
-Homodyne v2.1.0 significantly simplifies the MCMC API by removing manual method selection and implementing automatic NUTS/CMC selection based on dataset characteristics. This release introduces **breaking changes** to the MCMC interface that require configuration updates.
+Homodyne v2.1.0 significantly simplifies the MCMC API by removing manual method
+selection and implementing automatic NUTS/CMC selection based on dataset
+characteristics. This release introduces **breaking changes** to the MCMC interface that
+require configuration updates.
 
-📖 **[Read the Migration Guide](docs/migration/v2.0-to-v2.1.md)** for step-by-step upgrade instructions.
+📖 **[Read the Migration Guide](docs/migration/v2.0-to-v2.1.md)** for step-by-step
+upgrade instructions.
 
 ______________________________________________________________________
 
@@ -595,11 +676,14 @@ ______________________________________________________________________
 #### API Changes: fit_mcmc_jax()
 
 **Removed Parameters:**
+
 - `method` (str) - No longer accepts `"nuts"`, `"cmc"`, or `"auto"` arguments
 - `initial_params` (dict) - Renamed to `initial_values`
 
 **Added Parameters:**
-- `parameter_space` (ParameterSpace | None) - Config-driven bounds and prior distributions
+
+- `parameter_space` (ParameterSpace | None) - Config-driven bounds and prior
+  distributions
 - `initial_values` (dict[str, float] | None) - Renamed from `initial_params`
 - `min_samples_for_cmc` (int, default=15) - Parallelism threshold for CMC selection
 - `memory_threshold_pct` (float, default=0.30) - Memory threshold for CMC selection
@@ -633,11 +717,13 @@ result = fit_mcmc_jax(
 #### CLI Changes
 
 **Removed CLI Flags:**
+
 - `--method nuts` → Use `--method mcmc` (automatic selection)
 - `--method cmc` → Use `--method mcmc` (automatic selection)
 - `--method auto` → Use `--method mcmc` (now default behavior)
 
 **Supported Methods (v2.1.0):**
+
 - `--method nlsq` - Nonlinear least squares optimization
 - `--method mcmc` - MCMC with automatic NUTS/CMC selection
 
@@ -713,6 +799,7 @@ homodyne --config config.yaml --method mcmc
 ```
 
 **Rationale:**
+
 - **Transparency**: Clear separation between NLSQ and MCMC methods
 - **User control**: Explicit parameter transfer ensures understanding
 - **Simplification**: Removes complex initialization logic from codebase
@@ -728,10 +815,12 @@ ______________________________________________________________________
 CMC is automatically selected when **EITHER** criterion is met:
 
 1. **Parallelism criterion**: `num_samples >= min_samples_for_cmc` (default: 15)
+
    - Triggers CMC for CPU parallelization with many independent samples
    - Example: 50 phi angles → ~3x speedup on 14-core CPU
 
-2. **Memory criterion**: `estimated_memory > memory_threshold_pct` (default: 0.30)
+1. **Memory criterion**: `estimated_memory > memory_threshold_pct` (default: 0.30)
+
    - Triggers CMC for memory management with large datasets
    - Example: 10M+ points → prevent OOM errors
 
@@ -759,11 +848,13 @@ print(f"Selection reason: {result.metadata.get('selection_decision_metadata')}")
 **New Classes:**
 
 - `ParameterSpace` class in `homodyne.config.parameter_space`
+
   - `ParameterSpace.from_config(config_dict)` - Load from YAML config
   - Stores parameter bounds and prior distributions
   - Supports TruncatedNormal, Uniform, and LogNormal priors
 
 - `ConfigManager.get_initial_parameters()` method
+
   - Loads initial values from `initial_parameters.values` in YAML
   - Falls back to mid-point of bounds: `(min + max) / 2`
   - Supports CLI overrides
@@ -789,6 +880,7 @@ result = fit_mcmc_jax(
 #### Auto-Retry Mechanism
 
 **MCMC Convergence Failures:**
+
 - Automatic retry with different random seeds (max 3 attempts)
 - Helps recover from poor initialization or transient numerical issues
 - Configurable retry limit: `max_retries` parameter
@@ -803,6 +895,7 @@ print(f"Number of retries: {result.metadata.get('num_retries')}")
 #### Enhanced Diagnostics
 
 **MCMCResult Metadata Fields:**
+
 - `method_used` - 'NUTS' or 'CMC'
 - `selection_decision_metadata` - Why NUTS/CMC was selected
 - `parameter_space_metadata` - Bounds and priors used
@@ -819,14 +912,17 @@ ______________________________________________________________________
 **Threshold Evolution:**
 
 - `min_samples_for_cmc`: 100 → 20 → **15** (October 28, 2025)
+
   - More aggressive parallelism for multi-core CPUs
   - 20-sample experiment on 14-core CPU now triggers CMC (~1.4x speedup)
 
 - `memory_threshold_pct`: 0.50 → 0.40 → **0.30** (October 28, 2025)
+
   - More conservative OOM prevention
   - Triggers CMC earlier for large datasets
 
 **Impact:**
+
 - Better CPU utilization on HPC systems (14-128 cores)
 - Safer memory management for large datasets (>1M points)
 - Hardware-adaptive decision making
@@ -834,16 +930,19 @@ ______________________________________________________________________
 #### Documentation Updates
 
 **Updated API References:**
+
 - `docs/api-reference/optimization.rst` - fit_mcmc_jax() v2.1.0 API
 - `docs/api-reference/config.rst` - ParameterSpace and ConfigManager
 - `docs/advanced-topics/mcmc-uncertainty.rst` - v2.1.0 workflow changes
 
 **New Documentation:**
+
 - `docs/migration/v2.0-to-v2.1.md` - Comprehensive migration guide
 - YAML configuration examples with v2.1.0 structure
 - API reference for ParameterSpace class
 
 **Updated Architecture Docs:**
+
 - `docs/architecture/cmc-dual-mode-strategy.md` - Updated thresholds
 - `CLAUDE.md` - v2.1.0 changes and workflows
 
@@ -853,7 +952,8 @@ ______________________________________________________________________
 
 **No Deprecation Warnings (Hard Break):**
 
-The following features were removed without deprecation warnings due to acknowledged breaking change:
+The following features were removed without deprecation warnings due to acknowledged
+breaking change:
 
 - `method` parameter in `fit_mcmc_jax()`
 - `initial_params` parameter (use `initial_values`)
@@ -867,11 +967,13 @@ ______________________________________________________________________
 ### Removed
 
 **Automatic Initialization:**
+
 - No automatic NLSQ/SVI initialization before MCMC
 - Removed `run_nlsq_init`, `use_svi`, `svi_steps`, `svi_timeout` config options
 - Manual workflow required for NLSQ → MCMC transfer
 
 **Method Selection:**
+
 - Removed manual NUTS/CMC/auto method specification
 - All method selection is now automatic based on dual criteria
 
@@ -880,11 +982,13 @@ ______________________________________________________________________
 ### Fixed
 
 **MCMC Numerical Stability:**
+
 - Improved convergence with auto-retry mechanism
 - Better handling of poor initialization
 - Enhanced error messages with recovery suggestions
 
 **Configuration Validation:**
+
 - Better error messages for missing parameter_space
 - Validation of prior distribution types
 - Clear warnings when initial_values not provided
@@ -894,11 +998,13 @@ ______________________________________________________________________
 ### Performance
 
 **CMC Optimization:**
+
 - 20-sample experiment on 14-core CPU: ~1.4x speedup (CMC vs NUTS)
 - 50-sample experiment on 14-core CPU: ~3x speedup (CMC vs NUTS)
 - Large datasets (>1M points): ~30% memory threshold prevents OOM
 
 **Auto-Retry Overhead:**
+
 - Typical: 0 retries (no overhead)
 - Poor initialization: 1-2 retries (~2-4x initial warmup time)
 - Max 3 retries before failure
@@ -908,11 +1014,13 @@ ______________________________________________________________________
 ### Testing
 
 **New Tests:**
+
 - `tests/mcmc/test_mcmc_simplified.py` - Simplified API tests
 - `tests/integration/test_mcmc_simplified_workflow.py` - Workflow tests
 - `tests/unit/test_cli_args.py` - CLI argument validation
 
 **Test Coverage:**
+
 - Automatic selection logic (15 test cases)
 - Configuration-driven parameter management (8 test cases)
 - Auto-retry mechanism (5 test cases)
@@ -923,12 +1031,15 @@ ______________________________________________________________________
 ### Migration Resources
 
 **Documentation:**
+
 - [Migration Guide](docs/migration/v2.0-to-v2.1.md) - Step-by-step upgrade instructions
 - [API Reference](docs/api-reference/optimization.rst) - Updated fit_mcmc_jax() docs
-- [Configuration Guide](docs/api-reference/config.rst) - ParameterSpace and YAML structure
+- [Configuration Guide](docs/api-reference/config.rst) - ParameterSpace and YAML
+  structure
 - [CLAUDE.md](CLAUDE.md) - Developer guide with v2.1.0 workflows
 
 **Support:**
+
 - GitHub Issues: https://github.com/imewei/homodyne/issues
 - Migration Questions: Tag with `migration-v2.1`
 
@@ -940,17 +1051,23 @@ ______________________________________________________________________
 
 #### **Critical: CMC Memory Threshold Optimization (OOM Prevention)**
 
-- ✅ **Fixed MCMC Out-of-Memory (OOM) Errors** - Corrected memory estimation for NUTS MCMC
-  - **Sample threshold:** 20 → **15** (optimized for 14-core CPUs, 1.07 samples/core minimum)
+- ✅ **Fixed MCMC Out-of-Memory (OOM) Errors** - Corrected memory estimation for NUTS
+  MCMC
+
+  - **Sample threshold:** 20 → **15** (optimized for 14-core CPUs, 1.07 samples/core
+    minimum)
   - **Memory threshold:** 40% → **30%** (conservative OOM prevention with safety margin)
   - **Memory multiplier:** 6x → **30x** (empirically calibrated from real OOM failure)
 
 - ✅ **Root Cause** - Previous formula underestimated NUTS memory by 5x
+
   - Old estimate: 23M points → 1.1 GB (6x multiplier) → 6.9% of 16 GB → "safe" ❌
   - Actual usage: 23M points → 12-14 GB → **CUDA OOM error**
-  - New estimate: 23M points → 5.5 GB (30x multiplier) → 34.5% of 16 GB → CMC triggered ✓
+  - New estimate: 23M points → 5.5 GB (30x multiplier) → 34.5% of 16 GB → CMC triggered
+    ✓
 
 - ✅ **Memory Multiplier Components** (30x total)
+
   - Data arrays: 1x
   - Gradients (9 parameters): 9x
   - NUTS trajectory tree (10+ leapfrog steps): 15x
@@ -958,34 +1075,42 @@ ______________________________________________________________________
   - MCMC state (position, momentum): 2x
 
 - ✅ **Validation** - Correctly triggers CMC for problematic datasets
+
   - 23 samples × 1M points = 23M → CMC (both sample≥15 AND memory>30%) ✓
   - Prevents OOM on 16 GB GPUs
   - Maintains GPU performance for small datasets (< 15 samples, < 30% memory)
 
 **Impact**:
+
 - **OOM prediction accuracy:** 5x improvement
 - **Sample criterion:** 15-19 sample datasets now use CMC (better CPU parallelization)
 - **Memory safety:** 30% threshold provides margin for OS/driver overhead (~2 GB)
 
 **Files Modified**:
+
 - `homodyne/device/config.py` - Updated `should_use_cmc()` defaults and formula
 
 ### Added
 
 #### **Architecture Documentation**
 
-- ✅ **Comprehensive Architecture Documentation** - New architecture documentation section in Sphinx
+- ✅ **Comprehensive Architecture Documentation** - New architecture documentation
+  section in Sphinx
   - `docs/architecture.rst` - Central architecture documentation hub
   - `docs/architecture/README.md` - Navigation and overview
   - `docs/architecture/cmc-dual-mode-strategy.md` - CMC design (3,500+ words)
   - `docs/architecture/cmc-decision-quick-reference.md` - Quick CMC reference
   - `docs/architecture/nuts-chain-parallelization.md` - NUTS chains (4,000+ words)
-  - `docs/architecture/nuts-chain-parallelization-quick-reference.md` - Quick NUTS reference
+  - `docs/architecture/nuts-chain-parallelization-quick-reference.md` - Quick NUTS
+    reference
 - ✅ **Integrated into Sphinx** - New "Architecture" section in documentation
-- ✅ **Cross-References Added** - Updated CMC and MCMC advanced topics to link to architecture docs
-- ✅ **Built HTML Documentation** - All architecture pages successfully built and accessible
+- ✅ **Cross-References Added** - Updated CMC and MCMC advanced topics to link to
+  architecture docs
+- ✅ **Built HTML Documentation** - All architecture pages successfully built and
+  accessible
 
 **Topics Covered**:
+
 - CMC dual-criteria decision logic (parallelism OR memory)
 - NUTS chain parallelization (CPU parallel, GPU sequential, multi-GPU parallel)
 - Platform-specific execution modes and performance characteristics
@@ -996,66 +1121,98 @@ ______________________________________________________________________
 
 #### **MCMC NLSQ Initialization** - Removed automatic NLSQ execution before MCMC (2025-11-03)
 
-- ✅ **Fixed MCMC incorrectly running NLSQ initialization** - Properly implements v2.1.0 breaking change #3
-  - Previous: `--method mcmc` was still running "NLSQ pre-optimization for MCMC initialization" despite v2.1.0 removal
-  - Root cause: Code in `commands.py:1176` read `run_nlsq_init` from removed `mcmc.initialization` config section, defaulting to `True`
-  - Fix: Removed entire 67-line NLSQ initialization block, replaced with direct `initial_params = None` assignment
-  - Impact: MCMC now starts immediately with physics-informed priors from `ParameterSpace` as documented
+- ✅ **Fixed MCMC incorrectly running NLSQ initialization** - Properly implements v2.1.0
+  breaking change #3
 
-- ✅ **Simplified CLI workflow** - MCMC initialization behavior now matches v2.1.0 specification
+  - Previous: `--method mcmc` was still running "NLSQ pre-optimization for MCMC
+    initialization" despite v2.1.0 removal
+  - Root cause: Code in `commands.py:1176` read `run_nlsq_init` from removed
+    `mcmc.initialization` config section, defaulting to `True`
+  - Fix: Removed entire 67-line NLSQ initialization block, replaced with direct
+    `initial_params = None` assignment
+  - Impact: MCMC now starts immediately with physics-informed priors from
+    `ParameterSpace` as documented
+
+- ✅ **Simplified CLI workflow** - MCMC initialization behavior now matches v2.1.0
+  specification
+
   - No automatic NLSQ execution before MCMC
-  - Users must manually run NLSQ first if initialization desired (NLSQ → copy results → update YAML → MCMC)
+  - Users must manually run NLSQ first if initialization desired (NLSQ → copy results →
+    update YAML → MCMC)
   - Physics-informed priors from `ParameterSpace` used directly for MCMC sampling
 
 **Files Modified**:
-- `homodyne/cli/commands.py` (lines 1171-1185, 1217) - Removed NLSQ initialization block and updated comments
+
+- `homodyne/cli/commands.py` (lines 1171-1185, 1217) - Removed NLSQ initialization block
+  and updated comments
 
 **Verification**: `/tmp/verify_mcmc_no_nlsq.py` and `/tmp/mcmc_nlsq_init_fix_report.md`
 
 #### **CMC Pipeline Errors** - Critical bug fixes enabling CMC execution
 
-- ✅ **Fixed CMC shard validation** - Corrected data point counting to use total across all shards instead of per-shard
-  - Previous: Validation failed with "Total data points in shards (1002001) != original (23046023)"
+- ✅ **Fixed CMC shard validation** - Corrected data point counting to use total across
+  all shards instead of per-shard
+
+  - Previous: Validation failed with "Total data points in shards (1002001) != original
+    (23046023)"
   - Root cause: Summing shard['data'].shape instead of counting across all shards
   - Fix: Calculate `sum(len(shard['data']) for shard in shards)`
   - Impact: CMC now correctly validates 23 shards with 1M points each = 23M total
 
-- ✅ **Added data flattening before sharding** - Ensured coordinator receives flattened 1D arrays
+- ✅ **Added data flattening before sharding** - Ensured coordinator receives flattened
+  1D arrays
+
   - Previous: Sharding failed with multi-dimensional array shape errors
-  - Fix: Added explicit flattening in coordinator before calling `shard_data_stratified()`
+  - Fix: Added explicit flattening in coordinator before calling
+    `shard_data_stratified()`
   - Flattens: data, t1, t2, phi arrays to 1D before sharding
   - Impact: CMC sharding now works with any data shape
 
 - ✅ **Made sigma optional in SVI pooling** - Removed hardcoded sigma requirement
+
   - Previous: "Shard 0 missing required key 'sigma'" even when sigma not provided
   - Fix: Split keys into required ['data', 't1', 't2', 'phi'] and optional ['sigma']
   - Impact: SVI initialization works with or without uncertainty estimates
 
-- ✅ **Fixed NumPyro model creation for SVI** - Properly instantiated model with pooled data
-  - Previous: "_create_numpyro_model() missing 8 required positional arguments"
+- ✅ **Fixed NumPyro model creation for SVI** - Properly instantiated model with pooled
+  data
+
+  - Previous: "\_create_numpyro_model() missing 8 required positional arguments"
   - Root cause: Coordinator called model creation with only analysis_mode
-  - Fix: Create model with full signature: data, sigma, t1, t2, phi, q, L, analysis_mode, parameter_space, initial_params
+  - Fix: Create model with full signature: data, sigma, t1, t2, phi, q, L,
+    analysis_mode, parameter_space, initial_params
   - Added: ParameterSpace creation, sigma estimation if missing, q/L to pooled_data
   - Impact: NumPyro model function successfully created for SVI
 
 - ✅ **Fixed SVI timeout parameter name** - Corrected parameter mismatch
+
   - Previous: "run_svi_initialization() got an unexpected keyword argument 'timeout'"
   - Fix: Changed `timeout` → `timeout_minutes` with seconds-to-minutes conversion
   - Impact: SVI initialization accepts timeout configuration
 
-- ✅ **Fixed SVI model interface** - Removed incorrect model_args passing to closure-based model
+- ✅ **Fixed SVI model interface** - Removed incorrect model_args passing to
+  closure-based model
+
   - Previous: "homodyne_model() takes 0 positional arguments but 7 were given"
-  - Root cause: `_create_numpyro_model()` returns a closure that captures data internally, but SVI was passing 7 runtime arguments
-  - Fix: Removed `model_args` extraction and passing from `svi.init()` and `svi.update()` calls
-  - Changed: `svi.init(rng_key, *model_args)` → `svi.init(rng_key)` and `svi.update(svi_state, *model_args)` → `svi.update(svi_state)`
-  - Impact: SVI initialization and optimization now work correctly with closure-based NumPyro models
+  - Root cause: `_create_numpyro_model()` returns a closure that captures data
+    internally, but SVI was passing 7 runtime arguments
+  - Fix: Removed `model_args` extraction and passing from `svi.init()` and
+    `svi.update()` calls
+  - Changed: `svi.init(rng_key, *model_args)` → `svi.init(rng_key)` and
+    `svi.update(svi_state, *model_args)` → `svi.update(svi_state)`
+  - Impact: SVI initialization and optimization now work correctly with closure-based
+    NumPyro models
 
 **Files Modified**:
-- `homodyne/optimization/cmc/coordinator.py` - Data flattening, model creation, timeout fix
-- `homodyne/optimization/cmc/svi_init.py` - Optional sigma handling, SVI model interface fix
+
+- `homodyne/optimization/cmc/coordinator.py` - Data flattening, model creation, timeout
+  fix
+- `homodyne/optimization/cmc/svi_init.py` - Optional sigma handling, SVI model interface
+  fix
 - `homodyne/optimization/cmc/sharding.py` - Fixed total data point counting
 
 **Pipeline Status**:
+
 - ✅ Step 1: Data sharding (23 shards created)
 - ✅ Step 2: SVI pooling (4600 samples pooled)
 - ✅ Step 2: Model creation (NumPyro model instantiated)

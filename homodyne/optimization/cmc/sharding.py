@@ -73,7 +73,8 @@ Scott et al. (2016): "Bayes and big data: the consensus Monte Carlo algorithm"
 https://arxiv.org/abs/1411.7435
 """
 
-from typing import Dict, List, Literal, Tuple, Any
+from typing import Any
+
 import numpy as np
 from scipy import stats
 
@@ -265,7 +266,7 @@ def shard_data_random(
     L: float,
     sigma: np.ndarray = None,
     random_seed: int = 42,
-) -> List[Dict[str, np.ndarray]]:
+) -> list[dict[str, np.ndarray]]:
     """Create data shards using random assignment strategy.
 
     Randomly assigns datapoints to shards, ensuring balanced shard sizes
@@ -378,7 +379,7 @@ def shard_data_stratified(
     L: float,
     sigma: np.ndarray = None,
     seed_base: int = 0,
-) -> List[Dict[str, np.ndarray]]:
+) -> list[dict[str, np.ndarray]]:
     """Create data shards using stratified assignment strategy (PRIMARY).
 
     Sorts data by phi angle and assigns every Nth point to each shard using
@@ -488,7 +489,7 @@ def shard_data_stratified(
         for local_rank, idx in enumerate(angle_indices):
             shard_indices_list[local_rank % num_shards].append(idx)
 
-    shards: List[Dict[str, np.ndarray]] = []
+    shards: list[dict[str, np.ndarray]] = []
     for i, shard_indices in enumerate(shard_indices_list):
         shard_idx = np.array(sorted(shard_indices))
         shard = {
@@ -528,7 +529,7 @@ def shard_data_contiguous(
     q: float,
     L: float,
     sigma: np.ndarray = None,
-) -> List[Dict[str, np.ndarray]]:
+) -> list[dict[str, np.ndarray]]:
     """Create data shards using contiguous assignment strategy.
 
     Splits data along the flattened time dimension, preserving temporal
@@ -646,13 +647,13 @@ def shard_data_contiguous(
 
 
 def validate_shards(
-    shards: List[Dict[str, np.ndarray]],
+    shards: list[dict[str, np.ndarray]],
     original_dataset_size: int,
     min_shard_size: int = 10_000,
     max_size_imbalance_pct: float = 0.10,
     validate_phi_distribution: bool = True,
     ks_test_threshold: float = 0.05,
-) -> Tuple[bool, Dict[str, Any]]:
+) -> tuple[bool, dict[str, Any]]:
     """Validate shard integrity and quality.
 
     Performs comprehensive validation of sharding results to ensure:

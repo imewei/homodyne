@@ -208,11 +208,16 @@ def create_xla_activation_scripts(venv_path):
     try:
         # Find homodyne package to copy activation scripts
         import homodyne
+
         homodyne_pkg = Path(homodyne.__file__).parent
 
         # Source XLA activation scripts
-        xla_bash_src = homodyne_pkg / "runtime" / "shell" / "activation" / "xla_config.bash"
-        xla_fish_src = homodyne_pkg / "runtime" / "shell" / "activation" / "xla_config.fish"
+        xla_bash_src = (
+            homodyne_pkg / "runtime" / "shell" / "activation" / "xla_config.bash"
+        )
+        xla_fish_src = (
+            homodyne_pkg / "runtime" / "shell" / "activation" / "xla_config.fish"
+        )
 
         if not xla_bash_src.exists() or not xla_fish_src.exists():
             print("   ⚠️  XLA activation scripts not found in homodyne package")
@@ -285,7 +290,9 @@ fi
                 print(f"   ℹ️  XLA config already integrated with {bash_activate.name}")
 
         except Exception as e:
-            print(f"   ⚠️  Could not integrate XLA config with {bash_activate.name}: {e}")
+            print(
+                f"   ⚠️  Could not integrate XLA config with {bash_activate.name}: {e}"
+            )
 
     # Fish activation integration
     fish_activate = bin_dir / "activate.fish"
@@ -311,7 +318,9 @@ end
                 print(f"   ℹ️  XLA config already integrated with {fish_activate.name}")
 
         except Exception as e:
-            print(f"   ⚠️  Could not integrate XLA config with {fish_activate.name}: {e}")
+            print(
+                f"   ⚠️  Could not integrate XLA config with {fish_activate.name}: {e}"
+            )
 
     return modified_scripts
 
@@ -330,7 +339,7 @@ def configure_xla_mode(xla_mode=None):
     bool
         True if configuration succeeded, False otherwise
     """
-    from homodyne.cli.xla_config import VALID_MODES, set_mode, CONFIG_FILE
+    from homodyne.cli.xla_config import VALID_MODES, set_mode
 
     if xla_mode is None:
         print("\n🔧 XLA Configuration")
@@ -614,9 +623,7 @@ def interactive_setup():
     print("   - Modes: mcmc (4 devices), mcmc-hpc (8 devices), nlsq (1 device), auto")
     print("   - Essential for MCMC parallelization and optimal CPU usage")
 
-    configure_xla = (
-        input("   Configure XLA_FLAGS? [Y/n]: ").lower() != "n"
-    )
+    configure_xla = input("   Configure XLA_FLAGS? [Y/n]: ").lower() != "n"
 
     xla_mode = None
     if configure_xla:

@@ -727,7 +727,7 @@ class AdvancedMemoryManager:
                 # CRITICAL FIX (Nov 10, 2025): jax.clear_backends() removed in JAX 0.4.0+
                 # Use jax.clear_caches() for JAX 0.8.0 compatibility
                 # This clears JIT compilation cache and helps release device memory
-                if hasattr(jax, 'clear_caches'):
+                if hasattr(jax, "clear_caches"):
                     jax.clear_caches()
                     logger.debug("Cleared JAX compilation cache")
                 else:

@@ -11,8 +11,6 @@ Date: 2025-10-24
 
 import numpy as np
 
-from homodyne.optimization.mcmc import fit_mcmc_jax
-
 
 def demo_automatic_selection():
     """Demonstrate automatic method selection (v2.1.0)."""
@@ -89,11 +87,11 @@ def demo_forced_cmc():
 
     print("\nCMC Configuration (v2.1.0):")
     mcmc_config = {
-        'num_warmup': 1000,
-        'num_samples': 2000,
-        'min_samples_for_cmc': 15,           # Parallelism threshold
-        'memory_threshold_pct': 0.30,        # Memory threshold
-        'dense_mass_matrix': False,          # Efficiency for large datasets
+        "num_warmup": 1000,
+        "num_samples": 2000,
+        "min_samples_for_cmc": 15,  # Parallelism threshold
+        "memory_threshold_pct": 0.30,  # Memory threshold
+        "dense_mass_matrix": False,  # Efficiency for large datasets
     }
 
     print("  - min_samples_for_cmc: 15 (configurable)")
@@ -144,17 +142,25 @@ def demo_result_inspection():
     print("✅ if result.is_cmc_result():")
     print("       print(f'Used CMC with {result.num_shards} shards')")
     print("       print(f'Combination: {result.combination_method}')")
-    print("       print(f'Converged: {result.cmc_diagnostics[\"n_shards_converged\"]}')")
+    print(
+        "       print(f'Converged: {result.cmc_diagnostics[\"n_shards_converged\"]}')"
+    )
     print("   else:")
     print("       print('Used standard NUTS')")
     print("       print(f'Acceptance rate: {result.acceptance_rate}')")
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     print("\n")
     print("╔" + "=" * 68 + "╗")
     print("║" + " " * 68 + "║")
-    print("║" + "  v2.1.0: MCMC with Automatic NUTS/CMC Selection - Demonstrations  ".center(68) + "║")
+    print(
+        "║"
+        + "  v2.1.0: MCMC with Automatic NUTS/CMC Selection - Demonstrations  ".center(
+            68
+        )
+        + "║"
+    )
     print("║" + " " * 68 + "║")
     print("╚" + "=" * 68 + "╝")
     print()

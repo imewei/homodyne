@@ -1,52 +1,56 @@
 # Performance Tuning Guide
 
-**Version:** 3.0 (NLSQ API Alignment)
-**Date:** October 2025
-**Audience:** Advanced users, HPC administrators, production pipelines
+**Version:** 3.0 (NLSQ API Alignment) **Date:** October 2025 **Audience:** Advanced
+users, HPC administrators, production pipelines
 
----
+______________________________________________________________________
 
 ## Table of Contents
 
 1. [Overview](#overview)
-2. [Memory Optimization](#memory-optimization)
-3. [Batch Size Selection](#batch-size-selection)
-4. [Checkpoint Frequency](#checkpoint-frequency)
-5. [Fast Mode Usage](#fast-mode-usage)
-6. [HPC Optimization](#hpc-optimization)
-7. [GPU Acceleration](#gpu-acceleration)
-8. [Profiling and Benchmarking](#profiling-and-benchmarking)
+1. [Memory Optimization](#memory-optimization)
+1. [Batch Size Selection](#batch-size-selection)
+1. [Checkpoint Frequency](#checkpoint-frequency)
+1. [Fast Mode Usage](#fast-mode-usage)
+1. [HPC Optimization](#hpc-optimization)
+1. [GPU Acceleration](#gpu-acceleration)
+1. [Profiling and Benchmarking](#profiling-and-benchmarking)
 
----
+______________________________________________________________________
 
 ## Overview
 
-Homodyne v3.0 provides multiple optimization levers for tuning performance across different hardware configurations and use cases.
+Homodyne v3.0 provides multiple optimization levers for tuning performance across
+different hardware configurations and use cases.
 
 **Performance Goals:**
+
 - **Memory:** Constant usage for STREAMING mode (< 2 GB regardless of dataset size)
 - **Throughput:** > 380k points/second for STREAMING
 - **Overhead:** < 5% with full fault tolerance, < 1% in fast mode
 - **Checkpoint time:** < 2 seconds per save
 
 **Key Trade-offs:**
+
 - **Memory vs Speed:** Larger batches = faster but more memory
 - **Robustness vs Speed:** Validation adds ~0.5% overhead
 - **Disk vs Runtime:** More checkpoints = better fault tolerance but slower
 
----
+______________________________________________________________________
 
 ## Memory Optimization
 
 ### Understanding Memory Requirements
 
 **Memory Components:**
+
 1. **Data arrays:** `n_points × 8 bytes` (float64)
-2. **Jacobian matrix:** `n_points × n_parameters × 8 bytes`
-3. **Hessian matrix:** `n_parameters² × 8 bytes` (negligible)
-4. **Overhead:** 2× multiplier for temporary arrays and JAX compilation
+1. **Jacobian matrix:** `n_points × n_parameters × 8 bytes`
+1. **Hessian matrix:** `n_parameters² × 8 bytes` (negligible)
+1. **Overhead:** 2× multiplier for temporary arrays and JAX compilation
 
 **Formula:**
+
 ```python
 memory_gb = (data + jacobian + overhead) / (1024³)
          = (n_points × 8 + n_points × n_parameters × 8) × 2 / (1024³)
@@ -54,6 +58,7 @@ memory_gb = (data + jacobian + overhead) / (1024³)
 ```
 
 **Examples:**
+
 - 1M points, 5 params: ~0.09 GB
 - 10M points, 9 params: ~1.5 GB
 - 100M points, 9 params: ~15 GB
@@ -62,11 +67,9 @@ memory_gb = (data + jacobian + overhead) / (1024³)
 ### Strategy-Specific Memory Usage
 
 | Strategy | Memory Scaling | Example (10M pts, 9 params) |
-|----------|----------------|------------------------------|
-| STANDARD | Linear | ~3.0 GB (2.5× data size) |
-| LARGE | Linear | ~2.4 GB (memory optimized) |
-| CHUNKED | Linear | ~2.8 GB (progress overhead) |
-| STREAMING | **Constant** | ~1.8 GB (batch-based) |
+|----------|----------------|------------------------------| | STANDARD | Linear | ~3.0
+GB (2.5× data size) | | LARGE | Linear | ~2.4 GB (memory optimized) | | CHUNKED | Linear
+| ~2.8 GB (progress overhead) | | STREAMING | **Constant** | ~1.8 GB (batch-based) |
 
 ### Memory Optimization Techniques
 
@@ -81,11 +84,13 @@ performance:
 ```
 
 **When to Use:**
+
 - Shared HPC nodes with limited RAM per job
 - Running multiple homodyne instances concurrently
 - Desktop machines with < 8 GB RAM
 
 **Impact:**
+
 - **Memory:** Reduced proportionally (4 GB → 2 GB saves 50%)
 - **Speed:** ~10-20% slower due to more batches
 - **Quality:** No change (same total data processed)
@@ -120,6 +125,7 @@ jax.clear_caches()  # Free compilation cache memory
 ```
 
 **When to Use:**
+
 - After large optimizations before starting new one
 - When running many different parameter configurations
 - Memory pressure detected (swap usage high)
@@ -143,10 +149,11 @@ print(f"Memory after: {get_memory_usage():.2f} GB")
 ```
 
 **Expected for STREAMING:**
+
 - Variation < 20% across batches (coefficient of variation)
 - Peak < 2× average (2× safety margin in estimates)
 
----
+______________________________________________________________________
 
 ## Batch Size Selection
 
@@ -167,20 +174,19 @@ print(f"Optimal batch size: {config['batch_size']}")
 ```
 
 **Algorithm:**
+
 1. Detect available memory via `psutil`
-2. Calculate Jacobian memory: `batch_size × n_parameters × 8 bytes`
-3. Target 10% of available memory
-4. Bound between 1,000 and 100,000
-5. Round to nearest 1,000
+1. Calculate Jacobian memory: `batch_size × n_parameters × 8 bytes`
+1. Target 10% of available memory
+1. Bound between 1,000 and 100,000
+1. Round to nearest 1,000
 
 **Typical Results:**
 
 | Available RAM | 5 Params | 9 Params | 20 Params |
-|---------------|----------|----------|-----------|
-| 1 GB | 12,000 | 10,000 | 5,000 |
-| 8 GB | 90,000 | 50,000 | 25,000 |
-| 32 GB | 100,000 | 100,000 | 100,000 |
-| 64 GB | 100,000 | 100,000 | 100,000 |
+|---------------|----------|----------|-----------| | 1 GB | 12,000 | 10,000 | 5,000 | |
+8 GB | 90,000 | 50,000 | 25,000 | | 32 GB | 100,000 | 100,000 | 100,000 | | 64 GB |
+100,000 | 100,000 | 100,000 |
 
 (Capped at 100,000 for efficiency)
 
@@ -200,19 +206,22 @@ result = wrapper.fit(..., config=config)
 ```
 
 **When to Override:**
+
 1. **GPU Memory Constraints:** Smaller batches for limited VRAM
-2. **Benchmark Tuning:** Find optimal size for your hardware
-3. **Debugging:** Smaller batches for easier troubleshooting
+1. **Benchmark Tuning:** Find optimal size for your hardware
+1. **Debugging:** Smaller batches for easier troubleshooting
 
 ### Batch Size Trade-offs
 
 **Small Batches (< 10k):**
+
 - ✅ Lower memory usage
 - ✅ More frequent checkpoints (finer granularity)
 - ❌ More batches → more overhead (~15-25% slower)
 - ❌ More function calls → more compilation time
 
 **Large Batches (> 50k):**
+
 - ✅ Fewer batches → faster overall (~10-20% faster)
 - ✅ Better vectorization on GPU
 - ❌ Higher memory usage
@@ -249,6 +258,7 @@ for batch_size in [5000, 10000, 20000, 50000, 100000]:
 ```
 
 **Example Output:**
+
 ```
 Batch 5000:   320s, 1.2 GB
 Batch 10000:  280s, 1.5 GB
@@ -257,18 +267,20 @@ Batch 50000:  235s, 3.1 GB
 Batch 100000: 230s, 5.8 GB  ← Faster but much more memory
 ```
 
----
+______________________________________________________________________
 
 ## Checkpoint Frequency
 
 ### Understanding Checkpoint Overhead
 
 **Checkpoint Save Time:**
+
 - **Target:** < 2 seconds (spec requirement)
 - **Typical:** 0.2-1.5 seconds for 5-9 parameters
 - **Warning if:** > 2 seconds (logged automatically)
 
 **Overhead Calculation:**
+
 ```
 Total overhead = (num_batches / checkpoint_frequency) × checkpoint_save_time
 Example: (100 batches / 10 frequency) × 0.5s = 5s total overhead
@@ -278,17 +290,20 @@ Relative: 5s / 300s total = 1.7% overhead
 ### Frequency Selection Guidelines
 
 **High Frequency (save every 5-10 batches):**
+
 - ✅ Fine-grained resume (lose < 1 minute of work)
 - ✅ Better fault tolerance
 - ❌ Higher overhead (~2-3%)
 - ❌ More disk I/O
 
 **Medium Frequency (save every 10-20 batches):**
+
 - ✅ Balanced overhead (~1-2%)
 - ✅ Acceptable resume granularity (lose < 5 minutes)
 - ✅ **Recommended for most users**
 
 **Low Frequency (save every 50-100 batches):**
+
 - ✅ Minimal overhead (< 0.5%)
 - ❌ Coarse resume (lose 10+ minutes of work)
 - ❌ Only worthwhile if checkpoint saves are slow
@@ -326,6 +341,7 @@ manager = CheckpointManager(
 ```
 
 **Trade-offs:**
+
 - **Save time:** 30-50% faster
 - **File size:** 2-3× larger (10 MB → 30 MB typical)
 - **Disk I/O:** May be slower on HDDs (SSDs unaffected)
@@ -335,11 +351,13 @@ manager = CheckpointManager(
 #### 2. Use SSD for Checkpoints
 
 **HDD Performance:**
+
 - Sequential write: 100-150 MB/s
 - Random write: 1-5 MB/s
 - Checkpoint save: 1-3 seconds
 
 **SSD Performance:**
+
 - Sequential write: 500-3500 MB/s
 - Random write: 50-500 MB/s
 - Checkpoint save: 0.1-0.5 seconds
@@ -363,29 +381,33 @@ optimization:
 ```
 
 **Benefits:**
+
 - Save time: < 50 ms (40× faster than HDD)
 - Zero disk I/O
 - Minimal overhead
 
 **Limitations:**
+
 - Lost on crash/reboot (not fault-tolerant)
 - Limited size (typically 1-4 GB)
 - Only useful for short-term jobs
 
----
+______________________________________________________________________
 
 ## Fast Mode Usage
 
 ### Understanding Fast Mode
 
 **Fast Mode Disables:**
+
 1. Numerical validation at 3 critical points:
    - Gradient NaN/Inf checks
    - Parameter NaN/Inf checks
    - Loss NaN/Inf checks
-2. Bounds violation warnings
+1. Bounds violation warnings
 
 **Fast Mode Preserves:**
+
 - Error recovery mechanisms
 - Batch statistics tracking
 - Checkpoint functionality
@@ -393,13 +415,12 @@ optimization:
 
 ### Performance Impact
 
-| Mode | Overhead | Features |
-|------|----------|----------|
-| Full validation | ~0.5% | All NaN/Inf checks |
-| Fast mode | < 0.1% | Validation disabled |
-| **Difference** | **~0.4%** | **Negligible** |
+| Mode | Overhead | Features | |------|----------|----------| | Full validation | ~0.5%
+| All NaN/Inf checks | | Fast mode | < 0.1% | Validation disabled | | **Difference** |
+**~0.4%** | **Negligible** |
 
 **Example (200M points, 10 minutes total):**
+
 - Full validation: 600 seconds
 - Fast mode: 597 seconds
 - **Savings: 3 seconds** (0.5%)
@@ -407,31 +428,39 @@ optimization:
 ### When to Use Fast Mode
 
 ✅ **Use Fast Mode When:**
+
 1. **Production Pipelines:**
+
    - Data quality pre-validated
    - Workflow stable and tested
    - Every second counts
 
-2. **High-Throughput Processing:**
+1. **High-Throughput Processing:**
+
    - Processing hundreds of datasets
    - Minimal overhead critical
 
-3. **Validated Workflows:**
+1. **Validated Workflows:**
+
    - Parameter bounds well-characterized
    - Model function numerically stable
    - No history of NaN/Inf issues
 
 ❌ **Avoid Fast Mode When:**
+
 1. **Development/Debugging:**
+
    - New model functions
    - Untested parameter ranges
    - Exploratory analysis
 
-2. **Noisy Data:**
+1. **Noisy Data:**
+
    - Data quality unknown
    - Potential for extreme values
 
-3. **New Workflows:**
+1. **New Workflows:**
+
    - First time analyzing dataset
    - Testing new configurations
 
@@ -472,7 +501,7 @@ print(f"Validation overhead: {overhead:.2f}%")
 # Expected: 0.3-0.7% for typical datasets
 ```
 
----
+______________________________________________________________________
 
 ## HPC Optimization
 
@@ -533,6 +562,7 @@ performance:
 ```
 
 **Guidelines:**
+
 - Use `cpu_threads = cpus-per-task` from SLURM
 - For hyperthreading: Use physical cores only (cpus / 2)
 - For NUMA: Bind to single socket if possible
@@ -552,6 +582,7 @@ optimization:
 ```
 
 **Example Hierarchy:**
+
 ```
 /scratch/$SLURM_JOB_ID/  (local, fast)
 ├── checkpoints/         (temporary, deleted after job)
@@ -561,7 +592,7 @@ optimization:
 └── job_12345/           (final results)
 ```
 
----
+______________________________________________________________________
 
 ## GPU Acceleration
 
@@ -578,10 +609,12 @@ python -c "import jax; print(jax.devices())"
 ### Memory Management on GPU
 
 **GPU Memory is Precious:**
+
 - **Typical GPU RAM:** 8-48 GB (vs 64-256 GB CPU RAM)
 - **Batch size impact:** Limited by GPU VRAM, not system RAM
 
 **Check GPU memory:**
+
 ```bash
 nvidia-smi
 
@@ -595,6 +628,7 @@ nvidia-smi
 ```
 
 **Optimize for GPU:**
+
 ```python
 # Reduce batch size for GPU memory constraints
 config = selector.build_streaming_config(
@@ -617,6 +651,7 @@ export CUDA_VISIBLE_DEVICES=0
 ```
 
 **Parallel Batches (Future v3.2):**
+
 ```python
 # Future feature - not yet implemented
 wrapper = NLSQWrapper(
@@ -624,7 +659,7 @@ wrapper = NLSQWrapper(
 )
 ```
 
----
+______________________________________________________________________
 
 ## Profiling and Benchmarking
 
@@ -640,6 +675,7 @@ logging:
 ```
 
 **Example Output:**
+
 ```
 2025-10-22 15:32:10 [INFO] Batch 10/50 completed in 12.3s
 2025-10-22 15:32:10 [INFO] Checkpoint saved in 0.42s
@@ -673,6 +709,7 @@ run_optimization()
 ```
 
 **Example Output:**
+
 ```
 Line #    Mem usage    Increment   Occurrences   Line Contents
 =====================================================================
@@ -749,6 +786,7 @@ for strategy, metrics in results.items():
 ```
 
 **Example Output:**
+
 ```
 STANDARD  :  125.3s,   2.45 GB
 LARGE     :  118.7s,   2.01 GB
@@ -756,72 +794,76 @@ CHUNKED   :  122.1s,   2.15 GB
 STREAMING :  135.2s,   1.78 GB
 ```
 
----
+______________________________________________________________________
 
 ## Best Practices Summary
 
 1. **Memory Optimization:**
+
    - Use STREAMING for > 100M points (constant memory)
    - Set `memory_limit_gb` on shared HPC nodes
    - Clear JAX caches between large runs
 
-2. **Batch Size:**
+1. **Batch Size:**
+
    - Use automatic sizing (10% of RAM)
    - Override only for GPU memory constraints
    - Optimal range: 20k-50k points
 
-3. **Checkpoints:**
+1. **Checkpoints:**
+
    - Frequency: 10 batches (balanced)
    - Storage: SSD or local scratch (fast I/O)
    - Keep last 3 checkpoints (fault tolerance)
 
-4. **Fast Mode:**
+1. **Fast Mode:**
+
    - Enable for production pipelines
    - Disable for development/debugging
    - Overhead savings: ~0.5% (minimal)
 
-5. **HPC:**
+1. **HPC:**
+
    - Use local scratch for checkpoints
    - Set memory limits to 80% of SLURM allocation
    - Match CPU threads to allocated cores
 
-6. **GPU:**
+1. **GPU:**
+
    - JAX handles GPU acceleration automatically
    - Reduce batch size for limited VRAM
    - Monitor `nvidia-smi` during runs
 
-7. **Profiling:**
+1. **Profiling:**
+
    - Enable performance logging
    - Profile first run to establish baseline
    - Benchmark different configurations
 
----
+______________________________________________________________________
 
 ## Performance Targets (Spec Requirements)
 
 ✅ **All Met in v3.0:**
 
-| Metric | Target | Actual |
-|--------|--------|--------|
-| Streaming memory | Constant | < 2 GB (coefficient of variation < 20%) |
-| Checkpoint save time | < 2 seconds | 0.2-1.5s (typical) |
-| Fault tolerance overhead | < 5% | 2-4% (measured) |
-| Fast mode overhead | < 1% | 0.3-0.7% (measured) |
-| Streaming throughput | > 90% baseline | ~380k pts/s (76% of STANDARD) |
+| Metric | Target | Actual | |--------|--------|--------| | Streaming memory | Constant
+| < 2 GB (coefficient of variation < 20%) | | Checkpoint save time | < 2 seconds |
+0.2-1.5s (typical) | | Fault tolerance overhead | < 5% | 2-4% (measured) | | Fast mode
+overhead | < 1% | 0.3-0.7% (measured) | | Streaming throughput | > 90% baseline | ~380k
+pts/s (76% of STANDARD) |
 
 **Note:** Streaming is slower per point but handles 100× larger datasets
 
----
+______________________________________________________________________
 
 ## References
 
 - **StreamingOptimizer Usage:** `/docs/guides/streaming_optimizer_usage.md`
 - **API Reference:** `/docs/api-reference/optimization.md`
 - **Migration Guide:** `/docs/migration/v2_to_v3_migration.md`
-- **NLSQ Performance Guide:** https://nlsq.readthedocs.io/en/latest/guides/performance_guide.html
+- **NLSQ Performance Guide:**
+  https://nlsq.readthedocs.io/en/latest/guides/performance_guide.html
 
----
+______________________________________________________________________
 
-**Last Updated:** October 22, 2025
-**Homodyne Version:** 3.0+
-**NLSQ Version:** 0.1.5+
+**Last Updated:** October 22, 2025 **Homodyne Version:** 3.0+ **NLSQ Version:** 0.1.5+
