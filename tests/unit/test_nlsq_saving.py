@@ -172,7 +172,9 @@ class TestPrepareParameterData:
         assert len(param_dict) == 5
 
         # Verify values and uncertainties
-        assert param_dict["contrast"]["value"] == pytest.approx(0.45)
+        # Note: contrast is the mean of per-angle values which have random noise (0.01 * randn)
+        # so we use a larger tolerance for contrast/offset
+        assert param_dict["contrast"]["value"] == pytest.approx(0.45, abs=0.05)
         assert param_dict["contrast"]["uncertainty"] == pytest.approx(0.012)
         assert param_dict["D0"]["value"] == pytest.approx(1234.5)
 

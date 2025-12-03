@@ -236,7 +236,11 @@ class TestPerAngleMCMC:
             samples = prior_pred(random.PRNGKey(0))
 
             # Count parameters (excluding 'obs' which is the observable)
-            param_names = [k for k in samples.keys() if k != "obs"]
+            # Also exclude latent variables like 'log_D0_latent' used for reparameterization
+            param_names = [
+                k for k in samples.keys()
+                if k != "obs" and not k.endswith("_latent")
+            ]
             n_params = len(param_names)
 
             # Expected: 2*n_phi (contrast/offset per angle) + 3 (D0, alpha, D_offset)

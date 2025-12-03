@@ -480,18 +480,23 @@ def shard_data_stratified(
         f"(phi-preserving round-robin)"
     )
 
-    phi_unique, phi_inverse = np.unique(phi, return_inverse=True)
-    shard_indices_list = [[] for _ in range(num_shards)]
+    # Sort indices by phi angle to ensure phi distribution is preserved
+    sorted_indices = np.argsort(phi)
 
-    # Assign each phi group round-robin to preserve angle coverage per shard
-    for angle_idx, _angle in enumerate(phi_unique):
-        angle_indices = np.nonzero(phi_inverse == angle_idx)[0]
-        for local_rank, idx in enumerate(angle_indices):
-            shard_indices_list[local_rank % num_shards].append(idx)
+    # Round-robin assignment: every Nth point goes to shard N % num_shards
+    # This ensures each shard samples evenly across the sorted phi range
+    shard_indices_list: list[list[int]] = [[] for _ in range(num_shards)]
+    for rank, idx in enumerate(sorted_indices):
+        shard_indices_list[rank % num_shards].append(int(idx))
 
     shards: list[dict[str, np.ndarray]] = []
     for i, shard_indices in enumerate(shard_indices_list):
-        shard_idx = np.array(sorted(shard_indices))
+        # Convert to numpy array with explicit int64 dtype to avoid float dtype for empty arrays
+        shard_idx = np.array(shard_indices, dtype=np.int64)
+        if len(shard_idx) == 0:
+            logger.warning(f"Shard {i} is empty, skipping")
+            continue
+
         shard = {
             "data": data[shard_idx],
             "t1": t1[shard_idx],
