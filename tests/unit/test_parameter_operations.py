@@ -81,7 +81,7 @@ from homodyne.config.parameter_names import (
     verify_samples_dict,
 )
 from homodyne.core.jax_backend import compute_g2_scaled
-from homodyne.optimization.nlsq_wrapper import NLSQWrapper
+from homodyne.optimization.nlsq.wrapper import NLSQWrapper
 
 # Handle JAX imports
 try:
@@ -1042,7 +1042,7 @@ class TestPjitBackendConsistency:
         """Verify pjit backend does not contain old incorrect parameter names."""
         import inspect
 
-        from homodyne.optimization.cmc.backends.pjit import PjitBackend
+        from homodyne.optimization.mcmc.cmc.backends.pjit import PjitBackend
 
         # Get the source code
         source = inspect.getsource(PjitBackend._run_single_shard_mcmc)

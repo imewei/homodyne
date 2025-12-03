@@ -13,16 +13,16 @@ References:
     https://arxiv.org/abs/1411.7435
 """
 
-from homodyne.optimization.cmc.combination import combine_subposteriors
-from homodyne.optimization.cmc.coordinator import CMCCoordinator
-from homodyne.optimization.cmc.diagnostics import (
+from homodyne.optimization.mcmc.cmc.combination import combine_subposteriors
+from homodyne.optimization.mcmc.cmc.coordinator import CMCCoordinator
+from homodyne.optimization.mcmc.cmc.diagnostics import (
     compute_between_shard_kl_divergence,
     compute_combined_posterior_diagnostics,
     compute_per_shard_diagnostics,
     validate_cmc_results,
 )
-from homodyne.optimization.cmc.result import MCMCResult
-from homodyne.optimization.cmc.sharding import (
+from homodyne.optimization.mcmc.cmc.result import MCMCResult
+from homodyne.optimization.mcmc.cmc.sharding import (
     calculate_optimal_num_shards,
     shard_data_contiguous,
     shard_data_random,

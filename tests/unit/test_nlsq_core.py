@@ -44,7 +44,7 @@ except ImportError:
     NLSQ_AVAILABLE = False
 
 from homodyne.optimization.nlsq import fit_nlsq_jax
-from homodyne.optimization.nlsq_wrapper import (
+from homodyne.optimization.nlsq.wrapper import (
     NLSQWrapper,
     OptimizationResult,
     OptimizationStrategy,
@@ -488,7 +488,7 @@ class TestNLSQWrapperErrorRecovery:
 
         # Patch curve_fit in the nlsq_wrapper module namespace (since it's imported at module level)
         with patch(
-            "homodyne.optimization.nlsq_wrapper.curve_fit",
+            "homodyne.optimization.nlsq.wrapper.curve_fit",
             side_effect=mock_curve_fit_with_retry,
         ):
             result = wrapper.fit(
@@ -560,7 +560,7 @@ class TestNLSQWrapperErrorRecovery:
 
         # Patch in the nlsq_wrapper module namespace
         with patch(
-            "homodyne.optimization.nlsq_wrapper.curve_fit",
+            "homodyne.optimization.nlsq.wrapper.curve_fit",
             side_effect=mock_curve_fit_always_fail,
         ):
             with pytest.raises(Exception) as exc_info:
@@ -738,11 +738,11 @@ class TestNLSQWrapperErrorRecovery:
         from unittest.mock import patch
 
         with patch(
-            "homodyne.optimization.nlsq_wrapper.curve_fit_large",
+            "homodyne.optimization.nlsq.wrapper.curve_fit_large",
             side_effect=mock_curve_fit_large,
         ):
             with patch(
-                "homodyne.optimization.nlsq_wrapper.curve_fit",
+                "homodyne.optimization.nlsq.wrapper.curve_fit",
                 side_effect=mock_curve_fit,
             ):
                 result = wrapper.fit(

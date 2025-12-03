@@ -32,7 +32,7 @@ import time
 import numpy as np
 import pytest
 
-from homodyne.optimization.stratified_chunking import (
+from homodyne.optimization.nlsq.strategies.chunking import (
     analyze_angle_distribution,
     create_angle_stratified_data,
     estimate_stratification_memory,

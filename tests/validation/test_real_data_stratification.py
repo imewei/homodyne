@@ -38,7 +38,7 @@ class TestRealDataStratification:
         # Import here to avoid import errors if not available
         from homodyne.config.manager import ConfigManager
         from homodyne.data.xpcs_loader import XPCSDataLoader
-        from homodyne.optimization.stratified_chunking import (
+        from homodyne.optimization.nlsq.strategies.chunking import (
             analyze_angle_distribution,
             should_use_stratification,
         )
@@ -113,7 +113,7 @@ class TestRealDataStratification:
 
         # Import here to avoid import errors
         from homodyne.data.xpcs_loader import XPCSDataLoader
-        from homodyne.optimization.stratified_chunking import analyze_angle_distribution
+        from homodyne.optimization.nlsq.strategies.chunking import analyze_angle_distribution
 
         # Load data characteristics
         try:
@@ -144,7 +144,7 @@ class TestRealDataStratification:
 
     def test_stratification_memory_safety_real_data(self):
         """Test memory estimation with realistic dataset sizes."""
-        from homodyne.optimization.stratified_chunking import (
+        from homodyne.optimization.nlsq.strategies.chunking import (
             estimate_stratification_memory,
         )
 

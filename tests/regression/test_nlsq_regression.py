@@ -20,8 +20,8 @@ Date: 2025-10-22
 import numpy as np
 import pytest
 
-from homodyne.optimization.nlsq_wrapper import NLSQWrapper, OptimizationResult
-from homodyne.optimization.strategy import DatasetSizeStrategy, OptimizationStrategy
+from homodyne.optimization.nlsq.wrapper import NLSQWrapper, OptimizationResult
+from homodyne.optimization.nlsq.strategies.selection import DatasetSizeStrategy, OptimizationStrategy
 from tests.factories.large_dataset_factory import LargeDatasetFactory
 
 # ============================================================================

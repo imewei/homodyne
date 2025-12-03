@@ -734,7 +734,7 @@ alias hc-iso >/dev/null 2>&1 && echo "shortcut_alias_works" || echo "shortcut_al
             # Test 4: Homodyne NLSQ integration
             homodyne_integration_ok = True
             try:
-                from homodyne.optimization.nlsq_wrapper import NLSQWrapper  # noqa: F401
+                from homodyne.optimization.nlsq.wrapper import NLSQWrapper  # noqa: F401
 
                 details["nlsq_wrapper"] = "available"
             except ImportError as e:
@@ -744,7 +744,7 @@ alias hc-iso >/dev/null 2>&1 && echo "shortcut_alias_works" || echo "shortcut_al
 
             # Test 5: Strategy selection logic
             try:
-                from homodyne.optimization.strategy import (  # noqa: F401
+                from homodyne.optimization.nlsq.strategies.selection import (  # noqa: F401
                     build_streaming_config,
                 )
 

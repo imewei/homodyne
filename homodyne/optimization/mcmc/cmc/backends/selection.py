@@ -39,7 +39,7 @@ standalone systems).
 Usage Examples
 --------------
     from homodyne.device.config import detect_hardware
-    from homodyne.optimization.cmc.backends import select_backend
+    from homodyne.optimization.mcmc.cmc.backends import select_backend
 
     # Auto-select based on hardware
     hw = detect_hardware()
@@ -66,7 +66,7 @@ Error Handling
 """
 
 from homodyne.device.config import HardwareConfig
-from homodyne.optimization.cmc.backends.base import CMCBackend
+from homodyne.optimization.mcmc.cmc.backends.base import CMCBackend
 from homodyne.utils.logging import get_logger
 
 logger = get_logger(__name__)
@@ -74,9 +74,9 @@ logger = get_logger(__name__)
 
 # Backend registry - lazy loaded to avoid import errors
 _BACKEND_REGISTRY = {
-    "pjit": "homodyne.optimization.cmc.backends.pjit.PjitBackend",
-    "multiprocessing": "homodyne.optimization.cmc.backends.multiprocessing.MultiprocessingBackend",
-    "pbs": "homodyne.optimization.cmc.backends.pbs.PBSBackend",
+    "pjit": "homodyne.optimization.mcmc.cmc.backends.pjit.PjitBackend",
+    "multiprocessing": "homodyne.optimization.mcmc.cmc.backends.multiprocessing.MultiprocessingBackend",
+    "pbs": "homodyne.optimization.mcmc.cmc.backends.pbs.PBSBackend",
 }
 
 

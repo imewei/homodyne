@@ -12,7 +12,7 @@ Version: 2.2.0
 import numpy as np
 import pytest
 
-from homodyne.optimization.stratified_residual import (
+from homodyne.optimization.nlsq.strategies.residual import (
     StratifiedResidualFunction,
     create_stratified_residual_function,
 )

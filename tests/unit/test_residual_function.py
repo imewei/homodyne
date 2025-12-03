@@ -11,7 +11,7 @@ import jax.numpy as jnp
 import numpy as np
 import pytest
 
-from homodyne.optimization.nlsq_wrapper import NLSQWrapper
+from homodyne.optimization.nlsq.wrapper import NLSQWrapper
 
 
 class TestResidualFunctionCreation:

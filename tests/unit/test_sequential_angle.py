@@ -17,7 +17,7 @@ import logging
 import numpy as np
 import pytest
 
-from homodyne.optimization.sequential_angle import (
+from homodyne.optimization.nlsq.strategies.sequential import (
     AngleSubset,
     SequentialResult,
     combine_angle_results,

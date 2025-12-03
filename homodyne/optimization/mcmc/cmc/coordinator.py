@@ -22,7 +22,7 @@ Key Features
 
 Usage
 -----
-    from homodyne.optimization.cmc.coordinator import CMCCoordinator
+    from homodyne.optimization.mcmc.cmc.coordinator import CMCCoordinator
 
     # Create coordinator with configuration
     config = {
@@ -85,10 +85,10 @@ if TYPE_CHECKING:
 import numpy as np
 
 from homodyne.device.config import detect_hardware
-from homodyne.optimization.cmc.backends import select_backend
-from homodyne.optimization.cmc.combination import combine_subposteriors
-from homodyne.optimization.cmc.result import MCMCResult
-from homodyne.optimization.cmc.sharding import (
+from homodyne.optimization.mcmc.cmc.backends import select_backend
+from homodyne.optimization.mcmc.cmc.combination import combine_subposteriors
+from homodyne.optimization.mcmc.cmc.result import MCMCResult
+from homodyne.optimization.mcmc.cmc.sharding import (
     calculate_adaptive_min_shard_size,
     calculate_optimal_num_shards,
     shard_data_stratified,

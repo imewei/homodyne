@@ -66,16 +66,16 @@ from homodyne.optimization.checkpoint_manager import CheckpointManager
 from homodyne.optimization.exceptions import NLSQCheckpointError, NLSQOptimizationError
 from homodyne.optimization.numerical_validation import NumericalValidator
 from homodyne.optimization.recovery_strategies import RecoveryStrategyApplicator
-from homodyne.optimization.sequential_angle import (
+from homodyne.optimization.nlsq.strategies.sequential import (
     JAC_SAMPLE_SIZE,
     optimize_per_angle_sequential,
 )
-from homodyne.optimization.strategy import (
+from homodyne.optimization.nlsq.strategies.selection import (
     DatasetSizeStrategy,
     OptimizationStrategy,
     estimate_memory_requirements,
 )
-from homodyne.optimization.stratified_chunking import (
+from homodyne.optimization.nlsq.strategies.chunking import (
     StratificationDiagnostics,
     analyze_angle_distribution,
     compute_stratification_diagnostics,
@@ -85,11 +85,11 @@ from homodyne.optimization.stratified_chunking import (
     format_diagnostics_report,
     should_use_stratification,
 )
-from homodyne.optimization.stratified_residual import (
+from homodyne.optimization.nlsq.strategies.residual import (
     StratifiedResidualFunction,
     create_stratified_residual_function,
 )
-from homodyne.optimization.stratified_residual_jit import StratifiedResidualFunctionJIT
+from homodyne.optimization.nlsq.strategies.residual_jit import StratifiedResidualFunctionJIT
 
 DEFAULT_SHEAR_X_SCALE = {
     "gamma_dot_t0": 524.0,  # Canonical name (was gamma_dot_0)
@@ -3631,7 +3631,7 @@ class NLSQWrapper:
         )
 
         # Build optimal streaming configuration using strategy selector
-        from homodyne.optimization.strategy import DatasetSizeStrategy
+        from homodyne.optimization.nlsq.strategies.selection import DatasetSizeStrategy
 
         strategy_selector = DatasetSizeStrategy()
         streaming_config_dict = strategy_selector.build_streaming_config(

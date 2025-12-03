@@ -80,7 +80,7 @@ import numpy as np
 import pytest
 
 from homodyne.device.config import HardwareConfig
-from homodyne.optimization.cmc.backends import (
+from homodyne.optimization.mcmc.cmc.backends import (
     MULTIPROCESSING_AVAILABLE,
     PBS_AVAILABLE,
     PJIT_AVAILABLE,
@@ -89,8 +89,8 @@ from homodyne.optimization.cmc.backends import (
     get_backend_by_name,
     select_backend,
 )
-from homodyne.optimization.cmc.coordinator import CMCCoordinator
-from homodyne.optimization.cmc.result import MCMCResult
+from homodyne.optimization.mcmc.cmc.coordinator import CMCCoordinator
+from homodyne.optimization.mcmc.cmc.result import MCMCResult
 
 # Additional imports that might be needed
 try:
@@ -465,7 +465,7 @@ def test_pbs_backend_script_generation(
     temp_dir, synthetic_shards, mcmc_config, init_params, inv_mass_matrix
 ):
     """Test PBS job script generation."""
-    from homodyne.optimization.cmc.backends.pbs import PBSBackend
+    from homodyne.optimization.mcmc.cmc.backends.pbs import PBSBackend
 
     backend = PBSBackend(
         project_name="test_project",
@@ -502,7 +502,7 @@ def test_pbs_backend_data_serialization(
     """Test PBS shard data serialization to HDF5."""
     import h5py
 
-    from homodyne.optimization.cmc.backends.pbs import PBSBackend
+    from homodyne.optimization.mcmc.cmc.backends.pbs import PBSBackend
 
     backend = PBSBackend(
         project_name="test_project",
@@ -549,7 +549,7 @@ def test_pbs_backend_data_serialization(
 @pytest.mark.skipif(not PBS_AVAILABLE, reason="PBS backend not available")
 def test_pbs_backend_dry_run(temp_dir):
     """Test PBS backend without actually submitting to cluster."""
-    from homodyne.optimization.cmc.backends.pbs import PBSBackend
+    from homodyne.optimization.mcmc.cmc.backends.pbs import PBSBackend
 
     backend = PBSBackend(
         project_name="test_project",
@@ -606,7 +606,7 @@ def test_pjit_backend_handles_errors(init_params, inv_mass_matrix, parameter_spa
 def test_result_format_validation():
     """Test that all backends return results in consistent format."""
     # This is tested by base class utilities
-    from homodyne.optimization.cmc.backends.base import CMCBackend
+    from homodyne.optimization.mcmc.cmc.backends.base import CMCBackend
 
     # Create mock backend
     class MockBackend(CMCBackend):
@@ -692,7 +692,7 @@ def test_pjit_backend_diagnostics_collection(
 
 def test_backend_availability_flags():
     """Test that backend availability flags are set correctly."""
-    from homodyne.optimization.cmc.backends import (
+    from homodyne.optimization.mcmc.cmc.backends import (
         MULTIPROCESSING_AVAILABLE,
         PBS_AVAILABLE,
         PJIT_AVAILABLE,
@@ -710,7 +710,7 @@ def test_backend_availability_flags():
 
 def test_base_class_logging_utilities():
     """Test CMCBackend base class logging utilities."""
-    from homodyne.optimization.cmc.backends.base import CMCBackend
+    from homodyne.optimization.mcmc.cmc.backends.base import CMCBackend
 
     class MockBackend(CMCBackend):
         def run_parallel_mcmc(self, shards, mcmc_config, init_params, inv_mass_matrix):
@@ -748,7 +748,7 @@ def test_base_class_logging_utilities():
 @pytest.mark.skipif(not PBS_AVAILABLE, reason="PBS backend not available")
 def test_pbs_backend_job_status_parsing():
     """Test PBS job status parsing from qstat output."""
-    from homodyne.optimization.cmc.backends.pbs import PBSBackend
+    from homodyne.optimization.mcmc.cmc.backends.pbs import PBSBackend
 
     backend = PBSBackend(project_name="test")
 
@@ -994,7 +994,7 @@ def mock_inv_mass_matrix():
 def test_backend_selection_cpu_only(cpu_hardware_config):
     """Test auto-selection chooses multiprocessing for CPU."""
     with patch(
-        "homodyne.optimization.cmc.backends.selection.get_backend_by_name"
+        "homodyne.optimization.mcmc.cmc.backends.selection.get_backend_by_name"
     ) as mock_get:
         mock_backend = MockBackend("multiprocessing")
         mock_get.return_value = mock_backend
@@ -1008,7 +1008,7 @@ def test_backend_selection_cpu_only(cpu_hardware_config):
 def test_backend_selection_pbs_cluster_with_mock(pbs_cluster_hardware_config):
     """Test auto-selection chooses pbs for PBS cluster (with mocked backend)."""
     with patch(
-        "homodyne.optimization.cmc.backends.selection.get_backend_by_name"
+        "homodyne.optimization.mcmc.cmc.backends.selection.get_backend_by_name"
     ) as mock_get:
         mock_backend = MockBackend("pbs")
         mock_get.return_value = mock_backend
@@ -1022,7 +1022,7 @@ def test_backend_selection_pbs_cluster_with_mock(pbs_cluster_hardware_config):
 def test_backend_selection_slurm_cluster(slurm_cluster_hardware_config):
     """Test auto-selection chooses slurm for Slurm cluster."""
     with patch(
-        "homodyne.optimization.cmc.backends.selection.get_backend_by_name"
+        "homodyne.optimization.mcmc.cmc.backends.selection.get_backend_by_name"
     ) as mock_get:
         mock_backend = MockBackend("slurm")
         mock_get.return_value = mock_backend
@@ -1041,7 +1041,7 @@ def test_backend_selection_slurm_cluster(slurm_cluster_hardware_config):
 def test_user_override_on_cluster(pbs_cluster_hardware_config):
     """Test user can override cluster backend selection."""
     with patch(
-        "homodyne.optimization.cmc.backends.selection.get_backend_by_name"
+        "homodyne.optimization.mcmc.cmc.backends.selection.get_backend_by_name"
     ) as mock_get:
         mock_backend = MockBackend("pjit")
         mock_get.return_value = mock_backend
@@ -1213,7 +1213,7 @@ def test_compatibility_warning_pjit_on_cpu(cpu_hardware_config):
     backend = MockBackend("pjit")
 
     # Should log warning but not raise
-    with patch("homodyne.optimization.cmc.backends.selection.logger") as mock_logger:
+    with patch("homodyne.optimization.mcmc.cmc.backends.selection.logger") as mock_logger:
         _validate_backend_compatibility(backend, cpu_hardware_config)
         # Check that a warning was logged
         mock_logger.warning.assert_called()
@@ -1230,7 +1230,7 @@ def test_compatibility_warning_pjit_on_cpu(cpu_hardware_config):
 def test_full_selection_flow_with_auto_select(cpu_hardware_config):
     """Test complete backend selection flow with auto-selection."""
     with patch(
-        "homodyne.optimization.cmc.backends.selection.get_backend_by_name"
+        "homodyne.optimization.mcmc.cmc.backends.selection.get_backend_by_name"
     ) as mock_get:
         mock_backend = MockBackend("multiprocessing")
         mock_get.return_value = mock_backend
@@ -1419,7 +1419,7 @@ class TestCoordinatorInitialization:
     def test_minimal_initialization(self, minimal_config):
         """Test coordinator initialization with minimal config."""
         with patch(
-            "homodyne.optimization.cmc.coordinator.detect_hardware"
+            "homodyne.optimization.mcmc.cmc.coordinator.detect_hardware"
         ) as mock_detect:
             mock_detect.return_value = HardwareConfig(
                 platform="cpu",
@@ -1443,7 +1443,7 @@ class TestCoordinatorInitialization:
     def test_backend_selection_cpu(self, minimal_config, mock_hardware_cpu):
         """Test backend selection on CPU system."""
         with patch(
-            "homodyne.optimization.cmc.coordinator.detect_hardware"
+            "homodyne.optimization.mcmc.cmc.coordinator.detect_hardware"
         ) as mock_detect:
             mock_detect.return_value = mock_hardware_cpu
 
@@ -1457,7 +1457,7 @@ class TestCoordinatorInitialization:
         config["backend"] = {"type": "pjit"}
 
         with patch(
-            "homodyne.optimization.cmc.coordinator.detect_hardware"
+            "homodyne.optimization.mcmc.cmc.coordinator.detect_hardware"
         ) as mock_detect:
             mock_detect.return_value = mock_hardware_cpu
 
@@ -1480,7 +1480,7 @@ class TestEndToEndPipeline:
     ):
         """Test complete pipeline with minimal config and small dataset."""
         with patch(
-            "homodyne.optimization.cmc.coordinator.detect_hardware"
+            "homodyne.optimization.mcmc.cmc.coordinator.detect_hardware"
         ) as mock_detect:
             mock_detect.return_value = mock_hardware_cpu
 
@@ -1554,7 +1554,7 @@ class TestIndividualSteps:
     def test_step1_shard_calculation(self, minimal_config, mock_hardware_cpu):
         """Test Step 1: Shard calculation."""
         with patch(
-            "homodyne.optimization.cmc.coordinator.detect_hardware"
+            "homodyne.optimization.mcmc.cmc.coordinator.detect_hardware"
         ) as mock_detect:
             mock_detect.return_value = mock_hardware_cpu
 
@@ -1577,7 +1577,7 @@ class TestIndividualSteps:
         config["cmc"]["sharding"]["num_shards"] = 8
 
         with patch(
-            "homodyne.optimization.cmc.coordinator.detect_hardware"
+            "homodyne.optimization.mcmc.cmc.coordinator.detect_hardware"
         ) as mock_detect:
             mock_detect.return_value = mock_hardware_cpu
 
@@ -1589,7 +1589,7 @@ class TestIndividualSteps:
     def test_step2_mcmc_config_extraction(self, full_config, mock_hardware_cpu):
         """Test Step 2: MCMC config extraction."""
         with patch(
-            "homodyne.optimization.cmc.coordinator.detect_hardware"
+            "homodyne.optimization.mcmc.cmc.coordinator.detect_hardware"
         ) as mock_detect:
             mock_detect.return_value = mock_hardware_cpu
 
@@ -1604,7 +1604,7 @@ class TestIndividualSteps:
     def test_step5_basic_validation(self, minimal_config, mock_hardware_cpu):
         """Test Step 5: Basic validation."""
         with patch(
-            "homodyne.optimization.cmc.coordinator.detect_hardware"
+            "homodyne.optimization.mcmc.cmc.coordinator.detect_hardware"
         ) as mock_detect:
             mock_detect.return_value = mock_hardware_cpu
 
@@ -1643,7 +1643,7 @@ class TestErrorHandling:
     def test_empty_dataset_error(self, minimal_config, mock_hardware_cpu):
         """Test error handling for empty dataset."""
         with patch(
-            "homodyne.optimization.cmc.coordinator.detect_hardware"
+            "homodyne.optimization.mcmc.cmc.coordinator.detect_hardware"
         ) as mock_detect:
             mock_detect.return_value = mock_hardware_cpu
 
@@ -1670,7 +1670,7 @@ class TestErrorHandling:
     def test_low_convergence_rate_warning(self, minimal_config, mock_hardware_cpu):
         """Test warning for low convergence rate."""
         with patch(
-            "homodyne.optimization.cmc.coordinator.detect_hardware"
+            "homodyne.optimization.mcmc.cmc.coordinator.detect_hardware"
         ) as mock_detect:
             mock_detect.return_value = mock_hardware_cpu
 
@@ -1713,7 +1713,7 @@ class TestConfiguration:
         config = {"cmc": {}}
 
         with patch(
-            "homodyne.optimization.cmc.coordinator.detect_hardware"
+            "homodyne.optimization.mcmc.cmc.coordinator.detect_hardware"
         ) as mock_detect:
             mock_detect.return_value = mock_hardware_cpu
 
@@ -1727,7 +1727,7 @@ class TestConfiguration:
     def test_full_config_parsing(self, full_config, mock_hardware_cpu):
         """Test parsing of full configuration."""
         with patch(
-            "homodyne.optimization.cmc.coordinator.detect_hardware"
+            "homodyne.optimization.mcmc.cmc.coordinator.detect_hardware"
         ) as mock_detect:
             mock_detect.return_value = mock_hardware_cpu
 
@@ -1773,7 +1773,7 @@ class TestMCMCResultPackaging:
         ]
 
         # Use coordinator helper
-        with patch("homodyne.optimization.cmc.coordinator.detect_hardware"):
+        with patch("homodyne.optimization.mcmc.cmc.coordinator.detect_hardware"):
             coordinator = CMCCoordinator({"mcmc": {}, "cmc": {}})
             coordinator.backend = Mock()
             coordinator.backend.get_backend_name.return_value = "multiprocessing"
@@ -1812,7 +1812,7 @@ class TestMCMCResultPackaging:
             {"samples": np.random.randn(500, 5), "converged": True},
         ]
 
-        with patch("homodyne.optimization.cmc.coordinator.detect_hardware"):
+        with patch("homodyne.optimization.mcmc.cmc.coordinator.detect_hardware"):
             coordinator = CMCCoordinator({"mcmc": {}, "cmc": {}})
             coordinator.backend = Mock()
             coordinator.backend.get_backend_name.return_value = "pjit"

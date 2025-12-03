@@ -40,7 +40,7 @@ logger = logging.getLogger(__name__)
 
 # Type alias for MCMCResult
 try:
-    from homodyne.optimization.cmc.result import MCMCResult
+    from homodyne.optimization.mcmc.cmc.result import MCMCResult
 except ImportError:
     # Fallback for non-CMC installations
     from homodyne.optimization.mcmc import MCMCResult

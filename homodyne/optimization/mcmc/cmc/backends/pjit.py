@@ -34,7 +34,7 @@ Implementation Details
 
 Usage Example
 -------------
-    from homodyne.optimization.cmc.backends.pjit import PjitBackend
+    from homodyne.optimization.mcmc.cmc.backends.pjit import PjitBackend
 
     backend = PjitBackend()
     results = backend.run_parallel_mcmc(
@@ -72,7 +72,7 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 
-from homodyne.optimization.cmc.backends.base import CMCBackend
+from homodyne.optimization.mcmc.cmc.backends.base import CMCBackend
 from homodyne.utils.logging import get_logger
 
 if TYPE_CHECKING:

@@ -32,7 +32,7 @@ Key Features
 
 Usage
 -----
-    from homodyne.optimization.cmc.sharding import (
+    from homodyne.optimization.mcmc.cmc.sharding import (
         calculate_optimal_num_shards,
         shard_data_stratified,
         validate_shards,

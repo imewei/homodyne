@@ -21,7 +21,7 @@ import numpy as np
 import pytest
 
 from homodyne.optimization.exceptions import NLSQConvergenceError, NLSQNumericalError
-from homodyne.optimization.nlsq_wrapper import OptimizationStrategy
+from homodyne.optimization.nlsq.wrapper import OptimizationStrategy
 
 
 class TestStreamingOptimizerLargeDatasets:
@@ -29,7 +29,7 @@ class TestStreamingOptimizerLargeDatasets:
 
     def test_streaming_strategy_selected_for_large_dataset(self):
         """Test that STREAMING strategy is auto-selected for >100M points."""
-        from homodyne.optimization.strategy import DatasetSizeStrategy
+        from homodyne.optimization.nlsq.strategies.selection import DatasetSizeStrategy
 
         n_points = 150_000_000  # 150M points
         n_parameters = 9  # laminar_flow

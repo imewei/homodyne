@@ -17,7 +17,7 @@ import time
 import numpy as np
 import pytest
 
-from homodyne.optimization.nlsq_wrapper import NLSQWrapper
+from homodyne.optimization.nlsq.wrapper import NLSQWrapper
 from tests.factories.synthetic_data import generate_static_mode_dataset
 
 # Check if NLSQ is available

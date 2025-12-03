@@ -25,10 +25,10 @@ from unittest.mock import Mock, patch
 import numpy as np
 import pytest
 
-from homodyne.optimization.cmc.backends.multiprocessing import MultiprocessingBackend
+from homodyne.optimization.mcmc.cmc.backends.multiprocessing import MultiprocessingBackend
 
 # Import CMC coordinator and backends
-from homodyne.optimization.cmc.coordinator import CMCCoordinator
+from homodyne.optimization.mcmc.cmc.coordinator import CMCCoordinator
 
 # Import config infrastructure
 try:
@@ -197,7 +197,7 @@ def test_parameter_space_propagation(
 
     # Create coordinator with mocked backend
     with patch(
-        "homodyne.optimization.cmc.coordinator.select_backend",
+        "homodyne.optimization.mcmc.cmc.coordinator.select_backend",
         return_value=mock_backend,
     ):
         coordinator = CMCCoordinator(minimal_config)
@@ -272,7 +272,7 @@ def test_initial_values_usage(
 
     # Create coordinator with mocked backend
     with patch(
-        "homodyne.optimization.cmc.coordinator.select_backend",
+        "homodyne.optimization.mcmc.cmc.coordinator.select_backend",
         return_value=mock_backend,
     ):
         coordinator = CMCCoordinator(minimal_config)
@@ -340,7 +340,7 @@ def test_midpoint_defaults_when_no_initial_values(
 
     # Create coordinator with mocked backend
     with patch(
-        "homodyne.optimization.cmc.coordinator.select_backend",
+        "homodyne.optimization.mcmc.cmc.coordinator.select_backend",
         return_value=mock_backend,
     ):
         coordinator = CMCCoordinator(minimal_config)
@@ -410,7 +410,7 @@ def test_parameter_validation_against_bounds(
 
     # Create coordinator with mocked backend
     with patch(
-        "homodyne.optimization.cmc.coordinator.select_backend",
+        "homodyne.optimization.mcmc.cmc.coordinator.select_backend",
         return_value=mock_backend,
     ):
         coordinator = CMCCoordinator(minimal_config)
@@ -471,7 +471,7 @@ def test_automatic_cmc_selection_logging(
 
     # Create coordinator with mocked backend
     with patch(
-        "homodyne.optimization.cmc.coordinator.select_backend",
+        "homodyne.optimization.mcmc.cmc.coordinator.select_backend",
         return_value=mock_backend,
     ):
         coordinator = CMCCoordinator(minimal_config)
@@ -525,7 +525,7 @@ def test_no_svi_references_in_coordinator():
     # Read coordinator source code
     import inspect
 
-    import homodyne.optimization.cmc.coordinator as coordinator_module
+    import homodyne.optimization.mcmc.cmc.coordinator as coordinator_module
 
     source = inspect.getsource(coordinator_module)
     source_lower = source.lower()
@@ -584,7 +584,7 @@ def test_full_cmc_pipeline_with_config_parameters(
 
     # Create coordinator with mocked backend
     with patch(
-        "homodyne.optimization.cmc.coordinator.select_backend",
+        "homodyne.optimization.mcmc.cmc.coordinator.select_backend",
         return_value=mock_backend,
     ):
         coordinator = CMCCoordinator(minimal_config)

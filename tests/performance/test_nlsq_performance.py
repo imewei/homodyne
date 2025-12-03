@@ -24,7 +24,7 @@ import pytest
 
 from homodyne.optimization.batch_statistics import BatchStatistics
 from homodyne.optimization.checkpoint_manager import CheckpointManager
-from homodyne.optimization.nlsq_wrapper import NLSQWrapper
+from homodyne.optimization.nlsq.wrapper import NLSQWrapper
 from tests.factories.large_dataset_factory import LargeDatasetFactory
 
 # ============================================================================

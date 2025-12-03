@@ -47,20 +47,20 @@ from homodyne.optimization.batch_statistics import BatchStatistics
 from homodyne.optimization.checkpoint_manager import CheckpointManager
 from homodyne.optimization.exceptions import NLSQNumericalError
 from homodyne.optimization.nlsq import fit_nlsq_jax
-from homodyne.optimization.nlsq_wrapper import (
+from homodyne.optimization.nlsq.wrapper import (
     NLSQWrapper,
     OptimizationResult,
     OptimizationStrategy,
 )
 from homodyne.optimization.numerical_validation import NumericalValidator
-from homodyne.optimization.strategy import DatasetSizeStrategy
+from homodyne.optimization.nlsq.strategies.selection import DatasetSizeStrategy
 from tests.factories.large_dataset_factory import LargeDatasetFactory
 
 # Import missing test helpers
 import json
 
 from homodyne.cli.commands import save_nlsq_results
-from homodyne.optimization.stratified_chunking import (
+from homodyne.optimization.nlsq.strategies.chunking import (
     analyze_angle_distribution,
     create_angle_stratified_data,
     should_use_stratification,
@@ -1481,7 +1481,7 @@ def test_stratified_data_preserves_metadata_attributes():
     """
     import logging
 
-    from homodyne.optimization.nlsq_wrapper import NLSQWrapper
+    from homodyne.optimization.nlsq.wrapper import NLSQWrapper
 
     # Create mock data with all required metadata attributes
     # Need 100k+ points to trigger stratification
@@ -1583,7 +1583,7 @@ def test_stratification_diagnostics_passed_to_result():
     stratification_diagnostics parameter (preventing NameError), even when diagnostics
     is None (the common case when collect_diagnostics=False).
     """
-    from homodyne.optimization.nlsq_wrapper import NLSQWrapper, OptimizationResult
+    from homodyne.optimization.nlsq.wrapper import NLSQWrapper, OptimizationResult
 
     # Create wrapper
     wrapper = NLSQWrapper()
@@ -1649,7 +1649,7 @@ def test_full_nlsq_workflow_with_stratification():
     """
     import logging
 
-    from homodyne.optimization.nlsq_wrapper import NLSQWrapper
+    from homodyne.optimization.nlsq.wrapper import NLSQWrapper
 
     # Create realistic mock data (50k points, 3 angles)
     # Smaller dataset to avoid vmap errors while still triggering stratification
@@ -2242,7 +2242,7 @@ def test_large_strategy_medium_dataset(
 
     # Mock dataset size detection to force LARGE strategy
     with patch(
-        "homodyne.optimization.nlsq_wrapper.NLSQWrapper._prepare_data"
+        "homodyne.optimization.nlsq.wrapper.NLSQWrapper._prepare_data"
     ) as mock_prepare:
         # Simulate 2M points (within LARGE range: 1M - 10M)
         xdata = np.arange(2_000_000, dtype=np.float64)
@@ -2318,7 +2318,7 @@ def test_fallback_chain_execution(
     # Force wrapper to use LARGE strategy by mocking dataset size
     # Then make LARGE fail, which should trigger fallback to STANDARD
     with (
-        patch("homodyne.optimization.nlsq_wrapper.curve_fit_large") as mock_large,
+        patch("homodyne.optimization.nlsq.wrapper.curve_fit_large") as mock_large,
         patch.object(wrapper, "_prepare_data") as mock_prepare,
     ):
         # Mock large dataset (triggers LARGE strategy)
@@ -2382,7 +2382,7 @@ def test_error_recovery_detects_stagnation(
     wrapper = NLSQWrapper(enable_large_dataset=True, enable_recovery=True)
 
     # Mock NLSQ to return unchanged parameters (simulate bug)
-    with patch("homodyne.optimization.nlsq_wrapper.curve_fit") as mock_fit:
+    with patch("homodyne.optimization.nlsq.wrapper.curve_fit") as mock_fit:
         # Return unchanged parameters and identity covariance
         mock_fit.return_value = (
             static_mode_params.copy(),  # Unchanged

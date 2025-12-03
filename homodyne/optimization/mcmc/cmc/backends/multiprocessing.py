@@ -36,7 +36,7 @@ locally to avoid serialization issues.
 
 Usage Example
 -------------
-    from homodyne.optimization.cmc.backends.multiprocessing import MultiprocessingBackend
+    from homodyne.optimization.mcmc.cmc.backends.multiprocessing import MultiprocessingBackend
 
     backend = MultiprocessingBackend(num_workers=8, timeout_minutes=30)
     results = backend.run_parallel_mcmc(
@@ -74,7 +74,7 @@ from typing import Any
 
 import numpy as np
 
-from homodyne.optimization.cmc.backends.base import CMCBackend
+from homodyne.optimization.mcmc.cmc.backends.base import CMCBackend
 
 
 def _log_numpyro_init_diagnostics(model, init_param_values, log_fn, shard_idx):

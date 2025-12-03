@@ -42,7 +42,7 @@ Users can override auto-selection via configuration:
 
 Usage Examples
 --------------
-    from homodyne.optimization.cmc.backends import select_backend
+    from homodyne.optimization.mcmc.cmc.backends import select_backend
     from homodyne.device.config import detect_hardware
 
     # Auto-select backend
@@ -62,7 +62,7 @@ Usage Examples
     )
 
     # Direct instantiation
-    from homodyne.optimization.cmc.backends import get_backend_by_name
+    from homodyne.optimization.mcmc.cmc.backends import get_backend_by_name
 
     backend = get_backend_by_name('multiprocessing')
     results = backend.run_parallel_mcmc(...)
@@ -87,8 +87,8 @@ Implementation Status
 ✅ Task Group 5: Backend implementations (pjit, multiprocessing, PBS)
 """
 
-from homodyne.optimization.cmc.backends.base import CMCBackend
-from homodyne.optimization.cmc.backends.selection import (
+from homodyne.optimization.mcmc.cmc.backends.base import CMCBackend
+from homodyne.optimization.mcmc.cmc.backends.selection import (
     _validate_backend_compatibility,
     get_backend_by_name,
     select_backend,
@@ -97,14 +97,14 @@ from homodyne.optimization.cmc.backends.selection import (
 # Import backend implementations for direct access
 # These are lazy-loaded by get_backend_by_name() but can be imported directly
 try:
-    from homodyne.optimization.cmc.backends.pjit import PjitBackend
+    from homodyne.optimization.mcmc.cmc.backends.pjit import PjitBackend
 
     PJIT_AVAILABLE = True
 except ImportError:
     PJIT_AVAILABLE = False
 
 try:
-    from homodyne.optimization.cmc.backends.multiprocessing import (
+    from homodyne.optimization.mcmc.cmc.backends.multiprocessing import (
         MultiprocessingBackend,
     )
 
@@ -113,7 +113,7 @@ except ImportError:
     MULTIPROCESSING_AVAILABLE = False
 
 try:
-    from homodyne.optimization.cmc.backends.pbs import PBSBackend
+    from homodyne.optimization.mcmc.cmc.backends.pbs import PBSBackend
 
     PBS_AVAILABLE = True
 except ImportError:

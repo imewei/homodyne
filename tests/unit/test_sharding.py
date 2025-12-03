@@ -17,7 +17,7 @@ import pytest
 from scipy import stats
 
 from homodyne.device.config import HardwareConfig
-from homodyne.optimization.cmc.sharding import (
+from homodyne.optimization.mcmc.cmc.sharding import (
     calculate_optimal_num_shards,
     shard_data_contiguous,
     shard_data_random,

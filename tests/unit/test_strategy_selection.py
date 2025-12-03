@@ -9,7 +9,7 @@ Tests cover:
 
 import pytest
 
-from homodyne.optimization.strategy import (
+from homodyne.optimization.nlsq.strategies.selection import (
     DatasetSizeStrategy,
     OptimizationStrategy,
     estimate_memory_requirements,

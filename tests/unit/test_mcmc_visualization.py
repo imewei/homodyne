@@ -21,7 +21,7 @@ import pytest
 # Use non-interactive backend for testing
 matplotlib.use("Agg")
 
-from homodyne.optimization.cmc.result import MCMCResult
+from homodyne.optimization.mcmc.cmc.result import MCMCResult
 from homodyne.viz.mcmc_plots import (
     plot_cmc_summary_dashboard,
     plot_convergence_diagnostics,

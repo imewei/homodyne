@@ -8,7 +8,7 @@ result saving and visualization functions.
 
 import numpy as np
 
-from homodyne.optimization.nlsq_wrapper import OptimizationResult
+from homodyne.optimization.nlsq.wrapper import OptimizationResult
 
 
 def create_mock_optimization_result(

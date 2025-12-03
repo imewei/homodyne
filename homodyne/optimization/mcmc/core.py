@@ -433,8 +433,8 @@ except ImportError:
 # Import extended MCMCResult with CMC support
 # This provides backward compatibility while supporting CMC
 try:
-    from homodyne.optimization.cmc.bypass import evaluate_cmc_bypass
-    from homodyne.optimization.cmc.result import MCMCResult
+    from homodyne.optimization.mcmc.cmc.bypass import evaluate_cmc_bypass
+    from homodyne.optimization.mcmc.cmc.result import MCMCResult
 
     HAS_CMC_RESULT = True
 except ImportError:
@@ -1071,7 +1071,7 @@ def fit_mcmc_jax(
         logger.info("=" * 70)
 
         try:
-            from homodyne.optimization.cmc.coordinator import CMCCoordinator
+            from homodyne.optimization.mcmc.cmc.coordinator import CMCCoordinator
         except ImportError as e:
             logger.error(f"CMC module not available: {e}")
             raise ImportError(

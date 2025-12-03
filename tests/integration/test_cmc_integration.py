@@ -49,9 +49,9 @@ except ImportError:
 
 # Import CMC components
 try:
-    from homodyne.optimization.cmc.coordinator import CMCCoordinator
-    from homodyne.optimization.cmc.result import MCMCResult
-    from homodyne.optimization.cmc.sharding import (
+    from homodyne.optimization.mcmc.cmc.coordinator import CMCCoordinator
+    from homodyne.optimization.mcmc.cmc.result import MCMCResult
+    from homodyne.optimization.mcmc.cmc.sharding import (
         calculate_optimal_num_shards,
         shard_data_stratified,
     )
@@ -315,7 +315,7 @@ class TestCMCBackendIntegration:
     def test_backend_selection_logic(self):
         """Test backend selection based on hardware configuration."""
         from homodyne.device.config import detect_hardware
-        from homodyne.optimization.cmc.backends import select_backend
+        from homodyne.optimization.mcmc.cmc.backends import select_backend
 
         # Detect hardware
         hw_config = detect_hardware()
@@ -342,7 +342,7 @@ class TestCMCBackendIntegration:
     def test_multiprocessing_backend_basic(self):
         """Test multiprocessing backend instantiation."""
         from homodyne.device.config import detect_hardware
-        from homodyne.optimization.cmc.backends import select_backend
+        from homodyne.optimization.mcmc.cmc.backends import select_backend
 
         hw_config = detect_hardware()
         backend = select_backend(hw_config, user_override="multiprocessing")

@@ -11,7 +11,7 @@ Tests:
 import jax.numpy as jnp
 import pytest
 
-from homodyne.optimization.stratified_chunking import (
+from homodyne.optimization.nlsq.strategies.chunking import (
     StratificationDiagnostics,
     compute_stratification_diagnostics,
     create_angle_stratified_data,

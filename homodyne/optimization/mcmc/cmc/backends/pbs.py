@@ -60,7 +60,7 @@ The PBS script is generated from PBS_template.txt with the following replacement
 
 Usage Example
 -------------
-    from homodyne.optimization.cmc.backends.pbs import PBSBackend
+    from homodyne.optimization.mcmc.cmc.backends.pbs import PBSBackend
 
     backend = PBSBackend(
         project_name="my_project",
@@ -111,7 +111,7 @@ from typing import Any
 import h5py
 import numpy as np
 
-from homodyne.optimization.cmc.backends.base import CMCBackend
+from homodyne.optimization.mcmc.cmc.backends.base import CMCBackend
 from homodyne.utils.logging import get_logger
 
 logger = get_logger(__name__)
@@ -476,7 +476,7 @@ module load cuda/12.2  # If using GPU
 python -c "
 import sys
 sys.path.insert(0, '{Path.cwd()}')
-from homodyne.optimization.cmc.backends.pbs import run_shard_task
+from homodyne.optimization.mcmc.cmc.backends.pbs import run_shard_task
 run_shard_task(
     temp_dir='{self.temp_dir}',
     shard_idx=int('$PBS_ARRAY_INDEX')

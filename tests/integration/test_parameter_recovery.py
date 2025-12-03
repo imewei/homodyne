@@ -8,7 +8,7 @@ from synthetic data within acceptable error bounds.
 import numpy as np
 import pytest
 
-from homodyne.optimization.nlsq_wrapper import NLSQWrapper
+from homodyne.optimization.nlsq.wrapper import NLSQWrapper
 from tests.factories.synthetic_data import (
     generate_laminar_flow_dataset,
     generate_static_mode_dataset,

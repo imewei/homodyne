@@ -14,7 +14,7 @@ Key Features:
 
 Usage:
     from nlsq import least_squares
-    from homodyne.optimization.stratified_residual import StratifiedResidualFunction
+    from homodyne.optimization.nlsq.strategies.residual import StratifiedResidualFunction
 
     # Create stratified data (each chunk contains all angles)
     stratified_data = create_stratified_chunks(data, target_chunk_size=100000)

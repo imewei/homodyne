@@ -100,7 +100,7 @@ class TestScientificValidation:
         2. Medium: Typical experimental conditions
         3. Hard: Parameters near bounds, higher noise
         """
-        from homodyne.optimization.nlsq_wrapper import NLSQWrapper
+        from homodyne.optimization.nlsq.wrapper import NLSQWrapper
 
         test_cases = [
             {
@@ -263,7 +263,7 @@ class TestScientificValidation:
 
         Tests that NLSQ converges to same solution from different starting points.
         """
-        from homodyne.optimization.nlsq_wrapper import NLSQWrapper
+        from homodyne.optimization.nlsq.wrapper import NLSQWrapper
 
         # Generate reference data
         ground_truth = {
@@ -361,7 +361,7 @@ class TestScientificValidation:
 
         Validates scaling behavior and execution time.
         """
-        from homodyne.optimization.nlsq_wrapper import NLSQWrapper
+        from homodyne.optimization.nlsq.wrapper import NLSQWrapper
 
         ground_truth = {
             "contrast": 0.5,
@@ -462,7 +462,7 @@ class TestScientificValidation:
 
         Tests that recovery strategies successfully handle difficult cases.
         """
-        from homodyne.optimization.nlsq_wrapper import NLSQWrapper
+        from homodyne.optimization.nlsq.wrapper import NLSQWrapper
 
         # Create challenging scenario: parameters near bounds
         ground_truth = {
@@ -563,7 +563,7 @@ class TestScientificValidation:
 
         Checks that fitted parameters are physically reasonable.
         """
-        from homodyne.optimization.nlsq_wrapper import NLSQWrapper
+        from homodyne.optimization.nlsq.wrapper import NLSQWrapper
 
         ground_truth = {
             "contrast": 0.5,

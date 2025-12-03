@@ -98,7 +98,7 @@ except ImportError:
 
 # NLSQWrapper import for new implementation
 try:
-    from homodyne.optimization.nlsq_wrapper import NLSQWrapper, OptimizationResult
+    from homodyne.optimization.nlsq.wrapper import NLSQWrapper, OptimizationResult
 
     HAS_NLSQ_WRAPPER = True
 except ImportError:

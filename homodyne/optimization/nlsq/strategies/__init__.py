@@ -1,0 +1,59 @@
+"""NLSQ Optimization Strategies Subpackage.
+
+This subpackage contains strategy implementations for NLSQ optimization:
+- selection.py: Dataset size-based strategy selection
+- chunking.py: Angle-stratified chunking for large datasets
+- residual.py: Stratified residual function for per-angle optimization
+- residual_jit.py: JIT-compiled version of stratified residual
+- sequential.py: Sequential per-angle optimization
+"""
+
+from homodyne.optimization.nlsq.strategies.chunking import (
+    StratificationDiagnostics,
+    analyze_angle_distribution,
+    compute_stratification_diagnostics,
+    create_angle_stratified_data,
+    create_angle_stratified_indices,
+    estimate_stratification_memory,
+    format_diagnostics_report,
+    should_use_stratification,
+)
+from homodyne.optimization.nlsq.strategies.residual import (
+    StratifiedResidualFunction,
+    create_stratified_residual_function,
+)
+from homodyne.optimization.nlsq.strategies.residual_jit import (
+    StratifiedResidualFunctionJIT,
+)
+from homodyne.optimization.nlsq.strategies.selection import (
+    DatasetSizeStrategy,
+    OptimizationStrategy,
+    estimate_memory_requirements,
+)
+from homodyne.optimization.nlsq.strategies.sequential import (
+    JAC_SAMPLE_SIZE,
+    optimize_per_angle_sequential,
+)
+
+__all__ = [
+    # Selection
+    "DatasetSizeStrategy",
+    "OptimizationStrategy",
+    "estimate_memory_requirements",
+    # Chunking
+    "StratificationDiagnostics",
+    "analyze_angle_distribution",
+    "compute_stratification_diagnostics",
+    "create_angle_stratified_data",
+    "create_angle_stratified_indices",
+    "estimate_stratification_memory",
+    "format_diagnostics_report",
+    "should_use_stratification",
+    # Residual
+    "StratifiedResidualFunction",
+    "StratifiedResidualFunctionJIT",
+    "create_stratified_residual_function",
+    # Sequential
+    "JAC_SAMPLE_SIZE",
+    "optimize_per_angle_sequential",
+]

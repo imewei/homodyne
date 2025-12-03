@@ -29,8 +29,8 @@ except ImportError:
 
 # Import CMC components
 try:
-    from homodyne.optimization.cmc.combination import combine_subposteriors
-    from homodyne.optimization.cmc.diagnostics import (
+    from homodyne.optimization.mcmc.cmc.combination import combine_subposteriors
+    from homodyne.optimization.mcmc.cmc.diagnostics import (
         compute_between_shard_kl_divergence,
         compute_combined_posterior_diagnostics,
         compute_per_shard_diagnostics,

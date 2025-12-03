@@ -18,12 +18,15 @@ ______________________________________________________________________
 
 ## Recent Updates
 
-### v2.4.1 (Dec 2025) - CMC-Only Architecture & Single-Angle Fixes
+### v2.4.1 (Dec 2025) - CMC-Only Architecture & Module Reorganization
 
 - **MCMC**: CMC-only path (NUTS auto-selection removed for simplicity)
 - **Single-Angle**: Log-space D0 sampling for convergence stability
 - **Per-Phi Init**: New `homodyne/optimization/initialization/per_phi_initializer.py`
 - **Linting**: Fixed F401/F841/E402/F811 issues across homodyne/
+- **Module Reorganization**: `optimization/` restructured into subpackages:
+  - `nlsq/` - NLSQ optimization (core, wrapper, jacobian, results, transforms, strategies/)
+  - `mcmc/` - MCMC inference (core, data_prep, priors, scaling, single_angle, cmc/)
 
 ### v2.4.0 (Nov 2025) - Per-Angle Scaling Mandatory
 
@@ -220,9 +223,16 @@ homodyne/
 ├── core/          # jax_backend.py, physics.py, models.py, fitting.py
 ├── data/          # xpcs_loader.py, preprocessing.py, phi_filtering.py
 ├── device/        # cpu.py (v2.3.0: GPU removed)
-├── optimization/  # nlsq_wrapper.py, mcmc.py, strategy.py, checkpoint_manager.py
-│   ├── cmc/       # coordinator.py, sharding.py, backends/
-│   └── initialization/  # per_phi_initializer.py (v2.4.1)
+├── optimization/  # Top-level optimization module
+│   ├── nlsq/      # Non-linear least squares (v2.4.1 reorganization)
+│   │   ├── core.py, wrapper.py, jacobian.py, results.py, transforms.py
+│   │   └── strategies/  # chunking.py, residual.py, residual_jit.py, selection.py, sequential.py
+│   ├── mcmc/      # MCMC inference (v2.4.1 reorganization)
+│   │   ├── core.py, data_prep.py, priors.py, scaling.py, single_angle.py
+│   │   └── cmc/   # Consensus Monte Carlo
+│   │       ├── coordinator.py, sharding.py, combination.py, diagnostics.py
+│   │       └── backends/  # multiprocessing.py, pjit.py, pbs.py
+│   └── initialization/  # per_phi_initializer.py
 ├── runtime/       # shell/, utils/system_validator.py
 └── utils/         # Logging, progress
 
@@ -250,7 +260,7 @@ info = {}  # Empty dict for consistency
 **Issue**: Silent failure (0 iterations)
 - ✅ **RESOLVED in v2.2.1**: Auto parameter expansion, gradient sanity check
 - Activates: Dataset ≥ 1M, per-angle scaling, stratified data
-- Fix: `homodyne/optimization/nlsq_wrapper.py` lines 500-595, 2506-2559
+- Fix: `homodyne/optimization/nlsq/wrapper.py`
 
 ### MCMC Initialization
 
@@ -258,7 +268,7 @@ info = {}  # Empty dict for consistency
 - ✅ **RESOLVED in v2.4.0 (Nov 14, 2025)**: Parameter ordering fixed in coordinator
 - **Root Cause**: NumPyro's `init_to_value()` requires parameters in EXACT order as model samples them
 - **Symptom**: "Cannot find valid initial parameters" error during MCMC initialization
-- **Error Location**: `homodyne/optimization/cmc/backends/multiprocessing.py:179-215`
+- **Error Location**: `homodyne/optimization/mcmc/cmc/backends/multiprocessing.py`
 
 **Required Parameter Ordering**:
 ```python
@@ -277,9 +287,9 @@ correct_order = [
 ```
 
 **Fix Locations**:
-- Coordinator: `homodyne/optimization/cmc/coordinator.py:485-550` (parameter expansion)
-- Worker validation: `homodyne/optimization/cmc/backends/multiprocessing.py:875-913` (assertion)
-- Model sampling: `homodyne/optimization/mcmc.py:1706-1720` (per-angle iteration)
+- Coordinator: `homodyne/optimization/mcmc/cmc/coordinator.py` (parameter expansion)
+- Worker validation: `homodyne/optimization/mcmc/cmc/backends/multiprocessing.py` (assertion)
+- Model sampling: `homodyne/optimization/mcmc/core.py` (per-angle iteration)
 
 **Developer Notes**:
 - Python dict insertion order matters for NumPyro initialization (Python 3.7+)

@@ -11,7 +11,7 @@ Tests cover:
 import numpy as np
 import pytest
 
-from homodyne.optimization.cmc.diagnostics import (
+from homodyne.optimization.mcmc.cmc.diagnostics import (
     _check_multimodality,
     _fit_gaussian_to_samples,
     _kl_divergence_gaussian,

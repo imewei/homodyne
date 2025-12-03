@@ -30,8 +30,8 @@ except ImportError:
 
 # Import CMC components
 try:
-    from homodyne.optimization.cmc.combination import combine_subposteriors
-    from homodyne.optimization.cmc.sharding import (
+    from homodyne.optimization.mcmc.cmc.combination import combine_subposteriors
+    from homodyne.optimization.mcmc.cmc.sharding import (
         calculate_optimal_num_shards,
         shard_data_stratified,
     )

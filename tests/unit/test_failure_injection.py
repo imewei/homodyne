@@ -24,7 +24,7 @@ import pytest
 from homodyne.optimization.batch_statistics import BatchStatistics
 from homodyne.optimization.checkpoint_manager import CheckpointManager
 from homodyne.optimization.exceptions import NLSQCheckpointError
-from homodyne.optimization.nlsq_wrapper import NLSQWrapper
+from homodyne.optimization.nlsq.wrapper import NLSQWrapper
 from homodyne.optimization.numerical_validation import NumericalValidator
 from homodyne.optimization.recovery_strategies import RecoveryStrategyApplicator
 from tests.factories.large_dataset_factory import LargeDatasetFactory
@@ -508,7 +508,7 @@ class TestFailureHandlingIntegration:
         )
 
         # Mock NLSQ to inject NaN
-        with patch("homodyne.optimization.nlsq_wrapper.curve_fit") as mock_fit:
+        with patch("homodyne.optimization.nlsq.wrapper.curve_fit") as mock_fit:
             # First attempt: return NaN
             mock_fit.side_effect = [
                 ValueError("NaN detected"),

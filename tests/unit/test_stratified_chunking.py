@@ -26,7 +26,7 @@ import numpy as np
 import pytest
 from numpy.testing import assert_allclose, assert_array_equal
 
-from homodyne.optimization.stratified_chunking import (
+from homodyne.optimization.nlsq.strategies.chunking import (
     analyze_angle_distribution,
     create_angle_stratified_data,
     create_angle_stratified_indices,

@@ -22,13 +22,46 @@ Performance Comparison:
 
 # Handle NLSQ imports with intelligent fallback
 try:
-    from homodyne.optimization.nlsq import NLSQResult, fit_nlsq_jax
+    from homodyne.optimization.nlsq import (
+        NLSQResult,
+        NLSQWrapper,
+        OptimizationResult,
+        fit_nlsq_jax,
+        # Strategies
+        DatasetSizeStrategy,
+        OptimizationStrategy,
+        estimate_memory_requirements,
+        # Chunking
+        StratificationDiagnostics,
+        create_angle_stratified_data,
+        create_angle_stratified_indices,
+        should_use_stratification,
+        # Residual
+        StratifiedResidualFunction,
+        StratifiedResidualFunctionJIT,
+        create_stratified_residual_function,
+        # Sequential
+        optimize_per_angle_sequential,
+    )
 
     NLSQ_AVAILABLE = True
 except ImportError as e:
     print(f"Warning: Could not import NLSQ optimization: {e}")
     fit_nlsq_jax = None
     NLSQResult = None
+    NLSQWrapper = None
+    OptimizationResult = None
+    DatasetSizeStrategy = None
+    OptimizationStrategy = None
+    estimate_memory_requirements = None
+    StratificationDiagnostics = None
+    create_angle_stratified_data = None
+    create_angle_stratified_indices = None
+    should_use_stratification = None
+    StratifiedResidualFunction = None
+    StratifiedResidualFunctionJIT = None
+    create_stratified_residual_function = None
+    optimize_per_angle_sequential = None
     NLSQ_AVAILABLE = False
 
 # Handle MCMC imports with intelligent fallback
@@ -64,7 +97,7 @@ OPTIMIZATION_STATUS = {
 # These modules were extracted from _create_numpyro_model (Dec 2025)
 # to reduce cyclomatic complexity and improve maintainability.
 try:
-    from homodyne.optimization.mcmc_data_prep import (
+    from homodyne.optimization.mcmc.data_prep import (
         compute_phi_mapping,
         get_target_dtype,
         normalize_array,
@@ -72,7 +105,7 @@ try:
         prepare_mcmc_arrays,
         validate_array_shapes,
     )
-    from homodyne.optimization.mcmc_priors import (
+    from homodyne.optimization.mcmc.priors import (
         DIST_TYPE_MAP,
         auto_convert_to_bounded_distribution,
         cast_dist_kwargs,
@@ -82,7 +115,7 @@ try:
         sample_parameter,
         sample_scaling_parameters,
     )
-    from homodyne.optimization.mcmc_scaling import (
+    from homodyne.optimization.mcmc.scaling import (
         apply_global_scaling,
         apply_per_angle_scaling,
         apply_scaling_to_theory,
@@ -92,7 +125,7 @@ try:
         select_scaling_per_point,
         validate_c2_fitted_shape,
     )
-    from homodyne.optimization.mcmc_single_angle import (
+    from homodyne.optimization.mcmc.single_angle import (
         apply_surrogate_parameter_overrides,
         build_log_d0_fallback_prior,
         build_surrogate_settings,
@@ -117,6 +150,20 @@ __all__ = [
     # Result classes
     "NLSQResult",
     "MCMCResult",
+    # NLSQ components
+    "NLSQWrapper",
+    "OptimizationResult",
+    "DatasetSizeStrategy",
+    "OptimizationStrategy",
+    "estimate_memory_requirements",
+    "StratificationDiagnostics",
+    "create_angle_stratified_data",
+    "create_angle_stratified_indices",
+    "should_use_stratification",
+    "StratifiedResidualFunction",
+    "StratifiedResidualFunctionJIT",
+    "create_stratified_residual_function",
+    "optimize_per_angle_sequential",
     # Status information
     "OPTIMIZATION_STATUS",
     "NLSQ_AVAILABLE",

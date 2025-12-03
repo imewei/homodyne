@@ -20,7 +20,7 @@ Test Structure:
 import numpy as np
 import pytest
 
-from homodyne.optimization.cmc.combination import (
+from homodyne.optimization.mcmc.cmc.combination import (
     _simple_averaging,
     _validate_shard_results,
     _weighted_gaussian_product,
@@ -343,7 +343,7 @@ def test_fallback_disabled_raises_error():
 
     # Mock the weighted function to raise an exception
     with mock.patch(
-        "homodyne.optimization.cmc.combination._weighted_gaussian_product",
+        "homodyne.optimization.mcmc.cmc.combination._weighted_gaussian_product",
         side_effect=ValueError("Simulated failure"),
     ):
         # With fallback disabled, should raise the error
