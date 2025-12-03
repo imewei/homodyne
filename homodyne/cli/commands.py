@@ -20,15 +20,6 @@ import numpy as np
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt  # noqa: E402
 
-# Check if Datashader backend is available (actual import done lazily)
-try:
-    import homodyne.viz.datashader_backend  # noqa: F401
-
-    DATASHADER_AVAILABLE = True
-except ImportError:
-    DATASHADER_AVAILABLE = False
-    # Will log warning later when plotting is attempted
-
 from homodyne.cli.args_parser import validate_args  # noqa: E402
 from homodyne.config.parameter_space import ParameterSpace  # noqa: E402
 from homodyne.config.types import (  # noqa: E402
@@ -37,7 +28,50 @@ from homodyne.config.types import (  # noqa: E402
     STATIC_PARAM_NAMES,
 )
 from homodyne.core.jax_backend import compute_g2_scaled  # noqa: E402
+from homodyne.data.angle_filtering import (  # noqa: E402
+    angle_in_range as _data_angle_in_range,
+)
+from homodyne.data.angle_filtering import (
+    apply_angle_filtering as _data_apply_angle_filtering,
+)
+from homodyne.data.angle_filtering import (
+    apply_angle_filtering_for_plot as _data_apply_angle_filtering_for_plot,
+)
+from homodyne.data.angle_filtering import (
+    normalize_angle_to_symmetric_range as _data_normalize_angle_to_symmetric_range,
+)
+from homodyne.io.json_utils import json_safe as _io_json_safe  # noqa: E402
+from homodyne.io.mcmc_writers import (  # noqa: E402
+    create_mcmc_analysis_dict as _io_create_mcmc_analysis_dict,
+)
+from homodyne.io.mcmc_writers import (
+    create_mcmc_diagnostics_dict as _io_create_mcmc_diagnostics_dict,
+)
+from homodyne.io.mcmc_writers import (
+    create_mcmc_parameters_dict as _io_create_mcmc_parameters_dict,
+)
+from homodyne.io.nlsq_writers import (  # noqa: E402
+    save_nlsq_json_files as _io_save_nlsq_json_files,
+)
+from homodyne.io.nlsq_writers import (
+    save_nlsq_npz_file as _io_save_nlsq_npz_file,
+)
 from homodyne.utils.logging import get_logger  # noqa: E402
+from homodyne.viz.experimental_plots import (  # noqa: E402
+    plot_experimental_data as _viz_plot_experimental_data,
+)
+from homodyne.viz.experimental_plots import (
+    plot_fit_comparison as _viz_plot_fit_comparison,
+)
+from homodyne.viz.nlsq_plots import (  # noqa: E402
+    generate_and_plot_fitted_simulations as _viz_generate_and_plot_fitted_simulations,
+)
+from homodyne.viz.nlsq_plots import (
+    generate_nlsq_plots as _viz_generate_nlsq_plots,
+)
+from homodyne.viz.nlsq_plots import (
+    plot_simulated_data as _viz_plot_simulated_data,
+)
 
 logger = get_logger(__name__)
 
@@ -161,108 +195,17 @@ def clamp_parameters_to_bounds(
 def normalize_angle_to_symmetric_range(angle):
     """Normalize angle(s) to [-180°, 180°] range.
 
-    The horizontal flow direction is defined as 0°. Angles are normalized
-    to be symmetric around 0° in the range [-180°, 180°].
-
-    Physical Interpretation
-    -----------------------
-    In XPCS experiments with flow, the flow direction is typically set as 0°
-    (horizontal reference). Angles are measured relative to this reference.
-    Normalizing to [-180°, 180°] provides a natural symmetric representation
-    where positive angles are counterclockwise and negative angles are
-    clockwise from the flow direction.
-
-    Normalization Rules
-    -------------------
-    - If 180° < φ < 360°: φ_norm = φ - 360°
-      (e.g., 210° → -150°)
-    - If -360° < φ < -180°: φ_norm = φ + 360°
-      (e.g., -210° → 150°)
-    - If -180° ≤ φ ≤ 180°: φ_norm = φ (no change)
-
-    Parameters
-    ----------
-    angle : float or np.ndarray
-        Angle(s) in degrees. Can be scalar (float) or array (np.ndarray).
-
-    Returns
-    -------
-    float or np.ndarray
-        Normalized angle(s) in range [-180°, 180°]. Returns scalar if input
-        is scalar, array if input is array.
-
-    Examples
-    --------
-    >>> normalize_angle_to_symmetric_range(210.0)
-    -150.0
-    >>> normalize_angle_to_symmetric_range(-210.0)
-    150.0
-    >>> normalize_angle_to_symmetric_range(np.array([0, 90, 210, -210]))
-    array([  0.,  90., -150.,  150.])
-    >>> normalize_angle_to_symmetric_range(np.array([180, -180, 360]))
-    array([180., -180.,   0.])
+    This is a wrapper that delegates to homodyne.data.angle_filtering.
     """
-    angle_array = np.asarray(angle)
-    normalized = angle_array % 360
-    normalized = np.where(normalized > 180, normalized - 360, normalized)
-
-    # Return scalar if input was scalar
-    if np.isscalar(angle):
-        return float(normalized)
-    return normalized
+    return _data_normalize_angle_to_symmetric_range(angle)
 
 
 def _angle_in_range(angle, min_angle, max_angle):
     """Check if angle is in range, accounting for wrap-around at ±180°.
 
-    This function handles both normal ranges (where min_angle ≤ max_angle)
-    and wrapped ranges that span the ±180° boundary (where min_angle > max_angle).
-
-    Wrapped Range Logic
-    -------------------
-    When a range spans the ±180° boundary after normalization, the comparison
-    logic changes:
-    - Normal range [85°, 95°]: 85° ≤ angle ≤ 95°
-    - Wrapped range [170°, -170°]: angle ≥ 170° OR angle ≤ -170°
-
-    Example: User specifies range [170°, 190°]
-    - After normalization: [170°, -170°] (min > max, wrapped)
-    - Angle 175° matches: 175° ≥ 170° ✓
-    - Angle -175° matches: -175° ≤ -170° ✓
-    - Angle 0° does not match: 0° < 170° and 0° > -170° ✗
-
-    Parameters
-    ----------
-    angle : float
-        Angle to check (should be normalized to [-180°, 180°])
-    min_angle : float
-        Minimum angle of range (normalized to [-180°, 180°])
-    max_angle : float
-        Maximum angle of range (normalized to [-180°, 180°])
-
-    Returns
-    -------
-    bool
-        True if angle is in range, False otherwise
-
-    Examples
-    --------
-    >>> _angle_in_range(90.0, 85.0, 95.0)  # Normal range
-    True
-    >>> _angle_in_range(175.0, 170.0, -170.0)  # Wrapped range
-    True
-    >>> _angle_in_range(-175.0, 170.0, -170.0)  # Wrapped range
-    True
-    >>> _angle_in_range(0.0, 170.0, -170.0)  # Outside wrapped range
-    False
+    This is a wrapper that delegates to homodyne.data.angle_filtering.
     """
-    if min_angle <= max_angle:
-        # Normal range (doesn't span ±180° boundary)
-        return min_angle <= angle <= max_angle
-    else:
-        # Wrapped range (spans ±180° boundary)
-        # Angle matches if it's >= min_angle OR <= max_angle
-        return angle >= min_angle or angle <= max_angle
+    return _data_angle_in_range(angle, min_angle, max_angle)
 
 
 # Import core modules with fallback
@@ -1590,74 +1533,9 @@ def _apply_angle_filtering(
 ) -> tuple[list[int], np.ndarray, np.ndarray]:
     """Core angle filtering logic shared by optimization and plotting.
 
-    Filters phi angles and corresponding C2 data based on target_ranges
-    specified in configuration. Uses OR logic across ranges: an angle is
-    selected if it falls within ANY of the specified ranges.
-
-    Parameters
-    ----------
-    phi_angles : np.ndarray
-        Array of phi angles in degrees, shape (n_phi,)
-    c2_exp : np.ndarray
-        Experimental correlation data, shape (n_phi, n_t1, n_t2)
-    config : dict
-        Configuration dictionary with phi_filtering section
-
-    Returns
-    -------
-    filtered_indices : list of int
-        Indices of angles that matched target ranges
-    filtered_phi_angles : np.ndarray
-        Filtered phi angles array, shape (n_matched,)
-    filtered_c2_exp : np.ndarray
-        Filtered C2 data array, shape (n_matched, n_t1, n_t2)
-
-    Notes
-    -----
-    - Returns all angles (unfiltered) if phi_filtering.enabled is False
-    - Returns all angles with warning if no target_ranges specified
-    - Returns all angles with warning if no angles match target ranges
-    - Angle matching uses wrap-aware range checking (handles ±180° boundary)
-    - Normal range [85°, 95°]: 85° ≤ angle ≤ 95°
-    - Wrapped range [170°, -170°]: angle ≥ 170° OR angle ≤ -170°
-    - Angles matching multiple ranges are only included once
+    This is a wrapper that delegates to homodyne.data.angle_filtering.
     """
-    # Get phi_filtering configuration
-    phi_filtering_config = config.get("phi_filtering", {})
-
-    if not phi_filtering_config.get("enabled", False):
-        # Filtering disabled - return all angles
-        return list(range(len(phi_angles))), phi_angles, c2_exp
-
-    # Get target ranges
-    target_ranges = phi_filtering_config.get("target_ranges", [])
-    if not target_ranges:
-        # No ranges specified - return all angles with warning
-        return list(range(len(phi_angles))), phi_angles, c2_exp
-
-    # Filter angles based on target ranges (OR logic)
-    # Uses wrap-aware range checking to handle ranges spanning ±180° boundary
-    filtered_indices = []
-    for i, angle in enumerate(phi_angles):
-        for range_spec in target_ranges:
-            min_angle = range_spec.get("min_angle", -180.0)
-            max_angle = range_spec.get("max_angle", 180.0)
-            if _angle_in_range(angle, min_angle, max_angle):
-                filtered_indices.append(i)
-                break  # Angle matches this range, no need to check other ranges
-
-    if not filtered_indices:
-        # No matches - return all angles with warning
-        return list(range(len(phi_angles))), phi_angles, c2_exp
-
-    # Apply filtering
-    # Convert list to numpy array for JAX compatibility
-    # (JAX arrays don't accept Python list indexing, see https://github.com/jax-ml/jax/issues/4564)
-    filtered_indices_array = np.array(filtered_indices)
-    filtered_phi_angles = phi_angles[filtered_indices_array]
-    filtered_c2_exp = c2_exp[filtered_indices_array]
-
-    return filtered_indices, filtered_phi_angles, filtered_c2_exp
+    return _data_apply_angle_filtering(phi_angles, c2_exp, config)
 
 
 def _apply_angle_filtering_for_plot(
@@ -1667,249 +1545,21 @@ def _apply_angle_filtering_for_plot(
 ) -> tuple[list[int], np.ndarray, np.ndarray]:
     """Apply angle filtering to select specific angles for plotting.
 
-    This is a wrapper around _apply_angle_filtering() that extracts the
-    configuration from the data dictionary and adds plot-specific logging.
-
-    This filters the loaded data (which contains ALL angles) to show only
-    the angles specified in phi_filtering configuration.
-
-    Parameters
-    ----------
-    phi_angles : np.ndarray
-        Array of phi angles in degrees
-    c2_exp : np.ndarray
-        Experimental correlation data
-    data : dict
-        Data dictionary containing 'config' key with phi_filtering settings
-
-    Returns
-    -------
-    tuple
-        (filtered_indices, filtered_phi_angles, filtered_c2_exp)
-
-    Notes
-    -----
-    Uses shared _apply_angle_filtering() function for consistent filtering
-    logic with optimization workflow.
+    This is a wrapper that delegates to homodyne.data.angle_filtering.
     """
-    # Check if filtering config is available in data dict
-    config = data.get("config", None)
-    if config is None:
-        # No config available - plot all angles
-        logger.debug("No config available for angle filtering, plotting all angles")
-        return list(range(len(phi_angles))), phi_angles, c2_exp
-
-    # Call shared filtering function
-    filtered_indices, filtered_phi_angles, filtered_c2_exp = _apply_angle_filtering(
-        phi_angles,
-        c2_exp,
-        config,
-    )
-
-    # Add plot-specific logging
-    phi_filtering_config = config.get("phi_filtering", {})
-
-    if not phi_filtering_config.get("enabled", False):
-        logger.debug("Phi filtering not enabled, plotting all angles")
-    elif not phi_filtering_config.get("target_ranges", []):
-        logger.warning(
-            "Phi filtering enabled but no target_ranges specified, plotting all angles",
-        )
-    elif not filtered_indices or len(filtered_indices) == len(phi_angles):
-        if len(filtered_indices) == 0:
-            logger.warning("No angles matched target ranges, plotting all angles")
-        # else: all angles matched, no special logging needed
-    else:
-        logger.info(
-            f"Angle filtering applied: {len(filtered_indices)} angles selected "
-            f"from {len(phi_angles)} total angles",
-        )
-
-    return filtered_indices, filtered_phi_angles, filtered_c2_exp
+    return _data_apply_angle_filtering_for_plot(phi_angles, c2_exp, data)
 
 
 def _plot_experimental_data(data: dict[str, Any], plots_dir) -> None:
-    """Generate validation plots of experimental data."""
-    import matplotlib.pyplot as plt
-    import numpy as np
+    """Generate validation plots of experimental data.
 
-    # Basic experimental data visualization
-    c2_exp = data.get("c2_exp", None)
-    if c2_exp is None:
-        logger.warning("No experimental data to plot")
-        return
-
-    # Get time arrays if available for proper axis labels
-    t1 = data.get("t1", None)
-    t2 = data.get("t2", None)
-
-    # Extract time extent for imshow if time arrays are available
-    if t1 is not None and t2 is not None:
-        t_min = float(np.min(t1))
-        t_max = float(np.max(t1))
-        extent = [t_min, t_max, t_min, t_max]
-        xlabel = "t₂ (s)"
-        ylabel = "t₁ (s)"
-        logger.debug(f"Using time extent: [{t_min:.3f}, {t_max:.3f}] seconds")
-    else:
-        extent = None
-        xlabel = "t₂ Index"
-        ylabel = "t₁ Index"
-        logger.debug("Time arrays not available, using frame indices")
-
-    # Get phi angles array from data
-    phi_angles_list = data.get("phi_angles_list", None)
-    if phi_angles_list is None:
-        logger.warning("phi_angles_list not found in data, using indices")
-        phi_angles_list = np.arange(c2_exp.shape[0])
-
-    # Apply angle filtering for plotting if configured
-    # This filters the loaded data to show only selected angles
-    filtered_indices, filtered_phi_angles, filtered_c2_exp = (
-        _apply_angle_filtering_for_plot(phi_angles_list, c2_exp, data)
+    This is a wrapper that delegates to homodyne.viz.experimental_plots.
+    """
+    _viz_plot_experimental_data(
+        data,
+        plots_dir,
+        angle_filter_func=_apply_angle_filtering_for_plot,
     )
-
-    # Use filtered data for plotting
-    phi_angles_list = filtered_phi_angles
-    c2_exp = filtered_c2_exp
-
-    logger.info(
-        f"Plotting {len(filtered_indices)} angles after filtering: {filtered_phi_angles}",
-    )
-
-    # Handle different data shapes
-    if c2_exp.ndim == 3:
-        # Data shape: (n_phi, n_t1, n_t2)
-        # Save individual heatmap for EACH phi angle
-        n_angles = c2_exp.shape[0]
-
-        logger.info(f"Generating individual C₂ heatmaps for {n_angles} phi angles...")
-
-        for angle_idx in range(n_angles):
-            # Get actual phi angle value
-            phi_deg = (
-                phi_angles_list[angle_idx] if len(phi_angles_list) > angle_idx else 0.0
-            )
-            angle_data = c2_exp[angle_idx]
-
-            # Create individual figure for this phi angle
-            fig, ax = plt.subplots(figsize=(8, 7))
-
-            # Create C2 heatmap
-            # Transpose to show diagonal from bottom-left to top-right
-            # Data structure: c2[t1_idx, t2_idx] → c2.T for correct imshow display
-            im = ax.imshow(
-                angle_data.T,
-                aspect="equal",
-                cmap="jet",
-                origin="lower",
-                extent=extent,
-            )
-            ax.set_xlabel(xlabel, fontsize=11)
-            ax.set_ylabel(ylabel, fontsize=11)
-            ax.set_title(
-                f"Experimental C₂(t₁, t₂) at φ={phi_deg:.1f}°",
-                fontsize=13,
-                fontweight="bold",
-            )
-
-            # Add colorbar
-            cbar = plt.colorbar(im, ax=ax, label="C₂", shrink=0.9)
-            cbar.ax.tick_params(labelsize=9)
-
-            # Calculate and display key statistics on the plot
-            mean_val = np.mean(angle_data)
-            max_val = np.max(angle_data)
-            min_val = np.min(angle_data)
-
-            # Add text box with statistics
-            stats_text = f"Mean: {mean_val:.4f}\nRange: [{min_val:.4f}, {max_val:.4f}]"
-            ax.text(
-                0.02,
-                0.98,
-                stats_text,
-                transform=ax.transAxes,
-                fontsize=9,
-                verticalalignment="top",
-                bbox={"boxstyle": "round", "facecolor": "white", "alpha": 0.8},
-            )
-
-            plt.tight_layout()
-
-            # Save individual file with phi angle in filename
-            filename = f"experimental_data_phi_{phi_deg:.1f}.png"
-            plt.savefig(plots_dir / filename, dpi=150, bbox_inches="tight")
-            plt.close()
-
-            logger.debug(f"  ✓ Saved: {filename}")
-
-        logger.info(f"✓ Generated {n_angles} individual C₂ heatmaps")
-
-        # Plot diagonal (t1=t2) for all phi angles
-        fig, ax = plt.subplots(figsize=(10, 6))
-
-        # Get time values for x-axis if available
-        if t1 is not None:
-            time_diagonal = np.diag(
-                t1,
-            )  # Extract diagonal of t1 (which equals t2 on diagonal)
-        else:
-            time_diagonal = np.arange(c2_exp.shape[-1])
-
-        for idx in range(min(10, c2_exp.shape[0])):
-            diagonal = np.diag(c2_exp[idx])
-            phi_deg = phi_angles_list[idx] if len(phi_angles_list) > idx else idx
-            ax.plot(time_diagonal, diagonal, label=f"φ={phi_deg:.1f}°", alpha=0.7)
-        ax.set_xlabel("Time (s)" if t1 is not None else "Time Index")
-        ax.set_ylabel("C₂(t, t)")
-        ax.set_title("C₂ Diagonal (t₁=t₂) for Different φ Angles")
-        ax.legend(ncol=2)
-        ax.grid(True, alpha=0.3)
-        plt.tight_layout()
-        plt.savefig(
-            plots_dir / "experimental_data_diagonal.png",
-            dpi=150,
-            bbox_inches="tight",
-        )
-        plt.close()
-
-    elif c2_exp.ndim == 2:
-        # 2D data: single correlation matrix
-        fig, ax = plt.subplots(figsize=(10, 8))
-        # Transpose to show diagonal from bottom-left to top-right
-        im = ax.imshow(
-            c2_exp.T,
-            aspect="equal",
-            cmap="jet",
-            origin="lower",
-            extent=extent,
-        )
-        plt.colorbar(im, ax=ax, label="C₂(t₁,t₂)", shrink=0.8)
-        ax.set_xlabel(xlabel)
-        ax.set_ylabel(ylabel)
-        ax.set_title("Experimental C₂ Data")
-        ax.grid(True, alpha=0.3)
-        plt.tight_layout()
-        plt.savefig(plots_dir / "experimental_data.png", dpi=150, bbox_inches="tight")
-        plt.close()
-
-    elif c2_exp.ndim == 1:
-        # 1D data
-        fig, ax = plt.subplots(figsize=(10, 6))
-        ax.plot(c2_exp, marker="o", linestyle="-", alpha=0.7)
-        ax.set_xlabel("Data Point Index")
-        ax.set_ylabel("C₂")
-        ax.set_title("Experimental C₂ Data")
-        ax.grid(True, alpha=0.3)
-        plt.tight_layout()
-        plt.savefig(plots_dir / "experimental_data.png", dpi=150, bbox_inches="tight")
-        plt.close()
-
-    else:
-        logger.warning(f"Unsupported data dimensionality: {c2_exp.ndim}D")
-        return
-
-    logger.debug(f"Plotted experimental data with shape {c2_exp.shape}")
 
 
 def _plot_simulated_data(
@@ -1920,320 +1570,11 @@ def _plot_simulated_data(
     plots_dir,
     data: dict[str, Any] | None = None,
 ) -> None:
-    """Generate plots of simulated/theoretical data."""
-    import jax.numpy as jnp
-    import matplotlib.pyplot as plt
+    """Generate plots of simulated/theoretical data.
 
-    from homodyne.core.models import CombinedModel
-
-    # BUGFIX: Force contrast to 0.5 to match working version
-    # The default was incorrectly set to 0.3 somewhere upstream
-    if contrast < 0.4:  # If it's the old default 0.3, override it
-        logger.debug(f"Overriding contrast={contrast} → 0.5 (matching working version)")
-        contrast = 0.5
-
-    logger.info(
-        f"Generating simulated data plots (contrast={contrast:.3f}, offset={offset:.3f})",
-    )
-
-    # Determine analysis mode
-    analysis_mode = config.get("analysis_mode", "static")
-    logger.info(f"Analysis mode: {analysis_mode}")
-
-    # Create model
-    model = CombinedModel(analysis_mode)
-
-    # Get parameters from configuration
-    # Read from top-level initial_parameters (not nested in optimization)
-    initial_params_config = config.get("initial_parameters", {})
-    param_names = initial_params_config.get("parameter_names", [])
-    param_values = initial_params_config.get("values", [])
-
-    # Create dict mapping parameter names to values
-    params_dict = (
-        dict(zip(param_names, param_values, strict=False))
-        if param_names and param_values
-        else {}
-    )
-
-    if analysis_mode.startswith("static"):
-        # Static mode: 3 parameters
-        params = jnp.array(
-            [
-                params_dict.get("D0", 100.0),
-                params_dict.get("alpha", -0.5),
-                params_dict.get("D_offset", 0.0),
-            ],
-        )
-    else:
-        # Laminar flow: 7 parameters
-        # Use canonical parameter names matching config
-        params = jnp.array(
-            [
-                params_dict.get("D0", 100.0),
-                params_dict.get("alpha", -0.5),
-                params_dict.get("D_offset", 0.0),
-                params_dict.get("gamma_dot_t0", 0.01),  # Canonical (was gamma_dot_0)
-                params_dict.get("beta", 0.5),
-                params_dict.get(
-                    "gamma_dot_t_offset", 0.0
-                ),  # Canonical (was gamma_dot_offset)
-                params_dict.get("phi0", 0.0),
-            ],
-        )
-
-    logger.debug(
-        f"Using parameters: {dict(zip(model.parameter_names, params, strict=False))}",
-    )
-
-    # Determine phi angles for theoretical simulation plots
-    # Note: These plots show theoretical behavior with initial parameters,
-    # independent of angle filtering used for optimization
-    #
-    # Priority:
-    # 1. Use CLI-provided phi_angles_str if specified
-    # 2. Use ALL experimental data phi angles (unfiltered) if available
-    # 3. Fall back to default range
-    if phi_angles_str:
-        # Use CLI-provided angles (highest priority for explicit control)
-        phi_degrees = np.array([float(x.strip()) for x in phi_angles_str.split(",")])
-        phi = phi_degrees
-        logger.info(
-            f"Using CLI-provided phi angles for theoretical plots: {phi_degrees}",
-        )
-    elif data is not None and "phi_angles_list" in data:
-        # Use experimental data's phi angles
-        # Note: May be filtered if angle filtering is enabled in config
-        phi_degrees = np.array(data["phi_angles_list"])
-        phi = phi_degrees
-        logger.info(
-            f"Using experimental data phi angles for theoretical plots: {phi_degrees}",
-        )
-        logger.warning(
-            "Theoretical plots using potentially filtered phi angles from experimental data. "
-            "To use all angles, disable phi_filtering in config or provide --phi-angles explicitly.",
-        )
-    else:
-        # Default: 8 evenly spaced angles from 0 to 180 degrees
-        phi_degrees = np.linspace(0, 180, 8)
-        phi = phi_degrees
-        logger.info(f"Using default phi angles for theoretical plots: {phi_degrees}")
-
-    logger.debug(f"Generating simulated data for {len(phi)} phi angles")
-
-    # Generate time arrays matching configuration specification
-    # CRITICAL: Simulated data must be independent of experimental data
-    analyzer_params = config.get("analyzer_parameters", {})
-    dt = analyzer_params.get("dt", 0.1)
-    start_frame = analyzer_params.get("start_frame", 1)
-    end_frame = analyzer_params.get("end_frame", 8000)
-
-    # Calculate number of time points (inclusive frame counting)
-    # This matches the data loader convention: n = end - start + 1
-    n_time_points = end_frame - start_frame + 1
-
-    # Generate time array starting at t=dt (EXCLUDE t=0 to match experimental data)
-    # The data loader removes t1=t2=0 from c2_exp to avoid singularities
-    # We must do the same for simulated data for consistency
-    #
-    # CRITICAL FIX (Nov 14, 2025): Three critical issues fixed:
-    # 1. Use arange instead of linspace to ensure EXACT dt spacing
-    #    Problem: linspace(0, time_max, n) creates spacing = time_max/(n-1) ≠ dt
-    # 2. Start at t=dt instead of t=0 to avoid alpha<0 singularity
-    #    Problem: D(t=0) = D₀*0^α = ∞ when α<0, causing NaN/Inf in C₂
-    # 3. Match experimental data loader convention (removes t=0 points)
-    t_vals = dt * np.arange(1, n_time_points + 1)  # Start at dt, not 0
-    _time_max = t_vals[-1]  # Actual maximum time (dt * n_time_points)  # noqa: F841
-    t1_grid, t2_grid = np.meshgrid(t_vals, t_vals, indexing="ij")
-
-    logger.debug(
-        f"Simulated data time grid: dt={dt}, start_frame={start_frame}, end_frame={end_frame}",
-    )
-    logger.debug(
-        f"Time range: [{float(t_vals[0]):.4f}, {float(t_vals[-1]):.2f}] seconds with {n_time_points} points",
-    )
-    logger.debug(
-        f"Time spacing verification: t[1]-t[0]={float(t_vals[1] - t_vals[0]):.6f} (should equal dt={dt})",
-    )
-
-    # Get wavevector_q and stator_rotor_gap from correct config sections
-    scattering_config = analyzer_params.get("scattering", {})
-    geometry_config = analyzer_params.get("geometry", {})
-
-    q = scattering_config.get("wavevector_q", 0.0054)  # Wave vector in Å⁻¹
-    L_angstroms = geometry_config.get("stator_rotor_gap", 2000000)  # Gap in Angstroms
-
-    # Convert to microns for display (1 μm = 10,000 Å)
-    L_microns = L_angstroms / 10000.0
-
-    logger.info(
-        f"Generating theoretical C₂ with q={q:.6f} Å⁻¹, L={L_microns:.1f} μm ({L_angstroms:.0f} Å)",
-    )
-    logger.debug(
-        f"Physics parameters: q={q}, L={L_angstroms} (Angstroms - used by physics code)",
-    )
-
-    # Generate simulated C₂ for each phi angle
-    c2_simulated = []
-
-    for _i, phi_val in enumerate(phi):
-        phi_array = jnp.array([phi_val])
-
-        logger.debug(f"Computing C₂ for φ={phi_val}° (phi_array={phi_array})")
-
-        # Compute g2 for this phi angle (L_angstroms: physics code expects Angstroms)
-        # CRITICAL: Pass dt explicitly to ensure correct physics calculations
-        c2_phi = model.compute_g2(
-            params,
-            t1_grid,
-            t2_grid,
-            phi_array,
-            q,
-            L_angstroms,
-            contrast,
-            offset,
-            dt,  # Pass dt from config for accurate physics
-        )
-
-        # Extract the 2D array (remove phi dimension)
-        c2_result = np.array(c2_phi[0])
-        logger.debug(
-            f"  C₂ shape: {c2_result.shape}, range: [{c2_result.min():.4f}, {c2_result.max():.4f}]",
-        )
-        c2_simulated.append(c2_result)
-
-    c2_simulated = np.array(c2_simulated)  # Shape: (n_phi, n_t, n_t)
-
-    logger.info(f"Generated simulated C₂ with shape: {c2_simulated.shape}")
-
-    # Compute global color scale across all angles for consistent visualization
-    # ADAPTIVE COLOR SCALING (Nov 14, 2025):
-    # Independently check data min/max against [1.0, 1.6] boundaries
-    # vmin = max(1.0, data_min): use data_min if >= 1.0, else 1.0
-    # vmax = min(1.6, data_max): use data_max if <= 1.6, else 1.6
-    c2_min = float(c2_simulated.min())
-    c2_max = float(c2_simulated.max())
-
-    # Independent boundary checks (OR relation, not AND)
-    vmin = max(1.0, c2_min)  # Clamp lower bound to 1.0
-    vmax = min(1.6, c2_max)  # Clamp upper bound to 1.6
-
-    logger.debug(
-        f"Simulated C2 range [{c2_min:.4f}, {c2_max:.4f}] → "
-        f"color scale [{vmin:.4f}, {vmax:.4f}] (clamped to [1.0, 1.6])"
-    )
-
-    logger.debug(f"Global color scale: vmin={vmin:.6f}, vmax={vmax:.6f}")
-
-    # Save individual C₂ heatmap for EACH phi angle
-    n_phi = len(phi)
-    logger.info(
-        f"Generating individual simulated C₂ heatmaps for {n_phi} phi angles...",
-    )
-
-    for idx in range(n_phi):
-        # Create individual figure for this phi angle
-        fig, ax = plt.subplots(figsize=(8, 7))
-
-        # Create C2 heatmap
-        # Transpose to show diagonal from bottom-left to top-right
-        #
-        # CRITICAL FIXES (Nov 14, 2025):
-        # 1. Add explicit interpolation='bilinear' (smooth rendering, no blocky artifacts)
-        # 2. Apply adaptive vmin/vmax (better contrast when data fits [1.0, 1.6])
-        im = ax.imshow(
-            c2_simulated[idx].T,
-            extent=[t_vals[0], t_vals[-1], t_vals[0], t_vals[-1]],
-            aspect="equal",
-            cmap="jet",
-            origin="lower",
-            interpolation="bilinear",  # Smooth interpolation for continuous C₂
-            vmin=vmin,  # Adaptive color scaling
-            vmax=vmax,  # Adaptive color scaling
-        )
-        ax.set_xlabel("t₁ (s)", fontsize=11)
-        ax.set_ylabel("t₂ (s)", fontsize=11)
-        ax.set_title(
-            f"Simulated C₂(t₁, t₂) at φ={phi_degrees[idx]:.1f}°",
-            fontsize=13,
-            fontweight="bold",
-        )
-
-        # Add colorbar
-        cbar = plt.colorbar(im, ax=ax, label="C₂", shrink=0.9)
-        cbar.ax.tick_params(labelsize=9)
-
-        # Calculate and display key statistics
-        mean_val = np.mean(c2_simulated[idx])
-        max_val = np.max(c2_simulated[idx])
-        min_val = np.min(c2_simulated[idx])
-
-        # Add text box with statistics
-        stats_text = f"Mean: {mean_val:.4f}\nRange: [{min_val:.4f}, {max_val:.4f}]"
-        ax.text(
-            0.02,
-            0.98,
-            stats_text,
-            transform=ax.transAxes,
-            fontsize=9,
-            verticalalignment="top",
-            bbox={"boxstyle": "round", "facecolor": "white", "alpha": 0.8},
-        )
-
-        # Add analysis mode info
-        mode_text = (
-            f"Mode: {analysis_mode}\nContrast: {contrast:.3f}\nOffset: {offset:.3f}"
-        )
-        ax.text(
-            0.02,
-            0.02,
-            mode_text,
-            transform=ax.transAxes,
-            fontsize=8,
-            verticalalignment="bottom",
-            bbox={"boxstyle": "round", "facecolor": "lightblue", "alpha": 0.7},
-        )
-
-        plt.tight_layout()
-
-        # Save individual file with phi angle in filename
-        filename = f"simulated_data_phi_{phi_degrees[idx]:.1f}.png"
-        plt.savefig(plots_dir / filename, dpi=150, bbox_inches="tight")
-        plt.close()
-
-        logger.debug(f"  ✓ Saved: {filename}")
-
-    logger.info(f"✓ Generated {n_phi} individual simulated C₂ heatmaps")
-
-    # Plot 2: Diagonal (t1=t2) for all phi angles
-    fig, ax = plt.subplots(figsize=(10, 6))
-
-    for idx in range(min(10, len(phi))):
-        diagonal = np.diag(c2_simulated[idx])
-        ax.plot(
-            t_vals,
-            diagonal,
-            label=f"φ={phi_degrees[idx]:.1f}°",
-            alpha=0.7,
-            linewidth=2,
-        )
-
-    ax.set_xlabel("Time t (s)", fontsize=12)
-    ax.set_ylabel("C₂(t, t)", fontsize=12)
-    ax.set_title(
-        f"Simulated C₂ Along Diagonal (t₁=t₂)\n(contrast={contrast:.3f}, offset={offset:.3f}, mode={analysis_mode})",
-        fontsize=13,
-        fontweight="bold",
-    )
-    ax.legend(loc="best", fontsize=9, ncol=2)
-    ax.grid(True, alpha=0.3)
-    plt.tight_layout()
-    plt.savefig(plots_dir / "simulated_data_diagonal.png", dpi=150, bbox_inches="tight")
-    plt.close()
-
-    logger.info("✓ Generated diagonal plot: simulated_data_diagonal.png")
-
-    logger.info("✓ Simulated data plots generated successfully")
+    This is a wrapper that delegates to homodyne.viz.nlsq_plots.
+    """
+    _viz_plot_simulated_data(config, contrast, offset, phi_angles_str, plots_dir, data)
 
 
 def _generate_and_plot_fitted_simulations(
@@ -2244,310 +1585,23 @@ def _generate_and_plot_fitted_simulations(
 ) -> None:
     """Generate and plot C2 simulations using fitted parameters from optimization.
 
-    This function generates simulated C2 data using the optimized parameters and
-    saves individual plots for each phi angle in the simulated_data/ subdirectory.
-
-    Parameters
-    ----------
-    result : OptimizationResult
-        Optimization result containing fitted parameters
-    data : dict
-        Experimental data dictionary containing phi_angles_list, t1, t2, c2_exp
-    config : dict
-        Configuration dictionary with analysis_mode and physics parameters
-    output_dir : Path
-        Output directory path (simulated_data/ subdirectory will be created here)
+    This is a wrapper that delegates to homodyne.viz.nlsq_plots.
     """
-    import json
-
-    import jax.numpy as jnp
-    import matplotlib.pyplot as plt
-    import numpy as np
-
-    from homodyne.config.manager import ConfigManager
-    from homodyne.core.models import CombinedModel
-
-    logger.info("Generating fitted C₂ simulations...")
-
-    # Apply phi filtering to data (if enabled in config)
-    # Convert config dict to ConfigManager if needed for filtering function
-    if isinstance(config, dict):
-        config_for_filtering = ConfigManager(config_dict=config)
-    else:
-        config_for_filtering = config
-
-    filtered_data = _apply_angle_filtering_for_optimization(data, config_for_filtering)
-    logger.debug(
-        f"Applied phi filtering for fitted simulation plots: "
-        f"{len(filtered_data['phi_angles_list'])} angles selected"
+    _viz_generate_and_plot_fitted_simulations(
+        result,
+        data,
+        config,
+        output_dir,
+        angle_filter_func=_apply_angle_filtering_for_optimization,
     )
-
-    # Create simulated_data subdirectory
-    simulated_data_dir = output_dir / "simulated_data"
-    simulated_data_dir.mkdir(parents=True, exist_ok=True)
-
-    # Extract fitted parameters from result
-    if hasattr(result, "parameters") and isinstance(result.parameters, np.ndarray):
-        # NLSQ result format - parameters is np.ndarray
-        # Order: [contrast, offset, D0, alpha, D_offset, ...]
-        # For laminar_flow: [..., gamma_dot_t0, beta, gamma_dot_t_offset, phi0]
-        params_array = result.parameters
-        if len(params_array) >= 2:
-            contrast = float(params_array[0])
-            offset = float(params_array[1])
-            # Physical parameters start at index 2
-            physical_params = params_array[2:] if len(params_array) > 2 else []
-        else:
-            logger.warning(
-                f"Insufficient parameters in result.parameters: {len(params_array)}"
-            )
-            contrast = 0.5
-            offset = 1.0
-            physical_params = []
-    elif hasattr(result, "mean_params"):
-        # MCMC result format
-        contrast = result.mean_contrast
-        offset = result.mean_offset
-        physical_params = result.mean_params
-    else:
-        logger.warning("Cannot extract fitted parameters from result")
-        return
-
-    # Convert to JAX array
-    if isinstance(physical_params, list):
-        params = jnp.array(physical_params)
-    elif hasattr(physical_params, "tolist"):
-        params = jnp.array(physical_params.tolist())
-    else:
-        params = jnp.array(physical_params)
-
-    logger.info(
-        f"Using fitted parameters: contrast={contrast:.4f}, offset={offset:.4f}",
-    )
-    logger.debug(f"Physical parameters: {params}")
-
-    # Get analysis mode
-    analysis_mode = config.get("analysis_mode", "static_isotropic")
-    logger.info(f"Analysis mode: {analysis_mode}")
-
-    # Create model
-    model = CombinedModel(analysis_mode)
-
-    # Get experimental data structure (using filtered data)
-    phi_angles_list = filtered_data.get("phi_angles_list", None)
-    t1 = filtered_data.get("t1", None)
-    t2 = filtered_data.get("t2", None)
-
-    if phi_angles_list is None or t1 is None or t2 is None:
-        logger.warning("Missing experimental data structure (phi_angles_list, t1, t2)")
-        return
-
-    # Convert to JAX arrays
-    t1_grid = jnp.array(t1)
-    t2_grid = jnp.array(t2)
-
-    # Get physics parameters from config
-    analyzer_params = config.get("analyzer_parameters", {})
-    scattering_config = analyzer_params.get("scattering", {})
-    geometry_config = analyzer_params.get("geometry", {})
-    dt = analyzer_params.get("dt", 0.1)
-
-    q = scattering_config.get("wavevector_q", 0.0054)
-    L_angstroms = geometry_config.get("stator_rotor_gap", 2000000)
-
-    logger.debug(f"Physics: q={q:.6f} Å⁻¹, L={L_angstroms:.0f} Å, dt={dt}")
-
-    # Generate fitted C2 for each phi angle
-    c2_fitted_list = []
-
-    for _i, phi_deg in enumerate(phi_angles_list):
-        phi_array = jnp.array([phi_deg])
-
-        logger.debug(f"Generating fitted C₂ for φ={phi_deg:.1f}°")
-
-        # Compute g2 with fitted parameters
-        c2_phi = model.compute_g2(
-            params,
-            t1_grid,
-            t2_grid,
-            phi_array,
-            q,
-            L_angstroms,
-            contrast,
-            offset,
-            dt,
-        )
-
-        # Extract 2D array (remove phi dimension)
-        c2_result = np.array(c2_phi[0])
-        c2_fitted_list.append(c2_result)
-
-        logger.debug(f"  C₂ range: [{c2_result.min():.4f}, {c2_result.max():.4f}]")
-
-    c2_fitted = np.array(c2_fitted_list)  # Shape: (n_phi, n_t1, n_t2)
-
-    logger.info(f"Generated fitted C₂ with shape: {c2_fitted.shape}")
-
-    # Save fitted C2 data as NPZ
-    npz_file = simulated_data_dir / "c2_fitted_data.npz"
-    np.savez(
-        npz_file,
-        c2_data=c2_fitted,
-        phi_angles=phi_angles_list,
-        t1=t1,
-        t2=t2,
-        initial_params=params,
-        contrast=contrast,
-        offset=offset,
-    )
-    logger.info(f"✓ Saved fitted C₂ data: {npz_file}")
-
-    # Save configuration for fitted simulation
-    config_file = simulated_data_dir / "simulation_config_fitted.json"
-    sim_config = {
-        "command_line_args": {
-            "contrast": float(contrast),
-            "offset": float(offset),
-            "phi_angles": ",".join(f"{x:.1f}" for x in phi_angles_list),
-        },
-        "parameters": {
-            "values": params.tolist() if hasattr(params, "tolist") else list(params),
-            "names": model.parameter_names,
-        },
-        "data_type": "fitted",
-        "analysis_mode": analysis_mode,
-    }
-    with open(config_file, "w") as f:
-        json.dump(sim_config, f, indent=2)
-    logger.info(f"✓ Saved simulation config: {config_file}")
-
-    # Generate individual plots for each phi angle
-    # Note: Using auto-scaling per plot for optimal visualization
-    logger.info(
-        f"Generating individual fitted C₂ plots for {len(phi_angles_list)} angles...",
-    )
-
-    # Get time extent for plotting
-    if t1 is not None and t2 is not None:
-        t_min = float(np.min(t1))
-        t_max = float(np.max(t1))
-        extent = [t_min, t_max, t_min, t_max]
-        xlabel = "t₂ (s)"
-        ylabel = "t₁ (s)"
-    else:
-        extent = None
-        xlabel = "t₂ Index"
-        ylabel = "t₁ Index"
-
-    for i, phi_deg in enumerate(phi_angles_list):
-        # Create individual figure
-        fig, ax = plt.subplots(figsize=(8, 7))
-
-        # Create heatmap
-        # Note: No vmin/vmax for individual plots - auto-scale each plot
-        # for optimal visualization (like experimental plots)
-        # Transpose to show diagonal from bottom-left to top-right
-        im = ax.imshow(
-            c2_fitted[i].T,
-            aspect="equal",
-            cmap="jet",
-            origin="lower",
-            extent=extent,
-        )
-        ax.set_xlabel(xlabel, fontsize=11)
-        ax.set_ylabel(ylabel, fontsize=11)
-        ax.set_title(
-            f"Fitted C₂(t₁, t₂) at φ={phi_deg:.1f}°",
-            fontsize=13,
-            fontweight="bold",
-        )
-
-        # Add colorbar
-        cbar = plt.colorbar(im, ax=ax, label="C₂", shrink=0.9)
-        cbar.ax.tick_params(labelsize=9)
-
-        # Calculate statistics
-        mean_val = np.mean(c2_fitted[i])
-        max_val = np.max(c2_fitted[i])
-        min_val = np.min(c2_fitted[i])
-
-        # Add statistics box
-        stats_text = f"Mean: {mean_val:.4f}\nRange: [{min_val:.4f}, {max_val:.4f}]"
-        ax.text(
-            0.02,
-            0.98,
-            stats_text,
-            transform=ax.transAxes,
-            fontsize=9,
-            verticalalignment="top",
-            bbox={"boxstyle": "round", "facecolor": "white", "alpha": 0.8},
-        )
-
-        # Add fitting info
-        fit_text = f"Fitted Parameters\nContrast: {contrast:.3f}\nOffset: {offset:.3f}"
-        ax.text(
-            0.02,
-            0.02,
-            fit_text,
-            transform=ax.transAxes,
-            fontsize=8,
-            verticalalignment="bottom",
-            bbox={"boxstyle": "round", "facecolor": "lightgreen", "alpha": 0.7},
-        )
-
-        plt.tight_layout()
-
-        # Save with correct filename pattern: simulated_c2_fitted_phi_{angle}deg.png
-        filename = f"simulated_c2_fitted_phi_{phi_deg:.1f}deg.png"
-        plt.savefig(simulated_data_dir / filename, dpi=150, bbox_inches="tight")
-        plt.close()
-
-        logger.debug(f"  ✓ Saved: {filename}")
-
-    logger.info(f"✓ Generated {len(phi_angles_list)} individual fitted C₂ plots")
-    logger.info(f"✓ Fitted simulation data saved to: {simulated_data_dir}")
 
 
 def _plot_fit_comparison(result: Any, data: dict[str, Any], plots_dir) -> None:
-    """Generate comparison plots between fit and experimental data."""
-    import matplotlib.pyplot as plt
+    """Generate comparison plots between fit and experimental data.
 
-    c2_exp = data.get("c2_exp", None)
-    if c2_exp is None:
-        return
-
-    fig, axes = plt.subplots(1, 2, figsize=(14, 5))
-
-    # Plot experimental data
-    if c2_exp.ndim == 1:
-        axes[0].plot(c2_exp, marker="o", linestyle="-", alpha=0.7, label="Experimental")
-        axes[0].set_xlabel("Data Point Index")
-        axes[0].set_ylabel("C₂")
-    else:
-        im0 = axes[0].imshow(c2_exp, aspect="auto", cmap="jet", vmin=1.0, vmax=1.5)
-        plt.colorbar(im0, ax=axes[0], label="C₂")
-        axes[0].set_xlabel("t₂ Index")
-        axes[0].set_ylabel("φ Index")
-    axes[0].set_title("Experimental Data")
-    axes[0].grid(True, alpha=0.3)
-
-    # Plot fit results
-    axes[1].text(
-        0.5,
-        0.5,
-        "Fit visualization\nrequires full\nplotting backend",
-        ha="center",
-        va="center",
-        fontsize=14,
-    )
-    axes[1].set_title("Fit Results")
-    axes[1].axis("off")
-
-    plt.tight_layout()
-    plt.savefig(plots_dir / "fit_comparison.png", dpi=150, bbox_inches="tight")
-    plt.close()
-
-    logger.info("Generated basic fit comparison plot")
+    This is a wrapper that delegates to homodyne.viz.experimental_plots.
+    """
+    _viz_plot_fit_comparison(result, data, plots_dir)
 
 
 # ==============================================================================
@@ -3106,19 +2160,11 @@ def _compute_nlsq_fits(
 
 
 def _json_safe(value: Any) -> Any:
-    """Convert nested objects to JSON-serializable primitives."""
+    """Convert nested objects to JSON-serializable primitives.
 
-    if isinstance(value, dict):
-        return {str(k): _json_safe(v) for k, v in value.items()}
-    if isinstance(value, (list, tuple, set)):
-        return [_json_safe(v) for v in value]
-    if isinstance(value, (np.generic,)):
-        return value.item()
-    if isinstance(value, jnp.ndarray):
-        return _json_safe(np.asarray(value))
-    if isinstance(value, np.ndarray):
-        return value.tolist()
-    return value
+    This is a wrapper that delegates to homodyne.io.json_utils.
+    """
+    return _io_json_safe(value)
 
 
 def _save_nlsq_json_files(
@@ -3129,48 +2175,9 @@ def _save_nlsq_json_files(
 ) -> None:
     """Save 3 JSON files: parameters, analysis results, convergence metrics.
 
-    Parameters
-    ----------
-    param_dict : dict[str, Any]
-        Parameter dictionary with {name: {value, uncertainty}}
-    analysis_dict : dict[str, Any]
-        Analysis results with method, fit_quality, dataset_info, etc.
-    convergence_dict : dict[str, Any]
-        Convergence diagnostics with status, iterations, recovery_actions
-    output_dir : Path
-        Output directory for JSON files
-
-    Returns
-    -------
-    None
-        Files saved to disk
-
-    Notes
-    -----
-    Creates 3 JSON files:
-    - parameters.json: Complete parameter values and uncertainties
-    - analysis_results_nlsq.json: Analysis summary and fit quality
-    - convergence_metrics.json: Convergence diagnostics and device info
+    This is a wrapper that delegates to homodyne.io.nlsq_writers.
     """
-    # Save parameters.json
-    param_file = output_dir / "parameters.json"
-    with open(param_file, "w") as f:
-        json.dump(param_dict, f, indent=2)
-    logger.debug(f"Saved parameters to {param_file}")
-
-    # Save analysis_results_nlsq.json
-    analysis_file = output_dir / "analysis_results_nlsq.json"
-    with open(analysis_file, "w") as f:
-        json.dump(analysis_dict, f, indent=2)
-    logger.debug(f"Saved analysis results to {analysis_file}")
-
-    # Save convergence_metrics.json
-    convergence_file = output_dir / "convergence_metrics.json"
-    with open(convergence_file, "w") as f:
-        json.dump(convergence_dict, f, indent=2)
-    logger.debug(f"Saved convergence metrics to {convergence_file}")
-
-    logger.info("Saved 3 JSON files (parameters, analysis results, convergence)")
+    _io_save_nlsq_json_files(param_dict, analysis_dict, convergence_dict, output_dir)
 
 
 def _save_nlsq_npz_file(
@@ -3190,64 +2197,23 @@ def _save_nlsq_npz_file(
 ) -> None:
     """Save NPZ file with experimental/theoretical data and metadata.
 
-    Parameters
-    ----------
-    phi_angles : np.ndarray
-        Scattering angles (n_angles,)
-    c2_exp : np.ndarray
-        Experimental correlation data (n_angles, n_t1, n_t2)
-    c2_raw : np.ndarray
-        Raw theoretical fits before scaling (n_angles, n_t1, n_t2)
-    c2_scaled : np.ndarray
-        Scaled theoretical fits (n_angles, n_t1, n_t2)
-    c2_solver : np.ndarray | None
-        Solver-evaluated theoretical fits (optional, n_angles, n_t1, n_t2)
-    per_angle_scaling : np.ndarray
-        Per-angle scaling parameters (n_angles, 2) [contrast, offset]
-    per_angle_scaling_solver : np.ndarray
-        Original per-angle scaling parameters from the solver (n_angles, 2)
-    residuals : np.ndarray
-        Residuals: exp - scaled (n_angles, n_t1, n_t2)
-    residuals_norm : np.ndarray
-        Normalized residuals (n_angles, n_t1, n_t2)
-    t1 : np.ndarray
-        Time array 1 (n_t1,)
-    t2 : np.ndarray
-        Time array 2 (n_t2,)
-    q : float
-        Wavevector magnitude [1/Å]
-    output_dir : Path
-        Output directory
-
-    Returns
-    -------
-    None
-        NPZ file saved to disk
+    This is a wrapper that delegates to homodyne.io.nlsq_writers.
     """
-    npz_file = output_dir / "fitted_data.npz"
-
-    np.savez_compressed(
-        npz_file,
-        # Experimental data (2 arrays)
-        phi_angles=phi_angles,
-        c2_exp=c2_exp,
-        # Note: sigma (uncertainties) not included - would need to pass from data if available
-        # Theoretical fits (4 arrays)
-        c2_theoretical_raw=c2_raw,
-        c2_theoretical_scaled=c2_scaled,
-        c2_solver_scaled=c2_solver,
-        per_angle_scaling=per_angle_scaling,
-        per_angle_scaling_solver=per_angle_scaling_solver,
-        # Residuals (2 arrays)
-        residuals=residuals,
-        residuals_normalized=residuals_norm,
-        # Coordinate arrays (3 arrays)
-        t1=t1,
-        t2=t2,
-        q=np.array([q]),  # Wrap scalar in array
+    _io_save_nlsq_npz_file(
+        phi_angles,
+        c2_exp,
+        c2_raw,
+        c2_scaled,
+        c2_solver,
+        per_angle_scaling,
+        per_angle_scaling_solver,
+        residuals,
+        residuals_norm,
+        t1,
+        t2,
+        q,
+        output_dir,
     )
-
-    logger.info(f"Saved NPZ file with 10 arrays to {npz_file}")
 
 
 def save_nlsq_results(
@@ -3499,194 +2465,21 @@ def generate_nlsq_plots(
 ) -> None:
     """Generate 3-panel heatmap plots for NLSQ fit visualization.
 
-    **Hybrid Rendering Approach:**
-    - **Preview mode (preview_mode: true)**: Datashader backend, 5-10x faster
-    - **Publication mode (preview_mode: false)**: Matplotlib backend, high quality
-
-    Mode selection priority:
-    1. Config file: output.plots.preview_mode
-    2. Legacy parameter: use_datashader (backward compatible)
-    3. Default: Publication mode (matplotlib)
-
-    The displayed surface is selected via ``output.plots.fit_surface``
-    ("solver" or "posthoc"). Adaptive color scaling can be enabled via
-    ``output.plots.color_scale``.
-
-    Performance:
-        - Publication (matplotlib): ~150-300ms per plot
-        - Preview (Datashader): ~30-60ms per plot (5-10x speedup)
-        - Preview + parallel (8 cores): ~4-8ms per plot (20-40x speedup)
-
-    Parameters
-    ----------
-    phi_angles : np.ndarray
-        Scattering angles in degrees (n_angles,)
-    c2_exp : np.ndarray
-        Experimental correlation data (n_angles, n_t1, n_t2)
-    c2_theoretical_scaled : np.ndarray
-        Scaled theoretical fits (n_angles, n_t1, n_t2)
-    residuals : np.ndarray
-        Residuals: exp - scaled (n_angles, n_t1, n_t2)
-    t1 : np.ndarray
-        Time array 1 in seconds (n_t1,)
-    t2 : np.ndarray
-        Time array 2 in seconds (n_t2,)
-    output_dir : Path
-        Output directory for PNG files
-    config : ConfigManager or dict, optional
-        Configuration object/dict containing output.plots.preview_mode setting
-    use_datashader : bool, default=True
-        Legacy parameter for backward compatibility. Overridden by config.
-    parallel : bool, default=True
-        Generate plots in parallel using multiprocessing (Nx speedup, N=cores).
-        Recommended for multiple angles.
-
-    Returns
-    -------
-    None
-        PNG files saved to disk
-
-    Notes
-    -----
-    - Creates one PNG per angle: c2_heatmaps_phi_{angle:.1f}deg.png
-    - Layout: 3 panels (experimental, fitted, residuals)
-    - Colormaps: jet (exp, fit, residuals)
-    - Resolution: 300 DPI for publication quality
-    - Datashader canvas: 1200×1200 pixels (configurable via output.plots.datashader.canvas_width)
-    - Matplotlib interpolation: bilinear (configurable via output.plots.matplotlib.interpolation)
-
-    Examples
-    --------
-    >>> # Publication mode (default, matplotlib)
-    >>> generate_nlsq_plots(
-    ...     phi_angles, c2_exp, c2_fit, residuals, t1, t2,
-    ...     output_dir=Path("./results/nlsq"),
-    ...     config=config_manager,  # preview_mode: false
-    ... )
-
-    >>> # Preview mode (fast, Datashader)
-    >>> generate_nlsq_plots(
-    ...     phi_angles, c2_exp, c2_fit, residuals, t1, t2,
-    ...     output_dir=Path("./results/nlsq"),
-    ...     config=config_manager,  # preview_mode: true
-    ...     parallel=True,
-    ... )
+    This is a wrapper that delegates to homodyne.viz.nlsq_plots.
     """
-    logger.info(f"Generating heatmap plots for {len(phi_angles)} angles")
-
-    # Determine rendering mode from config (priority: config > use_datashader legacy param)
-    preview_mode = use_datashader  # Default to legacy parameter
-    width = 1200
-    height = 1200
-    fit_surface_mode = "solver"
-    color_scale_cfg: dict[str, Any] = {}
-
-    if config is not None:
-        # Extract config dict if ConfigManager object
-        config_dict = config.config if hasattr(config, "config") else config
-
-        # Read preview_mode from config (output.plots.preview_mode)
-        output_config = config_dict.get("output", {})
-        plots_config = output_config.get("plots", {})
-        preview_mode = plots_config.get("preview_mode", preview_mode)
-        fit_surface_mode = plots_config.get("fit_surface", fit_surface_mode)
-        color_scale_cfg = plots_config.get("color_scale", {})
-
-        # Read Datashader canvas resolution
-        datashader_config = plots_config.get("datashader", {})
-        width = datashader_config.get("canvas_width", width)
-        height = datashader_config.get("canvas_height", height)
-
-        logger.debug(
-            f"Plot config: preview_mode={preview_mode}, "
-            f"canvas={width}×{height}, parallel={parallel}",
-        )
-
-    # Determine which fit surface to display
-    use_solver_surface = fit_surface_mode == "solver" and c2_solver_scaled is not None
-    c2_fit_display = c2_solver_scaled if use_solver_surface else c2_theoretical_scaled
-    residuals_display = c2_exp - c2_fit_display
-
-    color_mode = color_scale_cfg.get("mode", "legacy")
-    pin_legacy_range = color_scale_cfg.get(
-        "pin_legacy_range",
-        color_mode != "adaptive",
+    _viz_generate_nlsq_plots(
+        phi_angles=phi_angles,
+        c2_exp=c2_exp,
+        c2_theoretical_scaled=c2_theoretical_scaled,
+        residuals=residuals,
+        t1=t1,
+        t2=t2,
+        output_dir=output_dir,
+        config=config,
+        use_datashader=use_datashader,
+        parallel=parallel,
+        c2_solver_scaled=c2_solver_scaled,
     )
-    percentile_min = color_scale_cfg.get("percentile_min", 1.0)
-    percentile_max = color_scale_cfg.get("percentile_max", 99.0)
-
-    # ADAPTIVE COLOR SCALING (Nov 14, 2025):
-    # Independently check data min/max against [1.0, 1.6] boundaries
-    # vmin = max(1.0, data_min): use data_min if >= 1.0, else 1.0
-    # vmax = min(1.6, data_max): use data_max if <= 1.6, else 1.6
-    c2_min = min(np.min(c2_exp), np.min(c2_fit_display))
-    c2_max = max(np.max(c2_exp), np.max(c2_fit_display))
-
-    # Independent boundary checks (OR relation, not AND)
-    vmin_adaptive = float(max(1.0, c2_min))  # Clamp lower bound to 1.0
-    vmax_adaptive = float(min(1.6, c2_max))  # Clamp upper bound to 1.6
-
-    logger.debug(
-        f"C2 data range [{c2_min:.4f}, {c2_max:.4f}] → "
-        f"color scale [{vmin_adaptive:.4f}, {vmax_adaptive:.4f}] (clamped to [1.0, 1.6])"
-    )
-
-    if pin_legacy_range:
-        color_options = {
-            "vmin": vmin_adaptive,
-            "vmax": vmax_adaptive,
-            "adaptive": False,
-            "percentile_min": percentile_min,
-            "percentile_max": percentile_max,
-        }
-    else:
-        color_options = {
-            "vmin": color_scale_cfg.get("fixed_min", vmin_adaptive),
-            "vmax": color_scale_cfg.get("fixed_max", vmax_adaptive),
-            "adaptive": color_mode == "adaptive",
-            "percentile_min": percentile_min,
-            "percentile_max": percentile_max,
-        }
-
-    surface_label = "solver" if use_solver_surface else "posthoc"
-    logger.info(f"Plotting fit surface: {surface_label}")
-
-    # Select backend based on mode
-    if preview_mode and DATASHADER_AVAILABLE:
-        logger.info("Using Datashader backend (preview mode, fast rendering)")
-        _generate_plots_datashader(
-            phi_angles,
-            c2_exp,
-            c2_fit_display,
-            residuals_display,
-            t1,
-            t2,
-            output_dir,
-            parallel=parallel,
-            width=1200,
-            height=1200,
-            color_options=color_options,
-        )
-    else:
-        if preview_mode and not DATASHADER_AVAILABLE:
-            logger.warning(
-                "Preview mode (Datashader) requested but Datashader not available. "
-                "Install with: pip install datashader xarray colorcet"
-            )
-            logger.info("Falling back to matplotlib backend (publication quality)")
-        else:
-            logger.info("Using matplotlib backend (publication quality)")
-
-        _generate_plots_matplotlib(
-            phi_angles,
-            c2_exp,
-            c2_fit_display,
-            residuals_display,
-            t1,
-            t2,
-            output_dir,
-            color_options=color_options,
-        )
 
 
 # ============================================================================
@@ -3921,121 +2714,9 @@ def save_mcmc_results(
 def _create_mcmc_parameters_dict(result: Any) -> dict:
     """Create parameters dictionary with posterior statistics.
 
-    Parameters
-    ----------
-    result : MCMCResult
-        MCMC result with posterior samples and statistics
-
-    Returns
-    -------
-    dict
-        Structured parameter dictionary with posterior mean ± std
+    This is a wrapper that delegates to homodyne.io.mcmc_writers.
     """
-    from datetime import datetime
-
-    import numpy as np
-
-    diag_summary = getattr(result, "diagnostic_summary", {}) or {}
-    deterministic_params = set(diag_summary.get("deterministic_params") or [])
-    surrogate_thresholds = diag_summary.get("surrogate_thresholds")
-
-    param_dict = {
-        "timestamp": datetime.now().isoformat(),
-        "analysis_mode": getattr(result, "analysis_mode", "unknown"),
-        "method": (
-            "cmc"
-            if (hasattr(result, "is_cmc_result") and result.is_cmc_result())
-            else "mcmc"
-        ),
-        "sampling_summary": {
-            "n_samples": getattr(result, "n_samples", 0),
-            "n_warmup": getattr(result, "n_warmup", 0),
-            "n_chains": getattr(result, "n_chains", 1),
-            "total_samples": getattr(result, "n_samples", 0)
-            * getattr(result, "n_chains", 1),
-            "computation_time": getattr(result, "computation_time", 0.0),
-        },
-        "convergence": {},
-        "parameters": {},
-    }
-
-    # Add convergence diagnostics if available
-    if hasattr(result, "r_hat") and result.r_hat is not None:
-        # r_hat can be either dict or array
-        if isinstance(result.r_hat, dict):
-            # Filter out None values
-            r_hat_values = [
-                v
-                for name, v in result.r_hat.items()
-                if v is not None and name not in deterministic_params
-            ]
-            if r_hat_values:
-                param_dict["convergence"]["all_chains_converged"] = bool(
-                    all(v < 1.1 for v in r_hat_values)
-                )
-                param_dict["convergence"]["min_r_hat"] = float(min(r_hat_values))
-                param_dict["convergence"]["max_r_hat"] = float(max(r_hat_values))
-        else:
-            r_hat = np.asarray(result.r_hat)
-            param_dict["convergence"]["all_chains_converged"] = bool(
-                np.all(r_hat < 1.1)
-            )
-            param_dict["convergence"]["min_r_hat"] = float(np.min(r_hat))
-            param_dict["convergence"]["max_r_hat"] = float(np.max(r_hat))
-
-    if (
-        hasattr(result, "effective_sample_size")
-        and result.effective_sample_size is not None
-    ):
-        # ESS can be either dict or array (attribute name is effective_sample_size, not ess)
-        if isinstance(result.effective_sample_size, dict):
-            # Filter out None values
-            ess_values = [
-                v for v in result.effective_sample_size.values() if v is not None
-            ]
-            if ess_values:
-                param_dict["convergence"]["min_ess"] = float(min(ess_values))
-        else:
-            ess = np.asarray(result.effective_sample_size)
-            param_dict["convergence"]["min_ess"] = float(np.min(ess))
-
-    if hasattr(result, "acceptance_rate") and result.acceptance_rate is not None:
-        param_dict["convergence"]["acceptance_rate"] = float(result.acceptance_rate)
-
-    if surrogate_thresholds:
-        param_dict["convergence"]["surrogate_thresholds"] = surrogate_thresholds
-
-    # Add scaling parameters (contrast, offset)
-    if hasattr(result, "mean_contrast"):
-        param_dict["parameters"]["contrast"] = {
-            "mean": float(result.mean_contrast),
-            "std": float(getattr(result, "std_contrast", 0.0)),
-        }
-
-    if hasattr(result, "mean_offset"):
-        param_dict["parameters"]["offset"] = {
-            "mean": float(result.mean_offset),
-            "std": float(getattr(result, "std_offset", 0.0)),
-        }
-
-    # Add physical parameters
-    if hasattr(result, "mean_params") and result.mean_params is not None:
-        analysis_mode = getattr(result, "analysis_mode", "static_isotropic")
-        param_names = _get_parameter_names(analysis_mode)
-
-        mean_params = np.asarray(result.mean_params)
-        std_params = np.asarray(
-            getattr(result, "std_params", np.zeros_like(mean_params))
-        )
-
-        for i, name in enumerate(param_names):
-            if i < len(mean_params):
-                param_dict["parameters"][name] = {
-                    "mean": float(mean_params[i]),
-                    "std": float(std_params[i]) if i < len(std_params) else 0.0,
-                }
-
-    return param_dict
+    return _io_create_mcmc_parameters_dict(result)
 
 
 def _create_mcmc_analysis_dict(
@@ -4045,400 +2726,17 @@ def _create_mcmc_analysis_dict(
 ) -> dict:
     """Create analysis results dictionary for MCMC/CMC.
 
-    Parameters
-    ----------
-    result : MCMCResult
-        MCMC result with diagnostics
-    data : dict
-        Experimental data dictionary
-    method_name : str
-        "mcmc" or "cmc"
-
-    Returns
-    -------
-    dict
-        Analysis summary dictionary
+    This is a wrapper that delegates to homodyne.io.mcmc_writers.
     """
-    from datetime import datetime
-
-    import numpy as np
-
-    # Get dataset dimensions
-    c2_exp = data.get("c2_exp", [])
-    n_angles = len(data.get("phi_angles_list", []))
-    n_time_points = (
-        c2_exp.shape[1] * c2_exp.shape[2]
-        if hasattr(c2_exp, "shape") and len(c2_exp.shape) >= 3
-        else 0
-    )
-    total_data_points = c2_exp.size if hasattr(c2_exp, "size") else 0
-
-    # Determine sampling quality
-    quality_flag = "unknown"
-    warnings = []
-    recommendations = []
-
-    if hasattr(result, "r_hat") and result.r_hat is not None:
-        # r_hat can be either dict or array
-        if isinstance(result.r_hat, dict):
-            # Filter out None values
-            r_hat_values = [v for v in result.r_hat.values() if v is not None]
-            max_r_hat = max(r_hat_values) if r_hat_values else None
-        else:
-            r_hat = np.asarray(result.r_hat)
-            max_r_hat = np.max(r_hat)
-
-        if max_r_hat is not None:
-            if max_r_hat < 1.05:
-                quality_flag = "good"
-            elif max_r_hat < 1.1:
-                quality_flag = "acceptable"
-                warnings.append(
-                    f"Some parameters have R-hat between 1.05-1.1 (max={max_r_hat:.3f})"
-                )
-            else:
-                quality_flag = "poor"
-                warnings.append(
-                    f"Convergence issues detected (max R-hat={max_r_hat:.3f})"
-                )
-                recommendations.append("Consider increasing n_warmup or n_samples")
-
-    if (
-        hasattr(result, "effective_sample_size")
-        and result.effective_sample_size is not None
-    ):
-        # ESS can be either dict or array
-        if isinstance(result.effective_sample_size, dict):
-            # Filter out None values
-            ess_values = [
-                v for v in result.effective_sample_size.values() if v is not None
-            ]
-            min_ess = min(ess_values) if ess_values else None
-        else:
-            ess = np.asarray(result.effective_sample_size)
-            min_ess = np.min(ess)
-
-        if min_ess is not None and min_ess < 400:
-            warnings.append(f"Low effective sample size (min ESS={min_ess:.0f})")
-            recommendations.append(
-                "Consider increasing n_samples for better posterior estimates"
-            )
-
-    analysis_dict = {
-        "method": method_name,
-        "timestamp": datetime.now().isoformat(),
-        "analysis_mode": getattr(result, "analysis_mode", "unknown"),
-        "sampling_quality": {
-            "convergence_status": (
-                "converged"
-                if quality_flag in ["good", "acceptable"]
-                else "not_converged"
-            ),
-            "quality_flag": quality_flag,
-            "warnings": warnings,
-            "recommendations": recommendations,
-        },
-        "dataset_info": {
-            "n_angles": n_angles,
-            "n_time_points": n_time_points,
-            "total_data_points": total_data_points,
-            "q_value": (
-                float(data.get("wavevector_q_list", [0.0])[0])
-                if data.get("wavevector_q_list") is not None
-                else 0.0
-            ),
-        },
-        "sampling_summary": {
-            "n_samples": getattr(result, "n_samples", 0),
-            "n_warmup": getattr(result, "n_warmup", 0),
-            "n_chains": getattr(result, "n_chains", 1),
-            "execution_time": float(getattr(result, "computation_time", 0.0)),
-        },
-    }
-
-    # v2.1.0: Add config-driven metadata if available
-    if (
-        hasattr(result, "parameter_space_metadata")
-        and result.parameter_space_metadata is not None
-    ):
-        analysis_dict["parameter_space"] = result.parameter_space_metadata
-
-    if (
-        hasattr(result, "initial_values_metadata")
-        and result.initial_values_metadata is not None
-    ):
-        analysis_dict["initial_values"] = result.initial_values_metadata
-
-    if (
-        hasattr(result, "selection_decision_metadata")
-        and result.selection_decision_metadata is not None
-    ):
-        analysis_dict["selection_decision"] = result.selection_decision_metadata
-
-    return analysis_dict
+    return _io_create_mcmc_analysis_dict(result, data, method_name)
 
 
 def _create_mcmc_diagnostics_dict(result: Any) -> dict:
     """Create diagnostics dictionary for MCMC/CMC.
 
-    Parameters
-    ----------
-    result : MCMCResult
-        MCMC result with convergence diagnostics
-
-    Returns
-    -------
-    dict
-        Diagnostics dictionary with convergence metrics
+    This is a wrapper that delegates to homodyne.io.mcmc_writers.
     """
-    import numpy as np
-
-    diagnostics_dict = {
-        "convergence": {},
-        "sampling_efficiency": {},
-        "posterior_checks": {},
-    }
-
-    diag_summary = getattr(result, "diagnostic_summary", {}) or {}
-    deterministic_params = set(diag_summary.get("deterministic_params") or [])
-    per_param_stats = diag_summary.get("per_param_stats") or {}
-
-    # Convergence diagnostics
-    if hasattr(result, "r_hat") and result.r_hat is not None:
-        # r_hat can be either dict or array
-        if isinstance(result.r_hat, dict):
-            # Filter out None values
-            r_hat_values = [v for v in result.r_hat.values() if v is not None]
-            if r_hat_values:
-                diagnostics_dict["convergence"]["all_chains_converged"] = bool(
-                    all(v < 1.1 for v in r_hat_values)
-                )
-                diagnostics_dict["convergence"]["r_hat_threshold"] = 1.1
-
-            # Add per-parameter diagnostics using dict keys (include None to surface N/A)
-            per_param = []
-            for param_name, r_hat_val in result.r_hat.items():
-                ess_val = None
-                if hasattr(result, "effective_sample_size") and isinstance(
-                    result.effective_sample_size, dict
-                ):
-                    ess_val = result.effective_sample_size.get(param_name, None)
-
-                per_param.append(
-                    {
-                        "name": param_name,
-                        "r_hat": float(r_hat_val) if r_hat_val is not None else None,
-                        "ess": float(ess_val) if ess_val is not None else None,
-                        "converged": bool(r_hat_val is not None and r_hat_val < 1.1),
-                        "deterministic": param_name in deterministic_params,
-                    }
-                )
-            if per_param:
-                diagnostics_dict["convergence"]["per_parameter_diagnostics"] = per_param
-        else:
-            r_hat = np.asarray(result.r_hat)
-            diagnostics_dict["convergence"]["all_chains_converged"] = bool(
-                np.all(r_hat < 1.1)
-            )
-            diagnostics_dict["convergence"]["r_hat_threshold"] = 1.1
-
-            # Get parameter names if available
-            analysis_mode = getattr(result, "analysis_mode", "static_isotropic")
-            param_names = _get_parameter_names(analysis_mode)
-
-            # Add per-parameter diagnostics
-            per_param = []
-            ess_array = (
-                np.asarray(result.effective_sample_size)
-                if (
-                    hasattr(result, "effective_sample_size")
-                    and result.effective_sample_size is not None
-                    and not isinstance(result.effective_sample_size, dict)
-                )
-                else None
-            )
-
-            for i, name in enumerate(param_names):
-                if i < len(r_hat):
-                    ess_val = (
-                        ess_array[i]
-                        if (ess_array is not None and i < len(ess_array))
-                        else 0.0
-                    )
-                    per_param.append(
-                        {
-                            "name": name,
-                            "r_hat": float(r_hat[i]),
-                            "ess": float(ess_val),
-                            "converged": bool(r_hat[i] < 1.1),
-                            "deterministic": name in deterministic_params,
-                        }
-                    )
-
-            diagnostics_dict["convergence"]["per_parameter_diagnostics"] = per_param
-
-    if (
-        hasattr(result, "effective_sample_size")
-        and result.effective_sample_size is not None
-    ):
-        diagnostics_dict["convergence"]["ess_threshold"] = 400
-
-    if diag_summary.get("surrogate_thresholds"):
-        diagnostics_dict["convergence"]["surrogate_thresholds"] = diag_summary[
-            "surrogate_thresholds"
-        ]
-
-    # Sampling efficiency
-    if hasattr(result, "acceptance_rate") and result.acceptance_rate is not None:
-        diagnostics_dict["sampling_efficiency"]["acceptance_rate"] = float(
-            result.acceptance_rate
-        )
-        diagnostics_dict["sampling_efficiency"]["target_acceptance"] = 0.80
-
-    if hasattr(result, "divergences"):
-        diagnostics_dict["sampling_efficiency"]["divergences"] = int(result.divergences)
-
-    if hasattr(result, "tree_depth_warnings"):
-        diagnostics_dict["sampling_efficiency"]["tree_depth_warnings"] = int(
-            result.tree_depth_warnings
-        )
-
-    # Posterior checks
-    if hasattr(result, "ess") and hasattr(result, "n_samples"):
-        ess = np.asarray(result.ess)
-        total_samples = result.n_samples * getattr(result, "n_chains", 1)
-        if total_samples > 0:
-            ess_ratio = float(np.mean(ess) / total_samples)
-            diagnostics_dict["posterior_checks"]["effective_sample_size_ratio"] = (
-                ess_ratio
-            )
-
-    if "per_parameter_diagnostics" not in diagnostics_dict["convergence"]:
-        param_keys = set(per_param_stats.keys())
-        if isinstance(result.r_hat, dict):
-            param_keys.update(result.r_hat.keys())
-        if isinstance(result.effective_sample_size, dict):
-            param_keys.update(result.effective_sample_size.keys())
-        if param_keys:
-            fallback_entries = []
-            for name in sorted(param_keys):
-                stats = per_param_stats.get(name, {})
-                r_hat_val = None
-                if isinstance(result.r_hat, dict):
-                    r_hat_val = result.r_hat.get(name)
-                elif "r_hat" in stats:
-                    r_hat_val = stats.get("r_hat")
-                ess_val = None
-                if isinstance(result.effective_sample_size, dict):
-                    ess_val = result.effective_sample_size.get(name)
-                elif "ess" in stats:
-                    ess_val = stats.get("ess")
-
-                fallback_entries.append(
-                    {
-                        "name": name,
-                        "r_hat": float(r_hat_val) if r_hat_val is not None else None,
-                        "ess": float(ess_val) if ess_val is not None else None,
-                        "converged": bool(
-                            r_hat_val is not None
-                            and r_hat_val
-                            < diagnostics_dict["convergence"].get(
-                                "r_hat_threshold", 1.1
-                            )
-                        ),
-                        "deterministic": name in deterministic_params
-                        or stats.get("deterministic", False),
-                    }
-                )
-            diagnostics_dict["convergence"]["per_parameter_diagnostics"] = (
-                fallback_entries
-            )
-
-    # CMC-specific diagnostics
-    if hasattr(result, "is_cmc_result") and result.is_cmc_result():
-        diagnostics_dict["cmc_specific"] = {}
-
-        # Per-shard diagnostics summary
-        if hasattr(result, "per_shard_diagnostics") and result.per_shard_diagnostics:
-            per_shard = result.per_shard_diagnostics
-
-            # Extract acceptance rates
-            acceptance_rates = []
-            converged_shards = 0
-
-            for shard in per_shard:
-                if isinstance(shard, dict):
-                    if shard.get("acceptance_rate") is not None:
-                        acceptance_rates.append(float(shard["acceptance_rate"]))
-                    if shard.get("converged", False):
-                        converged_shards += 1
-
-            shard_summary = {
-                "num_shards": len(per_shard),
-                "shards_converged": converged_shards,
-                "convergence_rate": (
-                    float(converged_shards / len(per_shard))
-                    if len(per_shard) > 0
-                    else 0.0
-                ),
-            }
-
-            # Add acceptance rate statistics if available
-            if acceptance_rates:
-                shard_summary["acceptance_rate_stats"] = {
-                    "mean": float(np.mean(acceptance_rates)),
-                    "min": float(np.min(acceptance_rates)),
-                    "max": float(np.max(acceptance_rates)),
-                    "std": float(np.std(acceptance_rates)),
-                }
-
-            diagnostics_dict["cmc_specific"]["shard_summary"] = shard_summary
-
-        # Overall CMC diagnostics
-        if hasattr(result, "cmc_diagnostics") and result.cmc_diagnostics:
-            cmc_diag = result.cmc_diagnostics
-
-            # Extract key metrics safely
-            overall_metrics = {}
-
-            if isinstance(cmc_diag, dict):
-                if "combination_success" in cmc_diag:
-                    overall_metrics["combination_success"] = bool(
-                        cmc_diag["combination_success"]
-                    )
-                if "n_shards_converged" in cmc_diag:
-                    overall_metrics["n_shards_converged"] = int(
-                        cmc_diag["n_shards_converged"]
-                    )
-                if "n_shards_total" in cmc_diag:
-                    overall_metrics["n_shards_total"] = int(cmc_diag["n_shards_total"])
-                if "weighted_product_std" in cmc_diag:
-                    overall_metrics["weighted_product_std"] = float(
-                        cmc_diag["weighted_product_std"]
-                    )
-                if "combination_time" in cmc_diag:
-                    overall_metrics["combination_time"] = float(
-                        cmc_diag["combination_time"]
-                    )
-                if "success_rate" in cmc_diag:
-                    overall_metrics["success_rate"] = float(cmc_diag["success_rate"])
-
-                # Include full diagnostics if available
-                diagnostics_dict["cmc_specific"]["overall_diagnostics"] = (
-                    overall_metrics
-                )
-
-        # Combination method
-        if hasattr(result, "combination_method") and result.combination_method:
-            diagnostics_dict["cmc_specific"]["combination_method"] = str(
-                result.combination_method
-            )
-
-        # Number of shards
-        if hasattr(result, "num_shards") and result.num_shards:
-            diagnostics_dict["cmc_specific"]["num_shards"] = int(result.num_shards)
-
-    return diagnostics_dict
+    return _io_create_mcmc_diagnostics_dict(result)
 
 
 def _get_parameter_names(analysis_mode: str) -> list[str]:

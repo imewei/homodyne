@@ -25,12 +25,21 @@ from homodyne.viz.diagnostics import (
     DiagonalOverlayResult,
     compute_diagonal_overlay_stats,
 )
+from homodyne.viz.experimental_plots import (
+    plot_experimental_data,
+    plot_fit_comparison,
+)
 from homodyne.viz.mcmc_plots import (
     plot_cmc_summary_dashboard,
     plot_convergence_diagnostics,
     plot_kl_divergence_matrix,
     plot_posterior_comparison,
     plot_trace_plots,
+)
+from homodyne.viz.nlsq_plots import (
+    generate_and_plot_fitted_simulations,
+    generate_nlsq_plots,
+    plot_simulated_data,
 )
 
 __all__ = [
@@ -40,6 +49,13 @@ __all__ = [
     "plot_c2_comparison_fast",
     "compute_diagonal_overlay_stats",
     "DiagonalOverlayResult",
+    # Experimental data plots
+    "plot_experimental_data",
+    "plot_fit_comparison",
+    # NLSQ optimization plots
+    "plot_simulated_data",
+    "generate_and_plot_fitted_simulations",
+    "generate_nlsq_plots",
     # MCMC diagnostic plots
     "plot_trace_plots",
     "plot_kl_divergence_matrix",

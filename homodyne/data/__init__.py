@@ -102,6 +102,19 @@ except ImportError:
     HAS_PHI_FILTERING = False
 
 try:
+    from homodyne.data.angle_filtering import (  # noqa: F401
+        angle_in_range,
+        apply_angle_filtering,
+        apply_angle_filtering_for_optimization,
+        apply_angle_filtering_for_plot,
+        normalize_angle_to_symmetric_range,
+    )
+
+    HAS_ANGLE_FILTERING = True
+except ImportError:
+    HAS_ANGLE_FILTERING = False
+
+try:
     from homodyne.data.preprocessing import (  # noqa: F401
         NoiseReductionMethod,
         NormalizationMethod,
@@ -138,6 +151,7 @@ __features__ = {
     "xpcs_loader": HAS_XPCS_LOADER,
     "validation": HAS_VALIDATION,
     "phi_filtering": HAS_PHI_FILTERING,
+    "angle_filtering": HAS_ANGLE_FILTERING,
     "preprocessing": HAS_PREPROCESSING,
     "optimization": HAS_OPTIMIZATION,
     "yaml_config": True,  # Always available through fallbacks
@@ -189,6 +203,17 @@ if HAS_PHI_FILTERING:
             "filter_phi_angles",
             "create_anisotropic_ranges",
             "create_isotropic_ranges",
+        ],
+    )
+
+if HAS_ANGLE_FILTERING:
+    __all__.extend(
+        [
+            "normalize_angle_to_symmetric_range",
+            "angle_in_range",
+            "apply_angle_filtering",
+            "apply_angle_filtering_for_optimization",
+            "apply_angle_filtering_for_plot",
         ],
     )
 
