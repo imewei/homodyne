@@ -1,21 +1,24 @@
-"""MCMC + JAX: High-Accuracy Bayesian Analysis for Homodyne v2.1
-================================================================
+"""MCMC + JAX: High-Accuracy Bayesian Analysis for Homodyne v2.4.1+
+===================================================================
 
 NumPyro/BlackJAX-based MCMC sampling for high-precision parameter estimation
-and uncertainty quantification with automatic NUTS/CMC selection.
+and uncertainty quantification using Consensus Monte Carlo (CMC).
+
+**v2.4.1 Update**: CMC-only architecture. NUTS auto-selection has been removed.
+All MCMC runs use CMC with per-shard NUTS internally. Single-shard CMC is used
+for low-parallelism scenarios (single-angle datasets).
 
 Key Features
 ------------
-- **Automatic NUTS/CMC Selection**: Tri-criteria OR logic based on dataset characteristics
-  - Criterion 1 (Parallelism): num_samples >= min_samples_for_cmc (default: 15)
-  - Criterion 2 (Memory): estimated_memory > memory_threshold_pct (default: 30%)
-  - Criterion 3 (Large Dataset): dataset_size > large_dataset_threshold (default: 1M)
-  - Decision: CMC if (Criterion 1 OR Criterion 2 OR Criterion 3), otherwise NUTS
+- **CMC-Only MCMC**: Consensus Monte Carlo with per-shard NumPyro NUTS
+  - Multi-shard CMC for datasets with multiple phi angles
+  - Single-shard CMC (bypass) for single-angle datasets
+  - Stratified sharding preserves phi angle distribution
 
 - **Configuration-Driven Parameter Management**: All parameters loaded from YAML config
   - parameter_space: Bounds and prior distributions
   - initial_values: Starting points for MCMC chains (e.g., from NLSQ results)
-  - Automatic fallback to mid-point of bounds if values not specified
+  - per_phi_initial_values: Per-angle contrast/offset with percentile fallback
 
 - **Full Posterior Sampling**: NumPyro/BlackJAX NUTS with comprehensive diagnostics
   - Unified homodyne model: c2_fitted = contrast * c2_theory + offset
@@ -24,25 +27,26 @@ Key Features
   - Auto-retry mechanism with different random seeds (max 3 retries)
 
 - **JAX Acceleration**: CPU-only execution with JIT compilation (v2.3.0+)
-  - Single-device NUTS for small datasets (<1M points)
-  - Multi-shard CMC for large datasets or many samples
-  - Hardware-adaptive selection using HardwareConfig
+  - Per-shard NUTS execution within CMC framework
+  - Subposterior combination (weighted Gaussian or averaging)
+  - Hardware-adaptive backend selection (multiprocessing/PBS)
 
 Workflow
 --------
 **Recommended: Manual NLSQ → MCMC Workflow**
 1. Run NLSQ optimization to get point estimates
 2. Manually copy best-fit results to config YAML: `initial_parameters.values`
-3. Run MCMC with `--method mcmc` (automatic NUTS/CMC selection)
+3. Run MCMC with `--method mcmc` (CMC-only)
 4. MCMC uses config-loaded values for faster convergence
 
 **Configuration Structure (YAML)**
 ```yaml
 optimization:
   mcmc:
-    min_samples_for_cmc: 15        # Parallelism threshold
-    memory_threshold_pct: 0.30     # Memory threshold (30%)
     dense_mass_matrix: false       # Diagonal (fast) vs full covariance (accurate)
+    cmc:
+      num_shards: "auto"           # Number of CMC shards (auto-detected)
+      stratification: "stratified" # Phi-preserving sharding
 
 initial_parameters:
   parameter_names: [D0, alpha, D_offset]
@@ -66,23 +70,23 @@ MCMC Philosophy
 - Essential for critical/publication-quality analysis
 - Complements NLSQ for comprehensive Bayesian workflow
 
-Automatic Selection Logic
+CMC Architecture (v2.4.1+)
 --------------------------
-**NUTS (Single-Device):**
-- Fast for small datasets (<1M points)
-- Low overhead, single-device execution
-- Selected when: ALL criteria fail (num_samples < 15) AND (memory < 30%) AND (dataset_size <= 1M)
+**Multi-Shard CMC:**
+- Default for datasets with multiple phi angles
+- Stratified sharding ensures each shard has representative phi coverage
+- Per-shard NUTS execution with subposterior combination
+- Automatic shard count based on CPU cores and dataset size
 
-**CMC (Multi-Shard):**
-- Parallelized for CPU cores or large memory requirements
-- ~10-20% overhead but enables unlimited dataset sizes
-- Selected when: (num_samples >= 15) OR (memory >= 30%) OR (dataset_size > 1M)
+**Single-Shard CMC (Bypass):**
+- Used for single-angle datasets (phi_count < 2)
+- Runs NUTS within single-shard CMC framework
+- Avoids unnecessary sharding overhead for small datasets
 
-**Examples:**
-- 50 phi angles (num_samples=50) → CMC (parallelism criterion)
-- 5 phi angles but 10M points (memory>30%) → CMC (memory criterion)
-- 3 phi angles, 3M pooled points → CMC (large dataset criterion, JAX broadcasting protection)
-- 10 phi angles, 100k points (memory<30%) → NUTS (all criteria fail, minimal overhead)
+**Deprecated (removed in v2.4.1):**
+- NUTS auto-selection (tri-criteria logic)
+- Standalone NUTS runner
+- `min_samples_for_cmc`, `memory_threshold_pct` parameters
 """
 
 from __future__ import annotations
@@ -652,18 +656,21 @@ def fit_mcmc_jax(
     use_simplified_likelihood: bool = True,
     **kwargs,
 ) -> MCMCResult:
-    """High-accuracy Bayesian parameter estimation using MCMC with automatic NUTS/CMC selection.
+    """High-accuracy Bayesian parameter estimation using Consensus Monte Carlo (CMC).
+
+    **v2.4.1+**: CMC-only architecture. All MCMC runs use Consensus Monte Carlo with
+    per-shard NumPyro NUTS execution. Single-shard CMC is used for single-angle datasets.
 
     Performs full posterior sampling using NumPyro/BlackJAX with the unified homodyne
-    correlation model. Automatically selects between standard NUTS (single-device) and
-    Consensus Monte Carlo (multi-shard parallelization) based on dual-criteria OR logic:
-    (num_samples >= min_samples_for_cmc) OR (estimated_memory > memory_threshold_pct).
+    correlation model. CMC provides parallelized execution across CPU cores with
+    stratified sharding that preserves phi angle distribution.
 
     Configuration-Driven Parameter Management
     ------------------------------------------
     Parameters and priors are loaded from YAML configuration files via:
     - **parameter_space**: Bounds and prior distributions (from `parameter_space` YAML section)
     - **initial_values**: Starting points for MCMC chains (from `initial_parameters.values` YAML section)
+    - **per_phi_initial_values**: Per-angle contrast/offset with percentile fallback
 
     If not provided, defaults are loaded from package configuration:
     - Mid-point of parameter bounds for initial values
@@ -674,27 +681,26 @@ def fit_mcmc_jax(
     2. Manually copy best-fit results to config YAML: `initial_parameters.values`
     3. Run MCMC with initialized values for faster convergence
 
-    Automatic NUTS/CMC Selection
-    -----------------------------
-    Selection uses dual-criteria OR logic (configurable via YAML):
+    CMC Architecture (v2.4.1+)
+    --------------------------
+    **Multi-Shard CMC** (default for multiple phi angles):
+    - Stratified sharding preserves phi angle distribution across shards
+    - Per-shard NUTS execution with subposterior combination
+    - Automatic shard count based on CPU cores and dataset size
 
-    **Criterion 1 - Parallelism**: `num_samples >= min_samples_for_cmc` (default: 15)
-    - Many independent samples (e.g., 50 phi angles) → CMC for CPU parallelization
-    - Achieves ~3x speedup on 14-core CPU with 50 samples
-
-    **Criterion 2 - Memory**: `estimated_memory > memory_threshold_pct` (default: 0.30)
-    - Large datasets approaching OOM threshold → CMC for memory management
-    - Prevents out-of-memory failures on datasets >1M points
-
-    **Decision**: CMC if (Criterion 1 OR Criterion 2), otherwise NUTS
+    **Single-Shard CMC** (for single-angle datasets):
+    - CMC bypass for datasets with phi_count < 2
+    - Runs NUTS within single-shard CMC framework
+    - Avoids unnecessary sharding overhead
 
     Configuration (in YAML):
     ```yaml
     optimization:
       mcmc:
-        min_samples_for_cmc: 15        # Parallelism threshold
-        memory_threshold_pct: 0.30     # Memory threshold (30%)
         dense_mass_matrix: false       # Diagonal (fast) vs full covariance (accurate)
+        cmc:
+          num_shards: "auto"           # Number of CMC shards
+          stratification: "stratified" # Phi-preserving sharding
     ```
 
     Parameters
@@ -1035,84 +1041,30 @@ def fit_mcmc_jax(
     logger.info(f"Analysis mode: {analysis_mode}")
 
     # =========================================================================
-    # AUTOMATIC NUTS/CMC SELECTION - DUAL-CRITERIA OR LOGIC
+    # CMC-ONLY ARCHITECTURE (v2.4.1+)
     # =========================================================================
-    # Step 1: Detect hardware configuration
-    # Hardware detection provides memory information for dual-criteria decision
-    try:
-        from homodyne.device.config import detect_hardware, should_use_cmc
+    # All MCMC runs use Consensus Monte Carlo (CMC) with per-shard NUTS.
+    # Single-shard CMC (bypass) is used for single-angle datasets.
+    # Legacy tri-criteria NUTS/CMC selection has been removed.
 
-        hardware_config = detect_hardware()
-    except ImportError:
-        logger.warning(
-            "Hardware detection not available. Using simple threshold-based selection."
-        )
-        hardware_config = None
+    # Pop deprecated kwargs for backward compatibility (ignored)
+    kwargs.pop("min_samples_for_cmc", None)
+    kwargs.pop("memory_threshold_pct", None)
+    kwargs.pop("large_dataset_threshold", None)
 
-    # Step 2: Extract configurable thresholds from kwargs (with defaults)
-    # These thresholds are loaded from YAML config: optimization.mcmc.min_samples_for_cmc
-    # Users can override via CLI: --min-samples-cmc, --memory-threshold-pct, --large-dataset-threshold
-    min_samples_for_cmc = kwargs.pop("min_samples_for_cmc", 15)
-    memory_threshold_pct = kwargs.pop("memory_threshold_pct", 0.30)
-    large_dataset_threshold = kwargs.pop("large_dataset_threshold", 1_000_000)
-
-    # Step 3: Automatic NUTS/CMC selection using tri-criteria OR logic
-    # Criterion 1 (Parallelism): num_samples >= min_samples_for_cmc (default: 15)
-    #   - Many independent samples (e.g., 50 phi angles) → CMC for CPU parallelization
-    #   - Achieves ~3x speedup on multi-core CPUs with many samples
-    # Criterion 2 (Memory): estimated_memory > memory_threshold_pct (default: 30%)
-    #   - Large datasets approaching OOM threshold → CMC for memory management
-    #   - Prevents out-of-memory failures on datasets >1M points
-    # Criterion 3 (Large Dataset): dataset_size > large_dataset_threshold (default: 1M)
-    #   - Very large pooled datasets → CMC to prevent JAX broadcasting overflow
-    #   - Critical for pooled data causing (3M, 3M, 3M) array creation
-    # Decision: use_cmc = (Criterion 1 OR Criterion 2 OR Criterion 3)
-    #   - Any criterion triggers CMC (OR logic, not AND)
-    if hardware_config is not None:
-        # Hardware detection available - use full tri-criteria logic
-        use_cmc = should_use_cmc(
-            num_samples,
-            hardware_config,
-            dataset_size=dataset_size,
-            min_samples_for_cmc=min_samples_for_cmc,
-            memory_threshold_pct=memory_threshold_pct,
-            large_dataset_threshold=large_dataset_threshold,
-        )
-        actual_method = "cmc" if use_cmc else "nuts"
-        logger.info(
-            f"Automatic selection: {actual_method.upper()} "
-            f"(num_samples={num_samples:,}, dataset_size={dataset_size:,}, "
-            f"thresholds: min_samples={min_samples_for_cmc}, memory={memory_threshold_pct:.1%}, "
-            f"platform={hardware_config.platform})"
-        )
-    else:
-        # Fallback: Simple threshold-based selection using num_samples only
-        use_cmc = num_samples >= min_samples_for_cmc
-        actual_method = "cmc" if use_cmc else "nuts"
-        logger.info(
-            f"Automatic selection (fallback): {actual_method.upper()} "
-            f"(num_samples={num_samples:,}, min_samples_for_cmc={min_samples_for_cmc})"
-        )
-
-    # Step 4: Log warnings for edge cases
-    if actual_method == "cmc" and num_samples < min_samples_for_cmc:
-        logger.warning(
-            f"Using CMC with very few samples ({num_samples} samples). "
-            f"CMC adds 10-20% overhead; NUTS is faster for <{min_samples_for_cmc} samples if memory permits. "
-            f"(Likely triggered by memory criterion: estimated_memory > {memory_threshold_pct:.1%})"
-        )
-    elif actual_method == "nuts" and num_samples >= min_samples_for_cmc:
-        logger.info(
-            f"Using NUTS with {num_samples:,} samples. "
-            f"CMC may provide additional parallelization on multi-core CPU."
-        )
+    # CMC is always used (v2.4.1+ CMC-only architecture)
+    actual_method = "cmc"
+    logger.info(
+        f"Using CMC (v2.4.1+ CMC-only architecture) "
+        f"(num_samples={num_samples:,}, dataset_size={dataset_size:,})"
+    )
 
     # Optional metadata for downstream consumers (e.g., visualization, CLI)
     selection_decision_metadata: dict[str, Any] | None = None
     requested_method = actual_method  # Remember pre-bypass intent
 
-    # Step 5: Execute selected method
-    if actual_method == "cmc":
+    # Execute CMC
+    if True:  # CMC-only path (always True in v2.4.1+)
         # Use Consensus Monte Carlo
         logger.info("=" * 70)
         logger.info("Executing Consensus Monte Carlo (CMC)")
@@ -2513,41 +2465,30 @@ def _create_numpyro_model(
             )
             if single_angle_log_sampling:
                 d0_bounds = parameter_space.get_bounds("D0")
-
-                def _extract_scalar(name: str, fallback: float):
-                    """Extract value from dist_kwargs, keeping as JAX array to avoid tracer errors."""
-                    value = dist_kwargs.get(name)
-                    if value is None:
-                        return jnp.asarray(fallback, dtype=target_dtype)
-                    # Don't call float() - keep as JAX array to avoid tracer concretization
-                    return jnp.asarray(value, dtype=target_dtype).reshape(())
-
-                linear_loc = _extract_scalar("loc", d0_bounds[0])
-                linear_scale = jnp.abs(
-                    _extract_scalar("scale", (d0_bounds[1] - d0_bounds[0]) / 4.0)
-                )
-                linear_low = jnp.maximum(_extract_scalar("low", d0_bounds[0]), 1e-6)
-                linear_high = jnp.maximum(
-                    _extract_scalar("high", d0_bounds[1]), linear_low + 1e-6
-                )
-
-                # Convert to Python scalars for log_prior_cfg (static configuration, not traced)
-                # Use .item() to extract concrete values outside of traced region
                 import numpy as _np
 
+                # Extract concrete values from prior_spec (NOT from dist_kwargs which can be traced)
+                # prior_spec contains Python floats from configuration, safe to use directly
+                linear_loc = float(getattr(prior_spec, "mu", d0_bounds[0]))
+                linear_scale = abs(
+                    float(
+                        getattr(prior_spec, "sigma", (d0_bounds[1] - d0_bounds[0]) / 4.0)
+                    )
+                )
+                linear_low = max(float(getattr(prior_spec, "min_val", d0_bounds[0])), 1e-6)
+                linear_high = max(
+                    float(getattr(prior_spec, "max_val", d0_bounds[1])),
+                    linear_low + 1e-6,
+                )
+
+                # Build log-space prior configuration from concrete Python floats
                 log_prior_cfg = {
-                    "loc": float(_np.log(max(float(linear_loc), 1e-6))),
+                    "loc": float(_np.log(max(linear_loc, 1e-6))),
                     "scale": float(
-                        _np.clip(
-                            float(linear_scale) / max(float(linear_loc), 1e-6),
-                            1e-6,
-                            5.0,
-                        )
+                        _np.clip(linear_scale / max(linear_loc, 1e-6), 1e-6, 5.0)
                     ),
-                    "low": float(_np.log(max(float(linear_low), 1e-6))),
-                    "high": float(
-                        _np.log(max(float(linear_high), float(linear_low) + 1e-6))
-                    ),
+                    "low": float(_np.log(max(linear_low, 1e-6))),
+                    "high": float(_np.log(max(linear_high, linear_low + 1e-6))),
                 }
 
                 d0_value = _sample_single_angle_log_d0(log_prior_cfg, target_dtype)

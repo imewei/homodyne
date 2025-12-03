@@ -373,10 +373,9 @@ class PjitBackend(CMCBackend):
     ) -> list[dict[str, Any]]:
         """Execute a batch of shards in parallel using pmap.
 
-        Note: For true parallel execution, we would need to use pmap with
-        a batched MCMC function. However, this is complex due to MCMC's
-        stateful nature. Instead, we fall back to sequential execution
-        for now, with a TODO for future optimization.
+        Note: Since v2.3.0, Homodyne is CPU-only and this function falls back
+        to sequential execution. Use the multiprocessing backend for parallel
+        CMC execution on multi-core CPUs.
 
         Parameters
         ----------
@@ -396,14 +395,15 @@ class PjitBackend(CMCBackend):
         list of dict
             Batch results
         """
-        # TODO: Implement true pmap parallelization in Phase 2
-        # For Phase 1, we use sequential execution even on multi-GPU
-        # True pmap would require batching MCMC operations, which is complex
+        # NOTE (Dec 2025): Multi-GPU pmap parallelization is now obsolete.
+        # Since v2.3.0, Homodyne is CPU-only. This code path remains for
+        # potential future re-enablement but is not actively developed.
+        # The multiprocessing backend is used for all parallel execution.
 
         logger.warning(
-            "Multi-GPU pmap parallelization not yet implemented. "
-            "Falling back to sequential execution on first GPU. "
-            "This will be optimized in Phase 2."
+            "Multi-GPU pmap parallelization not available in CPU-only v2.3.0+. "
+            "Falling back to sequential execution. "
+            "Use multiprocessing backend for parallel CMC execution."
         )
 
         results = []

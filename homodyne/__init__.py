@@ -5,10 +5,9 @@ A high-performance package for X-ray Photon Correlation Spectroscopy (XPCS) anal
 using JAX-accelerated optimization methods for HPC and supercomputer environments.
 
 Key Features:
-- JAX-first computational architecture
+- JAX-first computational architecture (CPU-only v2.3.0+)
 - NLSQ trust-region nonlinear least squares (primary optimization)
-- NumPyro/BlackJAX MCMC sampling (secondary optimization)
-- System CUDA integration with jax[local]
+- NumPyro/BlackJAX MCMC sampling (secondary optimization, CMC-only)
 - HPC-optimized for 36/128-core CPU nodes
 - Preserved API compatibility with validated components
 

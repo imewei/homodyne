@@ -4,10 +4,26 @@ Essential utility functions with preserved API compatibility.
 """
 
 from homodyne.utils.logging import get_logger, log_calls, log_operation, log_performance
+from homodyne.utils.validation import (
+    validate_array_not_empty,
+    validate_array_not_none,
+    validate_array_shapes_match,
+    validate_in_bounds,
+    validate_positive_scalar,
+    validate_required_params,
+)
 
 __all__ = [
+    # Logging utilities
     "get_logger",
     "log_performance",
     "log_calls",
     "log_operation",
+    # Validation utilities
+    "validate_array_not_none",
+    "validate_array_not_empty",
+    "validate_positive_scalar",
+    "validate_in_bounds",
+    "validate_array_shapes_match",
+    "validate_required_params",
 ]

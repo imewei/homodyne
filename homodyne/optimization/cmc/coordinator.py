@@ -187,7 +187,10 @@ class CMCCoordinator:
                 f"Checkpoint architecture initialized (dir={checkpoint_dir}). "
                 "Full checkpoint integration will be completed in Phase 2."
             )
-            # TODO (Phase 2): Initialize CheckpointManager
+            # NOTE (Dec 2025): CheckpointManager integration deferred to Phase 2.
+            # The checkpoint infrastructure exists but is not yet integrated
+            # with the CMC pipeline. This is tracked in the technical debt
+            # remediation plan: docs/remediation/TECHNICAL_DEBT_REMEDIATION_PLAN.md
             # self.checkpoint_manager = CheckpointManager(
             #     checkpoint_dir=checkpoint_dir,
             #     checkpoint_frequency=config.get('checkpoint_frequency', 10),
@@ -638,8 +641,9 @@ class CMCCoordinator:
         logger.info("STEP 4: Validating CMC results")
         logger.info("=" * 70)
 
-        # TODO (Task Group 10): Integrate full validation module
-        # For now, perform basic validation
+        # NOTE (Dec 2025): Full validation module integration deferred.
+        # Basic validation is sufficient for current production use.
+        # See docs/remediation/TECHNICAL_DEBT_REMEDIATION_PLAN.md for details.
         is_valid, validation_diagnostics = self._basic_validation(
             combined_posterior, shard_results
         )

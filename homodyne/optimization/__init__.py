@@ -60,6 +60,55 @@ OPTIMIZATION_STATUS = {
     "blackjax_available": BLACKJAX_AVAILABLE if MCMC_AVAILABLE else False,
 }
 
+# Import MCMC extraction modules for public API
+# These modules were extracted from _create_numpyro_model (Dec 2025)
+# to reduce cyclomatic complexity and improve maintainability.
+try:
+    from homodyne.optimization.mcmc_data_prep import (
+        compute_phi_mapping,
+        get_target_dtype,
+        normalize_array,
+        normalize_scalar,
+        prepare_mcmc_arrays,
+        validate_array_shapes,
+    )
+    from homodyne.optimization.mcmc_priors import (
+        DIST_TYPE_MAP,
+        auto_convert_to_bounded_distribution,
+        cast_dist_kwargs,
+        create_beta_scaled_distribution,
+        get_prior_spec_with_fallback,
+        prepare_truncated_normal_kwargs,
+        sample_parameter,
+        sample_scaling_parameters,
+    )
+    from homodyne.optimization.mcmc_scaling import (
+        apply_global_scaling,
+        apply_per_angle_scaling,
+        apply_scaling_to_theory,
+        compute_phi_indices,
+        extract_per_point_theory,
+        prepare_phi_mapping,
+        select_scaling_per_point,
+        validate_c2_fitted_shape,
+    )
+    from homodyne.optimization.mcmc_single_angle import (
+        apply_surrogate_parameter_overrides,
+        build_log_d0_fallback_prior,
+        build_surrogate_settings,
+        estimate_single_angle_scaling,
+        get_deterministic_param_overrides,
+        get_surrogate_diagnostic_thresholds,
+        is_single_angle_static,
+        sample_log_d0,
+        should_use_log_sampling,
+    )
+
+    MCMC_EXTRACTION_AVAILABLE = True
+except ImportError:
+    MCMC_EXTRACTION_AVAILABLE = False
+
+
 # Primary API functions
 __all__ = [
     # Primary optimization methods
@@ -72,6 +121,42 @@ __all__ = [
     "OPTIMIZATION_STATUS",
     "NLSQ_AVAILABLE",
     "MCMC_AVAILABLE",
+    "MCMC_EXTRACTION_AVAILABLE",
+    # MCMC data preparation utilities
+    "get_target_dtype",
+    "normalize_array",
+    "normalize_scalar",
+    "prepare_mcmc_arrays",
+    "validate_array_shapes",
+    "compute_phi_mapping",
+    # MCMC prior utilities
+    "DIST_TYPE_MAP",
+    "get_prior_spec_with_fallback",
+    "auto_convert_to_bounded_distribution",
+    "cast_dist_kwargs",
+    "prepare_truncated_normal_kwargs",
+    "create_beta_scaled_distribution",
+    "sample_parameter",
+    "sample_scaling_parameters",
+    # MCMC scaling utilities
+    "prepare_phi_mapping",
+    "compute_phi_indices",
+    "extract_per_point_theory",
+    "apply_per_angle_scaling",
+    "apply_global_scaling",
+    "select_scaling_per_point",
+    "validate_c2_fitted_shape",
+    "apply_scaling_to_theory",
+    # MCMC single-angle utilities
+    "estimate_single_angle_scaling",
+    "build_surrogate_settings",
+    "sample_log_d0",
+    "is_single_angle_static",
+    "should_use_log_sampling",
+    "build_log_d0_fallback_prior",
+    "apply_surrogate_parameter_overrides",
+    "get_surrogate_diagnostic_thresholds",
+    "get_deterministic_param_overrides",
 ]
 
 

@@ -921,57 +921,6 @@ def _get_optimizer_config(config: ConfigManager) -> dict[str, Any]:
     return default_config
 
 
-def _calculate_parameter_errors(result: Any, analysis_mode: str) -> dict[str, float]:
-    """Calculate parameter errors from optimization result."""
-    # Estimate parameter errors using simple heuristic
-    # based on final residual magnitude
-    if "static" in analysis_mode.lower():
-        param_names = ["contrast", "offset", "D0", "alpha", "D_offset"]
-    else:
-        param_names = [
-            "contrast",
-            "offset",
-            "D0",
-            "alpha",
-            "D_offset",
-            "gamma_dot_t0",
-            "beta",
-            "gamma_dot_t_offset",
-            "phi0",
-        ]
-
-    # For now, return small relative errors as placeholder
-    # TODO: Implement proper error estimation using finite differences or bootstrap
-    errors = {}
-    for i, name in enumerate(param_names):
-        if hasattr(result, "x") and i < len(result.x):
-            # Estimate error as 1% of parameter value
-            param_val = (
-                float(result.x[i].item())
-                if hasattr(result.x[i], "item")
-                else float(result.x[i])
-            )
-            errors[name] = abs(0.01 * param_val) if param_val != 0 else 0.01
-        else:
-            errors[name] = 0.01
-    return errors
-
-
-def _calculate_chi_squared(result: Any, data: dict[str, Any]) -> float:
-    """Calculate chi-squared from NLSQ result."""
-    # Calculate final residuals and chi-squared
-    if hasattr(result, "x"):
-        # TODO: Re-evaluate residuals at final point for accurate chi-squared
-        # For now, use a reasonable estimate based on data size
-        n_data_points = np.prod(data["c2_exp"].shape)
-        # Estimate chi-squared from convergence (assuming reasonable fit)
-        chi2_estimate = n_data_points * 0.1  # Placeholder estimate
-        if hasattr(result.stats, "get"):
-            chi2_estimate = float(result.stats.get("final_loss", chi2_estimate))
-        return chi2_estimate
-    return np.inf
-
-
 def _check_convergence(result: Any) -> bool:
     """Check if NLSQ optimization converged."""
     return getattr(result, "success", False)

@@ -475,44 +475,15 @@ def install_macos_shell_completion():
     config_dir = venv_path / "etc" / "homodyne"
     config_dir.mkdir(parents=True, exist_ok=True)
 
-    # TODO: Create aliases script that works on macOS (not yet implemented)
-    # script_content = '''#!/bin/bash
-
-
-# # Homodyne Shell Aliases for macOS
-#
-# # CPU-only aliases
-# alias hm='homodyne --method mcmc'
-# alias hc='homodyne --method classical'
-# alias hr='homodyne --method robust'
-# alias ha='homodyne --method all'
-#
-# # Configuration shortcuts
-# alias hconfig='homodyne --config'
-#
-# # Plotting shortcuts
-# alias hexp='homodyne --plot-experimental-data'
-# alias hsim='homodyne --plot-simulated-data'
-#
-# # homodyne-config shortcuts
-# alias hc-iso='homodyne-config --mode static_isotropic'
-# alias hc-aniso='homodyne-config --mode static_anisotropic'
-# alias hc-flow='homodyne-config --mode laminar_flow'
-#
-# # Helper function
-# homodyne_help() {
-#     echo "Homodyne command shortcuts:"
-#     echo "  hc = homodyne --method classical"
-#     echo "  hm = homodyne --method mcmc"
-#     echo "  hr = homodyne --method robust"
-#     echo "  ha = homodyne --method all"
-#     echo ""
-#     echo "Config shortcuts:"
-#     echo "  hc-iso   = homodyne-config --mode static_isotropic"
-#     echo "  hc-aniso = homodyne-config --mode static_anisotropic"
-#     echo "  hc-flow  = homodyne-config --mode laminar_flow"
-# }
-# '''
+    # NOTE (Dec 2025): macOS shell aliases feature is not yet implemented.
+    # This function is a placeholder for future macOS shell completion support.
+    # Users can manually add aliases to their ~/.zshrc or ~/.bashrc:
+    #
+    #   alias hm='homodyne --method mcmc'
+    #   alias hconfig='homodyne --config'
+    #
+    # See docs/README.md for CLI usage documentation.
+    pass
 
 
 def install_advanced_features():

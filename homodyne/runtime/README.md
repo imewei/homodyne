@@ -1,32 +1,29 @@
 # Homodyne Runtime System
 
-**Advanced shell completion, smart GPU acceleration, and comprehensive system validation
-for the homodyne analysis package.**
+**Advanced shell completion and comprehensive system validation for the homodyne analysis package (CPU-only v2.3.0+).**
 
 ______________________________________________________________________
 
-## 📁 System Architecture
+## System Architecture (v2.3.0+ CPU-Only)
 
 ```
 runtime/
 ├── shell/              # Advanced shell completion system
 │   └── completion.sh   # Context-aware completion with caching
-├── gpu/                # Smart GPU acceleration system  
-│   ├── activation.sh   # CUDA detection and NumPyro setup
-│   ├── gpu_wrapper.py  # homodyne-gpu command wrapper
-│   └── optimizer.py    # Hardware-specific optimization
 ├── utils/              # System validation and utilities
 │   └── system_validator.py  # Comprehensive system testing
 └── README.md          # This documentation
 ```
 
-## 🚀 Quick Setup
+> **Note**: GPU support was removed in v2.3.0. This is now a CPU-only package with HPC multi-core optimization.
+
+## Quick Setup
 
 ### One-Command Installation
 
 ```bash
 # Complete setup with all features
-homodyne-post-install --shell zsh --gpu --advanced
+homodyne-post-install --shell zsh --advanced
 
 # Interactive setup (choose features)
 homodyne-post-install --interactive
@@ -37,14 +34,12 @@ homodyne-post-install --shell zsh
 
 ### Installed Components
 
-1. **🔧 Smart Shell Completion** - Context-aware completion with caching
-1. **⚡ Isolated GPU Backend** - Pure NumPyro/JAX backend completely separated from PyMC
-1. **📝 Unified Aliases** - Isolated CPU shortcuts (`hm`, `hc`, `hr`, `ha`) + isolated
-   GPU shortcuts (`hgm`, `hga`)
-1. **🛠️ Advanced Tools** - GPU optimization, system validation, benchmarking
-1. **📋 Environment Integration** - Auto-activation in conda/mamba/venv
+1. **Smart Shell Completion** - Context-aware completion with caching
+2. **Unified Aliases** - CPU shortcuts (`hm`, `hc`, `hr`, `ha`)
+3. **Advanced Tools** - System validation, benchmarking
+4. **Environment Integration** - Auto-activation in conda/mamba/venv
 
-## 🔧 Shell Completion System
+## Shell Completion System
 
 ### Key Features
 
@@ -62,7 +57,7 @@ homodyne --config <TAB>
 
 # Smart method suggestions based on config mode
 homodyne --config laminar_flow.json --method <TAB>
-# → Shows: mcmc robust all (optimized for laminar flow)
+# → Shows: mcmc nlsq
 
 # Interactive command builder
 homodyne_build
@@ -72,124 +67,28 @@ homodyne_build
 ### Smart Completion Logic
 
 | Config Mode | Suggested Methods | Reasoning |
-|-------------|------------------|-----------| | `static_isotropic` | `classical robust`
-| Optimized for static analysis | | `static_anisotropic` | `classical robust` |
-CPU-optimized methods | | `laminar_flow` | `mcmc robust all` | Benefits from GPU
-acceleration |
+|-------------|------------------|-----------|
+| `static` | `nlsq mcmc` | Fast parameter estimation |
+| `laminar_flow` | `mcmc nlsq` | Uncertainty quantification |
 
-## ⚡ Isolated MCMC Backend System
+## MCMC Backend System (CPU-Only)
 
-### Completely Isolated Backend Architecture
+### CMC-Only Architecture (v2.4.1+)
 
-The homodyne package features **completely separated MCMC implementations** to prevent
-PyTensor/JAX conflicts:
+The homodyne package uses Consensus Monte Carlo (CMC) for all MCMC operations:
 
-| Command | Backend | Implementation | Isolation | Use Case |
-|---------|---------|----------------|-----------|----------| | `homodyne` | **Pure PyMC
-CPU** | `mcmc_cpu_backend.py` | No JAX imports | Cross-platform, reliable | |
-`homodyne-gpu` | **Pure NumPyro GPU** | `mcmc_gpu_backend.py` | No PyMC imports |
-High-performance, Linux + CUDA |
+| Command | Backend | Implementation | Use Case |
+|---------|---------|----------------|----------|
+| `homodyne` | **NumPyro CMC** | `mcmc.py` | Production, all datasets |
 
-### Smart GPU Detection
+### CMC Features
 
-**Key Features:**
+- **Multi-core parallelization**: Uses multiprocessing backend for parallel shard execution
+- **Automatic sharding**: Dataset size-aware shard allocation
+- **Physics-informed priors**: Domain-specific prior distributions
+- **Robust convergence**: Auto-retry with up to 3 attempts
 
-- **Platform Detection**: Linux-only with automatic CPU fallback
-- **CUDA Discovery**: Searches system and conda installations
-- **Hardware Analysis**: GPU memory and capability detection
-- **NumPyro Configuration**: Automatic JAX environment setup
-
-### Auto-Configuration Profiles
-
-Memory-based optimization applied automatically:
-
-| GPU Memory | Memory Fraction | Batch Size | XLA Optimizations |
-|------------|-----------------|------------|-------------------| | < 4GB | 70% |
-Conservative | Basic flags | | 4-8GB | 80% | Standard | Standard optimizations | | > 8GB
-| 90% | Aggressive | Advanced XLA features |
-
-### GPU Commands
-
-```bash
-# Smart GPU activation
-gpu-on                   # Manual activation
-
-# Detailed status with hardware info
-gpu-status               # GPU hardware, CUDA, JAX devices, memory
-
-# Performance benchmarking
-gpu-bench                # Matrix multiplication benchmarks
-
-# Hardware optimization
-homodyne-gpu-optimize    # Detect hardware, apply optimal settings
-```
-
-### Isolated Backend Selection Logic
-
-**`homodyne` Command (Isolated PyMC CPU Backend):**
-
-- Backend Wrapper: `mcmc_cpu_backend.py` - completely isolated from JAX
-- Environment: `HOMODYNE_GPU_INTENT` not set or `false`
-- Platform: Linux, Windows, macOS (identical behavior)
-- PyTensor Configuration: CPU-only mode with dedicated compilation directory
-- Use Cases: Development, testing, cross-platform compatibility, CPU-only systems
-
-**`homodyne-gpu` Command (Isolated NumPyro GPU Backend):**
-
-- Backend Wrapper: `mcmc_gpu_backend.py` - completely isolated from PyMC
-- Environment: `HOMODYNE_GPU_INTENT=true` (auto-set by wrapper)
-- Platform: Linux with CUDA (JAX CPU fallback if no GPU), macOS/Windows (JAX CPU mode)
-- JAX Configuration: GPU detection with automatic CPU fallback within JAX ecosystem
-- Use Cases: Production, large datasets, high-performance computing, GPU acceleration
-
-## 🚀 GPU Optimization System
-
-### Hardware Analysis & Optimization
-
-```bash
-# Generate hardware report
-homodyne-gpu-optimize --report
-
-# Run benchmark and apply optimal settings
-homodyne-gpu-optimize --benchmark --apply
-
-# Create custom optimization profile
-homodyne-gpu-optimize --profile conservative
-homodyne-gpu-optimize --profile aggressive
-```
-
-### Optimization Features
-
-1. **Hardware Detection**: GPU memory, CUDA compatibility, driver validation
-1. **Performance Benchmarking**: Matrix operations, memory bandwidth, JAX compilation
-1. **Auto-Configuration**: XLA flags, memory tuning, batch size optimization
-
-### Custom Configuration
-
-Create profiles in `~/.config/homodyne/gpu_profiles.json`:
-
-```json
-{
-  "profiles": {
-    "conservative": {
-      "memory_fraction": 0.6,
-      "batch_size": 500,
-      "enable_x64": false
-    },
-    "aggressive": {
-      "memory_fraction": 0.95,
-      "batch_size": 5000,
-      "enable_x64": true,
-      "xla_flags": [
-        "--xla_gpu_enable_triton_gemm=true",
-        "--xla_gpu_enable_latency_hiding_scheduler=true"
-      ]
-    }
-  }
-}
-```
-
-## 🧪 System Validation
+## System Validation
 
 ### Comprehensive Testing
 
@@ -198,10 +97,9 @@ Create profiles in `~/.config/homodyne/gpu_profiles.json`:
 homodyne-validate
 
 # Verbose validation with timing
-homodyne-validate --verbose  
+homodyne-validate --verbose
 
 # Component-specific testing
-homodyne-validate --test gpu         # GPU system only
 homodyne-validate --test completion  # Shell completion only
 
 # JSON output for automation
@@ -211,63 +109,48 @@ homodyne-validate --json
 ### Test Categories
 
 1. **Environment Detection**: Platform, Python version, virtual environment, shell type
-1. **Installation Verification**: Commands, help output, module imports, version
-   consistency
-1. **Shell Completion**: Files, activation scripts, aliases, cache system
-1. **GPU Setup** (Linux): Hardware detection, CUDA, JAX devices, driver compatibility
-1. **Integration Testing**: Cross-component functionality, environment propagation
+2. **Installation Verification**: Commands, help output, module imports, version consistency
+3. **Shell Completion**: Files, activation scripts, aliases, cache system
+4. **Integration Testing**: Cross-component functionality, environment propagation
 
 ### Sample Output
 
 ```
-🔍 HOMODYNE SYSTEM VALIDATION REPORT
+HOMODYNE SYSTEM VALIDATION REPORT
 ================================================================================
 
-📊 Summary: 5/5 tests passed ✅
-🎉 All systems operational!
+Summary: 5/5 tests passed
+All systems operational!
 
-🖥️  Environment:
+Environment:
    Platform: Linux x86_64
    Python: 3.12.0
    Environment: conda (homodyne)
    Shell: zsh
 
-📋 Test Results:
-✅ PASS Environment Detection (0.003s)
-✅ PASS Homodyne Installation (0.152s)
-✅ PASS Shell Completion (0.089s)  
-✅ PASS GPU Setup (0.234s)
-✅ PASS Integration (0.067s)
+Test Results:
+PASS Environment Detection (0.003s)
+PASS Homodyne Installation (0.152s)
+PASS Shell Completion (0.089s)
+PASS CPU Backend (0.234s)
+PASS Integration (0.067s)
 
-💡 Recommendations:
-   🚀 Your homodyne installation is optimized and ready!
-   📖 Run 'hm --help' to see unified command options
-   ⚡ GPU acceleration active - use 'gpu-bench' to test performance
+Recommendations:
+   Your homodyne installation is optimized and ready!
+   Run 'homodyne --help' to see command options
+   CPU optimization active for HPC multi-core systems
 ```
 
-## 🛠️ Configuration
+## Configuration
 
 ### Essential Environment Variables
 
 ```bash
-# MCMC Backend Routing
-export HOMODYNE_GPU_INTENT=true     # NumPyro GPU backend
-export HOMODYNE_GPU_INTENT=false    # PyMC CPU backend
+# JAX Configuration (CPU-only)
+export JAX_ENABLE_X64=1              # Use float64 for numerical precision
+export JAX_PLATFORMS=cpu             # Force CPU platform
 
-# JAX Configuration
-export JAX_ENABLE_X64=0              # Use float32 for GPU performance  
-export XLA_PYTHON_CLIENT_MEM_FRACTION=0.8  # GPU memory allocation
-
-# Advanced XLA Optimization
-export XLA_FLAGS="--xla_gpu_enable_triton_softmax_fusion=true \
-                  --xla_gpu_triton_gemm_any=true \
-                  --xla_gpu_enable_latency_hiding_scheduler=true"
-```
-
-### Shell Completion Settings
-
-```bash
-# Cache configuration
+# Shell Completion Settings
 export HOMODYNE_COMPLETION_CACHE_TTL=300    # 5-minute cache
 export HOMODYNE_COMPLETION_MAX_FILES=20     # Max cached files
 export HOMODYNE_COMPLETION_DEBUG=1          # Debug mode
@@ -276,7 +159,7 @@ export HOMODYNE_COMPLETION_DEBUG=1          # Debug mode
 ~/.cache/homodyne/completion_cache
 ```
 
-## 📝 Enhanced Logging
+## Enhanced Logging
 
 ### Logging Modes
 
@@ -286,39 +169,36 @@ homodyne --config config.json --method mcmc
 
 # Quiet: File-only logging (no console output)
 homodyne --config config.json --quiet
-homodyne-gpu --config config.json --quiet
 
-# Verbose: DEBUG level logging  
+# Verbose: DEBUG level logging
 homodyne --config config.json --verbose
 ```
 
 **Log Location:** `./homodyne_results/run.log` (or `--output-dir/run.log`)
 
-## 📊 Performance Monitoring
+## Performance Monitoring (CPU)
 
-### GPU Monitoring
+### CPU Monitoring
 
 ```bash
-# Real-time GPU utilization
-nvidia-smi dmon -i 0 -s pucvmet -d 1 &
-hm --config config.json
+# Real-time CPU utilization
+htop
+
+# Process-specific monitoring
+top -H -p $(pgrep -f homodyne)
 
 # Memory tracking
-nvidia-smi --query-gpu=memory.used,memory.total --format=csv -l 1
-
-# Performance benchmarking
-gpu-bench                           # Quick test
-homodyne-gpu-optimize --benchmark   # Comprehensive analysis
+free -h
 ```
 
 ### JAX Debugging
 
 ```bash
 export JAX_DEBUG_NANS=1     # Debug NaN values
-export JAX_TRACE_LEVEL=2    # Detailed JAX tracing
+export JAX_LOG_COMPILES=1   # Log JIT compilation
 ```
 
-## 🐛 Troubleshooting
+## Troubleshooting
 
 ### Common Issues
 
@@ -339,46 +219,28 @@ conda deactivate && conda activate your-env
 #### MCMC Backend Problems
 
 ```bash
-# Check current backend
-python3 -c "
-import os
-gpu_intent = os.environ.get('HOMODYNE_GPU_INTENT', 'false').lower() == 'true'
-print(f'GPU Intent: {gpu_intent}')
-"
+# Check JAX platform
+python3 -c "import jax; print(jax.devices())"
 
-# Force specific backend
-HOMODYNE_GPU_INTENT=false homodyne --method mcmc    # PyMC CPU
-homodyne-gpu --method mcmc                          # NumPyro GPU
-```
-
-#### GPU Activation Issues
-
-```bash
-# Comprehensive diagnostics
-gpu-status
-homodyne-validate --test gpu --verbose
-homodyne-gpu-optimize --report
-
-# Manual troubleshooting
-nvidia-smi                          # Check GPU/driver
-ls -la /usr/local/cuda              # Verify CUDA
-echo $LD_LIBRARY_PATH               # Check library paths
+# Verify NumPyro import
+python3 -c "import numpyro; print(numpyro.__version__)"
 ```
 
 #### Performance Issues
 
 ```bash
-# GPU optimization
-homodyne-gpu-optimize --benchmark --apply
-export XLA_PYTHON_CLIENT_MEM_FRACTION=0.7  # Reduce memory
-export JAX_ENABLE_X64=0                     # Use float32
+# Check CPU utilization
+htop
 
-# Force JAX CPU fallback
-export JAX_PLATFORMS=cpu
-homodyne-gpu --method mcmc  # Still uses NumPyro, but on CPU
+# Verify multi-core usage
+python3 -c "import os; print(f'CPU cores: {os.cpu_count()}')"
+
+# Force single-threaded execution (debugging)
+export JAX_NUM_THREADS=1
+homodyne --method mcmc
 ```
 
-## 🔄 Integration Examples
+## Integration Examples
 
 ### CI/CD Integration
 
@@ -393,43 +255,38 @@ jobs:
       - uses: actions/checkout@v4
       - name: Install homodyne
         run: |
-          pip install homodyne-analysis[jax]
+          pip install homodyne-analysis
           homodyne-post-install --shell bash --non-interactive
       - name: System validation
         run: homodyne-validate --json
       - name: Run tests
         run: |
-          homodyne --config test_config.json --method classical
-          hm test_config.json
+          homodyne --config test_config.json --method nlsq
 ```
 
 ### Docker Integration
 
 ```dockerfile
-FROM nvidia/cuda:12.3-devel-ubuntu22.04
+FROM python:3.12-slim
 
-RUN apt-get update && apt-get install -y python3 python3-pip
-RUN pip install homodyne-analysis[jax]
-RUN homodyne-post-install --shell bash --gpu --non-interactive
+RUN pip install homodyne-analysis
+RUN homodyne-post-install --shell bash --non-interactive
 
-ENV HOMODYNE_GPU_AUTO=1
-ENV XLA_FLAGS="--xla_gpu_cuda_data_dir=/usr/local/cuda"
-
-RUN homodyne-validate && gpu-bench
+RUN homodyne-validate
 ENTRYPOINT ["homodyne"]
 ```
 
-## 📦 Environment Support
+## Environment Support
 
-| Environment | Shell Completion | GPU Setup | Auto-Activation | Advanced Tools |
-|-------------|------------------|-----------|-----------------|----------------| |
-**Conda** | ✅ Full support | ✅ Automatic | ✅ On activate | ✅ All features | | **Mamba**
-| ✅ Full support | ✅ Automatic | ✅ On activate | ✅ All features | | **venv** | ✅ Manual
-setup | ✅ Manual setup | 🔶 Manual sourcing | ✅ All features | | **virtualenv** | ✅
-Manual setup | ✅ Manual setup | 🔶 Manual sourcing | ✅ All features | | **System Python**
-| 🔶 User-wide | 🔶 User-wide | 🔴 Not recommended | 🔶 Limited |
+| Environment | Shell Completion | Auto-Activation | Advanced Tools |
+|-------------|------------------|-----------------|----------------|
+| **Conda** | Full support | On activate | All features |
+| **Mamba** | Full support | On activate | All features |
+| **venv** | Manual setup | Manual sourcing | All features |
+| **virtualenv** | Manual setup | Manual sourcing | All features |
+| **System Python** | User-wide | Not recommended | Limited |
 
-## 🧹 Uninstallation
+## Uninstallation
 
 ### Complete Cleanup (Recommended)
 
@@ -441,18 +298,8 @@ homodyne-cleanup --interactive
 pip uninstall homodyne-analysis
 
 # Step 3: Verify cleanup
-homodyne-validate 2>/dev/null || echo "✅ Successfully uninstalled"
+homodyne-validate 2>/dev/null || echo "Successfully uninstalled"
 ```
-
-### Why Cleanup Order Matters
-
-**Always run cleanup first** - the smart removal system is part of the homodyne package
-and provides:
-
-- Intelligent component detection
-- Safe file removal with dry-run preview
-- Cross-platform compatibility
-- Verification of complete cleanup
 
 ### Post-Cleanup Verification
 
@@ -461,12 +308,11 @@ and provides:
 conda deactivate && conda activate <your-env>
 
 # Verify removal
-which hm 2>/dev/null || echo "✅ Aliases removed"
-which homodyne-validate 2>/dev/null || echo "✅ Tools removed"
-find "$CONDA_PREFIX" -name "*homodyne*" 2>/dev/null || echo "✅ Files cleaned"
+which hm 2>/dev/null || echo "Aliases removed"
+which homodyne-validate 2>/dev/null || echo "Tools removed"
+find "$CONDA_PREFIX" -name "*homodyne*" 2>/dev/null || echo "Files cleaned"
 ```
 
 ______________________________________________________________________
 
-*This runtime system provides intelligent automation, cross-platform compatibility, and
-performance optimization for homodyne analysis workflows.*
+*This runtime system provides intelligent automation, cross-platform compatibility, and CPU optimization for homodyne analysis workflows (v2.3.0+ CPU-only architecture).*
