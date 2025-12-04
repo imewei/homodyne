@@ -36,6 +36,8 @@ import matplotlib.pyplot as plt
 import numpy as np
 from matplotlib.figure import Figure
 
+from homodyne.utils.path_validation import PathValidationError, validate_plot_save_path
+
 logger = logging.getLogger(__name__)
 
 # Type alias for MCMCResult
@@ -230,8 +232,13 @@ def plot_trace_plots(
 
     # Save or show
     if save_path is not None:
-        fig.savefig(save_path, dpi=dpi, bbox_inches="tight")
-        logger.info(f"Trace plots saved to {save_path}")
+        try:
+            validated_path = validate_plot_save_path(save_path)
+            if validated_path is not None:
+                fig.savefig(validated_path, dpi=dpi, bbox_inches="tight")
+                logger.info(f"Trace plots saved to {validated_path.name}")
+        except (PathValidationError, ValueError) as e:
+            logger.warning(f"Could not save trace plots: {e}")
 
     if show:
         plt.show()
@@ -382,8 +389,13 @@ def plot_kl_divergence_matrix(
 
     # Save or show
     if save_path is not None:
-        fig.savefig(save_path, dpi=dpi, bbox_inches="tight")
-        logger.info(f"KL divergence matrix saved to {save_path}")
+        try:
+            validated_path = validate_plot_save_path(save_path)
+            if validated_path is not None:
+                fig.savefig(validated_path, dpi=dpi, bbox_inches="tight")
+                logger.info(f"KL divergence matrix saved to {validated_path.name}")
+        except (PathValidationError, ValueError) as e:
+            logger.warning(f"Could not save KL divergence matrix: {e}")
 
     if show:
         plt.show()
@@ -393,7 +405,7 @@ def plot_kl_divergence_matrix(
 
 def plot_convergence_diagnostics(
     result: MCMCResult,
-    metrics: list[str] = ["rhat", "ess"],
+    metrics: list[str] | None = None,
     figsize: tuple | None = None,
     rhat_threshold: float = 1.1,
     ess_threshold: float = 100.0,
@@ -410,8 +422,8 @@ def plot_convergence_diagnostics(
     ----------
     result : MCMCResult
         MCMC or CMC result object with convergence diagnostics
-    metrics : list of str, default=['rhat', 'ess']
-        Metrics to plot. Options: 'rhat', 'ess'
+    metrics : list of str, optional
+        Metrics to plot. Options: 'rhat', 'ess'. Defaults to ['rhat', 'ess']
     figsize : tuple, optional
         Figure size (width, height). If None, auto-calculated
     rhat_threshold : float, default=1.1
@@ -444,6 +456,10 @@ def plot_convergence_diagnostics(
     - ESS > 100: Adequate sampling (good)
     - ESS < 100: Poor sampling efficiency (bad)
     """
+    # Set default metrics if not provided
+    if metrics is None:
+        metrics = ["rhat", "ess"]
+
     # Check if CMC result
     is_cmc = result.is_cmc_result() if hasattr(result, "is_cmc_result") else False
 
@@ -502,8 +518,13 @@ def plot_convergence_diagnostics(
 
     # Save or show
     if save_path is not None:
-        fig.savefig(save_path, dpi=dpi, bbox_inches="tight")
-        logger.info(f"Convergence diagnostics saved to {save_path}")
+        try:
+            validated_path = validate_plot_save_path(save_path)
+            if validated_path is not None:
+                fig.savefig(validated_path, dpi=dpi, bbox_inches="tight")
+                logger.info(f"Convergence diagnostics saved to {validated_path.name}")
+        except (PathValidationError, ValueError) as e:
+            logger.warning(f"Could not save convergence diagnostics: {e}")
 
     if show:
         plt.show()
@@ -871,8 +892,13 @@ def plot_posterior_comparison(
 
     # Save or show
     if save_path is not None:
-        fig.savefig(save_path, dpi=dpi, bbox_inches="tight")
-        logger.info(f"Posterior comparison saved to {save_path}")
+        try:
+            validated_path = validate_plot_save_path(save_path)
+            if validated_path is not None:
+                fig.savefig(validated_path, dpi=dpi, bbox_inches="tight")
+                logger.info(f"Posterior comparison saved to {validated_path.name}")
+        except (PathValidationError, ValueError) as e:
+            logger.warning(f"Could not save posterior comparison: {e}")
 
     if show:
         plt.show()
@@ -1171,8 +1197,13 @@ def plot_cmc_summary_dashboard(
 
     # Save or show
     if save_path is not None:
-        fig.savefig(save_path, dpi=dpi, bbox_inches="tight")
-        logger.info(f"CMC summary dashboard saved to {save_path}")
+        try:
+            validated_path = validate_plot_save_path(save_path)
+            if validated_path is not None:
+                fig.savefig(validated_path, dpi=dpi, bbox_inches="tight")
+                logger.info(f"CMC summary dashboard saved to {validated_path.name}")
+        except (PathValidationError, ValueError) as e:
+            logger.warning(f"Could not save CMC summary dashboard: {e}")
 
     if show:
         plt.show()
@@ -1264,8 +1295,13 @@ def plot_arviz_trace(
 
     # Save or show
     if save_path is not None:
-        fig.savefig(save_path, dpi=dpi, bbox_inches="tight")
-        logger.info(f"ArviZ trace plots saved to {save_path}")
+        try:
+            validated_path = validate_plot_save_path(save_path)
+            if validated_path is not None:
+                fig.savefig(validated_path, dpi=dpi, bbox_inches="tight")
+                logger.info(f"ArviZ trace plots saved to {validated_path.name}")
+        except (PathValidationError, ValueError) as e:
+            logger.warning(f"Could not save ArviZ trace plots: {e}")
 
     if show:
         plt.show()
@@ -1348,8 +1384,13 @@ def plot_arviz_posterior(
 
     # Save or show
     if save_path is not None:
-        fig.savefig(save_path, dpi=dpi, bbox_inches="tight")
-        logger.info(f"ArviZ posterior plots saved to {save_path}")
+        try:
+            validated_path = validate_plot_save_path(save_path)
+            if validated_path is not None:
+                fig.savefig(validated_path, dpi=dpi, bbox_inches="tight")
+                logger.info(f"ArviZ posterior plots saved to {validated_path.name}")
+        except (PathValidationError, ValueError) as e:
+            logger.warning(f"Could not save ArviZ posterior plots: {e}")
 
     if show:
         plt.show()
@@ -1451,8 +1492,13 @@ def plot_arviz_pair(
 
     # Save or show
     if save_path is not None:
-        fig.savefig(save_path, dpi=dpi, bbox_inches="tight")
-        logger.info(f"ArviZ pair plots saved to {save_path}")
+        try:
+            validated_path = validate_plot_save_path(save_path)
+            if validated_path is not None:
+                fig.savefig(validated_path, dpi=dpi, bbox_inches="tight")
+                logger.info(f"ArviZ pair plots saved to {validated_path.name}")
+        except (PathValidationError, ValueError) as e:
+            logger.warning(f"Could not save ArviZ pair plots: {e}")
 
     if show:
         plt.show()
@@ -1604,7 +1650,7 @@ def print_mcmc_summary(result: MCMCResult) -> None:
     print(f"Computation Time: {result.computation_time:.2f}s")
 
     if result.is_cmc_result():
-        print(f"\nCMC Information:")
+        print("\nCMC Information:")
         print(f"  - Number of Shards: {result.num_shards}")
         print(f"  - Combination Method: {result.combination_method}")
 

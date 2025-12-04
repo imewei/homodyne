@@ -4,6 +4,12 @@ Essential utility functions with preserved API compatibility.
 """
 
 from homodyne.utils.logging import get_logger, log_calls, log_operation, log_performance
+from homodyne.utils.path_validation import (
+    PathValidationError,
+    get_safe_output_dir,
+    validate_plot_save_path,
+    validate_save_path,
+)
 from homodyne.utils.validation import (
     validate_array_not_empty,
     validate_array_not_none,
@@ -19,7 +25,12 @@ __all__ = [
     "log_performance",
     "log_calls",
     "log_operation",
-    # Validation utilities
+    # Path validation utilities
+    "PathValidationError",
+    "validate_save_path",
+    "validate_plot_save_path",
+    "get_safe_output_dir",
+    # Array/param validation utilities
     "validate_array_not_none",
     "validate_array_not_empty",
     "validate_positive_scalar",
