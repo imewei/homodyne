@@ -217,11 +217,13 @@ def test_parameter_space_propagation(
 
     # Verify backend was called with parameter_space
     assert mock_backend.run_parallel_mcmc.called
+    assert mock_backend.run_parallel_mcmc.call_count == 1
     call_kwargs = mock_backend.run_parallel_mcmc.call_args.kwargs
 
     # Check parameter_space propagation
     assert "parameter_space" in call_kwargs
     assert call_kwargs["parameter_space"] is static_parameter_space
+    assert call_kwargs["parameter_space"].model_type == "static"
 
     # Check analysis_mode propagation
     assert "analysis_mode" in call_kwargs
@@ -230,13 +232,25 @@ def test_parameter_space_propagation(
     # Check init_params includes initial_values
     assert "init_params" in call_kwargs
     init_params = call_kwargs["init_params"]
+    assert isinstance(init_params, dict)
+    assert len(init_params) > 0
+
+    # Verify all physics parameters present
     assert init_params["D0"] == 1234.5
     assert init_params["alpha"] == 0.567
     assert init_params["D_offset"] == 12.34
 
+    # Verify values are finite and physically reasonable
+    assert np.isfinite(init_params["D0"])
+    assert np.isfinite(init_params["alpha"])
+    assert np.isfinite(init_params["D_offset"])
+    assert init_params["D0"] > 0  # Diffusion coefficient must be positive
+
     # Check scaling parameters added (per-angle in v2.4.0+)
     assert "contrast_0" in init_params
     assert "offset_0" in init_params
+    assert 0 < init_params["contrast_0"] <= 1.5  # Valid contrast range
+    assert 0.5 <= init_params["offset_0"] <= 1.5  # Valid offset range
 
     print("✓ parameter_space successfully propagated through CMC pipeline")
 
@@ -291,6 +305,7 @@ def test_initial_values_usage(
         )
 
     # Verify backend received init_params
+    assert mock_backend.run_parallel_mcmc.called
     call_kwargs = mock_backend.run_parallel_mcmc.call_args.kwargs
     init_params = call_kwargs["init_params"]
 
@@ -303,9 +318,26 @@ def test_initial_values_usage(
     assert init_params["gamma_dot_t_offset"] == 0.45
     assert init_params["phi0"] == 0.12
 
+    # Verify all 7 laminar flow physics params present
+    laminar_physics_params = ["D0", "alpha", "D_offset", "gamma_dot_t0", "beta", "gamma_dot_t_offset", "phi0"]
+    for param in laminar_physics_params:
+        assert param in init_params, f"Missing laminar flow param: {param}"
+        assert np.isfinite(init_params[param]), f"{param} is not finite"
+
     # Check scaling parameters added automatically (per-angle in v2.4.0+)
     assert init_params["contrast_0"] == 0.5  # Default per-angle
     assert init_params["offset_0"] == 1.0  # Default per-angle
+
+    # Verify parameter ordering for NumPyro compatibility
+    # Per-angle scaling must come before physics params
+    param_keys = list(init_params.keys())
+    contrast_idx = param_keys.index("contrast_0")
+    offset_idx = param_keys.index("offset_0")
+    d0_idx = param_keys.index("D0")
+
+    # In NumPyro order: contrast → offset → physics
+    assert contrast_idx < d0_idx, "contrast must come before D0 in param order"
+    assert offset_idx < d0_idx, "offset must come before D0 in param order"
 
     print("✓ initial_values successfully used for shard initialization")
 
@@ -610,15 +642,39 @@ def test_full_cmc_pipeline_with_config_parameters(
     # Verify CMC-specific fields (extended MCMCResult)
     assert hasattr(result, "num_shards")
     assert hasattr(result, "combination_method")
+    assert hasattr(result, "per_shard_diagnostics")
+
+    # Verify mean_params has correct dimensionality
+    assert result.mean_params is not None
+    assert len(result.mean_params) > 0
+    assert np.all(np.isfinite(result.mean_params))
+
+    # Verify CMC result identification
+    if hasattr(result, "is_cmc_result"):
+        assert result.is_cmc_result() or result.num_shards is not None
 
     # Verify backend was called correctly
     assert mock_backend.run_parallel_mcmc.called
+    assert mock_backend.run_parallel_mcmc.call_count == 1
     call_kwargs = mock_backend.run_parallel_mcmc.call_args.kwargs
+
+    # Verify all required kwargs were passed to backend
+    required_kwargs = ["parameter_space", "analysis_mode", "init_params"]
+    for kwarg in required_kwargs:
+        assert kwarg in call_kwargs, f"Missing required kwarg: {kwarg}"
 
     # Final verification: All config-driven parameters propagated
     assert call_kwargs["parameter_space"] is laminar_parameter_space
     assert call_kwargs["analysis_mode"] == "laminar_flow"
     assert call_kwargs["init_params"]["D0"] == 1234.5  # From initial_values
+    assert call_kwargs["init_params"]["gamma_dot_t0"] == 1.23  # Flow param
+    assert call_kwargs["init_params"]["phi0"] == 0.12  # Flow direction
+
+    # Verify per-angle scaling params were added
+    assert "contrast_0" in call_kwargs["init_params"]
+    assert "offset_0" in call_kwargs["init_params"]
+    assert call_kwargs["init_params"]["contrast_0"] == 0.5
+    assert call_kwargs["init_params"]["offset_0"] == 1.0
 
     print("✓ Full CMC pipeline executed successfully with config-driven parameters")
 

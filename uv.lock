@@ -590,7 +590,7 @@ docs = [
 
 [package.metadata]
 requires-dist = [
-    { name = "arviz", specifier = ">=0.20.0" },
+    { name = "arviz", specifier = ">=0.20.0,<0.23.0" },
     { name = "black", marker = "extra == 'dev'", specifier = ">=25.0.0,<26.0.0" },
     { name = "blackjax", specifier = ">=1.2.0,<2.0.0" },
     { name = "cloudpickle", specifier = ">=3.0.0" },

@@ -39,6 +39,14 @@ try:
 except ImportError:
     HAS_YAML = False
 
+try:
+    import arviz as az
+
+    HAS_ARVIZ = True
+except ImportError:
+    HAS_ARVIZ = False
+    az = None
+
 
 # ============================================================================
 # Platform Detection
@@ -85,6 +93,8 @@ def pytest_configure(config):
     config.addinivalue_line("markers", "slow: Slow tests (> 5 seconds)")
     config.addinivalue_line("markers", "requires_jax: Requires JAX installation")
     config.addinivalue_line("markers", "linux: Requires Linux OS")
+    config.addinivalue_line("markers", "arviz: ArviZ integration tests (v2.4.1+)")
+    config.addinivalue_line("markers", "visualization: Plotting and visualization tests")
 
 
 def pytest_collection_modifyitems(config, items):
@@ -186,9 +196,12 @@ def reset_config_state():
         pass
 
 
-@pytest.fixture
+@pytest.fixture(scope="session")
 def numpy_backend():
-    """NumPy backend for fallback tests."""
+    """NumPy backend for fallback tests.
+
+    Note: Session-scoped as numpy module reference is constant.
+    """
     return np
 
 
@@ -199,9 +212,12 @@ def temp_dir():
         yield Path(tmpdir)
 
 
-@pytest.fixture
+@pytest.fixture(scope="module")
 def test_config():
-    """Basic test configuration dictionary."""
+    """Basic test configuration dictionary.
+
+    Note: Module-scoped as config values are read-only during tests.
+    """
     return {
         "analysis_mode": "static",
         "optimization": {
@@ -218,9 +234,12 @@ def test_config():
 # ============================================================================
 
 
-@pytest.fixture
+@pytest.fixture(scope="module")
 def synthetic_xpcs_data():
-    """Generate synthetic XPCS data for testing."""
+    """Generate synthetic XPCS data for testing.
+
+    Note: Module-scoped for memory efficiency (avoids 200MB+ recreation per test).
+    """
     n_times = 50
     n_angles = 36
 
@@ -253,9 +272,12 @@ def synthetic_xpcs_data():
     }
 
 
-@pytest.fixture
+@pytest.fixture(scope="module")
 def small_xpcs_data():
-    """Small XPCS dataset for fast tests."""
+    """Small XPCS dataset for fast tests.
+
+    Note: Module-scoped for memory efficiency.
+    """
     n_times = 10
     n_angles = 12
 
@@ -276,9 +298,12 @@ def small_xpcs_data():
     }
 
 
-@pytest.fixture
+@pytest.fixture(scope="module")
 def large_xpcs_data():
-    """Large XPCS dataset for performance tests."""
+    """Large XPCS dataset for performance tests.
+
+    Note: Module-scoped to prevent 200MB+ memory waste per test.
+    """
     n_times = 200
     n_angles = 72
 
@@ -303,9 +328,12 @@ def large_xpcs_data():
     }
 
 
-@pytest.fixture
+@pytest.fixture(scope="module")
 def test_parameters():
-    """Standard test parameters for optimization."""
+    """Standard test parameters for optimization.
+
+    Note: Module-scoped as values are immutable and reused across tests.
+    """
     return {
         "offset": 1.0,
         "contrast": 0.5,

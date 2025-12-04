@@ -76,7 +76,7 @@ dependencies = [
     # Bayesian inference (2025 stable)
     "numpyro>=0.18.0,<0.20.0",  # Tested: NumPyro 0.19.0
     "blackjax>=1.2.0,<2.0.0",  # Tested: BlackJAX 1.2.5
-    "arviz>=0.20.0",  # CMC diagnostics, 95% CI plots, trace plots
+    "arviz>=0.20.0,<0.23.0",  # CMC diagnostics, 95% CI plots, trace plots (pinned for API stability)
 
     # Data handling
     "h5py>=3.10.0,<4.0.0",  # Tested: h5py 3.15.1
