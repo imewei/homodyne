@@ -8,8 +8,8 @@
 # Use for: Nonequilibrium systems, shear flow, time-dependent shear rates
 # Parameter count: 7 physical + 2 × N_angles scaling = 7 + 2N total
 #
-# VERSION: 2.4.0
-# UPDATED: 2025-11-08
+# VERSION: 2.4.1
+# UPDATED: 2025-12-04
 # ==============================================================================
 
 # ==============================================================================
@@ -17,8 +17,8 @@
 # ==============================================================================
 # Template metadata describing analysis configuration
 metadata:
-  config_version: "2.4.0" # Configuration file format version
-  description: "Laminar flow analysis - 7-parameter model (v3.0: CPU-only, per-angle mandatory, CMC-only MCMC)"
+  config_version: "2.4.1" # Configuration file format version
+  description: "Laminar flow analysis - 7-parameter model (v2.4.1: CPU-only, per-angle mandatory, CMC-only MCMC)"
   analysis_mode: "laminar_flow" # Laminar flow mode
   parameter_count: 7 # D₀, α, D_offset, γ̇₀, β, γ̇_offset, φ₀
 
@@ -34,17 +34,6 @@ metadata:
   recommended_use: "Nonequilibrium XPCS systems under shear flow with time-dependent dynamics"
   template_type: "production_ready" # Production-ready template
   complexity: "comprehensive" # All features documented
-
-  # Key features of this configuration
-  key_features:
-    - "7-parameter laminar flow model with time-dependent shear"
-    - "CPU-only architecture (v2.3.0) with JAX 0.8.0 - GPU support removed"
-    - "Per-angle scaling mandatory (v2.4.0) - physically correct"
-    - "CMC-only MCMC architecture (v2.4.1) - per-shard NUTS"
-    - "Multi-angle correlation analysis with flow-specific phi filtering"
-    - "Discrete numerical integration for anomalous diffusion and shear"
-    - "Comprehensive quality control and validation"
-    - "HPC CPU optimization for multi-core systems"
 
   # Optional: Generation metadata (filled by homodyne-config)
   generated_at: null # ISO timestamp when config generated
@@ -317,7 +306,7 @@ parameter_space:
 optimization:
   method:
     "nlsq" # Options: "nlsq" | "mcmc"
-    # Note: NUTS/CMC is auto-selected within MCMC based on dual criteria
+    # Note: MCMC uses CMC-only architecture (v2.4.1) with per-shard NUTS sampling
 
   # ---------------------------------------------------------------------------
   # NLSQ - Trust-Region Nonlinear Least Squares (Primary Method)
@@ -382,7 +371,9 @@ optimization:
   # ---------------------------------------------------------------------------
   # MCMC - Markov Chain Monte Carlo (Uncertainty Quantification)
   # ---------------------------------------------------------------------------
-  # CMC-only posterior sampling with per-shard NumPyro/BlackJAX NUTS
+  # CMC-only architecture (v2.4.1): per-shard NUTS sampling with
+  # weighted Gaussian combination of subposteriors
+  # Provides full posterior distributions and uncertainty estimates
   mcmc:
     backend: "numpyro" # Options: "numpyro" | "blackjax"
     num_warmup: 2500 # NUTS warmup/adaptation samples
@@ -423,15 +414,12 @@ optimization:
     adaptive_batching: true # Dynamically adjust batch size based on performance
 
   # ---------------------------------------------------------------------------
-  # CMC - Consensus Monte Carlo (Automatically Selected by MCMC)
+  # CMC - Consensus Monte Carlo (v2.4.1: Default MCMC Architecture)
   # ---------------------------------------------------------------------------
-  # CMC is automatically selected when MCMC dual criteria met (v2.1.0):
-  #   (num_samples >= 15) OR (memory > 30%)
-  # This section configures CMC behavior when auto-selected
-  # Parallelizes MCMC across data shards and combines subposteriors
+  # CMC is the only MCMC path in v2.4.1+ (NUTS auto-selection removed)
+  # Parallelizes MCMC across data shards with per-shard NUTS sampling
+  # and combines subposteriors using weighted Gaussian combination
   cmc:
-    enable: "auto" # Options: false | true | "auto" (recommended: "auto")
-    min_points_for_cmc: 1000000 # Minimum dataset size to trigger CMC (legacy parameter)
     backend: "jax" # Options: "jax" (CPU-only in v2.3.0+) | "numpy"
     diagonal_correction: true # Apply diagonal correction to correlation matrix
 
@@ -678,7 +666,7 @@ validation:
 # LAMINAR FLOW - USAGE NOTES
 # ==============================================================================
 #
-# QUICK START (v2.1.0+ Manual Workflow):
+# QUICK START (v2.4.1 Workflow):
 # ----------------------------------------
 # Step 1 - NLSQ optimization:
 #   1. Update experimental_data paths to your HDF5 file
@@ -686,12 +674,12 @@ validation:
 #   3. Run: homodyne --config this_file.yaml --method nlsq
 #   4. Note best-fit parameters from output
 #
-# Step 2 - Manual MCMC initialization (no automatic initialization in v2.1.0+):
+# Step 2 - MCMC initialization:
 #   5. Manually copy NLSQ best-fit results from output
 #   6. Update initial_parameters.values in this file with NLSQ results
 #   7. Example: values: [1234.5, 0.567, 12.34, 0.01, 0.0, 0.0, 0.0]
 #   8. Run: homodyne --config this_file.yaml --method mcmc
-#   9. Automatic NUTS/CMC selection based on dual criteria
+#   9. CMC-only architecture with per-shard NUTS sampling
 #
 # LAMINAR FLOW PHYSICS:
 # ---------------------
@@ -734,25 +722,23 @@ validation:
 #
 # Use require_orthogonal_angles: true to ensure both directions sampled
 #
-# OPTIMIZATION METHOD SELECTION (v2.1.0):
+# OPTIMIZATION METHOD SELECTION (v2.4.1):
 # ----------------------------------------
 # NLSQ (Recommended first):
 #   - Fast: ~seconds to minutes
 #   - CPU-optimized with JAX 0.8.0 JIT compilation
 #   - Handles 7 parameters efficiently
 #   - Good for exploration and initial fit
-#   - ⚠ CRITICAL FOR LAMINAR FLOW: Use x_scale_map to fix gradient imbalance
+#   - CRITICAL FOR LAMINAR FLOW: Use x_scale_map to fix gradient imbalance
 #
 # MCMC (For publication with uncertainty quantification):
 #   - Slower: ~hours for 7 parameters
 #   - Full posterior distributions with credible intervals
-#   - Automatic NUTS/CMC selection based on dual criteria:
-#     * (num_samples >= 15) OR (memory > 30%) → CMC (parallel sampling)
-#     * Otherwise → NUTS (sequential sampling)
+#   - CMC-only architecture (v2.4.1): per-shard NUTS sampling with
+#     weighted Gaussian combination of subposteriors
 #   - Convergence diagnostics (R-hat, ESS, divergences)
-#   - Increased warmup (1500) recommended for 7 parameters vs static mode
-#   - Manual workflow (v2.1.0+): Run NLSQ → copy results → update YAML → run MCMC
-#   - No automatic NLSQ/SVI initialization (removed in v2.1.0)
+#   - Increased warmup (2500) recommended for 7 parameters
+#   - Manual workflow: Run NLSQ → copy results → update YAML → run MCMC
 #
 # Streaming (Automatic for >100M points):
 #   - Constant memory footprint

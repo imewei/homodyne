@@ -7,8 +7,8 @@
 # Use for: Equilibrium systems, pure diffusion, anomalous diffusion
 # Parameter count: 3 physical + 2 × N_angles scaling = 3 + 2N total
 #
-# VERSION: 2.4.0
-# UPDATED: 2025-11-08
+# VERSION: 2.4.1
+# UPDATED: 2025-12-04
 # ==============================================================================
 
 # ==============================================================================
@@ -16,8 +16,8 @@
 # ==============================================================================
 # Template metadata describing analysis configuration
 metadata:
-  config_version: "2.4.0" # Configuration file format version
-  description: "Static diffusion analysis - 3-parameter model (v3.0: CPU-only, per-angle mandatory, CMC-only MCMC)"
+  config_version: "2.4.1" # Configuration file format version
+  description: "Static diffusion analysis - 3-parameter model (v2.4.1: CPU-only, per-angle mandatory, CMC-only MCMC)"
   analysis_mode: "static" # Static diffusion mode
   parameter_count: 3 # D₀, α, D_offset
 
@@ -32,17 +32,6 @@ metadata:
   recommended_use: "Equilibrium XPCS systems with pure diffusion and anomalous diffusion"
   template_type: "production_ready" # Production-ready template
   complexity: "comprehensive" # All features documented
-
-  # Key features of this configuration
-  key_features:
-    - "3-parameter static diffusion model"
-    - "CPU-only architecture (v2.3.0) with JAX 0.8.0 - GPU support removed"
-    - "Per-angle scaling mandatory (v2.4.0) - physically correct"
-    - "CMC-only MCMC architecture (v2.4.1) - per-shard NUTS"
-    - "Multi-angle correlation analysis with phi filtering"
-    - "Discrete numerical integration for anomalous diffusion"
-    - "Comprehensive quality control and validation"
-    - "HPC CPU optimization for multi-core systems"
 
   # Optional: Generation metadata (filled by homodyne-config)
   generated_at: null # ISO timestamp when config generated
@@ -263,7 +252,7 @@ parameter_space:
 optimization:
   method:
     "nlsq" # Options: "nlsq" | "mcmc"
-    # Note: NUTS/CMC is auto-selected within MCMC based on dual criteria
+    # Note: MCMC uses CMC-only architecture (v2.4.1) with per-shard NUTS sampling
 
   # ---------------------------------------------------------------------------
   # NLSQ - Trust-Region Nonlinear Least Squares (Primary Method)
@@ -358,8 +347,9 @@ optimization:
   # ---------------------------------------------------------------------------
   # MCMC - Markov Chain Monte Carlo (Uncertainty Quantification)
   # ---------------------------------------------------------------------------
+  # CMC-only architecture (v2.4.1): per-shard NUTS sampling with
+  # weighted Gaussian combination of subposteriors
   # Provides full posterior distributions and uncertainty estimates
-  # CMC-only pipeline with per-shard NumPyro/BlackJAX NUTS
   mcmc:
     backend: "numpyro" # Options: "numpyro" | "blackjax"
     num_warmup: 2000 # NUTS warmup/adaptation samples
@@ -615,7 +605,7 @@ validation:
 # STATIC DIFFUSION - USAGE NOTES
 # ==============================================================================
 #
-# QUICK START (v2.1.0+ Manual Workflow):
+# QUICK START (v2.4.1 Workflow):
 # ----------------------------------------
 # Step 1 - NLSQ optimization:
 #   1. Update experimental_data paths to your HDF5 file
@@ -623,12 +613,12 @@ validation:
 #   3. Run: homodyne --config this_file.yaml --method nlsq
 #   4. Note best-fit parameters from output
 #
-# Step 2 - Manual MCMC initialization (no automatic initialization in v2.1.0+):
+# Step 2 - MCMC initialization:
 #   5. Manually copy NLSQ best-fit results from output
 #   6. Update initial_parameters.values in this file with NLSQ results
 #   7. Example: values: [1234.5, 0.567, 12.34]  # 3 parameters for static
 #   8. Run: homodyne --config this_file.yaml --method mcmc
-#   9. Automatic NUTS/CMC selection based on dual criteria
+#   9. CMC-only architecture with per-shard NUTS sampling
 #
 # STATIC DIFFUSION PHYSICS:
 # -------------------------
@@ -660,7 +650,7 @@ validation:
 #
 # Use fallback_to_all_angles: true if anisotropy direction unknown
 #
-# OPTIMIZATION METHOD SELECTION (v2.1.0):
+# OPTIMIZATION METHOD SELECTION (v2.4.1):
 # ----------------------------------------
 # NLSQ (Recommended first):
 #   - Fast: ~seconds to minutes
@@ -671,12 +661,10 @@ validation:
 # MCMC (For publication with uncertainty quantification):
 #   - Slower: ~minutes to hours (faster than laminar_flow for 3 params)
 #   - Full posterior distributions with credible intervals
-#   - Automatic NUTS/CMC selection based on dual criteria:
-#     * (num_samples >= 15) OR (memory > 30%) → CMC (parallel sampling)
-#     * Otherwise → NUTS (sequential sampling)
+#   - CMC-only architecture (v2.4.1): per-shard NUTS sampling with
+#     weighted Gaussian combination of subposteriors
 #   - Convergence diagnostics (R-hat, ESS, divergences)
-#   - Manual workflow (v2.1.0+): Run NLSQ → copy results → update YAML → run MCMC
-#   - No automatic NLSQ/SVI initialization (removed in v2.1.0)
+#   - Manual workflow: Run NLSQ → copy results → update YAML → run MCMC
 #
 # Streaming (Automatic for >100M points):
 #   - Constant memory footprint
