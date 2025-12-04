@@ -169,10 +169,11 @@ class TestNLSQWrapperOverhead:
 
         # For medium datasets, wrapper overhead should be minimal
         # We can't measure direct NLSQ easily without duplicating wrapper logic,
-        # so we validate that total time is reasonable (throughput > 1000 pts/s)
+        # so we validate that total time is reasonable (throughput > 500 pts/s)
+        # v2.4.0: Per-angle scaling increases parameter count, lowering throughput
         throughput = 9000 / avg_wrapper_time
-        assert throughput > 1000, (
-            f"Throughput too low: {throughput:.0f} pts/s (expected >1000 pts/s)"
+        assert throughput > 500, (
+            f"Throughput too low: {throughput:.0f} pts/s (expected >500 pts/s)"
         )
 
     def test_overhead_large_dataset(self):

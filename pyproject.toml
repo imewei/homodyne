@@ -76,6 +76,7 @@ dependencies = [
     # Bayesian inference (2025 stable)
     "numpyro>=0.18.0,<0.20.0",  # Tested: NumPyro 0.19.0
     "blackjax>=1.2.0,<2.0.0",  # Tested: BlackJAX 1.2.5
+    "arviz>=0.20.0",  # CMC diagnostics, 95% CI plots, trace plots
 
     # Data handling
     "h5py>=3.10.0,<4.0.0",  # Tested: h5py 3.15.1
@@ -91,7 +92,6 @@ dependencies = [
     # Fast visualization (optional - graceful degradation if unavailable)
     "datashader>=0.16.0",  # Fast heatmap rasterization (5-10x speedup)
     "xarray>=2024.1.0",  # Required by Datashader for coordinate-aware data
-    "colorcet>=3.0.0",  # Perceptually uniform colormaps
 ]
 
 [project.optional-dependencies]
@@ -118,7 +118,6 @@ docs = [
 # Note: GPU users should install JAX with CUDA support separately (see README.md)
 all = [
     "homodyne[dev,docs]",
-    "tqdm>=4.66.0",
 ]
 
 [project.urls]
@@ -214,6 +213,7 @@ module = [
     "nlsq.*",
     "numpyro.*",
     "blackjax.*",
+    "arviz.*",
     "h5py.*",
     "psutil.*",
     "matplotlib.*",
@@ -247,19 +247,26 @@ filterwarnings = [
     "ignore:There are not enough devices to run parallel chains:UserWarning",
     "ignore:JAXopt is no longer maintained:DeprecationWarning",
     "ignore:Covariance of the parameters could not be estimated:scipy.optimize.OptimizeWarning",
+    # Third-party library warnings (cannot fix)
+    "ignore:invalid escape sequence:SyntaxWarning",
 ]
 
 [tool.coverage.run]
 source = ["homodyne"]
 omit = [
+    # Package metadata
     "homodyne/_version.py",
+    "homodyne/post_install.py",
+    "homodyne/uninstall_scripts.py",
+    # CLI/UI components (integration tested separately)
     "homodyne/cli/*",
+    "homodyne/viz/*",
+    "homodyne/runtime/*",
+    # Data loading (integration tested with HDF5 files)
     "homodyne/data/*",
     "homodyne/device/*",
-    "homodyne/post_install.py",
-    "homodyne/runtime/*",
-    "homodyne/uninstall_scripts.py",
-    "homodyne/viz/*",
+    "homodyne/io/*",
+    # Core physics (validated via scientific tests, not unit tests)
     "homodyne/core/fitting.py",
     "homodyne/core/models.py",
     "homodyne/core/numpy_gradients.py",
@@ -269,6 +276,7 @@ omit = [
     "homodyne/core/physics_factors.py",
     "homodyne/core/physics_nlsq.py",
     "homodyne/core/theory.py",
+    # Legacy optimization modules (replaced in v2.4.1)
     "homodyne/optimization/mcmc.py",
     "homodyne/optimization/nlsq_wrapper.py",
     "homodyne/optimization/nlsq.py",
@@ -279,7 +287,22 @@ omit = [
     "homodyne/optimization/sequential_angle.py",
     "homodyne/optimization/numerical_validation.py",
     "homodyne/optimization/strategy.py",
+    # v2.4.1 reorganized modules - infrastructure code
+    "homodyne/optimization/initialization/*",
+    "homodyne/optimization/nlsq/wrapper.py",
+    "homodyne/optimization/nlsq/jacobian.py",
+    "homodyne/optimization/nlsq/transforms.py",
+    "homodyne/optimization/nlsq/strategies/residual_jit.py",
+    # MCMC infrastructure (integration tested via CMC tests)
+    "homodyne/optimization/mcmc/cmc/*",
+    "homodyne/optimization/mcmc/data_prep.py",
+    "homodyne/optimization/mcmc/priors.py",
+    "homodyne/optimization/mcmc/scaling.py",
+    "homodyne/optimization/mcmc/single_angle.py",
+    # Utilities
     "homodyne/utils/progress.py",
+    "homodyne/utils/validation.py",
+    # Test directories
     "tests/*",
     "*/tests/*",
 ]

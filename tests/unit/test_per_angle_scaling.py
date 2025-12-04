@@ -376,5 +376,284 @@ class TestPhiMappingPreparation:
         assert prepared.dtype == jnp.float32
 
 
+# ==============================================================================
+# Additional Edge Case Tests (v2.4.1)
+# ==============================================================================
+
+
+class TestPerAngleEdgeCases:
+    """Test edge cases for per-angle scaling."""
+
+    @pytest.fixture
+    def static_param_space(self):
+        """Create ParameterSpace for static mode."""
+        return ParameterSpace.from_defaults("static")
+
+    def test_single_angle_still_uses_per_angle_naming(self, static_param_space):
+        """Single phi angle should still create contrast_0, offset_0 (not scalar names).
+
+        This ensures consistent parameter naming regardless of angle count,
+        which simplifies downstream code that processes results.
+        """
+        n_points = 50
+        phi = np.zeros(n_points)  # Single angle (0 degrees)
+
+        model = _create_numpyro_model(
+            data=np.ones(n_points) * 1.1,
+            sigma=np.ones(n_points) * 0.01,
+            t1=np.linspace(0, 1, n_points),
+            t2=np.linspace(0, 1, n_points),
+            phi=phi,
+            q=0.005,
+            L=1e10,
+            analysis_mode="static",
+            parameter_space=static_param_space,
+            dt=0.1,
+            phi_full=phi,
+            per_angle_scaling=True,
+        )
+
+        prior_pred = Predictive(model, num_samples=5)
+        samples = prior_pred(random.PRNGKey(0))
+
+        # Should use per-angle naming even for single angle
+        assert "contrast_0" in samples, "Single angle should use 'contrast_0' not 'contrast'"
+        assert "offset_0" in samples, "Single angle should use 'offset_0' not 'offset'"
+        assert "contrast" not in samples, "Should not have scalar 'contrast'"
+        assert "offset" not in samples, "Should not have scalar 'offset'"
+
+        # Total parameters: 1*2 per-angle + 3 physical = 5
+        param_names = [
+            k for k in samples.keys() if k != "obs" and not k.endswith("_latent")
+        ]
+        assert len(param_names) == 5
+
+    def test_many_angles_parameter_scaling(self, static_param_space):
+        """Test per-angle scaling with a large number of angles (20).
+
+        Verifies that the parameter count formula holds for edge cases
+        and that NumPyro can handle many per-angle parameters.
+        """
+        n_phi = 20
+        n_points_per_angle = 10
+        n_total = n_phi * n_points_per_angle
+
+        phi_angles = np.linspace(0, 180, n_phi, endpoint=False)
+        phi = np.concatenate(
+            [np.full(n_points_per_angle, angle) for angle in phi_angles]
+        )
+
+        model = _create_numpyro_model(
+            data=np.ones(n_total) * 1.1,
+            sigma=np.ones(n_total) * 0.01,
+            t1=np.linspace(0, 10, n_total),
+            t2=np.linspace(0, 10, n_total),
+            phi=phi,
+            q=0.005,
+            L=1e10,
+            analysis_mode="static",
+            parameter_space=static_param_space,
+            dt=0.1,
+            phi_full=phi,
+            per_angle_scaling=True,
+        )
+
+        prior_pred = Predictive(model, num_samples=5)
+        samples = prior_pred(random.PRNGKey(0))
+
+        # Verify all 20 contrast and 20 offset parameters exist
+        for i in range(n_phi):
+            assert f"contrast_{i}" in samples, f"Missing contrast_{i} for 20-angle test"
+            assert f"offset_{i}" in samples, f"Missing offset_{i} for 20-angle test"
+
+        # Total: 2*20 + 3 = 43 parameters
+        param_names = [
+            k for k in samples.keys() if k != "obs" and not k.endswith("_latent")
+        ]
+        assert len(param_names) == 43, f"Expected 43 params for 20 angles, got {len(param_names)}"
+
+    def test_non_contiguous_phi_angles(self, static_param_space):
+        """Test per-angle scaling with shuffled (non-sorted) phi values.
+
+        Real data often has phi angles in random order. Verify that
+        the model correctly maps data points to their angle indices.
+        """
+        n_points_per_angle = 20
+        phi_angles = np.array([0.0, 60.0, 120.0])
+        n_phi = len(phi_angles)
+        n_total = n_phi * n_points_per_angle
+
+        # Create phi array with shuffled order (not sorted by angle)
+        np.random.seed(42)
+        phi = np.concatenate(
+            [np.full(n_points_per_angle, angle) for angle in phi_angles]
+        )
+        shuffle_indices = np.random.permutation(n_total)
+        phi_shuffled = phi[shuffle_indices]
+
+        model = _create_numpyro_model(
+            data=np.ones(n_total) * 1.1,
+            sigma=np.ones(n_total) * 0.01,
+            t1=np.linspace(0, 10, n_total),
+            t2=np.linspace(0, 10, n_total),
+            phi=phi_shuffled,  # Shuffled!
+            q=0.005,
+            L=1e10,
+            analysis_mode="static",
+            parameter_space=static_param_space,
+            dt=0.1,
+            phi_full=phi_shuffled,
+            per_angle_scaling=True,
+        )
+
+        prior_pred = Predictive(model, num_samples=5)
+        samples = prior_pred(random.PRNGKey(0))
+
+        # Should still have 3 contrast and 3 offset params
+        for i in range(n_phi):
+            assert f"contrast_{i}" in samples
+            assert f"offset_{i}" in samples
+
+
+class TestPerAngleLaminarFlow:
+    """Test per-angle scaling with laminar flow mode."""
+
+    @pytest.fixture
+    def laminar_param_space(self):
+        """Create ParameterSpace for laminar flow mode."""
+        return ParameterSpace.from_defaults("laminar_flow")
+
+    def test_laminar_flow_per_angle_parameter_count(self, laminar_param_space):
+        """Test correct parameter count for laminar flow with per-angle scaling.
+
+        Laminar flow has 7 physical parameters:
+        - D0, alpha, D_offset
+        - gamma_dot_t0, beta, gamma_dot_t_offset, phi0
+
+        With 3 phi angles: 3*2 per-angle + 7 physical = 13 total
+        """
+        n_phi = 3
+        n_points_per_angle = 20
+        n_total = n_phi * n_points_per_angle
+
+        phi_angles = np.array([0.0, 60.0, 120.0])
+        phi = np.concatenate(
+            [np.full(n_points_per_angle, angle) for angle in phi_angles]
+        )
+
+        model = _create_numpyro_model(
+            data=np.ones(n_total) * 1.1,
+            sigma=np.ones(n_total) * 0.01,
+            t1=np.linspace(0, 10, n_total),
+            t2=np.linspace(0, 10, n_total),
+            phi=phi,
+            q=0.005,
+            L=1e10,
+            analysis_mode="laminar_flow",
+            parameter_space=laminar_param_space,
+            dt=0.1,
+            phi_full=phi,
+            per_angle_scaling=True,
+        )
+
+        prior_pred = Predictive(model, num_samples=5)
+        samples = prior_pred(random.PRNGKey(0))
+
+        # Check physical parameters
+        assert "D0" in samples
+        assert "alpha" in samples
+        assert "D_offset" in samples
+        assert "gamma_dot_t0" in samples
+        assert "beta" in samples
+        assert "gamma_dot_t_offset" in samples
+        assert "phi0" in samples
+
+        # Check per-angle parameters
+        for i in range(n_phi):
+            assert f"contrast_{i}" in samples
+            assert f"offset_{i}" in samples
+
+        # Total: 3*2 + 7 = 13 parameters
+        param_names = [
+            k for k in samples.keys() if k != "obs" and not k.endswith("_latent")
+        ]
+        assert len(param_names) == 13, f"Expected 13 params, got {len(param_names)}"
+
+
+class TestPerAngleBoundsValidation:
+    """Test that per-angle parameters respect bounds."""
+
+    @pytest.fixture
+    def static_param_space(self):
+        """Create ParameterSpace for static mode."""
+        return ParameterSpace.from_defaults("static")
+
+    def test_contrast_samples_within_bounds(self, static_param_space):
+        """Verify contrast parameters are sampled within valid bounds.
+
+        Default contrast bounds: [0.0, 2.0] (from config/defaults.py)
+        """
+        n_phi = 3
+        n_points = 60
+        phi = np.repeat([0.0, 60.0, 120.0], 20)
+
+        model = _create_numpyro_model(
+            data=np.ones(n_points) * 1.1,
+            sigma=np.ones(n_points) * 0.01,
+            t1=np.linspace(0, 1, n_points),
+            t2=np.linspace(0, 1, n_points),
+            phi=phi,
+            q=0.005,
+            L=1e10,
+            analysis_mode="static",
+            parameter_space=static_param_space,
+            dt=0.1,
+            phi_full=phi,
+            per_angle_scaling=True,
+        )
+
+        prior_pred = Predictive(model, num_samples=1000)
+        samples = prior_pred(random.PRNGKey(42))
+
+        for i in range(n_phi):
+            contrast_samples = samples[f"contrast_{i}"]
+            # Verify all samples are within bounds
+            assert np.all(contrast_samples >= 0.0), f"contrast_{i} has samples < 0"
+            assert np.all(contrast_samples <= 2.0), f"contrast_{i} has samples > 2"
+
+    def test_offset_samples_within_bounds(self, static_param_space):
+        """Verify offset parameters are sampled within valid bounds.
+
+        Default offset bounds: [0.5, 1.5] (from config/defaults.py)
+        """
+        n_phi = 3
+        n_points = 60
+        phi = np.repeat([0.0, 60.0, 120.0], 20)
+
+        model = _create_numpyro_model(
+            data=np.ones(n_points) * 1.1,
+            sigma=np.ones(n_points) * 0.01,
+            t1=np.linspace(0, 1, n_points),
+            t2=np.linspace(0, 1, n_points),
+            phi=phi,
+            q=0.005,
+            L=1e10,
+            analysis_mode="static",
+            parameter_space=static_param_space,
+            dt=0.1,
+            phi_full=phi,
+            per_angle_scaling=True,
+        )
+
+        prior_pred = Predictive(model, num_samples=1000)
+        samples = prior_pred(random.PRNGKey(42))
+
+        for i in range(n_phi):
+            offset_samples = samples[f"offset_{i}"]
+            # Verify all samples are within bounds
+            assert np.all(offset_samples >= 0.5), f"offset_{i} has samples < 0.5"
+            assert np.all(offset_samples <= 1.5), f"offset_{i} has samples > 1.5"
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])

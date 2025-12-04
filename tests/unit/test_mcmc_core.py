@@ -60,7 +60,7 @@ from homodyne.cli.commands import (
 
 # Homodyne imports
 from homodyne.config.parameter_space import ParameterSpace, PriorDistribution
-from homodyne.device.config import HardwareConfig, should_use_cmc
+from homodyne.device.config import HardwareConfig
 from homodyne.optimization.mcmc import (
     MCMCResult,
     _build_single_angle_surrogate_settings,
@@ -1257,268 +1257,248 @@ class TestParameterOrdering:
         for param_name in expected_order:
             assert param_name in samples, f"Missing parameter: {param_name}"
 
+    def test_multi_angle_parameter_order_documented(self):
+        """TC-MCMC-001: Document actual model parameter order for multi-angle.
 
-# ==============================================================================
-# MCMC Selection Logic Tests (from test_mcmc_selection.py)
-# ==============================================================================
+        NumPyro's Predictive returns samples sorted in a specific order that
+        is determined by the model's sample site ordering. This test documents
+        the ACTUAL order, which should be consistent across runs.
 
+        Note: The actual order differs from CLAUDE.md documentation due to
+        how NumPyro handles sample sites. The coordinator must build init dicts
+        in this ACTUAL order for init_to_value() to work correctly.
+        """
+        n_phi = 3
+        param_space = ParameterSpace.from_defaults("static")
 
-@pytest.mark.skip(
-    reason="should_use_cmc() deprecated in v2.4.1 CMC-only architecture - always returns True"
-)
-class TestMCMCSelectionIntegration:
-    """Test MCMC selection logic integration with config and hardware detection.
+        # Create data with 3 distinct angles
+        phi_values = np.array([0.0, np.pi / 4, np.pi / 2])
+        n_per_phi = 5
+        n = n_per_phi * n_phi
 
-    NOTE: Deprecated in v2.4.1. CMC is now the only MCMC path.
-    should_use_cmc() is a deprecated shim that always returns True.
-    """
+        data = np.ones(n)
+        sigma = np.ones(n) * 0.01
+        t1 = np.tile(np.linspace(0, 1, n_per_phi), n_phi)
+        t2 = np.tile(np.linspace(0, 1, n_per_phi), n_phi)
+        phi = np.repeat(phi_values, n_per_phi)
 
-    @pytest.fixture
-    def mock_hardware_config(self):
-        """Create a mock hardware configuration for testing."""
-        return HardwareConfig(
-            platform="cpu",
-            num_devices=1,
-            memory_per_device_gb=32.0,
-            num_nodes=1,
-            cores_per_node=14,
-            total_memory_gb=32.0,
-            cluster_type="standalone",
-            recommended_backend="multiprocessing",
-            max_parallel_shards=14,
+        model = _create_numpyro_model(
+            data=data,
+            sigma=sigma,
+            t1=t1,
+            t2=t2,
+            phi=phi,
+            q=0.001,
+            L=1e10,
+            analysis_mode="static",
+            parameter_space=param_space,
+            dt=0.1,
         )
 
-    def test_config_threshold_loading_from_kwargs(self, mock_hardware_config):
+        # Sample from prior to get parameter names in model order
+        prior_pred = Predictive(model, num_samples=1)
+        samples = prior_pred(random.PRNGKey(0))
+
+        # Get sample keys in order
+        actual_order = list(samples.keys())
+
+        # Define expected model params (excluding 'obs')
+        model_params = {"D0", "D_offset", "alpha", "contrast_0", "contrast_1",
+                        "contrast_2", "offset_0", "offset_1", "offset_2"}
+
+        # Verify all expected params are present
+        actual_set = set(actual_order)
+        for param in model_params:
+            assert param in actual_set, f"Missing parameter: {param}"
+
+        # Verify total count (model_params + obs)
+        assert len(actual_order) == len(model_params) + 1  # +1 for 'obs'
+
+        # Document the actual order for reference (may be alphabetical or model-defined)
+        # The coordinator should build init dicts matching this observed order
+        param_filtered = [k for k in actual_order if k in model_params]
+        assert len(param_filtered) == len(model_params)
+
+    def test_dict_insertion_order_preserved(self):
+        """TC-MCMC-002: Dict insertion order is preserved (Python 3.7+).
+
+        Python 3.7+ guarantees dict insertion order is preserved.
+        This is critical for NumPyro init_to_value() which relies on
+        dict iteration order matching parameter sampling order.
         """
-        Test that thresholds can be loaded from kwargs (passed from config).
+        import sys
 
-        Spec requirement: Extract thresholds from config (not hardcoded)
+        # Python 3.7+ guarantees dict order
+        assert sys.version_info >= (3, 7), "Requires Python 3.7+ for dict ordering"
 
-        NOTE: Using 500K points (< 1M) to avoid Criterion 3 (JAX Broadcasting Protection).
+        # Create dict with specific insertion order
+        test_dict = {
+            "contrast_0": 0.3,
+            "contrast_1": 0.35,
+            "offset_0": 1.0,
+            "offset_1": 1.05,
+            "D0": 1000.0,
+            "alpha": 0.8,
+        }
+
+        # Verify keys() returns in insertion order
+        expected_keys = [
+            "contrast_0",
+            "contrast_1",
+            "offset_0",
+            "offset_1",
+            "D0",
+            "alpha",
+        ]
+        assert list(test_dict.keys()) == expected_keys
+
+        # Verify items() also preserves order
+        for i, (key, _) in enumerate(test_dict.items()):
+            assert key == expected_keys[i]
+
+    def test_init_to_value_order_critical_for_numpyro(self):
+        """TC-MCMC-003: init_to_value requires dict order matching model.sample() order.
+
+        When using numpyro.infer.init_to_value(), the initialization dict
+        must have keys in the same order as the model samples parameters.
+        Wrong order leads to parameters being assigned incorrect values.
         """
-        # Test with custom thresholds from config
-        num_samples = 18
-        dataset_size = 500_000  # < 1M to avoid Criterion 3
+        # Simulate creating init values in CORRECT order
+        n_phi = 2
+        correct_init = {}
 
-        # Custom thresholds that differ from defaults
-        custom_min_samples = 20
-        custom_memory_threshold = 0.25
+        # Model samples in this order:
+        # 1. contrast_i for i in range(n_phi)
+        for i in range(n_phi):
+            correct_init[f"contrast_{i}"] = 0.3 + i * 0.05
 
-        result = should_use_cmc(
-            num_samples=num_samples,
-            hardware_config=mock_hardware_config,
-            dataset_size=dataset_size,
-            min_samples_for_cmc=custom_min_samples,
-            memory_threshold_pct=custom_memory_threshold,
+        # 2. offset_i for i in range(n_phi)
+        for i in range(n_phi):
+            correct_init[f"offset_{i}"] = 1.0 + i * 0.05
+
+        # 3. Physical params
+        correct_init["D0"] = 1000.0
+        correct_init["alpha"] = 0.8
+        correct_init["D_offset"] = 5.0
+
+        # Verify order
+        expected_keys = [
+            "contrast_0",
+            "contrast_1",
+            "offset_0",
+            "offset_1",
+            "D0",
+            "alpha",
+            "D_offset",
+        ]
+        assert list(correct_init.keys()) == expected_keys
+
+        # WRONG order would cause D0 value to go to contrast_0, etc.
+        wrong_init = {
+            "D0": 1000.0,  # WRONG: physical param first
+            "alpha": 0.8,
+            "contrast_0": 0.3,
+            "contrast_1": 0.35,
+            "offset_0": 1.0,
+            "offset_1": 1.05,
+        }
+        assert list(wrong_init.keys())[0] == "D0"  # Wrong order
+
+    def test_laminar_flow_multi_angle_params_present(self):
+        """TC-MCMC-004: Laminar flow with multi-angle has all expected parameters.
+
+        For laminar_flow mode with 3 angles:
+        - 6 scaling params: contrast_0,1,2, offset_0,1,2
+        - 7 physical params: D0, alpha, D_offset, gamma_dot_t0, beta, gamma_dot_t_offset, phi0
+        - Total: 13 parameters
+
+        Note: Actual NumPyro sample order may differ from documentation.
+        This test verifies all parameters are present.
+        """
+        n_phi = 3
+        param_space = ParameterSpace.from_defaults("laminar_flow")
+
+        # All expected model parameters
+        expected_params = {
+            # Per-angle contrast
+            "contrast_0", "contrast_1", "contrast_2",
+            # Per-angle offset
+            "offset_0", "offset_1", "offset_2",
+            # Physical params
+            "D0", "alpha", "D_offset",
+            "gamma_dot_t0", "beta", "gamma_dot_t_offset", "phi0",
+        }
+
+        # Create data with 3 distinct angles
+        phi_values = np.array([0.0, np.pi / 4, np.pi / 2])
+        n_per_phi = 5
+        n = n_per_phi * n_phi
+
+        model = _create_numpyro_model(
+            data=np.ones(n),
+            sigma=np.ones(n) * 0.01,
+            t1=np.tile(np.linspace(0, 1, n_per_phi), n_phi),
+            t2=np.tile(np.linspace(0, 1, n_per_phi), n_phi),
+            phi=np.repeat(phi_values, n_per_phi),
+            q=0.001,
+            L=1e10,
+            analysis_mode="laminar_flow",
+            parameter_space=param_space,
+            dt=0.1,
         )
 
-        # 18 < 20 (custom threshold) and memory < 25% → NUTS
-        assert result is False, (
-            "Should use NUTS when num_samples < custom threshold "
-            "and memory < custom threshold"
-        )
+        # Sample from prior
+        prior_pred = Predictive(model, num_samples=1)
+        samples = prior_pred(random.PRNGKey(0))
 
-    def test_hardware_detection_fallback_none(self):
+        # Verify all expected params are present
+        actual_params = set(samples.keys())
+        for param in expected_params:
+            assert param in actual_params, f"Missing parameter: {param}"
+
+        # Verify count (expected_params + 'obs')
+        assert len(actual_params) == len(expected_params) + 1  # +1 for 'obs'
+
+    def test_worker_receives_params_in_correct_order(self):
+        """TC-MCMC-005: Worker initialization dict has correct ordering.
+
+        When coordinator sends init params to workers, the dict must
+        maintain the correct insertion order for NumPyro compatibility.
         """
-        Test fallback behavior when hardware detection returns None.
+        # Simulate what coordinator builds for 2-angle static mode
+        n_phi = 2
 
-        Spec requirement: Fallback to simple threshold if hardware detection fails
-        """
-        # Simulate hardware detection failure
-        hardware_config = None
+        # Build init dict the way coordinator does (correct way)
+        worker_init = {}
 
-        # When hardware_config is None, should_use_cmc should still work
-        # (though it won't have memory estimation capability)
-        num_samples = 20
-        min_samples_for_cmc = 15
+        # Step 1: Add per-angle contrast
+        for i in range(n_phi):
+            worker_init[f"contrast_{i}"] = 0.3 + i * 0.02
 
-        # Without hardware_config, only sample-based decision possible
-        # This test verifies graceful handling of None hardware_config
-        # Note: In actual mcmc.py, fallback uses simple threshold
-        # Here we test that the function signature supports this scenario
+        # Step 2: Add per-angle offset
+        for i in range(n_phi):
+            worker_init[f"offset_{i}"] = 1.0 + i * 0.01
 
-        # The actual fallback is in mcmc.py (lines 537-544)
-        # This test verifies the design is correct
-        assert True, "Test passes - fallback handled in mcmc.py"
+        # Step 3: Add physical params
+        physical_params = {"D0": 1000.0, "alpha": 0.8, "D_offset": 5.0}
+        worker_init.update(physical_params)
 
-    def test_comprehensive_logging_parallelism_mode(self, mock_hardware_config, caplog):
-        """
-        Test that comprehensive logging shows quad-criteria evaluation for parallelism mode.
+        # Verify final order
+        expected_order = [
+            "contrast_0",
+            "contrast_1",
+            "offset_0",
+            "offset_1",
+            "D0",
+            "alpha",
+            "D_offset",
+        ]
+        assert list(worker_init.keys()) == expected_order
 
-        Spec requirement: Add comprehensive logging showing decision process
-
-        NOTE: Updated for quad-criteria (was dual-criteria in v2.1.0)
-        """
-        import logging
-
-        caplog.set_level(logging.INFO)
-
-        num_samples = 20  # Triggers parallelism (Criterion 1)
-        dataset_size = 500_000  # < 1M to avoid Criterion 3
-
-        should_use_cmc(
-            num_samples=num_samples,
-            hardware_config=mock_hardware_config,
-            dataset_size=dataset_size,
-            min_samples_for_cmc=15,
-            memory_threshold_pct=0.30,
-        )
-
-        # Verify logging contains key elements (quad-criteria)
-        log_text = caplog.text
-        assert "Quad-Criteria Evaluation" in log_text
-        assert "Criterion 1 (Parallelism)" in log_text
-        assert "Criterion 2 (Memory)" in log_text
-        assert "Final decision" in log_text
-        assert "CMC" in log_text
-
-    def test_comprehensive_logging_memory_mode(self, mock_hardware_config, caplog):
-        """
-        Test that comprehensive logging shows dual-criteria evaluation for memory mode.
-
-        Spec requirement: Add comprehensive logging showing decision process
-        """
-        import logging
-
-        caplog.set_level(logging.INFO)
-
-        num_samples = 5  # Below parallelism threshold
-        dataset_size = 50_000_000  # Large dataset
-
-        should_use_cmc(
-            num_samples=num_samples,
-            hardware_config=mock_hardware_config,
-            dataset_size=dataset_size,
-            min_samples_for_cmc=15,
-            memory_threshold_pct=0.30,
-        )
-
-        # Verify logging shows quad-criteria
-        log_text = caplog.text
-        assert "Quad-Criteria Evaluation" in log_text
-        assert "Criterion 1 (Parallelism)" in log_text
-        assert "→ False" in log_text  # Parallelism failed (5 < 15)
-        assert "Criterion 2 (Memory)" in log_text
-        assert "→ True" in log_text  # Memory or other criteria triggered
-        assert "CMC" in log_text
-
-    def test_comprehensive_logging_nuts_mode(self, mock_hardware_config, caplog):
-        """
-        Test that comprehensive logging shows quad-criteria evaluation for NUTS selection.
-
-        Spec requirement: Add comprehensive logging showing decision process
-
-        NOTE: Updated for quad-criteria. Using dataset < 1M to avoid Criterion 3.
-        """
-        import logging
-
-        caplog.set_level(logging.INFO)
-
-        num_samples = 10  # Below parallelism threshold (< 15)
-        dataset_size = 500_000  # < 1M to avoid Criterion 3
-
-        should_use_cmc(
-            num_samples=num_samples,
-            hardware_config=mock_hardware_config,
-            dataset_size=dataset_size,
-            min_samples_for_cmc=15,
-            memory_threshold_pct=0.30,
-        )
-
-        # Verify logging shows quad-criteria with all failed
-        log_text = caplog.text
-        assert "Quad-Criteria Evaluation" in log_text
-        assert "Criterion 1 (Parallelism)" in log_text
-        assert "Criterion 2 (Memory)" in log_text
-        assert "NUTS" in log_text
-
-    def test_warning_for_cmc_with_few_samples(self, mock_hardware_config, caplog):
-        """
-        Test warning when CMC is triggered by memory but few samples.
-
-        Spec requirement: Log warning for edge case (CMC + few samples)
-        """
-        import logging
-
-        caplog.set_level(logging.WARNING)
-
-        num_samples = 5  # Very few samples
-        dataset_size = 50_000_000  # Large dataset triggers memory
-
-        should_use_cmc(
-            num_samples=num_samples,
-            hardware_config=mock_hardware_config,
-            dataset_size=dataset_size,
-            min_samples_for_cmc=15,
-            memory_threshold_pct=0.30,
-        )
-
-        # Verify warning is logged (quad-criteria format)
-        log_text = caplog.text
-        assert "Using CMC with only" in log_text
-        assert "samples" in log_text
-        # Note: Quad-criteria shows all triggers, not just "memory criterion"
-        assert "Triggered by:" in log_text
-        assert "memory" in log_text.lower()
-
-    def test_default_threshold_values(self, mock_hardware_config):
-        """
-        Test that default threshold values are correctly set.
-
-        Spec requirement: Default values should be 15 samples and 30% memory
-        """
-        num_samples = 15  # Exactly at default threshold
-        dataset_size = 10_000_000
-
-        # Use defaults (should be 15 and 0.30)
-        result = should_use_cmc(
-            num_samples=num_samples,
-            hardware_config=mock_hardware_config,
-            dataset_size=dataset_size,
-        )
-
-        assert result is True, (
-            "CMC should be selected at exactly 15 samples (default threshold)"
-        )
-
-    def test_memory_estimation_accuracy(self, mock_hardware_config):
-        """
-        Test memory estimation formula accuracy.
-
-        Spec requirement: Memory estimation should use dataset_size * 8 * num_samples / 1e9
-
-        NOTE (Quad-Criteria): With large dataset (30M > 1M), Criteria 3 and 4 will
-        also trigger. This test verifies memory calculation is correct, acknowledging
-        that CMC will be selected due to multiple criteria.
-        """
-        num_samples = 5
-        dataset_size = 30_000_000
-
-        # Expected memory: 30M * 8 bytes * 5 / 1e9 = 1.2 GB
-        # 1.2 / 32 = 3.75% memory usage
-
-        # Test with 1% threshold (should trigger CMC via Criterion 2)
-        result_triggered = should_use_cmc(
-            num_samples=num_samples,
-            hardware_config=mock_hardware_config,
-            dataset_size=dataset_size,
-            memory_threshold_pct=0.01,  # 3.75% > 1% → Criterion 2 triggers
-            min_samples_for_cmc=15,
-        )
-
-        assert result_triggered is True, "CMC should be selected (Criterion 2 + 3 + 4)"
-
-        # Test with 10% threshold
-        # NOTE: Criterion 2 won't trigger (3.75% < 10%), but Criteria 3 and 4 will
-        result_quad_criteria = should_use_cmc(
-            num_samples=num_samples,
-            hardware_config=mock_hardware_config,
-            dataset_size=dataset_size,
-            memory_threshold_pct=0.10,  # 3.75% < 10% → Criterion 2 doesn't trigger
-            min_samples_for_cmc=15,
-        )
-
-        assert result_quad_criteria is True, "CMC should be selected (Criterion 3 + 4)"
+        # Verify values are correct (not mixed up)
+        assert worker_init["contrast_0"] == pytest.approx(0.30, rel=1e-10)
+        assert worker_init["contrast_1"] == pytest.approx(0.32, rel=1e-10)
+        assert worker_init["D0"] == pytest.approx(1000.0, rel=1e-10)
 
 
 class TestMCMCFallbackBehavior:
@@ -2077,6 +2057,7 @@ class TestDataValidation:
                 L=3.5,
             )
 
+    @pytest.mark.filterwarnings("ignore:Model closure array size mismatch")
     def test_mismatched_array_sizes_raises_error(self):
         """Test that mismatched array sizes are detected as invalid.
 
@@ -2477,6 +2458,7 @@ class TestProcessPosteriorSamples:
         )
         assert math.isclose(summary["mean_offset"], float(jnp.mean(samples["offset"])))
 
+    @pytest.mark.filterwarnings("ignore:divide by zero")
     def test_single_angle_surrogate_samples_are_supported(self):
         log_d0 = jnp.array([1.0, 1.1, 0.9])
         samples = {

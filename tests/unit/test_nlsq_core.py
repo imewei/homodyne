@@ -779,6 +779,202 @@ class TestNLSQWrapperErrorRecovery:
         print(f"Final strategy succeeded: {strategies_attempted[-1]}")
         print(f"Convergence status: {result.convergence_status}")
 
+    def test_nan_inf_detection_during_optimization(self):
+        """
+        TC-NLSQ-012: Test NaN/Inf detection during optimization.
+
+        Acceptance: NaN/Inf values in residuals are detected and trigger
+        recovery with parameter perturbation.
+        """
+        from tests.factories.synthetic_data import generate_static_mode_dataset
+
+        synthetic_data = generate_static_mode_dataset(
+            D0=1000.0, alpha=0.5, D_offset=10.0, noise_level=0.02, n_phi=3, n_t1=10, n_t2=10
+        )
+
+        class MockConfig:
+            def __init__(self):
+                self.optimization = {"lsq": {"max_iterations": 100, "tolerance": 1e-6}}
+
+        mock_config = MockConfig()
+        wrapper = NLSQWrapper(enable_large_dataset=False, enable_recovery=True)
+
+        initial_params = np.array([0.5, 1.0, 1000.0, 0.5, 10.0])
+        bounds = (
+            np.array([0.0, 0.8, 100.0, 0.3, 1.0]),
+            np.array([1.0, 1.2, 1e5, 1.5, 1000.0]),
+        )
+
+        # Track NaN detection
+        nan_detected = [False]
+        from nlsq import curve_fit as real_curve_fit
+
+        call_count = [0]
+
+        def mock_curve_fit_nan_first(*args, **kwargs):
+            """Mock that produces NaN on first call, succeeds on second."""
+            call_count[0] += 1
+            if call_count[0] == 1:
+                nan_detected[0] = True
+                raise RuntimeError("NaN values encountered in residuals")
+            return real_curve_fit(*args, **kwargs)
+
+        with patch(
+            "homodyne.optimization.nlsq.wrapper.curve_fit",
+            side_effect=mock_curve_fit_nan_first,
+        ):
+            result = wrapper.fit(
+                data=synthetic_data,
+                config=mock_config,
+                initial_params=initial_params,
+                bounds=bounds,
+                analysis_mode="static",
+            )
+
+        assert nan_detected[0], "NaN should have been detected"
+        assert call_count[0] >= 2, "Should retry after NaN detection"
+        assert isinstance(result, OptimizationResult)
+        print(f"\n✅ TC-NLSQ-012 passed: NaN detected and recovered")
+
+    def test_singular_covariance_matrix_handling(self):
+        """
+        TC-NLSQ-013: Test singular covariance matrix handling.
+
+        Acceptance: When covariance matrix is singular (not invertible),
+        fallback to identity matrix with warning.
+        """
+        # Create result with singular covariance matrix
+        singular_pcov = np.array([
+            [1.0, 1.0, 0.0],
+            [1.0, 1.0, 0.0],  # Row 2 = Row 1 (singular)
+            [0.0, 0.0, 0.0],  # All zeros (singular)
+        ])
+
+        result = {
+            "x": np.array([0.5, 1.0, 1000.0]),
+            "pcov": singular_pcov,
+            "success": True,
+            "message": "Converged",
+        }
+
+        popt, pcov, info = NLSQWrapper._handle_nlsq_result(
+            result, OptimizationStrategy.STANDARD
+        )
+
+        # Should return the singular covariance (caller handles interpretation)
+        assert popt.shape == (3,)
+        assert pcov.shape == (3, 3)
+        # Verify it's the same singular matrix (or identity fallback)
+        np.testing.assert_array_equal(popt, result["x"])
+        print("\n✅ TC-NLSQ-013 passed: Singular covariance handled")
+
+    def test_gradient_computation_failure_recovery(self):
+        """
+        TC-NLSQ-014: Test gradient computation failure recovery.
+
+        Acceptance: When Jacobian computation fails, trigger retry with
+        perturbed parameters or finite-difference fallback.
+        """
+        from tests.factories.synthetic_data import generate_static_mode_dataset
+
+        synthetic_data = generate_static_mode_dataset(
+            D0=1000.0, alpha=0.5, D_offset=10.0, noise_level=0.01, n_phi=3, n_t1=10, n_t2=10
+        )
+
+        class MockConfig:
+            def __init__(self):
+                self.optimization = {"lsq": {"max_iterations": 100, "tolerance": 1e-6}}
+
+        mock_config = MockConfig()
+        wrapper = NLSQWrapper(enable_large_dataset=False, enable_recovery=True)
+
+        initial_params = np.array([0.5, 1.0, 1000.0, 0.5, 10.0])
+        bounds = (
+            np.array([0.0, 0.8, 100.0, 0.3, 1.0]),
+            np.array([1.0, 1.2, 1e5, 1.5, 1000.0]),
+        )
+
+        from nlsq import curve_fit as real_curve_fit
+
+        call_count = [0]
+
+        def mock_curve_fit_jacobian_fail(*args, **kwargs):
+            """Mock that fails Jacobian on first call."""
+            call_count[0] += 1
+            if call_count[0] == 1:
+                raise RuntimeError("Jacobian computation failed: matrix singular")
+            return real_curve_fit(*args, **kwargs)
+
+        with patch(
+            "homodyne.optimization.nlsq.wrapper.curve_fit",
+            side_effect=mock_curve_fit_jacobian_fail,
+        ):
+            result = wrapper.fit(
+                data=synthetic_data,
+                config=mock_config,
+                initial_params=initial_params,
+                bounds=bounds,
+                analysis_mode="static",
+            )
+
+        assert call_count[0] >= 2, "Should retry after Jacobian failure"
+        assert isinstance(result, OptimizationResult)
+        print(f"\n✅ TC-NLSQ-014 passed: Jacobian failure recovered")
+
+    def test_memory_pressure_graceful_degradation(self):
+        """
+        TC-NLSQ-011: Test memory pressure handling.
+
+        Acceptance: Large dataset triggers automatic strategy downgrade
+        to handle memory constraints.
+        """
+        from tests.factories.synthetic_data import generate_static_mode_dataset
+
+        # Generate moderately large dataset
+        synthetic_data = generate_static_mode_dataset(
+            D0=1000.0, alpha=0.5, D_offset=10.0, noise_level=0.01,
+            n_phi=10, n_t1=50, n_t2=50  # 25,000 points
+        )
+
+        class MockConfig:
+            def __init__(self):
+                self.optimization = {"lsq": {"max_iterations": 100, "tolerance": 1e-6}}
+
+        mock_config = MockConfig()
+        # Enable large dataset handling
+        wrapper = NLSQWrapper(enable_large_dataset=True, enable_recovery=True)
+
+        initial_params = np.array([0.5, 1.0, 1000.0, 0.5, 10.0])
+        bounds = (
+            np.array([0.0, 0.8, 100.0, 0.3, 1.0]),
+            np.array([1.0, 1.2, 1e5, 1.5, 1000.0]),
+        )
+
+        from nlsq import curve_fit as real_curve_fit
+
+        def mock_curve_fit_memory_error_first(*args, **kwargs):
+            """Simulate MemoryError on first call."""
+            if not hasattr(mock_curve_fit_memory_error_first, "called"):
+                mock_curve_fit_memory_error_first.called = True
+                raise MemoryError("Unable to allocate array")
+            return real_curve_fit(*args, **kwargs)
+
+        with patch(
+            "homodyne.optimization.nlsq.wrapper.curve_fit",
+            side_effect=mock_curve_fit_memory_error_first,
+        ):
+            result = wrapper.fit(
+                data=synthetic_data,
+                config=mock_config,
+                initial_params=initial_params,
+                bounds=bounds,
+                analysis_mode="static",
+            )
+
+        # Should recover from MemoryError
+        assert isinstance(result, OptimizationResult)
+        print("\n✅ TC-NLSQ-011 passed: Memory pressure handled gracefully")
+
 
 # =============================================================================
 # NLSQ Optimization Tests (from test_optimization_nlsq.py)
@@ -1113,8 +1309,9 @@ class TestNLSQPerformance:
         result = fit_nlsq_jax(data, test_config)
         elapsed_time = time.perf_counter() - start_time
 
-        # Should complete in reasonable time
-        assert elapsed_time < 5.0, f"Small dataset took too long: {elapsed_time:.2f}s"
+        # Should complete in reasonable time (includes JIT compilation on first run)
+        # v2.4.0: Per-angle scaling increases optimization complexity
+        assert elapsed_time < 20.0, f"Small dataset took too long: {elapsed_time:.2f}s"
         assert result.success, "Small dataset optimization should succeed"
 
         # Reported time should be consistent

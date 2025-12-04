@@ -1460,6 +1460,430 @@ def test_multiprocessing_backend_with_laminar_flow_minimal(laminar_parameter_spa
         assert "error" in result, "Failed result should have 'error' field"
 
 
+# ==============================================================================
+# Additional CMC Coordinator Tests (v2.4.1)
+# ==============================================================================
+
+
+class TestCMCCoordinatorMultiAngle:
+    """Tests for CMC coordinator with multiple phi angles."""
+
+    @pytest.fixture
+    def multi_angle_data(self):
+        """Create multi-angle synthetic data (3 phi angles)."""
+        np.random.seed(42)
+        n_phi = 3
+        n_t = 50  # Small for test speed
+        n_points = n_phi * n_t * n_t
+
+        # Create meshgrid-style data
+        phi_values = np.array([0.0, 60.0, 120.0]) * np.pi / 180  # Convert to radians
+        t_range = np.linspace(0, 1, n_t)
+        t1_mesh, t2_mesh = np.meshgrid(t_range, t_range, indexing="ij")
+
+        # Flatten t1, t2 for each angle
+        t1_pattern = t1_mesh.flatten()
+        t2_pattern = t2_mesh.flatten()
+
+        # Replicate for each phi angle
+        t1 = np.tile(t1_pattern, n_phi)
+        t2 = np.tile(t2_pattern, n_phi)
+        phi = np.repeat(phi_values, n_t * n_t)
+
+        # Generate synthetic C2 data
+        data = 1.0 + 0.1 * np.random.randn(n_points)
+
+        return {
+            "data": data,
+            "t1": t1,
+            "t2": t2,
+            "phi": phi,
+            "n_phi": n_phi,
+            "n_t": n_t,
+        }
+
+    def test_multi_angle_parameter_expansion(
+        self, multi_angle_data, static_parameter_space, mock_backend, minimal_config
+    ):
+        """Test parameter expansion for multi-angle CMC.
+
+        Verifies:
+        1. Per-angle contrast/offset parameters are created
+        2. Correct number of total parameters
+        3. Parameter ordering is correct (contrast_i, offset_i first, then physics)
+        """
+        with patch(
+            "homodyne.optimization.mcmc.cmc.coordinator.select_backend",
+            return_value=mock_backend,
+        ):
+            coordinator = CMCCoordinator(minimal_config)
+
+            initial_values = {"D0": 1000.0, "alpha": 1.0, "D_offset": 10.0}
+
+            result = coordinator.run_cmc(
+                data=multi_angle_data["data"],
+                t1=multi_angle_data["t1"],
+                t2=multi_angle_data["t2"],
+                phi=multi_angle_data["phi"],
+                q=0.01,
+                L=3.5,
+                analysis_mode="static",
+                parameter_space=static_parameter_space,
+                initial_values=initial_values,
+            )
+
+        # Verify backend received expanded parameters
+        call_kwargs = mock_backend.run_parallel_mcmc.call_args.kwargs
+        init_params = call_kwargs["init_params"]
+
+        # Check per-angle parameters exist
+        n_phi = multi_angle_data["n_phi"]
+        for i in range(n_phi):
+            assert f"contrast_{i}" in init_params, f"Missing contrast_{i}"
+            assert f"offset_{i}" in init_params, f"Missing offset_{i}"
+
+        # Check physical parameters exist
+        assert "D0" in init_params
+        assert "alpha" in init_params
+        assert "D_offset" in init_params
+
+        # Check total parameter count: 3 physical + 2*3 per-angle = 9
+        assert len(init_params) == 9
+
+    def test_multi_angle_init_params_ordering(
+        self, multi_angle_data, static_parameter_space, mock_backend, minimal_config
+    ):
+        """Test that init_params ordering matches NumPyro model sampling order.
+
+        CRITICAL: NumPyro's init_to_value() requires parameters in the EXACT ORDER
+        the model samples them: per-angle params FIRST, then physics params.
+        """
+        with patch(
+            "homodyne.optimization.mcmc.cmc.coordinator.select_backend",
+            return_value=mock_backend,
+        ):
+            coordinator = CMCCoordinator(minimal_config)
+
+            initial_values = {"D0": 1000.0, "alpha": 1.0, "D_offset": 10.0}
+
+            coordinator.run_cmc(
+                data=multi_angle_data["data"],
+                t1=multi_angle_data["t1"],
+                t2=multi_angle_data["t2"],
+                phi=multi_angle_data["phi"],
+                q=0.01,
+                L=3.5,
+                analysis_mode="static",
+                parameter_space=static_parameter_space,
+                initial_values=initial_values,
+            )
+
+        call_kwargs = mock_backend.run_parallel_mcmc.call_args.kwargs
+        init_params = call_kwargs["init_params"]
+
+        # Get parameter keys in order (Python 3.7+ preserves dict insertion order)
+        param_keys = list(init_params.keys())
+
+        # Verify ordering: contrast_* first, then offset_*, then physics
+        n_phi = multi_angle_data["n_phi"]
+        expected_order = (
+            [f"contrast_{i}" for i in range(n_phi)]
+            + [f"offset_{i}" for i in range(n_phi)]
+            + ["D0", "alpha", "D_offset"]
+        )
+
+        assert param_keys == expected_order, (
+            f"Parameter ordering mismatch! "
+            f"Expected: {expected_order}, Got: {param_keys}"
+        )
+
+
+class TestCMCCoordinatorErrorHandling:
+    """Tests for CMC coordinator error handling."""
+
+    def test_empty_data_raises_value_error(self, static_parameter_space, minimal_config):
+        """Test that empty data raises ValueError."""
+        with patch(
+            "homodyne.optimization.mcmc.cmc.coordinator.select_backend"
+        ) as mock_select:
+            mock_backend = Mock()
+            mock_select.return_value = mock_backend
+            coordinator = CMCCoordinator(minimal_config)
+
+            with pytest.raises(ValueError, match="Cannot run CMC on empty dataset"):
+                coordinator.run_cmc(
+                    data=np.array([]),  # Empty data
+                    t1=np.array([]),
+                    t2=np.array([]),
+                    phi=np.array([]),
+                    q=0.01,
+                    L=3.5,
+                    analysis_mode="static",
+                    parameter_space=static_parameter_space,
+                    initial_values={"D0": 1000.0, "alpha": 1.0, "D_offset": 10.0},
+                )
+
+    def test_all_shards_failed_raises_runtime_error(
+        self, static_parameter_space, minimal_config
+    ):
+        """Test that RuntimeError is raised when all shards fail."""
+        with patch(
+            "homodyne.optimization.mcmc.cmc.coordinator.select_backend"
+        ) as mock_select:
+            mock_backend = Mock()
+            mock_backend.get_backend_name.return_value = "mock_backend"
+            # Return results where all shards failed
+            mock_backend.run_parallel_mcmc.return_value = [
+                {"converged": False, "error": "Test failure 1"},
+                {"converged": False, "error": "Test failure 2"},
+            ]
+            mock_select.return_value = mock_backend
+
+            coordinator = CMCCoordinator(minimal_config)
+
+            # Create minimal valid data
+            n = 500
+            data = np.random.randn(n)
+            t1 = np.linspace(0, 1, n)
+            t2 = np.linspace(0, 1, n)
+            phi = np.zeros(n)
+
+            with pytest.raises(RuntimeError, match="All shards failed to converge"):
+                coordinator.run_cmc(
+                    data=data,
+                    t1=t1,
+                    t2=t2,
+                    phi=phi,
+                    q=0.01,
+                    L=3.5,
+                    analysis_mode="static",
+                    parameter_space=static_parameter_space,
+                    initial_values={"D0": 1000.0, "alpha": 1.0, "D_offset": 10.0},
+                )
+
+
+class TestCMCCoordinatorBackendSelection:
+    """Tests for CMC backend selection logic."""
+
+    def test_backend_selection_from_config_dict(self):
+        """Test backend selection with dict-style config (old schema)."""
+        config = {
+            "backend": {"name": "multiprocessing"},
+            "mcmc": {"num_warmup": 100, "num_samples": 200},
+        }
+
+        with patch(
+            "homodyne.optimization.mcmc.cmc.coordinator.select_backend"
+        ) as mock_select:
+            mock_backend = Mock()
+            mock_backend.get_backend_name.return_value = "multiprocessing"
+            mock_select.return_value = mock_backend
+
+            coordinator = CMCCoordinator(config)
+
+            # Verify select_backend was called with user_override
+            mock_select.assert_called_once()
+            call_args = mock_select.call_args
+            assert call_args.kwargs.get("user_override") == "multiprocessing"
+
+    def test_backend_selection_auto(self):
+        """Test backend selection with auto (no override)."""
+        config = {
+            "backend": {"name": "auto"},
+            "mcmc": {"num_warmup": 100, "num_samples": 200},
+        }
+
+        with patch(
+            "homodyne.optimization.mcmc.cmc.coordinator.select_backend"
+        ) as mock_select:
+            mock_backend = Mock()
+            mock_backend.get_backend_name.return_value = "multiprocessing"
+            mock_select.return_value = mock_backend
+
+            coordinator = CMCCoordinator(config)
+
+            # Verify select_backend was called with user_override="auto"
+            mock_select.assert_called_once()
+            call_args = mock_select.call_args
+            assert call_args.kwargs.get("user_override") == "auto"
+
+    def test_backend_selection_with_backend_config(self):
+        """Test backend selection with new schema (backend string + backend_config)."""
+        config = {
+            "backend": "jax",  # String (computational backend)
+            "backend_config": {"name": "pbs"},  # Dict (parallel backend)
+            "mcmc": {"num_warmup": 100, "num_samples": 200},
+        }
+
+        with patch(
+            "homodyne.optimization.mcmc.cmc.coordinator.select_backend"
+        ) as mock_select:
+            mock_backend = Mock()
+            mock_backend.get_backend_name.return_value = "pbs"
+            mock_select.return_value = mock_backend
+
+            coordinator = CMCCoordinator(config)
+
+            # Verify select_backend was called with user_override="pbs"
+            mock_select.assert_called_once()
+            call_args = mock_select.call_args
+            assert call_args.kwargs.get("user_override") == "pbs"
+
+
+class TestCMCCoordinatorMCMCConfig:
+    """Tests for MCMC configuration extraction."""
+
+    def test_default_mcmc_config(self):
+        """Test default MCMC config values."""
+        config = {}  # No MCMC config
+
+        with patch(
+            "homodyne.optimization.mcmc.cmc.coordinator.select_backend"
+        ) as mock_select:
+            mock_backend = Mock()
+            mock_backend.get_backend_name.return_value = "multiprocessing"
+            mock_select.return_value = mock_backend
+
+            coordinator = CMCCoordinator(config)
+            mcmc_config = coordinator._get_mcmc_config()
+
+            # Check defaults
+            assert mcmc_config["num_warmup"] == 500
+            assert mcmc_config["num_samples"] == 2000
+            assert mcmc_config["num_chains"] == 1
+
+    def test_custom_mcmc_config(self):
+        """Test custom MCMC config values."""
+        config = {
+            "mcmc": {
+                "num_warmup": 1000,
+                "num_samples": 5000,
+                "num_chains": 2,
+            }
+        }
+
+        with patch(
+            "homodyne.optimization.mcmc.cmc.coordinator.select_backend"
+        ) as mock_select:
+            mock_backend = Mock()
+            mock_backend.get_backend_name.return_value = "multiprocessing"
+            mock_select.return_value = mock_backend
+
+            coordinator = CMCCoordinator(config)
+            mcmc_config = coordinator._get_mcmc_config()
+
+            # Check custom values
+            assert mcmc_config["num_warmup"] == 1000
+            assert mcmc_config["num_samples"] == 5000
+            assert mcmc_config["num_chains"] == 2
+
+
+class TestCMCCoordinatorShardCalculation:
+    """Tests for optimal shard calculation."""
+
+    def test_user_override_num_shards(self):
+        """Test user-specified num_shards override."""
+        config = {
+            "cmc": {"sharding": {"num_shards": 8}},
+            "mcmc": {"num_warmup": 100},
+        }
+
+        with patch(
+            "homodyne.optimization.mcmc.cmc.coordinator.select_backend"
+        ) as mock_select:
+            mock_backend = Mock()
+            mock_backend.get_backend_name.return_value = "multiprocessing"
+            mock_select.return_value = mock_backend
+
+            coordinator = CMCCoordinator(config)
+            num_shards = coordinator._calculate_num_shards(dataset_size=10_000_000)
+
+            # Should use user override
+            assert num_shards == 8
+
+    def test_automatic_shard_calculation(self):
+        """Test automatic shard calculation based on dataset size."""
+        config = {"mcmc": {"num_warmup": 100}}
+
+        with patch(
+            "homodyne.optimization.mcmc.cmc.coordinator.select_backend"
+        ) as mock_select:
+            mock_backend = Mock()
+            mock_backend.get_backend_name.return_value = "multiprocessing"
+            mock_select.return_value = mock_backend
+
+            coordinator = CMCCoordinator(config)
+            # For CPU with target_shard_size_cpu=2M: 10M / 2M = 5 shards
+            num_shards = coordinator._calculate_num_shards(dataset_size=10_000_000)
+
+            assert num_shards >= 1  # At least one shard
+
+
+class TestCMCBasicValidation:
+    """Tests for CMC basic validation."""
+
+    def test_validation_detects_nan_inf(self):
+        """Test validation detects NaN/Inf in combined samples."""
+        config = {}
+
+        with patch(
+            "homodyne.optimization.mcmc.cmc.coordinator.select_backend"
+        ) as mock_select:
+            mock_backend = Mock()
+            mock_backend.get_backend_name.return_value = "multiprocessing"
+            mock_select.return_value = mock_backend
+
+            coordinator = CMCCoordinator(config)
+
+            # Combined posterior with NaN
+            combined_posterior = {
+                "samples": np.array([[1.0, np.nan], [2.0, 3.0]]),
+                "mean": np.array([1.5, np.nan]),
+                "cov": np.eye(2),
+            }
+            shard_results = [{"converged": True}]
+
+            is_valid, diagnostics = coordinator._basic_validation(
+                combined_posterior, shard_results
+            )
+
+            assert not is_valid
+            assert diagnostics.get("nan_inf_detected") is True
+
+    def test_validation_detects_low_convergence(self):
+        """Test validation detects low convergence rate."""
+        config = {}
+
+        with patch(
+            "homodyne.optimization.mcmc.cmc.coordinator.select_backend"
+        ) as mock_select:
+            mock_backend = Mock()
+            mock_backend.get_backend_name.return_value = "multiprocessing"
+            mock_select.return_value = mock_backend
+
+            coordinator = CMCCoordinator(config)
+
+            # Combined posterior (valid)
+            combined_posterior = {
+                "samples": np.random.randn(100, 5),
+                "mean": np.random.randn(5),
+                "cov": np.eye(5),
+            }
+
+            # Low convergence: only 2/10 shards converged
+            shard_results = [
+                {"converged": False} for _ in range(8)
+            ] + [{"converged": True} for _ in range(2)]
+
+            is_valid, diagnostics = coordinator._basic_validation(
+                combined_posterior, shard_results
+            )
+
+            assert not is_valid
+            assert diagnostics.get("low_convergence_rate") is True
+            assert diagnostics["convergence_rate"] == 0.2
+
+
 if __name__ == "__main__":
     # Run tests with pytest
     pytest.main([__file__, "-v"])

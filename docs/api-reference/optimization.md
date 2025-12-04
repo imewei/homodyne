@@ -20,7 +20,7 @@ ______________________________________________________________________
 
 ## NLSQWrapper
 
-**Module:** `homodyne.optimization.nlsq_wrapper`
+**Module:** `homodyne.optimization.nlsq.wrapper`
 
 Main optimization interface providing unified access to all NLSQ strategies (STANDARD,
 LARGE, CHUNKED, STREAMING).

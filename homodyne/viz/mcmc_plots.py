@@ -1189,3 +1189,466 @@ def _create_empty_figure(message: str) -> Figure:
     ax.set_xticks([])
     ax.set_yticks([])
     return fig
+
+
+# =============================================================================
+# ArviZ-Based Plotting Functions (v2.4.1+)
+# =============================================================================
+
+
+def plot_arviz_trace(
+    result: MCMCResult,
+    var_names: list[str] | None = None,
+    figsize: tuple | None = None,
+    show: bool = False,
+    save_path: str | Path | None = None,
+    dpi: int = 150,
+    **kwargs,
+) -> Figure:
+    """Plot MCMC trace plots using ArviZ.
+
+    Creates trace plots showing parameter evolution and posterior distributions
+    side by side for each parameter.
+
+    Parameters
+    ----------
+    result : MCMCResult
+        MCMC or CMC result object containing samples.
+    var_names : list of str, optional
+        Parameter names to plot. If None, plots all parameters.
+    figsize : tuple, optional
+        Figure size (width, height). If None, auto-calculated.
+    show : bool, default=False
+        If True, display the figure interactively.
+    save_path : str or Path, optional
+        If provided, save figure to this path.
+    dpi : int, default=150
+        DPI for saved figure.
+    **kwargs
+        Additional arguments passed to az.plot_trace().
+
+    Returns
+    -------
+    Figure
+        Matplotlib figure object.
+
+    Examples
+    --------
+    >>> plot_arviz_trace(result, var_names=["D0", "alpha", "D_offset"])
+    >>> plot_arviz_trace(result, save_path="traces.png")
+    """
+    try:
+        import arviz as az
+    except ImportError:
+        logger.warning("ArviZ not available. Falling back to custom trace plots.")
+        return plot_trace_plots(result, show=show, save_path=save_path, dpi=dpi)
+
+    if result.samples_params is None:
+        logger.warning("No parameter samples available for trace plots")
+        return _create_empty_figure("No samples available")
+
+    # Convert to ArviZ InferenceData
+    idata = result.to_arviz()
+
+    # Plot traces
+    axes = az.plot_trace(idata, var_names=var_names, figsize=figsize, **kwargs)
+    fig = axes.ravel()[0].figure
+
+    # Add title
+    title = "MCMC Trace Plots (ArviZ)"
+    if result.is_cmc_result():
+        title += f" - CMC ({result.num_shards} shards)"
+    fig.suptitle(title, fontsize=14, fontweight="bold", y=1.02)
+
+    plt.tight_layout()
+
+    # Save or show
+    if save_path is not None:
+        fig.savefig(save_path, dpi=dpi, bbox_inches="tight")
+        logger.info(f"ArviZ trace plots saved to {save_path}")
+
+    if show:
+        plt.show()
+
+    return fig
+
+
+def plot_arviz_posterior(
+    result: MCMCResult,
+    var_names: list[str] | None = None,
+    hdi_prob: float = 0.95,
+    figsize: tuple | None = None,
+    show: bool = False,
+    save_path: str | Path | None = None,
+    dpi: int = 150,
+    **kwargs,
+) -> Figure:
+    """Plot posterior distributions with 95% credible intervals using ArviZ.
+
+    Parameters
+    ----------
+    result : MCMCResult
+        MCMC or CMC result object containing samples.
+    var_names : list of str, optional
+        Parameter names to plot. If None, plots all parameters.
+    hdi_prob : float, default=0.95
+        Highest density interval probability (e.g., 0.95 for 95% HDI).
+    figsize : tuple, optional
+        Figure size (width, height). If None, auto-calculated.
+    show : bool, default=False
+        If True, display the figure interactively.
+    save_path : str or Path, optional
+        If provided, save figure to this path.
+    dpi : int, default=150
+        DPI for saved figure.
+    **kwargs
+        Additional arguments passed to az.plot_posterior().
+
+    Returns
+    -------
+    Figure
+        Matplotlib figure object.
+
+    Examples
+    --------
+    >>> plot_arviz_posterior(result, var_names=["D0", "alpha", "D_offset"])
+    >>> plot_arviz_posterior(result, hdi_prob=0.90)  # 90% CI
+    """
+    try:
+        import arviz as az
+    except ImportError:
+        logger.warning("ArviZ not available. Cannot create posterior plots.")
+        return _create_empty_figure("ArviZ not installed")
+
+    if result.samples_params is None:
+        logger.warning("No parameter samples available for posterior plots")
+        return _create_empty_figure("No samples available")
+
+    # Convert to ArviZ InferenceData
+    idata = result.to_arviz()
+
+    # Plot posteriors with HDI
+    axes = az.plot_posterior(
+        idata, var_names=var_names, hdi_prob=hdi_prob, figsize=figsize, **kwargs
+    )
+
+    # Handle both single and multi-panel cases
+    if hasattr(axes, "ravel"):
+        fig = axes.ravel()[0].figure
+    else:
+        fig = axes.figure
+
+    # Add title
+    title = f"Posterior Distributions ({int(hdi_prob * 100)}% HDI)"
+    if result.is_cmc_result():
+        title += f" - CMC ({result.num_shards} shards)"
+    fig.suptitle(title, fontsize=14, fontweight="bold", y=1.02)
+
+    plt.tight_layout()
+
+    # Save or show
+    if save_path is not None:
+        fig.savefig(save_path, dpi=dpi, bbox_inches="tight")
+        logger.info(f"ArviZ posterior plots saved to {save_path}")
+
+    if show:
+        plt.show()
+
+    return fig
+
+
+def plot_arviz_pair(
+    result: MCMCResult,
+    var_names: list[str] | None = None,
+    figsize: tuple | None = None,
+    show: bool = False,
+    save_path: str | Path | None = None,
+    dpi: int = 150,
+    **kwargs,
+) -> Figure:
+    """Plot pair plots showing parameter correlations using ArviZ.
+
+    Parameters
+    ----------
+    result : MCMCResult
+        MCMC or CMC result object containing samples.
+    var_names : list of str, optional
+        Parameter names to plot. If None, plots physical parameters only.
+    figsize : tuple, optional
+        Figure size (width, height). If None, auto-calculated.
+    show : bool, default=False
+        If True, display the figure interactively.
+    save_path : str or Path, optional
+        If provided, save figure to this path.
+    dpi : int, default=150
+        DPI for saved figure.
+    **kwargs
+        Additional arguments passed to az.plot_pair().
+
+    Returns
+    -------
+    Figure
+        Matplotlib figure object.
+
+    Examples
+    --------
+    >>> plot_arviz_pair(result, var_names=["D0", "alpha", "D_offset"])
+    >>> plot_arviz_pair(result)  # Auto-selects physical parameters
+    """
+    try:
+        import arviz as az
+    except ImportError:
+        logger.warning("ArviZ not available. Cannot create pair plots.")
+        return _create_empty_figure("ArviZ not installed")
+
+    if result.samples_params is None:
+        logger.warning("No parameter samples available for pair plots")
+        return _create_empty_figure("No samples available")
+
+    # Convert to ArviZ InferenceData
+    idata = result.to_arviz()
+
+    # Default to physical parameters only (exclude per-angle scaling)
+    if var_names is None:
+        if result.analysis_mode == "static":
+            var_names = ["D0", "alpha", "D_offset"]
+        elif result.analysis_mode == "laminar_flow":
+            var_names = [
+                "D0",
+                "alpha",
+                "D_offset",
+                "gamma_dot_t0",
+                "beta",
+                "gamma_dot_t_offset",
+                "phi0",
+            ]
+
+    # Plot pair plots
+    axes = az.plot_pair(
+        idata,
+        var_names=var_names,
+        figsize=figsize,
+        kind="kde",
+        marginals=True,
+        **kwargs,
+    )
+
+    # Get figure
+    if hasattr(axes, "ravel"):
+        fig = axes.ravel()[0].figure
+    elif hasattr(axes, "figure"):
+        fig = axes.figure
+    else:
+        fig = plt.gcf()
+
+    # Add title
+    title = "Parameter Correlations"
+    if result.is_cmc_result():
+        title += f" - CMC ({result.num_shards} shards)"
+    fig.suptitle(title, fontsize=14, fontweight="bold", y=1.02)
+
+    plt.tight_layout()
+
+    # Save or show
+    if save_path is not None:
+        fig.savefig(save_path, dpi=dpi, bbox_inches="tight")
+        logger.info(f"ArviZ pair plots saved to {save_path}")
+
+    if show:
+        plt.show()
+
+    return fig
+
+
+def generate_mcmc_diagnostic_report(
+    result: MCMCResult,
+    output_dir: str | Path,
+    prefix: str = "mcmc",
+    include_heatmaps: bool = True,
+    dpi: int = 150,
+) -> dict[str, Path]:
+    """Generate comprehensive MCMC diagnostic report with all plots.
+
+    Creates a complete set of diagnostic plots for MCMC results:
+    1. ArviZ trace plots (trace + posterior side-by-side)
+    2. ArviZ posterior distributions with 95% CI
+    3. ArviZ pair plots (parameter correlations)
+    4. Convergence diagnostics (R-hat, ESS)
+    5. CMC-specific: KL divergence matrix, shard comparison
+
+    Parameters
+    ----------
+    result : MCMCResult
+        MCMC or CMC result object.
+    output_dir : str or Path
+        Directory to save plots.
+    prefix : str, default="mcmc"
+        Prefix for output filenames.
+    include_heatmaps : bool, default=True
+        Whether to include C2 heatmap comparisons (requires fitted_data).
+    dpi : int, default=150
+        DPI for saved figures.
+
+    Returns
+    -------
+    dict[str, Path]
+        Dictionary mapping plot names to file paths.
+
+    Examples
+    --------
+    >>> paths = generate_mcmc_diagnostic_report(result, "output/mcmc_diagnostics")
+    >>> print(paths["trace"])  # Path to trace plot
+    >>> print(paths["posterior"])  # Path to posterior plot
+    """
+    output_dir = Path(output_dir)
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    paths: dict[str, Path] = {}
+
+    # 1. ArviZ trace plots
+    try:
+        trace_path = output_dir / f"{prefix}_trace.png"
+        plot_arviz_trace(result, save_path=trace_path, dpi=dpi)
+        paths["trace"] = trace_path
+        logger.info(f"Generated trace plot: {trace_path}")
+    except Exception as e:
+        logger.warning(f"Failed to generate trace plot: {e}")
+
+    # 2. ArviZ posterior distributions
+    try:
+        posterior_path = output_dir / f"{prefix}_posterior.png"
+        plot_arviz_posterior(result, save_path=posterior_path, dpi=dpi)
+        paths["posterior"] = posterior_path
+        logger.info(f"Generated posterior plot: {posterior_path}")
+    except Exception as e:
+        logger.warning(f"Failed to generate posterior plot: {e}")
+
+    # 3. ArviZ pair plots
+    try:
+        pair_path = output_dir / f"{prefix}_pair.png"
+        plot_arviz_pair(result, save_path=pair_path, dpi=dpi)
+        paths["pair"] = pair_path
+        logger.info(f"Generated pair plot: {pair_path}")
+    except Exception as e:
+        logger.warning(f"Failed to generate pair plot: {e}")
+
+    # 4. Convergence diagnostics
+    try:
+        conv_path = output_dir / f"{prefix}_convergence.png"
+        plot_convergence_diagnostics(result, save_path=conv_path, dpi=dpi)
+        paths["convergence"] = conv_path
+        logger.info(f"Generated convergence plot: {conv_path}")
+    except Exception as e:
+        logger.warning(f"Failed to generate convergence plot: {e}")
+
+    # 5. CMC-specific plots
+    if result.is_cmc_result():
+        # KL divergence matrix
+        try:
+            kl_path = output_dir / f"{prefix}_kl_matrix.png"
+            plot_kl_divergence_matrix(result, save_path=kl_path, dpi=dpi)
+            paths["kl_matrix"] = kl_path
+            logger.info(f"Generated KL matrix plot: {kl_path}")
+        except Exception as e:
+            logger.warning(f"Failed to generate KL matrix plot: {e}")
+
+        # CMC summary dashboard
+        try:
+            dashboard_path = output_dir / f"{prefix}_cmc_dashboard.png"
+            plot_cmc_summary_dashboard(result, save_path=dashboard_path, dpi=dpi)
+            paths["cmc_dashboard"] = dashboard_path
+            logger.info(f"Generated CMC dashboard: {dashboard_path}")
+        except Exception as e:
+            logger.warning(f"Failed to generate CMC dashboard: {e}")
+
+    # 6. Summary statistics (save as CSV)
+    try:
+        summary_path = output_dir / f"{prefix}_summary.csv"
+        summary_df = result.compute_summary()
+        summary_df.to_csv(summary_path)
+        paths["summary_csv"] = summary_path
+        logger.info(f"Generated summary CSV: {summary_path}")
+    except Exception as e:
+        logger.warning(f"Failed to generate summary CSV: {e}")
+
+    logger.info(f"MCMC diagnostic report generated: {len(paths)} files in {output_dir}")
+    return paths
+
+
+def print_mcmc_summary(result: MCMCResult) -> None:
+    """Print formatted MCMC summary to console.
+
+    Displays key diagnostics including:
+    - Parameter estimates with 95% CI
+    - R-hat and ESS for each parameter
+    - Convergence status
+    - CMC-specific information if applicable
+
+    Parameters
+    ----------
+    result : MCMCResult
+        MCMC or CMC result object.
+
+    Examples
+    --------
+    >>> print_mcmc_summary(result)
+    """
+    print("\n" + "=" * 60)
+    print("MCMC Results Summary")
+    print("=" * 60)
+
+    # Basic info
+    print(f"\nAnalysis Mode: {result.analysis_mode}")
+    print(f"Sampler: {result.sampler}")
+    print(f"Converged: {result.converged}")
+    print(f"Computation Time: {result.computation_time:.2f}s")
+
+    if result.is_cmc_result():
+        print(f"\nCMC Information:")
+        print(f"  - Number of Shards: {result.num_shards}")
+        print(f"  - Combination Method: {result.combination_method}")
+
+    # Parameter estimates
+    print("\n" + "-" * 60)
+    print("Parameter Estimates (95% CI)")
+    print("-" * 60)
+
+    param_names = result.get_param_names()
+
+    # Compute CI if not already computed
+    if result.ci_95_lower is None or result.ci_95_upper is None:
+        try:
+            ci_lower, ci_upper = result.compute_credible_intervals(0.95)
+        except ValueError:
+            ci_lower = ci_upper = None
+    else:
+        ci_lower, ci_upper = result.ci_95_lower, result.ci_95_upper
+
+    for i, name in enumerate(param_names):
+        mean = result.mean_params[i]
+        std = result.std_params[i] if result.std_params is not None else 0.0
+
+        if ci_lower is not None and ci_upper is not None:
+            print(f"  {name:20s}: {mean:12.4f} ± {std:8.4f}  [{ci_lower[i]:.4f}, {ci_upper[i]:.4f}]")
+        else:
+            print(f"  {name:20s}: {mean:12.4f} ± {std:8.4f}")
+
+    # Convergence diagnostics
+    if result.r_hat is not None or result.effective_sample_size is not None:
+        print("\n" + "-" * 60)
+        print("Convergence Diagnostics")
+        print("-" * 60)
+
+        if result.r_hat is not None:
+            print("\n  R-hat (target < 1.1):")
+            for name, value in result.r_hat.items():
+                status = "✓" if value < 1.1 else "✗"
+                print(f"    {name:20s}: {value:.4f} {status}")
+
+        if result.effective_sample_size is not None:
+            print("\n  ESS (target > 100):")
+            for name, value in result.effective_sample_size.items():
+                status = "✓" if value > 100 else "✗"
+                print(f"    {name:20s}: {value:.1f} {status}")
+
+    print("\n" + "=" * 60)

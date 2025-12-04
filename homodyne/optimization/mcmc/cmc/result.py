@@ -1,4 +1,4 @@
-"""Extended MCMCResult class with CMC support.
+"""Extended MCMCResult class with CMC support and ArviZ integration.
 
 This module extends the existing MCMCResult class from homodyne.optimization.mcmc
 to support Consensus Monte Carlo (CMC) specific fields while maintaining 100%
@@ -10,17 +10,29 @@ Key Features:
 - New is_cmc_result() method to detect CMC results
 - Serialization support for CMC-specific data
 - Per-shard diagnostics and combination method tracking
+- ArviZ InferenceData conversion for diagnostics and plotting
+- 95% credible intervals (CI) for uncertainty quantification
+- Fitted data storage for comparison with experimental data
 
 Backward Compatibility:
 - All existing MCMCResult parameters work exactly as before
 - CMC fields only used when explicitly provided
 - Non-CMC results load and save without CMC data
 - No breaking changes to existing API
+
+ArviZ Integration (v2.4.1+):
+- to_arviz() method converts MCMCResult to az.InferenceData
+- compute_summary() returns pandas DataFrame with diagnostics
+- Compatible with az.plot_trace(), az.plot_posterior(), az.plot_pair()
 """
 
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import numpy as np
+
+if TYPE_CHECKING:
+    import arviz as az
+    import pandas as pd
 
 
 class MCMCResult:
@@ -136,6 +148,28 @@ class MCMCResult:
         - estimated_memory_fraction : float (optional)
         Default: None (for backward compatibility)
 
+    ArviZ Integration Fields (v2.4.1+)
+    ----------------------------------
+    ci_95_lower : np.ndarray, optional
+        Lower bounds of 95% credible intervals for each parameter.
+        Computed as 2.5th percentile of posterior samples.
+        Default: None (computed lazily from samples_params)
+
+    ci_95_upper : np.ndarray, optional
+        Upper bounds of 95% credible intervals for each parameter.
+        Computed as 97.5th percentile of posterior samples.
+        Default: None (computed lazily from samples_params)
+
+    fitted_data : np.ndarray, optional
+        Predicted g2 values computed from posterior mean parameters.
+        Shape matches experimental data for comparison plots.
+        Default: None (computed by coordinator after sampling)
+
+    param_names : list[str], optional
+        Parameter names for ArviZ labeling and diagnostics.
+        Example: ['contrast_0', 'offset_0', 'D0', 'alpha', 'D_offset']
+        Default: None (auto-generated from analysis_mode)
+
     Examples
     --------
     Standard MCMC result (backward compatible):
@@ -200,6 +234,11 @@ class MCMCResult:
         parameter_space_metadata: dict[str, Any] | None = None,
         initial_values_metadata: dict[str, float] | None = None,
         selection_decision_metadata: dict[str, Any] | None = None,
+        # NEW v2.4.1: ArviZ integration fields (optional, backward compatible)
+        ci_95_lower: np.ndarray | None = None,
+        ci_95_upper: np.ndarray | None = None,
+        fitted_data: np.ndarray | None = None,
+        param_names: list[str] | None = None,
         **kwargs,
     ):
         """Initialize MCMCResult with optional CMC support.
@@ -251,6 +290,12 @@ class MCMCResult:
         self.parameter_space_metadata = parameter_space_metadata
         self.initial_values_metadata = initial_values_metadata
         self.selection_decision_metadata = selection_decision_metadata
+
+        # NEW v2.4.1: ArviZ integration attributes (all optional, default None)
+        self.ci_95_lower = ci_95_lower
+        self.ci_95_upper = ci_95_upper
+        self.fitted_data = fitted_data
+        self.param_names = param_names
 
     def is_cmc_result(self) -> bool:
         """Return True when the result came from the CMC pipeline.
@@ -381,6 +426,17 @@ class MCMCResult:
             "parameter_space_metadata": self.parameter_space_metadata,
             "initial_values_metadata": self.initial_values_metadata,
             "selection_decision_metadata": self.selection_decision_metadata,
+            # v2.4.1 ArviZ integration fields
+            "ci_95_lower": (
+                self.ci_95_lower.tolist() if self.ci_95_lower is not None else None
+            ),
+            "ci_95_upper": (
+                self.ci_95_upper.tolist() if self.ci_95_upper is not None else None
+            ),
+            "fitted_data": (
+                self.fitted_data.tolist() if self.fitted_data is not None else None
+            ),
+            "param_names": self.param_names,
         }
         return data
 
@@ -468,4 +524,230 @@ class MCMCResult:
             parameter_space_metadata=data.get("parameter_space_metadata"),
             initial_values_metadata=data.get("initial_values_metadata"),
             selection_decision_metadata=data.get("selection_decision_metadata"),
+            # v2.4.1 ArviZ integration fields (default to None for backward compatibility)
+            ci_95_lower=(
+                np.array(data["ci_95_lower"])
+                if data.get("ci_95_lower") is not None
+                else None
+            ),
+            ci_95_upper=(
+                np.array(data["ci_95_upper"])
+                if data.get("ci_95_upper") is not None
+                else None
+            ),
+            fitted_data=(
+                np.array(data["fitted_data"])
+                if data.get("fitted_data") is not None
+                else None
+            ),
+            param_names=data.get("param_names"),
         )
+
+    def get_param_names(self) -> list[str]:
+        """Get parameter names for this result.
+
+        Returns parameter names based on analysis_mode if not explicitly set.
+        For per-angle scaling, includes contrast_i and offset_i names.
+
+        Returns
+        -------
+        list[str]
+            Parameter names in correct order for NumPyro/ArviZ.
+        """
+        if self.param_names is not None:
+            return self.param_names
+
+        # Auto-generate based on analysis_mode
+        num_params = len(self.mean_params)
+
+        if self.analysis_mode == "static":
+            base_names = ["D0", "alpha", "D_offset"]
+        elif self.analysis_mode == "laminar_flow":
+            base_names = [
+                "D0",
+                "alpha",
+                "D_offset",
+                "gamma_dot_t0",
+                "beta",
+                "gamma_dot_t_offset",
+                "phi0",
+            ]
+        else:
+            base_names = [f"param_{i}" for i in range(num_params)]
+
+        # If num_params > len(base_names), assume per-angle scaling
+        if num_params > len(base_names):
+            n_physical = len(base_names)
+            n_scaling = num_params - n_physical
+            n_angles = n_scaling // 2  # contrast + offset per angle
+
+            names = []
+            names.extend([f"contrast_{i}" for i in range(n_angles)])
+            names.extend([f"offset_{i}" for i in range(n_angles)])
+            names.extend(base_names)
+            return names
+
+        return base_names[:num_params]
+
+    def compute_credible_intervals(
+        self, ci_level: float = 0.95
+    ) -> tuple[np.ndarray, np.ndarray]:
+        """Compute credible intervals from posterior samples.
+
+        Parameters
+        ----------
+        ci_level : float, default=0.95
+            Credible interval level (e.g., 0.95 for 95% CI).
+
+        Returns
+        -------
+        tuple[np.ndarray, np.ndarray]
+            (lower_bounds, upper_bounds) arrays for each parameter.
+
+        Raises
+        ------
+        ValueError
+            If samples_params is None.
+
+        Examples
+        --------
+        >>> lower, upper = result.compute_credible_intervals(0.95)
+        >>> print(f"D0: [{lower[0]:.2f}, {upper[0]:.2f}]")
+        """
+        if self.samples_params is None:
+            raise ValueError("Cannot compute CI: samples_params is None")
+
+        alpha = (1 - ci_level) / 2
+        lower_pct = alpha * 100
+        upper_pct = (1 - alpha) * 100
+
+        # Handle multi-dimensional samples
+        samples = self.samples_params
+        if samples.ndim == 3:
+            # (n_chains, n_samples, n_params) -> flatten chains
+            samples = samples.reshape(-1, samples.shape[-1])
+
+        lower = np.percentile(samples, lower_pct, axis=0)
+        upper = np.percentile(samples, upper_pct, axis=0)
+
+        return lower, upper
+
+    def to_arviz(self) -> "az.InferenceData":
+        """Convert MCMCResult to ArviZ InferenceData for diagnostics and plotting.
+
+        Creates an InferenceData object compatible with all ArviZ functions:
+        - az.plot_trace()
+        - az.plot_posterior()
+        - az.plot_pair()
+        - az.summary()
+        - az.rhat()
+        - az.ess()
+
+        Returns
+        -------
+        az.InferenceData
+            ArviZ InferenceData object with posterior samples.
+
+        Raises
+        ------
+        ImportError
+            If arviz is not installed.
+        ValueError
+            If samples_params is None.
+
+        Examples
+        --------
+        >>> idata = result.to_arviz()
+        >>> az.plot_trace(idata)
+        >>> az.summary(idata)
+
+        >>> # With custom plots
+        >>> az.plot_posterior(idata, var_names=["D0", "alpha"])
+        >>> az.plot_pair(idata, var_names=["D0", "alpha", "D_offset"])
+        """
+        try:
+            import arviz as az
+        except ImportError as e:
+            raise ImportError(
+                "ArviZ is required for to_arviz(). Install with: pip install arviz"
+            ) from e
+
+        if self.samples_params is None:
+            raise ValueError("Cannot convert to ArviZ: samples_params is None")
+
+        # Get parameter names
+        param_names = self.get_param_names()
+
+        # Prepare posterior samples
+        samples = self.samples_params
+        if samples.ndim == 2:
+            # (n_samples, n_params) -> (1, n_samples, n_params) for single chain
+            samples = samples[np.newaxis, :, :]
+        elif samples.ndim == 3:
+            # (n_chains, n_samples, n_params) - already correct
+            pass
+        else:
+            raise ValueError(f"Unexpected samples shape: {samples.shape}")
+
+        # Create posterior dict with named parameters
+        posterior_dict = {}
+        for i, name in enumerate(param_names):
+            # Shape: (n_chains, n_samples)
+            posterior_dict[name] = samples[:, :, i]
+
+        # Create InferenceData
+        idata = az.from_dict(
+            posterior=posterior_dict,
+            attrs={
+                "analysis_mode": self.analysis_mode,
+                "n_chains": self.n_chains,
+                "n_warmup": self.n_warmup,
+                "n_samples": self.n_samples,
+                "sampler": self.sampler,
+                "converged": self.converged,
+                "computation_time": self.computation_time,
+                "is_cmc": self.is_cmc_result(),
+                "num_shards": self.num_shards,
+            },
+        )
+
+        return idata
+
+    def compute_summary(self) -> "pd.DataFrame":
+        """Compute summary statistics using ArviZ.
+
+        Returns a pandas DataFrame with diagnostics including:
+        - mean, std: Posterior mean and standard deviation
+        - hdi_2.5%, hdi_97.5%: 95% highest density interval
+        - mcse_mean, mcse_sd: Monte Carlo standard error
+        - ess_bulk, ess_tail: Effective sample size
+        - r_hat: Gelman-Rubin convergence diagnostic
+
+        Returns
+        -------
+        pd.DataFrame
+            Summary statistics for all parameters.
+
+        Raises
+        ------
+        ImportError
+            If arviz is not installed.
+        ValueError
+            If samples_params is None.
+
+        Examples
+        --------
+        >>> summary = result.compute_summary()
+        >>> print(summary)
+        >>> # Filter for physical parameters
+        >>> print(summary.loc[["D0", "alpha", "D_offset"]])
+        """
+        try:
+            import arviz as az
+        except ImportError as e:
+            raise ImportError(
+                "ArviZ is required for compute_summary(). Install with: pip install arviz"
+            ) from e
+
+        idata = self.to_arviz()
+        return az.summary(idata)

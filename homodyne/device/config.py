@@ -250,20 +250,6 @@ def detect_hardware() -> HardwareConfig:
     return hw_config
 
 
-def should_use_cmc(*_args, **_kwargs) -> bool:
-    """Deprecated shim; CMC is always selected.
-
-    Left temporarily to avoid import errors while downstream surfaces migrate.
-    Logs a warning and returns ``True`` unconditionally.
-    """
-
-    logger.warning(
-        "should_use_cmc is deprecated; CMC is the only MCMC path now. "
-        "This helper will be removed in a future release."
-    )
-    return True
-
-
 # Export public API
 __all__ = [
     "HardwareConfig",

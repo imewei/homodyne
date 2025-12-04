@@ -808,9 +808,8 @@ class TestFullMCMCWorkflow:
 # Simplified Workflow Tests (from test_mcmc_simplified_workflow.py)
 # ==============================================================================
 
-# Note: TestAutomaticNUTSCMCSelection removed in v3.0 (CMC-only architecture)
-# should_use_cmc() is now a deprecated shim that always returns True
-# See docs/migration/v3_cmc_only.md for migration details
+# Note: TestAutomaticNUTSCMCSelection and should_use_cmc() removed in v2.4.1
+# (CMC-only architecture). See docs/migration/v3_cmc_only.md for details.
 
 
 class TestManualNLSQMCMCWorkflow:

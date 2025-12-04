@@ -11,7 +11,7 @@ Test Coverage:
 - Backend recommendation logic
 - Edge cases and error handling
 
-Note: should_use_cmc() tests removed in v3.0 (CMC-only architecture)
+Note: should_use_cmc() removed in v2.4.1 (CMC-only architecture)
 """
 
 import pytest
@@ -64,8 +64,7 @@ class TestHardwareConfig:
         assert config.recommended_backend == "multiprocessing"
 
 
-# Note: TestShouldUseCMC removed in v3.0 (CMC-only architecture)
-# should_use_cmc() is now a deprecated shim that always returns True
+# Note: TestShouldUseCMC and should_use_cmc() removed in v2.4.1 (CMC-only architecture)
 
 
 class TestBackendRecommendation:

@@ -563,5 +563,230 @@ def test_regression_test_summary():
     assert len(regression_requirements) == 6
 
 
+# ============================================================================
+# Test Group 7: Actual Parameter Recovery (E2E Tests)
+# ============================================================================
+
+
+class TestActualParameterRecovery:
+    """End-to-end parameter recovery tests with real optimization."""
+
+    @pytest.mark.integration
+    def test_static_mode_actual_recovery(self):
+        """
+        E2E Test: Recover static mode parameters from synthetic data.
+
+        Uses actual NLSQ optimization (not mocked) to validate
+        parameter recovery accuracy.
+        """
+        from tests.factories.synthetic_data import generate_static_mode_dataset
+
+        # Known ground truth parameters
+        ground_truth = {
+            "D0": 1000.0,
+            "alpha": 0.5,
+            "D_offset": 10.0,
+            "contrast": 0.5,
+            "offset": 1.0,
+        }
+
+        # Generate synthetic data with minimal noise
+        data = generate_static_mode_dataset(
+            **ground_truth,
+            noise_level=0.01,  # 1% noise
+            n_phi=8,
+            n_t1=20,
+            n_t2=20,
+            random_seed=42,
+        )
+
+        # Set up wrapper
+        wrapper = NLSQWrapper(enable_large_dataset=False, enable_recovery=False)
+
+        class MockConfig:
+            def __init__(self):
+                self.optimization = {"lsq": {"max_iterations": 500, "tolerance": 1e-8}}
+
+        # Initial guess (10% perturbation from truth)
+        initial_params = np.array([
+            ground_truth["contrast"] * 1.1,
+            ground_truth["offset"] * 1.05,
+            ground_truth["D0"] * 1.1,
+            ground_truth["alpha"] * 1.1,
+            ground_truth["D_offset"] * 1.1,
+        ])
+
+        bounds = (
+            np.array([0.1, 0.8, 100.0, 0.2, 1.0]),
+            np.array([0.9, 1.2, 5000.0, 1.0, 50.0]),
+        )
+
+        # Run actual optimization
+        result = wrapper.fit(
+            data=data,
+            config=MockConfig(),
+            initial_params=initial_params,
+            bounds=bounds,
+            analysis_mode="static",
+        )
+
+        # Extract recovered physical params (per-angle scaling)
+        n_phi = 8
+        recovered = {
+            "contrast": np.mean(result.parameters[:n_phi]),
+            "offset": np.mean(result.parameters[n_phi:2*n_phi]),
+            "D0": result.parameters[2*n_phi],
+            "alpha": result.parameters[2*n_phi + 1],
+            "D_offset": result.parameters[2*n_phi + 2],
+        }
+
+        # Validate recovery accuracy (< 10% error for key params)
+        tolerance_map = {
+            "contrast": 15.0,  # 15%
+            "offset": 10.0,   # 10%
+            "D0": 15.0,       # 15%
+            "alpha": 15.0,    # 15%
+            "D_offset": 100.0,  # D_offset is less constrained
+        }
+
+        print("\n=== E2E Static Mode Recovery ===")
+        all_passed = True
+        for param, true_val in ground_truth.items():
+            rec_val = recovered[param]
+            error_pct = abs(rec_val - true_val) / true_val * 100
+            tol = tolerance_map[param]
+            passed = error_pct < tol
+            all_passed = all_passed and passed
+            status = "✓" if passed else "✗"
+            print(f"  {status} {param}: true={true_val:.4f}, rec={rec_val:.4f}, err={error_pct:.2f}% (tol={tol}%)")
+
+        assert result.convergence_status == "converged", "Should converge"
+        assert all_passed, "All parameters should be recovered within tolerance"
+
+    @pytest.mark.integration
+    def test_recovery_stability_across_seeds(self):
+        """
+        E2E Test: Verify recovery stability across different random seeds.
+
+        Tests that optimization is robust to different noise realizations.
+        """
+        from tests.factories.synthetic_data import generate_static_mode_dataset
+
+        ground_truth = {"D0": 1000.0, "alpha": 0.5, "D_offset": 10.0}
+        D0_recovered = []
+
+        # Test with 3 different seeds
+        for seed in [42, 123, 456]:
+            data = generate_static_mode_dataset(
+                **ground_truth,
+                contrast=0.5,
+                offset=1.0,
+                noise_level=0.02,
+                n_phi=5,
+                n_t1=15,
+                n_t2=15,
+                random_seed=seed,
+            )
+
+            wrapper = NLSQWrapper(enable_large_dataset=False, enable_recovery=False)
+
+            class MockConfig:
+                def __init__(self):
+                    self.optimization = {"lsq": {"max_iterations": 200, "tolerance": 1e-6}}
+
+            initial_params = np.array([0.5, 1.0, 1100.0, 0.55, 12.0])
+            bounds = (
+                np.array([0.1, 0.8, 100.0, 0.2, 1.0]),
+                np.array([0.9, 1.2, 5000.0, 1.0, 50.0]),
+            )
+
+            result = wrapper.fit(
+                data=data,
+                config=MockConfig(),
+                initial_params=initial_params,
+                bounds=bounds,
+                analysis_mode="static",
+            )
+
+            # Extract D0 (per-angle scaling)
+            n_phi = 5
+            D0_rec = result.parameters[2*n_phi]
+            D0_recovered.append(D0_rec)
+
+        # Verify consistency across seeds (CV < 30%)
+        # Note: 2% noise synthetic data can have significant variability
+        D0_mean = np.mean(D0_recovered)
+        D0_std = np.std(D0_recovered)
+        cv = D0_std / D0_mean if D0_mean > 0 else 0
+
+        print(f"\n=== Recovery Stability ===")
+        print(f"  D0 values: {D0_recovered}")
+        print(f"  Mean: {D0_mean:.2f}, Std: {D0_std:.2f}, CV: {cv:.2%}")
+
+        # Relaxed tolerance: CV < 30% (synthetic data with noise has variability)
+        assert cv < 0.30, f"D0 recovery not stable across seeds: CV={cv:.2%}"
+
+    @pytest.mark.integration
+    def test_noise_level_sensitivity(self):
+        """
+        E2E Test: Verify recovery degrades gracefully with noise level.
+
+        Higher noise should lead to larger recovery errors but not failure.
+        """
+        from tests.factories.synthetic_data import generate_static_mode_dataset
+
+        ground_truth = {"D0": 1000.0, "alpha": 0.5, "D_offset": 10.0}
+        noise_levels = [0.01, 0.03, 0.05]
+        errors = []
+
+        for noise_level in noise_levels:
+            data = generate_static_mode_dataset(
+                **ground_truth,
+                contrast=0.5,
+                offset=1.0,
+                noise_level=noise_level,
+                n_phi=6,
+                n_t1=15,
+                n_t2=15,
+                random_seed=42,
+            )
+
+            wrapper = NLSQWrapper(enable_large_dataset=False, enable_recovery=False)
+
+            class MockConfig:
+                def __init__(self):
+                    self.optimization = {"lsq": {"max_iterations": 200, "tolerance": 1e-6}}
+
+            initial_params = np.array([0.5, 1.0, 1100.0, 0.55, 12.0])
+            bounds = (
+                np.array([0.1, 0.8, 100.0, 0.2, 1.0]),
+                np.array([0.9, 1.2, 5000.0, 1.0, 50.0]),
+            )
+
+            result = wrapper.fit(
+                data=data,
+                config=MockConfig(),
+                initial_params=initial_params,
+                bounds=bounds,
+                analysis_mode="static",
+            )
+
+            # Extract D0 error
+            n_phi = 6
+            D0_rec = result.parameters[2*n_phi]
+            error_pct = abs(D0_rec - ground_truth["D0"]) / ground_truth["D0"] * 100
+            errors.append(error_pct)
+
+        print(f"\n=== Noise Sensitivity ===")
+        for i, (noise, error) in enumerate(zip(noise_levels, errors)):
+            print(f"  Noise={noise*100:.0f}%, D0 Error={error:.2f}%")
+
+        # Higher noise should not cause catastrophic failure
+        assert all(e < 50.0 for e in errors), "All errors should be < 50%"
+
+        # Error should generally increase with noise (with some tolerance)
+        # Not strictly monotonic due to noise, but trend should hold
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])

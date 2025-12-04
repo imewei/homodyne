@@ -25,10 +25,9 @@ The Consensus Monte Carlo (CMC) API provides a complete framework for scalable B
 inference on large XPCS datasets. The API is organized into several modules:
 
 ```
-homodyne.optimization.cmc/
+homodyne.optimization.mcmc.cmc/
 ├── coordinator.py      # Main orchestrator (CMCCoordinator)
 ├── sharding.py         # Data partitioning
-├── svi_init.py         # SVI initialization
 ├── backends/           # Execution backends (pjit, multiprocessing, PBS)
 ├── combination.py      # Subposterior combination
 ├── diagnostics.py      # Validation and diagnostics
@@ -182,7 +181,7 @@ ______________________________________________________________________
 
 ## CMCCoordinator Class
 
-**Module:** `homodyne.optimization.cmc.coordinator`
+**Module:** `homodyne.optimization.mcmc.cmc.coordinator`
 
 Main orchestrator for the CMC pipeline.
 
@@ -278,7 +277,7 @@ Input Data (50M points)
 ### Example Usage
 
 ```python
-from homodyne.optimization.cmc.coordinator import CMCCoordinator
+from homodyne.optimization.mcmc.cmc.coordinator import CMCCoordinator
 
 # Create configuration
 config = {
@@ -312,7 +311,7 @@ ______________________________________________________________________
 
 ## Sharding Module
 
-**Module:** `homodyne.optimization.cmc.sharding`
+**Module:** `homodyne.optimization.mcmc.cmc.sharding`
 
 Data partitioning functions for creating representative shards.
 
@@ -463,7 +462,7 @@ def validate_shards(
 ### Example
 
 ```python
-from homodyne.optimization.cmc.sharding import (
+from homodyne.optimization.mcmc.cmc.sharding import (
     shard_data_stratified,
     calculate_optimal_num_shards,
     validate_shards,
@@ -493,136 +492,9 @@ assert is_valid, f"Shard validation failed: {diagnostics}"
 
 ______________________________________________________________________
 
-## SVI Initialization Module
-
-**Module:** `homodyne.optimization.cmc.svi_init`
-
-Stochastic Variational Inference for NUTS initialization.
-
-### Functions
-
-#### `run_svi_initialization()`
-
-Run SVI to estimate inverse mass matrix for NUTS.
-
-```python
-def run_svi_initialization(
-    model_fn: Callable,
-    pooled_data: Dict[str, np.ndarray],
-    init_params: Dict[str, float],
-    num_steps: int = 5000,
-    learning_rate: float = 0.001,
-    rank: int = 5,
-    timeout: Optional[float] = None,
-) -> Tuple[Dict[str, float], Optional[np.ndarray]]:
-    """Run SVI initialization.
-
-    Parameters
-    ----------
-    model_fn : callable
-        NumPyro model function
-    pooled_data : dict
-        Pooled data from shards
-    init_params : dict
-        Initial parameter values
-    num_steps : int
-        Number of SVI optimization steps
-    learning_rate : float
-        Adam learning rate
-    rank : int
-        Low-rank approximation rank (1-10)
-    timeout : float, optional
-        Maximum SVI runtime in seconds
-
-    Returns
-    -------
-    init_params : dict
-        Optimized initial parameters
-    inv_mass_matrix : np.ndarray or None
-        Inverse mass matrix (None if SVI failed)
-    """
-```
-
-**SVI Configuration:**
-
-- **`num_steps`**: 5000-20000 (more steps = better convergence)
-- **`learning_rate`**: 0.0001-0.01 (default: 0.001)
-- **`rank`**: 1-10 (low-rank approximation, default: 5)
-- **`timeout`**: 300-900 seconds (prevent infinite loops)
-
-#### `pool_samples_from_shards()`
-
-Pool representative samples from shards for SVI.
-
-```python
-def pool_samples_from_shards(
-    shards: List[Dict[str, Any]],
-    samples_per_shard: int = 200,
-    strategy: str = 'uniform',
-) -> Dict[str, np.ndarray]:
-    """Pool samples from shards.
-
-    Parameters
-    ----------
-    shards : List[Dict]
-        List of shard dictionaries
-    samples_per_shard : int
-        Number of samples to draw per shard
-    strategy : str
-        Pooling strategy: 'uniform', 'weighted'
-
-    Returns
-    -------
-    pooled_data : dict
-        Pooled data dictionary with keys:
-        - 'data': Pooled c2 values
-        - 't1', 't2', 'phi': Pooled coordinates
-        - 'q', 'L': Physics parameters
-    """
-```
-
-**Pooling Strategies:**
-
-- **`uniform`**: Sample uniformly from each shard
-- **`weighted`**: Sample proportionally to shard size
-
-### Example
-
-```python
-from homodyne.optimization.cmc.svi_init import (
-    run_svi_initialization,
-    pool_samples_from_shards,
-)
-
-# Pool samples
-pooled_data = pool_samples_from_shards(
-    shards=shards,
-    samples_per_shard=200,
-    strategy='uniform',
-)
-
-# Run SVI
-init_params, inv_mass_matrix = run_svi_initialization(
-    model_fn=create_numpyro_model('static_isotropic'),
-    pooled_data=pooled_data,
-    init_params={'D0': 10000.0, 'alpha': 0.8, 'D_offset': 100.0},
-    num_steps=5000,
-    learning_rate=0.001,
-    rank=5,
-    timeout=600,  # 10 minutes max
-)
-
-if inv_mass_matrix is not None:
-    print("SVI succeeded, using estimated mass matrix")
-else:
-    print("SVI failed, using identity matrix")
-```
-
-______________________________________________________________________
-
 ## Backend Interface
 
-**Module:** `homodyne.optimization.cmc.backends`
+**Module:** `homodyne.optimization.mcmc.cmc.backends`
 
 Abstract backend interface and selection logic.
 
@@ -720,7 +592,7 @@ class CMCBackend(ABC):
 **JAX pjit backend for GPU/CPU execution.**
 
 ```python
-from homodyne.optimization.cmc.backends.pjit import PjitBackend
+from homodyne.optimization.mcmc.cmc.backends.pjit import PjitBackend
 
 backend = PjitBackend()
 shard_results = backend.run_parallel_mcmc(
@@ -742,7 +614,7 @@ shard_results = backend.run_parallel_mcmc(
 **Python multiprocessing for CPU parallelism.**
 
 ```python
-from homodyne.optimization.cmc.backends.multiprocessing import MultiprocessingBackend
+from homodyne.optimization.mcmc.cmc.backends.multiprocessing import MultiprocessingBackend
 
 backend = MultiprocessingBackend()
 shard_results = backend.run_parallel_mcmc(...)
@@ -759,7 +631,7 @@ shard_results = backend.run_parallel_mcmc(...)
 **PBS job array backend for HPC clusters.**
 
 ```python
-from homodyne.optimization.cmc.backends.pbs import PBSBackend
+from homodyne.optimization.mcmc.cmc.backends.pbs import PBSBackend
 
 backend = PBSBackend(
     project_name='my_project',
@@ -779,7 +651,7 @@ ______________________________________________________________________
 
 ## Combination Module
 
-**Module:** `homodyne.optimization.cmc.combination`
+**Module:** `homodyne.optimization.mcmc.cmc.combination`
 
 Subposterior combination methods.
 
@@ -842,7 +714,7 @@ def combine_subposteriors(
 ### Example
 
 ```python
-from homodyne.optimization.cmc.combination import combine_subposteriors
+from homodyne.optimization.mcmc.cmc.combination import combine_subposteriors
 
 # Combine posteriors
 combined = combine_subposteriors(
@@ -862,7 +734,7 @@ ______________________________________________________________________
 
 ## Diagnostics Module
 
-**Module:** `homodyne.optimization.cmc.diagnostics`
+**Module:** `homodyne.optimization.mcmc.cmc.diagnostics`
 
 Validation and diagnostic functions.
 
@@ -982,7 +854,7 @@ Symmetric KL = 0.5 * (KL(p||q) + KL(q||p))
 ### Example
 
 ```python
-from homodyne.optimization.cmc.diagnostics import (
+from homodyne.optimization.mcmc.cmc.diagnostics import (
     validate_cmc_results,
     compute_per_shard_diagnostics,
     compute_between_shard_kl_divergence,
@@ -1136,7 +1008,7 @@ ______________________________________________________________________
 
 ## Extended MCMCResult
 
-**Module:** `homodyne.optimization.cmc.result`
+**Module:** `homodyne.optimization.mcmc.cmc.result`
 
 Extended MCMC result class with CMC-specific fields.
 
@@ -1280,7 +1152,7 @@ class MCMCResult:
 ### Example
 
 ```python
-from homodyne.optimization.cmc.result import MCMCResult
+from homodyne.optimization.mcmc.cmc.result import MCMCResult
 
 # Check if CMC result
 if result.is_cmc_result():
@@ -1312,20 +1184,21 @@ ______________________________________________________________________
 
 **Quick API Reference:**
 
-| Task | API Call | |------|----------| | **Run CMC** |
-`fit_mcmc_jax(..., method='cmc')` | | **Check if CMC** | `result.is_cmc_result()` | |
-**Create shards** | `shard_data_stratified(...)` | | **Run SVI** |
-`run_svi_initialization(...)` | | **Combine posteriors** | `combine_subposteriors(...)`
-| | **Validate results** | `validate_cmc_results(...)` | | **Select backend** |
-`select_backend(hardware_config)` |
+| Task | API Call |
+|------|----------|
+| **Run CMC** | `fit_mcmc_jax(..., method='cmc')` |
+| **Check if CMC** | `result.is_cmc_result()` |
+| **Create shards** | `shard_data_stratified(...)` |
+| **Combine posteriors** | `combine_subposteriors(...)` |
+| **Validate results** | `validate_cmc_results(...)` |
+| **Select backend** | `select_backend(hardware_config)` |
 
 **Module Organization:**
 
 ```
-homodyne.optimization.cmc/
+homodyne.optimization.mcmc.cmc/
 ├── coordinator.py           # CMCCoordinator (main orchestrator)
 ├── sharding.py              # Data partitioning
-├── svi_init.py              # SVI initialization
 ├── backends/                # Execution backends
 │   ├── base.py              # CMCBackend base class
 │   ├── selection.py         # Backend selection logic

@@ -7,6 +7,7 @@ for testing parameter recovery accuracy.
 Uses homodyne physics models to generate realistic data with controllable noise.
 """
 
+import warnings
 from dataclasses import dataclass
 
 import numpy as np
@@ -27,7 +28,7 @@ class SyntheticXPCSData:
         L: Sample-detector distance
         dt: Time step
         ground_truth_params: True parameter values used to generate data
-        per_angle_scaling: Whether to use per-angle scaling parameters (default: False)
+        per_angle_scaling: Whether to use per-angle scaling parameters (default: True as of v2.4.0)
     """
 
     phi: np.ndarray
@@ -39,7 +40,56 @@ class SyntheticXPCSData:
     L: float
     dt: float
     ground_truth_params: dict[str, float]
-    per_angle_scaling: bool = False  # Default to False for parameter recovery tests
+    per_angle_scaling: bool = True  # v2.4.0: per-angle scaling is mandatory
+
+
+def get_per_angle_param_names(n_angles: int, mode: str = "static") -> list[str]:
+    """
+    Get parameter names in correct NumPyro order for per-angle scaling.
+
+    NumPyro requires parameters to be returned in exact order:
+    1. Per-angle contrast parameters (contrast_0, contrast_1, ...)
+    2. Per-angle offset parameters (offset_0, offset_1, ...)
+    3. Physical parameters (D0, alpha, D_offset, ...)
+
+    Parameters
+    ----------
+    n_angles : int
+        Number of phi angles
+    mode : str
+        Analysis mode: 'static' or 'laminar_flow'
+
+    Returns
+    -------
+    list[str]
+        Parameter names in NumPyro-compatible order
+
+    Examples
+    --------
+    >>> params = get_per_angle_param_names(3, mode='static')
+    >>> assert params == ['contrast_0', 'contrast_1', 'contrast_2',
+    ...                    'offset_0', 'offset_1', 'offset_2',
+    ...                    'D0', 'alpha', 'D_offset']
+
+    >>> params = get_per_angle_param_names(2, mode='laminar_flow')
+    >>> assert params[-1] == 'phi0'
+    """
+    param_names = []
+
+    # Per-angle contrast parameters first
+    param_names.extend([f"contrast_{i}" for i in range(n_angles)])
+
+    # Per-angle offset parameters second
+    param_names.extend([f"offset_{i}" for i in range(n_angles)])
+
+    # Physical parameters last
+    param_names.extend(["D0", "alpha", "D_offset"])
+
+    # Add laminar flow parameters if needed
+    if "laminar" in mode.lower():
+        param_names.extend(["gamma_dot_t0", "beta", "gamma_dot_t_offset", "phi0"])
+
+    return param_names
 
 
 def generate_synthetic_xpcs_data(
@@ -52,6 +102,7 @@ def generate_synthetic_xpcs_data(
     L: float = 1.0,
     dt: float = 0.1,
     analysis_mode: str = "static",
+    per_angle_scaling: bool = True,
     random_seed: int | None = 42,
 ) -> SyntheticXPCSData:
     """
@@ -63,7 +114,8 @@ def generate_synthetic_xpcs_data(
     ----------
     ground_truth_params : dict
         Ground truth parameter values. Should include:
-        - For static mode: contrast, offset, D0, alpha, D_offset
+        - For static mode: [contrast_0...N, offset_0...N, D0, alpha, D_offset] (per-angle)
+          OR [contrast, offset, D0, alpha, D_offset] (legacy, deprecated)
         - For laminar flow: add gamma_dot_t0, beta, gamma_dot_offset, phi0
     n_phi : int
         Number of phi angles
@@ -81,6 +133,9 @@ def generate_synthetic_xpcs_data(
         Time step
     analysis_mode : str
         'static' or 'laminar_flow'
+    per_angle_scaling : bool
+        Use per-angle scaling for contrast and offset (default: True as of v2.4.0)
+        If False, raises DeprecationWarning (will be removed in v2.5.0)
     random_seed : int, optional
         Random seed for reproducibility
 
@@ -89,19 +144,34 @@ def generate_synthetic_xpcs_data(
     SyntheticXPCSData
         Synthetic data with known ground truth
 
+    Raises
+    ------
+    DeprecationWarning
+        If per_angle_scaling=False is explicitly passed
+
     Examples
     --------
     >>> params = {
-    ...     'contrast': 0.5,
-    ...     'offset': 1.0,
+    ...     'contrast_0': 0.5, 'contrast_1': 0.5, 'contrast_2': 0.5,
+    ...     'offset_0': 1.0, 'offset_1': 1.0, 'offset_2': 1.0,
     ...     'D0': 1000.0,
     ...     'alpha': 0.5,
     ...     'D_offset': 10.0
     ... }
-    >>> data = generate_synthetic_xpcs_data(params, n_phi=5, n_t1=10, n_t2=10)
-    >>> assert data.g2.shape == (5, 10, 10)
+    >>> data = generate_synthetic_xpcs_data(params, n_phi=3, n_t1=10, n_t2=10, per_angle_scaling=True)
+    >>> assert data.g2.shape == (3, 10, 10)
     >>> assert 'D0' in data.ground_truth_params
     """
+    # Handle deprecation of per_angle_scaling=False
+    if per_angle_scaling is False:
+        warnings.warn(
+            "per_angle_scaling=False is deprecated as of v2.4.0 and will be removed in v2.5.0. "
+            "Per-angle scaling is now mandatory. Please update your code to use per_angle_scaling=True "
+            "or use per-angle parameter format (contrast_0, contrast_1, ..., offset_0, offset_1, ...)",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+
     if random_seed is not None:
         np.random.seed(random_seed)
 
@@ -115,9 +185,24 @@ def generate_synthetic_xpcs_data(
     t1 = np.linspace(0, 1, n_t1)
     t2 = np.linspace(0, 1, n_t2)
 
-    # Extract parameters based on analysis mode
-    contrast = ground_truth_params["contrast"]
-    offset = ground_truth_params["offset"]
+    # Extract per-angle parameters (with fallback for scalar values)
+    contrasts = []
+    offsets = []
+    for i in range(n_phi):
+        # Try per-angle format first, fall back to scalar
+        if f"contrast_{i}" in ground_truth_params:
+            contrasts.append(ground_truth_params[f"contrast_{i}"])
+        elif "contrast" in ground_truth_params:
+            contrasts.append(ground_truth_params["contrast"])
+        else:
+            contrasts.append(0.5)  # default value
+
+        if f"offset_{i}" in ground_truth_params:
+            offsets.append(ground_truth_params[f"offset_{i}"])
+        elif "offset" in ground_truth_params:
+            offsets.append(ground_truth_params["offset"])
+        else:
+            offsets.append(1.0)  # default value
 
     # Physical parameters (excluding scaling params)
     param_order = ["D0", "alpha", "D_offset"]
@@ -128,7 +213,7 @@ def generate_synthetic_xpcs_data(
 
     # Generate theoretical g2 for each phi angle
     g2_theoretical = []
-    for phi_val in phi:
+    for i, phi_val in enumerate(phi):
         g2_phi = compute_g2_scaled(
             params=physical_params,
             t1=jnp.array(t1),
@@ -136,8 +221,8 @@ def generate_synthetic_xpcs_data(
             phi=float(phi_val),
             q=q,
             L=L,
-            contrast=contrast,
-            offset=offset,
+            contrast=contrasts[i],
+            offset=offsets[i],
             dt=dt,
         )
         g2_theoretical.append(np.array(g2_phi))
@@ -162,6 +247,7 @@ def generate_synthetic_xpcs_data(
         L=L,
         dt=dt,
         ground_truth_params=ground_truth_params.copy(),
+        per_angle_scaling=per_angle_scaling,
     )
 
     return data
@@ -177,10 +263,13 @@ def generate_static_mode_dataset(
     n_phi: int = 10,
     n_t1: int = 20,
     n_t2: int = 20,
+    per_angle_scaling: bool = True,
     **kwargs,
 ) -> SyntheticXPCSData:
     """
     Generate static mode synthetic dataset with default parameters.
+
+    Generates per-angle scaling parameters by default (v2.4.0+).
 
     Parameters
     ----------
@@ -191,28 +280,34 @@ def generate_static_mode_dataset(
     D_offset : float
         Diffusion offset
     contrast : float
-        Contrast parameter
+        Baseline contrast parameter (will be replicated per angle if per_angle_scaling=True)
     offset : float
-        Baseline offset
+        Baseline offset (will be replicated per angle if per_angle_scaling=True)
     noise_level : float
         Relative noise level
     n_phi, n_t1, n_t2 : int
         Grid dimensions
+    per_angle_scaling : bool
+        Use per-angle scaling for contrast and offset (default: True as of v2.4.0)
     **kwargs
         Additional arguments passed to generate_synthetic_xpcs_data
 
     Returns
     -------
     SyntheticXPCSData
-        Static isotropic synthetic data
+        Static isotropic synthetic data with per-angle scaling parameters
     """
+    # Build per-angle parameters
     params = {
-        "contrast": contrast,
-        "offset": offset,
         "D0": D0,
         "alpha": alpha,
         "D_offset": D_offset,
     }
+
+    # Add per-angle contrast and offset parameters
+    for i in range(n_phi):
+        params[f"contrast_{i}"] = contrast
+        params[f"offset_{i}"] = offset
 
     return generate_synthetic_xpcs_data(
         ground_truth_params=params,
@@ -221,6 +316,7 @@ def generate_static_mode_dataset(
         n_t2=n_t2,
         noise_level=noise_level,
         analysis_mode="static",
+        per_angle_scaling=per_angle_scaling,
         **kwargs,
     )
 
@@ -239,10 +335,13 @@ def generate_laminar_flow_dataset(
     n_phi: int = 15,
     n_t1: int = 20,
     n_t2: int = 20,
+    per_angle_scaling: bool = True,
     **kwargs,
 ) -> SyntheticXPCSData:
     """
     Generate laminar flow synthetic dataset with default parameters.
+
+    Generates per-angle scaling parameters by default (v2.4.0+).
 
     Parameters
     ----------
@@ -261,24 +360,25 @@ def generate_laminar_flow_dataset(
     phi0 : float
         Reference angle for shear
     contrast : float
-        Contrast parameter
+        Baseline contrast parameter (will be replicated per angle if per_angle_scaling=True)
     offset : float
-        Baseline offset
+        Baseline offset (will be replicated per angle if per_angle_scaling=True)
     noise_level : float
         Relative noise level
     n_phi, n_t1, n_t2 : int
         Grid dimensions
+    per_angle_scaling : bool
+        Use per-angle scaling for contrast and offset (default: True as of v2.4.0)
     **kwargs
         Additional arguments passed to generate_synthetic_xpcs_data
 
     Returns
     -------
     SyntheticXPCSData
-        Laminar flow synthetic data
+        Laminar flow synthetic data with per-angle scaling parameters
     """
+    # Build per-angle parameters
     params = {
-        "contrast": contrast,
-        "offset": offset,
         "D0": D0,
         "alpha": alpha,
         "D_offset": D_offset,
@@ -288,6 +388,11 @@ def generate_laminar_flow_dataset(
         "phi0": phi0,
     }
 
+    # Add per-angle contrast and offset parameters
+    for i in range(n_phi):
+        params[f"contrast_{i}"] = contrast
+        params[f"offset_{i}"] = offset
+
     return generate_synthetic_xpcs_data(
         ground_truth_params=params,
         n_phi=n_phi,
@@ -295,5 +400,6 @@ def generate_laminar_flow_dataset(
         n_t2=n_t2,
         noise_level=noise_level,
         analysis_mode="laminar_flow",
+        per_angle_scaling=per_angle_scaling,
         **kwargs,
     )

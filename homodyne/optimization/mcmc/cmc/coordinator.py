@@ -669,6 +669,13 @@ class CMCCoordinator:
             validation_diagnostics=validation_diagnostics,
             analysis_mode=analysis_mode,
             mcmc_config=mcmc_config,
+            # NEW v2.4.1: Pass data for fitted_data computation
+            t1=t1,
+            t2=t2,
+            phi=phi,
+            q=q,
+            L=L,
+            dt=self.config.get("dt", 0.001),
         )
 
         pipeline_time = time.time() - pipeline_start_time
@@ -796,6 +803,13 @@ class CMCCoordinator:
         validation_diagnostics: dict[str, Any],
         analysis_mode: str,
         mcmc_config: dict[str, Any],
+        # NEW v2.4.1: Additional data for fitted_data computation
+        t1: np.ndarray | None = None,
+        t2: np.ndarray | None = None,
+        phi: np.ndarray | None = None,
+        q: float | None = None,
+        L: float | None = None,
+        dt: float = 0.001,
     ) -> MCMCResult:
         """Package results into extended MCMCResult.
 
@@ -883,6 +897,90 @@ class CMCCoordinator:
         else:
             overall_acceptance_rate = None
 
+        # =====================================================================
+        # NEW v2.4.1: Compute ArviZ integration fields
+        # =====================================================================
+
+        # Compute 95% credible intervals from samples
+        ci_95_lower = np.percentile(samples_params, 2.5, axis=0)
+        ci_95_upper = np.percentile(samples_params, 97.5, axis=0)
+
+        # Determine number of phi angles for parameter naming
+        n_phi = 1
+        if phi is not None:
+            phi_unique = np.unique(np.asarray(phi))
+            n_phi = len(phi_unique)
+
+        # Generate parameter names based on analysis_mode and n_phi
+        if analysis_mode == "static":
+            base_names = ["D0", "alpha", "D_offset"]
+        elif analysis_mode == "laminar_flow":
+            base_names = [
+                "D0",
+                "alpha",
+                "D_offset",
+                "gamma_dot_t0",
+                "beta",
+                "gamma_dot_t_offset",
+                "phi0",
+            ]
+        else:
+            base_names = [f"param_{i}" for i in range(len(mean_params))]
+
+        # Build param_names with per-angle scaling params first
+        param_names = []
+        param_names.extend([f"contrast_{i}" for i in range(n_phi)])
+        param_names.extend([f"offset_{i}" for i in range(n_phi)])
+        param_names.extend(base_names)
+
+        # Compute fitted_data from posterior mean (if experimental data provided)
+        fitted_data = None
+        if all(v is not None for v in [t1, t2, phi, q, L]):
+            try:
+                from homodyne.core.jax_backend import compute_g2_scaled
+
+                # For fitted_data, use mean parameters
+                # The combined posterior includes per-angle scaling + physics params
+                # We need to compute g2 for each phi angle with its specific contrast/offset
+
+                # Get physics parameters (after per-angle scaling params)
+                physics_params = mean_params  # Already extracted from mean[2:]
+
+                # Compute fitted g2 for each phi angle
+                fitted_list = []
+                phi_unique = np.unique(np.asarray(phi))
+
+                for phi_idx, phi_val in enumerate(phi_unique):
+                    # Get per-angle contrast and offset from combined posterior
+                    contrast_idx = phi_idx
+                    offset_idx = n_phi + phi_idx
+                    phi_contrast = mean[contrast_idx]
+                    phi_offset = mean[offset_idx]
+
+                    # Compute g2 for this phi angle
+                    g2_fitted = compute_g2_scaled(
+                        params=jnp.array(physics_params),
+                        t1=jnp.array(t1),
+                        t2=jnp.array(t2),
+                        phi=jnp.full_like(jnp.array(t1), phi_val),
+                        q=q,
+                        L=L,
+                        contrast=float(phi_contrast),
+                        offset=float(phi_offset),
+                        dt=dt,
+                    )
+                    fitted_list.append(np.array(g2_fitted))
+
+                # Stack fitted data: shape (n_phi, n_t1, n_t2)
+                fitted_data = np.stack(fitted_list, axis=0)
+                logger.debug(
+                    f"Computed fitted_data from posterior mean: shape={fitted_data.shape}"
+                )
+
+            except Exception as e:
+                logger.warning(f"Failed to compute fitted_data: {e}")
+                fitted_data = None
+
         # Create MCMCResult
         result = MCMCResult(
             # Standard MCMC fields
@@ -911,6 +1009,11 @@ class CMCCoordinator:
             cmc_diagnostics=cmc_diagnostics,
             combination_method=combination_method,
             num_shards=num_shards,
+            # NEW v2.4.1: ArviZ integration fields
+            ci_95_lower=ci_95_lower,
+            ci_95_upper=ci_95_upper,
+            fitted_data=fitted_data,
+            param_names=param_names,
         )
 
         return result
