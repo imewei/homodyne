@@ -126,15 +126,10 @@ try:
         validate_c2_fitted_shape,
     )
     from homodyne.optimization.mcmc.single_angle import (
-        apply_surrogate_parameter_overrides,
-        build_log_d0_fallback_prior,
-        build_surrogate_settings,
+        build_log_d0_prior_config,
         estimate_single_angle_scaling,
-        get_deterministic_param_overrides,
-        get_surrogate_diagnostic_thresholds,
         is_single_angle_static,
         sample_log_d0,
-        should_use_log_sampling,
     )
 
     MCMC_EXTRACTION_AVAILABLE = True
@@ -194,16 +189,11 @@ __all__ = [
     "select_scaling_per_point",
     "validate_c2_fitted_shape",
     "apply_scaling_to_theory",
-    # MCMC single-angle utilities
+    # MCMC single-angle utilities (v2.4.1+: simplified, no tier system)
     "estimate_single_angle_scaling",
-    "build_surrogate_settings",
     "sample_log_d0",
     "is_single_angle_static",
-    "should_use_log_sampling",
-    "build_log_d0_fallback_prior",
-    "apply_surrogate_parameter_overrides",
-    "get_surrogate_diagnostic_thresholds",
-    "get_deterministic_param_overrides",
+    "build_log_d0_prior_config",
 ]
 
 

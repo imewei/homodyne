@@ -13,6 +13,9 @@ Expected results:
 - Log-space sampling should show higher ESS for D0
 - Log-space sampling should show R-hat closer to 1.0
 - Both samplings should recover ground-truth D0 accurately
+
+Updated (v2.4.1): Uses simplified API after tier system removal.
+All 5 parameters are now sampled for single-angle datasets.
 """
 
 import numpy as np
@@ -33,8 +36,8 @@ except ImportError:
 
 from homodyne.config.parameter_space import ParameterSpace
 from homodyne.optimization.mcmc import (
-    _build_single_angle_surrogate_settings,
     _create_numpyro_model,
+    build_log_d0_prior_config,
 )
 from tests.factories.synthetic_data import generate_synthetic_xpcs_data
 
@@ -81,23 +84,32 @@ def prepare_model_inputs(data):
     }
 
 
-def run_mcmc_sampling(model_inputs, param_space, use_log_space=True, tier="2"):
-    """Run MCMC sampling with specified configuration."""
-    # Build surrogate config
-    if use_log_space:
-        surrogate_cfg = _build_single_angle_surrogate_settings(param_space, tier)
-    else:
-        # Disable log-space sampling for comparison
-        surrogate_cfg = _build_single_angle_surrogate_settings(param_space, tier)
-        surrogate_cfg["sample_log_d0"] = False
+def run_mcmc_sampling(model_inputs, param_space, use_log_space=True):
+    """Run MCMC sampling with specified configuration.
 
-    # Create model
+    Parameters
+    ----------
+    model_inputs : dict
+        Model input arrays.
+    param_space : ParameterSpace
+        Parameter space configuration.
+    use_log_space : bool
+        If True, use log-space D0 sampling for single-angle.
+    """
+    # Build log-space D0 prior config if enabled
+    log_d0_prior_config = None
+    if use_log_space:
+        d0_bounds = param_space.get_bounds("D0")
+        d0_prior = param_space.get_prior("D0")
+        log_d0_prior_config = build_log_d0_prior_config(d0_bounds, d0_prior)
+
+    # Create model - samples ALL 5 parameters for single-angle
     model = _create_numpyro_model(
         **model_inputs,
         analysis_mode="static",
         parameter_space=param_space,
-        per_angle_scaling=False,
-        single_angle_surrogate_config=surrogate_cfg,
+        per_angle_scaling=True,  # Per-angle scaling even for single angle
+        log_d0_prior_config=log_d0_prior_config,
     )
 
     # Run MCMC
@@ -141,9 +153,7 @@ def test_log_space_sampling_improves_diagnostics():
 
     # Test log-space sampling (new implementation)
     print("Running MCMC with log-space D0 sampling...")
-    mcmc_log = run_mcmc_sampling(
-        model_inputs, param_space, use_log_space=True, tier="2"
-    )
+    mcmc_log = run_mcmc_sampling(model_inputs, param_space, use_log_space=True)
 
     # Extract diagnostics
     from numpyro.diagnostics import effective_sample_size, gelman_rubin
@@ -180,9 +190,11 @@ def test_log_space_sampling_improves_diagnostics():
     assert ess_log > 50, f"ESS too low: {ess_log:.1f} (expected > 50)"
     assert rhat_log < 1.2, f"R-hat too high: {rhat_log:.4f} (expected < 1.2)"
 
-    # Note: Parameter recovery accuracy depends on data quality and sample size
-    # The key result here is the excellent convergence diagnostics (high ESS, low R-hat)
-    # which demonstrates the improved sampling geometry of log-space sampling
+    # Verify all 5 parameters are sampled (v2.4.1 requirement)
+    expected_params = ["D0", "alpha", "D_offset", "contrast_0", "offset_0"]
+    for param in expected_params:
+        assert param in samples_log, f"Missing sampled parameter: {param}"
+    print(f"\n  ✓ All 5 parameters sampled: {list(samples_log.keys())}")
 
     print("\n" + "=" * 70)
     print("VERIFICATION PASSED")
@@ -196,6 +208,7 @@ def test_log_space_sampling_improves_diagnostics():
     print("  • Efficient exploration of D0 parameter space")
     print("  • Better MCMC geometry for scale parameters")
     print("  • Improved convergence diagnostics")
+    print("  • All 5 parameters sampled (no fixed parameters)")
     print("=" * 70)
 
 

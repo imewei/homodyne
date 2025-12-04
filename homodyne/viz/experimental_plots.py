@@ -174,7 +174,7 @@ def _plot_3d_experimental_data(
     fig, ax = plt.subplots(figsize=(10, 6))
 
     if t1 is not None:
-        time_diagonal = np.diag(t1)
+        time_diagonal = t1
     else:
         time_diagonal = np.arange(c2_exp.shape[-1])
 
@@ -186,9 +186,8 @@ def _plot_3d_experimental_data(
     ax.set_xlabel("Time (s)" if t1 is not None else "Time Index")
     ax.set_ylabel("C₂(t, t)")
     ax.set_title("C₂ Diagonal (t₁=t₂) for Different φ Angles")
-    ax.legend(ncol=2)
+    ax.legend(loc="best")
     ax.grid(True, alpha=0.3)
-    plt.tight_layout()
     plt.savefig(
         plots_dir / "experimental_data_diagonal.png",
         dpi=150,

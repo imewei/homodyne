@@ -144,127 +144,41 @@ def _estimate_single_angle_scaling(data: Any) -> tuple[float, float]:
     return contrast, offset
 
 
-def _build_single_angle_surrogate_settings(
-    parameter_space: ParameterSpace | None, tier: str
-) -> dict[str, Any]:
-    """Construct surrogate configuration for phi_count==1."""
+def _build_log_d0_prior_config(
+    parameter_space: ParameterSpace,
+) -> dict[str, float]:
+    """Build log-space prior configuration for D0 sampling.
 
-    if parameter_space is None or PriorDistribution is None:
-        return {}
+    For single-angle datasets, log-space D0 sampling provides better
+    MCMC geometry since diffusion coefficients span orders of magnitude.
 
-    tier_normalized = (tier or "2").strip()
-    # Tier 1: NLSQ-friendly mode (keeps all params, no log-space sampling)
-    # Tier 2-4: Difficult cases (drop D_offset, use log-space D0)
-    if tier_normalized not in {"1", "2", "3", "4"}:
-        tier_normalized = "2"
+    Parameters
+    ----------
+    parameter_space : ParameterSpace
+        Parameter space with D0 bounds and prior.
 
+    Returns
+    -------
+    dict[str, float]
+        Log-space prior configuration with keys: loc, scale, low, high.
+    """
     try:
         d0_bounds = parameter_space.get_bounds("D0")
         d0_prior = parameter_space.get_prior("D0")
     except KeyError:
-        return {}
+        # Fallback defaults
+        return {"loc": 7.0, "scale": 0.5, "low": 4.6, "high": 11.5}
 
-    # Tier 1 uses simplified setup - no log-space configuration needed
-    if tier_normalized == "1":
-        nuts_overrides = {
-            "target_accept_prob": 0.95,  # Less aggressive than tier 2
-            "max_tree_depth": 10,
-            "n_warmup": 1000,
-        }
-        diagnostic_thresholds = {
-            "focus_params": ["D0", "alpha", "D_offset"],
-            "min_ess": 20.0,
-            "max_rhat": 1.2,
-        }
-        return {
-            "tier": "1",
-            "drop_d_offset": False,  # Keep all 3 parameters
-            "sample_log_d0": False,  # Use standard linear-space sampling
-            "fixed_d_offset": None,  # Sample D_offset, don't fix it
-            "alpha_prior_override": None,  # Use default alpha prior
-            "fixed_alpha": None,
-            "fixed_d0_value": None,
-            "disable_reparam": True,
-            "nuts_overrides": nuts_overrides,
-            "diagnostic_thresholds": diagnostic_thresholds,
-        }
-
-    min_d0 = max(d0_bounds[0], 1e-6)
-    max_d0 = max(d0_bounds[1], min_d0 * 10.0)
-    if tier_normalized == "4":
-        constrained_max = max(min_d0 * 50.0, min_d0 * 2.0)
-        max_d0 = min(max_d0, constrained_max)
-
-    log_low = float(np.log(min_d0))
-    log_high = float(np.log(max_d0))
-
-    prior_mu_clamped = float(np.clip(d0_prior.mu, min_d0, max_d0))
-    if tier_normalized == "4":
-        prior_mu_clamped = min(prior_mu_clamped, max_d0 * 0.6)
-    log_loc = float(np.log(max(prior_mu_clamped, 1e-6)))
-    log_scale = 0.5
-
-    alpha_prior_override: PriorDistribution | None = None
-    fixed_alpha = None
-
-    log_scale = 0.5
-    trust_radius = None
-    sample_log_d0 = True
-
-    if tier_normalized == "2":
-        alpha_prior_override = PriorDistribution(
-            dist_type="TruncatedNormal",
-            mu=-1.0,
-            sigma=0.15,
-            min_val=-1.5,
-            max_val=0.5,
-        )
-        log_scale = 0.35
-    elif tier_normalized == "3":
-        fixed_alpha = -1.2
-        log_scale = 0.3
-    elif tier_normalized == "4":
-        # Tier-4: Keep log-space sampling but with tighter bounds
-        # Avoid deterministic clamp (fixed_d0_value) to enable proper MCMC
-        fixed_alpha = -1.2
-        log_scale = 0.12
-        trust_radius = None  # Remove trust_radius - not needed with ExpTransform
-        sample_log_d0 = True  # Changed from False - use log-space sampling
-
-    nuts_overrides = {
-        "target_accept_prob": 0.99 if tier_normalized == "2" else 0.995,
-        "max_tree_depth": 8 if tier_normalized == "2" else 6,
-        "n_warmup": 1500 if tier_normalized == "2" else 2000,
-    }
-    if tier_normalized == "4":
-        nuts_overrides.update({"max_tree_depth": 6, "n_warmup": 2000})
-
-    diagnostic_thresholds = {
-        "focus_params": ["D0", "alpha"],
-        "min_ess": 25.0 if tier_normalized == "2" else 40.0,
-        "max_rhat": 1.2,
-    }
-    if tier_normalized == "4":
-        diagnostic_thresholds["min_ess"] = 50.0
+    d0_min = max(d0_bounds[0], 1e-6)
+    d0_max = max(d0_bounds[1], d0_min * 10.0)
+    prior_mu_val = float(d0_prior.mu) if hasattr(d0_prior, "mu") else 1000.0
+    prior_mu_clamp = max(d0_min, min(d0_max, prior_mu_val))
 
     return {
-        "tier": tier_normalized,
-        "drop_d_offset": True,
-        "sample_log_d0": sample_log_d0,
-        "log_d0_prior": {
-            "loc": log_loc,
-            "scale": log_scale,
-            "low": log_low,
-            "high": log_high,
-            "trust_radius": trust_radius,
-        },
-        "alpha_prior_override": alpha_prior_override,
-        "fixed_alpha": fixed_alpha,
-        "fixed_d_offset": 0.0,
-        "fixed_d0_value": None,  # Removed tier-4 deterministic clamp
-        "disable_reparam": True,
-        "nuts_overrides": nuts_overrides,
-        "diagnostic_thresholds": diagnostic_thresholds,
+        "loc": float(np.log(prior_mu_clamp)),
+        "scale": 0.5,  # Reasonable default for log-space exploration
+        "low": float(np.log(d0_min)),
+        "high": float(np.log(d0_max)),
     }
 
 
@@ -1387,16 +1301,15 @@ def _run_standard_nuts(
         single_angle_static = (
             analysis_mode.lower().startswith("static") and n_unique_phi == 1
         )
+        # For single-angle: disable per-angle scaling, use scalar contrast/offset
+        # For multi-angle: enable per-angle scaling (N contrast + N offset params)
         per_angle_scaling_enabled = not single_angle_static
         single_angle_geom_priors = None
         t_reference_value = None
-        single_angle_scaling_override: dict[str, float] | None = None
-        single_angle_surrogate_cfg: dict[str, Any] | None = None
-        surrogate_tier_env = os.environ.get("HOMODYNE_SINGLE_ANGLE_TIER", "2")
+        log_d0_prior_config: dict[str, float] | None = None
         user_scaling_override = kwargs.pop("fixed_scaling_overrides", None)
 
         # Extract user-provided contrast/offset from initial_values if present
-        # This allows configured values to override data-derived percentiles
         if user_scaling_override is None and initial_values is not None:
             extracted_scaling = {}
             if "contrast" in initial_values:
@@ -1411,43 +1324,18 @@ def _run_standard_nuts(
                 )
 
         if single_angle_static:
+            # Single-angle static: Sample all 5 parameters (D0, alpha, D_offset, contrast, offset)
+            # Use log-space D0 sampling for better MCMC geometry
             logger.info(
-                "Single-angle static dataset detected → disabling per-angle scaling and enabling stabilized priors",
+                "Single-angle static dataset detected: sampling 5 parameters "
+                "(D0 in log-space, alpha, D_offset, contrast, offset)"
             )
             if not kwargs.get("stable_prior_fallback", False):
                 kwargs["stable_prior_fallback"] = True
-            try:
-                t1_array = _np.asarray(t1)
-                positive = t1_array[t1_array > 0]
-                if positive.size:
-                    t_reference_value = float(_np.median(positive))
-                elif t1_array.size:
-                    t_reference_value = float(_np.mean(_np.abs(t1_array)))
-            except Exception:  # noqa: BLE001 - heuristic fallback
-                t_reference_value = None
 
-            contrast_fixed, offset_fixed = _estimate_single_angle_scaling(data)
-            single_angle_scaling_override = {
-                "contrast": contrast_fixed,
-                "offset": offset_fixed,
-            }
-            logger.info(
-                "Single-angle fallback: fixing contrast=%.4f, offset=%.4f based on data percentiles",
-                contrast_fixed,
-                offset_fixed,
-            )
-
-        if user_scaling_override:
-            single_angle_scaling_override = {
-                key: float(value) for key, value in user_scaling_override.items()
-            }
-            logger.info(
-                "Single-angle fallback: using user-provided scaling overrides %s",
-                ", ".join(
-                    f"{name}={val:.4g}"
-                    for name, val in single_angle_scaling_override.items()
-                ),
-            )
+            # Build log-space D0 prior configuration
+            if parameter_space is not None:
+                log_d0_prior_config = _build_log_d0_prior_config(parameter_space)
 
         stable_prior_config = bool(kwargs.get("stable_prior_fallback", False))
         stable_prior_env = os.environ.get("HOMODYNE_STABLE_PRIOR", "0") == "1"
@@ -1464,46 +1352,8 @@ def _run_standard_nuts(
             single_angle_geom_priors = (
                 parameter_space.get_single_angle_geometry_config()
             )
-            if t_reference_value is not None:
-                single_angle_geom_priors["t_reference"] = t_reference_value
-            single_angle_surrogate_cfg = _build_single_angle_surrogate_settings(
-                parameter_space, surrogate_tier_env
-            )
-            if single_angle_surrogate_cfg:
-                logger.info(
-                    "Single-angle surrogate tier %s active (drop_d_offset=%s)",
-                    single_angle_surrogate_cfg.get("tier"),
-                    single_angle_surrogate_cfg.get("drop_d_offset"),
-                )
-                if single_angle_surrogate_cfg.get("drop_d_offset"):
-                    # Preserve D_offset value from initial_values before dropping it
-                    # This allows MCMC to use the NLSQ-fitted value instead of hardcoded 0.0
-                    if initial_values is not None and "D_offset" in initial_values:
-                        d_offset_from_init = initial_values.pop("D_offset")
-                        # Update surrogate config to use the initial value
-                        single_angle_surrogate_cfg["fixed_d_offset"] = float(
-                            d_offset_from_init
-                        )
-                        logger.info(
-                            "Using D_offset=%.4f from initial_values for single-angle surrogate (not sampled)",
-                            d_offset_from_init,
-                        )
-                    else:
-                        # Fallback to default if no initial value provided
-                        if initial_values is not None:
-                            initial_values.pop("D_offset", None)
-                    parameter_space = parameter_space.drop_parameters({"D_offset"})
-                alpha_override = single_angle_surrogate_cfg.get("alpha_prior_override")
-                if alpha_override is not None:
-                    parameter_space = parameter_space.with_prior_overrides(
-                        {"alpha": alpha_override}
-                    )
-                if (
-                    single_angle_surrogate_cfg.get("fixed_alpha") is not None
-                    and initial_values is not None
-                ):
-                    initial_values.pop("alpha", None)
 
+        # Count parameters for MCMC configuration
         per_angle_param_count = (
             len(phi_unique) * 2
             if phi_unique is not None and per_angle_scaling_enabled
@@ -1512,39 +1362,16 @@ def _run_standard_nuts(
         base_param_count = (
             len(parameter_space.parameter_names) if parameter_space else 0
         )
-        override_param_count = len(single_angle_scaling_override or {})
-        total_param_count = (
-            max(0, base_param_count - override_param_count) + per_angle_param_count
-        )
+        # For single-angle: 3 physical + 2 scaling = 5 params
+        # For multi-angle: 3 physical + 2N scaling = 3 + 2N params
+        total_param_count = base_param_count + per_angle_param_count
+        if single_angle_static:
+            total_param_count = 5  # D0, alpha, D_offset, contrast, offset
 
         # Configure MCMC parameters
         config_kwargs = dict(kwargs)
         config_kwargs.setdefault("n_params", total_param_count)
-        user_config_overrides = {
-            "n_warmup": config_kwargs.get("n_warmup") is not None,
-        }
         mcmc_config = _get_mcmc_config(config_kwargs)
-        if single_angle_surrogate_cfg:
-            nuts_overrides = single_angle_surrogate_cfg.get("nuts_overrides") or {}
-            if "target_accept_prob" in nuts_overrides:
-                mcmc_config["target_accept_prob"] = max(
-                    mcmc_config["target_accept_prob"],
-                    nuts_overrides["target_accept_prob"],
-                )
-            if "max_tree_depth" in nuts_overrides:
-                mcmc_config["max_tree_depth"] = min(
-                    mcmc_config["max_tree_depth"], nuts_overrides["max_tree_depth"]
-                )
-            if "n_warmup" in nuts_overrides and not user_config_overrides["n_warmup"]:
-                mcmc_config["n_warmup"] = max(
-                    mcmc_config["n_warmup"], nuts_overrides["n_warmup"]
-                )
-            logger.info(
-                "Single-angle NUTS overrides applied: target_accept=%.3f, max_tree_depth=%d, n_warmup=%d",
-                mcmc_config["target_accept_prob"],
-                mcmc_config["max_tree_depth"],
-                mcmc_config["n_warmup"],
-            )
 
         # Log initial values if provided (for MCMC chain initialization)
         if initial_values is not None:
@@ -1556,25 +1383,23 @@ def _run_standard_nuts(
         else:
             logger.info("MCMC chains will use default initialization (NumPyro random)")
 
-        # Only add reparameterization parameters if not disabled by surrogate config
-        # Tier 1 and others with disable_reparam=True skip this initialization
-        reparam_disabled = (
-            single_angle_surrogate_cfg
-            and single_angle_surrogate_cfg.get("disable_reparam", False)
-        )
-        if single_angle_static and initial_values is not None and not reparam_disabled:
-            d0_init = initial_values.get("D0")
-            d_offset_init = initial_values.get("D_offset")
-            if d0_init is not None and d_offset_init is not None:
-                center_value = d0_init + d_offset_init
-                if not np.isfinite(center_value) or center_value <= 0:
-                    center_value = max(1.0, abs(d0_init))
-                log_center_init = float(np.log(max(center_value, 1e-6)))
-                frac = d0_init / max(center_value, 1e-6)
-                frac = float(np.clip(frac, 1e-6, 5.0))
-                delta_raw_init = float(np.log(np.expm1(frac)))
-                initial_values.setdefault("log_D_center", log_center_init)
-                initial_values.setdefault("delta_raw", delta_raw_init)
+        # Transform D0 init to log-space for single-angle (uses TransformedDistribution)
+        # NumPyro expects init_params in the unconstrained (log) space, not linear space.
+        if (
+            single_angle_static
+            and log_d0_prior_config is not None
+            and initial_values is not None
+            and "D0" in initial_values
+        ):
+            d0_linear = initial_values["D0"]
+            if d0_linear is not None and d0_linear > 0:
+                d0_log = float(np.log(d0_linear))
+                initial_values["D0"] = d0_log
+                logger.info(
+                    "Transformed D0 init to log-space: D0=%.4g → log(D0)=%.4f",
+                    d0_linear,
+                    d0_log,
+                )
 
         logger.debug(
             "Stable prior fallback: enabled=%s (config=%s, env=%s)",
@@ -1599,8 +1424,8 @@ def _run_standard_nuts(
                 phi_full=phi,
                 per_angle_scaling=per_angle_scaling_enabled,
                 single_angle_reparam_config=single_angle_geom_priors,
-                fixed_scaling_overrides=single_angle_scaling_override,
-                single_angle_surrogate_config=single_angle_surrogate_cfg,
+                fixed_scaling_overrides=user_scaling_override,
+                log_d0_prior_config=log_d0_prior_config,
             )
 
         def _execute_sampling(space: ParameterSpace):
@@ -1636,40 +1461,15 @@ def _run_standard_nuts(
         if result is None:
             raise RuntimeError("MCMC sampling did not return a result")
 
-        # Process results
-        surrogate_thresholds = None
-        if single_angle_surrogate_cfg:
-            diag_cfg = single_angle_surrogate_cfg.get("diagnostic_thresholds") or {}
-            surrogate_thresholds = {
-                "active": True,
-                "focus_params": diag_cfg.get("focus_params") or ["D0", "alpha"],
-                "min_ess": float(diag_cfg.get("min_ess", 25.0)),
-                "max_rhat": float(diag_cfg.get("max_rhat", 1.2)),
-            }
-
-        deterministic_param_overrides: set[str] = set()
-        if single_angle_scaling_override:
-            deterministic_param_overrides.update(single_angle_scaling_override.keys())
-        if single_angle_surrogate_cfg:
-            if (
-                single_angle_surrogate_cfg.get("drop_d_offset")
-                or single_angle_surrogate_cfg.get("fixed_d_offset") is not None
-            ):
-                deterministic_param_overrides.add("D_offset")
-            if single_angle_surrogate_cfg.get("fixed_alpha") is not None:
-                deterministic_param_overrides.add("alpha")
-            if single_angle_surrogate_cfg.get("fixed_d0_value") is not None:
-                deterministic_param_overrides.add("D0")
-
+        # Process results - no parameters are fixed, all are sampled
         diag_settings = {
             "max_rhat": mcmc_config.get("max_rhat_threshold", 1.1),
             "min_ess": mcmc_config.get("min_ess_threshold", 100),
             "check_hmc_diagnostics": mcmc_config.get("check_hmc_diagnostics", True),
-            "single_angle_surrogate": single_angle_surrogate_cfg,
-            "scaling_overrides": single_angle_scaling_override or {},
+            "scaling_overrides": user_scaling_override or {},
             "expected_params": _get_physical_param_order(analysis_mode),
-            "deterministic_params": sorted(deterministic_param_overrides),
-            "surrogate_thresholds": surrogate_thresholds,
+            "deterministic_params": [],
+            "single_angle_static": single_angle_static,
         }
 
         posterior_summary = _process_posterior_samples(
@@ -1723,7 +1523,6 @@ def _run_standard_nuts(
         diag_summary = posterior_summary.get("diagnostic_summary", {})
         result_obj.diagnostic_summary = diag_summary
         result_obj.deterministic_params = diag_summary.get("deterministic_params", [])
-        result_obj.surrogate_thresholds = surrogate_thresholds
 
         return result_obj
 
@@ -1887,12 +1686,14 @@ def _get_mcmc_config(kwargs: dict[str, Any]) -> dict[str, Any]:
 def _evaluate_convergence_thresholds(
     result: Any, default_max_rhat: float = 1.1, default_min_ess: float = 100.0
 ) -> dict[str, Any]:
-    """Assess convergence metrics with surrogate-aware thresholds."""
+    """Assess MCMC convergence metrics against thresholds.
 
+    Evaluates R-hat and ESS for all sampled parameters, excluding
+    deterministic parameters from the assessment.
+    """
     diag_summary = getattr(result, "diagnostic_summary", {}) or {}
     deterministic_params = set(diag_summary.get("deterministic_params") or [])
     per_param_stats = diag_summary.get("per_param_stats") or {}
-    surrogate_ctx = diag_summary.get("surrogate_thresholds") or {}
 
     def _collect_stat(values: list[float], reducer, default_value):
         finite_vals = [v for v in values if v is not None and np.isfinite(v)]
@@ -1923,37 +1724,9 @@ def _evaluate_convergence_thresholds(
         "max_rhat": default_max_rhat,
         "min_ess": default_min_ess,
     }
-    poor_rhat = False
-    poor_ess = False
-    focus_details: dict[str, dict[str, Any]] = {}
 
-    if surrogate_ctx.get("active"):
-        thresholds.update(
-            {
-                "mode": "single_angle_surrogate",
-                "max_rhat": float(surrogate_ctx.get("max_rhat", default_max_rhat)),
-                "min_ess": float(surrogate_ctx.get("min_ess", default_min_ess)),
-            }
-        )
-        focus_params = (
-            surrogate_ctx.get("focus_params") or diag_summary.get("focus_params") or []
-        )
-        for name in focus_params:
-            stats = per_param_stats.get(name, {})
-            focus_details[name] = stats
-            if stats.get("deterministic"):
-                continue
-            rhat_val = stats.get("r_hat")
-            ess_val = stats.get("ess")
-            if rhat_val is not None and rhat_val > thresholds["max_rhat"]:
-                poor_rhat = True
-            if ess_val is None or ess_val < thresholds["min_ess"]:
-                poor_ess = True
-    else:
-        if max_rhat is not None and max_rhat > thresholds["max_rhat"]:
-            poor_rhat = True
-        if min_ess is not None and min_ess < thresholds["min_ess"]:
-            poor_ess = True
+    poor_rhat = max_rhat is not None and max_rhat > thresholds["max_rhat"]
+    poor_ess = min_ess is not None and min_ess < thresholds["min_ess"]
 
     return {
         "poor_rhat": poor_rhat,
@@ -1962,7 +1735,6 @@ def _evaluate_convergence_thresholds(
         "min_ess_observed": min_ess,
         "thresholds": thresholds,
         "deterministic_params": deterministic_params,
-        "focus_param_details": focus_details,
     }
 
 
@@ -1982,7 +1754,7 @@ def _create_numpyro_model(
     per_angle_scaling=True,  # Default True: Physically correct per-angle scaling
     single_angle_reparam_config: dict[str, float] | None = None,
     fixed_scaling_overrides: dict[str, float] | None = None,
-    single_angle_surrogate_config: dict[str, Any] | None = None,
+    log_d0_prior_config: dict[str, float] | None = None,
 ):
     """Create NumPyro probabilistic model using config-driven priors.
 
@@ -2041,15 +1813,12 @@ def _create_numpyro_model(
         When provided (phi_count == 1 static mode), enables the centered diffusion
         reparameterization using keys emitted by
         ``ParameterSpace.get_single_angle_geometry_config``.
-    single_angle_surrogate_config : dict, optional
-        Configuration for reduced-dimension single-angle surrogate models.
-        Allows deterministic/fixed parameters and log-space sampling when
-        ``phi_count == 1`` without affecting multi-angle execution paths.
     fixed_scaling_overrides : dict, optional
-        Deterministic values for scaling parameters (contrast/offset) used when
-        single-angle fallback removes those degrees of freedom. When provided,
-        the corresponding parameters are emitted as deterministic nodes instead
-        of sampled latents, so NUTS no longer explores those dimensions.
+        User-provided values for scaling parameters (contrast/offset).
+    log_d0_prior_config : dict, optional
+        Configuration for log-space D0 sampling in single-angle mode.
+        When provided, D0 is sampled via TransformedDistribution with ExpTransform
+        for better MCMC geometry. Keys: loc, scale, low, high (all in log-space).
 
     Returns
     -------
@@ -2163,7 +1932,6 @@ def _create_numpyro_model(
         target_dtype = jnp.float64
 
     reparam_cfg = {}
-    surrogate_cfg = {}
     use_single_angle_reparam = False
     log_center_loc = 8.0
     log_center_scale = 1.0
@@ -2193,12 +1961,9 @@ def _create_numpyro_model(
     single_angle_static_mode = analysis_lower.startswith("static") and n_phi == 1
 
     reparam_cfg = dict(single_angle_reparam_config or {})
-    surrogate_cfg = single_angle_surrogate_config or {}
     if single_angle_static_mode:
         reparam_cfg["enabled"] = False
-    use_single_angle_reparam = bool(
-        reparam_cfg.get("enabled")
-    ) and not surrogate_cfg.get("disable_reparam", False)
+    use_single_angle_reparam = bool(reparam_cfg.get("enabled"))
     log_center_loc = float(reparam_cfg.get("log_center_loc", 8.0))
     log_center_scale = max(0.1, float(reparam_cfg.get("log_center_scale", 1.0)))
     delta_loc = float(reparam_cfg.get("delta_loc", 0.0))
@@ -2321,39 +2086,16 @@ def _create_numpyro_model(
             }
 
         for i, param_name in enumerate(param_names_ordered):
-            if surrogate_cfg.get("fixed_d0_value") is not None and param_name == "D0":
-                value = jnp.asarray(surrogate_cfg["fixed_d0_value"], dtype=target_dtype)
-                sampled_values[param_name] = value
-                deterministic("D0", value)
-                continue
+            # For single-angle static: use log-space D0 sampling for better MCMC geometry
             if (
-                surrogate_cfg.get("sample_log_d0")
+                log_d0_prior_config is not None
                 and param_name == "D0"
-                and surrogate_cfg.get("log_d0_prior") is not None
+                and single_angle_static_mode
             ):
-                log_prior = surrogate_cfg["log_d0_prior"]
-                # _sample_single_angle_log_d0 now returns D0 in linear space
+                # _sample_single_angle_log_d0 returns D0 in linear space
                 # (already exp-transformed via ExpTransform)
-                d0_value = _sample_single_angle_log_d0(log_prior, target_dtype)
+                d0_value = _sample_single_angle_log_d0(log_d0_prior_config, target_dtype)
                 sampled_values[param_name] = d0_value
-                # No need for additional deterministic node - already emitted in function
-                continue
-            if surrogate_cfg.get("fixed_alpha") is not None and param_name == "alpha":
-                alpha_value = jnp.asarray(
-                    surrogate_cfg["fixed_alpha"], dtype=target_dtype
-                )
-                sampled_values[param_name] = alpha_value
-                deterministic("alpha", alpha_value)
-                continue
-            if (
-                surrogate_cfg.get("fixed_d_offset") is not None
-                and param_name == "D_offset"
-            ):
-                d_offset_value = jnp.asarray(
-                    surrogate_cfg["fixed_d_offset"], dtype=target_dtype
-                )
-                sampled_values[param_name] = d_offset_value
-                deterministic("D_offset", d_offset_value)
                 continue
             if param_name in scaling_overrides and not per_angle_scaling:
                 value = jnp.asarray(scaling_overrides[param_name], dtype=target_dtype)
@@ -2395,12 +2137,6 @@ def _create_numpyro_model(
                         f"and no default available. Available parameters: "
                         f"{list(parameter_space.priors.keys())}"
                     )
-
-            if (
-                surrogate_cfg.get("alpha_prior_override") is not None
-                and param_name == "alpha"
-            ):
-                prior_spec = surrogate_cfg["alpha_prior_override"]
 
             # Get NumPyro distribution class
             dist_class = DIST_TYPE_MAP.get(
@@ -2450,50 +2186,6 @@ def _create_numpyro_model(
                 dist_kwargs["high"] = jnp.asarray(
                     dist_kwargs["high"], dtype=target_dtype
                 )
-
-            # Tier 1 uses standard linear-space sampling, no log-space conversion needed
-            # Only use alternative log-space sampling for cases without surrogate log sampling
-            tier_allows_log_fallback = surrogate_cfg.get("tier") != "1"
-            single_angle_log_sampling = (
-                single_angle_static_mode
-                and param_name == "D0"
-                and parameter_space is not None
-                and not surrogate_cfg.get("sample_log_d0")
-                and surrogate_cfg.get("fixed_d0_value") is None
-                and not reparam_active
-                and tier_allows_log_fallback  # Don't use for tier 1
-            )
-            if single_angle_log_sampling:
-                d0_bounds = parameter_space.get_bounds("D0")
-                import numpy as _np
-
-                # Extract concrete values from prior_spec (NOT from dist_kwargs which can be traced)
-                # prior_spec contains Python floats from configuration, safe to use directly
-                linear_loc = float(getattr(prior_spec, "mu", d0_bounds[0]))
-                linear_scale = abs(
-                    float(
-                        getattr(prior_spec, "sigma", (d0_bounds[1] - d0_bounds[0]) / 4.0)
-                    )
-                )
-                linear_low = max(float(getattr(prior_spec, "min_val", d0_bounds[0])), 1e-6)
-                linear_high = max(
-                    float(getattr(prior_spec, "max_val", d0_bounds[1])),
-                    linear_low + 1e-6,
-                )
-
-                # Build log-space prior configuration from concrete Python floats
-                log_prior_cfg = {
-                    "loc": float(_np.log(max(linear_loc, 1e-6))),
-                    "scale": float(
-                        _np.clip(linear_scale / max(linear_loc, 1e-6), 1e-6, 5.0)
-                    ),
-                    "low": float(_np.log(max(linear_low, 1e-6))),
-                    "high": float(_np.log(max(linear_high, linear_low + 1e-6))),
-                }
-
-                d0_value = _sample_single_angle_log_d0(log_prior_cfg, target_dtype)
-                sampled_values[param_name] = d0_value
-                continue
 
             dist_instance = None
             if prior_spec.dist_type == "BetaScaled":
@@ -3640,18 +3332,10 @@ def _process_posterior_samples(
     samples: dict[str, Any] = {}
     invalid_params: list[str] = []
     scaling_overrides = diagnostic_settings.get("scaling_overrides") or {}
-    surrogate_cfg = diagnostic_settings.get("single_angle_surrogate") or {}
     deterministic_params: set[str] = set(
         diagnostic_settings.get("deterministic_params") or []
     )
     deterministic_params.update(scaling_overrides.keys())
-    if (
-        surrogate_cfg.get("drop_d_offset")
-        or surrogate_cfg.get("fixed_d_offset") is not None
-    ):
-        deterministic_params.add("D_offset")
-    if surrogate_cfg.get("fixed_alpha") is not None:
-        deterministic_params.add("alpha")
     constructed_deterministic: set[str] = set()
 
     for param_name, param_values in raw_samples.items():
@@ -3681,14 +3365,6 @@ def _process_posterior_samples(
         elif "single_angle_log_d0_value" in samples:
             samples["D0"] = jnp.exp(samples["single_angle_log_d0_value"])
 
-    if "D_offset" not in samples and surrogate_cfg.get("fixed_d_offset") is not None:
-        fixed_offset = float(surrogate_cfg["fixed_d_offset"])
-        if sample_count:
-            samples["D_offset"] = jnp.full(
-                (sample_count,), fixed_offset, dtype=jnp.float64
-            )
-            constructed_deterministic.add("D_offset")
-
     def _ensure_param_array(name: str) -> jnp.ndarray | None:
         arr = samples.get(name)
         if arr is None:
@@ -3700,23 +3376,11 @@ def _process_posterior_samples(
     used_param_names: list[str] = []
     for param_name in expected_params:
         arr = _ensure_param_array(param_name)
-        filled_constant = False
         if arr is None:
-            if (
-                param_name == "D_offset"
-                and surrogate_cfg.get("fixed_d_offset") is not None
-            ):
-                fixed_offset = float(surrogate_cfg["fixed_d_offset"])
-                arr = jnp.full((sample_count,), fixed_offset, dtype=jnp.float64)
-                samples[param_name] = arr
-                filled_constant = True
-            else:
-                logger.debug("Skipping missing parameter '%s' in summary", param_name)
-                continue
+            logger.debug("Skipping missing parameter '%s' in summary", param_name)
+            continue
         param_arrays.append(arr)
         used_param_names.append(param_name)
-        if filled_constant:
-            constructed_deterministic.add(param_name)
 
     if param_arrays:
         param_samples = jnp.column_stack(param_arrays)
@@ -3918,10 +3582,6 @@ def _process_posterior_samples(
         "deterministic_params": sorted(deterministic_params),
         "per_param_stats": per_param_stats,
         "multi_chain": multi_chain,
-        "surrogate_thresholds": diagnostic_settings.get("surrogate_thresholds"),
-        "focus_params": (
-            (diagnostic_settings.get("surrogate_thresholds") or {}).get("focus_params")
-        ),
     }
 
     return {

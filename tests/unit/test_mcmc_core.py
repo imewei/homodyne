@@ -63,7 +63,6 @@ from homodyne.config.parameter_space import ParameterSpace, PriorDistribution
 from homodyne.device.config import HardwareConfig
 from homodyne.optimization.mcmc import (
     MCMCResult,
-    _build_single_angle_surrogate_settings,
     _calculate_midpoint_defaults,
     _create_numpyro_model,
     _estimate_single_angle_scaling,
@@ -71,6 +70,7 @@ from homodyne.optimization.mcmc import (
     _format_init_params_for_chains,
     _get_mcmc_config,
     _process_posterior_samples,
+    build_log_d0_prior_config,
     fit_mcmc_jax,
 )
 from tests.factories.synthetic_data import generate_synthetic_xpcs_data
@@ -846,13 +846,18 @@ class TestNumPyroModelCreation:
         assert float(trace["contrast"]["value"]) == pytest.approx(0.05)
         assert float(trace["offset"]["value"]) == pytest.approx(0.97)
 
-    def test_single_angle_surrogate_initializes_and_runs(
+    def test_single_angle_log_d0_sampling_initializes_and_runs(
         self, simple_data, static_parameter_space
     ):
-        surrogate_cfg = _build_single_angle_surrogate_settings(
-            static_parameter_space, tier="2"
-        )
-        assert surrogate_cfg, "Surrogate config should be constructed for tier 2"
+        """Test log-space D0 sampling for single-angle static mode (v2.4.1+).
+
+        This tests the simplified API where all 5 parameters are sampled
+        (no tier system).
+        """
+        # Build log-space D0 prior config
+        d0_bounds = static_parameter_space.get_bounds("D0")
+        d0_prior = static_parameter_space.get_prior("D0")
+        log_d0_prior_config = build_log_d0_prior_config(d0_bounds, d0_prior)
 
         model = _create_numpyro_model(
             data=simple_data["data"],
@@ -865,14 +870,14 @@ class TestNumPyroModelCreation:
             analysis_mode="static",
             parameter_space=static_parameter_space,
             dt=simple_data["dt"],
-            per_angle_scaling=False,
-            fixed_scaling_overrides={"contrast": 0.05, "offset": 1.0},
-            single_angle_surrogate_config=surrogate_cfg,
+            per_angle_scaling=True,  # Per-angle scaling for single angle
+            log_d0_prior_config=log_d0_prior_config,
         )
 
         seeded = handlers.seed(model, random.PRNGKey(0))
         trace = handlers.trace(seeded).get_trace()
 
+        # Verify log-space D0 sampling creates the latent variable
         assert "log_D0_latent" in trace
         assert trace["log_D0_latent"]["type"] == "deterministic"
 
@@ -886,16 +891,22 @@ class TestNumPyroModelCreation:
         )
         mcmc.run(random.PRNGKey(1))
         samples = mcmc.get_samples()
-        assert "log_D0_latent" in samples
-        assert "alpha" in samples
 
-    def test_single_angle_surrogate_tier4_trust_region(
+        # Verify all 5 parameters are sampled
+        assert "D0" in samples
+        assert "alpha" in samples
+        assert "D_offset" in samples
+        assert "contrast_0" in samples
+        assert "offset_0" in samples
+        assert "log_D0_latent" in samples
+
+    def test_single_angle_log_d0_bounds_respected(
         self, simple_data, static_parameter_space
     ):
-        surrogate_cfg = _build_single_angle_surrogate_settings(
-            static_parameter_space, tier="4"
-        )
-        assert surrogate_cfg.get("fixed_d0_value") is None
+        """Test that log-space D0 sampling respects bounds."""
+        d0_bounds = static_parameter_space.get_bounds("D0")
+        d0_prior = static_parameter_space.get_prior("D0")
+        log_d0_prior_config = build_log_d0_prior_config(d0_bounds, d0_prior)
 
         model = _create_numpyro_model(
             data=simple_data["data"],
@@ -908,17 +919,16 @@ class TestNumPyroModelCreation:
             analysis_mode="static",
             parameter_space=static_parameter_space,
             dt=simple_data["dt"],
-            per_angle_scaling=False,
-            fixed_scaling_overrides={"contrast": 0.05, "offset": 1.0},
-            single_angle_surrogate_config=surrogate_cfg,
+            per_angle_scaling=True,
+            log_d0_prior_config=log_d0_prior_config,
         )
 
         predictive = Predictive(model, num_samples=50)
         samples = predictive(random.PRNGKey(5))
         d0_samples = np.array(samples["D0"])
-        log_prior = surrogate_cfg["log_d0_prior"]
-        d0_min = np.exp(log_prior["low"])
-        d0_max = np.exp(log_prior["high"])
+        d0_min = np.exp(log_d0_prior_config["low"])
+        d0_max = np.exp(log_d0_prior_config["high"])
+        # Allow small tolerance for numerical precision
         assert np.all(d0_samples >= d0_min * 0.9)
         assert np.all(d0_samples <= d0_max * 1.1)
 
@@ -969,7 +979,7 @@ class TestNumPyroModelCreation:
         self, simple_data, static_parameter_space
     ):
         """Test that prior distributions match ParameterSpace specification."""
-        # Use tier="1" to disable log-space D0 sampling and test linear-space behavior
+        # Don't provide log_d0_prior_config to test linear-space D0 sampling
         model = _create_numpyro_model(
             data=simple_data["data"],
             sigma=simple_data["sigma"],
@@ -981,7 +991,7 @@ class TestNumPyroModelCreation:
             analysis_mode="static",
             parameter_space=static_parameter_space,
             dt=simple_data["dt"],
-            single_angle_surrogate_config={"tier": "1"},  # Disable log-space D0 sampling
+            per_angle_scaling=True,
         )
 
         # Sample many times from prior predictive
@@ -1588,8 +1598,8 @@ class TestBackwardCompatibility:
             "n_samples": 1000,
             "sampler": "NUTS",
             "acceptance_rate": 0.85,
-            "r_hat": {"D0": 1.01, "alpha": 1.02},
-            "effective_sample_size": {"D0": 800, "alpha": 750},
+            "r_hat": 1.02,  # Scalar r_hat (max across parameters)
+            "effective_sample_size": 750.0,  # Scalar ESS (min across parameters)
             # No CMC fields
         }
 
@@ -1600,6 +1610,8 @@ class TestBackwardCompatibility:
         assert np.allclose(result.mean_params, [100.0, 1.5, 10.0])
         assert result.mean_contrast == 0.5
         assert result.converged is True
+        assert result.r_hat == 1.02
+        assert result.effective_sample_size == 750.0
 
         # CMC fields default to None
         assert result.num_shards is None
@@ -1647,7 +1659,7 @@ class TestIsCMCResult:
             mean_contrast=0.5,
             mean_offset=1.0,
             num_shards=5,
-            combination_method="weighted",
+            combination_method="precision_weighted",
             per_shard_diagnostics=[
                 {"shard_id": 0, "converged": True},
                 {"shard_id": 1, "converged": True},
@@ -1655,7 +1667,7 @@ class TestIsCMCResult:
             cmc_diagnostics={"combination_success": True},
         )
         assert result.is_cmc_result() is True
-        assert result.combination_method == "weighted"
+        assert result.combination_method == "precision_weighted"
 
 
 class TestCMCFieldsPreservation:
@@ -1744,7 +1756,7 @@ class TestSerialization:
             mean_offset=1.0,
             std_params=np.array([5.0, 0.1, 0.5]),
             num_shards=5,
-            combination_method="weighted",
+            combination_method="precision_weighted",
             per_shard_diagnostics=[
                 {"shard_id": 0, "converged": True},
                 {"shard_id": 1, "converged": True},
@@ -1760,7 +1772,7 @@ class TestSerialization:
 
         # CMC fields
         assert data["num_shards"] == 5
-        assert data["combination_method"] == "weighted"
+        assert data["combination_method"] == "precision_weighted"
         assert len(data["per_shard_diagnostics"]) == 2
         assert data["cmc_diagnostics"]["combination_success"] is True
 
@@ -1791,7 +1803,7 @@ class TestSerialization:
             "effective_sample_size": None,
             # CMC fields
             "num_shards": 10,
-            "combination_method": "weighted",
+            "combination_method": "precision_weighted",
             "per_shard_diagnostics": [
                 {"shard_id": 0, "converged": True, "acceptance_rate": 0.85},
                 {"shard_id": 1, "converged": True, "acceptance_rate": 0.82},
@@ -1813,7 +1825,7 @@ class TestSerialization:
         # CMC fields
         assert result.is_cmc_result() is True
         assert result.num_shards == 10
-        assert result.combination_method == "weighted"
+        assert result.combination_method == "precision_weighted"
         assert len(result.per_shard_diagnostics) == 2
         assert result.cmc_diagnostics["n_shards_converged"] == 9
 
@@ -1828,7 +1840,7 @@ class TestSerialization:
             samples_contrast=np.array([0.49, 0.51]),
             samples_offset=np.array([0.98, 1.02]),
             num_shards=5,
-            combination_method="average",
+            combination_method="simple_average",
             per_shard_diagnostics=[
                 {"shard_id": i, "converged": True} for i in range(5)
             ],
@@ -1860,7 +1872,7 @@ class TestSerialization:
             mean_contrast=0.5,
             mean_offset=1.0,
             num_shards=3,
-            combination_method="weighted",
+            combination_method="precision_weighted",
             cmc_diagnostics={"combination_success": True},
         )
 
@@ -1917,10 +1929,10 @@ class TestNoneDefaults:
             mean_params=np.array([1.0]),
             mean_contrast=0.5,
             mean_offset=1.0,
-            combination_method="weighted",
+            combination_method="precision_weighted",
         )
         assert result2.is_cmc_result() is False  # Not CMC without num_shards
-        assert result2.combination_method == "weighted"  # But field is set
+        assert result2.combination_method == "precision_weighted"  # But field is set
 
 
 class TestEdgeCases:
@@ -2345,7 +2357,7 @@ class TestMCMCResultStructure:
             mean_offset=1.0,
             converged=True,
             num_shards=10,
-            combination_method="weighted",
+            combination_method="precision_weighted",
             per_shard_diagnostics=[{"shard_id": 0, "converged": True}],
         )
 
@@ -2459,13 +2471,18 @@ class TestProcessPosteriorSamples:
         assert math.isclose(summary["mean_offset"], float(jnp.mean(samples["offset"])))
 
     @pytest.mark.filterwarnings("ignore:divide by zero")
-    def test_single_angle_surrogate_samples_are_supported(self):
+    def test_log_d0_latent_converted_to_d0(self):
+        """Test that log_D0_latent samples are converted to D0 (v2.4.1+).
+
+        This tests the simplified path where all parameters are sampled.
+        """
         log_d0 = jnp.array([1.0, 1.1, 0.9])
         samples = {
             "log_D0_latent": log_d0,
             "alpha": jnp.array([-1.2, -1.1, -1.15]),
-            "contrast": jnp.array([0.05, 0.051, 0.049]),
-            "offset": jnp.array([1.0, 1.0, 1.0]),
+            "D_offset": jnp.array([0.01, 0.02, 0.015]),
+            "contrast_0": jnp.array([0.05, 0.051, 0.049]),
+            "offset_0": jnp.array([1.0, 1.0, 1.0]),
         }
         grouped = {
             key: jnp.reshape(value, (1,) + value.shape)
@@ -2478,60 +2495,65 @@ class TestProcessPosteriorSamples:
             "max_rhat": 10.0,
             "min_ess": 0,
             "check_hmc_diagnostics": True,
-            "single_angle_surrogate": {
-                "drop_d_offset": True,
-                "fixed_d_offset": 0.0,
-                "sample_log_d0": True,
-            },
             "expected_params": ["D0", "alpha", "D_offset"],
         }
 
         summary = _process_posterior_samples(dummy, "static", diag_settings)
 
+        # D0 should be derived from log_D0_latent via exp()
         assert "D0" in summary["samples"]
         assert math.isclose(
             float(summary["samples"]["D0"][0]), float(jnp.exp(log_d0[0]))
         )
+        # All parameters should be in the summary
         assert summary["param_names"] == ["D0", "alpha", "D_offset"]
         assert summary["mean_params"].shape[0] == 3
-        assert math.isclose(summary["mean_params"][2], 0.0, abs_tol=1e-9)
-        assert summary["ess"]["log_D0_latent"] is not None
-        assert summary["ess"]["D_offset"] is None
-        assert "D_offset" in summary["deterministic_params"]
-        assert summary["diagnostic_summary"]["per_param_stats"]["D_offset"][
-            "deterministic"
-        ]
+        # D_offset should be sampled, not fixed (no deterministic params in v2.4.1+)
+        assert len(summary["deterministic_params"]) == 0
 
-    def test_surrogate_thresholds_focus_on_physics_parameters(self):
+    def test_convergence_thresholds_evaluates_physics_parameters(self):
+        """Test that convergence thresholds evaluate non-deterministic params.
+
+        v2.4.1: Tier system removed. Simplified threshold evaluation now
+        checks all sampled parameters without focus_param logic.
+        """
         dummy = SimpleNamespace()
-        dummy.r_hat = {"D0": 1.05, "alpha": None, "D_offset": None}
-        dummy.effective_sample_size = {"D0": 22.0, "alpha": 5.0, "D_offset": None}
+        dummy.r_hat = {"D0": 1.05, "alpha": 1.02, "D_offset": 1.03}
+        dummy.effective_sample_size = {"D0": 22.0, "alpha": 5.0, "D_offset": 50.0}
         dummy.diagnostic_summary = {
-            "deterministic_params": ["D_offset"],
+            "deterministic_params": [],
             "per_param_stats": {
                 "D0": {"r_hat": 1.05, "ess": 22.0, "deterministic": False},
-                "alpha": {"r_hat": None, "ess": 5.0, "deterministic": False},
-                "D_offset": {"r_hat": None, "ess": None, "deterministic": True},
-            },
-            "surrogate_thresholds": {
-                "active": True,
-                "focus_params": ["D0", "alpha"],
-                "min_ess": 20.0,
-                "max_rhat": 1.2,
+                "alpha": {"r_hat": 1.02, "ess": 5.0, "deterministic": False},
+                "D_offset": {"r_hat": 1.03, "ess": 50.0, "deterministic": False},
             },
         }
 
         report = _evaluate_convergence_thresholds(dummy, 1.1, 100)
 
+        # R-hat 1.05 < 1.1 threshold, so no poor R-hat
         assert report["poor_rhat"] is False
-        assert report["poor_ess"] is True  # alpha ESS violates surrogate threshold
-        assert "alpha" in report["focus_param_details"]
+        # ESS 5.0 < 100 threshold, so poor ESS
+        assert report["poor_ess"] is True
+        # Min ESS observed should be 5.0 (from alpha)
+        assert report["min_ess_observed"] == 5.0
+        # Max R-hat observed should be 1.05 (from D0)
+        assert report["max_rhat_observed"] == 1.05
+        # Thresholds should use defaults
+        assert report["thresholds"]["mode"] == "default"
+        assert report["thresholds"]["max_rhat"] == 1.1
+        assert report["thresholds"]["min_ess"] == 100.0
 
 
-def test_diagnostics_json_surfaces_surrogate_metrics():
+def test_diagnostics_json_surfaces_per_param_metrics():
+    """Test that diagnostics JSON includes per-parameter metrics.
+
+    v2.4.1: Tier system removed. Diagnostics now show per-parameter
+    stats without surrogate_thresholds structure.
+    """
     result = SimpleNamespace()
-    result.r_hat = {"D0": 1.07, "alpha": None, "D_offset": None}
-    result.effective_sample_size = {"D0": 30.0, "alpha": 8.0, "D_offset": None}
+    result.r_hat = {"D0": 1.07, "alpha": 1.02, "D_offset": 1.01}
+    result.effective_sample_size = {"D0": 30.0, "alpha": 8.0, "D_offset": 50.0}
     result.acceptance_rate = 0.9
     result.divergences = 0
     result.tree_depth_warnings = 0
@@ -2540,17 +2562,11 @@ def test_diagnostics_json_surfaces_surrogate_metrics():
     result.n_chains = 1
     result.analysis_mode = "static"
     result.diagnostic_summary = {
-        "deterministic_params": ["D_offset"],
+        "deterministic_params": [],
         "per_param_stats": {
             "D0": {"r_hat": 1.07, "ess": 30.0, "deterministic": False},
-            "alpha": {"r_hat": None, "ess": 8.0, "deterministic": False},
-            "D_offset": {"r_hat": None, "ess": None, "deterministic": True},
-        },
-        "surrogate_thresholds": {
-            "active": True,
-            "focus_params": ["D0", "alpha"],
-            "min_ess": 25.0,
-            "max_rhat": 1.2,
+            "alpha": {"r_hat": 1.02, "ess": 8.0, "deterministic": False},
+            "D_offset": {"r_hat": 1.01, "ess": 50.0, "deterministic": False},
         },
     }
 
@@ -2560,37 +2576,53 @@ def test_diagnostics_json_surfaces_surrogate_metrics():
         for entry in diag["convergence"]["per_parameter_diagnostics"]
     }
 
-    assert per_param["alpha"]["r_hat"] is None
-    assert per_param["D_offset"]["deterministic"] is True
-    assert "surrogate_thresholds" in diag["convergence"]
+    # All parameters should have R-hat values
+    assert per_param["D0"]["r_hat"] == 1.07
+    assert per_param["alpha"]["r_hat"] == 1.02
+    assert per_param["D_offset"]["r_hat"] == 1.01
+    # No deterministic parameters (v2.4.1+ samples all 5 params)
+    assert per_param["D_offset"]["deterministic"] is False
 
 
-def test_parameters_json_handles_deterministic_surrogate_fields():
+def test_parameters_json_handles_all_sampled_params():
+    """Test that parameters JSON handles all sampled parameters.
+
+    v2.4.1: Tier system removed. All parameters are now sampled,
+    no deterministic parameters for single-angle static mode.
+    """
     result = SimpleNamespace(
-        mean_params=np.array([17000.0, -0.26, 0.0]),
-        std_params=np.array([10.0, 0.01, 0.0]),
+        mean_params=np.array([17000.0, -0.26, 0.5]),
+        std_params=np.array([10.0, 0.01, 0.02]),
         mean_contrast=0.5,
         std_contrast=0.02,
         mean_offset=1.0,
-        std_offset=0.0,
+        std_offset=0.01,
         n_samples=40,
         n_warmup=80,
         n_chains=2,
         computation_time=12.0,
-        r_hat={"D0": 1.05, "alpha": None, "D_offset": None},
-        effective_sample_size={"D0": 30.0, "alpha": 60.0, "D_offset": None},
+        r_hat={"D0": 1.05, "alpha": 1.02, "D_offset": 1.01},
+        effective_sample_size={"D0": 30.0, "alpha": 60.0, "D_offset": 50.0},
         acceptance_rate=0.93,
         analysis_mode="static",
         diagnostic_summary={
-            "deterministic_params": ["D_offset"],
-            "surrogate_thresholds": {"active": True, "min_ess": 25.0},
+            "deterministic_params": [],  # v2.4.1: No deterministic params
+            "per_param_stats": {
+                "D0": {"r_hat": 1.05, "ess": 30.0, "deterministic": False},
+                "alpha": {"r_hat": 1.02, "ess": 60.0, "deterministic": False},
+                "D_offset": {"r_hat": 1.01, "ess": 50.0, "deterministic": False},
+            },
         },
     )
 
     param_dict = _create_mcmc_parameters_dict(result)
 
-    assert param_dict["parameters"]["D_offset"]["mean"] == 0.0
-    assert param_dict["convergence"]["surrogate_thresholds"]["active"] is True
+    # All parameters should have mean values
+    assert param_dict["parameters"]["D0"]["mean"] == 17000.0
+    assert param_dict["parameters"]["alpha"]["mean"] == -0.26
+    assert param_dict["parameters"]["D_offset"]["mean"] == 0.5
+    # No surrogate_thresholds key (v2.4.1+)
+    assert "surrogate_thresholds" not in param_dict.get("convergence", {})
 
 
 # Run all tests

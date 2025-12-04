@@ -62,7 +62,6 @@ def create_mcmc_parameters_dict(result: Any) -> dict:
     """
     diag_summary = getattr(result, "diagnostic_summary", {}) or {}
     deterministic_params = set(diag_summary.get("deterministic_params") or [])
-    surrogate_thresholds = diag_summary.get("surrogate_thresholds")
 
     param_dict = {
         "timestamp": datetime.now().isoformat(),
@@ -122,9 +121,6 @@ def create_mcmc_parameters_dict(result: Any) -> dict:
 
     if hasattr(result, "acceptance_rate") and result.acceptance_rate is not None:
         param_dict["convergence"]["acceptance_rate"] = float(result.acceptance_rate)
-
-    if surrogate_thresholds:
-        param_dict["convergence"]["surrogate_thresholds"] = surrogate_thresholds
 
     # Add scaling parameters (contrast, offset)
     if hasattr(result, "mean_contrast"):
@@ -389,11 +385,6 @@ def create_mcmc_diagnostics_dict(result: Any) -> dict:
         and result.effective_sample_size is not None
     ):
         diagnostics_dict["convergence"]["ess_threshold"] = 400
-
-    if diag_summary.get("surrogate_thresholds"):
-        diagnostics_dict["convergence"]["surrogate_thresholds"] = diag_summary[
-            "surrogate_thresholds"
-        ]
 
     # Sampling efficiency
     if hasattr(result, "acceptance_rate") and result.acceptance_rate is not None:

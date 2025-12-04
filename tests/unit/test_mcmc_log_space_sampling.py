@@ -1,4 +1,8 @@
-"""Tests for log-space D0 sampling in single-angle static models."""
+"""Tests for log-space D0 sampling in single-angle static models.
+
+Updated (v2.4.1): Tier system removed. Now tests simplified API where
+all 5 parameters are sampled for single-angle datasets.
+"""
 
 from __future__ import annotations
 
@@ -26,10 +30,10 @@ except ImportError:
 
 from homodyne.config.parameter_space import ParameterSpace
 from homodyne.optimization.mcmc import (
-    _build_single_angle_surrogate_settings,
     _create_numpyro_model,
     _process_posterior_samples,
     _sample_single_angle_log_d0,
+    build_log_d0_prior_config,
 )
 
 
@@ -54,19 +58,33 @@ def _build_simple_model_input(n_phi: int = 1, n_points_per_phi: int = 20):
 
 
 @pytest.mark.skipif(not NUMPYRO_AVAILABLE, reason="NumPyro not available")
-class TestLogSpaceSurrogateConfiguration:
-    def test_all_tiers_enable_log_sampling(self):
-        param_space = ParameterSpace.from_defaults("static")
-        for tier in ("2", "3", "4"):
-            cfg = _build_single_angle_surrogate_settings(param_space, tier)
-            assert cfg["sample_log_d0"] is True
-            prior = cfg["log_d0_prior"]
-            assert prior["high"] > prior["low"]
+class TestLogSpacePriorConfiguration:
+    """Tests for log-space D0 prior configuration (v2.4.1+)."""
 
-    def test_tier4_no_deterministic_clamp(self):
+    def test_build_log_d0_prior_config(self):
+        """Test that log_d0_prior_config is built correctly."""
         param_space = ParameterSpace.from_defaults("static")
-        cfg = _build_single_angle_surrogate_settings(param_space, "4")
-        assert cfg["fixed_d0_value"] is None
+        d0_bounds = param_space.get_bounds("D0")
+        d0_prior = param_space.get_prior("D0")
+        config = build_log_d0_prior_config(d0_bounds, d0_prior)
+
+        assert "loc" in config
+        assert "scale" in config
+        assert "low" in config
+        assert "high" in config
+        assert config["high"] > config["low"]
+        assert config["scale"] > 0
+
+    def test_log_prior_bounds_match_d0_bounds(self):
+        """Test that log bounds correspond to linear D0 bounds."""
+        param_space = ParameterSpace.from_defaults("static")
+        d0_bounds = param_space.get_bounds("D0")
+        d0_prior = param_space.get_prior("D0")
+        config = build_log_d0_prior_config(d0_bounds, d0_prior)
+
+        # Log bounds should approximately match exp-transformed D0 bounds
+        assert np.exp(config["low"]) >= d0_bounds[0] * 0.99
+        assert np.exp(config["high"]) <= d0_bounds[1] * 1.01
 
 
 @pytest.mark.skipif(not NUMPYRO_AVAILABLE, reason="NumPyro not available")
@@ -109,9 +127,16 @@ class TestSampleSingleAngleLogD0:
 
 @pytest.mark.skipif(not NUMPYRO_AVAILABLE, reason="NumPyro not available")
 class TestLogSpaceModelIntegration:
-    def test_single_angle_without_surrogate_uses_log_space(self):
+    def test_single_angle_with_log_d0_config(self):
+        """Test single-angle model with log-space D0 sampling."""
         model_input = _build_simple_model_input(n_phi=1)
         param_space = ParameterSpace.from_defaults("static")
+
+        # Build log D0 prior config
+        d0_bounds = param_space.get_bounds("D0")
+        d0_prior = param_space.get_prior("D0")
+        log_d0_prior_config = build_log_d0_prior_config(d0_bounds, d0_prior)
+
         model = _create_numpyro_model(
             data=model_input["data"],
             sigma=model_input["sigma"],
@@ -123,12 +148,13 @@ class TestLogSpaceModelIntegration:
             analysis_mode="static",
             parameter_space=param_space,
             dt=model_input["dt"],
-            per_angle_scaling=False,
-            fixed_scaling_overrides={"contrast": 0.05, "offset": 1.0},
+            per_angle_scaling=True,
+            log_d0_prior_config=log_d0_prior_config,
         )
         seeded = handlers.seed(model, random.PRNGKey(2))
         trace = handlers.trace(seeded).get_trace()
         assert "log_D0_latent" in trace
+        assert "D0" in trace
 
     def test_multi_angle_path_uses_linear_sampling(self):
         model_input = _build_simple_model_input(n_phi=3)
@@ -144,15 +170,18 @@ class TestLogSpaceModelIntegration:
             analysis_mode="static",
             parameter_space=param_space,
             dt=model_input["dt"],
+            per_angle_scaling=True,
         )
         seeded = handlers.seed(model, random.PRNGKey(3))
         trace = handlers.trace(seeded).get_trace()
+        # Multi-angle doesn't use log-space D0 sampling
         assert "log_D0_latent" not in trace
 
 
 @pytest.mark.skipif(not NUMPYRO_AVAILABLE, reason="NumPyro not available")
 class TestLogSpaceDiagnostics:
     def test_process_posterior_samples_handles_log_latent(self):
+        """Test that log_D0_latent is converted to D0 in posterior processing."""
         samples = {
             "log_D0_latent": jnp.array(
                 [
@@ -162,8 +191,9 @@ class TestLogSpaceDiagnostics:
                 ]
             ),
             "alpha": jnp.array([-1.2, -1.15, -1.1]),
-            "contrast": jnp.array([0.05, 0.051, 0.049]),
-            "offset": jnp.array([1.0, 1.0, 1.0]),
+            "D_offset": jnp.array([0.01, 0.02, 0.015]),
+            "contrast_0": jnp.array([0.05, 0.051, 0.049]),
+            "offset_0": jnp.array([1.0, 1.0, 1.0]),
         }
         grouped = {k: jnp.reshape(v, (1,) + v.shape) for k, v in samples.items()}
         dummy_result = type("Dummy", (), {})()
@@ -179,16 +209,12 @@ class TestLogSpaceDiagnostics:
                 "min_ess": 0,
                 "check_hmc_diagnostics": False,
                 "expected_params": ["D0", "alpha", "D_offset"],
-                "single_angle_surrogate": {
-                    "drop_d_offset": True,
-                    "fixed_d_offset": 0.0,
-                },
             },
         )
         assert "D0" in summary["samples"]
-        assert summary["diagnostic_summary"]["per_param_stats"]["D_offset"][
-            "deterministic"
-        ]
+        # D0 should be exp of log_D0_latent
+        expected_d0 = np.exp(np.array([np.log(800.0), np.log(900.0), np.log(1000.0)]))
+        assert np.allclose(summary["samples"]["D0"], expected_d0)
 
 
 @pytest.mark.skipif(not NUMPYRO_AVAILABLE, reason="NumPyro not available")
@@ -234,6 +260,8 @@ class TestLogSpaceMultiChainESS:
         alpha_chain_b = rng.normal(
             ground_truth["alpha"] * 1.002, 0.01, size=draws_per_chain
         )
+        d_offset_chain_a = rng.normal(0.01, 0.001, size=draws_per_chain)
+        d_offset_chain_b = rng.normal(0.01, 0.001, size=draws_per_chain)
 
         def _stack(a_values, b_values):
             return np.stack([a_values, b_values], axis=0)
@@ -241,11 +269,12 @@ class TestLogSpaceMultiChainESS:
         samples_by_chain = {
             "log_D0_latent": _stack(log_d0_chain_a, log_d0_chain_b),
             "alpha": _stack(alpha_chain_a, alpha_chain_b),
-            "contrast": _stack(
+            "D_offset": _stack(d_offset_chain_a, d_offset_chain_b),
+            "contrast_0": _stack(
                 np.full(draws_per_chain, ground_truth["contrast"]),
                 np.full(draws_per_chain, ground_truth["contrast"] * 1.001),
             ),
-            "offset": _stack(
+            "offset_0": _stack(
                 np.full(draws_per_chain, ground_truth["offset"]),
                 np.full(draws_per_chain, ground_truth["offset"] * 0.999),
             ),
@@ -273,11 +302,6 @@ class TestLogSpaceMultiChainESS:
             "min_ess": 10,
             "check_hmc_diagnostics": True,
             "expected_params": ["D0", "alpha", "D_offset"],
-            "single_angle_surrogate": {
-                "drop_d_offset": True,
-                "fixed_d_offset": 0.0,
-            },
-            "deterministic_params": {"contrast", "offset"},
         }
         summary = _process_posterior_samples(
             dummy_result,
