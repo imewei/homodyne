@@ -20,7 +20,7 @@ References:
 
 Examples:
     # Plot trace plots for standard NUTS result
-    >>> from homodyne.optimization.mcmc import fit_mcmc_jax
+    >>> from homodyne.optimization.cmc import fit_mcmc_jax
     >>> result = fit_mcmc_jax(data=c2_exp, t1=t1, t2=t2, phi=phi, q=0.01, L=3.5)
     >>> plot_trace_plots(result, save_path='traces.png')
 
@@ -40,12 +40,15 @@ from homodyne.utils.path_validation import PathValidationError, validate_plot_sa
 
 logger = logging.getLogger(__name__)
 
-# Type alias for MCMCResult
+# Type alias for MCMCResult (v3.0 uses CMCResult, aliased as MCMCResult for compatibility)
 try:
-    from homodyne.optimization.mcmc.cmc.result import MCMCResult
+    from homodyne.optimization.cmc.results import CMCResult as MCMCResult
 except ImportError:
-    # Fallback for non-CMC installations
-    from homodyne.optimization.mcmc import MCMCResult
+    # Fallback: try legacy path
+    try:
+        from homodyne.optimization import MCMCResult
+    except ImportError:
+        MCMCResult = None  # Will be caught at runtime
 
 
 def plot_trace_plots(
