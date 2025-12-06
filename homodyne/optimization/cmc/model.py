@@ -36,6 +36,7 @@ def xpcs_model(
     q: float,
     L: float,
     dt: float,
+    time_grid: jnp.ndarray | None = None,
     analysis_mode: str,
     parameter_space: ParameterSpace,
     n_phi: int,
@@ -129,7 +130,7 @@ def xpcs_model(
     # 4. Compute theoretical g1 using EXACT same physics as NLSQ
     # =========================================================================
     # Note: compute_g1_total infers mode from params array length (3=static, 7=laminar)
-    g1 = compute_g1_total(params, t1, t2, phi, q, L, dt)
+    g1 = compute_g1_total(params, t1, t2, phi, q, L, dt, time_grid=time_grid)
 
     # =========================================================================
     # 5. Apply per-angle scaling to get C2
@@ -158,6 +159,7 @@ def xpcs_model_single_chain(
     q: float,
     L: float,
     dt: float,
+    time_grid: jnp.ndarray | None = None,
     analysis_mode: str,
     parameter_space: ParameterSpace,
     n_phi: int,
@@ -231,7 +233,7 @@ def xpcs_model_single_chain(
 
     # Compute physics
     # Note: compute_g1_total infers mode from params array length (3=static, 7=laminar)
-    g1 = compute_g1_total(params, t1, t2, phi, q, L, dt)
+    g1 = compute_g1_total(params, t1, t2, phi, q, L, dt, time_grid=time_grid)
 
     # Apply scaling
     contrast_per_point = contrast_arr[phi_indices]

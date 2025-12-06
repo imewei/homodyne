@@ -183,52 +183,48 @@ def _calculate_shear_rate_impl_jax(
 # =============================================================================
 
 
+def _trapezoid_cumsum(values: jnp.ndarray) -> jnp.ndarray:
+    """Cumulative trapezoid integral without dt scaling (dt is applied outside)."""
+    if safe_len(values) > 1:
+        trap_avg = 0.5 * (values[:-1] + values[1:])
+        cumsum_trap = jnp.cumsum(trap_avg)
+        return jnp.concatenate([jnp.array([0.0], dtype=values.dtype), cumsum_trap])
+    return jnp.cumsum(values)
+
+
 @jit
 def _compute_g1_diffusion_elementwise(
     params: jnp.ndarray,
     t1: jnp.ndarray,
     t2: jnp.ndarray,
+    time_grid: jnp.ndarray,
     wavevector_q_squared_half_dt: float,
 ) -> jnp.ndarray:
-    """Element-wise diffusion computation for CMC shards.
+    """Element-wise diffusion computation for CMC shards using trapezoidal cumulative sums.
 
-    Computes g1_diffusion for paired (t1[i], t2[i]) points using trapezoidal integration.
-    This is the ONLY diffusion function for CMC - no meshgrid mode.
-
-    Args:
-        params: Physical parameters [D0, alpha, D_offset, ...]
-        t1: Time array (1D, element-wise paired with t2)
-        t2: Time array (1D, element-wise paired with t1)
-        wavevector_q_squared_half_dt: Pre-computed factor 0.5 * q² * dt
-
-    Returns:
-        Diffusion contribution to g1 (1D array, same length as t1/t2)
+    Mirrors the NLSQ cumulative trapezoid logic: build a cumulative integral on the
+    1D time grid, then take the absolute difference for each (t1, t2) pair.
     """
     D0, alpha, D_offset = params[0], params[1], params[2]
 
-    # Element-wise computation for each paired (t1[i], t2[i]) point
-    # Compute integral from t1[i] to t2[i] for each i
-    D_t1 = _calculate_diffusion_coefficient_impl_jax(t1, D0, alpha, D_offset)
-    D_t2 = _calculate_diffusion_coefficient_impl_jax(t2, D0, alpha, D_offset)
+    # Build diffusion on the 1D grid and cumulative trapezoid (no dt scaling here)
+    D_grid = _calculate_diffusion_coefficient_impl_jax(time_grid, D0, alpha, D_offset)
+    D_cumsum = _trapezoid_cumsum(D_grid)
 
-    # Trapezoidal integration: ∫D(t)dt ≈ |t2-t1| * (D(t1) + D(t2)) / 2
-    # CRITICAL FIX: Use smooth abs() approximation for gradient stability in MCMC NUTS
-    # jnp.abs() has undefined gradient at x=0 (when t1 ≈ t2), causing NaN in NUTS backprop
-    # Solution: sqrt(x² + ε) ≈ |x| but differentiable everywhere
-    # Same fix as physics_nlsq.py:240 - this is why NLSQ works but MCMC failed!
+    # Map t1/t2 onto grid indices (time_grid is sorted, uniform)
+    max_index = time_grid.shape[0] - 1
+    idx1 = jnp.clip(jnp.searchsorted(time_grid, t1, side="left"), 0, max_index)
+    idx2 = jnp.clip(jnp.searchsorted(time_grid, t2, side="left"), 0, max_index)
+
+    # Trapezoidal integral steps between indices with smooth abs for stability
     epsilon_abs = 1e-20
-    time_diff_smooth = jnp.sqrt((t2 - t1) ** 2 + epsilon_abs)
-    D_integral_elementwise = time_diff_smooth * (D_t1 + D_t2) / 2.0
+    integral_steps = jnp.sqrt((D_cumsum[idx2] - D_cumsum[idx1]) ** 2 + epsilon_abs)
 
     # Compute g1 using log-space for numerical stability
-    log_g1 = -wavevector_q_squared_half_dt * D_integral_elementwise
+    log_g1 = -wavevector_q_squared_half_dt * integral_steps
     log_g1_clipped = jnp.clip(log_g1, -100.0, 0.0)
     g1_diffusion = jnp.exp(log_g1_clipped)
 
-    # CRITICAL FIX: Physical constraint |g1| ≤ 1.0 (normalized correlation function)
-    # Numerical errors can push g1 slightly above 1.0, causing unphysical amplification
-    # in g2 = 1 + (g1)² and creating gradient issues for MCMC NUTS sampler
-    # Same fix as physics_nlsq.py:325
     g1_safe = jnp.minimum(g1_diffusion, 1.0)
 
     return g1_safe  # Shape: (n_points,)
@@ -241,6 +237,7 @@ def _compute_g1_shear_elementwise(
     t2: jnp.ndarray,
     phi_unique: jnp.ndarray,
     sinc_prefactor: float,
+    time_grid: jnp.ndarray,
 ) -> jnp.ndarray:
     """Element-wise shear computation for CMC shards.
 
@@ -271,29 +268,25 @@ def _compute_g1_shear_elementwise(
         params[6],
     )
 
-    # Element-wise computation for each paired (t1[i], t2[i]) point
-    # Compute integral from t1[i] to t2[i] for each i
-    gamma_t1 = _calculate_shear_rate_impl_jax(
-        t1,
+    # Build shear rate on the 1D grid and cumulative trapezoid (no dt scaling here)
+    gamma_grid = _calculate_shear_rate_impl_jax(
+        time_grid,
         gamma_dot_0,
         beta,
         gamma_dot_offset,
     )
-    gamma_t2 = _calculate_shear_rate_impl_jax(
-        t2,
-        gamma_dot_0,
-        beta,
-        gamma_dot_offset,
-    )
+    gamma_cumsum = _trapezoid_cumsum(gamma_grid)
 
-    # Trapezoidal integration: ∫γ̇(t)dt ≈ |t2-t1| * (γ̇(t1) + γ̇(t2)) / 2
-    # CRITICAL FIX: Use smooth abs() approximation for gradient stability in MCMC NUTS
-    # jnp.abs() has undefined gradient at x=0 (when t1 ≈ t2), causing NaN in NUTS backprop
-    # Solution: sqrt(x² + ε) ≈ |x| but differentiable everywhere
-    # Same issue and fix as diffusion integration (line 220-221)
+    # Map t1/t2 onto grid indices (time_grid is sorted, uniform)
+    max_index = time_grid.shape[0] - 1
+    idx1 = jnp.clip(jnp.searchsorted(time_grid, t1, side="left"), 0, max_index)
+    idx2 = jnp.clip(jnp.searchsorted(time_grid, t2, side="left"), 0, max_index)
+
+    # Trapezoidal integration using cumulative sums with smooth abs for stability
     epsilon_abs = 1e-20
-    time_diff_smooth = jnp.sqrt((t2 - t1) ** 2 + epsilon_abs)
-    gamma_integral_elementwise = time_diff_smooth * (gamma_t1 + gamma_t2) / 2.0
+    gamma_integral_elementwise = jnp.sqrt(
+        (gamma_cumsum[idx2] - gamma_cumsum[idx1]) ** 2 + epsilon_abs
+    )
 
     # phi_unique is already filtered to unique values by caller (compute_g1_total)
     # No need for jnp.unique() here (causes JAX concretization error during JIT)
@@ -320,6 +313,7 @@ def _compute_g1_total_elementwise(
     t1: jnp.ndarray,
     t2: jnp.ndarray,
     phi_unique: jnp.ndarray,
+    time_grid: jnp.ndarray,
     wavevector_q_squared_half_dt: float,
     sinc_prefactor: float,
 ) -> jnp.ndarray:
@@ -341,11 +335,13 @@ def _compute_g1_total_elementwise(
     """
     # Compute diffusion contribution: shape (n_points,)
     g1_diff = _compute_g1_diffusion_elementwise(
-        params, t1, t2, wavevector_q_squared_half_dt
+        params, t1, t2, time_grid, wavevector_q_squared_half_dt
     )
 
     # Compute shear contribution: shape (n_unique_phi, n_points)
-    g1_shear = _compute_g1_shear_elementwise(params, t1, t2, phi_unique, sinc_prefactor)
+    g1_shear = _compute_g1_shear_elementwise(
+        params, t1, t2, phi_unique, sinc_prefactor, time_grid
+    )
 
     # Broadcast g1_diff from (n_points,) to (n_phi, n_points)
     n_phi = g1_shear.shape[0]
@@ -375,6 +371,7 @@ def compute_g1_diffusion(
     t2: jnp.ndarray,
     q: float,
     dt: float = None,
+    time_grid: jnp.ndarray | None = None,
 ) -> jnp.ndarray:
     """Compute g1 diffusion for CMC element-wise paired arrays.
 
@@ -387,6 +384,7 @@ def compute_g1_diffusion(
         t2: Time array (1D, element-wise paired with t1)
         q: Scattering wave vector magnitude
         dt: Time step from configuration (REQUIRED for correct physics)
+        time_grid: Optional 1D time grid; if None, inferred from t1/t2 and dt.
 
     Returns:
         Diffusion contribution to g1 (1D array)
@@ -407,11 +405,23 @@ def compute_g1_diffusion(
         time_array = t1
         dt = time_array[1] - time_array[0] if safe_len(time_array) > 1 else 1.0
 
+    # Build/infer time grid (prefer provided grid to avoid JIT shape issues)
+    if time_grid is None:
+        # Infer maximum time and construct grid from dt
+        import numpy as np
+
+        dt_safe = float(dt) if dt is not None else 1.0
+        max_time = float(np.max(np.concatenate([np.asarray(t1), np.asarray(t2)])))
+        n_time = int(round(max_time / dt_safe)) + 1
+        time_grid = jnp.linspace(0.0, dt_safe * (n_time - 1), n_time)
+    else:
+        time_grid = jnp.asarray(time_grid)
+
     # Compute the pre-computed factor using configuration dt
     wavevector_q_squared_half_dt = 0.5 * (q**2) * dt
 
     return _compute_g1_diffusion_elementwise(
-        params, t1, t2, wavevector_q_squared_half_dt
+        params, t1, t2, time_grid, wavevector_q_squared_half_dt
     )
 
 
@@ -423,6 +433,7 @@ def compute_g1_total(
     q: float,
     L: float,
     dt: float,
+    time_grid: jnp.ndarray | None = None,
 ) -> jnp.ndarray:
     """Compute total g1 for CMC element-wise paired arrays.
 
@@ -466,6 +477,7 @@ def compute_g1_total(
         q: Scattering wave vector magnitude
         L: Sample-detector distance (stator_rotor_gap)
         dt: Time step from configuration [s] (REQUIRED)
+        time_grid: Optional 1D time grid (preferred). If None, inferred from t1/t2.
 
     Returns:
         Total g1 correlation function (2D array: (n_phi, n_points))
@@ -493,6 +505,18 @@ def compute_g1_total(
     # IMPORTANT: Config dt value will OVERRIDE this default
     # Default dt = 0.001s if not in config (APS-U standard XPCS frame rate: 1ms)
     dt_value = dt if dt is not None else 0.001
+
+    if time_grid is None:
+        # Infer maximum time and construct grid from dt_value
+        import numpy as np
+
+        dt_safe = float(dt_value)
+        max_time = float(np.max(np.concatenate([np.asarray(t1), np.asarray(t2)])))
+        n_time = int(round(max_time / dt_safe)) + 1
+        time_grid = jnp.linspace(0.0, dt_safe * (n_time - 1), n_time)
+    else:
+        time_grid = jnp.asarray(time_grid)
+
     wavevector_q_squared_half_dt = 0.5 * (q**2) * dt_value
     sinc_prefactor = 0.5 / PI * q * L * dt_value
 
@@ -519,6 +543,7 @@ def compute_g1_total(
         t1,
         t2,
         phi_unique,
+        time_grid,
         wavevector_q_squared_half_dt,
         sinc_prefactor,
     )

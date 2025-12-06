@@ -138,6 +138,32 @@ For the power-law parameterization:
 
    \Gamma(t_1, t_2) = \frac{\dot{\gamma}_0}{1+\beta}\left(t_2^{1+\beta} - t_1^{1+\beta}\right) + \dot{\gamma}_{\text{offset}}(t_2 - t_1)
 
+Numerical Evaluation (NLSQ vs CMC)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+While the analytic expressions above are useful for intuition, the code evaluates
+the time integrals numerically using a cumulative trapezoid built on the discrete
+time grid:
+
+* Build trapezoid averages between adjacent samples: ``trap_avg[k] = 0.5*(f[k] + f[k+1])``.
+* Cumulative sum of those averages (no ``dt`` applied here): ``cumsum[0]=0`` and
+  ``cumsum[i] = Σ_{k=0}^{i-1} trap_avg[k]``.
+* The integral between any two frames is the absolute difference of cumulative sums:
+  ``|cumsum[i2] - cumsum[i1]|`` (a smooth abs is used for JAX gradients). The actual
+  ``dt`` scaling is applied outside via the precomputed physics factors
+  (``wavevector_q_squared_half_dt`` and ``sinc_prefactor``).
+
+Implementation differences:
+
+* NLSQ (meshgrid): builds a full cumulative-trapezoid matrix once on the 1D grid,
+  then uses ``|cumsum[i] - cumsum[j]|`` for every meshgrid pair (see
+  ``homodyne/core/physics_nlsq.py::_create_time_integral_matrix_impl_jax``).
+* CMC (element-wise): builds the same cumulative trapezoid on the 1D grid, maps
+  each pooled ``(t1, t2)`` pair to grid indices with ``searchsorted``, and uses the
+  same absolute cumulative difference per pair (see
+  ``homodyne/core/physics_cmc.py``). This replaces the old single-endpoint trapezoid,
+  ensuring multi-step intervals sum all intermediate trapezoids just like NLSQ.
+
 Scattering Geometry
 -------------------
 

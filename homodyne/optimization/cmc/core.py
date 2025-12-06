@@ -180,6 +180,9 @@ def fit_mcmc_jax(
     # =========================================================================
     # 4. Build model function
     # =========================================================================
+    # Build the 1D time grid once to mirror NLSQ trapezoidal integration
+    time_grid = jnp.array(np.unique(np.asarray(prepared.t1)))
+
     model_kwargs = {
         "data": jnp.array(prepared.data),
         "t1": jnp.array(prepared.t1),
@@ -189,6 +192,7 @@ def fit_mcmc_jax(
         "q": q,
         "L": L,
         "dt": dt,
+        "time_grid": time_grid,
         "analysis_mode": analysis_mode,
         "parameter_space": parameter_space,
         "n_phi": prepared.n_phi,

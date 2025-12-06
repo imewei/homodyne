@@ -92,6 +92,12 @@ The diffusion integral is computed as:
 
    J(t_1, t_2) = \frac{D_0}{1+\alpha}\left(t_2^{1+\alpha} - t_1^{1+\alpha}\right) + D_{\text{offset}}(t_2 - t_1)
 
+.. note::
+   In code this integral is evaluated numerically with a cumulative trapezoid on the
+   discrete time grid (see :mod:`homodyne.core.physics_nlsq` and :mod:`homodyne.core.physics_cmc`).
+   The integral between two frames uses the absolute difference of cumulative trapezoid
+   sums; ``dt`` scaling is applied via the precomputed physics factors.
+
 Laminar Flow Mode
 -----------------
 
@@ -192,6 +198,11 @@ The shear integral is computed as:
 .. math::
 
    \Gamma(t_1, t_2) = \frac{\dot{\gamma}_0}{1+\beta}\left(t_2^{1+\beta} - t_1^{1+\beta}\right) + \dot{\gamma}_{\text{offset}}(t_2 - t_1)
+
+.. note::
+   As with diffusion, the code evaluates this with a cumulative trapezoid and smooth
+   absolute differences between cumulative sums to cover multi-step intervals robustly
+   in both NLSQ (meshgrid) and CMC (element-wise) paths.
 
 Per-Angle Scaling
 -----------------
