@@ -1,23 +1,25 @@
-"""JAX-First Optimization for Homodyne v2
-======================================
+"""JAX-First Optimization for Homodyne v2.4
+==========================================
 
-Simplified optimization system using NLSQ package (primary) and MCMC+JAX
-(high-accuracy) for robust parameter estimation in homodyne analysis.
+Simplified optimization system using NLSQ package (primary) and CMC v3.0
+(high-accuracy Bayesian) for robust parameter estimation in homodyne analysis.
 
 This module implements the streamlined optimization philosophy:
 1. NLSQ as primary method (fast, reliable parameter estimation)
-2. MCMC+JAX (NumPyro/BlackJAX) for uncertainty quantification
+2. CMC v3.0 (NumPyro/NUTS) for uncertainty quantification
 3. Unified homodyne model: c2_fitted = c2_theory * contrast + offset
 
 Key Features:
 - NLSQ trust-region optimization (Levenberg-Marquardt) as foundation
-- JAX-accelerated MCMC for uncertainty quantification
-- CPU-primary, GPU-optional architecture
+- CMC v3.0: Fresh reimplementation with ArviZ-native output
+- CPU-primary architecture (GPU removed in v2.3.0)
 - Dataset size-aware optimization strategies
 
 Performance Comparison:
 - NLSQ: Fast, reliable parameter estimation
-- MCMC+JAX: Full posterior sampling, highest accuracy
+- CMC: Full posterior sampling, publication-quality uncertainty
+
+Note: Legacy mcmc/ package removed in v3.0. CMC v3.0 is the sole MCMC backend.
 """
 
 # Handle NLSQ imports with intelligent fallback
@@ -64,20 +66,28 @@ except ImportError as e:
     optimize_per_angle_sequential = None
     NLSQ_AVAILABLE = False
 
-# Handle MCMC imports with intelligent fallback
+# Handle CMC v3.0 imports (NO FALLBACK to legacy mcmc - it's removed)
 try:
-    from homodyne.optimization.mcmc import (
-        BLACKJAX_AVAILABLE,
-        NUMPYRO_AVAILABLE,
-        MCMCResult,
+    from homodyne.optimization.cmc import (
+        CMCConfig,
+        CMCResult,
         fit_mcmc_jax,
     )
-    from homodyne.optimization.mcmc import JAX_AVAILABLE as MCMC_JAX_AVAILABLE
 
+    # Aliases for backward compatibility
+    MCMCResult = CMCResult
+
+    # CMC v3.0 uses NumPyro/JAX
+    MCMC_JAX_AVAILABLE = True
+    NUMPYRO_AVAILABLE = True
+    BLACKJAX_AVAILABLE = True
     MCMC_AVAILABLE = True
+
 except ImportError as e:
-    print(f"Warning: Could not import MCMC optimization: {e}")
+    print(f"Warning: Could not import CMC optimization: {e}")
     fit_mcmc_jax = None
+    CMCConfig = None
+    CMCResult = None
     MCMCResult = None
     MCMC_JAX_AVAILABLE = False
     NUMPYRO_AVAILABLE = False
@@ -88,63 +98,22 @@ except ImportError as e:
 OPTIMIZATION_STATUS = {
     "nlsq_available": NLSQ_AVAILABLE,
     "mcmc_available": MCMC_AVAILABLE,
+    "cmc_available": MCMC_AVAILABLE,  # CMC v3.0 is the MCMC backend
     "jax_available": MCMC_JAX_AVAILABLE if MCMC_AVAILABLE else False,
     "numpyro_available": NUMPYRO_AVAILABLE if MCMC_AVAILABLE else False,
     "blackjax_available": BLACKJAX_AVAILABLE if MCMC_AVAILABLE else False,
 }
 
-# Import MCMC extraction modules for public API
-# These modules were extracted from _create_numpyro_model (Dec 2025)
-# to reduce cyclomatic complexity and improve maintainability.
-try:
-    from homodyne.optimization.mcmc.data_prep import (
-        compute_phi_mapping,
-        get_target_dtype,
-        normalize_array,
-        normalize_scalar,
-        prepare_mcmc_arrays,
-        validate_array_shapes,
-    )
-    from homodyne.optimization.mcmc.priors import (
-        DIST_TYPE_MAP,
-        auto_convert_to_bounded_distribution,
-        cast_dist_kwargs,
-        create_beta_scaled_distribution,
-        get_prior_spec_with_fallback,
-        prepare_truncated_normal_kwargs,
-        sample_parameter,
-        sample_scaling_parameters,
-    )
-    from homodyne.optimization.mcmc.scaling import (
-        apply_global_scaling,
-        apply_per_angle_scaling,
-        apply_scaling_to_theory,
-        compute_phi_indices,
-        extract_per_point_theory,
-        prepare_phi_mapping,
-        select_scaling_per_point,
-        validate_c2_fitted_shape,
-    )
-    from homodyne.optimization.mcmc.single_angle import (
-        build_log_d0_prior_config,
-        estimate_single_angle_scaling,
-        is_single_angle_static,
-        sample_log_d0,
-    )
-
-    MCMC_EXTRACTION_AVAILABLE = True
-except ImportError:
-    MCMC_EXTRACTION_AVAILABLE = False
-
-
 # Primary API functions
 __all__ = [
     # Primary optimization methods
     "fit_nlsq_jax",  # NLSQ trust-region (PRIMARY)
-    "fit_mcmc_jax",  # NumPyro/BlackJAX NUTS (SECONDARY)
+    "fit_mcmc_jax",  # CMC v3.0 NumPyro/NUTS (SECONDARY)
     # Result classes
     "NLSQResult",
-    "MCMCResult",
+    "CMCResult",  # CMC v3.0 result class
+    "MCMCResult",  # Alias for backward compatibility
+    "CMCConfig",  # CMC configuration
     # NLSQ components
     "NLSQWrapper",
     "OptimizationResult",
@@ -163,37 +132,6 @@ __all__ = [
     "OPTIMIZATION_STATUS",
     "NLSQ_AVAILABLE",
     "MCMC_AVAILABLE",
-    "MCMC_EXTRACTION_AVAILABLE",
-    # MCMC data preparation utilities
-    "get_target_dtype",
-    "normalize_array",
-    "normalize_scalar",
-    "prepare_mcmc_arrays",
-    "validate_array_shapes",
-    "compute_phi_mapping",
-    # MCMC prior utilities
-    "DIST_TYPE_MAP",
-    "get_prior_spec_with_fallback",
-    "auto_convert_to_bounded_distribution",
-    "cast_dist_kwargs",
-    "prepare_truncated_normal_kwargs",
-    "create_beta_scaled_distribution",
-    "sample_parameter",
-    "sample_scaling_parameters",
-    # MCMC scaling utilities
-    "prepare_phi_mapping",
-    "compute_phi_indices",
-    "extract_per_point_theory",
-    "apply_per_angle_scaling",
-    "apply_global_scaling",
-    "select_scaling_per_point",
-    "validate_c2_fitted_shape",
-    "apply_scaling_to_theory",
-    # MCMC single-angle utilities (v2.4.1+: simplified, no tier system)
-    "estimate_single_angle_scaling",
-    "sample_log_d0",
-    "is_single_angle_static",
-    "build_log_d0_prior_config",
 ]
 
 
@@ -208,7 +146,7 @@ def get_optimization_info():
     info = {
         "status": OPTIMIZATION_STATUS.copy(),
         "primary_method": "nlsq" if NLSQ_AVAILABLE else None,
-        "secondary_method": "mcmc" if MCMC_AVAILABLE else None,
+        "secondary_method": "cmc" if MCMC_AVAILABLE else None,
         "recommendations": [],
     }
 
@@ -219,12 +157,12 @@ def get_optimization_info():
 
     if MCMC_AVAILABLE:
         info["recommendations"].append(
-            "Use fit_mcmc_jax() for uncertainty quantification and publication-quality analysis",
+            "Use fit_mcmc_jax() for uncertainty quantification (CMC v3.0)",
         )
 
     if not NLSQ_AVAILABLE and not MCMC_AVAILABLE:
         info["recommendations"].append(
-            "Install NLSQ and NumPyro/BlackJAX for optimization capabilities",
+            "Install NLSQ and NumPyro for optimization capabilities",
         )
 
     return info
