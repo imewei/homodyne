@@ -47,7 +47,7 @@ class TestMCMCConvergence:
     def test_mcmc_module_availability(self):
         """Test MCMC module availability and imports."""
         try:
-            from homodyne.optimization.mcmc import NUMPYRO_AVAILABLE, fit_mcmc_jax
+            from homodyne.optimization import NUMPYRO_AVAILABLE, fit_mcmc_jax
 
             assert callable(fit_mcmc_jax)
             assert isinstance(NUMPYRO_AVAILABLE, bool)
@@ -58,7 +58,7 @@ class TestMCMCConvergence:
     def test_mcmc_basic_sampling(self, synthetic_xpcs_data):
         """Test basic MCMC sampling functionality."""
         try:
-            from homodyne.optimization.mcmc import NUMPYRO_AVAILABLE, fit_mcmc_jax
+            from homodyne.optimization import NUMPYRO_AVAILABLE, fit_mcmc_jax
         except ImportError:
             pytest.skip("MCMC module not available")
 
@@ -128,7 +128,7 @@ class TestMCMCConvergence:
         try:
             from homodyne.tests.factories.data_factory import XPCSDataFactory
 
-            from homodyne.optimization.mcmc import NUMPYRO_AVAILABLE, fit_mcmc_jax
+            from homodyne.optimization import NUMPYRO_AVAILABLE, fit_mcmc_jax
         except ImportError:
             pytest.skip("Required modules not available")
 
@@ -190,7 +190,7 @@ class TestMCMCConvergence:
     def test_mcmc_convergence_diagnostics(self, synthetic_xpcs_data):
         """Test MCMC convergence diagnostics."""
         try:
-            from homodyne.optimization.mcmc import NUMPYRO_AVAILABLE, fit_mcmc_jax
+            from homodyne.optimization import NUMPYRO_AVAILABLE, fit_mcmc_jax
         except ImportError:
             pytest.skip("MCMC module not available")
 
@@ -250,7 +250,7 @@ class TestMCMCConvergence:
     def test_mcmc_with_arviz_diagnostics(self, synthetic_xpcs_data):
         """Test MCMC with ArviZ diagnostics."""
         try:
-            from homodyne.optimization.mcmc import NUMPYRO_AVAILABLE, fit_mcmc_jax
+            from homodyne.optimization import NUMPYRO_AVAILABLE, fit_mcmc_jax
         except ImportError:
             pytest.skip("MCMC module not available")
 
@@ -330,7 +330,7 @@ class TestMCMCStatisticalProperties:
     def test_posterior_distribution_properties(self, synthetic_xpcs_data):
         """Test properties of posterior distributions."""
         try:
-            from homodyne.optimization.mcmc import NUMPYRO_AVAILABLE, fit_mcmc_jax
+            from homodyne.optimization import NUMPYRO_AVAILABLE, fit_mcmc_jax
         except ImportError:
             pytest.skip("MCMC module not available")
 
@@ -400,7 +400,7 @@ class TestMCMCStatisticalProperties:
         try:
             from homodyne.tests.factories.data_factory import XPCSDataFactory
 
-            from homodyne.optimization.mcmc import NUMPYRO_AVAILABLE, fit_mcmc_jax
+            from homodyne.optimization import NUMPYRO_AVAILABLE, fit_mcmc_jax
         except ImportError:
             pytest.skip("Required modules not available")
 
@@ -477,7 +477,7 @@ class TestMCMCStatisticalProperties:
     def test_mcmc_reproducibility(self, synthetic_xpcs_data):
         """Test MCMC reproducibility with fixed random seed."""
         try:
-            from homodyne.optimization.mcmc import NUMPYRO_AVAILABLE, fit_mcmc_jax
+            from homodyne.optimization import NUMPYRO_AVAILABLE, fit_mcmc_jax
         except ImportError:
             pytest.skip("MCMC module not available")
 
@@ -529,7 +529,7 @@ class TestMCMCStatisticalProperties:
     def test_mcmc_chain_mixing(self, synthetic_xpcs_data):
         """Test MCMC chain mixing quality."""
         try:
-            from homodyne.optimization.mcmc import NUMPYRO_AVAILABLE, fit_mcmc_jax
+            from homodyne.optimization import NUMPYRO_AVAILABLE, fit_mcmc_jax
         except ImportError:
             pytest.skip("MCMC module not available")
 
@@ -597,7 +597,7 @@ class TestMCMCEdgeCases:
         try:
             from homodyne.tests.factories.data_factory import XPCSDataFactory
 
-            from homodyne.optimization.mcmc import NUMPYRO_AVAILABLE, fit_mcmc_jax
+            from homodyne.optimization import NUMPYRO_AVAILABLE, fit_mcmc_jax
         except ImportError:
             pytest.skip("Required modules not available")
 
@@ -640,7 +640,7 @@ class TestMCMCEdgeCases:
         try:
             from homodyne.tests.factories.data_factory import XPCSDataFactory
 
-            from homodyne.optimization.mcmc import NUMPYRO_AVAILABLE, fit_mcmc_jax
+            from homodyne.optimization import NUMPYRO_AVAILABLE, fit_mcmc_jax
         except ImportError:
             pytest.skip("Required modules not available")
 
@@ -682,7 +682,7 @@ class TestMCMCEdgeCases:
         try:
             from homodyne.tests.factories.data_factory import XPCSDataFactory
 
-            from homodyne.optimization.mcmc import NUMPYRO_AVAILABLE, fit_mcmc_jax
+            from homodyne.optimization import NUMPYRO_AVAILABLE, fit_mcmc_jax
         except ImportError:
             pytest.skip("Required modules not available")
 

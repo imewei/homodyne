@@ -318,16 +318,16 @@ When adding new features:
 
 ### Module Import Paths (v2.4.1)
 
-After the optimization module reorganization:
+After the optimization module reorganization (CMC v3.0):
 
 ```python
 # NLSQ imports
 from homodyne.optimization.nlsq.core import optimize_nlsq
 from homodyne.optimization.nlsq.wrapper import NLSQWrapper
 
-# MCMC imports
-from homodyne.optimization.mcmc.core import run_mcmc
-from homodyne.optimization.mcmc.cmc.coordinator import CMCCoordinator
+# CMC v3.0 imports (MCMC inference)
+from homodyne.optimization.cmc.core import fit_mcmc_jax
+from homodyne.optimization.cmc.results import CMCResult
 ```
 
 For detailed troubleshooting, see the main package documentation.

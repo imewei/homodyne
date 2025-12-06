@@ -88,7 +88,7 @@ class TestPublicAPIStability:
             pytest.skip(f"Optimization functions not available: {e}")
 
         try:
-            from homodyne.optimization.mcmc import fit_mcmc_jax
+            from homodyne.optimization import fit_mcmc_jax
 
             assert callable(fit_mcmc_jax), "fit_mcmc_jax not callable"
 

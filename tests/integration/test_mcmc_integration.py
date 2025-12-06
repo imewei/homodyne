@@ -48,7 +48,7 @@ except ImportError:
 # Homodyne imports
 from homodyne.config.manager import ConfigManager
 from homodyne.config.parameter_space import ParameterSpace
-from homodyne.optimization.mcmc import MCMCResult, fit_mcmc_jax
+from homodyne.optimization import MCMCResult, fit_mcmc_jax
 
 # Test factory imports
 from tests.factories.config_factory import (
@@ -1019,13 +1019,18 @@ except ImportError:
 
 @pytest.mark.arviz
 @pytest.mark.skipif(not HAS_ARVIZ, reason="ArviZ not available")
+@pytest.mark.skip(
+    reason="Legacy MCMCResult API removed in CMC v3.0. "
+    "CMCResult has native ArviZ support via inference_data attribute. "
+    "See tests/cmc/test_results.py for v3.0 ArviZ tests."
+)
 class TestArviZWorkflows:
     """Integration tests for ArviZ workflows with MCMC results."""
 
     @pytest.fixture
     def mock_mcmc_result_with_samples(self):
         """Create MCMCResult with realistic samples for ArviZ testing."""
-        from homodyne.optimization.mcmc.cmc.result import MCMCResult
+        from homodyne.optimization.cmc.result import MCMCResult
 
         n_chains = 2
         n_samples = 100
@@ -1196,7 +1201,7 @@ class TestArviZWorkflows:
         3. User runs MCMC for uncertainty quantification
         4. User exports to ArviZ for diagnostics
         """
-        from homodyne.optimization.mcmc.cmc.result import MCMCResult
+        from homodyne.optimization.cmc.result import MCMCResult
 
         # Step 1: Simulated NLSQ results
         nlsq_best_fit = {
@@ -1254,7 +1259,7 @@ class TestArviZWorkflows:
 
     def test_cmc_result_to_arviz_with_diagnostics(self):
         """Test CMC result → ArviZ export with per-shard diagnostics."""
-        from homodyne.optimization.mcmc.cmc.result import MCMCResult
+        from homodyne.optimization.cmc.result import MCMCResult
 
         np.random.seed(42)
         n_samples = 100
@@ -1963,21 +1968,23 @@ def test_mcmc_with_manual_initial_params(simple_static_data):
         n_chains=1,  # Single chain for speed
     )
 
-    # Verify result structure
+    # Verify result structure (CMCResult v3.0 API)
     assert isinstance(result, MCMCResult)
-    assert result.mean_params is not None
-    assert len(result.mean_params) == 3  # D0, alpha, D_offset
-    assert result.mean_contrast is not None
-    assert result.mean_offset is not None
+    assert result.parameters is not None
+    # Physical params only: D0, alpha, D_offset (contrast/offset per-angle in samples)
+    assert len(result.parameters) >= 3
+    # Per-angle params stored in samples dict
+    assert "contrast_0" in result.samples
+    assert "offset_0" in result.samples
 
     # NOTE: With minimal data (10 points) and sampling (200 samples),
     # parameter recovery is not guaranteed. We just verify:
     # 1. MCMC completes without crashing
     # 2. Returns valid result structure
     # 3. Parameters are finite (not NaN or Inf)
-    assert np.all(np.isfinite(result.mean_params))
-    assert np.isfinite(result.mean_contrast)
-    assert np.isfinite(result.mean_offset)
+    assert np.all(np.isfinite(result.parameters))
+    assert np.all(np.isfinite(result.samples["contrast_0"]))
+    assert np.all(np.isfinite(result.samples["offset_0"]))
 
 
 def test_automatic_nuts_selection_small_dataset(simple_static_data):
@@ -2006,13 +2013,12 @@ def test_automatic_nuts_selection_small_dataset(simple_static_data):
         n_chains=1,
     )
 
-    # Verify result structure
+    # Verify result structure (CMCResult v3.0 API)
     assert isinstance(result, MCMCResult)
-    assert result.sampler == "NUTS"  # Should use NUTS
-
-    # In v3.0 CMC-only architecture, even NUTS sampler still flows through CMC
-    if hasattr(result, "is_cmc_result"):
-        assert result.is_cmc_result()
+    # CMC v3.0 uses NUTS internally, verified via is_cmc_result()
+    assert result.is_cmc_result()
+    # CMCResult doesn't have sampler attribute; it always uses NUTS
+    assert result.parameters is not None
 
 
 @pytest.mark.skip(reason="MCMC implementation needs full testing setup")
@@ -2043,29 +2049,30 @@ def test_convergence_with_physics_priors_only(simple_static_data):
         n_chains=2,  # Multiple chains for diagnostics
     )
 
-    # Verify convergence
+    # Verify convergence (CMCResult v3.0 API)
     assert isinstance(result, MCMCResult)
-    assert result.converged is True  # Should converge
+    assert result.success is True  # Should converge (success property)
 
-    # Verify R-hat if available (multi-chain)
-    if result.r_hat is not None:
-        for param_name, r_hat_value in result.r_hat.items():
-            if r_hat_value is not None:
-                assert r_hat_value < 1.2, (
-                    f"Poor convergence for {param_name}: R-hat={r_hat_value}"
-                )
+    # Verify R-hat (CMCResult v3.0 always has r_hat dict)
+    for param_name, r_hat_value in result.r_hat.items():
+        if r_hat_value is not None:
+            assert r_hat_value < 1.2, (
+                f"Poor convergence for {param_name}: R-hat={r_hat_value}"
+            )
 
-    # Verify ESS if available
-    if result.effective_sample_size is not None:
-        for param_name, ess_value in result.effective_sample_size.items():
-            if ess_value is not None:
-                assert ess_value > 50, f"Low ESS for {param_name}: ESS={ess_value}"
+    # Verify ESS (CMCResult v3.0 uses ess_bulk dict)
+    for param_name, ess_value in result.ess_bulk.items():
+        if ess_value is not None:
+            assert ess_value > 50, f"Low ESS for {param_name}: ESS={ess_value}"
 
     # Verify parameters are finite and valid
     # With physics priors and minimal data, exact recovery not guaranteed
-    assert np.all(np.isfinite(result.mean_params))
-    assert result.mean_params[0] > 0  # D0 must be positive
-    assert result.mean_params[1] > 0  # alpha must be positive
+    assert np.all(np.isfinite(result.parameters))
+    # D0 is physical param in parameters array
+    d0_idx = result.param_names.index("D0")
+    alpha_idx = result.param_names.index("alpha")
+    assert result.parameters[d0_idx] > 0  # D0 must be positive
+    assert result.parameters[alpha_idx] > 0  # alpha must be positive
 
 
 def test_auto_retry_on_poor_convergence():
@@ -2111,13 +2118,14 @@ def test_auto_retry_on_poor_convergence():
         n_chains=2,
     )
 
-    # Result should be returned even if convergence is poor
+    # Result should be returned even if convergence is poor (CMCResult v3.0 API)
     assert isinstance(result, MCMCResult)
 
     # Check if retry was triggered (indicated by warnings in logs)
     # For this test, we just verify result is valid regardless of convergence
-    assert result.mean_params is not None
-    assert len(result.mean_params) == 3
+    assert result.parameters is not None
+    # CMCResult v3.0: param_names includes all sampled params (contrast, offset, physical)
+    assert len(result.param_names) >= 3  # At least 3 physical params
 
 
 def test_warning_on_poor_convergence_metrics(simple_static_data, caplog):
@@ -2153,12 +2161,12 @@ def test_warning_on_poor_convergence_metrics(simple_static_data, caplog):
         n_chains=2,
     )
 
-    # Result should still be returned
+    # Result should still be returned (CMCResult v3.0 API)
     assert isinstance(result, MCMCResult)
 
     # Check for warnings in logs (may or may not trigger depending on seed)
     # We just verify the test runs without crashes
-    assert result.mean_params is not None
+    assert result.parameters is not None
 
 
 # Note: test_configurable_cmc_thresholds removed in v3.0 (CMC-only architecture)
@@ -2202,10 +2210,12 @@ def test_no_automatic_nlsq_initialization():
         n_chains=1,
     )
 
-    # Should complete successfully without NLSQ
+    # Should complete successfully without NLSQ (CMCResult v3.0 API)
     assert isinstance(result, MCMCResult)
-    assert result.converged in [True, False]  # Either is valid
-    assert result.backend == "JAX"
+    # CMCResult v3.0 uses convergence_status instead of converged bool
+    assert result.convergence_status in ["converged", "divergences", "not_converged"]
+    # CMCResult v3.0 uses device_info instead of backend string
+    assert "cpu" in result.device_info.get("platform", "cpu").lower()
 
     # Verify no NLSQ-specific metadata (if any existed)
     # The absence of automatic initialization is the key feature
@@ -2288,6 +2298,6 @@ def test_enhanced_retry_logging(caplog):
         if has_diagnostics:
             assert True, "Quantitative diagnostics included in logging"
 
-    # Verify result structure regardless of retry
-    assert result.mean_params is not None
-    assert len(result.mean_params) == 3
+    # Verify result structure regardless of retry (CMCResult v3.0 API)
+    assert result.parameters is not None
+    assert len(result.param_names) >= 3  # At least 3 physical params
