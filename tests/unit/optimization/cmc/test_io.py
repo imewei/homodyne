@@ -7,6 +7,8 @@ from pathlib import Path
 import numpy as np
 import pytest
 
+pytest.importorskip("arviz", reason="ArviZ required for CMC unit tests")
+
 from homodyne.optimization.cmc.io import (
     load_samples_npz,
     save_samples_npz,

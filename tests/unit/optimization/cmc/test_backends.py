@@ -18,6 +18,9 @@ from unittest.mock import MagicMock, patch
 import numpy as np
 import pytest
 
+# Require ArviZ for CMC imports; skip module if missing optional dependency
+pytest.importorskip("arviz", reason="ArviZ required for CMC unit tests")
+
 from homodyne.optimization.cmc.backends import (
     CMCBackend,
     MultiprocessingBackend,

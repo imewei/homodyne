@@ -25,26 +25,26 @@ class TestHardwareConfig:
     def test_hardware_config_creation(self):
         """Test creating a HardwareConfig instance."""
         config = HardwareConfig(
-            platform="gpu",
-            num_devices=4,
-            memory_per_device_gb=80.0,
+            platform="cpu",
+            num_devices=32,
+            memory_per_device_gb=8.0,
             num_nodes=2,
-            cores_per_node=36,
-            total_memory_gb=256.0,
+            cores_per_node=32,
+            total_memory_gb=512.0,
             cluster_type="pbs",
             recommended_backend="pbs",
-            max_parallel_shards=72,
+            max_parallel_shards=64,
         )
 
-        assert config.platform == "gpu"
-        assert config.num_devices == 4
-        assert config.memory_per_device_gb == 80.0
+        assert config.platform == "cpu"
+        assert config.num_devices == 32
+        assert config.memory_per_device_gb == 8.0
         assert config.num_nodes == 2
-        assert config.cores_per_node == 36
-        assert config.total_memory_gb == 256.0
+        assert config.cores_per_node == 32
+        assert config.total_memory_gb == 512.0
         assert config.cluster_type == "pbs"
         assert config.recommended_backend == "pbs"
-        assert config.max_parallel_shards == 72
+        assert config.max_parallel_shards == 64
 
     def test_hardware_config_with_none_cluster(self):
         """Test HardwareConfig with standalone system."""

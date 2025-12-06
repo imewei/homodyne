@@ -390,7 +390,7 @@ class TestVersionCompatibility:
         """Test graceful handling of optional dependencies."""
         # Should handle missing optional dependencies gracefully
         optional_modules = [
-            "homodyne.optimization.mcmc",
+            "homodyne.optimization.cmc",
         ]
 
         for module_name in optional_modules:

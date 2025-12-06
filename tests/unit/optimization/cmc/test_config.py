@@ -2,6 +2,8 @@
 
 import pytest
 
+pytest.importorskip("arviz", reason="ArviZ required for CMC unit tests")
+
 from homodyne.optimization.cmc.config import CMCConfig
 
 

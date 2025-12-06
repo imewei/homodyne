@@ -16,6 +16,8 @@ import jax.numpy as jnp
 import numpy as np
 import pytest
 
+pytest.importorskip("arviz", reason="ArviZ required for CMC unit tests")
+
 from homodyne.optimization.cmc.model import (
     get_model_param_count,
     validate_model_output,

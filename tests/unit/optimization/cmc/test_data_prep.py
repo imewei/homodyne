@@ -3,6 +3,8 @@
 import numpy as np
 import pytest
 
+pytest.importorskip("arviz", reason="ArviZ required for CMC unit tests")
+
 from homodyne.optimization.cmc.data_prep import (
     PreparedData,
     estimate_noise_scale,
