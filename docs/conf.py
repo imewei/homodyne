@@ -99,11 +99,10 @@ _online_intersphinx = {
 }
 
 # Default to offline builds in CI/air-gapped environments; opt in with SPHINX_OFFLINE=0
+intersphinx_mapping = _online_intersphinx.copy()
 if os.environ.get("SPHINX_OFFLINE", "1") == "0":
-    intersphinx_mapping = _online_intersphinx
     intersphinx_disabled_domains: list[str] = []
 else:
-    intersphinx_mapping = {}
     intersphinx_disabled_domains = list(_online_intersphinx.keys())
 intersphinx_timeout = 1
 

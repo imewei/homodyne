@@ -3,7 +3,14 @@
 Essential utility functions with preserved API compatibility.
 """
 
-from homodyne.utils.logging import get_logger, log_calls, log_operation, log_performance
+from homodyne.utils.logging import (
+    configure_logging,
+    get_logger,
+    log_calls,
+    log_operation,
+    log_performance,
+    with_context,
+)
 from homodyne.utils.path_validation import (
     PathValidationError,
     get_safe_output_dir,
@@ -22,6 +29,8 @@ from homodyne.utils.validation import (
 __all__ = [
     # Logging utilities
     "get_logger",
+    "configure_logging",
+    "with_context",
     "log_performance",
     "log_calls",
     "log_operation",

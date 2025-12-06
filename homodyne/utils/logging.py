@@ -1,21 +1,82 @@
-"""Minimal logging infrastructure for the homodyne package.
+"""Structured logging utilities for the homodyne package.
 
-Provides simplified logging with preserved API compatibility for the rebuild.
-This module maintains exact function signatures from the original implementation
-while removing complex features not essential for core functionality.
+Provides a lightweight but flexible logging system that matches the CMC
+reimplementation requirements: contextual log prefixes, configurable console
+and rotating file handlers, and helpers for performance monitoring.
 """
+
+from __future__ import annotations
 
 import functools
 import inspect
 import logging
 import time
 from contextlib import contextmanager
+from datetime import datetime
+from logging.handlers import RotatingFileHandler
+from pathlib import Path
+from typing import Any, Mapping
+
+DEFAULT_FORMAT_DETAILED = "%(asctime)s | %(levelname)-8s | %(name)s | %(message)s"
+DEFAULT_FORMAT_SIMPLE = "%(levelname)-8s | %(message)s"
+
+
+def _resolve_level(level: str | int | None) -> int | None:
+    """Convert string/int log level to logging level constant."""
+    if level is None:
+        return None
+    if isinstance(level, int):
+        return level
+    return getattr(logging, str(level).upper(), logging.INFO)
+
+
+class _ColorFormatter(logging.Formatter):
+    """Optional ANSI color formatter for console logging."""
+
+    COLOR_MAP = {
+        "DEBUG": "\033[36m",  # Cyan
+        "INFO": "\033[32m",  # Green
+        "WARNING": "\033[33m",  # Yellow
+        "ERROR": "\033[31m",  # Red
+        "CRITICAL": "\033[35m",  # Magenta
+    }
+    RESET = "\033[0m"
+
+    def __init__(self, fmt: str, datefmt: str | None, use_color: bool) -> None:
+        super().__init__(fmt=fmt, datefmt=datefmt)
+        self.use_color = use_color
+
+    def format(self, record: logging.LogRecord) -> str:
+        original_levelname = record.levelname
+        if self.use_color and original_levelname in self.COLOR_MAP:
+            record.levelname = f"{self.COLOR_MAP[original_levelname]}{original_levelname}{self.RESET}"
+        try:
+            return super().format(record)
+        finally:
+            record.levelname = original_levelname
+
+
+class _ContextAdapter(logging.LoggerAdapter):
+    """Logger adapter that prefixes messages with structured context."""
+
+    def process(self, msg: str, kwargs: Any) -> tuple[str, Any]:
+        if not self.extra:
+            return msg, kwargs
+
+        context_parts = [
+            f"{key}={value}"
+            for key, value in self.extra.items()
+            if value is not None and value != ""
+        ]
+        if context_parts:
+            msg = f"[{' '.join(context_parts)}] {msg}"
+        return msg, kwargs
 
 
 class MinimalLogger:
-    """Simplified logger manager for the homodyne package."""
+    """Configurable logger manager for the homodyne package."""
 
-    _instance = None
+    _instance: MinimalLogger | None = None
 
     def __new__(cls):
         if cls._instance is None:
@@ -23,7 +84,7 @@ class MinimalLogger:
             cls._instance._initialized = False
         return cls._instance
 
-    def __init__(self):
+    def __init__(self) -> None:
         if self._initialized:
             return
 
@@ -31,43 +92,177 @@ class MinimalLogger:
         self._root_logger_name = "homodyne"
         self._initialized = True
 
-    def configure(self, level: str = "INFO"):
-        """Configure basic logging."""
-        if self._configured:
-            return
+    @staticmethod
+    def _build_formatter(
+        format_name: str = "detailed",
+        use_color: bool = False,
+    ) -> logging.Formatter:
+        fmt = DEFAULT_FORMAT_SIMPLE if format_name == "simple" else DEFAULT_FORMAT_DETAILED
+        return _ColorFormatter(fmt=fmt, datefmt="%Y-%m-%d %H:%M:%S", use_color=use_color)
 
-        # Set up root logger
+    def _clear_managed_handlers(self, logger: logging.Logger) -> None:
+        for handler in list(logger.handlers):
+            if getattr(handler, "_homodyne_managed", False):
+                logger.removeHandler(handler)
+                handler.close()
+
+    def configure(
+        self,
+        level: str | int = "INFO",
+        *,
+        console_level: str | int | None = None,
+        console_format: str = "detailed",
+        console_colors: bool = False,
+        file_path: str | Path | None = None,
+        file_level: str | int | None = None,
+        max_size_mb: int = 10,
+        backup_count: int = 5,
+        module_levels: Mapping[str, str | int] | None = None,
+        force: bool = False,
+    ) -> Path | None:
+        """Configure homodyne logging.
+
+        Returns the file path if a file handler is created.
+        """
         root_logger = logging.getLogger(self._root_logger_name)
-        root_logger.setLevel(getattr(logging, level.upper(), logging.INFO))
 
-        # Add console handler if none exists
-        if not root_logger.handlers:
-            handler = logging.StreamHandler()
-            formatter = logging.Formatter(
-                "%(asctime)s | %(levelname)s | %(name)s | %(message)s",
+        if force:
+            self._clear_managed_handlers(root_logger)
+
+        root_level_candidates = [_resolve_level(level)]
+        if console_level is not False:
+            root_level_candidates.append(_resolve_level(console_level))
+        if file_level is not False:
+            root_level_candidates.append(_resolve_level(file_level))
+        root_level = min(lvl for lvl in root_level_candidates if lvl is not None)
+        root_logger.setLevel(root_level)
+
+        # Console handler
+        console_handler: logging.Handler | None = None
+        for handler in root_logger.handlers:
+            if isinstance(handler, logging.StreamHandler) and not isinstance(
+                handler,
+                logging.FileHandler,
+            ):
+                console_handler = handler
+                break
+
+        if console_level is not False:
+            if console_handler is None:
+                console_handler = logging.StreamHandler()
+                console_handler._homodyne_managed = True  # type: ignore[attr-defined]
+                root_logger.addHandler(console_handler)
+            console_handler.setLevel(_resolve_level(console_level) or root_level)
+            console_handler.setFormatter(
+                self._build_formatter(console_format, use_color=console_colors)
             )
-            handler.setFormatter(formatter)
-            root_logger.addHandler(handler)
+
+        # File handler
+        created_file: Path | None = None
+        if file_path:
+            file_path = Path(file_path)
+            file_path.parent.mkdir(parents=True, exist_ok=True)
+            created_file = file_path
+
+            max_bytes = int(max_size_mb * 1024 * 1024)
+            if max_bytes > 0:
+                file_handler: logging.Handler = RotatingFileHandler(
+                    file_path,
+                    maxBytes=max_bytes,
+                    backupCount=backup_count,
+                )
+            else:
+                file_handler = logging.FileHandler(file_path)
+            file_handler._homodyne_managed = True  # type: ignore[attr-defined]
+            file_handler.setLevel(_resolve_level(file_level) or root_level)
+            file_handler.setFormatter(
+                logging.Formatter(
+                    DEFAULT_FORMAT_DETAILED,
+                    datefmt="%Y-%m-%d %H:%M:%S",
+                )
+            )
+            root_logger.addHandler(file_handler)
+
+        # Module-specific overrides
+        if module_levels:
+            for module_name, module_level in module_levels.items():
+                logging.getLogger(module_name).setLevel(_resolve_level(module_level) or root_level)
 
         self._configured = True
+        return created_file
+
+    def configure_from_dict(
+        self,
+        logging_config: Mapping[str, Any] | None,
+        *,
+        verbose: bool = False,
+        quiet: bool = False,
+        output_dir: Path | str | None = None,
+        run_id: str | None = None,
+    ) -> Path | None:
+        """Configure logging from a `logging:` config section."""
+        if not logging_config or not logging_config.get("enabled", True):
+            return None
+
+        level = logging_config.get("level", "INFO")
+
+        console_cfg: Mapping[str, Any] = logging_config.get("console", {}) or {}
+        file_cfg: Mapping[str, Any] = logging_config.get("file", {}) or {}
+
+        console_enabled = console_cfg.get("enabled", True)
+        console_level: str | int | None = (
+            console_cfg.get("level", level) if console_enabled else False
+        )
+        if console_enabled:
+            if quiet:
+                console_level = "ERROR"
+            elif verbose:
+                console_level = "DEBUG"
+
+        file_path: Path | None = None
+        if file_cfg.get("enabled", False):
+            if "path" in file_cfg:
+                base_dir = Path(file_cfg.get("path", "./logs/"))
+                if not base_dir.is_absolute():
+                    base_dir = base_dir.resolve()
+            else:
+                base_dir = Path(output_dir) / "logs" if output_dir else Path("./logs")
+                base_dir = base_dir.resolve()
+            filename = file_cfg.get("filename", "homodyne_analysis.log")
+            run_suffix = run_id or datetime.now().strftime("%Y%m%d_%H%M%S")
+            if "{run_id}" in filename:
+                filename = filename.format(run_id=run_suffix)
+            else:
+                stem = Path(filename).stem or "homodyne_analysis"
+                suffix = Path(filename).suffix or ".log"
+                filename = f"{stem}_{run_suffix}{suffix}"
+            file_path = base_dir / filename
+
+        return self.configure(
+            level=level,
+            console_level=console_level,
+            console_format=console_cfg.get("format", "detailed"),
+            console_colors=bool(console_cfg.get("colors", False)),
+            file_path=file_path,
+            file_level=file_cfg.get("level", "DEBUG"),
+            max_size_mb=int(file_cfg.get("max_size_mb", 10)),
+            backup_count=int(file_cfg.get("backup_count", 5)),
+            module_levels=logging_config.get("modules"),
+            force=True,
+        )
 
     def get_logger(self, name: str) -> logging.Logger:
         """Get or create a logger with hierarchical naming."""
-
-        # Ensure we have a fully qualified name
         if not name.startswith(self._root_logger_name):
             if name == "__main__":
                 full_name = f"{self._root_logger_name}.main"
+            elif "." in name and name.startswith("homodyne"):
+                full_name = name
             else:
-                # Extract module path from name
-                if "." in name and name.startswith("homodyne"):
-                    full_name = name
-                else:
-                    full_name = f"{self._root_logger_name}.{name}"
+                full_name = f"{self._root_logger_name}.{name}"
         else:
             full_name = name
 
-        # Configure if not already done
         if not self._configured:
             self.configure()
 
@@ -78,27 +273,48 @@ class MinimalLogger:
 _logger_manager = MinimalLogger()
 
 
-def get_logger(name: str | None = None) -> logging.Logger:
-    """Get a logger instance with automatic naming.
+def configure_logging(
+    logging_config: Mapping[str, Any] | None,
+    *,
+    verbose: bool = False,
+    quiet: bool = False,
+    output_dir: Path | str | None = None,
+    run_id: str | None = None,
+) -> Path | None:
+    """Public helper to configure logging from config + CLI flags."""
+    return _logger_manager.configure_from_dict(
+        logging_config,
+        verbose=verbose,
+        quiet=quiet,
+        output_dir=output_dir,
+        run_id=run_id,
+    )
 
-    Args:
-        name: Logger name. If None, uses caller's module name.
 
-    Returns:
-        Configured logger instance.
-    """
+def get_logger(
+    name: str | None = None,
+    *,
+    context: Mapping[str, Any] | None = None,
+) -> logging.Logger:
+    """Get a logger instance with automatic naming and optional context."""
     if name is None:
-        # Auto-discover caller's module
         frame = inspect.currentframe()
         try:
             caller_frame = frame.f_back
             if caller_frame:
-                module_name = caller_frame.f_globals.get("__name__", "unknown")
-                name = module_name
+                name = caller_frame.f_globals.get("__name__", "unknown")
         finally:
             del frame
 
-    return _logger_manager.get_logger(name or "unknown")
+    base_logger = _logger_manager.get_logger(name or "unknown")
+    if context:
+        return _ContextAdapter(base_logger, dict(context))
+    return base_logger
+
+
+def with_context(logger: logging.Logger, **context: Any) -> logging.LoggerAdapter:
+    """Attach contextual prefix to an existing logger."""
+    return _ContextAdapter(logger, {k: v for k, v in context.items() if v is not None})
 
 
 def log_calls(

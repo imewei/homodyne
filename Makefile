@@ -306,6 +306,7 @@ clean-test:
 	rm -rf .homodyne_cache/
 	rm -f TASK_GROUP_*.md
 	rm -rf cmc_temp_*/
+	rm -rf tmp/
 	rm -f phi_angles_list.txt
 	rm -rf .ultra-think/
 

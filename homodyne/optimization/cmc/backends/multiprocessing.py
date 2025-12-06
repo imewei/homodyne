@@ -7,6 +7,7 @@ multiprocessing module for CPU-based parallelism.
 from __future__ import annotations
 
 import multiprocessing as mp
+import time
 from collections.abc import Callable
 from typing import TYPE_CHECKING, Any
 
@@ -14,7 +15,7 @@ import jax
 import numpy as np
 
 from homodyne.optimization.cmc.backends.base import CMCBackend, combine_shard_samples
-from homodyne.utils.logging import get_logger
+from homodyne.utils.logging import get_logger, with_context
 
 if TYPE_CHECKING:
     from homodyne.config.parameter_space import ParameterSpace
@@ -69,6 +70,13 @@ def _run_shard_worker(
     from homodyne.optimization.cmc.config import CMCConfig
     from homodyne.optimization.cmc.sampler import run_nuts_sampling
 
+    start_time = time.perf_counter()
+    worker_logger = get_logger(
+        __name__,
+        context={"run": config_dict.get("run_id"), "shard": shard_idx},
+    )
+    worker_logger.debug("Starting shard worker")
+
     # Reconstruct objects from dicts
     config = CMCConfig.from_dict(config_dict)
 
@@ -112,6 +120,12 @@ def _run_shard_worker(
             progress_bar=False,  # Disable in worker
         )
 
+        duration = time.perf_counter() - start_time
+        worker_logger.info(
+            f"Shard {shard_idx} finished in {duration:.2f}s with "
+            f"{samples.n_samples} samples per chain"
+        )
+
         # Serialize for return
         return {
             "success": True,
@@ -121,6 +135,7 @@ def _run_shard_worker(
             "n_chains": samples.n_chains,
             "n_samples": samples.n_samples,
             "extra_fields": {k: np.array(v) for k, v in samples.extra_fields.items()},
+            "duration": duration,
             "stats": {
                 "warmup_time": stats.warmup_time,
                 "sampling_time": stats.sampling_time,
@@ -130,11 +145,13 @@ def _run_shard_worker(
         }
 
     except Exception as e:
-        logger.error(f"Shard {shard_idx} failed: {e}")
+        duration = time.perf_counter() - start_time
+        worker_logger.error(f"Shard {shard_idx} failed after {duration:.2f}s: {e}")
         return {
             "success": False,
             "shard_idx": shard_idx,
             "error": str(e),
+            "duration": duration,
         }
 
 
@@ -206,9 +223,15 @@ class MultiprocessingBackend(CMCBackend):
         """
         from homodyne.optimization.cmc.sampler import MCMCSamples, run_nuts_sampling
 
+        run_logger = with_context(
+            logger,
+            run=getattr(config, "run_id", None),
+            backend="multiprocessing",
+        )
+
         if shards is None or len(shards) <= 1:
             # Single shard - run directly without multiprocessing
-            logger.info("Running single-shard MCMC (no parallelization)")
+            run_logger.info("Running single-shard MCMC (no parallelization)")
             samples, stats = run_nuts_sampling(
                 model=model,
                 model_kwargs=model_kwargs,
@@ -223,7 +246,7 @@ class MultiprocessingBackend(CMCBackend):
 
         # Multiple shards - run in parallel
         n_shards = len(shards)
-        logger.info(
+        run_logger.info(
             f"Running {n_shards} shards in parallel with {self.n_workers} workers"
         )
 
@@ -283,11 +306,12 @@ class MultiprocessingBackend(CMCBackend):
                     result = async_result.get(timeout=3600)  # 1 hour timeout
                     results.append(result)
                 except Exception as e:
-                    logger.error(f"Worker failed: {e}")
+                    run_logger.error(f"Worker failed: {e}")
                     results.append({"success": False, "error": str(e)})
 
         # Process results
         successful_samples = []
+        shard_timings: list[tuple[int | None, float | None]] = []
         for result in results:
             if result["success"]:
                 # Reconstruct MCMCSamples
@@ -299,8 +323,11 @@ class MultiprocessingBackend(CMCBackend):
                     extra_fields=result["extra_fields"],
                 )
                 successful_samples.append(samples)
+                shard_timings.append(
+                    (result.get("shard_idx"), result.get("duration"))
+                )
             else:
-                logger.warning(
+                run_logger.warning(
                     f"Shard {result.get('shard_idx', '?')} failed: {result.get('error', 'unknown')}"
                 )
 
@@ -310,9 +337,13 @@ class MultiprocessingBackend(CMCBackend):
         # Check success rate
         success_rate = len(successful_samples) / n_shards
         if success_rate < config.min_success_rate:
-            logger.warning(
+            run_logger.warning(
                 f"Success rate {success_rate:.1%} below threshold {config.min_success_rate:.1%}"
             )
+
+        for shard_idx, duration in shard_timings:
+            if shard_idx is not None and duration is not None:
+                run_logger.debug(f"Shard {shard_idx} completed in {duration:.2f}s")
 
         # Combine samples
         combined = combine_shard_samples(
@@ -320,7 +351,7 @@ class MultiprocessingBackend(CMCBackend):
             method=config.combination_method,
         )
 
-        logger.info(
+        run_logger.info(
             f"Combined {len(successful_samples)}/{n_shards} successful shards"
         )
 

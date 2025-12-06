@@ -56,7 +56,7 @@ from homodyne.io.nlsq_writers import (  # noqa: E402
 from homodyne.io.nlsq_writers import (
     save_nlsq_npz_file as _io_save_nlsq_npz_file,
 )
-from homodyne.utils.logging import get_logger  # noqa: E402
+from homodyne.utils.logging import configure_logging, get_logger  # noqa: E402
 from homodyne.viz.experimental_plots import (  # noqa: E402
     plot_experimental_data as _viz_plot_experimental_data,
 )
@@ -243,7 +243,9 @@ def dispatch_command(args) -> dict[str, Any]:
     dict
         Command execution result with success status and details
     """
-    logger.info("Dispatching homodyne analysis command")
+    run_id = getattr(args, "run_id", None) or datetime.now().strftime("%Y%m%d_%H%M%S")
+    args.run_id = run_id
+    logger.info(f"Dispatching homodyne analysis command (run_id={run_id})")
 
     # Validate arguments
     if not validate_args(args):
@@ -259,17 +261,24 @@ def dispatch_command(args) -> dict[str, Any]:
         # Create output directory
         args.output_dir.mkdir(parents=True, exist_ok=True)
 
-        # Setup file logging
-        _setup_file_logging(args)
+        # Load configuration (needed for logging settings)
+        config = _load_configuration(args)
 
-        # Configure logging based on args
-        _configure_logging(args)
+        # Configure logging using config + CLI verbosity flags
+        config_dict = config.get_config() if hasattr(config, "get_config") else config
+        logging_cfg = config_dict.get("logging", {}) if isinstance(config_dict, dict) else {}
+        log_file = configure_logging(
+            logging_cfg,
+            verbose=getattr(args, "verbose", False),
+            quiet=getattr(args, "quiet", False),
+            output_dir=args.output_dir,
+            run_id=run_id,
+        )
+        if log_file:
+            logger.info(f"Log file created: {log_file}")
 
         # Configure device (CPU/GPU)
         device_config = _configure_device(args)
-
-        # Load configuration
-        config = _load_configuration(args)
 
         # Check if only simulated data plotting is requested (no experimental data needed)
         plot_exp = getattr(args, "plot_experimental_data", False)
@@ -320,10 +329,13 @@ def dispatch_command(args) -> dict[str, Any]:
         logger.info("Analysis completed successfully")
 
         # Summary message
-        log_dir = args.output_dir / "logs"
-        log_files = list(log_dir.glob("homodyne_analysis_*.log"))
-        if log_files:
-            logger.info(f"Analysis log saved to: {log_files[-1]}")
+        if log_file:
+            logger.info(f"Analysis log saved to: {log_file}")
+        else:
+            log_dir = args.output_dir / "logs"
+            log_files = list(log_dir.glob("homodyne_analysis_*.log"))
+            if log_files:
+                logger.info(f"Analysis log saved to: {log_files[-1]}")
 
         return {
             "success": True,
@@ -336,65 +348,6 @@ def dispatch_command(args) -> dict[str, Any]:
         logger.error(f"Command execution failed: {e}")
         logger.debug("Full traceback:", exc_info=True)
         return {"success": False, "error": str(e)}
-
-
-def _setup_file_logging(args) -> None:
-    """Setup file logging to save analysis logs.
-
-    Creates a log file in the output directory to capture the full analysis log.
-    """
-    import logging
-    from datetime import datetime
-
-    # Create logs subdirectory
-    log_dir = args.output_dir / "logs"
-    log_dir.mkdir(parents=True, exist_ok=True)
-
-    # Generate log filename with timestamp
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    log_file = log_dir / f"homodyne_analysis_{timestamp}.log"
-
-    # Add file handler to root homodyne logger
-    root_logger = logging.getLogger("homodyne")
-
-    # Create file handler
-    file_handler = logging.FileHandler(log_file, mode="w")
-    file_formatter = logging.Formatter(
-        "%(asctime)s | %(levelname)-8s | %(name)s | %(message)s",
-        datefmt="%Y-%m-%d %H:%M:%S",
-    )
-    file_handler.setFormatter(file_formatter)
-    file_handler.setLevel(logging.DEBUG)  # Capture everything to file
-
-    # Add handler
-    root_logger.addHandler(file_handler)
-
-    logger.info(f"Log file created: {log_file}")
-    return log_file
-
-
-def _configure_logging(args) -> None:
-    """Configure logging based on CLI arguments."""
-    import logging
-
-    # Set root logger to DEBUG so file handler captures everything
-    root_logger = logging.getLogger("homodyne")
-    root_logger.setLevel(logging.DEBUG)
-
-    # Configure console handler level based on args
-    for handler in root_logger.handlers:
-        # Only adjust console (StreamHandler), not file handlers
-        if isinstance(handler, logging.StreamHandler) and not isinstance(
-            handler,
-            logging.FileHandler,
-        ):
-            if args.quiet:
-                handler.setLevel(logging.ERROR)
-            elif args.verbose:
-                handler.setLevel(logging.DEBUG)
-                logger.debug("Verbose logging enabled")
-            else:
-                handler.setLevel(logging.INFO)
 
 
 def _configure_device(args) -> dict[str, Any]:
@@ -707,6 +660,7 @@ def _build_mcmc_runtime_kwargs(args, config: ConfigManager) -> dict[str, Any]:
         "n_samples": args.n_samples,
         "n_warmup": args.n_warmup,
         "n_chains": args.n_chains,
+        "run_id": getattr(args, "run_id", None),
     }
 
     if cfg_dict:

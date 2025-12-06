@@ -21,7 +21,7 @@ from homodyne.optimization.cmc.priors import (
     build_init_values_dict,
     get_param_names_in_order,
 )
-from homodyne.utils.logging import get_logger
+from homodyne.utils.logging import get_logger, with_context
 
 if TYPE_CHECKING:
     from homodyne.config.parameter_space import ParameterSpace
@@ -163,6 +163,8 @@ def run_nuts_sampling(
     tuple[MCMCSamples, SamplingStats]
         Samples and timing statistics.
     """
+    run_logger = with_context(logger, run=getattr(config, "run_id", None))
+
     # Get parameter names in correct order
     param_names = get_param_names_in_order(n_phi, analysis_mode)
     # Add sigma (noise parameter)
@@ -203,7 +205,7 @@ def run_nuts_sampling(
         rng_key = jax.random.PRNGKey(42)
 
     # Run sampling with timing
-    logger.info(
+    run_logger.info(
         f"Starting NUTS sampling: {config.num_chains} chains, "
         f"{config.num_warmup} warmup, {config.num_samples} samples"
     )
@@ -213,7 +215,7 @@ def run_nuts_sampling(
     try:
         mcmc.run(rng_key, **model_kwargs)
     except Exception as e:
-        logger.error(f"MCMC sampling failed: {e}")
+        run_logger.error(f"MCMC sampling failed: {e}")
         raise RuntimeError(f"MCMC sampling failed: {e}") from e
 
     total_time = time.perf_counter() - start_time
@@ -252,7 +254,7 @@ def run_nuts_sampling(
         accept_prob=accept_prob,
     )
 
-    logger.info(
+    run_logger.info(
         f"Sampling complete in {total_time:.1f}s, "
         f"{num_divergent} divergences, "
         f"accept_prob={accept_prob:.3f}"
@@ -318,8 +320,16 @@ def run_nuts_with_retry(
         rng_key = jax.random.PRNGKey(42)
 
     last_error = None
+    run_logger = with_context(logger, run=getattr(config, "run_id", None))
 
     for attempt in range(max_retries):
+        attempt_num = attempt + 1
+        attempt_logger = with_context(run_logger, attempt=attempt_num)
+        attempt_start = time.perf_counter()
+        attempt_logger.info(
+            f"🔄 Attempt {attempt_num}/{max_retries}: starting NUTS "
+            f"(chains={config.num_chains}, samples={config.num_samples})"
+        )
         try:
             # Use different RNG key for each attempt
             attempt_key = jax.random.fold_in(rng_key, attempt)
@@ -340,21 +350,32 @@ def run_nuts_with_retry(
             divergence_rate = stats.num_divergent / (
                 config.num_samples * config.num_chains
             )
+            duration = time.perf_counter() - attempt_start
             if divergence_rate > 0.1:  # More than 10% divergences
-                logger.warning(
-                    f"Attempt {attempt + 1}: High divergence rate ({divergence_rate:.1%}), retrying..."
+                attempt_logger.warning(
+                    f"🔄 Attempt {attempt_num}/{max_retries}: divergence_rate={divergence_rate:.1%}, retrying..."
                 )
                 last_error = RuntimeError(
                     f"High divergence rate: {divergence_rate:.1%}"
                 )
                 continue
 
+            attempt_logger.info(
+                f"✅ Attempt {attempt_num}/{max_retries} succeeded in {duration:.2f}s "
+                f"(divergences={stats.num_divergent}, accept_prob={stats.accept_prob:.3f})"
+            )
             return samples, stats
 
         except Exception as e:
-            logger.warning(f"Attempt {attempt + 1} failed: {e}")
+            duration = time.perf_counter() - attempt_start
+            attempt_logger.warning(
+                f"❌ Attempt {attempt_num}/{max_retries} failed after {duration:.2f}s: {e}"
+            )
             last_error = e
 
+    run_logger.error(
+        f"❌ MCMC sampling failed after {max_retries} attempts: {last_error}"
+    )
     # All retries failed
     raise RuntimeError(
         f"MCMC sampling failed after {max_retries} attempts: {last_error}"

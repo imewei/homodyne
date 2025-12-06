@@ -52,6 +52,8 @@ class CMCConfig:
         How to combine shard posteriors: "weighted_gaussian", "simple_average".
     min_success_rate : float
         Minimum fraction of shards that must succeed.
+    run_id : str | None
+        Optional identifier used for structured logging across shards.
     """
 
     # Enable settings
@@ -81,6 +83,7 @@ class CMCConfig:
     # Combination
     combination_method: str = "weighted_gaussian"
     min_success_rate: float = 0.90
+    run_id: str | None = None
 
     # Computed fields
     _validation_errors: list[str] = field(default_factory=list, repr=False)
@@ -150,6 +153,7 @@ class CMCConfig:
             # Combination
             combination_method=combination.get("method", "weighted_gaussian"),
             min_success_rate=combination.get("min_success_rate", 0.90),
+            run_id=config_dict.get("run_id"),
         )
 
         # Validate and log any issues
@@ -313,6 +317,7 @@ class CMCConfig:
         return {
             "enable": self.enable,
             "min_points_for_cmc": self.min_points_for_cmc,
+            "run_id": self.run_id,
             "sharding": {
                 "strategy": self.sharding_strategy,
                 "num_shards": self.num_shards,

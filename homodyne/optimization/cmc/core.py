@@ -7,6 +7,7 @@ main entry point for CMC analysis, matching the CLI signature.
 from __future__ import annotations
 
 import time
+from datetime import datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -26,7 +27,7 @@ from homodyne.optimization.cmc.model import xpcs_model
 from homodyne.optimization.cmc.priors import get_param_names_in_order
 from homodyne.optimization.cmc.results import CMCResult
 from homodyne.optimization.cmc.sampler import run_nuts_sampling
-from homodyne.utils.logging import get_logger
+from homodyne.utils.logging import get_logger, with_context
 
 if TYPE_CHECKING:
     from homodyne.config.parameter_space import ParameterSpace
@@ -49,6 +50,7 @@ def fit_mcmc_jax(
     dt: float = 0.1,
     output_dir: Path | str | None = None,
     progress_bar: bool = True,
+    run_id: str | None = None,
     **kwargs,
 ) -> CMCResult:
     """Run CMC (Consensus Monte Carlo) analysis on XPCS data.
@@ -85,6 +87,8 @@ def fit_mcmc_jax(
         Output directory for saving results.
     progress_bar : bool
         Whether to show progress bar during sampling.
+    run_id : str | None
+        Optional identifier used to correlate logs across shards/backends.
     **kwargs
         Additional keyword arguments (for compatibility).
 
@@ -120,12 +124,14 @@ def fit_mcmc_jax(
     converged
     """
     start_time = time.perf_counter()
+    run_identifier = run_id or datetime.now().strftime("%Y%m%d_%H%M%S")
+    run_logger = with_context(logger, run=run_identifier, analysis="cmc")
 
     # Normalize analysis mode
     if "static" in analysis_mode.lower():
         analysis_mode = "static"
 
-    logger.info(
+    run_logger.info(
         f"Starting CMC analysis: {len(data):,} points, "
         f"mode={analysis_mode}, q={q:.4f}"
     )
@@ -136,9 +142,10 @@ def fit_mcmc_jax(
     if cmc_config is None:
         cmc_config = {}
     config = CMCConfig.from_dict(cmc_config)
+    config.run_id = getattr(config, "run_id", None) or run_identifier
 
     # Log configuration
-    logger.info(
+    run_logger.info(
         f"CMC config: {config.num_chains} chains, "
         f"{config.num_warmup} warmup, {config.num_samples} samples"
     )
@@ -150,11 +157,11 @@ def fit_mcmc_jax(
 
     # Log initial values if provided
     if initial_values:
-        logger.info(
+        run_logger.info(
             f"Initial values: {', '.join(f'{k}={v:.4g}' for k, v in list(initial_values.items())[:5])}..."
         )
     else:
-        logger.info("No initial values provided, using midpoint defaults")
+        run_logger.info("No initial values provided, using midpoint defaults")
 
     # =========================================================================
     # 3. Determine if CMC sharding is needed
@@ -165,10 +172,10 @@ def fit_mcmc_jax(
         # Shard by phi angle
         num_shards = config.get_num_shards(prepared.n_total, prepared.n_phi)
         shards = shard_data_stratified(prepared, num_shards)
-        logger.info(f"Using CMC with {len(shards)} shards (stratified by phi)")
+        run_logger.info(f"Using CMC with {len(shards)} shards (stratified by phi)")
     else:
         shards = None
-        logger.info("Using single-shard MCMC (no CMC sharding)")
+        run_logger.info("Using single-shard MCMC (no CMC sharding)")
 
     # =========================================================================
     # 4. Build model function
@@ -194,7 +201,7 @@ def fit_mcmc_jax(
     if shards is not None and len(shards) > 1:
         # Use parallel backend for CMC
         backend = select_backend(config)
-        logger.info(f"Using backend: {backend.get_name()}")
+        run_logger.info(f"Using backend: {backend.get_name()}")
 
         mcmc_samples = backend.run(
             model=xpcs_model,
@@ -251,21 +258,21 @@ def fit_mcmc_jax(
         n_samples=result.n_samples,
         n_chains=result.n_chains,
     )
-    logger.info(f"CMC complete: {result.convergence_status}")
-    logger.info(summary)
+    run_logger.info(f"CMC complete: {result.convergence_status}")
+    run_logger.info(summary)
 
     # Log parameter estimates
     stats_dict = result.get_posterior_stats()
     for name in get_param_names_in_order(prepared.n_phi, analysis_mode)[:5]:
         if name in stats_dict:
             s = stats_dict[name]
-            logger.info(
+            run_logger.info(
                 f"  {name}: {s['mean']:.4g} +/- {s['std']:.4g} "
                 f"(R-hat={s['r_hat']:.3f}, ESS={s['ess_bulk']:.0f})"
             )
 
     total_time = time.perf_counter() - start_time
-    logger.info(f"Total execution time: {total_time:.1f}s")
+    run_logger.info(f"Total execution time: {total_time:.1f}s")
 
     return result
 
