@@ -6,20 +6,24 @@ This module provides tools to diagnose gradient imbalance issues and compute
 optimal parameter scaling factors (x_scale) for NLSQ optimization.
 
 The Problem:
------------
+------------
 Shear parameters (gamma_dot_t0, beta, gamma_dot_t_offset) can have gradients
 100-10,000× larger than diffusion parameters (D0, alpha, D_offset), causing:
+
 - Premature convergence
 - Missing fine-scale features (oscillations)
 - Poor fit quality despite low chi-squared
 
+
 The Solution:
-------------
+-------------
 Compute parameter-specific x_scale values inversely proportional to gradient
 magnitudes to normalize optimization steps across all parameters.
 
 Usage:
 ------
+.. code-block:: python
+
     from homodyne.optimization.gradient_diagnostics import compute_optimal_x_scale
 
     # Compute from fitted parameters

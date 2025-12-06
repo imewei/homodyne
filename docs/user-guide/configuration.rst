@@ -118,22 +118,34 @@ Defines the physics model and analysis parameters.
 
 **Mode Comparison:**
 
-.. table::
+.. list-table::
    :widths: 30 20 20 30
+   :header-rows: 1
 
-   +------------------+----------+----------+----------------------------------+
-   | Feature          | Static   | Laminar  | Notes                            |
-   +==================+==========+==========+==================================+
-   | Physical params  | 3        | 7        | Total = 3 + 2*n_angles (v2.4)   |
-   +------------------+----------+----------+----------------------------------+
-   | Time dependence  | D(t)     | D(t)     | D(t) = D₀*t^α + D_offset        |
-   +------------------+----------+----------+----------------------------------+
-   | Shear dependence | No       | Yes      | γ̇(t) = γ̇₀*t^β + γ̇_offset    |
-   +------------------+----------+----------+----------------------------------+
-   | Anisotropy       | No       | Yes      | Via φ₀ parameter                |
-   +------------------+----------+----------+----------------------------------+
-   | Best for         | Isotropic | Flows   | Choose based on your experiment  |
-   +------------------+----------+----------+----------------------------------+
+   * - Feature
+     - Static
+     - Laminar
+     - Notes
+   * - Physical params
+     - 3
+     - 7
+     - Total = 3 + 2*n_angles (v2.4)
+   * - Time dependence
+     - D(t)
+     - D(t)
+     - D(t) = D0*t^alpha + D_offset
+   * - Shear dependence
+     - No
+     - Yes
+     - gamma_dot_t = gamma_dot_t0*t^beta + gamma_dot_t_offset
+   * - Anisotropy
+     - No
+     - Yes
+     - Via phi0 parameter
+   * - Best for
+     - Isotropic
+     - Flows
+     - Choose based on your experiment
 
 Optimization Section
 --------------------
@@ -275,22 +287,22 @@ Specifies where results are saved.
 
 **Output Files Generated:**
 
-.. table::
+.. list-table::
    :widths: 40 60
+   :header-rows: 1
 
-   +----------------------+-----------------------------------------------+
-   | File                 | Contents                                      |
-   +======================+===============================================+
-   | results.json         | Best-fit parameters and uncertainties        |
-   +----------------------+-----------------------------------------------+
-   | residuals.png        | Residual analysis                             |
-   +----------------------+-----------------------------------------------+
-   | c2_fit.png           | Two-time correlation visualization            |
-   +----------------------+-----------------------------------------------+
-   | correlation_heatmap  | Heatmap of c₂(t₁, t₂)                        |
-   +----------------------+-----------------------------------------------+
-   | convergence.json     | Optimization convergence history              |
-   +----------------------+-----------------------------------------------+
+   * - File
+     - Contents
+   * - results.json
+     - Best-fit parameters and uncertainties
+   * - residuals.png
+     - Residual analysis
+   * - c2_fit.png
+     - Two-time correlation visualization
+   * - correlation_heatmap
+     - Heatmap of c2(t1, t2)
+   * - convergence.json
+     - Optimization convergence history
 
 Advanced Configuration
 ======================

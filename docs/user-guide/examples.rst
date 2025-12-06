@@ -429,7 +429,7 @@ The MCMC range is asymmetric around the mean, capturing non-Gaussian behavior.
 ---
 
 Example 4: Multi-Angle Laminar Flow Analysis
-==========================================
+============================================
 
 **Scenario:** High-precision analysis with many detector arms.
 

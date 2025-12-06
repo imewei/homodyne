@@ -180,15 +180,15 @@ is a **hard break** with no migration path.
 - `gpu-check` - GPU validation
 - `test-gpu` - GPU test suite
 
-#### Examples
+#### Examples/Scripts
 
 - `examples/gpu_accelerated_optimization.py` - Deleted
 - `examples/gpu_acceleration.py` - Deleted
 
-**New Examples:**
+**New Scripts (relocated under `scripts/`):**
 
-- `examples/cpu_optimization.py` - HPC CPU optimization guide
-- `examples/multi_core_batch_processing.py` - Parallel CPU workflows
+- `scripts/nlsq/cpu_optimization.py` - HPC CPU optimization guide
+- `scripts/nlsq/multi_core_batch_processing.py` - Parallel CPU workflows
 
 #### Test Infrastructure
 
@@ -256,19 +256,19 @@ is a **hard break** with no migration path.
 #### Documentation
 
 - `docs/migration/v2.2-to-v2.3-gpu-removal.md` - Comprehensive migration guide
-- `examples/README.md` - Updated with CPU-focused examples
+- `scripts/README.md` - Updated with CPU-focused scripts
 - CPU optimization sections in README.md and CLAUDE.md
 
-#### Examples
+#### Scripts
 
-- `examples/cpu_optimization.py` (457 lines) - HPC CPU setup guide
+- `scripts/nlsq/cpu_optimization.py` (relocated) - HPC CPU setup guide
 
   - Multi-core thread configuration
   - NUMA awareness
   - Slurm/PBS/LSF job scripts
   - Performance profiling
 
-- `examples/multi_core_batch_processing.py` (506 lines) - Parallel CPU workflows
+- `scripts/nlsq/multi_core_batch_processing.py` (relocated) - Parallel CPU workflows
 
   - ProcessPoolExecutor patterns
   - Automatic worker scaling
@@ -360,8 +360,8 @@ pip install homodyne==2.2.1
 ### References
 
 - Migration Guide: `docs/migration/v2.2-to-v2.3-gpu-removal.md`
-- CPU Optimization: `examples/cpu_optimization.py`
-- Multi-Core Workflows: `examples/multi_core_batch_processing.py`
+- CPU Optimization: `scripts/nlsq/cpu_optimization.py`
+- Multi-Core Workflows: `scripts/nlsq/multi_core_batch_processing.py`
 - System Validator: Now 9 tests (was 10)
 
 ______________________________________________________________________

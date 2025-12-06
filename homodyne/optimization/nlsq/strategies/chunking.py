@@ -613,22 +613,10 @@ def create_angle_stratified_data(
     g2_exp: jnp.ndarray,
     target_chunk_size: int = 100_000,
 ) -> tuple[jnp.ndarray, jnp.ndarray, jnp.ndarray, jnp.ndarray, list[int]]:
-    """Reorganize data to ensure all chunks contain all phi angles.
+    """Ensure each chunk contains every phi angle.
 
-    This is the core function that fixes NLSQ per-angle parameter incompatibility.
-    It reorganizes data points so that when NLSQ performs chunking, every chunk
-    contains a balanced representation of all phi angles, ensuring gradients
-    for per-angle parameters are always well-defined.
-
-    Algorithm
-    ---------
-    1. Group data points by phi angle
-    2. Calculate points per angle per chunk (chunk_size / n_angles)
-    3. Interleave angle groups into chunks:
-       - Chunk 1: [points 0:k from angle_0, points 0:k from angle_1, ...]
-       - Chunk 2: [points k:2k from angle_0, points k:2k from angle_1, ...]
-       - ...
-    4. Concatenate all chunks into stratified arrays
+    Reorders data so NLSQ chunking keeps balanced angle coverage and maintains
+    valid gradients for per-angle parameters.
 
     Parameters
     ----------
@@ -657,44 +645,6 @@ def create_angle_stratified_data(
     chunk_sizes : list[int]
         Size of each stratified chunk (CRITICAL for correct re-chunking)
 
-    Examples
-    --------
-    >>> # Small example: 9 points, 3 angles
-    >>> phi = jnp.array([0, 0, 0, 45, 45, 45, 90, 90, 90])
-    >>> t1 = jnp.arange(9)
-    >>> t2 = jnp.arange(9) * 2
-    >>> g2 = jnp.ones(9)
-    >>> phi_s, t1_s, t2_s, g2_s = create_angle_stratified_data(
-    ...     phi, t1, t2, g2, target_chunk_size=6
-    ... )
-    >>> # With chunk_size=6 and 3 angles, each chunk gets 2 points per angle
-    >>> # Chunk 1: [angle0[0:2], angle45[0:2], angle90[0:2]] = 6 points
-    >>> # Chunk 2: [angle0[2:3], angle45[2:3], angle90[2:3]] = 3 points
-
-    >>> # Real dataset: 3M points, 3 angles
-    >>> phi, t1, t2, g2 = load_large_dataset()  # 3M points
-    >>> phi_s, t1_s, t2_s, g2_s = create_angle_stratified_data(
-    ...     phi, t1, t2, g2
-    ... )
-    >>> # Creates ~30 chunks × 100k points each
-    >>> # Each chunk has ~33k points from each of the 3 angles
-
-    Notes
-    -----
-    Edge Cases Handled:
-    - Imbalanced angles: Later chunks may have fewer points, but all angles
-      present in at least some chunks (sufficient for gradient computation)
-    - Single angle: No stratification needed, returns original data
-    - Uneven division: Last chunk may be smaller than target_chunk_size
-
-    Performance:
-    - Time complexity: O(n log n) due to sorting
-    - Space complexity: O(n) for stratified copy (2x peak)
-    - Typical time: ~0.15s for 3M points on modern CPU
-
-    Memory:
-    - Peak memory: 2x original data (temporary during reorganization)
-    - Example: 3M points × 4 features × 8 bytes = 96 MB → 192 MB peak
     """
     n_points = len(phi)
 

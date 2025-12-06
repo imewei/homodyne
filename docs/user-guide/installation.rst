@@ -152,7 +152,7 @@ If you have the wrong JAX version:
    python -c "import jax; print(jax.__version__)"
 
 Uninstalling Homodyne
-====================
+=====================
 
 To remove Homodyne:
 
@@ -211,7 +211,7 @@ For development or contributing to Homodyne:
    make test-all   # Run all tests with coverage
 
 Troubleshooting
-==============
+===============
 
 **Problem: "No module named 'jax'"**
 

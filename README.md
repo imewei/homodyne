@@ -199,7 +199,7 @@ print(f"✓ CMC used with {result.num_shards} shards")
   `output.plots.color_scale` (`mode: legacy|adaptive`, optional percentiles/fixed
   ranges). Set `output.plots.fit_surface` to `"posthoc"` to retain the previous behavior
   or pin `[1.0, 1.5]` via `pin_legacy_range: true`.
-- Use `examples/overlay_solver_vs_posthoc.py` (or the helper in
+- Use `scripts/nlsq/overlay_solver_vs_posthoc.py` (or the helper in
   `homodyne.viz.diagnostics`) to print baseline oscillation stats and overlay
   solver/post-hoc diagonals for any saved `fitted_data.npz`.
 
@@ -394,11 +394,11 @@ cpu_config = configure_optimal_device()
 ### Interactive Example
 
 For a complete interactive tutorial, see the
-[NLSQ Optimization Example Notebook](examples/nlsq_optimization_example.ipynb):
+[NLSQ Optimization Example Notebook](scripts/notebooks/nlsq_optimization_example.ipynb):
 
 ```bash
 # Launch Jupyter and open the example notebook
-jupyter notebook examples/nlsq_optimization_example.ipynb
+jupyter notebook scripts/notebooks/nlsq_optimization_example.ipynb
 ```
 
 The notebook covers:
@@ -920,7 +920,7 @@ homodyne --config laminar_flow.yaml --method nlsq
 ### CPU Performance Optimization
 
 ```python
-# examples/cpu_optimization.py
+# scripts/nlsq/cpu_optimization.py
 import os
 import psutil
 
@@ -932,7 +932,7 @@ os.environ['OMP_NUM_THREADS'] = str(optimal_threads)
 os.environ['JAX_NUM_THREADS'] = str(optimal_threads)
 ```
 
-See [`examples/cpu_optimization.py`](examples/cpu_optimization.py) for comprehensive HPC
+See [`scripts/nlsq/cpu_optimization.py`](scripts/nlsq/cpu_optimization.py) for comprehensive HPC
 setup guide.
 
 ### Progress Tracking

@@ -7,7 +7,8 @@ MCMC model definitions, sample extraction, and result processing.
 This module defines the canonical parameter names and ordering for
 both analysis modes (static_isotropic and laminar_flow).
 
-Usage:
+Usage::
+
     from homodyne.config.parameter_names import (
         STATIC_ISOTROPIC_PARAMS,
         LAMINAR_FLOW_PARAMS,
@@ -15,8 +16,10 @@ Usage:
     )
 
 Version History:
+
 - v2.1.1 (Nov 2025): Created to prevent parameter name mismatches
 - Fixed bug where pjit backend used gamma_dot_0 instead of gamma_dot_t0
+
 """
 
 from typing import Literal

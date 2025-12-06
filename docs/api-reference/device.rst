@@ -31,19 +31,19 @@ Module Contents
 ---------------
 
 .. automodule:: homodyne.device
-   :members:
-   :undoc-members:
-   :show-inheritance:
+   :noindex:
 
 Primary Functions
 ~~~~~~~~~~~~~~~~~
 
+.. currentmodule:: homodyne.device
+
 .. autosummary::
    :nosignatures:
 
-   homodyne.device.configure_optimal_device
-   homodyne.device.get_device_status
-   homodyne.device.benchmark_device_performance
+   configure_optimal_device
+   get_device_status
+   benchmark_device_performance
 
 Device Configuration
 --------------------
@@ -227,6 +227,7 @@ Device configuration utilities.
    :members:
    :undoc-members:
    :show-inheritance:
+   :noindex:
 
 Environment Variables
 ---------------------
@@ -331,7 +332,7 @@ If migrating from v2.2.x with GPU code:
 
 4. **For GPU workloads**: Use homodyne v2.2.1
 
-See :doc:`/migration/v2.2-to-v2.3-gpu-removal` for complete migration guide (if available).
+Refer to the v2.2.x release notes for any additional GPU-related guidance.
 
 Troubleshooting
 ---------------

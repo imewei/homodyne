@@ -27,9 +27,7 @@ Module Contents
 ---------------
 
 .. automodule:: homodyne.cli
-   :members:
-   :undoc-members:
-   :show-inheritance:
+   :noindex:
 
 Main Entry Point
 ----------------
@@ -40,6 +38,7 @@ Main command-line interface entry point.
    :members:
    :undoc-members:
    :show-inheritance:
+   :noindex:
 
 Usage
 ~~~~~
@@ -75,6 +74,7 @@ Command-line argument parsing and validation.
    :members:
    :undoc-members:
    :show-inheritance:
+   :noindex:
 
 Arguments
 ~~~~~~~~~
@@ -127,14 +127,18 @@ Command Flow
 Key Functions
 ~~~~~~~~~~~~~
 
+.. currentmodule:: homodyne.cli.commands
+
 .. autosummary::
    :nosignatures:
 
-   homodyne.cli.commands.dispatch_command
-   homodyne.cli.commands.run_nlsq_analysis
-   homodyne.cli.commands.run_mcmc_analysis
-   homodyne.cli.commands.load_and_validate_config
-   homodyne.cli.commands.save_results
+   dispatch_command
+   clamp_parameters_to_bounds
+   save_nlsq_results
+   save_mcmc_results
+   generate_nlsq_plots
+
+.. currentmodule:: homodyne.cli
 
 NLSQ Workflow
 ^^^^^^^^^^^^^

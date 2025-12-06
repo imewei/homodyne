@@ -1,6 +1,7 @@
 """I/O utilities for CMC results.
 
 This module provides functions for saving CMC results to files:
+
 - samples.npz: ArviZ-compatible posterior samples
 - fitted_data.npz: Fitted data matching NLSQ format
 - parameters.json: Posterior statistics
@@ -264,22 +265,6 @@ def save_parameters_json(
         CMC result.
     output_path : Path
         Output file path.
-
-    File Format
-    -----------
-    {
-        "param_name": {
-            "mean": float,
-            "std": float,
-            "median": float,
-            "hdi_5%": float,
-            "hdi_95%": float,
-            "r_hat": float,
-            "ess_bulk": float,
-            "ess_tail": float
-        },
-        ...
-    }
     """
     stats = result.get_posterior_stats()
 

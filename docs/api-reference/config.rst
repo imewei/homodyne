@@ -28,9 +28,9 @@ Module Contents
 ---------------
 
 .. automodule:: homodyne.config
-   :members:
-   :undoc-members:
-   :show-inheritance:
+   :noindex:
+
+.. currentmodule:: homodyne.config
 
 Primary Classes
 ~~~~~~~~~~~~~~~
@@ -38,9 +38,11 @@ Primary Classes
 .. autosummary::
    :nosignatures:
 
-   homodyne.config.ConfigManager
-   homodyne.config.ParameterRegistry
-   homodyne.config.ParameterSpace
+   ConfigManager
+   ParameterRegistry
+   ParameterSpace
+
+.. currentmodule:: homodyne.config.manager
 
 Configuration Manager
 ---------------------
@@ -121,6 +123,8 @@ Centralized parameter metadata management (v2.4.1+).
    :members:
    :undoc-members:
    :show-inheritance:
+   :exclude-members: ParameterInfo
+   :noindex:
 
 Registry Features
 ~~~~~~~~~~~~~~~~~
@@ -136,9 +140,12 @@ The parameter registry provides:
 Parameter Information
 ~~~~~~~~~~~~~~~~~~~~~
 
+.. currentmodule:: homodyne.config.parameter_registry
+
 .. autoclass:: homodyne.config.parameter_registry.ParameterInfo
    :members:
    :undoc-members:
+   :noindex:
 
 Registry Functions
 ~~~~~~~~~~~~~~~~~~
@@ -146,11 +153,13 @@ Registry Functions
 .. autosummary::
    :nosignatures:
 
-   homodyne.config.parameter_registry.get_registry
-   homodyne.config.parameter_registry.get_param_names
-   homodyne.config.parameter_registry.get_all_param_names
-   homodyne.config.parameter_registry.get_bounds
-   homodyne.config.parameter_registry.get_defaults
+   get_registry
+   get_param_names
+   get_all_param_names
+   get_bounds
+   get_defaults
+
+.. currentmodule:: homodyne.config
 
 Usage Example
 ^^^^^^^^^^^^^
@@ -201,6 +210,8 @@ Prior distributions and parameter transformations for MCMC.
    :members:
    :undoc-members:
    :show-inheritance:
+   :exclude-members: PriorDistribution
+   :noindex:
 
 Prior Distributions
 ~~~~~~~~~~~~~~~~~~~
@@ -208,6 +219,7 @@ Prior Distributions
 .. autoclass:: homodyne.config.parameter_space.PriorDistribution
    :members:
    :undoc-members:
+   :noindex:
 
 Supported Distributions
 ^^^^^^^^^^^^^^^^^^^^^^^
@@ -257,18 +269,24 @@ Type definitions and data structures for configuration.
    :members:
    :undoc-members:
    :show-inheritance:
+   :noindex:
 
 Key Types
 ~~~~~~~~~
 
+.. currentmodule:: homodyne.config.types
+
 .. autosummary::
    :nosignatures:
 
-   homodyne.config.types.AnalysisMode
-   homodyne.config.types.OptimizationMethod
-   homodyne.config.types.DataConfig
-   homodyne.config.types.OptimizationConfig
-   homodyne.config.types.AnalysisConfig
+   BoundDict
+   InitialParametersConfig
+   ParameterSpaceConfig
+   ExperimentalDataConfig
+   StreamingConfig
+   StratificationConfig
+
+.. currentmodule:: homodyne.config
 
 Parameter Names
 ---------------

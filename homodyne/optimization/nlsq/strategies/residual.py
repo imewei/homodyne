@@ -6,6 +6,7 @@ during NLSQ optimization, solving the double-chunking problem that occurs when u
 curve_fit_large() with per-angle scaling on large datasets.
 
 Key Features:
+
 - Maintains angle completeness across chunks (required for per-angle parameter gradients)
 - JAX JIT-compiled chunk computation for performance
 - Compatible with NLSQ's least_squares() function
@@ -13,6 +14,9 @@ Key Features:
 - Provides diagnostics for monitoring and validation
 
 Usage:
+
+.. code-block:: python
+
     from nlsq import least_squares
     from homodyne.optimization.nlsq.strategies.residual import StratifiedResidualFunction
 

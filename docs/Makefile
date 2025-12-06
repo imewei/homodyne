@@ -19,6 +19,7 @@ help:
 # Clean build artifacts
 clean:
 	rm -rf $(BUILDDIR)
+	rm -rf _autosummary
 	rm -rf api-reference/_autosummary
 	@echo "Build artifacts cleaned."
 

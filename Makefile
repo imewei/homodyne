@@ -108,7 +108,7 @@ help:
 	@echo "  check           Check package metadata"
 	@echo "  release         Prepare for release (test + build + check)"
 	@echo
-	@echo "Examples:"
+	@echo "Scripts:"
 	@echo "  run-example     Run example optimization"
 	@echo "  demo-nlsq       Demo NLSQ optimization"
 	@echo "  demo-mcmc       Demo MCMC optimization"
@@ -258,12 +258,12 @@ benchmark:
 
 profile-nlsq:
 	@echo "Profiling NLSQ optimization..."
-	$(PYTHON) -m cProfile -s cumulative examples/profile_nlsq.py 2>/dev/null || \
+	$(PYTHON) -m cProfile -s cumulative scripts/nlsq/static_isotropic_nlsq.py 2>/dev/null || \
 	$(PYTHON) -c "from homodyne.optimization import fit_nlsq_jax; print('NLSQ profiling ready')"
 
 profile-mcmc:
 	@echo "Profiling MCMC optimization..."
-	$(PYTHON) -m cProfile -s cumulative examples/profile_mcmc.py 2>/dev/null || \
+	$(PYTHON) -m cProfile -s cumulative scripts/mcmc/mcmc_uncertainty.py 2>/dev/null || \
 	$(PYTHON) -c "from homodyne.optimization import fit_mcmc_jax; print('MCMC profiling ready')"
 
 # Cleanup targets
@@ -273,7 +273,7 @@ clean: clean-build clean-pyc clean-test
 
 clean-all: clean clean-cache
 	rm -rf data/test_*
-	rm -rf examples/output/
+	rm -rf scripts/output/
 	@echo "✓ Cleaned everything"
 
 clean-build:
@@ -343,7 +343,7 @@ release: test quality build check
 
 # Example/Demo targets
 run-example:
-	$(PYTHON) examples/static_isotropic_nlsq.py
+	$(PYTHON) scripts/nlsq/static_isotropic_nlsq.py
 
 demo-nlsq:
 	@echo "Running NLSQ optimization demo..."

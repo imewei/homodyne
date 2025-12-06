@@ -21,9 +21,7 @@ Module Contents
 ---------------
 
 .. automodule:: homodyne.utils
-   :members:
-   :undoc-members:
-   :show-inheritance>
+   :noindex:
 
 Logging
 -------

@@ -98,8 +98,8 @@ Analysis Modes
 
 Two analysis modes are supported:
 
-**Static Mode** (3 physical parameters)
-""""""""""""""""""""""""""""""""""""""
+Static Mode (3 physical parameters)
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 For equilibrium systems with pure diffusion:
 
@@ -113,8 +113,8 @@ For equilibrium systems with pure diffusion:
         - alpha        # Anomalous diffusion exponent
         - D_offset     # Baseline diffusion
 
-**Laminar Flow Mode** (7 physical parameters)
-""""""""""""""""""""""""""""""""""""""""""""""
+Laminar Flow Mode (7 physical parameters)
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 For non-equilibrium systems under shear:
 

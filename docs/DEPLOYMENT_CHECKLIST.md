@@ -1,3 +1,7 @@
+---
+orphan: true
+---
+
 # ReadTheDocs Deployment Checklist for Homodyne v2.4
 
 **Documentation Version:** 2.4.1
@@ -342,4 +346,3 @@ Notifications → Email: [maintainer@anl.gov]
 5. Update README.md with documentation URL
 6. Announce documentation availability to users
 7. Set up version tracking for future releases (if needed)
-

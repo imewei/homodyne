@@ -1,6 +1,7 @@
 # Configuration file for the Sphinx documentation builder.
 # Homodyne v2.0+ Documentation
 
+import os
 import sys
 from pathlib import Path
 
@@ -55,6 +56,8 @@ autodoc_default_options = {
     "undoc-members": True,
     "exclude-members": "__weakref__",
     "show-inheritance": True,
+    "ignore-module-all": True,
+    "no-index": True,
 }
 
 # Include __init__ methods in class documentation
@@ -87,13 +90,22 @@ napoleon_use_rtype = True
 napoleon_type_aliases = None
 
 # -- Options for intersphinx extension ---------------------------------------
-intersphinx_mapping = {
+_online_intersphinx = {
     "python": ("https://docs.python.org/3", None),
     "jax": ("https://jax.readthedocs.io/en/latest/", None),
     "numpy": ("https://numpy.org/doc/stable/", None),
     "numpyro": ("https://num.pyro.ai/en/stable/", None),
     "scipy": ("https://docs.scipy.org/doc/scipy/", None),
 }
+
+# Default to offline builds in CI/air-gapped environments; opt in with SPHINX_OFFLINE=0
+if os.environ.get("SPHINX_OFFLINE", "1") == "0":
+    intersphinx_mapping = _online_intersphinx
+    intersphinx_disabled_domains: list[str] = []
+else:
+    intersphinx_mapping = {}
+    intersphinx_disabled_domains = list(_online_intersphinx.keys())
+intersphinx_timeout = 1
 
 # -- Options for MathJax extension -------------------------------------------
 mathjax_path = "https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"
@@ -212,6 +224,7 @@ epub_exclude_files = ["search.html"]
 suppress_warnings = [
     "misc.highlighting_failure",
     "myst.xref_missing",
+    "autosummary.import_cycle",
 ]
 
 # -- Todo extension configuration --------------------------------------------

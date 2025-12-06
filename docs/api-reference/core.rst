@@ -24,9 +24,7 @@ Module Contents
 ---------------
 
 .. automodule:: homodyne.core
-   :members:
-   :undoc-members:
-   :show-inheritance:
+   :noindex:
 
 JAX Backend
 -----------
@@ -118,6 +116,7 @@ Factory functions for creating physics factors from configuration.
    :members:
    :undoc-members:
    :show-inheritance:
+   :noindex:
 
 Theory Engine
 -------------

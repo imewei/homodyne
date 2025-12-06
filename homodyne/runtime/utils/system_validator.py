@@ -1059,17 +1059,17 @@ alias hc-iso >/dev/null 2>&1 && echo "shortcut_alias_works" || echo "shortcut_al
                 import homodyne
 
                 homodyne_path = Path(homodyne.__file__).parent.parent
-                examples_dir = homodyne_path / "examples"
+                scripts_dir = homodyne_path / "scripts"
                 tests_dir = homodyne_path / "tests"
 
                 test_data_locations = []
-                if examples_dir.exists():
-                    hdf5_files = list(examples_dir.rglob("*.hdf5")) + list(
-                        examples_dir.rglob("*.hdf"),
+                if scripts_dir.exists():
+                    hdf5_files = list(scripts_dir.rglob("*.hdf5")) + list(
+                        scripts_dir.rglob("*.hdf"),
                     )
                     if hdf5_files:
                         test_data_locations.append(
-                            f"examples/ ({len(hdf5_files)} files)"
+                            f"scripts/ ({len(hdf5_files)} files)"
                         )
 
                 if tests_dir.exists():
