@@ -164,6 +164,23 @@ Implementation differences:
   ``homodyne/core/physics_cmc.py``). This replaces the old single-endpoint trapezoid,
   ensuring multi-step intervals sum all intermediate trapezoids just like NLSQ.
 
+Parameter Space and Priors (CMC)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+CMC builds priors from the ``parameter_space`` section of the YAML using
+``homodyne.config.parameter_space`` and ``homodyne.optimization.cmc.priors``:
+
+* Bounds are required and shared with NLSQ. Missing bounds fall back to
+  package defaults (``contrast`` [0.0, 1.0], ``offset`` [0.5, 1.5], others [0.0, 1.0]).
+* If a prior is not specified for a parameter, a ``TruncatedNormal`` is built with
+  ``mu`` at the interval midpoint and ``sigma`` at one-quarter of the width.
+  If no prior spec is found at runtime, the fallback is ``Uniform(min, max)``.
+* Supported prior types: ``TruncatedNormal``, ``Uniform``, ``LogNormal``,
+  ``HalfNormal``, ``Normal``, ``BetaScaled`` (scaled Beta on [min, max], with
+  concentrations inferred from ``mu``/``sigma``).
+* Per-angle parameters ``contrast_i`` / ``offset_i`` inherit the base bounds/priors
+  from a single ``contrast``/``offset`` entry unless per-angle overrides are provided.
+
 Scattering Geometry
 -------------------
 

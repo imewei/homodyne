@@ -204,6 +204,60 @@ The shear integral is computed as:
    absolute differences between cumulative sums to cover multi-step intervals robustly
    in both NLSQ (meshgrid) and CMC (element-wise) paths.
 
+
+Parameter Bounds and Priors (NLSQ & CMC)
+----------------------------------------
+
+- **Where bounds come from:** Both NLSQ and CMC read bounds from the ``parameter_space``
+  section of the YAML. If a parameter is omitted, defaults from ``ParameterManager`` are
+  used; if those are missing, the fallbacks are:
+  - ``contrast``: [0.0, 1.0]
+  - ``offset``: [0.5, 1.5]
+  - other parameters: [0.0, 1.0]
+- **NLSQ usage:** Bounds are used for deterministic optimization only; NLSQ does not
+  sample priors.
+- **CMC usage:** Bounds are used to build priors via ``ParameterSpace`` (see
+  :mod:`homodyne.config.parameter_space` and :mod:`homodyne.optimization.cmc.priors`).
+  Per-angle parameters ``contrast_i`` / ``offset_i`` are always included; if you only
+  supply a base ``contrast``/``offset`` bound or prior, it applies to all angles.
+- **Default priors when not specified:**
+  - Type: ``TruncatedNormal``
+  - Location: midpoint of the bound interval
+  - Scale: one quarter of the interval width
+  If no prior spec exists at all for a parameter, the runtime fallback is
+  ``Uniform(min, max)``.
+- **Supported prior types in CMC:** ``TruncatedNormal``, ``Uniform``, ``LogNormal``,
+  ``HalfNormal``, ``Normal``, ``BetaScaled`` (Beta on [min, max]). All require finite
+  bounds; ``BetaScaled`` computes the Beta concentrations from ``mu``/``sigma`` on the
+  scaled interval.
+
+Example YAML snippet
+~~~~~~~~~~~~~~~~~~~~
+
+.. code-block:: yaml
+
+   parameter_space:
+     model: laminar_flow
+     bounds:
+       - name: D0
+         min: 1e2
+         max: 1e5
+         prior_mu: 1e3
+         prior_sigma: 1e3
+         type: TruncatedNormal
+       - name: alpha
+         min: -2.0
+         max: 2.0
+         prior_mu: 0.0
+         prior_sigma: 0.5
+         type: Normal
+       - name: contrast        # applies to all contrast_i
+         min: 0.0
+         max: 1.0
+         prior_mu: 0.5
+         prior_sigma: 0.2
+         type: BetaScaled
+
 Per-Angle Scaling
 -----------------
 
