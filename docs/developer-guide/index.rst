@@ -1,86 +1,54 @@
 Developer Guide
 ===============
 
-Welcome to the Homodyne Developer Guide. This section covers architecture, testing, contributing guidelines, and performance optimization.
+This section provides guidance for developers contributing to Homodyne, including
+development setup, code quality standards, testing practices, and contribution workflows.
 
 .. toctree::
    :maxdepth: 2
-   :caption: Contents:
+   :caption: Developer Resources
 
-   architecture
-   testing
    contributing
-   code-quality
-   performance
+   testing
 
-Quick Start for Contributors
------------------------------
+Quick Links
+-----------
 
-.. code-block:: bash
+- **Code Quality**: Black (formatting), Ruff (linting), MyPy (type checking)
+- **Testing**: Pytest with unit, integration, performance, and MCMC test suites
+- **Package Manager**: uv for Python 3.12+ dependency management
+- **Issue Tracking**: GitHub Issues for bugs, features, and discussions
 
-   # Clone repository
-   git clone https://github.com/imewei/homodyne.git
-   cd homodyne
+For Setup and Workflows
+^^^^^^^^^^^^^^^^^^^^^^^
 
-   # Development installation
-   make dev
+Refer to the **Contributing** guide for:
 
-   # Install pre-commit hooks
-   pre-commit install
+- Development environment setup with uv
+- Code style standards and formatting
+- Pre-commit hooks and validation
+- Pull request guidelines
 
-   # Run tests
-   make test
+For Testing and Validation
+^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-   # Check code quality
-   make format
-   make lint
+Refer to the **Testing** guide for:
 
-Overview
---------
+- Test organization and structure (unit, integration, performance, MCMC)
+- Running test suites
+- Code coverage requirements
+- JAX debugging and performance optimization tips
 
-This guide is designed for developers who want to:
+Configuration and Deployment
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-* Understand Homodyne's architecture and design patterns
-* Contribute code, documentation, or bug fixes
-* Run and write tests
-* Optimize performance for specific use cases
-* Deploy Homodyne in HPC environments
+For configuration file documentation and deployment guidance, see the
+:doc:`/configuration/index` section.
 
-Sections
---------
+Version Information
+^^^^^^^^^^^^^^^^^^^
 
-**Architecture**
-   JAX-first design philosophy, module structure, critical performance paths
-
-**Testing**
-   Test strategy, running tests, writing new tests
-
-**Contributing**
-   Development workflow, Git conventions, pull request guidelines
-
-**Code Quality**
-   Formatting (Black), linting (Ruff), type checking (Mypy)
-
-**Performance**
-   Profiling, GPU optimization, memory management
-
-Development Resources
----------------------
-
-* **GitHub**: https://github.com/imewei/homodyne
-* **Issues**: https://github.com/imewei/homodyne/issues
-* **Discussions**: https://github.com/imewei/homodyne/discussions
-
-Code Standards
---------------
-
-Homodyne follows strict code quality standards:
-
-* **Black** for code formatting (120 char line length)
-* **Ruff** for linting and style checks
-* **Mypy** for static type checking
-* **Pre-commit** hooks enforce standards automatically
-* **NumPy/Google** docstring format
-* **Type hints** required for all public functions
-
-See :doc:`code-quality` for detailed standards.
+- **Homodyne**: v2.4.1
+- **Python**: 3.12+
+- **JAX**: 0.8.0 (CPU-only)
+- **Package Manager**: uv

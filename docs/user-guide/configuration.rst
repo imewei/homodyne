@@ -1,441 +1,534 @@
 Configuration Guide
-====================
+===================
 
-This guide explains Homodyne's YAML configuration system and parameter counting.
+Homodyne uses YAML configuration files to control all aspects of your analysis.
+This guide explains every configuration option and how to set them for your specific use case.
 
-Configuration Basics
+Configuration File Format
+=========================
+
+Homodyne configurations are written in YAML (a human-friendly data format).
+Basic YAML syntax:
+
+.. code-block:: yaml
+
+   # Comments start with #
+   key: value                        # String values
+   number: 42                        # Numbers
+   decimal: 3.14
+   list:
+     - item1
+     - item2
+   nested:
+     sub_key: value
+
+Minimal Configuration Example
+=============================
+
+Here's the absolute minimum configuration to run an analysis:
+
+.. code-block:: yaml
+
+   data:
+     path: /path/to/xpcs_data.h5
+     h5_keys:
+       t1: "entry/data/t1"
+       t2: "entry/data/t2"
+       phi: "entry/data/phi"
+       c2: "entry/data/c2"
+
+   analysis:
+     mode: static
+     n_angles: 3
+
+   optimization:
+     method: nlsq
+     initial_parameters:
+       values: [1000.0, 0.5, 100.0]
+
+   output:
+     results_dir: ./results
+
+Complete Configuration Reference
+=================================
+
+Data Section
+------------
+
+Specifies where and how to load XPCS data.
+
+.. code-block:: yaml
+
+   data:
+     path: /path/to/xpcs_data.h5          # HDF5 file path (required)
+     h5_keys:                              # HDF5 dataset keys (required)
+       t1: "entry/data/t1"
+       t2: "entry/data/t2"
+       phi: "entry/data/phi"
+       c2: "entry/data/c2"
+     # Optional: Preprocessing
+     t1_slice: ":"                        # Slice time1 (e.g., ":10" = first 10)
+     t2_slice: ":"                        # Slice time2
+     phi_slice: ":"                       # Slice angles
+     angle_filtering:
+       enabled: false                     # Filter by angle range
+       min_angle: 0
+       max_angle: 180
+
+**Key Details:**
+
+- ``path``: Absolute or relative to working directory
+- ``h5_keys``: Must match your HDF5 file structure
+- Use ``h5dump -H file.h5`` to inspect structure
+- Slicing uses Python notation: ``":10"`` = first 10, ``"10:20"`` = 10-19
+
+Find Your HDF5 Keys
+~~~~~~~~~~~~~~~~~~~
+
+Check your HDF5 structure:
+
+.. code-block:: bash
+
+   h5dump -H /path/to/your/file.h5
+
+Look for datasets like:
+
+.. code-block:: text
+
+   /entry/data/c2 Dataset {1000, 100, 100}
+   /entry/data/phi Dataset {3}
+   /entry/data/t1 Dataset {100}
+   /entry/data/t2 Dataset {100}
+
+Use the paths as ``h5_keys``.
+
+Analysis Section
+----------------
+
+Defines the physics model and analysis parameters.
+
+.. code-block:: yaml
+
+   analysis:
+     mode: static                         # Analysis mode: static, laminar_flow
+     n_angles: 3                          # Number of azimuthal angles
+     # Optional: Data filtering
+     remove_bad_angles: true              # Remove low-intensity angles
+     phi_std_threshold: 2.0               # Standard deviations for rejection
+
+**Mode Comparison:**
+
+.. table::
+   :widths: 30 20 20 30
+
+   +------------------+----------+----------+----------------------------------+
+   | Feature          | Static   | Laminar  | Notes                            |
+   +==================+==========+==========+==================================+
+   | Physical params  | 3        | 7        | Total = 3 + 2*n_angles (v2.4)   |
+   +------------------+----------+----------+----------------------------------+
+   | Time dependence  | D(t)     | D(t)     | D(t) = D₀*t^α + D_offset        |
+   +------------------+----------+----------+----------------------------------+
+   | Shear dependence | No       | Yes      | γ̇(t) = γ̇₀*t^β + γ̇_offset    |
+   +------------------+----------+----------+----------------------------------+
+   | Anisotropy       | No       | Yes      | Via φ₀ parameter                |
+   +------------------+----------+----------+----------------------------------+
+   | Best for         | Isotropic | Flows   | Choose based on your experiment  |
+   +------------------+----------+----------+----------------------------------+
+
+Optimization Section
 --------------------
 
-Homodyne uses YAML configuration files to specify analysis parameters, optimization methods, and data loading.
-
-**Basic structure:**
+Controls how parameters are estimated from data.
 
 .. code-block:: yaml
 
-   experimental_data:
-     file_path: "./data/experiment.hdf"
+   optimization:
+     method: nlsq                         # NLSQ or MCMC
+     initial_parameters:
+       values: [1000.0, 0.5, 100.0]      # Initial guesses
+       bounds:                            # Parameter bounds
+         D0: [100.0, 10000.0]
+         alpha: [0.0, 1.0]
+         D_offset: [0.0, 500.0]
 
-   parameter_space:
-     model: "static_isotropic"     # or "laminar_flow"
-     bounds: [...]
+**Initial Parameters:**
 
-   initial_parameters:
-     parameter_names: [...]
+For **static** mode, provide 3 values:
+
+.. code-block:: yaml
+
+   values: [D0, alpha, D_offset]
+
+For **laminar_flow** mode, provide 7 values:
+
+.. code-block:: yaml
+
+   values: [D0, alpha, D_offset, gamma_dot_t0, beta, gamma_dot_t_offset, phi0]
+
+**Parameter Bounds:**
+
+Must be: ``[lower, upper]`` with lower < upper
+
+.. code-block:: yaml
+
+   bounds:
+     D0: [100.0, 10000.0]       # Diffusion coefficient
+     alpha: [0.0, 1.5]          # Time exponent (0=constant, 1=normal)
+     D_offset: [0.0, 500.0]     # Offset term
+     gamma_dot_t0: [0.1, 100.0] # Shear rate coefficient (laminar only)
+     beta: [0.0, 1.0]           # Shear time exponent (laminar only)
+     gamma_dot_t_offset: [0.0, 10.0]  # Shear offset (laminar only)
+     phi0: [-3.14, 3.14]        # Anisotropy angle (laminar only)
+
+**Physical Units:**
+
+.. table::
+   :widths: 30 20 50
+
+   +--------------------+-------+------------------------------------+
+   | Parameter          | Units | Typical Range                      |
+   +====================+=======+====================================+
+   | D0                 | μm²/s | 100-10000                          |
+   +--------------------+-------+------------------------------------+
+   | alpha              | none  | 0.0-1.5                            |
+   +--------------------+-------+------------------------------------+
+   | D_offset           | μm²/s | 0-500                              |
+   +--------------------+-------+------------------------------------+
+   | gamma_dot_t0       | s⁻¹   | 0.1-100                            |
+   +--------------------+-------+------------------------------------+
+   | beta               | none  | 0.0-1.0                            |
+   +--------------------+-------+------------------------------------+
+   | gamma_dot_t_offset | s⁻¹   | 0-10                               |
+   +--------------------+-------+------------------------------------+
+   | phi0               | rad   | -π to π                            |
+   +--------------------+-------+------------------------------------+
+
+Per-Angle Scaling (v2.4.0)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+**Important:** Per-angle scaling is now mandatory in v2.4.0+.
+
+Each angle has its own scaling parameters:
+
+- **Number of angles:** n_angles
+- **Per-angle contrast parameters:** n_angles
+- **Per-angle offset parameters:** n_angles
+- **Physical parameters:** 3 (static) or 7 (laminar_flow)
+- **Total parameters:** 2 × n_angles + physical_params
+
+**Example with 3 angles:**
+
+.. code-block:: text
+
+   Total parameters: 2*3 + 3 = 9
+   [contrast₀, contrast₁, contrast₂, offset₀, offset₁, offset₂, D₀, α, D_offset]
+
+This means:
+
+- Each angle has independent intensity scaling
+- Physical parameters (D₀, α, D_offset) are shared across all angles
+- More robust fits for heterogeneous data
+
+NLSQ Optimization Section
+~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Additional options for NLSQ method:
+
+.. code-block:: yaml
 
    optimization:
-     method: "nlsq"                 # or "mcmc"
-     nlsq: {...}
-     mcmc: {...}
+     method: nlsq
+     nlsq:
+       max_iterations: 100        # Maximum iterations
+       tolerance: 1e-6            # Convergence tolerance
+       loss: "linear"             # linear or huber (robust)
+       verbose: false             # Print iterations
+
+MCMC Inference Section
+~~~~~~~~~~~~~~~~~~~~~~
+
+Additional options for MCMC method:
+
+.. code-block:: yaml
+
+   optimization:
+     method: mcmc
+     mcmc:
+       n_samples: 2000            # Posterior samples
+       n_warmup: 1000             # Warmup iterations
+       n_chains: 4                # Number of MCMC chains
+       backend: "multiprocessing" # multiprocessing or pjit
+
+Output Section
+--------------
+
+Specifies where results are saved.
+
+.. code-block:: yaml
 
    output:
-     directory: "./results"
+     results_dir: ./homodyne_results    # Output directory
+     save_plots: true                   # Save visualization plots
+     plot_format: png                   # png or pdf
+     save_trace: true                   # Save optimization trace
+     save_posterior: true               # Save MCMC posteriors
 
-Critical Concept: Parameter Counting
--------------------------------------
+**Output Files Generated:**
 
-Homodyne uses **per-angle scaling parameters** in addition to physical parameters. This determines the total parameter count.
+.. table::
+   :widths: 40 60
 
-**Static Isotropic Model: 3 + 2n parameters**
+   +----------------------+-----------------------------------------------+
+   | File                 | Contents                                      |
+   +======================+===============================================+
+   | results.json         | Best-fit parameters and uncertainties        |
+   +----------------------+-----------------------------------------------+
+   | residuals.png        | Residual analysis                             |
+   +----------------------+-----------------------------------------------+
+   | c2_fit.png           | Two-time correlation visualization            |
+   +----------------------+-----------------------------------------------+
+   | correlation_heatmap  | Heatmap of c₂(t₁, t₂)                        |
+   +----------------------+-----------------------------------------------+
+   | convergence.json     | Optimization convergence history              |
+   +----------------------+-----------------------------------------------+
 
-- **3 physical parameters:**
-  - D₀: Diffusion coefficient [Å²/s]
-  - α: Power-law exponent [dimensionless]
-  - D_offset: Diffusion offset [Å²/s]
+Advanced Configuration
+======================
 
-- **2 scaling parameters per filtered phi angle:**
-  - contrast: Amplitude scaling [dimensionless]
-  - offset: Baseline offset [dimensionless]
+Logging Configuration
+---------------------
 
-- **Total:** 3 + 2×(number of filtered angles)
+.. code-block:: yaml
 
-**Example with 3 angles:**
+   logging:
+     level: INFO                 # DEBUG, INFO, WARNING, ERROR
+     file: homodyne.log         # Log file (optional)
+     console: true              # Log to console
 
-.. math::
-
-   \text{Total parameters} = 3 + 2 \times 3 = 9
-
-**Laminar Flow Model: 7 + 2n parameters**
-
-- **7 physical parameters:**
-  - D₀: Diffusion coefficient [Å²/s]
-  - α: Diffusion power-law exponent [dimensionless]
-  - D_offset: Diffusion offset [Å²/s]
-  - γ̇₀: Initial shear rate [s⁻¹]
-  - β: Shear power-law exponent [dimensionless]
-  - γ̇_offset: Shear rate offset [s⁻¹]
-  - φ₀: Initial angle [degrees]
-
-- **2 scaling parameters per filtered phi angle:**
-  - contrast: Amplitude scaling [dimensionless]
-  - offset: Baseline offset [dimensionless]
-
-- **Total:** 7 + 2×(number of filtered angles)
-
-**Example with 3 angles:**
-
-.. math::
-
-   \text{Total parameters} = 7 + 2 \times 3 = 13
-
-Impact of Angle Filtering
-^^^^^^^^^^^^^^^^^^^^^^^^^^
-
-The per-angle scaling approach means that **filtering angles directly reduces the total parameter count**:
-
-- **No filtering:** All angles analyzed separately
-- **With filtering:** Only selected angles used, reducing n
-
-Example comparison:
-
-- 10 total phi angles, no filtering → 3 + 2×10 = 23 parameters (static) or 7 + 2×10 = 27 parameters (laminar)
-- 10 angles, filtered to 3 ranges → 3 + 2×3 = 9 parameters (static) or 7 + 2×3 = 13 parameters (laminar)
-
-**Recommendation:** Use angle filtering to reduce parameter count and improve convergence.
-
-Configuration Sections
+Memory and Performance
 ----------------------
 
-Experimental Data
-^^^^^^^^^^^^^^^^^
-
-Specifies where to load experimental HDF5 data:
-
-.. code-block:: yaml
-
-   experimental_data:
-     file_path: "./data/sample/experiment.hdf"
-
-**Options:**
-
-- ``file_path``: Path to HDF5 file (absolute or relative)
-- **Recommendation:** Use absolute paths for reproducibility
-
-Parameter Space
-^^^^^^^^^^^^^^^
-
-Defines physical model and parameter bounds:
-
-.. code-block:: yaml
-
-   parameter_space:
-     model: "static_isotropic"    # or "laminar_flow"
-
-     bounds:
-       - name: D0
-         min: 100.0               # Minimum bound
-         max: 1e5                 # Maximum bound
-       - name: alpha
-         min: 0.0
-         max: 2.0
-       # ... additional parameters
-
-**For Static Isotropic (required):**
-
-- D0, alpha, D_offset
-
-**For Laminar Flow (required):**
-
-- D0, alpha, D_offset, gamma_dot_0, beta, gamma_dot_offset, phi_0
-
-**Notes:**
-
-- Bounds must match your physical system
-- See :doc:`../theoretical-framework/parameter-models` for recommended ranges
-- Parameter names in config map to code names (e.g., ``gamma_dot_0`` → ``gamma_dot_t0``)
-
-Initial Parameters
-^^^^^^^^^^^^^^^^^^
-
-Specifies which parameters to optimize:
-
-.. code-block:: yaml
-
-   initial_parameters:
-     parameter_names:
-       - D0
-       - alpha
-       - D_offset
-
-     # Optional: Specify active subset
-     active_parameters:
-       - D0
-       - alpha
-
-     # Optional: Fix specific parameters
-     fixed_parameters:
-       D_offset: 10.0
-
-**Strategies:**
-
-1. **Optimize all:** List all parameters in ``parameter_names``
-2. **Active subset:** Use ``active_parameters`` to optimize subset only
-3. **Fix parameters:** Use ``fixed_parameters`` for known values
-
-**Recommendation:** Start with critical parameters, add complexity gradually.
-
-Optimization Methods
-^^^^^^^^^^^^^^^^^^^^
-
-**NLSQ (Nonlinear Least Squares - Default)**
-
-.. code-block:: yaml
-
-   optimization:
-     method: "nlsq"
-
-     nlsq:
-       max_iterations: 100           # Maximum iterations
-       tolerance: 1e-8              # Convergence tolerance
-       trust_region_scale: 1.0      # Trust region scaling
-
-**When to use:** Primary optimization method for point estimates
-
-**MCMC (Markov Chain Monte Carlo)**
-
-.. code-block:: yaml
-
-   optimization:
-     method: "mcmc"
-
-     mcmc:
-       num_warmup: 1000             # Warmup samples
-       num_samples: 2000            # Posterior samples
-       num_chains: 4                # Parallel chains
-       progress_bar: true           # Show progress
-       backend: "numpyro"           # or "blackjax"
-
-**When to use:** Uncertainty quantification, posterior distributions
-
-See :doc:`../advanced-topics/mcmc-uncertainty` for details.
-
-Angle Filtering
-^^^^^^^^^^^^^^^
-
-Filters experimental data to specific phi angle ranges before optimization:
-
-.. code-block:: yaml
-
-   phi_filtering:
-     enabled: true
-
-     target_ranges:
-       - min_angle: -10.0           # Degrees
-         max_angle: 10.0
-         description: "Near 0 degrees"
-
-       - min_angle: 85.0
-         max_angle: 95.0
-         description: "Near 90 degrees"
-
-**Benefits:**
-
-- Reduces parameter count (fewer angles → 2n scaling parameters)
-- Improves convergence (focus on specific angular regimes)
-- Handles anisotropy better (separate analysis by angle)
-
-**Angles are normalized to [-180°, 180°]**, handling wrapping automatically.
-
-See :doc:`../advanced-topics/angle-filtering` for details.
-
-Performance and Strategy Selection
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-
 .. code-block:: yaml
 
    performance:
-     # Strategy selection (automatic by default)
-     strategy_override: null           # null for auto, or "standard"|"large"|"chunked"|"streaming"
-     memory_limit_gb: null            # Auto-detect if null
-     enable_progress: true            # Show progress bars
+     use_jit: true              # Use JAX JIT compilation
+     chunk_size: 1000           # Chunk size for large datasets
+     n_workers: 4               # Number of worker processes (MCMC)
+     device: cpu                # cpu (gpu not supported in v2.3.0+)
 
-     device:
-       preferred_device: "auto"       # "auto"|"cpu"|"gpu"
-       gpu_memory_fraction: 0.9       # GPU memory limit
+Example Configurations
+======================
 
-**Strategy Selection (Automatic):**
-
-- **< 1M points:** STANDARD (fast, low memory)
-- **1M-10M points:** LARGE (medium memory)
-- **10M-100M points:** CHUNKED (higher memory)
-- **> 100M points:** STREAMING (constant memory, with checkpoints)
-
-**Recommendation:** Leave ``strategy_override: null`` for automatic selection.
-
-See :doc:`../advanced-topics/streaming-optimization` for streaming details.
-
-Template Selection
-------------------
-
-Homodyne provides three comprehensive configuration templates:
-
-**Master Template**
-
-Complete reference with ALL parameters:
-
-.. code-block:: bash
-
-   cp homodyne/config/templates/homodyne_master_template.yaml my_config.yaml
-
-**Static Isotropic Template**
-
-Optimized for static, isotropic systems (3+2n parameters):
-
-.. code-block:: bash
-
-   cp homodyne/config/templates/homodyne_static_isotropic.yaml my_config.yaml
-
-**Laminar Flow Template**
-
-Optimized for flowing systems with angle filtering (7+2n parameters):
-
-.. code-block:: bash
-
-   cp homodyne/config/templates/homodyne_laminar_flow.yaml my_config.yaml
-
-See :doc:`../configuration-templates/index` for detailed template documentation.
-
-Complete Configuration Example
--------------------------------
-
-**Static isotropic with angle filtering:**
+Minimal Static Mode
+-------------------
 
 .. code-block:: yaml
 
-   experimental_data:
-     file_path: "./data/experiment.hdf"
+   data:
+     path: /data/xpcs.h5
+     h5_keys:
+       c2: entry/data/c2
+       t1: entry/data/t1
+       t2: entry/data/t2
+       phi: entry/data/phi
 
-   parameter_space:
-     model: "static_isotropic"
-
-     bounds:
-       - name: D0
-         min: 100.0
-         max: 1e5
-       - name: alpha
-         min: 0.0
-         max: 2.0
-       - name: D_offset
-         min: -100.0
-         max: 100.0
-
-   initial_parameters:
-     parameter_names: [D0, alpha, D_offset]
-     active_parameters: [D0, alpha]
-     fixed_parameters:
-       D_offset: 10.0
+   analysis:
+     mode: static
+     n_angles: 3
 
    optimization:
-     method: "nlsq"
-     nlsq:
-       max_iterations: 100
-       tolerance: 1e-8
-
-   phi_filtering:
-     enabled: true
-     target_ranges:
-       - min_angle: -10.0
-         max_angle: 10.0
-
-   performance:
-     strategy_override: null
-     enable_progress: true
+     method: nlsq
+     initial_parameters:
+       values: [1000, 0.5, 100]
 
    output:
-     directory: "./results"
+     results_dir: ./results
 
-This configuration:
-
-- Uses 3+2×1 = 5 parameters (3 physical + 2 for single filtered angle)
-- Optimizes D0 and alpha
-- Fixes D_offset to 10.0
-- Uses NLSQ optimization
-- Filters to near 0° angles only
-
-Advanced Configuration Topics
-------------------------------
-
-**Streaming Optimization for Large Datasets**
+Complete Laminar Flow Configuration
+------------------------------------
 
 .. code-block:: yaml
+
+   data:
+     path: /data/xpcs_flow.h5
+     h5_keys:
+       c2: entry/data/c2
+       t1: entry/data/t1
+       t2: entry/data/t2
+       phi: entry/data/phi
+
+   analysis:
+     mode: laminar_flow
+     n_angles: 5
+     remove_bad_angles: true
 
    optimization:
-     streaming:
-       enable_checkpoints: true
-       checkpoint_dir: "./checkpoints"
-       checkpoint_frequency: 10
-       max_retries_per_batch: 2
+     method: nlsq
+     initial_parameters:
+       values: [1500, 0.5, 150, 10.0, 0.5, 1.0, 0.0]
+       bounds:
+         D0: [500, 5000]
+         alpha: [0, 1]
+         D_offset: [0, 500]
+         gamma_dot_t0: [1, 50]
+         beta: [0, 1]
+         gamma_dot_t_offset: [0, 10]
+         phi0: [-3.14, 3.14]
 
-See :doc:`../advanced-topics/streaming-optimization`.
+   output:
+     results_dir: ./laminar_results
+     save_plots: true
+     plot_format: png
 
-**CMC (Covariance Matrix Combination)**
+Configuration for MCMC
+----------------------
+
+Start with NLSQ, then add MCMC:
 
 .. code-block:: yaml
 
+   # First run with:
    optimization:
-     cmc:
-       enable: true
-       backend: "jax"
-       diagonal_correction: true
+     method: nlsq
+     initial_parameters:
+       values: [1234.5, 0.567, 123.4]
 
-See :doc:`../advanced-topics/cmc-large-datasets`.
+   # Get best-fit, then switch to:
+   optimization:
+     method: mcmc
+     initial_parameters:
+       values: [1234.5, 0.567, 123.4]  # From NLSQ output
+     mcmc:
+       n_samples: 2000
+       n_warmup: 1000
+       n_chains: 4
 
-**GPU Acceleration**
+Validation and Testing
+======================
 
-.. code-block:: yaml
-
-   performance:
-     device:
-       preferred_device: "gpu"
-       gpu_memory_fraction: 0.9
-
-See :doc:`../advanced-topics/gpu-acceleration`.
-
-Validation and Debugging
-------------------------
-
-**Validate YAML syntax:**
+Validate Your Configuration
+---------------------------
 
 .. code-block:: bash
 
-   python -c "import yaml; yaml.safe_load(open('config.yaml'))"
+   homodyne-config --validate my_config.yaml
 
-**Check configuration loading:**
+This checks:
 
-.. code-block:: python
+- YAML syntax
+- Required fields
+- Data file accessibility
+- Parameter bounds logical consistency
+- HDF5 keys exist
 
-   from homodyne.config import ConfigManager
-   config = ConfigManager("config.yaml")
-   print(config.get_model())
-   print(config.get_parameter_bounds())
+Common Configuration Errors
+---------------------------
 
-**Preview parameter count:**
+**Error: "Parameter out of bounds"**
+
+Initial values must be within bounds:
+
+.. code-block:: yaml
+
+   values: [1000]           # ✓ Within bounds
+   bounds:
+     D0: [100, 10000]
+
+   values: [50]             # ✗ Below lower bound
+   bounds:
+     D0: [100, 10000]
+
+**Error: "Cannot find HDF5 key"**
 
 .. code-block:: bash
 
-   # Count angles after filtering
-   python -c "
-   from homodyne.config import ConfigManager
-   config = ConfigManager('config.yaml')
-   model = config.get_model()
-   n_angles = config.get_filtered_angle_count()
-   if model == 'static_isotropic':
-       total = 3 + 2*n_angles
-   else:
-       total = 7 + 2*n_angles
-   print(f'Total parameters: {total} ({n_angles} angles)')
-   "
+   # Verify your keys:
+   h5ls /path/to/file.h5
+
+   # Result might be:
+   #  entry/data/c2 Dataset {1000, 100, 100}
+
+   # Then in config:
+   h5_keys:
+     c2: entry/data/c2  # ✓ Correct
+
+**Error: "Wrong number of initial values"**
+
+For static mode: 3 values (D0, alpha, D_offset)
+For laminar_flow mode: 7 values (+ 4 shear parameters)
+
+Tips and Best Practices
+=======================
+
+**1. Start Conservative**
+
+Use wider bounds than you think necessary:
+
+.. code-block:: yaml
+
+   bounds:
+     alpha: [0.0, 2.0]   # Wider range
+     # rather than
+     # alpha: [0.4, 0.6]
+
+**2. Good Initial Guesses**
+
+Closer to true values = faster convergence:
+
+.. code-block:: yaml
+
+   values: [1200, 0.5, 100]  # Based on literature/similar samples
+
+**3. Physics Constraints**
+
+Respect physical bounds:
+
+.. code-block:: text
+
+   D0 > 0          Always positive (diffusion)
+   0 < alpha < 2   Typical range for dynamics
+   D_offset >= 0   Non-negative offset
+
+**4. Per-Angle Scaling**
+
+Always enabled in v2.4.0+. Improves fit for:
+
+- Heterogeneous intensity distributions
+- Multiple detector arms
+- Complex sample geometries
+
+Configuration Migration
+=======================
+
+If upgrading from v2.3.0 to v2.4.0:
+
+**Change:** Per-angle scaling is now mandatory
+
+.. code-block:: yaml
+
+   # Old (v2.3.0) - optional:
+   # per_angle_scaling: true
+
+   # New (v2.4.0) - always true, remove this line
+
+   # Everything else stays the same!
+
+Template Configurations
+=======================
+
+Generate templates with:
+
+.. code-block:: bash
+
+   homodyne-config --mode static      # Static mode template
+   homodyne-config --mode laminar_flow # Laminar flow template
+
+Then edit as needed for your specific experiment.
 
 Next Steps
-----------
+==========
 
-- :doc:`cli-usage` - Run analyses with your configuration
-- :doc:`examples` - Real-world workflow examples
-- :doc:`../advanced-topics/index` - Advanced optimization techniques
-- :doc:`../theoretical-framework/parameter-models` - Detailed parameter descriptions
-
-See Also
---------
-
-- :doc:`../configuration-templates/index` - Template documentation
-- :doc:`../api-reference/config` - Configuration API reference
-- :doc:`../developer-guide/testing` - Testing configurations
+- :doc:`./examples` - See configuration in action
+- :doc:`./cli` - Run your configured analysis
+- :doc:`../research/theoretical_framework` - Understand the physics
+- :doc:`../configuration/options` - Complete option reference

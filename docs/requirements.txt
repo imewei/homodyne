@@ -1,24 +1,19 @@
-# Sphinx documentation dependencies
-# Install with: pip install -r docs/requirements.txt
+# Sphinx documentation dependencies for ReadTheDocs
+# This file is used by ReadTheDocs build process
+# The main package is installed via pip install -e ".[docs]"
 
-# Sphinx core
-sphinx>=7.2.0,<8.0.0
+# Core Sphinx
+sphinx>=8.0.0,<9.0.0
 
 # Theme
-sphinx-rtd-theme>=2.0.0,<3.0.0
+sphinx-rtd-theme>=3.0.0,<4.0.0
 
-# Extensions
+# Markdown support
+myst-parser>=4.0.0,<5.0.0
+
+# Optional enhancements for better documentation
 sphinx-autodoc-typehints>=2.0.0,<3.0.0
-myst-parser>=2.0.0,<3.0.0
 sphinx-copybutton>=0.5.2,<0.6.0
-sphinx-tabs>=3.4.5,<4.0.0
 
-# Optional but useful
-sphinxcontrib-bibtex>=2.6.0,<3.0.0
-sphinx-autobuild>=2024.0.0
-
-# Required for building (must match package dependencies)
-jax>=0.8.0,<0.9.0
-jaxlib>=0.8.0,<0.9.0
-numpy>=2.0.0,<3.0.0
-pyyaml>=6.0.2
+# Note: Core dependencies (jax, numpy, etc.) are installed via pip install -e ".[docs]"
+# This ensures version consistency with pyproject.toml

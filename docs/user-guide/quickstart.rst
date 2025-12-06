@@ -1,242 +1,290 @@
-Quickstart: Your First Analysis in 5 Minutes
-==============================================
+Quickstart
+==========
 
-This quickstart guide walks you through your first Homodyne analysis in just 5 minutes.
+Get up and running with Homodyne in 5 minutes. This guide walks you through your first
+XPCS analysis with a minimal example.
 
 Prerequisites
--------------
+=============
 
-- Homodyne installed (see :doc:`installation`)
-- Sample HDF5 data file (or download from examples)
-- Basic familiarity with YAML
+- Python 3.12+ installed
+- Homodyne installed (see :doc:`./installation`)
+- A sample XPCS HDF5 data file
 
-Step 1: Create a Configuration File (1 minute)
------------------------------------------------
+Installation Check
+------------------
 
-Create a file named ``config.yaml``:
-
-.. code-block:: yaml
-
-   # Minimal configuration for first analysis
-   experimental_data:
-     file_path: "./data/sample/experiment.hdf"
-
-   parameter_space:
-     model: "static_isotropic"
-
-     bounds:
-       - name: D0
-         min: 100.0
-         max: 1e5
-       - name: alpha
-         min: 0.0
-         max: 2.0
-       - name: D_offset
-         min: -100.0
-         max: 100.0
-
-   initial_parameters:
-     parameter_names:
-       - D0
-       - alpha
-       - D_offset
-
-   optimization:
-     method: "nlsq"
-     nlsq:
-       max_iterations: 100
-       tolerance: 1e-8
-
-   output:
-     directory: "./results"
-
-For more comprehensive templates, see :doc:`configuration`.
-
-Step 2: Run the Analysis (2 minutes)
-------------------------------------
+Verify your installation:
 
 .. code-block:: bash
 
-   # Navigate to directory with config.yaml
-   cd your_project_directory
+   homodyne --version
 
-   # Run analysis
-   homodyne --config config.yaml
+You should see ``Homodyne v2.4.1``.
+
+5-Minute Analysis Workflow
+==========================
+
+Step 1: Create a Configuration File
+-----------------------------------
+
+Create a file named ``my_config.yaml`` with the following content:
+
+.. code-block:: yaml
+
+   # Minimal static mode configuration
+   data:
+     path: /path/to/your/xpcs_data.h5          # Update this path!
+     h5_keys:
+       t1: "entry/data/t1"
+       t2: "entry/data/t2"
+       phi: "entry/data/phi"
+       c2: "entry/data/c2"
+
+   analysis:
+     mode: static                                # Two options: static, laminar_flow
+     n_angles: 3                                 # Number of azimuthal angles
+
+   optimization:
+     method: nlsq                                # Non-linear least squares
+     initial_parameters:
+       values: [1000.0, 0.5, 100.0]            # [D0, alpha, D_offset]
+     parameter_bounds:
+       D0: [100.0, 10000.0]
+       alpha: [0.0, 1.0]
+       D_offset: [0.0, 500.0]
+
+   output:
+     results_dir: ./homodyne_results
+
+**Key Configuration Points:**
+
+- ``data.path``: Update to your HDF5 file location
+- ``data.h5_keys``: Keys to your data arrays in the HDF5 file
+- ``analysis.mode``: Use ``static`` for this example (3 parameters)
+- ``optimization.method``: Use ``nlsq`` for fast optimization
+
+Step 2: Run the Analysis
+------------------------
+
+Run Homodyne with your configuration:
+
+.. code-block:: bash
+
+   homodyne --config my_config.yaml
 
 You should see output like:
 
 .. code-block:: text
 
-   Loading configuration from config.yaml
-   Loading experimental data from ./data/sample/experiment.hdf
-   Initializing NLSQ optimization...
-   Optimization in progress... [████████████████████] 100%
-   Analysis complete!
-   Results saved to ./results/
+   Homodyne v2.4.1
+   ===============
 
-Step 3: Examine Results (2 minutes)
------------------------------------
+   Loading configuration: my_config.yaml
+   Loading XPCS data: /path/to/xpcs_data.h5
 
-**Output files created in ``./results/``:**
+   Analysis Configuration:
+     Mode: static
+     Angles: 3
+     Physical Parameters: D0, alpha, D_offset
 
-1. **parameters.json** - Optimized parameter values
+   Running NLSQ optimization...
 
-   .. code-block:: json
+   Iteration    Cost         Gradient Norm
+   1            1234.56      45.23
+   2            1189.45      12.34
+   3            1185.67      2.45
+   ...
 
-      {
-        "D0": {
-          "value": 1250.5,
-          "uncertainty": 45.3,
-          "unit": "Å²/s"
-        },
-        "alpha": {
-          "value": 0.62,
-          "uncertainty": 0.08,
-          "unit": "dimensionless"
-        },
-        "D_offset": {
-          "value": 12.3,
-          "uncertainty": 5.2,
-          "unit": "Å²/s"
-        }
-      }
+   ✓ Optimization converged in 5 iterations
 
-2. **fitted_data.npz** - Experimental and theoretical data
+   Best-Fit Parameters:
+   ═════════════════════
+   D0 (Diffusion):        1234.5 ± 45.6 μm²/s
+   alpha (Time exponent): 0.567 ± 0.012
+   D_offset (Offset):     123.4 ± 5.6 μm²/s
 
-   .. code-block:: python
+   Results saved to: ./homodyne_results/
 
-      import numpy as np
-      data = np.load('./results/fitted_data.npz')
-      print(data.files)  # List available arrays
-      # ['experimental_c2', 'theoretical_c2', 'residuals', ...]
 
-3. **analysis_results_nlsq.json** - Fit quality metrics
-
-   .. code-block:: json
-
-      {
-        "chi_squared": 1.235,
-        "reduced_chi_squared": 1.189,
-        "number_of_data_points": 1000,
-        "number_of_parameters": 3
-      }
-
-4. **convergence_metrics.json** - Optimization details
-
-   .. code-block:: json
-
-      {
-        "iterations": 23,
-        "final_trust_region_radius": 0.145,
-        "convergence_flag": 4,
-        "computation_time_seconds": 8.32
-      }
-
-Understanding Your Results
----------------------------
-
-**Chi-squared value:**
-
-- :math:`\chi^2 \approx 1` indicates good fit quality
-- :math:`\chi^2 < 0.5` may indicate overfitting
-- :math:`\chi^2 > 2` suggests parameter adjustment needed
-
-**Uncertainties:**
-
-- Computed from the covariance matrix
-- Larger uncertainties indicate parameter is less constrained
-- Use relative uncertainty: :math:`\Delta p / p` to judge significance
-
-**Convergence flag:**
-
-- ``4`` = convergence success
-- ``2`` = max iterations reached (try increasing `max_iterations`)
-- ``1`` = tolerance achieved
-
-Adding Visualization
+Step 3: View Results
 --------------------
 
-To visualize your results:
+Homodyne automatically generates results in ``./homodyne_results/``:
 
-.. code-block:: bash
+.. code-block:: text
 
-   homodyne --config config.yaml --plot-experimental-data
+   homodyne_results/
+   ├── results.json              # Complete parameter estimates
+   ├── residuals.png             # Residual analysis plot
+   ├── c2_fit.png                # Two-time correlation plot
+   ├── correlation_heatmap.png   # Heatmap visualization
+   └── convergence.json          # Optimization convergence details
 
-This creates additional plots in ``./results/plots/``:
+**Key Output Files:**
 
-- **c2_fit.png** - Two-time correlation heatmap with fit overlay
-- **residuals.png** - Residual analysis plots
-- **parameters.png** - Parameter distributions
+- ``results.json``: Best-fit parameters and uncertainty
+- ``c2_fit.png``: Visual comparison of data vs model
+- ``correlation_heatmap.png``: Two-time correlation visualization
 
-Next Steps
-----------
+Step 4: Interpret Results
+--------------------------
 
-Congratulations on your first analysis! To continue:
+The output shows:
 
-1. **Explore other analysis modes:**
-   - Static isotropic (used in this quickstart)
-   - Laminar flow (see :doc:`examples`)
-   - MCMC uncertainty quantification (see :doc:`examples`)
+1. **Parameter Values:** Best-fit estimate and uncertainty
+2. **Physics Interpretation:**
+   - ``D0`` (Diffusion coefficient) ~1234 μm²/s
+   - ``alpha`` (Time exponent) ~0.57 (sub-diffusive)
+   - ``D_offset`` (Offset) ~123 μm²/s
 
-2. **Learn the configuration system:**
-   - :doc:`configuration` - Detailed parameter explanation
-   - Parameter counting: 3+2n for static, 7+2n for laminar
-   - Advanced settings: streaming, GPU acceleration, checkpoints
+3. **Convergence Status:** "Converged" = good fit achieved
 
-3. **Try advanced features:**
-   - :doc:`../advanced-topics/nlsq-optimization` - Trust-region optimization details
-   - :doc:`../advanced-topics/angle-filtering` - Angular selection
-   - :doc:`../advanced-topics/gpu-acceleration` - GPU speedup (Linux only)
+Understanding the Output
+========================
 
-4. **Run example workflows:**
-   - :doc:`examples` - Real-world use cases
-   - Static isotropic + NLSQ
-   - Laminar flow + angle filtering
-   - MCMC uncertainty quantification
+**What These Parameters Mean:**
 
-Troubleshooting
----------------
+.. math::
 
-**"No such file or directory: ./data/sample/experiment.hdf"**
+   D(t) = D_0 \times t^{\alpha} + D_{\text{offset}}
 
-Update the data file path in ``config.yaml``:
+- **D₀** (Diffusion): Proportional to particle mobility
+- **α** (Exponent):
+  - α = 1.0 → Normal diffusion
+  - α < 1.0 → Subdiffusion (hindered motion)
+  - α > 1.0 → Superdiffusion (enhanced motion)
+- **D_offset** (Baseline): Instrumental offset or non-dynamic scattering
+
+**Uncertainty Values:**
+
+The ± values indicate confidence in the estimates:
+
+- Smaller uncertainty = more precise fit
+- Larger uncertainty = data may be noisier or parameter less constrained
+
+Next Steps: Adding Complexity
+==============================
+
+**Option 1: Include Multiple Angles**
+
+Use ``n_angles: 5`` or more for better statistics (update YAML accordingly).
+
+**Option 2: Add Laminar Flow Physics**
+
+Change to ``mode: laminar_flow`` for systems with velocity gradients:
 
 .. code-block:: yaml
 
-   experimental_data:
-     file_path: "/absolute/path/to/your/data.hdf"
+   analysis:
+     mode: laminar_flow                        # Add shear-rate dependency
+     n_angles: 3
 
-Use absolute paths for reliability.
+   optimization:
+     initial_parameters:
+       values: [1000.0, 0.5, 100.0,           # Physical params: D0, alpha, D_offset
+                1.0, 0.5, 0.5, 0.0]            # Shear params: gamma_dot_t0, beta, offset, phi0
 
-**"ModuleNotFoundError: No module named 'homodyne'"**
+This adds 4 additional parameters for shear-rate dependent dynamics.
 
-Ensure homodyne is installed:
+**Option 3: Bayesian Uncertainty Quantification**
 
-.. code-block:: bash
-
-   pip install homodyne
-   homodyne --version
-
-**"Error: Invalid configuration"**
-
-Check YAML syntax:
+After NLSQ converges, run MCMC:
 
 .. code-block:: bash
 
-   python -c "import yaml; yaml.safe_load(open('config.yaml'))"
+   # Step 1: Copy best-fit from NLSQ results.json
+   # Step 2: Update initial_parameters.values in config
+   homodyne --config my_config.yaml --method mcmc
 
-Should succeed without error.
+This provides full posterior distributions instead of point estimates.
 
-**Analysis is very slow**
+Troubleshooting Common Issues
+=============================
 
-- For small datasets (<10M points), CPU is often faster than GPU
-- Check :doc:`../developer-guide/performance` for optimization tips
-- Reduce `max_iterations` to test quickly
+**Issue: "Cannot load data from HDF5 file"**
 
-See Also
---------
+Check:
 
-- :doc:`configuration` - Detailed configuration guide
-- :doc:`cli-usage` - Command-line reference
-- :doc:`examples` - More advanced examples
-- :doc:`../api-reference/index` - Full API documentation
+1. File path is correct
+2. Keys match your HDF5 structure:
+
+.. code-block:: bash
+
+   # View HDF5 structure
+   h5dump -H /path/to/xpcs_data.h5
+
+3. Data arrays are numeric (float32 or float64)
+
+**Issue: "Initial parameters out of bounds"**
+
+Solution: Adjust bounds in configuration:
+
+.. code-block:: yaml
+
+   parameter_bounds:
+     D0: [100.0, 10000.0]       # Make wider if needed
+
+**Issue: "Optimization did not converge"**
+
+Try:
+
+1. Improve initial parameter guesses (closer to truth)
+2. Loosen parameter bounds
+3. Check data quality (look at residuals plot)
+4. Use more angles (n_angles: 5 or more)
+
+**Issue: "Memory error during optimization"**
+
+Reduce data size:
+
+1. Use fewer angles: ``n_angles: 3``
+2. Downsample time: ``t1_slice: ":10"`` (take every 10th time point)
+
+Quick Reference
+===============
+
+**Basic Commands:**
+
+.. code-block:: bash
+
+   # Run analysis
+   homodyne --config config.yaml
+
+   # Run with specific method
+   homodyne --config config.yaml --method nlsq   # Fast
+   homodyne --config config.yaml --method mcmc   # Detailed
+
+   # Check options
+   homodyne --help
+
+   # Generate config interactively
+   homodyne-config --interactive
+
+   # Validate existing config
+   homodyne-config --validate my_config.yaml
+
+**Configuration Modes:**
+
+- ``static``: Time-dependent diffusion, 3 physical parameters
+- ``laminar_flow``: Diffusion + shear, 7 physical parameters
+
+**Optimization Methods:**
+
+- ``nlsq``: Fast, point estimates, ~seconds to minutes
+- ``mcmc``: Slow, full posteriors, ~hours to days
+
+**Output Files:**
+
+- ``results.json``: Best-fit parameters and uncertainties
+- ``c2_fit.png``: Visual fit quality
+- ``convergence.json``: Optimization details
+
+Next Steps
+==========
+
+- :doc:`./cli` - Learn all command-line options
+- :doc:`./configuration` - Deep dive into configuration
+- :doc:`./examples` - Real-world analysis workflows
+- :doc:`../research/theoretical_framework` - Understand the physics
+- :doc:`../api-reference/index` - API reference for developers

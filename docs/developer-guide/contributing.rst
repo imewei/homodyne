@@ -1,528 +1,485 @@
-Contributing Guide
-==================
+Contributing to Homodyne
+========================
 
-Thank you for contributing to Homodyne! This guide covers the development workflow, code standards, and contribution process.
+Welcome to Homodyne development! This guide covers the contribution workflow,
+development setup, code quality standards, and best practices for working on the project.
 
-Getting Started
----------------
+Development Setup with uv
+--------------------------
 
-Prerequisites
-~~~~~~~~~~~~~
+Homodyne uses **uv** for Python package management, optimized for Python 3.12+.
+This provides faster dependency resolution and installation compared to pip.
 
-* Python 3.12+
-* Git
-* (Optional) CUDA 12.1-12.9 for GPU support (Linux only)
+Installing Development Environment
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-Development Setup
-~~~~~~~~~~~~~~~~~
-
-1. **Clone the repository**:
+1. **Install uv** (if not already installed):
 
    .. code-block:: bash
 
-      git clone https://github.com/imewei/homodyne.git
-      cd homodyne
+       curl -LsSf https://astral.sh/uv/install.sh | sh
 
-2. **Install development dependencies**:
-
-   .. code-block:: bash
-
-      make dev               # CPU-only (all platforms)
-      make install-jax-gpu   # GPU support (Linux only)
-
-3. **Install pre-commit hooks**:
+   Or using Homebrew on macOS:
 
    .. code-block:: bash
 
-      pre-commit install
+       brew install uv
 
-4. **Verify installation**:
+2. **Clone the repository**:
 
    .. code-block:: bash
 
-      make test
-      homodyne --version
+       git clone https://github.com/ORG/homodyne.git
+       cd homodyne
 
-Development Workflow
---------------------
+3. **Create virtual environment and install development dependencies**:
 
-Branch Strategy
-~~~~~~~~~~~~~~~
+   .. code-block:: bash
 
-**Main branches**:
+       uv venv --python 3.12
+       source .venv/bin/activate  # On Windows: .venv\Scripts\activate
 
-* ``main``: Production-ready code
-* ``dev`` (if used): Integration branch for features
+4. **Install Homodyne in development mode**:
 
-**Feature branches**:
+   .. code-block:: bash
 
-* Create from ``main``
-* Name: ``feature/<descriptive-name>``
-* Example: ``feature/add-streaming-optimizer``
+       uv pip install -e ".[dev,docs]"
 
-**Bugfix branches**:
+   This installs:
+   - Core dependencies (JAX 0.8.0 CPU-only, NumPyro, BlackJAX)
+   - Development tools (pytest, black, ruff, mypy)
+   - Documentation tools (sphinx, sphinx-rtd-theme, myst-parser)
 
-* Name: ``bugfix/<issue-number>-<description>``
-* Example: ``bugfix/123-fix-parameter-validation``
+Verifying Installation
+^^^^^^^^^^^^^^^^^^^^^^
 
-**Hotfix branches**:
-
-* Name: ``hotfix/<version>-<description>``
-* For critical production fixes
-
-Creating a Feature Branch
-~~~~~~~~~~~~~~~~~~~~~~~~~
+Verify your development environment is properly configured:
 
 .. code-block:: bash
 
-   # Update main
-   git checkout main
-   git pull origin main
+    # Check Python and JAX versions
+    python --version  # Should be 3.12+
+    python -c "import jax; print(f'JAX {jax.__version__}')"
 
-   # Create feature branch
-   git checkout -b feature/my-new-feature
+    # Validate system configuration
+    python -m homodyne.runtime.utils.system_validator --quick
 
-   # Make changes...
+    # Run quick test to verify setup
+    make test-unit
 
-   # Run tests
-   make test
+Code Quality Standards
+----------------------
 
-   # Check code quality
-   make format
-   make lint
+Homodyne maintains high code quality standards using three primary tools:
 
-   # Commit changes
-   git add .
-   git commit -m "feat: add streaming optimizer support"
+Black - Code Formatting
+^^^^^^^^^^^^^^^^^^^^^^^
 
-   # Push to remote
-   git push origin feature/my-new-feature
+**Black** enforces consistent code formatting across the project.
 
-Commit Message Convention
-~~~~~~~~~~~~~~~~~~~~~~~~~~
+Configuration in ``pyproject.toml``:
 
-Follow **Conventional Commits** format:
+.. code-block:: toml
+
+    [tool.black]
+    line-length = 100
+    target-version = ['py312']
+    include = '\.pyi?$'
+    extend-exclude = '''
+    /(
+        \.git
+      | \.venv
+      | _build
+      | dist
+    )/
+    '''
+
+Format your code before committing:
+
+.. code-block:: bash
+
+    black homodyne/
+
+Check formatting without modifying:
+
+.. code-block:: bash
+
+    black --check homodyne/
+
+Ruff - Linting
+^^^^^^^^^^^^^^
+
+**Ruff** performs fast linting and import sorting.
+
+Key rules enforced:
+- F: PyFlakes (undefined names, unused imports)
+- E/W: pycodestyle (whitespace, indentation)
+- I: isort (import sorting)
+- N: pep8-naming (naming conventions)
+- UP: pyupgrade (Python 3.12+ features)
+
+Lint your code:
+
+.. code-block:: bash
+
+    ruff check homodyne/
+
+Fix linting issues automatically:
+
+.. code-block:: bash
+
+    ruff check --fix homodyne/
+
+MyPy - Type Checking
+^^^^^^^^^^^^^^^^^^^^
+
+**MyPy** validates type hints and catches type-related errors.
+
+Configuration in ``pyproject.toml``:
+
+.. code-block:: toml
+
+    [tool.mypy]
+    python_version = "3.12"
+    warn_return_any = true
+    warn_unused_configs = true
+    disallow_incomplete_defs = true
+    disallow_untyped_defs = false
+    ignore_missing_imports = true
+
+Type-check your code:
+
+.. code-block:: bash
+
+    mypy homodyne/
+
+Complete Quality Check
+^^^^^^^^^^^^^^^^^^^^^^
+
+Run all quality checks together:
+
+.. code-block:: bash
+
+    make quality
+
+This runs: black format → ruff lint/fix → mypy type check
+
+Before Committing
+^^^^^^^^^^^^^^^^^
+
+Always run the quality check before committing:
+
+.. code-block:: bash
+
+    make quality
+    make test-unit  # Ensure tests still pass
+
+Testing with Pytest
+-------------------
+
+Homodyne uses **pytest** for comprehensive testing across multiple test suites.
+
+Test Organization
+^^^^^^^^^^^^^^^^^
+
+Tests are organized by type in ``tests/``:
 
 .. code-block:: text
 
-   <type>(<scope>): <subject>
+    tests/
+    ├── unit/              # Function-level tests (fast, <100ms each)
+    │   ├── test_*.py      # Test modules
+    │   └── optimization/  # Module-specific subdirectories
+    ├── integration/       # End-to-end workflow tests
+    ├── performance/       # Benchmarks and optimization tests
+    ├── mcmc/              # Statistical validation for MCMC
+    ├── factories/         # Test data generators
+    └── conftest.py        # Pytest configuration and fixtures
 
-   <body>
+Running Tests
+^^^^^^^^^^^^^
 
-   <footer>
-
-**Types**:
-
-* ``feat``: New feature
-* ``fix``: Bug fix
-* ``docs``: Documentation only
-* ``style``: Formatting (no code change)
-* ``refactor``: Code restructuring
-* ``perf``: Performance improvement
-* ``test``: Add/update tests
-* ``chore``: Maintenance tasks
-
-**Examples**:
-
-.. code-block:: text
-
-   feat(optimization): add streaming optimizer for large datasets
-
-   - Implement StreamingOptimizer with checkpoint support
-   - Add batch-level statistics tracking
-   - Update documentation
-
-   Closes #45
-
-.. code-block:: text
-
-   fix(cli): correct angle normalization in phi filtering
-
-   Angles now correctly normalized to [-180, 180] range.
-   Fixes wrap-around at ±180 boundary.
-
-   Fixes #123
-
-Pull Request Process
---------------------
-
-Creating a Pull Request
-~~~~~~~~~~~~~~~~~~~~~~~
-
-1. **Push your branch**:
-
-   .. code-block:: bash
-
-      git push origin feature/my-feature
-
-2. **Create PR on GitHub**:
-
-   * Go to https://github.com/imewei/homodyne/pulls
-   * Click "New Pull Request"
-   * Select your branch
-   * Fill in the PR template
-
-3. **PR title** (conventional format):
-
-   .. code-block:: text
-
-      feat: add streaming optimizer support
-
-4. **PR description template**:
-
-   .. code-block:: markdown
-
-      ## Summary
-
-      Brief description of changes.
-
-      ## Changes
-
-      * Added StreamingOptimizer class
-      * Implemented checkpoint management
-      * Updated documentation
-
-      ## Testing
-
-      * [ ] Unit tests pass
-      * [ ] Integration tests pass
-      * [ ] Documentation builds
-      * [ ] Manual testing completed
-
-      ## Related Issues
-
-      Closes #45
-
-PR Checklist
-~~~~~~~~~~~~
-
-Before submitting, ensure:
-
-* [ ] Code follows style guidelines (Black, Ruff)
-* [ ] Type hints added for new functions
-* [ ] Docstrings added (NumPy/Google format)
-* [ ] Tests added for new features
-* [ ] All tests pass (``make test-all``)
-* [ ] Documentation updated
-* [ ] Commit messages follow convention
-* [ ] No merge conflicts with ``main``
-
-Code Review Process
-~~~~~~~~~~~~~~~~~~~
-
-**Review criteria**:
-
-1. **Correctness**: Does it solve the problem?
-2. **Tests**: Adequate test coverage?
-3. **Documentation**: Clear docstrings and comments?
-4. **Style**: Follows code standards?
-5. **Performance**: No obvious inefficiencies?
-
-**Addressing feedback**:
+Run core unit tests (fastest):
 
 .. code-block:: bash
 
-   # Make requested changes
-   git add .
-   git commit -m "fix: address PR feedback"
-   git push origin feature/my-feature
+    make test
 
-   # OR squash commits before merging
-   git rebase -i main
-
-Code Standards
---------------
-
-Formatting
-~~~~~~~~~~
-
-**Black** (line length: 88 characters):
+Run all tests including integration and performance:
 
 .. code-block:: bash
 
-   make format
-   # OR
-   black homodyne/
+    make test-all
 
-**Ruff** (linting + formatting):
+Run specific test suite:
 
 .. code-block:: bash
 
-   make lint
-   # OR
-   ruff check homodyne/ --fix
-   ruff format homodyne/
+    make test-unit         # Unit tests only
+    make test-integration  # Integration tests
+    make test-nlsq         # NLSQ optimization tests
+    make test-mcmc         # MCMC validation tests
 
-Linting
-~~~~~~~
-
-**Ruff configuration**: ``pyproject.toml``
+Run tests with coverage:
 
 .. code-block:: bash
 
-   ruff check homodyne/
+    make test-all
+    # Coverage report written to htmlcov/index.html
 
-Type Checking
-~~~~~~~~~~~~~
-
-**Mypy** (static type checking):
+Run specific test file or test:
 
 .. code-block:: bash
 
-   mypy homodyne/
+    pytest tests/unit/test_parameter_manager.py
+    pytest tests/unit/test_parameter_manager.py::test_specific_test_name -v
 
-**Type hints required** for all public functions:
+Writing Tests
+^^^^^^^^^^^^^
+
+Guidelines for writing tests:
+
+**1. Test Function Naming**
+
+Use descriptive names starting with ``test_``:
 
 .. code-block:: python
 
-   def process_data(
-       data: np.ndarray,
-       config: HomodyneConfig,
-   ) -> Dict[str, Any]:
-       """
-       Process experimental data.
+    # Good
+    def test_static_mode_parameter_validation():
+        pass
 
-       Parameters
-       ----------
-       data : np.ndarray
-           Input data array
-       config : HomodyneConfig
-           Configuration dictionary
+    # Poor
+    def test_params():
+        pass
 
-       Returns
-       -------
-       Dict[str, Any]
-           Processed results
-       """
-       pass
-
-Docstring Format
-~~~~~~~~~~~~~~~~
-
-Use **NumPy/Google docstring** format:
+**2. Test Structure (Arrange-Act-Assert)**
 
 .. code-block:: python
 
-   def compute_g2_scaled(
-       params: np.ndarray,
-       phi_angles: np.ndarray,
-       t1_grid: np.ndarray,
-       t2_grid: np.ndarray,
-   ) -> np.ndarray:
-       """
-       Compute scaled two-time correlation function G2.
+    def test_parameter_manager_bounds_validation():
+        # Arrange: Set up test data
+        param_mgr = ParameterManager(
+            parameter_names=['D0', 'alpha'],
+            bounds=[[100, 10000], [-2, 2]]
+        )
 
-       Parameters
-       ----------
-       params : np.ndarray, shape (n_params,)
-           Parameter array [contrast, offset, D0, alpha, D_offset, ...]
-       phi_angles : np.ndarray, shape (n_angles,)
-           Scattering angles in degrees
-       t1_grid : np.ndarray, shape (n_t1, n_t2)
-           First time grid (seconds)
-       t2_grid : np.ndarray, shape (n_t1, n_t2)
-           Second time grid (seconds)
+        # Act: Execute the code being tested
+        result = param_mgr.validate_parameters([1000, 0.5])
 
-       Returns
-       -------
-       np.ndarray, shape (n_angles, n_t1, n_t2)
-           Scaled G2 values
+        # Assert: Verify the result
+        assert result is True
 
-       Examples
-       --------
-       >>> params = np.array([0.5, 1.0, 100.0, 0.5, 10.0])
-       >>> phi_angles = np.array([0.0, 45.0, 90.0])
-       >>> t1_grid = np.linspace(0, 1, 10).reshape(10, 1)
-       >>> t2_grid = np.linspace(0, 1, 10).reshape(1, 10)
-       >>> g2 = compute_g2_scaled(params, phi_angles, t1_grid, t2_grid)
-       >>> g2.shape
-       (3, 10, 10)
-       """
-       pass
+**3. Use Fixtures for Reusable Data**
 
-Pre-commit Hooks
-~~~~~~~~~~~~~~~~
+.. code-block:: python
 
-**Installed hooks** (``.pre-commit-config.yaml``):
+    import pytest
 
-* **Black**: Code formatting
-* **Ruff**: Linting + formatting
-* **isort**: Import sorting
-* **Mypy**: Type checking
-* **Bandit**: Security scanning
-* **Flake8**: Style guide enforcement
+    @pytest.fixture
+    def sample_config():
+        """Fixture providing test configuration."""
+        return {
+            'analysis_mode': 'static',
+            'initial_parameters': {'D0': 1000, 'alpha': -1.2}
+        }
 
-**Run manually**:
+    def test_with_config(sample_config):
+        # Use the fixture
+        assert sample_config['analysis_mode'] == 'static'
 
-.. code-block:: bash
+**4. Test XPCS-Specific Behavior**
 
-   pre-commit run --all-files
+.. code-block:: python
 
-Documentation Standards
------------------------
+    def test_c2_computation_range():
+        """Test that C2 values stay in physically valid range [1.0, 1.6]."""
+        c2_values = compute_c2(...)
+        assert np.all(c2_values >= 1.0), "C2 below 1.0 is non-physical"
+        assert np.all(c2_values <= 1.6), "C2 above 1.6 is unusual"
 
-Updating Documentation
-~~~~~~~~~~~~~~~~~~~~~~
+Code Coverage Requirements
+^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-**Sphinx docs** (``docs/``):
+Target coverage metrics:
+
+- **Overall**: ≥ 80% line coverage
+- **Core modules**: ≥ 85% (jax_backend, physics, parameter_manager)
+- **Optimization**: ≥ 75% (complex algorithms acceptable)
+- **New code**: ≥ 90% before merge
+
+View coverage report:
 
 .. code-block:: bash
 
-   # Build documentation
-   make docs
+    coverage report
+    coverage html  # Detailed HTML report in htmlcov/
 
-   # View locally
-   cd docs/_build/html
-   python -m http.server
+JAX and CPU Debugging
+^^^^^^^^^^^^^^^^^^^^^
 
-**Documentation structure**:
+Homodyne v2.3.0+ uses JAX 0.8.0 with CPU-only optimization.
 
-* ``docs/user-guide/``: User-facing guides
-* ``docs/developer-guide/``: Developer documentation
-* ``docs/api-reference/``: API reference (auto-generated)
-* ``docs/theoretical-framework/``: Physics background
+Common JAX Debugging Commands
+""""""""""""""""""""""""""""""
 
-Adding New Modules
-~~~~~~~~~~~~~~~~~~
+Enable compilation logging:
 
-When adding new modules, update:
+.. code-block:: bash
 
-1. **Docstrings**: All public functions/classes
-2. **API Reference**: Add to ``docs/api-reference/``
-3. **User Guide**: If user-facing feature
-4. **CHANGELOG.md**: Document changes
-5. **Tests**: Comprehensive test coverage
+    JAX_LOG_COMPILES=1 python script.py
 
-Common Development Tasks
+Disable JIT compilation for easier debugging:
+
+.. code-block:: bash
+
+    JAX_DISABLE_JIT=1 python script.py
+
+Check JAX device configuration:
+
+.. code-block:: python
+
+    import jax
+    print(jax.devices())  # Should show CPU device
+
+Monitor CPU usage during optimization:
+
+.. code-block:: bash
+
+    # Terminal 1: Run homodyne optimization
+    homodyne --config config.yaml --method nlsq
+
+    # Terminal 2: Monitor CPU usage
+    top -H -p $(pgrep -f homodyne)
+    htop  # Better alternative to top
+
+CPU Performance Tips
+""""""""""""""""""""
+
+- JAX compiles once per unique shape/dtype - first run is slower
+- CPU threads controlled by: ``JAX_PLATFORMS=cpu`` and ``OMP_NUM_THREADS``
+- For reproducible results: ``JAX_DEFAULT_PRNG_IMPL=threefry_prng``
+- Profile with: ``python -m cProfile -s cumtime script.py``
+
+Pull Request Guidelines
 ------------------------
 
-Adding a New Optimization Method
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+Before Submitting
+^^^^^^^^^^^^^^^^^^
 
-1. Create file in ``homodyne/optimization/``
-2. Implement interface matching ``nlsq_wrapper.py``
-3. Use residual functions from ``core/jax_backend.py``
-4. Add unit tests in ``tests/unit/test_optimization_*.py``
-5. Add integration tests in ``tests/integration/``
-6. Document in API reference
+1. **Ensure tests pass**:
 
-Modifying Physics Models
-~~~~~~~~~~~~~~~~~~~~~~~~~
+   .. code-block:: bash
 
-1. Update JAX functions in ``core/jax_backend.py``
-2. Ensure JIT compatibility (no Python control flow)
-3. Update wrappers in ``core/models.py``
-4. Test gradients/Hessians
-5. Run self-consistency tests
-6. Update parameter bounds
+       make test-all
 
-Troubleshooting
----------------
+2. **Run quality checks**:
 
-Common Issues
-~~~~~~~~~~~~~
+   .. code-block:: bash
 
-**Import errors after installation**:
+       make quality
 
-.. code-block:: bash
+3. **Verify documentation builds**:
 
-   # Reinstall in development mode
-   pip uninstall homodyne
-   make dev
+   .. code-block:: bash
 
-**Pre-commit hooks failing**:
+       cd docs && make html
 
-.. code-block:: bash
+4. **Check for common issues**:
 
-   # Update hooks
-   pre-commit autoupdate
+   - No print statements (use logging)
+   - No hardcoded file paths (use pathlib and config)
+   - No GPU-specific code (CPU-only architecture)
+   - Docstrings for public functions
 
-   # Skip hooks temporarily (not recommended)
-   git commit --no-verify
+PR Description Template
+^^^^^^^^^^^^^^^^^^^^^^^
 
-**Tests failing locally but passing in CI**:
+Use this template for your PR description:
 
-.. code-block:: bash
+.. code-block:: markdown
 
-   # Clear pytest cache
-   pytest --cache-clear
+    ## Summary
+    Brief description of changes (1-2 sentences)
 
-   # Check Python version matches CI
-   python --version  # Should be 3.12+
+    ## Type of Change
+    - [ ] Bug fix
+    - [ ] New feature
+    - [ ] Performance improvement
+    - [ ] Documentation
+    - [ ] Refactoring
+
+    ## Testing
+    Describe tests added or modified:
+    - [ ] Unit tests added
+    - [ ] Integration tests added
+    - [ ] All tests passing
+
+    ## Documentation
+    - [ ] Updated README/docs
+    - [ ] Added/updated docstrings
+    - [ ] Updated CHANGELOG
+
+    ## Related Issues
+    Fixes #ISSUE_NUMBER
+
+Commit Message Guidelines
+^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Use clear, descriptive commit messages:
+
+.. code-block:: text
+
+    # Good
+    fix(mcmc): handle CMC subposterior weight normalization
+
+    Resolved issue where CMC subposterior weights didn't sum to 1.0
+    in edge cases, causing incorrect posterior combination.
+
+    Fixes #1234
+
+    # Poor
+    fixed bug
+    update
+    WIP: stuff
+
+Standard Commit Prefixes
+""""""""""""""""""""""""
+
+- ``fix(scope)``: Bug fixes (e.g., ``fix(mcmc): ...``)
+- ``feat(scope)``: New features (e.g., ``feat(cli): ...``)
+- ``refactor(scope)``: Code reorganization (e.g., ``refactor(core): ...``)
+- ``test(scope)``: Test additions (e.g., ``test(nlsq): ...``)
+- ``docs(scope)``: Documentation (e.g., ``docs(config): ...``)
+- ``perf(scope)``: Performance improvements (e.g., ``perf(jax): ...``)
+- ``chore(scope)``: Maintenance (e.g., ``chore(deps): ...``)
+
+Reference Material
+-------------------
+
+For additional information on Homodyne development and commands, see:
+
+- :doc:`/developer-guide/testing` - Detailed testing guide
+- :doc:`/configuration/index` - Configuration documentation
+- **CLAUDE.md** in project root - Development commands quick reference:
+
+  .. code-block:: bash
+
+      make test              # Run core unit tests
+      make test-all          # Run all tests with coverage
+      make quality           # Format, lint, and type check
+      make dev               # Install development environment
+      make clean             # Clean build artifacts
+
+- **Project README** - High-level project overview and features
+- **GitHub Issues** - Known issues, features in progress, bug reports
 
 Getting Help
-~~~~~~~~~~~~
+^^^^^^^^^^^^
 
-* **Issues**: https://github.com/imewei/homodyne/issues
-* **Discussions**: https://github.com/imewei/homodyne/discussions
-* **Email**: maintainer@homodyne.org
+- **Questions**: Open a Discussion on GitHub
+- **Bugs**: File an Issue with reproduction steps
+- **Ideas**: Start a Discussion for feature requests
+- **Development Help**: Ask in the development Discussions
 
-Community Guidelines
---------------------
-
-Code of Conduct
-~~~~~~~~~~~~~~~
-
-* Be respectful and inclusive
-* Focus on constructive feedback
-* Welcome newcomers
-* Assume good intentions
-
-Best Practices
-~~~~~~~~~~~~~~
-
-* **Ask before starting**: Check if feature is wanted (open issue first)
-* **Small PRs**: Easier to review (<500 lines preferred)
-* **Tests required**: No PR without tests
-* **Document changes**: Update docs in same PR
-* **Responsive to feedback**: Address review comments promptly
-
-Release Process
----------------
-
-(For maintainers only)
-
-Versioning
-~~~~~~~~~~
-
-Follow **Semantic Versioning** (MAJOR.MINOR.PATCH):
-
-* **MAJOR**: Breaking changes
-* **MINOR**: New features (backward compatible)
-* **PATCH**: Bug fixes
-
-Creating a Release
-~~~~~~~~~~~~~~~~~~
-
-.. code-block:: bash
-
-   # Update version in homodyne/_version.py
-   VERSION = "2.1.0"
-
-   # Update CHANGELOG.md
-
-   # Commit version bump
-   git commit -am "chore: bump version to 2.1.0"
-
-   # Tag release
-   git tag -a v2.1.0 -m "Release v2.1.0"
-
-   # Push
-   git push origin main --tags
-
-   # GitHub Actions automatically builds and publishes to PyPI
-
-Resources
----------
-
-* **Conventional Commits**: https://www.conventionalcommits.org/
-* **Semantic Versioning**: https://semver.org/
-* **NumPy Docstring Guide**: https://numpydoc.readthedocs.io/
-* **Pre-commit**: https://pre-commit.com/
-
-Next Steps
-----------
-
-* **Architecture Guide**: Understand the codebase structure
-* **Testing Guide**: Learn the testing strategy
-* **Code Quality Guide**: Detailed formatting and linting standards
+Thank you for contributing to Homodyne!

@@ -92,7 +92,7 @@ intersphinx_mapping = {
     "jax": ("https://jax.readthedocs.io/en/latest/", None),
     "numpy": ("https://numpy.org/doc/stable/", None),
     "numpyro": ("https://num.pyro.ai/en/stable/", None),
-    "nlsq": ("https://nlsq.readthedocs.io/en/latest/", None),
+    "scipy": ("https://docs.scipy.org/doc/scipy/", None),
 }
 
 # -- Options for MathJax extension -------------------------------------------
@@ -121,13 +121,14 @@ myst_heading_anchors = 3
 html_theme = "sphinx_rtd_theme"
 
 html_theme_options = {
-    "collapse_navigation": False,
+    "collapse_navigation": True,
     "sticky_navigation": True,
-    "navigation_depth": 4,
+    "navigation_depth": 3,
     "includehidden": True,
     "titles_only": False,
     "prev_next_buttons_location": "bottom",
     "style_external_links": True,
+    "style_nav_header_background": "#2980b9",  # Argonne branding
 }
 
 # Add any paths that contain custom static files (such as style sheets) here,
@@ -154,6 +155,9 @@ html_show_sphinx = True
 
 # If true, "(C) Copyright ..." is shown in the HTML footer. Default is True.
 html_show_copyright = True
+
+# If true, links to source code are shown. We disable this for cleaner docs.
+html_show_sourcelink = False
 
 # Output file base name for HTML help builder.
 htmlhelp_basename = "homodynedoc"

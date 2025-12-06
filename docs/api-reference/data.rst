@@ -1,481 +1,369 @@
-homodyne.data - Data Pipeline
-=============================
+Data Module
+===========
+
+The :mod:`homodyne.data` module provides comprehensive data loading infrastructure for XPCS experimental data from synchrotron sources, with intelligent caching and JAX integration.
+
+.. contents:: Contents
+   :local:
+   :depth: 2
+
+Overview
+--------
+
+**Key Features**:
+
+- YAML-first configuration with JSON support
+- Support for APS old format and APS-U new format HDF5 files
+- Intelligent NPZ caching system
+- JAX array output with NumPy fallback
+- Physics-based data validation
+- Angle filtering for optimization performance
+
+**Data Pipeline**:
+
+1. Load configuration (YAML/JSON)
+2. Read HDF5 experimental data
+3. Apply validation and quality checks
+4. Filter phi angles if needed
+5. Preprocess data (optional)
+6. Convert to JAX arrays
+
+Module Contents
+---------------
 
 .. automodule:: homodyne.data
    :members:
    :undoc-members:
    :show-inheritance:
 
-Overview
---------
+Primary Functions
+~~~~~~~~~~~~~~~~~
 
-The ``homodyne.data`` module provides comprehensive data loading, preprocessing, and quality control for XPCS experimental data. It supports both APS (old format) and APS-U (new format) HDF5 files with intelligent caching, validation, and memory-efficient handling of large datasets.
+.. autosummary::
+   :nosignatures:
 
-**Key Features:**
+   homodyne.data.load_xpcs_data
+   homodyne.data.filter_phi_angles
+   homodyne.data.get_data_module_info
 
-* **HDF5 Data Loading**: Support for APS and APS-U formats
-* **Data Preprocessing**: Normalization, filtering, and quality control
-* **Angle Filtering**: Angular selection with wrap-aware range checking
-* **Memory Management**: Efficient handling of large correlation matrices
-* **Quality Control**: Automated data quality assessment and validation
-
-Module Structure
+XPCS Data Loader
 ----------------
 
-The data module is organized into several submodules:
-
-* :mod:`homodyne.data.xpcs_loader` - HDF5 data loading (XPCSDataLoader)
-* :mod:`homodyne.data.preprocessing` - Data preparation and normalization
-* :mod:`homodyne.data.phi_filtering` - Angular filtering algorithms
-* :mod:`homodyne.data.memory_manager` - Memory-efficient data handling
-* :mod:`homodyne.data.quality_controller` - Data quality assessment
-* :mod:`homodyne.data.validation` - Data validation utilities
-
-Submodules
-----------
-
-homodyne.data.xpcs_loader
-~~~~~~~~~~~~~~~~~~~~~~~~~
+Main class for loading XPCS experimental data from HDF5 files.
 
 .. automodule:: homodyne.data.xpcs_loader
    :members:
    :undoc-members:
    :show-inheritance:
-   :exclude-members: __weakref__
 
-HDF5 data loading with support for APS and APS-U formats.
+Usage Example
+~~~~~~~~~~~~~
 
-**Key Classes:**
+**Basic Loading**::
 
-* ``XPCSDataLoader`` - Main data loading interface
+    from homodyne.data import load_xpcs_data
 
-**Supported Formats:**
+    # Load from YAML configuration
+    data = load_xpcs_data("xpcs_config.yaml")
 
-* **APS Old Format** - Legacy format with ``.hdf`` extension
-* **APS-U New Format** - Modern format with enhanced metadata
+    # Access data fields
+    t1 = data['t1']
+    t2 = data['t2']
+    c2_exp = data['c2_exp']
+    phi_angles = data['phi_angles_list']
+    wavevector_q = data['wavevector_q_list']
 
-**Usage Example:**
+**Using Loader Class**::
 
-.. code-block:: python
+    from homodyne.data import XPCSDataLoader
 
-   from homodyne.data import XPCSDataLoader
+    loader = XPCSDataLoader(config_path="config.yaml")
+    data = loader.load_experimental_data()
 
-   # Load XPCS data
-   loader = XPCSDataLoader(file_path='/path/to/experiment.hdf')
+    # Check data format
+    print(loader.get_data_format_info())
 
-   # Load correlation data
-   data = loader.load_correlation_data()
+Data Structure
+~~~~~~~~~~~~~~
 
-   # Access data arrays
-   t1 = data['t1']  # Time array 1
-   t2 = data['t2']  # Time array 2
-   phi_angles = data['phi']  # Phi angles (degrees)
-   c2_exp = data['c2']  # Experimental g2 correlation
+The loaded data dictionary contains:
 
-   # Access metadata
-   q = data['q']  # Momentum transfer
-   L = data['L']  # Sample thickness
-   dt = data['dt']  # Time resolution
+- ``t1``: First time axis (lag times in seconds)
+- ``t2``: Second time axis (age times in seconds)
+- ``c2_exp``: Experimental two-time correlation function (shape: n_phi, n_t1, n_t2)
+- ``phi_angles_list``: Azimuthal angles in radians
+- ``wavevector_q_list``: Wavevector magnitudes in inverse nanometers
 
-   print(f"Data shape: {c2_exp.shape}")  # (num_phi, len(t1), len(t2))
-   print(f"Phi angles: {phi_angles}")
-   print(f"q = {q} Å⁻¹")
+Supported Formats
+~~~~~~~~~~~~~~~~~
 
-**Format Detection:**
+**APS Old Format**:
 
-.. code-block:: python
+- Legacy HDF5 structure from APS 8-ID beamline
+- Standard XPCS data hierarchy
 
-   # Automatic format detection
-   loader = XPCSDataLoader(file_path='/path/to/data.hdf')
+**APS-U New Format**:
 
-   # Check detected format
-   if loader.format == 'aps_old':
-       print("Using APS old format")
-   elif loader.format == 'aps_u':
-       print("Using APS-U new format")
+- Updated HDF5 structure for APS-U upgrade
+- Enhanced metadata and provenance tracking
 
-**Caching:**
+Angle Filtering
+---------------
 
-.. code-block:: python
-
-   # Enable intelligent caching (default)
-   loader = XPCSDataLoader(file_path='/path/to/data.hdf', enable_cache=True)
-
-   # First load reads from HDF5
-   data1 = loader.load_correlation_data()
-
-   # Second load uses cached data (fast)
-   data2 = loader.load_correlation_data()
-
-homodyne.data.preprocessing
-~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-.. automodule:: homodyne.data.preprocessing
-   :members:
-   :undoc-members:
-   :show-inheritance:
-   :exclude-members: __weakref__
-
-Data preparation and normalization utilities.
-
-**Key Functions:**
-
-* ``prepare_data()`` - Main data preparation pipeline
-* ``normalize_correlation()`` - Normalize g2 correlation functions
-* ``validate_data_quality()`` - Quality checks
-
-**Usage Example:**
-
-.. code-block:: python
-
-   from homodyne.data.preprocessing import prepare_data
-   import jax.numpy as jnp
-
-   # Prepare data for optimization
-   prepared_data = prepare_data(
-       t1=t1,
-       t2=t2,
-       phi_angles=phi_angles,
-       c2_exp=c2_exp,
-       normalize=True,
-       remove_outliers=True
-   )
-
-   # Access prepared arrays
-   t1_clean = prepared_data['t1']
-   t2_clean = prepared_data['t2']
-   phi_clean = prepared_data['phi']
-   c2_clean = prepared_data['c2']
-
-homodyne.data.phi_filtering
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+Intelligent phi angle filtering for optimization performance.
 
 .. automodule:: homodyne.data.phi_filtering
    :members:
    :undoc-members:
    :show-inheritance:
-   :exclude-members: __weakref__
 
-Angular filtering with wrap-aware range checking.
+Filtering Strategies
+~~~~~~~~~~~~~~~~~~~~
 
-**Key Functions:**
+**Isotropic Filtering**::
 
-* ``apply_angle_filter()`` - Filter data by phi angle ranges
-* ``normalize_angle_to_symmetric_range()`` - Normalize angles to [-180°, 180°]
-* ``angle_in_range()`` - Wrap-aware range checking
+    from homodyne.data import filter_phi_angles, create_isotropic_ranges
 
-**Usage Example:**
+    # Create isotropic angle ranges (4 quadrants)
+    ranges = create_isotropic_ranges(n_ranges=4)
 
-.. code-block:: python
+    # Apply filtering
+    indices, filtered_angles = filter_phi_angles(
+        phi_angles,
+        angle_ranges=ranges
+    )
 
-   from homodyne.data.phi_filtering import apply_angle_filter
+**Anisotropic Filtering**::
 
-   # Define angle ranges
-   angle_ranges = [
-       {'min_angle': -10.0, 'max_angle': 10.0, 'description': 'Near 0°'},
-       {'min_angle': 85.0, 'max_angle': 95.0, 'description': 'Near 90°'}
-   ]
+    from homodyne.data import create_anisotropic_ranges
 
-   # Apply filtering
-   filtered_data = apply_angle_filter(
-       phi_angles=phi_angles,
-       c2_exp=c2_exp,
-       angle_ranges=angle_ranges
-   )
+    # Create anisotropic ranges (horizontal/vertical)
+    ranges = create_anisotropic_ranges(
+        horizontal_width=0.2,  # radians
+        vertical_width=0.2
+    )
 
-   # Get filtered arrays
-   phi_filtered = filtered_data['phi']
-   c2_filtered = filtered_data['c2']
-   mask = filtered_data['mask']
+Advanced Filtering
+~~~~~~~~~~~~~~~~~~
 
-   print(f"Original angles: {len(phi_angles)}")
-   print(f"Filtered angles: {len(phi_filtered)}")
-
-**Wrap-Around Handling:**
-
-.. code-block:: python
-
-   # Handles ranges spanning ±180° boundary
-   angle_ranges = [
-       {'min_angle': 170.0, 'max_angle': -170.0, 'description': 'Near ±180°'}
-   ]
-
-   # Correctly handles wrap-around
-   filtered_data = apply_angle_filter(phi_angles, c2_exp, angle_ranges)
-
-homodyne.data.memory_manager
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-.. automodule:: homodyne.data.memory_manager
+.. automodule:: homodyne.data.angle_filtering
    :members:
    :undoc-members:
    :show-inheritance:
-   :exclude-members: __weakref__
 
-Memory-efficient data handling for large correlation matrices.
+Key Functions
+^^^^^^^^^^^^^
 
-**Key Classes:**
+.. autosummary::
+   :nosignatures:
 
-* ``MemoryManager`` - Memory allocation and tracking
+   homodyne.data.angle_filtering.normalize_angle_to_symmetric_range
+   homodyne.data.angle_filtering.angle_in_range
+   homodyne.data.angle_filtering.apply_angle_filtering
+   homodyne.data.angle_filtering.apply_angle_filtering_for_optimization
+   homodyne.data.angle_filtering.apply_angle_filtering_for_plot
 
-**Usage Example:**
+Data Validation
+---------------
 
-.. code-block:: python
-
-   from homodyne.data.memory_manager import MemoryManager
-
-   # Create memory manager
-   mem_manager = MemoryManager(max_memory_gb=16.0)
-
-   # Estimate memory usage
-   estimated_mb = mem_manager.estimate_memory(
-       data_shape=(23, 50, 50),  # (num_phi, len(t1), len(t2))
-       dtype='float64'
-   )
-
-   print(f"Estimated memory: {estimated_mb} MB")
-
-   # Check if operation fits in memory
-   if mem_manager.can_allocate(estimated_mb):
-       print("Operation can proceed")
-   else:
-       print("Need to use chunking or streaming")
-
-homodyne.data.quality_controller
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-.. automodule:: homodyne.data.quality_controller
-   :members:
-   :undoc-members:
-   :show-inheritance:
-   :exclude-members: __weakref__
-
-Automated data quality assessment and validation.
-
-**Key Classes:**
-
-* ``QualityController`` - Quality assessment engine
-
-**Quality Checks:**
-
-1. **Data Completeness**: Check for missing or NaN values
-2. **Value Ranges**: Validate physical bounds (g2 ≥ 1)
-3. **Signal-to-Noise**: Assess correlation quality
-4. **Time Resolution**: Check dt consistency
-5. **Angle Coverage**: Validate phi angle distribution
-
-**Usage Example:**
-
-.. code-block:: python
-
-   from homodyne.data.quality_controller import QualityController
-
-   # Create quality controller
-   qc = QualityController()
-
-   # Run quality checks
-   quality_report = qc.assess_quality(
-       t1=t1,
-       t2=t2,
-       phi_angles=phi_angles,
-       c2_exp=c2_exp,
-       metadata={'q': 0.01, 'L': 1.0, 'dt': 0.001}
-   )
-
-   # Check results
-   if quality_report['overall_quality'] == 'good':
-       print("Data quality is good")
-   else:
-       print(f"Issues found: {quality_report['issues']}")
-
-   # Access detailed metrics
-   print(f"Completeness: {quality_report['completeness']:.1%}")
-   print(f"SNR: {quality_report['snr']:.2f}")
-
-homodyne.data.validation
-~~~~~~~~~~~~~~~~~~~~~~~~
+Physics-based validation and quality checks.
 
 .. automodule:: homodyne.data.validation
    :members:
    :undoc-members:
    :show-inheritance:
-   :exclude-members: __weakref__
 
-Data validation utilities.
+Validation Checks
+~~~~~~~~~~~~~~~~~
 
-**Key Functions:**
+The validation module performs:
 
-* ``validate_correlation_data()`` - Validate g2 correlation arrays
-* ``validate_metadata()`` - Validate experimental metadata
-* ``check_array_consistency()`` - Check array shape consistency
+- Time axis monotonicity checks
+- Correlation function bounds (c2 ≥ 1.0)
+- NaN/Inf detection
+- Array shape consistency
+- Physical parameter ranges
 
-Data Loading Workflow
----------------------
+Quality Report
+~~~~~~~~~~~~~~
 
-**Standard Workflow:**
+The :class:`~homodyne.data.validation.DataQualityReport` provides:
 
-1. **Load Data** - Use XPCSDataLoader
+- Overall quality score
+- Warning and error lists
+- Recommendation for data usage
+- Detailed diagnostic information
 
-   .. code-block:: python
+Preprocessing
+-------------
 
-      from homodyne.data import XPCSDataLoader
-      loader = XPCSDataLoader(file_path='/path/to/data.hdf')
-      data = loader.load_correlation_data()
+Data preprocessing pipeline for noise reduction and normalization.
 
-2. **Quality Check** - Assess data quality
+.. automodule:: homodyne.data.preprocessing
+   :members:
+   :undoc-members:
+   :show-inheritance:
 
-   .. code-block:: python
+Preprocessing Stages
+~~~~~~~~~~~~~~~~~~~~
 
-      from homodyne.data.quality_controller import QualityController
-      qc = QualityController()
-      quality_report = qc.assess_quality(**data)
+.. autosummary::
+   :nosignatures:
 
-3. **Preprocess** - Normalize and clean
+   homodyne.data.preprocessing.PreprocessingPipeline
+   homodyne.data.preprocessing.PreprocessingResult
+   homodyne.data.preprocessing.PreprocessingProvenance
+   homodyne.data.preprocessing.NormalizationMethod
+   homodyne.data.preprocessing.NoiseReductionMethod
 
-   .. code-block:: python
+Usage Example
+~~~~~~~~~~~~~
 
-      from homodyne.data.preprocessing import prepare_data
-      prepared_data = prepare_data(**data, normalize=True)
+::
 
-4. **Filter Angles** - Apply angle selection (optional)
+    from homodyne.data import preprocess_xpcs_data, create_default_preprocessing_config
 
-   .. code-block:: python
+    # Create preprocessing configuration
+    config = create_default_preprocessing_config()
 
-      from homodyne.data.phi_filtering import apply_angle_filter
-      filtered_data = apply_angle_filter(**prepared_data, angle_ranges=ranges)
+    # Preprocess data
+    result = preprocess_xpcs_data(
+        c2_exp=c2_exp,
+        config=config
+    )
 
-5. **Pass to Optimization** - Ready for fitting
+    # Access processed data
+    c2_processed = result.c2_processed
+    provenance = result.provenance
 
-   .. code-block:: python
+Data Optimization
+-----------------
 
-      from homodyne.optimization import fit_nlsq_jax
-      result = fit_nlsq_jax(**filtered_data, q=q, analysis_type='static_isotropic')
+Dataset optimization for different analysis methods.
+
+.. automodule:: homodyne.data.optimization
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+Optimization Strategies
+~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autosummary::
+   :nosignatures:
+
+   homodyne.data.optimization.optimize_for_method
+   homodyne.data.optimization.DatasetOptimizer
+   homodyne.data.optimization.ProcessingStrategy
+
+Method-Specific Optimization
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+**For NLSQ**::
+
+    from homodyne.data import optimize_for_method
+
+    optimized_data = optimize_for_method(
+        data=raw_data,
+        method="nlsq",
+        strategy="chunking"  # For large datasets
+    )
+
+**For MCMC**::
+
+    optimized_data = optimize_for_method(
+        data=raw_data,
+        method="mcmc",
+        strategy="sampling"  # Reduce data size for MCMC
+    )
+
+Memory Management
+-----------------
+
+Memory-efficient handling of large datasets.
+
+.. automodule:: homodyne.data.memory_manager
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+Memory Features
+~~~~~~~~~~~~~~~
+
+- Automatic chunking for large arrays
+- JAX device memory management
+- Streaming data loading
+- Memory usage estimation
+
+Quality Controller
+------------------
+
+Comprehensive data quality assessment.
+
+.. automodule:: homodyne.data.quality_controller
+   :members:
+   :undoc-members:
+   :show-inheritance:
 
 Configuration
 -------------
 
-**YAML Configuration:**
+Data loading configuration management.
 
-.. code-block:: yaml
+.. automodule:: homodyne.data.config
+   :members:
+   :undoc-members:
+   :show-inheritance:
 
-   experimental_data:
-     file_path: "./data/experiment.hdf"
-     q: 0.01            # Momentum transfer (Å⁻¹)
-     L: 1.0             # Sample thickness (mm)
-     dt: 0.001          # Time resolution (s)
+Configuration Format
+~~~~~~~~~~~~~~~~~~~~
 
-   phi_filtering:
-     enabled: true
-     target_ranges:
-       - min_angle: -10.0
-         max_angle: 10.0
-         description: "Near 0 degrees"
-       - min_angle: 85.0
-         max_angle: 95.0
-         description: "Near 90 degrees"
+**YAML Example**::
 
-   preprocessing:
-     normalize: true
-     remove_outliers: true
-     outlier_threshold: 5.0  # Standard deviations
+    data:
+      hdf5_path: /path/to/experiment.h5
+      format: APS_old
+      cache_enabled: true
+      cache_path: /path/to/cache.npz
 
-HDF5 Data Structure
--------------------
+    filtering:
+      enabled: true
+      mode: isotropic
+      n_ranges: 4
 
-**APS Old Format:**
+    preprocessing:
+      enabled: false
 
-.. code-block:: text
+Exceptions
+----------
 
-   /
-   ├── exchange/
-   │   ├── norm-0-g2  # 3D array (num_phi, len(t1), len(t2))
-   │   ├── t1         # 1D time array
-   │   ├── t2         # 1D time array
-   │   └── phi        # 1D angle array (degrees)
-   └── metadata/
-       ├── q          # Momentum transfer
-       ├── L          # Sample thickness
-       └── dt         # Time resolution
+Data module exceptions for error handling:
 
-**APS-U New Format:**
-
-.. code-block:: text
-
-   /
-   ├── correlation/
-   │   ├── g2         # 3D array (num_phi, len(t1), len(t2))
-   │   ├── time1      # 1D time array
-   │   ├── time2      # 1D time array
-   │   └── angles     # 1D angle array (degrees)
-   └── metadata/
-       ├── q_value
-       ├── thickness
-       └── time_resolution
+- :class:`~homodyne.data.XPCSDataFormatError`: Invalid HDF5 format
+- :class:`~homodyne.data.XPCSDependencyError`: Missing required dependencies
+- :class:`~homodyne.data.XPCSConfigurationError`: Invalid configuration
+- :class:`~homodyne.data.PreprocessingError`: Preprocessing failures
+- :class:`~homodyne.data.PreprocessingConfigurationError`: Invalid preprocessing config
 
 Performance Considerations
 --------------------------
 
-**Memory Management**
-   * Correlation matrices can be large: (23 angles × 50 times × 50 times) = ~2.3 MB per dataset
-   * Use memory_manager to estimate and track usage
-   * Consider chunking for datasets >100M total points
+**Large Dataset Handling**:
 
-**Caching**
-   * XPCSDataLoader caches loaded data automatically
-   * Significantly speeds up repeated access
-   * Disable with ``enable_cache=False`` if memory constrained
+- Use NPZ caching to avoid repeated HDF5 reads
+- Apply angle filtering to reduce data volume
+- Enable chunking for datasets > 1M points
+- Consider preprocessing to reduce noise
 
-**HDF5 Performance**
-   * Use compression for large files (gzip level 4-6)
-   * Chunked storage improves partial reads
-   * Parallel HDF5 for multi-node HPC
+**Memory Optimization**:
 
-Troubleshooting
----------------
-
-**HDF5 Loading Errors:**
-
-* **File not found** - Check file_path in configuration
-* **Format detection failed** - Manually specify format: ``XPCSDataLoader(file_path, format='aps_old')``
-* **Missing datasets** - Verify HDF5 structure with ``h5py`` or ``h5dump``
-
-**Data Quality Issues:**
-
-* **High NaN ratio** - Check experimental data collection
-* **Low SNR** - Increase counting time or signal strength
-* **g2 < 1** - Physics violation, check normalization
-
-**Memory Errors:**
-
-* Use memory_manager to estimate before loading
-* Enable chunking for large datasets
-* Reduce angle count via phi_filtering
+- JAX arrays use device memory efficiently
+- Streaming loader for ultra-large datasets
+- Automatic memory estimation before loading
 
 See Also
 --------
 
-* :doc:`../user-guide/configuration` - Data loading guide
-* :doc:`../user-guide/configuration` - Quality assessment guide
-* :doc:`optimization` - Optimization module that consumes data
-* :doc:`../api-reference/data` - HDF5 format specifications
-
-Cross-References
-----------------
-
-**Common Imports:**
-
-.. code-block:: python
-
-   from homodyne.data import (
-       XPCSDataLoader,
-       prepare_data,
-       apply_angle_filter,
-       QualityController,
-       MemoryManager,
-   )
-
-**Related Functions:**
-
-* :func:`homodyne.optimization.fit_nlsq_jax` - Uses prepared data
-* :func:`homodyne.core.jax_backend.compute_g2_scaled` - Computes theoretical g2
-* :func:`homodyne.cli.commands.load_data` - CLI data loading
+- :mod:`homodyne.core` - Core physics and computation
+- :mod:`homodyne.config` - Configuration management
+- :mod:`homodyne.optimization` - Data usage in optimization

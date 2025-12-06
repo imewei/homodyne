@@ -1,363 +1,361 @@
-homodyne.cli - Command-Line Interface
-=====================================
+CLI Module
+==========
+
+The :mod:`homodyne.cli` module provides command-line interfaces for homodyne scattering analysis, including the main ``homodyne`` command and configuration generation utilities.
+
+.. contents:: Contents
+   :local:
+   :depth: 2
+
+Overview
+--------
+
+**Available Commands**:
+
+- ``homodyne``: Main analysis command (NLSQ/MCMC optimization)
+- ``homodyne-config``: Interactive configuration generator
+- ``homodyne-post-install``: Shell completion setup
+
+**Command Philosophy**:
+
+- YAML-first configuration
+- Minimal required arguments
+- Verbose/quiet output control
+- Integration with optimization backends
+
+Module Contents
+---------------
 
 .. automodule:: homodyne.cli
    :members:
    :undoc-members:
    :show-inheritance:
 
-Overview
---------
-
-The ``homodyne.cli`` module provides the command-line interface for running XPCS analyses. It handles argument parsing, configuration loading, workflow orchestration, result saving, and plotting.
-
-**Key Features:**
-
-* **Configuration-Driven**: YAML-based workflow configuration
-* **CLI Overrides**: Command-line arguments override configuration
-* **Workflow Orchestration**: Complete analysis pipeline automation
-* **Result Management**: Comprehensive output saving (JSON, NPZ, HDF5)
-* **Plotting**: Automated visualization of results
-
-Module Structure
+Main Entry Point
 ----------------
 
-The CLI module is organized into several submodules:
-
-* :mod:`homodyne.cli.main` - Main entry point
-* :mod:`homodyne.cli.args_parser` - Argument parsing
-* :mod:`homodyne.cli.commands` - Command implementations
-
-Submodules
-----------
-
-homodyne.cli.main
-~~~~~~~~~~~~~~~~~
+Main command-line interface entry point.
 
 .. automodule:: homodyne.cli.main
    :members:
    :undoc-members:
    :show-inheritance:
-   :exclude-members: __weakref__
-   :no-index:
 
-Main CLI entry point.
+Usage
+~~~~~
 
-**Key Functions:**
+**Basic Analysis**::
 
-* ``main()`` - Main CLI entry point
+    # NLSQ optimization (fast)
+    homodyne --config analysis.yaml --method nlsq
 
-**Usage:**
+    # MCMC inference (Bayesian UQ)
+    homodyne --config analysis.yaml --method mcmc
 
-.. code-block:: bash
+    # Verbose output
+    homodyne --config analysis.yaml --verbose
 
-   # Direct invocation
-   homodyne --config config.yaml
+    # Quiet mode (errors only)
+    homodyne --config analysis.yaml --quiet
 
-   # Python module invocation
-   python -m homodyne.cli --config config.yaml
+**Visualization**::
 
-homodyne.cli.args_parser
-~~~~~~~~~~~~~~~~~~~~~~~~~
+    # Plot experimental data
+    homodyne --config analysis.yaml --plot-experimental-data
+
+    # Plot results after analysis
+    homodyne --config analysis.yaml --plot-results
+
+Argument Parser
+---------------
+
+Command-line argument parsing and validation.
 
 .. automodule:: homodyne.cli.args_parser
    :members:
    :undoc-members:
    :show-inheritance:
-   :exclude-members: __weakref__
 
-Command-line argument parsing.
+Arguments
+~~~~~~~~~
 
-**Key Functions:**
+**Required**:
 
-* ``create_parser()`` - Create argument parser
-* ``parse_args()`` - Parse command-line arguments
+- ``--config``: Path to YAML configuration file
 
-**Supported Arguments:**
+**Optional**:
 
-.. code-block:: text
+- ``--method``: Optimization method (``nlsq`` or ``mcmc``, default from config)
+- ``--verbose``: Enable DEBUG logging
+- ``--quiet``: Suppress all output except errors
+- ``--plot-experimental-data``: Plot input data
+- ``--plot-results``: Plot optimization results
+- ``--output``: Output directory for results
 
-   --config PATH              Configuration file path (required)
-   --data-file PATH           Override data file path
-   --output-dir PATH          Override output directory
-   --method {nlsq,mcmc}       Optimization method
-   --plot-experimental-data   Plot experimental data
-   --verbose                  Enable verbose logging
-   --quiet                    Suppress output
-   --version                  Show version
+Validation
+~~~~~~~~~~
 
-homodyne.cli.commands
-~~~~~~~~~~~~~~~~~~~~~
+.. autofunction:: homodyne.cli.args_parser.validate_args
+
+The argument validator checks:
+
+- Configuration file exists and is readable
+- Method is valid (nlsq or mcmc)
+- Output directory is writable
+- No conflicting options (verbose + quiet)
+
+Command Dispatcher
+------------------
+
+Command execution and workflow orchestration.
 
 .. automodule:: homodyne.cli.commands
    :members:
    :undoc-members:
    :show-inheritance:
-   :exclude-members: __weakref__
 
-Command implementations for analysis workflows.
+Command Flow
+~~~~~~~~~~~~
 
-**Key Functions:**
+1. Load configuration from YAML
+2. Validate configuration and parameters
+3. Load experimental data
+4. Run optimization (NLSQ or MCMC)
+5. Save results to output directory
+6. Generate plots (if requested)
 
-* ``run_analysis()`` - Main analysis workflow
-* ``load_config()`` - Configuration loading
-* ``load_data()`` - Data loading from HDF5
-* ``run_optimization()`` - NLSQ or MCMC optimization
-* ``save_results()`` - Save analysis results
-* ``plot_results()`` - Generate plots
+Key Functions
+~~~~~~~~~~~~~
 
-CLI Workflows
--------------
+.. autosummary::
+   :nosignatures:
 
-**Basic Workflow:**
+   homodyne.cli.commands.dispatch_command
+   homodyne.cli.commands.run_nlsq_analysis
+   homodyne.cli.commands.run_mcmc_analysis
+   homodyne.cli.commands.load_and_validate_config
+   homodyne.cli.commands.save_results
 
-.. code-block:: bash
+NLSQ Workflow
+^^^^^^^^^^^^^
 
-   # 1. Run NLSQ optimization (default)
-   homodyne --config config.yaml
+::
 
-   # Output:
-   # - results/nlsq/parameters.json
-   # - results/nlsq/fitted_data.npz
-   # - results/nlsq/analysis_results_nlsq.json
-   # - results/nlsq/convergence_metrics.json
+    from homodyne.cli.commands import run_nlsq_analysis
 
-**MCMC Workflow:**
+    # Run NLSQ optimization
+    result = run_nlsq_analysis(
+        config=config,
+        data=experimental_data,
+        output_dir="results/"
+    )
 
-.. code-block:: bash
+    # Result contains:
+    # - Best-fit parameters
+    # - Parameter uncertainties
+    # - Chi-squared values
+    # - Optimization diagnostics
 
-   # 2. Run MCMC sampling
-   homodyne --config config.yaml --method mcmc
+MCMC Workflow
+^^^^^^^^^^^^^
 
-   # Output:
-   # - results/mcmc/posterior_samples.hdf5
-   # - results/mcmc/diagnostics.json
-   # - results/mcmc/summary_statistics.json
+::
 
-**With Plotting:**
+    from homodyne.cli.commands import run_mcmc_analysis
 
-.. code-block:: bash
+    # Run MCMC sampling
+    result = run_mcmc_analysis(
+        config=config,
+        data=experimental_data,
+        output_dir="results/"
+    )
 
-   # 3. Run with plots
-   homodyne --config config.yaml --plot-experimental-data
+    # Result contains:
+    # - Posterior samples (ArviZ InferenceData)
+    # - Summary statistics
+    # - Convergence diagnostics
+    # - Trace plots
 
-   # Output (additional):
-   # - results/plots/experimental_g2.png
-   # - results/plots/fitted_comparison.png
-   # - results/plots/residuals.png
-
-Configuration Overrides
+Configuration Generator
 -----------------------
 
-**Override Data File:**
+Interactive configuration file generator.
 
-.. code-block:: bash
+.. automodule:: homodyne.cli.config_generator
+   :members:
+   :undoc-members:
+   :show-inheritance:
 
-   homodyne --config config.yaml --data-file /path/to/other_data.hdf
+Usage
+~~~~~
 
-**Override Output Directory:**
+**Interactive Mode**::
 
-.. code-block:: bash
+    homodyne-config --interactive
 
-   homodyne --config config.yaml --output-dir ./custom_results
+    # Prompts for:
+    # - Analysis mode (static or laminar_flow)
+    # - Data file path
+    # - Optimization method
+    # - Parameter initial values
+    # - Output file path
 
-**Override Method:**
+**Template Mode**::
 
-.. code-block:: bash
+    homodyne-config --mode static --output static_config.yaml
 
-   homodyne --config config.yaml --method mcmc
+    # Generates configuration from template
+    # Available modes: static, laminar_flow
 
-Logging
--------
+**Validation**::
 
-**Log Files:**
+    homodyne-config --validate my_config.yaml
 
-All analysis runs create timestamped log files:
+    # Checks:
+    # - YAML syntax
+    # - Required fields present
+    # - Parameter bounds valid
+    # - File paths exist
 
-.. code-block:: text
+XLA Configuration
+-----------------
 
-   results/logs/homodyne_analysis_YYYYMMDD_HHMMSS.log
+JAX/XLA runtime configuration for CPU optimization.
 
-**Dual Logging:**
+.. automodule:: homodyne.cli.xla_config
+   :members:
+   :undoc-members:
+   :show-inheritance:
 
-* **Console**: Respects ``--verbose`` and ``--quiet`` flags
-* **File**: Always contains full DEBUG-level logs
+Configuration Options
+~~~~~~~~~~~~~~~~~~~~~
 
-**Logging Levels:**
+The XLA configuration module sets optimal JAX flags for CPU execution:
 
-.. code-block:: bash
+- ``XLA_FLAGS``: CPU-specific optimization flags
+- ``JAX_PLATFORM_NAME``: Force CPU execution (v2.3.0+)
+- ``JAX_ENABLE_X64``: Enable 64-bit precision when needed
 
-   # Normal (INFO level)
-   homodyne --config config.yaml
+**Note**: These are set automatically when using the CLI. For programmatic use, import ``homodyne.cli.xla_config`` before JAX imports.
 
-   # Verbose (DEBUG level)
-   homodyne --config config.yaml --verbose
+NLSQ to MCMC Workflow
+----------------------
 
-   # Quiet (ERROR level only)
-   homodyne --config config.yaml --quiet
+**Recommended Workflow**:
 
-Result Structure
+1. **Run NLSQ first** for fast parameter estimation::
+
+       homodyne --config analysis.yaml --method nlsq
+
+2. **Copy best-fit parameters** from NLSQ output::
+
+       Best-fit parameters:
+         D0: 1234.5 ± 45.6
+         alpha: 0.567 ± 0.012
+         D_offset: 78.9 ± 5.3
+
+3. **Update configuration** with NLSQ values as initial parameters::
+
+       optimization:
+         initial_parameters:
+           values: [1234.5, 0.567, 78.9]
+
+4. **Run MCMC** for uncertainty quantification::
+
+       homodyne --config analysis.yaml --method mcmc
+
+This workflow ensures:
+
+- Fast exploration with NLSQ
+- Good initialization for MCMC
+- Reduced MCMC warmup time
+- Better convergence
+
+Output Structure
 ----------------
 
-**NLSQ Output:**
+The CLI commands create standardized output directories::
 
-.. code-block:: text
-
-   results/
-   ├── nlsq/
-   │   ├── parameters.json              # Parameter values + uncertainties
-   │   ├── fitted_data.npz               # 10 arrays (experimental + theoretical + residuals)
-   │   ├── analysis_results_nlsq.json    # Fit quality + metadata
-   │   └── convergence_metrics.json      # Convergence info + recovery
-   ├── plots/
-   │   ├── experimental_g2.png
-   │   ├── fitted_comparison.png
-   │   └── residuals.png
-   └── logs/
-       └── homodyne_analysis_YYYYMMDD_HHMMSS.log
-
-**MCMC Output:**
-
-.. code-block:: text
-
-   results/
-   ├── mcmc/
-   │   ├── posterior_samples.hdf5        # Full posterior samples
-   │   ├── diagnostics.json              # R-hat, ESS, divergences
-   │   └── summary_statistics.json       # Mean, std, credible intervals
-   ├── plots/
-   │   ├── posterior_distributions.png
-   │   ├── trace_plots.png
-   │   └── corner_plot.png
-   └── logs/
-       └── homodyne_analysis_YYYYMMDD_HHMMSS.log
-
-Programmatic Usage
-------------------
-
-**Python API:**
-
-.. code-block:: python
-
-   from homodyne.cli.commands import run_analysis
-
-   # Run analysis programmatically
-   result = run_analysis(
-       config_path='config.yaml',
-       output_dir='./results',
-       method='nlsq',
-       plot_results=True
-   )
-
-   # Access results
-   print(f"Optimal parameters: {result['parameters']}")
-   print(f"Chi-squared: {result['chi_squared']}")
-
-**Load Configuration:**
-
-.. code-block:: python
-
-   from homodyne.cli.commands import load_config
-
-   # Load and validate configuration
-   config_dict = load_config('config.yaml')
-
-   # Access configuration sections
-   data_config = config_dict['experimental_data']
-   opt_config = config_dict['optimization']
-
-Error Handling
---------------
-
-**Configuration Errors:**
-
-.. code-block:: bash
-
-   $ homodyne --config invalid.yaml
-   ERROR: Configuration validation failed:
-     - Missing required field: experimental_data.file_path
-     - Invalid analysis_type: must be 'static_isotropic' or 'laminar_flow'
-
-**Data Loading Errors:**
-
-.. code-block:: bash
-
-   $ homodyne --config config.yaml --data-file nonexistent.hdf
-   ERROR: Data file not found: nonexistent.hdf
-
-**Optimization Errors:**
-
-.. code-block:: bash
-
-   $ homodyne --config config.yaml
-   WARNING: NLSQ convergence failed on attempt 1/3
-   INFO: Applying convergence recovery strategy
-   INFO: NLSQ optimization successful on attempt 2/3
+    results/
+    ├── config.yaml              # Configuration used
+    ├── parameters.json          # Best-fit parameters
+    ├── diagnostics.json         # Optimization diagnostics
+    ├── plots/
+    │   ├── experimental_data.png
+    │   ├── fit_comparison.png
+    │   └── residuals.png
+    └── mcmc/                    # MCMC-specific outputs
+        ├── arviz_data.nc        # ArviZ InferenceData
+        ├── trace_plots.png
+        ├── corner_plot.png
+        └── diagnostics.txt
 
 Shell Completion
 ----------------
 
-**Bash Completion:**
+The homodyne CLI supports shell completion for bash, zsh, and fish.
 
-.. code-block:: bash
+**Setup**::
 
-   # Enable bash completion
-   source examples/setup_shell_completion.sh
+    # Interactive setup
+    homodyne-post-install --interactive
 
-   # Use tab completion
-   homodyne --config <TAB>
-   homodyne --method <TAB>
+    # Manual setup (bash)
+    eval "$(homodyne --completion bash)"
+
+    # Manual setup (zsh)
+    eval "$(homodyne --completion zsh)"
+
+**Completion Features**:
+
+- Command completion (homodyne, homodyne-config, etc.)
+- Option completion (--config, --method, etc.)
+- File path completion for arguments
+- Method name completion (nlsq, mcmc)
 
 Examples
 --------
 
-**Static Isotropic Analysis:**
+**Quick Start**::
 
-.. code-block:: bash
+    # Generate config
+    homodyne-config --mode static --output my_config.yaml
 
-   homodyne --config homodyne/config/templates/homodyne_static_isotropic.yaml \\
-            --output-dir ./results_static \\
-            --plot-experimental-data
+    # Edit config with your data path
+    vim my_config.yaml
 
-**Laminar Flow Analysis:**
+    # Run analysis
+    homodyne --config my_config.yaml --method nlsq
 
-.. code-block:: bash
+**Full Analysis Pipeline**::
 
-   homodyne --config homodyne/config/templates/homodyne_laminar_flow.yaml \\
-            --method nlsq \\
-            --output-dir ./results_laminar
+    # Validate configuration
+    homodyne-config --validate my_config.yaml
 
-**MCMC Uncertainty Quantification:**
+    # Plot experimental data to verify loading
+    homodyne --config my_config.yaml --plot-experimental-data
 
-.. code-block:: bash
+    # Run NLSQ optimization
+    homodyne --config my_config.yaml --method nlsq --output results/nlsq/
 
-   # First run NLSQ
-   homodyne --config config.yaml --method nlsq --output-dir ./results
+    # Run MCMC with NLSQ initialization
+    homodyne --config my_config_mcmc.yaml --method mcmc --output results/mcmc/
 
-   # Then run MCMC initialized from NLSQ
-   homodyne --config config.yaml --method mcmc --output-dir ./results
+    # Plot final results
+    homodyne --config my_config_mcmc.yaml --plot-results
+
+**Programmatic Use**::
+
+    from homodyne.cli import main
+
+    # Run CLI programmatically
+    import sys
+    sys.argv = ['homodyne', '--config', 'analysis.yaml', '--method', 'nlsq']
+    main()
 
 See Also
 --------
 
-* :doc:`../user-guide/cli-usage` - CLI usage guide
-* :doc:`../user-guide/configuration` - Configuration guide
-* :doc:`config` - Configuration module
-* :doc:`../user-guide/quickstart` - Result interpretation
-
-Cross-References
-----------------
-
-**Common Imports:**
-
-.. code-block:: python
-
-   from homodyne.cli import main
-   from homodyne.cli.commands import run_analysis, load_config, load_data
-
-**Related Functions:**
-
-* :func:`homodyne.config.manager.ConfigManager` - Configuration loading
-* :func:`homodyne.data.xpcs_loader.XPCSDataLoader` - Data loading
-* :func:`homodyne.optimization.fit_nlsq_jax` - NLSQ optimization
-* :func:`homodyne.optimization.fit_mcmc_jax` - MCMC sampling
+- :mod:`homodyne.config` - Configuration management
+- :mod:`homodyne.optimization` - Optimization backends
+- :mod:`homodyne.data` - Data loading
