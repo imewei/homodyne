@@ -1,21 +1,16 @@
 # Read the Docs configuration file for Homodyne
-# See https://docs.readthedocs.io/en/stable/config-file/v2.html for details
-# Note: Homodyne v2.4+ supports Python 3.12 and 3.13
-# RTD build uses 3.12 for broader compatibility
+# See https://docs.readthedocs.io/en/stable/config-file/v2.html
 
 version: 2
 
-# Build configuration
 build:
   os: ubuntu-24.04
   tools:
-    python: "3.12" # RTD build version (package supports 3.12 and 3.13)
+    python: "3.12"
   jobs:
     post_install:
-      # Install the package with docs extras (CPU-only JAX)
       - pip install -e ".[docs]"
 
-# Python configuration
 python:
   install:
     - requirements: docs/requirements.txt
@@ -24,12 +19,10 @@ python:
       extra_requirements:
         - docs
 
-# Sphinx configuration
 sphinx:
   configuration: docs/conf.py
   fail_on_warning: false
 
-# Output formats
 formats:
   - pdf
   - epub

@@ -1,9 +1,8 @@
 # Pre-commit hooks for Homodyne Analysis Package v2.4+
-# Install with: pip install pre-commit && pre-commit install
-# Tested with pre-commit 4.3.0
+# Install: pip install pre-commit && pre-commit install
 
 repos:
-  # Built-in hooks
+  # Basic file checks
   - repo: https://github.com/pre-commit/pre-commit-hooks
     rev: v5.0.0
     hooks:
@@ -22,86 +21,29 @@ repos:
       - id: mixed-line-ending
         args: [--fix=lf]
 
-  # Python code formatting
-  - repo: https://github.com/psf/black
-    rev: 25.1.0 # Tested: black 25.9.0
-    hooks:
-      - id: black
-        name: black
-        description: "Black: The uncompromising Python code formatter"
-        language: python
-        require_serial: true
-        types_or: [python, pyi]
-        args: [--line-length=88]
-
-  # Import sorting
-  - repo: https://github.com/pycqa/isort
-    rev: 6.0.1
-    hooks:
-      - id: isort
-        name: isort (python)
-        description: "Sort Python imports"
-        types: [python]
-        args: [--profile=black, --line-length=88]
-
-  # Linting (legacy - prefer ruff)
-  - repo: https://github.com/pycqa/flake8
-    rev: 7.2.0
-    hooks:
-      - id: flake8
-        name: flake8
-        description: "Tool For Style Guide Enforcement"
-        types: [python]
-        args:
-          - --max-line-length=88
-          - --extend-ignore=E203,W503,E501
-          - --exclude=build,dist,.eggs,*.egg-info,.tox,.venv,venv
-
-  # Modern linting and formatting (preferred)
+  # Python linting and formatting (ruff replaces flake8, isort, black)
   - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.13.1 # Tested: ruff 0.13.1
+    rev: v0.13.1
     hooks:
       - id: ruff
-        name: ruff
-        description: "An extremely fast Python linter, written in Rust"
-        types: [python]
         args: [--fix, --exit-non-zero-on-fix]
       - id: ruff-format
-        name: ruff-format
-        description: "An extremely fast Python formatter, written in Rust"
-        types: [python]
 
   # Security scanning
   - repo: https://github.com/PyCQA/bandit
     rev: 1.8.3
     hooks:
       - id: bandit
-        name: bandit
-        description: "Bandit is a tool for finding common security issues in Python code"
-        entry: bandit
-        language: python
-        types: [python]
-        args:
-          - -r
-          - -f
-          - json
-          - -o
-          - bandit_report.json
-          - --severity-level
-          - medium
-          - --skip
-          - B101,B110,B403,B404,B603
-        exclude: ^(homodyne/tests/|tests/|build/|dist/)
+        args: [-c, pyproject.toml]
+        additional_dependencies: ["bandit[toml]"]
+        exclude: ^tests/
 
   # Type checking
   - repo: https://github.com/pre-commit/mirrors-mypy
-    rev: v1.18.2 # Tested: mypy 1.18.2
+    rev: v1.18.2
     hooks:
       - id: mypy
-        name: mypy
-        description: "Optional static typing for Python"
-        types: [python]
-        args: [--config-file=pyproject.toml, --ignore-missing-imports]
+        args: [--config-file=pyproject.toml]
         additional_dependencies:
           - types-psutil>=5.9
           - types-requests>=2.31
@@ -112,78 +54,13 @@ repos:
           - types-decorator>=5.1
           - types-setuptools>=68.0
           - types-pyyaml>=6.0
-        exclude: ^(homodyne/tests/|tests/|build/|dist/|docs/)
-
-  # Scientific computing quality checks
-  - repo: local
-    hooks:
-      - id: numerical-stability-check
-        name: numerical-stability-check
-        description: "Check for numerical stability issues in scientific code"
-        entry: python
-        language: system
-        types: [python]
-        args:
-          - -c
-          - |
-            import ast
-            import sys
-
-            def check_numerical_stability(filename):
-                with open(filename, 'r') as f:
-                    try:
-                        tree = ast.parse(f.read())
-                        # Check for common numerical stability issues
-                        for node in ast.walk(tree):
-                            if isinstance(node, ast.BinOp):
-                                # Check for potential division by zero
-                                if isinstance(node.op, ast.Div):
-                                    print(f"Warning: Division operation found in {filename}:{node.lineno}")
-                    except SyntaxError:
-                        pass
-
-            for filename in sys.argv[1:]:
-                check_numerical_stability(filename)
-        files: ^homodyne/(core|analysis|optimization)/.*\.py$
-
-      - id: docstring-coverage
-        name: docstring-coverage
-        description: "Check docstring coverage for scientific functions"
-        entry: python
-        language: system
-        types: [python]
-        args:
-          - -c
-          - |
-            import ast
-            import sys
-
-            def check_docstrings(filename):
-                with open(filename, 'r') as f:
-                    try:
-                        tree = ast.parse(f.read())
-                        functions = [n for n in ast.walk(tree) if isinstance(n, ast.FunctionDef)]
-                        missing_docs = []
-                        for func in functions:
-                            if not func.name.startswith('_') and not ast.get_docstring(func):
-                                missing_docs.append(f"{filename}:{func.lineno}:{func.name}")
-                        if missing_docs and len(missing_docs) > len(functions) * 0.2:  # Allow 20% missing
-                            print(f"Warning: {len(missing_docs)} functions missing docstrings in {filename}")
-                    except SyntaxError:
-                        pass
-
-            for filename in sys.argv[1:]:
-                check_docstrings(filename)
-        files: ^homodyne/(core|analysis|optimization)/.*\.py$
+        exclude: ^(tests/|docs/)
 
   # Markdown formatting
   - repo: https://github.com/executablebooks/mdformat
     rev: 0.7.21
     hooks:
       - id: mdformat
-        name: mdformat
-        description: "CommonMark compliant Markdown formatter"
-        types: [markdown]
         args: [--wrap=88]
 
   # YAML/JSON formatting
@@ -191,36 +68,24 @@ repos:
     rev: v4.0.0-alpha.8
     hooks:
       - id: prettier
-        name: prettier
-        description: "Prettier formatter for various file types"
         types_or: [yaml, json]
         args: [--write, --tab-width=2]
 
-  # Jupyter notebook cleaning
+  # Jupyter notebook linting
   - repo: https://github.com/nbQA-dev/nbQA
     rev: 1.9.1
     hooks:
-      - id: nbqa-black
-        name: nbqa-black
-        description: "Run black on Jupyter notebooks"
-        types: [jupyter]
-        args: [black, --line-length=88]
-      - id: nbqa-isort
-        name: nbqa-isort
-        description: "Run isort on Jupyter notebooks"
-        types: [jupyter]
-        args: [isort, --profile=black]
+      - id: nbqa-ruff
+        args: [--ignore=E402]
+        additional_dependencies: [ruff>=0.13.0]
 
-# Global configuration
 default_language_version:
-  python: python3.13 # Tested: Python 3.13
+  python: python3.13
 
-# Exclude certain directories and files
 exclude: |
   (?x)^(
       \.eggs/|
       \.git/|
-      \.hg/|
       \.mypy_cache/|
       \.pytest_cache/|
       \.ruff_cache/|

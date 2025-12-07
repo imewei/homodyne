@@ -1,5 +1,5 @@
 [build-system]
-requires = ["setuptools>=80.0.0", "wheel>=0.45.0", "setuptools_scm[toml]>=8.1"]
+requires = ["setuptools>=68.0.0", "wheel>=0.42.0", "setuptools_scm[toml]>=8.1"]
 build-backend = "setuptools.build_meta"
 
 [project]
@@ -32,20 +32,18 @@ classifiers = [
     "Operating System :: OS Independent",
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
     "Topic :: Scientific/Engineering :: Physics",
     "Topic :: Scientific/Engineering :: Chemistry",
     "Topic :: Scientific/Engineering :: Mathematics",
 ]
-requires-python = ">=3.12"  # Tested with Python 3.12.x and 3.13.x
+requires-python = ">=3.12"
 
 # ============================================================================
 # CPU-ONLY ARCHITECTURE (v2.3.0+)
 # ============================================================================
-# Homodyne.3.0+ is CPU-only, optimized for multi-core systems and HPC clusters.
+# Homodyne is CPU-only, optimized for multi-core systems and HPC clusters.
 # Works on ALL platforms: Linux, macOS, Windows
-#
-# GPU support removed in v2.3.0 for simplified maintenance and reliability.
-# For GPU users: Use Homodyne.2.1 (last GPU-supporting version)
 #
 # Platform support:
 #   ✅ Linux: Full support (HPC clusters with 36/128-core nodes)
@@ -53,72 +51,59 @@ requires-python = ">=3.12"  # Tested with Python 3.12.x and 3.13.x
 #   ✅ Windows: Full support
 #
 # Requirements:
-#   - Python 3.12+
+#   - Python 3.12+ (tested with 3.12.x and 3.13.x)
 #   - JAX 0.8.0 (CPU-only, exact version)
 #   - Multi-core CPU recommended (14+ cores for best performance)
-#
-# See README.md for HPC CPU optimization guide
-# See docs/migration/v2.2-to-v2.3-gpu-removal.md for migration from v2.2.x
 # ============================================================================
 dependencies = [
-    # Core scientific computing (2025 tested stable)
-    "numpy>=2.3.5,<3.0.0",  # Tested: NumPy 2.3.5 (uv env)
-    "scipy>=1.16.3,<2.0.0",  # Tested: SciPy 1.16.3 (uv env)
+    # Core scientific computing
+    "numpy>=2.0.0,<3.0.0",
+    "scipy>=1.14.0,<2.0.0",
 
     # JAX ecosystem (CPU-only in v2.3.0+)
-    "jax==0.8.0",  # JAX 0.8.0 CPU-only - exact version required
-    "jaxlib==0.8.0",  # jaxlib 0.8.0 CPU-only - must match JAX version exactly
-    "nlsq>=0.3.0,<0.4.0",  # NLSQ trust-region optimizer for JAX-native nonlinear least squares
-                          # Repository: https://github.com/imewei/NLSQ
-                          # Provides Trust Region Reflective (TRF) and Levenberg-Marquardt (LM) algorithms
-                          # Tested: nlsq 0.3.0 (uv env)
+    "jax==0.8.0",
+    "jaxlib==0.8.0",
+    "nlsq>=0.3.0",
 
-    # Bayesian inference (2025 stable)
-    "numpyro>=0.19.0,<0.20.0",  # Tested: NumPyro 0.19.0 (uv env)
-    "blackjax>=1.3.0,<2.0.0",  # Tested: BlackJAX 1.3.0 (uv env)
-    "arviz>=0.22.0,<0.23.0",  # CMC diagnostics, 95% CI plots, trace plots (uv env 0.22.0)
-    "arviz-base>=0.7.0,<0.8.0",  # ArviZ split packages (uv env 0.7.0)
-    "arviz-plots>=0.7.0,<0.8.0",  # ArviZ split packages (uv env 0.7.0)
-    "arviz-stats>=0.7.0,<0.8.0",  # ArviZ split packages (uv env 0.7.0)
+    # Bayesian inference
+    "numpyro>=0.19.0,<0.20.0",
+    "blackjax>=1.2.0,<2.0.0",
 
     # Data handling
-    "h5py>=3.15.0,<4.0.0",  # Tested: h5py 3.15.1 (uv env)
-    "pyyaml>=6.0.2",  # Tested: PyYAML 6.0.3
+    "h5py>=3.10.0,<4.0.0",
+    "pyyaml>=6.0.2",
 
     # System utilities
-    "psutil>=7.1.0,<8.0.0",  # Tested: psutil 7.1.3 (uv env)
-    "cloudpickle>=3.1.0,<4.0.0",  # Multiprocessing serialization for complex objects (CMC backend)
+    "psutil>=6.0.0,<8.0.0",
+    "cloudpickle>=3.0.0,<4.0.0",
 
-    # Plotting (stable)
-    "matplotlib>=3.10.7,<4.0.0",  # Tested: matplotlib 3.10.7 (uv env)
+    # Plotting
+    "matplotlib>=3.8.0,<4.0.0",
 
     # Fast visualization (optional - graceful degradation if unavailable)
-    "datashader>=0.18.2,<0.19.0",  # Fast heatmap rasterization (5-10x speedup) (uv env 0.18.2)
-    "xarray>=2025.12.0,<2026.0.0",  # Required by Datashader for coordinate-aware data (uv env 2025.12.0)
+    "datashader>=0.16.0,<0.19.0",
+    "xarray>=2024.1.0",
 ]
 
 [project.optional-dependencies]
-# Development and testing (all platforms)
 dev = [
-    "pytest>=8.4.0,<9.0.0",  # Tested: pytest 8.4.2
-    "pytest-cov>=7.0.0,<8.0.0",  # Tested: pytest-cov 7.0.0
-    "pytest-xdist>=3.8.0,<4.0.0",  # Tested: pytest-xdist 3.8.0, parallel execution with -n auto
-    "black>=25.11.0,<26.0.0",  # Tested: black 25.11.0 (uv env)
-    "ruff>=0.14.8,<0.15.0",  # Tested: ruff 0.14.8 (uv env)
-    "mypy>=1.19.0,<2.0.0",  # Tested: mypy 1.19.0 (uv env)
-    "pre-commit>=4.5.0,<5.0.0",  # Tested: pre-commit 4.5.0 (uv env)
-    "tqdm>=4.67.1",  # Tested: tqdm 4.67.1 (uv env)
+    "pytest>=8.3.0,<9.0.0",
+    "pytest-cov>=6.0.0,<8.0.0",
+    "pytest-xdist>=3.5.0,<4.0.0",
+    "ruff>=0.13.0,<0.15.0",
+    "mypy>=1.18.0,<2.0.0",
+    "pre-commit>=4.0.0,<5.0.0",
+    "tqdm>=4.66.0",
 ]
 
-# Documentation (all platforms)
 docs = [
-    "sphinx>=8.0.0,<9.0.0",  # Tested: sphinx 8.2.3
-    "sphinx-rtd-theme>=3.0.0,<4.0.0",  # Tested: sphinx-rtd-theme 3.0.2
-    "myst-parser>=4.0.0,<5.0.0",  # Tested: myst-parser 4.0.1
+    "sphinx>=8.0.0,<9.0.0",
+    "sphinx-rtd-theme>=3.0.0,<4.0.0",
+    "myst-parser>=4.0.0,<5.0.0",
+    "sphinx-autodoc-typehints>=2.0.0,<3.0.0",
+    "sphinx-copybutton>=0.5.2,<0.6.0",
 ]
 
-# Complete installation (all platforms, CPU-only)
-# Note: GPU users should install JAX with CUDA support separately (see README.md)
 all = [
     "homodyne[dev,docs]",
 ]
@@ -152,51 +137,35 @@ homodyne = [
     "config/templates/*.yml",
 ]
 
-[tool.black]
-line-length = 88
-target-version = ['py312', 'py313']
-include = '\.pyi?$'
-extend-exclude = '''
-/(
-  # directories
-  \.eggs
-  | \.git
-  | \.hg
-  | \.mypy_cache
-  | \.tox
-  | \.venv
-  | _build
-  | buck-out
-  | build
-  | dist
-)/
-'''
-
 [tool.ruff]
 line-length = 88
-target-version = "py312"  # Compatible with py313
+target-version = "py312"
 
 [tool.ruff.lint]
 select = [
-    "E",  # pycodestyle errors
-    "W",  # pycodestyle warnings
-    "F",  # pyflakes
-    "I",  # isort
-    "B",  # flake8-bugbear
-    "C4", # flake8-comprehensions
-    "UP", # pyupgrade
+    "E",   # pycodestyle errors
+    "W",   # pycodestyle warnings
+    "F",   # pyflakes
+    "I",   # isort
+    "B",   # flake8-bugbear
+    "C4",  # flake8-comprehensions
+    "UP",  # pyupgrade
 ]
 ignore = [
-    "E501",  # line too long, handled by black
+    "E501",  # line too long, handled by formatter
     "B008",  # do not perform function calls in argument defaults
     "C901",  # too complex
 ]
 
 [tool.ruff.lint.per-file-ignores]
-"__init__.py" = ["F401"]  # Allow unused imports in __init__.py
+"__init__.py" = ["F401"]
+
+[tool.bandit]
+exclude_dirs = ["tests", "docs", "build", "dist"]
+skips = ["B101", "B110", "B403", "B404", "B603"]
 
 [tool.mypy]
-python_version = "3.12"  # Compatible with 3.13
+python_version = "3.12"
 warn_return_any = true
 warn_unused_configs = true
 disallow_untyped_defs = true
@@ -220,20 +189,18 @@ module = [
     "h5py.*",
     "psutil.*",
     "matplotlib.*",
+    "datashader.*",
+    "xarray.*",
 ]
 ignore_missing_imports = true
 
-# Phased mypy cleanup: relax non-library targets so tests/docs/scripts can run
-# without blocking strict library work. These modules still run through mypy,
-# but imports are skipped and errors are suppressed to keep the signal focused
-# on the homodyne package while we incrementally type-annotate these areas.
 [[tool.mypy.overrides]]
 module = ["tests.*", "scripts.*", "docs.*"]
 follow_imports = "skip"
 ignore_errors = true
 
 [tool.pytest.ini_options]
-minversion = "8.4"
+minversion = "8.3"
 addopts = "-ra -q --strict-markers --strict-config"
 testpaths = ["tests"]
 python_files = ["test_*.py", "*_test.py"]
@@ -241,7 +208,7 @@ python_classes = ["Test*"]
 python_functions = ["test_*"]
 markers = [
     "slow: marks tests as slow (deselect with '-m \"not slow\"')",
-    "gpu: marks tests as requiring GPU (Linux + CUDA 12+ only)",
+    "gpu: marks tests as requiring GPU (DEPRECATED in v2.3.0 - CPU-only)",
     "integration: marks tests as integration tests",
     "linux: marks tests as requiring Linux OS",
     "unit: marks tests as unit tests",
@@ -249,36 +216,32 @@ markers = [
     "mcmc: marks tests as MCMC statistical tests",
     "property: marks tests as property-based tests",
     "requires_jax: marks tests as requiring JAX",
-    "requires_gpu: marks tests as requiring GPU hardware (Linux + CUDA 12+)",
+    "requires_gpu: marks tests as requiring GPU hardware (DEPRECATED)",
     "api: marks tests as API compatibility tests",
     "self_consistency: marks tests as CMC self-consistency tests",
     "validation: marks tests as CMC accuracy validation tests",
+    "arviz: marks tests as ArviZ integration tests",
+    "visualization: marks tests as visualization tests",
 ]
 filterwarnings = [
-    # Expected warnings in test environment
     "ignore:There are not enough devices to run parallel chains:UserWarning",
     "ignore:JAXopt is no longer maintained:DeprecationWarning",
     "ignore:Covariance of the parameters could not be estimated:scipy.optimize.OptimizeWarning",
-    # Third-party library warnings (cannot fix)
     "ignore:invalid escape sequence:SyntaxWarning",
 ]
 
 [tool.coverage.run]
 source = ["homodyne"]
 omit = [
-    # Package metadata
     "homodyne/_version.py",
     "homodyne/post_install.py",
     "homodyne/uninstall_scripts.py",
-    # CLI/UI components (integration tested separately)
     "homodyne/cli/*",
     "homodyne/viz/*",
     "homodyne/runtime/*",
-    # Data loading (integration tested with HDF5 files)
     "homodyne/data/*",
     "homodyne/device/*",
     "homodyne/io/*",
-    # Core physics (validated via scientific tests, not unit tests)
     "homodyne/core/fitting.py",
     "homodyne/core/models.py",
     "homodyne/core/numpy_gradients.py",
@@ -288,7 +251,6 @@ omit = [
     "homodyne/core/physics_factors.py",
     "homodyne/core/physics_nlsq.py",
     "homodyne/core/theory.py",
-    # Legacy optimization modules (replaced in v2.4.1)
     "homodyne/optimization/mcmc.py",
     "homodyne/optimization/nlsq_wrapper.py",
     "homodyne/optimization/nlsq.py",
@@ -299,22 +261,18 @@ omit = [
     "homodyne/optimization/sequential_angle.py",
     "homodyne/optimization/numerical_validation.py",
     "homodyne/optimization/strategy.py",
-    # v2.4.1 reorganized modules - infrastructure code
     "homodyne/optimization/initialization/*",
     "homodyne/optimization/nlsq/wrapper.py",
     "homodyne/optimization/nlsq/jacobian.py",
     "homodyne/optimization/nlsq/transforms.py",
     "homodyne/optimization/nlsq/strategies/residual_jit.py",
-    # MCMC infrastructure (integration tested via CMC tests)
     "homodyne/optimization/mcmc/cmc/*",
     "homodyne/optimization/mcmc/data_prep.py",
     "homodyne/optimization/mcmc/priors.py",
     "homodyne/optimization/mcmc/scaling.py",
     "homodyne/optimization/mcmc/single_angle.py",
-    # Utilities
     "homodyne/utils/progress.py",
     "homodyne/utils/validation.py",
-    # Test directories
     "tests/*",
     "*/tests/*",
 ]
@@ -333,23 +291,16 @@ exclude_lines = [
     "@(abc\\.)?abstractmethod",
 ]
 
-# Environment-specific configurations
 [tool.homodyne]
-# HPC environment configuration
 hpc = true
-cuda_system_path = "/usr/local/cuda-12"  # CUDA 12.1-12.9 required
-preferred_device = "auto"  # auto, cpu, gpu
-cuda_version = "12.x"  # Minimum 12.1, maximum 12.9
+preferred_device = "cpu"
 
-# Default analysis parameters
 [tool.homodyne.defaults]
 analysis_mode = "static_isotropic"
 optimization_method = "nlsq"
 output_format = "yaml"
 
 [tool.homodyne.performance]
-# Performance optimization hints
 cpu_threads = "auto"
-gpu_memory_fraction = 0.9
 enable_jit = true
 cache_compilation = true
