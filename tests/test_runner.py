@@ -12,8 +12,9 @@ Comprehensive test runner with different test profiles:
 import argparse
 import subprocess
 import sys
+from collections.abc import Callable
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Mapping
+from typing import Any
 
 
 class HomodyneTestRunner:
@@ -172,9 +173,9 @@ class HomodyneTestRunner:
         cmd = ["python", "-m", "pytest"] + test_args
         return subprocess.call(cmd)
 
-    def check_test_environment(self) -> Dict[str, Any]:
+    def check_test_environment(self) -> dict[str, Any]:
         """Check test environment and dependencies."""
-        env_info: Dict[str, Any] = {
+        env_info: dict[str, Any] = {
             "python_version": sys.version,
             "test_directory": str(self.test_dir),
             "dependencies": {},
@@ -271,7 +272,7 @@ def main() -> int:
         return 0
 
     # Run appropriate test suite
-    test_methods: Dict[str, Callable[[], int]] = {
+    test_methods: dict[str, Callable[[], int]] = {
         "quick": runner.run_quick_tests,
         "unit": runner.run_unit_tests,
         "integration": runner.run_integration_tests,

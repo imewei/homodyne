@@ -27,7 +27,7 @@ import json
 import sys
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Dict, Tuple
+from typing import Any
 
 import numpy as np
 import yaml  # type: ignore[import-untyped]
@@ -51,10 +51,12 @@ class NLSQData:
 class NLSQConfig:
     """Placeholder for config data required by diagnostics."""
 
-    raw: Dict[str, Any] | None = None
+    raw: dict[str, Any] | None = None
 
 
-def load_nlsq_results(results_dir: Path) -> Tuple[Dict[str, float], NLSQData, NLSQConfig, str]:
+def load_nlsq_results(
+    results_dir: Path,
+) -> tuple[dict[str, float], NLSQData, NLSQConfig, str]:
     """Load NLSQ results from directory."""
     # Load parameters
     param_file = results_dir / "parameters.json"
@@ -89,9 +91,9 @@ def load_nlsq_results(results_dir: Path) -> Tuple[Dict[str, float], NLSQData, NL
         q=float(npz_data["q"][0]),
         L=2_000_000.0,  # Default
         dt=float(npz_data["t1"][1] - npz_data["t1"][0]),
-        per_angle_scaling_solver=per_angle_scaling
-        if isinstance(per_angle_scaling, np.ndarray)
-        else None,
+        per_angle_scaling_solver=(
+            per_angle_scaling if isinstance(per_angle_scaling, np.ndarray) else None
+        ),
     )
 
     # Load analysis results to get analysis_mode

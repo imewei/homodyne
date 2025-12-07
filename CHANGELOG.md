@@ -129,8 +129,8 @@ ______________________________________________________________________
 
 #### 🚨 GPU Support Removed - CPU-Only Architecture
 
-**CRITICAL BREAKING CHANGE**: Homodyne.3.0 removes all GPU acceleration support. This
-is a **hard break** with no migration path.
+**CRITICAL BREAKING CHANGE**: Homodyne.3.0 removes all GPU acceleration support. This is
+a **hard break** with no migration path.
 
 **Decision:**
 
@@ -661,10 +661,10 @@ ______________________________________________________________________
 
 ### 🎉 MCMC/CMC Simplification Release
 
-Homodyne.1.0 significantly simplifies the MCMC API by removing manual method
-selection and implementing automatic NUTS/CMC selection based on dataset
-characteristics. This release introduces **breaking changes** to the MCMC interface that
-require configuration updates.
+Homodyne.1.0 significantly simplifies the MCMC API by removing manual method selection
+and implementing automatic NUTS/CMC selection based on dataset characteristics. This
+release introduces **breaking changes** to the MCMC interface that require configuration
+updates.
 
 📖 **[Read the Migration Guide](docs/migration/v2.0-to-v2.1.md)** for step-by-step
 upgrade instructions.

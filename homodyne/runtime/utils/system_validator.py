@@ -298,7 +298,9 @@ alias hc-iso >/dev/null 2>&1 && echo "shortcut_alias_works" || echo "shortcut_al
                         working_aliases >= 2
                     )  # At least core and config should work
                 except Exception:
-                    logger.debug("Shell alias validation failed; continuing without alias checks")
+                    logger.debug(
+                        "Shell alias validation failed; continuing without alias checks"
+                    )
 
             execution_time = time.perf_counter() - start_time
             warnings = []
@@ -733,7 +735,9 @@ alias hc-iso >/dev/null 2>&1 && echo "shortcut_alias_works" || echo "shortcut_al
                                 "NLSQ version",
                             )
                     except Exception as exc:
-                        logger.debug("Version parsing for streaming optimizer failed: %s", exc)
+                        logger.debug(
+                            "Version parsing for streaming optimizer failed: %s", exc
+                        )
 
             # Test 4: Homodyne NLSQ integration
             homodyne_integration_ok = True

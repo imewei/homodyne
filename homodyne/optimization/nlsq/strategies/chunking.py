@@ -799,9 +799,7 @@ def create_angle_stratified_data(
 
     # Ensure we didn't somehow create more data than we had
     if n_used > n_points:
-        raise ValueError(
-            f"Data expansion during stratification: {n_used} > {n_points}"
-        )
+        raise ValueError(f"Data expansion during stratification: {n_used} > {n_points}")
 
     # Convert back to JAX arrays and return with chunk boundary information
     return (
