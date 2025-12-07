@@ -79,12 +79,12 @@ output:
 """
 
 
-def main():
+def main() -> None:
     """Run angle filtering example."""
     print("Angle Filtering for Anisotropic Analysis Example")
     print("=" * 60)
 
-    config_path = Path("homodyne_config_angle_filtering.yaml")
+    config_path: Path = Path("homodyne_config_angle_filtering.yaml")
     config_path.write_text(CONFIG_ANGLE_FILTERING)
     print(f"✓ Created configuration: {config_path}")
 
