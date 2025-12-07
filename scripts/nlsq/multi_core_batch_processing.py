@@ -4,7 +4,7 @@ Multi-Core Batch Processing for XPCS Analysis
 ==============================================
 
 This example demonstrates how to efficiently process multiple XPCS datasets
-in parallel using Homodyne v2.3 on multi-core systems.
+in parallel using Homodyne.3 on multi-core systems.
 
 Key Features:
 - Parallel processing of multiple datasets
@@ -478,7 +478,7 @@ Debugging:
 def main():
     """Main batch processing demonstration."""
     print("\n" + "=" * 60)
-    print(" Multi-Core Batch Processing Example - Homodyne v2.3")
+    print(" Multi-Core Batch Processing Example - Homodyne.3")
     print("=" * 60)
     print("\nCPU-optimized parallel processing (GPU removed in v2.3.0)")
 

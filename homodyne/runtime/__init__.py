@@ -1,4 +1,4 @@
-"""Homodyne v2 Runtime Support
+"""Homodyne Runtime Support
 ==========================
 
 Runtime support modules for hardware optimization and system utilities.

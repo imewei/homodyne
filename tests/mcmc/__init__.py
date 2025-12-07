@@ -1,5 +1,5 @@
 """
-MCMC Statistical Tests for Homodyne v2
+MCMC Statistical Tests for Homodyne
 ======================================
 
 Statistical validation tests for MCMC sampling:

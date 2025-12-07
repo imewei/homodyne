@@ -1,4 +1,4 @@
-"""JAX Computational Backend for Homodyne v2
+"""JAX Computational Backend for Homodyne
 ==========================================
 
 High-performance JAX-based implementation of the core mathematical operations

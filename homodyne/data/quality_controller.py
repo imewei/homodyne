@@ -1,4 +1,4 @@
-"""Data Quality Controller for Homodyne v2
+"""Data Quality Controller for Homodyne
 =======================================
 
 Comprehensive data quality control system that integrates validation throughout

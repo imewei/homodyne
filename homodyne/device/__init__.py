@@ -1,4 +1,4 @@
-"""Device Optimization Module for Homodyne v2.3
+"""Device Optimization Module for Homodyne.3
 ============================================
 
 HPC CPU device optimization with intelligent configuration.

@@ -1,4 +1,4 @@
-"""Advanced Memory Manager for Homodyne v2 Performance Engine
+"""Advanced Memory Manager for Homodyne Performance Engine
 ==========================================================
 
 Intelligent memory management system for massive XPCS datasets with dynamic allocation,

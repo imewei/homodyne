@@ -1,5 +1,5 @@
 """
-Test Data Factories for Homodyne v2
+Test Data Factories for Homodyne
 ====================================
 
 Data factories and generators for creating realistic test datasets:

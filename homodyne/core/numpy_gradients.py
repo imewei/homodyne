@@ -1,4 +1,4 @@
-"""Production-Grade Numerical Differentiation System for Homodyne v2
+"""Production-Grade Numerical Differentiation System for Homodyne
 ================================================================
 
 High-performance NumPy-based numerical differentiation to replace JAX gradients

@@ -1,5 +1,5 @@
 """
-Homodyne v2 Test Suite
+Homodyne Test Suite
 ======================
 
 Comprehensive test suite for JAX-first homodyne package.

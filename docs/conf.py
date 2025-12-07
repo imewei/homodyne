@@ -1,5 +1,5 @@
 # Configuration file for the Sphinx documentation builder.
-# Homodyne v2.0+ Documentation
+# Homodyne.0+ Documentation
 
 import os
 import sys

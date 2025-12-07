@@ -1,4 +1,4 @@
-"""Minimal CLI Entry Point for Homodyne v2
+"""Minimal CLI Entry Point for Homodyne
 =======================================
 
 Simplified command-line interface for homodyne scattering analysis with

@@ -101,7 +101,7 @@ You should see:
 
 .. code-block:: text
 
-   Homodyne v2.4.1
+   Homodyne.4.1
 
 Check Device Status
 -------------------
@@ -114,7 +114,7 @@ This runs a ~0.15 second system validation. You should see:
 
 .. code-block:: text
 
-   Homodyne v2.4.1 System Validation
+   Homodyne.4.1 System Validation
    ==================================
    [✓] Python version: 3.12.x
    [✓] JAX 0.8.0 (CPU)

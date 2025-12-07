@@ -1,4 +1,4 @@
-"""Parameter Manager for Homodyne v2
+"""Parameter Manager for Homodyne
 ==================================
 
 Centralized parameter management system for handling parameter bounds,

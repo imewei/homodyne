@@ -1,4 +1,4 @@
-"""HPC CPU Optimization for Homodyne v2
+"""HPC CPU Optimization for Homodyne
 ====================================
 
 CPU-primary optimization strategies for high-performance computing environments.

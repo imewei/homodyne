@@ -1,4 +1,4 @@
-"""Data Loading and Management for Homodyne v2
+"""Data Loading and Management for Homodyne
 =============================================
 
 Comprehensive data loading infrastructure supporting XPCS experimental data

@@ -1,4 +1,4 @@
-"""Advanced Performance Engine for Massive XPCS Datasets - Homodyne v2
+"""Advanced Performance Engine for Massive XPCS Datasets - Homodyne
 ===================================================================
 
 High-performance data processing engine for handling massive XPCS datasets (>1GB)

@@ -1,4 +1,4 @@
-"""Advanced Data Preprocessing Pipeline for Homodyne v2
+"""Advanced Data Preprocessing Pipeline for Homodyne
 ======================================================
 
 Intelligent data transformation system that builds on config-based filtering to provide

@@ -1,5 +1,5 @@
 """
-Performance and Benchmark Tests for Homodyne v2
+Performance and Benchmark Tests for Homodyne
 ===============================================
 
 Performance tests, benchmarks, and regression tests to ensure:

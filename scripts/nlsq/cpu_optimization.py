@@ -4,7 +4,7 @@ CPU-Optimized NLSQ Analysis for HPC Systems
 =============================================
 
 This example demonstrates best practices for CPU-optimized XPCS analysis using
-Homodyne v2.3 on HPC clusters and multi-core personal computers.
+Homodyne.3 on HPC clusters and multi-core personal computers.
 
 Key Features:
 - Multi-core CPU thread management (optimal for 36/128-core HPC nodes)
@@ -401,7 +401,7 @@ free -h
 def main():
     """Main CPU optimization demonstration."""
     print("\n" + "=" * 60)
-    print(" CPU-Optimized Homodyne v2.3 Analysis Example")
+    print(" CPU-Optimized Homodyne.3 Analysis Example")
     print("=" * 60)
     print("\nGPU support removed in v2.3.0")
     print("Focus: Multi-core CPU optimization for HPC clusters")

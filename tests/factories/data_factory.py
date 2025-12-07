@@ -1,5 +1,5 @@
 """
-Test Data Factory for Homodyne v2
+Test Data Factory for Homodyne
 ==================================
 
 Factory functions for generating realistic test datasets:

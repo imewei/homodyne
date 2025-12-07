@@ -1,4 +1,4 @@
-"""NLSQ: Primary Optimization Method for Homodyne v2
+"""NLSQ: Primary Optimization Method for Homodyne
 ==================================================
 
 NLSQ package-based trust-region nonlinear least squares solver for the scaled

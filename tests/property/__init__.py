@@ -1,5 +1,5 @@
 """
-Property-Based Tests for Homodyne v2
+Property-Based Tests for Homodyne
 ====================================
 
 Property-based tests using Hypothesis to validate mathematical invariants:

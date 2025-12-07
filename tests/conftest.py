@@ -1,5 +1,5 @@
 """
-Pytest Configuration and Fixtures for Homodyne v2
+Pytest Configuration and Fixtures for Homodyne
 ==================================================
 
 Shared fixtures, configuration, and test utilities for the entire test suite.

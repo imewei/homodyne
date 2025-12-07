@@ -98,7 +98,7 @@ See :doc:`analysis_modes` for detailed parameter descriptions and usage.
 Version Information
 -------------------
 
-This documentation covers Homodyne v2.4.x with the following key features:
+This documentation covers Homodyne.4.x with the following key features:
 
 * **v2.4.1**: CMC-only MCMC architecture, module reorganization
 * **v2.4.0**: Per-angle scaling mandatory, legacy scalar mode removed

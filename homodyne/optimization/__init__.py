@@ -1,4 +1,4 @@
-"""JAX-First Optimization for Homodyne v2.4
+"""JAX-First Optimization for Homodyne.4
 ==========================================
 
 Simplified optimization system using NLSQ package (primary) and CMC v3.0

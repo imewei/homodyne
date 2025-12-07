@@ -318,7 +318,7 @@ View coverage report:
 JAX and CPU Debugging
 ^^^^^^^^^^^^^^^^^^^^^
 
-Homodyne v2.3.0+ uses JAX 0.8.0 with CPU-only optimization.
+Homodyne.3.0+ uses JAX 0.8.0 with CPU-only optimization.
 
 Common JAX Debugging Commands
 """"""""""""""""""""""""""""""

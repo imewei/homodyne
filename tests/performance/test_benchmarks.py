@@ -1,5 +1,5 @@
 """
-Performance Benchmarks for Homodyne v2
+Performance Benchmarks for Homodyne
 ======================================
 
 Comprehensive performance benchmarks for computational kernels:

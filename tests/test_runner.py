@@ -1,5 +1,5 @@
 """
-Test Runner and Configuration for Homodyne v2
+Test Runner and Configuration for Homodyne
 ==============================================
 
 Comprehensive test runner with different test profiles:
@@ -17,7 +17,7 @@ from typing import Any, Callable, Dict, List, Mapping
 
 
 class HomodyneTestRunner:
-    """Test runner for Homodyne v2 test suite."""
+    """Test runner for Homodyne test suite."""
 
     def __init__(self, base_dir: Path | None = None):
         """Initialize test runner."""
@@ -216,7 +216,7 @@ class HomodyneTestRunner:
     def print_environment_info(self) -> None:
         """Print test environment information."""
         print("=" * 60)
-        print("Homodyne v2 Test Environment")
+        print("Homodyne Test Environment")
         print("=" * 60)
 
         env_info = self.check_test_environment()
@@ -235,7 +235,7 @@ class HomodyneTestRunner:
 
 def main() -> int:
     """Main test runner entry point."""
-    parser = argparse.ArgumentParser(description="Homodyne v2 Test Runner")
+    parser = argparse.ArgumentParser(description="Homodyne Test Runner")
 
     parser.add_argument(
         "test_type",

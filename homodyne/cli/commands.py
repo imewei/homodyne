@@ -1,4 +1,4 @@
-"""Command Dispatcher for Homodyne v2 CLI
+"""Command Dispatcher for Homodyne CLI
 ======================================
 
 Handles command execution and coordination between CLI arguments,

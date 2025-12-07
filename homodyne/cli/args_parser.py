@@ -1,4 +1,4 @@
-"""Argument Parser for Homodyne v2 CLI
+"""Argument Parser for Homodyne CLI
 ===================================
 
 Simplified argument parsing system for the minimal CLI interface.

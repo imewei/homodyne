@@ -1,4 +1,4 @@
-# Homodyne v2.4: CPU-Optimized JAX-First XPCS Analysis
+# Homodyne.4: CPU-Optimized JAX-First XPCS Analysis
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Python](https://img.shields.io/badge/Python-3.12%2B-blue)](https://www.python.org/)
@@ -214,7 +214,7 @@ Single-shard (small data) | 1 | 5M | ~10 min | baseline |
 - **Windows**: Full support
 - **Python**: 3.12+
 
-**For GPU users**: Use Homodyne v2.2.1 (last GPU-supporting version)
+**For GPU users**: Use Homodyne.2.1 (last GPU-supporting version)
 
 ## Installation
 
@@ -240,7 +240,7 @@ This installs Homodyne with CPU-optimized JAX 0.8.0, suitable for:
 # Uninstall GPU JAX
 pip uninstall -y jax jaxlib
 
-# Install CPU-only Homodyne v2.3.0+
+# Install CPU-only Homodyne.3.0+
 pip install homodyne
 
 # Verify CPU devices
@@ -702,7 +702,7 @@ Based on comprehensive scientific validation (T036-T041):
 
 ### Adaptive Subsampling for Large Datasets
 
-Homodyne v2 includes **intelligent two-layer subsampling** to handle very large datasets
+Homodyne includes **intelligent two-layer subsampling** to handle very large datasets
 (>50M points) while preserving XPCS correlation structure and minimizing accuracy loss.
 
 **Two-Layer Defense System**:
@@ -887,7 +887,7 @@ Existing YAML configuration files work without modification.
 
 ### Multi-Core CPU Configuration
 
-Homodyne v2.3.0+ is optimized for multi-core CPUs on HPC clusters:
+Homodyne.3.0+ is optimized for multi-core CPUs on HPC clusters:
 
 - **36-core nodes**: Reserve 2 cores for OS, use 34 for computation
 - **128-core nodes**: Reserve 4-8 cores for OS, use remaining for computation
@@ -1008,7 +1008,7 @@ If you use this software in your research, please cite both:
 
 ```bibtex
 @software{chen2025homodyne,
-  title={Homodyne v2: JAX-First XPCS Analysis Package},
+  title={Homodyne: JAX-First XPCS Analysis Package},
   author={Chen, Wei and He, Hongrui},
   year={2025},
   organization={Argonne National Laboratory}

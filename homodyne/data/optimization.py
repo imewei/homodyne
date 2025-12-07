@@ -1,4 +1,4 @@
-"""Dataset Size Optimization for Homodyne v2
+"""Dataset Size Optimization for Homodyne
 ==========================================
 
 Memory-efficient data processing strategies for different dataset sizes.

@@ -1,4 +1,4 @@
-"""Theory Computation Engine for Homodyne v2
+"""Theory Computation Engine for Homodyne
 ==========================================
 
 High-level interface to theoretical calculations for homodyne scattering analysis.

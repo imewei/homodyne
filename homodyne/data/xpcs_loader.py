@@ -1,4 +1,4 @@
-"""XPCS Data Loader for Homodyne v2
+"""XPCS Data Loader for Homodyne
 ================================
 
 Enhanced XPCS data loader supporting both APS (old) and APS-U (new) HDF5 formats
@@ -189,7 +189,7 @@ def load_xpcs_config(config_path: str | Path) -> dict[str, Any]:
 
 
 class XPCSDataLoader:
-    """Enhanced XPCS data loader for Homodyne v2.
+    """Enhanced XPCS data loader for Homodyne.
 
     Supports both APS (old) and APS-U (new) formats with YAML-first configuration,
     intelligent caching, and JAX integration.

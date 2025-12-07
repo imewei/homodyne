@@ -20,7 +20,7 @@ Verify your installation:
 
    homodyne --version
 
-You should see ``Homodyne v2.4.1``.
+You should see ``Homodyne.4.1``.
 
 5-Minute Analysis Workflow
 ==========================
@@ -77,7 +77,7 @@ You should see output like:
 
 .. code-block:: text
 
-   Homodyne v2.4.1
+   Homodyne.4.1
    ===============
 
    Loading configuration: my_config.yaml

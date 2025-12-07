@@ -1,5 +1,5 @@
 """
-Integration Tests for Homodyne v2
+Integration Tests for Homodyne
 =================================
 
 Integration tests for complete scientific workflows:

@@ -1,5 +1,5 @@
 """
-API Compatibility Tests for Homodyne v2
+API Compatibility Tests for Homodyne
 =======================================
 
 Tests for API compatibility and backward compatibility:

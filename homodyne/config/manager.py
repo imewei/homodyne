@@ -1,4 +1,4 @@
-"""Minimal Configuration Management for Homodyne v2
+"""Minimal Configuration Management for Homodyne
 ===================================================
 
 Simplified configuration system with preserved API compatibility.

@@ -73,7 +73,7 @@ Expected Output
 
 .. code-block:: text
 
-   Homodyne v2.4.1
+   Homodyne.4.1
    ===============
    Loading: polymer_xpcs.h5
 

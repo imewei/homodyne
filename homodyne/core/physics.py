@@ -1,4 +1,4 @@
-"""Physical Constants and Parameter Validation for Homodyne v2
+"""Physical Constants and Parameter Validation for Homodyne
 ===========================================================
 
 Centralized physical constants, parameter bounds, and validation functions

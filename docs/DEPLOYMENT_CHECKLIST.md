@@ -2,7 +2,7 @@ ______________________________________________________________________
 
 ## orphan: true
 
-# ReadTheDocs Deployment Checklist for Homodyne v2.4
+# ReadTheDocs Deployment Checklist for Homodyne.4
 
 **Documentation Version:** 2.4.1 **Deployment Date:** 2025-12-06 **RTD Environment:**
 Ubuntu 24.04, Python 3.12 **Expected Build Time:** ~3-5 minutes

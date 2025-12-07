@@ -1,4 +1,4 @@
-"""Physical Models for Homodyne v2
+"""Physical Models for Homodyne
 ================================
 
 Object-oriented interface to the physical models implemented in the JAX backend.

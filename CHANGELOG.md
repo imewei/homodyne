@@ -129,7 +129,7 @@ ______________________________________________________________________
 
 #### 🚨 GPU Support Removed - CPU-Only Architecture
 
-**CRITICAL BREAKING CHANGE**: Homodyne v2.3.0 removes all GPU acceleration support. This
+**CRITICAL BREAKING CHANGE**: Homodyne.3.0 removes all GPU acceleration support. This
 is a **hard break** with no migration path.
 
 **Decision:**
@@ -661,7 +661,7 @@ ______________________________________________________________________
 
 ### 🎉 MCMC/CMC Simplification Release
 
-Homodyne v2.1.0 significantly simplifies the MCMC API by removing manual method
+Homodyne.1.0 significantly simplifies the MCMC API by removing manual method
 selection and implementing automatic NUTS/CMC selection based on dataset
 characteristics. This release introduces **breaking changes** to the MCMC interface that
 require configuration updates.
@@ -1282,7 +1282,7 @@ ______________________________________________________________________
 
 ### 🎉 Major Release: Optimistix → NLSQ Migration
 
-Homodyne v2.0 represents a major architectural upgrade, migrating from Optimistix to the
+Homodyne.0 represents a major architectural upgrade, migrating from Optimistix to the
 **NLSQ** package for trust-region nonlinear least squares optimization. **Good news**:
 The migration is **99% backward compatible** - most existing code works without
 modifications!

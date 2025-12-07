@@ -1,4 +1,4 @@
-# Homodyne v2 Test Suite
+# Homodyne Test Suite
 
 Comprehensive test suite for the JAX-first homodyne package covering all aspects of
 scientific computing, performance validation, and API compatibility.
