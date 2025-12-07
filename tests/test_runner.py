@@ -13,7 +13,7 @@ import argparse
 import subprocess
 import sys
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable, Dict, List, Mapping
 
 
 class HomodyneTestRunner:
@@ -172,9 +172,9 @@ class HomodyneTestRunner:
         cmd = ["python", "-m", "pytest"] + test_args
         return subprocess.call(cmd)
 
-    def check_test_environment(self) -> dict[str, Any]:
+    def check_test_environment(self) -> Dict[str, Any]:
         """Check test environment and dependencies."""
-        env_info = {
+        env_info: Dict[str, Any] = {
             "python_version": sys.version,
             "test_directory": str(self.test_dir),
             "dependencies": {},
@@ -233,7 +233,7 @@ class HomodyneTestRunner:
         print("=" * 60)
 
 
-def main():
+def main() -> int:
     """Main test runner entry point."""
     parser = argparse.ArgumentParser(description="Homodyne v2 Test Runner")
 
@@ -271,7 +271,7 @@ def main():
         return 0
 
     # Run appropriate test suite
-    test_methods = {
+    test_methods: Dict[str, Callable[[], int]] = {
         "quick": runner.run_quick_tests,
         "unit": runner.run_unit_tests,
         "integration": runner.run_integration_tests,

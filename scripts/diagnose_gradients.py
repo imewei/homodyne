@@ -25,13 +25,36 @@ Version: 1.0.0
 import argparse
 import json
 import sys
+from dataclasses import dataclass
 from pathlib import Path
+from typing import Any, Dict, Tuple
 
 import numpy as np
-import yaml
+import yaml  # type: ignore[import-untyped]
 
 
-def load_nlsq_results(results_dir: Path) -> tuple:
+@dataclass
+class NLSQData:
+    """Lightweight container for NLSQ fitted data."""
+
+    phi: np.ndarray
+    t1: np.ndarray
+    t2: np.ndarray
+    g2: np.ndarray
+    q: float
+    L: float
+    dt: float
+    per_angle_scaling_solver: np.ndarray | None = None
+
+
+@dataclass
+class NLSQConfig:
+    """Placeholder for config data required by diagnostics."""
+
+    raw: Dict[str, Any] | None = None
+
+
+def load_nlsq_results(results_dir: Path) -> Tuple[Dict[str, float], NLSQData, NLSQConfig, str]:
     """Load NLSQ results from directory."""
     # Load parameters
     param_file = results_dir / "parameters.json"
@@ -53,22 +76,23 @@ def load_nlsq_results(results_dir: Path) -> tuple:
 
     npz_data = np.load(npz_file)
 
-    # Create data object
-    class DataObject:
-        pass
-
-    data = DataObject()
-    data.phi = npz_data["phi_angles"]
-    data.t1 = npz_data["t1"]
-    data.t2 = npz_data["t2"]
-    data.g2 = npz_data["c2_exp"]
-    data.q = float(npz_data["q"][0])
-    data.L = 2_000_000.0  # Default
-    data.dt = float(npz_data["t1"][1] - npz_data["t1"][0])
-
-    # Load per-angle scaling if available
-    if "per_angle_scaling_solver" in npz_data:
-        data.per_angle_scaling_solver = npz_data["per_angle_scaling_solver"]
+    per_angle_scaling = (
+        npz_data["per_angle_scaling_solver"]
+        if "per_angle_scaling_solver" in npz_data
+        else None
+    )
+    data = NLSQData(
+        phi=npz_data["phi_angles"],
+        t1=npz_data["t1"],
+        t2=npz_data["t2"],
+        g2=npz_data["c2_exp"],
+        q=float(npz_data["q"][0]),
+        L=2_000_000.0,  # Default
+        dt=float(npz_data["t1"][1] - npz_data["t1"][0]),
+        per_angle_scaling_solver=per_angle_scaling
+        if isinstance(per_angle_scaling, np.ndarray)
+        else None,
+    )
 
     # Load analysis results to get analysis_mode
     analysis_file = results_dir / "analysis_results_nlsq.json"
@@ -78,16 +102,12 @@ def load_nlsq_results(results_dir: Path) -> tuple:
             analysis_data = json.load(f)
             analysis_mode = analysis_data.get("analysis_mode", "laminar_flow")
 
-    # Create minimal config
-    class ConfigObject:
-        pass
-
-    config = ConfigObject()
+    config = NLSQConfig()
 
     return parameters, data, config, analysis_mode
 
 
-def main():
+def main() -> int:
     parser = argparse.ArgumentParser(
         description="Diagnose gradient imbalance in NLSQ optimization results",
         formatter_class=argparse.RawDescriptionHelpFormatter,
@@ -213,6 +233,8 @@ For more information, see:
         traceback.print_exc()
         sys.exit(1)
 
+    return 0
+
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())
