@@ -2,7 +2,7 @@
 # HOMODYNE LAMINAR FLOW CONFIGURATION TEMPLATE
 # ==============================================================================
 # Comprehensive production-ready template for laminar flow analysis.
-# 7-parameter model: D(t,φ) = D₀·t^α + D_offset + shear_effects(γ̇(t),φ)
+# 7-parameter model: D(t) = D₀·t^α + D_offset
 #                   γ̇(t) = γ̇₀·t^β + γ̇_offset
 #
 # Use for: Nonequilibrium systems, shear flow, time-dependent shear rates
@@ -18,12 +18,12 @@
 # Template metadata describing analysis configuration
 metadata:
   config_version: "2.4.1" # Configuration file format version
-  description: "Laminar flow analysis - 7-parameter model (v2.4.1: CPU-only, per-angle mandatory, CMC-only MCMC)"
+  description: "Laminar flow analysis - 7-parameter model"
   analysis_mode: "laminar_flow" # Laminar flow mode
   parameter_count: 7 # D₀, α, D_offset, γ̇₀, β, γ̇_offset, φ₀
 
   # Physics model description
-  physics_model: "D(t,φ) = D₀·t^α + D_offset + shear_effects(γ̇(t),φ)"
+  physics_model: "D(t) = D₀·t^α + D_offset"
   shear_model: "γ̇(t) = γ̇₀·t^β + γ̇_offset" # Time-dependent shear rate
 
   # Integration and correction methods
@@ -324,6 +324,49 @@ optimization:
     trust_region_scale: 1.0 # Trust region scaling factor (0.1-10.0)
     verbose: false # Print iteration details
 
+    # ROBUST LOSS FUNCTION SELECTION
+    # --------------------------------
+    # Controls how outliers affect the fit. All loss functions are JAX JIT-compiled.
+    #
+    # Available options:
+    #   "linear"  - Standard least squares: ρ(z) = z
+    #               No outlier protection; fastest; optimal for clean data
+    #
+    #   "huber"   - Huber loss: ρ(z) = z if z ≤ 1, else 2√z - 1
+    #               Quadratic for small residuals, linear for large
+    #               Good balance between efficiency and robustness
+    #
+    #   "soft_l1" - Soft L1 loss: ρ(z) = 2(√(1+z) - 1)
+    #               Smooth approximation to L1 norm
+    #               More robust than Huber; preserves differentiability
+    #               RECOMMENDED DEFAULT for XPCS data
+    #
+    #   "cauchy"  - Cauchy/Lorentzian: ρ(z) = ln(1 + z)
+    #               Extremely robust; handles heavy-tailed errors
+    #               May converge slowly; use cautiously
+    #
+    #   "arctan"  - Arctangent: ρ(z) = arctan(z)
+    #               Bounded loss; very robust to extreme outliers
+    #               May converge slowly; use cautiously
+    #
+    # LOSS FUNCTION SELECTION FOR XPCS:
+    # ----------------------------------
+    # | Data Quality              | Recommended Loss |
+    # |---------------------------|------------------|
+    # | Clean, well-characterized | "linear"         |
+    # | Typical XPCS data         | "soft_l1"        |
+    # | Few outliers/artifacts    | "huber"          |
+    # | Many outliers             | "soft_l1"        |
+    # | Severe contamination      | "cauchy"         |
+    # | Unknown quality           | "soft_l1"        |
+    #
+    # XPCS-specific considerations:
+    #   - Detector artifacts, cosmic rays, dead pixels → use "soft_l1"
+    #   - High-quality synchrotron data → "linear" or "huber"
+    #   - If convergence issues with "cauchy"/"arctan" → fall back to "soft_l1"
+    #
+    loss: "soft_l1"
+
     # Parameter-Specific Scaling (CRITICAL FOR LAMINAR FLOW)
     # -------------------------------------------------------
     # Fixes gradient imbalance: shear parameters can have 100-10,000× larger gradients
@@ -374,20 +417,20 @@ optimization:
   # CMC-only architecture (v2.4.1): per-shard NUTS sampling with
   # weighted Gaussian combination of subposteriors
   # Provides full posterior distributions and uncertainty estimates
+  # For laminar_flow with 7 parameters: increased warmup recommended
   mcmc:
-    backend: "numpyro" # Options: "numpyro" | "blackjax"
-    num_warmup: 2500 # NUTS warmup/adaptation samples
-    num_samples: 6000 # Posterior samples per chain
-    num_chains: 4 # Parallel chains
-    progress_bar: true # Show sampling progress
-    target_accept_prob: 0.90 # NUTS target acceptance probability
-    max_tree_depth: 12 # Maximum NUTS tree depth
-    dense_mass_matrix: true # Full covariance mass matrix
-    sharding:
-      num_shards: auto # auto = choose based on hardware
-      seed_base: 0 # Base RNG seed for shard seeds
+    backend: "numpyro"           # "numpyro" | "blackjax"
+    num_warmup: 1000             # Increase if divergences persist
+    num_samples: 3000            # Lower for diagnostics, raise for publication
+    num_chains: 4                # ≥2 for R-hat calculation
+    progress_bar: true
+    target_accept_prob: 0.90     # NUTS target acceptance
+    max_tree_depth: 12
+    dense_mass_matrix: true      # Full covariance adaptation
+
+    # Per-phi initialization (rarely needed)
     initial_values:
-      phi: {} # Optional per-phi overrides: angle_deg: {contrast, offset}
+      phi: {}                    # {angle_deg: {contrast: X, offset: Y}}
       percentile_fallback:
         contrast_low_pct: 5
         contrast_high_pct: 95
@@ -450,12 +493,13 @@ optimization:
       validate_results: true # Validate combined posterior quality
       min_success_rate: 0.8 # Minimum fraction of shards that must converge (0.0-1.0)
 
-    # Per-shard MCMC configuration
+    # Per-shard MCMC (overrides base mcmc settings for shards)
     per_shard_mcmc:
-      num_warmup: 750 # Warmup steps per shard
-      num_samples: 1500 # Samples per shard
-      num_chains: 2 # Chains per shard
-      subsample_size: "auto" # Subsample size (int or "auto" for automatic subsampling)
+      num_warmup: 100
+      num_samples: 3000
+      num_chains: 4
+      subsample_size: "auto"
+      target_accept_prob: 0.80
 
     # Convergence validation
     validation:
@@ -683,7 +727,7 @@ validation:
 #
 # LAMINAR FLOW PHYSICS:
 # ---------------------
-# Model: D(t,φ) = D₀·t^α + D_offset + shear_effects(γ̇(t),φ)
+# Model: D(t) = D₀·t^α + D_offset
 #        γ̇(t) = γ̇₀·t^β + γ̇_offset
 #
 # Diffusion parameters:

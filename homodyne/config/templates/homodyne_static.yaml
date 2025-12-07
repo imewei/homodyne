@@ -2,7 +2,7 @@
 # HOMODYNE STATIC DIFFUSION CONFIGURATION TEMPLATE
 # ==============================================================================
 # Comprehensive production-ready template for static diffusion analysis.
-# 3-parameter model: D(t,φ) = D₀·t^α + D_offset
+# 3-parameter model: D(t) = D₀·t^α + D_offset
 #
 # Use for: Equilibrium systems, pure diffusion, anomalous diffusion
 # Parameter count: 3 physical + 2 × N_angles scaling = 3 + 2N total
@@ -17,12 +17,12 @@
 # Template metadata describing analysis configuration
 metadata:
   config_version: "2.4.1" # Configuration file format version
-  description: "Static diffusion analysis - 3-parameter model (v2.4.1: CPU-only, per-angle mandatory, CMC-only MCMC)"
+  description: "Static diffusion analysis - 3-parameter model"
   analysis_mode: "static" # Static diffusion mode
   parameter_count: 3 # D₀, α, D_offset
 
   # Physics model description
-  physics_model: "D(t,φ) = D₀·t^α + D_offset" # No shear effects (equilibrium)
+  physics_model: "D(t) = D₀·t^α + D_offset" # No shear effects (equilibrium)
 
   # Integration and correction methods
   integration_method: "discrete_numerical" # Discrete numerical integration for stability
@@ -270,6 +270,49 @@ optimization:
     trust_region_scale: 1.0 # Trust region scaling factor (0.1-10.0)
     verbose: false # Print iteration details
 
+    # ROBUST LOSS FUNCTION SELECTION
+    # --------------------------------
+    # Controls how outliers affect the fit. All loss functions are JAX JIT-compiled.
+    #
+    # Available options:
+    #   "linear"  - Standard least squares: ρ(z) = z
+    #               No outlier protection; fastest; optimal for clean data
+    #
+    #   "huber"   - Huber loss: ρ(z) = z if z ≤ 1, else 2√z - 1
+    #               Quadratic for small residuals, linear for large
+    #               Good balance between efficiency and robustness
+    #
+    #   "soft_l1" - Soft L1 loss: ρ(z) = 2(√(1+z) - 1)
+    #               Smooth approximation to L1 norm
+    #               More robust than Huber; preserves differentiability
+    #               RECOMMENDED DEFAULT for XPCS data
+    #
+    #   "cauchy"  - Cauchy/Lorentzian: ρ(z) = ln(1 + z)
+    #               Extremely robust; handles heavy-tailed errors
+    #               May converge slowly; use cautiously
+    #
+    #   "arctan"  - Arctangent: ρ(z) = arctan(z)
+    #               Bounded loss; very robust to extreme outliers
+    #               May converge slowly; use cautiously
+    #
+    # LOSS FUNCTION SELECTION FOR XPCS:
+    # ----------------------------------
+    # | Data Quality              | Recommended Loss |
+    # |---------------------------|------------------|
+    # | Clean, well-characterized | "linear"         |
+    # | Typical XPCS data         | "soft_l1"        |
+    # | Few outliers/artifacts    | "huber"          |
+    # | Many outliers             | "soft_l1"        |
+    # | Severe contamination      | "cauchy"         |
+    # | Unknown quality           | "soft_l1"        |
+    #
+    # XPCS-specific considerations:
+    #   - Detector artifacts, cosmic rays, dead pixels → use "soft_l1"
+    #   - High-quality synchrotron data → "linear" or "huber"
+    #   - If convergence issues with "cauchy"/"arctan" → fall back to "soft_l1"
+    #
+    loss: "soft_l1"
+
     # Parameter-Specific Scaling (Optional for Static Mode)
     # ------------------------------------------------------
     # Less critical than laminar flow, but can help if alpha has large gradients
@@ -345,64 +388,75 @@ optimization:
   # - Combines results using weighted averaging
 
   # ---------------------------------------------------------------------------
-  # MCMC - Markov Chain Monte Carlo (Uncertainty Quantification)
+  # MCMC - Base MCMC Sampler Configuration
   # ---------------------------------------------------------------------------
-  # CMC-only architecture (v2.4.1): per-shard NUTS sampling with
-  # weighted Gaussian combination of subposteriors
-  # Provides full posterior distributions and uncertainty estimates
+  # Base configuration for NumPyro/BlackJAX NUTS sampler.
+  # Used by CMC shards; can be overridden in cmc.per_shard_mcmc.
   mcmc:
-    backend: "numpyro" # Options: "numpyro" | "blackjax"
-    num_warmup: 2000 # NUTS warmup/adaptation samples
-    num_samples: 5000 # Posterior samples per chain
-    num_chains: 4 # Parallel chains
-    progress_bar: true # Show sampling progress
-    target_accept_prob: 0.90 # NUTS target acceptance probability
-    max_tree_depth: 12 # Maximum NUTS tree depth
-    dense_mass_matrix: true # Full covariance mass matrix
-    # Data sharding configuration (CMC-only in v3.0)
-    sharding:
-      strategy: "stratified" # Options: "stratified" | "random" | "contiguous"
-      num_shards: "auto" # Number of shards (int or "auto" for automatic)
-      max_points_per_shard: "auto" # Maximum points per shard (int or "auto")
-      seed_base: 0 # Base RNG seed for shard seeds
+    backend: "numpyro"           # "numpyro" | "blackjax"
+    num_warmup: 1000             # Increase if divergences persist
+    num_samples: 3000            # Lower for diagnostics, raise for publication
+    num_chains: 4                # ≥2 for R-hat calculation
+    progress_bar: true
+    target_accept_prob: 0.90     # NUTS target acceptance
+    max_tree_depth: 12
+    dense_mass_matrix: true      # Full covariance adaptation
 
-    # Per-phi initialization values
+    # Per-phi initialization (rarely needed)
     initial_values:
-      phi: {} # Optional per-phi overrides: angle_deg: {contrast, offset}
+      phi: {}                    # {angle_deg: {contrast: X, offset: Y}}
       percentile_fallback:
         contrast_low_pct: 5
         contrast_high_pct: 95
         offset_pct: 50
 
+  # ---------------------------------------------------------------------------
+  # CMC - Consensus Monte Carlo (v2.4.1: Only MCMC Path)
+  # ---------------------------------------------------------------------------
+  # Parallelizes MCMC across data shards using per-shard NUTS sampling.
+  # Combines subposteriors via weighted Gaussian product.
+  cmc:
+    enable: "auto"               # true | false | "auto"
+    min_points_for_cmc: 500000   # Threshold for auto-enable
+    backend: "jax"               # "jax" | "numpy"
+
     # Backend configuration for parallel execution
     backend_config:
-      name: "auto" # Options: "auto" | "pjit" | "multiprocessing" | "pbs" | "slurm"
-      enable_checkpoints: true # Enable checkpoint functionality
-      checkpoint_frequency: 1 # Save checkpoint every N shards
-      checkpoint_dir: "./cmc_checkpoints" # Directory for CMC checkpoint files
-      keep_last_checkpoints: 3 # Number of recent checkpoints to keep
-      resume_from_checkpoint: true # Auto-resume from latest checkpoint
+      name: "auto"               # "auto" | "multiprocessing" | "pjit" | "pbs" | "slurm"
+      enable_checkpoints: true
+      checkpoint_frequency: 1    # Save every N shards
+      checkpoint_dir: "./cmc_checkpoints"
+      keep_last_checkpoints: 3
+      resume_from_checkpoint: true
 
-    # Subposterior combination method
+    # Data sharding
+    sharding:
+      strategy: "stratified"     # "stratified" (angle-aware) | "random" | "contiguous"
+      num_shards: "auto"         # "auto" uses n_phi for stratified
+      max_points_per_shard: "auto"
+      seed_base: 0               # Shard seed = seed_base + shard_id
+
+    # Subposterior combination
     combination:
-      method: "weighted_gaussian" # Options: "weighted_gaussian" | "simple_average" | "auto"
-      validate_results: true # Validate combined posterior quality
-      min_success_rate: 0.8 # Minimum fraction of shards that must converge (0.0-1.0)
+      method: "weighted_gaussian"  # "weighted_gaussian" | "simple_average" | "auto"
+      validate_results: true
+      min_success_rate: 0.90     # Require 90% shard convergence
 
-    # Per-shard MCMC configuration
+    # Per-shard MCMC (overrides base mcmc settings for shards)
     per_shard_mcmc:
-      num_warmup: 500 # Warmup steps per shard
-      num_samples: 1000 # Samples per shard
-      num_chains: 2 # Chains per shard
-      subsample_size: "auto" # Subsample size (int or "auto" for automatic subsampling)
+      num_warmup: 100
+      num_samples: 3000
+      num_chains: 4
+      subsample_size: "auto"
+      target_accept_prob: 0.80
 
     # Convergence validation
     validation:
-      strict_mode: false # Fail if validation criteria not met
-      min_per_shard_ess: 100 # Minimum effective sample size per parameter per shard
-      max_per_shard_rhat: 1.2 # Maximum R-hat per parameter per shard
-      max_between_shard_kl: 0.5 # Maximum KL divergence between shard posteriors
-      min_success_rate: 0.8 # Minimum fraction of shards that must converge
+      strict_mode: true          # Fail if thresholds not met
+      min_per_shard_ess: 100.0   # Effective sample size threshold
+      max_per_shard_rhat: 1.1    # R-hat threshold
+      max_between_shard_kl: 2.0  # KL divergence between shards
+      min_success_rate: 0.90
 
 # ==============================================================================
 # NOISE ESTIMATION (Optional)
@@ -622,7 +676,7 @@ validation:
 #
 # STATIC DIFFUSION PHYSICS:
 # -------------------------
-# Model: D(t,φ) = D₀·t^α + D_offset
+# Model: D(t) = D₀·t^α + D_offset
 #
 # Parameters:
 #   D₀: Diffusion coefficient prefactor (magnitude)
