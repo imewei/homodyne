@@ -950,12 +950,12 @@ class TestParameterNameValidation:
 class TestMCMCModelConsistency:
     """Test parameter name consistency in MCMC model definitions.
 
-    NOTE: These tests use legacy internal MCMC functions that were removed in CMC v3.0.
-    CMC v3.0 uses a simplified architecture with fit_mcmc_jax() as the main entry point.
+    NOTE: These tests use legacy internal MCMC functions that were removed in CMC.
+    CMC uses a simplified architecture with fit_mcmc_jax() as the main entry point.
     """
 
     @pytest.mark.skip(
-        reason="Legacy _create_numpyro_model removed in CMC v3.0. "
+        reason="Legacy _create_numpyro_model removed in CMC. "
         "Use homodyne.optimization.cmc.core.fit_mcmc_jax() instead."
     )
     def test_mcmc_model_param_names_static(self):
@@ -1000,7 +1000,7 @@ class TestMCMCModelConsistency:
             )
 
     @pytest.mark.skip(
-        reason="Legacy _create_numpyro_model removed in CMC v3.0. "
+        reason="Legacy _create_numpyro_model removed in CMC. "
         "Use homodyne.optimization.cmc.core.fit_mcmc_jax() instead."
     )
     def test_mcmc_model_param_names_laminar(self):
@@ -1049,13 +1049,13 @@ class TestMCMCModelConsistency:
 class TestPjitBackendConsistency:
     """Test parameter name consistency in pjit backend sample extraction.
 
-    NOTE: These tests check legacy PjitBackend internal methods that don't exist in CMC v3.0.
-    CMC v3.0 PjitBackend has a simplified API without _run_single_shard_mcmc.
+    NOTE: These tests check legacy PjitBackend internal methods that don't exist in CMC.
+    CMC PjitBackend has a simplified API without _run_single_shard_mcmc.
     """
 
     @pytest.mark.skip(
-        reason="Legacy PjitBackend._run_single_shard_mcmc removed in CMC v3.0. "
-        "CMC v3.0 uses a simplified backend API."
+        reason="Legacy PjitBackend._run_single_shard_mcmc removed in CMC. "
+        "CMC uses a simplified backend API."
     )
     def test_pjit_no_old_incorrect_names(self):
         """Verify pjit backend does not contain old incorrect parameter names."""

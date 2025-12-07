@@ -10,74 +10,74 @@ Mathematical Foundation
 Core Correlation Equation
 ~~~~~~~~~~~~~~~~~~~~~~~~~
 
-The fundamental quantity analyzed is the two-time intensity correlation function.
-The relationship between the intensity correlation :math:`c_2` and the field correlation
-:math:`c_1` follows the Siegert relation:
+The homodyne intensity correlation uses per-angle scaling:
 
 .. math::
 
-   c_2(\phi, t_1, t_2) = 1 + \beta \left[ c_1(\phi, t_1, t_2) \right]^2
+   c_2(\phi, t_1, t_2) = \text{offset} + \text{contrast} \times \left[c_1(\phi, t_1, t_2)\right]^2
 
-where:
-
-* :math:`c_2(\phi, t_1, t_2)`: Two-time intensity correlation function
-* :math:`c_1(\phi, t_1, t_2)`: Two-time field correlation function
-* :math:`\beta`: Instrumental contrast parameter (typically 0 < :math:`\beta` < 1)
-* :math:`\phi`: Azimuthal angle between flow direction and scattering wavevector
-* :math:`t_1, t_2`: Two time points defining the correlation window
-
-In the Homodyne implementation, this is parameterized with per-angle scaling as:
-
-.. math::
-
-   c_2(\phi_i, t_1, t_2) = \text{offset}_i + \text{contrast}_i \times \left[ c_1(\phi_i, t_1, t_2) \right]^2
-
-where :math:`\text{contrast}_i` and :math:`\text{offset}_i` are per-angle parameters
-that account for instrumental variations across different detector positions.
-
-Field Correlation Function
-~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-The field correlation function captures both diffusive and advective contributions:
+with a separable field correlation:
 
 .. math::
 
    c_1(\phi, t_1, t_2) = c_1^{\text{diff}}(t_1, t_2) \times c_1^{\text{shear}}(\phi, t_1, t_2)
 
-**Diffusion Contribution:**
+Diffusion Contribution
+~~~~~~~~~~~~~~~~~~~~~~
 
 .. math::
 
-   c_1^{\text{diff}}(t_1, t_2) = \exp\left[-\frac{q^2}{2} J(t_1, t_2)\right]
+   c_1^{\text{diff}}(t_1, t_2) = \exp\!\left[-\frac{q^2}{2} \int\limits_{|t_2 - t_1|} D(t') \, dt'\right]
 
-where :math:`q` is the scattering wavevector magnitude and :math:`J(t_1, t_2)` is the
-diffusion integral.
-
-**Shear Contribution:**
+Shear Contribution
+~~~~~~~~~~~~~~~~~~
 
 .. math::
 
-   c_1^{\text{shear}}(\phi, t_1, t_2) = \text{sinc}^2\left[\frac{qh}{2\pi} \Gamma(t_1, t_2) \cos(\phi - \phi_0)\right]
+   c_1^{\text{shear}}(\phi, t_1, t_2) = \left[\operatorname{sinc}\!\big(\Phi(\phi, t_1, t_2)\big)\right]^2
 
-where :math:`h` is the gap between stator and rotor, :math:`\Gamma(t_1, t_2)` is the
-shear integral, and :math:`\phi_0` is the flow direction angle.
+with
+
+.. math::
+
+   \Phi(\phi, t_1, t_2) = \frac{1}{2\pi} \, q \, L \, \cos(\phi_0 - \phi) \, \int\limits_{|t_2 - t_1|} \dot{\gamma}(t') \, dt'
 
 Time-Dependent Transport Coefficients
--------------------------------------
-
-Diffusion Coefficient
-~~~~~~~~~~~~~~~~~~~~~
-
-The time-dependent diffusion coefficient follows a power-law parameterization for
-anomalous diffusion:
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. math::
 
-   D(t) = D_0 \cdot t^{\alpha} + D_{\text{offset}}
+   D(t) = D_0 \, t^{\alpha} + D_{\text{offset}}
 
-where:
+.. math::
 
-* :math:`D_0`: Baseline diffusion coefficient [units depend on :math:`\alpha`]
+   \dot{\gamma}(t) = \dot{\gamma}_0 \, t^{\beta} + \dot{\gamma}_{\text{offset}}
+
+Parameter Sets
+--------------
+
+**Static Mode (3 parameters)**
+
+- :math:`D_0`: Reference diffusion coefficient [Å²/s]
+- :math:`\alpha`: Diffusion time-dependence exponent [-]
+- :math:`D_{\text{offset}}`: Baseline diffusion [Å²/s]
+- Shear parameters set to zero, :math:`\phi_0 = 0` (irrelevant)
+
+**Laminar Flow Mode (7 parameters)**
+
+- :math:`D_0`, :math:`\alpha`, :math:`D_{\text{offset}}`
+- :math:`\dot{\gamma}_0`: Reference shear rate [s⁻¹]
+- :math:`\beta`: Shear rate time-dependence exponent [-]
+- :math:`\dot{\gamma}_{\text{offset}}`: Baseline shear rate [s⁻¹]
+- :math:`\phi_0`: Angular offset [degrees]
+
+Experimental Parameters
+-----------------------
+
+- :math:`q`: Scattering wavevector magnitude [Å⁻¹]
+- :math:`L`: Characteristic length scale / gap size [Å]
+- :math:`\phi`: Scattering angle [degrees]
+- :math:`dt`: Time step between frames [s/frame]
 * :math:`\alpha`: Diffusion scaling exponent (dimensionless)
     - :math:`\alpha = 0`: Normal diffusion
     - :math:`\alpha < 0`: Subdiffusion (constrained motion)

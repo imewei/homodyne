@@ -1672,7 +1672,7 @@ def test_mcmc_with_manual_initial_params(simple_static_data):
         analysis_mode="static",
         parameter_space=param_space,
         initial_params=initial_params,  # Manual initialization
-        # Uses CMC framework (CMC-only in v3.0)
+        # Uses CMC framework (CMC-only architecture)
         n_samples=200,  # Small for speed
         n_warmup=100,
         n_chains=1,  # Single chain for speed
@@ -1723,9 +1723,9 @@ def test_automatic_nuts_selection_small_dataset(simple_static_data):
         n_chains=1,
     )
 
-    # Verify result structure (CMCResult v3.0 API)
+    # Verify result structure (CMCResult API)
     assert isinstance(result, MCMCResult)
-    # CMC v3.0 uses NUTS internally, verified via is_cmc_result()
+    # CMC uses NUTS internally, verified via is_cmc_result()
     assert result.is_cmc_result()
     # CMCResult doesn't have sampler attribute; it always uses NUTS
     assert result.parameters is not None

@@ -1,17 +1,17 @@
 """JAX-First Optimization for Homodyne.4
 ==========================================
 
-Simplified optimization system using NLSQ package (primary) and CMC v3.0
+Simplified optimization system using NLSQ package (primary) and CMC
 (high-accuracy Bayesian) for robust parameter estimation in homodyne analysis.
 
 This module implements the streamlined optimization philosophy:
 1. NLSQ as primary method (fast, reliable parameter estimation)
-2. CMC v3.0 (NumPyro/NUTS) for uncertainty quantification
+2. CMC (NumPyro/NUTS) for uncertainty quantification
 3. Unified homodyne model: c2_fitted = c2_theory * contrast + offset
 
 Key Features:
 - NLSQ trust-region optimization (Levenberg-Marquardt) as foundation
-- CMC v3.0: Fresh reimplementation with ArviZ-native output
+- CMC: Fresh reimplementation with ArviZ-native output
 - CPU-primary architecture (GPU removed in v2.3.0)
 - Dataset size-aware optimization strategies
 
@@ -19,7 +19,7 @@ Performance Comparison:
 - NLSQ: Fast, reliable parameter estimation
 - CMC: Full posterior sampling, publication-quality uncertainty
 
-Note: Legacy mcmc/ package removed in v3.0. CMC v3.0 is the sole MCMC backend.
+Note: Legacy mcmc/ package removed in v3.0. CMC is the sole MCMC backend.
 """
 
 # Handle NLSQ imports with intelligent fallback
@@ -62,7 +62,7 @@ except ImportError as e:
     optimize_per_angle_sequential = None
     NLSQ_AVAILABLE = False
 
-# Handle CMC v3.0 imports (NO FALLBACK to legacy mcmc - it's removed)
+# Handle CMC imports (NO FALLBACK to legacy mcmc - it's removed)
 try:
     from homodyne.optimization.cmc import (
         CMCConfig,
@@ -73,7 +73,7 @@ try:
     # Aliases for backward compatibility
     MCMCResult = CMCResult
 
-    # CMC v3.0 uses NumPyro/JAX
+    # CMC uses NumPyro/JAX
     MCMC_JAX_AVAILABLE = True
     NUMPYRO_AVAILABLE = True
     BLACKJAX_AVAILABLE = True
@@ -94,7 +94,7 @@ except ImportError as e:
 OPTIMIZATION_STATUS = {
     "nlsq_available": NLSQ_AVAILABLE,
     "mcmc_available": MCMC_AVAILABLE,
-    "cmc_available": MCMC_AVAILABLE,  # CMC v3.0 is the MCMC backend
+    "cmc_available": MCMC_AVAILABLE,  # CMC is the MCMC backend
     "jax_available": MCMC_JAX_AVAILABLE if MCMC_AVAILABLE else False,
     "numpyro_available": NUMPYRO_AVAILABLE if MCMC_AVAILABLE else False,
     "blackjax_available": BLACKJAX_AVAILABLE if MCMC_AVAILABLE else False,
@@ -104,10 +104,10 @@ OPTIMIZATION_STATUS = {
 __all__ = [
     # Primary optimization methods
     "fit_nlsq_jax",  # NLSQ trust-region (PRIMARY)
-    "fit_mcmc_jax",  # CMC v3.0 NumPyro/NUTS (SECONDARY)
+    "fit_mcmc_jax",  # CMC NumPyro/NUTS (SECONDARY)
     # Result classes
     "NLSQResult",
-    "CMCResult",  # CMC v3.0 result class
+    "CMCResult",  # CMC result class
     "MCMCResult",  # Alias for backward compatibility
     "CMCConfig",  # CMC configuration
     # NLSQ components
@@ -153,7 +153,7 @@ def get_optimization_info():
 
     if MCMC_AVAILABLE:
         info["recommendations"].append(
-            "Use fit_mcmc_jax() for uncertainty quantification (CMC v3.0)",
+            "Use fit_mcmc_jax() for uncertainty quantification (CMC)",
         )
 
     if not NLSQ_AVAILABLE and not MCMC_AVAILABLE:

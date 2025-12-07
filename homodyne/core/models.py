@@ -5,13 +5,39 @@ Object-oriented interface to the physical models implemented in the JAX backend.
 Provides structured access to diffusion, shear, and combined models with
 parameter validation and configuration management.
 
-This module wraps the low-level JAX functions in user-friendly classes that
-handle parameter management, bounds checking, and model configuration.
+Homodyne Model
+--------------------------
+The measured intensity correlation uses per-angle scaling:
 
-Physical Models:
-- DiffusionModel: Anomalous diffusion D(t) = D₀ t^α + D_offset
-- ShearModel: Time-dependent shear γ̇(t) = γ̇₀ t^β + γ̇_offset
-- CombinedModel: Full homodyne model with diffusion + shear
+    c2(φ, t₁, t₂) = offset + contrast × [c1(φ, t₁, t₂)]²
+
+with a separable field correlation function:
+
+    c1(φ, t₁, t₂) = c1_diff(t₁, t₂) × c1_shear(φ, t₁, t₂)
+
+Diffusion contribution:
+
+    c1_diff(t₁, t₂) = exp[-(q² / 2) ∫|t₂ - t₁| D(t') dt']
+
+Shear contribution:
+
+    c1_shear(φ, t₁, t₂) = [sinc(Φ(φ, t₁, t₂))]²
+    Φ(φ, t₁, t₂) = (1 / 2π) · q · L · cos(φ₀ - φ) · ∫|t₂ - t₁| γ̇(t') dt'
+
+Time-dependent transport coefficients:
+
+    D(t) = D₀ · t^α + D_offset
+    γ̇(t) = γ̇₀ · t^β + γ̇_offset
+
+Parameter sets:
+- Static mode (3 params): D₀, α, D_offset (γ̇₀, β, γ̇_offset, φ₀ fixed/irrelevant)
+- Laminar flow (7 params): D₀, α, D_offset, γ̇₀, β, γ̇_offset, φ₀
+
+Experimental parameters:
+- q: scattering wavevector magnitude [Å⁻¹]
+- L: gap/characteristic length [Å]
+- φ: scattering angle [degrees]
+- dt: frame time step [s]
 """
 
 import time

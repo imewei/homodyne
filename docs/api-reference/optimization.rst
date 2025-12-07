@@ -4,7 +4,7 @@ Optimization Module
 The :mod:`homodyne.optimization` module provides two complementary optimization methods for parameter estimation in homodyne scattering analysis:
 
 1. **NLSQ** (Primary): Fast, reliable trust-region optimization using Levenberg-Marquardt
-2. **CMC v3.0** (Secondary): Bayesian uncertainty quantification using Consensus Monte Carlo
+2. **CMC** (Secondary): Bayesian uncertainty quantification using Consensus Monte Carlo
 
 .. contents:: Contents
    :local:
@@ -16,7 +16,7 @@ Overview
 **Optimization Philosophy** (v2.4.1):
 
 - NLSQ as primary method for fast parameter estimation
-- CMC v3.0 (NumPyro/NUTS) for publication-quality uncertainty quantification
+- CMC (NumPyro/NUTS) for publication-quality uncertainty quantification
 - CPU-optimized architecture (v2.3.0+)
 - Dataset size-aware strategy selection
 
@@ -32,7 +32,7 @@ Overview
    * - NLSQ
      - Fast parameter estimation, exploratory analysis
      - ~seconds for 1M points
-   * - CMC v3.0
+   * - CMC
      - Uncertainty quantification, publication figures
      - ~minutes (parallelized)
 
@@ -136,7 +136,7 @@ Sequential Optimization
 CMC: Consensus Monte Carlo
 ---------------------------
 
-CMC v3.0 provides Bayesian parameter estimation with full posterior sampling using NumPyro/NUTS.
+CMC provides Bayesian parameter estimation with full posterior sampling using NumPyro/NUTS.
 
 **Key Features**:
 
@@ -257,7 +257,7 @@ Plotting
 Backends
 ~~~~~~~~
 
-CMC v3.0 supports multiple parallelization backends:
+CMC supports multiple parallelization backends:
 
 .. automodule:: homodyne.optimization.cmc.backends
    :members:
@@ -330,7 +330,7 @@ Usage Examples
 
     print(f"Best-fit D0: {result.params['D0']:.2f}")
 
-**CMC v3.0 Optimization**::
+**CMC Optimization**::
 
     from homodyne.optimization import fit_mcmc_jax, CMCConfig
 

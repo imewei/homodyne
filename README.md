@@ -89,6 +89,26 @@ correlation functions.
 A completely rebuilt homodyne package with JAX-first architecture, optimized for HPC and
 supercomputer environments.
 
+## Homodyne Correlation Model
+
+```
+c2(φ, t1, t2) = offset + contrast * [c1(φ, t1, t2)]^2
+c1(φ, t1, t2) = c1_diff(t1, t2) * c1_shear(φ, t1, t2)
+
+c1_diff(t1, t2) = exp[-(q^2 / 2) * ∫|t2 - t1| D(t') dt']
+c1_shear(φ, t1, t2) = [sinc(Φ(φ, t1, t2))]^2
+Φ(φ, t1, t2) = (1 / 2π) * q * L * cos(φ0 - φ) * ∫|t2 - t1| γ̇(t') dt'
+
+D(t) = D0 * t^α + D_offset
+γ̇(t) = γ̇0 * t^β + γ̇_offset
+```
+
+Parameter sets:
+- Static (3): D0, α, D_offset (shear terms ignored, φ0 = 0)
+- Laminar flow (7): D0, α, D_offset, γ̇0, β, γ̇_offset, φ0
+
+Experimental parameters: q (Å⁻¹), L (Å), φ (deg), dt (s/frame); contrast/offset are per-angle.
+
 ## Architecture Overview
 
 This rebuild achieves **~70% complexity reduction** while maintaining **100% API

@@ -52,7 +52,7 @@ Complete template with all available options:
     # ==============================================================================
     # HOMODYNE STATIC DIFFUSION CONFIGURATION TEMPLATE
     # ==============================================================================
-    # Equilibrium systems with 3-parameter model: D(t,φ) = D₀·t^α + D_offset
+    # Equilibrium systems with 3-parameter model: D(t) = D₀·t^α + D_offset
     # VERSION: 2.4.1 | Python: 3.12+ | JAX: 0.8.0 (CPU-only)
     # ==============================================================================
 
