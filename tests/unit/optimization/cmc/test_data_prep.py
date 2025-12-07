@@ -5,7 +5,7 @@ import pytest
 
 pytest.importorskip("arviz", reason="ArviZ required for CMC unit tests")
 
-from homodyne.optimization.cmc.data_prep import (
+from homodyne.optimization.cmc.data_prep import (  # noqa: E402
     PreparedData,
     estimate_noise_scale,
     extract_phi_info,

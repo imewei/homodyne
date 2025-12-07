@@ -17,7 +17,7 @@ import pytest
 
 pytest.importorskip("arviz", reason="ArviZ required for CMC unit tests")
 
-from homodyne.optimization.cmc.model import (
+from homodyne.optimization.cmc.model import (  # noqa: E402
     get_model_param_count,
     validate_model_output,
     xpcs_model,

@@ -17,14 +17,14 @@ import pytest
 # Require ArviZ for CMC imports; skip module if missing optional dependency
 pytest.importorskip("arviz", reason="ArviZ required for CMC unit tests")
 
-from homodyne.optimization.cmc.backends import (
+from homodyne.optimization.cmc.backends import (  # noqa: E402
     CMCBackend,
     MultiprocessingBackend,
     select_backend,
 )
-from homodyne.optimization.cmc.backends.base import combine_shard_samples
-from homodyne.optimization.cmc.config import CMCConfig
-from homodyne.optimization.cmc.sampler import MCMCSamples
+from homodyne.optimization.cmc.backends.base import combine_shard_samples  # noqa: E402
+from homodyne.optimization.cmc.config import CMCConfig  # noqa: E402
+from homodyne.optimization.cmc.sampler import MCMCSamples  # noqa: E402
 
 # =============================================================================
 # Fixtures

@@ -17,7 +17,7 @@ import numpy as np
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt  # noqa: E402
 
-from homodyne.utils.logging import get_logger
+from homodyne.utils.logging import get_logger  # noqa: E402
 
 logger = get_logger(__name__)
 

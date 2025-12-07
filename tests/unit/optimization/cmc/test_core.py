@@ -14,9 +14,9 @@ import pytest
 # Require ArviZ for CMC imports; skip if optional dependency is missing
 pytest.importorskip("arviz", reason="ArviZ required for CMC unit tests")
 
-from homodyne.optimization.cmc.config import CMCConfig
-from homodyne.optimization.cmc.data_prep import PreparedData
-from homodyne.optimization.cmc.results import CMCResult
+from homodyne.optimization.cmc.config import CMCConfig  # noqa: E402
+from homodyne.optimization.cmc.data_prep import PreparedData  # noqa: E402
+from homodyne.optimization.cmc.results import CMCResult  # noqa: E402
 
 # =============================================================================
 # Fixtures

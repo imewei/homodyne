@@ -31,41 +31,47 @@ from homodyne.core.jax_backend import compute_g2_scaled  # noqa: E402
 from homodyne.data.angle_filtering import (  # noqa: E402
     angle_in_range as _data_angle_in_range,
 )
-from homodyne.data.angle_filtering import (
+from homodyne.data.angle_filtering import (  # noqa: E402
     apply_angle_filtering as _data_apply_angle_filtering,
 )
-from homodyne.data.angle_filtering import (
+from homodyne.data.angle_filtering import (  # noqa: E402
     apply_angle_filtering_for_plot as _data_apply_angle_filtering_for_plot,
 )
-from homodyne.data.angle_filtering import (
+from homodyne.data.angle_filtering import (  # noqa: E402
     normalize_angle_to_symmetric_range as _data_normalize_angle_to_symmetric_range,
 )
 from homodyne.io.json_utils import json_safe as _io_json_safe  # noqa: E402
 from homodyne.io.mcmc_writers import (  # noqa: E402
     create_mcmc_analysis_dict as _io_create_mcmc_analysis_dict,
 )
-from homodyne.io.mcmc_writers import (
+from homodyne.io.mcmc_writers import (  # noqa: E402
     create_mcmc_diagnostics_dict as _io_create_mcmc_diagnostics_dict,
 )
-from homodyne.io.mcmc_writers import (
+from homodyne.io.mcmc_writers import (  # noqa: E402
     create_mcmc_parameters_dict as _io_create_mcmc_parameters_dict,
 )
 from homodyne.io.nlsq_writers import (  # noqa: E402
     save_nlsq_json_files as _io_save_nlsq_json_files,
 )
-from homodyne.io.nlsq_writers import save_nlsq_npz_file as _io_save_nlsq_npz_file
+from homodyne.io.nlsq_writers import (  # noqa: E402
+    save_nlsq_npz_file as _io_save_nlsq_npz_file,
+)
 from homodyne.utils.logging import configure_logging, get_logger  # noqa: E402
 from homodyne.viz.experimental_plots import (  # noqa: E402
     plot_experimental_data as _viz_plot_experimental_data,
 )
-from homodyne.viz.experimental_plots import (
+from homodyne.viz.experimental_plots import (  # noqa: E402
     plot_fit_comparison as _viz_plot_fit_comparison,
 )
 from homodyne.viz.nlsq_plots import (  # noqa: E402
     generate_and_plot_fitted_simulations as _viz_generate_and_plot_fitted_simulations,
 )
-from homodyne.viz.nlsq_plots import generate_nlsq_plots as _viz_generate_nlsq_plots
-from homodyne.viz.nlsq_plots import plot_simulated_data as _viz_plot_simulated_data
+from homodyne.viz.nlsq_plots import (  # noqa: E402
+    generate_nlsq_plots as _viz_generate_nlsq_plots,
+)
+from homodyne.viz.nlsq_plots import (  # noqa: E402
+    plot_simulated_data as _viz_plot_simulated_data,
+)
 
 logger = get_logger(__name__)
 
