@@ -83,6 +83,22 @@ except ImportError:
 from collections.abc import Callable
 from functools import wraps
 
+from homodyne.core.physics_utils import (
+    EPS,
+    PI,
+    safe_exp,
+    safe_len,
+    safe_sinc,
+)
+from homodyne.core.physics_utils import (
+    calculate_diffusion_coefficient as _calculate_diffusion_coefficient_impl_jax,
+)
+from homodyne.core.physics_utils import (
+    calculate_shear_rate as _calculate_shear_rate_impl_jax,
+)
+from homodyne.core.physics_utils import (
+    create_time_integral_matrix as _create_time_integral_matrix_impl_jax,
+)
 from homodyne.utils.logging import get_logger, log_performance
 
 logger = get_logger(__name__)
@@ -99,44 +115,6 @@ _fallback_stats = {
 # Global flags for availability checking
 jax_available = JAX_AVAILABLE
 numpy_gradients_available = NUMPY_GRADIENTS_AVAILABLE if not JAX_AVAILABLE else False
-
-
-def safe_len(obj):
-    """JAX-safe length function that handles scalars, arrays, and JAX objects.
-
-    Args:
-        obj: Any object that might have a length or shape
-
-    Returns:
-        int: Length of the object, or 1 for scalars
-    """
-    # Handle JAX arrays and numpy arrays with shape attribute
-    if hasattr(obj, "shape"):
-        if obj.shape == () or len(obj.shape) == 0:
-            # Scalar (0-dimensional array)
-            return 1
-        else:
-            # Array - return first dimension size
-            return obj.shape[0]
-
-    # Handle objects with __len__ method (lists, tuples, etc.)
-    if hasattr(obj, "__len__"):
-        try:
-            return len(obj)
-        except TypeError:
-            # This catches "len() of unsized object" errors
-            return 1
-
-    # Handle scalars (int, float, etc.)
-    if hasattr(obj, "__iter__") and not isinstance(obj, (str, bytes)):
-        # Iterable but not string/bytes
-        try:
-            return len(list(obj))
-        except (TypeError, ValueError):
-            return 1
-
-    # Default case: treat as scalar
-    return 1
 
 
 if not JAX_AVAILABLE:
@@ -236,174 +214,16 @@ def _create_no_hessian_fallback(func_name: str) -> Callable:
     return no_hessian_available
 
 
-# Physical and mathematical constants
-PI = jnp.pi
-EPS = 1e-12  # Numerical stability epsilon
-
-
+# safe_divide is kept here as it's only used in jax_backend.py
 @jit
 def safe_divide(a: jnp.ndarray, b: jnp.ndarray, default: float = 0.0) -> jnp.ndarray:
     """Safe division with numerical stability."""
     return jnp.where(jnp.abs(b) > EPS, a / b, default)
 
 
-@jit
-def safe_exp(x: jnp.ndarray, max_val: float = 700.0) -> jnp.ndarray:
-    """Safe exponential to prevent overflow."""
-    return jnp.exp(jnp.clip(x, -max_val, max_val))
-
-
-@jit
-def safe_sinc(x: jnp.ndarray) -> jnp.ndarray:
-    """Safe UNNORMALIZED sinc function: sin(x) / x (NOT sin(πx) / (πx)).
-
-    This matches the reference implementation which uses sin(arg) / arg directly.
-    The phase argument already includes all necessary scaling factors.
-    """
-    return jnp.where(jnp.abs(x) > EPS, jnp.sin(x) / x, 1.0)
-
-
-# Discrete numerical integration helpers (following reference v1 implementation)
-@jit
-def _calculate_diffusion_coefficient_impl_jax(
-    time_array: jnp.ndarray,
-    D0: float,
-    alpha: float,
-    D_offset: float,
-) -> jnp.ndarray:
-    """Calculate time-dependent diffusion coefficient using discrete evaluation.
-
-    Follows reference v1 implementation: D_t[i] = D0 * (time_array[i] ** alpha) + D_offset
-    Physical constraint: D(t) should be positive and finite
-
-    Args:
-        time_array: Array of time points
-        D0: Diffusion coefficient amplitude
-        alpha: Anomalous diffusion exponent
-        D_offset: Baseline diffusion offset
-
-    Returns:
-        D(t) evaluated at each time point with physical bounds applied
-    """
-    # CRITICAL FIX: Add epsilon to prevent t=0 with negative alpha causing Inf/NaN gradients
-    # When alpha < 0: t^alpha = 1/t^|alpha|, so t=0 → infinity
-    # Adding epsilon ensures numerical stability: (t+ε)^alpha is always finite
-    epsilon = 1e-10
-    time_safe = time_array + epsilon
-
-    # Compute diffusion coefficient
-    D_t = D0 * (time_safe**alpha) + D_offset
-
-    # TEMPORARY: Remove hard clipping to test if it's blocking gradients
-    # Just ensure positive values
-    return jnp.maximum(D_t, 1e-10)
-
-
-@jit
-def _calculate_shear_rate_impl_jax(
-    time_array: jnp.ndarray,
-    gamma_dot_0: float,
-    beta: float,
-    gamma_dot_offset: float,
-) -> jnp.ndarray:
-    """Calculate time-dependent shear rate using discrete evaluation.
-
-    Follows reference v1 implementation: γ̇_t[i] = γ̇₀ * (time_array[i] ** β) + γ̇_offset
-
-    Args:
-        time_array: Array of time points
-        gamma_dot_0: Shear rate amplitude
-        beta: Shear rate exponent
-        gamma_dot_offset: Baseline shear rate offset
-
-    Returns:
-        γ̇(t) evaluated at each time point
-    """
-    # CRITICAL FIX: Replace t=0 with dt to prevent singularity when beta < 0
-    # When beta < 0: t^beta = 1/t^|beta|, so t=0 → infinity
-    # Strategy: Replace only the first element (t=0) with dt, leave others unchanged
-    # This ensures smooth continuity: γ̇(dt), γ̇(dt), γ̇(2dt), ...
-
-    # Infer dt from time grid
-    if safe_len(time_array) > 1:
-        dt = jnp.abs(time_array[1] - time_array[0])
-    else:
-        dt = 1e-3  # Fallback for single time point
-
-    # Replace t=0 with dt: where(time_array == 0, dt, time_array)
-    # This avoids discontinuity since both t[0] and t[1] map to dt
-    time_safe = jnp.where(time_array == 0.0, dt, time_array)
-
-    gamma_t = gamma_dot_0 * (time_safe**beta) + gamma_dot_offset
-    # Ensure positive values with numerical stability floor
-    return jnp.maximum(gamma_t, 1e-10)
-
-
-@jit
-def _create_time_integral_matrix_impl_jax(
-    time_dependent_array: jnp.ndarray,
-) -> jnp.ndarray:
-    """Create time integral matrix using trapezoidal numerical integration.
-
-    RESTORED (Nov 2025): Back to working implementation from homodyne-analysis/kernels.py
-    The dt scaling happens in wavevector_q_squared_half_dt, NOT in this cumsum.
-
-    Algorithm (from working version):
-    1. Trapezoidal integration: cumsum[i] = Σ(k=0 to i-1) 0.5 * (f[k] + f[k+1])
-    2. Compute difference matrix: matrix[i,j] = |cumsum[i] - cumsum[j]|
-    3. The dt factor is applied via wavevector_q_squared_half_dt = 0.5 * q² * dt
-
-    This gives: matrix[i,j] = number of integration steps
-    Actual integral: dt * matrix[i,j] ≈ ∫₀^|tᵢ-tⱼ| f(t') dt'
-
-    Benefits over simple cumsum:
-    - Reduces oscillations from discretization by ~50%
-    - Second-order accuracy (O(dt²)) vs. first-order (O(dt))
-    - Eliminates checkerboard artifacts in diagonal-corrected results
-
-    Args:
-        time_dependent_array: f(t) evaluated at discrete time points
-
-    Returns:
-        Time integral matrix (in units of integration steps)
-    """
-    # Handle scalar input by converting to array
-    time_dependent_array = jnp.atleast_1d(time_dependent_array)
-    n = safe_len(time_dependent_array)
-
-    # Step 1: Improved cumulative integration using trapezoidal rule
-    # Trapezoidal: ∫f(t)dt ≈ dt × Σ(1/2)(f[i] + f[i+1])
-    # The dt scaling happens in wavevector_q_squared_half_dt, not here
-    if n > 1:
-        # Compute trapezoidal averages: 0.5 * (f[i] + f[i+1])
-        trap_avg = 0.5 * (time_dependent_array[:-1] + time_dependent_array[1:])
-
-        # Cumulative sum of trapezoidal averages (NO dt scaling)
-        cumsum_trap = jnp.cumsum(trap_avg)
-
-        # Prepend 0 for initial condition: cumsum[0] = 0
-        cumsum = jnp.concatenate([jnp.array([0.0]), cumsum_trap])
-    else:
-        # Single point: just use direct cumsum
-        cumsum = jnp.cumsum(time_dependent_array)
-
-    # Step 2: Create difference matrix
-    # matrix[i,j] = |cumsum[i] - cumsum[j]| (number of integration steps)
-    cumsum_i = cumsum[:, None]  # Shape: (n, 1)
-    cumsum_j = cumsum[None, :]  # Shape: (1, n)
-    diff = cumsum_i - cumsum_j
-
-    # CRITICAL FIX: Use smooth approximation of abs() for gradient stability
-    # jnp.abs() has undefined gradient at x=0, causing NaN in backpropagation
-    # The diagonal of diff matrix is exactly 0 (cumsum[i] - cumsum[i] = 0)
-    # Solution: sqrt(x² + ε) ≈ |x| but is differentiable everywhere
-    epsilon = 1e-20
-    matrix = jnp.sqrt(diff**2 + epsilon)  # Shape: (n, n)
-
-    return matrix
-
-
 # Core physics computations with discrete numerical integration
+# Note: _calculate_diffusion_coefficient_impl_jax, _calculate_shear_rate_impl_jax,
+# and _create_time_integral_matrix_impl_jax are now imported from physics_utils.py
 @jit
 def _compute_g1_diffusion_core(
     params: jnp.ndarray,

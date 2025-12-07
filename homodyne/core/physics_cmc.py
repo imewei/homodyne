@@ -27,175 +27,23 @@ Usage:
 import jax.numpy as jnp
 from jax import jit
 
+from homodyne.core.physics_utils import (
+    PI,
+    safe_len,
+    safe_sinc,
+)
+from homodyne.core.physics_utils import (
+    calculate_diffusion_coefficient as _calculate_diffusion_coefficient_impl_jax,
+)
+from homodyne.core.physics_utils import (
+    calculate_shear_rate_cmc as _calculate_shear_rate_impl_jax,
+)
+from homodyne.core.physics_utils import (
+    trapezoid_cumsum as _trapezoid_cumsum,
+)
 from homodyne.utils.logging import get_logger
 
 logger = get_logger(__name__)
-
-# Physical and mathematical constants
-PI = jnp.pi
-EPS = 1e-12  # Numerical stability epsilon
-
-
-# =============================================================================
-# UTILITY FUNCTIONS
-# =============================================================================
-
-
-def safe_len(obj):
-    """JAX-safe length function that handles scalars, arrays, and JAX objects.
-
-    Args:
-        obj: Any object that might have a length or shape
-
-    Returns:
-        int: Length of the object, or 1 for scalars
-    """
-    # Handle JAX arrays and numpy arrays with shape attribute
-    if hasattr(obj, "shape"):
-        if obj.shape == () or len(obj.shape) == 0:
-            # Scalar (0-dimensional array)
-            return 1
-        else:
-            # Array - return first dimension size
-            return obj.shape[0]
-
-    # Handle objects with __len__ method (lists, tuples, etc.)
-    if hasattr(obj, "__len__"):
-        try:
-            return len(obj)
-        except TypeError:
-            # This catches "len() of unsized object" errors
-            return 1
-
-    # Handle scalars (int, float, etc.)
-    if hasattr(obj, "__iter__") and not isinstance(obj, (str, bytes)):
-        # Iterable but not string/bytes
-        try:
-            return len(list(obj))
-        except (TypeError, ValueError):
-            return 1
-
-    # Default case: treat as scalar
-    return 1
-
-
-@jit
-def safe_exp(x: jnp.ndarray, max_val: float = 700.0) -> jnp.ndarray:
-    """Safe exponential to prevent overflow."""
-    return jnp.exp(jnp.clip(x, -max_val, max_val))
-
-
-@jit
-def safe_sinc(x: jnp.ndarray) -> jnp.ndarray:
-    """Safe UNNORMALIZED sinc function: sin(x) / x (NOT sin(πx) / (πx)).
-
-    This matches the reference implementation which uses sin(arg) / arg directly.
-    The phase argument already includes all necessary scaling factors.
-    """
-    return jnp.where(jnp.abs(x) > EPS, jnp.sin(x) / x, 1.0)
-
-
-# =============================================================================
-# PHYSICS HELPER FUNCTIONS
-# =============================================================================
-
-
-@jit
-def _calculate_diffusion_coefficient_impl_jax(
-    time_array: jnp.ndarray,
-    D0: float,
-    alpha: float,
-    D_offset: float,
-) -> jnp.ndarray:
-    """Calculate time-dependent diffusion coefficient using discrete evaluation.
-
-    Follows reference v1 implementation: D_t[i] = D0 * (time_array[i] ** alpha) + D_offset
-    Physical constraint: D(t) should be positive and finite
-
-    Args:
-        time_array: Array of time points
-        D0: Diffusion coefficient amplitude
-        alpha: Anomalous diffusion exponent
-        D_offset: Baseline diffusion offset
-
-    Returns:
-        D(t) evaluated at each time point with physical bounds applied
-    """
-    # CRITICAL FIX: Add epsilon to prevent t=0 with negative alpha causing Inf/NaN gradients
-    # When alpha < 0: t^alpha = 1/t^|alpha|, so t=0 → infinity
-    # Adding epsilon ensures numerical stability: (t+ε)^alpha is always finite
-    epsilon = 1e-10
-    time_safe = time_array + epsilon
-
-    # Compute diffusion coefficient
-    D_t = D0 * (time_safe**alpha) + D_offset
-
-    # Ensure positive values
-    return jnp.maximum(D_t, 1e-10)
-
-
-@jit
-def _calculate_shear_rate_impl_jax(
-    time_array: jnp.ndarray,
-    gamma_dot_0: float,
-    beta: float,
-    gamma_dot_offset: float,
-) -> jnp.ndarray:
-    """Calculate time-dependent shear rate using discrete evaluation.
-
-    Follows reference v1 implementation: γ̇_t[i] = γ̇₀ * (time_array[i] ** β) + γ̇_offset
-
-    Args:
-        time_array: Array of time points
-        gamma_dot_0: Shear rate amplitude
-        beta: Shear rate exponent
-        gamma_dot_offset: Baseline shear rate offset
-
-    Returns:
-        γ̇(t) evaluated at each time point
-    """
-    # CRITICAL FIX: Replace t=0 with dt to prevent singularity when beta < 0
-    # When beta < 0: t^beta = 1/t^|beta|, so t=0 → infinity
-    # Strategy: Replace only the first element (t=0) with dt, leave others unchanged
-    # This ensures smooth continuity: γ̇(dt), γ̇(dt), γ̇(2dt), ...
-
-    # Infer dt from time grid
-    if safe_len(time_array) > 1:
-        dt = jnp.abs(time_array[1] - time_array[0])
-        # CRITICAL FIX: Ensure dt > 0 to prevent 0^(negative beta) = infinity
-        # CMC element-wise data can have consecutive zeros: t[0]=0, t[1]=0 → dt=0
-        # This causes NaN when beta < 0 in gamma_t = gamma_dot_0 * (time_safe**beta)
-        dt = jnp.maximum(dt, 1e-10)  # Minimum 1e-10 for numerical stability
-    else:
-        dt = 1e-3  # Fallback for single time point
-
-    # Replace t=0 with dt: where(time_array == 0, dt, time_array)
-    # This avoids discontinuity since both t[0] and t[1] map to dt
-    time_safe = jnp.where(time_array == 0.0, dt, time_array)
-
-    gamma_t = gamma_dot_0 * (time_safe**beta) + gamma_dot_offset
-    # Ensure positive values with numerical stability floor
-    return jnp.maximum(gamma_t, 1e-10)
-
-
-# =============================================================================
-# ELEMENT-WISE CORE PHYSICS (CMC ONLY)
-# =============================================================================
-
-
-def _trapezoid_cumsum(values: jnp.ndarray) -> jnp.ndarray:
-    """Cumulative trapezoid integral without dt scaling (dt is applied outside).
-
-    Returns cumsum so that ``cumsum[j] - cumsum[i]`` equals the trapezoidal sum
-    over all intervals between indices ``i`` and ``j``. The caller applies a
-    smooth absolute value to that difference when mapping each (t1, t2) pair,
-    keeping gradients well-behaved at zero-length intervals.
-    """
-    if safe_len(values) > 1:
-        trap_avg = 0.5 * (values[:-1] + values[1:])
-        cumsum_trap = jnp.cumsum(trap_avg)
-        return jnp.concatenate([jnp.array([0.0], dtype=values.dtype), cumsum_trap])
-    return jnp.cumsum(values)
 
 
 @jit
