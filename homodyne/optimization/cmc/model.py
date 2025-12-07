@@ -31,7 +31,7 @@ def xpcs_model(
     data: jnp.ndarray,
     t1: jnp.ndarray,
     t2: jnp.ndarray,
-    phi: jnp.ndarray,
+    phi_unique: jnp.ndarray,
     phi_indices: jnp.ndarray,
     q: float,
     L: float,
@@ -61,8 +61,8 @@ def xpcs_model(
         Time coordinates t1, shape (n_total,).
     t2 : jnp.ndarray
         Time coordinates t2, shape (n_total,).
-    phi : jnp.ndarray
-        Phi angles per data point, shape (n_total,).
+    phi_unique : jnp.ndarray
+        Unique phi angles, shape (n_phi,).
     phi_indices : jnp.ndarray
         Index into per-angle arrays for each point, shape (n_total,).
     q : float
@@ -130,7 +130,14 @@ def xpcs_model(
     # 4. Compute theoretical g1 using EXACT same physics as NLSQ
     # =========================================================================
     # Note: compute_g1_total infers mode from params array length (3=static, 7=laminar)
-    g1 = compute_g1_total(params, t1, t2, phi, q, L, dt, time_grid=time_grid)
+    # IMPORTANT: phi_unique must be UNIQUE to avoid n_points^2 blowup (see physics_cmc docs)
+    g1_all_phi = compute_g1_total(
+        params, t1, t2, phi_unique, q, L, dt, time_grid=time_grid
+    )  # shape: (n_phi, n_points)
+
+    # Map each pooled data point to its phi row to keep a 1D vector aligned with data
+    point_idx = jnp.arange(phi_indices.shape[0], dtype=phi_indices.dtype)
+    g1_per_point = g1_all_phi[phi_indices, point_idx]
 
     # =========================================================================
     # 5. Apply per-angle scaling to get C2
@@ -138,7 +145,7 @@ def xpcs_model(
     # c2 = contrast * g1^2 + offset
     contrast_per_point = contrast_arr[phi_indices]
     offset_per_point = offset_arr[phi_indices]
-    c2_theory = contrast_per_point * g1**2 + offset_per_point
+    c2_theory = contrast_per_point * g1_per_point**2 + offset_per_point
 
     # =========================================================================
     # 6. Likelihood with noise model
@@ -154,7 +161,7 @@ def xpcs_model_single_chain(
     data: jnp.ndarray,
     t1: jnp.ndarray,
     t2: jnp.ndarray,
-    phi: jnp.ndarray,
+    phi_unique: jnp.ndarray,
     phi_indices: jnp.ndarray,
     q: float,
     L: float,
@@ -174,8 +181,12 @@ def xpcs_model_single_chain(
     ----------
     data : jnp.ndarray
         Observed C2 correlation data.
-    t1, t2, phi, phi_indices : jnp.ndarray
-        Coordinates.
+    t1, t2 : jnp.ndarray
+        Time coordinates.
+    phi_unique : jnp.ndarray
+        Unique phi angles used for physics evaluation.
+    phi_indices : jnp.ndarray
+        Mapping from pooled data points to phi_unique rows.
     q, L, dt : float
         Physics parameters.
     analysis_mode : str
@@ -233,12 +244,16 @@ def xpcs_model_single_chain(
 
     # Compute physics
     # Note: compute_g1_total infers mode from params array length (3=static, 7=laminar)
-    g1 = compute_g1_total(params, t1, t2, phi, q, L, dt, time_grid=time_grid)
+    g1_all_phi = compute_g1_total(
+        params, t1, t2, phi_unique, q, L, dt, time_grid=time_grid
+    )
+    point_idx = jnp.arange(phi_indices.shape[0], dtype=phi_indices.dtype)
+    g1_per_point = g1_all_phi[phi_indices, point_idx]
 
     # Apply scaling
     contrast_per_point = contrast_arr[phi_indices]
     offset_per_point = offset_arr[phi_indices]
-    c2_theory = contrast_per_point * g1**2 + offset_per_point
+    c2_theory = contrast_per_point * g1_per_point**2 + offset_per_point
 
     # Likelihood
     sigma = numpyro.sample("sigma", dist.HalfNormal(scale=noise_scale))

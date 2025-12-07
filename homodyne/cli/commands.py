@@ -2765,7 +2765,18 @@ def _compute_theoretical_c2_from_mcmc(
     # Extract parameters from MCMC result
     contrast = getattr(result, "mean_contrast", 0.5)
     offset = getattr(result, "mean_offset", 1.0)
-    mean_params = np.asarray(result.mean_params)
+
+    mean_params_obj = getattr(result, "mean_params", None)
+    # mean_params may be a ParameterStats (hybrid), dict, or array-like
+    if hasattr(mean_params_obj, "as_array"):
+        mean_params = np.asarray(mean_params_obj.as_array)
+    elif isinstance(mean_params_obj, dict):
+        ordered_names = _get_parameter_names(getattr(result, "analysis_mode", "static"))
+        mean_params = np.array(
+            [mean_params_obj.get(name, np.nan) for name in ordered_names]
+        )
+    else:
+        mean_params = np.asarray(mean_params_obj)
 
     # Log parameter values for debugging
     logger.info("Computing theoretical C2 with posterior means:")

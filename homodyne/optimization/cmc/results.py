@@ -19,6 +19,39 @@ from homodyne.utils.logging import get_logger
 logger = get_logger(__name__)
 
 
+class ParameterStats(dict):
+    """Hybrid mapping/sequence for posterior summaries.
+
+    Supports dict-style access by name (for tests/back-compat) and
+    list/array-style access by index (for plotting utilities).
+    """
+
+    def __init__(self, ordered_names: list[str], values: list[float]) -> None:
+        super().__init__(zip(ordered_names, values))
+        self._ordered_names = list(ordered_names)
+        self._ordered_values = list(values)
+
+    def __getitem__(self, key: int | str) -> float:
+        if isinstance(key, int):
+            return self._ordered_values[key]
+        return super().__getitem__(key)
+
+    def __len__(self) -> int:  # sequence semantics
+        return len(self._ordered_values)
+
+    def __array__(self, dtype=None) -> np.ndarray:  # numpy friendliness
+        return np.asarray(self._ordered_values, dtype=dtype)
+
+    @property
+    def as_array(self) -> np.ndarray:
+        """Return ordered values as numpy array."""
+        return np.asarray(self._ordered_values, dtype=float)
+
+    def tolist(self) -> list[float]:
+        """Return ordered values as list (numpy compatibility)."""
+        return list(self._ordered_values)
+
+
 @dataclass
 class CMCResult:
     """CMC analysis result with posterior samples and diagnostics.
@@ -102,6 +135,13 @@ class CMCResult:
     device_info: dict[str, Any] = field(default_factory=dict)
     recovery_actions: list[str] = field(default_factory=list)
     quality_flag: str = "good"
+    # Legacy/CLI plot compatibility
+    mean_params: ParameterStats = field(default_factory=lambda: ParameterStats([], []))
+    std_params: ParameterStats = field(default_factory=lambda: ParameterStats([], []))
+    mean_contrast: float | None = None
+    std_contrast: float | None = None
+    mean_offset: float | None = None
+    std_offset: float | None = None
 
     def is_cmc_result(self) -> bool:
         """Return True - required by CLI for diagnostic generation."""
@@ -177,11 +217,31 @@ class CMCResult:
         parameters = np.zeros(len(param_names))
         uncertainties = np.zeros(len(param_names))
 
+        # Aggregate convenience stats for legacy consumers (CLI plots, writers)
+        contrast_values: list[float] = []
+        contrast_stds: list[float] = []
+        offset_values: list[float] = []
+        offset_stds: list[float] = []
+        physical_param_names: list[str] = []
+        mean_params_physical: list[float] = []
+        std_params_physical: list[float] = []
+
         for i, name in enumerate(param_names):
             if name in mcmc_samples.samples:
                 samples_flat = mcmc_samples.samples[name].flatten()
                 parameters[i] = np.mean(samples_flat)
                 uncertainties[i] = np.std(samples_flat)
+
+                if name.startswith("contrast_"):
+                    contrast_values.append(float(parameters[i]))
+                    contrast_stds.append(float(uncertainties[i]))
+                elif name.startswith("offset_"):
+                    offset_values.append(float(parameters[i]))
+                    offset_stds.append(float(uncertainties[i]))
+                else:
+                    physical_param_names.append(name)
+                    mean_params_physical.append(float(parameters[i]))
+                    std_params_physical.append(float(uncertainties[i]))
 
         # Compute covariance
         all_samples = np.column_stack(
@@ -191,6 +251,16 @@ class CMCResult:
 
         # Create ArviZ InferenceData
         inference_data = create_inference_data(mcmc_samples)
+
+        mean_params_stats = ParameterStats(physical_param_names, mean_params_physical)
+        std_params_stats = ParameterStats(physical_param_names, std_params_physical)
+
+        if contrast_values:
+            mean_params_stats["contrast"] = float(np.mean(contrast_values))
+            std_params_stats["contrast"] = float(np.mean(contrast_stds))
+        if offset_values:
+            mean_params_stats["offset"] = float(np.mean(offset_values))
+            std_params_stats["offset"] = float(np.mean(offset_stds))
 
         return cls(
             parameters=parameters,
@@ -211,6 +281,13 @@ class CMCResult:
             analysis_mode=analysis_mode,
             covariance=covariance,
             device_info={"platform": "cpu", "device": "CPU"},
+            # Legacy/compat fields expected by CLI writers/plots
+            mean_params=mean_params_stats,
+            std_params=std_params_stats,
+            mean_contrast=mean_params_stats.get("contrast"),
+            std_contrast=std_params_stats.get("contrast"),
+            mean_offset=mean_params_stats.get("offset"),
+            std_offset=std_params_stats.get("offset"),
         )
 
     def get_posterior_stats(self) -> dict[str, dict[str, float]]:

@@ -128,7 +128,7 @@ def synthetic_pooled_data():
         "data": jnp.array(data),
         "t1": jnp.array(t1),
         "t2": jnp.array(t2),
-        "phi": jnp.array(phi_unique),  # UNIQUE phi values
+        "phi_unique": jnp.array(phi_unique),  # UNIQUE phi values
         "phi_indices": jnp.array(phi_indices),
         "n_phi": n_phi,
         "n_total": n_total,
@@ -282,7 +282,7 @@ class TestXPCSModelStructure:
                     data=synthetic_pooled_data["data"],
                     t1=synthetic_pooled_data["t1"],
                     t2=synthetic_pooled_data["t2"],
-                    phi=synthetic_pooled_data["phi"],
+                    phi_unique=synthetic_pooled_data["phi_unique"],
                     phi_indices=synthetic_pooled_data["phi_indices"],
                     q=0.01,
                     L=2000000.0,
@@ -314,7 +314,7 @@ class TestXPCSModelStructure:
                     data=synthetic_pooled_data["data"],
                     t1=synthetic_pooled_data["t1"],
                     t2=synthetic_pooled_data["t2"],
-                    phi=synthetic_pooled_data["phi"],
+                    phi_unique=synthetic_pooled_data["phi_unique"],
                     phi_indices=synthetic_pooled_data["phi_indices"],
                     q=0.01,
                     L=2000000.0,
@@ -355,7 +355,7 @@ class TestXPCSModelStructure:
                     data=synthetic_pooled_data["data"],
                     t1=synthetic_pooled_data["t1"],
                     t2=synthetic_pooled_data["t2"],
-                    phi=synthetic_pooled_data["phi"],
+                    phi_unique=synthetic_pooled_data["phi_unique"],
                     phi_indices=synthetic_pooled_data["phi_indices"],
                     q=0.01,
                     L=2000000.0,
@@ -405,7 +405,7 @@ class TestXPCSModelSingleChain:
                     data=synthetic_pooled_data["data"],
                     t1=synthetic_pooled_data["t1"],
                     t2=synthetic_pooled_data["t2"],
-                    phi=synthetic_pooled_data["phi"],
+                    phi_unique=synthetic_pooled_data["phi_unique"],
                     phi_indices=synthetic_pooled_data["phi_indices"],
                     q=0.01,
                     L=2000000.0,
@@ -434,7 +434,7 @@ class TestXPCSModelSingleChain:
                     data=synthetic_pooled_data["data"],
                     t1=synthetic_pooled_data["t1"],
                     t2=synthetic_pooled_data["t2"],
-                    phi=synthetic_pooled_data["phi"],
+                    phi_unique=synthetic_pooled_data["phi_unique"],
                     phi_indices=synthetic_pooled_data["phi_indices"],
                     q=0.01,
                     L=2000000.0,
@@ -474,7 +474,7 @@ class TestModelPhysics:
                     data=synthetic_pooled_data["data"],
                     t1=synthetic_pooled_data["t1"],
                     t2=synthetic_pooled_data["t2"],
-                    phi=synthetic_pooled_data["phi"],
+                    phi_unique=synthetic_pooled_data["phi_unique"],
                     phi_indices=synthetic_pooled_data["phi_indices"],
                     q=0.01,
                     L=2000000.0,
@@ -495,6 +495,32 @@ class TestModelPhysics:
         assert jnp.all(c2_theory >= 0.5), f"C2 too low: min={jnp.min(c2_theory)}"
         assert jnp.all(c2_theory <= 3.0), f"C2 too high: max={jnp.max(c2_theory)}"
 
+    def test_obs_matches_pooled_points(
+        self, mock_parameter_space_static, synthetic_pooled_data
+    ):
+        """Ensure obs site stays 1D (no phi broadcasting)."""
+        import numpyro
+
+        with numpyro.handlers.seed(rng_seed=0):
+            with numpyro.handlers.trace() as trace:
+                xpcs_model(
+                    data=synthetic_pooled_data["data"],
+                    t1=synthetic_pooled_data["t1"],
+                    t2=synthetic_pooled_data["t2"],
+                    phi_unique=synthetic_pooled_data["phi_unique"],
+                    phi_indices=synthetic_pooled_data["phi_indices"],
+                    q=0.01,
+                    L=2000000.0,
+                    dt=0.1,
+                    analysis_mode="static",
+                    parameter_space=mock_parameter_space_static,
+                    n_phi=synthetic_pooled_data["n_phi"],
+                    noise_scale=0.1,
+                )
+
+        obs_value = trace["obs"]["value"]
+        assert obs_value.shape == (synthetic_pooled_data["n_total"],)
+
     def test_n_phi_consistency(
         self, mock_parameter_space_static, synthetic_pooled_data
     ):
@@ -509,7 +535,7 @@ class TestModelPhysics:
                     data=synthetic_pooled_data["data"],
                     t1=synthetic_pooled_data["t1"],
                     t2=synthetic_pooled_data["t2"],
-                    phi=synthetic_pooled_data["phi"],
+                    phi_unique=synthetic_pooled_data["phi_unique"],
                     phi_indices=synthetic_pooled_data["phi_indices"],
                     q=0.01,
                     L=2000000.0,

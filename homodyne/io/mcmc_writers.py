@@ -138,16 +138,36 @@ def create_mcmc_parameters_dict(result: Any) -> dict:
         analysis_mode = getattr(result, "analysis_mode", "static")
         param_names = _get_parameter_names(analysis_mode)
 
-        mean_params = np.asarray(result.mean_params)
-        std_params = np.asarray(
-            getattr(result, "std_params", np.zeros_like(mean_params))
-        )
+        mean_params_obj = result.mean_params
+        std_params_obj = getattr(result, "std_params", None)
+
+        if hasattr(mean_params_obj, "as_array"):
+            mean_params_arr = np.asarray(mean_params_obj.as_array)
+        elif isinstance(mean_params_obj, dict):
+            mean_params_arr = np.array(
+                [mean_params_obj.get(name, np.nan) for name in param_names]
+            )
+        else:
+            mean_params_arr = np.asarray(mean_params_obj)
+
+        if hasattr(std_params_obj, "as_array"):
+            std_params_arr = np.asarray(std_params_obj.as_array)
+        elif isinstance(std_params_obj, dict):
+            std_params_arr = np.array(
+                [std_params_obj.get(name, 0.0) for name in param_names]
+            )
+        else:
+            std_params_arr = (
+                np.asarray(std_params_obj)
+                if std_params_obj is not None
+                else np.zeros_like(mean_params_arr)
+            )
 
         for i, name in enumerate(param_names):
-            if i < len(mean_params):
+            if i < len(mean_params_arr):
                 param_dict["parameters"][name] = {
-                    "mean": float(mean_params[i]),
-                    "std": float(std_params[i]) if i < len(std_params) else 0.0,
+                    "mean": float(mean_params_arr[i]),
+                    "std": float(std_params_arr[i]) if i < len(std_params_arr) else 0.0,
                 }
 
     return param_dict

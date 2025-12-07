@@ -91,6 +91,30 @@ def build_prior_from_spec(
         raise ValueError(f"Unsupported distribution type: {dist_type}")
 
 
+def _get_base_param_name(param_name: str) -> str:
+    """Get base parameter name for per-angle parameters.
+
+    Maps 'contrast_0', 'contrast_1', etc. to 'contrast',
+    and 'offset_0', 'offset_1', etc. to 'offset'.
+    Other parameter names are returned unchanged.
+
+    Parameters
+    ----------
+    param_name : str
+        Parameter name (possibly with angle suffix).
+
+    Returns
+    -------
+    str
+        Base parameter name.
+    """
+    if param_name.startswith("contrast_"):
+        return "contrast"
+    elif param_name.startswith("offset_"):
+        return "offset"
+    return param_name
+
+
 def build_prior(
     param_name: str,
     parameter_space: ParameterSpace,
@@ -100,7 +124,7 @@ def build_prior(
     Parameters
     ----------
     param_name : str
-        Parameter name (e.g., "D0", "alpha", "contrast").
+        Parameter name (e.g., "D0", "alpha", "contrast", "contrast_0").
     parameter_space : ParameterSpace
         Parameter space with bounds and priors.
 
@@ -109,12 +133,15 @@ def build_prior(
     dist.Distribution
         NumPyro distribution for sampling.
     """
+    # Use base name for per-angle parameters (contrast_0 -> contrast, etc.)
+    base_name = _get_base_param_name(param_name)
+
     try:
-        prior_spec = parameter_space.get_prior(param_name)
+        prior_spec = parameter_space.get_prior(base_name)
         return build_prior_from_spec(prior_spec)
     except (KeyError, AttributeError):
         # Fallback to uniform prior with bounds
-        bounds = parameter_space.get_bounds(param_name)
+        bounds = parameter_space.get_bounds(base_name)
         logger.debug(
             f"No prior spec for {param_name}, using Uniform({bounds[0]}, {bounds[1]})"
         )
@@ -129,8 +156,9 @@ def get_init_value(
     """Get initial value for a parameter.
 
     Priority:
-    1. Value from initial_values dict if provided
-    2. Midpoint of parameter bounds as fallback
+    1. Value from initial_values dict if provided (exact match)
+    2. Value from initial_values dict for base param (e.g., 'contrast' for 'contrast_0')
+    3. Midpoint of parameter bounds as fallback
 
     Parameters
     ----------
@@ -146,12 +174,17 @@ def get_init_value(
     float
         Initial value for the parameter.
     """
-    # Check initial_values first
+    # Check initial_values first (exact match)
     if initial_values is not None and param_name in initial_values:
         return float(initial_values[param_name])
 
-    # Fallback to midpoint of bounds
-    bounds = parameter_space.get_bounds(param_name)
+    # For per-angle params, check base param name in initial_values
+    base_name = _get_base_param_name(param_name)
+    if initial_values is not None and base_name in initial_values:
+        return float(initial_values[base_name])
+
+    # Fallback to midpoint of bounds (use base name for per-angle params)
+    bounds = parameter_space.get_bounds(base_name)
     midpoint = (bounds[0] + bounds[1]) / 2.0
     return midpoint
 
@@ -193,10 +226,6 @@ def build_init_values_dict(
         init_dict[param_name] = get_init_value(
             param_name, initial_values, parameter_space
         )
-        # If per-angle not in initial_values, try base "contrast"
-        if initial_values is not None and param_name not in initial_values:
-            if "contrast" in initial_values:
-                init_dict[param_name] = float(initial_values["contrast"])
 
     # 2. Per-angle offset parameters (SECOND)
     for i in range(n_phi):
@@ -204,9 +233,6 @@ def build_init_values_dict(
         init_dict[param_name] = get_init_value(
             param_name, initial_values, parameter_space
         )
-        if initial_values is not None and param_name not in initial_values:
-            if "offset" in initial_values:
-                init_dict[param_name] = float(initial_values["offset"])
 
     # 3. Physical parameters (THIRD, in canonical order)
     physical_params = (

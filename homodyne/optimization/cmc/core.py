@@ -186,7 +186,7 @@ def fit_mcmc_jax(
         "data": jnp.array(prepared.data),
         "t1": jnp.array(prepared.t1),
         "t2": jnp.array(prepared.t2),
-        "phi": jnp.array(prepared.phi),
+        "phi_unique": jnp.array(prepared.phi_unique),
         "phi_indices": jnp.array(prepared.phi_indices),
         "q": q,
         "L": L,
