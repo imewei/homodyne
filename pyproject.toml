@@ -223,6 +223,15 @@ module = [
 ]
 ignore_missing_imports = true
 
+# Phased mypy cleanup: relax non-library targets so tests/docs/scripts can run
+# without blocking strict library work. These modules still run through mypy,
+# but imports are skipped and errors are suppressed to keep the signal focused
+# on the homodyne package while we incrementally type-annotate these areas.
+[[tool.mypy.overrides]]
+module = ["tests.*", "scripts.*", "docs.*"]
+follow_imports = "skip"
+ignore_errors = true
+
 [tool.pytest.ini_options]
 minversion = "8.4"
 addopts = "-ra -q --strict-markers --strict-config"
