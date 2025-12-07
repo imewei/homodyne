@@ -30,6 +30,8 @@ try:
     import jax
     import jax.numpy as jnp
 
+    _ = jax
+
     JAX_AVAILABLE = True
 except ImportError:
     JAX_AVAILABLE = False
@@ -38,6 +40,8 @@ except ImportError:
 # Check NLSQ package availability
 try:
     import nlsq
+
+    _ = nlsq
 
     NLSQ_AVAILABLE = True
 except ImportError:
@@ -257,7 +261,7 @@ class TestNLSQWrapperFit:
         # With 3 angles: 2*3 + 3 = 9 parameters after expansion
         # But wait - check actual result to understand expansion
         # The result will have expanded parameters based on actual implementation
-        n_angles = len(mock_data.phi)  # 3
+        len(mock_data.phi)  # 3
         assert result.parameters.ndim == 1, "Parameters should be 1D array"
         assert len(result.parameters) >= 5, (
             f"Should have at least 5 parameters, got {len(result.parameters)}"
@@ -723,7 +727,7 @@ class TestNLSQWrapperErrorRecovery:
 
         def mock_curve_fit_large(*args, **kwargs):
             """Mock curve_fit_large that always fails."""
-            strategy = kwargs.get("show_progress", False)
+            kwargs.get("show_progress", False)
             strategies_attempted.append("large")
             raise RuntimeError("Mock failure: curve_fit_large failed")
 
@@ -789,7 +793,13 @@ class TestNLSQWrapperErrorRecovery:
         from tests.factories.synthetic_data import generate_static_mode_dataset
 
         synthetic_data = generate_static_mode_dataset(
-            D0=1000.0, alpha=0.5, D_offset=10.0, noise_level=0.02, n_phi=3, n_t1=10, n_t2=10
+            D0=1000.0,
+            alpha=0.5,
+            D_offset=10.0,
+            noise_level=0.02,
+            n_phi=3,
+            n_t1=10,
+            n_t2=10,
         )
 
         class MockConfig:
@@ -834,7 +844,7 @@ class TestNLSQWrapperErrorRecovery:
         assert nan_detected[0], "NaN should have been detected"
         assert call_count[0] >= 2, "Should retry after NaN detection"
         assert isinstance(result, OptimizationResult)
-        print(f"\n✅ TC-NLSQ-012 passed: NaN detected and recovered")
+        print("\n✅ TC-NLSQ-012 passed: NaN detected and recovered")
 
     def test_singular_covariance_matrix_handling(self):
         """
@@ -844,11 +854,13 @@ class TestNLSQWrapperErrorRecovery:
         fallback to identity matrix with warning.
         """
         # Create result with singular covariance matrix
-        singular_pcov = np.array([
-            [1.0, 1.0, 0.0],
-            [1.0, 1.0, 0.0],  # Row 2 = Row 1 (singular)
-            [0.0, 0.0, 0.0],  # All zeros (singular)
-        ])
+        singular_pcov = np.array(
+            [
+                [1.0, 1.0, 0.0],
+                [1.0, 1.0, 0.0],  # Row 2 = Row 1 (singular)
+                [0.0, 0.0, 0.0],  # All zeros (singular)
+            ]
+        )
 
         result = {
             "x": np.array([0.5, 1.0, 1000.0]),
@@ -878,7 +890,13 @@ class TestNLSQWrapperErrorRecovery:
         from tests.factories.synthetic_data import generate_static_mode_dataset
 
         synthetic_data = generate_static_mode_dataset(
-            D0=1000.0, alpha=0.5, D_offset=10.0, noise_level=0.01, n_phi=3, n_t1=10, n_t2=10
+            D0=1000.0,
+            alpha=0.5,
+            D_offset=10.0,
+            noise_level=0.01,
+            n_phi=3,
+            n_t1=10,
+            n_t2=10,
         )
 
         class MockConfig:
@@ -919,7 +937,7 @@ class TestNLSQWrapperErrorRecovery:
 
         assert call_count[0] >= 2, "Should retry after Jacobian failure"
         assert isinstance(result, OptimizationResult)
-        print(f"\n✅ TC-NLSQ-014 passed: Jacobian failure recovered")
+        print("\n✅ TC-NLSQ-014 passed: Jacobian failure recovered")
 
     def test_memory_pressure_graceful_degradation(self):
         """
@@ -932,8 +950,13 @@ class TestNLSQWrapperErrorRecovery:
 
         # Generate moderately large dataset
         synthetic_data = generate_static_mode_dataset(
-            D0=1000.0, alpha=0.5, D_offset=10.0, noise_level=0.01,
-            n_phi=10, n_t1=50, n_t2=50  # 25,000 points
+            D0=1000.0,
+            alpha=0.5,
+            D_offset=10.0,
+            noise_level=0.01,
+            n_phi=10,
+            n_t1=50,
+            n_t2=50,  # 25,000 points
         )
 
         class MockConfig:
@@ -1283,7 +1306,7 @@ class TestNLSQFallback:
 
         # This should raise ImportError when NLSQ is not available
         with pytest.raises(ImportError) as exc_info:
-            result = fit_nlsq_jax(data, test_config)
+            fit_nlsq_jax(data, test_config)
 
         # Error message should mention NLSQ
         error_msg = str(exc_info.value).lower()

@@ -207,17 +207,11 @@ class CMCConfig:
 
         # Validate sampling parameters
         if not isinstance(self.num_warmup, int) or self.num_warmup <= 0:
-            errors.append(
-                f"num_warmup must be positive int, got: {self.num_warmup}"
-            )
+            errors.append(f"num_warmup must be positive int, got: {self.num_warmup}")
         if not isinstance(self.num_samples, int) or self.num_samples <= 0:
-            errors.append(
-                f"num_samples must be positive int, got: {self.num_samples}"
-            )
+            errors.append(f"num_samples must be positive int, got: {self.num_samples}")
         if not isinstance(self.num_chains, int) or self.num_chains <= 0:
-            errors.append(
-                f"num_chains must be positive int, got: {self.num_chains}"
-            )
+            errors.append(f"num_chains must be positive int, got: {self.num_chains}")
 
         # Validate target_accept_prob
         if not 0.0 < self.target_accept_prob < 1.0:

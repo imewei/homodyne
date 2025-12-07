@@ -70,9 +70,7 @@ def normalize_angle_to_symmetric_range(angle: float | np.ndarray) -> float | np.
     return normalized
 
 
-def angle_in_range(
-    angle: float, min_angle: float, max_angle: float
-) -> bool:
+def angle_in_range(angle: float, min_angle: float, max_angle: float) -> bool:
     """Check if angle is in range, accounting for wrap-around at ±180°.
 
     This function handles both normal ranges (where min_angle ≤ max_angle)
@@ -321,9 +319,7 @@ def apply_angle_filtering_for_optimization(
     # Check if any angles were filtered
     if len(filtered_indices) == 0 or len(filtered_indices) == len(phi_angles):
         if len(filtered_indices) == 0:
-            logger.warning(
-                "No angles matched phi_filtering criteria, using all angles"
-            )
+            logger.warning("No angles matched phi_filtering criteria, using all angles")
             # Return data with normalized angles
             normalized_data = data.copy()
             normalized_data["phi_angles_list"] = phi_angles

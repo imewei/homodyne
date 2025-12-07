@@ -20,10 +20,10 @@ def demo_automatic_selection():
 
     # Create small synthetic dataset (10k points)
     np.random.seed(42)
-    data_small = np.random.randn(10_000) * 0.1 + 1.0
-    t1 = np.random.rand(10_000) * 10
-    t2 = np.random.rand(10_000) * 10
-    phi = np.random.rand(10_000) * 360 - 180
+    np.random.randn(10_000) * 0.1 + 1.0
+    np.random.rand(10_000) * 10
+    np.random.rand(10_000) * 10
+    np.random.rand(10_000) * 360 - 180
 
     print("\nSmall dataset: 10,000 points")
     print("Expected: Automatic selection will choose NUTS")
@@ -86,13 +86,6 @@ def demo_forced_cmc():
     print("    Example: 100M+ points → avoid OOM")
 
     print("\nCMC Configuration (v2.1.0):")
-    mcmc_config = {
-        "num_warmup": 1000,
-        "num_samples": 2000,
-        "min_samples_for_cmc": 15,  # Parallelism threshold
-        "memory_threshold_pct": 0.30,  # Memory threshold
-        "dense_mass_matrix": False,  # Efficiency for large datasets
-    }
 
     print("  - min_samples_for_cmc: 15 (configurable)")
     print("  - memory_threshold_pct: 0.30 (configurable)")

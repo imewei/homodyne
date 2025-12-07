@@ -198,7 +198,6 @@ class TestReturnTypes:
         try:
             from homodyne.optimization.nlsq import (
                 NLSQ_AVAILABLE,
-                NLSQResult,
                 fit_nlsq_jax,
             )
         except ImportError:
@@ -304,6 +303,8 @@ class TestDeprecationWarnings:
                 from homodyne.core import jax_backend
                 from homodyne.data import xpcs_loader
                 from homodyne.optimization import nlsq
+
+                _ = (homodyne, jax_backend, xpcs_loader, nlsq)
             except ImportError:
                 pass  # Modules might not be available
 

@@ -26,6 +26,8 @@ except ImportError:
 try:
     import yaml
 
+    _ = yaml
+
     HAS_YAML = True
 except ImportError:
     HAS_YAML = False
@@ -266,7 +268,7 @@ class TestHDF5FormatDetection:
         empty_file = temp_dir / "empty.h5"
 
         # Create empty HDF5 file
-        with h5py.File(empty_file, "w") as f:
+        with h5py.File(empty_file, "w"):
             pass  # Empty file
 
         basic_config = {
@@ -554,7 +556,7 @@ class TestXPCSDataLoaderProperties:
 
             # Test diagonal elements (should be maximum correlation)
             diagonal = np.diag(c2_angle)
-            off_diagonal_max = np.max(c2_angle - np.diag(diagonal))
+            np.max(c2_angle - np.diag(diagonal))
 
             # Diagonal should generally be >= off-diagonal (physical expectation)
             mean_diagonal = np.mean(diagonal)
@@ -590,28 +592,28 @@ class TestCoordinateAxes:
 
     def test_time_axis_creation_basic(self, synthetic_xpcs_data):
         """Test basic time axis creation."""
-        t1, t2 = synthetic_xpcs_data["t1"], synthetic_xpcs_data["t2"]
+        t1, _t2 = synthetic_xpcs_data["t1"], synthetic_xpcs_data["t2"]
 
         # Time arrays should be 2D (meshgrid)
         assert t1.ndim == 2, "t1 should be 2D array"
-        assert t2.ndim == 2, "t2 should be 2D array"
+        assert _t2.ndim == 2, "t2 should be 2D array"
 
         # Shapes should match
-        assert t1.shape == t2.shape, "t1 and t2 should have same shape"
+        assert t1.shape == _t2.shape, "t1 and t2 should have same shape"
 
     def test_time_axis_meshgrid_structure(self):
         """Test time axis meshgrid structure."""
         n_times = 50
         time_values = np.arange(n_times)
-        t1, t2 = np.meshgrid(time_values, time_values, indexing="ij")
+        t1, _t2 = np.meshgrid(time_values, time_values, indexing="ij")
 
         # Verify meshgrid indexing
         assert t1[10, 0] == 10, "t1[i, j] should give i-th time"
-        assert t2[0, 10] == 10, "t2[i, j] should give j-th time"
+        assert _t2[0, 10] == 10, "t2[i, j] should give j-th time"
 
         # Verify all values are present
         unique_t1 = np.unique(t1[:, 0])
-        unique_t2 = np.unique(t2[0, :])
+        unique_t2 = np.unique(_t2[0, :])
         np.testing.assert_array_equal(unique_t1, time_values)
         np.testing.assert_array_equal(unique_t2, time_values)
 
@@ -648,7 +650,7 @@ class TestCoordinateAxes:
 
     def test_coordinate_dimension_consistency(self, synthetic_xpcs_data):
         """Test coordinate dimension consistency."""
-        t1, t2 = synthetic_xpcs_data["t1"], synthetic_xpcs_data["t2"]
+        t1 = synthetic_xpcs_data["t1"]
         phi = synthetic_xpcs_data["phi_angles_list"]
         c2 = synthetic_xpcs_data["c2_exp"]
 

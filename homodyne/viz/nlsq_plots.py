@@ -113,11 +113,15 @@ def plot_simulated_data(
     if phi_angles_str:
         phi_degrees = np.array([float(x.strip()) for x in phi_angles_str.split(",")])
         phi = phi_degrees
-        logger.info(f"Using CLI-provided phi angles for theoretical plots: {phi_degrees}")
+        logger.info(
+            f"Using CLI-provided phi angles for theoretical plots: {phi_degrees}"
+        )
     elif data is not None and "phi_angles_list" in data:
         phi_degrees = np.array(data["phi_angles_list"])
         phi = phi_degrees
-        logger.info(f"Using experimental data phi angles for theoretical plots: {phi_degrees}")
+        logger.info(
+            f"Using experimental data phi angles for theoretical plots: {phi_degrees}"
+        )
         logger.warning(
             "Theoretical plots using potentially filtered phi angles from experimental data. "
             "To use all angles, disable phi_filtering in config or provide --phi-angles explicitly.",
@@ -200,7 +204,9 @@ def plot_simulated_data(
 
     # Save individual C₂ heatmap for EACH phi angle
     n_phi = len(phi)
-    logger.info(f"Generating individual simulated C₂ heatmaps for {n_phi} phi angles...")
+    logger.info(
+        f"Generating individual simulated C₂ heatmaps for {n_phi} phi angles..."
+    )
 
     for idx in range(n_phi):
         fig, ax = plt.subplots(figsize=(8, 7))

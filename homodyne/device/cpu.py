@@ -21,7 +21,8 @@ HPC Environment Support:
 
 import os
 import platform
-import subprocess
+import shutil
+import subprocess  # nosec B404
 
 import psutil
 
@@ -78,14 +79,21 @@ def detect_cpu_info() -> dict[str, any]:
 
         # Detect NUMA topology
         try:
-            result = subprocess.run(["lscpu"], capture_output=True, text=True)
-            if result.returncode == 0:
-                for line in result.stdout.split("\n"):
-                    if "NUMA node(s):" in line:
-                        info["numa_nodes"] = int(line.split(":")[1].strip())
-                        break
-        except (subprocess.SubprocessError, FileNotFoundError):
-            pass
+            lscpu_path = shutil.which("lscpu")
+            if lscpu_path:
+                result = subprocess.run(  # nosec B603
+                    [lscpu_path],
+                    capture_output=True,
+                    text=True,
+                    check=False,
+                )
+                if result.returncode == 0:
+                    for line in result.stdout.split("\n"):
+                        if "NUMA node(s):" in line:
+                            info["numa_nodes"] = int(line.split(":")[1].strip())
+                            break
+        except (subprocess.SubprocessError, FileNotFoundError) as exc:
+            logger.debug("NUMA detection via lscpu failed: %s", exc)
 
         # Set optimization recommendations
         if "Intel" in info["cpu_brand"]:

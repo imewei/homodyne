@@ -851,7 +851,7 @@ class TestAngleValidation:
 
         # Act
         caplog.clear()
-        filtered_data = _apply_angle_filtering_for_optimization(data, config)
+        _apply_angle_filtering_for_optimization(data, config)
 
         # Assert - No warning logged
         log_messages = [rec.message for rec in caplog.records]

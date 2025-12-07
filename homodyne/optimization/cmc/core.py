@@ -132,8 +132,7 @@ def fit_mcmc_jax(
         analysis_mode = "static"
 
     run_logger.info(
-        f"Starting CMC analysis: {len(data):,} points, "
-        f"mode={analysis_mode}, q={q:.4f}"
+        f"Starting CMC analysis: {len(data):,} points, mode={analysis_mode}, q={q:.4f}"
     )
 
     # =========================================================================

@@ -1,18 +1,17 @@
 # CLAUDE.md
 
-**Homodyne v2.4** - CPU-optimized XPCS analysis implementing [He et al. PNAS 2024](https://doi.org/10.1073/pnas.2401162121)
+**Homodyne v2.4** - CPU-optimized XPCS analysis implementing
+[He et al. PNAS 2024](https://doi.org/10.1073/pnas.2401162121)
 
-**Core Equation:** `c₂(φ,t₁,t₂) = 1 + contrast × [c₁(φ,t₁,t₂)]²`
-**Version:** 2.4.0 | **Python:** 3.12+ | **JAX:** 0.8.0 (CPU-only)
+**Core Equation:** `c₂(φ,t₁,t₂) = 1 + contrast × [c₁(φ,t₁,t₂)]²` **Version:** 2.4.0 |
+**Python:** 3.12+ | **JAX:** 0.8.0 (CPU-only)
 
 ## Quick Reference
 
-| Section | Purpose |
-|---------|---------|
-| [Architecture](#architecture) | System design, optimization flow |
-| [Development](#development-commands) | Testing, validation, debugging |
-| [CLI Usage](#cli-usage) | Command patterns, workflows |
-| [Known Issues](#known-issues) | Troubleshooting guide |
+| Section | Purpose | |---------|---------| | [Architecture](#architecture) | System
+design, optimization flow | | [Development](#development-commands) | Testing,
+validation, debugging | | [CLI Usage](#cli-usage) | Command patterns, workflows | |
+[Known Issues](#known-issues) | Troubleshooting guide |
 
 ______________________________________________________________________
 
@@ -25,7 +24,8 @@ ______________________________________________________________________
 - **Per-Phi Init**: New `homodyne/optimization/initialization/per_phi_initializer.py`
 - **Linting**: Fixed F401/F841/E402/F811 issues across homodyne/
 - **Module Reorganization**: `optimization/` restructured into subpackages:
-  - `nlsq/` - NLSQ optimization (core, wrapper, jacobian, results, transforms, strategies/)
+  - `nlsq/` - NLSQ optimization (core, wrapper, jacobian, results, transforms,
+    strategies/)
   - `mcmc/` - MCMC inference (core, data_prep, priors, scaling, single_angle, cmc/)
 
 ### v2.4.0 (Nov 2025) - Per-Angle Scaling Mandatory
@@ -57,28 +57,33 @@ ______________________________________________________________________
 ### Optimization Stack
 
 1. **Primary**: NLSQ trust-region (Levenberg-Marquardt)
+
    - JIT-compiled, CPU-optimized
    - Auto strategy: STANDARD → LARGE → CHUNKED → STREAMING
 
-2. **Secondary**: NumPyro/BlackJAX MCMC (CMC-only in v2.4.1+)
+1. **Secondary**: NumPyro/BlackJAX MCMC (CMC-only in v2.4.1+)
+
    - Physics-informed priors, auto-retry (max 3)
    - Single-angle: Log-space D0 sampling for stability
 
 ### Analysis Modes
 
 **Static Isotropic** (3 params):
+
 ```
 Physical: [D₀, α, D_offset]
 With scaling: [contrast, offset, D₀, α, D_offset]
 ```
 
 **Laminar Flow** (7 params):
+
 ```
 Physical: [D₀, α, D_offset, γ̇₀, β, γ̇_offset, φ₀]
 With scaling: [contrast, offset, D₀, α, D_offset, γ̇₀, β, γ̇_offset, φ₀]
 ```
 
 **Per-Angle Scaling** (v2.4.0 mandatory):
+
 ```
 3 angles: [c₀,c₁,c₂, o₀,o₁,o₂, ...physical_params]
 ```
@@ -93,13 +98,15 @@ ConfigManager → XPCSDataLoader → CLI Commands
 ### Parameter Management
 
 **ParameterManager** (`config/parameter_manager.py`):
+
 - Name mapping: `gamma_dot_0` → `gamma_dot_t0`
 - Bounds validation, caching (~10-100x speedup)
 
 **Critical Paths**:
+
 1. `core/jax_backend.py:compute_residuals` (JIT, called repeatedly)
-2. `core/jax_backend.py:compute_g2_scaled` (vectorized, CPU-optimized)
-3. `data/memory_manager.py` (chunking, JAX arrays)
+1. `core/jax_backend.py:compute_g2_scaled` (vectorized, CPU-optimized)
+1. `data/memory_manager.py` (chunking, JAX arrays)
 
 ______________________________________________________________________
 
@@ -146,6 +153,7 @@ ______________________________________________________________________
 ## System Validation
 
 **9 Tests** (v2.3.0: GPU removed):
+
 - Dependency Versions (20%) - JAX==0.8.0 exact match
 - JAX Installation (20%) - CPU devices
 - NLSQ Integration (15%) - curve_fit, StreamingOptimizer
@@ -153,11 +161,13 @@ ______________________________________________________________________
 - Shell/Integration (15%) - Completion, imports
 
 **Health Score**:
+
 - 🟢 90-100: Production ready
 - 🟡 70-89: Functional (minor issues)
-- 🔴 <70: Critical failures
+- 🔴 \<70: Critical failures
 
 **Common Fixes**:
+
 ```bash
 pip install jax==0.8.0 jaxlib==0.8.0  # Version mismatch
 pip install --upgrade nlsq>=0.1.5     # Missing StreamingOptimizer
@@ -251,6 +261,7 @@ ______________________________________________________________________
 ### NLSQ Optimization
 
 **Issue**: `curve_fit_large()` returns `(popt, pcov)`, not `(popt, pcov, info)`
+
 ```python
 # ✅ CORRECT:
 popt, pcov = curve_fit_large(...)
@@ -258,6 +269,7 @@ info = {}  # Empty dict for consistency
 ```
 
 **Issue**: Silent failure (0 iterations)
+
 - ✅ **RESOLVED in v2.2.1**: Auto parameter expansion, gradient sanity check
 - Activates: Dataset ≥ 1M, per-angle scaling, stratified data
 - Fix: `homodyne/optimization/nlsq/wrapper.py`
@@ -265,12 +277,15 @@ info = {}  # Empty dict for consistency
 ### MCMC Initialization
 
 **CRITICAL**: Parameter ordering requirement for per-angle scaling
+
 - ✅ **RESOLVED in v2.4.0 (Nov 14, 2025)**: Parameter ordering fixed in coordinator
-- **Root Cause**: NumPyro's `init_to_value()` requires parameters in EXACT order as model samples them
+- **Root Cause**: NumPyro's `init_to_value()` requires parameters in EXACT order as
+  model samples them
 - **Symptom**: "Cannot find valid initial parameters" error during MCMC initialization
 - **Error Location**: `homodyne/optimization/mcmc/cmc/backends/multiprocessing.py`
 
 **Required Parameter Ordering**:
+
 ```python
 # NumPyro model samples parameters in THIS ORDER:
 # 1. Per-angle contrast params: contrast_0, contrast_1, ..., contrast_{n_phi-1}
@@ -287,11 +302,14 @@ correct_order = [
 ```
 
 **Fix Locations**:
+
 - Coordinator: `homodyne/optimization/mcmc/cmc/coordinator.py` (parameter expansion)
-- Worker validation: `homodyne/optimization/mcmc/cmc/backends/multiprocessing.py` (assertion)
+- Worker validation: `homodyne/optimization/mcmc/cmc/backends/multiprocessing.py`
+  (assertion)
 - Model sampling: `homodyne/optimization/mcmc/core.py` (per-angle iteration)
 
 **Developer Notes**:
+
 - Python dict insertion order matters for NumPyro initialization (Python 3.7+)
 - Worker validates parameter ordering at runtime (raises ValueError if wrong)
 - If coordinator sends wrong order, NumPyro assigns wrong values (e.g., D0 → contrast_0)
@@ -300,6 +318,7 @@ correct_order = [
 ### Plotting
 
 **Issue**: Two-time correlation diagonal orientation
+
 ```python
 # ✅ CORRECT:
 ax.imshow(c2.T, origin='lower', extent=[t1[0], t1[-1], t2[0], t2[-1]])
@@ -319,13 +338,13 @@ ______________________________________________________________________
 
 - **JAX 0.8.0 + jaxlib 0.8.0** (exact match, CPU-only)
 - **nlsq ≥ 0.1.0** - Trust-region optimization
-- **NumPyro ≥ 0.18.0, <0.20.0** - MCMC
-- **BlackJAX ≥ 1.2.0, <2.0.0** - MCMC backend
-- **NumPy ≥ 2.0.0, <3.0.0**
-- **SciPy ≥ 1.14.0, <2.0.0**
-- **h5py ≥ 3.10.0, <4.0.0**
+- **NumPyro ≥ 0.18.0, \<0.20.0** - MCMC
+- **BlackJAX ≥ 1.2.0, \<2.0.0** - MCMC backend
+- **NumPy ≥ 2.0.0, \<3.0.0**
+- **SciPy ≥ 1.14.0, \<2.0.0**
+- **h5py ≥ 3.10.0, \<4.0.0**
 - **PyYAML ≥ 6.0.2**
-- **matplotlib ≥ 3.8.0, <4.0.0**
+- **matplotlib ≥ 3.8.0, \<4.0.0**
 - **psutil ≥ 6.0.0**
 
 ### Platform Support
@@ -345,16 +364,19 @@ ______________________________________________________________________
 ### Canonical Parameter Names
 
 **Static Isotropic** (3 params):
+
 ```python
 ['D0', 'alpha', 'D_offset']
 ```
 
 **Laminar Flow** (7 params):
+
 ```python
 ['D0', 'alpha', 'D_offset', 'gamma_dot_t0', 'beta', 'gamma_dot_t_offset', 'phi0']
 ```
 
 **All Parameters** (with scaling):
+
 ```python
 ['contrast', 'offset', 'D0', 'alpha', 'D_offset', 'gamma_dot_t0', 'beta',
  'gamma_dot_t_offset', 'phi0']
@@ -364,8 +386,12 @@ ______________________________________________________________________
 
 - Float32 recommended for MCMC
 - Homodyne supports both float32 and float64
-- **Don't question initial parameter values/bounds - they are verified and physically correct**
+- **Don't question initial parameter values/bounds - they are verified and physically
+  correct**
 - Per-angle scaling mandatory in v2.4.0
 - CPU-only in v2.3.0+ (GPU support removed)
-- All C2 heatmap plots now use adaptive color scaling with the conditional logic: vmin = max(1.0, c2_min) # Use data_min if >= 1.0, else clamp to 1.0; vmax = min(1.6, c2_max) # Use data_max if <= 1.6, else clamp to 1.6
-- Only two modes, "static" and "laminar_flow", are available in the current codebase. No "static_isotropic" and "static_anisotropic" modes exist in the current codebase.
+- All C2 heatmap plots now use adaptive color scaling with the conditional logic: vmin =
+  max(1.0, c2_min) # Use data_min if >= 1.0, else clamp to 1.0; vmax = min(1.6, c2_max)
+  \# Use data_max if \<= 1.6, else clamp to 1.6
+- Only two modes, "static" and "laminar_flow", are available in the current codebase. No
+  "static_isotropic" and "static_anisotropic" modes exist in the current codebase.

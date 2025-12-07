@@ -101,7 +101,7 @@ def test_split_data_by_angle_basic(simple_dataset):
     assert len(subsets) == 3
 
     # Check each subset
-    for i, subset in enumerate(subsets):
+    for _i, subset in enumerate(subsets):
         assert isinstance(subset, AngleSubset)
         assert subset.n_points == 100  # 100 points per angle
         assert len(subset.phi) == 100
@@ -121,8 +121,8 @@ def test_split_data_by_angle_preserves_data(simple_dataset):
 
     # Combine all subsets
     combined_phi = np.concatenate([s.phi for s in subsets])
-    combined_t1 = np.concatenate([s.t1 for s in subsets])
-    combined_t2 = np.concatenate([s.t2 for s in subsets])
+    np.concatenate([s.t1 for s in subsets])
+    np.concatenate([s.t2 for s in subsets])
     combined_g2 = np.concatenate([s.g2_exp for s in subsets])
 
     # Should have same total points

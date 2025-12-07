@@ -95,7 +95,6 @@ class TestCheckpointSaveHDF5:
         # Simulated checkpoint data
         batch_idx = 10
         parameters = np.array([1.0, 2.0, 3.0])
-        optimizer_state = {"iteration": 50, "lr": 0.01}
         loss = 0.123
 
         # Would call: checkpoint_manager.save_checkpoint(...)
@@ -250,7 +249,7 @@ class TestCheckpointLoadValidation:
         # Would raise: NLSQCheckpointError
         # For now, verify file doesn't exist
         with pytest.raises(FileNotFoundError):
-            with h5py.File(checkpoint_path, "r") as f:
+            with h5py.File(checkpoint_path, "r"):
                 pass
 
 
@@ -366,7 +365,7 @@ class TestCheckpointCorruptionDetection:
             f.write(b"corrupted data")
 
         # Should detect corruption
-        with pytest.raises(Exception):  # h5py will raise OSError or similar
+        with pytest.raises(OSError):
             with h5py.File(checkpoint_path, "r") as f:
                 pass
 
@@ -419,7 +418,7 @@ class TestCheckpointCorruptionDetection:
         # Should handle gracefully (return None or raise specific exception)
         checkpoint_valid = False
         try:
-            with h5py.File(checkpoint_path, "r") as f:
+            with h5py.File(checkpoint_path, "r"):
                 checkpoint_valid = True
         except Exception:
             checkpoint_valid = False
@@ -515,7 +514,6 @@ class TestCheckpointManagerWorkflow:
         checkpoint_dir.mkdir()
 
         # Create checkpoints with different timestamps
-        import time
 
         for i in range(3):
             checkpoint_path = checkpoint_dir / f"checkpoint_batch_{i:04d}.h5"
@@ -549,7 +547,7 @@ class TestCheckpointManagerWorkflow:
 
         # 2. Load checkpoint
         with h5py.File(checkpoint_path, "r") as f:
-            loaded_params = f["parameters"][:]
+            f["parameters"][:]
             loaded_batch = f.attrs["batch_idx"]
 
         # 3. Resume (next batch)
@@ -669,7 +667,7 @@ class TestCheckpointManagerSave:
             assert metadata_group.attrs["float_value"] == 3.14
             assert metadata_group.attrs["str_value"] == "test"
             # h5py converts bool to numpy bool, use == not is
-            assert metadata_group.attrs["bool_value"] == True
+            assert metadata_group.attrs["bool_value"]
 
     def test_save_checkpoint_with_list_metadata(self, tmp_path):
         """Test saving checkpoint with list metadata (JSON serialization)."""
@@ -749,7 +747,6 @@ class TestCheckpointManagerSave:
         optimizer_state = {"iteration": 42}
 
         # Mock time.time to simulate slow save
-        original_time = time.time
         call_count = [0]
 
         def mock_time():
@@ -760,7 +757,7 @@ class TestCheckpointManagerSave:
                 return 2.5  # End time (2.5 seconds elapsed)
 
         with patch("time.time", side_effect=mock_time):
-            checkpoint_path = manager.save_checkpoint(
+            manager.save_checkpoint(
                 batch_idx=10,
                 parameters=params,
                 optimizer_state=optimizer_state,

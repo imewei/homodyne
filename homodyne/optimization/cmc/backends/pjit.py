@@ -146,7 +146,9 @@ class PjitBackend(CMCBackend):
 
         for i, shard in enumerate(shards):
             device_idx = i % n_devices
-            logger.debug(f"Processing shard {i + 1}/{len(shards)} on device {device_idx}")
+            logger.debug(
+                f"Processing shard {i + 1}/{len(shards)} on device {device_idx}"
+            )
 
             # Place data on specific device
             with jax.default_device(devices[device_idx]):
@@ -174,9 +176,11 @@ class PjitBackend(CMCBackend):
         # Combine results from all shards
         combined = combine_shard_samples(
             shard_results,
-            method=config.combination_method
-            if hasattr(config, "combination_method")
-            else "weighted_gaussian",
+            method=(
+                config.combination_method
+                if hasattr(config, "combination_method")
+                else "weighted_gaussian"
+            ),
         )
 
         elapsed = time.time() - start_time

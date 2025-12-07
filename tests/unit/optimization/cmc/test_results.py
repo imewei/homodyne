@@ -19,9 +19,7 @@ class TestCMCResult:
         param_names = ["contrast_0", "offset_0", "D0", "alpha", "D_offset"]
 
         # Create sample arrays
-        samples = {
-            name: np.random.randn(n_chains, n_samples) for name in param_names
-        }
+        samples = {name: np.random.randn(n_chains, n_samples) for name in param_names}
 
         return CMCResult(
             parameters=np.array([0.5, 1.0, 1000.0, 0.5, 0.0]),
@@ -29,9 +27,9 @@ class TestCMCResult:
             param_names=param_names,
             samples=samples,
             convergence_status="converged",
-            r_hat={name: 1.001 for name in param_names},
-            ess_bulk={name: 500.0 for name in param_names},
-            ess_tail={name: 400.0 for name in param_names},
+            r_hat=dict.fromkeys(param_names, 1.001),
+            ess_bulk=dict.fromkeys(param_names, 500.0),
+            ess_tail=dict.fromkeys(param_names, 400.0),
             divergences=0,
             inference_data=None,  # Would be ArviZ object
             execution_time=60.0,

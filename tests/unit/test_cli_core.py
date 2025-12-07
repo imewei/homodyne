@@ -1233,7 +1233,7 @@ class TestDataLoading:
         }
 
         # Call _load_data
-        result = _load_data(mock_args, mock_config)
+        _load_data(mock_args, mock_config)
 
         # Verify it handled relative path
         assert mock_loader_class.called
@@ -1308,7 +1308,7 @@ class TestEdgeCases:
         config = ConfigManager(config_override=config_data)
 
         # Should handle None gracefully
-        exp_data = config.config["experimental_data"]
+        config.config["experimental_data"]
         # Normalization might skip or handle None values
         # This tests for no crash
 
@@ -1369,7 +1369,7 @@ class TestIntegrationScenarios:
             "analyzer_parameters": {"dt": 0.1},
         }
 
-        config = ConfigManager(config_override=config_data)
+        ConfigManager(config_override=config_data)
 
         # Mock args with different file
         mock_args = Mock()

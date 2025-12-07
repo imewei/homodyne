@@ -18,6 +18,8 @@ try:
     import jax
     import jax.numpy as jnp
 
+    _ = jax
+
     JAX_AVAILABLE = True
 except ImportError:
     JAX_AVAILABLE = False
@@ -28,6 +30,8 @@ try:
     from hypothesis import assume, given, settings
     from hypothesis import strategies as st
     from hypothesis.extra.numpy import arrays
+
+    _ = arrays
 
     HAS_HYPOTHESIS = True
 except ImportError:

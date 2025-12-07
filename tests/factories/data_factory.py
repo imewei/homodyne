@@ -36,6 +36,8 @@ try:
     import jax
     import jax.numpy as jnp
 
+    _ = jax
+
     JAX_AVAILABLE = True
 except ImportError:
     JAX_AVAILABLE = False
@@ -293,7 +295,7 @@ class XPCSDataFactory:
             "L": 1.0,
         }
 
-        for i, frame_time in enumerate(frame_times):
+        for _i, frame_time in enumerate(frame_times):
             # Modify parameters if dynamic
             if dynamic_parameters:
                 params = base_params.copy()

@@ -24,10 +24,9 @@ def mock_stratified_data_small():
     """Create small mock stratified data for testing (3 angles, 100 points per angle)."""
     n_phi = 3
     n_points_per_angle = 100
-    n_total = n_phi * n_points_per_angle
+    n_phi * n_points_per_angle
 
     # Create mock chunks (2 chunks)
-    chunk_size = 150
     n_chunks = 2
 
     class MockChunk:
@@ -68,7 +67,7 @@ def mock_stratified_data_small():
         chunk_t2 = []
         chunk_g2 = []
 
-        for phi_idx, phi_val in enumerate(phi_vals):
+        for phi_idx, _phi_val in enumerate(phi_vals):
             # Flatten the (t1, t2) grid for this phi
             phi_slice = phi_grid[phi_idx].flatten()
             t1_slice = t1_grid[phi_idx].flatten()

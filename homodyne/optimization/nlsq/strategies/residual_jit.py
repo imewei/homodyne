@@ -413,7 +413,7 @@ class StratifiedResidualFunctionJIT:
             f"{n_expected} expected angles per chunk"
         )
 
-        for i, chunk in enumerate(self.chunks):
+        for i, _chunk in enumerate(self.chunks):
             # Only check real data (not padding)
             n_real = int(np.sum(self.mask[i]))
             phi_real = self.phi_padded[i, :n_real]

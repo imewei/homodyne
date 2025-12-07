@@ -7,8 +7,6 @@ comprehensive documentation with all required extensions and settings.
 import sys
 from pathlib import Path
 
-import pytest
-
 
 def test_conf_py_loads_without_errors():
     """Test that conf.py can be loaded without import errors."""
@@ -66,9 +64,9 @@ def test_required_extensions_enabled():
         ]
 
         for ext in required_extensions:
-            assert (
-                ext in conf.extensions
-            ), f"Required extension '{ext}' not found in extensions list"
+            assert ext in conf.extensions, (
+                f"Required extension '{ext}' not found in extensions list"
+            )
 
     finally:
         sys.path.pop(0)
@@ -89,16 +87,16 @@ def test_intersphinx_mappings_resolve():
         spec.loader.exec_module(conf)
 
         # Check that intersphinx_mapping exists and has required projects
-        assert hasattr(
-            conf, "intersphinx_mapping"
-        ), "intersphinx_mapping not configured"
+        assert hasattr(conf, "intersphinx_mapping"), (
+            "intersphinx_mapping not configured"
+        )
 
         required_mappings = ["python", "jax", "numpy", "numpyro", "scipy"]
 
         for project in required_mappings:
-            assert (
-                project in conf.intersphinx_mapping
-            ), f"Required intersphinx mapping '{project}' not found"
+            assert project in conf.intersphinx_mapping, (
+                f"Required intersphinx mapping '{project}' not found"
+            )
 
             # Check that mapping has a valid URL
             url = conf.intersphinx_mapping[project][0]
@@ -137,9 +135,9 @@ def test_mathjax3_configuration():
 
         # Verify standard delimiters are present
         assert ["$", "$"] in tex_config["inlineMath"], "Dollar sign delimiter missing"
-        assert (
-            ["$$", "$$"] in tex_config["displayMath"]
-        ), "Double dollar delimiter missing"
+        assert ["$$", "$$"] in tex_config["displayMath"], (
+            "Double dollar delimiter missing"
+        )
 
     finally:
         sys.path.pop(0)
@@ -161,9 +159,9 @@ def test_autodoc_mock_imports_empty():
 
         # Check that autodoc_mock_imports exists and is empty
         assert hasattr(conf, "autodoc_mock_imports"), "autodoc_mock_imports not set"
-        assert (
-            conf.autodoc_mock_imports == []
-        ), f"autodoc_mock_imports should be empty, got: {conf.autodoc_mock_imports}"
+        assert conf.autodoc_mock_imports == [], (
+            f"autodoc_mock_imports should be empty, got: {conf.autodoc_mock_imports}"
+        )
 
     finally:
         sys.path.pop(0)
@@ -191,25 +189,25 @@ def test_sphinx_rtd_theme_configuration():
         theme_opts = conf.html_theme_options
 
         # Verify required theme options
-        assert (
-            theme_opts.get("navigation_depth") == 3
-        ), "navigation_depth should be 3"
-        assert (
-            theme_opts.get("sticky_navigation") is True
-        ), "sticky_navigation should be True"
-        assert (
-            theme_opts.get("collapse_navigation") is True
-        ), "collapse_navigation should be True"
-        assert (
-            theme_opts.get("style_nav_header_background") == "#2980b9"
-        ), "Argonne branding color should be #2980b9"
-        assert (
-            theme_opts.get("prev_next_buttons_location") == "bottom"
-        ), "prev_next_buttons_location should be 'bottom'"
+        assert theme_opts.get("navigation_depth") == 3, "navigation_depth should be 3"
+        assert theme_opts.get("sticky_navigation") is True, (
+            "sticky_navigation should be True"
+        )
+        assert theme_opts.get("collapse_navigation") is True, (
+            "collapse_navigation should be True"
+        )
+        assert theme_opts.get("style_nav_header_background") == "#2980b9", (
+            "Argonne branding color should be #2980b9"
+        )
+        assert theme_opts.get("prev_next_buttons_location") == "bottom", (
+            "prev_next_buttons_location should be 'bottom'"
+        )
 
         # Check sourcelink is disabled
         assert hasattr(conf, "html_show_sourcelink"), "html_show_sourcelink not set"
-        assert conf.html_show_sourcelink is False, "html_show_sourcelink should be False"
+        assert conf.html_show_sourcelink is False, (
+            "html_show_sourcelink should be False"
+        )
 
     finally:
         sys.path.pop(0)
@@ -230,16 +228,16 @@ def test_myst_parser_extensions():
         spec.loader.exec_module(conf)
 
         # Check MyST extensions
-        assert hasattr(
-            conf, "myst_enable_extensions"
-        ), "myst_enable_extensions not configured"
+        assert hasattr(conf, "myst_enable_extensions"), (
+            "myst_enable_extensions not configured"
+        )
 
         required_myst_extensions = ["dollarmath", "amsmath", "deflist", "colon_fence"]
 
         for ext in required_myst_extensions:
-            assert (
-                ext in conf.myst_enable_extensions
-            ), f"Required MyST extension '{ext}' not enabled"
+            assert ext in conf.myst_enable_extensions, (
+                f"Required MyST extension '{ext}' not enabled"
+            )
 
         # Check heading anchors
         assert hasattr(conf, "myst_heading_anchors"), "myst_heading_anchors not set"
@@ -264,14 +262,20 @@ def test_project_metadata():
         spec.loader.exec_module(conf)
 
         # Check basic project info
-        assert conf.project == "Homodyne", f"Project should be 'Homodyne', got '{conf.project}'"
-        assert conf.version == "2.4.1", f"Version should be '2.4.1', got '{conf.version}'"
-        assert conf.release == "2.4.1", f"Release should be '2.4.1', got '{conf.release}'"
+        assert conf.project == "Homodyne", (
+            f"Project should be 'Homodyne', got '{conf.project}'"
+        )
+        assert conf.version == "2.4.1", (
+            f"Version should be '2.4.1', got '{conf.version}'"
+        )
+        assert conf.release == "2.4.1", (
+            f"Release should be '2.4.1', got '{conf.release}'"
+        )
 
         # Check autodoc settings
-        assert (
-            conf.autodoc_typehints == "description"
-        ), "autodoc_typehints should be 'description'"
+        assert conf.autodoc_typehints == "description", (
+            "autodoc_typehints should be 'description'"
+        )
         assert conf.autosummary_generate is True, "autosummary_generate should be True"
 
     finally:
@@ -298,9 +302,9 @@ def test_warning_suppression():
         expected_suppressions = ["misc.highlighting_failure", "myst.xref_missing"]
 
         for warning in expected_suppressions:
-            assert (
-                warning in conf.suppress_warnings
-            ), f"Warning '{warning}' should be suppressed"
+            assert warning in conf.suppress_warnings, (
+                f"Warning '{warning}' should be suppressed"
+            )
 
     finally:
         sys.path.pop(0)

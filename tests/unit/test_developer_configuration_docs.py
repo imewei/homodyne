@@ -5,10 +5,7 @@ build correctly with Sphinx, internal links resolve, and content is properly
 formatted and complete.
 """
 
-import sys
 from pathlib import Path
-
-import pytest
 
 
 def test_developer_guide_index_exists():
@@ -16,7 +13,9 @@ def test_developer_guide_index_exists():
     docs_path = Path(__file__).parent.parent.parent / "docs"
     dev_guide_index = docs_path / "developer-guide" / "index.rst"
 
-    assert dev_guide_index.exists(), f"developer-guide/index.rst not found at {dev_guide_index}"
+    assert dev_guide_index.exists(), (
+        f"developer-guide/index.rst not found at {dev_guide_index}"
+    )
 
     # Verify file is not empty
     content = dev_guide_index.read_text()
@@ -29,15 +28,25 @@ def test_developer_guide_contributing_exists():
     docs_path = Path(__file__).parent.parent.parent / "docs"
     contributing = docs_path / "developer-guide" / "contributing.rst"
 
-    assert contributing.exists(), f"developer-guide/contributing.rst not found at {contributing}"
+    assert contributing.exists(), (
+        f"developer-guide/contributing.rst not found at {contributing}"
+    )
 
     content = contributing.read_text()
     assert len(content) > 0, "developer-guide/contributing.rst is empty"
 
     # Verify key sections exist
-    required_sections = ["Development Setup", "uv", "Code Quality", "Testing", "Pull Request"]
+    required_sections = [
+        "Development Setup",
+        "uv",
+        "Code Quality",
+        "Testing",
+        "Pull Request",
+    ]
     for section in required_sections:
-        assert section in content, f"Required section '{section}' not found in contributing.rst"
+        assert section in content, (
+            f"Required section '{section}' not found in contributing.rst"
+        )
 
 
 def test_developer_guide_testing_exists():
@@ -45,15 +54,25 @@ def test_developer_guide_testing_exists():
     docs_path = Path(__file__).parent.parent.parent / "docs"
     testing_guide = docs_path / "developer-guide" / "testing.rst"
 
-    assert testing_guide.exists(), f"developer-guide/testing.rst not found at {testing_guide}"
+    assert testing_guide.exists(), (
+        f"developer-guide/testing.rst not found at {testing_guide}"
+    )
 
     content = testing_guide.read_text()
     assert len(content) > 0, "developer-guide/testing.rst is empty"
 
     # Verify key sections exist
-    required_sections = ["Test Organization", "unit/", "integration/", "Running Tests", "make test"]
+    required_sections = [
+        "Test Organization",
+        "unit/",
+        "integration/",
+        "Running Tests",
+        "make test",
+    ]
     for section in required_sections:
-        assert section in content, f"Required section '{section}' not found in testing.rst"
+        assert section in content, (
+            f"Required section '{section}' not found in testing.rst"
+        )
 
 
 def test_configuration_index_exists():
@@ -81,7 +100,9 @@ def test_configuration_templates_exists():
     # Verify key sections exist
     required_sections = ["Static Mode", "Laminar Flow", "Per-Angle Scaling", "YAML"]
     for section in required_sections:
-        assert section in content, f"Required section '{section}' not found in templates.rst"
+        assert section in content, (
+            f"Required section '{section}' not found in templates.rst"
+        )
 
 
 def test_configuration_options_exists():
@@ -95,9 +116,16 @@ def test_configuration_options_exists():
     assert len(content) > 0, "configuration/options.rst is empty"
 
     # Verify key sections exist
-    required_sections = ["Configuration Options Reference", "Static Mode Bounds", "NLSQ Configuration", "MCMC Configuration"]
+    required_sections = [
+        "Configuration Options Reference",
+        "Static Mode Bounds",
+        "NLSQ Configuration",
+        "MCMC Configuration",
+    ]
     for section in required_sections:
-        assert section in content, f"Required section '{section}' not found in options.rst"
+        assert section in content, (
+            f"Required section '{section}' not found in options.rst"
+        )
 
 
 def test_developer_guide_references_claude_md():
@@ -114,7 +142,9 @@ def test_developer_guide_references_claude_md():
 
     combined_content = contributing_content + testing_content
     for ref in expected_refs:
-        assert ref in combined_content, f"Expected command/tool '{ref}' not found in developer guides"
+        assert ref in combined_content, (
+            f"Expected command/tool '{ref}' not found in developer guides"
+        )
 
 
 def test_configuration_templates_reference_yaml():
@@ -134,26 +164,34 @@ def test_internal_links_in_developer_guide():
     """Test that internal links in developer guide are properly formatted."""
     docs_path = Path(__file__).parent.parent.parent / "docs"
     dev_guide_index = docs_path / "developer-guide" / "index.rst"
-    contributing = docs_path / "developer-guide" / "contributing.rst"
-    testing_guide = docs_path / "developer-guide" / "testing.rst"
+    docs_path / "developer-guide" / "contributing.rst"
+    docs_path / "developer-guide" / "testing.rst"
 
     # Check that index.rst has proper toctree
     index_content = dev_guide_index.read_text()
-    assert "contributing" in index_content.lower(), "contributing guide not referenced in dev guide index"
-    assert "testing" in index_content.lower(), "testing guide not referenced in dev guide index"
+    assert "contributing" in index_content.lower(), (
+        "contributing guide not referenced in dev guide index"
+    )
+    assert "testing" in index_content.lower(), (
+        "testing guide not referenced in dev guide index"
+    )
 
 
 def test_internal_links_in_configuration():
     """Test that internal links in configuration guide are properly formatted."""
     docs_path = Path(__file__).parent.parent.parent / "docs"
     config_index = docs_path / "configuration" / "index.rst"
-    templates = docs_path / "configuration" / "templates.rst"
-    options = docs_path / "configuration" / "options.rst"
+    docs_path / "configuration" / "templates.rst"
+    docs_path / "configuration" / "options.rst"
 
     # Check that index.rst has proper toctree
     index_content = config_index.read_text()
-    assert "templates" in index_content.lower(), "templates guide not referenced in configuration index"
-    assert "options" in index_content.lower(), "options guide not referenced in configuration index"
+    assert "templates" in index_content.lower(), (
+        "templates guide not referenced in configuration index"
+    )
+    assert "options" in index_content.lower(), (
+        "options guide not referenced in configuration index"
+    )
 
 
 def test_sphinx_rst_formatting():
@@ -174,11 +212,13 @@ def test_sphinx_rst_formatting():
         content = rst_file.read_text()
 
         # Check for required RST elements
-        assert "=" in content or "-" in content or "~" in content, f"No section headers in {rst_file.name}"
+        assert "=" in content or "-" in content or "~" in content, (
+            f"No section headers in {rst_file.name}"
+        )
 
         # Check that file doesn't have trailing whitespace on lines (common issue)
         lines = content.split("\n")
-        for i, line in enumerate(lines):
+        for _i, line in enumerate(lines):
             if line.rstrip() != line and line.strip():  # Ignore empty lines
                 # This is a warning, not a failure - allow it but note it
                 pass

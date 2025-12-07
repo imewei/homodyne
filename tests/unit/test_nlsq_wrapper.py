@@ -23,14 +23,11 @@ NLSQWrapper API (v2.4.1):
 - fit(data, config, initial_params, bounds, analysis_mode, per_angle_scaling, ...)
 """
 
-import pytest
-import numpy as np
-from unittest.mock import Mock, patch, MagicMock
-from typing import Any
+from unittest.mock import Mock, patch
 
 # Import order matters for JAX
-import jax
-import jax.numpy as jnp
+import numpy as np
+import pytest
 
 
 @pytest.fixture
@@ -59,13 +56,13 @@ def mock_xpcs_data():
     q = 0.01 * np.ones(n_phi)
 
     # Generate valid C2 data (g2 >= 1.0)
-    T1, T2 = np.meshgrid(t, t, indexing='ij')
+    T1, T2 = np.meshgrid(t, t, indexing="ij")
     tau = np.abs(T1 - T2)
     c2 = np.zeros((n_phi, n_t, n_t))
 
     for i in range(n_phi):
         D_eff = 1000 * (1 + 0.5 * np.cos(2 * phi[i]))
-        g1_sq = np.exp(-2 * D_eff * q[i]**2 * tau)
+        g1_sq = np.exp(-2 * D_eff * q[i] ** 2 * tau)
         c2[i] = 1.0 + 0.5 * g1_sq
 
     sigma = 0.01 * np.ones_like(c2)
@@ -211,7 +208,7 @@ class TestNLSQWrapperFit:
 
         wrapper = NLSQWrapper()
 
-        with patch.object(wrapper, 'fit') as mock_fit:
+        with patch.object(wrapper, "fit") as mock_fit:
             mock_result = Mock()
             mock_result.converged = True
             mock_fit.return_value = mock_result
@@ -238,9 +235,7 @@ class TestNLSQWrapperFit:
         for key in expected_keys:
             assert key in per_angle_initial_params, f"Missing key: {key}"
 
-    def test_fit_validates_bounds(
-        self, mock_config, mock_xpcs_data, per_angle_bounds
-    ):
+    def test_fit_validates_bounds(self, mock_config, mock_xpcs_data, per_angle_bounds):
         """TC-FIT-003: fit() validates parameter bounds."""
         # Verify bounds structure matches params
         n_angles = 3
@@ -256,7 +251,7 @@ class TestNLSQWrapperFit:
 
         wrapper = NLSQWrapper()
 
-        with patch.object(wrapper, 'fit') as mock_fit:
+        with patch.object(wrapper, "fit") as mock_fit:
             mock_result = Mock()
             mock_result.converged = True
             mock_result.iterations = 50
@@ -274,7 +269,7 @@ class TestNLSQWrapperFit:
 
         wrapper = NLSQWrapper()
 
-        with patch.object(wrapper, 'fit') as mock_fit:
+        with patch.object(wrapper, "fit") as mock_fit:
             mock_result = Mock()
             mock_result.converged = False
             mock_result.iterations = 100
@@ -292,7 +287,7 @@ class TestNLSQWrapperFit:
         wrapper = NLSQWrapper()
 
         # Mock internal method that handles bounds violation
-        with patch.object(wrapper, '_perturb_parameters', create=True) as mock_perturb:
+        with patch.object(wrapper, "_perturb_parameters", create=True) as mock_perturb:
             mock_perturb.return_value = {"D0": 1100.0}  # 10% perturbed
 
             # Verify perturbation factor
@@ -303,7 +298,9 @@ class TestNLSQWrapperFit:
     def test_fit_nan_detection_and_reset(self, mock_config, mock_xpcs_data):
         """TC-FIT-006: fit() detects NaN and resets."""
         # NaN handling is critical for production reliability
-        assert not np.any(np.isnan(mock_xpcs_data["c2"])), "Test data should not have NaN"
+        assert not np.any(np.isnan(mock_xpcs_data["c2"])), (
+            "Test data should not have NaN"
+        )
 
     def test_fit_covariance_singular_handling(self, mock_config):
         """TC-FIT-007: fit() handles singular covariance matrix."""
@@ -317,7 +314,7 @@ class TestNLSQWrapperFit:
 
         wrapper = NLSQWrapper()
 
-        with patch.object(wrapper, 'fit') as mock_fit:
+        with patch.object(wrapper, "fit") as mock_fit:
             mock_result = Mock()
             mock_result.chi_squared = 1200.5
             mock_result.reduced_chi_squared = 1.05
@@ -325,8 +322,8 @@ class TestNLSQWrapperFit:
 
             result = wrapper.fit(mock_xpcs_data, mock_config)
 
-            assert hasattr(result, 'chi_squared')
-            assert hasattr(result, 'reduced_chi_squared')
+            assert hasattr(result, "chi_squared")
+            assert hasattr(result, "reduced_chi_squared")
 
     def test_fit_logs_iterations(self, mock_config, mock_xpcs_data):
         """TC-FIT-009: fit() logs iteration progress."""
@@ -334,7 +331,7 @@ class TestNLSQWrapperFit:
 
         wrapper = NLSQWrapper()
 
-        with patch.object(wrapper, 'fit') as mock_fit:
+        with patch.object(wrapper, "fit") as mock_fit:
             mock_result = Mock()
             mock_result.iterations = 42
             mock_fit.return_value = mock_result
@@ -354,13 +351,13 @@ class TestNLSQWrapperFit:
 
         wrapper = NLSQWrapper()
 
-        with patch.object(wrapper, 'fit') as mock_fit:
+        with patch.object(wrapper, "fit") as mock_fit:
             mock_result = Mock()
             mock_result.uncertainties = {"D0": 50.0, "alpha": 0.02}
             mock_fit.return_value = mock_result
 
             result = wrapper.fit(mock_xpcs_data, mock_config)
-            assert hasattr(result, 'uncertainties')
+            assert hasattr(result, "uncertainties")
 
     def test_fit_handles_empty_data(self, mock_config):
         """TC-FIT-012: fit() raises error on empty data."""
@@ -379,7 +376,7 @@ class TestNLSQWrapperFit:
         """TC-FIT-014: fit() handles single-angle data."""
         n_t = 20
         t = np.linspace(0, 10, n_t)
-        T1, T2 = np.meshgrid(t, t, indexing='ij')
+        T1, T2 = np.meshgrid(t, t, indexing="ij")
         tau = np.abs(T1 - T2)
         c2 = 1.0 + 0.5 * np.exp(-0.1 * tau)
 
@@ -518,6 +515,7 @@ class TestOptimizationStrategy:
         """TC-STRATEGY-004: Strategy considers available memory."""
         # CHUNKED and STREAMING should be memory-aware
         import psutil
+
         available_memory = psutil.virtual_memory().available
 
         # Should have at least 1GB for optimization
@@ -643,9 +641,15 @@ class TestOptimizationResult:
         expected_params = n_angles * 2 + 3  # 3 + 3 + 3 = 9
 
         params = {
-            "contrast_0": 0.5, "contrast_1": 0.52, "contrast_2": 0.48,
-            "offset_0": 1.0, "offset_1": 1.01, "offset_2": 0.99,
-            "D0": 1000.0, "alpha": 0.567, "D_offset": 10.0,
+            "contrast_0": 0.5,
+            "contrast_1": 0.52,
+            "contrast_2": 0.48,
+            "offset_0": 1.0,
+            "offset_1": 1.01,
+            "offset_2": 0.99,
+            "D0": 1000.0,
+            "alpha": 0.567,
+            "D_offset": 10.0,
         }
 
         assert len(params) == expected_params
@@ -662,7 +666,7 @@ class TestNLSQWrapperErrorHandling:
         """TC-ERROR-001: Error recovery actions are logged."""
         from homodyne.optimization.nlsq.wrapper import NLSQWrapper
 
-        wrapper = NLSQWrapper()
+        NLSQWrapper()
 
         # Recovery actions should be trackable
         recovery_actions = []

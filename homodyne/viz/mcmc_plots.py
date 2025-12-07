@@ -1678,7 +1678,9 @@ def print_mcmc_summary(result: MCMCResult) -> None:
         std = result.std_params[i] if result.std_params is not None else 0.0
 
         if ci_lower is not None and ci_upper is not None:
-            print(f"  {name:20s}: {mean:12.4f} ± {std:8.4f}  [{ci_lower[i]:.4f}, {ci_upper[i]:.4f}]")
+            print(
+                f"  {name:20s}: {mean:12.4f} ± {std:8.4f}  [{ci_lower[i]:.4f}, {ci_upper[i]:.4f}]"
+            )
         else:
             print(f"  {name:20s}: {mean:12.4f} ± {std:8.4f}")
 

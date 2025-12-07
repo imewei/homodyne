@@ -265,8 +265,8 @@ def cleanup_all_files():
                     if not any(dir_path.iterdir()):
                         dir_path.rmdir()
                         all_removed.append(("Empty directory", dir_path.name))
-                except Exception:
-                    pass  # Directory not empty or permission issue
+                except Exception as exc:
+                    print(f"   ⚠️ Could not remove {dir_path}: {exc}")
 
         print("\n📊 Cleanup Summary:")
         if all_removed:

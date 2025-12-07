@@ -394,7 +394,9 @@ class TestCheckpointCorruption:
         checksum = hashlib.sha256(optimizer_bytes).hexdigest()
         with h5py.File(valid_checkpoint, "w") as f:
             f.create_dataset("parameters", data=np.array([1.0, 2.0, 3.0]))
-            f.create_dataset("optimizer_state", data=np.frombuffer(optimizer_bytes, dtype=np.uint8))
+            f.create_dataset(
+                "optimizer_state", data=np.frombuffer(optimizer_bytes, dtype=np.uint8)
+            )
             f.attrs["batch_idx"] = 1
             f.attrs["loss"] = 0.5
             f.attrs["checksum"] = checksum
@@ -458,7 +460,11 @@ class TestRecoveryMechanisms:
         if result is not None:
             strategy_name, recovered_params = result
             # For NLSQNumericalError, first strategy is "reduce_step_size"
-            assert strategy_name in ["reduce_step_size", "tighten_bounds", "rescale_data"]
+            assert strategy_name in [
+                "reduce_step_size",
+                "tighten_bounds",
+                "rescale_data",
+            ]
             assert not np.any(np.isnan(recovered_params))
             assert not np.any(np.isinf(recovered_params))
 
@@ -473,7 +479,9 @@ class TestRecoveryMechanisms:
 
         # Try 3 recovery attempts
         for attempt in range(3):
-            result = recovery.get_recovery_strategy(error, initial_params, attempt=attempt)
+            result = recovery.get_recovery_strategy(
+                error, initial_params, attempt=attempt
+            )
             if result is not None:
                 recovery_results.append(result)
 
@@ -594,7 +602,9 @@ class TestFailureHandlingIntegration:
         checksum1 = hashlib.sha256(optimizer_bytes1).hexdigest()
         with h5py.File(checkpoint1_path, "w") as f:
             f.create_dataset("parameters", data=np.array([1.0, 2.0, 3.0]))
-            f.create_dataset("optimizer_state", data=np.frombuffer(optimizer_bytes1, dtype=np.uint8))
+            f.create_dataset(
+                "optimizer_state", data=np.frombuffer(optimizer_bytes1, dtype=np.uint8)
+            )
             f.attrs["batch_idx"] = 1
             f.attrs["loss"] = 0.5
             f.attrs["checksum"] = checksum1
@@ -605,7 +615,9 @@ class TestFailureHandlingIntegration:
         checksum2 = hashlib.sha256(optimizer_bytes2).hexdigest()
         with h5py.File(checkpoint2_path, "w") as f:
             f.create_dataset("parameters", data=np.array([1.1, 2.1, 3.1]))
-            f.create_dataset("optimizer_state", data=np.frombuffer(optimizer_bytes2, dtype=np.uint8))
+            f.create_dataset(
+                "optimizer_state", data=np.frombuffer(optimizer_bytes2, dtype=np.uint8)
+            )
             f.attrs["batch_idx"] = 2
             f.attrs["loss"] = 0.4
             f.attrs["checksum"] = checksum2
@@ -632,7 +644,7 @@ class TestFailureHandlingIntegration:
             assert fallback_strategy in strategy_chain
 
         # Verify chain order
-        for i, strategy in enumerate(strategy_chain[:-1]):
+        for i, _strategy in enumerate(strategy_chain[:-1]):
             next_strategy = strategy_chain[i + 1]
             assert next_strategy in strategy_chain
 
@@ -668,7 +680,9 @@ class TestFailureHandlingIntegration:
             error_type="numerical",
         )
         stats = batch_stats.get_statistics()
-        assert stats["success_rate"] < 1.0  # Key is "success_rate" not "batch_success_rate"
+        assert (
+            stats["success_rate"] < 1.0
+        )  # Key is "success_rate" not "batch_success_rate"
 
 
 # ============================================================================

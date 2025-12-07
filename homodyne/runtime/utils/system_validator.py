@@ -13,7 +13,7 @@ import json
 import logging
 import os
 import shutil
-import subprocess
+import subprocess  # nosec B404
 import sys
 import time
 from dataclasses import asdict, dataclass
@@ -56,11 +56,15 @@ class SystemValidator:
     def run_command(self, cmd: list[str], timeout: int = 30) -> tuple[bool, str, str]:
         """Run shell command and return success, stdout, stderr."""
         try:
-            result = subprocess.run(
+            resolved = shutil.which(cmd[0])
+            if resolved:
+                cmd = [resolved] + cmd[1:]
+            result = subprocess.run(  # nosec B603
                 cmd,
                 capture_output=True,
                 text=True,
                 timeout=timeout,
+                check=False,
             )
             return result.returncode == 0, result.stdout, result.stderr
         except subprocess.TimeoutExpired:
@@ -294,7 +298,7 @@ alias hc-iso >/dev/null 2>&1 && echo "shortcut_alias_works" || echo "shortcut_al
                         working_aliases >= 2
                     )  # At least core and config should work
                 except Exception:
-                    pass
+                    logger.debug("Shell alias validation failed; continuing without alias checks")
 
             execution_time = time.perf_counter() - start_time
             warnings = []
@@ -728,8 +732,8 @@ alias hc-iso >/dev/null 2>&1 && echo "shortcut_alias_works" || echo "shortcut_al
                                 "StreamingOptimizer not available despite recent "
                                 "NLSQ version",
                             )
-                    except Exception:
-                        pass
+                    except Exception as exc:
+                        logger.debug("Version parsing for streaming optimizer failed: %s", exc)
 
             # Test 4: Homodyne NLSQ integration
             homodyne_integration_ok = True

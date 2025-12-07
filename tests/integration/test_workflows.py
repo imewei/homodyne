@@ -36,6 +36,8 @@ try:
     import jax
     import jax.numpy as jnp
 
+    _ = jax
+
     JAX_AVAILABLE = True
 except ImportError:
     JAX_AVAILABLE = False
@@ -44,6 +46,8 @@ except ImportError:
 # Handle NLSQ imports
 try:
     import nlsq
+
+    _ = nlsq
 
     from homodyne.optimization.nlsq import fit_nlsq_jax
 
@@ -66,7 +70,7 @@ class TestEndToEndWorkflows:
             from homodyne.data.xpcs_loader import XPCSLoader
 
             # NLSQ imports now at module level
-            pass
+            _ = (ConfigManager, XPCSLoader)
         except ImportError as e:
             pytest.skip(f"Required modules not available: {e}")
 
@@ -143,7 +147,7 @@ class TestEndToEndWorkflows:
             from homodyne.data.xpcs_loader import load_xpcs_data
 
             # NLSQ imports now at module level
-            pass
+            _ = load_xpcs_data
         except ImportError as e:
             pytest.skip(f"Required modules not available: {e}")
 
@@ -178,9 +182,7 @@ class TestEndToEndWorkflows:
 
         # Note: load_xpcs_data now expects a config_path (str), not a config dict
         # Skipping this test as it requires proper HDF5 files
-        pytest.skip(
-            "load_xpcs_data API changed: requires config_path, not config dict"
-        )
+        pytest.skip("load_xpcs_data API changed: requires config_path, not config dict")
 
     @pytest.mark.skipif(not HAS_YAML, reason="PyYAML not available")
     def test_yaml_config_workflow(self, temp_dir):
@@ -615,7 +617,7 @@ class TestCrossplatformCompatibility:
 
         # Run multiple optimizations to test memory consistency
         results = []
-        for i in range(3):
+        for _i in range(3):
             result = fit_nlsq_jax(data, test_config)
             results.append(result)
 

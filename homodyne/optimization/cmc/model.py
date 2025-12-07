@@ -36,10 +36,10 @@ def xpcs_model(
     q: float,
     L: float,
     dt: float,
-    time_grid: jnp.ndarray | None = None,
     analysis_mode: str,
     parameter_space: ParameterSpace,
     n_phi: int,
+    time_grid: jnp.ndarray | None = None,
     noise_scale: float = 0.1,
 ) -> None:
     """NumPyro model for XPCS two-time correlation function.
@@ -159,10 +159,10 @@ def xpcs_model_single_chain(
     q: float,
     L: float,
     dt: float,
-    time_grid: jnp.ndarray | None = None,
     analysis_mode: str,
     parameter_space: ParameterSpace,
     n_phi: int,
+    time_grid: jnp.ndarray | None = None,
     noise_scale: float = 0.1,
     use_log_d0: bool = True,
 ) -> None:
@@ -294,7 +294,9 @@ def get_model_param_count(n_phi: int, analysis_mode: str) -> int:
 
     # Physical parameters
     if analysis_mode == "laminar_flow":
-        n_params += 7  # D0, alpha, D_offset, gamma_dot_t0, beta, gamma_dot_t_offset, phi0
+        n_params += (
+            7  # D0, alpha, D_offset, gamma_dot_t0, beta, gamma_dot_t_offset, phi0
+        )
     else:
         n_params += 3  # D0, alpha, D_offset
 

@@ -77,7 +77,7 @@ def run_benchmark(enable_onednn: bool, num_iterations: int = 5) -> dict:
         - Broadcasting
         """
         # Time difference matrix
-        tau = jnp.abs(t1[:, None] - t2[None, :])
+        jnp.abs(t1[:, None] - t2[None, :])
 
         # Anomalous diffusion term: exp(-q²/2 * ∫D(t)dt)
         D0, alpha, D_offset = params[0], params[1], params[2]

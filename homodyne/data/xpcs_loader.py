@@ -663,7 +663,7 @@ class XPCSDataLoader:
 
             # Extract correlation data to determine matrix size
             c2_exp = data["c2_exp"]
-            _matrix_size = c2_exp.shape[-1]  # noqa: F841 - Reserved for future validation
+            _ = c2_exp.shape[-1]  # Reserved for future validation
 
             # CRITICAL FIX (Nov 14, 2025): Return 1D arrays, not 2D meshgrids
             # ROOT CAUSE: Commit e5ac926 changed to always return 2D meshgrids,

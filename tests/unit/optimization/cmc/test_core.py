@@ -8,9 +8,6 @@ Comprehensive tests for the core CMC orchestration:
 
 from __future__ import annotations
 
-from dataclasses import dataclass
-from unittest.mock import MagicMock, patch
-
 import numpy as np
 import pytest
 
@@ -20,7 +17,6 @@ pytest.importorskip("arviz", reason="ArviZ required for CMC unit tests")
 from homodyne.optimization.cmc.config import CMCConfig
 from homodyne.optimization.cmc.data_prep import PreparedData
 from homodyne.optimization.cmc.results import CMCResult
-
 
 # =============================================================================
 # Fixtures
@@ -73,9 +69,9 @@ def mock_cmc_result():
         param_names=param_names,
         samples=samples,
         convergence_status="converged",
-        r_hat={name: 1.01 for name in param_names},
-        ess_bulk={name: 500.0 for name in param_names},
-        ess_tail={name: 400.0 for name in param_names},
+        r_hat=dict.fromkeys(param_names, 1.01),
+        ess_bulk=dict.fromkeys(param_names, 500.0),
+        ess_tail=dict.fromkeys(param_names, 400.0),
         divergences=0,
         inference_data=None,
         execution_time=30.0,
@@ -289,8 +285,8 @@ class TestCMCScientificProperties:
         stats = mock_cmc_result.get_posterior_stats()
 
         for i, name in enumerate(mock_cmc_result.param_names):
-            param_value = mock_cmc_result.parameters[i]
-            param_unc = mock_cmc_result.uncertainties[i]
+            mock_cmc_result.parameters[i]
+            mock_cmc_result.uncertainties[i]
 
             # Mean from samples should be close to reported parameter
             sample_mean = stats[name]["mean"]

@@ -175,7 +175,7 @@ class StratifiedResidualFunction:
         # Store SAME global unique arrays for ALL chunks
         # This ensures flat indexing calculations use correct dimensions
         self.chunk_metadata = []
-        for chunk in self.chunks:
+        for _chunk in self.chunks:
             metadata = {
                 "phi_unique": global_phi_unique,  # Same for all chunks
                 "t1_unique": global_t1_unique,  # Same for all chunks

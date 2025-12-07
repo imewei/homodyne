@@ -64,17 +64,6 @@ except ImportError:
 from homodyne.optimization.batch_statistics import BatchStatistics
 from homodyne.optimization.checkpoint_manager import CheckpointManager
 from homodyne.optimization.exceptions import NLSQCheckpointError, NLSQOptimizationError
-from homodyne.optimization.numerical_validation import NumericalValidator
-from homodyne.optimization.recovery_strategies import RecoveryStrategyApplicator
-from homodyne.optimization.nlsq.strategies.sequential import (
-    JAC_SAMPLE_SIZE,
-    optimize_per_angle_sequential,
-)
-from homodyne.optimization.nlsq.strategies.selection import (
-    DatasetSizeStrategy,
-    OptimizationStrategy,
-    estimate_memory_requirements,
-)
 from homodyne.optimization.nlsq.strategies.chunking import (
     StratificationDiagnostics,
     analyze_angle_distribution,
@@ -89,7 +78,20 @@ from homodyne.optimization.nlsq.strategies.residual import (
     StratifiedResidualFunction,
     create_stratified_residual_function,
 )
-from homodyne.optimization.nlsq.strategies.residual_jit import StratifiedResidualFunctionJIT
+from homodyne.optimization.nlsq.strategies.residual_jit import (
+    StratifiedResidualFunctionJIT,
+)
+from homodyne.optimization.nlsq.strategies.selection import (
+    DatasetSizeStrategy,
+    OptimizationStrategy,
+    estimate_memory_requirements,
+)
+from homodyne.optimization.nlsq.strategies.sequential import (
+    JAC_SAMPLE_SIZE,
+    optimize_per_angle_sequential,
+)
+from homodyne.optimization.numerical_validation import NumericalValidator
+from homodyne.optimization.recovery_strategies import RecoveryStrategyApplicator
 
 DEFAULT_SHEAR_X_SCALE = {
     "gamma_dot_t0": 524.0,  # Canonical name (was gamma_dot_0)

@@ -439,7 +439,7 @@ class HomodyneModel:
             raise KeyError(
                 f"Missing required configuration key: {e}. "
                 f"Expected structure: config['analyzer_parameters'][...]",
-            )
+            ) from e
 
     def _determine_analysis_mode(self, config: dict) -> str:
         """Determine analysis mode from configuration."""

@@ -13,7 +13,7 @@ from __future__ import annotations
 
 import json
 import os
-import subprocess
+import subprocess  # nosec B404
 import tempfile
 import time
 from collections.abc import Callable
@@ -99,8 +99,11 @@ class PBSBackend(CMCBackend):
     def _validate_pbs_available(self) -> None:
         """Check if PBS commands are available."""
         try:
-            subprocess.run(
-                ["qstat", "--version"],
+            qstat_path = shutil.which("qstat")
+            if not qstat_path:
+                raise FileNotFoundError("qstat not found")
+            subprocess.run(  # nosec B603
+                [qstat_path, "--version"],
                 capture_output=True,
                 timeout=10,
                 check=False,
@@ -132,8 +135,11 @@ class PBSBackend(CMCBackend):
             True if PBS commands are accessible.
         """
         try:
-            result = subprocess.run(
-                ["which", "qsub"],
+            qsub_path = shutil.which("qsub")
+            if not qsub_path:
+                return False
+            result = subprocess.run(  # nosec B603
+                [qsub_path],
                 capture_output=True,
                 timeout=5,
                 check=False,
@@ -217,9 +223,11 @@ class PBSBackend(CMCBackend):
         # Combine samples
         combined = combine_shard_samples(
             shard_results,
-            method=config.combination_method
-            if hasattr(config, "combination_method")
-            else "weighted_gaussian",
+            method=(
+                config.combination_method
+                if hasattr(config, "combination_method")
+                else "weighted_gaussian"
+            ),
         )
 
         logger.info("PBSBackend: All jobs completed successfully")
@@ -314,8 +322,9 @@ class PBSBackend(CMCBackend):
             f.write(job_script)
 
         # Submit job
-        result = subprocess.run(
-            ["qsub", str(script_file)],
+        qsub_path = shutil.which("qsub") or "qsub"
+        result = subprocess.run(  # nosec B603
+            [qsub_path, str(script_file)],
             capture_output=True,
             text=True,
             check=True,
@@ -357,8 +366,7 @@ class PBSBackend(CMCBackend):
 
             if pending_jobs:
                 logger.info(
-                    f"Waiting for {len(pending_jobs)} jobs... "
-                    f"({int(elapsed)}s elapsed)"
+                    f"Waiting for {len(pending_jobs)} jobs... ({int(elapsed)}s elapsed)"
                 )
                 time.sleep(self.poll_interval)
 
@@ -371,8 +379,9 @@ class PBSBackend(CMCBackend):
             Job status: Q (queued), R (running), C (complete), E (error).
         """
         try:
-            result = subprocess.run(
-                ["qstat", "-f", job_id],
+            qstat_path = shutil.which("qstat") or "qstat"
+            result = subprocess.run(  # nosec B603
+                [qstat_path, "-f", job_id],
                 capture_output=True,
                 text=True,
                 timeout=30,
@@ -410,9 +419,9 @@ class PBSBackend(CMCBackend):
                 param_names=list(data["param_names"]),
                 n_chains=int(data["n_chains"]),
                 n_samples=int(data["n_samples"]),
-                extra_fields=dict(data["extra_fields"].item())
-                if "extra_fields" in data
-                else {},
+                extra_fields=(
+                    dict(data["extra_fields"].item()) if "extra_fields" in data else {}
+                ),
             )
             results.append(samples)
 

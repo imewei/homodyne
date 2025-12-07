@@ -53,9 +53,7 @@ from homodyne.io.mcmc_writers import (
 from homodyne.io.nlsq_writers import (  # noqa: E402
     save_nlsq_json_files as _io_save_nlsq_json_files,
 )
-from homodyne.io.nlsq_writers import (
-    save_nlsq_npz_file as _io_save_nlsq_npz_file,
-)
+from homodyne.io.nlsq_writers import save_nlsq_npz_file as _io_save_nlsq_npz_file
 from homodyne.utils.logging import configure_logging, get_logger  # noqa: E402
 from homodyne.viz.experimental_plots import (  # noqa: E402
     plot_experimental_data as _viz_plot_experimental_data,
@@ -66,12 +64,8 @@ from homodyne.viz.experimental_plots import (
 from homodyne.viz.nlsq_plots import (  # noqa: E402
     generate_and_plot_fitted_simulations as _viz_generate_and_plot_fitted_simulations,
 )
-from homodyne.viz.nlsq_plots import (
-    generate_nlsq_plots as _viz_generate_nlsq_plots,
-)
-from homodyne.viz.nlsq_plots import (
-    plot_simulated_data as _viz_plot_simulated_data,
-)
+from homodyne.viz.nlsq_plots import generate_nlsq_plots as _viz_generate_nlsq_plots
+from homodyne.viz.nlsq_plots import plot_simulated_data as _viz_plot_simulated_data
 
 logger = get_logger(__name__)
 
@@ -266,7 +260,9 @@ def dispatch_command(args) -> dict[str, Any]:
 
         # Configure logging using config + CLI verbosity flags
         config_dict = config.get_config() if hasattr(config, "get_config") else config
-        logging_cfg = config_dict.get("logging", {}) if isinstance(config_dict, dict) else {}
+        logging_cfg = (
+            config_dict.get("logging", {}) if isinstance(config_dict, dict) else {}
+        )
         log_file = configure_logging(
             logging_cfg,
             verbose=getattr(args, "verbose", False),
@@ -1089,18 +1085,22 @@ def _run_optimization(args, config: ConfigManager, data: dict[str, Any]) -> Any:
             )  # Each phi repeated n_t*n_t times
 
             # Verify all arrays have matching lengths (CRITICAL for MCMC)
-            assert mcmc_data.shape[0] == n_total, (
-                f"Data pooling failed: mcmc_data={mcmc_data.shape[0]}, expected={n_total}"
-            )
-            assert t1_pooled.shape[0] == n_total, (
-                f"Data pooling failed: t1={t1_pooled.shape[0]}, expected={n_total}"
-            )
-            assert t2_pooled.shape[0] == n_total, (
-                f"Data pooling failed: t2={t2_pooled.shape[0]}, expected={n_total}"
-            )
-            assert phi_pooled.shape[0] == n_total, (
-                f"Data pooling failed: phi={phi_pooled.shape[0]}, expected={n_total}"
-            )
+            if mcmc_data.shape[0] != n_total:
+                raise ValueError(
+                    f"Data pooling failed: mcmc_data={mcmc_data.shape[0]}, expected={n_total}"
+                )
+            if t1_pooled.shape[0] != n_total:
+                raise ValueError(
+                    f"Data pooling failed: t1={t1_pooled.shape[0]}, expected={n_total}"
+                )
+            if t2_pooled.shape[0] != n_total:
+                raise ValueError(
+                    f"Data pooling failed: t2={t2_pooled.shape[0]}, expected={n_total}"
+                )
+            if phi_pooled.shape[0] != n_total:
+                raise ValueError(
+                    f"Data pooling failed: phi={phi_pooled.shape[0]}, expected={n_total}"
+                )
 
             logger.debug(
                 f"Pooled MCMC data: {n_phi} angles × {n_t}×{n_t} = {n_total:,} data points"

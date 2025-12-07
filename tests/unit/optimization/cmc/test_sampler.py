@@ -11,10 +11,7 @@ Comprehensive tests for:
 from __future__ import annotations
 
 from dataclasses import dataclass
-from unittest.mock import MagicMock, patch
 
-import jax
-import jax.numpy as jnp
 import numpy as np
 import pytest
 
@@ -26,7 +23,6 @@ from homodyne.optimization.cmc.sampler import (
     SamplingStats,
     create_init_strategy,
 )
-
 
 # =============================================================================
 # Fixtures
@@ -143,7 +139,9 @@ class TestSamplingStats:
         )
 
         assert stats.warmup_time < stats.total_time
-        assert stats.warmup_time + stats.sampling_time == pytest.approx(stats.total_time)
+        assert stats.warmup_time + stats.sampling_time == pytest.approx(
+            stats.total_time
+        )
 
 
 # =============================================================================
@@ -157,7 +155,9 @@ class TestMCMCSamples:
     def test_creation(self, sample_param_names):
         """Test MCMCSamples creation."""
         n_chains, n_samples = 2, 100
-        samples = {name: np.random.randn(n_chains, n_samples) for name in sample_param_names}
+        samples = {
+            name: np.random.randn(n_chains, n_samples) for name in sample_param_names
+        }
 
         mcmc_samples = MCMCSamples(
             samples=samples,
@@ -173,7 +173,9 @@ class TestMCMCSamples:
     def test_samples_shape(self, sample_param_names):
         """Test samples have correct shape."""
         n_chains, n_samples = 4, 500
-        samples = {name: np.random.randn(n_chains, n_samples) for name in sample_param_names}
+        samples = {
+            name: np.random.randn(n_chains, n_samples) for name in sample_param_names
+        }
 
         mcmc_samples = MCMCSamples(
             samples=samples,
@@ -188,7 +190,9 @@ class TestMCMCSamples:
     def test_extra_fields(self, sample_param_names):
         """Test MCMCSamples with extra fields."""
         n_chains, n_samples = 2, 100
-        samples = {name: np.random.randn(n_chains, n_samples) for name in sample_param_names}
+        samples = {
+            name: np.random.randn(n_chains, n_samples) for name in sample_param_names
+        }
         extra = {
             "diverging": np.zeros((n_chains, n_samples), dtype=bool),
             "accept_prob": np.random.uniform(0.8, 0.95, (n_chains, n_samples)),
@@ -352,7 +356,9 @@ class TestSamplingIntegration:
     def test_divergence_tracking(self, sample_param_names):
         """Test that divergences are properly tracked."""
         n_chains, n_samples = 2, 100
-        samples = {name: np.random.randn(n_chains, n_samples) for name in sample_param_names}
+        samples = {
+            name: np.random.randn(n_chains, n_samples) for name in sample_param_names
+        }
 
         # Create divergence pattern
         diverging = np.zeros((n_chains, n_samples), dtype=bool)
@@ -456,7 +462,9 @@ class TestSamplerProperties:
     @pytest.mark.parametrize("n_samples", [10, 100, 1000])
     def test_samples_shape_invariant(self, sample_param_names, n_chains, n_samples):
         """Test that sample shapes are always (n_chains, n_samples)."""
-        samples = {name: np.random.randn(n_chains, n_samples) for name in sample_param_names}
+        samples = {
+            name: np.random.randn(n_chains, n_samples) for name in sample_param_names
+        }
 
         mcmc_samples = MCMCSamples(
             samples=samples,
@@ -467,7 +475,10 @@ class TestSamplerProperties:
 
         for name in sample_param_names:
             shape = mcmc_samples.samples[name].shape
-            assert shape == (n_chains, n_samples), (
+            assert shape == (
+                n_chains,
+                n_samples,
+            ), (
                 f"Shape mismatch for {name}: expected ({n_chains}, {n_samples}), got {shape}"
             )
 

@@ -178,14 +178,10 @@ def validate_in_bounds(
 
     if inclusive:
         if value < lower or value > upper:
-            raise ValueError(
-                f"{name} must be in [{lower}, {upper}]{ctx}, got {value}"
-            )
+            raise ValueError(f"{name} must be in [{lower}, {upper}]{ctx}, got {value}")
     else:
         if value <= lower or value >= upper:
-            raise ValueError(
-                f"{name} must be in ({lower}, {upper}){ctx}, got {value}"
-            )
+            raise ValueError(f"{name} must be in ({lower}, {upper}){ctx}, got {value}")
 
     return value
 

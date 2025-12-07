@@ -398,10 +398,7 @@ def compute_fitted_c2(
         within_chain_idx = sample_idx // result.n_chains
 
         sample_params = np.array(
-            [
-                result.samples[name][chain_idx, within_chain_idx]
-                for name in param_names
-            ]
+            [result.samples[name][chain_idx, within_chain_idx] for name in param_names]
         )
 
         sample_g1 = compute_g1_total(

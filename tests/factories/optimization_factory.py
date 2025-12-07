@@ -65,12 +65,14 @@ def create_mock_optimization_result(
         # 3 physical parameters: D0, alpha, D_offset
         physical_params = np.array([1234.5, 0.567, 12.34])
         physical_uncertainties = np.array([45.6, 0.012, 1.23])
-        n_physical = 3
     elif analysis_mode == "laminar_flow":
         # 7 physical parameters: D0, alpha, D_offset, gamma_dot_t0, beta, gamma_dot_t_offset, phi0
-        physical_params = np.array([1234.5, 0.567, 12.34, 1.23e-4, 0.456, 5.6e-6, 0.123])
-        physical_uncertainties = np.array([45.6, 0.012, 1.23, 1.2e-5, 0.023, 1.2e-6, 0.023])
-        n_physical = 7
+        physical_params = np.array(
+            [1234.5, 0.567, 12.34, 1.23e-4, 0.456, 5.6e-6, 0.123]
+        )
+        physical_uncertainties = np.array(
+            [45.6, 0.012, 1.23, 1.2e-5, 0.023, 1.2e-6, 0.023]
+        )
     else:
         raise ValueError(
             f"Unknown analysis_mode: {analysis_mode}. Expected 'static' or 'laminar_flow'"
@@ -83,9 +85,9 @@ def create_mock_optimization_result(
     if include_uncertainties:
         contrast_uncertainties = np.full(n_angles, 0.012)
         offset_uncertainties = np.full(n_angles, 0.008)
-        uncertainties = np.concatenate([
-            contrast_uncertainties, offset_uncertainties, physical_uncertainties
-        ])
+        uncertainties = np.concatenate(
+            [contrast_uncertainties, offset_uncertainties, physical_uncertainties]
+        )
     else:
         uncertainties = None
 

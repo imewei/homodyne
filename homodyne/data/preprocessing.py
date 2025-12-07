@@ -341,7 +341,7 @@ class PreprocessingPipeline:
     def _generate_pipeline_id(self) -> str:
         """Generate unique pipeline ID based on configuration hash."""
         config_str = json.dumps(self.preprocessing_config, sort_keys=True)
-        config_hash = hashlib.md5(config_str.encode()).hexdigest()[:8]
+        config_hash = hashlib.sha256(config_str.encode()).hexdigest()[:8]
         timestamp = str(int(time.time()))
         return f"preprocess_{config_hash}_{timestamp}"
 
@@ -358,7 +358,7 @@ class PreprocessingPipeline:
         start_time = time.time()
 
         # Initialize provenance tracking
-        config_hash = hashlib.md5(
+        config_hash = hashlib.sha256(
             json.dumps(self.preprocessing_config, sort_keys=True).encode(),
         ).hexdigest()
 

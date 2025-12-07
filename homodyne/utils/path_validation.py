@@ -109,13 +109,13 @@ def validate_save_path(
         # (prevents traversal via symlinks in relative paths)
         try:
             resolved_path.relative_to(base_dir)
-        except ValueError:
+        except ValueError as e:
             # Path is outside base_dir
             raise PathValidationError(
                 f"Path resolves outside allowed directory: "
                 f"{_sanitize_log_path(str(resolved_path))} is not within "
                 f"{_sanitize_log_path(str(base_dir))}"
-            )
+            ) from e
 
     # Check extension
     if allowed_extensions is not None:
@@ -264,7 +264,9 @@ def get_safe_output_dir(
     if not resolved.exists():
         try:
             resolved.mkdir(parents=True, exist_ok=True)
-            logger.debug(f"Created output directory: {_sanitize_log_path(str(resolved))}")
+            logger.debug(
+                f"Created output directory: {_sanitize_log_path(str(resolved))}"
+            )
         except OSError as e:
             raise PermissionError(
                 f"Cannot create output directory: {_sanitize_log_path(str(resolved))}"

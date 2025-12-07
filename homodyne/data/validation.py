@@ -932,11 +932,11 @@ def _compute_data_hash(data: dict[str, Any]) -> str:
             # Use shape and checksum for arrays
             arr = np.asarray(value)
             hash_data.append(f"{key}:{arr.shape}:{np.sum(arr) if arr.size > 0 else 0}")
-        else:
-            hash_data.append(f"{key}:{hash(str(value))}")
+    else:
+        hash_data.append(f"{key}:{hash(str(value))}")
 
     combined_str = "|".join(hash_data)
-    return hashlib.md5(combined_str.encode()).hexdigest()
+    return hashlib.sha256(combined_str.encode()).hexdigest()
 
 
 def _generate_cache_key(data: dict[str, Any], validation_level: str) -> str:
@@ -1027,7 +1027,6 @@ def _identify_changed_components(
 
 def clear_validation_cache() -> None:
     """Clear the validation cache."""
-    global _validation_cache
     _validation_cache.clear()
     logger.debug("Validation cache cleared")
 

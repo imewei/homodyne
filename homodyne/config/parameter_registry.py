@@ -105,7 +105,7 @@ class ParameterRegistry:
     """
 
     # Singleton instance
-    _instance: "ParameterRegistry | None" = None
+    _instance: ParameterRegistry | None = None
 
     # Parameter definitions
     _PARAMETERS: dict[str, ParameterInfo] = {
@@ -226,12 +226,17 @@ class ParameterRegistry:
         "static": ["D0", "alpha", "D_offset"],
         "static_isotropic": ["D0", "alpha", "D_offset"],
         "laminar_flow": [
-            "D0", "alpha", "D_offset",
-            "gamma_dot_t0", "beta", "gamma_dot_t_offset", "phi0"
+            "D0",
+            "alpha",
+            "D_offset",
+            "gamma_dot_t0",
+            "beta",
+            "gamma_dot_t_offset",
+            "phi0",
         ],
     }
 
-    def __new__(cls) -> "ParameterRegistry":
+    def __new__(cls) -> ParameterRegistry:
         """Singleton pattern - return existing instance if available."""
         if cls._instance is None:
             cls._instance = super().__new__(cls)
@@ -467,9 +472,7 @@ class ParameterRegistry:
                     )
         else:
             if len(values) != len(names):
-                raise ValueError(
-                    f"Expected {len(names)} values, got {len(values)}"
-                )
+                raise ValueError(f"Expected {len(names)} values, got {len(values)}")
             for name, value in zip(names, values, strict=True):
                 lb, ub = self.get_bounds(name)
                 if value < lb or value > ub:
@@ -507,7 +510,9 @@ class ParameterRegistry:
         result = {}
 
         # Expand contrast
-        contrast_val = initial_values.get("contrast", self._PARAMETERS["contrast"].default)
+        contrast_val = initial_values.get(
+            "contrast", self._PARAMETERS["contrast"].default
+        )
         for i in range(n_angles):
             result[f"contrast_{i}"] = contrast_val
 
@@ -558,6 +563,7 @@ def get_registry() -> ParameterRegistry:
 
 
 # Convenience functions that delegate to the singleton
+
 
 def get_param_names(analysis_mode: AnalysisMode) -> list[str]:
     """Get physical parameter names for analysis mode."""

@@ -72,7 +72,9 @@ class TestLatexEquations:
         content = theoretical.read_text()
 
         # Check for math directive
-        assert ".. math::" in content, "theoretical_framework.rst missing math directive"
+        assert ".. math::" in content, (
+            "theoretical_framework.rst missing math directive"
+        )
 
     def test_core_equation_present(self):
         """Test that the core equation c2 = 1 + contrast * [c1]^2 is documented."""
@@ -206,9 +208,11 @@ class TestAnalysisModes:
 
         # Check for "3" with "param" context (flexible matching for tables and headings)
         # Matches: "3 parameters", "Parameters (3)", "- 3" in table
-        assert re.search(r"(3\s*(param|parameter)|param.*\(3\)|\n\s*-\s*3\s*\n)", content, re.IGNORECASE), (
-            "Static mode should mention 3 parameters"
-        )
+        assert re.search(
+            r"(3\s*(param|parameter)|param.*\(3\)|\n\s*-\s*3\s*\n)",
+            content,
+            re.IGNORECASE,
+        ), "Static mode should mention 3 parameters"
 
     def test_laminar_flow_mode_documented(self):
         """Test that laminar flow mode (7 params) is documented."""
@@ -232,9 +236,11 @@ class TestAnalysisModes:
 
         # Check for "7" with "param" context (flexible matching for tables and headings)
         # Matches: "7 parameters", "Parameters (7)", "- 7" in table
-        assert re.search(r"(7\s*(param|parameter)|param.*\(7\)|\n\s*-\s*7\s*\n)", content, re.IGNORECASE), (
-            "Laminar flow mode should mention 7 parameters"
-        )
+        assert re.search(
+            r"(7\s*(param|parameter)|param.*\(7\)|\n\s*-\s*7\s*\n)",
+            content,
+            re.IGNORECASE,
+        ), "Laminar flow mode should mention 7 parameters"
 
     def test_no_deprecated_modes(self):
         """Test that deprecated modes are NOT documented."""
@@ -277,7 +283,9 @@ class TestJAXFirstArchitecture:
 
         # Check for JAX mentions
         assert "JAX" in content, "computational_methods.rst should mention JAX"
-        assert "JIT" in content, "computational_methods.rst should mention JIT compilation"
+        assert "JIT" in content, (
+            "computational_methods.rst should mention JIT compilation"
+        )
 
     def test_no_numba_references(self):
         """Test that documentation does not reference Numba."""

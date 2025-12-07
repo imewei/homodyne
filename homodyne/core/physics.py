@@ -208,8 +208,8 @@ def validate_parameters_detailed(
                 parameters_checked=0,
                 message="Skipped validation for JAX tracers",
             )
-    except:  # noqa: E722
-        pass
+    except Exception as exc:  # noqa: BLE001
+        logger.debug("Tracer detection during validation skipped: %s", exc)
 
     # Check parameter count
     if len(params) != len(bounds):
@@ -235,8 +235,8 @@ def validate_parameters_detailed(
             param_type_str = str(type(param))
             if "Tracer" in param_type_str or "LinearizeTracer" in param_type_str:
                 continue
-        except:  # noqa: E722
-            pass
+        except Exception as exc:  # noqa: BLE001
+            logger.debug("Tracer detection for param failed: %s", exc)
 
         # Validate concrete numeric values
         try:

@@ -205,7 +205,6 @@ class TestParameterExpansion:
         lower_original = np.array([0.0, 0.5, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0, -np.pi])
         upper_original = np.array([1.0, 2.0, 1000.0, 1.0, 100.0, 1.0, 1.0, 1.0, np.pi])
         n_angles = 3
-        n_physical = 7
 
         # Extract bounds
         lower_contrast = lower_original[0]

@@ -101,7 +101,7 @@ class TestMalformedConfigFiles:
             # Missing parameter_space section
         }
         # Should not raise, fallback to defaults
-        config_mgr = ConfigManager(config_override=config)
+        ConfigManager(config_override=config)
         param_space = ParameterSpace.from_config(config, analysis_mode="static")
         assert param_space is not None
 
@@ -207,13 +207,6 @@ class TestInvalidParameterValues:
 
     def test_negative_d0_parameter_invalid(self):
         """Test that negative D0 values should be caught during validation."""
-        config = {
-            "analysis_mode": "static",
-            "initial_parameters": {
-                "parameter_names": ["D0", "alpha", "D_offset"],
-                "values": [-1000.0, 0.5, 10.0],  # Negative D0 is invalid
-            },
-        }
         param_space = ParameterSpace.from_defaults("static")
         initial_params = {"D0": -1000.0, "alpha": 0.5, "D_offset": 10.0}
 

@@ -1,6 +1,5 @@
 """Tests for CMC prior builders module."""
 
-import numpy as np
 import pytest
 
 pytest.importorskip("arviz", reason="ArviZ required for CMC unit tests")
@@ -83,7 +82,9 @@ class TestGetParamNamesInOrder:
             for i, n in enumerate(names)
             if n.startswith("contrast_") or n.startswith("offset_")
         ]
-        physical_indices = [i for i, n in enumerate(names) if n in ["D0", "alpha", "D_offset"]]
+        physical_indices = [
+            i for i, n in enumerate(names) if n in ["D0", "alpha", "D_offset"]
+        ]
 
         # All scaling indices should be less than all physical indices
         assert max(scaling_indices) < min(physical_indices)

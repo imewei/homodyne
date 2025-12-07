@@ -18,6 +18,8 @@ try:
     import jax
     import jax.numpy as jnp
 
+    _ = jax
+
     JAX_AVAILABLE = True
 except ImportError:
     JAX_AVAILABLE = False
@@ -68,18 +70,6 @@ class TestMCMCConvergence:
         data = synthetic_xpcs_data
 
         # Basic MCMC configuration
-        mcmc_config = {
-            "analysis_mode": "static",
-            "optimization": {
-                "method": "mcmc",
-                "mcmc": {
-                    "num_samples": 200,  # Small for testing
-                    "num_warmup": 100,
-                    "chains": 1,
-                },
-            },
-            "hardware": {"force_cpu": True},
-        }
 
         try:
             # Extract required parameters for MCMC
@@ -292,7 +282,7 @@ class TestMCMCConvergence:
                             arviz_samples[param_name] = param_samples.reshape(1, -1)
 
                     inference_data = az.from_dict(arviz_samples)
-                except:
+                except Exception:
                     pytest.skip("Could not create ArviZ InferenceData")
 
             # Run ArviZ diagnostics
@@ -365,7 +355,7 @@ class TestMCMCStatisticalProperties:
                         if p_value < 1e-10:
                             # Very non-normal, but that might be okay
                             pass
-                    except:
+                    except Exception:
                         pass
 
                     # Test for outliers (basic check)

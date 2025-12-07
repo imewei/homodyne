@@ -24,26 +24,22 @@ Note: Legacy mcmc/ package removed in v3.0. CMC v3.0 is the sole MCMC backend.
 
 # Handle NLSQ imports with intelligent fallback
 try:
-    from homodyne.optimization.nlsq import (
+    from homodyne.optimization.nlsq import (  # Strategies; Chunking; Residual; Sequential
+        DatasetSizeStrategy,
         NLSQResult,
         NLSQWrapper,
         OptimizationResult,
-        fit_nlsq_jax,
-        # Strategies
-        DatasetSizeStrategy,
         OptimizationStrategy,
-        estimate_memory_requirements,
-        # Chunking
         StratificationDiagnostics,
-        create_angle_stratified_data,
-        create_angle_stratified_indices,
-        should_use_stratification,
-        # Residual
         StratifiedResidualFunction,
         StratifiedResidualFunctionJIT,
+        create_angle_stratified_data,
+        create_angle_stratified_indices,
         create_stratified_residual_function,
-        # Sequential
+        estimate_memory_requirements,
+        fit_nlsq_jax,
         optimize_per_angle_sequential,
+        should_use_stratification,
     )
 
     NLSQ_AVAILABLE = True

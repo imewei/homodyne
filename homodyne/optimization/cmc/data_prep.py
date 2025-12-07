@@ -119,9 +119,7 @@ def validate_pooled_data(
         )
     if np.any(data > 10):
         high_count = np.sum(data > 10)
-        logger.warning(
-            f"data contains {high_count} values > 10 (unusual for C2)"
-        )
+        logger.warning(f"data contains {high_count} values > 10 (unusual for C2)")
 
     # Check time coordinates are non-negative
     if np.any(t1 < 0) or np.any(t2 < 0):

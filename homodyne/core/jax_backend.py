@@ -160,7 +160,6 @@ def _create_gradient_fallback(func: Callable, argnums: int = 0) -> Callable:
 
     @wraps(func)
     def fallback_gradient(*args, **kwargs):
-        global _fallback_stats
         _fallback_stats["gradient_calls"] += 1
 
         # Issue performance warning (once per function)
@@ -185,7 +184,6 @@ def _create_hessian_fallback(func: Callable, argnums: int = 0) -> Callable:
 
     @wraps(func)
     def fallback_hessian(*args, **kwargs):
-        global _fallback_stats
         _fallback_stats["hessian_calls"] += 1
 
         # Issue performance warning (once per function)
@@ -1774,7 +1772,7 @@ def _get_performance_recommendations() -> list[str]:
             if any("tpu" in str(d).lower() for d in devices):
                 recommendations.append("⚡ TPU acceleration available")
         except Exception:
-            pass
+            logger.debug("Device inspection failed; proceeding without device hints")
 
     return recommendations
 

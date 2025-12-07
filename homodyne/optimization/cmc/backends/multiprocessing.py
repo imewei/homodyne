@@ -253,17 +253,19 @@ class MultiprocessingBackend(CMCBackend):
         # Prepare shard data for workers
         shard_data_list = []
         for shard in shards:
-            shard_data_list.append({
-                "data": np.array(shard.data),
-                "t1": np.array(shard.t1),
-                "t2": np.array(shard.t2),
-                "phi": np.array(shard.phi),
-                "phi_indices": np.array(shard.phi_indices),
-                "q": model_kwargs["q"],
-                "L": model_kwargs["L"],
-                "dt": model_kwargs["dt"],
-                "noise_scale": shard.noise_scale,
-            })
+            shard_data_list.append(
+                {
+                    "data": np.array(shard.data),
+                    "t1": np.array(shard.t1),
+                    "t2": np.array(shard.t2),
+                    "phi": np.array(shard.phi),
+                    "phi_indices": np.array(shard.phi_indices),
+                    "q": model_kwargs["q"],
+                    "L": model_kwargs["L"],
+                    "dt": model_kwargs["dt"],
+                    "noise_scale": shard.noise_scale,
+                }
+            )
 
         # Serialize config and parameter_space
         config_dict = config.to_dict()
@@ -323,9 +325,7 @@ class MultiprocessingBackend(CMCBackend):
                     extra_fields=result["extra_fields"],
                 )
                 successful_samples.append(samples)
-                shard_timings.append(
-                    (result.get("shard_idx"), result.get("duration"))
-                )
+                shard_timings.append((result.get("shard_idx"), result.get("duration")))
             else:
                 run_logger.warning(
                     f"Shard {result.get('shard_idx', '?')} failed: {result.get('error', 'unknown')}"

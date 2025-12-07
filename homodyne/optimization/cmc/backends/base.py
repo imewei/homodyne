@@ -109,7 +109,9 @@ def select_backend(
 
             return PjitBackend()
         except ImportError:
-            logger.warning("pjit backend not available, falling back to multiprocessing")
+            logger.warning(
+                "pjit backend not available, falling back to multiprocessing"
+            )
             from homodyne.optimization.cmc.backends.multiprocessing import (
                 MultiprocessingBackend,
             )
@@ -193,7 +195,9 @@ def combine_shard_samples(
     # Combine extra fields
     combined_extra: dict[str, Any] = {}
     for key in shard_samples[0].extra_fields.keys():
-        all_extra = [s.extra_fields.get(key) for s in shard_samples if key in s.extra_fields]
+        all_extra = [
+            s.extra_fields.get(key) for s in shard_samples if key in s.extra_fields
+        ]
         if all_extra:
             combined_extra[key] = np.concatenate(all_extra, axis=0)
 

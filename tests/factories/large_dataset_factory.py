@@ -289,6 +289,7 @@ class LargeDatasetFactory:
                 "Allocating 10M point dataset (~1.2 GB). "
                 "This may cause memory issues on low-memory systems.",
                 ResourceWarning,
+                stacklevel=2,
             )
 
         return self.create_mock_dataset(

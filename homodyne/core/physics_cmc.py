@@ -184,7 +184,13 @@ def _calculate_shear_rate_impl_jax(
 
 
 def _trapezoid_cumsum(values: jnp.ndarray) -> jnp.ndarray:
-    """Cumulative trapezoid integral without dt scaling (dt is applied outside)."""
+    """Cumulative trapezoid integral without dt scaling (dt is applied outside).
+
+    Returns cumsum so that ``cumsum[j] - cumsum[i]`` equals the trapezoidal sum
+    over all intervals between indices ``i`` and ``j``. The caller applies a
+    smooth absolute value to that difference when mapping each (t1, t2) pair,
+    keeping gradients well-behaved at zero-length intervals.
+    """
     if safe_len(values) > 1:
         trap_avg = 0.5 * (values[:-1] + values[1:])
         cumsum_trap = jnp.cumsum(trap_avg)
@@ -204,6 +210,12 @@ def _compute_g1_diffusion_elementwise(
 
     Mirrors the NLSQ cumulative trapezoid logic: build a cumulative integral on the
     1D time grid, then take the absolute difference for each (t1, t2) pair.
+
+    Notes:
+        * t1/t2 are physical times (seconds) coming from the loader:
+          t = dt * (frame_index - start_frame). They are NOT frame indices.
+        * The smooth absolute difference comes from |cumsum[idx2]-cumsum[idx1]|,
+          approximating ∫_{t1}^{t2} D(t) dt using all interior trapezoids.
     """
     D0, alpha, D_offset = params[0], params[1], params[2]
 
@@ -250,6 +262,8 @@ def _compute_g1_shear_elementwise(
         t2: Time array (1D, element-wise paired with t1)
         phi_unique: UNIQUE scattering angles (1D array, pre-filtered for unique values only)
         sinc_prefactor: Pre-computed factor 0.5/π * q * L * dt
+        time_grid: 1D physical time grid (seconds) used for cumulative trapezoid
+            integration; |cumsum[idx2]-cumsum[idx1]| spans all interior intervals.
 
     Returns:
         Shear contribution to g1 (2D array: (n_unique_phi, n_points))

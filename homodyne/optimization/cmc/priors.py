@@ -190,7 +190,9 @@ def build_init_values_dict(
     # 1. Per-angle contrast parameters (FIRST)
     for i in range(n_phi):
         param_name = f"contrast_{i}"
-        init_dict[param_name] = get_init_value(param_name, initial_values, parameter_space)
+        init_dict[param_name] = get_init_value(
+            param_name, initial_values, parameter_space
+        )
         # If per-angle not in initial_values, try base "contrast"
         if initial_values is not None and param_name not in initial_values:
             if "contrast" in initial_values:
@@ -199,15 +201,21 @@ def build_init_values_dict(
     # 2. Per-angle offset parameters (SECOND)
     for i in range(n_phi):
         param_name = f"offset_{i}"
-        init_dict[param_name] = get_init_value(param_name, initial_values, parameter_space)
+        init_dict[param_name] = get_init_value(
+            param_name, initial_values, parameter_space
+        )
         if initial_values is not None and param_name not in initial_values:
             if "offset" in initial_values:
                 init_dict[param_name] = float(initial_values["offset"])
 
     # 3. Physical parameters (THIRD, in canonical order)
-    physical_params = LAMINAR_PARAMS if analysis_mode == "laminar_flow" else STATIC_PARAMS
+    physical_params = (
+        LAMINAR_PARAMS if analysis_mode == "laminar_flow" else STATIC_PARAMS
+    )
     for param_name in physical_params:
-        init_dict[param_name] = get_init_value(param_name, initial_values, parameter_space)
+        init_dict[param_name] = get_init_value(
+            param_name, initial_values, parameter_space
+        )
 
     logger.debug(
         f"Built init values for {len(init_dict)} params: {list(init_dict.keys())}"

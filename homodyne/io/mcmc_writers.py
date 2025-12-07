@@ -41,9 +41,7 @@ def _get_parameter_names(analysis_mode: str) -> list[str]:
             "phi0",
         ]
     else:
-        logger.warning(
-            f"Unknown analysis mode: {analysis_mode}, assuming static"
-        )
+        logger.warning(f"Unknown analysis mode: {analysis_mode}, assuming static")
         return ["D0", "alpha", "D_offset"]
 
 

@@ -10,7 +10,6 @@ Comprehensive tests for:
 from __future__ import annotations
 
 from dataclasses import dataclass
-from unittest.mock import MagicMock
 
 import jax.numpy as jnp
 import numpy as np
@@ -24,7 +23,6 @@ from homodyne.optimization.cmc.model import (
     xpcs_model,
     xpcs_model_single_chain,
 )
-
 
 # =============================================================================
 # Fixtures
@@ -53,9 +51,13 @@ class MockParameterSpace:
             "D0": MockPriorSpec("TruncatedNormal", 100.0, 100000.0, 1000.0, 500.0),
             "alpha": MockPriorSpec("TruncatedNormal", 0.1, 2.0, 0.5, 0.3),
             "D_offset": MockPriorSpec("TruncatedNormal", 0.0, 1000.0, 10.0, 50.0),
-            "gamma_dot_t0": MockPriorSpec("TruncatedNormal", 1.0, 10000.0, 100.0, 200.0),
+            "gamma_dot_t0": MockPriorSpec(
+                "TruncatedNormal", 1.0, 10000.0, 100.0, 200.0
+            ),
             "beta": MockPriorSpec("TruncatedNormal", 0.1, 2.0, 0.5, 0.3),
-            "gamma_dot_t_offset": MockPriorSpec("TruncatedNormal", -100.0, 100.0, 0.0, 20.0),
+            "gamma_dot_t_offset": MockPriorSpec(
+                "TruncatedNormal", -100.0, 100.0, 0.0, 20.0
+            ),
             "phi0": MockPriorSpec("TruncatedNormal", -np.pi, np.pi, 0.0, 1.0),
         }
         self._bounds = {
@@ -331,7 +333,9 @@ class TestXPCSModelStructure:
         assert "gamma_dot_t_offset" in sampled_params
         assert "phi0" in sampled_params
 
-    def test_parameter_ordering(self, mock_parameter_space_static, synthetic_pooled_data):
+    def test_parameter_ordering(
+        self, mock_parameter_space_static, synthetic_pooled_data
+    ):
         """Test parameters are sampled in NumPyro-required order."""
         import numpyro
         from numpyro.handlers import Messenger
@@ -364,8 +368,12 @@ class TestXPCSModelStructure:
 
         # Verify ordering: contrast_*, offset_*, physical, sigma
         # Find indices
-        contrast_indices = [i for i, n in enumerate(sampled_order) if n.startswith("contrast_")]
-        offset_indices = [i for i, n in enumerate(sampled_order) if n.startswith("offset_")]
+        contrast_indices = [
+            i for i, n in enumerate(sampled_order) if n.startswith("contrast_")
+        ]
+        offset_indices = [
+            i for i, n in enumerate(sampled_order) if n.startswith("offset_")
+        ]
         d0_index = sampled_order.index("D0")
 
         # All contrast before all offset
@@ -414,7 +422,9 @@ class TestXPCSModelSingleChain:
         # log_D0 should be sampled, D0 should be deterministic
         assert "log_D0" in sampled_params
 
-    def test_no_log_d0_parameter(self, mock_parameter_space_static, synthetic_pooled_data):
+    def test_no_log_d0_parameter(
+        self, mock_parameter_space_static, synthetic_pooled_data
+    ):
         """Test that D0 is sampled directly when use_log_d0=False."""
         import numpyro
 
@@ -451,7 +461,9 @@ class TestXPCSModelSingleChain:
 class TestModelPhysics:
     """Scientific validation tests for physics consistency."""
 
-    def test_c2_range_realistic(self, mock_parameter_space_static, synthetic_pooled_data):
+    def test_c2_range_realistic(
+        self, mock_parameter_space_static, synthetic_pooled_data
+    ):
         """Test that model produces physically realistic C2 values."""
         import numpyro
 
@@ -483,7 +495,9 @@ class TestModelPhysics:
         assert jnp.all(c2_theory >= 0.5), f"C2 too low: min={jnp.min(c2_theory)}"
         assert jnp.all(c2_theory <= 3.0), f"C2 too high: max={jnp.max(c2_theory)}"
 
-    def test_n_phi_consistency(self, mock_parameter_space_static, synthetic_pooled_data):
+    def test_n_phi_consistency(
+        self, mock_parameter_space_static, synthetic_pooled_data
+    ):
         """Test that n_phi matches number of per-angle parameters."""
         import numpyro
 
@@ -512,5 +526,7 @@ class TestModelPhysics:
         n_contrast = sum(1 for p in sampled_params if p.startswith("contrast_"))
         n_offset = sum(1 for p in sampled_params if p.startswith("offset_"))
 
-        assert n_contrast == n_phi, f"Expected {n_phi} contrast params, got {n_contrast}"
+        assert n_contrast == n_phi, (
+            f"Expected {n_phi} contrast params, got {n_contrast}"
+        )
         assert n_offset == n_phi, f"Expected {n_phi} offset params, got {n_offset}"

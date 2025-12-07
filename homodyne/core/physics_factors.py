@@ -368,7 +368,7 @@ def create_physics_factors_from_config_dict(config: dict) -> PhysicsFactors:
             f"Expected structure: config['analyzer_parameters']['temporal']['dt'], "
             f"config['analyzer_parameters']['scattering']['wavevector_q'], "
             f"config['analyzer_parameters']['geometry']['stator_rotor_gap']",
-        )
+        ) from e
 
 
 __all__ = ["PhysicsFactors", "create_physics_factors_from_config_dict"]

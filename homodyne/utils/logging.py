@@ -11,11 +11,12 @@ import functools
 import inspect
 import logging
 import time
+from collections.abc import Mapping
 from contextlib import contextmanager
 from datetime import datetime
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
-from typing import Any, Mapping
+from typing import Any
 
 DEFAULT_FORMAT_DETAILED = "%(asctime)s | %(levelname)-8s | %(name)s | %(message)s"
 DEFAULT_FORMAT_SIMPLE = "%(levelname)-8s | %(message)s"
@@ -49,7 +50,9 @@ class _ColorFormatter(logging.Formatter):
     def format(self, record: logging.LogRecord) -> str:
         original_levelname = record.levelname
         if self.use_color and original_levelname in self.COLOR_MAP:
-            record.levelname = f"{self.COLOR_MAP[original_levelname]}{original_levelname}{self.RESET}"
+            record.levelname = (
+                f"{self.COLOR_MAP[original_levelname]}{original_levelname}{self.RESET}"
+            )
         try:
             return super().format(record)
         finally:
@@ -97,8 +100,14 @@ class MinimalLogger:
         format_name: str = "detailed",
         use_color: bool = False,
     ) -> logging.Formatter:
-        fmt = DEFAULT_FORMAT_SIMPLE if format_name == "simple" else DEFAULT_FORMAT_DETAILED
-        return _ColorFormatter(fmt=fmt, datefmt="%Y-%m-%d %H:%M:%S", use_color=use_color)
+        fmt = (
+            DEFAULT_FORMAT_SIMPLE
+            if format_name == "simple"
+            else DEFAULT_FORMAT_DETAILED
+        )
+        return _ColorFormatter(
+            fmt=fmt, datefmt="%Y-%m-%d %H:%M:%S", use_color=use_color
+        )
 
     def _clear_managed_handlers(self, logger: logging.Logger) -> None:
         for handler in list(logger.handlers):
@@ -186,7 +195,9 @@ class MinimalLogger:
         # Module-specific overrides
         if module_levels:
             for module_name, module_level in module_levels.items():
-                logging.getLogger(module_name).setLevel(_resolve_level(module_level) or root_level)
+                logging.getLogger(module_name).setLevel(
+                    _resolve_level(module_level) or root_level
+                )
 
         self._configured = True
         return created_file

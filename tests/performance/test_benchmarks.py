@@ -21,6 +21,8 @@ try:
     import jax
     import jax.numpy as jnp
 
+    _ = jax
+
     JAX_AVAILABLE = True
 except ImportError:
     JAX_AVAILABLE = False
@@ -309,9 +311,9 @@ class TestDataLoadingBenchmarks:
                 t1, t2 = np.meshgrid(
                     np.arange(n_times), np.arange(n_times), indexing="ij"
                 )
-                phi = np.linspace(0, 2 * np.pi, n_angles)
+                np.linspace(0, 2 * np.pi, n_angles)
                 tau = np.abs(t1 - t2) + 1e-6
-                c2_exp = 1 + 0.5 * np.exp(-tau / 10.0)
+                1 + 0.5 * np.exp(-tau / 10.0)
 
                 elapsed = time.perf_counter() - start
                 times.append(elapsed)
@@ -374,7 +376,7 @@ class TestDataLoadingBenchmarks:
             times = []
             for _ in range(max(10, benchmark_config["min_rounds"])):
                 start = time.perf_counter()
-                loaded_config = load_config_file(str(config_file))
+                load_config_file(str(config_file))
                 elapsed = time.perf_counter() - start
                 times.append(elapsed)
 
@@ -684,8 +686,6 @@ class TestMCMCPerformanceBenchmarks:
     def test_mcmc_sampling_throughput(self):
         """Test MCMC sampling throughput (samples per second baseline)."""
         # Baseline expectation: ~5 samples/second for static mode
-        n_samples = 100
-        expected_time_per_sample = 0.2  # 200ms per sample max
 
         # Simulate timing for samples
         sample_times = []
@@ -713,7 +713,9 @@ class TestMCMCPerformanceBenchmarks:
         memory_per_chain_mb = (n_samples * n_params * 8) / (1024 * 1024)
 
         # Each chain should use < 1 MB
-        assert memory_per_chain_mb < 1.0, f"Chain memory too high: {memory_per_chain_mb:.3f} MB"
+        assert memory_per_chain_mb < 1.0, (
+            f"Chain memory too high: {memory_per_chain_mb:.3f} MB"
+        )
 
     def test_mcmc_warmup_time(self):
         """Test MCMC warmup phase timing."""
@@ -747,14 +749,16 @@ class TestMCMCPerformanceBenchmarks:
             chains = np.random.normal(0, 1, (2, 500))
             within_chain_var = np.mean(np.var(chains, axis=1))
             between_chain_var = np.var(np.mean(chains, axis=1))
-            r_hat = np.sqrt((within_chain_var + between_chain_var) / within_chain_var)
+            np.sqrt((within_chain_var + between_chain_var) / within_chain_var)
             elapsed = time.perf_counter() - start
             check_times.append(elapsed)
 
         avg_check_time = np.mean(check_times)
 
         # Convergence check should be fast
-        assert avg_check_time < 0.1, f"R-hat computation too slow: {avg_check_time:.3f}s"
+        assert avg_check_time < 0.1, (
+            f"R-hat computation too slow: {avg_check_time:.3f}s"
+        )
 
 
 @pytest.mark.performance
@@ -789,14 +793,16 @@ class TestMemoryEfficiencyBenchmarks:
         sizes = [1_000_000, 10_000_000, 100_000_000]
         peak_memories = []
 
-        for total_size in sizes:
+        for _total_size in sizes:
             # Peak memory is just the chunk size
             peak_memory_mb = (chunk_size * 8 * 3) / (1024 * 1024)
             peak_memories.append(peak_memory_mb)
 
         # All should be approximately equal
         memory_variance = np.var(peak_memories)
-        assert memory_variance < 0.01, f"Streaming memory not constant: variance={memory_variance}"
+        assert memory_variance < 0.01, (
+            f"Streaming memory not constant: variance={memory_variance}"
+        )
 
     def test_memory_per_angle_scaling_overhead(self):
         """Test memory overhead of per-angle scaling parameters."""
@@ -880,7 +886,9 @@ class TestAdditionalBenchmarks:
         expected_load_time = data_size_mb / 100  # seconds
 
         # Loading should be fast for reasonable sizes
-        assert expected_load_time < 0.1, f"Expected load time: {expected_load_time:.3f}s"
+        assert expected_load_time < 0.1, (
+            f"Expected load time: {expected_load_time:.3f}s"
+        )
 
         # For 100M point dataset
         large_data_size_mb = (100_000_000 * 8) / (1024 * 1024)
@@ -905,7 +913,7 @@ class TestAdditionalBenchmarks:
         times = []
         for _ in range(100):
             start = time.perf_counter()
-            json_str = json.dumps(result)
+            json.dumps(result)
             elapsed = time.perf_counter() - start
             times.append(elapsed)
 
@@ -945,7 +953,7 @@ class TestAdditionalBenchmarks:
             residuals = data["c2_exp"] - model
 
             # Step 3: Chi-squared
-            chi_sq = float(jnp.sum(residuals**2))
+            float(jnp.sum(residuals**2))
 
             elapsed = time.perf_counter() - start
             pipeline_times.append(elapsed)

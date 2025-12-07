@@ -524,7 +524,7 @@ class TestCaching:
         # Disable caching
         pm._cache_enabled = False
 
-        bounds1 = pm.get_parameter_bounds(["D0", "alpha"])
+        pm.get_parameter_bounds(["D0", "alpha"])
 
         # Cache should not be populated
         assert len(pm._bounds_cache) == 0
@@ -532,7 +532,7 @@ class TestCaching:
         # Re-enable caching
         pm._cache_enabled = True
 
-        bounds2 = pm.get_parameter_bounds(["D0", "alpha"])
+        pm.get_parameter_bounds(["D0", "alpha"])
 
         # Now cache should be populated
         assert len(pm._bounds_cache) == 1
@@ -566,12 +566,12 @@ class TestCaching:
         # First call - cache miss
         start_time = time.time()
         bounds1 = pm.get_parameter_bounds(param_names)
-        first_call_time = time.time() - start_time
+        time.time() - start_time
 
         # Second call - cache hit
         start_time = time.time()
         bounds2 = pm.get_parameter_bounds(param_names)
-        second_call_time = time.time() - start_time
+        time.time() - start_time
 
         # Cache hit should be faster (allow some tolerance)
         # Note: This is a weak assertion since timing can vary

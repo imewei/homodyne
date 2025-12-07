@@ -1,6 +1,7 @@
 # Homodyne Runtime System
 
-**Advanced shell completion and comprehensive system validation for the homodyne analysis package (CPU-only v2.3.0+).**
+**Advanced shell completion and comprehensive system validation for the homodyne
+analysis package (CPU-only v2.3.0+).**
 
 ______________________________________________________________________
 
@@ -15,7 +16,8 @@ runtime/
 └── README.md          # This documentation
 ```
 
-> **Note**: GPU support was removed in v2.3.0. This is now a CPU-only package with HPC multi-core optimization.
+> **Note**: GPU support was removed in v2.3.0. This is now a CPU-only package with HPC
+> multi-core optimization.
 
 ## Quick Setup
 
@@ -35,9 +37,9 @@ homodyne-post-install --shell zsh
 ### Installed Components
 
 1. **Smart Shell Completion** - Context-aware completion with caching
-2. **Unified Aliases** - CPU shortcuts (`hm`, `hc`, `hr`, `ha`)
-3. **Advanced Tools** - System validation, benchmarking
-4. **Environment Integration** - Auto-activation in conda/mamba/venv
+1. **Unified Aliases** - CPU shortcuts (`hm`, `hc`, `hr`, `ha`)
+1. **Advanced Tools** - System validation, benchmarking
+1. **Environment Integration** - Auto-activation in conda/mamba/venv
 
 ## Shell Completion System
 
@@ -67,9 +69,8 @@ homodyne_build
 ### Smart Completion Logic
 
 | Config Mode | Suggested Methods | Reasoning |
-|-------------|------------------|-----------|
-| `static` | `nlsq mcmc` | Fast parameter estimation |
-| `laminar_flow` | `mcmc nlsq` | Uncertainty quantification |
+|-------------|------------------|-----------| | `static` | `nlsq mcmc` | Fast parameter
+estimation | | `laminar_flow` | `mcmc nlsq` | Uncertainty quantification |
 
 ## MCMC Backend System (CPU-Only)
 
@@ -78,12 +79,13 @@ homodyne_build
 The homodyne package uses Consensus Monte Carlo (CMC) for all MCMC operations:
 
 | Command | Backend | Implementation | Use Case |
-|---------|---------|----------------|----------|
-| `homodyne` | **NumPyro CMC** | `mcmc.py` | Production, all datasets |
+|---------|---------|----------------|----------| | `homodyne` | **NumPyro CMC** |
+`mcmc.py` | Production, all datasets |
 
 ### CMC Features
 
-- **Multi-core parallelization**: Uses multiprocessing backend for parallel shard execution
+- **Multi-core parallelization**: Uses multiprocessing backend for parallel shard
+  execution
 - **Automatic sharding**: Dataset size-aware shard allocation
 - **Physics-informed priors**: Domain-specific prior distributions
 - **Robust convergence**: Auto-retry with up to 3 attempts
@@ -109,9 +111,10 @@ homodyne-validate --json
 ### Test Categories
 
 1. **Environment Detection**: Platform, Python version, virtual environment, shell type
-2. **Installation Verification**: Commands, help output, module imports, version consistency
-3. **Shell Completion**: Files, activation scripts, aliases, cache system
-4. **Integration Testing**: Cross-component functionality, environment propagation
+1. **Installation Verification**: Commands, help output, module imports, version
+   consistency
+1. **Shell Completion**: Files, activation scripts, aliases, cache system
+1. **Integration Testing**: Cross-component functionality, environment propagation
 
 ### Sample Output
 
@@ -279,12 +282,11 @@ ENTRYPOINT ["homodyne"]
 ## Environment Support
 
 | Environment | Shell Completion | Auto-Activation | Advanced Tools |
-|-------------|------------------|-----------------|----------------|
-| **Conda** | Full support | On activate | All features |
-| **Mamba** | Full support | On activate | All features |
-| **venv** | Manual setup | Manual sourcing | All features |
-| **virtualenv** | Manual setup | Manual sourcing | All features |
-| **System Python** | User-wide | Not recommended | Limited |
+|-------------|------------------|-----------------|----------------| | **Conda** | Full
+support | On activate | All features | | **Mamba** | Full support | On activate | All
+features | | **venv** | Manual setup | Manual sourcing | All features | | **virtualenv**
+| Manual setup | Manual sourcing | All features | | **System Python** | User-wide | Not
+recommended | Limited |
 
 ## Uninstallation
 
@@ -315,4 +317,5 @@ find "$CONDA_PREFIX" -name "*homodyne*" 2>/dev/null || echo "Files cleaned"
 
 ______________________________________________________________________
 
-*This runtime system provides intelligent automation, cross-platform compatibility, and CPU optimization for homodyne analysis workflows (v2.3.0+ CPU-only architecture).*
+*This runtime system provides intelligent automation, cross-platform compatibility, and
+CPU optimization for homodyne analysis workflows (v2.3.0+ CPU-only architecture).*

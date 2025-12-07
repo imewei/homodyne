@@ -45,7 +45,7 @@ class TestRealDataStratification:
 
         # Load config and data
         logger.info(f"Loading C020 config from: {config_file}")
-        config = ConfigManager(str(config_file))
+        ConfigManager(str(config_file))
 
         # XPCSDataLoader expects config file path (not data file)
         # It will load the data file path from the config
@@ -113,7 +113,9 @@ class TestRealDataStratification:
 
         # Import here to avoid import errors
         from homodyne.data.xpcs_loader import XPCSDataLoader
-        from homodyne.optimization.nlsq.strategies.chunking import analyze_angle_distribution
+        from homodyne.optimization.nlsq.strategies.chunking import (
+            analyze_angle_distribution,
+        )
 
         # Load data characteristics
         try:

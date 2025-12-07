@@ -1,11 +1,9 @@
 """Tests for CMC diagnostics module."""
 
-import numpy as np
 import pytest
 
 pytest.importorskip("arviz", reason="ArviZ required for CMC unit tests")
 
-from homodyne.optimization.cmc.config import CMCConfig
 from homodyne.optimization.cmc.diagnostics import (
     check_convergence,
     create_diagnostics_dict,
@@ -60,7 +58,10 @@ class TestCheckConvergence:
         )
 
         assert status == "not_converged"
-        assert any("R-hat" in w or "r_hat" in w.lower() or "rhat" in w.lower() for w in warnings)
+        assert any(
+            "R-hat" in w or "r_hat" in w.lower() or "rhat" in w.lower()
+            for w in warnings
+        )
 
     def test_not_converged_low_ess(self):
         """Test convergence fails with low ESS."""

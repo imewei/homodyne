@@ -23,7 +23,8 @@
 
 ### v2.4.0 - Per-Angle Scaling Mandatory
 
-**Per-angle scaling is now mandatory** - Legacy scalar `per_angle_scaling=False` removed.
+**Per-angle scaling is now mandatory** - Legacy scalar `per_angle_scaling=False`
+removed.
 
 **Key Changes:**
 
@@ -173,10 +174,9 @@ print(f"✓ CMC used with {result.num_shards} shards")
 **Performance:**
 
 | Scenario | Shards | Data Size | Runtime | Speedup |
-|----------|--------|-----------|---------|---------|
-| Multi-core CPU (14 cores) | 4 | 50M | ~40 min | 1.4x |
-| HPC CPU (36 cores) | 8 | 200M | ~2 hours | 1.5x |
-| Single-shard (small data) | 1 | 5M | ~10 min | baseline |
+|----------|--------|-----------|---------|---------| | Multi-core CPU (14 cores) | 4 |
+50M | ~40 min | 1.4x | | HPC CPU (36 cores) | 8 | 200M | ~2 hours | 1.5x | |
+Single-shard (small data) | 1 | 5M | ~10 min | baseline |
 
 **Documentation:**
 
@@ -932,8 +932,8 @@ os.environ['OMP_NUM_THREADS'] = str(optimal_threads)
 os.environ['JAX_NUM_THREADS'] = str(optimal_threads)
 ```
 
-See [`scripts/nlsq/cpu_optimization.py`](scripts/nlsq/cpu_optimization.py) for comprehensive HPC
-setup guide.
+See [`scripts/nlsq/cpu_optimization.py`](scripts/nlsq/cpu_optimization.py) for
+comprehensive HPC setup guide.
 
 ### Progress Tracking
 

@@ -266,7 +266,7 @@ class TestParameterSpaceConversion:
         }
 
         # Convert to Beta
-        beta_space = param_space.convert_to_beta_scaled_priors()
+        param_space.convert_to_beta_scaled_priors()
 
         # Check original unchanged
         for param_name in param_space.parameter_names:

@@ -62,7 +62,9 @@ def save_samples_npz(
     samples_3d = result.get_samples_array()
 
     # Build arrays for diagnostics
-    r_hat_arr = np.array([result.r_hat.get(name, np.nan) for name in result.param_names])
+    r_hat_arr = np.array(
+        [result.r_hat.get(name, np.nan) for name in result.param_names]
+    )
     ess_bulk_arr = np.array(
         [result.ess_bulk.get(name, np.nan) for name in result.param_names]
     )
@@ -172,9 +174,7 @@ def samples_to_arviz(
     samples = samples_data["posterior_samples"]
     param_names = samples_data["param_names"]
 
-    posterior_dict = {
-        name: samples[:, :, i] for i, name in enumerate(param_names)
-    }
+    posterior_dict = {name: samples[:, :, i] for i, name in enumerate(param_names)}
 
     return az.from_dict(posterior=posterior_dict)
 
@@ -248,9 +248,7 @@ def save_fitted_data_npz(
         c2_fitted_95pct=c2_fitted_95pct,
     )
 
-    logger.info(
-        f"Saved fitted_data.npz: {output_path} (shape={c2_exp.shape})"
-    )
+    logger.info(f"Saved fitted_data.npz: {output_path} (shape={c2_exp.shape})")
 
 
 def save_parameters_json(
@@ -272,8 +270,7 @@ def save_parameters_json(
     stats_json: dict[str, dict[str, float]] = {}
     for name, param_stats in stats.items():
         stats_json[name] = {
-            k: float(v) if not np.isnan(v) else None
-            for k, v in param_stats.items()
+            k: float(v) if not np.isnan(v) else None for k, v in param_stats.items()
         }
 
     with open(output_path, "w", encoding="utf-8") as f:
@@ -386,7 +383,9 @@ def save_all_results(
     saved_files["diagnostics"] = diag_path
 
     # Save fitted_data.npz if data provided
-    if all(x is not None for x in [c2_exp, c2_fitted, c2_fitted_std, t1, t2, phi_angles, q]):
+    if all(
+        x is not None for x in [c2_exp, c2_fitted, c2_fitted_std, t1, t2, phi_angles, q]
+    ):
         fitted_path = output_dir / "fitted_data.npz"
         save_fitted_data_npz(
             result=result,

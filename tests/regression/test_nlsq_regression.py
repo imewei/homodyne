@@ -20,8 +20,11 @@ Date: 2025-10-22
 import numpy as np
 import pytest
 
+from homodyne.optimization.nlsq.strategies.selection import (
+    DatasetSizeStrategy,
+    OptimizationStrategy,
+)
 from homodyne.optimization.nlsq.wrapper import NLSQWrapper, OptimizationResult
-from homodyne.optimization.nlsq.strategies.selection import DatasetSizeStrategy, OptimizationStrategy
 from tests.factories.large_dataset_factory import LargeDatasetFactory
 
 # ============================================================================
@@ -107,7 +110,7 @@ class TestParameterRecoveryQuality:
         )
 
         # Initial guess (perturbed from true values)
-        initial_params = np.array(
+        np.array(
             [
                 true_params["contrast"] * 1.1,
                 true_params["offset"] * 0.95,
@@ -118,7 +121,7 @@ class TestParameterRecoveryQuality:
         )
 
         # Bounds
-        bounds = (
+        (
             np.array([0.1, 0.5, 100.0, 0.1, 1.0]),
             np.array([1.0, 2.0, 10000.0, 2.0, 100.0]),
         )
@@ -126,7 +129,7 @@ class TestParameterRecoveryQuality:
         # Run optimization (mocked for speed)
         # In real test, would use actual NLSQ fit
         # For regression test, verify structure is correct
-        wrapper = NLSQWrapper(enable_large_dataset=False)
+        NLSQWrapper(enable_large_dataset=False)
 
         # Simulate optimized parameters (in real test, from actual fit)
         optimized_params = np.array(
@@ -495,7 +498,6 @@ class TestReferenceDataValidation:
         This reproduces the key result from scientific validation:
         Parameter recovery within 1.88-14.23% error.
         """
-        ref = ReferenceResults.STATIC_ISOTROPIC_REFERENCE
 
         # These bounds are from scientific validation report
         expected_min_error = 1.88
@@ -608,13 +610,15 @@ class TestActualParameterRecovery:
                 self.optimization = {"lsq": {"max_iterations": 500, "tolerance": 1e-8}}
 
         # Initial guess (10% perturbation from truth)
-        initial_params = np.array([
-            ground_truth["contrast"] * 1.1,
-            ground_truth["offset"] * 1.05,
-            ground_truth["D0"] * 1.1,
-            ground_truth["alpha"] * 1.1,
-            ground_truth["D_offset"] * 1.1,
-        ])
+        initial_params = np.array(
+            [
+                ground_truth["contrast"] * 1.1,
+                ground_truth["offset"] * 1.05,
+                ground_truth["D0"] * 1.1,
+                ground_truth["alpha"] * 1.1,
+                ground_truth["D_offset"] * 1.1,
+            ]
+        )
 
         bounds = (
             np.array([0.1, 0.8, 100.0, 0.2, 1.0]),
@@ -634,18 +638,18 @@ class TestActualParameterRecovery:
         n_phi = 8
         recovered = {
             "contrast": np.mean(result.parameters[:n_phi]),
-            "offset": np.mean(result.parameters[n_phi:2*n_phi]),
-            "D0": result.parameters[2*n_phi],
-            "alpha": result.parameters[2*n_phi + 1],
-            "D_offset": result.parameters[2*n_phi + 2],
+            "offset": np.mean(result.parameters[n_phi : 2 * n_phi]),
+            "D0": result.parameters[2 * n_phi],
+            "alpha": result.parameters[2 * n_phi + 1],
+            "D_offset": result.parameters[2 * n_phi + 2],
         }
 
         # Validate recovery accuracy (< 10% error for key params)
         tolerance_map = {
             "contrast": 15.0,  # 15%
-            "offset": 10.0,   # 10%
-            "D0": 15.0,       # 15%
-            "alpha": 15.0,    # 15%
+            "offset": 10.0,  # 10%
+            "D0": 15.0,  # 15%
+            "alpha": 15.0,  # 15%
             "D_offset": 100.0,  # D_offset is less constrained
         }
 
@@ -658,7 +662,9 @@ class TestActualParameterRecovery:
             passed = error_pct < tol
             all_passed = all_passed and passed
             status = "✓" if passed else "✗"
-            print(f"  {status} {param}: true={true_val:.4f}, rec={rec_val:.4f}, err={error_pct:.2f}% (tol={tol}%)")
+            print(
+                f"  {status} {param}: true={true_val:.4f}, rec={rec_val:.4f}, err={error_pct:.2f}% (tol={tol}%)"
+            )
 
         assert result.convergence_status == "converged", "Should converge"
         assert all_passed, "All parameters should be recovered within tolerance"
@@ -692,7 +698,9 @@ class TestActualParameterRecovery:
 
             class MockConfig:
                 def __init__(self):
-                    self.optimization = {"lsq": {"max_iterations": 200, "tolerance": 1e-6}}
+                    self.optimization = {
+                        "lsq": {"max_iterations": 200, "tolerance": 1e-6}
+                    }
 
             initial_params = np.array([0.5, 1.0, 1100.0, 0.55, 12.0])
             bounds = (
@@ -710,7 +718,7 @@ class TestActualParameterRecovery:
 
             # Extract D0 (per-angle scaling)
             n_phi = 5
-            D0_rec = result.parameters[2*n_phi]
+            D0_rec = result.parameters[2 * n_phi]
             D0_recovered.append(D0_rec)
 
         # Verify consistency across seeds (CV < 30%)
@@ -719,7 +727,7 @@ class TestActualParameterRecovery:
         D0_std = np.std(D0_recovered)
         cv = D0_std / D0_mean if D0_mean > 0 else 0
 
-        print(f"\n=== Recovery Stability ===")
+        print("\n=== Recovery Stability ===")
         print(f"  D0 values: {D0_recovered}")
         print(f"  Mean: {D0_mean:.2f}, Std: {D0_std:.2f}, CV: {cv:.2%}")
 
@@ -755,7 +763,9 @@ class TestActualParameterRecovery:
 
             class MockConfig:
                 def __init__(self):
-                    self.optimization = {"lsq": {"max_iterations": 200, "tolerance": 1e-6}}
+                    self.optimization = {
+                        "lsq": {"max_iterations": 200, "tolerance": 1e-6}
+                    }
 
             initial_params = np.array([0.5, 1.0, 1100.0, 0.55, 12.0])
             bounds = (
@@ -773,13 +783,13 @@ class TestActualParameterRecovery:
 
             # Extract D0 error
             n_phi = 6
-            D0_rec = result.parameters[2*n_phi]
+            D0_rec = result.parameters[2 * n_phi]
             error_pct = abs(D0_rec - ground_truth["D0"]) / ground_truth["D0"] * 100
             errors.append(error_pct)
 
-        print(f"\n=== Noise Sensitivity ===")
-        for i, (noise, error) in enumerate(zip(noise_levels, errors)):
-            print(f"  Noise={noise*100:.0f}%, D0 Error={error:.2f}%")
+        print("\n=== Noise Sensitivity ===")
+        for _i, (noise, error) in enumerate(zip(noise_levels, errors, strict=False)):
+            print(f"  Noise={noise * 100:.0f}%, D0 Error={error:.2f}%")
 
         # Higher noise should not cause catastrophic failure
         assert all(e < 50.0 for e in errors), "All errors should be < 50%"

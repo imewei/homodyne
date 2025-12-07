@@ -164,6 +164,19 @@ Implementation differences:
   ``homodyne/core/physics_cmc.py``). This replaces the old single-endpoint trapezoid,
   ensuring multi-step intervals sum all intermediate trapezoids just like NLSQ.
 
+Concrete example (uniform grid, no ``dt`` scaling shown):
+
+* Samples: ``f = [f0, f1, f2]``.
+* Trapezoid averages: ``trap_avg = [0.5(f0+f1), 0.5(f1+f2)]``.
+* Cumulative sums: ``cumsum = [0, 0.5(f0+f1), 0.5(f0+f1)+0.5(f1+f2)]``.
+* Interval ``[t0, t2]`` uses all interior trapezoids:
+  ``|cumsum[2] - cumsum[0]| = 0.5(f0+f1) + 0.5(f1+f2)``.
+* Interval ``[t1, t2]`` uses only the last trapezoid:
+  ``|cumsum[2] - cumsum[1]| = 0.5(f1+f2)``.
+
+CMC applies a smooth absolute (``sqrt(diff**2 + eps)``) so gradients stay finite
+for zero-length intervals; NLSQ uses the same smooth-abs on the meshgrid matrix.
+
 Parameter Space and Priors (CMC)
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
@@ -172,6 +185,9 @@ CMC builds priors from the ``parameter_space`` section of the YAML using
 
 * Bounds are required and shared with NLSQ. Missing bounds fall back to
   package defaults (``contrast`` [0.0, 1.0], ``offset`` [0.5, 1.5], others [0.0, 1.0]).
+  Those bounds are enforced twice: NLSQ clamps the optimizer to them, and CMC
+  samples only from distributions truncated to that interval (NumPyro uses the
+  bounds directly in ``Uniform``/``TruncatedNormal`` draws).
 * If a prior is not specified for a parameter, a ``TruncatedNormal`` is built with
   ``mu`` at the interval midpoint and ``sigma`` at one-quarter of the width.
   If no prior spec is found at runtime, the fallback is ``Uniform(min, max)``.

@@ -4,7 +4,8 @@ Organized, ready-to-run scripts for Homodyne. All are CPU-only and grouped by wo
 
 ## Layout
 
-- `nlsq/` – NLSQ optimization demos (static, laminar flow, streaming, overlays, CPU tuning)
+- `nlsq/` – NLSQ optimization demos (static, laminar flow, streaming, overlays, CPU
+  tuning)
 - `mcmc/` – CMC/NUTS uncertainty quantification demos (small and large datasets)
 - `benchmarks/` – Performance checks (e.g., oneDNN)
 - `utils/` – Utilities (angle filtering helper, shell completion setup)

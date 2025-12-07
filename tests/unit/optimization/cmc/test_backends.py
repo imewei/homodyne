@@ -11,10 +11,6 @@ Comprehensive tests for:
 
 from __future__ import annotations
 
-from dataclasses import dataclass
-from typing import Any
-from unittest.mock import MagicMock, patch
-
 import numpy as np
 import pytest
 
@@ -29,7 +25,6 @@ from homodyne.optimization.cmc.backends import (
 from homodyne.optimization.cmc.backends.base import combine_shard_samples
 from homodyne.optimization.cmc.config import CMCConfig
 from homodyne.optimization.cmc.sampler import MCMCSamples
-
 
 # =============================================================================
 # Fixtures
@@ -67,7 +62,9 @@ def mock_mcmc_samples(sample_param_names):
 
     def create_samples(n_chains=2, n_samples=100, seed=42):
         np.random.seed(seed)
-        samples = {name: np.random.randn(n_chains, n_samples) for name in sample_param_names}
+        samples = {
+            name: np.random.randn(n_chains, n_samples) for name in sample_param_names
+        }
         extra_fields = {
             "diverging": np.zeros((n_chains, n_samples), dtype=bool),
             "accept_prob": np.random.uniform(0.8, 0.95, (n_chains, n_samples)),
@@ -233,8 +230,10 @@ class TestCombineShardSamples:
 
             # Combined mean should be between the two, but closer to shard1
             # This is a heuristic test; the exact relationship depends on weights
-            assert min(shard1_mean, shard2_mean) <= combined_mean <= max(
-                shard1_mean, shard2_mean
+            assert (
+                min(shard1_mean, shard2_mean)
+                <= combined_mean
+                <= max(shard1_mean, shard2_mean)
             )
 
     def test_many_shards(self, mock_mcmc_samples, sample_param_names):
@@ -337,7 +336,9 @@ class TestBackendEdgeCases:
         for name in sample_param_names:
             assert np.all(np.isfinite(combined.samples[name]))
 
-    def test_combine_shards_different_seeds(self, mock_mcmc_samples, sample_param_names):
+    def test_combine_shards_different_seeds(
+        self, mock_mcmc_samples, sample_param_names
+    ):
         """Test that different seeds produce different combinations."""
         shards1 = [mock_mcmc_samples(seed=i) for i in range(4)]
         shards2 = [mock_mcmc_samples(seed=i + 100) for i in range(4)]
@@ -430,7 +431,9 @@ class TestBackendScientificProperties:
         shard1_samples = {name: np.random.randn(2, 1000) for name in sample_param_names}
 
         # Shard 2: variance = 4.0
-        shard2_samples = {name: np.random.randn(2, 1000) * 2.0 for name in sample_param_names}
+        shard2_samples = {
+            name: np.random.randn(2, 1000) * 2.0 for name in sample_param_names
+        }
 
         shard1 = MCMCSamples(
             samples=shard1_samples,

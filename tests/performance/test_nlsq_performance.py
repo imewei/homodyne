@@ -119,7 +119,7 @@ class TestMemoryUsageValidation:
         initial_memory = get_memory_usage_mb()
 
         # Run optimization (mocked for speed)
-        wrapper = NLSQWrapper(enable_large_dataset=False)
+        NLSQWrapper(enable_large_dataset=False)
 
         # Memory should be proportional to dataset size
         # but not exceed reasonable bounds
@@ -186,7 +186,7 @@ class TestMemoryUsageValidation:
         initial_memory = get_memory_usage_mb()
 
         # Process multiple batches
-        for batch_idx in range(min(10, n_batches)):  # Test first 10 batches
+        for _batch_idx in range(min(10, n_batches)):  # Test first 10 batches
             # Simulate batch data
             batch_data = np.random.randn(batch_size)
             batch_residuals = np.random.randn(batch_size)
@@ -424,7 +424,7 @@ class TestStrategyOverhead:
 
         # Baseline: Direct computation
         def baseline_computation():
-            params = np.array([0.3, 1.0, 1000.0, 0.5, 10.0])
+            np.array([0.3, 1.0, 1000.0, 0.5, 10.0])
             residuals = data.g2.ravel() - 1.0
             return residuals
 
@@ -432,9 +432,9 @@ class TestStrategyOverhead:
 
         # With wrapper
         def wrapper_computation():
-            wrapper = NLSQWrapper(enable_large_dataset=False)
+            NLSQWrapper(enable_large_dataset=False)
             # Note: actual fit would be much slower; this tests overhead only
-            params = np.array([0.3, 1.0, 1000.0, 0.5, 10.0])
+            np.array([0.3, 1.0, 1000.0, 0.5, 10.0])
             residuals = data.g2.ravel() - 1.0
             return residuals
 
@@ -463,7 +463,7 @@ class TestStrategyOverhead:
 
         # Without fault tolerance
         def without_fault_tolerance():
-            wrapper = NLSQWrapper(
+            NLSQWrapper(
                 enable_recovery=False,
                 enable_numerical_validation=False,
             )
@@ -475,7 +475,7 @@ class TestStrategyOverhead:
 
         # With fault tolerance
         def with_fault_tolerance():
-            wrapper = NLSQWrapper(
+            NLSQWrapper(
                 enable_recovery=True,
                 enable_numerical_validation=True,
             )
@@ -539,7 +539,7 @@ class TestFastModePerformance:
 
         # Fast mode wrapper
         def fast_mode():
-            wrapper = NLSQWrapper(fast_mode=True)
+            NLSQWrapper(fast_mode=True)
             result = data.g2.ravel().std()
             return result
 
@@ -566,7 +566,7 @@ class TestFastModePerformance:
 
         # Normal mode
         def normal_mode():
-            wrapper = NLSQWrapper(
+            NLSQWrapper(
                 fast_mode=False,
                 enable_numerical_validation=True,
             )
@@ -577,7 +577,7 @@ class TestFastModePerformance:
 
         # Fast mode
         def fast_mode():
-            wrapper = NLSQWrapper(fast_mode=True)
+            NLSQWrapper(fast_mode=True)
             result = data.g2.ravel().mean()
             return result
 

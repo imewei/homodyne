@@ -143,8 +143,8 @@ class CheckpointManager:
         )
 
         try:
-            # Serialize optimizer state to bytes for checksum
-            import pickle
+            # Serialize optimizer state to bytes for checksum (trusted checkpoint)
+            import pickle  # nosec B403
 
             optimizer_bytes = pickle.dumps(optimizer_state)
 
@@ -270,9 +270,9 @@ class CheckpointManager:
                     )
 
                 # Deserialize optimizer state
-                import pickle
+                import pickle  # nosec B403: internal checkpoint serialization
 
-                optimizer_state = pickle.loads(optimizer_bytes)
+                optimizer_state = pickle.loads(optimizer_bytes)  # nosec B301
 
                 # Load metadata if available
                 metadata = {}

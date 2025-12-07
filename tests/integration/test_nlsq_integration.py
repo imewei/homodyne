@@ -30,6 +30,8 @@ try:
     import jax
     import jax.numpy as jnp
 
+    _ = jax
+
     JAX_AVAILABLE = True
 except ImportError:
     JAX_AVAILABLE = False
@@ -39,37 +41,38 @@ except ImportError:
 try:
     import nlsq
 
+    _ = nlsq
+
     NLSQ_AVAILABLE = True
 except ImportError:
     NLSQ_AVAILABLE = False
 
+# Import missing test helpers
+import json
+
+from homodyne.cli.commands import save_nlsq_results
 from homodyne.optimization.batch_statistics import BatchStatistics
 from homodyne.optimization.checkpoint_manager import CheckpointManager
 from homodyne.optimization.exceptions import NLSQNumericalError
 from homodyne.optimization.nlsq import fit_nlsq_jax
+from homodyne.optimization.nlsq.strategies.chunking import (
+    analyze_angle_distribution,
+    create_angle_stratified_data,
+    should_use_stratification,
+)
+from homodyne.optimization.nlsq.strategies.selection import DatasetSizeStrategy
 from homodyne.optimization.nlsq.wrapper import (
     NLSQWrapper,
     OptimizationResult,
     OptimizationStrategy,
 )
 from homodyne.optimization.numerical_validation import NumericalValidator
-from homodyne.optimization.nlsq.strategies.selection import DatasetSizeStrategy
-from tests.factories.large_dataset_factory import LargeDatasetFactory
-
-# Import missing test helpers
-import json
-
-from homodyne.cli.commands import save_nlsq_results
-from homodyne.optimization.nlsq.strategies.chunking import (
-    analyze_angle_distribution,
-    create_angle_stratified_data,
-    should_use_stratification,
-)
 from tests.factories.config_factory import (
     create_disabled_filtering_config,
     create_phi_filtering_config,
 )
 from tests.factories.data_factory import create_specific_angles_test_data
+from tests.factories.large_dataset_factory import LargeDatasetFactory
 from tests.factories.optimization_factory import (
     create_mock_config_manager,
     create_mock_data_dict,
@@ -110,7 +113,7 @@ class TestFullPipeline:
         assert metadata.strategy_expected == "STANDARD"
 
         # 2. Create wrapper and select strategy
-        wrapper = NLSQWrapper(enable_large_dataset=False)
+        NLSQWrapper(enable_large_dataset=False)
 
         # 3. Setup optimization
         initial_params = np.array([0.3, 1.0, 1000.0, 0.5, 10.0])
@@ -151,11 +154,11 @@ class TestFullPipeline:
         assert metadata.strategy_expected == "LARGE"
 
         # Wrapper with large dataset support
-        wrapper = NLSQWrapper(enable_large_dataset=True)
+        NLSQWrapper(enable_large_dataset=True)
 
         # Setup
         initial_params = np.array([0.3, 1.0, 1000.0, 0.5, 10.0])
-        bounds = (
+        (
             np.array([0.1, 0.5, 100.0, 0.1, 1.0]),
             np.array([1.0, 2.0, 10000.0, 2.0, 100.0]),
         )
@@ -747,7 +750,7 @@ class TestNLSQFullWorkflow:
             assert len(png_files) == 5, f"Expected 5 PNG files, got {len(png_files)}"
 
             # Verify naming convention
-            for i, phi in enumerate(data["phi_angles_list"]):
+            for _i, phi in enumerate(data["phi_angles_list"]):
                 expected_name = f"c2_heatmaps_phi_{phi:.1f}deg.png"
                 png_file = nlsq_dir / expected_name
                 assert png_file.exists(), f"PNG file not found: {expected_name}"
@@ -1269,7 +1272,6 @@ def test_stratification_decision_integrates_with_strategy():
     """Test stratification decision considers NLSQ strategy selection."""
     # Large dataset with per-angle scaling
     n_points = 2_000_000  # 2M points falls in LARGE range (1M-10M)
-    n_angles = 3
     per_angle_scaling = True
 
     # Strategy selector suggests LARGE/CHUNKED/STREAMING for >1M points
@@ -1392,7 +1394,6 @@ def test_integration_stratification_with_strategy_selector():
         n_angles * points_per_angle
     )  # 1,999,998 total (slightly under 2M, still in LARGE range)
     n_parameters = 9  # laminar_flow with per-angle scaling
-    per_angle_scaling = True
 
     # Mock data with equal points per angle
     data = {
@@ -1444,8 +1445,8 @@ def test_integration_workflow_without_stratification():
     n_points = 10_000
     phi = np.repeat([0.0, 45.0, 90.0], n_points // 3)
     t1 = np.linspace(1e-6, 1e-3, n_points)
-    t2 = t1.copy()
-    g2_exp = np.random.uniform(1.0, 1.5, n_points)
+    t1.copy()
+    np.random.uniform(1.0, 1.5, n_points)
 
     # Strategy selection
     selector = DatasetSizeStrategy()
@@ -1489,7 +1490,7 @@ def test_stratified_data_preserves_metadata_attributes():
     # n_points = len(phi) × len(t1) × len(t2)
     n_phi = 3  # 3 phi angles
     n_t = 200  # 200 time points
-    n_total = n_phi * n_t * n_t  # 3 × 200 × 200 = 120k points
+    n_phi * n_t * n_t  # 3 × 200 × 200 = 120k points
 
     class MockOriginalData:
         """Mock data object with all attributes expected by NLSQ."""
@@ -1882,10 +1883,10 @@ class TestNLSQWithAngleFiltering:
         # Optimization may not converge with synthetic data,
         # but we verify filtering works and optimization is attempted
         try:
-            result = fit_nlsq_jax(filtered_data, config)
+            fit_nlsq_jax(filtered_data, config)
         except Exception:
             # Optimization failure is OK - we're testing filtering, not convergence
-            result = None
+            pass
 
         # Assert - Dataset size reduction (filtering worked)
         assert len(filtered_data["phi_angles_list"]) == 3, (
@@ -1968,10 +1969,10 @@ class TestNLSQWithAngleFiltering:
         # Act - Run NLSQ with all angles
         caplog.clear()
         try:
-            result = fit_nlsq_jax(filtered_data_obj, config)
+            fit_nlsq_jax(filtered_data_obj, config)
         except Exception:
             # Optimization failure is OK - we're testing filtering
-            result = None
+            pass
 
         # Assert - All 9 angles used (no filtering)
         assert len(filtered_data["phi_angles_list"]) == 9, (
@@ -2051,7 +2052,7 @@ class TestNLSQWithAngleFiltering:
         from homodyne.cli.commands import _apply_angle_filtering_for_optimization
 
         caplog.clear()
-        filtered_data = _apply_angle_filtering_for_optimization(data, config)
+        _apply_angle_filtering_for_optimization(data, config)
 
         # Assert - Check log messages
         log_messages = [rec.message for rec in caplog.records]
@@ -2117,19 +2118,23 @@ class TestNLSQWithAngleFiltering:
         assert "wavevector_q_list" in filtered_data, "Should have wavevector_q_list key"
 
         # Verify filtered data dimensions
-        assert len(filtered_data["phi_angles_list"]) == 3, "Should have 3 filtered angles"
-        assert filtered_data["c2_exp"].shape[0] == 3, "c2_exp first dimension should be 3"
+        assert len(filtered_data["phi_angles_list"]) == 3, (
+            "Should have 3 filtered angles"
+        )
+        assert filtered_data["c2_exp"].shape[0] == 3, (
+            "c2_exp first dimension should be 3"
+        )
 
         # Act - Attempt optimization (may not converge, but should accept data structure)
         # Note: fit_nlsq_jax expects a dict, not SimpleNamespace
         try:
-            result = fit_nlsq_jax(filtered_data, config)
+            fit_nlsq_jax(filtered_data, config)
             # If we get here, optimization at least started
             optimization_attempted = True
         except Exception as e:
             # If exception is about data structure, that's a failure
             if "attribute" in str(e).lower() or "must have" in str(e).lower():
-                raise AssertionError(f"NLSQ rejected data structure: {e}")
+                raise AssertionError(f"NLSQ rejected data structure: {e}") from e
             # Other exceptions (convergence, numerical issues) are OK
             optimization_attempted = True
 
@@ -2262,7 +2267,7 @@ def test_streaming_strategy_huge_dataset(
 
     Uses mocking since we can't create 100M+ point arrays in unit tests.
     """
-    data = mock_xpcs_data(n_phi=5, n_t1=10, n_t2=10)
+    mock_xpcs_data(n_phi=5, n_t1=10, n_t2=10)
 
     wrapper = NLSQWrapper(
         enable_large_dataset=True,

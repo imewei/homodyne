@@ -147,7 +147,9 @@ def analyze_parameter_sensitivity(
     else:
         normalized = np.zeros_like(col_norms)
 
-    return {name: float(norm) for name, norm in zip(param_names, normalized, strict=False)}
+    return {
+        name: float(norm) for name, norm in zip(param_names, normalized, strict=False)
+    }
 
 
 def estimate_gradient_noise(
@@ -186,14 +188,18 @@ def estimate_gradient_noise(
 
         for _ in range(n_samples):
             # Add small perturbation
-            noise = np.random.randn(len(params_base)) * perturbation * np.abs(params_base)
+            noise = (
+                np.random.randn(len(params_base)) * perturbation * np.abs(params_base)
+            )
             params_perturbed = params_base + noise
 
             params_jnp = jnp.asarray(params_perturbed)
             if hasattr(residual_fn, "jax_residual"):
 
                 def residual_vector(p):
-                    return jnp.asarray(residual_fn.jax_residual(jnp.asarray(p))).reshape(-1)
+                    return jnp.asarray(
+                        residual_fn.jax_residual(jnp.asarray(p))
+                    ).reshape(-1)
 
             else:
 

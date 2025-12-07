@@ -24,6 +24,8 @@ from tests.factories.synthetic_data import generate_static_mode_dataset
 try:
     import nlsq
 
+    _ = nlsq
+
     NLSQ_AVAILABLE = True
 except ImportError:
     NLSQ_AVAILABLE = False
@@ -78,7 +80,7 @@ class TestNLSQWrapperOverhead:
         for _ in range(3):
             start = time.perf_counter()
             try:
-                result = wrapper.fit(data, config, initial_params, bounds, "static")
+                wrapper.fit(data, config, initial_params, bounds, "static")
                 elapsed = time.perf_counter() - start
                 wrapper_times.append(elapsed)
             except Exception as e:
@@ -146,7 +148,7 @@ class TestNLSQWrapperOverhead:
         for _ in range(3):
             start = time.perf_counter()
             try:
-                result = wrapper.fit(data, config, initial_params, bounds, "static")
+                wrapper.fit(data, config, initial_params, bounds, "static")
                 elapsed = time.perf_counter() - start
                 wrapper_times.append(elapsed)
             except Exception as e:
@@ -218,7 +220,7 @@ class TestNLSQWrapperOverhead:
         # Benchmark wrapper (single run for large dataset to save time)
         start = time.perf_counter()
         try:
-            result = wrapper.fit(data, config, initial_params, bounds, "static")
+            wrapper.fit(data, config, initial_params, bounds, "static")
             wrapper_time = time.perf_counter() - start
         except Exception as e:
             pytest.skip(f"Optimization failed: {e}")
@@ -280,7 +282,7 @@ class TestNLSQWrapperOverhead:
         # 2. Total fit time (includes all operations)
         start = time.perf_counter()
         try:
-            result = wrapper.fit(data, config, initial_params, bounds, "static")
+            wrapper.fit(data, config, initial_params, bounds, "static")
             timings["total"] = time.perf_counter() - start
         except Exception as e:
             pytest.skip(f"Optimization failed: {e}")

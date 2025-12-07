@@ -410,10 +410,10 @@ def main():
     cpu_info = detect_hpc_environment()
 
     # Step 2: Configure CPU optimization
-    config = configure_cpu_optimal(cpu_info)
+    configure_cpu_optimal(cpu_info)
 
     # Step 3: Report CPU performance
-    benchmark_results = benchmark_and_report()
+    benchmark_and_report()
 
     # Step 4: Generate synthetic data
     data = generate_synthetic_xpcs_data(n_times=50, n_angles=8)

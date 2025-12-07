@@ -94,7 +94,9 @@ def pytest_configure(config):
     config.addinivalue_line("markers", "requires_jax: Requires JAX installation")
     config.addinivalue_line("markers", "linux: Requires Linux OS")
     config.addinivalue_line("markers", "arviz: ArviZ integration tests (v2.4.1+)")
-    config.addinivalue_line("markers", "visualization: Plotting and visualization tests")
+    config.addinivalue_line(
+        "markers", "visualization: Plotting and visualization tests"
+    )
 
 
 def pytest_collection_modifyitems(config, items):
@@ -945,8 +947,7 @@ def numpyro_init_values_validator():
 
             if len(offset_keys) != n_angles:
                 raise AssertionError(
-                    f"Expected {n_angles} offset parameters, "
-                    f"found {len(offset_keys)}"
+                    f"Expected {n_angles} offset parameters, found {len(offset_keys)}"
                 )
 
             # Validate that per-angle indices are 0 to n_angles-1
@@ -958,19 +959,19 @@ def numpyro_init_values_validator():
                 try:
                     idx = int(key.split("_")[1])
                     actual_contrast_indices.add(idx)
-                except (IndexError, ValueError):
+                except (IndexError, ValueError) as exc:
                     raise AssertionError(
                         f"Invalid contrast parameter name format: {key}"
-                    )
+                    ) from exc
 
             for key in offset_keys:
                 try:
                     idx = int(key.split("_")[1])
                     actual_offset_indices.add(idx)
-                except (IndexError, ValueError):
+                except (IndexError, ValueError) as exc:
                     raise AssertionError(
                         f"Invalid offset parameter name format: {key}"
-                    )
+                    ) from exc
 
             if actual_contrast_indices != expected_indices:
                 raise AssertionError(
@@ -992,9 +993,7 @@ def numpyro_init_values_validator():
                 )
 
             if isinstance(value, float) and not np.isfinite(value):
-                raise AssertionError(
-                    f"Parameter {key} has non-finite value: {value}"
-                )
+                raise AssertionError(f"Parameter {key} has non-finite value: {value}")
 
         return True
 
@@ -1075,7 +1074,13 @@ def mock_numerical_validator():
         class NLSQNumericalError(Exception):
             """Fallback numerical error exception."""
 
-            def __init__(self, message, detection_point=None, invalid_values=None, error_context=None):
+            def __init__(
+                self,
+                message,
+                detection_point=None,
+                invalid_values=None,
+                error_context=None,
+            ):
                 super().__init__(message)
                 self.detection_point = detection_point
                 self.invalid_values = invalid_values or []
@@ -1204,7 +1209,9 @@ def mock_numerical_validator():
                 violations_upper = param_array > upper
 
                 if np.any(violations_lower) or np.any(violations_upper):
-                    n_violations = int(np.sum(violations_lower) + np.sum(violations_upper))
+                    n_violations = int(
+                        np.sum(violations_lower) + np.sum(violations_upper)
+                    )
 
                     violation_info = []
                     for i in range(len(param_array)):
@@ -1375,15 +1382,15 @@ def physics_bounds():
         >>> assert bounds['alpha'] == [0.3, 1.5]
     """
     return {
-        'D0': [100.0, 1e5],
-        'alpha': [0.3, 1.5],
-        'D_offset': [1.0, 1000.0],
-        'gamma_dot_t0': [1.0, 10000.0],
-        'beta': [0.1, 2.0],
-        'gamma_dot_t_offset': [-100.0, 100.0],
-        'phi0': [-np.pi, np.pi],
-        'contrast': [0.0, 1.0],
-        'offset': [0.5, 1.5],
+        "D0": [100.0, 1e5],
+        "alpha": [0.3, 1.5],
+        "D_offset": [1.0, 1000.0],
+        "gamma_dot_t0": [1.0, 10000.0],
+        "beta": [0.1, 2.0],
+        "gamma_dot_t_offset": [-100.0, 100.0],
+        "phi0": [-np.pi, np.pi],
+        "contrast": [0.0, 1.0],
+        "offset": [0.5, 1.5],
     }
 
 
@@ -1407,10 +1414,10 @@ def physics_tolerances():
         >>> assert tolerances['g2_min'] == 1.0
     """
     return {
-        'relative_error': 0.05,
-        'absolute_error': 1e-6,
-        'g2_min': 1.0,
-        'g2_max': 2.0,
+        "relative_error": 0.05,
+        "absolute_error": 1e-6,
+        "g2_min": 1.0,
+        "g2_max": 2.0,
     }
 
 
@@ -1436,6 +1443,7 @@ def physics_validation_helpers():
     Notes:
         All validators raise AssertionError with descriptive messages on failure.
     """
+
     def validate_g2_bounds(g2_array, g2_min=1.0, g2_max=2.0):
         """Assert 1.0 <= g2 <= 2.0 for correlation function values.
 
@@ -1500,14 +1508,16 @@ def physics_validation_helpers():
         # Handle both dict and array inputs
         if isinstance(true_params, dict):
             true_arr = np.array([true_params[k] for k in sorted(true_params.keys())])
-            fitted_arr = np.array([fitted_params[k] for k in sorted(fitted_params.keys())])
+            fitted_arr = np.array(
+                [fitted_params[k] for k in sorted(fitted_params.keys())]
+            )
         else:
             true_arr = np.asarray(true_params)
             fitted_arr = np.asarray(fitted_params)
 
         # Calculate relative error, avoiding division by zero
         relative_errors = []
-        for true_val, fitted_val in zip(true_arr, fitted_arr):
+        for true_val, fitted_val in zip(true_arr, fitted_arr, strict=False):
             if abs(true_val) < 1e-10:
                 # For near-zero values, use absolute error
                 error = abs(fitted_val)
@@ -1559,10 +1569,10 @@ def physics_validation_helpers():
         )
 
     return {
-        'validate_g2_bounds': validate_g2_bounds,
-        'validate_time_symmetry': validate_time_symmetry,
-        'validate_parameter_recovery': validate_parameter_recovery,
-        'validate_correlation_decay': validate_correlation_decay,
+        "validate_g2_bounds": validate_g2_bounds,
+        "validate_time_symmetry": validate_time_symmetry,
+        "validate_parameter_recovery": validate_parameter_recovery,
+        "validate_correlation_decay": validate_correlation_decay,
     }
 
 
@@ -1594,7 +1604,7 @@ def typical_xpcs_time_scales():
         dynamics and beam intensity.
     """
     return {
-        't_min': 0.001,
-        't_max': 1000.0,
-        'n_decades': 6,
+        "t_min": 0.001,
+        "t_max": 1000.0,
+        "n_decades": 6,
     }

@@ -32,6 +32,8 @@ try:
     import jax.numpy as jnp
     from jax import random
 
+    _ = (jax, random)
+
     JAX_AVAILABLE = True
 except ImportError:
     JAX_AVAILABLE = False
@@ -40,6 +42,8 @@ except ImportError:
 try:
     import numpyro
     from numpyro.infer import MCMC, NUTS
+
+    _ = (numpyro, MCMC, NUTS)
 
     NUMPYRO_AVAILABLE = True
 except ImportError:
@@ -668,14 +672,12 @@ class TestFullMCMCWorkflow:
 
         # Create minimal test data
         n_points = 10
-        t1 = np.linspace(0.1, 1.0, n_points)
-        t2 = np.linspace(0.1, 1.0, n_points)
-        phi = np.zeros(n_points)  # Single angle
-        q = 0.01
-        L = 3.5e6
+        np.linspace(0.1, 1.0, n_points)
+        np.linspace(0.1, 1.0, n_points)
+        np.zeros(n_points)  # Single angle
 
         # Generate synthetic data (c2 ≈ 1.0)
-        data = np.ones(n_points) + 0.01 * np.random.randn(n_points)
+        np.ones(n_points) + 0.01 * np.random.randn(n_points)
 
         # Pass config via kwargs (this is how CLI would call it)
         # NOTE: This test verifies the integration but doesn't run full MCMC
@@ -832,7 +834,9 @@ class TestManualNLSQMCMCWorkflow:
         # Total: 2*n_angles + 3 = 13 parameters
         nlsq_params = nlsq_result.parameters
         expected_total = 2 * n_angles + 3  # Per-angle scaling + 3 physical params
-        assert len(nlsq_params) == expected_total, f"NLSQ should return {expected_total} params"
+        assert len(nlsq_params) == expected_total, (
+            f"NLSQ should return {expected_total} params"
+        )
 
         # Act - User manually copies NLSQ results to YAML config
         # Extract physics parameters (skip per-angle contrast and offset)
@@ -933,7 +937,7 @@ class TestParameterRegimeConvergence:
     def test_static_mode_parameter_regime(self):
         """Test MCMC works for static_mode mode (3 physics params)."""
         # Arrange - Static isotropic data
-        data = create_mock_data_dict(n_angles=10, n_t1=25, n_t2=25)
+        create_mock_data_dict(n_angles=10, n_t1=25, n_t2=25)
         config = create_mock_config_manager(analysis_mode="static")
 
         # Physics parameters: [D0, alpha, D_offset]
@@ -948,7 +952,7 @@ class TestParameterRegimeConvergence:
     def test_laminar_flow_parameter_regime(self):
         """Test MCMC works for laminar_flow mode (7 physics params)."""
         # Arrange - Laminar flow data
-        data = create_mock_data_dict(n_angles=10, n_t1=25, n_t2=25)
+        create_mock_data_dict(n_angles=10, n_t1=25, n_t2=25)
         config = create_mock_config_manager(analysis_mode="laminar_flow")
 
         # Physics parameters: [D0, alpha, D_offset, gamma_dot_t0, beta,
@@ -1169,7 +1173,7 @@ class TestMCMCWithAngleFiltering:
         from homodyne.cli.commands import _apply_angle_filtering_for_optimization
 
         caplog.clear()
-        filtered_data = _apply_angle_filtering_for_optimization(data, config)
+        _apply_angle_filtering_for_optimization(data, config)
 
         # Assert - Check log messages
         log_messages = [rec.message for rec in caplog.records]
@@ -1606,7 +1610,7 @@ def simple_static_data():
 
     # Generate synthetic g2 data with noise
     # g1 = exp(-D0 * q^2 * (t1^alpha + t2^alpha) - D_offset * q^2 * (t1 + t2))
-    dt = t1[1] - t1[0]
+    t1[1] - t1[0]
     D_total = true_D0 * (t1**true_alpha + t2**true_alpha) + true_D_offset * (t1 + t2)
     g1 = np.exp(-D_total * q**2)
     c2_theory = 1.0 + g1**2
@@ -1988,8 +1992,8 @@ def test_enhanced_retry_logging(caplog):
     # If retries were triggered, we check for proper formatting
 
     retry_messages = [msg for msg in log_messages if "🔄" in msg or "Retry" in msg]
-    success_messages = [msg for msg in log_messages if "✅" in msg]
-    failure_messages = [msg for msg in log_messages if "❌" in msg]
+    [msg for msg in log_messages if "✅" in msg]
+    [msg for msg in log_messages if "❌" in msg]
 
     # If retry was triggered, verify enhanced logging format
     if retry_messages:

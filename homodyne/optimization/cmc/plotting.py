@@ -249,9 +249,12 @@ def plot_energy(
         # Create minimal figure with message
         fig, ax = plt.subplots(figsize=figsize)
         ax.text(
-            0.5, 0.5,
+            0.5,
+            0.5,
             "Energy plot not available\n(sample_stats not recorded)",
-            ha="center", va="center", fontsize=12,
+            ha="center",
+            va="center",
+            fontsize=12,
         )
         ax.set_xlim(0, 1)
         ax.set_ylim(0, 1)

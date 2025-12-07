@@ -468,7 +468,7 @@ class AdvancedMemoryManager:
         self._virtual_memory_enabled = self.memory_config.get("virtual_memory", True)
         self._virtual_memory_path = self.memory_config.get(
             "virtual_memory_path",
-            "/tmp/homodyne_vm",
+            str(Path(tempfile.gettempdir()) / "homodyne_vm"),
         )
 
         # Start monitoring

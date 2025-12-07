@@ -627,7 +627,7 @@ def test_index_based_single_angle_identity(balanced_data):
 def test_index_based_memory_efficiency():
     """Test that index-based uses less memory than full copy."""
     n_points = 300
-    phi = np.repeat([0.0, 45.0, 90.0], 100)
+    np.repeat([0.0, 45.0, 90.0], 100)
 
     # Estimate memory for both approaches
     mem_full = estimate_stratification_memory(n_points, use_index_based=False)

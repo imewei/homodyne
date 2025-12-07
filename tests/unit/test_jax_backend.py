@@ -843,7 +843,7 @@ class TestPhysicsConstraints:
             for j in range(n):
                 if i != j:
                     assert result_2d[i, j] <= diagonal_val + 1e-6, (
-                        f"Off-diagonal [{i},{j}]={result_2d[i,j]:.6f} > "
+                        f"Off-diagonal [{i},{j}]={result_2d[i, j]:.6f} > "
                         f"diagonal={diagonal_val:.6f}"
                     )
 
@@ -908,23 +908,20 @@ class TestJAXArrayCreation:
 
         assert jax_f32.dtype == jnp.float32
         # Verify precision is maintained
-        np.testing.assert_array_almost_equal(
-            np.asarray(jax_f32), data_f32, decimal=6
-        )
+        np.testing.assert_array_almost_equal(np.asarray(jax_f32), data_f32, decimal=6)
 
     def test_dtype_float64_preservation(self, jax_backend):
         """TC-CORE-JAX-003: Test float64 dtype preservation."""
         # Enable float64 for this test
         from jax import config
+
         config.update("jax_enable_x64", True)
 
         data_f64 = np.array([1.0, 2.0, 3.0], dtype=np.float64)
         jax_f64 = jnp.array(data_f64)
 
         assert jax_f64.dtype == jnp.float64
-        np.testing.assert_array_almost_equal(
-            np.asarray(jax_f64), data_f64, decimal=14
-        )
+        np.testing.assert_array_almost_equal(np.asarray(jax_f64), data_f64, decimal=14)
 
     def test_meshgrid_creation(self, jax_backend):
         """TC-CORE-JAX-004: Test meshgrid creation for correlation functions."""
@@ -989,7 +986,6 @@ class TestVectorizationExpanded:
 
     def test_vmap_over_phi_angles(self, jax_backend):
         """Test vectorization over phi angles."""
-        from jax import vmap
 
         t1 = jnp.array([[0, 1], [1, 0]])
         t2 = jnp.array([[0, 1], [1, 0]])
@@ -1012,7 +1008,6 @@ class TestVectorizationExpanded:
 
     def test_vmap_over_time_arrays(self, jax_backend):
         """Test vectorization over different time array sizes."""
-        from jax import vmap
 
         phi = jnp.array([0.0])
         q = 0.01
@@ -1045,12 +1040,12 @@ class TestVectorizationExpanded:
 
         params = jnp.array([1000.0, 0.5, 10.0, 0.0, 0.5, 0.0, 0.0])
 
-        for i, (c, o) in enumerate(zip(contrasts, offsets)):
+        for i, (c, o) in enumerate(zip(contrasts, offsets, strict=False)):
             result = compute_g2_scaled(
                 params=params,
                 t1=t1,
                 t2=t2,
-                phi=phi[i:i+1],
+                phi=phi[i : i + 1],
                 q=q,
                 L=L,
                 contrast=float(c),
@@ -1063,7 +1058,6 @@ class TestVectorizationExpanded:
 
     def test_batch_parameter_computation(self, jax_backend):
         """Test batch computation over multiple parameter sets."""
-        from jax import vmap
 
         t1 = jnp.array([[0, 1], [1, 0]])
         t2 = jnp.array([[0, 1], [1, 0]])
@@ -1163,7 +1157,7 @@ class TestJAXCompilationExpanded:
 
         @jit
         def compute(x):
-            return jnp.sum(x ** 2)
+            return jnp.sum(x**2)
 
         # Different shapes should work (each triggers compilation)
         result1 = compute(jnp.ones(10))
@@ -1198,14 +1192,12 @@ class TestJAXCompilationExpanded:
         jit_c2 = jit(compute_c2_model_jax)
         result_jit = jit_c2(params, t1, t2, phi, q)
 
-        np.testing.assert_array_almost_equal(
-            result_regular, result_jit, decimal=12
-        )
+        np.testing.assert_array_almost_equal(result_regular, result_jit, decimal=12)
 
     def test_jit_with_static_argnums(self, jax_backend):
         """Test JIT with static arguments using functools.partial."""
+
         from jax import jit
-        from functools import partial
 
         def compute_sum(x):
             return jnp.sum(x)
@@ -1244,7 +1236,7 @@ class TestJAXCompilationExpanded:
 
         @jit
         def inner(x):
-            return x ** 2
+            return x**2
 
         @jit
         def outer(x):
@@ -1274,14 +1266,16 @@ class TestNumericalStabilityExpanded:
 
         # g1 = exp(-q²D|tau|) for simple diffusion
         # Manually compute to test underflow behavior
-        g1_manual = jnp.exp(-q**2 * D * tau_values)
+        g1_manual = jnp.exp(-(q**2) * D * tau_values)
 
         # Should not have underflow (result should be >= 0, not -inf or nan)
         assert jnp.all(jnp.isfinite(g1_manual))
         assert jnp.all(g1_manual >= 0.0)
         # Large tau should give g1 close to 0
         min_val = float(jnp.min(g1_manual))
-        assert min_val < 1e-10 or min_val >= 0, f"Expected min value < 1e-10, got {min_val}"
+        assert min_val < 1e-10 or min_val >= 0, (
+            f"Expected min value < 1e-10, got {min_val}"
+        )
 
     def test_no_overflow_small_tau(self, jax_backend):
         """Test no overflow for very small time separations."""
@@ -1291,7 +1285,7 @@ class TestNumericalStabilityExpanded:
         D = 0.1
 
         # g1 = exp(-q²D|tau|) for simple diffusion
-        g1_manual = jnp.exp(-q**2 * D * tau_values)
+        g1_manual = jnp.exp(-(q**2) * D * tau_values)
 
         # Should not have overflow
         assert jnp.all(jnp.isfinite(g1_manual))
@@ -1474,7 +1468,7 @@ class TestGradientComputationsExpanded:
         from jax import jvp
 
         def f(x):
-            return jnp.sum(x ** 2)
+            return jnp.sum(x**2)
 
         x = jnp.array([1.0, 2.0, 3.0])
         v = jnp.array([1.0, 0.0, 0.0])  # Direction vector
@@ -1490,7 +1484,7 @@ class TestGradientComputationsExpanded:
         from jax import grad
 
         def f(x):
-            return jnp.sum(x ** 2)
+            return jnp.sum(x**2)
 
         x = jnp.array([1.0, 2.0, 3.0])
         gradient = grad(f)(x)
@@ -1559,13 +1553,13 @@ class TestGradientComputationsExpanded:
         from jax import value_and_grad
 
         def f(x):
-            return jnp.sum(x ** 3)
+            return jnp.sum(x**3)
 
         x = jnp.array([1.0, 2.0, 3.0])
         value, gradient = value_and_grad(f)(x)
 
         assert value == 36.0  # 1 + 8 + 27
-        expected_grad = 3 * x ** 2  # Gradient of x³ is 3x²
+        expected_grad = 3 * x**2  # Gradient of x³ is 3x²
         np.testing.assert_array_almost_equal(gradient, expected_grad, decimal=10)
 
     def test_gradient_chain_rule(self, jax_backend):
@@ -1573,10 +1567,10 @@ class TestGradientComputationsExpanded:
         from jax import grad
 
         def outer(inner_result):
-            return jnp.sum(inner_result ** 2)
+            return jnp.sum(inner_result**2)
 
         def inner(x):
-            return x ** 2 + 1
+            return x**2 + 1
 
         def composed(x):
             return outer(inner(x))
@@ -1585,7 +1579,7 @@ class TestGradientComputationsExpanded:
         gradient = grad(composed)(x)
 
         # Chain rule: d/dx[sum((x² + 1)²)] = 4x(x² + 1)
-        expected = 4 * x * (x ** 2 + 1)
+        expected = 4 * x * (x**2 + 1)
         np.testing.assert_array_almost_equal(gradient, expected, decimal=10)
 
     def test_gradient_with_conditionals(self, jax_backend):
@@ -1593,7 +1587,7 @@ class TestGradientComputationsExpanded:
         from jax import grad
 
         def f(x):
-            return jnp.where(x > 0, x ** 2, -x ** 2)
+            return jnp.where(x > 0, x**2, -(x**2))
 
         grad_fn = grad(lambda x: jnp.sum(f(x)))
 
@@ -1612,7 +1606,7 @@ class TestGradientComputationsExpanded:
         from jax import grad
 
         def f(x):
-            return x ** 4
+            return x**4
 
         # First derivative: 4x³
         grad1 = grad(f)
@@ -1622,9 +1616,9 @@ class TestGradientComputationsExpanded:
         grad3 = grad(grad2)
 
         x = 2.0
-        assert grad1(x) == 32.0   # 4 * 2³ = 32
-        assert grad2(x) == 48.0   # 12 * 2² = 48
-        assert grad3(x) == 48.0   # 24 * 2 = 48
+        assert grad1(x) == 32.0  # 4 * 2³ = 32
+        assert grad2(x) == 48.0  # 12 * 2² = 48
+        assert grad3(x) == 48.0  # 24 * 2 = 48
 
     def test_gradient_physics_model(self, jax_backend):
         """Test gradient of physics model with respect to physical parameters."""
@@ -1667,7 +1661,7 @@ class TestGradientComputationsExpanded:
         from jax import grad
 
         def f(x):
-            return jnp.sum(jnp.sin(x) * jnp.exp(-x ** 2))
+            return jnp.sum(jnp.sin(x) * jnp.exp(-(x**2)))
 
         x = jnp.array([0.5, 1.0, 1.5])
 
@@ -1684,6 +1678,4 @@ class TestGradientComputationsExpanded:
                 (f(x_plus) - f(x_minus)) / (2 * eps)
             )
 
-        np.testing.assert_array_almost_equal(
-            analytical_grad, numerical_grad, decimal=5
-        )
+        np.testing.assert_array_almost_equal(analytical_grad, numerical_grad, decimal=5)

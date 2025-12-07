@@ -135,12 +135,11 @@ class TestStreamingOptimizerMemoryConstancy:
         # For now, we validate the concept
 
         # Simulate processing batches without accumulation
-        memory_readings = []
 
-        for i in range(100):
+        for _i in range(100):
             # Process batch (simulated)
             batch = np.random.randn(10_000)
-            result = batch.mean()  # Process and discard
+            batch.mean()  # Process and discard
 
             # Memory should stay constant (batch gets garbage collected)
             # In real test: memory_readings.append(current_memory_usage())
@@ -156,7 +155,7 @@ class TestStreamingOptimizerMemoryConstancy:
         initial_refcount = sys.getrefcount(batch)
 
         # Process batch
-        result = batch.mean()
+        batch.mean()
 
         # After processing, no new references should exist
         final_refcount = sys.getrefcount(batch)
@@ -164,10 +163,9 @@ class TestStreamingOptimizerMemoryConstancy:
 
     def test_no_batch_accumulation(self):
         """Test that batches aren't accumulated in memory."""
-        max_batches_in_memory = 1  # Should only hold current batch
 
         # Simulate streaming - only one batch at a time
-        for i in range(100):
+        for _i in range(100):
             batch = np.random.randn(10_000)
             # Process immediately, don't store
             _ = batch.mean()
@@ -254,7 +252,7 @@ class TestStreamingOptimizerErrorRecovery:
         max_retries = 2
         for retry in range(max_retries):
             try:
-                result = mock_fit_batch()
+                mock_fit_batch()
                 break  # Success
             except NLSQConvergenceError:
                 if retry == max_retries - 1:
@@ -278,7 +276,7 @@ class TestStreamingOptimizerErrorRecovery:
         max_retries = 2
         for retry in range(max_retries):
             try:
-                result = mock_fit_batch()
+                mock_fit_batch()
                 break
             except NLSQNumericalError:
                 if retry == max_retries - 1:
@@ -480,7 +478,7 @@ class TestStreamingOptimizerBestParameterTracking:
         best_batch_idx = -1
 
         for batch_idx in range(10):
-            loss = 10.0 / (batch_idx + 1)  # Loss decreases
+            10.0 / (batch_idx + 1)  # Loss decreases
             best_batch_idx = batch_idx
 
         assert best_batch_idx == 9  # Last batch had best loss
@@ -489,7 +487,6 @@ class TestStreamingOptimizerBestParameterTracking:
         """Test returning best params even if final batch fails."""
         best_params = np.array([1.0, 2.0, 3.0])
         best_loss = 0.5
-        best_batch = 7
 
         # Final batch (9) fails
         final_batch_failed = True

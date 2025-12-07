@@ -21,7 +21,6 @@ from homodyne.optimization.nlsq.core import (
     JAX_AVAILABLE,
     NLSQ_AVAILABLE,
     NLSQResult,
-    _get_param_names,
     fit_nlsq_jax,
 )
 from homodyne.optimization.nlsq.results import (

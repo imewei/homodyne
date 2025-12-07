@@ -25,7 +25,7 @@ Key Features:
 
 import hashlib
 import os
-import pickle
+import pickle  # nosec B403: internal cache serialization only
 import threading
 import time
 from collections import OrderedDict, deque
@@ -769,8 +769,8 @@ class MultiLevelCache:
             else:
                 serialized = data  # Fallback to uncompressed
 
-            # Deserialize
-            item = pickle.loads(serialized)
+            # Deserialize (trusted internal cache only)
+            item = pickle.loads(serialized)  # nosec B301
             return item
 
         except Exception as e:
@@ -1307,7 +1307,7 @@ class PerformanceEngine:
         file_info = f"{hdf_path}:{file_stat.st_mtime}:{file_stat.st_size}"
 
         # Hash the data keys for shorter cache key
-        keys_hash = hashlib.md5(",".join(sorted(data_keys)).encode()).hexdigest()[:8]
+        keys_hash = hashlib.sha256(",".join(sorted(data_keys)).encode()).hexdigest()[:8]
 
         return (
             f"corr_matrices_{keys_hash}_{file_info.replace('/', '_').replace(':', '_')}"

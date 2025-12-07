@@ -798,9 +798,10 @@ def create_angle_stratified_data(
     )
 
     # Ensure we didn't somehow create more data than we had
-    assert n_used <= n_points, (
-        f"Data expansion during stratification: {n_used} > {n_points}"
-    )
+    if n_used > n_points:
+        raise ValueError(
+            f"Data expansion during stratification: {n_used} > {n_points}"
+        )
 
     # Convert back to JAX arrays and return with chunk boundary information
     return (
@@ -977,9 +978,11 @@ def create_angle_stratified_indices(
     )
 
     # Ensure we didn't somehow create more indices than we had points
-    assert n_used <= n_points, f"Index array too large: {n_used} > {n_points}"
+    if n_used > n_points:
+        raise ValueError(f"Index array too large: {n_used} > {n_points}")
     # Ensure no duplicate indices
-    assert len(np.unique(final_indices)) == n_used, "Duplicate indices detected"
+    if len(np.unique(final_indices)) != n_used:
+        raise ValueError("Duplicate indices detected")
 
     return final_indices
 

@@ -21,7 +21,9 @@ def test_autodoc_imports_homodyne_successfully():
         assert hasattr(homodyne, "core"), "homodyne.core module not accessible"
         assert hasattr(homodyne, "config"), "homodyne.config module not accessible"
         assert hasattr(homodyne, "data"), "homodyne.data module not accessible"
-        assert hasattr(homodyne, "optimization"), "homodyne.optimization module not accessible"
+        assert hasattr(homodyne, "optimization"), (
+            "homodyne.optimization module not accessible"
+        )
         assert hasattr(homodyne, "cli"), "homodyne.cli module not accessible"
         assert hasattr(homodyne, "viz"), "homodyne.viz module not accessible"
         assert hasattr(homodyne, "device"), "homodyne.device module not accessible"
@@ -66,7 +68,9 @@ def test_config_module_imports():
 
         # Check key components exist
         assert hasattr(config, "manager"), "manager not found in config"
-        assert hasattr(config, "parameter_manager"), "parameter_manager not found in config"
+        assert hasattr(config, "parameter_manager"), (
+            "parameter_manager not found in config"
+        )
         assert hasattr(config, "types"), "types not found in config"
 
     except ImportError as e:
@@ -80,7 +84,9 @@ def test_docstring_parsing_with_napoleon():
 
         # Check that compute_g2_scaled has a docstring
         assert hasattr(jax_backend, "compute_g2_scaled"), "compute_g2_scaled not found"
-        assert jax_backend.compute_g2_scaled.__doc__ is not None, "compute_g2_scaled missing docstring"
+        assert jax_backend.compute_g2_scaled.__doc__ is not None, (
+            "compute_g2_scaled missing docstring"
+        )
 
         # Check docstring contains typical sections
         docstring = jax_backend.compute_g2_scaled.__doc__
@@ -97,7 +103,7 @@ def test_api_reference_rst_files_exist():
 
     # Check that api-reference directory exists
     assert api_ref_path.exists(), f"api-reference directory not found at {api_ref_path}"
-    assert api_ref_path.is_dir(), f"api-reference should be a directory"
+    assert api_ref_path.is_dir(), "api-reference should be a directory"
 
 
 @pytest.mark.slow
@@ -148,8 +154,9 @@ Test Autosummary
 def test_type_hints_accessible():
     """Test that type hints are accessible for autodoc."""
     try:
-        from homodyne.core import jax_backend
         import inspect
+
+        from homodyne.core import jax_backend
 
         # Check that functions have type annotations
         if hasattr(jax_backend, "compute_g2_scaled"):
