@@ -96,7 +96,7 @@ def safe_sinc(x: jnp.ndarray) -> jnp.ndarray:
         x: Input array
 
     Returns:
-        sin(x)/x where |x| > EPS, else 1.0
+        sin(x)/x where abs(x) > EPS, else 1.0
     """
     return jnp.where(jnp.abs(x) > EPS, jnp.sin(x) / x, 1.0)
 
@@ -228,12 +228,13 @@ def create_time_integral_matrix(
     The dt scaling happens in wavevector_q_squared_half_dt, NOT in this cumsum.
 
     Algorithm (from working version):
-    1. Trapezoidal integration: cumsum[i] = Σ(k=0 to i-1) 0.5 * (f[k] + f[k+1])
-    2. Compute difference matrix: matrix[i,j] = |cumsum[i] - cumsum[j]|
-    3. The dt factor is applied via wavevector_q_squared_half_dt = 0.5 * q² * dt
 
-    This gives: matrix[i,j] = number of integration steps
-    Actual integral: dt * matrix[i,j] ≈ ∫₀^|tᵢ-tⱼ| f(t') dt'
+    1. Trapezoidal integration: cumsum[i] = Sum(k=0 to i-1) 0.5 * (f[k] + f[k+1])
+    2. Compute difference matrix: matrix[i,j] = abs(cumsum[i] - cumsum[j])
+    3. The dt factor is applied via wavevector_q_squared_half_dt = 0.5 * q^2 * dt
+
+    This gives: matrix[i,j] = number of integration steps.
+    Actual integral: dt * matrix[i,j] approximates the integral from 0 to abs(ti-tj) of f(t') dt'
 
     Benefits over simple cumsum:
     - Reduces oscillations from discretization by ~50%

@@ -97,7 +97,7 @@ compatibility** for all validated components:
 ### Preserved Components
 
 - **`data/`** - Complete XPCS data loading infrastructure (11 files preserved)
-- **`core/`** - Validated physics models and JAX backend (7 files preserved)
+- **`core/`** - Validated physics models and JAX backend (11 files including shared utilities)
 
 ### New Components
 

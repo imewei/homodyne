@@ -23,6 +23,11 @@ Configuration & CLI
 - **config**: Configuration management, parameter handling, and templates
 - **cli**: Command-line interface and interactive configuration builder
 
+I/O & Results
+~~~~~~~~~~~~~
+
+- **io**: Result saving (JSON, NPZ) and serialization utilities
+
 Visualization & Utilities
 ~~~~~~~~~~~~~~~~~~~~~~~~~~
 
@@ -41,6 +46,7 @@ API Documentation by Module
    data
    config
    cli
+   io
    viz
    device
    utils
@@ -68,6 +74,11 @@ Quick Links
 
 - :class:`homodyne.data.XPCSDataLoader` - HDF5 data loading from APS beamlines
 - :func:`homodyne.data.filter_phi_angles` - Angle filtering and selection
+
+**I/O & Results**
+
+- :func:`homodyne.io.save_nlsq_json_files` - Save NLSQ results to JSON
+- :func:`homodyne.io.save_nlsq_npz_file` - Save numerical data to NPZ
 
 Indices and Tables
 ------------------

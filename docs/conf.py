@@ -69,7 +69,8 @@ autodoc_typehints_description_target = "documented"
 autodoc_preserve_defaults = True
 
 # Mock imports for dependencies that might not be available during build
-autodoc_mock_imports: list[str] = []
+# arviz is optional and may not be installed in CI environments
+autodoc_mock_imports: list[str] = ["arviz"]
 
 # -- Options for autosummary extension ---------------------------------------
 autosummary_generate = True

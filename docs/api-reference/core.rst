@@ -142,16 +142,41 @@ Scaled fitting engine implementing the core homodyne equation:
    :undoc-members:
    :show-inheritance:
 
+Shared Physics Utilities
+------------------------
+
+Common utility functions and physics helpers shared across backends.
+
+.. automodule:: homodyne.core.physics_utils
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+Key Shared Functions
+~~~~~~~~~~~~~~~~~~~~
+
+.. autosummary::
+   :nosignatures:
+
+   homodyne.core.physics_utils.safe_len
+   homodyne.core.physics_utils.safe_exp
+   homodyne.core.physics_utils.safe_sinc
+   homodyne.core.physics_utils.calculate_diffusion_coefficient
+   homodyne.core.physics_utils.calculate_shear_rate
+   homodyne.core.physics_utils.create_time_integral_matrix
+   homodyne.core.physics_utils.trapezoid_cumsum
+
 Specialized Physics Modules
 ---------------------------
 
 The core module includes specialized physics implementations for different optimization methods:
 
-- **physics_nlsq.py**: Physics computations optimized for NLSQ (non-linear least squares)
-- **physics_cmc.py**: Physics computations optimized for CMC (Consensus Monte Carlo)
+- **physics_utils.py**: Shared utilities consolidated from multiple backends (diffusion coefficient, shear rate, time integrals)
+- **physics_nlsq.py**: Physics computations optimized for NLSQ (meshgrid operations)
+- **physics_cmc.py**: Physics computations optimized for CMC (element-wise operations)
 - **numpy_gradients.py**: NumPy-based gradient calculations for validation
 
-These modules are primarily for internal use and are documented in the source code.
+These modules share common functions via ``physics_utils.py`` to ensure consistent behavior across backends.
 
 See Also
 --------
