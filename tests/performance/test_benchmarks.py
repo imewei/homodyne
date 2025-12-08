@@ -45,7 +45,7 @@ class TestComputationalBenchmarks:
 
     def test_g1_diffusion_benchmark(self, jax_backend, benchmark_config):
         """Benchmark g1 diffusion computation across different sizes."""
-        from homodyne.core.jax_backend import compute_g1_diffusion_jax
+        from tests.utils.legacy_compat import compute_g1_diffusion_jax
 
         # Test different matrix sizes
         sizes = [50, 100, 200, 300]
@@ -102,7 +102,7 @@ class TestComputationalBenchmarks:
 
     def test_c2_model_benchmark(self, jax_backend, benchmark_config):
         """Benchmark complete c2 model computation."""
-        from homodyne.core.jax_backend import compute_c2_model_jax
+        from tests.utils.legacy_compat import compute_c2_model_jax
 
         # Realistic dataset sizes
         test_cases = [
@@ -224,7 +224,7 @@ class TestComputationalBenchmarks:
     @pytest.mark.skipif(not HAS_PSUTIL, reason="psutil not available")
     def test_memory_usage_benchmark(self, jax_backend):
         """Benchmark memory usage for different dataset sizes."""
-        from homodyne.core.jax_backend import compute_c2_model_jax
+        from tests.utils.legacy_compat import compute_c2_model_jax
 
         # Monitor memory usage
         process = psutil.Process()
@@ -403,7 +403,7 @@ class TestScalingBenchmarks:
         """Test JAX compilation overhead vs execution time."""
         from jax import jit
 
-        from homodyne.core.jax_backend import compute_g1_diffusion_jax
+        from tests.utils.legacy_compat import compute_g1_diffusion_jax
 
         size = 100
         t1, t2 = jnp.meshgrid(jnp.arange(size), jnp.arange(size), indexing="ij")
@@ -447,7 +447,7 @@ class TestScalingBenchmarks:
         """Test performance scaling with vectorization."""
         from jax import vmap
 
-        from homodyne.core.jax_backend import compute_c2_model_jax
+        from tests.utils.legacy_compat import compute_c2_model_jax
 
         # Base computation
         t1 = jnp.array([[0, 1, 2], [1, 0, 1], [2, 1, 0]])
@@ -510,7 +510,7 @@ class TestScalingBenchmarks:
 
     def test_memory_scaling_behavior(self, jax_backend):
         """Test memory scaling with dataset size."""
-        from homodyne.core.jax_backend import compute_c2_model_jax
+        from tests.utils.legacy_compat import compute_c2_model_jax
 
         # Test different sizes
         sizes = [20, 40, 60]
@@ -577,7 +577,7 @@ class TestRegressionBenchmarks:
 
     def test_baseline_performance_regression(self, jax_backend, synthetic_xpcs_data):
         """Test against baseline performance expectations."""
-        from homodyne.core.jax_backend import compute_c2_model_jax
+        from tests.utils.legacy_compat import compute_c2_model_jax
 
         # Standard test case
         data = synthetic_xpcs_data
@@ -849,7 +849,7 @@ class TestAdditionalBenchmarks:
 
     def test_jax_jit_compilation_time(self, jax_backend):
         """Test JIT compilation time: first vs subsequent calls."""
-        from homodyne.core.jax_backend import compute_g1_diffusion_jax
+        from tests.utils.legacy_compat import compute_g1_diffusion_jax
 
         t1, t2 = jnp.meshgrid(jnp.arange(50), jnp.arange(50), indexing="ij")
         q, D = 0.01, 1000.0
@@ -924,7 +924,7 @@ class TestAdditionalBenchmarks:
 
     def test_overall_pipeline_timing(self, jax_backend, synthetic_xpcs_data):
         """Test end-to-end workflow timing."""
-        from homodyne.core.jax_backend import compute_c2_model_jax
+        from tests.utils.legacy_compat import compute_c2_model_jax
 
         data = synthetic_xpcs_data
         t1 = data["t1"]

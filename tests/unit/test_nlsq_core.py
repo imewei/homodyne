@@ -1092,7 +1092,7 @@ class TestNLSQOptimization:
         q = 0.01
 
         # Generate perfect synthetic data
-        from homodyne.core.jax_backend import compute_c2_model_jax
+        from tests.utils.legacy_compat import compute_c2_model_jax
 
         c2_true = compute_c2_model_jax(true_params, t1, t2, phi, q)
 
@@ -1206,7 +1206,7 @@ class TestNLSQOptimization:
         q = 0.015
 
         # Generate synthetic data with shear
-        from homodyne.core.jax_backend import compute_c2_model_jax
+        from tests.utils.legacy_compat import compute_c2_model_jax
 
         c2_true = compute_c2_model_jax(params_with_shear, t1, t2, phi, q)
 
@@ -1252,7 +1252,7 @@ class TestNLSQOptimization:
         q_values = np.array([0.008, 0.012, 0.016])
 
         # Generate data for each q
-        from homodyne.core.jax_backend import compute_c2_model_jax
+        from tests.utils.legacy_compat import compute_c2_model_jax
 
         true_params = {
             "offset": 1.0,

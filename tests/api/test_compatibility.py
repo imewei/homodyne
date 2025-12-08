@@ -46,20 +46,18 @@ class TestPublicAPIStability:
         """Test core API function availability."""
         try:
             from homodyne.core.jax_backend import (
-                chi_squared_jax,
-                compute_c2_model_jax,
-                compute_g1_diffusion_jax,
-                compute_g1_shear_jax,
-                residuals_jax,
+                compute_chi_squared,
+                compute_g1_diffusion,
+                compute_g1_shear,
+                compute_g2_scaled,
             )
 
             # All should be callable
             core_functions = [
-                compute_c2_model_jax,
-                compute_g1_diffusion_jax,
-                compute_g1_shear_jax,
-                residuals_jax,
-                chi_squared_jax,
+                compute_g2_scaled,
+                compute_g1_diffusion,
+                compute_g1_shear,
+                compute_chi_squared,
             ]
 
             for func in core_functions:
@@ -137,13 +135,14 @@ class TestFunctionSignatures:
     def test_core_function_signatures(self):
         """Test core function signatures are stable."""
         try:
-            from homodyne.core.jax_backend import compute_c2_model_jax
+            from homodyne.core.jax_backend import compute_g2_scaled
 
-            sig = inspect.signature(compute_c2_model_jax)
+            sig = inspect.signature(compute_g2_scaled)
             params = list(sig.parameters.keys())
 
             # Expected parameters (order matters for positional args)
-            expected_params = ["params", "t1", "t2", "phi", "q"]
+            # Modern API: compute_g2_scaled(params, t1, t2, phi, q, L, contrast, offset, dt)
+            expected_params = ["params", "t1", "t2", "phi", "q", "L", "contrast", "offset", "dt"]
             for i, expected_param in enumerate(expected_params):
                 assert i < len(params), f"Missing parameter {expected_param}"
                 assert params[i] == expected_param, (
@@ -322,9 +321,9 @@ class TestDeprecationWarnings:
 
     def test_backward_compatibility_imports(self):
         """Test backward compatibility imports still work."""
-        # Test that common import patterns still work
+        # Test that common import patterns still work (updated to modern API)
         import_patterns = [
-            "from homodyne.core.jax_backend import compute_c2_model_jax",
+            "from homodyne.core.jax_backend import compute_g2_scaled",
             "from homodyne.optimization.nlsq import fit_nlsq_jax",
             "from homodyne.data.xpcs_loader import load_xpcs_data",
         ]

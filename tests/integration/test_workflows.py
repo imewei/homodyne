@@ -253,7 +253,7 @@ class TestEndToEndWorkflows:
     def test_multi_q_value_workflow(self, test_config):
         """Test workflow with multiple q-values."""
         try:
-            from homodyne.core.jax_backend import compute_c2_model_jax
+            from tests.utils.legacy_compat import compute_c2_model_jax
 
             # NLSQ imports now at module level
             pass
@@ -467,7 +467,7 @@ class TestModuleInteraction:
     def test_backend_optimization_consistency(self, synthetic_xpcs_data, test_config):
         """Test consistency between JAX backend and optimization."""
         try:
-            from homodyne.core.jax_backend import chi_squared_jax, compute_c2_model_jax
+            from tests.utils.legacy_compat import chi_squared_jax, compute_c2_model_jax
 
             # NLSQ imports now at module level
             pass
@@ -569,7 +569,7 @@ class TestCrossplatformCompatibility:
     def test_numerical_precision_consistency(self):
         """Test numerical precision consistency across platforms."""
         try:
-            from homodyne.core.jax_backend import compute_g1_diffusion_jax
+            from tests.utils.legacy_compat import compute_g1_diffusion_jax
         except ImportError:
             pytest.skip("JAX backend not available")
 

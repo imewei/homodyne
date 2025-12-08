@@ -86,7 +86,7 @@ class TestJAXBackendProperties:
     @settings(max_examples=50, deadline=None)
     def test_g1_diffusion_physical_bounds(self, params, q, time_data):
         """Test that g1_diffusion satisfies physical bounds."""
-        from homodyne.core.jax_backend import compute_g1_diffusion_jax
+        from tests.utils.legacy_compat import compute_g1_diffusion_jax
 
         t1, t2 = time_data
         t1 = jnp.array(t1)
@@ -119,7 +119,7 @@ class TestJAXBackendProperties:
     @settings(max_examples=30, deadline=None)
     def test_g1_shear_physical_bounds(self, params, q, angles):
         """Test that g1_shear satisfies physical bounds."""
-        from homodyne.core.jax_backend import compute_g1_shear_jax
+        from tests.utils.legacy_compat import compute_g1_shear_jax
 
         phi = jnp.array(angles)
         # Simple time arrays
@@ -154,7 +154,7 @@ class TestJAXBackendProperties:
     @settings(max_examples=30, deadline=None)
     def test_c2_model_physical_bounds(self, params, q, time_data, angles):
         """Test that c2 model satisfies physical bounds."""
-        from homodyne.core.jax_backend import compute_c2_model_jax
+        from tests.utils.legacy_compat import compute_c2_model_jax
 
         t1, t2 = time_data
         t1 = jnp.array(t1)
@@ -184,7 +184,7 @@ class TestJAXBackendProperties:
     @settings(max_examples=20, deadline=None)
     def test_g1_diffusion_symmetry(self, params, time_data):
         """Test g1_diffusion time-reversal symmetry."""
-        from homodyne.core.jax_backend import compute_g1_diffusion_jax
+        from tests.utils.legacy_compat import compute_g1_diffusion_jax
 
         t1, t2 = time_data
         t1 = jnp.array(t1)
@@ -213,7 +213,7 @@ class TestJAXBackendProperties:
     @settings(max_examples=20, deadline=None)
     def test_parameter_scaling_properties(self, params1, params2, scale):
         """Test parameter scaling properties."""
-        from homodyne.core.jax_backend import compute_c2_model_jax
+        from tests.utils.legacy_compat import compute_c2_model_jax
 
         # Simple test arrays
         t1 = jnp.array([[0, 1], [1, 0]])
@@ -246,7 +246,7 @@ class TestJAXBackendProperties:
     @settings(max_examples=20, deadline=None)
     def test_diffusion_monotonicity(self, params, q):
         """Test that diffusion decreases monotonically with time."""
-        from homodyne.core.jax_backend import compute_g1_diffusion_jax
+        from tests.utils.legacy_compat import compute_g1_diffusion_jax
 
         # Create increasing time separations
         times = jnp.array([0, 1, 2, 3, 4, 5])
@@ -280,7 +280,7 @@ class TestResidualProperties:
         if not JAX_AVAILABLE:
             pytest.skip("JAX not available")
 
-        from homodyne.core.jax_backend import compute_c2_model_jax, residuals_jax
+        from tests.utils.legacy_compat import compute_c2_model_jax, residuals_jax
 
         # Simple test case
         t1 = jnp.array([[0, 1, 2], [1, 0, 1], [2, 1, 0]])
@@ -313,7 +313,7 @@ class TestResidualProperties:
         if not JAX_AVAILABLE:
             pytest.skip("JAX not available")
 
-        from homodyne.core.jax_backend import chi_squared_jax, compute_c2_model_jax
+        from tests.utils.legacy_compat import chi_squared_jax, compute_c2_model_jax
 
         t1 = jnp.array([[0, 1], [1, 0]])
         t2 = jnp.array([[0, 1], [1, 0]])
@@ -347,7 +347,7 @@ class TestResidualProperties:
         if not JAX_AVAILABLE:
             pytest.skip("JAX not available")
 
-        from homodyne.core.jax_backend import chi_squared_jax, compute_c2_model_jax
+        from tests.utils.legacy_compat import chi_squared_jax, compute_c2_model_jax
 
         t1 = jnp.array([[0, 1], [1, 0]])
         t2 = jnp.array([[0, 1], [1, 0]])
@@ -391,7 +391,7 @@ class TestNumericalStabilityProperties:
         if not JAX_AVAILABLE:
             pytest.skip("JAX not available")
 
-        from homodyne.core.jax_backend import compute_g1_diffusion_jax
+        from tests.utils.legacy_compat import compute_g1_diffusion_jax
 
         # Test with very small time differences
         t1 = jnp.array([[0.0, small_values], [small_values, 0.0]])
@@ -428,7 +428,7 @@ class TestNumericalStabilityProperties:
         if not JAX_AVAILABLE:
             pytest.skip("JAX not available")
 
-        from homodyne.core.jax_backend import compute_c2_model_jax
+        from tests.utils.legacy_compat import compute_c2_model_jax
 
         # Create matrices of different sizes
         t1, t2 = jnp.meshgrid(
@@ -464,7 +464,7 @@ class TestNumericalStabilityProperties:
         if not JAX_AVAILABLE:
             pytest.skip("JAX not available")
 
-        from homodyne.core.jax_backend import compute_g1_shear_jax
+        from tests.utils.legacy_compat import compute_g1_shear_jax
 
         phi = jnp.array(angles)
         t1 = jnp.array([[0, 1], [1, 0]])
