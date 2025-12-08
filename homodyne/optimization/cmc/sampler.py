@@ -241,6 +241,18 @@ def run_nuts_sampling(
     if "accept_prob" in extra_fields:
         accept_prob = float(np.mean(extra_fields["accept_prob"]))
 
+    # Critical warning for zero acceptance rate
+    if accept_prob < 0.001:
+        run_logger.warning(
+            "⚠️ CRITICAL: Acceptance rate is essentially 0% - all proposals rejected! "
+            "This indicates severe sampling problems. Possible causes:\n"
+            "  1. Initial values are outside prior support or at boundaries\n"
+            "  2. Likelihood returns -inf due to numerical issues (NaN/overflow)\n"
+            "  3. Prior is too narrow for the data\n"
+            "  4. Step size adaptation failed during warmup\n"
+            "Consider: checking initial values, widening priors, or running NLSQ first."
+        )
+
     # Estimate warmup vs sampling time (rough estimate)
     warmup_ratio = config.num_warmup / (config.num_warmup + config.num_samples)
     warmup_time = total_time * warmup_ratio

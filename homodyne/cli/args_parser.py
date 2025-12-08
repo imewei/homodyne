@@ -28,18 +28,18 @@ def create_parser() -> argparse.ArgumentParser:
 Examples:
   %(prog)s                                    # Run with default NLSQ method
   %(prog)s --method nlsq                      # NLSQ trust-region least squares (default)
-  %(prog)s --method mcmc                      # MCMC with CMC (per-shard NUTS)
+  %(prog)s --method cmc                       # Consensus Monte Carlo (per-shard NUTS)
   %(prog)s --config my_config.yaml            # Use custom config file
   %(prog)s --output-dir ./results             # Custom output directory
   %(prog)s --verbose                          # Enable verbose logging
-  %(prog)s --plot-experimental-data          # Generate data validation plots
+  %(prog)s --plot-experimental-data           # Generate data validation plots
   %(prog)s --plot-simulated-data              # Plot theoretical heatmaps
   %(prog)s --plot-simulated-data --contrast 0.5 --offset 1.05  # Custom contrast/offset
   %(prog)s --phi-angles "0,45,90,135"         # Custom phi angles for simulated data
   %(prog)s --static-mode                      # Force static mode (3 parameters)
-  %(prog)s --laminar-flow --method mcmc       # Force laminar flow (7 parameters) with MCMC
+  %(prog)s --laminar-flow --method cmc        # Force laminar flow (7 parameters) with CMC
 
-Manual NLSQ → MCMC Workflow:
+Manual NLSQ → CMC Workflow:
   Step 1: Run NLSQ to get point estimates
     %(prog)s --method nlsq --config config.yaml
 
@@ -49,16 +49,16 @@ Manual NLSQ → MCMC Workflow:
     initial_parameters:
       values: [1234.5, -1.234, 567.8]  # From NLSQ output
 
-  Step 4: Run MCMC with initialized parameters
-    %(prog)s --method mcmc --config config.yaml
+  Step 4: Run CMC with initialized parameters
+    %(prog)s --method cmc --config config.yaml
 
 Optimization Methods:
   nlsq:    NLSQ trust-region nonlinear least squares (PRIMARY)
-          Use for: Fast, reliable parameter estimation
+           Use for: Fast, reliable parameter estimation
 
-  mcmc:    Consensus Monte Carlo (CMC-only) with stratified sharding (SECONDARY)
-          Use for: Uncertainty quantification, publication-quality analysis
-          Per-phi initial values from config or percentile fallback; single shard runs NUTS inside each shard.
+  cmc:     Consensus Monte Carlo with stratified sharding (SECONDARY)
+           Use for: Uncertainty quantification, publication-quality analysis
+           Per-shard NUTS sampling with NumPyro/BlackJAX backend.
 
 Physical Model:
   c₂(φ,t₁,t₂) = 1 + contrast × [c₁(φ,t₁,t₂)]²
@@ -86,12 +86,12 @@ Homodyne v{__version__} - CPU-Optimized JAX Architecture
     # Method selection - JAX-first methods only
     parser.add_argument(
         "--method",
-        choices=["nlsq", "mcmc"],
+        choices=["nlsq", "cmc"],
         default="nlsq",
         help=(
-            "Optimization method: nlsq (NLSQ trust-region), mcmc (CMC-only). "
-            "MCMC always uses Consensus Monte Carlo with per-shard NumPyro/BlackJAX NUTS; "
-            "configure sharding and per-phi initial values via config."
+            "Optimization method: nlsq (NLSQ trust-region), cmc (Consensus Monte Carlo). "
+            "CMC uses stratified sharding with per-shard NumPyro/BlackJAX NUTS sampling; "
+            "configure sharding and initial values via config."
         ),
     )
 
@@ -146,36 +146,33 @@ Homodyne v{__version__} - CPU-Optimized JAX Architecture
         help="NLSQ convergence tolerance (default: %(default)s)",
     )
 
-    # MCMC-specific options
-    mcmc_group = parser.add_argument_group("MCMC Options")
-    mcmc_group.add_argument(
-        "--n-samples",
-        type=int,
-        default=None,
-        help="Number of MCMC samples (default: from config or 1000)",
-    )
-
-    mcmc_group.add_argument(
-        "--n-warmup",
-        type=int,
-        default=None,
-        help="Number of MCMC warmup samples (default: from config or 500)",
-    )
-
-    mcmc_group.add_argument(
-        "--n-chains",
-        type=int,
-        default=None,
-        help="Number of MCMC chains (default: from config or 4)",
-    )
-
     # CMC-specific options
     cmc_group = parser.add_argument_group(
         "Consensus Monte Carlo (CMC) Options",
-        description="Options for CMC when automatically selected by --method mcmc. "
-        "CMC is selected when: (num_samples >= 15) OR (memory > 30%). "
-        "These options control CMC behavior when automatic selection chooses CMC.",
+        description="Options for --method cmc. "
+        "CMC uses stratified sharding with per-shard NUTS sampling.",
     )
+    cmc_group.add_argument(
+        "--n-samples",
+        type=int,
+        default=None,
+        help="Number of CMC samples per chain (default: from config or 1000)",
+    )
+
+    cmc_group.add_argument(
+        "--n-warmup",
+        type=int,
+        default=None,
+        help="Number of CMC warmup samples (default: from config or 500)",
+    )
+
+    cmc_group.add_argument(
+        "--n-chains",
+        type=int,
+        default=None,
+        help="Number of CMC chains (default: from config or 4)",
+    )
+
     cmc_group.add_argument(
         "--cmc-num-shards",
         type=int,
@@ -193,7 +190,8 @@ Homodyne v{__version__} - CPU-Optimized JAX Architecture
     cmc_group.add_argument(
         "--cmc-plot-diagnostics",
         action="store_true",
-        help="Generate CMC diagnostic plots (per-shard convergence, between-shard consistency)",
+        help="[DEPRECATED] ArviZ diagnostic plots are now always generated for --method cmc. "
+        "This flag is kept for backward compatibility but has no effect.",
     )
 
     # Parameter override options
@@ -387,8 +385,8 @@ def validate_args(args) -> bool:
         print("Error: CMC num_shards must be positive")
         return False
 
-    # Warn if CMC arguments provided with non-MCMC method
-    if args.method not in ["mcmc"]:
+    # Warn if CMC arguments provided with non-CMC method
+    if args.method != "cmc":
         if args.cmc_num_shards is not None:
             print(
                 f"Warning: --cmc-num-shards ignored (not applicable for method={args.method})"
@@ -397,10 +395,12 @@ def validate_args(args) -> bool:
             print(
                 f"Warning: --cmc-backend ignored (not applicable for method={args.method})"
             )
-        if args.cmc_plot_diagnostics:
+        if args.n_samples is not None or args.n_warmup is not None or args.n_chains is not None:
             print(
-                f"Warning: --cmc-plot-diagnostics ignored (not applicable for method={args.method})"
+                f"Warning: --n-samples/--n-warmup/--n-chains ignored (not applicable for method={args.method})"
             )
+        # Note: --cmc-plot-diagnostics is deprecated and ignored for all methods
+        # ArviZ diagnostic plots are now always generated for CMC
 
     # Validate parameter override values
     if args.initial_d0 is not None and args.initial_d0 <= 0:

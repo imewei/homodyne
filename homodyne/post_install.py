@@ -82,7 +82,7 @@ if [[ -z "$_HOMODYNE_ZSH_COMPLETION_LOADED" ]]; then
 
     # Method aliases (hm- prefix)
     alias hm-nlsq='homodyne --method nlsq'    # NLSQ trust-region optimization (primary)
-    alias hm-mcmc='homodyne --method mcmc'    # MCMC with automatic NUTS/CMC selection
+    alias hm-cmc='homodyne --method cmc'    # Consensus Monte Carlo
 
     # Config mode aliases (hc- prefix)
     alias hc-stat='homodyne-config --mode static'         # Generate static mode config
@@ -100,7 +100,7 @@ if [[ -z "$_HOMODYNE_ZSH_COMPLETION_LOADED" ]]; then
         echo ""
         echo "Method shortcuts (hm- prefix):"
         echo "  hm-nlsq  = homodyne --method nlsq  # NLSQ trust-region (primary)"
-        echo "  hm-mcmc  = homodyne --method mcmc  # MCMC with automatic NUTS/CMC selection"
+        echo "  hm-cmc  = homodyne --method cmc  # Consensus Monte Carlo"
         echo ""
         echo "Config mode shortcuts (hc- prefix):"
         echo "  hc-stat  = homodyne-config --mode static"
@@ -426,7 +426,7 @@ fi
 
             print("✅ Shell completion installed (conda/mamba)")
             print("   • Auto-activated on environment activation")
-            print("   • Aliases: hm, hconfig, hm-nlsq, hm-mcmc")
+            print("   • Aliases: hm, hconfig, hm-nlsq, hm-cmc")
             print("   • Config: hc-stat, hc-flow")
             print("   • Plotting: hexp, hsim")
             print()
@@ -442,7 +442,7 @@ fi
             modified_scripts.extend(xla_modified)
 
             print("✅ Shell completion installed (uv/venv/virtualenv)")
-            print("   • Aliases: hm, hconfig, hm-nlsq, hm-mcmc")
+            print("   • Aliases: hm, hconfig, hm-nlsq, hm-cmc")
             print("   • Config: hc-stat, hc-flow")
             print("   • Plotting: hexp, hsim")
             print("   • XLA_FLAGS: Auto-configured on activation")
@@ -479,7 +479,7 @@ def install_macos_shell_completion():
     # This function is a placeholder for future macOS shell completion support.
     # Users can manually add aliases to their ~/.zshrc or ~/.bashrc:
     #
-    #   alias hm='homodyne --method mcmc'
+    #   alias hm='homodyne --method cmc'
     #   alias hconfig='homodyne --config'
     #
     # See docs/README.md for CLI usage documentation.
@@ -566,7 +566,7 @@ def interactive_setup():
     # Shell completion
     print("1. Shell Completion (bash/zsh/fish)")
     print("   - Adds tab completion for homodyne commands")
-    print("   - Adds convenient aliases (hm, hconfig, hm-nlsq, hm-mcmc)")
+    print("   - Adds convenient aliases (hm, hconfig, hm-nlsq, hm-cmc)")
     print("   - Safe: doesn't interfere with system commands")
 
     install_completion = (
@@ -639,7 +639,7 @@ def show_installation_summary(interactive_results=None):
     print("\n🚀 Quick Start Commands:")
     print("   homodyne --method nlsq --config config.yaml")
     print(
-        "   homodyne --method mcmc --config config.yaml  # Automatic NUTS/CMC selection"
+        "   homodyne --method cmc --config config.yaml  # Automatic NUTS/CMC selection"
     )
     print("   homodyne-config --mode static -o my_config.yaml")
 
@@ -650,7 +650,7 @@ def show_installation_summary(interactive_results=None):
     print("\n   Method shortcuts (hm- prefix):")
     print("     hm-nlsq  = homodyne --method nlsq  # NLSQ trust-region (primary)")
     print(
-        "     hm-mcmc  = homodyne --method mcmc  # MCMC with automatic NUTS/CMC selection"
+        "     hm-cmc  = homodyne --method cmc  # Consensus Monte Carlo"
     )
     print("\n   Config mode shortcuts (hc- prefix):")
     print("     hc-stat  = homodyne-config --mode static")

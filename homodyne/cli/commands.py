@@ -996,8 +996,8 @@ def _run_optimization(args, config: ConfigManager, data: dict[str, Any]) -> Any:
         if method == "nlsq":
             # Run NLSQ optimization (CPU-only in v2.3.0+)
             result = fit_nlsq_jax(filtered_data, config)
-        elif method == "mcmc":
-            # CMC-only MCMC
+        elif method == "cmc":
+            # Consensus Monte Carlo
             # Get CMC configuration from config file
             cmc_config = config.get_cmc_config()
 
@@ -1015,7 +1015,7 @@ def _run_optimization(args, config: ConfigManager, data: dict[str, Any]) -> Any:
                 cmc_config.setdefault("backend", {})["name"] = args.cmc_backend
 
             # Log CMC configuration being used
-            logger.info(f"MCMC method: {method} (CMC-only)")
+            logger.info(f"Method: {method.upper()} (Consensus Monte Carlo)")
 
             # Log key CMC parameters
             sharding = cmc_config.get("sharding", {})
@@ -1181,18 +1181,16 @@ def _run_optimization(args, config: ConfigManager, data: dict[str, Any]) -> Any:
                 **mcmc_runtime_kwargs,
             )
 
-            # Generate CMC diagnostic plots if requested
-            if args.cmc_plot_diagnostics:
-                if hasattr(result, "is_cmc_result") and result.is_cmc_result():
-                    logger.info("Generating CMC diagnostic plots...")
-                    _generate_cmc_diagnostic_plots(
-                        result, args.output_dir, config.config.get("analysis_mode")
-                    )
-                else:
-                    logger.warning(
-                        "CMC diagnostic plots requested but result is not a CMC result "
-                        "(ensure dataset is large enough for CMC auto-selection: samples >= 15 OR memory > 30%)"
-                    )
+            # Always generate ArviZ diagnostic plots for MCMC/CMC methods
+            # These are essential for validating MCMC convergence
+            if hasattr(result, "inference_data") and result.inference_data is not None:
+                _generate_cmc_diagnostic_plots(
+                    result, args.output_dir, config.config.get("analysis_mode")
+                )
+            else:
+                logger.warning(
+                    "Cannot generate ArviZ diagnostic plots: inference_data not available"
+                )
         else:
             raise ValueError(f"Unknown optimization method: {method}")
 
@@ -1214,67 +1212,81 @@ def _run_optimization(args, config: ConfigManager, data: dict[str, Any]) -> Any:
 def _generate_cmc_diagnostic_plots(
     result: Any, output_dir: Path, analysis_mode: str
 ) -> None:
-    """Generate CMC diagnostic plots.
+    """Generate CMC/MCMC diagnostic plots using ArviZ.
 
-    This function generates diagnostic visualizations for Consensus Monte Carlo results:
-    - Per-shard convergence diagnostics (R-hat, ESS, acceptance rate)
-    - Between-shard KL divergence heatmap
-    - Combined posterior parameter distributions
+    This function generates 6 standard ArviZ diagnostic plots:
+    1. Pair plot (corner plot) - pairwise parameter correlations
+    2. Forest plot - posterior distributions with HDI
+    3. Energy plot - HMC energy diagnostics
+    4. Autocorrelation plot - sample independence
+    5. Rank plot - chain mixing diagnostics
+    6. ESS plot - effective sample size evolution
 
-    Note: This is a placeholder implementation. Full visualization functionality
-    will be added when Task Group 11 (Visualization) is complete.
+    These plots are generated REGARDLESS of convergence status to help
+    diagnose sampling problems.
 
     Parameters
     ----------
     result : Any
-        MCMC result object with CMC diagnostics (must be a CMC result)
+        MCMC result object with inference_data (CMCResult or similar)
     output_dir : Path
         Output directory for saving plots
     analysis_mode : str
         Analysis mode (static_isotropic or laminar_flow)
     """
-    # Check if result is a CMC result
-    if not (hasattr(result, "is_cmc_result") and result.is_cmc_result()):
-        logger.warning("Result is not a CMC result - skipping diagnostic plots")
-        return
-
-    # Check if result has CMC diagnostics
-    if not hasattr(result, "cmc_diagnostics") or result.cmc_diagnostics is None:
+    # Check if result has inference_data for ArviZ plots
+    if not hasattr(result, "inference_data") or result.inference_data is None:
         logger.warning(
-            "CMC diagnostics not available in result - skipping diagnostic plots"
+            "No inference_data available in result - skipping ArviZ diagnostic plots"
         )
         return
 
     try:
+        from homodyne.optimization.cmc.plotting import generate_diagnostic_plots
+
         # Create diagnostics subdirectory
-        diag_dir = output_dir / "cmc_diagnostics"
+        diag_dir = output_dir / "diagnostics"
         diag_dir.mkdir(parents=True, exist_ok=True)
 
-        # Save diagnostic data as JSON for now (visualization to be implemented)
-        diag_data = {
-            "per_shard_diagnostics": result.cmc_diagnostics.get(
-                "per_shard_diagnostics", []
-            ),
-            "between_shard_kl": result.cmc_diagnostics.get("kl_matrix", []),
-            "success_rate": result.cmc_diagnostics.get("success_rate", 0.0),
-            "combined_diagnostics": result.cmc_diagnostics.get(
-                "combined_diagnostics", {}
-            ),
-        }
-
-        import json
-
-        diag_file = diag_dir / "cmc_diagnostics.json"
-        with open(diag_file, "w") as f:
-            json.dump(diag_data, f, indent=2, default=str)
-
-        logger.info(f"CMC diagnostic data saved to: {diag_file}")
-        logger.info(
-            "Note: Graphical diagnostic plots will be available after Task Group 11 (Visualization) is complete"
+        # Generate ArviZ diagnostic plots
+        logger.info("Generating ArviZ diagnostic plots...")
+        saved_plots = generate_diagnostic_plots(
+            result=result,
+            output_dir=diag_dir,
         )
 
+        if saved_plots:
+            logger.info(f"Generated {len(saved_plots)} ArviZ diagnostic plots:")
+            for plot_path in saved_plots:
+                logger.info(f"  - {plot_path.name}")
+        else:
+            logger.warning("No diagnostic plots were generated")
+
+        # Also save CMC-specific diagnostics as JSON if available
+        if hasattr(result, "cmc_diagnostics") and result.cmc_diagnostics is not None:
+            import json
+
+            diag_data = {
+                "per_shard_diagnostics": result.cmc_diagnostics.get(
+                    "per_shard_diagnostics", []
+                ),
+                "between_shard_kl": result.cmc_diagnostics.get("kl_matrix", []),
+                "success_rate": result.cmc_diagnostics.get("success_rate", 0.0),
+                "combined_diagnostics": result.cmc_diagnostics.get(
+                    "combined_diagnostics", {}
+                ),
+            }
+
+            diag_file = diag_dir / "cmc_diagnostics.json"
+            with open(diag_file, "w") as f:
+                json.dump(diag_data, f, indent=2, default=str)
+            logger.debug(f"CMC diagnostic data saved to: {diag_file}")
+
+    except ImportError as e:
+        logger.warning(f"ArviZ plotting not available: {e}")
     except Exception as e:
-        logger.warning(f"Failed to generate CMC diagnostic plots: {e}")
+        logger.warning(f"Failed to generate diagnostic plots: {e}")
+        logger.debug(f"Diagnostic plot error details: {e}", exc_info=True)
 
 
 def _save_results(
@@ -1318,9 +1330,9 @@ def _save_results(
         # Also save legacy format for backward compatibility if requested
         if args.output_format != "json":
             logger.info("Saving legacy results summary for backward compatibility")
-    elif args.method == "mcmc":
-        # Use comprehensive MCMC/CMC saving (4 files: 3 JSON + 1 NPZ + plots)
-        logger.info("Using comprehensive MCMC result saving")
+    elif args.method == "cmc":
+        # Use comprehensive CMC saving (4 files: 3 JSON + 1 NPZ + plots)
+        logger.info("Using comprehensive CMC result saving")
         save_mcmc_results(result, data, config, args.output_dir)
         # Also save legacy format for backward compatibility if requested
         if args.output_format != "json":
@@ -2453,27 +2465,27 @@ def save_mcmc_results(
     config: Any,
     output_dir: Path,
 ) -> None:
-    """Save MCMC/CMC results with comprehensive diagnostics.
+    """Save CMC results with comprehensive diagnostics.
 
-    Creates method-specific directory (mcmc/ or cmc/) and saves:
+    Creates cmc/ directory and saves:
     1. parameters.json: Posterior mean ± std for each parameter
-    2. analysis_results_mcmc.json: Sampling summary and diagnostics
+    2. analysis_results_cmc.json: Sampling summary and diagnostics
     3. samples.npz: Full posterior samples, r_hat, ess
     4. diagnostics.json: Convergence metrics
     5. fitted_data.npz: Experimental + theoretical data (optional)
     6. c2_heatmaps_phi_*.png: Comparison plots using posterior mean
-    7. trace_plots.png: MCMC diagnostic plots (future)
+    7. ArviZ diagnostic plots: pair, forest, energy, autocorr, rank, ess
 
     Parameters
     ----------
-    result : MCMCResult
-        MCMC/CMC optimization result with posterior samples and diagnostics
+    result : CMCResult
+        CMC optimization result with posterior samples and diagnostics
     data : dict
         Experimental data dictionary containing c2_exp, phi_angles_list, t1, t2, q
     config : ConfigManager
         Configuration manager with analysis settings
     output_dir : Path
-        Base output directory (method-specific subdirectory will be created)
+        Base output directory (cmc/ subdirectory will be created)
 
     Notes
     -----
@@ -2483,20 +2495,16 @@ def save_mcmc_results(
     Examples
     --------
     >>> from pathlib import Path
-    >>> result = fit_mcmc_jax(data, ...)
+    >>> result = fit_cmc_jax(data, ...)
     >>> save_mcmc_results(result, data, config, Path("homodyne_results"))
-    # Creates: homodyne_results/mcmc/parameters.json, samples.npz, etc.
+    # Creates: homodyne_results/cmc/parameters.json, samples.npz, etc.
     """
     import json
 
     import numpy as np
 
-    # Determine method name (mcmc or cmc)
-    method_name = (
-        "cmc"
-        if (hasattr(result, "is_cmc_result") and result.is_cmc_result())
-        else "mcmc"
-    )
+    # CMC-only - always use "cmc" directory
+    method_name = "cmc"
 
     # Create method-specific directory
     method_dir = output_dir / method_name
@@ -2767,24 +2775,39 @@ def _compute_theoretical_c2_from_mcmc(
     offset = getattr(result, "mean_offset", 1.0)
 
     mean_params_obj = getattr(result, "mean_params", None)
+    analysis_mode = getattr(result, "analysis_mode", "static")
+    ordered_names = _get_parameter_names(analysis_mode)
+
     # mean_params may be a ParameterStats (hybrid), dict, or array-like
-    if hasattr(mean_params_obj, "as_array"):
-        mean_params = np.asarray(mean_params_obj.as_array)
-    elif isinstance(mean_params_obj, dict):
-        ordered_names = _get_parameter_names(getattr(result, "analysis_mode", "static"))
+    # Always use named access to avoid ordering bugs
+    if hasattr(mean_params_obj, "get"):
+        # ParameterStats or dict - use named access for correctness
         mean_params = np.array(
             [mean_params_obj.get(name, np.nan) for name in ordered_names]
         )
+    elif hasattr(mean_params_obj, "as_array"):
+        # Fallback to array (legacy)
+        mean_params = np.asarray(mean_params_obj.as_array)
     else:
         mean_params = np.asarray(mean_params_obj)
 
-    # Log parameter values for debugging
+    # Log parameter values for debugging using named access for correctness
     logger.info("Computing theoretical C2 with posterior means:")
     logger.info(f"  Contrast: {contrast:.6f}")
     logger.info(f"  Offset: {offset:.6f}")
-    logger.info(
-        f"  Physical params: D0={mean_params[0]:.2f}, alpha={mean_params[1]:.4f}, D_offset={mean_params[2]:.4f}"
-    )
+    if hasattr(mean_params_obj, "get"):
+        # Use named access for accurate logging
+        D0_val = mean_params_obj.get("D0", np.nan)
+        alpha_val = mean_params_obj.get("alpha", np.nan)
+        D_offset_val = mean_params_obj.get("D_offset", np.nan)
+        logger.info(
+            f"  Physical params: D0={D0_val:.2f}, alpha={alpha_val:.4f}, D_offset={D_offset_val:.4f}"
+        )
+    else:
+        # Fallback to positional (may be incorrect order)
+        logger.info(
+            f"  Physical params (positional): [{', '.join(f'{v:.4f}' for v in mean_params[:3])}]"
+        )
 
     # Validate parameters for reasonable theoretical prediction
     if contrast < 0.05:
@@ -2792,9 +2815,15 @@ def _compute_theoretical_c2_from_mcmc(
             f"Very small contrast ({contrast:.4f} < 0.05) may produce nearly constant c2_theory. "
             "This suggests poor MCMC convergence or inappropriate initial values."
         )
-    if mean_params[0] >= 99990:  # Near D0 upper bound
+    # Use named access for D0 validation
+    D0_for_validation = (
+        mean_params_obj.get("D0", 0.0)
+        if hasattr(mean_params_obj, "get")
+        else mean_params[0]
+    )
+    if D0_for_validation >= 99990:  # Near D0 upper bound
         logger.warning(
-            f"D0 ({mean_params[0]:.1f}) near upper bound (100000). "
+            f"D0 ({D0_for_validation:.1f}) near upper bound (100000). "
             "Consider increasing max D0 bound or improving initial values."
         )
 
