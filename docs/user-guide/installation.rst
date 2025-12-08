@@ -130,7 +130,7 @@ JAX and Version Pinning
 
 Homodyne uses JAX 0.8.0 specifically for:
 
-- **JIT Compilation:** ``compute_residuals()`` and ``compute_g2_scaled()`` are JIT-compiled for optimal CPU performance
+- **JIT Compilation:** ``compute_g2_scaled()`` and ``compute_chi_squared()`` are JIT-compiled for optimal CPU performance
 - **Automatic Differentiation:** Jacobian computation for NLSQ optimization
 - **Numerical Stability:** Float32 and Float64 both fully supported
 - **Compatibility:** Tested extensively with NumPyro 0.18+ and BlackJAX 1.2+
@@ -230,7 +230,7 @@ Solution: Reinstall exact version:
    pip uninstall jax jaxlib
    pip install jax==0.8.0 jaxlib==0.8.0
 
-**Problem: "ImportError: cannot import name 'compute_residuals'"**
+**Problem: "ImportError: cannot import name 'compute_chi_squared'"**
 
 Solution: Ensure homodyne core modules are installed:
 

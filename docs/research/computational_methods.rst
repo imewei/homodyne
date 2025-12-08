@@ -14,6 +14,102 @@ computing. The computational stack consists of:
 2. **Bayesian Inference**: NumPyro/BlackJAX MCMC (CMC-only in v2.4.1+)
 3. **Core Kernels**: JAX JIT-compiled functions
 
+Backend Architecture: NLSQ vs CMC
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Homodyne uses two separate physics backends with intentionally different computation modes.
+This separation (introduced Nov 2025) prevents NLSQ from being affected by CMC-specific
+memory management complexity.
+
+.. list-table:: Backend Comparison
+   :header-rows: 1
+   :widths: 25 35 40
+
+   * - Aspect
+     - NLSQ Backend (``physics_nlsq.py``)
+     - CMC Backend (``jax_backend.py``)
+   * - Purpose
+     - Deterministic point estimates
+     - Bayesian uncertainty quantification
+   * - Computation Mode
+     - Meshgrid-only
+     - Dual-mode (element-wise + meshgrid)
+   * - Data Format
+     - 3D matrices: (n_phi, n_t1, n_t2)
+     - Flattened arrays OR 3D matrices
+   * - Memory Pattern
+     - O(N²) for N time points
+     - O(N) for N measurements (element-wise)
+   * - Typical Data Size
+     - 100-1000 time points (~1M elements)
+     - 4600+ measurements per shard (~23M pooled)
+
+**NLSQ Backend (Meshgrid-Only)**
+
+The NLSQ backend creates full 2D correlation matrices for all time pairs:
+
+.. code-block:: python
+
+   # NLSQ creates meshgrid for all (t1[i], t2[j]) combinations
+   t1_grid, t2_grid = jnp.meshgrid(t1, t2, indexing="ij")
+   # Result: g2 shape = (n_phi, n_t1, n_t2)
+
+This is optimal for NLSQ because:
+
+- Trust-region requires full Jacobian computation across all data points
+- Diagonal correction removes autocorrelation peak from the NxN matrix
+- Memory usage is predictable and manageable for typical XPCS data
+
+**CMC Backend (Dual-Mode)**
+
+The CMC backend detects data format and switches computation mode:
+
+.. code-block:: python
+
+   # Element-wise detection (threshold: 2000 elements)
+   is_elementwise = t1.ndim == 1 and safe_len(t1) > 2000
+
+   if is_elementwise:
+       # CMC mode: compute for each (t1[i], t2[i], phi[i]) pair independently
+       # Result: 1D array of shape (n_measurements,)
+   else:
+       # Meshgrid mode: same as NLSQ
+       # Result: 3D array of shape (n_phi, n_t1, n_t2)
+
+This dual-mode design prevents memory catastrophe:
+
+- **Without element-wise mode**: CMC would create meshgrid from ~4600 elements per shard
+- **Pooled for final inference**: ~23M elements
+- **Full meshgrid**: 23M × 23M = 530 quadrillion elements = **35TB memory allocation!**
+- **With element-wise mode**: Only 23M elements = ~180MB
+
+**Shared Components (``physics_utils.py``)**
+
+Common utilities consolidated to eliminate duplication:
+
+- ``apply_diagonal_correction``: Removes autocorrelation peak from C₂ matrices
+- ``safe_exp``, ``safe_sinc``: Numerically stable operations
+- ``calculate_diffusion_coefficient``: Time-dependent D(t) = D₀ t^α + D_offset
+- ``calculate_shear_rate``: Time-dependent γ̇(t) = γ̇₀ t^β + γ̇_offset
+- ``create_time_integral_matrix``: Trapezoidal numerical integration
+
+**When to Use Which Backend**
+
+.. list-table:: Backend Selection Guide
+   :header-rows: 1
+   :widths: 30 70
+
+   * - Use Case
+     - Recommended Backend
+   * - Quick parameter estimation
+     - NLSQ (``homodyne fit --method nlsq``)
+   * - Uncertainty quantification
+     - CMC (``homodyne fit --method cmc``)
+   * - Large datasets (>1M points)
+     - CMC with sharding
+   * - Publication-quality error bars
+     - CMC with convergence diagnostics
+
 JAX JIT Compilation
 -------------------
 
@@ -71,14 +167,12 @@ The following core functions are JIT-compiled:
      - Purpose
    * - ``compute_g2_scaled``
      - Full correlation computation with per-angle scaling
-   * - ``compute_residuals``
-     - Residual calculation for NLSQ optimization
    * - ``compute_chi_squared``
-     - Fast chi-squared evaluation for objective function
-   * - ``compute_diffusion_integral``
-     - Analytical diffusion integral :math:`J(t_1, t_2)`
-   * - ``compute_shear_integral``
-     - Analytical shear integral :math:`\Gamma(t_1, t_2)`
+     - Fast chi-squared evaluation (residuals computed internally)
+   * - ``compute_g1_diffusion``
+     - Diffusion contribution to g1 correlation
+   * - ``compute_g1_shear``
+     - Shear contribution to g1 correlation
 
 Performance Benefits
 ~~~~~~~~~~~~~~~~~~~~
@@ -154,9 +248,9 @@ The Jacobian matrix is computed using JAX automatic differentiation:
 .. code-block:: python
 
    @jax.jit
-   def compute_jacobian(params, data):
+   def compute_jacobian(params, fixed_args):
        """Compute Jacobian via JAX autodiff."""
-       return jax.jacobian(compute_residuals)(params, data)
+       return jax.jacobian(compute_chi_squared)(params, *fixed_args)
 
 This provides exact gradients rather than finite-difference approximations,
 improving convergence and numerical stability.

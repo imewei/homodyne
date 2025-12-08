@@ -121,16 +121,16 @@ Performance Tests
 .. code-block:: python
 
     def test_jax_backend_jit_compilation_speed():
-        """Benchmark JAX JIT compilation for residual computation."""
+        """Benchmark JAX JIT compilation for g2 computation."""
         # Measure compilation time
         start = time.time()
-        result = compute_residuals_jit(data, parameters)
+        result = compute_g2_scaled(params, t1, t2, phi, q, L, contrast, offset, dt)
         compile_time = time.time() - start
 
         # JIT first call is slower (compilation)
         # Second call should be much faster (cached)
         start = time.time()
-        result = compute_residuals_jit(data, parameters)
+        result = compute_g2_scaled(params, t1, t2, phi, q, L, contrast, offset, dt)
         cached_time = time.time() - start
 
         assert cached_time < compile_time / 10, "JIT caching not working"
@@ -352,8 +352,8 @@ in compiled JAX bytecode. This makes debugging much easier.
     import os
     os.environ['JAX_DISABLE_JIT'] = '1'  # Must be before JAX imports
 
-    from homodyne.core.jax_backend import compute_residuals
-    result = compute_residuals(data, parameters)  # Now shows Python traceback
+    from homodyne.core.jax_backend import compute_chi_squared
+    result = compute_chi_squared(params, data, sigma, t1, t2, phi, q, L, contrast, offset, dt)  # Now shows Python traceback
 
 Profiling JAX Code
 ^^^^^^^^^^^^^^^^^^^

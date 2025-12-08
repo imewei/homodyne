@@ -304,8 +304,7 @@ The package implements these equations using JAX for high-performance computatio
 All core computational kernels are JIT-compiled for optimal performance:
 
 - ``compute_g2_scaled``: Computes the full :math:`c_2` correlation with per-angle scaling
-- ``compute_residuals``: Calculates residuals for optimization
-- ``compute_chi_squared``: Fast chi-squared evaluation
+- ``compute_chi_squared``: Fast chi-squared evaluation (includes residual calculation)
 
 **Vectorized Operations:**
 Time integrals and correlation matrices are computed using vectorized JAX operations
