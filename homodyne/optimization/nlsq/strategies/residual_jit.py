@@ -154,11 +154,10 @@ class StratifiedResidualFunctionJIT:
         t2_first = jnp.sort(jnp.unique(jnp.asarray(first_chunk.t2)))
 
         if len(t1_unique) != len(t1_first) or len(t2_unique) != len(t2_first):
-            self.logger.warning(
-                f"Unique value mismatch detected (chunks have different subsets):\n"
-                f"  First chunk: {len(t1_first)} t1, {len(t2_first)} t2\n"
-                f"  All chunks:  {len(t1_unique)} t1, {len(t2_unique)} t2\n"
-                f"  This is EXPECTED with stratified chunking - using complete set from all chunks."
+            self.logger.debug(
+                f"Stratified chunking: chunks have different time point subsets "
+                f"(first chunk: {len(t1_first)} t1, all chunks: {len(t1_unique)} t1) - "
+                f"using complete set from all chunks"
             )
 
         return phi_unique, t1_unique, t2_unique
