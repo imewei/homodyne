@@ -1,7 +1,7 @@
 Utils Module
 ============
 
-The :mod:`homodyne.utils` module provides essential utility functions for logging, path validation, and input validation.
+The :mod:`homodyne.utils` module provides essential utility functions for logging and path validation.
 
 .. contents:: Contents
    :local:
@@ -14,8 +14,6 @@ Overview
 
 - **Logging**: Structured logging with performance tracking
 - **Path Validation**: Safe file/directory path handling
-- **Input Validation**: Array and parameter validation
-- **Progress Tracking**: Progress bars for long operations (optional)
 
 Module Contents
 ---------------
@@ -211,124 +209,6 @@ Raised when path validation fails due to:
 - Path traversal attempt
 - Parent directory does not exist (and create_dirs=False)
 
-Input Validation
-----------------
-
-Array and parameter validation utilities.
-
-.. automodule:: homodyne.utils.validation
-   :members:
-   :undoc-members:
-   :show-inheritance:
-
-Array Validation
-~~~~~~~~~~~~~~~~
-
-.. autosummary::
-   :nosignatures:
-
-   homodyne.utils.validation.validate_array_not_none
-   homodyne.utils.validation.validate_array_not_empty
-   homodyne.utils.validation.validate_array_shapes_match
-
-Usage Examples
-^^^^^^^^^^^^^^
-
-::
-
-    from homodyne.utils import (
-        validate_array_not_none,
-        validate_array_not_empty,
-        validate_array_shapes_match
-    )
-
-    # Check array is not None
-    validate_array_not_none(data, "data")
-
-    # Check array is not empty
-    validate_array_not_empty(data, "data")
-
-    # Check shapes match
-    validate_array_shapes_match(
-        t1, t2,
-        array1_name="t1",
-        array2_name="t2"
-    )
-
-Parameter Validation
-~~~~~~~~~~~~~~~~~~~~
-
-.. autosummary::
-   :nosignatures:
-
-   homodyne.utils.validation.validate_positive_scalar
-   homodyne.utils.validation.validate_in_bounds
-   homodyne.utils.validation.validate_required_params
-
-Usage Examples
-^^^^^^^^^^^^^^
-
-::
-
-    from homodyne.utils import (
-        validate_positive_scalar,
-        validate_in_bounds,
-        validate_required_params
-    )
-
-    # Validate positive scalar
-    validate_positive_scalar(num_samples, "num_samples")
-
-    # Validate within bounds
-    validate_in_bounds(
-        alpha, 0.0, 2.0,
-        param_name="alpha"
-    )
-
-    # Validate required parameters present
-    required = ['D0', 'alpha', 'D_offset']
-    validate_required_params(params, required)
-
-Progress Tracking
------------------
-
-Progress bar utilities for long operations.
-
-.. automodule:: homodyne.utils.progress
-   :members:
-   :undoc-members:
-   :show-inheritance:
-
-**Note**: Progress tracking requires ``tqdm`` package (optional dependency).
-
-Usage Example
-~~~~~~~~~~~~~
-
-::
-
-    from homodyne.utils.progress import create_progress_bar
-
-    # Create progress bar
-    pbar = create_progress_bar(
-        total=1000,
-        desc="Processing data"
-    )
-
-    for i in range(1000):
-        # Process data
-        pbar.update(1)
-
-    pbar.close()
-
-**Context Manager**::
-
-    from tqdm import tqdm
-
-    with tqdm(total=1000, desc="Processing") as pbar:
-        for i in range(1000):
-            # Process data
-            pbar.update(1)
-
 Best Practices
 --------------
 
@@ -364,24 +244,6 @@ Best Practices
 3. Validate file extensions for safety::
 
        validate_plot_save_path(path)  # Only allows image formats
-
-**Input Validation**:
-
-1. Validate at function entry points::
-
-       def my_function(data, params):
-           validate_array_not_none(data, "data")
-           validate_required_params(params, ['D0', 'alpha'])
-           ...
-
-2. Provide clear parameter names in error messages::
-
-       validate_positive_scalar(value, "num_warmup")
-       # Error: "num_warmup must be positive, got -10"
-
-3. Check array shapes before operations::
-
-       validate_array_shapes_match(x, y, "x", "y")
 
 Error Handling
 --------------
