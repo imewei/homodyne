@@ -514,7 +514,7 @@ class AdaptiveChunker:
         avg_performance_ratio = np.mean(
             [p["performance_ratio"] for p in successful_chunks],
         )
-        np.mean([p["chunk_size"] for p in successful_chunks])
+        # Note: avg_chunk_size calculation removed - was unused
 
         # Adapt based on performance
         if avg_performance_ratio < 0.8:  # Processing slower than expected

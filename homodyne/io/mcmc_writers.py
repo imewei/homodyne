@@ -10,13 +10,17 @@ from typing import Any
 
 import numpy as np
 
+from homodyne.config.parameter_names import get_physical_param_names
 from homodyne.utils.logging import get_logger
 
 logger = get_logger(__name__)
 
 
 def _get_parameter_names(analysis_mode: str) -> list[str]:
-    """Get parameter names for given analysis mode.
+    """Get physical parameter names for given analysis mode.
+
+    This is a thin wrapper around get_physical_param_names() that handles
+    unknown modes gracefully with a warning instead of raising an exception.
 
     Parameters
     ----------
@@ -26,23 +30,13 @@ def _get_parameter_names(analysis_mode: str) -> list[str]:
     Returns
     -------
     list[str]
-        List of parameter names
+        List of physical parameter names (without contrast/offset)
     """
-    if analysis_mode == "static":
-        return ["D0", "alpha", "D_offset"]
-    elif analysis_mode == "laminar_flow":
-        return [
-            "D0",
-            "alpha",
-            "D_offset",
-            "gamma_dot_t0",
-            "beta",
-            "gamma_dot_t_offset",
-            "phi0",
-        ]
-    else:
+    try:
+        return get_physical_param_names(analysis_mode)
+    except ValueError:
         logger.warning(f"Unknown analysis mode: {analysis_mode}, assuming static")
-        return ["D0", "alpha", "D_offset"]
+        return get_physical_param_names("static")
 
 
 def create_mcmc_parameters_dict(result: Any) -> dict:

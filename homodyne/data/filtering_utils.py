@@ -26,13 +26,8 @@ from typing import Any
 
 import numpy as np
 
-# JAX integration with fallback
-try:
-    import jax  # noqa: F401 - Used for availability check
-
-    HAS_JAX = True
-except ImportError:
-    HAS_JAX = False
+# Note: JAX is not used in this module. Data filtering is numpy-only
+# for simplicity and compatibility. See jax_backend.py for JAX operations.
 
 # V2 logging integration
 try:

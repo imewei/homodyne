@@ -932,8 +932,9 @@ def _compute_data_hash(data: dict[str, Any]) -> str:
             # Use shape and checksum for arrays
             arr = np.asarray(value)
             hash_data.append(f"{key}:{arr.shape}:{np.sum(arr) if arr.size > 0 else 0}")
-    else:
-        hash_data.append(f"{key}:{hash(str(value))}")
+        else:
+            # Non-array values use string hash
+            hash_data.append(f"{key}:{hash(str(value))}")
 
     combined_str = "|".join(hash_data)
     return hashlib.sha256(combined_str.encode()).hexdigest()

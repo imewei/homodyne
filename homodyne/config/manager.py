@@ -157,10 +157,10 @@ class ConfigManager:
         """
         return {
             "metadata": {
-                "config_version": "2.3",
+                "config_version": "2.4.1",
                 "description": "Default minimal configuration (CPU-only)",
             },
-            "analysis_mode": "static_isotropic",
+            "analysis_mode": "static",
             "analyzer_parameters": {
                 "dt": 0.1,
                 "start_frame": 1,
@@ -559,6 +559,99 @@ class ConfigManager:
 
         return midpoint_dict
 
+    def validate_per_angle_scaling(self, n_phi: int) -> list[str]:
+        """Validate per-angle scaling array lengths against number of phi angles.
+
+        This method should be called after loading phi angles from data to verify
+        that the per_angle_scaling arrays in the config match the actual number
+        of angles in the data.
+
+        Parameters
+        ----------
+        n_phi : int
+            Number of phi angles in the loaded data.
+
+        Returns
+        -------
+        list[str]
+            List of validation warnings (empty if all valid).
+
+        Raises
+        ------
+        ValueError
+            If per-angle scaling arrays have incorrect length and cannot be used.
+
+        Examples
+        --------
+        >>> config_mgr = ConfigManager("config.yaml")
+        >>> warnings = config_mgr.validate_per_angle_scaling(n_phi=5)
+        >>> if warnings:
+        ...     for w in warnings:
+        ...         logger.warning(w)
+        """
+        warnings: list[str] = []
+
+        if not self.config:
+            return warnings
+
+        initial_params = self.config.get("initial_parameters", {})
+        per_angle_scaling = initial_params.get("per_angle_scaling")
+
+        if not per_angle_scaling or not isinstance(per_angle_scaling, dict):
+            return warnings
+
+        contrast_values = per_angle_scaling.get("contrast")
+        offset_values = per_angle_scaling.get("offset")
+
+        # Validate contrast array length
+        if contrast_values is not None and isinstance(contrast_values, list):
+            n_contrast = len(contrast_values)
+            if n_contrast != n_phi and n_contrast != 1:
+                raise ValueError(
+                    f"per_angle_scaling.contrast has {n_contrast} values but data has "
+                    f"{n_phi} phi angles. Must have either 1 (scalar) or {n_phi} values."
+                )
+            if n_contrast == 1 and n_phi > 1:
+                warnings.append(
+                    f"per_angle_scaling.contrast has 1 value but data has {n_phi} angles. "
+                    f"Using scalar contrast for all angles."
+                )
+
+        # Validate offset array length
+        if offset_values is not None and isinstance(offset_values, list):
+            n_offset = len(offset_values)
+            if n_offset != n_phi and n_offset != 1:
+                raise ValueError(
+                    f"per_angle_scaling.offset has {n_offset} values but data has "
+                    f"{n_phi} phi angles. Must have either 1 (scalar) or {n_phi} values."
+                )
+            if n_offset == 1 and n_phi > 1:
+                warnings.append(
+                    f"per_angle_scaling.offset has 1 value but data has {n_phi} angles. "
+                    f"Using scalar offset for all angles."
+                )
+
+        # Cross-check contrast and offset array lengths
+        if (
+            contrast_values is not None
+            and offset_values is not None
+            and isinstance(contrast_values, list)
+            and isinstance(offset_values, list)
+        ):
+            n_contrast = len(contrast_values)
+            n_offset = len(offset_values)
+            if n_contrast != n_offset and n_contrast > 1 and n_offset > 1:
+                warnings.append(
+                    f"per_angle_scaling arrays have different lengths: "
+                    f"contrast={n_contrast}, offset={n_offset}. This may cause issues."
+                )
+
+        if warnings:
+            for w in warnings:
+                logger.warning(w)
+
+        return warnings
+
     def get_cmc_config(self) -> dict[str, Any]:
         """Get CMC (Consensus Monte Carlo) configuration with validation and defaults.
 
@@ -868,8 +961,74 @@ class ConfigManager:
         if not self.config:
             return
 
+        self._normalize_analysis_mode()
         self._normalize_experimental_data()
-        # Future: add other normalizations here
+        self._validate_config_version()
+
+    def _normalize_analysis_mode(self) -> None:
+        """Normalize analysis_mode to canonical lowercase form.
+
+        Handles case-insensitive input and legacy mode names:
+        - "STATIC", "Static" → "static"
+        - "LAMINAR_FLOW", "Laminar_Flow" → "laminar_flow"
+        - "static_isotropic" → "static" (legacy alias)
+        - "static_anisotropic" → "static" (legacy alias)
+        """
+        if "analysis_mode" not in self.config:
+            return
+
+        mode = self.config["analysis_mode"]
+        if not isinstance(mode, str):
+            return
+
+        original_mode = mode
+        normalized_mode = mode.lower()
+
+        # Handle legacy aliases
+        if normalized_mode in ("static_isotropic", "static_anisotropic"):
+            normalized_mode = "static"
+
+        if normalized_mode != original_mode:
+            self.config["analysis_mode"] = normalized_mode
+            logger.debug(
+                f"Normalized analysis_mode: '{original_mode}' → '{normalized_mode}'"
+            )
+
+    def _validate_config_version(self) -> None:
+        """Validate config_version against package version.
+
+        Warns if config version doesn't match package version, which may
+        indicate incompatible configuration schema.
+        """
+        if "metadata" not in self.config:
+            return
+
+        config_version = self.config["metadata"].get("config_version")
+        if not config_version:
+            return
+
+        # Get package version
+        try:
+            from homodyne import __version__ as package_version
+
+            # Extract major.minor for comparison (ignore patch)
+            def get_major_minor(version: str) -> str:
+                parts = version.split(".")
+                if len(parts) >= 2:
+                    return f"{parts[0]}.{parts[1]}"
+                return version
+
+            config_mm = get_major_minor(str(config_version))
+            package_mm = get_major_minor(str(package_version))
+
+            if config_mm != package_mm:
+                logger.warning(
+                    f"Config version mismatch: config={config_version}, "
+                    f"package={package_version}. Configuration schema may be incompatible."
+                )
+        except ImportError:
+            # Package version not available, skip validation
+            pass
 
     def _normalize_experimental_data(self) -> None:
         """Normalize experimental_data section.

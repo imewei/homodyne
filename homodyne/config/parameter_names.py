@@ -104,6 +104,41 @@ def get_parameter_names(analysis_mode: AnalysisMode) -> list[str]:
         )
 
 
+def get_physical_param_names(analysis_mode: AnalysisMode) -> list[str]:
+    """Get physical parameter names only (without scaling params).
+
+    Unlike get_parameter_names() which includes contrast/offset, this
+    returns only the physical model parameters for result formatting.
+
+    Parameters
+    ----------
+    analysis_mode : str
+        Analysis mode: 'static_isotropic', 'static', or 'laminar_flow'
+
+    Returns
+    -------
+    list of str
+        Ordered list of physical parameter names (without contrast/offset)
+
+    Examples
+    --------
+    >>> get_physical_param_names('static')
+    ['D0', 'alpha', 'D_offset']
+
+    >>> get_physical_param_names('laminar_flow')
+    ['D0', 'alpha', 'D_offset', 'gamma_dot_t0', 'beta', 'gamma_dot_t_offset', 'phi0']
+    """
+    if "static" in analysis_mode.lower():
+        return STATIC_PHYSICAL_PARAMS.copy()
+    elif "laminar" in analysis_mode.lower() or "flow" in analysis_mode.lower():
+        return (STATIC_PHYSICAL_PARAMS + FLOW_PARAMS).copy()
+    else:
+        raise ValueError(
+            f"Unknown analysis mode: {analysis_mode}. "
+            f"Expected 'static', 'static_isotropic', or 'laminar_flow'"
+        )
+
+
 def get_num_parameters(analysis_mode: AnalysisMode) -> int:
     """Get number of parameters for analysis mode.
 
@@ -272,6 +307,7 @@ __all__ = [
     "PARAMETER_DESCRIPTIONS",
     # Functions
     "get_parameter_names",
+    "get_physical_param_names",
     "get_num_parameters",
     "validate_parameter_names",
     "get_parameter_description",
