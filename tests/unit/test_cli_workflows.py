@@ -107,7 +107,7 @@ class TestCMCArgumentParsing:
         """Test --method argument accepts all valid choices."""
         parser = create_parser()
 
-        for method in ["nlsq", "mcmc"]:
+        for method in ["nlsq", "cmc"]:
             args = parser.parse_args(["--method", method])
             assert args.method == method
 
@@ -124,7 +124,7 @@ class TestCMCArgumentParsing:
         args = parser.parse_args(
             [
                 "--method",
-                "mcmc",
+                "cmc",
                 "--cmc-num-shards",
                 "16",
                 "--cmc-backend",
@@ -133,7 +133,7 @@ class TestCMCArgumentParsing:
             ]
         )
 
-        assert args.method == "mcmc"
+        assert args.method == "cmc"
         assert args.cmc_num_shards == 16
         assert args.cmc_backend == "pjit"
         assert args.cmc_plot_diagnostics is True
@@ -229,7 +229,7 @@ class TestCMCConfigOverride:
 
         # Create args with CLI override
         args = argparse.Namespace(
-            method="mcmc",
+            method="cmc",
             cmc_num_shards=20,  # CLI override
             cmc_backend=None,
             cmc_plot_diagnostics=False,
@@ -283,7 +283,7 @@ class TestCMCConfigOverride:
 
         # Create args with CLI override
         args = argparse.Namespace(
-            method="mcmc",
+            method="cmc",
             cmc_num_shards=None,
             cmc_backend="multiprocessing",  # CLI override
             cmc_plot_diagnostics=False,
@@ -345,7 +345,7 @@ class TestCMCDiagnosticPlotGeneration:
 
         # Create args with diagnostic plots enabled
         args = argparse.Namespace(
-            method="mcmc",
+            method="cmc",
             cmc_num_shards=None,
             cmc_backend=None,
             cmc_plot_diagnostics=True,  # Request diagnostic plots
@@ -368,10 +368,10 @@ class TestCMCDiagnosticPlotGeneration:
     @patch("homodyne.cli.commands._generate_cmc_diagnostic_plots")
     @patch("homodyne.cli.commands.fit_mcmc_jax")
     @patch("homodyne.cli.commands._apply_angle_filtering_for_optimization")
-    def test_diagnostic_plots_not_generated_for_nuts_result(
+    def test_diagnostic_plots_not_generated_without_inference_data(
         self, mock_filter, mock_fit_mcmc, mock_generate_plots
     ):
-        """Test diagnostic plots are NOT generated when result is NUTS (not CMC)."""
+        """Test diagnostic plots are NOT generated when result lacks inference_data."""
         # Setup mocks
         mock_config = Mock()
         mock_config.get_cmc_config.return_value = {}
@@ -395,39 +395,39 @@ class TestCMCDiagnosticPlotGeneration:
         }
         mock_filter.return_value = mock_data
 
-        # Create NUTS result mock
+        # Create result mock without inference_data
         mock_result = Mock()
-        mock_result.is_cmc_result.return_value = False  # This is NOT a CMC result
+        mock_result.inference_data = None  # No inference_data available
         mock_fit_mcmc.return_value = mock_result
 
         from homodyne.cli.commands import _run_optimization
 
-        # Create args with diagnostic plots enabled
+        # Create args
         args = argparse.Namespace(
-            method="mcmc",
+            method="cmc",
             cmc_num_shards=None,
             cmc_backend=None,
-            cmc_plot_diagnostics=True,  # Request diagnostic plots
+            cmc_plot_diagnostics=True,
             n_samples=100,
             n_warmup=100,
             n_chains=2,
             output_dir=Path("/tmp/test"),
-            dense_mass_matrix=False,  # Required by _build_mcmc_runtime_kwargs
+            dense_mass_matrix=False,
         )
 
         # Run optimization
         _run_optimization(args, mock_config, mock_data)
 
-        # Verify _generate_cmc_diagnostic_plots was NOT called
+        # Verify _generate_cmc_diagnostic_plots was NOT called (no inference_data)
         mock_generate_plots.assert_not_called()
 
     @patch("homodyne.cli.commands._generate_cmc_diagnostic_plots")
     @patch("homodyne.cli.commands.fit_mcmc_jax")
     @patch("homodyne.cli.commands._apply_angle_filtering_for_optimization")
-    def test_diagnostic_plots_not_generated_when_flag_false(
+    def test_diagnostic_plots_always_generated_with_inference_data(
         self, mock_filter, mock_fit_mcmc, mock_generate_plots
     ):
-        """Test diagnostic plots are NOT generated when flag is False."""
+        """Test diagnostic plots are ALWAYS generated when result has inference_data."""
         # Setup mocks
         mock_config = Mock()
         mock_config.get_cmc_config.return_value = {}
@@ -451,44 +451,46 @@ class TestCMCDiagnosticPlotGeneration:
         }
         mock_filter.return_value = mock_data
 
-        # Create CMC result mock
+        # Create CMC result mock with inference_data
         mock_result = Mock()
-        mock_result.is_cmc_result.return_value = True
-        mock_result.cmc_diagnostics = {"success_rate": 0.95}
+        mock_result.inference_data = Mock()  # Has inference_data
         mock_fit_mcmc.return_value = mock_result
 
         from homodyne.cli.commands import _run_optimization
 
-        # Create args without diagnostic plots
+        # Create args (flag doesn't matter - always generates for CMC)
         args = argparse.Namespace(
-            method="mcmc",
+            method="cmc",
             cmc_num_shards=None,
             cmc_backend=None,
-            cmc_plot_diagnostics=False,  # Do NOT request diagnostic plots
+            cmc_plot_diagnostics=False,  # Flag is deprecated, plots always generated
             n_samples=100,
             n_warmup=100,
             n_chains=2,
             output_dir=Path("/tmp/test"),
-            dense_mass_matrix=False,  # Required by _build_mcmc_runtime_kwargs
+            dense_mass_matrix=False,
         )
 
         # Run optimization
         _run_optimization(args, mock_config, mock_data)
 
-        # Verify _generate_cmc_diagnostic_plots was NOT called
-        mock_generate_plots.assert_not_called()
+        # Verify _generate_cmc_diagnostic_plots WAS called (always for CMC with inference_data)
+        mock_generate_plots.assert_called_once()
 
 
 class TestCMCDiagnosticPlotFunction:
     """Test _generate_cmc_diagnostic_plots function directly."""
 
-    def test_diagnostic_plot_function_with_cmc_result(self, tmp_path):
-        """Test _generate_cmc_diagnostic_plots saves diagnostic data for CMC result."""
+    @patch("homodyne.optimization.cmc.plotting.generate_diagnostic_plots")
+    def test_diagnostic_plot_function_with_inference_data(
+        self, mock_generate_plots, tmp_path
+    ):
+        """Test _generate_cmc_diagnostic_plots generates ArviZ plots with inference_data."""
         from homodyne.cli.commands import _generate_cmc_diagnostic_plots
 
-        # Create mock CMC result
+        # Create mock result with inference_data
         mock_result = Mock()
-        mock_result.is_cmc_result.return_value = True
+        mock_result.inference_data = Mock()  # Has inference_data
         mock_result.cmc_diagnostics = {
             "per_shard_diagnostics": [{"shard_id": 0, "r_hat": 1.01}],
             "kl_matrix": [[0.0, 0.5], [0.5, 0.0]],
@@ -496,13 +498,22 @@ class TestCMCDiagnosticPlotFunction:
             "combined_diagnostics": {"ess": 1500},
         }
 
+        # Mock generate_diagnostic_plots to return file paths
+        mock_generate_plots.return_value = [
+            tmp_path / "pair_plot.png",
+            tmp_path / "forest_plot.png",
+        ]
+
         output_dir = tmp_path / "test_output"
 
         # Call function
         _generate_cmc_diagnostic_plots(mock_result, output_dir, "laminar_flow")
 
-        # Verify JSON file was created
-        diag_file = output_dir / "cmc_diagnostics" / "cmc_diagnostics.json"
+        # Verify generate_diagnostic_plots was called
+        mock_generate_plots.assert_called_once()
+
+        # Verify JSON file was created for cmc_diagnostics
+        diag_file = output_dir / "diagnostics" / "cmc_diagnostics.json"
         assert diag_file.exists()
 
         # Verify JSON content
@@ -511,17 +522,16 @@ class TestCMCDiagnosticPlotFunction:
         with open(diag_file) as f:
             data = json.load(f)
         assert "per_shard_diagnostics" in data
-        assert "between_shard_kl" in data
         assert "success_rate" in data
         assert data["success_rate"] == 0.95
 
-    def test_diagnostic_plot_function_with_nuts_result_logs_warning(self, caplog):
-        """Test _generate_cmc_diagnostic_plots logs warning for NUTS result."""
+    def test_diagnostic_plot_function_without_inference_data_logs_warning(self, caplog):
+        """Test _generate_cmc_diagnostic_plots logs warning when inference_data missing."""
         from homodyne.cli.commands import _generate_cmc_diagnostic_plots
 
-        # Create mock NUTS result (not CMC)
+        # Create mock result without inference_data
         mock_result = Mock()
-        mock_result.is_cmc_result.return_value = False
+        mock_result.inference_data = None  # No inference_data
 
         output_dir = Path("/tmp/test_output")
 
@@ -530,27 +540,33 @@ class TestCMCDiagnosticPlotFunction:
             _generate_cmc_diagnostic_plots(mock_result, output_dir, "laminar_flow")
 
         # Verify warning was logged
-        assert "not a CMC result" in caplog.text
+        assert "inference_data" in caplog.text.lower()
 
-    def test_diagnostic_plot_function_with_missing_diagnostics_logs_warning(
-        self, caplog
+    @patch("homodyne.optimization.cmc.plotting.generate_diagnostic_plots")
+    def test_diagnostic_plot_function_without_cmc_diagnostics(
+        self, mock_generate_plots, tmp_path
     ):
-        """Test _generate_cmc_diagnostic_plots logs warning when diagnostics missing."""
+        """Test _generate_cmc_diagnostic_plots works without cmc_diagnostics (only ArviZ plots)."""
         from homodyne.cli.commands import _generate_cmc_diagnostic_plots
 
-        # Create mock CMC result without diagnostics
+        # Create mock result with inference_data but no cmc_diagnostics
         mock_result = Mock()
-        mock_result.is_cmc_result.return_value = True
-        mock_result.cmc_diagnostics = None  # Missing diagnostics
+        mock_result.inference_data = Mock()  # Has inference_data
+        mock_result.cmc_diagnostics = None  # No cmc_diagnostics
 
-        output_dir = Path("/tmp/test_output")
+        mock_generate_plots.return_value = [tmp_path / "pair_plot.png"]
 
-        # Call function
-        with caplog.at_level("WARNING"):
-            _generate_cmc_diagnostic_plots(mock_result, output_dir, "laminar_flow")
+        output_dir = tmp_path / "test_output"
 
-        # Verify warning was logged
-        assert "diagnostics not available" in caplog.text
+        # Call function - should not fail
+        _generate_cmc_diagnostic_plots(mock_result, output_dir, "laminar_flow")
+
+        # Verify generate_diagnostic_plots was called
+        mock_generate_plots.assert_called_once()
+
+        # JSON file should NOT be created (no cmc_diagnostics)
+        diag_file = output_dir / "diagnostics" / "cmc_diagnostics.json"
+        assert not diag_file.exists()
 
 
 class TestBackwardCompatibility:
@@ -576,18 +592,18 @@ class TestBackwardCompatibility:
         assert args.cmc_plot_diagnostics is False
 
     def test_mcmc_method_without_cmc_args_works(self):
-        """Test --method mcmc without CMC arguments works (auto-selection)."""
+        """Test --method cmc without CMC arguments works (auto-selection)."""
         parser = create_parser()
 
         args = parser.parse_args(
             [
                 "--method",
-                "mcmc",
+                "cmc",
             ]
         )
 
         # Verify defaults
-        assert args.method == "mcmc"
+        assert args.method == "cmc"
         assert args.cmc_num_shards is None
         assert args.cmc_backend is None
         assert args.cmc_plot_diagnostics is False
@@ -602,7 +618,7 @@ def test_cli_integration_summary():
     args = parser.parse_args(
         [
             "--method",
-            "mcmc",
+            "cmc",
             "--cmc-num-shards",
             "16",
             "--cmc-backend",
@@ -610,7 +626,7 @@ def test_cli_integration_summary():
             "--cmc-plot-diagnostics",
         ]
     )
-    assert args.method == "mcmc"
+    assert args.method == "cmc"
     assert args.cmc_num_shards == 16
     assert args.cmc_backend == "multiprocessing"
     assert args.cmc_plot_diagnostics is True
@@ -659,7 +675,7 @@ def mock_config():
             "values": [1000.0, 0.5, 10.0],
         },
         "optimization": {
-            "mcmc": {
+            "cmc": {
                 "dense_mass": False,
             }
         },
@@ -1091,7 +1107,7 @@ def test_threshold_override_dense_mass_matrix(mock_config):
         data_file=None,
         static_mode=False,
         laminar_flow=False,
-        method="mcmc",
+        method="cmc",
         n_samples=None,
         n_warmup=None,
         n_chains=None,
@@ -1108,6 +1124,7 @@ def test_threshold_override_dense_mass_matrix(mock_config):
 
     _apply_cli_overrides(mock_config, args)
 
+    # Note: dense_mass is stored under "mcmc" key for historical reasons
     assert mock_config.config["optimization"]["mcmc"]["dense_mass"] is True
 
 

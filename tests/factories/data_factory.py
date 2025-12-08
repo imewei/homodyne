@@ -668,8 +668,8 @@ class ConfigFactory:
         return {
             "analysis_mode": "static",
             "optimization": {
-                "method": "mcmc",
-                "mcmc": {
+                "method": "cmc",
+                "cmc": {
                     "num_samples": num_samples,
                     "num_warmup": num_warmup,
                     "chains": 1,

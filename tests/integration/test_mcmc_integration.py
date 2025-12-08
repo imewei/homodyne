@@ -857,7 +857,7 @@ class TestManualNLSQMCMCWorkflow:
                 "values": None,  # Optional: set from NLSQ manually
             },
             "optimization": {
-                "mcmc": {
+                "cmc": {
                     "num_warmup": 1000,
                     "num_samples": 2000,
                     "num_chains": 4,
@@ -920,15 +920,16 @@ class TestConvergenceAndErrorHandling:
         # Actual CLI testing is in test_cli_args.py
 
         # Arrange - Define valid and invalid methods
-        valid_methods = ["nlsq", "mcmc"]
-        invalid_methods = ["nuts", "cmc", "svi", "auto"]
+        valid_methods = ["nlsq", "cmc"]
+        invalid_methods = ["nuts", "mcmc", "svi", "auto"]  # mcmc removed, use cmc
 
-        # Act & Assert - Invalid methods should raise errors
+        # Act & Assert - Valid methods should be recognized
         for method in valid_methods:
-            assert method in ["nlsq", "mcmc"], f"{method} should be valid"
+            assert method in ["nlsq", "cmc"], f"{method} should be valid"
 
+        # Invalid methods should not be in valid list
         for method in invalid_methods:
-            assert method not in valid_methods, f"{method} should be invalid in v2.1"
+            assert method not in valid_methods, f"{method} should be invalid"
 
 
 class TestParameterRegimeConvergence:

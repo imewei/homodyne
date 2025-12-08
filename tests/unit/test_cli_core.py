@@ -96,11 +96,11 @@ class TestMethodArgumentParsing:
         assert validate_args(args) is True
 
     def test_method_mcmc_accepted(self):
-        """Test that --method mcmc is accepted and triggers automatic selection."""
+        """Test that --method cmc is accepted and triggers automatic selection."""
         parser = create_parser()
-        args = parser.parse_args(["--method", "mcmc"])
+        args = parser.parse_args(["--method", "cmc"])
 
-        assert args.method == "mcmc"
+        assert args.method == "cmc"
         assert validate_args(args) is True
 
     def test_method_nuts_rejected(self):
@@ -113,13 +113,13 @@ class TestMethodArgumentParsing:
 
         assert exc_info.value.code == 2  # argparse error exit code
 
-    def test_method_cmc_rejected(self):
-        """Test that --method cmc raises clear error message."""
+    def test_method_mcmc_rejected(self):
+        """Test that --method mcmc raises clear error message (use cmc instead)."""
         parser = create_parser()
 
-        # Should raise SystemExit due to invalid choice
+        # Should raise SystemExit due to invalid choice (mcmc removed, use cmc)
         with pytest.raises(SystemExit) as exc_info:
-            parser.parse_args(["--method", "cmc"])
+            parser.parse_args(["--method", "mcmc"])
 
         assert exc_info.value.code == 2  # argparse error exit code
 
@@ -140,8 +140,8 @@ class TestMethodArgumentParsing:
 
         assert args.method == "nlsq"
 
-    def test_method_choices_only_nlsq_and_mcmc(self):
-        """Test that method choices are restricted to nlsq and mcmc only."""
+    def test_method_choices_only_nlsq_and_cmc(self):
+        """Test that method choices are restricted to nlsq and cmc only."""
         parser = create_parser()
 
         # Find the --method argument in parser
@@ -152,9 +152,9 @@ class TestMethodArgumentParsing:
                 break
 
         assert method_action is not None
-        assert set(method_action.choices) == {"nlsq", "mcmc"}
+        assert set(method_action.choices) == {"nlsq", "cmc"}
         assert "nuts" not in method_action.choices
-        assert "cmc" not in method_action.choices
+        assert "mcmc" not in method_action.choices  # mcmc removed, use cmc
         assert "auto" not in method_action.choices
 
 
@@ -180,7 +180,7 @@ class TestMethodValidation:
         config_file = tmp_path / "test_config.yaml"
         config_file.write_text("# Test config")
 
-        args = parser.parse_args(["--method", "mcmc", "--config", str(config_file)])
+        args = parser.parse_args(["--method", "cmc", "--config", str(config_file)])
         assert validate_args(args) is True
 
 
@@ -188,49 +188,49 @@ class TestCMCOptions:
     """Test CMC-specific CLI options are accepted with mcmc method."""
 
     def test_cmc_num_shards_accepted_with_mcmc(self, tmp_path):
-        """Test that --cmc-num-shards is accepted with --method mcmc."""
+        """Test that --cmc-num-shards is accepted with --method cmc."""
         parser = create_parser()
         config_file = tmp_path / "test_config.yaml"
         config_file.write_text("# Test config")
 
         args = parser.parse_args(
-            ["--method", "mcmc", "--cmc-num-shards", "4", "--config", str(config_file)]
+            ["--method", "cmc", "--cmc-num-shards", "4", "--config", str(config_file)]
         )
 
-        assert args.method == "mcmc"
+        assert args.method == "cmc"
         assert args.cmc_num_shards == 4
         assert validate_args(args) is True
 
     def test_cmc_backend_accepted_with_mcmc(self, tmp_path):
-        """Test that --cmc-backend is accepted with --method mcmc."""
+        """Test that --cmc-backend is accepted with --method cmc."""
         parser = create_parser()
         config_file = tmp_path / "test_config.yaml"
         config_file.write_text("# Test config")
 
         args = parser.parse_args(
-            ["--method", "mcmc", "--cmc-backend", "pjit", "--config", str(config_file)]
+            ["--method", "cmc", "--cmc-backend", "pjit", "--config", str(config_file)]
         )
 
-        assert args.method == "mcmc"
+        assert args.method == "cmc"
         assert args.cmc_backend == "pjit"
         assert validate_args(args) is True
 
     def test_cmc_plot_diagnostics_accepted_with_mcmc(self, tmp_path):
-        """Test that --cmc-plot-diagnostics is accepted with --method mcmc."""
+        """Test that --cmc-plot-diagnostics is accepted with --method cmc."""
         parser = create_parser()
         config_file = tmp_path / "test_config.yaml"
         config_file.write_text("# Test config")
 
         args = parser.parse_args(
-            ["--method", "mcmc", "--cmc-plot-diagnostics", "--config", str(config_file)]
+            ["--method", "cmc", "--cmc-plot-diagnostics", "--config", str(config_file)]
         )
 
-        assert args.method == "mcmc"
+        assert args.method == "cmc"
         assert args.cmc_plot_diagnostics is True
         assert validate_args(args) is True
 
     def test_all_cmc_options_accepted_together(self, tmp_path):
-        """Test that all CMC options can be used together with --method mcmc."""
+        """Test that all CMC options can be used together with --method cmc."""
         parser = create_parser()
         config_file = tmp_path / "test_config.yaml"
         config_file.write_text("# Test config")
@@ -238,7 +238,7 @@ class TestCMCOptions:
         args = parser.parse_args(
             [
                 "--method",
-                "mcmc",
+                "cmc",
                 "--cmc-num-shards",
                 "8",
                 "--cmc-backend",
@@ -249,7 +249,7 @@ class TestCMCOptions:
             ]
         )
 
-        assert args.method == "mcmc"
+        assert args.method == "cmc"
         assert args.cmc_num_shards == 8
         assert args.cmc_backend == "multiprocessing"
         assert args.cmc_plot_diagnostics is True
@@ -283,7 +283,7 @@ class TestCMCOptions:
         captured = capsys.readouterr()
         assert "Warning: --cmc-num-shards ignored" in captured.out
         assert "Warning: --cmc-backend ignored" in captured.out
-        assert "Warning: --cmc-plot-diagnostics ignored" in captured.out
+        # Note: --cmc-plot-diagnostics is deprecated and no longer warns
 
 
 class TestHelpTextDocumentation:
@@ -304,7 +304,7 @@ class TestHelpTextDocumentation:
         help_text = method_action.help
 
         # Check that help text mentions mcmc
-        assert "mcmc" in help_text.lower() or "MCMC" in help_text
+        assert "cmc" in help_text.lower() or "MCMC" in help_text
 
     def test_cmc_group_has_description(self):
         """Test that CMC argument group has a descriptive title."""
@@ -329,7 +329,7 @@ class TestHelpTextDocumentation:
         # Epilog should exist and document CMC options
         assert epilog is not None
         # Check for CMC/sharding documentation
-        assert "CMC" in epilog or "shard" in epilog.lower() or "mcmc" in epilog.lower()
+        assert "CMC" in epilog or "shard" in epilog.lower() or "cmc" in epilog.lower()
 
 
 # ==============================================================================
@@ -351,13 +351,13 @@ class TestDeprecatedMethodRejection:
         # argparse returns exit code 2 for invalid arguments
         assert exc_info.value.code == 2
 
-    def test_method_cmc_rejected_with_exit_code(self):
-        """Test that --method cmc is rejected with proper exit code."""
+    def test_method_mcmc_rejected_with_exit_code(self):
+        """Test that --method mcmc is rejected with proper exit code (use cmc instead)."""
         parser = create_parser()
 
-        # Should raise SystemExit due to invalid choice
+        # Should raise SystemExit due to invalid choice (mcmc removed, use cmc)
         with pytest.raises(SystemExit) as exc_info:
-            parser.parse_args(["--method", "cmc"])
+            parser.parse_args(["--method", "mcmc"])
 
         # argparse returns exit code 2 for invalid arguments
         assert exc_info.value.code == 2
@@ -374,7 +374,7 @@ class TestDeprecatedMethodRejection:
         assert exc_info.value.code == 2
 
     def test_method_choices_excludes_deprecated_methods(self):
-        """Test that method argument only includes nlsq and mcmc."""
+        """Test that method argument only includes nlsq and cmc."""
         parser = create_parser()
 
         # Find the --method argument
@@ -385,11 +385,11 @@ class TestDeprecatedMethodRejection:
                 break
 
         assert method_action is not None
-        assert set(method_action.choices) == {"nlsq", "mcmc"}
+        assert set(method_action.choices) == {"nlsq", "cmc"}
 
         # Explicitly verify deprecated methods are NOT in choices
         assert "nuts" not in method_action.choices
-        assert "cmc" not in method_action.choices
+        assert "mcmc" not in method_action.choices  # mcmc removed, use cmc
         assert "auto" not in method_action.choices
 
 
@@ -404,11 +404,11 @@ class TestAcceptedMethodsFunctionality:
         assert args.method == "nlsq"
 
     def test_method_mcmc_accepted(self):
-        """Test that --method mcmc is accepted."""
+        """Test that --method cmc is accepted."""
         parser = create_parser()
-        args = parser.parse_args(["--method", "mcmc"])
+        args = parser.parse_args(["--method", "cmc"])
 
-        assert args.method == "mcmc"
+        assert args.method == "cmc"
 
     def test_default_method_is_nlsq(self):
         """Test that default method is nlsq when not specified."""
@@ -432,12 +432,12 @@ class TestAcceptedMethodsFunctionality:
         config_file = tmp_path / "test_config.yaml"
         config_file.write_text("# Test config")
 
-        args = parser.parse_args(["--method", "mcmc", "--config", str(config_file)])
+        args = parser.parse_args(["--method", "cmc", "--config", str(config_file)])
         assert validate_args(args) is True
 
 
 class TestCMCSpecificOptions:
-    """Test CMC-specific CLI options work with --method mcmc.
+    """Test CMC-specific CLI options work with --method cmc.
 
     Note: --min-samples-cmc and --memory-threshold-pct removed in v3.0 (CMC-only)
     """
@@ -451,7 +451,7 @@ class TestCMCSpecificOptions:
         args = parser.parse_args(
             [
                 "--method",
-                "mcmc",
+                "cmc",
                 "--cmc-num-shards",
                 "8",
                 "--config",
@@ -459,7 +459,7 @@ class TestCMCSpecificOptions:
             ]
         )
 
-        assert args.method == "mcmc"
+        assert args.method == "cmc"
         assert args.cmc_num_shards == 8
         assert validate_args(args) is True
 
@@ -472,7 +472,7 @@ class TestCMCSpecificOptions:
         args = parser.parse_args(
             [
                 "--method",
-                "mcmc",
+                "cmc",
                 "--cmc-backend",
                 "pjit",
                 "--config",
@@ -480,7 +480,7 @@ class TestCMCSpecificOptions:
             ]
         )
 
-        assert args.method == "mcmc"
+        assert args.method == "cmc"
         assert args.cmc_backend == "pjit"
         assert validate_args(args) is True
 
@@ -493,7 +493,7 @@ class TestCMCSpecificOptions:
         args = parser.parse_args(
             [
                 "--method",
-                "mcmc",
+                "cmc",
                 "--cmc-num-shards",
                 "8",
                 "--cmc-backend",
@@ -504,7 +504,7 @@ class TestCMCSpecificOptions:
             ]
         )
 
-        assert args.method == "mcmc"
+        assert args.method == "cmc"
         assert args.cmc_num_shards == 8
         assert args.cmc_backend == "multiprocessing"
         assert args.cmc_plot_diagnostics is True
@@ -628,7 +628,7 @@ class TestCLIParameterOverrides:
         args = parser.parse_args(
             [
                 "--method",
-                "mcmc",
+                "cmc",
                 "--dense-mass-matrix",
                 "--config",
                 str(config_file),
@@ -647,7 +647,7 @@ class TestCLIParameterOverrides:
         args = parser.parse_args(
             [
                 "--method",
-                "mcmc",
+                "cmc",
                 "--n-samples",
                 "2000",
                 "--n-warmup",
@@ -704,7 +704,7 @@ class TestShellAliasDefinitions:
 
         # Check that correct aliases are defined
         assert "alias hm-nlsq='homodyne --method nlsq'" in content
-        assert "alias hm-mcmc='homodyne --method mcmc'" in content
+        assert "alias hm-cmc='homodyne --method cmc'" in content
 
     def test_deprecated_aliases_not_defined(self):
         """Test that deprecated aliases are not defined."""
@@ -716,10 +716,10 @@ class TestShellAliasDefinitions:
         content = post_install_file.read_text()
 
         # Deprecated aliases should not be defined
-        # (they would show up as "alias hm-nuts=" or "alias hm-cmc=" or "alias hm-auto=")
+        # (they would show up as "alias hm-nuts=" or "alias hm-auto=")
         assert "alias hm-nuts=" not in content
-        assert "alias hm-cmc=" not in content
         assert "alias hm-auto=" not in content
+        # Note: hm-mcmc was renamed to hm-cmc
 
     def test_alias_descriptions_in_post_install(self):
         """Test that alias descriptions properly document the changes."""
@@ -728,9 +728,9 @@ class TestShellAliasDefinitions:
         )
         content = post_install_file.read_text()
 
-        # Check that descriptions mention automatic selection for mcmc
+        # Check that aliases are defined for nlsq and cmc
         assert "hm-nlsq" in content
-        assert "hm-mcmc" in content
+        assert "hm-cmc" in content
 
 
 class TestHelpTextValidation:
@@ -755,7 +755,7 @@ class TestHelpTextValidation:
 
         # Verify help text mentions key concepts
         assert "nlsq" in help_text or "NLSQ" in help_text
-        assert "mcmc" in help_text or "MCMC" in help_text
+        assert "cmc" in help_text or "MCMC" in help_text
 
     def test_cmc_group_exists(self):
         """Test that CMC argument group exists with proper title."""
@@ -779,7 +779,7 @@ class TestHelpTextValidation:
 
         assert epilog is not None
         # Check for CMC documentation
-        assert "CMC" in epilog or "mcmc" in epilog.lower() or "shard" in epilog.lower()
+        assert "CMC" in epilog or "cmc" in epilog.lower() or "shard" in epilog.lower()
 
 
 class TestMCMCSpecificOptionsValidation:
@@ -959,7 +959,7 @@ class TestCliHelpOutput:
 
         # Should mention nlsq and mcmc
         assert "nlsq" in help_output.lower()
-        assert "mcmc" in help_output.lower()
+        assert "cmc" in help_output.lower()
 
     def test_homodyne_help_does_not_mention_deprecated_methods(self):
         """Test that homodyne --help does not mention deprecated methods."""

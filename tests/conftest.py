@@ -110,7 +110,7 @@ def pytest_collection_modifyitems(config, items):
         elif "performance" in str(item.fspath):
             item.add_marker(pytest.mark.performance)
             item.add_marker(pytest.mark.slow)
-        elif "mcmc" in str(item.fspath):
+        elif "cmc" in str(item.fspath):
             item.add_marker(pytest.mark.mcmc)
             item.add_marker(pytest.mark.slow)
 

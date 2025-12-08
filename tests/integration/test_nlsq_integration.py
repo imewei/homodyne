@@ -1043,9 +1043,9 @@ class TestNLSQCLIIntegration:
         with tempfile.TemporaryDirectory() as tmpdir:
             output_dir = Path(tmpdir)
 
-            # Create mock args with method="mcmc"
+            # Create mock args with method="cmc"
             args = Mock()
-            args.method = "mcmc"
+            args.method = "cmc"
             args.output_dir = output_dir
             args.output_format = "json"
 
