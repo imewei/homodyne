@@ -116,7 +116,7 @@ class TestMCMCConvergence:
     def test_mcmc_parameter_recovery(self):
         """Test MCMC parameter recovery with known synthetic data."""
         try:
-            from homodyne.tests.factories.data_factory import XPCSDataFactory
+            from tests.factories.data_factory import XPCSDataFactory
 
             from homodyne.optimization import NUMPYRO_AVAILABLE, fit_mcmc_jax
         except ImportError:
@@ -388,7 +388,7 @@ class TestMCMCStatisticalProperties:
     def test_credible_intervals(self):
         """Test Bayesian credible intervals."""
         try:
-            from homodyne.tests.factories.data_factory import XPCSDataFactory
+            from tests.factories.data_factory import XPCSDataFactory
 
             from homodyne.optimization import NUMPYRO_AVAILABLE, fit_mcmc_jax
         except ImportError:
@@ -585,7 +585,7 @@ class TestMCMCEdgeCases:
     def test_mcmc_high_noise_data(self):
         """Test MCMC with high noise data."""
         try:
-            from homodyne.tests.factories.data_factory import XPCSDataFactory
+            from tests.factories.data_factory import XPCSDataFactory
 
             from homodyne.optimization import NUMPYRO_AVAILABLE, fit_mcmc_jax
         except ImportError:
@@ -628,7 +628,7 @@ class TestMCMCEdgeCases:
     def test_mcmc_low_contrast_data(self):
         """Test MCMC with low contrast data."""
         try:
-            from homodyne.tests.factories.data_factory import XPCSDataFactory
+            from tests.factories.data_factory import XPCSDataFactory
 
             from homodyne.optimization import NUMPYRO_AVAILABLE, fit_mcmc_jax
         except ImportError:
@@ -670,7 +670,7 @@ class TestMCMCEdgeCases:
     def test_mcmc_small_dataset(self):
         """Test MCMC with very small dataset."""
         try:
-            from homodyne.tests.factories.data_factory import XPCSDataFactory
+            from tests.factories.data_factory import XPCSDataFactory
 
             from homodyne.optimization import NUMPYRO_AVAILABLE, fit_mcmc_jax
         except ImportError:
