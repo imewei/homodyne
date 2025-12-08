@@ -640,6 +640,12 @@ class TestRegressionBenchmarks:
         regression_config = test_config.copy()
         regression_config["optimization"]["lsq"]["max_iterations"] = 30
 
+        # Warm up JIT/solver once outside the timed loop to avoid measuring compilation
+        try:
+            _ = fit_nlsq_jax(data, regression_config)
+        except Exception:
+            pass
+
         # Benchmark optimization
         times = []
         successes = []

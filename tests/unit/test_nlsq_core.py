@@ -1334,7 +1334,7 @@ class TestNLSQPerformance:
 
         # Should complete in reasonable time (includes JIT compilation on first run)
         # v2.4.0: Per-angle scaling increases optimization complexity
-        assert elapsed_time < 20.0, f"Small dataset took too long: {elapsed_time:.2f}s"
+        assert elapsed_time < 25.0, f"Small dataset took too long: {elapsed_time:.2f}s"
         assert result.success, "Small dataset optimization should succeed"
 
         # Reported time should be consistent

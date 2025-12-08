@@ -92,14 +92,18 @@ class XPCSDataFactory:
         dict
             Dictionary with XPCS data structure
         """
+        default_parameters = {
+            "offset": 1.0,
+            "contrast": 0.4,
+            "diffusion_coefficient": 0.1,
+            "shear_rate": 0.0,
+            "L": 1.0,
+        }
+        # Ensure optional callers that only override a subset still get required keys
         if true_parameters is None:
-            true_parameters = {
-                "offset": 1.0,
-                "contrast": 0.4,
-                "diffusion_coefficient": 0.1,
-                "shear_rate": 0.0,
-                "L": 1.0,
-            }
+            true_parameters = default_parameters
+        else:
+            true_parameters = {**default_parameters, **true_parameters}
 
         # Create time arrays
         t1, t2 = np.meshgrid(np.arange(n_times), np.arange(n_times), indexing="ij")
