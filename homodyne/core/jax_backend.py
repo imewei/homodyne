@@ -86,6 +86,7 @@ from functools import wraps
 from homodyne.core.physics_utils import (
     EPS,
     PI,
+    apply_diagonal_correction,
     safe_exp,
     safe_len,
     safe_sinc,
@@ -259,28 +260,6 @@ def _compute_g1_diffusion_core(
     """
     D0, alpha, D_offset = params[0], params[1], params[2]
 
-    # DEBUG: Log input parameters
-    if jax_available and hasattr(jnp, "where"):
-        # Use JAX operations for debugging within JIT context
-        pass  # Can't print in JIT context easily
-    else:
-        import numpy as np  # noqa: F811 - Conditional import for debug path
-
-        if hasattr(D0, "item"):
-            print(
-                f"DEBUG g1_diffusion: D0={D0.item():.6f}, alpha={alpha.item():.6f}, D_offset={D_offset.item():.6f}",
-            )
-            print(
-                f"DEBUG g1_diffusion: wavevector_q_squared_half_dt={wavevector_q_squared_half_dt:.6e}",
-            )
-        else:
-            print(
-                f"DEBUG g1_diffusion: D0={D0:.6f}, alpha={alpha:.6f}, D_offset={D_offset:.6f}",
-            )
-            print(
-                f"DEBUG g1_diffusion: wavevector_q_squared_half_dt={wavevector_q_squared_half_dt:.6e}",
-            )
-
     # CRITICAL FIX (Nov 2025): Detect element-wise data to prevent 35TB matrix allocation
     # Same issue as in _compute_g1_shear_core
     is_elementwise = t1.ndim == 1 and safe_len(t1) > 2000
@@ -318,27 +297,9 @@ def _compute_g1_diffusion_core(
         # Step 2: Calculate D(t) at each time point
         D_t = _calculate_diffusion_coefficient_impl_jax(time_array, D0, alpha, D_offset)
 
-        # DEBUG: Check D_t values
-        if not jax_available or not hasattr(jnp, "where"):  # Outside JIT
-            import numpy as np  # noqa: F811 - Conditional import for debug path
-
-            if hasattr(D_t, "min"):
-                print(
-                    f"DEBUG g1_diffusion: D_t min={np.min(D_t):.6e}, max={np.max(D_t):.6e}, mean={np.mean(D_t):.6e}",
-                )
-
         # Step 3: Create diffusion integral matrix using cumulative sums
         # This gives matrix[i,j] = |cumsum[i] - cumsum[j]| ≈ |∫D(t)dt from i to j|
         D_integral = _create_time_integral_matrix_impl_jax(D_t)
-
-        # DEBUG: Check D_integral values
-        if not jax_available or not hasattr(jnp, "where"):  # Outside JIT
-            import numpy as np  # noqa: F811 - Conditional import for debug path
-
-            if hasattr(D_integral, "min"):
-                print(
-                    f"DEBUG g1_diffusion: D_integral min={np.min(D_integral):.6e}, max={np.max(D_integral):.6e}, mean={np.mean(D_integral):.6e}",
-                )
 
     # Step 4: Compute g1 correlation using log-space for numerical stability
     # This matches reference: g1 = exp(-wavevector_q_squared_half_dt * D_integral)
@@ -349,54 +310,18 @@ def _compute_g1_diffusion_core(
     # New approach: clip in log-space, then exp() - no artificial plateaus
     log_g1 = -wavevector_q_squared_half_dt * D_integral
 
-    # DEBUG: Check log values before clipping
-    if not jax_available or not hasattr(jnp, "where"):  # Outside JIT
-        import numpy as np
-
-        if hasattr(log_g1, "min"):
-            print(
-                f"DEBUG g1_diffusion: log_g1 (pre-clip) min={np.min(log_g1):.6e}, max={np.max(log_g1):.6e}, mean={np.mean(log_g1):.6e}",
-            )
-
     # Clip in log-space to prevent numerical overflow/underflow
     # -700 → exp(-700) ≈ 1e-304 (near machine precision)
     # 0 → exp(0) = 1.0 (maximum physical value)
     log_g1_bounded = jnp.clip(log_g1, -700.0, 0.0)
 
-    # DEBUG: Check log values after clipping
-    if not jax_available or not hasattr(jnp, "where"):  # Outside JIT
-        import numpy as np
-
-        if hasattr(log_g1_bounded, "min"):
-            print(
-                f"DEBUG g1_diffusion: log_g1_bounded min={np.min(log_g1_bounded):.6e}, max={np.max(log_g1_bounded):.6e}",
-            )
-
     # Compute exponential with safeguards (safe_exp handles edge cases)
     g1_result = safe_exp(log_g1_bounded)
-
-    # DEBUG: Check g1_result after exp
-    if not jax_available or not hasattr(jnp, "where"):  # Outside JIT
-        import numpy as np
-
-        if hasattr(g1_result, "min"):
-            print(
-                f"DEBUG g1_diffusion: g1_result min={np.min(g1_result):.6e}, max={np.max(g1_result):.6e}",
-            )
 
     # Apply ONLY upper bound (g1 ≤ 1.0 is physical constraint)
     # No lower bound clipping - preserves full precision down to machine epsilon
     # This eliminates artificial plateaus from overly aggressive clipping
     g1_safe = jnp.minimum(g1_result, 1.0)
-
-    # DEBUG: Final g1_diffusion result
-    if not jax_available or not hasattr(jnp, "where"):  # Outside JIT
-        import numpy as np
-
-        if hasattr(g1_safe, "min"):
-            print(
-                f"DEBUG g1_diffusion: FINAL min={np.min(g1_safe):.6e}, max={np.max(g1_safe):.6e}",
-            )
 
     return g1_safe
 
@@ -738,80 +663,11 @@ def _compute_g2_scaled_core(
     return g2_bounded
 
 
-@jit
-def apply_diagonal_correction(c2_mat: jnp.ndarray) -> jnp.ndarray:
-    """Apply diagonal correction to two-time correlation matrix.
-
-    This function replaces the diagonal elements (t₁=t₂) with interpolated values
-    from adjacent off-diagonal elements. This removes the bright autocorrelation peak
-    and isolates the cross-correlation dynamics.
-
-    Based on pyXPCSViewer's correct_diagonal_c2 function. This is a critical
-    preprocessing step that MUST be applied consistently to both experimental data
-    and theoretical model predictions during optimization.
-
-    Algorithm:
-
-    1. Extract side band: elements at (i, i+1) for i=0..N-2
-    2. Compute diagonal values as average of adjacent off-diagonals:
-       - diag[0] = side_band[0] (edge case)
-       - diag[i] = (side_band[i-1] + side_band[i]) / 2 for i=1..N-2
-       - diag[N-1] = side_band[N-2] (edge case)
-    3. Replace diagonal with computed values
-
-    Args:
-        c2_mat: Two-time correlation matrix with shape (N, N)
-                Must be square matrix with N ≥ 2
-
-    Returns:
-        Corrected correlation matrix with interpolated diagonal
-
-    Example:
-        >>> c2 = jnp.array([[5.0, 1.2, 1.1],
-        ...                 [1.2, 5.0, 1.3],
-        ...                 [1.1, 1.3, 5.0]])
-        >>> c2_corrected = apply_diagonal_correction(c2)
-        >>> # Diagonal now contains interpolated values, not 5.0
-
-    References:
-        - pyXPCSViewer: https://github.com/AdvancedPhotonSource/pyXPCSViewer
-        - XPCS Analysis: He et al. PNAS 2024, doi:10.1073/pnas.2401162121
-    """
-    size = c2_mat.shape[0]
-
-    # Extract side band: off-diagonal elements adjacent to main diagonal
-    # side_band[i] = c2_mat[i, i+1] for i in range(size-1)
-    indices_i = jnp.arange(size - 1)
-    indices_j = jnp.arange(1, size)
-    side_band = c2_mat[indices_i, indices_j]  # Shape: (size-1,)
-
-    # Compute diagonal values as average of adjacent off-diagonal elements
-    # This implementation matches xpcs_loader.py:924-953 but uses pure JAX ops
-    # Use same dtype as input matrix to avoid casting warnings
-    diag_val = jnp.zeros(size, dtype=c2_mat.dtype)
-
-    # Add left neighbors: diag_val[:-1] += side_band
-    diag_val = diag_val.at[:-1].add(side_band)
-
-    # Add right neighbors: diag_val[1:] += side_band
-    diag_val = diag_val.at[1:].add(side_band)
-
-    # Normalize by number of neighbors (1 for edges, 2 for middle)
-    norm = jnp.ones(size, dtype=c2_mat.dtype)
-    norm = norm.at[1:-1].set(2.0)  # Middle elements have 2 neighbors
-
-    diag_val = diag_val / norm
-
-    # Replace diagonal with computed values using JAX immutable array operations
-    diag_indices = jnp.diag_indices(size)
-    c2_corrected = c2_mat.at[diag_indices].set(diag_val)
-
-    return c2_corrected
-
-
 # =============================================================================
 # COMPATIBILITY WRAPPER FUNCTIONS
 # =============================================================================
+# Note: apply_diagonal_correction is imported from physics_utils.py
+# to eliminate code duplication between NLSQ and CMC backends.
 # These maintain the old API for backward compatibility while using correct
 # configuration values internally
 
@@ -1145,6 +1001,7 @@ def compute_chi_squared(
     L: float,
     contrast: float,
     offset: float,
+    dt: float,
 ) -> float:
     """Compute chi-squared goodness of fit.
 
@@ -1159,11 +1016,12 @@ def compute_chi_squared(
         q: Wave vector magnitude
         L: Sample-detector distance
         contrast, offset: Scaling parameters
+        dt: Time step from configuration
 
     Returns:
         Chi-squared value
     """
-    theory = compute_g2_scaled(params, t1, t2, phi, q, L, contrast, offset)
+    theory = compute_g2_scaled(params, t1, t2, phi, q, L, contrast, offset, dt)
     residuals = (data - theory) / (sigma + EPS)  # Avoid division by zero
     return jnp.sum(residuals**2)
 
@@ -1352,145 +1210,6 @@ def validate_backend() -> dict[str, bool | str | dict]:
     return results
 
 
-# Legacy function for compatibility
-def validate_jax_backend() -> bool:
-    """Legacy function - use validate_backend() instead."""
-    results = validate_backend()
-    return results["jax_available"] and results["gradient_support"]
-
-
-# Legacy function for backward compatibility with old tests
-def compute_c2_model_jax(
-    params: dict,
-    t1: jnp.ndarray,
-    t2: jnp.ndarray,
-    phi: jnp.ndarray,
-    q: float,
-) -> jnp.ndarray:
-    """Legacy wrapper for compute_g2_scaled() - for backward compatibility with old tests.
-
-    This function provides a simplified interface matching the old API signature,
-    using default values for L, contrast, offset, and dt parameters.
-
-    Args:
-        params: Parameter dictionary with keys like 'offset', 'contrast', 'diffusion_coefficient', etc.
-        t1, t2: Time points for correlation calculation
-        phi: Scattering angles
-        q: Scattering wave vector magnitude
-
-    Returns:
-        g2 correlation function
-
-    Note:
-        This is a legacy function for backward compatibility.
-        New code should use compute_g2_scaled() directly with explicit parameters.
-    """
-    # Extract parameters from dict with defaults
-    contrast = params.get("contrast", 0.5)
-    offset = params.get("offset", 1.0)
-    L = params.get("L", 1.0)
-
-    # Convert parameter dict to array format expected by compute_g2_scaled
-    # Old tests use 'diffusion_coefficient', new code uses 'D0'
-    D0 = params.get("diffusion_coefficient", params.get("D0", 1000.0))
-    alpha = params.get("alpha", 0.5)
-    D_offset = params.get("D_offset", 10.0)
-
-    # For static isotropic mode (3 physical parameters)
-    param_array = jnp.array([D0, alpha, D_offset])
-
-    # Estimate dt from time array (legacy behavior)
-    if t1.ndim == 2:
-        time_array = t1[:, 0]
-    else:
-        time_array = t1
-    dt = time_array[1] - time_array[0] if safe_len(time_array) > 1 else 1.0
-
-    # Call new function with explicit parameters
-    return compute_g2_scaled(
-        params=param_array,
-        t1=t1,
-        t2=t2,
-        phi=phi,
-        q=q,
-        L=L,
-        contrast=contrast,
-        offset=offset,
-        dt=dt,
-    )
-
-
-# Legacy aliases for backward compatibility with old tests
-def residuals_jax(
-    params: dict,
-    c2_exp: jnp.ndarray,
-    sigma: jnp.ndarray,
-    t1: jnp.ndarray,
-    t2: jnp.ndarray,
-    phi: jnp.ndarray,
-    q: float,
-) -> jnp.ndarray:
-    """Legacy function: compute residuals (data - model) / sigma.
-
-    Note: This is for backward compatibility with old tests.
-    New code should use compute_chi_squared() directly.
-    """
-    # Generate model prediction using legacy wrapper
-    c2_model = compute_c2_model_jax(params, t1, t2, phi, q)
-
-    # Compute residuals
-    return (c2_exp - c2_model) / (sigma + EPS)
-
-
-def chi_squared_jax(
-    params: dict,
-    c2_exp: jnp.ndarray,
-    sigma: jnp.ndarray,
-    t1: jnp.ndarray,
-    t2: jnp.ndarray,
-    phi: jnp.ndarray,
-    q: float,
-) -> float:
-    """Legacy function: compute chi-squared goodness of fit.
-
-    Note: This is for backward compatibility with old tests.
-    New code should use compute_chi_squared() directly.
-    """
-    residuals = residuals_jax(params, c2_exp, sigma, t1, t2, phi, q)
-    return jnp.sum(residuals**2)
-
-
-def compute_g1_diffusion_jax(
-    t1: jnp.ndarray,
-    t2: jnp.ndarray,
-    q: float,
-    D: float,
-) -> jnp.ndarray:
-    """Legacy function: compute g1 diffusion factor.
-
-    Note: This is for backward compatibility with old tests.
-    New code should use compute_g1_diffusion() directly.
-    """
-    # Call new function with simple parameters
-    # Old function signature: (t1, t2, q, D)
-    # New function signature: (params, t1, t2, q, dt)
-
-    # Create params array [D0, alpha, D_offset] with alpha=0.5 (normal diffusion)
-    params = jnp.array([D, 0.5, 0.0])
-
-    # Estimate dt
-    if t1.ndim == 2:
-        time_array = t1[:, 0]
-    elif t1.ndim == 1:
-        time_array = t1
-    else:
-        time_array = t1.flatten()
-
-    dt = time_array[1] - time_array[0] if safe_len(time_array) > 1 else 1.0
-
-    return compute_g1_diffusion(params, t1, t2, q, dt)
-
-
 def get_device_info() -> dict:
     """Get comprehensive device and backend information."""
     if not JAX_AVAILABLE:
@@ -1613,11 +1332,6 @@ __all__ = [
     "vectorized_g2_computation",
     "batch_chi_squared",
     "validate_backend",
-    "validate_jax_backend",  # Legacy compatibility
-    "compute_c2_model_jax",  # Legacy compatibility for old tests
-    "residuals_jax",  # Legacy compatibility for old tests
-    "chi_squared_jax",  # Legacy compatibility for old tests
-    "compute_g1_diffusion_jax",  # Legacy compatibility for old tests
     "get_device_info",
     "get_performance_summary",  # New performance monitoring
 ]

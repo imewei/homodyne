@@ -307,6 +307,80 @@ def trapezoid_cumsum(values: jnp.ndarray) -> jnp.ndarray:
 
 
 # =============================================================================
+# DIAGONAL CORRECTION
+# =============================================================================
+
+
+@jit
+def apply_diagonal_correction(c2_mat: jnp.ndarray) -> jnp.ndarray:
+    """Apply diagonal correction to two-time correlation matrix.
+
+    This function replaces the diagonal elements (t₁=t₂) with interpolated values
+    from adjacent off-diagonal elements. This removes the bright autocorrelation peak
+    and isolates the cross-correlation dynamics.
+
+    Based on pyXPCSViewer's correct_diagonal_c2 function. This is a critical
+    preprocessing step that MUST be applied consistently to both experimental data
+    and theoretical model predictions during optimization.
+
+    Algorithm:
+    1. Extract side band: elements at (i, i+1) for i=0..N-2
+    2. Compute diagonal values as average of adjacent off-diagonals:
+       - diag[0] = side_band[0] (edge case)
+       - diag[i] = (side_band[i-1] + side_band[i]) / 2 for i=1..N-2
+       - diag[N-1] = side_band[N-2] (edge case)
+    3. Replace diagonal with computed values
+
+    Args:
+        c2_mat: Two-time correlation matrix with shape (N, N)
+                Must be square matrix with N ≥ 2
+
+    Returns:
+        Corrected correlation matrix with interpolated diagonal
+
+    Example:
+        >>> c2 = jnp.array([[5.0, 1.2, 1.1],
+        ...                 [1.2, 5.0, 1.3],
+        ...                 [1.1, 1.3, 5.0]])
+        >>> c2_corrected = apply_diagonal_correction(c2)
+        >>> # Diagonal now contains interpolated values, not 5.0
+
+    References:
+        - pyXPCSViewer: https://github.com/AdvancedPhotonSource/pyXPCSViewer
+        - XPCS Analysis: He et al. PNAS 2024, doi:10.1073/pnas.2401162121
+    """
+    size = c2_mat.shape[0]
+
+    # Extract side band: off-diagonal elements adjacent to main diagonal
+    # side_band[i] = c2_mat[i, i+1] for i in range(size-1)
+    indices_i = jnp.arange(size - 1)
+    indices_j = jnp.arange(1, size)
+    side_band = c2_mat[indices_i, indices_j]  # Shape: (size-1,)
+
+    # Compute diagonal values as average of adjacent off-diagonal elements
+    # Use same dtype as input matrix to avoid casting warnings
+    diag_val = jnp.zeros(size, dtype=c2_mat.dtype)
+
+    # Add left neighbors: diag_val[:-1] += side_band
+    diag_val = diag_val.at[:-1].add(side_band)
+
+    # Add right neighbors: diag_val[1:] += side_band
+    diag_val = diag_val.at[1:].add(side_band)
+
+    # Normalize by number of neighbors (1 for edges, 2 for middle)
+    norm = jnp.ones(size, dtype=c2_mat.dtype)
+    norm = norm.at[1:-1].set(2.0)  # Middle elements have 2 neighbors
+
+    diag_val = diag_val / norm
+
+    # Replace diagonal with computed values using JAX immutable array operations
+    diag_indices = jnp.diag_indices(size)
+    c2_corrected = c2_mat.at[diag_indices].set(diag_val)
+
+    return c2_corrected
+
+
+# =============================================================================
 # BACKWARD COMPATIBILITY ALIASES
 # =============================================================================
 
