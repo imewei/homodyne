@@ -3,14 +3,14 @@
 
 Memory-efficient data processing strategies for different dataset sizes.
 Implements chunked processing, progressive loading, and batch optimization
-for VI+JAX and MCMC+JAX methods.
+for NLSQ and CMC optimization methods.
 
 Key Features:
 - Size-aware processing strategies (<1M, 1-10M, >20M points)
 - Memory-efficient chunked processing for large datasets
 - Progressive loading with intelligent caching
 - JAX-optimized batch processing
-- Integration with VI+JAX and MCMC+JAX pipelines
+- Integration with NLSQ and CMC pipelines
 """
 
 import time
@@ -70,7 +70,7 @@ class ProcessingStrategy:
 
 
 class DatasetOptimizer:
-    """Dataset size-aware optimization for VI+JAX and MCMC+JAX.
+    """Dataset size-aware optimization for NLSQ and CMC.
 
     Provides memory-efficient processing strategies based on dataset size:
     - Small (<1M): In-memory processing with full JAX acceleration
@@ -164,13 +164,13 @@ class DatasetOptimizer:
     def get_processing_strategy(
         self,
         dataset_info: DatasetInfo,
-        method: str = "vi",
+        method: str = "nlsq",
     ) -> ProcessingStrategy:
         """Get optimized processing strategy for specific method.
 
         Args:
             dataset_info: Dataset analysis results
-            method: "vi" for VI+JAX or "mcmc" for MCMC+JAX
+            method: "nlsq" for trust-region optimization, "cmc" for Consensus Monte Carlo
 
         Returns:
             ProcessingStrategy optimized for the method and dataset
@@ -185,22 +185,22 @@ class DatasetOptimizer:
         batch_size = dataset_info.recommended_batch_size
 
         # Method-specific adjustments
-        if method.lower() == "vi":
-            # VI+JAX can handle larger batches efficiently
+        if method.lower() == "nlsq":
+            # NLSQ can handle larger batches efficiently
             batch_size = min(batch_size * 2, chunk_size)
             jax_config = {
                 "xla_python_client_mem_fraction": "0.8",
-                "jax_enable_x64": "false",  # VI can use float32
-                "jax_platforms": "gpu,cpu",
+                "jax_enable_x64": "false",  # NLSQ can use float32
+                "jax_platforms": "cpu",
             }
-        elif method.lower() == "mcmc":
-            # MCMC needs more conservative memory usage
+        elif method.lower() == "cmc":
+            # CMC needs more conservative memory usage
             batch_size = max(batch_size // 2, 50)
             chunk_size = max(chunk_size // 2, 1000)
             jax_config = {
                 "xla_python_client_mem_fraction": "0.7",
-                "jax_enable_x64": "true",  # MCMC benefits from float64
-                "jax_platforms": "gpu,cpu",
+                "jax_enable_x64": "true",  # CMC benefits from float64
+                "jax_platforms": "cpu",
             }
         else:
             jax_config = {
@@ -290,7 +290,7 @@ class DatasetOptimizer:
             yield data_chunk, sigma_chunk, t1_chunk, t2_chunk, phi_chunk
 
     @log_performance()
-    def optimize_for_vi_jax(
+    def optimize_for_nlsq(
         self,
         data: np.ndarray,
         sigma: np.ndarray,
@@ -299,7 +299,7 @@ class DatasetOptimizer:
         phi: np.ndarray,
         **kwargs,
     ) -> dict[str, Any]:
-        """Optimize data processing specifically for VI+JAX.
+        """Optimize data processing specifically for NLSQ.
 
         Args:
             data, sigma, t1, t2, phi: Input arrays
@@ -309,7 +309,7 @@ class DatasetOptimizer:
             Dictionary with optimized processing configuration
         """
         dataset_info = self.analyze_dataset(data, sigma)
-        strategy = self.get_processing_strategy(dataset_info, "vi")
+        strategy = self.get_processing_strategy(dataset_info, "nlsq")
 
         # Apply JAX configuration
         if JAX_AVAILABLE:
@@ -340,8 +340,8 @@ class DatasetOptimizer:
 
         return optimization_config
 
-    @log_performance
-    def optimize_for_mcmc_jax(
+    @log_performance()
+    def optimize_for_cmc(
         self,
         data: np.ndarray,
         sigma: np.ndarray,
@@ -350,7 +350,7 @@ class DatasetOptimizer:
         phi: np.ndarray,
         **kwargs,
     ) -> dict[str, Any]:
-        """Optimize data processing specifically for MCMC+JAX.
+        """Optimize data processing specifically for CMC (Consensus Monte Carlo).
 
         Args:
             data, sigma, t1, t2, phi: Input arrays
@@ -360,7 +360,7 @@ class DatasetOptimizer:
             Dictionary with optimized processing configuration
         """
         dataset_info = self.analyze_dataset(data, sigma)
-        strategy = self.get_processing_strategy(dataset_info, "mcmc")
+        strategy = self.get_processing_strategy(dataset_info, "cmc")
 
         # Apply JAX configuration
         if JAX_AVAILABLE:
@@ -391,99 +391,25 @@ class DatasetOptimizer:
 
         return optimization_config
 
-    @log_performance()
-    def optimize_for_lsq(
-        self,
-        data: np.ndarray,
-        sigma: np.ndarray,
-        t1: np.ndarray,
-        t2: np.ndarray,
-        phi: np.ndarray,
-        **kwargs,
-    ) -> dict[str, Any]:
-        """Optimize data processing specifically for LSQ method.
-
-        LSQ uses intelligent correlation sampling for large datasets
-        to maintain performance while achieving accurate results.
-
-        Args:
-            data, sigma, t1, t2, phi: Input arrays
-            **kwargs: Additional optimization parameters
-
-        Returns:
-            Dictionary with optimized processing configuration
-        """
-        dataset_info = self.analyze_dataset(data, sigma)
-
-        # LSQ-specific strategy: more aggressive sampling for classical optimization
-        strategy = ProcessingStrategy(
-            chunk_size=min(50000, dataset_info.size // 10),  # Larger chunks for LSQ
-            batch_size=1000,  # Smaller batches for scipy optimize
-            memory_limit_mb=self.memory_limit_mb,
-            use_caching=False,  # LSQ doesn't benefit from caching
-            use_compression=False,  # No compression for LSQ
-            parallel_workers=1,  # LSQ is sequential
-            jax_config=(
-                {}
-                if not JAX_AVAILABLE
-                else {
-                    "xla_python_client_mem_fraction": "0.5",
-                    "jax_enable_x64": "false",  # LSQ can use float32
-                    "jax_platforms": "cpu",  # LSQ primarily CPU-based
-                }
-            ),
-        )
-
-        optimization_config = {
-            "dataset_info": dataset_info,
-            "strategy": strategy,
-            "sampling_config": None,
-            "preprocessing_time": 0.0,
-        }
-
-        # Setup intelligent sampling for large datasets
-        if dataset_info.size > 100000:  # Use sampling for datasets >100K points
-            start_time = time.time()
-
-            # Create sampling configuration for LSQ
-            sampling_config = {
-                "method": "stratified",  # Use stratified sampling
-                "target_samples": min(10000, dataset_info.size // 100),  # 1% or 10K max
-                "use_correlation_weights": True,
-                "preserve_edges": True,  # Keep edge points for boundary conditions
-            }
-
-            optimization_config["sampling_config"] = sampling_config
-            optimization_config["preprocessing_time"] = time.time() - start_time
-
-            logger.info(
-                f"LSQ optimization: Using {sampling_config['target_samples']:,} samples "
-                f"from {dataset_info.size:,} total points",
-            )
-
-        return optimization_config
-
     def estimate_processing_time(
         self,
         dataset_info: DatasetInfo,
-        method: str = "vi",
+        method: str = "nlsq",
     ) -> dict[str, float]:
         """Estimate processing time for different methods.
 
         Args:
             dataset_info: Dataset analysis results
-            method: Processing method
+            method: Processing method ("nlsq" or "cmc")
 
         Returns:
             Dictionary with time estimates
         """
         # Base processing rates (points per second) based on empirical measurements
-        if method.lower() == "vi":
-            base_rate = 50000 if JAX_AVAILABLE else 5000  # VI+JAX vs numpy fallback
-        elif method.lower() == "mcmc":
-            base_rate = 5000 if JAX_AVAILABLE else 500  # MCMC+JAX vs numpy fallback
-        elif method.lower() == "lsq":
-            base_rate = 100000 if JAX_AVAILABLE else 20000  # LSQ fast with sampling
+        if method.lower() == "nlsq":
+            base_rate = 100000 if JAX_AVAILABLE else 20000  # NLSQ fast with JAX
+        elif method.lower() == "cmc":
+            base_rate = 5000 if JAX_AVAILABLE else 500  # CMC+JAX vs numpy fallback
         else:
             base_rate = 1000
 
@@ -545,14 +471,14 @@ def optimize_for_method(
     t1: np.ndarray,
     t2: np.ndarray,
     phi: np.ndarray,
-    method: str = "vi",
+    method: str = "nlsq",
     **kwargs,
 ) -> dict[str, Any]:
     """One-shot optimization for specific method.
 
     Args:
         data, sigma, t1, t2, phi: Input arrays
-        method: "vi" or "mcmc"
+        method: "nlsq" or "cmc"
         **kwargs: Additional optimization parameters
 
     Returns:
@@ -560,15 +486,12 @@ def optimize_for_method(
     """
     optimizer = create_dataset_optimizer(**kwargs)
 
-    if method.lower() == "vi":
-        return optimizer.optimize_for_vi_jax(data, sigma, t1, t2, phi)
-    elif method.lower() == "mcmc":
-        return optimizer.optimize_for_mcmc_jax(data, sigma, t1, t2, phi)
-    elif method.lower() == "lsq":
-        # LSQ can use the same optimization as VI since it's matrix-based
-        return optimizer.optimize_for_vi_jax(data, sigma, t1, t2, phi)
+    if method.lower() == "nlsq":
+        return optimizer.optimize_for_nlsq(data, sigma, t1, t2, phi)
+    elif method.lower() == "cmc":
+        return optimizer.optimize_for_cmc(data, sigma, t1, t2, phi)
     else:
-        raise ValueError(f"Unknown method: {method}. Use 'vi', 'mcmc', or 'lsq'.")
+        raise ValueError(f"Unknown method: {method}. Use 'nlsq' or 'cmc'.")
 
 
 class AdvancedDatasetOptimizer:
@@ -684,7 +607,7 @@ class AdvancedDatasetOptimizer:
         t2: np.ndarray,
         phi: np.ndarray,
         hdf_path: str | None = None,
-        method: str = "vi",
+        method: str = "nlsq",
         **kwargs,
     ) -> dict[str, Any]:
         """Optimize processing for massive datasets with advanced features.
@@ -699,7 +622,7 @@ class AdvancedDatasetOptimizer:
         Args:
             data, sigma, t1, t2, phi: Input arrays
             hdf_path: Optional path to HDF5 file for memory-mapped access
-            method: Processing method ("vi" or "mcmc")
+            method: Processing method ("nlsq" or "cmc")
             **kwargs: Additional optimization parameters
 
         Returns:
@@ -708,8 +631,8 @@ class AdvancedDatasetOptimizer:
         start_time = time.time()
 
         # Get basic optimization as foundation
-        if method.lower() == "vi":
-            basic_config = self.base_optimizer.optimize_for_vi_jax(
+        if method.lower() == "nlsq":
+            basic_config = self.base_optimizer.optimize_for_nlsq(
                 data,
                 sigma,
                 t1,
@@ -718,7 +641,7 @@ class AdvancedDatasetOptimizer:
                 **kwargs,
             )
         else:
-            basic_config = self.base_optimizer.optimize_for_mcmc_jax(
+            basic_config = self.base_optimizer.optimize_for_cmc(
                 data,
                 sigma,
                 t1,
@@ -866,18 +789,18 @@ class AdvancedDatasetOptimizer:
         }
 
         # Method-specific chunking adjustments
-        if method.lower() == "vi":
+        if method.lower() == "nlsq":
             chunking_config.update(
                 {
-                    "chunk_overlap": 0.1,  # 10% overlap for VI stability
+                    "chunk_overlap": 0.1,  # 10% overlap for NLSQ stability
                     "dynamic_sizing": True,
-                    "gpu_memory_optimization": JAX_AVAILABLE,
+                    "cpu_memory_optimization": JAX_AVAILABLE,
                 },
             )
-        elif method.lower() == "mcmc":
+        elif method.lower() == "cmc":
             chunking_config.update(
                 {
-                    "chunk_overlap": 0.05,  # 5% overlap for MCMC
+                    "chunk_overlap": 0.05,  # 5% overlap for CMC
                     "conservative_sizing": True,
                     "chain_continuity_preservation": True,
                 },
@@ -910,10 +833,10 @@ class AdvancedDatasetOptimizer:
             method = config["performance_metrics"]["method"].lower()
 
             # Predict next operation based on common patterns
-            if method == "vi" and dataset_size > 1000000:
-                # VI on large datasets often followed by MCMC refinement
+            if method == "nlsq" and dataset_size > 1000000:
+                # NLSQ on large datasets often followed by CMC refinement
                 logger.debug(
-                    "Scheduling background optimization for potential MCMC follow-up",
+                    "Scheduling background optimization for potential CMC follow-up",
                 )
 
         except Exception as e:
@@ -1008,7 +931,7 @@ def optimize_for_method_advanced(
     t1: np.ndarray,
     t2: np.ndarray,
     phi: np.ndarray,
-    method: str = "vi",
+    method: str = "nlsq",
     hdf_path: str | None = None,
     config: dict[str, Any] | None = None,
     **kwargs,
@@ -1023,7 +946,7 @@ def optimize_for_method_advanced(
 
     Args:
         data, sigma, t1, t2, phi: Input arrays
-        method: "vi" or "mcmc"
+        method: "nlsq" or "cmc"
         hdf_path: Optional HDF5 file path for memory-mapped access
         config: Advanced optimization configuration
         **kwargs: Additional optimization parameters
