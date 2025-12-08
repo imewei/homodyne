@@ -189,6 +189,61 @@ def get_init_value(
     return midpoint
 
 
+def validate_initial_value_bounds(
+    param_name: str,
+    value: float,
+    parameter_space: ParameterSpace,
+) -> tuple[float, bool]:
+    """Validate and optionally clip initial value to parameter bounds.
+
+    Parameters
+    ----------
+    param_name : str
+        Parameter name.
+    value : float
+        Initial value to validate.
+    parameter_space : ParameterSpace
+        Parameter space with bounds.
+
+    Returns
+    -------
+    tuple[float, bool]
+        (validated_value, was_clipped) - The value (clipped if needed) and whether clipping occurred.
+    """
+    import math
+
+    base_name = _get_base_param_name(param_name)
+    bounds = parameter_space.get_bounds(base_name)
+    lower, upper = bounds[0], bounds[1]
+
+    # Check for NaN/Inf
+    if not math.isfinite(value):
+        midpoint = (lower + upper) / 2.0
+        logger.warning(
+            f"Initial value for '{param_name}' is {value} (non-finite), "
+            f"resetting to midpoint {midpoint:.4g}"
+        )
+        return midpoint, True
+
+    # Check bounds
+    if value < lower:
+        logger.warning(
+            f"Initial value for '{param_name}' ({value:.4g}) is below lower bound ({lower:.4g}), "
+            f"clipping to lower bound + 1% margin"
+        )
+        margin = 0.01 * (upper - lower)
+        return lower + margin, True
+    elif value > upper:
+        logger.warning(
+            f"Initial value for '{param_name}' ({value:.4g}) is above upper bound ({upper:.4g}), "
+            f"clipping to upper bound - 1% margin"
+        )
+        margin = 0.01 * (upper - lower)
+        return upper - margin, True
+
+    return value, False
+
+
 def build_init_values_dict(
     n_phi: int,
     analysis_mode: str,
@@ -219,33 +274,57 @@ def build_init_values_dict(
         Initial values dictionary in sampling order.
     """
     init_dict: dict[str, float] = {}
+    clipped_params: list[str] = []
 
     # 1. Per-angle contrast parameters (FIRST)
     for i in range(n_phi):
         param_name = f"contrast_{i}"
-        init_dict[param_name] = get_init_value(
-            param_name, initial_values, parameter_space
+        raw_value = get_init_value(param_name, initial_values, parameter_space)
+        validated_value, was_clipped = validate_initial_value_bounds(
+            param_name, raw_value, parameter_space
         )
+        init_dict[param_name] = validated_value
+        if was_clipped:
+            clipped_params.append(param_name)
 
     # 2. Per-angle offset parameters (SECOND)
     for i in range(n_phi):
         param_name = f"offset_{i}"
-        init_dict[param_name] = get_init_value(
-            param_name, initial_values, parameter_space
+        raw_value = get_init_value(param_name, initial_values, parameter_space)
+        validated_value, was_clipped = validate_initial_value_bounds(
+            param_name, raw_value, parameter_space
         )
+        init_dict[param_name] = validated_value
+        if was_clipped:
+            clipped_params.append(param_name)
 
     # 3. Physical parameters (THIRD, in canonical order)
     physical_params = (
         LAMINAR_PARAMS if analysis_mode == "laminar_flow" else STATIC_PARAMS
     )
     for param_name in physical_params:
-        init_dict[param_name] = get_init_value(
-            param_name, initial_values, parameter_space
+        raw_value = get_init_value(param_name, initial_values, parameter_space)
+        validated_value, was_clipped = validate_initial_value_bounds(
+            param_name, raw_value, parameter_space
+        )
+        init_dict[param_name] = validated_value
+        if was_clipped:
+            clipped_params.append(param_name)
+
+    if clipped_params:
+        logger.warning(
+            f"⚠️ {len(clipped_params)} initial values were outside bounds and clipped: "
+            f"{clipped_params}. This may indicate NLSQ fit issues or mismatched bounds."
         )
 
     logger.debug(
         f"Built init values for {len(init_dict)} params: {list(init_dict.keys())}"
     )
+
+    # Defensive validation: ensure dict keys match expected order
+    # This catches parameter ordering bugs that could cause subtle issues
+    expected_names = get_param_names_in_order(n_phi, analysis_mode)
+    validate_init_values_order(init_dict, expected_names)
 
     return init_dict
 
@@ -290,7 +369,11 @@ def validate_init_values_order(
     init_values: dict[str, float],
     expected_names: list[str],
 ) -> None:
-    """Validate that init values are in correct order.
+    """Validate that init values dictionary keys match expected order.
+
+    This is a defensive check to catch parameter ordering bugs early.
+    In Python 3.7+, dict preserves insertion order, so key order matters
+    for functions that assume positional correspondence.
 
     Parameters
     ----------
@@ -307,49 +390,22 @@ def validate_init_values_order(
     actual_names = list(init_values.keys())
 
     if actual_names != expected_names:
+        # Find first mismatch for helpful error message
+        for i, (actual, expected) in enumerate(zip(actual_names, expected_names)):
+            if actual != expected:
+                raise ValueError(
+                    f"Parameter order mismatch at position {i}!\n"
+                    f"Expected: {expected}\n"
+                    f"Actual: {actual}\n"
+                    f"Full expected: {expected_names}\n"
+                    f"Full actual: {actual_names}"
+                )
+
+        # Length mismatch
         raise ValueError(
-            f"Parameter order mismatch!\n"
-            f"Expected: {expected_names}\n"
-            f"Actual: {actual_names}"
+            f"Parameter count mismatch!\n"
+            f"Expected {len(expected_names)} params: {expected_names}\n"
+            f"Actual {len(actual_names)} params: {actual_names}"
         )
 
 
-def build_bounds_arrays(
-    n_phi: int,
-    analysis_mode: str,
-    parameter_space: ParameterSpace,
-) -> tuple[jnp.ndarray, jnp.ndarray]:
-    """Build lower and upper bounds arrays in parameter order.
-
-    Parameters
-    ----------
-    n_phi : int
-        Number of phi angles.
-    analysis_mode : str
-        Analysis mode.
-    parameter_space : ParameterSpace
-        Parameter space with bounds.
-
-    Returns
-    -------
-    tuple[jnp.ndarray, jnp.ndarray]
-        (lower_bounds, upper_bounds) arrays.
-    """
-    param_names = get_param_names_in_order(n_phi, analysis_mode)
-
-    lower_bounds: list[float] = []
-    upper_bounds: list[float] = []
-
-    for name in param_names:
-        # Handle per-angle parameters
-        if name.startswith("contrast_"):
-            bounds = parameter_space.get_bounds("contrast")
-        elif name.startswith("offset_"):
-            bounds = parameter_space.get_bounds("offset")
-        else:
-            bounds = parameter_space.get_bounds(name)
-
-        lower_bounds.append(bounds[0])
-        upper_bounds.append(bounds[1])
-
-    return jnp.array(lower_bounds), jnp.array(upper_bounds)

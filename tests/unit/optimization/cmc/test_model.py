@@ -2,7 +2,6 @@
 
 Comprehensive tests for:
 - xpcs_model: Main NumPyro probabilistic model
-- xpcs_model_single_chain: Single-chain model with log-space D0
 - validate_model_output: Physics validation
 - get_model_param_count: Parameter counting
 """
@@ -21,7 +20,6 @@ from homodyne.optimization.cmc.model import (  # noqa: E402
     get_model_param_count,
     validate_model_output,
     xpcs_model,
-    xpcs_model_single_chain,
 )
 
 # =============================================================================
@@ -385,72 +383,6 @@ class TestXPCSModelStructure:
         assert max(offset_indices) < d0_index, (
             f"Offset indices {offset_indices} should all come before D0 at {d0_index}"
         )
-
-
-# =============================================================================
-# Tests for xpcs_model_single_chain
-# =============================================================================
-
-
-class TestXPCSModelSingleChain:
-    """Tests for xpcs_model_single_chain with log-space D0."""
-
-    def test_log_d0_parameter(self, mock_parameter_space_static, synthetic_pooled_data):
-        """Test that log_D0 is sampled when use_log_d0=True."""
-        import numpyro
-
-        with numpyro.handlers.seed(rng_seed=42):
-            with numpyro.handlers.trace() as trace:
-                xpcs_model_single_chain(
-                    data=synthetic_pooled_data["data"],
-                    t1=synthetic_pooled_data["t1"],
-                    t2=synthetic_pooled_data["t2"],
-                    phi_unique=synthetic_pooled_data["phi_unique"],
-                    phi_indices=synthetic_pooled_data["phi_indices"],
-                    q=0.01,
-                    L=2000000.0,
-                    dt=0.1,
-                    analysis_mode="static",
-                    parameter_space=mock_parameter_space_static,
-                    n_phi=synthetic_pooled_data["n_phi"],
-                    noise_scale=0.1,
-                    use_log_d0=True,
-                )
-
-        sampled_params = [k for k, v in trace.items() if v.get("type") == "sample"]
-
-        # log_D0 should be sampled, D0 should be deterministic
-        assert "log_D0" in sampled_params
-
-    def test_no_log_d0_parameter(
-        self, mock_parameter_space_static, synthetic_pooled_data
-    ):
-        """Test that D0 is sampled directly when use_log_d0=False."""
-        import numpyro
-
-        with numpyro.handlers.seed(rng_seed=42):
-            with numpyro.handlers.trace() as trace:
-                xpcs_model_single_chain(
-                    data=synthetic_pooled_data["data"],
-                    t1=synthetic_pooled_data["t1"],
-                    t2=synthetic_pooled_data["t2"],
-                    phi_unique=synthetic_pooled_data["phi_unique"],
-                    phi_indices=synthetic_pooled_data["phi_indices"],
-                    q=0.01,
-                    L=2000000.0,
-                    dt=0.1,
-                    analysis_mode="static",
-                    parameter_space=mock_parameter_space_static,
-                    n_phi=synthetic_pooled_data["n_phi"],
-                    noise_scale=0.1,
-                    use_log_d0=False,
-                )
-
-        sampled_params = [k for k, v in trace.items() if v.get("type") == "sample"]
-
-        # D0 should be sampled directly
-        assert "D0" in sampled_params
-        assert "log_D0" not in sampled_params
 
 
 # =============================================================================

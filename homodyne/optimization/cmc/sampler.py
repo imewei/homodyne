@@ -253,6 +253,18 @@ def run_nuts_sampling(
             "Consider: checking initial values, widening priors, or running NLSQ first."
         )
 
+    # Check for numerical issues exposed by the model
+    if "n_numerical_issues" in extra_fields:
+        n_issues = int(np.sum(extra_fields["n_numerical_issues"]))
+        if n_issues > 0:
+            total_evals = config.num_samples * config.num_chains
+            issue_rate = n_issues / max(total_evals, 1)
+            run_logger.warning(
+                f"⚠️ Numerical issues detected: {n_issues:,} NaN/Inf occurrences "
+                f"({issue_rate:.1%} of evaluations). "
+                "This may indicate parameter combinations causing overflow in physics model."
+            )
+
     # Estimate warmup vs sampling time (rough estimate)
     warmup_ratio = config.num_warmup / (config.num_warmup + config.num_samples)
     warmup_time = total_time * warmup_ratio

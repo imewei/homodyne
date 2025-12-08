@@ -145,7 +145,22 @@ def xpcs_model(
     # c2 = contrast * g1^2 + offset
     contrast_per_point = contrast_arr[phi_indices]
     offset_per_point = offset_arr[phi_indices]
-    c2_theory = contrast_per_point * g1_per_point**2 + offset_per_point
+    c2_theory_raw = contrast_per_point * g1_per_point**2 + offset_per_point
+
+    # =========================================================================
+    # 5b. Numerical stability safeguard
+    # =========================================================================
+    # Replace NaN/Inf with bounded values to prevent likelihood becoming -inf
+    # This allows sampling to continue while flagging problematic regions
+    c2_theory = jnp.where(
+        jnp.isfinite(c2_theory_raw),
+        c2_theory_raw,
+        jnp.ones_like(c2_theory_raw),  # Replace NaN/Inf with 1.0 (neutral C2 value)
+    )
+
+    # Expose numerical health as deterministic for diagnostics
+    n_nan = jnp.sum(~jnp.isfinite(c2_theory_raw))
+    numpyro.deterministic("n_numerical_issues", n_nan)
 
     # =========================================================================
     # 6. Likelihood with noise model
@@ -154,109 +169,6 @@ def xpcs_model(
     sigma = numpyro.sample("sigma", dist.HalfNormal(scale=noise_scale))
 
     # Observation likelihood
-    numpyro.sample("obs", dist.Normal(c2_theory, sigma), obs=data)
-
-
-def xpcs_model_single_chain(
-    data: jnp.ndarray,
-    t1: jnp.ndarray,
-    t2: jnp.ndarray,
-    phi_unique: jnp.ndarray,
-    phi_indices: jnp.ndarray,
-    q: float,
-    L: float,
-    dt: float,
-    analysis_mode: str,
-    parameter_space: ParameterSpace,
-    n_phi: int,
-    time_grid: jnp.ndarray | None = None,
-    noise_scale: float = 0.1,
-    use_log_d0: bool = True,
-) -> None:
-    """NumPyro model optimized for single-angle sampling.
-
-    Uses log-space sampling for D0 to improve convergence stability.
-
-    Parameters
-    ----------
-    data : jnp.ndarray
-        Observed C2 correlation data.
-    t1, t2 : jnp.ndarray
-        Time coordinates.
-    phi_unique : jnp.ndarray
-        Unique phi angles used for physics evaluation.
-    phi_indices : jnp.ndarray
-        Mapping from pooled data points to phi_unique rows.
-    q, L, dt : float
-        Physics parameters.
-    analysis_mode : str
-        Analysis mode.
-    parameter_space : ParameterSpace
-        Parameter bounds/priors.
-    n_phi : int
-        Number of phi angles.
-    noise_scale : float
-        Initial noise estimate.
-    use_log_d0 : bool
-        If True, sample log(D0) for better convergence.
-    """
-    # Sample contrast and offset
-    contrasts = []
-    for i in range(n_phi):
-        c_i = numpyro.sample(f"contrast_{i}", build_prior("contrast", parameter_space))
-        contrasts.append(c_i)
-    contrast_arr = jnp.array(contrasts)
-
-    offsets = []
-    for i in range(n_phi):
-        o_i = numpyro.sample(f"offset_{i}", build_prior("offset", parameter_space))
-        offsets.append(o_i)
-    offset_arr = jnp.array(offsets)
-
-    # Sample D0 (optionally in log space for stability)
-    if use_log_d0:
-        bounds = parameter_space.get_bounds("D0")
-        log_D0 = numpyro.sample(
-            "log_D0",
-            dist.Uniform(jnp.log(bounds[0]), jnp.log(bounds[1])),
-        )
-        D0 = numpyro.deterministic("D0", jnp.exp(log_D0))
-    else:
-        D0 = numpyro.sample("D0", build_prior("D0", parameter_space))
-
-    alpha = numpyro.sample("alpha", build_prior("alpha", parameter_space))
-    D_offset = numpyro.sample("D_offset", build_prior("D_offset", parameter_space))
-
-    if analysis_mode == "laminar_flow":
-        gamma_dot_t0 = numpyro.sample(
-            "gamma_dot_t0", build_prior("gamma_dot_t0", parameter_space)
-        )
-        beta = numpyro.sample("beta", build_prior("beta", parameter_space))
-        gamma_dot_t_offset = numpyro.sample(
-            "gamma_dot_t_offset", build_prior("gamma_dot_t_offset", parameter_space)
-        )
-        phi0 = numpyro.sample("phi0", build_prior("phi0", parameter_space))
-        params = jnp.array(
-            [D0, alpha, D_offset, gamma_dot_t0, beta, gamma_dot_t_offset, phi0]
-        )
-    else:
-        params = jnp.array([D0, alpha, D_offset])
-
-    # Compute physics
-    # Note: compute_g1_total infers mode from params array length (3=static, 7=laminar)
-    g1_all_phi = compute_g1_total(
-        params, t1, t2, phi_unique, q, L, dt, time_grid=time_grid
-    )
-    point_idx = jnp.arange(phi_indices.shape[0], dtype=phi_indices.dtype)
-    g1_per_point = g1_all_phi[phi_indices, point_idx]
-
-    # Apply scaling
-    contrast_per_point = contrast_arr[phi_indices]
-    offset_per_point = offset_arr[phi_indices]
-    c2_theory = contrast_per_point * g1_per_point**2 + offset_per_point
-
-    # Likelihood
-    sigma = numpyro.sample("sigma", dist.HalfNormal(scale=noise_scale))
     numpyro.sample("obs", dist.Normal(c2_theory, sigma), obs=data)
 
 
