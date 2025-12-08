@@ -48,8 +48,8 @@ Usage
     # NLSQ optimization (fast)
     homodyne --config analysis.yaml --method nlsq
 
-    # MCMC inference (Bayesian UQ)
-    homodyne --config analysis.yaml --method mcmc
+    # CMC inference (Bayesian UQ)
+    homodyne --config analysis.yaml --method cmc
 
     # Verbose output
     homodyne --config analysis.yaml --verbose
@@ -85,7 +85,7 @@ Arguments
 
 **Optional**:
 
-- ``--method``: Optimization method (``nlsq`` or ``mcmc``, default from config)
+- ``--method``: Optimization method (``nlsq`` or ``cmc``, default from config)
 - ``--verbose``: Enable DEBUG logging
 - ``--quiet``: Suppress all output except errors
 - ``--plot-experimental-data``: Plot input data
@@ -100,7 +100,7 @@ Validation
 The argument validator checks:
 
 - Configuration file exists and is readable
-- Method is valid (nlsq or mcmc)
+- Method is valid (nlsq or cmc)
 - Output directory is writable
 - No conflicting options (verbose + quiet)
 
@@ -264,9 +264,9 @@ NLSQ to MCMC Workflow
          initial_parameters:
            values: [1234.5, 0.567, 78.9]
 
-4. **Run MCMC** for uncertainty quantification::
+4. **Run CMC** for uncertainty quantification::
 
-       homodyne --config analysis.yaml --method mcmc
+       homodyne --config analysis.yaml --method cmc
 
 This workflow ensures:
 
@@ -288,7 +288,7 @@ The CLI commands create standardized output directories::
     │   ├── experimental_data.png
     │   ├── fit_comparison.png
     │   └── residuals.png
-    └── mcmc/                    # MCMC-specific outputs
+    └── cmc/                     # CMC-specific outputs
         ├── arviz_data.nc        # ArviZ InferenceData
         ├── trace_plots.png
         ├── corner_plot.png
@@ -315,7 +315,7 @@ The homodyne CLI supports shell completion for bash, zsh, and fish.
 - Command completion (homodyne, homodyne-config, etc.)
 - Option completion (--config, --method, etc.)
 - File path completion for arguments
-- Method name completion (nlsq, mcmc)
+- Method name completion (nlsq, cmc)
 
 Examples
 --------
@@ -342,11 +342,11 @@ Examples
     # Run NLSQ optimization
     homodyne --config my_config.yaml --method nlsq --output results/nlsq/
 
-    # Run MCMC with NLSQ initialization
-    homodyne --config my_config_mcmc.yaml --method mcmc --output results/mcmc/
+    # Run CMC with NLSQ initialization
+    homodyne --config my_config_cmc.yaml --method cmc --output results/cmc/
 
     # Plot final results
-    homodyne --config my_config_mcmc.yaml --plot-results
+    homodyne --config my_config_cmc.yaml --plot-results
 
 **Programmatic Use**::
 

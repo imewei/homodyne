@@ -20,7 +20,7 @@ The main command for running XPCS analyses.
 .. code-block:: text
 
    -c, --config FILE              Configuration YAML file (required)
-   -m, --method {nlsq,mcmc}       Analysis method (default: nlsq)
+   -m, --method {nlsq,cmc}        Analysis method (default: nlsq)
    --plot-experimental-data       Display experimental data plots
    --verbose                      Enable debug logging (INFO level)
    --quiet                        Suppress non-error messages
@@ -34,11 +34,11 @@ Run analysis with NLSQ (fast):
 
    homodyne --config my_config.yaml --method nlsq
 
-Run analysis with MCMC (Bayesian inference):
+Run analysis with CMC (Bayesian inference):
 
 .. code-block:: bash
 
-   homodyne --config my_config.yaml --method mcmc
+   homodyne --config my_config.yaml --method cmc
 
 Run with verbose logging:
 
@@ -56,7 +56,7 @@ Combine options:
 
 .. code-block:: bash
 
-   homodyne --config my_config.yaml --method mcmc --verbose --plot-experimental-data
+   homodyne --config my_config.yaml --method cmc --verbose --plot-experimental-data
 
 NLSQ Method: Non-Linear Least Squares
 --------------------------------------
@@ -89,10 +89,10 @@ Fast, deterministic optimization for point estimates.
 - Medium datasets (5K angles, 500 times): ~1 minute
 - Large datasets (10K angles, 1000 times): ~5 minutes
 
-MCMC Method: Bayesian Inference
---------------------------------
+CMC Method: Bayesian Inference
+-------------------------------
 
-Full Bayesian inference using Markov Chain Monte Carlo for uncertainty quantification.
+Full Bayesian inference using Consensus Monte Carlo (CMC) for uncertainty quantification.
 
 **Use when:**
 
@@ -101,7 +101,7 @@ Full Bayesian inference using Markov Chain Monte Carlo for uncertainty quantific
 - You want to compare models (model selection)
 - You need confidence intervals on derived quantities
 
-**Requirements Before MCMC:**
+**Requirements Before CMC:**
 
 1. Run NLSQ first to get good initial parameters:
 
@@ -119,13 +119,13 @@ Full Bayesian inference using Markov Chain Monte Carlo for uncertainty quantific
      initial_parameters:
        values: [1234.5, 0.567, 123.4]  # From NLSQ results
 
-4. Run MCMC:
+4. Run CMC:
 
 .. code-block:: bash
 
-   homodyne --config config.yaml --method mcmc
+   homodyne --config config.yaml --method cmc
 
-**Complete NLSQ → MCMC Workflow:**
+**Complete NLSQ → CMC Workflow:**
 
 .. code-block:: bash
 
@@ -141,8 +141,8 @@ Full Bayesian inference using Markov Chain Monte Carlo for uncertainty quantific
    #   initial_parameters:
    #     values: [1234.5, 0.567, 123.4]
 
-   # Step 4: Run MCMC
-   homodyne --config config.yaml --method mcmc --verbose
+   # Step 4: Run CMC
+   homodyne --config config.yaml --method cmc --verbose
 
 **Output:**
 
@@ -159,7 +159,7 @@ Full Bayesian inference using Markov Chain Monte Carlo for uncertainty quantific
 
 **Memory Requirements:**
 
-MCMC inference requires substantial memory:
+CMC inference requires substantial memory:
 
 - 4 GB minimum
 - 8+ GB recommended
@@ -387,8 +387,8 @@ Workflow 2: Laminar Flow with Uncertainty
    # 4. Copy best-fit parameters to config
    # (Edit config.yaml manually)
 
-   # 5. Run MCMC for posteriors
-   homodyne --config config.yaml --method mcmc --verbose
+   # 5. Run CMC for posteriors
+   homodyne --config config.yaml --method cmc --verbose
 
 Workflow 3: Parameter Space Exploration
 ----------------------------------------
@@ -525,7 +525,7 @@ Quick Reference Card
    BASIC COMMANDS
    ==============
    homodyne --config config.yaml              Run analysis (NLSQ)
-   homodyne --config config.yaml --method mcmc Run Bayesian inference
+   homodyne --config config.yaml --method cmc  Run Bayesian inference
    homodyne --help                            Show help
 
    CONFIGURATION

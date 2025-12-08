@@ -787,11 +787,11 @@ Recommended workflow for publication-quality results with uncertainty quantifica
        initial_parameters:
          values: [1234.5, -1.2, 45.6]
 
-3. **Run MCMC inference** (slower, full uncertainty distributions)
+3. **Run CMC inference** (slower, full uncertainty distributions)
 
    .. code-block:: bash
 
-       homodyne --config config.yaml --method mcmc
+       homodyne --config config.yaml --method cmc
 
 4. **Analyze results** with posterior distributions and credible intervals
 

@@ -85,11 +85,11 @@ Run NLSQ optimization:
 
     homodyne --config my_config.yaml --method nlsq
 
-Run MCMC inference:
+Run CMC inference:
 
 .. code-block:: bash
 
-    homodyne --config my_config.yaml --method mcmc
+    homodyne --config my_config.yaml --method cmc
 
 Both methods use the same configuration file.
 

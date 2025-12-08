@@ -160,7 +160,7 @@ compatibility** for all validated components:
 - **CMC mandatory**: All MCMC runs use CMC with automatic sharding
 - **Single-shard NUTS**: Small datasets run as single-shard CMC (NUTS internally)
 - **Per-phi initialization**: Initial values from config or per-phi percentiles
-- **Simplified CLI**: Only `--method mcmc` needed (CMC always used)
+- **Simplified CLI**: Only `--method cmc` needed (CMC always used)
 
 **Key Features:**
 
@@ -338,8 +338,8 @@ make quality           # Format, lint, type-check
 # NLSQ optimization (default method)
 homodyne --method nlsq --config config.yaml
 
-# MCMC sampling for uncertainty quantification (v2.1.0: automatic NUTS/CMC selection)
-homodyne --method mcmc --config config.yaml
+# CMC sampling for uncertainty quantification (v2.4.1+: CMC-only architecture)
+homodyne --method cmc --config config.yaml
 
 # Force CPU-only computation
 homodyne --method nlsq --force-cpu
@@ -365,8 +365,8 @@ homodyne --method nlsq --config config.yaml
 #    initial_parameters:
 #      values: [1234.5, 0.567, 12.34]
 
-# 4. Run MCMC with initialized parameters
-homodyne --method mcmc --config config.yaml
+# 4. Run CMC with initialized parameters
+homodyne --method cmc --config config.yaml
 ```
 
 ### Python API
@@ -472,7 +472,7 @@ After installing completion, use short aliases:
 
 ```bash
 hm-nlsq --config config.yaml           # homodyne --method nlsq
-hm-mcmc --config config.yaml           # homodyne --method mcmc
+hm-cmc --config config.yaml            # homodyne --method cmc
 
 hc-stat --output static.yaml           # homodyne-config --mode static
 hc-flow --output flow.yaml             # homodyne-config --mode laminar_flow
@@ -484,7 +484,7 @@ hconfig --validate my_config.yaml      # homodyne-config --validate
 
 ```bash
 homodyne --config <TAB>        # Shows *.yaml files
-homodyne --method <TAB>        # Shows: nlsq, mcmc (v2.1.0: nuts/cmc removed)
+homodyne --method <TAB>        # Shows: nlsq, cmc
 hm-nlsq --<TAB>                # Shows all available options
 ```
 
@@ -579,7 +579,7 @@ devices | Adapts to CPU | Automatic optimization |
 ```bash
 homodyne-config-xla --mode mcmc      # Typical workstations
 homodyne-config-xla --mode mcmc-hpc  # HPC clusters (36+ cores)
-homodyne --method mcmc --config config.yaml
+homodyne --method cmc --config config.yaml
 ```
 
 **For NLSQ workflows:**

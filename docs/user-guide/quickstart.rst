@@ -189,13 +189,13 @@ This adds 4 additional parameters for shear-rate dependent dynamics.
 
 **Option 3: Bayesian Uncertainty Quantification**
 
-After NLSQ converges, run MCMC:
+After NLSQ converges, run CMC:
 
 .. code-block:: bash
 
    # Step 1: Copy best-fit from NLSQ results.json
    # Step 2: Update initial_parameters.values in config
-   homodyne --config my_config.yaml --method mcmc
+   homodyne --config my_config.yaml --method cmc
 
 This provides full posterior distributions instead of point estimates.
 
@@ -253,7 +253,7 @@ Quick Reference
 
    # Run with specific method
    homodyne --config config.yaml --method nlsq   # Fast
-   homodyne --config config.yaml --method mcmc   # Detailed
+   homodyne --config config.yaml --method cmc    # Detailed
 
    # Check options
    homodyne --help
@@ -272,7 +272,7 @@ Quick Reference
 **Optimization Methods:**
 
 - ``nlsq``: Fast, point estimates, ~seconds to minutes
-- ``mcmc``: Slow, full posteriors, ~hours to days
+- ``cmc``: Slow, full posteriors, ~hours to days
 
 **Output Files:**
 

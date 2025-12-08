@@ -550,7 +550,7 @@ Quick Reference: When to Use What
 
    homodyne --config config.yaml --method nlsq
 
-**Use MCMC When:**
+**Use CMC When:**
 
 - Need uncertainty quantification
 - Have good initial estimates (from NLSQ)
@@ -559,7 +559,7 @@ Quick Reference: When to Use What
 
 .. code-block:: bash
 
-   homodyne --config config.yaml --method mcmc
+   homodyne --config config.yaml --method cmc
 
 ---
 

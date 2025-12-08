@@ -66,8 +66,8 @@ by analyzing two-time correlation functions from time-series XPCS data.
    # First run NLSQ for initial fit
    homodyne --config my_config.yaml --method nlsq
 
-   # Then run MCMC for Bayesian inference
-   homodyne --config my_config.yaml --method mcmc
+   # Then run CMC for Bayesian inference
+   homodyne --config my_config.yaml --method cmc
 
 **Interactive Configuration:**
 
