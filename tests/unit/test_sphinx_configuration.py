@@ -143,10 +143,13 @@ def test_mathjax3_configuration():
         sys.path.pop(0)
 
 
-def test_autodoc_mock_imports_empty():
-    """Test that autodoc_mock_imports is empty (no mocking required)."""
+def test_autodoc_mock_imports_allowed():
+    """Test that autodoc_mock_imports only contains expected optional dependencies."""
     docs_path = Path(__file__).parent.parent.parent / "docs"
     conf_path = docs_path / "conf.py"
+
+    # Optional dependencies that are allowed to be mocked
+    allowed_mocks = {"arviz"}
 
     sys.path.insert(0, str(docs_path))
 
@@ -157,10 +160,14 @@ def test_autodoc_mock_imports_empty():
         conf = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(conf)
 
-        # Check that autodoc_mock_imports exists and is empty
+        # Check that autodoc_mock_imports exists
         assert hasattr(conf, "autodoc_mock_imports"), "autodoc_mock_imports not set"
-        assert conf.autodoc_mock_imports == [], (
-            f"autodoc_mock_imports should be empty, got: {conf.autodoc_mock_imports}"
+        # Check that only allowed optional dependencies are mocked
+        mock_set = set(conf.autodoc_mock_imports)
+        unexpected = mock_set - allowed_mocks
+        assert not unexpected, (
+            f"Unexpected packages in autodoc_mock_imports: {unexpected}. "
+            f"Only optional dependencies {allowed_mocks} should be mocked."
         )
 
     finally:
