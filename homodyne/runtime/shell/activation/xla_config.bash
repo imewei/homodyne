@@ -1,6 +1,6 @@
 #!/bin/bash
 # homodyne/runtime/shell/activation/xla_config.bash
-# XLA_FLAGS configuration for Homodyne MCMC/NLSQ optimization
+# XLA_FLAGS configuration for Homodyne CMC/NLSQ optimization
 # Automatically sourced when virtual environment is activated
 
 # ============================================================================
@@ -58,20 +58,20 @@ fi
 
 # Validate mode from config file
 case "$HOMODYNE_XLA_MODE" in
-    mcmc|mcmc-hpc|nlsq|auto)
+    cmc|cmc-hpc|nlsq|auto)
         # Valid mode, proceed
         ;;
     "")
         # No mode set, use default
-        HOMODYNE_XLA_MODE="mcmc"
+        HOMODYNE_XLA_MODE="cmc"
         ;;
     *)
         # Invalid mode in file, warn and use default
         if [ -n "$HOMODYNE_VERBOSE" ]; then
             echo "[homodyne] Warning: Invalid mode '$HOMODYNE_XLA_MODE' in ~/.homodyne_xla_mode" >&2
-            echo "[homodyne] Using default mode: mcmc" >&2
+            echo "[homodyne] Using default mode: cmc" >&2
         fi
-        HOMODYNE_XLA_MODE="mcmc"
+        HOMODYNE_XLA_MODE="cmc"
         ;;
 esac
 
@@ -79,17 +79,17 @@ esac
 # Set XLA_FLAGS Based on Mode
 # ============================================================================
 case "$HOMODYNE_XLA_MODE" in
-    mcmc)
+    cmc)
         export XLA_FLAGS="--xla_force_host_platform_device_count=4"
         if [ -n "$HOMODYNE_VERBOSE" ]; then
-            echo "[homodyne] XLA: mcmc mode (4 devices for parallel MCMC chains)" >&2
+            echo "[homodyne] XLA: cmc mode (4 devices for parallel CMC chains)" >&2
         fi
         ;;
 
-    mcmc-hpc)
+    cmc-hpc)
         export XLA_FLAGS="--xla_force_host_platform_device_count=8"
         if [ -n "$HOMODYNE_VERBOSE" ]; then
-            echo "[homodyne] XLA: mcmc-hpc mode (8 devices for HPC clusters)" >&2
+            echo "[homodyne] XLA: cmc-hpc mode (8 devices for HPC clusters)" >&2
         fi
         ;;
 

@@ -1,6 +1,7 @@
 #!/bin/bash
 # Advanced Homodyne Shell Completion System
 # Provides intelligent completion with context awareness
+# Supports NLSQ (primary) and CMC (secondary) optimization methods
 
 # Cache for faster completion
 HOMODYNE_COMPLETION_CACHE_DIR="${XDG_CACHE_HOME:-$HOME/.cache}/homodyne"
@@ -27,14 +28,14 @@ _homodyne_get_recent_configs() {
         fi
     fi
 
-    # Rebuild cache
+    # Rebuild cache - find YAML files (primary config format)
     {
-        # Find JSON files in current and parent directories
-        find . -maxdepth 2 -name "*.json" -type f 2>/dev/null | head -20
+        find . -maxdepth 2 -name "*.yaml" -type f 2>/dev/null | head -20
+        find . -maxdepth 2 -name "*.yml" -type f 2>/dev/null | head -10
         # Add commonly used config names
-        echo "homodyne_config.json"
-        echo "config.json"
-        echo "analysis_config.json"
+        echo "homodyne_config.yaml"
+        echo "config.yaml"
+        echo "analysis_config.yaml"
     } | sort -u > "$HOMODYNE_COMPLETION_CACHE_FILE"
 
     cat "$HOMODYNE_COMPLETION_CACHE_FILE"
@@ -48,14 +49,11 @@ _homodyne_smart_method_completion() {
     # If config file exists, try to detect mode and suggest appropriate methods
     if [[ -f "$config_file" ]] && command -v python3 >/dev/null 2>&1; then
         local mode=$(python3 -c "
-import json, yaml
+import yaml
 try:
     with open('$config_file') as f:
-        try:
-            config = yaml.safe_load(f)
-        except:
-            config = json.load(f)
-        mode = config.get('mode', '')
+        config = yaml.safe_load(f)
+        mode = config.get('analysis_mode', '')
         if 'static' in mode:
             print('nlsq cmc')
         elif 'laminar' in mode:
@@ -78,11 +76,24 @@ _homodyne_advanced_completion() {
     cur="${COMP_WORDS[COMP_CWORD]}"
     prev="${COMP_WORDS[COMP_CWORD-1]}"
 
-    # Main options
-    local main_opts="--help --method --config --output-dir --verbose --quiet"
-    local mode_opts="--static-isotropic --static-anisotropic --laminar-flow"
-    local plot_opts="--plot-experimental-data --plot-simulated-data"
-    local param_opts="--contrast --offset --phi-angles"
+    # Main options (from args_parser.py)
+    local main_opts="--help --version --method --config --output-dir --data-file --verbose --quiet"
+
+    # Analysis mode options (simplified in v2.4+)
+    local mode_opts="--static-mode --laminar-flow"
+
+    # NLSQ-specific options
+    local nlsq_opts="--max-iterations --tolerance"
+
+    # CMC-specific options
+    local cmc_opts="--n-samples --n-warmup --n-chains --cmc-num-shards --cmc-backend --cmc-plot-diagnostics --dense-mass-matrix"
+
+    # Parameter override options
+    local override_opts="--initial-d0 --initial-alpha --initial-d-offset --initial-gamma-dot-t0 --initial-beta --initial-gamma-dot-offset --initial-phi0"
+
+    # Output and plotting options
+    local output_opts="--output-format --save-plots --plot-experimental-data --plot-simulated-data --plotting-backend --parallel-plots"
+    local plot_param_opts="--contrast --offset --phi-angles"
 
     case $prev in
         --method)
@@ -100,11 +111,12 @@ _homodyne_advanced_completion() {
             return 0
             ;;
         --config)
-            # Use cached recent configs
+            # Use cached recent configs (YAML files)
             local configs=$(_homodyne_get_recent_configs)
             COMPREPLY=($(compgen -W "$configs" -- "$cur"))
-            # Also add file completion
-            COMPREPLY+=($(compgen -f -X '!*.json' -- "$cur"))
+            # Also add file completion for YAML files
+            COMPREPLY+=($(compgen -f -X '!*.yaml' -- "$cur"))
+            COMPREPLY+=($(compgen -f -X '!*.yml' -- "$cur"))
             return 0
             ;;
         --output-dir)
@@ -114,15 +126,28 @@ _homodyne_advanced_completion() {
             COMPREPLY+=($(compgen -d -- "$cur"))
             return 0
             ;;
+        --data-file)
+            # HDF5 data file completion
+            COMPREPLY=($(compgen -f -X '!*.hdf' -- "$cur"))
+            COMPREPLY+=($(compgen -f -X '!*.h5' -- "$cur"))
+            COMPREPLY+=($(compgen -f -X '!*.hdf5' -- "$cur"))
+            return 0
+            ;;
         --phi-angles)
             # Common angle sets
             local angles="0,45,90,135 0,36,72,108,144 0,30,60,90,120,150"
             COMPREPLY=($(compgen -W "$angles" -- "$cur"))
             return 0
             ;;
-        --contrast|--offset)
-            # Common values
-            local values="0.0 0.5 1.0 1.5 2.0"
+        --contrast)
+            # Common contrast values
+            local values="0.1 0.2 0.3 0.4 0.5"
+            COMPREPLY=($(compgen -W "$values" -- "$cur"))
+            return 0
+            ;;
+        --offset)
+            # Common offset values
+            local values="0.9 0.95 1.0 1.05 1.1"
             COMPREPLY=($(compgen -W "$values" -- "$cur"))
             return 0
             ;;
@@ -138,24 +163,127 @@ _homodyne_advanced_completion() {
             COMPREPLY=($(compgen -W "$backends" -- "$cur"))
             return 0
             ;;
+        --output-format)
+            # Output format options
+            local formats="yaml json npz"
+            COMPREPLY=($(compgen -W "$formats" -- "$cur"))
+            return 0
+            ;;
+        --plotting-backend)
+            # Plotting backend options
+            local backends="auto matplotlib datashader"
+            COMPREPLY=($(compgen -W "$backends" -- "$cur"))
+            return 0
+            ;;
+        --max-iterations)
+            # Common iteration counts
+            local counts="1000 5000 10000 50000"
+            COMPREPLY=($(compgen -W "$counts" -- "$cur"))
+            return 0
+            ;;
+        --tolerance)
+            # Common tolerance values
+            local values="1e-6 1e-7 1e-8 1e-9 1e-10"
+            COMPREPLY=($(compgen -W "$values" -- "$cur"))
+            return 0
+            ;;
+        --n-samples)
+            # Common MCMC sample counts
+            local counts="500 1000 2000 5000 10000"
+            COMPREPLY=($(compgen -W "$counts" -- "$cur"))
+            return 0
+            ;;
+        --n-warmup)
+            # Common warmup counts
+            local counts="250 500 1000 2000"
+            COMPREPLY=($(compgen -W "$counts" -- "$cur"))
+            return 0
+            ;;
+        --n-chains)
+            # Common chain counts
+            local counts="2 4 6 8"
+            COMPREPLY=($(compgen -W "$counts" -- "$cur"))
+            return 0
+            ;;
+        --initial-d0)
+            # Common D0 values (nm^2/s)
+            local values="100 500 1000 5000 10000"
+            COMPREPLY=($(compgen -W "$values" -- "$cur"))
+            return 0
+            ;;
+        --initial-alpha)
+            # Common alpha values
+            local values="-2.0 -1.5 -1.0 -0.5 0.0"
+            COMPREPLY=($(compgen -W "$values" -- "$cur"))
+            return 0
+            ;;
+        --initial-d-offset)
+            # Common D_offset values
+            local values="0 100 500 1000"
+            COMPREPLY=($(compgen -W "$values" -- "$cur"))
+            return 0
+            ;;
+        --initial-gamma-dot-t0)
+            # Common gamma_dot values (s^-1)
+            local values="0.001 0.01 0.1 1.0"
+            COMPREPLY=($(compgen -W "$values" -- "$cur"))
+            return 0
+            ;;
+        --initial-beta)
+            # Common beta values
+            local values="-2.0 -1.0 0.0 1.0"
+            COMPREPLY=($(compgen -W "$values" -- "$cur"))
+            return 0
+            ;;
+        --initial-gamma-dot-offset)
+            # Common gamma_dot_offset values
+            local values="0 0.001 0.01"
+            COMPREPLY=($(compgen -W "$values" -- "$cur"))
+            return 0
+            ;;
+        --initial-phi0)
+            # Common phi0 values (radians)
+            local values="0.0 0.785 1.571 2.356 3.142"
+            COMPREPLY=($(compgen -W "$values" -- "$cur"))
+            return 0
+            ;;
     esac
 
     # Check for incompatible options
     local has_mode=false
     for word in "${COMP_WORDS[@]}"; do
-        if [[ "$word" =~ ^--(static-isotropic|static-anisotropic|laminar-flow)$ ]]; then
+        if [[ "$word" =~ ^--(static-mode|laminar-flow)$ ]]; then
             has_mode=true
             break
         fi
     done
 
+    # Check current method for context-aware completions
+    local current_method=""
+    for ((i=1; i<COMP_CWORD; i++)); do
+        if [[ "${COMP_WORDS[i]}" == "--method" ]] && [[ $((i+1)) -lt ${#COMP_WORDS[@]} ]]; then
+            current_method="${COMP_WORDS[i+1]}"
+            break
+        fi
+    done
+
     if [[ $cur == -* ]]; then
-        local all_opts="$main_opts $plot_opts $param_opts"
+        local all_opts="$main_opts $output_opts $plot_param_opts $nlsq_opts"
         [[ "$has_mode" == false ]] && all_opts="$all_opts $mode_opts"
+
+        # Add CMC options if method is cmc
+        if [[ "$current_method" == "cmc" ]]; then
+            all_opts="$all_opts $cmc_opts $override_opts"
+        else
+            # Always show override options (useful for any method)
+            all_opts="$all_opts $override_opts"
+        fi
+
         COMPREPLY=($(compgen -W "$all_opts" -- "$cur"))
     else
-        # Default to config files
-        COMPREPLY=($(compgen -f -X '!*.json' -- "$cur"))
+        # Default to config files (YAML)
+        COMPREPLY=($(compgen -f -X '!*.yaml' -- "$cur"))
+        COMPREPLY+=($(compgen -f -X '!*.yml' -- "$cur"))
     fi
 }
 
@@ -171,7 +299,7 @@ _homodyne_config_completion() {
 
     case $prev in
         --mode|-m)
-            # Updated modes: static (generic) and laminar_flow
+            # Updated modes: static and laminar_flow
             local modes="static laminar_flow"
             COMPREPLY=($(compgen -W "$modes" -- "$cur"))
             return 0
@@ -208,37 +336,49 @@ if [[ -n "$ZSH_VERSION" ]]; then
         local -a args
         args=(
             '(--help -h)'{--help,-h}'[Show help message]'
-            '--method[Analysis method]:method:->methods'
-            '--config[Configuration file]:file:->configs'
+            '--version[Show version information]'
+            '--method[Optimization method]:method:(nlsq cmc)'
+            '--config[Configuration file (YAML)]:file:_files -g "*.yaml" -g "*.yml"'
             '--output-dir[Output directory]:dir:_directories'
+            '--data-file[Experimental data file (overrides config)]:file:_files -g "*.hdf" -g "*.h5" -g "*.hdf5"'
+            '--output-format[Output format]:format:(yaml json npz)'
             '--verbose[Enable verbose logging]'
-            '--quiet[Disable console logging]'
-            '(--static-isotropic --static-anisotropic --laminar-flow)--static-isotropic[Static isotropic mode]'
-            '(--static-isotropic --static-anisotropic --laminar-flow)--static-anisotropic[static mode]'
-            '(--static-isotropic --static-anisotropic --laminar-flow)--laminar-flow[Laminar flow mode]'
-            '--plot-experimental-data[Plot experimental data]'
-            '--plot-simulated-data[Plot simulated data]'
-            '--contrast[Contrast parameter]:value:'
-            '--offset[Offset parameter]:value:'
-            '--phi-angles[Phi angles (comma-separated)]:angles:'
-            '*:config:_files -g "*.json"'
+            '--quiet[Suppress all output except errors]'
+            # Analysis modes
+            '(--static-mode --laminar-flow)--static-mode[Force static analysis mode (3 parameters)]'
+            '(--static-mode --laminar-flow)--laminar-flow[Force laminar flow mode (7 parameters)]'
+            # NLSQ options
+            '--max-iterations[Maximum NLSQ iterations]:iterations:'
+            '--tolerance[NLSQ convergence tolerance]:tolerance:'
+            # CMC options
+            '--n-samples[CMC samples per chain]:samples:'
+            '--n-warmup[CMC warmup samples]:warmup:'
+            '--n-chains[Number of CMC chains]:chains:'
+            '--cmc-num-shards[Data shards for CMC]:shards:(4 8 10 16 20 32)'
+            '--cmc-backend[CMC parallel backend]:backend:(auto pjit multiprocessing pbs)'
+            '--cmc-plot-diagnostics[DEPRECATED - ArviZ plots always generated]'
+            '--dense-mass-matrix[Use dense mass matrix for NUTS/CMC]'
+            # Parameter overrides
+            '--initial-d0[Override initial D0 (nm^2/s)]:value:'
+            '--initial-alpha[Override initial alpha]:value:'
+            '--initial-d-offset[Override initial D_offset (nm^2/s)]:value:'
+            '--initial-gamma-dot-t0[Override gamma_dot_t0 (s^-1, laminar flow)]:value:'
+            '--initial-beta[Override beta (laminar flow)]:value:'
+            '--initial-gamma-dot-offset[Override gamma_dot_offset (s^-1, laminar flow)]:value:'
+            '--initial-phi0[Override phi0 (radians, laminar flow)]:value:'
+            # Output and plotting
+            '--save-plots[Save result plots to output directory]'
+            '--plot-experimental-data[Generate data validation plots]'
+            '--plot-simulated-data[Plot theoretical C2 heatmaps]'
+            '--plotting-backend[Plotting backend]:backend:(auto matplotlib datashader)'
+            '--parallel-plots[Generate plots in parallel]'
+            '--contrast[Contrast parameter for simulated data]:contrast:'
+            '--offset[Offset parameter for simulated data]:offset:'
+            '--phi-angles[Phi angles (comma-separated degrees)]:angles:'
+            '*:config:_files -g "*.yaml" -g "*.yml"'
         )
 
         _arguments -C $args
-
-        case $state in
-            methods)
-                local methods="nlsq cmc"
-                _values 'method' ${(z)methods}
-                ;;
-            configs)
-                # Show recent configs first
-                local -a configs
-                configs=($(_homodyne_get_recent_configs))
-                _describe 'recent configs' configs
-                _files -g '*.json'
-                ;;
-        esac
     }
 
     # Zsh completion for homodyne-config
@@ -246,12 +386,12 @@ if [[ -n "$ZSH_VERSION" ]]; then
         local -a args
         args=(
             '(--help -h)'{--help,-h}'[Show help message]'
-            '(--mode -m)'{--mode,-m}'[Analysis mode]:mode:(static laminar_flow)'
-            '(--output -o)'{--output,-o}'[Output configuration file]:file:_files -g "*.yaml"'
+            '(--mode -m)'{--mode,-m}'[Configuration mode]:mode:(static laminar_flow)'
+            '(--output -o)'{--output,-o}'[Output configuration file]:file:_files -g "*.yaml" -g "*.yml"'
             '(--interactive -i)'{--interactive,-i}'[Interactive configuration builder]'
-            '(--validate -v)'{--validate,-v}'[Validate configuration file]:file:_files -g "*.yaml"'
+            '(--validate -v)'{--validate,-v}'[Validate configuration file]:file:_files -g "*.yaml" -g "*.yml"'
             '(--force -f)'{--force,-f}'[Force overwrite existing file]'
-            '*:output:_files -g "*.yaml"'
+            '*:output:_files -g "*.yaml" -g "*.yml"'
         )
 
         _arguments -C $args
@@ -322,16 +462,20 @@ homodyne_build() {
     local cmd="homodyne"
     local method=""
     local config=""
-    local output=""
 
-    echo "🔧 Homodyne Command Builder"
+    echo "Homodyne Command Builder"
+    echo "========================"
     echo ""
 
     # Select method
     PS3="Select analysis method: "
-    select m in "nlsq" "cmc" "skip"; do
-        [[ -n "$m" ]] && [[ "$m" != "skip" ]] && method="--method $m"
-        break
+    select m in "nlsq (primary)" "cmc (uncertainty)" "skip"; do
+        case $REPLY in
+            1) method="--method nlsq"; break;;
+            2) method="--method cmc"; break;;
+            3) break;;
+            *) echo "Invalid selection";;
+        esac
     done
 
     # Select config
@@ -354,22 +498,50 @@ homodyne_build() {
         [[ -n "$c" ]] && config="--config $c"
     fi
 
-    # No GPU options needed - homodyne handles GPU automatically via JAX
-
     # Build and show command
     echo ""
-    echo "📋 Generated command:"
+    echo "Generated command:"
     echo "  $cmd $method $config"
     echo ""
     read -p "Run this command? (y/N): " run_it
 
     if [[ "$run_it" =~ ^[Yy] ]]; then
-        echo "🚀 Running..."
+        echo "Running..."
         eval "$cmd $method $config"
     else
-        echo "💡 Command copied to clipboard (if available)"
+        echo "Command copied to clipboard (if available)"
         echo "$cmd $method $config" | xclip -selection clipboard 2>/dev/null || \
         echo "$cmd $method $config" | pbcopy 2>/dev/null || \
         echo "Copy command: $cmd $method $config"
     fi
+}
+
+# Help function showing all aliases and shortcuts
+homodyne_help() {
+    echo "Homodyne Shell Shortcuts"
+    echo "========================"
+    echo ""
+    echo "Base Commands:"
+    echo "  hm                    homodyne"
+    echo "  hconfig               homodyne-config"
+    echo ""
+    echo "Method Aliases (hm- prefix):"
+    echo "  hm-nlsq               homodyne --method nlsq (primary)"
+    echo "  hm-cmc                homodyne --method cmc (uncertainty)"
+    echo ""
+    echo "Config Aliases (hc- prefix):"
+    echo "  hc-stat               homodyne-config --mode static"
+    echo "  hc-flow               homodyne-config --mode laminar_flow"
+    echo ""
+    echo "Utility Aliases:"
+    echo "  hexp                  homodyne --plot-experimental-data"
+    echo "  hsim                  homodyne --plot-simulated-data"
+    echo ""
+    echo "Interactive:"
+    echo "  homodyne_build        Interactive command builder"
+    echo "  homodyne_help         Show this help"
+    echo ""
+    echo "Tab Completion:"
+    echo "  All commands support intelligent tab completion."
+    echo "  Try: hm --<TAB> or hm --method <TAB>"
 }

@@ -44,36 +44,36 @@ set -l mode $HOMODYNE_XLA_MODE
 
 # If not set, read from config file
 if test -z "$mode"; and test -f $HOME/.homodyne_xla_mode
-    set mode (cat $HOME/.homodyne_xla_mode 2>/dev/null | tr -d '[:space:]'; or echo "mcmc")
+    set mode (cat $HOME/.homodyne_xla_mode 2>/dev/null | tr -d '[:space:]'; or echo "cmc")
 end
 
 # Validate and default
 switch $mode
-    case mcmc mcmc-hpc nlsq auto
+    case cmc cmc-hpc nlsq auto
         # Valid mode
     case ''
-        set mode mcmc
+        set mode cmc
     case '*'
         if set -q HOMODYNE_VERBOSE
-            echo "[homodyne] Warning: Invalid mode '$mode', using mcmc" >&2
+            echo "[homodyne] Warning: Invalid mode '$mode', using cmc" >&2
         end
-        set mode mcmc
+        set mode cmc
 end
 
 # ============================================================================
 # Set XLA_FLAGS Based on Mode
 # ============================================================================
 switch $mode
-    case mcmc
+    case cmc
         set -gx XLA_FLAGS "--xla_force_host_platform_device_count=4"
         if set -q HOMODYNE_VERBOSE
-            echo "[homodyne] XLA: mcmc mode (4 devices)" >&2
+            echo "[homodyne] XLA: cmc mode (4 devices)" >&2
         end
 
-    case mcmc-hpc
+    case cmc-hpc
         set -gx XLA_FLAGS "--xla_force_host_platform_device_count=8"
         if set -q HOMODYNE_VERBOSE
-            echo "[homodyne] XLA: mcmc-hpc mode (8 devices)" >&2
+            echo "[homodyne] XLA: cmc-hpc mode (8 devices)" >&2
         end
 
     case nlsq

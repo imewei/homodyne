@@ -6,7 +6,7 @@ import os
 import sys
 from pathlib import Path
 
-VALID_MODES = ["mcmc", "mcmc-hpc", "nlsq", "auto"]
+VALID_MODES = ["cmc", "cmc-hpc", "nlsq", "auto"]
 CONFIG_FILE = Path.home() / ".homodyne_xla_mode"
 
 
@@ -41,9 +41,9 @@ def set_mode(mode: str) -> bool:
     print(f"✓ XLA mode set to: {mode}")
 
     # Show what this means
-    if mode == "mcmc":
-        print("  → 4 CPU devices for parallel MCMC chains")
-    elif mode == "mcmc-hpc":
+    if mode == "cmc":
+        print("  → 4 CPU devices for parallel CMC chains")
+    elif mode == "cmc-hpc":
         print("  → 8 CPU devices for HPC clusters (36+ cores)")
     elif mode == "nlsq":
         print("  → 1 CPU device (NLSQ doesn't need parallelism)")
@@ -64,7 +64,7 @@ def show_config():
     if CONFIG_FILE.exists():
         mode = CONFIG_FILE.read_text().strip()
     else:
-        mode = "mcmc (default)"
+        mode = "cmc (default)"
 
     # Get current XLA_FLAGS
     xla_flags = os.environ.get("XLA_FLAGS", "Not set")
@@ -94,13 +94,13 @@ def main():
         description="Configure XLA_FLAGS for Homodyne workflows",
         epilog="""
 Examples:
-  homodyne-config-xla --mode mcmc        # 4 devices for MCMC
+  homodyne-config-xla --mode cmc         # 4 devices for CMC
   homodyne-config-xla --mode auto        # Auto-detect based on CPU
   homodyne-config-xla --show             # Show current configuration
 
 Modes:
-  mcmc       4 devices (multi-core workstations)
-  mcmc-hpc   8 devices (HPC with 36+ cores)
+  cmc        4 devices (multi-core workstations)
+  cmc-hpc    8 devices (HPC with 36+ cores)
   nlsq       1 device (NLSQ-only workflows)
   auto       Auto-detect based on CPU cores
         """,
@@ -109,7 +109,7 @@ Modes:
     parser.add_argument(
         "--mode",
         choices=VALID_MODES,
-        help="Set XLA mode (mcmc, mcmc-hpc, nlsq, auto)",
+        help="Set XLA mode (cmc, cmc-hpc, nlsq, auto)",
     )
     parser.add_argument(
         "--show", action="store_true", help="Show current configuration"

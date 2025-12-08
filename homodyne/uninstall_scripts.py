@@ -121,6 +121,21 @@ def cleanup_advanced_features():
     return removed_files
 
 
+def cleanup_xla_config():
+    """Remove XLA configuration file from user's home directory."""
+    removed_files = []
+
+    xla_config_file = Path.home() / ".homodyne_xla_mode"
+    if xla_config_file.exists():
+        try:
+            xla_config_file.unlink()
+            removed_files.append(("XLA config", xla_config_file.name))
+        except Exception as e:
+            print(f"   ⚠️  Failed to remove {xla_config_file.name}: {e}")
+
+    return removed_files
+
+
 def cleanup_old_system_files():
     """Remove old modular system files if they exist."""
     venv_path = Path(sys.prefix)
@@ -199,6 +214,13 @@ def interactive_cleanup():
 
         remove_old = input("   Remove old system files? [Y/n]: ").lower() != "n"
 
+        # XLA configuration
+        print("\n5. XLA Configuration")
+        print("   - Removes ~/.homodyne_xla_mode config file")
+        print("   - Can be regenerated with: homodyne-config-xla --mode cmc")
+
+        remove_xla = input("   Remove XLA configuration? [y/N]: ").lower().startswith("y")
+
         # Perform cleanup
         all_removed = []
 
@@ -213,6 +235,9 @@ def interactive_cleanup():
 
         if remove_old:
             all_removed.extend(cleanup_old_system_files())
+
+        if remove_xla:
+            all_removed.extend(cleanup_xla_config())
 
         return all_removed
 
@@ -247,6 +272,7 @@ def cleanup_all_files():
         all_removed.extend(cleanup_gpu_files())
         all_removed.extend(cleanup_advanced_features())
         all_removed.extend(cleanup_old_system_files())
+        all_removed.extend(cleanup_xla_config())
 
         # Clean up empty directories
         venv_path = Path(sys.prefix)
@@ -369,7 +395,10 @@ def show_dry_run():
         ),
     ]
 
-    all_files = completion_files + gpu_files + advanced_files
+    # XLA config file
+    xla_config = [(Path.home() / ".homodyne_xla_mode", "XLA config", ".homodyne_xla_mode")]
+
+    all_files = completion_files + gpu_files + advanced_files + xla_config
 
     for file_path, file_type, name in all_files:
         if file_path.exists():
@@ -429,6 +458,7 @@ def main():
                 print("   • GPU acceleration setup files")
                 print("   • Advanced features CLI commands")
                 print("   • All conda activation hooks")
+                print("   • XLA configuration (~/.homodyne_xla_mode)")
                 print("\n💡 To restore these files later, run:")
                 print("   homodyne-post-install --interactive")
                 print()
@@ -457,6 +487,7 @@ def main():
                 print("   ├─ Activation scripts (homodyne-activate)")
                 print("   ├─ GPU acceleration setup (JAX with CUDA)")
                 print("   ├─ Conda activation hooks")
+                print("   ├─ XLA configuration (~/.homodyne_xla_mode)")
                 print("   └─ Legacy system files")
             print("\n🔄 Next steps:")
             print("   • Restart your shell session")
@@ -507,6 +538,7 @@ Files removed:
   • Activation scripts (homodyne-activate)
   • GPU acceleration setup (JAX with CUDA)
   • Conda activation hooks
+  • XLA configuration (~/.homodyne_xla_mode)
   • Legacy system files
 
 Supports: conda, mamba, uv, venv, virtualenv

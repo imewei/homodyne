@@ -331,7 +331,7 @@ def configure_xla_mode(xla_mode=None):
     Parameters
     ----------
     xla_mode : str, optional
-        XLA mode to configure (mcmc, mcmc-hpc, nlsq, auto)
+        XLA mode to configure (cmc, cmc-hpc, nlsq, auto)
         If None, prompts user interactively
 
     Returns
@@ -344,12 +344,12 @@ def configure_xla_mode(xla_mode=None):
     if xla_mode is None:
         print("\n🔧 XLA Configuration")
         print("Select XLA device mode:")
-        print("  mcmc       - 4 devices (multi-core workstations)")
-        print("  mcmc-hpc   - 8 devices (HPC with 36+ cores)")
+        print("  cmc        - 4 devices (multi-core workstations)")
+        print("  cmc-hpc    - 8 devices (HPC with 36+ cores)")
         print("  nlsq       - 1 device (NLSQ-only workflows)")
         print("  auto       - Auto-detect based on CPU cores")
 
-        xla_mode = input("\nXLA mode [mcmc]: ").strip() or "mcmc"
+        xla_mode = input("\nXLA mode [cmc]: ").strip() or "cmc"
 
     if xla_mode not in VALID_MODES:
         print(f"   ❌ Invalid XLA mode: {xla_mode}")
@@ -487,8 +487,8 @@ def install_macos_shell_completion():
 
 
 def install_advanced_features():
-    """Install advanced features (Phases 4-6, CPU-only in v2.3.0)."""
-    print("🚀 Installing Advanced Features (CPU-only)...")
+    """Install advanced features: completion caching and system validation."""
+    print("🚀 Installing Advanced Features...")
 
     try:
         venv_path = Path(sys.prefix)
@@ -591,7 +591,7 @@ def interactive_setup():
     # XLA configuration
     print("\n2. XLA_FLAGS Configuration")
     print("   - Auto-configures JAX CPU devices on venv activation")
-    print("   - Modes: mcmc (4 devices), mcmc-hpc (8 devices), nlsq (1 device), auto")
+    print("   - Modes: cmc (4 devices), cmc-hpc (8 devices), nlsq (1 device), auto")
     print("   - Essential for MCMC parallelization and optimal CPU usage")
 
     configure_xla = input("   Configure XLA_FLAGS? [Y/n]: ").lower() != "n"
@@ -600,10 +600,10 @@ def interactive_setup():
     if configure_xla:
         xla_mode = None  # Will be prompted in configure_xla_mode()
 
-    # Advanced features (Phases 4-6)
-    print("\n3. Advanced Features (Phases 4-6)")
-    print("   - Phase 4: Advanced shell completion with caching")
-    print("   - Phase 6: Comprehensive system validation")
+    # Advanced features
+    print("\n3. Advanced Features")
+    print("   - Smart shell completion with config file caching")
+    print("   - System validation (homodyne-validate command)")
     print("   - Adds homodyne-validate command")
 
     install_advanced = (
@@ -769,13 +769,13 @@ Examples:
   homodyne-post-install --interactive              # Interactive setup (recommended)
   homodyne-post-install                            # Install shell completion only
   homodyne-post-install --xla-mode auto            # Configure XLA with auto-detection
-  homodyne-post-install --shell bash --xla-mode mcmc  # Shell completion + XLA
+  homodyne-post-install --shell bash --xla-mode cmc   # Shell completion + XLA
   homodyne-post-install --force                    # Force install outside venv
 
 The script provides optional installation of:
 - Shell completion (bash/zsh/fish) with safe aliases
 - XLA_FLAGS auto-configuration for JAX CPU devices
-- Advanced features (Phases 4-6): completion caching, system validation
+- Advanced features: completion caching, system validation
 - Virtual environment integration
 
 Version 2.3.0: GPU support removed - CPU-only architecture
@@ -797,14 +797,14 @@ Version 2.3.0: GPU support removed - CPU-only architecture
 
     parser.add_argument(
         "--xla-mode",
-        choices=["mcmc", "mcmc-hpc", "nlsq", "auto"],
-        help="Configure XLA_FLAGS mode (mcmc, mcmc-hpc, nlsq, auto)",
+        choices=["cmc", "cmc-hpc", "nlsq", "auto"],
+        help="Configure XLA_FLAGS mode (cmc, cmc-hpc, nlsq, auto)",
     )
 
     parser.add_argument(
         "--advanced",
         action="store_true",
-        help="Install advanced features (Phases 4-6)",
+        help="Install advanced features (completion caching, system validation)",
     )
 
     parser.add_argument(
