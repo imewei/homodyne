@@ -43,19 +43,12 @@ from homodyne.utils.logging import get_logger  # noqa: E402
 logger = get_logger(__name__)
 
 
-def check_python_version() -> None:
-    """Check Python version requirement."""
-
-
 def main() -> None:
     """Main CLI entry point.
 
     Processes command-line arguments and dispatches to appropriate command handler.
     """
     try:
-        # Check Python version
-        check_python_version()
-
         # Parse arguments
         parser = create_parser()
         args = parser.parse_args()

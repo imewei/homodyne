@@ -12,15 +12,10 @@ from pathlib import Path
 from typing import Any
 
 import jax.numpy as jnp
-
-# Set matplotlib backend for HPC headless support (must be before pyplot import)
-import matplotlib
 import numpy as np
 
-matplotlib.use("Agg")
-import matplotlib.pyplot as plt  # noqa: E402
-
-from homodyne.cli.args_parser import validate_args  # noqa: E402
+from homodyne.cli.args_parser import validate_args
+from homodyne.config.parameter_names import get_physical_param_names  # noqa: E402
 from homodyne.config.parameter_space import ParameterSpace  # noqa: E402
 from homodyne.config.types import (  # noqa: E402
     LAMINAR_FLOW_PARAM_NAMES,
@@ -77,119 +72,6 @@ logger = get_logger(__name__)
 
 # Common XPCS experimental angles (in degrees) for validation
 COMMON_XPCS_ANGLES = [0, 30, 45, 60, 90, 120, 135, 150, 180]
-
-
-def clamp_parameters_to_bounds(
-    params: dict[str, float],
-    config: Any,
-    analysis_mode: str,
-) -> dict[str, float]:
-    """Clamp NLSQ parameters to valid NumPyro prior bounds.
-
-    NumPyro uses TruncatedNormal priors with strict bounds. NLSQ can sometimes
-    return values outside these bounds (e.g., negative values for positive parameters),
-    which causes MCMC initialization to fail with "Cannot find valid initial parameters".
-
-    This function ensures all parameters are within their valid NumPyro prior bounds
-    before being passed to MCMC/CMC initialization.
-
-    NOTE: Uses hardcoded NumPyro prior bounds, not NLSQ optimization bounds.
-    NLSQ bounds allow negative values for exploration, but NumPyro priors enforce
-    strict physical constraints (e.g., diffusion coefficients must be positive).
-
-    IMPORTANT: Parameters are clamped to slightly INSIDE the bounds (with epsilon offset)
-    to avoid numerical issues with TruncatedNormal PDFs at exact boundary values.
-    Epsilon is chosen as max(1e-6, 0.001 * range) to handle both small and large ranges.
-
-    Parameters
-    ----------
-    params : dict[str, float]
-        Parameter dictionary from NLSQ optimization
-    config : Any
-        Configuration object (unused, kept for API compatibility)
-    analysis_mode : str
-        Analysis mode ("static_isotropic" or "laminar_flow")
-
-    Returns
-    -------
-    dict[str, float]
-        Clamped parameters with all values within valid NumPyro prior bounds (with epsilon offset)
-
-    Examples
-    --------
-    >>> params = {"alpha": -3.38, "D_offset": -2386.63}
-    >>> clamped = clamp_parameters_to_bounds(params, config, "laminar_flow")
-    >>> clamped["alpha"]  # Clamped to [-2.0 + epsilon, 2.0 - epsilon], epsilon = 0.004
-    -1.996
-    >>> clamped["D_offset"]  # Clamped to [0.0 + epsilon, 1e6 - epsilon], epsilon = 1000.0
-    1000.0
-    """
-    # NumPyro prior bounds (strict physics constraints)
-    # These MUST match ParameterSpace bounds from homodyne/core/fitting.py
-    # which are used by TruncatedNormal priors in homodyne/optimization/mcmc.py
-    NUMPYRO_PRIOR_BOUNDS = {
-        # Scaling parameters (always present)
-        "contrast": (0.0, 1.0),  # fitting.py: implied from prior
-        "offset": (0.8, 1.2),  # fitting.py: implied from prior
-        # Core diffusion parameters
-        "D0": (1.0, 1.0e6),  # fitting.py:73
-        "alpha": (-10.0, 10.0),  # fitting.py:74
-        "D_offset": (-100000.0, 100000.0),  # fitting.py:75-78
-        # Laminar flow parameters
-        "gamma_dot_t0": (1.0e-5, 1.0),  # fitting.py:81
-        "beta": (-10.0, 10.0),  # fitting.py:82
-        "gamma_dot_t_offset": (-1.0, 1.0),  # fitting.py:83-86 (CAN BE NEGATIVE!)
-        "phi0": (-30.0, 30.0),  # fitting.py:87
-    }
-
-    # Clamp each parameter
-    clamped_params = {}
-    clamped_count = 0
-
-    for param_name, value in params.items():
-        if param_name in NUMPYRO_PRIOR_BOUNDS:
-            min_val, max_val = NUMPYRO_PRIOR_BOUNDS[param_name]
-
-            # Check if value is already within bounds (no clamping needed)
-            if min_val <= value <= max_val:
-                # Value is valid, no need to clamp
-                clamped_params[param_name] = float(value)
-            else:
-                # Value is outside bounds, clamp to epsilon-adjusted bounds
-                # NumPyro's TruncatedNormal PDF approaches zero at boundaries,
-                # so we use epsilon offset to avoid exact boundary values
-                param_range = max_val - min_val
-                epsilon = max(
-                    1e-6, 0.001 * param_range
-                )  # 0.1% of range or 1e-6, whichever is larger
-
-                # Adjust bounds to be slightly inside the valid region
-                min_val_adjusted = min_val + epsilon
-                max_val_adjusted = max_val - epsilon
-
-                # Clamp to epsilon-adjusted bounds
-                clamped_value = np.clip(value, min_val_adjusted, max_val_adjusted)
-
-                logger.warning(
-                    f"Clamping {param_name}: {value:.6f} → {clamped_value:.6f} "
-                    f"(NumPyro prior bounds: [{min_val:.3e}, {max_val:.3e}], epsilon={epsilon:.3e})"
-                )
-                clamped_count += 1
-
-                clamped_params[param_name] = float(clamped_value)
-        else:
-            # Unknown parameter, keep as-is (shouldn't happen)
-            logger.debug(f"Unknown parameter {param_name}, keeping value {value}")
-            clamped_params[param_name] = value
-
-    if clamped_count > 0:
-        logger.info(
-            f"Clamped {clamped_count}/{len(params)} parameters to valid NumPyro prior bounds"
-        )
-    else:
-        logger.debug("All NLSQ parameters within NumPyro prior bounds")
-
-    return clamped_params
 
 
 def normalize_angle_to_symmetric_range(angle):
@@ -2708,40 +2590,28 @@ def _create_mcmc_diagnostics_dict(result: Any) -> dict:
 
 
 def _get_parameter_names(analysis_mode: str) -> list[str]:
-    """Get parameter names for given analysis mode.
+    """Get physical parameter names for given analysis mode.
+
+    This is a thin wrapper around get_physical_param_names() that handles
+    unknown modes gracefully with a warning instead of raising an exception.
 
     Parameters
     ----------
     analysis_mode : str
-        Analysis mode ("static_isotropic" or "laminar_flow")
+        Analysis mode ("static", "static_isotropic", or "laminar_flow")
 
     Returns
     -------
     list[str]
-        List of parameter names
-
-    Raises
-    ------
-    ValueError
-        If analysis mode is unknown
+        List of physical parameter names (without scaling params)
     """
-    if analysis_mode == "static":
-        return ["D0", "alpha", "D_offset"]
-    elif analysis_mode == "laminar_flow":
-        return [
-            "D0",
-            "alpha",
-            "D_offset",
-            "gamma_dot_t0",
-            "beta",
-            "gamma_dot_t_offset",
-            "phi0",
-        ]
-    else:
+    try:
+        return get_physical_param_names(analysis_mode)
+    except ValueError:
         logger.warning(
             f"Unknown analysis mode: {analysis_mode}, assuming static_isotropic"
         )
-        return ["D0", "alpha", "D_offset"]
+        return get_physical_param_names("static")
 
 
 def _compute_theoretical_c2_from_mcmc(
@@ -2899,326 +2769,6 @@ def _compute_theoretical_c2_from_mcmc(
         )
 
     return c2_theoretical_scaled
-
-
-def _worker_init_cpu_only():
-    """Initialize worker process with CPU-only mode.
-
-    When spawning multiple workers for parallel plotting, we ensure each worker
-    uses CPU-only execution. Plotting is CPU-bound (Datashader/matplotlib).
-
-    Sets environment variables for CPU-only JAX execution:
-    - JAX_PLATFORMS: Tells JAX to only use CPU platform
-    - CUDA_VISIBLE_DEVICES: Disables any CUDA device access
-    - XLA_PYTHON_CLIENT_PREALLOCATE: Prevents memory preallocation
-    """
-    import os
-
-    # Primary: Tell JAX to only use CPU platform
-    os.environ["JAX_PLATFORMS"] = "cpu"
-
-    # Secondary: Hide all CUDA devices from this process
-    # Use "-1" instead of "" to explicitly disable (empty string might be ignored)
-    os.environ["CUDA_VISIBLE_DEVICES"] = "-1"
-
-    # Tertiary: Disable XLA GPU compilation and memory preallocation
-    os.environ["XLA_PYTHON_CLIENT_PREALLOCATE"] = "false"
-    os.environ["XLA_PYTHON_CLIENT_ALLOCATOR"] = "platform"
-
-    # Suppress TensorFlow/XLA warnings
-    os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
-
-
-def _plot_single_angle_datashader(args):
-    """Plot single angle for parallel processing (picklable module-level function).
-
-    Args:
-        args: Tuple of (i, phi_angles, c2_exp, c2_fit, residuals, t1, t2, output_dir, width, height)
-
-    Returns:
-        Path to generated plot file
-    """
-    # CRITICAL: Set CPU-only mode BEFORE any imports that might trigger CUDA
-    # This must be first to prevent CUDA OOM in parallel workers
-    # Belt-and-suspenders approach: set here even though initializer also sets them
-    import os
-
-    os.environ["JAX_PLATFORMS"] = "cpu"
-    os.environ["CUDA_VISIBLE_DEVICES"] = "-1"  # Explicitly disable (not empty string)
-    os.environ["XLA_PYTHON_CLIENT_PREALLOCATE"] = "false"
-    os.environ["XLA_PYTHON_CLIENT_ALLOCATOR"] = "platform"
-    os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
-
-    # Lazy import to ensure environment variables take effect
-    import numpy as np
-
-    from homodyne.viz.datashader_backend import plot_c2_comparison_fast
-
-    (
-        i,
-        phi_angles,
-        c2_exp,
-        c2_fit,
-        residuals,
-        t1,
-        t2,
-        output_dir,
-        width,
-        height,
-        color_options,
-    ) = args
-    phi = phi_angles[i]
-    output_file = output_dir / f"c2_heatmaps_phi_{phi:.1f}deg.png"
-
-    # Convert JAX GPU arrays to numpy CPU arrays before plotting
-    # This fixes: "BufferError: INVALID_ARGUMENT: Python buffer protocol is only defined for CPU buffers"
-    # Numba (used by Datashader) requires CPU arrays for buffer protocol access
-    c2_exp_cpu = np.asarray(c2_exp)
-    c2_fit_cpu = np.asarray(c2_fit)
-    residuals_cpu = np.asarray(residuals)
-    t1_cpu = np.asarray(t1)
-    t2_cpu = np.asarray(t2)
-
-    # Use Datashader fast plotting with higher resolution
-    plot_c2_comparison_fast(
-        c2_exp_cpu,
-        c2_fit_cpu,
-        residuals_cpu,
-        t1_cpu,
-        t2_cpu,
-        output_file,
-        phi_angle=phi,
-        width=width,
-        height=height,
-        **color_options,
-    )
-
-    return output_file
-
-
-def _generate_plots_datashader(
-    phi_angles: np.ndarray,
-    c2_exp: np.ndarray,
-    c2_fit_display: np.ndarray,
-    residuals: np.ndarray,
-    t1: np.ndarray,
-    t2: np.ndarray,
-    output_dir: Path,
-    parallel: bool = True,
-    width: int = 1200,
-    height: int = 1200,
-    color_options: dict[str, Any] | None = None,
-) -> None:
-    """Generate plots using Datashader backend with optional parallelization.
-
-    IMPORTANT: Uses 'spawn' multiprocessing method to avoid JAX deadlock.
-    JAX is multithreaded, and fork() + threading = deadlock on Linux.
-
-    Parameters
-    ----------
-    width : int, default=1200
-        Datashader canvas width in pixels. Higher values preserve more detail
-        but increase file size. Recommended: 1200-1500 for publication quality.
-    height : int, default=1200
-        Datashader canvas height in pixels.
-    """
-    import multiprocessing
-
-    if parallel and len(phi_angles) > 1:
-        # Use 'spawn' method to avoid JAX threading deadlock
-        # fork() + JAX multithreading = deadlock on Linux
-        ctx = multiprocessing.get_context("spawn")
-
-        # Parallel processing for maximum speed
-        n_workers = min(multiprocessing.cpu_count(), len(phi_angles))
-        logger.info(f"Using {n_workers} parallel workers for plotting (spawn method)")
-
-        # Prepare arguments for parallel processing
-        args_list = [
-            (
-                i,
-                phi_angles,
-                c2_exp[i],
-                c2_fit_display[i],
-                residuals[i],
-                t1,
-                t2,
-                output_dir,
-                width,
-                height,
-                color_options or {},
-            )
-            for i in range(len(phi_angles))
-        ]
-
-        try:
-            # Use map_async with timeout to prevent indefinite hangs
-            # Initialize workers with CPU-only mode to prevent CUDA OOM
-            with ctx.Pool(
-                processes=n_workers, initializer=_worker_init_cpu_only
-            ) as pool:
-                # Timeout: 30 seconds per plot * number of angles / workers + 60s buffer
-                timeout_seconds = (30 * len(phi_angles) / n_workers) + 60
-                logger.debug(f"Parallel plotting timeout: {timeout_seconds:.0f}s")
-
-                result = pool.map_async(_plot_single_angle_datashader, args_list)
-                result.get(timeout=timeout_seconds)
-
-            logger.info(f"✓ Generated {len(phi_angles)} heatmap plots (parallel)")
-
-        except Exception as e:
-            logger.warning(f"Parallel plotting failed: {e.__class__.__name__}: {e}")
-            logger.info("Falling back to sequential plotting...")
-
-            # Fallback to sequential processing
-            for i in range(len(phi_angles)):
-                args = (
-                    i,
-                    phi_angles,
-                    c2_exp[i],
-                    c2_fit_display[i],
-                    residuals[i],
-                    t1,
-                    t2,
-                    output_dir,
-                    width,
-                    height,
-                    color_options or {},
-                )
-                _plot_single_angle_datashader(args)
-
-            logger.info(
-                f"✓ Generated {len(phi_angles)} heatmap plots (sequential fallback)"
-            )
-    else:
-        # Sequential processing
-        for i in range(len(phi_angles)):
-            args = (
-                i,
-                phi_angles,
-                c2_exp[i],
-                c2_fit_display[i],
-                residuals[i],
-                t1,
-                t2,
-                output_dir,
-                width,
-                height,
-                color_options or {},
-            )
-            _plot_single_angle_datashader(args)
-
-        logger.info(f"✓ Generated {len(phi_angles)} heatmap plots (sequential)")
-
-
-def _generate_plots_matplotlib(
-    phi_angles: np.ndarray,
-    c2_exp: np.ndarray,
-    c2_fit_display: np.ndarray,
-    residuals: np.ndarray,
-    t1: np.ndarray,
-    t2: np.ndarray,
-    output_dir: Path,
-    color_options: dict[str, Any] | None = None,
-) -> None:
-    """Generate plots using matplotlib backend (original implementation)."""
-    logger.info(f"Generating heatmap plots for {len(phi_angles)} angles")
-
-    for i, phi in enumerate(phi_angles):
-        # Create 3-panel figure
-        fig, axes = plt.subplots(1, 3, figsize=(15, 5))
-
-        # Panel 1: Experimental data with fixed color scale [1.0, 1.5]
-        # Transpose because data is structured as c2[t1_index, t2_index] with indexing="ij"
-        # but we want x-axis=t1, y-axis=t2 for display
-        vmin_use, vmax_use = _resolve_color_limits(
-            c2_exp[i],
-            color_options,
-        )
-
-        im0 = axes[0].imshow(
-            c2_exp[i].T,
-            origin="lower",
-            aspect="equal",
-            cmap="jet",
-            extent=[t1[0], t1[-1], t2[0], t2[-1]],
-            vmin=vmin_use,
-            vmax=vmax_use,
-        )
-        axes[0].set_title(f"Experimental C₂ (φ={phi:.1f}°)", fontsize=12)
-        axes[0].set_xlabel("t₁ (s)", fontsize=10)
-        axes[0].set_ylabel("t₂ (s)", fontsize=10)
-        cbar0 = plt.colorbar(im0, ax=axes[0], label="C₂(t₁,t₂)")
-        cbar0.ax.tick_params(labelsize=8)
-
-        # Panel 2: Theoretical fit with fixed color scale [1.0, 1.5]
-        im1 = axes[1].imshow(
-            c2_fit_display[i].T,
-            origin="lower",
-            aspect="equal",
-            cmap="jet",
-            extent=[t1[0], t1[-1], t2[0], t2[-1]],
-            vmin=vmin_use,
-            vmax=vmax_use,
-        )
-        axes[1].set_title(f"Classical Fit (φ={phi:.1f}°)", fontsize=12)
-        axes[1].set_xlabel("t₁ (s)", fontsize=10)
-        axes[1].set_ylabel("t₂ (s)", fontsize=10)
-        cbar1 = plt.colorbar(im1, ax=axes[1], label="C₂(t₁,t₂)")
-        cbar1.ax.tick_params(labelsize=8)
-
-        # Panel 3: Residuals using actual min/max
-        residual_min = float(np.min(residuals[i]))
-        residual_max = float(np.max(residuals[i]))
-        im2 = axes[2].imshow(
-            residuals[i].T,
-            origin="lower",
-            aspect="equal",
-            cmap="jet",
-            vmin=residual_min,
-            vmax=residual_max,
-            extent=[t1[0], t1[-1], t2[0], t2[-1]],
-        )
-        axes[2].set_title(f"Residuals (φ={phi:.1f}°)", fontsize=12)
-        axes[2].set_xlabel("t₁ (s)", fontsize=10)
-        axes[2].set_ylabel("t₂ (s)", fontsize=10)
-        cbar2 = plt.colorbar(im2, ax=axes[2], label="ΔC₂")
-        cbar2.ax.tick_params(labelsize=8)
-
-        # Adjust layout and save
-        plt.tight_layout()
-        plot_file = output_dir / f"c2_heatmaps_phi_{phi:.1f}deg.png"
-        plt.savefig(plot_file, dpi=300, bbox_inches="tight")
-        plt.close(fig)
-
-        logger.debug(f"Saved plot: {plot_file}")
-
-    logger.info(f"✓ Generated {len(phi_angles)} heatmap plots (matplotlib)")
-
-
-def _resolve_color_limits(
-    matrix: np.ndarray,
-    color_options: dict[str, Any] | None,
-) -> tuple[float, float]:
-    opts = color_options or {}
-    adaptive = opts.get("adaptive", False)
-    vmin = opts.get("vmin")
-    vmax = opts.get("vmax")
-    percentile_min = opts.get("percentile_min", 1.0)
-    percentile_max = opts.get("percentile_max", 99.0)
-
-    if adaptive and matrix.size > 0:
-        if vmin is None:
-            vmin = float(np.percentile(matrix, percentile_min))
-        if vmax is None:
-            vmax = float(np.percentile(matrix, percentile_max))
-
-    if vmin is None:
-        vmin = 1.0
-    if vmax is None:
-        vmax = 1.5
-
-    return vmin, vmax
 
 
 def _json_serializer(obj):
