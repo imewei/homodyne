@@ -78,11 +78,13 @@ Experimental Parameters
 - :math:`L`: Characteristic length scale / gap size [Å]
 - :math:`\phi`: Scattering angle [degrees]
 - :math:`dt`: Time step between frames [s/frame]
-* :math:`\alpha`: Diffusion scaling exponent (dimensionless)
-    - :math:`\alpha = 0`: Normal diffusion
-    - :math:`\alpha < 0`: Subdiffusion (constrained motion)
-    - :math:`\alpha > 0`: Superdiffusion (enhanced motion)
-* :math:`D_{\text{offset}}`: Additive offset for baseline correction
+- :math:`\alpha`: Diffusion scaling exponent (dimensionless)
+
+  - :math:`\alpha = 0`: Normal diffusion
+  - :math:`\alpha < 0`: Subdiffusion (constrained motion)
+  - :math:`\alpha > 0`: Superdiffusion (enhanced motion)
+
+- :math:`D_{\text{offset}}`: Additive offset for baseline correction
 
 Shear Rate
 ~~~~~~~~~~

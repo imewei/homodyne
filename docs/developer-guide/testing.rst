@@ -302,7 +302,7 @@ Coverage Requirements
 
 - **Optimization**: ≥ 75% (complex algorithms acceptable)
   - ``homodyne.optimization.nlsq``
-  - ``homodyne.optimization.mcmc``
+  - ``homodyne.optimization.cmc``
 
 - **New code**: ≥ 90% before PR merge
 

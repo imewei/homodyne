@@ -324,11 +324,14 @@ def apply_diagonal_correction(c2_mat: jnp.ndarray) -> jnp.ndarray:
     and theoretical model predictions during optimization.
 
     Algorithm:
+
     1. Extract side band: elements at (i, i+1) for i=0..N-2
     2. Compute diagonal values as average of adjacent off-diagonals:
+
        - diag[0] = side_band[0] (edge case)
        - diag[i] = (side_band[i-1] + side_band[i]) / 2 for i=1..N-2
        - diag[N-1] = side_band[N-2] (edge case)
+
     3. Replace diagonal with computed values
 
     Args:

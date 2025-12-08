@@ -133,7 +133,6 @@ Key Functions
    :nosignatures:
 
    dispatch_command
-   clamp_parameters_to_bounds
    save_nlsq_results
    save_mcmc_results
    generate_nlsq_plots

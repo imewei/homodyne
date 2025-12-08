@@ -264,16 +264,6 @@ CMC supports multiple parallelization backends:
    :undoc-members:
    :show-inheritance:
 
-Initialization
---------------
-
-Per-angle parameter initialization strategies.
-
-.. automodule:: homodyne.optimization.initialization
-   :members:
-   :undoc-members:
-   :show-inheritance:
-
 Supporting Modules
 ------------------
 
