@@ -136,6 +136,27 @@ def cleanup_xla_config():
     return removed_files
 
 
+def cleanup_xla_activation_scripts():
+    """Remove XLA activation scripts from virtual environment."""
+    venv_path = Path(sys.prefix)
+    removed_files = []
+
+    xla_activation_files = [
+        venv_path / "etc" / "homodyne" / "activation" / "xla_config.bash",
+        venv_path / "etc" / "homodyne" / "activation" / "xla_config.fish",
+    ]
+
+    for file_path in xla_activation_files:
+        if file_path.exists():
+            try:
+                file_path.unlink()
+                removed_files.append(("XLA activation", file_path.name))
+            except Exception as e:
+                print(f"   ⚠️  Failed to remove {file_path.name}: {e}")
+
+    return removed_files
+
+
 def cleanup_old_system_files():
     """Remove old modular system files if they exist."""
     venv_path = Path(sys.prefix)
@@ -217,7 +238,8 @@ def interactive_cleanup():
         # XLA configuration
         print("\n5. XLA Configuration")
         print("   - Removes ~/.homodyne_xla_mode config file")
-        print("   - Can be regenerated with: homodyne-config-xla --mode cmc")
+        print("   - Removes $VIRTUAL_ENV/etc/homodyne/activation/ scripts")
+        print("   - Can be regenerated with: homodyne-post-install --interactive")
 
         remove_xla = input("   Remove XLA configuration? [y/N]: ").lower().startswith("y")
 
@@ -238,6 +260,7 @@ def interactive_cleanup():
 
         if remove_xla:
             all_removed.extend(cleanup_xla_config())
+            all_removed.extend(cleanup_xla_activation_scripts())
 
         return all_removed
 
@@ -273,11 +296,13 @@ def cleanup_all_files():
         all_removed.extend(cleanup_advanced_features())
         all_removed.extend(cleanup_old_system_files())
         all_removed.extend(cleanup_xla_config())
+        all_removed.extend(cleanup_xla_activation_scripts())
 
         # Clean up empty directories
         venv_path = Path(sys.prefix)
         directories_to_clean = [
             venv_path / "etc" / "homodyne" / "gpu",
+            venv_path / "etc" / "homodyne" / "activation",
             venv_path / "etc" / "homodyne",
             venv_path / "etc" / "zsh",
             venv_path / "share" / "fish" / "vendor_completions.d",
@@ -395,10 +420,14 @@ def show_dry_run():
         ),
     ]
 
-    # XLA config file
-    xla_config = [(Path.home() / ".homodyne_xla_mode", "XLA config", ".homodyne_xla_mode")]
+    # XLA config file and activation scripts
+    xla_files = [
+        (Path.home() / ".homodyne_xla_mode", "XLA config", ".homodyne_xla_mode"),
+        (venv_path / "etc" / "homodyne" / "activation" / "xla_config.bash", "XLA activation", "xla_config.bash"),
+        (venv_path / "etc" / "homodyne" / "activation" / "xla_config.fish", "XLA activation", "xla_config.fish"),
+    ]
 
-    all_files = completion_files + gpu_files + advanced_files + xla_config
+    all_files = completion_files + gpu_files + advanced_files + xla_files
 
     for file_path, file_type, name in all_files:
         if file_path.exists():
@@ -459,6 +488,7 @@ def main():
                 print("   • Advanced features CLI commands")
                 print("   • All conda activation hooks")
                 print("   • XLA configuration (~/.homodyne_xla_mode)")
+                print("   • XLA activation scripts ($VIRTUAL_ENV/etc/homodyne/activation/)")
                 print("\n💡 To restore these files later, run:")
                 print("   homodyne-post-install --interactive")
                 print()
@@ -488,6 +518,7 @@ def main():
                 print("   ├─ GPU acceleration setup (JAX with CUDA)")
                 print("   ├─ Conda activation hooks")
                 print("   ├─ XLA configuration (~/.homodyne_xla_mode)")
+                print("   ├─ XLA activation scripts ($VIRTUAL_ENV/etc/homodyne/activation/)")
                 print("   └─ Legacy system files")
             print("\n🔄 Next steps:")
             print("   • Restart your shell session")
@@ -539,6 +570,7 @@ Files removed:
   • GPU acceleration setup (JAX with CUDA)
   • Conda activation hooks
   • XLA configuration (~/.homodyne_xla_mode)
+  • XLA activation scripts ($VIRTUAL_ENV/etc/homodyne/activation/)
   • Legacy system files
 
 Supports: conda, mamba, uv, venv, virtualenv
