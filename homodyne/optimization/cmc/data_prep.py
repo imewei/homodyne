@@ -327,20 +327,22 @@ def shard_data_stratified(
         n_points = len(angle_data)
 
         # Determine how many shards needed for this angle
+        # effective_max_points tracks actual points per shard (may exceed max_points_per_shard if capped)
+        effective_max_points = max_points_per_shard
+
         if max_points_per_shard is not None and n_points > max_points_per_shard:
             n_angle_shards = (n_points + max_points_per_shard - 1) // max_points_per_shard
 
-            # Cap shards per angle and subsample if needed
+            # Cap shards per angle - increase points per shard to use ALL data
             if n_angle_shards > max_shards_per_angle:
-                # Too many shards - cap and subsample within each shard
-                total_sampled = max_shards_per_angle * max_points_per_shard
-                pct_used = 100 * total_sampled / n_points
+                n_angle_shards = max_shards_per_angle
+                # Recalculate points per shard to fit all data into capped shards
+                effective_max_points = (n_points + max_shards_per_angle - 1) // max_shards_per_angle
                 logger.info(
                     f"Angle {angle_idx} (phi={angle_phi_value:.4f}): {n_points:,} points → "
-                    f"{max_shards_per_angle} shards (capped from {n_angle_shards}, "
-                    f"subsampling to {pct_used:.1f}% of data)"
+                    f"{max_shards_per_angle} shards (~{effective_max_points:,} points each, "
+                    f"increased from {max_points_per_shard:,} to fit all data)"
                 )
-                n_angle_shards = max_shards_per_angle
             else:
                 logger.info(
                     f"Angle {angle_idx} (phi={angle_phi_value:.4f}): {n_points:,} points → "
@@ -377,27 +379,18 @@ def shard_data_stratified(
             indices = np.arange(n_points)
             rng.shuffle(indices)
 
-            # Calculate points per shard - cap at max_points_per_shard
-            raw_points_per_shard = n_points // n_angle_shards
-            if max_points_per_shard is not None and raw_points_per_shard > max_points_per_shard:
-                # Subsample within each shard
-                target_points = max_points_per_shard
-            else:
-                target_points = raw_points_per_shard
+            # Calculate points per shard - use all data
+            points_per_shard = n_points // n_angle_shards
 
             for j in range(n_angle_shards):
-                start_idx = j * raw_points_per_shard
+                start_idx = j * points_per_shard
                 if j == n_angle_shards - 1:
                     # Last shard gets remaining points
                     end_idx = n_points
                 else:
-                    end_idx = (j + 1) * raw_points_per_shard
+                    end_idx = (j + 1) * points_per_shard
 
                 shard_indices = indices[start_idx:end_idx]
-
-                # Subsample if this shard exceeds target
-                if len(shard_indices) > target_points:
-                    shard_indices = rng.choice(shard_indices, target_points, replace=False)
 
                 # Sort to preserve temporal structure within shard
                 shard_indices = np.sort(shard_indices)
