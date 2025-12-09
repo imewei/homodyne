@@ -193,9 +193,9 @@ def fit_mcmc_jax(
         # laminar_flow has 7 physics params + per-angle scaling = more complex
         # static has 3 physics params + per-angle scaling = simpler
         if analysis_mode == "laminar_flow":
-            max_per_shard = 15000  # 7 params: ~15-30 min per shard
+            max_per_shard = 25000  # 7 params: ~20-40 min per shard
         else:
-            max_per_shard = 50000  # 3 params: ~15-30 min per shard
+            max_per_shard = 100000  # 3 params: ~20-40 min per shard
         run_logger.info(f"Auto-selected max_points_per_shard={max_per_shard} for {analysis_mode} mode")
     max_per_shard = int(max_per_shard)
 
