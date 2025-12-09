@@ -633,7 +633,10 @@ def _estimate_contrast_offset_from_data(
         Estimated offset parameter (baseline of g2)
     """
     # Extract g2 data (try multiple possible key names)
-    g2 = data.get("g2") or data.get("c2_exp")
+    # Note: Cannot use `or` operator with numpy arrays as it evaluates truth value
+    g2 = data.get("g2")
+    if g2 is None:
+        g2 = data.get("c2_exp")
 
     if g2 is None:
         logger.warning(
