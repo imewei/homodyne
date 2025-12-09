@@ -276,6 +276,7 @@ def shard_data_stratified(
     prepared: PreparedData,
     num_shards: int | None = None,
     max_points_per_shard: int | None = None,
+    max_shards_per_angle: int = 50,
     seed: int = 42,
 ) -> list[PreparedData]:
     """Shard data by phi angle (stratified sharding).
@@ -283,6 +284,9 @@ def shard_data_stratified(
     Each shard contains data for one phi angle. If a single angle has more
     data points than max_points_per_shard, multiple shards are created for
     that angle by splitting the data randomly.
+
+    When the number of required shards exceeds max_shards_per_angle, data is
+    subsampled within each shard to maintain tractable shard counts.
 
     Parameters
     ----------
@@ -294,7 +298,10 @@ def shard_data_stratified(
     max_points_per_shard : int | None
         Maximum points per shard. If an angle exceeds this, multiple shards
         are created for that angle. If None, uses one shard per angle.
-        Recommended: 15000-50000 for NUTS.
+        Recommended: 25000-100000 for NUTS.
+    max_shards_per_angle : int
+        Maximum shards to create per angle. If more would be needed, data is
+        subsampled within each shard. Default: 50 (balances coverage vs overhead).
     seed : int
         Random seed for reproducible splitting.
 
@@ -322,10 +329,23 @@ def shard_data_stratified(
         # Determine how many shards needed for this angle
         if max_points_per_shard is not None and n_points > max_points_per_shard:
             n_angle_shards = (n_points + max_points_per_shard - 1) // max_points_per_shard
-            logger.info(
-                f"Angle {angle_idx} (phi={angle_phi_value:.4f}): {n_points:,} points → "
-                f"{n_angle_shards} shards (~{max_points_per_shard:,} points each)"
-            )
+
+            # Cap shards per angle and subsample if needed
+            if n_angle_shards > max_shards_per_angle:
+                # Too many shards - cap and subsample within each shard
+                total_sampled = max_shards_per_angle * max_points_per_shard
+                pct_used = 100 * total_sampled / n_points
+                logger.info(
+                    f"Angle {angle_idx} (phi={angle_phi_value:.4f}): {n_points:,} points → "
+                    f"{max_shards_per_angle} shards (capped from {n_angle_shards}, "
+                    f"subsampling to {pct_used:.1f}% of data)"
+                )
+                n_angle_shards = max_shards_per_angle
+            else:
+                logger.info(
+                    f"Angle {angle_idx} (phi={angle_phi_value:.4f}): {n_points:,} points → "
+                    f"{n_angle_shards} shards (~{max_points_per_shard:,} points each)"
+                )
         else:
             n_angle_shards = 1
 
@@ -357,17 +377,28 @@ def shard_data_stratified(
             indices = np.arange(n_points)
             rng.shuffle(indices)
 
-            points_per_shard = n_points // n_angle_shards
+            # Calculate points per shard - cap at max_points_per_shard
+            raw_points_per_shard = n_points // n_angle_shards
+            if max_points_per_shard is not None and raw_points_per_shard > max_points_per_shard:
+                # Subsample within each shard
+                target_points = max_points_per_shard
+            else:
+                target_points = raw_points_per_shard
 
             for j in range(n_angle_shards):
-                start_idx = j * points_per_shard
+                start_idx = j * raw_points_per_shard
                 if j == n_angle_shards - 1:
                     # Last shard gets remaining points
                     end_idx = n_points
                 else:
-                    end_idx = (j + 1) * points_per_shard
+                    end_idx = (j + 1) * raw_points_per_shard
 
                 shard_indices = indices[start_idx:end_idx]
+
+                # Subsample if this shard exceeds target
+                if len(shard_indices) > target_points:
+                    shard_indices = rng.choice(shard_indices, target_points, replace=False)
+
                 # Sort to preserve temporal structure within shard
                 shard_indices = np.sort(shard_indices)
 
