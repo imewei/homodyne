@@ -476,7 +476,8 @@ optimization:
     sharding:
       strategy: "stratified" # Options: "stratified" | "random" | "contiguous"
       num_shards: "auto" # Number of shards (int or "auto" for automatic)
-      max_points_per_shard: "auto" # Maximum points per shard (int or "auto")
+      max_points_per_shard: 15000 # Maximum points per shard for NUTS tractability
+      # Note: "auto" resolves to 15000 for laminar_flow (7 params). Increase if you have more time.
 
     # Backend configuration for parallel execution
     backend_config:

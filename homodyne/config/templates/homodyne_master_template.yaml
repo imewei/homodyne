@@ -584,7 +584,8 @@ optimization:
     sharding:
       strategy: "stratified"     # "stratified" (angle-aware) | "random" | "contiguous"
       num_shards: "auto"         # "auto" uses n_phi for stratified
-      max_points_per_shard: "auto"
+      max_points_per_shard: 50000  # Maximum points per shard for NUTS tractability
+      # Note: "auto" resolves to 50000. Increase if you have more time, decrease if timeouts occur.
       seed_base: 0               # Shard seed = seed_base + shard_id
 
     # Subposterior combination
