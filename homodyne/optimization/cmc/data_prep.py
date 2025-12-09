@@ -280,93 +280,125 @@ def shard_data_stratified(
 ) -> list[PreparedData]:
     """Shard data by phi angle (stratified sharding).
 
-    Each shard contains all data for one or more phi angles. If a shard
-    exceeds max_points_per_shard, data is randomly subsampled to fit.
+    Each shard contains data for one phi angle. If a single angle has more
+    data points than max_points_per_shard, multiple shards are created for
+    that angle by splitting the data randomly.
 
     Parameters
     ----------
     prepared : PreparedData
         Prepared data object.
     num_shards : int | None
-        Number of shards. If None, uses one shard per angle.
+        Ignored. Number of shards is determined automatically based on
+        data size and max_points_per_shard.
     max_points_per_shard : int | None
-        Maximum points per shard. If exceeded, data is randomly subsampled.
-        If None, no subsampling is applied. Recommended: 50000-100000 for NUTS.
+        Maximum points per shard. If an angle exceeds this, multiple shards
+        are created for that angle. If None, uses one shard per angle.
+        Recommended: 15000-50000 for NUTS.
     seed : int
-        Random seed for reproducible subsampling.
+        Random seed for reproducible splitting.
 
     Returns
     -------
     list[PreparedData]
         List of shard data objects.
     """
-    if num_shards is None:
-        num_shards = prepared.n_phi
-
     shards: list[PreparedData] = []
+    rng = np.random.default_rng(seed)
+    shard_idx = 0
 
-    # Group phi angles into shards
-    angles_per_shard = max(1, prepared.n_phi // num_shards)
+    # Process each phi angle separately
+    for angle_idx in range(prepared.n_phi):
+        # Get data for this angle
+        mask = prepared.phi_indices == angle_idx
+        angle_data = prepared.data[mask]
+        angle_t1 = prepared.t1[mask]
+        angle_t2 = prepared.t2[mask]
+        angle_phi = prepared.phi[mask]
+        angle_phi_value = prepared.phi_unique[angle_idx]
 
-    for i in range(num_shards):
-        # Determine which angles go in this shard
-        start_angle = i * angles_per_shard
-        if i == num_shards - 1:
-            # Last shard gets remaining angles
-            end_angle = prepared.n_phi
+        n_points = len(angle_data)
+
+        # Determine how many shards needed for this angle
+        if max_points_per_shard is not None and n_points > max_points_per_shard:
+            n_angle_shards = (n_points + max_points_per_shard - 1) // max_points_per_shard
+            logger.info(
+                f"Angle {angle_idx} (phi={angle_phi_value:.4f}): {n_points:,} points → "
+                f"{n_angle_shards} shards (~{max_points_per_shard:,} points each)"
+            )
         else:
-            end_angle = (i + 1) * angles_per_shard
+            n_angle_shards = 1
 
-        # Get indices for these angles
-        mask = np.zeros(prepared.n_total, dtype=bool)
-        for angle_idx in range(start_angle, end_angle):
-            mask |= prepared.phi_indices == angle_idx
+        if n_angle_shards == 1:
+            # Single shard for this angle - no splitting needed
+            shard_phi_unique, shard_phi_indices = extract_phi_info(angle_phi)
+            shard_noise = estimate_noise_scale(angle_data)
 
-        # Extract shard data
-        shard_data = prepared.data[mask]
-        shard_t1 = prepared.t1[mask]
-        shard_t2 = prepared.t2[mask]
-        shard_phi = prepared.phi[mask]
-
-        original_size = len(shard_data)
-
-        # Subsample if exceeds max_points_per_shard
-        if max_points_per_shard is not None and len(shard_data) > max_points_per_shard:
-            rng = np.random.default_rng(seed + i)
-            indices = rng.choice(len(shard_data), max_points_per_shard, replace=False)
-            indices = np.sort(indices)  # Preserve temporal order for correlation
-            shard_data = shard_data[indices]
-            shard_t1 = shard_t1[indices]
-            shard_t2 = shard_t2[indices]
-            shard_phi = shard_phi[indices]
-            logger.warning(
-                f"Shard {i}: Subsampled from {original_size:,} to {max_points_per_shard:,} points "
-                f"({100*max_points_per_shard/original_size:.1f}% of data) for MCMC tractability"
+            shards.append(
+                PreparedData(
+                    data=angle_data,
+                    t1=angle_t1,
+                    t2=angle_t2,
+                    phi=angle_phi,
+                    phi_unique=shard_phi_unique,
+                    phi_indices=shard_phi_indices,
+                    n_total=len(angle_data),
+                    n_phi=len(shard_phi_unique),
+                    noise_scale=shard_noise,
+                )
             )
-
-        # Create shard PreparedData
-        shard_phi_unique, shard_phi_indices = extract_phi_info(shard_phi)
-        shard_noise = estimate_noise_scale(shard_data)
-
-        shards.append(
-            PreparedData(
-                data=shard_data,
-                t1=shard_t1,
-                t2=shard_t2,
-                phi=shard_phi,
-                phi_unique=shard_phi_unique,
-                phi_indices=shard_phi_indices,
-                n_total=len(shard_data),
-                n_phi=len(shard_phi_unique),
-                noise_scale=shard_noise,
+            logger.debug(
+                f"Shard {shard_idx}: {len(angle_data):,} points, "
+                f"angle {angle_idx} (phi={angle_phi_value:.4f})"
             )
-        )
+            shard_idx += 1
+        else:
+            # Split this angle's data into multiple shards
+            indices = np.arange(n_points)
+            rng.shuffle(indices)
 
-        logger.debug(
-            f"Shard {i}: {len(shard_data):,} points, "
-            f"{len(shard_phi_unique)} angles: {shard_phi_unique}"
-        )
+            points_per_shard = n_points // n_angle_shards
 
+            for j in range(n_angle_shards):
+                start_idx = j * points_per_shard
+                if j == n_angle_shards - 1:
+                    # Last shard gets remaining points
+                    end_idx = n_points
+                else:
+                    end_idx = (j + 1) * points_per_shard
+
+                shard_indices = indices[start_idx:end_idx]
+                # Sort to preserve temporal structure within shard
+                shard_indices = np.sort(shard_indices)
+
+                shard_data = angle_data[shard_indices]
+                shard_t1 = angle_t1[shard_indices]
+                shard_t2 = angle_t2[shard_indices]
+                shard_phi = angle_phi[shard_indices]
+
+                shard_phi_unique, shard_phi_indices = extract_phi_info(shard_phi)
+                shard_noise = estimate_noise_scale(shard_data)
+
+                shards.append(
+                    PreparedData(
+                        data=shard_data,
+                        t1=shard_t1,
+                        t2=shard_t2,
+                        phi=shard_phi,
+                        phi_unique=shard_phi_unique,
+                        phi_indices=shard_phi_indices,
+                        n_total=len(shard_data),
+                        n_phi=len(shard_phi_unique),
+                        noise_scale=shard_noise,
+                    )
+                )
+                logger.debug(
+                    f"Shard {shard_idx}: {len(shard_data):,} points, "
+                    f"angle {angle_idx} part {j+1}/{n_angle_shards} (phi={angle_phi_value:.4f})"
+                )
+                shard_idx += 1
+
+    logger.info(f"Created {len(shards)} total shards from {prepared.n_phi} angles")
     return shards
 
 

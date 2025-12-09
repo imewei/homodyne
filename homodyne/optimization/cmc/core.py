@@ -207,7 +207,7 @@ def fit_mcmc_jax(
         total_shard_points = sum(s.n_total for s in shards)
         run_logger.info(
             f"Using CMC with {len(shards)} shards (stratified by phi), "
-            f"{total_shard_points:,} total points after subsampling"
+            f"{total_shard_points:,} total points"
         )
     elif use_cmc and prepared.n_phi == 1:
         # Single phi angle but large dataset - use random sharding
