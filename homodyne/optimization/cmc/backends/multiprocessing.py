@@ -13,6 +13,7 @@ from typing import TYPE_CHECKING, Any
 
 import jax
 import numpy as np
+from tqdm import tqdm
 
 from homodyne.optimization.cmc.backends.base import CMCBackend, combine_shard_samples
 from homodyne.utils.logging import get_logger, with_context
@@ -197,6 +198,7 @@ class MultiprocessingBackend(CMCBackend):
         initial_values: dict[str, float] | None = None,
         parameter_space: ParameterSpace = None,
         analysis_mode: str = "static",
+        progress_bar: bool = True,
     ) -> MCMCSamples:
         """Run MCMC sampling across shards.
 
@@ -216,6 +218,8 @@ class MultiprocessingBackend(CMCBackend):
             Parameter space for priors.
         analysis_mode : str
             Analysis mode.
+        progress_bar : bool
+            Whether to show progress bar for shard completion.
 
         Returns
         -------
@@ -304,14 +308,28 @@ class MultiprocessingBackend(CMCBackend):
                 )
                 async_results.append(async_result)
 
-            # Collect results
+            # Collect results with optional progress bar
+            pbar = tqdm(
+                total=n_shards,
+                desc="CMC shards",
+                disable=not progress_bar,
+                unit="shard",
+            )
             for async_result in async_results:
                 try:
                     result = async_result.get(timeout=3600)  # 1 hour timeout
                     results.append(result)
+                    pbar.update(1)
+                    if result.get("success"):
+                        pbar.set_postfix(
+                            shard=result.get("shard_idx", "?"),
+                            time=f"{result.get('duration', 0):.1f}s",
+                        )
                 except Exception as e:
                     run_logger.error(f"Worker failed: {e}")
                     results.append({"success": False, "error": str(e)})
+                    pbar.update(1)
+            pbar.close()
 
         # Process results
         successful_samples = []

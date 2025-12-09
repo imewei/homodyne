@@ -298,6 +298,7 @@ def fit_mcmc_jax(
             initial_values=initial_values,
             parameter_space=parameter_space,
             analysis_mode=analysis_mode,
+            progress_bar=progress_bar,
         )
         stats_warmup = 0.0  # Not tracked for parallel
         stats_total = time.perf_counter() - start_time
