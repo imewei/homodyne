@@ -18,6 +18,7 @@ from homodyne.optimization.cmc.backends import select_backend
 from homodyne.optimization.cmc.config import CMCConfig
 from homodyne.optimization.cmc.data_prep import (
     prepare_mcmc_data,
+    shard_data_random,
     shard_data_stratified,
 )
 from homodyne.optimization.cmc.diagnostics import (
@@ -185,11 +186,42 @@ def fit_mcmc_jax(
     # =========================================================================
     use_cmc = config.should_enable_cmc(prepared.n_total)
 
+    # Resolve max_points_per_shard - critical for NUTS tractability
+    # Scale inversely with parameter count: more params = fewer points per shard
+    max_per_shard = config.max_points_per_shard
+    if max_per_shard == "auto" or max_per_shard is None:
+        # laminar_flow has 7 physics params + per-angle scaling = more complex
+        # static has 3 physics params + per-angle scaling = simpler
+        if analysis_mode == "laminar_flow":
+            max_per_shard = 15000  # 7 params: ~15-30 min per shard
+        else:
+            max_per_shard = 50000  # 3 params: ~15-30 min per shard
+        run_logger.info(f"Auto-selected max_points_per_shard={max_per_shard} for {analysis_mode} mode")
+    max_per_shard = int(max_per_shard)
+
     if use_cmc and prepared.n_phi > 1:
-        # Shard by phi angle
+        # Shard by phi angle (stratified)
         num_shards = config.get_num_shards(prepared.n_total, prepared.n_phi)
-        shards = shard_data_stratified(prepared, num_shards)
-        run_logger.info(f"Using CMC with {len(shards)} shards (stratified by phi)")
+
+        shards = shard_data_stratified(prepared, num_shards, max_points_per_shard=max_per_shard)
+        total_shard_points = sum(s.n_total for s in shards)
+        run_logger.info(
+            f"Using CMC with {len(shards)} shards (stratified by phi), "
+            f"{total_shard_points:,} total points after subsampling"
+        )
+    elif use_cmc and prepared.n_phi == 1:
+        # Single phi angle but large dataset - use random sharding
+        # Calculate number of shards based on data size and max_per_shard
+        num_shards = max(2, (prepared.n_total + max_per_shard - 1) // max_per_shard)
+        # Cap at reasonable number of parallel workers
+        num_shards = min(num_shards, 8)
+
+        shards = shard_data_random(prepared, num_shards, max_points_per_shard=max_per_shard)
+        total_shard_points = sum(s.n_total for s in shards)
+        run_logger.info(
+            f"Using CMC with {len(shards)} shards (random split, single phi), "
+            f"{total_shard_points:,} total points after subsampling"
+        )
     else:
         shards = None
         run_logger.info("Using single-shard MCMC (no CMC sharding)")

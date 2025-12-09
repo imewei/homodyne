@@ -36,6 +36,7 @@ def _run_shard_worker(
     parameter_space_dict: dict[str, Any],
     n_phi: int,
     analysis_mode: str,
+    threads_per_worker: int = 2,
 ) -> dict[str, Any]:
     """Worker function for processing a single shard.
 
@@ -59,12 +60,22 @@ def _run_shard_worker(
         Number of phi angles in this shard.
     analysis_mode : str
         Analysis mode.
+    threads_per_worker : int
+        Number of threads for JAX/XLA in this worker process.
 
     Returns
     -------
     dict[str, Any]
         Serialized MCMCSamples.
     """
+    import os
+
+    # Limit threads BEFORE importing JAX to enable true parallelism across workers
+    os.environ["XLA_FLAGS"] = "--xla_cpu_multi_thread_eigen=false"
+    os.environ["OMP_NUM_THREADS"] = str(threads_per_worker)
+    os.environ["MKL_NUM_THREADS"] = str(threads_per_worker)
+    os.environ["OPENBLAS_NUM_THREADS"] = str(threads_per_worker)
+
     import jax.numpy as jnp
 
     from homodyne.config.parameter_space import ParameterSpace
@@ -251,8 +262,16 @@ class MultiprocessingBackend(CMCBackend):
 
         # Multiple shards - run in parallel
         n_shards = len(shards)
+        actual_workers = min(self.n_workers, n_shards)
+
+        # Calculate threads per worker to avoid over-subscription
+        # Each worker gets a fair share of CPU threads
+        total_threads = mp.cpu_count()
+        threads_per_worker = max(1, total_threads // actual_workers)
+
         run_logger.info(
-            f"Running {n_shards} shards in parallel with {self.n_workers} workers"
+            f"Running {n_shards} shards in parallel with {actual_workers} workers "
+            f"({threads_per_worker} threads each)"
         )
 
         # Prepare shard data for workers - must include all fields needed by xpcs_model()
@@ -289,7 +308,7 @@ class MultiprocessingBackend(CMCBackend):
         # Use spawn context for clean process isolation
         ctx = mp.get_context(self.spawn_method)
 
-        with ctx.Pool(processes=min(self.n_workers, n_shards)) as pool:
+        with ctx.Pool(processes=actual_workers) as pool:
             # Submit all shards
             async_results = []
             for i, shard_data in enumerate(shard_data_list):
@@ -304,31 +323,97 @@ class MultiprocessingBackend(CMCBackend):
                         ps_dict,
                         shards[i].n_phi,
                         analysis_mode,
+                        threads_per_worker,
                     ),
                 )
                 async_results.append(async_result)
 
-            # Collect results with optional progress bar
+            # Collect results with polling-based progress bar
+            # This shows progress immediately instead of waiting for first result
             pbar = tqdm(
                 total=n_shards,
                 desc="CMC shards",
                 disable=not progress_bar,
                 unit="shard",
+                position=0,
+                leave=True,
+                dynamic_ncols=True,
             )
-            for async_result in async_results:
-                try:
-                    result = async_result.get(timeout=3600)  # 1 hour timeout
-                    results.append(result)
-                    pbar.update(1)
-                    if result.get("success"):
-                        pbar.set_postfix(
-                            shard=result.get("shard_idx", "?"),
-                            time=f"{result.get('duration', 0):.1f}s",
-                        )
-                except Exception as e:
-                    run_logger.error(f"Worker failed: {e}")
-                    results.append({"success": False, "error": str(e)})
-                    pbar.update(1)
+            # Show that sampling is in progress
+            pbar.set_postfix_str("sampling...")
+            pbar.refresh()
+
+            # Timeout for NUTS sampling - scale with number of shards
+            # Each shard can take ~30-60 min for complex models, but they run in parallel
+            # Set per-shard timeout of 2 hours, total timeout scales with parallelism
+            per_shard_timeout = 7200  # 2 hours per shard
+            # With parallel execution, total time ≈ per_shard_timeout * ceil(n_shards / n_workers)
+            batches = (n_shards + actual_workers - 1) // actual_workers
+            timeout_seconds = per_shard_timeout * batches
+            run_logger.info(
+                f"Timeout set to {timeout_seconds/3600:.1f} hours "
+                f"({batches} batch(es) × {per_shard_timeout/3600:.1f}h per batch)"
+            )
+            poll_interval = 1.0  # Check every second
+            start_time = time.time()
+
+            # Track which results we've collected
+            collected = [False] * n_shards
+            completed_count = 0
+
+            while completed_count < n_shards:
+                elapsed = time.time() - start_time
+                if elapsed > timeout_seconds:
+                    # Timeout - collect whatever we have
+                    for i, _async_result in enumerate(async_results):
+                        if not collected[i]:
+                            timeout_msg = (
+                                f"Worker timed out after {timeout_seconds}s - shard likely has "
+                                "too many data points for NUTS sampling. Consider reducing "
+                                "max_points_per_shard in cmc config or using fewer angles."
+                            )
+                            run_logger.error(timeout_msg)
+                            results.append({"success": False, "shard_idx": i, "error": timeout_msg})
+                            pbar.update(1)
+                            completed_count += 1
+                    break
+
+                # Poll each async result
+                for i, async_result in enumerate(async_results):
+                    if collected[i]:
+                        continue
+
+                    if async_result.ready():
+                        try:
+                            result = async_result.get(timeout=0)
+                            results.append(result)
+                            collected[i] = True
+                            completed_count += 1
+                            pbar.update(1)
+                            if result.get("success"):
+                                pbar.set_postfix(
+                                    shard=result.get("shard_idx", "?"),
+                                    time=f"{result.get('duration', 0):.1f}s",
+                                )
+                            else:
+                                pbar.set_postfix(
+                                    shard=result.get("shard_idx", "?"),
+                                    status="failed",
+                                )
+                        except Exception as e:
+                            error_msg = f"{type(e).__name__}: {e}" if str(e) else type(e).__name__
+                            run_logger.error(f"Worker {i} failed: {error_msg}")
+                            results.append({"success": False, "shard_idx": i, "error": error_msg})
+                            collected[i] = True
+                            completed_count += 1
+                            pbar.update(1)
+
+                # Update elapsed time in progress bar
+                if completed_count < n_shards:
+                    mins, secs = divmod(int(elapsed), 60)
+                    pbar.set_postfix_str(f"sampling... {mins}m{secs:02d}s")
+                    time.sleep(poll_interval)
+
             pbar.close()
 
         # Process results

@@ -275,10 +275,13 @@ def prepare_mcmc_data(
 def shard_data_stratified(
     prepared: PreparedData,
     num_shards: int | None = None,
+    max_points_per_shard: int | None = None,
+    seed: int = 42,
 ) -> list[PreparedData]:
     """Shard data by phi angle (stratified sharding).
 
-    Each shard contains all data for one or more phi angles.
+    Each shard contains all data for one or more phi angles. If a shard
+    exceeds max_points_per_shard, data is randomly subsampled to fit.
 
     Parameters
     ----------
@@ -286,6 +289,11 @@ def shard_data_stratified(
         Prepared data object.
     num_shards : int | None
         Number of shards. If None, uses one shard per angle.
+    max_points_per_shard : int | None
+        Maximum points per shard. If exceeded, data is randomly subsampled.
+        If None, no subsampling is applied. Recommended: 50000-100000 for NUTS.
+    seed : int
+        Random seed for reproducible subsampling.
 
     Returns
     -------
@@ -320,6 +328,22 @@ def shard_data_stratified(
         shard_t2 = prepared.t2[mask]
         shard_phi = prepared.phi[mask]
 
+        original_size = len(shard_data)
+
+        # Subsample if exceeds max_points_per_shard
+        if max_points_per_shard is not None and len(shard_data) > max_points_per_shard:
+            rng = np.random.default_rng(seed + i)
+            indices = rng.choice(len(shard_data), max_points_per_shard, replace=False)
+            indices = np.sort(indices)  # Preserve temporal order for correlation
+            shard_data = shard_data[indices]
+            shard_t1 = shard_t1[indices]
+            shard_t2 = shard_t2[indices]
+            shard_phi = shard_phi[indices]
+            logger.warning(
+                f"Shard {i}: Subsampled from {original_size:,} to {max_points_per_shard:,} points "
+                f"({100*max_points_per_shard/original_size:.1f}% of data) for MCMC tractability"
+            )
+
         # Create shard PreparedData
         shard_phi_unique, shard_phi_indices = extract_phi_info(shard_phi)
         shard_noise = estimate_noise_scale(shard_data)
@@ -341,6 +365,98 @@ def shard_data_stratified(
         logger.debug(
             f"Shard {i}: {len(shard_data):,} points, "
             f"{len(shard_phi_unique)} angles: {shard_phi_unique}"
+        )
+
+    return shards
+
+
+def shard_data_random(
+    prepared: PreparedData,
+    num_shards: int,
+    max_points_per_shard: int | None = None,
+    seed: int = 42,
+) -> list[PreparedData]:
+    """Shard data randomly into approximately equal parts.
+
+    This is used when there's only one phi angle but the dataset is too
+    large for efficient NUTS sampling. Each shard gets a random subset
+    of the data.
+
+    Parameters
+    ----------
+    prepared : PreparedData
+        Prepared data object.
+    num_shards : int
+        Number of shards to create.
+    max_points_per_shard : int | None
+        Maximum points per shard. If total/num_shards exceeds this,
+        data is subsampled. Recommended: 50000-100000 for NUTS.
+    seed : int
+        Random seed for reproducible shuffling.
+
+    Returns
+    -------
+    list[PreparedData]
+        List of shard data objects.
+    """
+    rng = np.random.default_rng(seed)
+
+    # Shuffle indices
+    indices = np.arange(prepared.n_total)
+    rng.shuffle(indices)
+
+    # Split into shards
+    points_per_shard = prepared.n_total // num_shards
+    shards: list[PreparedData] = []
+
+    for i in range(num_shards):
+        start_idx = i * points_per_shard
+        if i == num_shards - 1:
+            # Last shard gets remaining points
+            end_idx = prepared.n_total
+        else:
+            end_idx = (i + 1) * points_per_shard
+
+        shard_indices = indices[start_idx:end_idx]
+
+        # Apply max_points_per_shard limit
+        if max_points_per_shard is not None and len(shard_indices) > max_points_per_shard:
+            original_size = len(shard_indices)
+            shard_indices = rng.choice(shard_indices, max_points_per_shard, replace=False)
+            logger.warning(
+                f"Shard {i}: Subsampled from {original_size:,} to {max_points_per_shard:,} points "
+                f"for MCMC tractability"
+            )
+
+        # Sort to preserve some temporal structure
+        shard_indices = np.sort(shard_indices)
+
+        # Extract shard data
+        shard_data = prepared.data[shard_indices]
+        shard_t1 = prepared.t1[shard_indices]
+        shard_t2 = prepared.t2[shard_indices]
+        shard_phi = prepared.phi[shard_indices]
+
+        # Create shard PreparedData
+        shard_phi_unique, shard_phi_indices = extract_phi_info(shard_phi)
+        shard_noise = estimate_noise_scale(shard_data)
+
+        shards.append(
+            PreparedData(
+                data=shard_data,
+                t1=shard_t1,
+                t2=shard_t2,
+                phi=shard_phi,
+                phi_unique=shard_phi_unique,
+                phi_indices=shard_phi_indices,
+                n_total=len(shard_data),
+                n_phi=len(shard_phi_unique),
+                noise_scale=shard_noise,
+            )
+        )
+
+        logger.debug(
+            f"Shard {i}: {len(shard_data):,} points (random split)"
         )
 
     return shards
