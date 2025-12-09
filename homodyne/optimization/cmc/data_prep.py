@@ -428,25 +428,30 @@ def shard_data_stratified(
 
 def shard_data_random(
     prepared: PreparedData,
-    num_shards: int,
+    num_shards: int | None = None,
     max_points_per_shard: int | None = None,
+    max_shards: int = 50,
     seed: int = 42,
 ) -> list[PreparedData]:
     """Shard data randomly into approximately equal parts.
 
     This is used when there's only one phi angle but the dataset is too
     large for efficient NUTS sampling. Each shard gets a random subset
-    of the data.
+    of the data. ALL data is used (no subsampling).
 
     Parameters
     ----------
     prepared : PreparedData
         Prepared data object.
-    num_shards : int
-        Number of shards to create.
+    num_shards : int | None
+        Number of shards to create. If None, calculated from data size
+        and max_points_per_shard.
     max_points_per_shard : int | None
-        Maximum points per shard. If total/num_shards exceeds this,
-        data is subsampled. Recommended: 50000-100000 for NUTS.
+        Target points per shard. Used to calculate num_shards if not provided.
+        If num_shards would exceed max_shards, shard size increases to fit all data.
+        Recommended: 25000-100000 for NUTS.
+    max_shards : int
+        Maximum number of shards. Default: 50.
     seed : int
         Random seed for reproducible shuffling.
 
@@ -457,11 +462,34 @@ def shard_data_random(
     """
     rng = np.random.default_rng(seed)
 
+    # Calculate number of shards if not provided
+    if num_shards is None:
+        if max_points_per_shard is not None:
+            num_shards = (prepared.n_total + max_points_per_shard - 1) // max_points_per_shard
+        else:
+            num_shards = 1
+
+    # Cap shards and increase shard size to use ALL data
+    if num_shards > max_shards:
+        effective_points_per_shard = (prepared.n_total + max_shards - 1) // max_shards
+        logger.info(
+            f"Random sharding: {prepared.n_total:,} points → {max_shards} shards "
+            f"(~{effective_points_per_shard:,} points each, increased from "
+            f"{max_points_per_shard:,} to fit all data)"
+        )
+        num_shards = max_shards
+    else:
+        points_per_shard = prepared.n_total // num_shards
+        logger.info(
+            f"Random sharding: {prepared.n_total:,} points → {num_shards} shards "
+            f"(~{points_per_shard:,} points each)"
+        )
+
     # Shuffle indices
     indices = np.arange(prepared.n_total)
     rng.shuffle(indices)
 
-    # Split into shards
+    # Split into shards - use ALL data
     points_per_shard = prepared.n_total // num_shards
     shards: list[PreparedData] = []
 
@@ -474,15 +502,6 @@ def shard_data_random(
             end_idx = (i + 1) * points_per_shard
 
         shard_indices = indices[start_idx:end_idx]
-
-        # Apply max_points_per_shard limit
-        if max_points_per_shard is not None and len(shard_indices) > max_points_per_shard:
-            original_size = len(shard_indices)
-            shard_indices = rng.choice(shard_indices, max_points_per_shard, replace=False)
-            logger.warning(
-                f"Shard {i}: Subsampled from {original_size:,} to {max_points_per_shard:,} points "
-                f"for MCMC tractability"
-            )
 
         # Sort to preserve some temporal structure
         shard_indices = np.sort(shard_indices)

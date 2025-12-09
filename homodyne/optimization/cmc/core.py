@@ -211,16 +211,17 @@ def fit_mcmc_jax(
         )
     elif use_cmc and prepared.n_phi == 1:
         # Single phi angle but large dataset - use random sharding
-        # Calculate number of shards based on data size and max_per_shard
-        num_shards = max(2, (prepared.n_total + max_per_shard - 1) // max_per_shard)
-        # Cap at reasonable number of parallel workers
-        num_shards = min(num_shards, 8)
-
-        shards = shard_data_random(prepared, num_shards, max_points_per_shard=max_per_shard)
+        # shard_data_random handles num_shards calculation and capping internally
+        shards = shard_data_random(
+            prepared,
+            num_shards=None,  # Auto-calculate from data size
+            max_points_per_shard=max_per_shard,
+            max_shards=50,  # Same cap as stratified
+        )
         total_shard_points = sum(s.n_total for s in shards)
         run_logger.info(
             f"Using CMC with {len(shards)} shards (random split, single phi), "
-            f"{total_shard_points:,} total points after subsampling"
+            f"{total_shard_points:,} total points"
         )
     else:
         shards = None
