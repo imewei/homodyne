@@ -478,6 +478,194 @@ Typical performance on CPU (Intel Xeon, 8 cores):
 
 Performance scales well with data size due to vectorized JAX operations.
 
+Data Flow: HDF5 to Cache to Analysis
+------------------------------------
+
+Understanding the data flow from raw HDF5 files through the caching system to
+analysis is critical for debugging and extending the package.
+
+Complete Data Pipeline
+~~~~~~~~~~~~~~~~~~~~~~
+
+The data flows through these stages:
+
+.. code-block:: text
+
+   ┌─────────────────────────────────────────────────────────────────────────┐
+   │                           HDF5 FILE                                     │
+   │  C2 matrices from synchrotron (APS old or APS-U new format)            │
+   └──────────────────────────────────┬──────────────────────────────────────┘
+                                      │
+                                      ▼
+   ┌─────────────────────────────────────────────────────────────────────────┐
+   │                   XPCSDataLoader._load_from_hdf()                       │
+   │  - Detects format (APS old vs APS-U)                                    │
+   │  - Loads C2 matrices and metadata                                       │
+   │  - Applies frame slicing [start_frame:end_frame]                        │
+   └──────────────────────────────────┬──────────────────────────────────────┘
+                                      │
+                                      ▼
+   ┌─────────────────────────────────────────────────────────────────────────┐
+   │              XPCSDataLoader._calculate_time_arrays()                    │
+   │                                                                         │
+   │  time_1d = np.linspace(0, time_max, matrix_size)  ◀── STARTS FROM 0    │
+   │  t1_2d, t2_2d = np.meshgrid(time_1d, time_1d, indexing="ij")           │
+   │                                                                         │
+   │  Result: time_1d = [0, dt, 2*dt, 3*dt, ..., (N-1)*dt]                   │
+   └──────────────────────────────────┬──────────────────────────────────────┘
+                                      │
+                                      ▼
+   ┌─────────────────────────────────────────────────────────────────────────┐
+   │                   XPCSDataLoader._save_to_cache()                       │
+   │                                                                         │
+   │  np.savez_compressed(cache_path,                                        │
+   │      t1=t1_2d,           # 2D meshgrid, starts from t=0                 │
+   │      t2=t2_2d,           # 2D meshgrid, starts from t=0                 │
+   │      c2_exp=c2_exp,      # Shape: (n_phi, n_t1, n_t2)                   │
+   │      phi_angles_list=...,                                               │
+   │      wavevector_q_list=...,                                             │
+   │      cache_metadata=...                                                 │
+   │  )                                                                      │
+   └──────────────────────────────────┬──────────────────────────────────────┘
+                                      │
+                                      ▼
+   ┌─────────────────────────────────────────────────────────────────────────┐
+   │                         CACHE FILE (.npz)                               │
+   │                                                                         │
+   │  Contains: t1, t2 (2D meshgrids), c2_exp (3D), metadata                 │
+   │  Note: t1[0,0] = t2[0,0] = 0 (includes t=0 point)                       │
+   └──────────────────────────────────┬──────────────────────────────────────┘
+                                      │
+                                      ▼
+   ┌─────────────────────────────────────────────────────────────────────────┐
+   │                   XPCSDataLoader._load_from_cache()                     │
+   │                                                                         │
+   │  Returns data dict with t1, t2 (may be 1D or 2D depending on version)  │
+   └──────────────────────────────────┬──────────────────────────────────────┘
+                                      │
+                                      ▼
+   ┌─────────────────────────────────────────────────────────────────────────┐
+   │              commands.py: _exclude_t0_from_analysis()                   │
+   │                                                                         │
+   │  CRITICAL: Removes t=0 to prevent D(t) singularity                      │
+   │                                                                         │
+   │  if t1.ndim == 2:                                                       │
+   │      t1_sliced = t1[1:, 1:]    # Remove first row & column              │
+   │      t2_sliced = t2[1:, 1:]                                             │
+   │      c2_sliced = c2[:, 1:, 1:]                                          │
+   │  else:                                                                  │
+   │      t1_sliced = t1[1:]        # Remove first element                   │
+   │      t2_sliced = t2[1:]                                                 │
+   │      c2_sliced = c2[:, 1:, 1:]                                          │
+   │                                                                         │
+   │  Result: Analysis uses t ∈ {dt, 2*dt, 3*dt, ...}                        │
+   └──────────────────────────────────┬──────────────────────────────────────┘
+                                      │
+                                      ▼
+   ┌─────────────────────────────────────────────────────────────────────────┐
+   │                      NLSQ / CMC Analysis                                │
+   │                                                                         │
+   │  Optimization runs on data excluding t=0                                │
+   │  D(t) = D₀ × t^α + D_offset is finite for all t > 0                     │
+   └─────────────────────────────────────────────────────────────────────────┘
+
+Time Array Generation
+~~~~~~~~~~~~~~~~~~~~~
+
+The ``_calculate_time_arrays()`` method creates time arrays:
+
+.. code-block:: python
+
+   def _calculate_time_arrays(self, matrix_size: int) -> tuple[NDArray, NDArray]:
+       """Calculate t1 and t2 time arrays as 2D meshgrids."""
+       dt = self.analyzer_config.get("dt", 1.0)
+       start_frame = self.analyzer_config.get("start_frame", 1)
+       end_frame = self.analyzer_config.get("end_frame", matrix_size + start_frame - 1)
+
+       # Create 1D time array from configuration
+       time_max = dt * (end_frame - start_frame)
+       time_1d = np.linspace(0, time_max, matrix_size)  # STARTS FROM 0
+
+       # Create 2D meshgrids for correlation analysis
+       t1_2d, t2_2d = np.meshgrid(time_1d, time_1d, indexing="ij")
+
+       return t1_2d, t2_2d
+
+**Example with concrete values**:
+
+- ``matrix_size = 100`` (100×100 C₂ matrix)
+- ``dt = 0.001`` seconds
+- ``start_frame = 1``, ``end_frame = 100`` (default)
+
+Result:
+
+- ``time_max = 0.001 × 99 = 0.099`` seconds
+- ``time_1d = np.linspace(0, 0.099, 100)``
+- Step size = ``0.099 / 99 = 0.001 = dt``
+- ``time_1d = [0, 0.001, 0.002, ..., 0.099]``
+
+The t=0 Exclusion Fix
+~~~~~~~~~~~~~~~~~~~~~
+
+**Problem**: When the diffusion exponent α < 0 (common in subdiffusive systems):
+
+.. math::
+
+   D(t) = D_0 \times t^\alpha + D_{\text{offset}}
+
+At t=0 with α < 0:
+
+.. math::
+
+   D(0) = D_0 \times 0^{-1.5} = D_0 \times \infty \rightarrow \text{numerical overflow}
+
+**Example**: With α = -1.571 and D₀ = 16830:
+
+- ``D(1e-10) ≈ 1.3 × 10²⁴`` (dominates cumulative integrals)
+- This causes ``g₁ → 1`` (constant), making C₂ output constant
+- MCMC shows 0% acceptance rate due to numerical instability
+
+**Solution**: Exclude t=0 from analysis while preserving it for plotting:
+
+.. code-block:: python
+
+   def _exclude_t0_from_analysis(data: dict[str, Any]) -> dict[str, Any]:
+       """Exclude t=0 (index 0) from time arrays and C2 data for analysis.
+
+       This prevents the D(t=0) singularity when α < 0 (anomalous diffusion).
+       The physics model D(t) = D₀ × t^α diverges at t=0 for negative α.
+
+       Slicing strategy:
+       - 2D meshgrid: t1[1:, 1:], t2[1:, 1:], c2[:, 1:, 1:]
+       - 1D arrays: t1[1:], t2[1:], c2[:, 1:, 1:]
+
+       The cache file preserves t=0 for plotting purposes.
+       """
+       # ... implementation
+
+This design ensures:
+
+1. **Cache preserves full data**: Including t=0 for complete visualization
+2. **Analysis excludes t=0**: Preventing numerical singularities
+3. **Both NLSQ and CMC benefit**: Applied before optimization branch
+
+**Verification**:
+
+After slicing with ``[1:, 1:]``:
+
+- Original: ``t1_2d.shape = (100, 100)``, min value = 0
+- Sliced: ``t1_sliced.shape = (99, 99)``, min value = dt
+
+The dimensions correctly align:
+
+.. code-block:: python
+
+   t1_sliced = t1_2d[1:, 1:]     # Shape: (N-1, N-1)
+   t2_sliced = t2_2d[1:, 1:]     # Shape: (N-1, N-1)
+   c2_sliced = c2_exp[:, 1:, 1:] # Shape: (n_phi, N-1, N-1)
+
+   # All dimensions match: ✓
+
 CPU Optimization
 ----------------
 

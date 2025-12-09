@@ -17,6 +17,11 @@ pytest.importorskip("arviz", reason="ArviZ required for CMC unit tests")
 from homodyne.optimization.cmc.config import CMCConfig  # noqa: E402
 from homodyne.optimization.cmc.data_prep import PreparedData  # noqa: E402
 from homodyne.optimization.cmc.results import CMCResult  # noqa: E402
+from homodyne.optimization.cmc.core import _infer_time_step, fit_mcmc_jax  # noqa: E402
+from homodyne.optimization.cmc.sampler import (  # noqa: E402
+    MCMCSamples,
+    SamplingStats,
+)
 
 # =============================================================================
 # Fixtures
@@ -376,3 +381,194 @@ class TestCMCEdgeCases:
         # Total samples should be correct
         total = config.num_samples * config.num_chains
         assert total == 80000
+
+
+class TestTimeStepInference:
+    """Tests for dt inference and propagation into the CMC model."""
+
+    def test_infer_time_step_from_meshgrid(self):
+        """Median positive delta from pooled times is returned."""
+        base_times = np.linspace(0.0, 0.003, 4)
+        t2_2d, t1_2d = np.meshgrid(base_times, base_times, indexing="ij")
+        t1 = np.tile(t1_2d.ravel(), 2)
+        t2 = np.tile(t2_2d.ravel(), 2)
+
+        inferred = _infer_time_step(t1, t2)
+
+        assert inferred == pytest.approx(base_times[1] - base_times[0])
+
+    def test_fit_mcmc_uses_inferred_dt_when_missing(self, monkeypatch):
+        """fit_mcmc_jax should infer dt from pooled time axes when none is provided."""
+        base_times = np.array([0.0, 0.001, 0.002])
+        t2_2d, t1_2d = np.meshgrid(base_times, base_times, indexing="ij")
+        t1 = t1_2d.ravel()
+        t2 = t2_2d.ravel()
+        phi = np.zeros_like(t1)
+
+        captured: dict[str, float] = {}
+
+        def fake_run_nuts_sampling(model, model_kwargs, **kwargs):
+            captured["dt"] = float(model_kwargs["dt"])
+            samples = MCMCSamples(
+                samples={"sigma": np.ones((1, 1))},
+                param_names=["sigma"],
+                n_chains=1,
+                n_samples=1,
+                extra_fields={"diverging": np.zeros((1, 1))},
+            )
+            stats = SamplingStats()
+            return samples, stats
+
+        monkeypatch.setattr(
+            "homodyne.optimization.cmc.core.run_nuts_sampling", fake_run_nuts_sampling
+        )
+
+        fit_mcmc_jax(
+            data=np.ones_like(t1),
+            t1=t1,
+            t2=t2,
+            phi=phi,
+            q=0.01,
+            L=1.0,
+            analysis_mode="static",
+            method="mcmc",
+            cmc_config={"num_samples": 1, "num_warmup": 1, "num_chains": 1},
+            initial_values=None,
+            parameter_space=None,
+            dt=None,
+            progress_bar=False,
+        )
+
+        assert captured["dt"] == pytest.approx(0.001)
+
+
+class TestT0Exclusion:
+    """Tests for t=0 exclusion from analysis arrays."""
+
+    def test_exclude_t0_prevents_diffusion_singularity(self):
+        """Verify that excluding t=0 prevents D(t) singularity with negative alpha."""
+        # Time array starting from 0 (the problematic case)
+        base_times = np.array([0.0, 0.001, 0.002, 0.003])
+
+        # After slicing [1:], should start from dt=0.001
+        analysis_times = base_times[1:]
+
+        assert analysis_times[0] == 0.001
+        assert 0.0 not in analysis_times
+
+        # D(t) with negative alpha should be finite for all values in analysis_times
+        D0, alpha, D_offset = 16830.0, -1.571, 3.0
+        D_t = D0 * (analysis_times**alpha) + D_offset
+
+        # All values should be finite and positive
+        assert np.all(np.isfinite(D_t)), f"D(t) has non-finite values: {D_t}"
+        assert np.all(D_t > 0), f"D(t) has non-positive values: {D_t}"
+
+        # Contrast with t=0: would produce infinity
+        D_t_with_zero = D0 * (base_times**alpha) + D_offset
+        assert not np.isfinite(D_t_with_zero[0]), "D(0) should be infinite with negative alpha"
+
+    def test_exclude_t0_2d_meshgrid(self):
+        """Test t=0 exclusion with 2D meshgrid arrays."""
+        from homodyne.cli.commands import _exclude_t0_from_analysis
+
+        n_phi = 2
+        n_t = 4
+        dt = 0.001
+
+        # Create time arrays starting from 0
+        time_1d = np.linspace(0, dt * (n_t - 1), n_t)  # [0, 0.001, 0.002, 0.003]
+        t1_2d, t2_2d = np.meshgrid(time_1d, time_1d, indexing="ij")
+        c2_exp = np.random.rand(n_phi, n_t, n_t)
+
+        data = {"t1": t1_2d, "t2": t2_2d, "c2_exp": c2_exp}
+
+        result = _exclude_t0_from_analysis(data)
+
+        # Verify shapes
+        assert result["t1"].shape == (n_t - 1, n_t - 1)
+        assert result["t2"].shape == (n_t - 1, n_t - 1)
+        assert result["c2_exp"].shape == (n_phi, n_t - 1, n_t - 1)
+
+        # Verify t=0 is excluded
+        assert result["t1"].min() > 0, "t1 should not contain 0"
+        assert result["t2"].min() > 0, "t2 should not contain 0"
+
+        # Verify first time value is dt
+        assert result["t1"][0, 0] == pytest.approx(dt)
+
+    def test_exclude_t0_1d_arrays(self):
+        """Test t=0 exclusion with 1D time arrays."""
+        from homodyne.cli.commands import _exclude_t0_from_analysis
+
+        n_phi = 2
+        n_t = 4
+        dt = 0.001
+
+        # Create 1D time arrays starting from 0
+        time_1d = np.linspace(0, dt * (n_t - 1), n_t)
+        c2_exp = np.random.rand(n_phi, n_t, n_t)
+
+        data = {"t1": time_1d, "t2": time_1d.copy(), "c2_exp": c2_exp}
+
+        result = _exclude_t0_from_analysis(data)
+
+        # Verify shapes
+        assert result["t1"].shape == (n_t - 1,)
+        assert result["t2"].shape == (n_t - 1,)
+        assert result["c2_exp"].shape == (n_phi, n_t - 1, n_t - 1)
+
+        # Verify t=0 is excluded
+        assert 0.0 not in result["t1"]
+        assert result["t1"][0] == pytest.approx(dt)
+
+    def test_exclude_t0_preserves_other_keys(self):
+        """Test that t=0 exclusion preserves other data dictionary keys."""
+        from homodyne.cli.commands import _exclude_t0_from_analysis
+
+        n_t = 4
+        time_1d = np.linspace(0, 0.003, n_t)
+        t1_2d, t2_2d = np.meshgrid(time_1d, time_1d, indexing="ij")
+
+        data = {
+            "t1": t1_2d,
+            "t2": t2_2d,
+            "c2_exp": np.random.rand(1, n_t, n_t),
+            "wavevector_q_list": [0.01],
+            "phi_angles_list": [0.0],
+            "extra_key": "preserved",
+        }
+
+        result = _exclude_t0_from_analysis(data)
+
+        # Other keys should be preserved unchanged
+        assert result["wavevector_q_list"] == [0.01]
+        assert result["phi_angles_list"] == [0.0]
+        assert result["extra_key"] == "preserved"
+
+    def test_exclude_t0_handles_missing_arrays(self):
+        """Test graceful handling of missing arrays."""
+        from homodyne.cli.commands import _exclude_t0_from_analysis
+
+        # Missing c2_exp
+        data = {"t1": np.array([0, 1, 2]), "t2": np.array([0, 1, 2])}
+        result = _exclude_t0_from_analysis(data)
+        assert result is data  # Should return input unchanged
+
+        # Missing t1
+        data = {"t2": np.array([0, 1, 2]), "c2_exp": np.random.rand(1, 3, 3)}
+        result = _exclude_t0_from_analysis(data)
+        assert result is data
+
+    def test_exclude_t0_handles_small_arrays(self):
+        """Test handling of arrays too small to slice."""
+        from homodyne.cli.commands import _exclude_t0_from_analysis
+
+        # Single time point (can't slice [1:])
+        data = {
+            "t1": np.array([[0.0]]),
+            "t2": np.array([[0.0]]),
+            "c2_exp": np.array([[[1.0]]]),
+        }
+        result = _exclude_t0_from_analysis(data)
+        assert result is data  # Should return input unchanged
