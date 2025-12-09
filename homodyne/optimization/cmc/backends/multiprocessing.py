@@ -90,16 +90,17 @@ def _run_shard_worker(
     # Create RNG key for this shard
     rng_key = jax.random.PRNGKey(42 + shard_idx)
 
-    # Prepare model kwargs
+    # Prepare model kwargs - must match xpcs_model() signature
     model_kwargs = {
         "data": jnp.array(shard_data["data"]),
         "t1": jnp.array(shard_data["t1"]),
         "t2": jnp.array(shard_data["t2"]),
-        "phi": jnp.array(shard_data["phi"]),
+        "phi_unique": jnp.array(shard_data["phi_unique"]),
         "phi_indices": jnp.array(shard_data["phi_indices"]),
         "q": shard_data["q"],
         "L": shard_data["L"],
         "dt": shard_data["dt"],
+        "time_grid": jnp.array(shard_data["time_grid"]) if shard_data.get("time_grid") is not None else None,
         "analysis_mode": analysis_mode,
         "parameter_space": parameter_space,
         "n_phi": n_phi,
@@ -250,7 +251,7 @@ class MultiprocessingBackend(CMCBackend):
             f"Running {n_shards} shards in parallel with {self.n_workers} workers"
         )
 
-        # Prepare shard data for workers
+        # Prepare shard data for workers - must include all fields needed by xpcs_model()
         shard_data_list = []
         for shard in shards:
             shard_data_list.append(
@@ -258,11 +259,12 @@ class MultiprocessingBackend(CMCBackend):
                     "data": np.array(shard.data),
                     "t1": np.array(shard.t1),
                     "t2": np.array(shard.t2),
-                    "phi": np.array(shard.phi),
+                    "phi_unique": np.array(shard.phi_unique),
                     "phi_indices": np.array(shard.phi_indices),
                     "q": model_kwargs["q"],
                     "L": model_kwargs["L"],
                     "dt": model_kwargs["dt"],
+                    "time_grid": np.array(model_kwargs["time_grid"]) if model_kwargs.get("time_grid") is not None else None,
                     "noise_scale": shard.noise_scale,
                 }
             )
