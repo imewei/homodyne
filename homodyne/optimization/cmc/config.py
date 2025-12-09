@@ -85,6 +85,9 @@ class CMCConfig:
     min_success_rate: float = 0.90
     run_id: str | None = None
 
+    # Timeout
+    per_shard_timeout: int = 7200  # 2 hours per shard in seconds
+
     # Computed fields
     _validation_errors: list[str] = field(default_factory=list, repr=False)
 
@@ -154,6 +157,8 @@ class CMCConfig:
             combination_method=combination.get("method", "weighted_gaussian"),
             min_success_rate=combination.get("min_success_rate", 0.90),
             run_id=config_dict.get("run_id"),
+            # Timeout
+            per_shard_timeout=config_dict.get("per_shard_timeout", 7200),
         )
 
         # Validate and log any issues
@@ -336,4 +341,5 @@ class CMCConfig:
                 "method": self.combination_method,
                 "min_success_rate": self.min_success_rate,
             },
+            "per_shard_timeout": self.per_shard_timeout,
         }

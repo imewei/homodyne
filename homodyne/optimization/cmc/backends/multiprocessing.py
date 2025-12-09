@@ -27,6 +27,33 @@ if TYPE_CHECKING:
 logger = get_logger(__name__)
 
 
+def _run_shard_worker_with_queue(
+    shard_idx: int,
+    shard_data: dict[str, Any],
+    model_fn: Callable,
+    config_dict: dict[str, Any],
+    initial_values: dict[str, float] | None,
+    parameter_space_dict: dict[str, Any],
+    n_phi: int,
+    analysis_mode: str,
+    threads_per_worker: int,
+    result_queue: mp.Queue,
+) -> None:
+    """Worker function that puts result in a queue for proper timeout handling."""
+    result = _run_shard_worker(
+        shard_idx=shard_idx,
+        shard_data=shard_data,
+        model_fn=model_fn,
+        config_dict=config_dict,
+        initial_values=initial_values,
+        parameter_space_dict=parameter_space_dict,
+        n_phi=n_phi,
+        analysis_mode=analysis_mode,
+        threads_per_worker=threads_per_worker,
+    )
+    result_queue.put(result)
+
+
 def _run_shard_worker(
     shard_idx: int,
     shard_data: dict[str, Any],
@@ -260,12 +287,11 @@ class MultiprocessingBackend(CMCBackend):
             )
             return samples
 
-        # Multiple shards - run in parallel
+        # Multiple shards - run in parallel with per-shard timeout enforcement
         n_shards = len(shards)
         actual_workers = min(self.n_workers, n_shards)
 
         # Calculate threads per worker to avoid over-subscription
-        # Each worker gets a fair share of CPU threads
         total_threads = mp.cpu_count()
         threads_per_worker = max(1, total_threads // actual_workers)
 
@@ -274,7 +300,14 @@ class MultiprocessingBackend(CMCBackend):
             f"({threads_per_worker} threads each)"
         )
 
-        # Prepare shard data for workers - must include all fields needed by xpcs_model()
+        # Per-shard timeout - enforced per individual process
+        per_shard_timeout = config.per_shard_timeout  # Default: 7200s (2 hours)
+        run_logger.info(
+            f"Per-shard timeout: {per_shard_timeout/3600:.1f} hours "
+            f"(processes will be terminated if exceeded)"
+        )
+
+        # Prepare shard data for workers
         shard_data_list = []
         for shard in shards:
             shard_data_list.append(
@@ -295,126 +328,145 @@ class MultiprocessingBackend(CMCBackend):
         # Serialize config and parameter_space
         config_dict = config.to_dict()
 
-        # Get parameter space config (need to serialize)
         if hasattr(parameter_space, "_config_dict"):
             ps_dict = parameter_space._config_dict
         else:
-            # Fallback - use model_kwargs config if available
             ps_dict = model_kwargs.get("config_dict", {})
-
-        # Run workers
-        results = []
 
         # Use spawn context for clean process isolation
         ctx = mp.get_context(self.spawn_method)
+        result_queue = ctx.Queue()
 
-        with ctx.Pool(processes=actual_workers) as pool:
-            # Submit all shards
-            async_results = []
-            for i, shard_data in enumerate(shard_data_list):
-                async_result = pool.apply_async(
-                    _run_shard_worker,
-                    args=(
-                        i,
-                        shard_data,
-                        model,
-                        config_dict,
-                        initial_values,
-                        ps_dict,
-                        shards[i].n_phi,
-                        analysis_mode,
-                        threads_per_worker,
-                    ),
-                )
-                async_results.append(async_result)
+        # Track active processes: {shard_idx: (process, start_time)}
+        active_processes: dict[int, tuple[mp.Process, float]] = {}
+        pending_shards = list(range(n_shards))
+        results = []
+        completed_count = 0
 
-            # Collect results with polling-based progress bar
-            # This shows progress immediately instead of waiting for first result
-            pbar = tqdm(
-                total=n_shards,
-                desc="CMC shards",
-                disable=not progress_bar,
-                unit="shard",
-                position=0,
-                leave=True,
-                dynamic_ncols=True,
-            )
-            # Show that sampling is in progress
-            pbar.set_postfix_str("sampling...")
-            pbar.refresh()
+        # Progress bar
+        pbar = tqdm(
+            total=n_shards,
+            desc="CMC shards",
+            disable=not progress_bar,
+            unit="shard",
+            position=0,
+            leave=True,
+            dynamic_ncols=True,
+        )
+        pbar.set_postfix_str("starting...")
+        pbar.refresh()
 
-            # Timeout for NUTS sampling - scale with number of shards
-            # Each shard can take ~30-60 min for complex models, but they run in parallel
-            # Set per-shard timeout of 2 hours, total timeout scales with parallelism
-            per_shard_timeout = 7200  # 2 hours per shard
-            # With parallel execution, total time ≈ per_shard_timeout * ceil(n_shards / n_workers)
-            batches = (n_shards + actual_workers - 1) // actual_workers
-            timeout_seconds = per_shard_timeout * batches
-            run_logger.info(
-                f"Timeout set to {timeout_seconds/3600:.1f} hours "
-                f"({batches} batch(es) × {per_shard_timeout/3600:.1f}h per batch)"
-            )
-            poll_interval = 1.0  # Check every second
-            start_time = time.time()
+        start_time = time.time()
+        poll_interval = 2.0  # Check every 2 seconds
 
-            # Track which results we've collected
-            collected = [False] * n_shards
-            completed_count = 0
-
+        try:
             while completed_count < n_shards:
-                elapsed = time.time() - start_time
-                if elapsed > timeout_seconds:
-                    # Timeout - collect whatever we have
-                    for i, _async_result in enumerate(async_results):
-                        if not collected[i]:
-                            timeout_msg = (
-                                f"Worker timed out after {timeout_seconds}s - shard likely has "
-                                "too many data points for NUTS sampling. Consider reducing "
-                                "max_points_per_shard in cmc config or using fewer angles."
+                # Launch new processes up to max workers
+                while len(active_processes) < actual_workers and pending_shards:
+                    shard_idx = pending_shards.pop(0)
+                    shard_data = shard_data_list[shard_idx]
+
+                    process = ctx.Process(
+                        target=_run_shard_worker_with_queue,
+                        args=(
+                            shard_idx,
+                            shard_data,
+                            model,
+                            config_dict,
+                            initial_values,
+                            ps_dict,
+                            shards[shard_idx].n_phi,
+                            analysis_mode,
+                            threads_per_worker,
+                            result_queue,
+                        ),
+                    )
+                    process.start()
+                    active_processes[shard_idx] = (process, time.time())
+                    run_logger.debug(f"Started shard {shard_idx} (pid={process.pid})")
+
+                # Check for completed or timed-out processes
+                for shard_idx, (process, proc_start_time) in list(active_processes.items()):
+                    proc_elapsed = time.time() - proc_start_time
+
+                    if not process.is_alive():
+                        # Process finished - it should have put result in queue
+                        process.join(timeout=1)
+                        del active_processes[shard_idx]
+                        run_logger.debug(f"Shard {shard_idx} process exited after {proc_elapsed:.1f}s")
+
+                    elif proc_elapsed > per_shard_timeout:
+                        # Per-shard timeout exceeded - terminate the process
+                        run_logger.warning(
+                            f"Shard {shard_idx} timed out after {proc_elapsed:.0f}s "
+                            f"(limit: {per_shard_timeout}s), terminating process (pid={process.pid})"
+                        )
+                        process.terminate()
+                        process.join(timeout=5)  # Give 5s to cleanup
+                        if process.is_alive():
+                            run_logger.warning(f"Shard {shard_idx} did not terminate, killing")
+                            process.kill()
+                            process.join(timeout=2)
+
+                        del active_processes[shard_idx]
+                        results.append({
+                            "success": False,
+                            "shard_idx": shard_idx,
+                            "error": f"Timeout after {proc_elapsed:.0f}s (limit: {per_shard_timeout}s)",
+                            "duration": proc_elapsed,
+                        })
+                        completed_count += 1
+                        pbar.update(1)
+                        pbar.set_postfix(shard=shard_idx, status="timeout")
+
+                # Collect results from queue (non-blocking)
+                while True:
+                    try:
+                        result = result_queue.get_nowait()
+                        results.append(result)
+                        completed_count += 1
+                        pbar.update(1)
+                        if result.get("success"):
+                            pbar.set_postfix(
+                                shard=result.get("shard_idx", "?"),
+                                time=f"{result.get('duration', 0):.1f}s",
                             )
-                            run_logger.error(timeout_msg)
-                            results.append({"success": False, "shard_idx": i, "error": timeout_msg})
-                            pbar.update(1)
-                            completed_count += 1
-                    break
+                        else:
+                            pbar.set_postfix(
+                                shard=result.get("shard_idx", "?"),
+                                status="failed",
+                            )
+                    except Exception:
+                        # Queue empty
+                        break
 
-                # Poll each async result
-                for i, async_result in enumerate(async_results):
-                    if collected[i]:
-                        continue
-
-                    if async_result.ready():
-                        try:
-                            result = async_result.get(timeout=0)
-                            results.append(result)
-                            collected[i] = True
-                            completed_count += 1
-                            pbar.update(1)
-                            if result.get("success"):
-                                pbar.set_postfix(
-                                    shard=result.get("shard_idx", "?"),
-                                    time=f"{result.get('duration', 0):.1f}s",
-                                )
-                            else:
-                                pbar.set_postfix(
-                                    shard=result.get("shard_idx", "?"),
-                                    status="failed",
-                                )
-                        except Exception as e:
-                            error_msg = f"{type(e).__name__}: {e}" if str(e) else type(e).__name__
-                            run_logger.error(f"Worker {i} failed: {error_msg}")
-                            results.append({"success": False, "shard_idx": i, "error": error_msg})
-                            collected[i] = True
-                            completed_count += 1
-                            pbar.update(1)
-
-                # Update elapsed time in progress bar
+                # Update progress bar with elapsed time
                 if completed_count < n_shards:
+                    elapsed = time.time() - start_time
                     mins, secs = divmod(int(elapsed), 60)
-                    pbar.set_postfix_str(f"sampling... {mins}m{secs:02d}s")
+                    hrs, mins = divmod(mins, 60)
+                    if hrs > 0:
+                        pbar.set_postfix_str(f"active={len(active_processes)} elapsed={hrs}h{mins:02d}m")
+                    else:
+                        pbar.set_postfix_str(f"active={len(active_processes)} elapsed={mins}m{secs:02d}s")
                     time.sleep(poll_interval)
 
+        except KeyboardInterrupt:
+            run_logger.warning("Interrupted - terminating all active processes")
+            for shard_idx, (process, _) in active_processes.items():
+                run_logger.debug(f"Terminating shard {shard_idx} (pid={process.pid})")
+                process.terminate()
+                process.join(timeout=2)
+            raise
+
+        finally:
             pbar.close()
+            # Clean up any remaining active processes
+            for shard_idx, (process, _) in list(active_processes.items()):
+                if process.is_alive():
+                    run_logger.warning(f"Cleaning up orphan process for shard {shard_idx}")
+                    process.terminate()
+                    process.join(timeout=2)
 
         # Process results
         successful_samples = []
