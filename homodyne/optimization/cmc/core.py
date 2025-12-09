@@ -216,7 +216,7 @@ def fit_mcmc_jax(
             prepared,
             num_shards=None,  # Auto-calculate from data size
             max_points_per_shard=max_per_shard,
-            max_shards=50,  # Same cap as stratified
+            max_shards=100,  # Same cap as stratified
         )
         total_shard_points = sum(s.n_total for s in shards)
         run_logger.info(

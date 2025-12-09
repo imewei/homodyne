@@ -276,7 +276,7 @@ def shard_data_stratified(
     prepared: PreparedData,
     num_shards: int | None = None,
     max_points_per_shard: int | None = None,
-    max_shards_per_angle: int = 50,
+    max_shards_per_angle: int = 100,
     seed: int = 42,
 ) -> list[PreparedData]:
     """Shard data by phi angle (stratified sharding).
@@ -285,8 +285,8 @@ def shard_data_stratified(
     data points than max_points_per_shard, multiple shards are created for
     that angle by splitting the data randomly.
 
-    When the number of required shards exceeds max_shards_per_angle, data is
-    subsampled within each shard to maintain tractable shard counts.
+    When the number of required shards exceeds max_shards_per_angle, shard
+    size increases to fit all data (no subsampling).
 
     Parameters
     ----------
@@ -300,8 +300,8 @@ def shard_data_stratified(
         are created for that angle. If None, uses one shard per angle.
         Recommended: 25000-100000 for NUTS.
     max_shards_per_angle : int
-        Maximum shards to create per angle. If more would be needed, data is
-        subsampled within each shard. Default: 50 (balances coverage vs overhead).
+        Maximum shards to create per angle. If more would be needed, shard
+        size increases to fit all data. Default: 100.
     seed : int
         Random seed for reproducible splitting.
 
@@ -430,7 +430,7 @@ def shard_data_random(
     prepared: PreparedData,
     num_shards: int | None = None,
     max_points_per_shard: int | None = None,
-    max_shards: int = 50,
+    max_shards: int = 100,
     seed: int = 42,
 ) -> list[PreparedData]:
     """Shard data randomly into approximately equal parts.
@@ -451,7 +451,7 @@ def shard_data_random(
         If num_shards would exceed max_shards, shard size increases to fit all data.
         Recommended: 25000-100000 for NUTS.
     max_shards : int
-        Maximum number of shards. Default: 50.
+        Maximum number of shards. Default: 100.
     seed : int
         Random seed for reproducible shuffling.
 
