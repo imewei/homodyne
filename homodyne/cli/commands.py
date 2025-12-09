@@ -656,6 +656,90 @@ def _load_data(args, config: ConfigManager) -> dict[str, Any]:
         raise RuntimeError(f"Failed to load experimental data: {e}") from e
 
 
+def _exclude_t0_from_analysis(data: dict[str, Any]) -> dict[str, Any]:
+    """Exclude t=0 (index 0) from time arrays and C2 data for analysis.
+
+    With anomalous diffusion D(t) = D0 * t^alpha where alpha < 0,
+    D(t=0) approaches infinity. This singularity corrupts the cumulative
+    integral in g1 computation, causing:
+    - CMC: 0% acceptance rate due to constant likelihood
+    - NLSQ: Potential numerical instability
+
+    The fix: exclude index 0 from analysis arrays. The physics at t=0 is
+    known analytically (g1(t,t) = 1 by definition), not computed numerically.
+
+    Parameters
+    ----------
+    data : dict[str, Any]
+        Data dictionary containing 't1', 't2', and 'c2_exp' arrays.
+
+    Returns
+    -------
+    dict[str, Any]
+        Modified data dictionary with t=0 excluded from arrays.
+        Returns input unchanged if arrays are missing or too small.
+    """
+    # Extract arrays
+    t1_raw = data.get("t1")
+    t2_raw = data.get("t2")
+    c2_raw = data.get("c2_exp")
+
+    # Validate arrays exist
+    if t1_raw is None or t2_raw is None or c2_raw is None:
+        logger.debug("Skipping t=0 exclusion: missing t1, t2, or c2_exp arrays")
+        return data
+
+    # Convert to numpy arrays if needed
+    t1_raw = np.asarray(t1_raw)
+    t2_raw = np.asarray(t2_raw)
+    c2_raw = np.asarray(c2_raw)
+
+    # Validate minimum size (need at least 2 points to slice)
+    min_size = min(
+        t1_raw.shape[0] if t1_raw.ndim >= 1 else 1,
+        t2_raw.shape[0] if t2_raw.ndim >= 1 else 1,
+        c2_raw.shape[-1] if c2_raw.ndim >= 2 else 1,
+    )
+    if min_size < 2:
+        logger.debug("Skipping t=0 exclusion: arrays too small to slice")
+        return data
+
+    # Create modified copy of data
+    result = data.copy()
+
+    # Slice based on array dimensions
+    if t1_raw.ndim == 2 and t2_raw.ndim == 2:
+        # 2D meshgrids: slice both axes [1:, 1:]
+        result["t1"] = t1_raw[1:, 1:]
+        result["t2"] = t2_raw[1:, 1:]
+        old_shape = c2_raw.shape
+        result["c2_exp"] = c2_raw[:, 1:, 1:]  # All phi angles, slice time axes
+        logger.info(
+            f"Excluded t=0 for analysis (2D meshgrid): "
+            f"c2_exp {old_shape} -> {result['c2_exp'].shape}, "
+            f"t1 {t1_raw.shape} -> {result['t1'].shape}"
+        )
+    elif t1_raw.ndim == 1 and t2_raw.ndim == 1:
+        # 1D arrays: slice directly [1:]
+        result["t1"] = t1_raw[1:]
+        result["t2"] = t2_raw[1:]
+        old_shape = c2_raw.shape
+        result["c2_exp"] = c2_raw[:, 1:, 1:]  # All phi angles, slice time axes
+        logger.info(
+            f"Excluded t=0 for analysis (1D arrays): "
+            f"c2_exp {old_shape} -> {result['c2_exp'].shape}, "
+            f"t1 {t1_raw.shape} -> {result['t1'].shape}"
+        )
+    else:
+        logger.warning(
+            f"Unexpected array dimensions: t1.ndim={t1_raw.ndim}, t2.ndim={t2_raw.ndim}. "
+            f"Skipping t=0 exclusion."
+        )
+        return data
+
+    return result
+
+
 def _apply_angle_filtering_for_optimization(
     data: dict[str, Any],
     config: ConfigManager,
@@ -871,6 +955,19 @@ def _run_optimization(args, config: ConfigManager, data: dict[str, Any]) -> Any:
     # Apply angle filtering before optimization (if configured)
     filtered_data = _apply_angle_filtering_for_optimization(data, config)
 
+    # =========================================================================
+    # CRITICAL FIX: Exclude t=0 from analysis to prevent D(t) singularity
+    # =========================================================================
+    # With anomalous diffusion D(t) = D0 * t^alpha where alpha < 0,
+    # D(t=0) → infinity, which corrupts cumulative integrals and causes:
+    # - CMC: 0% acceptance rate, constant C2 output
+    # - NLSQ: Potential numerical instability
+    #
+    # Analysis uses indices [1:, 1:] corresponding to t ∈ [dt, 2dt, ...]
+    # Boundary g1(0,0) = 1 is exact by physics definition, not computed.
+    # =========================================================================
+    filtered_data = _exclude_t0_from_analysis(filtered_data)
+
     # NLSQ will handle large datasets natively via streaming optimization
     logger.debug("Using NLSQ native large dataset handling")
 
@@ -947,9 +1044,21 @@ def _run_optimization(args, config: ConfigManager, data: dict[str, Any]) -> Any:
             # If t1/t2 are 1D, create 2D meshgrids; if already 2D, use as-is
             if t1_raw.ndim == 1 and t2_raw.ndim == 1:
                 # Create 2D meshgrids from 1D arrays
-                t2_2d, t1_2d = np.meshgrid(t1_raw, t2_raw, indexing="ij")
+                # NOTE: meshgrid returns (X, Y) where X varies along axis 0 with indexing="ij"
+                # BUG FIX (Dec 2025): Variables were swapped! t1_2d should get first return value.
+                t1_2d, t2_2d = np.meshgrid(t1_raw, t2_raw, indexing="ij")
                 logger.debug(
                     f"Created 2D meshgrids from 1D arrays: t1={t1_raw.shape} → {t1_2d.shape}"
+                )
+                # DEBUG: Log sample values to verify meshgrid is correct
+                logger.info(
+                    f"[CMC DEBUG] Meshgrid verification:\n"
+                    f"  t1_raw[:3]={t1_raw[:3] if len(t1_raw) >= 3 else t1_raw}\n"
+                    f"  t2_raw[:3]={t2_raw[:3] if len(t2_raw) >= 3 else t2_raw}\n"
+                    f"  t1_2d[0,:3]={t1_2d[0,:3] if t1_2d.shape[1] >= 3 else t1_2d[0,:]}\n"
+                    f"  t1_2d[:3,0]={t1_2d[:3,0] if t1_2d.shape[0] >= 3 else t1_2d[:,0]}\n"
+                    f"  t2_2d[0,:3]={t2_2d[0,:3] if t2_2d.shape[1] >= 3 else t2_2d[0,:]}\n"
+                    f"  t2_2d[:3,0]={t2_2d[:3,0] if t2_2d.shape[0] >= 3 else t2_2d[:,0]}"
                 )
             elif t1_raw.ndim == 2 and t2_raw.ndim == 2:
                 # Already 2D meshgrids
@@ -968,6 +1077,14 @@ def _run_optimization(args, config: ConfigManager, data: dict[str, Any]) -> Any:
             # Tile the 2D meshgrid for each phi angle
             t1_pooled = np.tile(t1_2d.ravel(), n_phi)  # (n_t*n_t,) repeated n_phi times
             t2_pooled = np.tile(t2_2d.ravel(), n_phi)
+
+            # DEBUG: Log pooled data sample
+            logger.info(
+                f"[CMC DEBUG] Pooled time arrays:\n"
+                f"  t1_pooled[:10]={t1_pooled[:10]}\n"
+                f"  t2_pooled[:10]={t2_pooled[:10]}\n"
+                f"  Sample |t1-t2| values: {np.abs(t1_pooled[:10] - t2_pooled[:10])}"
+            )
             phi_pooled = np.repeat(
                 phi_angles, n_t * n_t
             )  # Each phi repeated n_t*n_t times
@@ -1060,6 +1177,11 @@ def _run_optimization(args, config: ConfigManager, data: dict[str, Any]) -> Any:
                 cmc_config=cmc_config,  # Pass CMC configuration
                 initial_values=initial_values,  # ✅ FIXED: Load from config initial_parameters.values
                 parameter_space=parameter_space,  # ✅ Pass config-aware ParameterSpace
+                dt=(
+                    config.config.get("analyzer_parameters", {}).get("dt", None)
+                    if hasattr(config, "config")
+                    else None
+                ),
                 **mcmc_runtime_kwargs,
             )
 

@@ -81,8 +81,13 @@ def _compute_g1_diffusion_elementwise(
     integral_steps = jnp.sqrt((D_cumsum[idx2] - D_cumsum[idx1]) ** 2 + epsilon_abs)
 
     # Compute g1 using log-space for numerical stability
+    # CRITICAL FIX (Dec 2025): Use -700 clip (same as NLSQ) instead of -100
+    # The -100 clip caused gradient vanishing for NUTS MCMC:
+    # - When log_g1 < -100, gradient = 0 (clipping removes gradient flow)
+    # - NUTS uses gradients to guide proposals, so zero gradients = stuck sampling
+    # - exp(-700) ≈ 10^-304 is near machine epsilon but still differentiable
     log_g1 = -wavevector_q_squared_half_dt * integral_steps
-    log_g1_clipped = jnp.clip(log_g1, -100.0, 0.0)
+    log_g1_clipped = jnp.clip(log_g1, -700.0, 0.0)
     g1_diffusion = jnp.exp(log_g1_clipped)
 
     g1_safe = jnp.minimum(g1_diffusion, 1.0)
@@ -296,6 +301,7 @@ def compute_g1_total(
     L: float,
     dt: float,
     time_grid: jnp.ndarray | None = None,
+    _debug: bool = False,
 ) -> jnp.ndarray:
     """Compute total g1 for CMC element-wise paired arrays.
 
@@ -340,6 +346,7 @@ def compute_g1_total(
         L: Sample-detector distance (stator_rotor_gap)
         dt: Time step from configuration [s] (REQUIRED)
         time_grid: Optional 1D time grid (preferred). If None, inferred from t1/t2.
+        _debug: If True, log detailed debug information (default: False)
 
     Returns:
         Total g1 correlation function (2D array: (n_phi, n_points))
@@ -376,11 +383,36 @@ def compute_g1_total(
         max_time = float(np.max(np.concatenate([np.asarray(t1), np.asarray(t2)])))
         n_time = int(round(max_time / dt_safe)) + 1
         time_grid = jnp.linspace(0.0, dt_safe * (n_time - 1), n_time)
+        if _debug:
+            logger.warning(
+                f"[CMC DEBUG] time_grid inferred: n_time={n_time}, max_time={max_time:.4g}, dt={dt_safe:.6g}"
+            )
     else:
         time_grid = jnp.asarray(time_grid)
 
     wavevector_q_squared_half_dt = 0.5 * (q**2) * dt_value
     sinc_prefactor = 0.5 / PI * q * L * dt_value
+
+    # DEBUG logging for CMC physics diagnosis
+    if _debug:
+        import numpy as np
+
+        t1_np = np.asarray(t1)
+        t2_np = np.asarray(t2)
+        time_grid_np = np.asarray(time_grid)
+        params_np = np.asarray(params)
+
+        logger.warning(
+            f"[CMC DEBUG] compute_g1_total called:\n"
+            f"  q={q:.6g}, L={L:.6g}, dt={dt_value:.6g}\n"
+            f"  wavevector_q_squared_half_dt={wavevector_q_squared_half_dt:.6g}\n"
+            f"  sinc_prefactor={sinc_prefactor:.6g}\n"
+            f"  params={params_np}\n"
+            f"  t1: shape={t1_np.shape}, range=[{t1_np.min():.4g}, {t1_np.max():.4g}]\n"
+            f"  t2: shape={t2_np.shape}, range=[{t2_np.min():.4g}, {t2_np.max():.4g}]\n"
+            f"  time_grid: shape={time_grid_np.shape}, range=[{time_grid_np.min():.4g}, {time_grid_np.max():.4g}]\n"
+            f"  phi: {np.asarray(phi)}"
+        )
 
     # CRITICAL FIX (Nov 2025): Removed jnp.unique() call to prevent JAX concretization error
     # The caller MUST pre-compute unique phi values before calling this function

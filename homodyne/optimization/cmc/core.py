@@ -35,6 +35,24 @@ if TYPE_CHECKING:
 logger = get_logger(__name__)
 
 
+def _infer_time_step(t1: np.ndarray, t2: np.ndarray) -> float:
+    """Infer time step from pooled t1/t2 arrays (seconds).
+
+    Uses the median positive difference across all unique time points to avoid
+    being skewed by repeated values from meshgrid flattening.
+    """
+    time_values = np.unique(np.concatenate([np.asarray(t1), np.asarray(t2)]))
+    if time_values.size < 2:
+        return 1.0
+
+    diffs = np.diff(time_values)
+    positive_diffs = diffs[diffs > 0]
+    if positive_diffs.size == 0:
+        return 1.0
+
+    return float(np.median(positive_diffs))
+
+
 def fit_mcmc_jax(
     data: np.ndarray,
     t1: np.ndarray,
@@ -47,7 +65,7 @@ def fit_mcmc_jax(
     cmc_config: dict[str, Any] | None = None,
     initial_values: dict[str, float] | None = None,
     parameter_space: ParameterSpace = None,
-    dt: float = 0.1,
+    dt: float | None = None,
     output_dir: Path | str | None = None,
     progress_bar: bool = True,
     run_id: str | None = None,
@@ -81,8 +99,8 @@ def fit_mcmc_jax(
         Initial parameter values from ConfigManager.get_initial_parameters().
     parameter_space : ParameterSpace
         Parameter space with bounds and priors from ParameterSpace.from_config().
-    dt : float
-        Time step for physics model.
+    dt : float | None
+        Time step for physics model. If None, inferred from pooled time arrays.
     output_dir : Path | str | None
         Output directory for saving results.
     progress_bar : bool
@@ -180,7 +198,44 @@ def fit_mcmc_jax(
     # 4. Build model function
     # =========================================================================
     # Build the 1D time grid once to mirror NLSQ trapezoidal integration
-    time_grid = jnp.array(np.unique(np.asarray(prepared.t1)))
+    time_grid_np = np.unique(
+        np.concatenate([np.asarray(prepared.t1), np.asarray(prepared.t2)])
+    )
+    time_grid = jnp.array(time_grid_np)
+
+    # DEBUG: Log time_grid construction details
+    run_logger.info(
+        f"[CMC DEBUG] time_grid constructed: n_points={len(time_grid_np)}, "
+        f"range=[{time_grid_np.min():.6g}, {time_grid_np.max():.6g}]"
+    )
+    run_logger.info(
+        f"[CMC DEBUG] pooled t1: n={len(prepared.t1)}, range=[{prepared.t1.min():.6g}, {prepared.t1.max():.6g}]"
+    )
+    run_logger.info(
+        f"[CMC DEBUG] pooled t2: n={len(prepared.t2)}, range=[{prepared.t2.min():.6g}, {prepared.t2.max():.6g}]"
+    )
+
+    inferred_dt = _infer_time_step(prepared.t1, prepared.t2)
+    dt_used = dt if dt is not None else inferred_dt
+
+    if not np.isfinite(dt_used) or dt_used <= 0:
+        dt_used = inferred_dt if np.isfinite(inferred_dt) and inferred_dt > 0 else 0.1
+        run_logger.warning(
+            f"Invalid dt provided; using inferred fallback dt={dt_used:.6g} seconds"
+        )
+    else:
+        rel_diff = (
+            abs(dt_used - inferred_dt) / max(inferred_dt, 1e-12)
+            if np.isfinite(inferred_dt) and inferred_dt > 0
+            else 0.0
+        )
+        if dt is None:
+            run_logger.info(f"Inferred dt from pooled times: dt={dt_used:.6g} seconds")
+        elif rel_diff > 1e-3:
+            run_logger.warning(
+                f"dt mismatch: provided dt={dt_used:.6g}s vs inferred {inferred_dt:.6g}s; "
+                "using provided dt for physics; results may not match NLSQ"
+            )
 
     model_kwargs = {
         "data": jnp.array(prepared.data),
@@ -190,13 +245,42 @@ def fit_mcmc_jax(
         "phi_indices": jnp.array(prepared.phi_indices),
         "q": q,
         "L": L,
-        "dt": dt,
+        "dt": dt_used,
         "time_grid": time_grid,
         "analysis_mode": analysis_mode,
         "parameter_space": parameter_space,
         "n_phi": prepared.n_phi,
         "noise_scale": prepared.noise_scale,
     }
+
+    # DEBUG: Log model_kwargs for diagnosis
+    run_logger.info(
+        f"[CMC DEBUG] model_kwargs: q={q:.6g}, L={L:.6g}, dt={dt_used:.6g}, "
+        f"n_phi={prepared.n_phi}, noise_scale={prepared.noise_scale:.6g}"
+    )
+    run_logger.info(
+        f"[CMC DEBUG] phi_unique: {prepared.phi_unique}"
+    )
+
+    # DEBUG: Compute and log D values at sample times to verify physics
+    if initial_values:
+        D0_init = initial_values.get("D0", 1e10)
+        alpha_init = initial_values.get("alpha", -0.5)
+        D_offset_init = initial_values.get("D_offset", 1e9)
+        # Sample D at a few time points
+        t_samples = np.array([0.0, 1.0, 10.0, 50.0])
+        t_safe = t_samples + 1e-10
+        D_samples = D0_init * (t_safe ** alpha_init) + D_offset_init
+        run_logger.info(
+            f"[CMC DEBUG] D(t) at sample times with initial params:\n"
+            f"  D0={D0_init:.4g}, alpha={alpha_init:.4g}, D_offset={D_offset_init:.4g}\n"
+            f"  t=[0, 1, 10, 50] → D={D_samples}"
+        )
+        # Compute expected prefactor
+        wavevector_q_squared_half_dt = 0.5 * (q**2) * dt_used
+        run_logger.info(
+            f"[CMC DEBUG] Physics prefactor: 0.5*q²*dt = 0.5*{q}²*{dt_used} = {wavevector_q_squared_half_dt:.6g}"
+        )
 
     # =========================================================================
     # 5. Select backend and run sampling
@@ -291,7 +375,7 @@ def run_cmc_analysis(
     config: CMCConfig,
     parameter_space: ParameterSpace,
     initial_values: dict[str, float] | None = None,
-    dt: float = 0.1,
+    dt: float | None = None,
 ) -> CMCResult:
     """Simplified interface for CMC analysis.
 
@@ -312,8 +396,8 @@ def run_cmc_analysis(
         Parameter space.
     initial_values : dict[str, float] | None
         Initial values.
-    dt : float
-        Time step.
+    dt : float | None
+        Time step (None infers from pooled time arrays).
 
     Returns
     -------
