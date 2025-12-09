@@ -509,9 +509,9 @@ The data flows through these stages:
    │              XPCSDataLoader._calculate_time_arrays()                    │
    │                                                                         │
    │  time_1d = np.linspace(0, time_max, matrix_size)  ◀── STARTS FROM 0    │
-   │  t1_2d, t2_2d = np.meshgrid(time_1d, time_1d, indexing="ij")           │
    │                                                                         │
-   │  Result: time_1d = [0, dt, 2*dt, 3*dt, ..., (N-1)*dt]                   │
+   │  Returns 1D array: time_1d = [0, dt, 2*dt, 3*dt, ..., (N-1)*dt]        │
+   │  CMC uses 1D directly; NLSQ regenerates meshgrids as needed            │
    └──────────────────────────────────┬──────────────────────────────────────┘
                                       │
                                       ▼
@@ -519,8 +519,8 @@ The data flows through these stages:
    │                   XPCSDataLoader._save_to_cache()                       │
    │                                                                         │
    │  np.savez_compressed(cache_path,                                        │
-   │      t1=t1_2d,           # 2D meshgrid, starts from t=0                 │
-   │      t2=t2_2d,           # 2D meshgrid, starts from t=0                 │
+   │      t1=time_1d,         # 1D array, starts from t=0                    │
+   │      t2=time_1d,         # Same 1D array (backward compatibility)       │
    │      c2_exp=c2_exp,      # Shape: (n_phi, n_t1, n_t2)                   │
    │      phi_angles_list=...,                                               │
    │      wavevector_q_list=...,                                             │
@@ -532,15 +532,18 @@ The data flows through these stages:
    ┌─────────────────────────────────────────────────────────────────────────┐
    │                         CACHE FILE (.npz)                               │
    │                                                                         │
-   │  Contains: t1, t2 (2D meshgrids), c2_exp (3D), metadata                 │
-   │  Note: t1[0,0] = t2[0,0] = 0 (includes t=0 point)                       │
+   │  Contains: t1, t2 (1D arrays), c2_exp (3D), metadata                    │
+   │  Note: t1[0] = t2[0] = 0 (includes t=0 point)                           │
+   │  Old 2D caches are auto-converted to 1D during loading                  │
    └──────────────────────────────────┬──────────────────────────────────────┘
                                       │
                                       ▼
    ┌─────────────────────────────────────────────────────────────────────────┐
    │                   XPCSDataLoader._load_from_cache()                     │
    │                                                                         │
-   │  Returns data dict with t1, t2 (may be 1D or 2D depending on version)  │
+   │  Only supports 1D array cache format (rejects old 2D meshgrid caches) │
+   │  Returns 1D arrays: t1, t2 = [0, dt, 2*dt, ...]                        │
+   │  CMC uses 1D directly; NLSQ regenerates meshgrids as needed            │
    └──────────────────────────────────┬──────────────────────────────────────┘
                                       │
                                       ▼
