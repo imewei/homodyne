@@ -592,6 +592,34 @@ class TestCMCDataSharding:
         total_shard_points = sum(s.n_total for s in shards)
         assert total_shard_points > 0
 
+    def test_shard_stratified_preserves_phi_indices_and_order(self):
+        """Stratified shards keep phi grouping and per-angle ordering intact."""
+        # Two angles with distinct phi values and ordered blocks
+        phi_vals = np.array([0.0, 30.0])
+        counts = [5, 3]
+        phi = np.repeat(phi_vals, counts)
+        data = np.arange(len(phi))  # monotonic to track ordering
+        t1 = np.arange(len(phi)) * 0.1
+        t2 = t1 + 0.01
+
+        prepared = prepare_mcmc_data(data, t1, t2, phi)
+        shards = shard_data_stratified(prepared, num_shards=len(phi_vals))
+
+        # Expect one shard per angle; each shard's phi_indices should be 0..0 or 1..1 and sorted
+        assert len(shards) == len(phi_vals)
+
+        for shard in shards:
+            # All phi entries in the shard should be the same angle value
+            shard_phis = shard.phi
+            assert np.allclose(shard_phis, shard_phis[0])
+
+            # phi_indices should all be equal (single angle per shard) and non-decreasing
+            assert np.all(shard.phi_indices == shard.phi_indices[0])
+            assert np.all(np.diff(shard.phi_indices) == 0)
+
+            # data preserved ordering within the shard
+            assert np.all(np.diff(shard.data) >= 0)
+
     def test_shard_random_equal_split(self):
         """Random sharding should split data approximately evenly."""
         n_points = 1000
