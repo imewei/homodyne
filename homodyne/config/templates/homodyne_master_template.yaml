@@ -594,12 +594,12 @@ optimization:
       validate_results: true
       min_success_rate: 0.90     # Require 90% shard convergence
 
-    # Per-shard MCMC (overrides base mcmc settings for shards)
+    # Per-shard MCMC (overrides base mcmc settings for shards). No
+    # subsampling is performed; each shard uses all assigned points.
     per_shard_mcmc:
       num_warmup: 500
       num_samples: 1500
       num_chains: 2
-      subsample_size: "auto"
       target_accept_prob: 0.85
 
     # Convergence validation

@@ -505,12 +505,12 @@ optimization:
 
     # Per-shard MCMC (overrides base mcmc settings for shards)
     # Tuned to avoid per-shard timeouts on large laminar_flow
-    # datasets while still providing usable posteriors.
+    # datasets while still providing usable posteriors. No subsampling is
+    # performed; each shard uses all assigned points.
     per_shard_mcmc:
       num_warmup: 500
       num_samples: 1500
       num_chains: 2
-      subsample_size: "auto"
       target_accept_prob: 0.85
 
     # Convergence validation
