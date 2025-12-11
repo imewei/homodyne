@@ -437,20 +437,20 @@ def compute_fitted_c2(
 
     params = np.array([stats[name]["mean"] for name in param_names])
 
+    # Prepare unique phi for physics call (compute_g1_total expects unique phi)
+    phi_unique = np.unique(phi)
     # Compute g1 with posterior mean
     g1 = compute_g1_total(
         jnp.array(params),
         jnp.array(t1),
         jnp.array(t2),
-        jnp.array(phi),
+        jnp.array(phi_unique),
         q,
         L,
         dt,
-        analysis_mode,
     )
 
     # Get per-angle contrast/offset
-    phi_unique = np.unique(phi)
     n_phi = len(phi_unique)
 
     contrasts = np.array([stats[f"contrast_{i}"]["mean"] for i in range(n_phi)])
@@ -482,11 +482,10 @@ def compute_fitted_c2(
             jnp.array(sample_params),
             jnp.array(t1),
             jnp.array(t2),
-            jnp.array(phi),
+            jnp.array(phi_unique),
             q,
             L,
             dt,
-            analysis_mode,
         )
 
         sample_contrasts = np.array(
