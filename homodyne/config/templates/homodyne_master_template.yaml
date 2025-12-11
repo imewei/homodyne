@@ -584,7 +584,7 @@ optimization:
     sharding:
       strategy: "stratified"     # "stratified" (angle-aware) | "random" | "contiguous"
       num_shards: "auto"         # "auto" uses n_phi for stratified
-      max_points_per_shard: "auto"  # "auto" → 25000 (laminar_flow) or 100000 (static)
+      max_points_per_shard: "auto"  # "auto" → 250000 (all modes)
       # Note: Tune based on timeout behavior. ~20-40 min per shard expected.
       seed_base: 0               # Shard seed = seed_base + shard_id
 

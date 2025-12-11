@@ -476,16 +476,13 @@ optimization:
     # Example: offset=42 → shard 0 uses seed 42, shard 1 uses seed 43, etc.
 
     # Data sharding configuration
-    sharding:
-      strategy: "stratified" # Options: "stratified" | "random" | "contiguous"
-      num_shards: "auto" # Number of shards (int or "auto" for automatic)
-      max_points_per_shard: 20000 # Max points per shard (laminar_flow); see core.py for auto-scaling
-      # Note: when left as "auto" in the resolved config, laminar_flow uses
-      # 20k points for typical datasets and 10k points for very large pooled
-      # datasets (≥2M points) to keep per-shard runtimes below timeout.
+  sharding:
+    strategy: "stratified" # Options: "stratified" | "random" | "contiguous"
+    num_shards: "auto" # Number of shards (int or "auto" for automatic)
+    max_points_per_shard: 250000 # Max points per shard; auto uses 250k to reduce shard count
 
-    # Per-shard timeout (seconds). Matches multiprocessing backend default
-    # and can be lowered/raised here if site walltimes differ.
+  # Per-shard timeout (seconds). Matches multiprocessing backend default
+  # and can be lowered/raised here if site walltimes differ.
     per_shard_timeout: 7200
 
     # Backend configuration for parallel execution

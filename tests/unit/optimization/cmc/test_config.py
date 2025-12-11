@@ -74,7 +74,7 @@ class TestCMCConfig:
             "sharding": {
                 "strategy": "stratified",
                 "num_shards": 4,
-                "max_points_per_shard": 100000,
+                "max_points_per_shard": 250000,
             },
         }
 
@@ -82,7 +82,7 @@ class TestCMCConfig:
 
         assert config.sharding_strategy == "stratified"
         assert config.num_shards == 4
-        assert config.max_points_per_shard == 100000
+        assert config.max_points_per_shard == 250000
 
     def test_validate_no_errors(self):
         """Test validation passes for valid config."""

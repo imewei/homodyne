@@ -44,7 +44,7 @@ class _MockParameterSpace:
 
 @pytest.mark.unit
 def test_resolve_max_points_per_shard_laminar_large_pool():
-    assert _resolve_max_points_per_shard("laminar_flow", 3_000_000, "auto") == 10_000
+    assert _resolve_max_points_per_shard("laminar_flow", 3_000_000, "auto") == 250_000
 
 
 @pytest.mark.unit
