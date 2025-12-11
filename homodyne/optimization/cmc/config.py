@@ -71,10 +71,20 @@ class CMCConfig:
     checkpoint_dir: str = "./checkpoints/cmc"
 
     # Sampling
+    # NOTE: Defaults are intentionally conservative for laminar_flow
+    # workloads to avoid per-shard timeouts on large pooled datasets
+    # (millions of points across a handful of angles).
+    #
+    # Effective work per shard scales roughly as:
+    #   O(num_chains * (num_warmup + num_samples) * max_points_per_shard)
+    #
+    # Values here are chosen to keep typical laminar_flow CMC shards
+    # well under the 2 hour timeout on modest CPU nodes while still
+    # providing usable posteriors and R-hat diagnostics.
     num_warmup: int = 500
-    num_samples: int = 2000
-    num_chains: int = 4
-    target_accept_prob: float = 0.8
+    num_samples: int = 1500
+    num_chains: int = 2
+    target_accept_prob: float = 0.85
 
     # Validation thresholds
     max_r_hat: float = 1.1
@@ -147,9 +157,9 @@ class CMCConfig:
             checkpoint_dir=checkpoint_dir,
             # Sampling
             num_warmup=per_shard.get("num_warmup", 500),
-            num_samples=per_shard.get("num_samples", 2000),
-            num_chains=per_shard.get("num_chains", 4),
-            target_accept_prob=per_shard.get("target_accept_prob", 0.8),
+            num_samples=per_shard.get("num_samples", 1500),
+            num_chains=per_shard.get("num_chains", 2),
+            target_accept_prob=per_shard.get("target_accept_prob", 0.85),
             # Validation
             max_r_hat=validation.get("max_per_shard_rhat", 1.1),
             min_ess=validation.get("min_per_shard_ess", 100.0),

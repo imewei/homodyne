@@ -445,11 +445,11 @@ optimization:
 
     # Per-shard MCMC (overrides base mcmc settings for shards)
     per_shard_mcmc:
-      num_warmup: 100
-      num_samples: 3000
-      num_chains: 4
+      num_warmup: 500
+      num_samples: 1500
+      num_chains: 2
       subsample_size: "auto"
-      target_accept_prob: 0.80
+      target_accept_prob: 0.85
 
     # Convergence validation
     validation:

@@ -742,10 +742,16 @@ class ConfigManager:
                 "validate_results": True,
                 "min_success_rate": 0.90,
             },
+            # Per-shard NUTS defaults are tuned to keep
+            # laminar_flow CMC workloads below the 2 hour
+            # per-shard timeout on typical CPU nodes.
+            # These values are intentionally lighter than
+            # early prototypes (fewer chains / samples).
             "per_shard_mcmc": {
                 "num_warmup": 500,
-                "num_samples": 2000,
-                "num_chains": 1,
+                "num_samples": 1500,
+                "num_chains": 2,
+                "target_accept_prob": 0.85,
                 "subsample_size": "auto",
             },
             "validation": {

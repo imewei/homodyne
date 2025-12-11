@@ -17,9 +17,9 @@ class TestCMCConfig:
         assert config.enable == "auto"
         assert config.min_points_for_cmc == 500000
         assert config.num_warmup == 500
-        assert config.num_samples == 2000
-        assert config.num_chains == 4
-        assert config.target_accept_prob == 0.8
+        assert config.num_samples == 1500
+        assert config.num_chains == 2
+        assert config.target_accept_prob == 0.85
 
     def test_from_dict_basic(self):
         """Test creating config from dictionary."""
@@ -45,7 +45,7 @@ class TestCMCConfig:
 
         assert config.enable == "auto"
         assert config.num_warmup == 500
-        assert config.num_samples == 2000
+        assert config.num_samples == 1500
 
     def test_from_dict_none(self):
         """Test creating config from None uses defaults."""

@@ -36,6 +36,21 @@ if TYPE_CHECKING:
 logger = get_logger(__name__)
 
 
+def _resolve_max_points_per_shard(
+    analysis_mode: str,
+    n_total: int,
+    max_points_per_shard: int | str | None,
+) -> int:
+    """Determine a shard size bound based on mode and data volume."""
+
+    if max_points_per_shard is None or max_points_per_shard == "auto":
+        if analysis_mode == "laminar_flow":
+            return 10_000 if n_total >= 2_000_000 else 20_000
+        return 100_000
+
+    return int(max_points_per_shard)
+
+
 def _infer_time_step(t1: np.ndarray, t2: np.ndarray) -> float:
     """Infer time step from pooled t1/t2 arrays (seconds).
 
@@ -188,16 +203,15 @@ def fit_mcmc_jax(
 
     # Resolve max_points_per_shard - critical for NUTS tractability
     # Scale inversely with parameter count: more params = fewer points per shard
-    max_per_shard = config.max_points_per_shard
-    if max_per_shard == "auto" or max_per_shard is None:
-        # laminar_flow has 7 physics params + per-angle scaling = more complex
-        # static has 3 physics params + per-angle scaling = simpler
-        if analysis_mode == "laminar_flow":
-            max_per_shard = 25000  # 7 params: ~20-40 min per shard
-        else:
-            max_per_shard = 100000  # 3 params: ~20-40 min per shard
-        run_logger.info(f"Auto-selected max_points_per_shard={max_per_shard} for {analysis_mode} mode")
-    max_per_shard = int(max_per_shard)
+    max_points_setting = config.max_points_per_shard
+    max_per_shard = _resolve_max_points_per_shard(
+        analysis_mode, prepared.n_total, max_points_setting
+    )
+    if max_points_setting is None or max_points_setting == "auto":
+        run_logger.info(
+            f"Auto-selected max_points_per_shard={max_per_shard} for {analysis_mode} mode "
+            f"(n_total={prepared.n_total:,})"
+        )
 
     if use_cmc and prepared.n_phi > 1:
         # Shard by phi angle (stratified)

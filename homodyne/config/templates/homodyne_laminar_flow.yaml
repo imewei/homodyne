@@ -420,9 +420,12 @@ optimization:
   # For laminar_flow with 7 parameters: increased warmup recommended
   mcmc:
     backend: "numpyro"           # "numpyro" | "blackjax"
-    num_warmup: 1000             # Increase if divergences persist
-    num_samples: 3000            # Lower for diagnostics, raise for publication
-    num_chains: 4                # ≥2 for R-hat calculation
+    # Base MCMC settings (single-shard). These are
+    # intentionally moderate; CMC-specific per-shard
+    # settings are configured separately below.
+    num_warmup: 500              # Increase if divergences persist
+    num_samples: 2000            # Lower for quick diagnostics, raise for publication
+    num_chains: 2                # ≥2 for R-hat calculation
     progress_bar: true
     target_accept_prob: 0.90     # NUTS target acceptance
     max_tree_depth: 12
@@ -476,8 +479,14 @@ optimization:
     sharding:
       strategy: "stratified" # Options: "stratified" | "random" | "contiguous"
       num_shards: "auto" # Number of shards (int or "auto" for automatic)
-      max_points_per_shard: 25000 # Maximum points per shard for NUTS tractability
-      # Note: "auto" resolves to 25000 for laminar_flow (7 params). ~20-40 min per shard.
+      max_points_per_shard: 20000 # Max points per shard (laminar_flow); see core.py for auto-scaling
+      # Note: when left as "auto" in the resolved config, laminar_flow uses
+      # 20k points for typical datasets and 10k points for very large pooled
+      # datasets (≥2M points) to keep per-shard runtimes below timeout.
+
+    # Per-shard timeout (seconds). Matches multiprocessing backend default
+    # and can be lowered/raised here if site walltimes differ.
+    per_shard_timeout: 7200
 
     # Backend configuration for parallel execution
     backend_config:
@@ -495,12 +504,14 @@ optimization:
       min_success_rate: 0.8 # Minimum fraction of shards that must converge (0.0-1.0)
 
     # Per-shard MCMC (overrides base mcmc settings for shards)
+    # Tuned to avoid per-shard timeouts on large laminar_flow
+    # datasets while still providing usable posteriors.
     per_shard_mcmc:
-      num_warmup: 100
-      num_samples: 3000
-      num_chains: 4
+      num_warmup: 500
+      num_samples: 1500
+      num_chains: 2
       subsample_size: "auto"
-      target_accept_prob: 0.80
+      target_accept_prob: 0.85
 
     # Convergence validation
     validation:
