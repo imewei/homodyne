@@ -9,6 +9,7 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
+from homodyne.optimization.cmc import core
 from homodyne.optimization.cmc.core import (
     _resolve_max_points_per_shard,
     fit_mcmc_jax,
@@ -45,6 +46,20 @@ class _MockParameterSpace:
 @pytest.mark.unit
 def test_resolve_max_points_per_shard_laminar_large_pool():
     assert _resolve_max_points_per_shard("laminar_flow", 3_000_000, "auto") == 10_000
+
+
+@pytest.mark.unit
+def test_suggested_timeout_clamps_and_scales():
+    # cost: chains=2, warmup+samples=2000, max_per_shard=20k → cost=80M
+    cost = 2 * (500 + 1500) * 20_000
+    # raw = 5 * 2e-5 * 80,000,000 = 80,000s -> clamped to max_timeout (7200)
+    suggested = core._compute_suggested_timeout(cost_per_shard=cost, max_timeout=7200)
+    assert suggested == 7200
+
+    # Smaller cost should respect min clamp 600s
+    small_cost = 2 * (5 + 10) * 100
+    suggested_small = core._compute_suggested_timeout(cost_per_shard=small_cost, max_timeout=7200)
+    assert suggested_small == 600
 
 
 @pytest.mark.unit

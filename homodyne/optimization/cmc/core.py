@@ -52,6 +52,24 @@ def _resolve_max_points_per_shard(
     return int(max_points_per_shard)
 
 
+def _compute_suggested_timeout(
+    *,
+    cost_per_shard: int,
+    max_timeout: int,
+    secs_per_unit: float = 2.0e-5,
+    safety_factor: float = 5.0,
+    min_timeout: int = 600,
+) -> int:
+    """Derive a timeout (seconds) from shard cost with clamping.
+
+    cost_per_shard = num_chains * (num_warmup + num_samples) * max_points_per_shard
+    """
+
+    raw = safety_factor * secs_per_unit * cost_per_shard
+    clamped = min(max_timeout, max(min_timeout, raw))
+    return int(clamped)
+
+
 def _infer_time_step(t1: np.ndarray, t2: np.ndarray) -> float:
     """Infer time step from pooled t1/t2 arrays (seconds).
 
@@ -214,6 +232,18 @@ def fit_mcmc_jax(
             f"(n_total={prepared.n_total:,})"
         )
 
+    # Derive a suggested per-shard timeout from cost
+    cost_per_shard = config.num_chains * (config.num_warmup + config.num_samples) * max_per_shard
+    suggested_timeout = _compute_suggested_timeout(
+        cost_per_shard=cost_per_shard,
+        max_timeout=config.per_shard_timeout,
+    )
+    run_logger.info(
+        f"Suggested per-shard timeout: {suggested_timeout}s (cost={cost_per_shard:,}, "
+        f"chains={config.num_chains}, warmup+samples={config.num_warmup + config.num_samples}, "
+        f"max_points_per_shard={max_per_shard:,}, clamp=[600,{config.per_shard_timeout}])"
+    )
+
     if use_cmc and prepared.n_phi > 1:
         # Shard by phi angle (stratified)
         num_shards = config.get_num_shards(prepared.n_total, prepared.n_phi)
@@ -337,6 +367,20 @@ def fit_mcmc_jax(
         # Use parallel backend for CMC
         backend = select_backend(config)
         run_logger.info(f"Using backend: {backend.get_name()}")
+
+        # Enforce timeout only where supported (multiprocessing). Others log advisory.
+        if backend.get_name() == "multiprocessing":
+            effective_timeout = min(config.per_shard_timeout, suggested_timeout)
+            if effective_timeout != config.per_shard_timeout:
+                run_logger.info(
+                    f"Applying tighter per_shard_timeout={effective_timeout}s based on shard cost"
+                )
+            config.per_shard_timeout = effective_timeout
+        else:
+            run_logger.warning(
+                f"Backend '{backend.get_name()}' does not enforce per_shard_timeout; "
+                f"suggested={suggested_timeout}s (cap={config.per_shard_timeout}s)"
+            )
 
         mcmc_samples = backend.run(
             model=xpcs_model,
