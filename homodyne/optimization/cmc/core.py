@@ -52,6 +52,22 @@ def _resolve_max_points_per_shard(
     return int(max_points_per_shard)
 
 
+def _cap_laminar_max_points(max_points_per_shard: int, logger) -> int:
+    """Guard rails for laminar_flow to keep shards within reasonable runtime.
+
+    Caps overly large user values that would routinely exceed per-shard timeouts.
+    """
+
+    cap = 50_000
+    if max_points_per_shard > cap:
+        logger.warning(
+            f"max_points_per_shard={max_points_per_shard:,} is high for laminar_flow; "
+            f"capping to {cap:,} to keep per-shard runtime tractable"
+        )
+        return cap
+    return max_points_per_shard
+
+
 def _compute_suggested_timeout(
     *,
     cost_per_shard: int,
@@ -226,6 +242,8 @@ def fit_mcmc_jax(
     max_per_shard = _resolve_max_points_per_shard(
         analysis_mode, prepared.n_total, max_points_setting
     )
+    if analysis_mode == "laminar_flow":
+        max_per_shard = _cap_laminar_max_points(max_per_shard, run_logger)
     if max_points_setting is None or max_points_setting == "auto":
         run_logger.info(
             f"Auto-selected max_points_per_shard={max_per_shard} for {analysis_mode} mode "
@@ -369,7 +387,7 @@ def fit_mcmc_jax(
         run_logger.info(f"Using backend: {backend.get_name()}")
 
         # Enforce timeout only where supported (multiprocessing). Others log advisory.
-        if backend.get_name() == "multiprocessing":
+        if backend.get_name().startswith("multiprocessing"):
             effective_timeout = min(config.per_shard_timeout, suggested_timeout)
             if effective_timeout != config.per_shard_timeout:
                 run_logger.info(

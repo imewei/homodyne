@@ -27,6 +27,18 @@ if TYPE_CHECKING:
 logger = get_logger(__name__)
 
 
+def _compute_threads_per_worker(total_threads: int, workers: int) -> int:
+    """Derive a conservative thread budget per worker to avoid oversubscription.
+
+    We approximate physical cores as half of logical (common HT layout) and divide
+    that budget across workers, clamping to at least 1.
+    """
+
+    safe_pool = max(1, total_threads // 2)
+    worker_count = max(1, workers)
+    return max(1, safe_pool // worker_count)
+
+
 def _run_shard_worker_with_queue(
     shard_idx: int,
     shard_data: dict[str, Any],
@@ -293,7 +305,13 @@ class MultiprocessingBackend(CMCBackend):
 
         # Calculate threads per worker to avoid over-subscription
         total_threads = mp.cpu_count()
-        threads_per_worker = max(1, total_threads // actual_workers)
+        threads_per_worker = _compute_threads_per_worker(total_threads, actual_workers)
+
+        if threads_per_worker < max(1, total_threads // max(1, actual_workers)):
+            run_logger.info(
+                f"Capping threads to avoid oversubscription: logical={total_threads}, "
+                f"workers={actual_workers} → {threads_per_worker} threads/worker"
+            )
 
         run_logger.info(
             f"Running {n_shards} shards in parallel with {actual_workers} workers "
@@ -342,6 +360,7 @@ class MultiprocessingBackend(CMCBackend):
         pending_shards = list(range(n_shards))
         results = []
         completed_count = 0
+        recorded_shards: set[int] = set()
 
         # Progress bar
         pbar = tqdm(
@@ -395,6 +414,20 @@ class MultiprocessingBackend(CMCBackend):
                         del active_processes[shard_idx]
                         run_logger.debug(f"Shard {shard_idx} process exited after {proc_elapsed:.1f}s")
 
+                        if shard_idx not in recorded_shards:
+                            results.append(
+                                {
+                                    "success": False,
+                                    "shard_idx": shard_idx,
+                                    "error": "Process exited without returning a result",
+                                    "duration": proc_elapsed,
+                                }
+                            )
+                            recorded_shards.add(shard_idx)
+                            completed_count += 1
+                            pbar.update(1)
+                            pbar.set_postfix(shard=shard_idx, status="no-result")
+
                     elif proc_elapsed > per_shard_timeout:
                         # Per-shard timeout exceeded - terminate the process
                         run_logger.warning(
@@ -409,21 +442,27 @@ class MultiprocessingBackend(CMCBackend):
                             process.join(timeout=2)
 
                         del active_processes[shard_idx]
-                        results.append({
-                            "success": False,
-                            "shard_idx": shard_idx,
-                            "error": f"Timeout after {proc_elapsed:.0f}s (limit: {per_shard_timeout}s)",
-                            "duration": proc_elapsed,
-                        })
-                        completed_count += 1
-                        pbar.update(1)
-                        pbar.set_postfix(shard=shard_idx, status="timeout")
+                        if shard_idx not in recorded_shards:
+                            results.append(
+                                {
+                                    "success": False,
+                                    "shard_idx": shard_idx,
+                                    "error": f"Timeout after {proc_elapsed:.0f}s (limit: {per_shard_timeout}s)",
+                                    "duration": proc_elapsed,
+                                }
+                            )
+                            recorded_shards.add(shard_idx)
+                            completed_count += 1
+                            pbar.update(1)
+                            pbar.set_postfix(shard=shard_idx, status="timeout")
 
                 # Collect results from queue (non-blocking)
                 while True:
                     try:
                         result = result_queue.get_nowait()
                         results.append(result)
+                        if "shard_idx" in result:
+                            recorded_shards.add(result["shard_idx"])
                         completed_count += 1
                         pbar.update(1)
                         if result.get("success"):
@@ -450,6 +489,23 @@ class MultiprocessingBackend(CMCBackend):
                     else:
                         pbar.set_postfix_str(f"active={len(active_processes)} elapsed={mins}m{secs:02d}s")
                     time.sleep(poll_interval)
+
+                # If no processes remain and nothing is pending, mark any missing shards as failed
+                if not active_processes and not pending_shards and completed_count < n_shards:
+                    missing = set(range(n_shards)) - recorded_shards
+                    for shard_idx in sorted(missing):
+                        results.append(
+                            {
+                                "success": False,
+                                "shard_idx": shard_idx,
+                                "error": "Shard exited without emitting a result",
+                                "duration": None,
+                            }
+                        )
+                        recorded_shards.add(shard_idx)
+                        completed_count += 1
+                        pbar.update(1)
+                        pbar.set_postfix(shard=shard_idx, status="no-result")
 
         except KeyboardInterrupt:
             run_logger.warning("Interrupted - terminating all active processes")
