@@ -44,8 +44,10 @@ def _resolve_max_points_per_shard(
     """Determine a shard size bound based on mode and data volume."""
 
     if max_points_per_shard is None or max_points_per_shard == "auto":
-        # Uniform higher cap to reduce shard count across modes
-        return 250_000
+        if analysis_mode == "laminar_flow":
+            # Very large pools need tighter caps to avoid timeouts
+            return 10_000 if n_total >= 2_000_000 else 20_000
+        return 100_000
 
     return int(max_points_per_shard)
 

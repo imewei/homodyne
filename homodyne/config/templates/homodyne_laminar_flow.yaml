@@ -479,7 +479,7 @@ optimization:
     sharding:
       strategy: "stratified" # Options: "stratified" | "random" | "contiguous"
       num_shards: "auto" # Number of shards (int or "auto" for automatic)
-      max_points_per_shard: 250000 # Max points per shard; auto uses 250k to reduce shard count
+      max_points_per_shard: "auto" # auto -> 20k (laminar_flow) or 10k if pooled ≥2M points
 
     # Per-shard timeout (seconds). Matches multiprocessing backend default
     # and can be lowered/raised here if site walltimes differ.
