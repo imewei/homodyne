@@ -183,8 +183,9 @@ def estimate_per_angle_scaling(
             offset_mid = (offset_bounds[0] + offset_bounds[1]) / 2.0
             estimates[f"contrast_{i}"] = contrast_mid
             estimates[f"offset_{i}"] = offset_mid
-            logger.debug(
-                f"Angle {i}: insufficient data ({n_points} points), using midpoints"
+            logger.info(
+                f"Angle {i}: insufficient data ({n_points} points), "
+                f"using midpoint init contrast={contrast_mid:.4f}, offset={offset_mid:.4f}"
             )
             continue
 
@@ -201,7 +202,7 @@ def estimate_per_angle_scaling(
         estimates[f"contrast_{i}"] = contrast_i
         estimates[f"offset_{i}"] = offset_i
 
-        logger.debug(
+        logger.info(
             f"Angle {i}: estimated contrast={contrast_i:.4f}, offset={offset_i:.4f} "
             f"from {n_points:,} data points"
         )
@@ -727,5 +728,4 @@ def validate_init_values_order(
             f"Expected {len(expected_names)} params: {expected_names}\n"
             f"Actual {len(actual_names)} params: {actual_names}"
         )
-
 
