@@ -171,15 +171,32 @@ def run_nuts_sampling(
     param_names_with_sigma = param_names + ["sigma"]
 
     # Build full init values dict if needed
-    if initial_values is not None:
-        full_init = build_init_values_dict(
-            n_phi=n_phi,
-            analysis_mode=analysis_mode,
-            initial_values=initial_values,
-            parameter_space=parameter_space,
-        )
-    else:
-        full_init = None
+    # Extract data arrays from model_kwargs for data-driven estimation
+    c2_data = model_kwargs.get("data")
+    t1_data = model_kwargs.get("t1")
+    t2_data = model_kwargs.get("t2")
+    phi_indices = model_kwargs.get("phi_indices")
+
+    # Convert JAX arrays to numpy for estimation (if needed)
+    if c2_data is not None and hasattr(c2_data, "__array__"):
+        c2_data = np.asarray(c2_data)
+    if t1_data is not None and hasattr(t1_data, "__array__"):
+        t1_data = np.asarray(t1_data)
+    if t2_data is not None and hasattr(t2_data, "__array__"):
+        t2_data = np.asarray(t2_data)
+    if phi_indices is not None and hasattr(phi_indices, "__array__"):
+        phi_indices = np.asarray(phi_indices)
+
+    full_init = build_init_values_dict(
+        n_phi=n_phi,
+        analysis_mode=analysis_mode,
+        initial_values=initial_values,
+        parameter_space=parameter_space,
+        c2_data=c2_data,
+        t1=t1_data,
+        t2=t2_data,
+        phi_indices=phi_indices,
+    )
 
     # Create init strategy
     init_strategy = create_init_strategy(full_init, param_names_with_sigma)

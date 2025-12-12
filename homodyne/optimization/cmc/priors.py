@@ -9,6 +9,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 import jax.numpy as jnp
+import numpy as np
 import numpyro.distributions as dist
 
 from homodyne.utils.logging import get_logger
@@ -17,6 +18,195 @@ if TYPE_CHECKING:
     from homodyne.config.parameter_space import ParameterSpace, PriorDistribution
 
 logger = get_logger(__name__)
+
+
+# =============================================================================
+# DATA-DRIVEN INITIAL VALUE ESTIMATION
+# =============================================================================
+
+
+def estimate_contrast_offset_from_data(
+    c2_data: np.ndarray,
+    t1: np.ndarray,
+    t2: np.ndarray,
+    contrast_bounds: tuple[float, float] = (0.0, 1.0),
+    offset_bounds: tuple[float, float] = (0.5, 1.5),
+    lag_floor_quantile: float = 0.80,
+    lag_ceiling_quantile: float = 0.20,
+    value_quantile_low: float = 0.10,
+    value_quantile_high: float = 0.90,
+) -> tuple[float, float]:
+    """Estimate contrast and offset from C2 data using physics-informed quantile analysis.
+
+    Uses the correlation decay structure: C2 = contrast × g1² + offset
+    - At large time lags, g1² → 0, so C2 → offset (the "floor")
+    - At small time lags, g1² ≈ 1, so C2 ≈ contrast + offset (the "ceiling")
+
+    Parameters
+    ----------
+    c2_data : np.ndarray
+        C2 correlation values (1D array).
+    t1 : np.ndarray
+        First time coordinate array (same shape as c2_data).
+    t2 : np.ndarray
+        Second time coordinate array (same shape as c2_data).
+    contrast_bounds : tuple[float, float]
+        Valid bounds for contrast parameter.
+    offset_bounds : tuple[float, float]
+        Valid bounds for offset parameter.
+    lag_floor_quantile : float
+        Quantile threshold for "large lag" region (default: 0.80 = top 20% of lags).
+    lag_ceiling_quantile : float
+        Quantile threshold for "small lag" region (default: 0.20 = bottom 20% of lags).
+    value_quantile_low : float
+        Quantile for robust floor estimation (default: 0.10).
+    value_quantile_high : float
+        Quantile for robust ceiling estimation (default: 0.90).
+
+    Returns
+    -------
+    tuple[float, float]
+        (contrast_est, offset_est) - Estimated values clipped to bounds.
+
+    Notes
+    -----
+    The estimation is robust to outliers by using quantiles instead of min/max.
+    The lag-based segmentation ensures we're sampling from the appropriate
+    regions of the correlation decay curve.
+    """
+    # Compute time lags
+    delta_t = np.abs(np.asarray(t1) - np.asarray(t2))
+    c2 = np.asarray(c2_data)
+
+    # Sanity checks
+    if len(c2) < 100:
+        # Not enough data for robust estimation - return midpoints
+        contrast_mid = (contrast_bounds[0] + contrast_bounds[1]) / 2.0
+        offset_mid = (offset_bounds[0] + offset_bounds[1]) / 2.0
+        logger.debug(
+            f"Insufficient data ({len(c2)} points) for quantile estimation, "
+            f"using midpoint defaults: contrast={contrast_mid:.3f}, offset={offset_mid:.3f}"
+        )
+        return contrast_mid, offset_mid
+
+    # Find lag thresholds
+    lag_threshold_high = np.percentile(delta_t, lag_floor_quantile * 100)
+    lag_threshold_low = np.percentile(delta_t, lag_ceiling_quantile * 100)
+
+    # OFFSET estimation: From large-lag region where g1² ≈ 0
+    # C2 → offset at large lags
+    large_lag_mask = delta_t >= lag_threshold_high
+    if np.sum(large_lag_mask) >= 10:
+        c2_floor_region = c2[large_lag_mask]
+        # Use low quantile for robustness (in case of noise spikes)
+        offset_est = np.percentile(c2_floor_region, value_quantile_low * 100)
+    else:
+        # Fallback: use overall low quantile
+        offset_est = np.percentile(c2, value_quantile_low * 100)
+
+    # Clip offset to bounds
+    offset_est = float(np.clip(offset_est, offset_bounds[0], offset_bounds[1]))
+
+    # CONTRAST estimation: From small-lag region where g1² ≈ 1
+    # C2 ≈ contrast + offset at small lags
+    small_lag_mask = delta_t <= lag_threshold_low
+    if np.sum(small_lag_mask) >= 10:
+        c2_ceiling_region = c2[small_lag_mask]
+        # Use high quantile for robustness
+        c2_ceiling = np.percentile(c2_ceiling_region, value_quantile_high * 100)
+    else:
+        # Fallback: use overall high quantile
+        c2_ceiling = np.percentile(c2, value_quantile_high * 100)
+
+    # contrast ≈ c2_ceiling - offset
+    contrast_est = c2_ceiling - offset_est
+
+    # Clip contrast to bounds
+    contrast_est = float(np.clip(contrast_est, contrast_bounds[0], contrast_bounds[1]))
+
+    logger.debug(
+        f"Quantile-based estimation: offset={offset_est:.4f} (from large-lag floor), "
+        f"contrast={contrast_est:.4f} (from small-lag ceiling - floor)"
+    )
+
+    return contrast_est, offset_est
+
+
+def estimate_per_angle_scaling(
+    c2_data: np.ndarray,
+    t1: np.ndarray,
+    t2: np.ndarray,
+    phi_indices: np.ndarray,
+    n_phi: int,
+    contrast_bounds: tuple[float, float],
+    offset_bounds: tuple[float, float],
+) -> dict[str, float]:
+    """Estimate contrast and offset initial values for each phi angle.
+
+    Parameters
+    ----------
+    c2_data : np.ndarray
+        Pooled C2 correlation values.
+    t1 : np.ndarray
+        Pooled first time coordinates.
+    t2 : np.ndarray
+        Pooled second time coordinates.
+    phi_indices : np.ndarray
+        Index mapping each data point to its phi angle (0 to n_phi-1).
+    n_phi : int
+        Number of unique phi angles.
+    contrast_bounds : tuple[float, float]
+        Valid bounds for contrast.
+    offset_bounds : tuple[float, float]
+        Valid bounds for offset.
+
+    Returns
+    -------
+    dict[str, float]
+        Dictionary with keys 'contrast_0', 'offset_0', 'contrast_1', 'offset_1', etc.
+    """
+    estimates: dict[str, float] = {}
+
+    c2 = np.asarray(c2_data)
+    t1_arr = np.asarray(t1)
+    t2_arr = np.asarray(t2)
+    phi_idx = np.asarray(phi_indices)
+
+    for i in range(n_phi):
+        # Filter data for this angle
+        angle_mask = phi_idx == i
+        n_points = np.sum(angle_mask)
+
+        if n_points < 100:
+            # Not enough data - use midpoint defaults
+            contrast_mid = (contrast_bounds[0] + contrast_bounds[1]) / 2.0
+            offset_mid = (offset_bounds[0] + offset_bounds[1]) / 2.0
+            estimates[f"contrast_{i}"] = contrast_mid
+            estimates[f"offset_{i}"] = offset_mid
+            logger.debug(
+                f"Angle {i}: insufficient data ({n_points} points), using midpoints"
+            )
+            continue
+
+        # Extract data for this angle
+        c2_angle = c2[angle_mask]
+        t1_angle = t1_arr[angle_mask]
+        t2_angle = t2_arr[angle_mask]
+
+        # Estimate from data
+        contrast_i, offset_i = estimate_contrast_offset_from_data(
+            c2_angle, t1_angle, t2_angle, contrast_bounds, offset_bounds
+        )
+
+        estimates[f"contrast_{i}"] = contrast_i
+        estimates[f"offset_{i}"] = offset_i
+
+        logger.debug(
+            f"Angle {i}: estimated contrast={contrast_i:.4f}, offset={offset_i:.4f} "
+            f"from {n_points:,} data points"
+        )
+
+    return estimates
 
 # Physical parameter names in canonical order
 STATIC_PARAMS = ["D0", "alpha", "D_offset"]
@@ -274,6 +464,11 @@ def build_init_values_dict(
     analysis_mode: str,
     initial_values: dict[str, float] | None,
     parameter_space: ParameterSpace,
+    *,
+    c2_data: np.ndarray | None = None,
+    t1: np.ndarray | None = None,
+    t2: np.ndarray | None = None,
+    phi_indices: np.ndarray | None = None,
 ) -> dict[str, float]:
     """Build complete initial values dictionary in sampling order.
 
@@ -293,6 +488,14 @@ def build_init_values_dict(
         specifications for contrast/offset. See Notes for details.
     parameter_space : ParameterSpace
         Parameter space with bounds.
+    c2_data : np.ndarray | None
+        Optional C2 correlation data for quantile-based estimation of contrast/offset.
+    t1 : np.ndarray | None
+        Optional time coordinates (required if c2_data provided).
+    t2 : np.ndarray | None
+        Optional time coordinates (required if c2_data provided).
+    phi_indices : np.ndarray | None
+        Optional phi angle indices for per-angle estimation.
 
     Returns
     -------
@@ -302,18 +505,21 @@ def build_init_values_dict(
     Notes
     -----
     Per-angle scaling parameters (contrast/offset):
-        This function supports two modes for specifying per-angle initial values:
+        This function supports three modes for specifying per-angle initial values:
 
-        1. **Scalar broadcast** (default): If initial_values contains only base names
+        1. **Data-driven estimation** (NEW, preferred): If c2_data, t1, t2, and
+           phi_indices are provided, and contrast/offset not in initial_values,
+           uses physics-informed quantile analysis to estimate values from data.
+
+        2. **Scalar broadcast**: If initial_values contains only base names
            like 'contrast' and 'offset', those values are broadcast to ALL phi angles.
            Example: ``{'contrast': 0.5}`` → contrast_0=0.5, contrast_1=0.5, ...
 
-        2. **Explicit per-angle**: If initial_values contains indexed names like
+        3. **Explicit per-angle**: If initial_values contains indexed names like
            'contrast_0', 'contrast_1', etc., those specific values are used.
            Example: ``{'contrast_0': 0.4, 'contrast_1': 0.6}``
 
-        Mixed mode is supported: explicit per-angle values take precedence, with
-        the base scalar used as fallback for unspecified angles.
+        Priority: explicit per-angle > scalar broadcast > data-driven > midpoint fallback
 
     Bounds validation:
         All initial values are validated against parameter bounds. Out-of-bounds
@@ -322,10 +528,64 @@ def build_init_values_dict(
     init_dict: dict[str, float] = {}
     clipped_params: list[str] = []
 
+    # Check if we should use data-driven estimation for contrast/offset
+    # Only use if:
+    # 1. Data arrays are provided
+    # 2. contrast/offset are NOT in initial_values (neither scalar nor per-angle)
+    use_data_estimation = (
+        c2_data is not None
+        and t1 is not None
+        and t2 is not None
+        and phi_indices is not None
+        and len(c2_data) >= 100
+    )
+
+    # Check if contrast/offset are missing from initial_values
+    has_contrast = initial_values is not None and (
+        "contrast" in initial_values
+        or any(k.startswith("contrast_") for k in initial_values)
+    )
+    has_offset = initial_values is not None and (
+        "offset" in initial_values
+        or any(k.startswith("offset_") for k in initial_values)
+    )
+
+    # Compute data-driven estimates if needed
+    data_estimates: dict[str, float] = {}
+    if use_data_estimation and (not has_contrast or not has_offset):
+        contrast_bounds = parameter_space.get_bounds("contrast")
+        offset_bounds = parameter_space.get_bounds("offset")
+
+        data_estimates = estimate_per_angle_scaling(
+            c2_data=c2_data,
+            t1=t1,
+            t2=t2,
+            phi_indices=phi_indices,
+            n_phi=n_phi,
+            contrast_bounds=contrast_bounds,
+            offset_bounds=offset_bounds,
+        )
+        logger.info(
+            f"Using data-driven quantile estimation for contrast/offset "
+            f"(n_phi={n_phi}, n_data={len(c2_data):,})"
+        )
+
     # 1. Per-angle contrast parameters (FIRST)
     for i in range(n_phi):
         param_name = f"contrast_{i}"
-        raw_value = get_init_value(param_name, initial_values, parameter_space)
+
+        # Priority: initial_values > data_estimates > midpoint fallback
+        if initial_values is not None and param_name in initial_values:
+            raw_value = float(initial_values[param_name])
+        elif initial_values is not None and "contrast" in initial_values:
+            raw_value = float(initial_values["contrast"])
+        elif param_name in data_estimates:
+            raw_value = data_estimates[param_name]
+        else:
+            # Midpoint fallback
+            bounds = parameter_space.get_bounds("contrast")
+            raw_value = (bounds[0] + bounds[1]) / 2.0
+
         validated_value, was_clipped = validate_initial_value_bounds(
             param_name, raw_value, parameter_space
         )
@@ -336,7 +596,19 @@ def build_init_values_dict(
     # 2. Per-angle offset parameters (SECOND)
     for i in range(n_phi):
         param_name = f"offset_{i}"
-        raw_value = get_init_value(param_name, initial_values, parameter_space)
+
+        # Priority: initial_values > data_estimates > midpoint fallback
+        if initial_values is not None and param_name in initial_values:
+            raw_value = float(initial_values[param_name])
+        elif initial_values is not None and "offset" in initial_values:
+            raw_value = float(initial_values["offset"])
+        elif param_name in data_estimates:
+            raw_value = data_estimates[param_name]
+        else:
+            # Midpoint fallback
+            bounds = parameter_space.get_bounds("offset")
+            raw_value = (bounds[0] + bounds[1]) / 2.0
+
         validated_value, was_clipped = validate_initial_value_bounds(
             param_name, raw_value, parameter_space
         )
