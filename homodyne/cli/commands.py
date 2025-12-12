@@ -420,9 +420,19 @@ def _apply_cli_overrides(config: ConfigManager, args) -> None:
     if args.n_chains is None:
         args.n_chains = mcmc_config.get("num_chains", 4)
 
-    # CMC-only: selection thresholds removed; ensure mcmc section exists
-    if "mcmc" not in config.config["optimization"]:
-        config.config["optimization"]["mcmc"] = {}
+    # CMC-only: ensure sections exist and CLI overrides take precedence
+    optimization_section = config.config.setdefault("optimization", {})
+    optimization_section.setdefault("mcmc", {})
+    cmc_section = optimization_section.setdefault("cmc", {})
+    sharding_section = cmc_section.setdefault("sharding", {})
+    per_shard = cmc_section.setdefault("per_shard_mcmc", {})
+
+    if args.cmc_num_shards is not None:
+        sharding_section["num_shards"] = args.cmc_num_shards
+
+    per_shard["num_samples"] = args.n_samples
+    per_shard["num_warmup"] = args.n_warmup
+    per_shard["num_chains"] = args.n_chains
 
     # Ensure CMC per-shard MCMC picks up CLI overrides too
     cmc_section = config.config["optimization"].setdefault("cmc", {})
@@ -1006,6 +1016,24 @@ def _run_optimization(args, config: ConfigManager, data: dict[str, Any]) -> Any:
             if args.cmc_backend is not None:
                 logger.info(f"Overriding CMC backend from CLI: {args.cmc_backend}")
                 backend_cfg["name"] = args.cmc_backend
+
+            # If user requested multiple shards but backend is auto/jax, default to multiprocessing
+            num_shards_override = cmc_config.get("sharding", {}).get("num_shards", "auto")
+            try:
+                num_shards_int = int(num_shards_override)
+            except (TypeError, ValueError):
+                num_shards_int = None
+
+            backend_name_current = backend_cfg.get("name", "auto")
+            if num_shards_int and num_shards_int > 1 and backend_name_current in (
+                "auto",
+                "jax",
+            ):
+                logger.warning(
+                    "Multiple shards requested but backend is 'auto/jax'; defaulting to multiprocessing. "
+                    "Use --cmc-backend to override explicitly."
+                )
+                backend_cfg["name"] = "multiprocessing"
 
             # Log CMC configuration being used
             logger.info(f"Method: {method.upper()} (Consensus Monte Carlo)")

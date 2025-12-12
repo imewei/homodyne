@@ -234,8 +234,11 @@ def fit_mcmc_jax(
     # =========================================================================
     # 3. Determine if CMC sharding is needed
     # =========================================================================
-    forced_shards = isinstance(config.num_shards, int) or isinstance(
-        config.max_points_per_shard, int
+    def _int_like(val) -> bool:
+        return isinstance(val, int) or (isinstance(val, str) and val.isdigit())
+
+    forced_shards = _int_like(config.num_shards) or _int_like(
+        config.max_points_per_shard
     )
     use_cmc = config.should_enable_cmc(prepared.n_total) or forced_shards
 
@@ -265,7 +268,11 @@ def fit_mcmc_jax(
         f"max_points_per_shard={max_per_shard:,}, clamp=[600,{config.per_shard_timeout}])"
     )
 
-    requested_shards = config.num_shards if isinstance(config.num_shards, int) else None
+    requested_shards = (
+        int(config.num_shards)
+        if _int_like(config.num_shards)
+        else None
+    )
 
     if use_cmc and prepared.n_phi > 1:
         # Shard by phi angle (stratified)

@@ -143,14 +143,23 @@ class CMCConfig:
             enable_checkpoints = backend.get("enable_checkpoints", True)
             checkpoint_dir = backend.get("checkpoint_dir", "./checkpoints/cmc")
 
+        # Normalize possibly stringified ints
+        num_shards_val = sharding.get("num_shards", "auto")
+        if isinstance(num_shards_val, str) and num_shards_val.isdigit():
+            num_shards_val = int(num_shards_val)
+
+        max_points_val = sharding.get("max_points_per_shard", "auto")
+        if isinstance(max_points_val, str) and max_points_val.isdigit():
+            max_points_val = int(max_points_val)
+
         config = cls(
             # Enable settings
             enable=config_dict.get("enable", "auto"),
             min_points_for_cmc=config_dict.get("min_points_for_cmc", 500000),
             # Sharding
             sharding_strategy=sharding.get("strategy", "stratified"),
-            num_shards=sharding.get("num_shards", "auto"),
-            max_points_per_shard=sharding.get("max_points_per_shard", "auto"),
+            num_shards=num_shards_val,
+            max_points_per_shard=max_points_val,
             # Backend
             backend_name=backend_name,
             enable_checkpoints=enable_checkpoints,
