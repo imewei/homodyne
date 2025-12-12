@@ -27,7 +27,7 @@ class ParameterStats(dict):
     """
 
     def __init__(self, ordered_names: list[str], values: list[float]) -> None:
-        super().__init__(zip(ordered_names, values))
+        super().__init__(zip(ordered_names, values, strict=True))
         self._ordered_names = list(ordered_names)
         self._ordered_values = list(values)
 

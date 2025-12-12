@@ -173,6 +173,31 @@ def get_init_value(
     -------
     float
         Initial value for the parameter.
+
+    Notes
+    -----
+    Per-angle parameter handling (scalar broadcast):
+        For per-angle parameters like 'contrast_0', 'contrast_1', etc., this function
+        broadcasts a single scalar value to all angles. If only 'contrast' is provided
+        in initial_values (not 'contrast_0', 'contrast_1', etc.), that single value
+        is used for ALL phi angles.
+
+        To specify different initial values per angle, provide explicit keys like:
+        ``{'contrast_0': 0.4, 'contrast_1': 0.5, 'contrast_2': 0.45}``
+
+        The same applies to 'offset' parameters.
+
+    Examples
+    --------
+    >>> # Scalar broadcast: same value for all angles
+    >>> initial_values = {'contrast': 0.5, 'offset': 1.0}
+    >>> get_init_value('contrast_0', initial_values, param_space)  # Returns 0.5
+    >>> get_init_value('contrast_1', initial_values, param_space)  # Returns 0.5
+
+    >>> # Explicit per-angle values
+    >>> initial_values = {'contrast_0': 0.4, 'contrast_1': 0.6}
+    >>> get_init_value('contrast_0', initial_values, param_space)  # Returns 0.4
+    >>> get_init_value('contrast_1', initial_values, param_space)  # Returns 0.6
     """
     # Check initial_values first (exact match)
     if initial_values is not None and param_name in initial_values:
@@ -264,7 +289,8 @@ def build_init_values_dict(
     analysis_mode : str
         Analysis mode ("static" or "laminar_flow").
     initial_values : dict[str, float] | None
-        Initial values from config.
+        Initial values from config. Supports both scalar (broadcast) and per-angle
+        specifications for contrast/offset. See Notes for details.
     parameter_space : ParameterSpace
         Parameter space with bounds.
 
@@ -272,6 +298,26 @@ def build_init_values_dict(
     -------
     dict[str, float]
         Initial values dictionary in sampling order.
+
+    Notes
+    -----
+    Per-angle scaling parameters (contrast/offset):
+        This function supports two modes for specifying per-angle initial values:
+
+        1. **Scalar broadcast** (default): If initial_values contains only base names
+           like 'contrast' and 'offset', those values are broadcast to ALL phi angles.
+           Example: ``{'contrast': 0.5}`` → contrast_0=0.5, contrast_1=0.5, ...
+
+        2. **Explicit per-angle**: If initial_values contains indexed names like
+           'contrast_0', 'contrast_1', etc., those specific values are used.
+           Example: ``{'contrast_0': 0.4, 'contrast_1': 0.6}``
+
+        Mixed mode is supported: explicit per-angle values take precedence, with
+        the base scalar used as fallback for unspecified angles.
+
+    Bounds validation:
+        All initial values are validated against parameter bounds. Out-of-bounds
+        values are clipped to bounds ± 1% margin with a warning logged.
     """
     init_dict: dict[str, float] = {}
     clipped_params: list[str] = []
@@ -391,7 +437,9 @@ def validate_init_values_order(
 
     if actual_names != expected_names:
         # Find first mismatch for helpful error message
-        for i, (actual, expected) in enumerate(zip(actual_names, expected_names)):
+        for i, (actual, expected) in enumerate(
+            zip(actual_names, expected_names, strict=True)
+        ):
             if actual != expected:
                 raise ValueError(
                     f"Parameter order mismatch at position {i}!\n"
