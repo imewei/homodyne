@@ -979,6 +979,13 @@ def _run_optimization(args, config: ConfigManager, data: dict[str, Any]) -> Any:
             # Consensus Monte Carlo
             # Get CMC configuration from config file
             cmc_config = config.get_cmc_config()
+            # Normalize backend config to dict form for mutation
+            backend_cfg = cmc_config.get("backend", {})
+            if isinstance(backend_cfg, str):
+                backend_cfg = {"name": backend_cfg}
+            elif backend_cfg is None:
+                backend_cfg = {}
+            cmc_config["backend"] = backend_cfg
 
             # Apply CLI overrides to CMC configuration
             if args.cmc_num_shards is not None:
@@ -991,7 +998,7 @@ def _run_optimization(args, config: ConfigManager, data: dict[str, Any]) -> Any:
 
             if args.cmc_backend is not None:
                 logger.info(f"Overriding CMC backend from CLI: {args.cmc_backend}")
-                cmc_config.setdefault("backend", {})["name"] = args.cmc_backend
+                backend_cfg["name"] = args.cmc_backend
 
             # Log CMC configuration being used
             logger.info(f"Method: {method.upper()} (Consensus Monte Carlo)")

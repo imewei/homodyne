@@ -293,11 +293,12 @@ def shard_data_stratified(
     prepared : PreparedData
         Prepared data object.
     num_shards : int | None
-        Ignored. Number of shards is determined automatically based on
-        data size and max_points_per_shard.
+        Desired total shard count. When provided, it forces a target shard
+        size; max_points_per_shard is derived if not set.
     max_points_per_shard : int | None
         Maximum points per shard. If an angle exceeds this, multiple shards
-        are created for that angle. If None, uses one shard per angle.
+        are created for that angle. If None, uses one shard per angle unless
+        num_shards is provided (then it is derived).
         Recommended: 25000-100000 for NUTS.
     max_shards_per_angle : int
         Maximum shards to create per angle. If more would be needed, shard
@@ -313,6 +314,10 @@ def shard_data_stratified(
     shards: list[PreparedData] = []
     rng = np.random.default_rng(seed)
     shard_idx = 0
+
+    if num_shards is not None and num_shards > 0 and max_points_per_shard is None:
+        # Derive an approximate per-shard target to honor explicit shard counts
+        max_points_per_shard = (prepared.n_total + num_shards - 1) // num_shards
 
     # Process each phi angle separately
     for angle_idx in range(prepared.n_phi):

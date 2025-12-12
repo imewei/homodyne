@@ -234,7 +234,10 @@ def fit_mcmc_jax(
     # =========================================================================
     # 3. Determine if CMC sharding is needed
     # =========================================================================
-    use_cmc = config.should_enable_cmc(prepared.n_total)
+    forced_shards = isinstance(config.num_shards, int) or isinstance(
+        config.max_points_per_shard, int
+    )
+    use_cmc = config.should_enable_cmc(prepared.n_total) or forced_shards
 
     # Resolve max_points_per_shard - critical for NUTS tractability
     # Scale inversely with parameter count: more params = fewer points per shard
@@ -262,11 +265,19 @@ def fit_mcmc_jax(
         f"max_points_per_shard={max_per_shard:,}, clamp=[600,{config.per_shard_timeout}])"
     )
 
+    requested_shards = config.num_shards if isinstance(config.num_shards, int) else None
+
     if use_cmc and prepared.n_phi > 1:
         # Shard by phi angle (stratified)
-        num_shards = config.get_num_shards(prepared.n_total, prepared.n_phi)
+        num_shards = (
+            requested_shards
+            if requested_shards is not None
+            else config.get_num_shards(prepared.n_total, prepared.n_phi)
+        )
 
-        shards = shard_data_stratified(prepared, num_shards, max_points_per_shard=max_per_shard)
+        shards = shard_data_stratified(
+            prepared, num_shards, max_points_per_shard=max_per_shard
+        )
         total_shard_points = sum(s.n_total for s in shards)
         run_logger.info(
             f"Using CMC with {len(shards)} shards (stratified by phi), "
@@ -277,7 +288,7 @@ def fit_mcmc_jax(
         # shard_data_random handles num_shards calculation and capping internally
         shards = shard_data_random(
             prepared,
-            num_shards=None,  # Auto-calculate from data size
+            num_shards=requested_shards,  # Honor explicit shards when provided
             max_points_per_shard=max_per_shard,
             max_shards=100,  # Same cap as stratified
         )
