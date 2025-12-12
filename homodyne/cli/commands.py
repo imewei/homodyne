@@ -424,6 +424,13 @@ def _apply_cli_overrides(config: ConfigManager, args) -> None:
     if "mcmc" not in config.config["optimization"]:
         config.config["optimization"]["mcmc"] = {}
 
+    # Ensure CMC per-shard MCMC picks up CLI overrides too
+    cmc_section = config.config["optimization"].setdefault("cmc", {})
+    per_shard = cmc_section.setdefault("per_shard_mcmc", {})
+    per_shard["num_samples"] = args.n_samples
+    per_shard["num_warmup"] = args.n_warmup
+    per_shard["num_chains"] = args.n_chains
+
     # Override dense mass matrix flag
     if args.dense_mass_matrix:
         old_value = config.config["optimization"]["mcmc"].get("dense_mass", False)
