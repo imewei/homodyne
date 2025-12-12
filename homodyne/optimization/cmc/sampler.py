@@ -211,6 +211,7 @@ def run_nuts_sampling(
     )
 
     start_time = time.perf_counter()
+    run_logger.info("NUTS phase: JIT compile + sampling started (may take minutes)...")
 
     try:
         mcmc.run(rng_key, **model_kwargs)
@@ -219,6 +220,7 @@ def run_nuts_sampling(
         raise RuntimeError(f"MCMC sampling failed: {e}") from e
 
     total_time = time.perf_counter() - start_time
+    run_logger.info(f"NUTS finished in {total_time:.1f}s")
 
     # Extract samples
     samples = mcmc.get_samples(group_by_chain=True)

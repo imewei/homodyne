@@ -7,6 +7,8 @@ multiprocessing module for CPU-based parallelism.
 from __future__ import annotations
 
 import multiprocessing as mp
+import queue
+import threading
 import time
 from collections.abc import Callable
 from typing import TYPE_CHECKING, Any
@@ -62,8 +64,14 @@ def _run_shard_worker_with_queue(
         n_phi=n_phi,
         analysis_mode=analysis_mode,
         threads_per_worker=threads_per_worker,
+        result_queue=result_queue,
     )
-    result_queue.put(result)
+    try:
+        result_queue.put_nowait(result)
+    except Exception:
+        # If the queue is already full or closed, drop the result; the parent
+        # loop will have marked the shard as failed. This is a best-effort send.
+        pass
 
 
 def _run_shard_worker(
@@ -76,6 +84,7 @@ def _run_shard_worker(
     n_phi: int,
     analysis_mode: str,
     threads_per_worker: int = 2,
+    result_queue: mp.Queue | None = None,
 ) -> dict[str, Any]:
     """Worker function for processing a single shard.
 
@@ -158,6 +167,31 @@ def _run_shard_worker(
         "noise_scale": shard_data.get("noise_scale", 0.1),
     }
 
+    # Heartbeat thread to emit liveness updates back to the parent.
+    stop_hb = threading.Event()
+    heartbeat_interval = 30.0
+
+    def _heartbeat_loop() -> None:
+        last_sent = time.perf_counter()
+        while not stop_hb.is_set():
+            now = time.perf_counter()
+            if now - last_sent >= heartbeat_interval:
+                payload = {
+                    "type": "heartbeat",
+                    "shard_idx": shard_idx,
+                    "elapsed": now - start_time,
+                }
+                if result_queue is not None:
+                    try:
+                        result_queue.put_nowait(payload)
+                    except Exception:
+                        pass
+                last_sent = now
+            time.sleep(heartbeat_interval / 4)
+
+    hb_thread = threading.Thread(target=_heartbeat_loop, daemon=True)
+    hb_thread.start()
+
     try:
         # Run sampling
         samples, stats = run_nuts_sampling(
@@ -179,7 +213,8 @@ def _run_shard_worker(
         )
 
         # Serialize for return
-        return {
+        result = {
+            "type": "result",
             "success": True,
             "shard_idx": shard_idx,
             "samples": {k: np.array(v) for k, v in samples.samples.items()},
@@ -195,16 +230,32 @@ def _run_shard_worker(
                 "num_divergent": stats.num_divergent,
             },
         }
+        if result_queue is not None:
+            try:
+                result_queue.put_nowait(result)
+            except Exception:
+                pass
+        return result
 
     except Exception as e:
         duration = time.perf_counter() - start_time
         worker_logger.error(f"Shard {shard_idx} failed after {duration:.2f}s: {e}")
-        return {
+        result = {
+            "type": "result",
             "success": False,
             "shard_idx": shard_idx,
             "error": str(e),
             "duration": duration,
         }
+        if result_queue is not None:
+            try:
+                result_queue.put_nowait(result)
+            except Exception:
+                pass
+        return result
+    finally:
+        stop_hb.set()
+        hb_thread.join(timeout=1)
 
 
 class MultiprocessingBackend(CMCBackend):
@@ -361,6 +412,7 @@ class MultiprocessingBackend(CMCBackend):
         results = []
         completed_count = 0
         recorded_shards: set[int] = set()
+        last_heartbeat: dict[int, float] = {}
 
         # Progress bar
         pbar = tqdm(
@@ -377,9 +429,52 @@ class MultiprocessingBackend(CMCBackend):
 
         start_time = time.time()
         poll_interval = 2.0  # Check every 2 seconds
+        status_log_interval = 300.0  # parent status log every 5 minutes
+        last_status_log = start_time
 
         try:
             while completed_count < n_shards:
+                # Drain queue first to capture heartbeats and completed shards
+                while True:
+                    try:
+                        message = result_queue.get_nowait()
+                    except queue.Empty:
+                        break
+                    except Exception as exc:
+                        run_logger.warning(f"Queue read error: {exc}")
+                        break
+
+                    msg_type = message.get("type")
+                    shard_idx = message.get("shard_idx")
+                    if msg_type == "heartbeat" and shard_idx is not None:
+                        last_heartbeat[shard_idx] = time.time()
+                        continue
+
+                    if msg_type == "result" or message.get("success") is not None:
+                        results.append(message)
+                        if shard_idx is not None:
+                            recorded_shards.add(shard_idx)
+                        completed_count += 1
+                        pbar.update(1)
+                        if message.get("success"):
+                            pbar.set_postfix(
+                                shard=message.get("shard_idx", "?"),
+                                time=f"{message.get('duration', 0):.1f}s",
+                            )
+                        else:
+                            pbar.set_postfix(
+                                shard=message.get("shard_idx", "?"),
+                                status="failed",
+                            )
+                        if shard_idx in active_processes:
+                            # Clean up completed process tracking
+                            proc, _ = active_processes.pop(shard_idx)
+                            if proc.is_alive():
+                                proc.join(timeout=1)
+                        continue
+
+                    run_logger.debug(f"Ignoring unexpected queue message: {message}")
+
                 # Launch new processes up to max workers
                 while len(active_processes) < actual_workers and pending_shards:
                     shard_idx = pending_shards.pop(0)
@@ -401,15 +496,19 @@ class MultiprocessingBackend(CMCBackend):
                         ),
                     )
                     process.start()
-                    active_processes[shard_idx] = (process, time.time())
+                    now = time.time()
+                    active_processes[shard_idx] = (process, now)
+                    last_heartbeat[shard_idx] = now
                     run_logger.debug(f"Started shard {shard_idx} (pid={process.pid})")
 
                 # Check for completed or timed-out processes
                 for shard_idx, (process, proc_start_time) in list(active_processes.items()):
-                    proc_elapsed = time.time() - proc_start_time
+                    now = time.time()
+                    proc_elapsed = now - proc_start_time
+                    last_active = last_heartbeat.get(shard_idx, proc_start_time)
+                    inactive_elapsed = now - last_active
 
                     if not process.is_alive():
-                        # Process finished - it should have put result in queue
                         process.join(timeout=1)
                         del active_processes[shard_idx]
                         run_logger.debug(f"Shard {shard_idx} process exited after {proc_elapsed:.1f}s")
@@ -417,6 +516,7 @@ class MultiprocessingBackend(CMCBackend):
                         if shard_idx not in recorded_shards:
                             results.append(
                                 {
+                                    "type": "result",
                                     "success": False,
                                     "shard_idx": shard_idx,
                                     "error": "Process exited without returning a result",
@@ -428,14 +528,13 @@ class MultiprocessingBackend(CMCBackend):
                             pbar.update(1)
                             pbar.set_postfix(shard=shard_idx, status="no-result")
 
-                    elif proc_elapsed > per_shard_timeout:
-                        # Per-shard timeout exceeded - terminate the process
+                    elif inactive_elapsed > per_shard_timeout:
                         run_logger.warning(
-                            f"Shard {shard_idx} timed out after {proc_elapsed:.0f}s "
+                            f"Shard {shard_idx} inactive for {inactive_elapsed:.0f}s "
                             f"(limit: {per_shard_timeout}s), terminating process (pid={process.pid})"
                         )
                         process.terminate()
-                        process.join(timeout=5)  # Give 5s to cleanup
+                        process.join(timeout=5)
                         if process.is_alive():
                             run_logger.warning(f"Shard {shard_idx} did not terminate, killing")
                             process.kill()
@@ -445,9 +544,10 @@ class MultiprocessingBackend(CMCBackend):
                         if shard_idx not in recorded_shards:
                             results.append(
                                 {
+                                    "type": "result",
                                     "success": False,
                                     "shard_idx": shard_idx,
-                                    "error": f"Timeout after {proc_elapsed:.0f}s (limit: {per_shard_timeout}s)",
+                                    "error": f"Timeout after {inactive_elapsed:.0f}s (limit: {per_shard_timeout}s)",
                                     "duration": proc_elapsed,
                                 }
                             )
@@ -455,29 +555,6 @@ class MultiprocessingBackend(CMCBackend):
                             completed_count += 1
                             pbar.update(1)
                             pbar.set_postfix(shard=shard_idx, status="timeout")
-
-                # Collect results from queue (non-blocking)
-                while True:
-                    try:
-                        result = result_queue.get_nowait()
-                        results.append(result)
-                        if "shard_idx" in result:
-                            recorded_shards.add(result["shard_idx"])
-                        completed_count += 1
-                        pbar.update(1)
-                        if result.get("success"):
-                            pbar.set_postfix(
-                                shard=result.get("shard_idx", "?"),
-                                time=f"{result.get('duration', 0):.1f}s",
-                            )
-                        else:
-                            pbar.set_postfix(
-                                shard=result.get("shard_idx", "?"),
-                                status="failed",
-                            )
-                    except Exception:
-                        # Queue empty
-                        break
 
                 # Update progress bar with elapsed time
                 if completed_count < n_shards:
@@ -488,6 +565,18 @@ class MultiprocessingBackend(CMCBackend):
                         pbar.set_postfix_str(f"active={len(active_processes)} elapsed={hrs}h{mins:02d}m")
                     else:
                         pbar.set_postfix_str(f"active={len(active_processes)} elapsed={mins}m{secs:02d}s")
+
+                    if time.time() - last_status_log >= status_log_interval:
+                        heartbeat_snapshot = {
+                            k: f"{time.time() - v:.0f}s"
+                            for k, v in last_heartbeat.items()
+                        }
+                        run_logger.info(
+                            f"CMC status: {completed_count}/{n_shards} complete; "
+                            f"active={len(active_processes)}; last_heartbeats={heartbeat_snapshot}"
+                        )
+                        last_status_log = time.time()
+
                     time.sleep(poll_interval)
 
                 # If no processes remain and nothing is pending, mark any missing shards as failed

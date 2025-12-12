@@ -542,8 +542,14 @@ class XPCSDataLoader:
         )
         cache_path = os.path.join(cache_folder, cache_filename)
 
-        # Check cache first
-        if (
+        # If user provided a direct NPZ path, prefer it
+        direct_path = os.path.join(data_folder, data_file) if data_file else ""
+        if direct_path.endswith(".npz") and os.path.exists(direct_path):
+            logger.info(f"Loading data from NPZ override: {direct_path}")
+            data = self._load_from_cache(direct_path)
+
+        # Otherwise, try cache then raw HDF
+        elif (
             os.path.exists(cache_path)
             and self.v2_config.get("cache_strategy", "intelligent") != "none"
         ):
