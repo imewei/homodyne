@@ -96,6 +96,11 @@ def select_backend(
         # Default to multiprocessing for CPU
         backend_name = "multiprocessing"
 
+    # Backward compatibility: allow legacy "jax" alias
+    if backend_name == "jax":
+        logger.warning("CMC backend 'jax' is deprecated; mapping to 'pjit'.")
+        backend_name = "pjit"
+
     if backend_name == "multiprocessing":
         from homodyne.optimization.cmc.backends.multiprocessing import (
             MultiprocessingBackend,

@@ -86,6 +86,11 @@ class PjitBackend(CMCBackend):
         model_kwargs: dict[str, Any],
         config: CMCConfig,
         shards: list[PreparedData] | None = None,
+        *,
+        initial_values: dict[str, float] | None = None,
+        parameter_space: Any | None = None,
+        analysis_mode: str | None = None,
+        progress_bar: bool = True,
     ) -> MCMCSamples:
         """Run MCMC sampling using pjit for parallelism.
 
@@ -100,6 +105,13 @@ class PjitBackend(CMCBackend):
         shards : list[PreparedData] | None
             Data shards for parallel execution.
             If None, runs on full data without sharding.
+
+        Notes
+        -----
+        Additional keyword arguments are accepted for signature compatibility
+        with other backends (multiprocessing). They are currently unused but
+        harmless, ensuring legacy calls with initial_values/parameter_space
+        do not fail.
 
         Returns
         -------
@@ -127,12 +139,26 @@ class PjitBackend(CMCBackend):
                     "data": jnp.array(prepared_data.data),
                     "t1": jnp.array(prepared_data.t1),
                     "t2": jnp.array(prepared_data.t2),
-                    "phi": jnp.array(prepared_data.phi),
+                    "phi_unique": jnp.array(prepared_data.phi_unique),
                     "phi_indices": jnp.array(prepared_data.phi_indices),
+                    "q": model_kwargs.get("q"),
+                    "L": model_kwargs.get("L"),
+                    "dt": model_kwargs.get("dt"),
+                    "time_grid": jnp.array(model_kwargs.get("time_grid"))
+                    if model_kwargs.get("time_grid") is not None
+                    else None,
+                    "analysis_mode": analysis_mode or "laminar_flow",
+                    "parameter_space": parameter_space,
+                    "n_phi": prepared_data.n_phi,
+                    "noise_scale": model_kwargs.get("noise_scale", 0.1),
                 },
                 config=config,
-                initial_values=model_kwargs.get("initial_values"),
+                initial_values=initial_values,
+                parameter_space=parameter_space,
+                n_phi=prepared_data.n_phi,
+                analysis_mode=analysis_mode or "laminar_flow",
                 rng_key=rng_key,
+                progress_bar=progress_bar,
             )
 
             return samples
@@ -163,12 +189,26 @@ class PjitBackend(CMCBackend):
                         "data": jnp.array(shard.data),
                         "t1": jnp.array(shard.t1),
                         "t2": jnp.array(shard.t2),
-                        "phi": jnp.array(shard.phi),
+                        "phi_unique": jnp.array(shard.phi_unique),
                         "phi_indices": jnp.array(shard.phi_indices),
+                        "q": model_kwargs.get("q"),
+                        "L": model_kwargs.get("L"),
+                        "dt": model_kwargs.get("dt"),
+                        "time_grid": jnp.array(model_kwargs.get("time_grid"))
+                        if model_kwargs.get("time_grid") is not None
+                        else None,
+                        "analysis_mode": analysis_mode or "laminar_flow",
+                        "parameter_space": parameter_space,
+                        "n_phi": shard.n_phi,
+                        "noise_scale": model_kwargs.get("noise_scale", 0.1),
                     },
                     config=config,
-                    initial_values=model_kwargs.get("initial_values"),
+                    initial_values=initial_values,
+                    parameter_space=parameter_space,
+                    n_phi=shard.n_phi,
+                    analysis_mode=analysis_mode or "laminar_flow",
                     rng_key=rng_key,
+                    progress_bar=progress_bar,
                 )
 
                 shard_results.append(samples)

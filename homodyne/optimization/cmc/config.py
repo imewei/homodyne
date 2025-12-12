@@ -143,6 +143,14 @@ class CMCConfig:
             enable_checkpoints = backend.get("enable_checkpoints", True)
             checkpoint_dir = backend.get("checkpoint_dir", "./checkpoints/cmc")
 
+        # Backward compatibility: map legacy "jax" backend name to pjit
+        if backend_name == "jax":
+            logger.warning(
+                "CMC backend 'jax' is deprecated; mapping to 'pjit'. "
+                "Set backend_config.name to 'pjit' or 'auto' instead."
+            )
+            backend_name = "pjit"
+
         # Normalize possibly stringified ints
         num_shards_val = sharding.get("num_shards", "auto")
         if isinstance(num_shards_val, str) and num_shards_val.isdigit():
@@ -222,8 +230,8 @@ class CMCConfig:
                     f"num_shards must be 'auto' or positive int, got: {self.num_shards}"
                 )
 
-        # Validate backend_name
-        valid_backends = ["auto", "multiprocessing", "pjit", "pbs", "slurm"]
+        # Validate backend_name (allow legacy 'jax' but normalize earlier)
+        valid_backends = ["auto", "multiprocessing", "pjit", "pbs", "slurm", "jax"]
         if self.backend_name not in valid_backends:
             errors.append(
                 f"backend_name must be one of {valid_backends}, got: {self.backend_name}"

@@ -854,6 +854,7 @@ class ConfigManager:
                     "multiprocessing",
                     "pbs",
                     "slurm",
+                    "jax",  # legacy alias, mapped to pjit downstream
                 ]
                 if backend_name not in valid_parallel_backends:
                     raise ValueError(
@@ -862,7 +863,14 @@ class ConfigManager:
         else:
             # Old schema: backend is dict with name for parallel execution
             backend_name = backend.get("name", "auto")
-            valid_backends = ["auto", "pjit", "multiprocessing", "pbs", "slurm"]
+            valid_backends = [
+                "auto",
+                "pjit",
+                "multiprocessing",
+                "pbs",
+                "slurm",
+                "jax",  # legacy alias, mapped to pjit downstream
+            ]
             if backend_name not in valid_backends:
                 raise ValueError(
                     f"Backend name must be one of {valid_backends}, got: {backend_name}"

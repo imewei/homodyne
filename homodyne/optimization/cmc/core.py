@@ -58,7 +58,8 @@ def _cap_laminar_max_points(max_points_per_shard: int, logger) -> int:
     Caps overly large user values that would routinely exceed per-shard timeouts.
     """
 
-    cap = 50_000
+    # Allow larger shards for smoke runs; still guard against runaway values.
+    cap = 3_000_000
     if max_points_per_shard > cap:
         logger.warning(
             f"max_points_per_shard={max_points_per_shard:,} is high for laminar_flow; "

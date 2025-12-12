@@ -466,7 +466,7 @@ optimization:
   # Parallelizes MCMC across data shards with per-shard NUTS sampling
   # and combines subposteriors using weighted Gaussian combination
   cmc:
-    backend: "jax" # Options: "jax" (CPU-only in v2.3.0+) | "numpy"
+    backend: "jax" # Options: "jax" (CPU-only) | "numpy"; for parallel backend use backend_config.name="pjit"/"auto"
     diagonal_correction: true # Apply diagonal correction to correlation matrix
 
     # RNG seeding (for reproducibility)
@@ -487,7 +487,7 @@ optimization:
 
     # Backend configuration for parallel execution
     backend_config:
-      name: "auto" # Options: "auto" | "pjit" | "multiprocessing" | "pbs" | "slurm"
+      name: "auto" # Options: "auto" | "pjit" | "multiprocessing" | "pbs" | "slurm"; legacy "jax" maps to "pjit"
       enable_checkpoints: true # Enable checkpoint functionality
       checkpoint_frequency: 1 # Save checkpoint every N shards
       checkpoint_dir: "./cmc_checkpoints" # Directory for CMC checkpoint files
