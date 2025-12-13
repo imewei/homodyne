@@ -7,8 +7,6 @@ gradient magnitudes across parameters with vastly different scales.
 import numpy as np
 import pytest
 
-pytest.importorskip("arviz", reason="ArviZ required for CMC unit tests")
-
 from homodyne.config.parameter_space import ParameterSpace
 from homodyne.optimization.cmc.scaling import (
     ParameterScaling,
@@ -35,7 +33,7 @@ class TestParameterScaling:
             name="test", center=100.0, scale=10.0, low=0.0, high=200.0
         )
         z = scaling.to_normalized(110.0)
-        assert z == pytest.approx(1.0)
+        assert z == pytest.approx(1.0, abs=5e-3)
 
     def test_to_normalized_negative_sigma(self):
         """Test that center - scale maps to z=-1."""
@@ -43,7 +41,7 @@ class TestParameterScaling:
             name="test", center=100.0, scale=10.0, low=0.0, high=200.0
         )
         z = scaling.to_normalized(90.0)
-        assert z == pytest.approx(-1.0)
+        assert z == pytest.approx(-1.0, abs=5e-3)
 
     def test_to_original_at_zero(self):
         """Test that z=0 maps to center."""
@@ -54,17 +52,17 @@ class TestParameterScaling:
         assert float(value) == pytest.approx(100.0)
 
     def test_to_original_clips_to_bounds(self):
-        """Test that to_original clips values outside bounds."""
+        """Test that to_original stays within bounds."""
         scaling = ParameterScaling(
             name="test", center=100.0, scale=10.0, low=50.0, high=150.0
         )
-        # z=10 would give 200, but should be clipped to 150
-        value = scaling.to_original(np.array(10.0))
-        assert float(value) == pytest.approx(150.0)
 
-        # z=-10 would give 0, but should be clipped to 50
-        value = scaling.to_original(np.array(-10.0))
-        assert float(value) == pytest.approx(50.0)
+        # Large |z| should asymptotically approach bounds without hard clipping.
+        value_high = float(scaling.to_original(np.array(100.0)))
+        assert 50.0 <= value_high <= 150.0
+
+        value_low = float(scaling.to_original(np.array(-100.0)))
+        assert 50.0 <= value_low <= 150.0
 
     def test_roundtrip_within_bounds(self):
         """Test that to_normalized and to_original are inverses within bounds."""
@@ -183,13 +181,9 @@ class TestComputeScalingFactors:
         assert "D0" in scalings
         assert "contrast_0" in scalings
 
-        # D0 now uses log-space for gradient balancing (Dec 2025 fix)
-        # Center is log-midpoint: (log(1e3) + log(1e5)) / 2 = (6.9 + 11.5) / 2 ≈ 9.2
-        import numpy as np
-
-        expected_log_center = (np.log(1e3) + np.log(1e5)) / 2
-        assert scalings["D0"].use_log_space is True
-        assert scalings["D0"].center == pytest.approx(expected_log_center)
+        # Center should fall back to midpoint of bounds.
+        assert scalings["D0"].center == pytest.approx((1e3 + 1e5) / 2)
+        assert scalings["D0"].use_log_space is False
 
 
 class TestTransformInitialValuesToZ:
@@ -207,15 +201,21 @@ class TestTransformInitialValuesToZ:
             ),
         }
 
-    def test_transforms_values_to_z_space(self, scalings):
-        """Test that values are correctly transformed to z-space."""
+    def test_transforms_values_roundtrip(self, scalings):
+        """Test that values are correctly transformed to z-space and back."""
         init_values = {"D0": 75000.0, "alpha": -1.0}
         z_values = transform_initial_values_to_z(init_values, scalings)
 
-        # D0: (75000 - 50000) / 25000 = 1.0
-        assert z_values["D0_z"] == pytest.approx(1.0)
-        # alpha: (-1.0 - 0.0) / 1.0 = -1.0
-        assert z_values["alpha_z"] == pytest.approx(-1.0)
+        assert "D0_z" in z_values
+        assert "alpha_z" in z_values
+
+        recovered_d0 = float(scalings["D0"].to_original(np.array(z_values["D0_z"])))
+        assert recovered_d0 == pytest.approx(init_values["D0"], rel=1e-6)
+
+        recovered_alpha = float(
+            scalings["alpha"].to_original(np.array(z_values["alpha_z"]))
+        )
+        assert recovered_alpha == pytest.approx(init_values["alpha"], rel=1e-6)
 
     def test_adds_z_suffix_to_names(self, scalings):
         """Test that output keys have _z suffix."""
@@ -262,22 +262,21 @@ class TestTransformSamplesFromZ:
         }
         original = transform_samples_from_z(samples, scalings)
 
-        # D0: center + scale * z
-        expected_D0 = np.array([50000.0, 75000.0, 25000.0])
-        np.testing.assert_allclose(original["D0"], expected_D0)
+        expected_D0 = np.asarray(scalings["D0"].to_original(samples["D0_z"]))
+        np.testing.assert_allclose(np.asarray(original["D0"]), expected_D0)
 
-        # alpha: center + scale * z
-        expected_alpha = np.array([0.0, 0.5, -0.5])
-        np.testing.assert_allclose(original["alpha"], expected_alpha)
+        expected_alpha = np.asarray(scalings["alpha"].to_original(samples["alpha_z"]))
+        np.testing.assert_allclose(np.asarray(original["alpha"]), expected_alpha)
 
     def test_clips_to_bounds(self, scalings):
-        """Test that transformed samples are clipped to bounds."""
+        """Test that transformed samples stay within bounds."""
         samples = {
-            "D0_z": np.array([10.0]),  # Would give 300000, clipped to 100000
+            "D0_z": np.array([100.0]),
         }
         original = transform_samples_from_z(samples, scalings)
 
-        assert original["D0"][0] == pytest.approx(100000.0)
+        d0_low, d0_high = scalings["D0"].low, scalings["D0"].high
+        assert d0_low <= float(original["D0"][0]) <= d0_high
 
 
 class TestGradientBalancing:
@@ -301,78 +300,8 @@ class TestGradientBalancing:
         normalized_ratio = 1.0
         assert normalized_ratio < original_ratio / 100
 
-    def test_d0_uses_log_space_when_bounds_positive(self):
-        """Test D0 uses log-space for gradient balancing (Dec 2025 fix)."""
+    def test_d0_uses_linear_scaling(self):
+        """Test D0 uses linear scaling (no log-space)."""
         ps = ParameterSpace.from_defaults("laminar_flow")
         scalings = compute_scaling_factors(ps, n_phi=1, analysis_mode="laminar_flow")
-
-        # D0 should use log-space since it has positive bounds
-        assert scalings["D0"].use_log_space is True
-
-        # D0 center should be in log domain
-        d0_low, d0_high = ps.get_bounds("D0")
-        expected_log_center = (np.log(d0_low) + np.log(d0_high)) / 2
-        assert scalings["D0"].center == pytest.approx(expected_log_center, rel=0.01)
-
-    def test_log_space_roundtrip(self):
-        """Test log-space to_normalized and to_original are inverses."""
-        # Create a log-space scaling
-        scaling = ParameterScaling(
-            name="D0",
-            center=np.log(10000),  # log-midpoint of [100, 1e6]
-            scale=2.0,
-            low=100.0,
-            high=1e6,
-            use_log_space=True,
-        )
-
-        # Test roundtrip
-        original = 5000.0
-        z = scaling.to_normalized(original)
-        recovered = float(scaling.to_original(np.array(z)))
-        assert recovered == pytest.approx(original, rel=0.01)
-
-    def test_log_space_clips_to_bounds(self):
-        """Test log-space to_original clips extreme values."""
-        scaling = ParameterScaling(
-            name="D0",
-            center=np.log(10000),
-            scale=1.0,
-            low=100.0,
-            high=100000.0,
-            use_log_space=True,
-        )
-
-        # Very large z should clip to high bound
-        value_high = float(scaling.to_original(np.array(100.0)))
-        assert value_high == pytest.approx(100000.0)
-
-        # Very negative z should clip to low bound
-        value_low = float(scaling.to_original(np.array(-100.0)))
-        assert value_low == pytest.approx(100.0)
-
-    def test_d_offset_uses_linear_when_bounds_include_negative(self):
-        """Test D_offset uses linear scaling when lower bound can be negative."""
-
-        # Create parameter space where D_offset has negative lower bound
-        class MockPS:
-            def get_bounds(self, name):
-                if name == "D_offset":
-                    return (-1000.0, 5000.0)  # Includes negative
-                elif name == "D0":
-                    return (100.0, 100000.0)
-                elif name == "alpha":
-                    return (-3.0, 1.0)
-                return (0.0, 1.0)
-
-            def get_prior(self, name):
-                raise KeyError(name)
-
-        mock_ps = MockPS()
-        scalings = compute_scaling_factors(mock_ps, n_phi=1, analysis_mode="static")
-
-        # D0 should use log-space (positive bounds)
-        assert scalings["D0"].use_log_space is True
-
-        # D_offset should NOT use log-space (negative lower bound)
-        assert scalings["D_offset"].use_log_space is False
+        assert scalings["D0"].use_log_space is False

@@ -28,6 +28,107 @@ from homodyne.optimization.cmc.scaling import (
 from homodyne.utils.logging import get_logger, with_context
 
 
+def _subset_model_kwargs_for_preflight(
+    model_kwargs: dict[str, Any],
+    *,
+    max_points: int = 512,
+) -> dict[str, Any]:
+    """Build a reduced model_kwargs dict for fast preflight diagnostics."""
+    data = model_kwargs.get("data")
+    if data is None:
+        return dict(model_kwargs)
+
+    if not hasattr(data, "shape"):
+        return dict(model_kwargs)
+
+    n = int(data.shape[0])
+    if n <= max_points:
+        return dict(model_kwargs)
+
+    # Pick evenly spaced points to cover the full time range.
+    idx = np.linspace(0, n - 1, num=max_points, dtype=np.int64)
+    reduced = dict(model_kwargs)
+    for key in ("data", "t1", "t2", "phi_indices"):
+        arr = model_kwargs.get(key)
+        if arr is not None:
+            reduced[key] = arr[idx]
+    return reduced
+
+
+def _preflight_log_density(
+    *,
+    model: Callable,
+    model_kwargs: dict[str, Any],
+    params: dict[str, Any],
+    run_logger,
+    max_points: int = 512,
+) -> None:
+    """Compute initial log density and basic finiteness diagnostics.
+
+    This is intended to catch the common failure modes behind near-zero
+    acceptance (NaN/-inf log prob, non-finite deterministics) before spending
+    hours running many CMC shards.
+    """
+    try:
+        from numpyro import handlers
+        from numpyro.infer.util import log_density
+
+        subset_kwargs = _subset_model_kwargs_for_preflight(
+            model_kwargs, max_points=max_points
+        )
+
+        seeded = handlers.seed(model, jax.random.PRNGKey(0))
+        log_joint, trace = log_density(seeded, (), subset_kwargs, params)
+        log_joint_val = float(np.asarray(log_joint))
+
+        n_nonfinite_log_prob = 0
+        n_total_log_prob = 0
+        for site in trace.values():
+            if site.get("type") != "sample":
+                continue
+
+            fn = site.get("fn")
+            value = site.get("value")
+            if fn is None or value is None:
+                continue
+
+            try:
+                log_prob = fn.log_prob(value)
+            except Exception:
+                continue
+
+            log_prob_np = np.asarray(log_prob)
+            n_total_log_prob += log_prob_np.size
+            n_nonfinite_log_prob += int(np.sum(~np.isfinite(log_prob_np)))
+
+        n_issues = None
+        if "n_numerical_issues" in trace:
+            try:
+                n_issues = int(np.asarray(trace["n_numerical_issues"]["value"]))
+            except Exception:
+                n_issues = None
+
+        run_logger.info(
+            "Preflight log_density: "
+            f"log_joint={log_joint_val:.4g}, "
+            f"nonfinite_log_prob={n_nonfinite_log_prob}/{n_total_log_prob}, "
+            f"n_numerical_issues={n_issues}"
+        )
+
+        if not np.isfinite(log_joint_val) or n_nonfinite_log_prob > 0:
+            raise RuntimeError(
+                "Preflight detected non-finite log density/log_prob at initialization. "
+                "This typically leads to 0% NUTS acceptance; check bounds, initial values, "
+                "and numerical stability of the physics model."
+            )
+
+    except RuntimeError:
+        raise
+    except Exception as e:
+        # If the preflight itself fails, keep going but make it loud.
+        run_logger.warning(f"Preflight diagnostics failed: {e}")
+
+
 def _compute_mcmc_safe_d0(
     initial_values: dict[str, float] | None,
     q: float,
@@ -169,6 +270,148 @@ if TYPE_CHECKING:
 logger = get_logger(__name__)
 
 
+def _summarize_inverse_mass_matrix(inv_mass: Any) -> str:
+    """Return a compact summary of the adapted inverse mass matrix."""
+
+    def _one(mat: Any) -> str:
+        if isinstance(mat, dict):
+            keys = list(mat.keys())
+            if not keys:
+                return "dict(empty)"
+            first = mat[keys[0]]
+            return f"dict(keys={len(keys)}) first[{keys[0]}]: {_one(first)}"
+
+        try:
+            arr = np.asarray(mat)
+        except Exception:
+            return f"type={type(mat).__name__}"
+
+        if arr.ndim == 0:
+            # Could be an object scalar (e.g., dict) depending on upstream types.
+            try:
+                return f"scalar={float(arr):.3g}"
+            except Exception:
+                return f"scalar(type={type(arr.item()).__name__})"
+
+        if arr.ndim == 1:
+            diag = arr
+            diag = diag[np.isfinite(diag)]
+            if diag.size == 0:
+                return f"diag(dim={arr.size}) all-nonfinite"
+            dmin = float(np.min(diag))
+            dmax = float(np.max(diag))
+            cond = float(dmax / dmin) if dmin > 0 else float("inf")
+            return f"diag(dim={arr.size}) min={dmin:.3g} max={dmax:.3g} cond≈{cond:.3g}"
+
+        if arr.ndim == 2 and arr.shape[0] == arr.shape[1]:
+            diag = np.diag(arr)
+            diag = diag[np.isfinite(diag)]
+            if diag.size == 0:
+                return f"dense(dim={arr.shape[0]}) diag all-nonfinite"
+            dmin = float(np.min(diag))
+            dmax = float(np.max(diag))
+            try:
+                cond = float(np.linalg.cond(arr))
+            except Exception:
+                cond = float("nan")
+            return (
+                f"dense(dim={arr.shape[0]}) diag[min={dmin:.3g}, max={dmax:.3g}] "
+                f"cond={cond:.3g}"
+            )
+
+        # Per-chain dense matrices: (n_chains, dim, dim)
+        if arr.ndim == 3 and arr.shape[1] == arr.shape[2]:
+            n_chains = arr.shape[0]
+            dim = arr.shape[1]
+            # summarize first two chains
+            parts = []
+            for i in range(min(n_chains, 2)):
+                parts.append(_one(arr[i]))
+            more = "" if n_chains <= 2 else f" (+{n_chains - 2} more)"
+            return f"per-chain dense(dim={dim})[{', '.join(parts)}]{more}"
+
+        return f"array(shape={arr.shape}, ndim={arr.ndim})"
+
+    if isinstance(inv_mass, (list, tuple)):
+        parts = [_one(m) for m in inv_mass[:2]]
+        more = "" if len(inv_mass) <= 2 else f" (+{len(inv_mass) - 2} more)"
+        return f"per-chain[{', '.join(parts)}]{more}"
+
+    return _one(inv_mass)
+
+
+def _extract_adapt_states(last_state: Any) -> list[Any]:
+    """Extract per-chain adapt_state objects from a NumPyro MCMC last_state."""
+    if last_state is None:
+        return []
+
+    if hasattr(last_state, "adapt_state"):
+        return [last_state.adapt_state]
+
+    if isinstance(last_state, (list, tuple)):
+        out: list[Any] = []
+        for item in last_state:
+            if hasattr(item, "adapt_state"):
+                out.append(item.adapt_state)
+        return out
+
+    # NumPyro may omit adapt_state (e.g., API differences or failed adaptation).
+    return []
+
+
+def _log_array_stats(
+    run_logger,
+    *,
+    name: str,
+    arr: Any,
+) -> None:
+    try:
+        a = np.asarray(arr)
+    except Exception:
+        return
+
+    if a.size == 0:
+        return
+
+    finite = np.isfinite(a)
+    if not np.any(finite):
+        run_logger.info(f"{name} stats: all non-finite, shape={a.shape}")
+        return
+
+    run_logger.info(
+        f"{name} stats: "
+        f"min={float(np.min(a[finite])):.3g}, "
+        f"median={float(np.median(a[finite])):.3g}, "
+        f"max={float(np.max(a[finite])):.3g}, "
+        f"mean={float(np.mean(a[finite])):.3g}, "
+        f"std={float(np.std(a[finite])):.3g}, "
+        f"finite={float(np.mean(finite)):.1%}, shape={a.shape}"
+    )
+
+
+def _extract_step_sizes(adapt_states: list[Any]) -> list[float]:
+    """Extract step_size values from NumPyro adapt_state objects."""
+    step_sizes: list[float] = []
+    for adapt_state in adapt_states:
+        if adapt_state is None:
+            continue
+
+        if hasattr(adapt_state, "step_size"):
+            try:
+                step_sizes.append(float(adapt_state.step_size))
+                continue
+            except Exception:
+                pass
+
+        if isinstance(adapt_state, dict) and "step_size" in adapt_state:
+            try:
+                step_sizes.append(float(adapt_state["step_size"]))
+            except Exception:
+                pass
+
+    return step_sizes
+
+
 @dataclass
 class SamplingStats:
     """Statistics from MCMC sampling.
@@ -187,6 +430,12 @@ class SamplingStats:
         Mean acceptance probability.
     step_size : float
         Final step size.
+    step_size_min : float
+        Minimum adapted step size across chains (if available).
+    step_size_max : float
+        Maximum adapted step size across chains (if available).
+    inverse_mass_matrix_summary : str | None
+        Compact summary of the adapted inverse mass matrix (if available).
     tree_depth : float
         Mean tree depth.
     """
@@ -197,6 +446,9 @@ class SamplingStats:
     num_divergent: int = 0
     accept_prob: float = 0.0
     step_size: float = 0.0
+    step_size_min: float | None = None
+    step_size_max: float | None = None
+    inverse_mass_matrix_summary: str | None = None
     tree_depth: float = 0.0
 
 
@@ -400,6 +652,21 @@ def run_nuts_sampling(
         full_init, param_names_with_sigma, z_space_values=z_space_init
     )
 
+    # =========================================================================
+    # PREFLIGHT: Validate initial log density and finiteness
+    # =========================================================================
+    # This catches common causes of 0% acceptance (NaNs/-inf log prob) before
+    # spending wall-clock hours running many CMC shards.
+    sigma_init = float(max(model_kwargs.get("noise_scale", 0.1), 1e-6))
+    preflight_params = dict(z_space_init)
+    preflight_params["sigma"] = sigma_init
+    _preflight_log_density(
+        model=model,
+        model_kwargs=model_kwargs,
+        params=preflight_params,
+        run_logger=run_logger,
+    )
+
     # Create NUTS kernel
     # GRADIENT BALANCING FIX (Dec 2025): Use dense_mass=True to learn
     # cross-correlations between parameters with vastly different scales.
@@ -437,7 +704,21 @@ def run_nuts_sampling(
     run_logger.info("NUTS phase: JIT compile + sampling started (may take minutes)...")
 
     try:
-        mcmc.run(rng_key, **model_kwargs)
+        # Explicitly request extra fields so diagnostics are reliable across
+        # NumPyro versions.
+        mcmc.run(
+            rng_key,
+            extra_fields=(
+                "accept_prob",
+                "diverging",
+                "energy",
+                "potential_energy",
+                "mean_accept_prob",
+                "num_steps",
+                "adapt_state.step_size",
+            ),
+            **model_kwargs,
+        )
     except Exception as e:
         run_logger.error(f"MCMC sampling failed: {e}")
         raise RuntimeError(f"MCMC sampling failed: {e}") from e
@@ -446,28 +727,128 @@ def run_nuts_sampling(
     run_logger.info(f"NUTS finished in {total_time:.1f}s")
 
     # Extract samples
+    t_extract = time.perf_counter()
+    run_logger.info("Extracting samples + extra_fields...")
     samples = mcmc.get_samples(group_by_chain=True)
+    samples = jax.device_get(samples)
 
     # Convert to numpy and proper format
     samples_np: dict[str, np.ndarray] = {}
     for name, arr in samples.items():
-        samples_np[name] = np.array(arr)
+        samples_np[name] = np.asarray(arr)
 
     # Get extra fields (divergences, etc.)
     extra = mcmc.get_extra_fields(group_by_chain=True)
-    extra_fields = {k: np.array(v) for k, v in extra.items()}
+    extra = jax.device_get(extra)
+    extra_fields = {k: np.asarray(v) for k, v in extra.items()}
+    run_logger.info(
+        f"Extraction complete in {time.perf_counter() - t_extract:.2f}s "
+        f"(samples={len(samples_np)}, extra_fields={len(extra_fields)})"
+    )
 
     # Compute statistics
     num_divergent = 0
     if "diverging" in extra_fields:
         num_divergent = int(np.sum(extra_fields["diverging"]))
 
-    accept_prob = 0.0
+    accept_prob = float("nan")
+    accept_prob_arr = None
     if "accept_prob" in extra_fields:
-        accept_prob = float(np.mean(extra_fields["accept_prob"]))
+        accept_prob_arr = np.asarray(extra_fields["accept_prob"])
+        if accept_prob_arr.size:
+            accept_prob = float(np.mean(accept_prob_arr))
+
+    # Adaptation diagnostics (step size, mass matrix)
+    step_size = 0.0
+    inv_mass_summary = None
+    last_state = getattr(mcmc, "last_state", None)
+    adapt_states = _extract_adapt_states(last_state)
+    step_sizes = _extract_step_sizes(adapt_states)
+    if step_sizes:
+        step_size = float(np.median(step_sizes))
+        step_size_min = float(np.min(step_sizes))
+        step_size_max = float(np.max(step_sizes))
+    else:
+        step_size_min = None
+        step_size_max = None
+
+    # If we couldn't extract step_size from last_state, try extra_fields
+    # (available across NumPyro versions when explicitly requested).
+    if step_size == 0.0 and "adapt_state.step_size" in extra_fields:
+        try:
+            ss = np.asarray(extra_fields["adapt_state.step_size"]).reshape(-1)
+            ss = ss[np.isfinite(ss)]
+            if ss.size:
+                step_size = float(np.median(ss))
+        except Exception:
+            pass
+
+    inv_mass = None
+    if adapt_states:
+        a0 = adapt_states[0]
+        inv_mass = getattr(a0, "inverse_mass_matrix", None)
+        if inv_mass is None and isinstance(a0, dict):
+            inv_mass = a0.get("inverse_mass_matrix")
+    if inv_mass is not None:
+        inv_mass_summary = _summarize_inverse_mass_matrix(inv_mass)
+
+    if step_sizes:
+        run_logger.info(
+            "Adapted step_size stats: "
+            f"min={float(np.min(step_sizes)):.3g}, "
+            f"median={float(np.median(step_sizes)):.3g}, "
+            f"max={float(np.max(step_sizes)):.3g}"
+        )
+    elif step_size > 0:
+        run_logger.info(f"Adapted step_size≈{step_size:.3g} (from extra_fields)")
+    if inv_mass_summary is not None:
+        run_logger.info(f"Adapted inverse_mass_matrix: {inv_mass_summary}")
+
+    # Always log basic accept/energy diagnostics when available.
+    if accept_prob_arr is not None and accept_prob_arr.size:
+        run_logger.info(
+            "accept_prob stats: "
+            f"mean={float(np.mean(accept_prob_arr)):.3g}, "
+            f"min={float(np.min(accept_prob_arr)):.3g}, "
+            f"median={float(np.median(accept_prob_arr)):.3g}, "
+            f"max={float(np.max(accept_prob_arr)):.3g}, "
+            f"frac<1e-12={float(np.mean(accept_prob_arr < 1e-12)):.1%}, "
+            f"shape={accept_prob_arr.shape}"
+        )
+
+        # Per-chain stats are often the easiest way to spot a single stuck chain.
+        if accept_prob_arr.ndim >= 2:
+            for i in range(min(accept_prob_arr.shape[0], 8)):
+                a = np.asarray(accept_prob_arr[i]).reshape(-1)
+                if a.size:
+                    run_logger.info(
+                        f"accept_prob chain[{i}] mean={float(np.mean(a)):.3g} "
+                        f"min={float(np.min(a)):.3g} median={float(np.median(a)):.3g} "
+                        f"max={float(np.max(a)):.3g}"
+                    )
+
+    if "diverging" in extra_fields:
+        div = np.asarray(extra_fields["diverging"])
+        run_logger.info(f"diverging total={int(np.sum(div))} shape={div.shape}")
+        if div.ndim >= 2:
+            for i in range(min(div.shape[0], 8)):
+                run_logger.info(f"diverging chain[{i}]={int(np.sum(div[i]))}")
+
+    # Step count stats help identify stiffness/underflow that forces tiny step sizes.
+    if "num_steps" in extra_fields:
+        _log_array_stats(run_logger, name="num_steps", arr=extra_fields["num_steps"])
+
+    if "mean_accept_prob" in extra_fields:
+        _log_array_stats(
+            run_logger, name="mean_accept_prob", arr=extra_fields["mean_accept_prob"]
+        )
+
+    for energy_key in ("potential_energy", "energy"):
+        if energy_key in extra_fields:
+            _log_array_stats(run_logger, name=energy_key, arr=extra_fields[energy_key])
 
     # Critical warning for zero acceptance rate
-    if accept_prob < 0.001:
+    if np.isfinite(accept_prob) and accept_prob < 0.001:
         run_logger.warning(
             "⚠️ CRITICAL: Acceptance rate is essentially 0% - all proposals rejected! "
             "This indicates severe sampling problems. Possible causes:\n"
@@ -478,17 +859,55 @@ def run_nuts_sampling(
             "Consider: checking initial values, widening priors, or running NLSQ first."
         )
 
-    # Check for numerical issues exposed by the model
-    if "n_numerical_issues" in extra_fields:
-        n_issues = int(np.sum(extra_fields["n_numerical_issues"]))
-        if n_issues > 0:
-            total_evals = config.num_samples * config.num_chains
-            issue_rate = n_issues / max(total_evals, 1)
+        if accept_prob_arr is not None and accept_prob_arr.size:
+            finite = np.isfinite(accept_prob_arr)
             run_logger.warning(
-                f"⚠️ Numerical issues detected: {n_issues:,} NaN/Inf occurrences "
-                f"({issue_rate:.1%} of evaluations). "
-                "This may indicate parameter combinations causing overflow in physics model."
+                "accept_prob stats: "
+                f"min={float(np.nanmin(accept_prob_arr)):.3g}, "
+                f"median={float(np.nanmedian(accept_prob_arr)):.3g}, "
+                f"max={float(np.nanmax(accept_prob_arr)):.3g}, "
+                f"frac<1e-12={float(np.mean(accept_prob_arr < 1e-12)):.1%}, "
+                f"finite={float(np.mean(finite)):.1%}, shape={accept_prob_arr.shape}"
             )
+        else:
+            run_logger.warning(
+                f"accept_prob array missing/empty; extra_fields keys={sorted(extra_fields.keys())}"
+            )
+
+        for energy_key in ("potential_energy", "energy"):
+            if energy_key in extra_fields:
+                e = np.asarray(extra_fields[energy_key])
+                finite = np.isfinite(e)
+                if np.any(finite):
+                    run_logger.warning(
+                        f"{energy_key} stats: "
+                        f"min={float(np.min(e[finite])):.3g}, "
+                        f"median={float(np.median(e[finite])):.3g}, "
+                        f"max={float(np.max(e[finite])):.3g}, "
+                        f"finite={float(np.mean(finite)):.1%}"
+                    )
+                else:
+                    run_logger.warning(f"{energy_key} all non-finite")
+            else:
+                run_logger.warning(
+                    f"{energy_key} not present in extra_fields (keys={sorted(extra_fields.keys())})"
+                )
+
+    # Check for numerical issues exposed by the model.
+    # NOTE: numpyro stores deterministics in `get_samples`, not `get_extra_fields`.
+    if "n_numerical_issues" in samples_np:
+        try:
+            n_issues_total = float(np.sum(samples_np["n_numerical_issues"]))
+            if n_issues_total > 0:
+                total_evals = config.num_samples * config.num_chains
+                issue_rate = n_issues_total / max(total_evals, 1)
+                run_logger.warning(
+                    f"⚠️ Numerical issues detected: {n_issues_total:.0f} NaN/Inf occurrences "
+                    f"({issue_rate:.1%} of evaluations). "
+                    "This may indicate parameter combinations causing overflow in physics model."
+                )
+        except Exception:
+            pass
 
     # Estimate warmup vs sampling time (rough estimate)
     warmup_ratio = config.num_warmup / (config.num_warmup + config.num_samples)
@@ -501,6 +920,10 @@ def run_nuts_sampling(
         total_time=total_time,
         num_divergent=num_divergent,
         accept_prob=accept_prob,
+        step_size=step_size,
+        step_size_min=step_size_min,
+        step_size_max=step_size_max,
+        inverse_mass_matrix_summary=inv_mass_summary,
     )
 
     run_logger.info(

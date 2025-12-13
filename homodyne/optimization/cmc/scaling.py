@@ -21,7 +21,7 @@ Non-centered reparameterization transforms each parameter to unit scale:
 
     P_z ~ Normal(0, 1)           # Sample in normalized space
     P = center + scale × P_z     # Transform to original space
-    P = clip(P, low, high)       # Enforce bounds
+    P = smooth_bound(P, low, high)  # Smoothly enforce bounds
 
 Where:
 - center = (low + high) / 2  or  prior_mu
@@ -32,18 +32,16 @@ exploration.
 
 CRITICAL - Lessons Learned (Dec 2025):
 --------------------------------------
-DO NOT use log-space transformations (use_log_space=True) for parameters.
+Hard clipping (jnp.clip) introduces non-smooth behavior at the bounds.
+In practice this can lead to poor HMC/NUTS adaptation (especially when chains
+push against bounds during warmup), including near-zero acceptance.
 
-While log-space seems intuitive for large-scale parameters like D0, it creates
-a Jacobian amplification problem:
-- Log-space: ∂D0/∂z = D0 × log_scale ≈ 17000
-- Linear: ∂gamma_offset/∂z = 0.02
+To avoid this, Homodyne uses a smooth bounded transform based on tanh:
 
-This ~10^6:1 gradient ratio causes 0% NUTS acceptance rate because proposals
-that are reasonable for small-gradient parameters overshoot large-gradient ones.
+    smooth_bound(x; low, high) = mid + half * tanh((x - mid) / half)
 
-The fix is to use purely LINEAR z-space scaling for ALL parameters. The scale
-differences are handled by NUTS dense mass matrix adaptation during warmup.
+This maps ℝ → (low, high) smoothly while behaving approximately like the
+identity mapping in the middle of the interval.
 """
 
 from __future__ import annotations
@@ -80,8 +78,8 @@ class ParameterScaling:
     high : float
         Upper bound for clipping.
     use_log_space : bool
-        If True, sample in log-space for better gradient balancing.
-        Used for large-scale parameters like D0, D_offset.
+        Reserved for future use. Homodyne currently uses purely linear
+        z-space scaling with smooth bounding for all parameters.
     """
 
     name: str
@@ -91,29 +89,53 @@ class ParameterScaling:
     high: float
     use_log_space: bool = False
 
-    def to_normalized(self, value: float) -> float:
-        """Transform from original to normalized space."""
+    def _smooth_bound(
+        self, raw: jnp.ndarray, low: float, high: float, eps: float = 1e-12
+    ) -> jnp.ndarray:
+        """Smoothly bound a value to (low, high) using tanh.
+
+        Maps ℝ → (low, high) and remains differentiable everywhere.
+        """
+        mid = 0.5 * (low + high)
+        half = 0.5 * (high - low)
+        # Avoid division by zero on degenerate bounds.
+        half_safe = jnp.where(half > 0.0, half, eps)
+        return mid + half_safe * jnp.tanh((raw - mid) / half_safe)
+
+    def _smooth_bound_inverse(
+        self, value: float, low: float, high: float, eps: float = 1e-12
+    ) -> float:
+        """Inverse of _smooth_bound for initialization.
+
+        This is used only to map initial values from original-space to z-space.
+        Values at/over the bounds are projected slightly into the interior to
+        keep the inverse finite.
+        """
         import numpy as np
 
-        if self.use_log_space:
-            # Transform to log-space first, then normalize
-            # Ensure value is positive for log
-            safe_value = max(value, 1e-10)
-            log_value = float(np.log(safe_value))
-            return (log_value - self.center) / self.scale
-        return (value - self.center) / self.scale
+        mid = 0.5 * (low + high)
+        half = 0.5 * (high - low)
+        half_safe = half if half > 0.0 else eps
+        y = (float(value) - mid) / half_safe
+        y = float(np.clip(y, -1.0 + 1e-6, 1.0 - 1e-6))
+        return mid + half_safe * float(np.arctanh(y))
+
+    def to_normalized(self, value: float) -> float:
+        """Transform from original to normalized space.
+
+        Uses the analytic inverse of the smooth bounding transform to recover
+        the underlying affine value prior to normalization.
+        """
+        # NOTE: use_log_space is intentionally ignored for now.
+        raw = self._smooth_bound_inverse(value, self.low, self.high)
+        scale = self.scale if self.scale != 0.0 else 1.0
+        return float((raw - self.center) / scale)
 
     def to_original(self, z_value: jnp.ndarray) -> jnp.ndarray:
-        """Transform from normalized to original space with clipping."""
-        if self.use_log_space:
-            # Transform from z-space to log-space, then exp to original
-            log_value = self.center + self.scale * z_value
-            # Clip log_value to avoid overflow (exp(700) is near float max)
-            log_clipped = jnp.clip(log_value, -700.0, 700.0)
-            raw = jnp.exp(log_clipped)
-            return jnp.clip(raw, self.low, self.high)
+        """Transform from normalized to original space with smooth bounding."""
+        # NOTE: use_log_space is intentionally ignored for now.
         raw = self.center + self.scale * z_value
-        return jnp.clip(raw, self.low, self.high)
+        return self._smooth_bound(raw, self.low, self.high)
 
 
 def compute_scaling_factors(
@@ -171,15 +193,10 @@ def compute_scaling_factors(
     if analysis_mode == "laminar_flow":
         physical_params.extend(["gamma_dot_t0", "beta", "gamma_dot_t_offset", "phi0"])
 
-    # GRADIENT BALANCING FIX (Dec 2025, revised):
-    # Use PURELY LINEAR z-space scaling for all parameters.
-    # The original log-space approach for D0/D_offset created Jacobian
-    # imbalance: ∂D0/∂z = D0 × log_scale ≈ 17000 vs ∂gamma_offset/∂z = 0.02.
-    # This 10^6:1 ratio caused 0% NUTS acceptance rate.
-    #
-    # Linear z-space ensures consistent Jacobian: ∂param/∂z = scale for all.
-    # The scale differences (0.02 to 20000) are handled by NUTS dense mass
-    # matrix adaptation, which learns the parameter covariance during warmup.
+    # GRADIENT BALANCING (Dec 2025):
+    # Use purely linear z-space scaling for all parameters, then apply a smooth
+    # bounding transform (tanh-based) to respect parameter bounds without hard
+    # clipping.
 
     for param_name in physical_params:
         try:
@@ -240,7 +257,7 @@ def sample_scaled_parameter(
         dist.Normal(0.0, 1.0),
     )
 
-    # Transform to original space with clipping
+    # Transform to original space with smooth bounds
     value = scaling.to_original(z)
 
     # Register the transformed value as deterministic for output
