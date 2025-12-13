@@ -21,7 +21,8 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 
-from homodyne.core.physics_nlsq import apply_diagonal_correction, compute_g2_scaled
+from homodyne.core.physics_nlsq import compute_g2_scaled
+from homodyne.core.physics_utils import apply_diagonal_correction
 
 
 class StratifiedResidualFunctionJIT:

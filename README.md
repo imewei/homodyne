@@ -164,6 +164,8 @@ compatibility** for all validated components:
 
 **Key Features:**
 
+- **Z-space gradient balancing**: Non-centered parameterization for stable MCMC sampling
+- **Data-driven initialization**: Automatic contrast/offset estimation from C2 data
 - **Hardware-adaptive**: Automatic backend selection (pjit/multiprocessing/PBS/Slurm)
 - **Linear speedup**: Perfect parallelization across CPU cores or cluster nodes
 - **Memory efficient**: Each shard fits in available memory with 40% safety margin
