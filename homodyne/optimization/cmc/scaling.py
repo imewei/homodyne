@@ -29,6 +29,21 @@ Where:
 
 This ensures ALL gradients have similar magnitude, enabling balanced MCMC
 exploration.
+
+CRITICAL - Lessons Learned (Dec 2025):
+--------------------------------------
+DO NOT use log-space transformations (use_log_space=True) for parameters.
+
+While log-space seems intuitive for large-scale parameters like D0, it creates
+a Jacobian amplification problem:
+- Log-space: ∂D0/∂z = D0 × log_scale ≈ 17000
+- Linear: ∂gamma_offset/∂z = 0.02
+
+This ~10^6:1 gradient ratio causes 0% NUTS acceptance rate because proposals
+that are reasonable for small-gradient parameters overshoot large-gradient ones.
+
+The fix is to use purely LINEAR z-space scaling for ALL parameters. The scale
+differences are handled by NUTS dense mass matrix adaptation during warmup.
 """
 
 from __future__ import annotations
@@ -156,14 +171,15 @@ def compute_scaling_factors(
     if analysis_mode == "laminar_flow":
         physical_params.extend(["gamma_dot_t0", "beta", "gamma_dot_t_offset", "phi0"])
 
-    # GRADIENT BALANCING FIX (Dec 2025): Use log-space for large-scale parameters
-    # D0 and D_offset can span 10^4-10^5, causing 10^6:1 gradient imbalance
-    # with small parameters like gamma_dot_t0 (~10^-3). Log-space sampling
-    # naturally balances gradients: log(10^4) ≈ 9.2, log(10^-3) ≈ -6.9,
-    # giving a much more manageable ~16:1 ratio instead of 10^7:1.
-    import numpy as np
-
-    log_space_params = {"D0", "D_offset"}
+    # GRADIENT BALANCING FIX (Dec 2025, revised):
+    # Use PURELY LINEAR z-space scaling for all parameters.
+    # The original log-space approach for D0/D_offset created Jacobian
+    # imbalance: ∂D0/∂z = D0 × log_scale ≈ 17000 vs ∂gamma_offset/∂z = 0.02.
+    # This 10^6:1 ratio caused 0% NUTS acceptance rate.
+    #
+    # Linear z-space ensures consistent Jacobian: ∂param/∂z = scale for all.
+    # The scale differences (0.02 to 20000) are handled by NUTS dense mass
+    # matrix adaptation, which learns the parameter covariance during warmup.
 
     for param_name in physical_params:
         try:
@@ -172,35 +188,17 @@ def compute_scaling_factors(
             logger.warning(f"Parameter {param_name} not in parameter_space, skipping")
             continue
 
-        use_log = param_name in log_space_params and low > 0
+        # Always use linear scaling (no log-space)
+        try:
+            prior = parameter_space.get_prior(param_name)
+            center = prior.mu if hasattr(prior, "mu") else (low + high) / 2
+            scale = prior.sigma if hasattr(prior, "sigma") else (high - low) / 4
+        except KeyError:
+            center = (low + high) / 2
+            scale = (high - low) / 4
 
-        if use_log:
-            # For log-space: center and scale are in log domain
-            # Use log of bounds to define the log-space range
-            log_low = np.log(max(low, 1e-10))
-            log_high = np.log(max(high, 1e-10))
-            center = (log_low + log_high) / 2
-            scale = (log_high - log_low) / 4
-            # Ensure reasonable scale
-            scale = max(scale, 0.5)  # At least 0.5 in log-space
-
-            logger.debug(
-                f"Using LOG-SPACE for {param_name}: "
-                f"log_center={center:.3f}, log_scale={scale:.3f}, "
-                f"bounds=[{low:.3g}, {high:.3g}]"
-            )
-        else:
-            # Standard linear scaling
-            try:
-                prior = parameter_space.get_prior(param_name)
-                center = prior.mu if hasattr(prior, "mu") else (low + high) / 2
-                scale = prior.sigma if hasattr(prior, "sigma") else (high - low) / 4
-            except KeyError:
-                center = (low + high) / 2
-                scale = (high - low) / 4
-
-            # Ensure scale is positive and reasonable
-            scale = max(scale, (high - low) / 10, 1e-6)
+        # Ensure scale is positive and reasonable
+        scale = max(scale, (high - low) / 10, 1e-6)
 
         scalings[param_name] = ParameterScaling(
             name=param_name,
@@ -208,7 +206,7 @@ def compute_scaling_factors(
             scale=scale,
             low=low,
             high=high,
-            use_log_space=use_log,
+            use_log_space=False,  # Always linear
         )
 
     return scalings
