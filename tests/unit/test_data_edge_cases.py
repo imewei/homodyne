@@ -112,7 +112,11 @@ analyzer_parameters:
                         "data_folder_path": "/tmp",
                         "data_file_name": "test.h5",
                     },
-                    "analyzer_parameters": {"dt": 0.1, "start_frame": 1, "end_frame": -1},
+                    "analyzer_parameters": {
+                        "dt": 0.1,
+                        "start_frame": 1,
+                        "end_frame": -1,
+                    },
                 }
             )
         )
@@ -213,7 +217,9 @@ class TestDataLoaderInitEdgeCases:
                 # Missing dt, start_frame, end_frame
             },
         }
-        with pytest.raises(XPCSConfigurationError, match="Missing.*analyzer_parameters"):
+        with pytest.raises(
+            XPCSConfigurationError, match="Missing.*analyzer_parameters"
+        ):
             XPCSDataLoader(config_dict=config)
 
 
@@ -528,9 +534,7 @@ class TestDataQualityReportEdgeCases:
             is_valid=True, validation_level="basic", total_issues=0
         )
         report.add_issue(
-            ValidationIssue(
-                severity="error", category="test", message="Test error"
-            )
+            ValidationIssue(severity="error", category="test", message="Test error")
         )
         assert not report.is_valid
         assert report.total_issues == 1
@@ -541,9 +545,7 @@ class TestDataQualityReportEdgeCases:
             is_valid=True, validation_level="basic", total_issues=0
         )
         report.add_issue(
-            ValidationIssue(
-                severity="warning", category="test", message="Test warning"
-            )
+            ValidationIssue(severity="warning", category="test", message="Test warning")
         )
         assert report.is_valid
         assert report.total_issues == 1
@@ -686,9 +688,7 @@ class TestHDF5FormatDetectionEdgeCases:
         hdf_file = tmp_path / "aps_u.h5"
         with h5py.File(hdf_file, "w") as f:
             f.create_group("xpcs/qmap")
-            f["xpcs/qmap"].create_dataset(
-                "dynamic_v_list_dim0", data=np.array([0.005])
-            )
+            f["xpcs/qmap"].create_dataset("dynamic_v_list_dim0", data=np.array([0.005]))
             f.create_group("xpcs/twotime")
             f["xpcs/twotime"].create_dataset(
                 "correlation_map", data=np.ones((1, 10, 10))

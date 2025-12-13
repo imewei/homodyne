@@ -29,7 +29,6 @@ from jax import jit
 
 from homodyne.core.physics_utils import (
     PI,
-    apply_diagonal_correction,
     safe_exp,
     safe_len,
     safe_sinc,

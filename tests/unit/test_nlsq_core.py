@@ -141,18 +141,18 @@ class TestFitNlsqJaxAPI:
         )
 
         # Verify result has backward-compatible attributes (FR-002)
-        assert hasattr(result, "parameters"), (
-            "Result should have 'parameters' attribute for backward compatibility"
-        )
-        assert hasattr(result, "chi_squared"), (
-            "Result should have 'chi_squared' attribute"
-        )
+        assert hasattr(
+            result, "parameters"
+        ), "Result should have 'parameters' attribute for backward compatibility"
+        assert hasattr(
+            result, "chi_squared"
+        ), "Result should have 'chi_squared' attribute"
         assert hasattr(result, "success"), "Result should have 'success' attribute"
 
         # Verify optimization succeeded with realistic data
-        assert result.success, (
-            f"Optimization should succeed with synthetic data: {result.message if hasattr(result, 'message') else 'no message'}"
-        )
+        assert (
+            result.success
+        ), f"Optimization should succeed with synthetic data: {result.message if hasattr(result, 'message') else 'no message'}"
 
         # Test 2: Call with initial_params=None (auto-loading from config)
         result_auto = fit_nlsq_jax(
@@ -161,9 +161,9 @@ class TestFitNlsqJaxAPI:
             initial_params=None,  # Should auto-load from config
         )
 
-        assert hasattr(result_auto, "parameters"), (
-            "Auto-loaded result should have 'parameters' attribute"
-        )
+        assert hasattr(
+            result_auto, "parameters"
+        ), "Auto-loaded result should have 'parameters' attribute"
         assert result_auto.success, "Auto-loaded optimization should succeed"
 
         # Test 3: Verify parameter recovery accuracy (<5% error per SC-002)
@@ -186,9 +186,9 @@ class TestFitNlsqJaxAPI:
                         f"  {param_name}: true={true_val:.4f}, recovered={rec_val:.4f}, error={rel_error:.2%}"
                     )
                     # Relaxed tolerance for test stability (15% instead of 5%)
-                    assert rel_error < 0.15, (
-                        f"Parameter {param_name} recovery error {rel_error:.2%} exceeds 15%"
-                    )
+                    assert (
+                        rel_error < 0.15
+                    ), f"Parameter {param_name} recovery error {rel_error:.2%} exceeds 15%"
 
 
 # =============================================================================
@@ -253,9 +253,9 @@ class TestNLSQWrapperFit:
         )
 
         # Assertions
-        assert isinstance(result, OptimizationResult), (
-            "Result should be OptimizationResult instance"
-        )
+        assert isinstance(
+            result, OptimizationResult
+        ), "Result should be OptimizationResult instance"
 
         # v2.4.0: Code expands compact 5 params to per-angle form
         # With 3 angles: 2*3 + 3 = 9 parameters after expansion
@@ -263,37 +263,35 @@ class TestNLSQWrapperFit:
         # The result will have expanded parameters based on actual implementation
         len(mock_data.phi)  # 3
         assert result.parameters.ndim == 1, "Parameters should be 1D array"
-        assert len(result.parameters) >= 5, (
-            f"Should have at least 5 parameters, got {len(result.parameters)}"
-        )
+        assert (
+            len(result.parameters) >= 5
+        ), f"Should have at least 5 parameters, got {len(result.parameters)}"
 
         # Covariance and uncertainties should match parameter count
-        assert result.uncertainties.shape == result.parameters.shape, (
-            f"Uncertainties shape {result.uncertainties.shape} should match parameters {result.parameters.shape}"
-        )
+        assert (
+            result.uncertainties.shape == result.parameters.shape
+        ), f"Uncertainties shape {result.uncertainties.shape} should match parameters {result.parameters.shape}"
         assert result.covariance.shape == (
             len(result.parameters),
             len(result.parameters),
-        ), (
-            f"Covariance shape {result.covariance.shape} should be NxN where N={len(result.parameters)}"
-        )
+        ), f"Covariance shape {result.covariance.shape} should be NxN where N={len(result.parameters)}"
         assert result.chi_squared >= 0, "Chi-squared should be non-negative"
-        assert result.reduced_chi_squared >= 0, (
-            "Reduced chi-squared should be non-negative"
-        )
+        assert (
+            result.reduced_chi_squared >= 0
+        ), "Reduced chi-squared should be non-negative"
         assert result.convergence_status in [
             "converged",
             "max_iter",
             "failed",
         ], f"Invalid convergence status: {result.convergence_status}"
         # Note: NLSQ may report -1 for iterations when not available
-        assert result.iterations >= -1, (
-            f"Iterations should be >= -1 (NLSQ may not report), got {result.iterations}"
-        )
+        assert (
+            result.iterations >= -1
+        ), f"Iterations should be >= -1 (NLSQ may not report), got {result.iterations}"
         assert result.execution_time > 0, "Execution time should be positive"
-        assert "device" in result.device_info or "platform" in result.device_info, (
-            "Device info should contain device information"
-        )
+        assert (
+            "device" in result.device_info or "platform" in result.device_info
+        ), "Device info should contain device information"
         assert result.quality_flag in [
             "good",
             "marginal",
@@ -302,12 +300,12 @@ class TestNLSQWrapperFit:
 
         # Acceptance criteria (relaxed for noisy synthetic data)
         # Chi-squared ~500 is reasonable for 300 data points with sigma=0.1 noise
-        assert result.chi_squared < 1000.0, (
-            f"Chi-squared should be reasonable, got {result.chi_squared}"
-        )
-        assert result.reduced_chi_squared < 5.0, (
-            f"Reduced chi-squared should be <5.0, got {result.reduced_chi_squared}"
-        )
+        assert (
+            result.chi_squared < 1000.0
+        ), f"Chi-squared should be reasonable, got {result.chi_squared}"
+        assert (
+            result.reduced_chi_squared < 5.0
+        ), f"Reduced chi-squared should be <5.0, got {result.reduced_chi_squared}"
 
     def test_laminar_flow_fit_large_dataset(self):
         """
@@ -372,14 +370,14 @@ class TestNLSQWrapperFit:
         n_angles = len(mock_data.phi)  # 23
         n_physical = 7  # laminar flow
         expected_n_params = 2 * n_angles + n_physical  # 53
-        assert result.parameters.shape == (expected_n_params,), (
-            f"Laminar flow should have {expected_n_params} parameters (per-angle scaling), got {result.parameters.shape}"
-        )
+        assert result.parameters.shape == (
+            expected_n_params,
+        ), f"Laminar flow should have {expected_n_params} parameters (per-angle scaling), got {result.parameters.shape}"
         assert result.convergence_status in ["converged", "max_iter", "failed"]
         # Note: NLSQ may report -1 for iterations when not available
-        assert result.iterations >= -1, (
-            f"Iterations should be >= -1 (NLSQ may not report), got {result.iterations}"
-        )
+        assert (
+            result.iterations >= -1
+        ), f"Iterations should be >= -1 (NLSQ may not report), got {result.iterations}"
 
     def test_parameter_bounds_clipping(self):
         """
@@ -505,15 +503,13 @@ class TestNLSQWrapperErrorRecovery:
 
         # Assertions
         assert isinstance(result, OptimizationResult)
-        assert len(result.recovery_actions) > 0, (
-            "Recovery actions should be recorded when retry occurs"
-        )
+        assert (
+            len(result.recovery_actions) > 0
+        ), "Recovery actions should be recorded when retry occurs"
         assert any(
             "perturb" in action.lower() or "retry" in action.lower()
             for action in result.recovery_actions
-        ), (
-            f"Recovery actions should mention perturbation/retry: {result.recovery_actions}"
-        )
+        ), f"Recovery actions should mention perturbation/retry: {result.recovery_actions}"
         assert result.convergence_status in [
             "converged",
             "converged_with_recovery",
@@ -640,9 +636,9 @@ class TestNLSQWrapperErrorRecovery:
         )
 
         # Assertions
-        assert isinstance(result, OptimizationResult), (
-            "Should return result even with bounds violations (clipping applied)"
-        )
+        assert isinstance(
+            result, OptimizationResult
+        ), "Should return result even with bounds violations (clipping applied)"
 
         # v2.4.0: Parameters are expanded from compact form
         # With 5 angles: 2*5 + 3 = 13 parameters after expansion
@@ -650,22 +646,22 @@ class TestNLSQWrapperErrorRecovery:
         expected_n_params = 2 * n_angles + 3  # 13
 
         # Verify parameters were expanded correctly
-        assert len(result.parameters) == expected_n_params, (
-            f"Should have {expected_n_params} expanded parameters, got {len(result.parameters)}"
-        )
+        assert (
+            len(result.parameters) == expected_n_params
+        ), f"Should have {expected_n_params} expanded parameters, got {len(result.parameters)}"
 
         # Verify the result is valid - check that contrasts and offsets are within bounds
         # Contrasts (first n_angles elements) should be <= 1.0
         contrasts = result.parameters[:n_angles]
-        assert all(c <= 1.0 for c in contrasts), (
-            f"All contrasts should be <= 1.0, got {contrasts}"
-        )
+        assert all(
+            c <= 1.0 for c in contrasts
+        ), f"All contrasts should be <= 1.0, got {contrasts}"
 
         # Offsets (next n_angles elements) should be >= 0.8
         offsets = result.parameters[n_angles : 2 * n_angles]
-        assert all(o >= 0.8 for o in offsets), (
-            f"All offsets should be >= 0.8, got {offsets}"
-        )
+        assert all(
+            o >= 0.8 for o in offsets
+        ), f"All offsets should be >= 0.8, got {offsets}"
 
         print("\n✅ T022b bounds test passed: Clipping handled gracefully")
         print(f"Original compact params: {violating_params}")
@@ -765,12 +761,12 @@ class TestNLSQWrapperErrorRecovery:
         # CHUNKED uses curve_fit_large → fails
         # LARGE uses curve_fit_large → fails
         # STANDARD uses curve_fit → succeeds
-        assert len(strategies_attempted) >= 2, (
-            f"Should attempt multiple strategies, attempted: {strategies_attempted}"
-        )
-        assert strategies_attempted[-1] == "standard", (
-            "Should succeed with STANDARD strategy"
-        )
+        assert (
+            len(strategies_attempted) >= 2
+        ), f"Should attempt multiple strategies, attempted: {strategies_attempted}"
+        assert (
+            strategies_attempted[-1] == "standard"
+        ), "Should succeed with STANDARD strategy"
 
         # Verify convergence
         assert result.convergence_status in [
@@ -1017,9 +1013,9 @@ class TestNLSQOptimization:
             import nlsq
 
             assert hasattr(nlsq, "curve_fit"), "NLSQ should have curve_fit function"
-            assert hasattr(nlsq, "curve_fit_large"), (
-                "NLSQ should have curve_fit_large function"
-            )
+            assert hasattr(
+                nlsq, "curve_fit_large"
+            ), "NLSQ should have curve_fit_large function"
 
     @pytest.mark.skipif(not NLSQ_AVAILABLE, reason="NLSQ package not available")
     def test_nlsq_synthetic_data_fit(self, synthetic_xpcs_data, test_config):
@@ -1048,9 +1044,9 @@ class TestNLSQOptimization:
         # v2.4.0: Per-angle scaling with 36 angles
         n_angles = len(data["phi_angles_list"])  # 36
         expected_n_params = 2 * n_angles + 3  # 75 params
-        assert len(result.parameters) == expected_n_params, (
-            f"Should have {expected_n_params} parameters (per-angle scaling), got {len(result.parameters)}"
-        )
+        assert (
+            len(result.parameters) == expected_n_params
+        ), f"Should have {expected_n_params} parameters (per-angle scaling), got {len(result.parameters)}"
 
         # Physical constraints - per-angle parameters
         # Check first angle's parameters as representative
@@ -1066,9 +1062,9 @@ class TestNLSQOptimization:
         # Convergence metrics
         assert result.chi_squared >= 0.0, "Chi-squared must be non-negative"
         # Note: NLSQ may report -1 for iterations when not available
-        assert result.iterations >= -1, (
-            f"Iterations should be >= -1 (NLSQ may not report), got {result.iterations}"
-        )
+        assert (
+            result.iterations >= -1
+        ), f"Iterations should be >= -1 (NLSQ may not report), got {result.iterations}"
         assert result.execution_time > 0.0, "Should have non-zero execution time"
 
     @pytest.mark.skipif(not NLSQ_AVAILABLE, reason="NLSQ package not available")
@@ -1149,9 +1145,9 @@ class TestNLSQOptimization:
             for param_name, (lower, upper) in bounds.items():
                 if param_name in result.parameters:
                     value = result.parameters[param_name]
-                    assert lower <= value <= upper, (
-                        f"Parameter {param_name}={value} outside bounds [{lower}, {upper}]"
-                    )
+                    assert (
+                        lower <= value <= upper
+                    ), f"Parameter {param_name}={value} outside bounds [{lower}, {upper}]"
 
     def test_nlsq_error_handling(self, test_config):
         """Test NLSQ error handling with invalid data."""
@@ -1235,9 +1231,9 @@ class TestNLSQOptimization:
             # Check that shear rate is recovered reasonably
             if "shear_rate" in result.parameters:
                 recovered_shear = result.parameters["shear_rate"]
-                assert abs(recovered_shear - params_with_shear["shear_rate"]) < 0.02, (
-                    f"Shear rate recovery poor: {recovered_shear} vs {params_with_shear['shear_rate']}"
-                )
+                assert (
+                    abs(recovered_shear - params_with_shear["shear_rate"]) < 0.02
+                ), f"Shear rate recovery poor: {recovered_shear} vs {params_with_shear['shear_rate']}"
 
     @pytest.mark.skipif(not NLSQ_AVAILABLE, reason="NLSQ package not available")
     def test_nlsq_multiple_q_values(self, test_config):
@@ -1338,9 +1334,9 @@ class TestNLSQPerformance:
         assert result.success, "Small dataset optimization should succeed"
 
         # Reported time should be consistent
-        assert abs(result.execution_time - elapsed_time) < 0.1, (
-            "Reported computation time inconsistent"
-        )
+        assert (
+            abs(result.execution_time - elapsed_time) < 0.1
+        ), "Reported computation time inconsistent"
 
     def test_nlsq_scaling_dataset_size(self, test_config):
         """Test NLSQ timing scaling with dataset size."""
@@ -1414,9 +1410,9 @@ class TestNLSQPerformance:
             # Fast convergence indicator
             # Use chi_squared as proxy when iterations not available
             if result.iterations > 0 and result.iterations < 10:
-                assert result.chi_squared < 1.0, (
-                    "Fast convergence should achieve good fit"
-                )
+                assert (
+                    result.chi_squared < 1.0
+                ), "Fast convergence should achieve good fit"
 
 
 @pytest.mark.unit

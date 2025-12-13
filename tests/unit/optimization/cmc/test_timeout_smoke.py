@@ -58,7 +58,9 @@ def test_suggested_timeout_clamps_and_scales():
 
     # Smaller cost should respect min clamp 600s
     small_cost = 2 * (5 + 10) * 100
-    suggested_small = core._compute_suggested_timeout(cost_per_shard=small_cost, max_timeout=7200)
+    suggested_small = core._compute_suggested_timeout(
+        cost_per_shard=small_cost, max_timeout=7200
+    )
     assert suggested_small == 600
 
 

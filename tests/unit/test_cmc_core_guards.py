@@ -19,4 +19,3 @@ def test_cap_laminar_max_points_preserves_safe_values(caplog):
 
     assert capped == 40_000
     assert not caplog.messages
-

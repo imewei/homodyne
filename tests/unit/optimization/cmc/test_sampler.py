@@ -478,9 +478,7 @@ class TestSamplerProperties:
             assert shape == (
                 n_chains,
                 n_samples,
-            ), (
-                f"Shape mismatch for {name}: expected ({n_chains}, {n_samples}), got {shape}"
-            )
+            ), f"Shape mismatch for {name}: expected ({n_chains}, {n_samples}), got {shape}"
 
     def test_param_names_consistency(self, sample_param_names):
         """Test that param_names matches samples keys."""

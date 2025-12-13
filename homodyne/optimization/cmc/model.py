@@ -19,6 +19,10 @@ import numpyro.distributions as dist
 
 from homodyne.core.physics_cmc import compute_g1_total
 from homodyne.optimization.cmc.priors import build_prior
+from homodyne.optimization.cmc.scaling import (
+    compute_scaling_factors,
+    sample_scaled_parameter,
+)
 from homodyne.utils.logging import get_logger
 
 if TYPE_CHECKING:
@@ -166,7 +170,13 @@ def xpcs_model(
     # 6. Likelihood with noise model
     # =========================================================================
     # Sample observation noise
-    sigma = numpyro.sample("sigma", dist.HalfNormal(scale=noise_scale))
+    # MCMC-SAFE FIX: Use 3x multiplier on noise_scale to allow larger sigma values.
+    # The original noise_scale from data variance is often too tight, causing NUTS
+    # to reject all proposals because the sigma prior strongly prefers small values
+    # while the data needs larger sigma to account for model-data mismatch.
+    # The 3x multiplier allows sigma to explore a wider range during MCMC warmup.
+    sigma_scale = noise_scale * 3.0  # MCMC-safe multiplier
+    sigma = numpyro.sample("sigma", dist.HalfNormal(scale=sigma_scale))
 
     # Observation likelihood
     numpyro.sample("obs", dist.Normal(c2_theory, sigma), obs=data)
@@ -231,3 +241,133 @@ def get_model_param_count(n_phi: int, analysis_mode: str) -> int:
     n_params += 1  # sigma
 
     return n_params
+
+
+def xpcs_model_scaled(
+    data: jnp.ndarray,
+    t1: jnp.ndarray,
+    t2: jnp.ndarray,
+    phi_unique: jnp.ndarray,
+    phi_indices: jnp.ndarray,
+    q: float,
+    L: float,
+    dt: float,
+    analysis_mode: str,
+    parameter_space: ParameterSpace,
+    n_phi: int,
+    time_grid: jnp.ndarray | None = None,
+    noise_scale: float = 0.1,
+) -> None:
+    """NumPyro model with non-centered parameterization for gradient balancing.
+
+    This model samples all parameters in normalized (z) space where z ~ N(0,1),
+    then transforms to original space: P = center + scale * z. This ensures
+    all gradient magnitudes are balanced, solving the 0% acceptance rate issue
+    caused by D0 (~10^4) dominating gradients over gamma_dot_t0 (~10^-3).
+
+    The physics computation is identical to xpcs_model, only the sampling
+    space is transformed.
+
+    Parameters
+    ----------
+    data : jnp.ndarray
+        Observed C2 correlation data, shape (n_total,).
+    t1, t2 : jnp.ndarray
+        Time coordinates, shape (n_total,).
+    phi_unique : jnp.ndarray
+        Unique phi angles, shape (n_phi,).
+    phi_indices : jnp.ndarray
+        Index into per-angle arrays for each point, shape (n_total,).
+    q : float
+        Wavevector magnitude.
+    L : float
+        Stator-rotor gap length (nm).
+    dt : float
+        Time step.
+    analysis_mode : str
+        Analysis mode: "static" or "laminar_flow".
+    parameter_space : ParameterSpace
+        Parameter space with bounds and priors.
+    n_phi : int
+        Number of unique phi angles.
+    noise_scale : float
+        Initial estimate of observation noise.
+    """
+    # =========================================================================
+    # 0. Compute scaling factors for all parameters
+    # =========================================================================
+    scalings = compute_scaling_factors(parameter_space, n_phi, analysis_mode)
+
+    # =========================================================================
+    # 1. Sample per-angle CONTRAST parameters in z-space (FIRST)
+    # =========================================================================
+    contrasts = []
+    for i in range(n_phi):
+        c_i = sample_scaled_parameter(f"contrast_{i}", scalings[f"contrast_{i}"])
+        contrasts.append(c_i)
+    contrast_arr = jnp.array(contrasts)
+
+    # =========================================================================
+    # 2. Sample per-angle OFFSET parameters in z-space (SECOND)
+    # =========================================================================
+    offsets = []
+    for i in range(n_phi):
+        o_i = sample_scaled_parameter(f"offset_{i}", scalings[f"offset_{i}"])
+        offsets.append(o_i)
+    offset_arr = jnp.array(offsets)
+
+    # =========================================================================
+    # 3. Sample PHYSICAL parameters in z-space (THIRD)
+    # =========================================================================
+    D0 = sample_scaled_parameter("D0", scalings["D0"])
+    alpha = sample_scaled_parameter("alpha", scalings["alpha"])
+    D_offset = sample_scaled_parameter("D_offset", scalings["D_offset"])
+
+    if analysis_mode == "laminar_flow":
+        gamma_dot_t0 = sample_scaled_parameter("gamma_dot_t0", scalings["gamma_dot_t0"])
+        beta = sample_scaled_parameter("beta", scalings["beta"])
+        gamma_dot_t_offset = sample_scaled_parameter(
+            "gamma_dot_t_offset", scalings["gamma_dot_t_offset"]
+        )
+        phi0 = sample_scaled_parameter("phi0", scalings["phi0"])
+
+        params = jnp.array(
+            [D0, alpha, D_offset, gamma_dot_t0, beta, gamma_dot_t_offset, phi0]
+        )
+    else:
+        params = jnp.array([D0, alpha, D_offset])
+
+    # =========================================================================
+    # 4. Compute theoretical g1 using EXACT same physics as NLSQ
+    # =========================================================================
+    g1_all_phi = compute_g1_total(
+        params, t1, t2, phi_unique, q, L, dt, time_grid=time_grid
+    )
+
+    point_idx = jnp.arange(phi_indices.shape[0], dtype=phi_indices.dtype)
+    g1_per_point = g1_all_phi[phi_indices, point_idx]
+
+    # =========================================================================
+    # 5. Apply per-angle scaling to get C2
+    # =========================================================================
+    contrast_per_point = contrast_arr[phi_indices]
+    offset_per_point = offset_arr[phi_indices]
+    c2_theory_raw = contrast_per_point * g1_per_point**2 + offset_per_point
+
+    # Numerical stability safeguard
+    c2_theory = jnp.where(
+        jnp.isfinite(c2_theory_raw),
+        c2_theory_raw,
+        jnp.ones_like(c2_theory_raw),
+    )
+
+    n_nan = jnp.sum(~jnp.isfinite(c2_theory_raw))
+    numpyro.deterministic("n_numerical_issues", n_nan)
+
+    # =========================================================================
+    # 6. Likelihood with noise model
+    # =========================================================================
+    sigma_scale = noise_scale * 3.0
+    sigma = numpyro.sample("sigma", dist.HalfNormal(scale=sigma_scale))
+
+    numpyro.sample("obs", dist.Normal(c2_theory, sigma), obs=data)

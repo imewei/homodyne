@@ -86,7 +86,6 @@ from functools import wraps
 from homodyne.core.physics_utils import (
     EPS,
     PI,
-    apply_diagonal_correction,
     safe_exp,
     safe_len,
     safe_sinc,

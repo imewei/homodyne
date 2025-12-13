@@ -160,7 +160,11 @@ def _run_shard_worker(
         "q": shard_data["q"],
         "L": shard_data["L"],
         "dt": shard_data["dt"],
-        "time_grid": jnp.array(shard_data["time_grid"]) if shard_data.get("time_grid") is not None else None,
+        "time_grid": (
+            jnp.array(shard_data["time_grid"])
+            if shard_data.get("time_grid") is not None
+            else None
+        ),
         "analysis_mode": analysis_mode,
         "parameter_space": parameter_space,
         "n_phi": n_phi,
@@ -372,7 +376,7 @@ class MultiprocessingBackend(CMCBackend):
         # Per-shard timeout - enforced per individual process
         per_shard_timeout = config.per_shard_timeout  # Default: 7200s (2 hours)
         run_logger.info(
-            f"Per-shard timeout: {per_shard_timeout/3600:.1f} hours "
+            f"Per-shard timeout: {per_shard_timeout / 3600:.1f} hours "
             f"(processes will be terminated if exceeded)"
         )
 
@@ -389,7 +393,11 @@ class MultiprocessingBackend(CMCBackend):
                     "q": model_kwargs["q"],
                     "L": model_kwargs["L"],
                     "dt": model_kwargs["dt"],
-                    "time_grid": np.array(model_kwargs["time_grid"]) if model_kwargs.get("time_grid") is not None else None,
+                    "time_grid": (
+                        np.array(model_kwargs["time_grid"])
+                        if model_kwargs.get("time_grid") is not None
+                        else None
+                    ),
                     "noise_scale": shard.noise_scale,
                 }
             )
@@ -502,7 +510,9 @@ class MultiprocessingBackend(CMCBackend):
                     run_logger.debug(f"Started shard {shard_idx} (pid={process.pid})")
 
                 # Check for completed or timed-out processes
-                for shard_idx, (process, proc_start_time) in list(active_processes.items()):
+                for shard_idx, (process, proc_start_time) in list(
+                    active_processes.items()
+                ):
                     now = time.time()
                     proc_elapsed = now - proc_start_time
                     last_active = last_heartbeat.get(shard_idx, proc_start_time)
@@ -511,7 +521,9 @@ class MultiprocessingBackend(CMCBackend):
                     if not process.is_alive():
                         process.join(timeout=1)
                         del active_processes[shard_idx]
-                        run_logger.debug(f"Shard {shard_idx} process exited after {proc_elapsed:.1f}s")
+                        run_logger.debug(
+                            f"Shard {shard_idx} process exited after {proc_elapsed:.1f}s"
+                        )
 
                         if shard_idx not in recorded_shards:
                             results.append(
@@ -536,7 +548,9 @@ class MultiprocessingBackend(CMCBackend):
                         process.terminate()
                         process.join(timeout=5)
                         if process.is_alive():
-                            run_logger.warning(f"Shard {shard_idx} did not terminate, killing")
+                            run_logger.warning(
+                                f"Shard {shard_idx} did not terminate, killing"
+                            )
                             process.kill()
                             process.join(timeout=2)
 
@@ -562,9 +576,13 @@ class MultiprocessingBackend(CMCBackend):
                     mins, secs = divmod(int(elapsed), 60)
                     hrs, mins = divmod(mins, 60)
                     if hrs > 0:
-                        pbar.set_postfix_str(f"active={len(active_processes)} elapsed={hrs}h{mins:02d}m")
+                        pbar.set_postfix_str(
+                            f"active={len(active_processes)} elapsed={hrs}h{mins:02d}m"
+                        )
                     else:
-                        pbar.set_postfix_str(f"active={len(active_processes)} elapsed={mins}m{secs:02d}s")
+                        pbar.set_postfix_str(
+                            f"active={len(active_processes)} elapsed={mins}m{secs:02d}s"
+                        )
 
                     if time.time() - last_status_log >= status_log_interval:
                         heartbeat_snapshot = {
@@ -580,7 +598,11 @@ class MultiprocessingBackend(CMCBackend):
                     time.sleep(poll_interval)
 
                 # If no processes remain and nothing is pending, mark any missing shards as failed
-                if not active_processes and not pending_shards and completed_count < n_shards:
+                if (
+                    not active_processes
+                    and not pending_shards
+                    and completed_count < n_shards
+                ):
                     missing = set(range(n_shards)) - recorded_shards
                     for shard_idx in sorted(missing):
                         results.append(
@@ -609,7 +631,9 @@ class MultiprocessingBackend(CMCBackend):
             # Clean up any remaining active processes
             for shard_idx, (process, _) in list(active_processes.items()):
                 if process.is_alive():
-                    run_logger.warning(f"Cleaning up orphan process for shard {shard_idx}")
+                    run_logger.warning(
+                        f"Cleaning up orphan process for shard {shard_idx}"
+                    )
                     process.terminate()
                     process.join(timeout=2)
 

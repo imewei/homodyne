@@ -395,7 +395,11 @@ def validate_args(args) -> bool:
             print(
                 f"Warning: --cmc-backend ignored (not applicable for method={args.method})"
             )
-        if args.n_samples is not None or args.n_warmup is not None or args.n_chains is not None:
+        if (
+            args.n_samples is not None
+            or args.n_warmup is not None
+            or args.n_chains is not None
+        ):
             print(
                 f"Warning: --n-samples/--n-warmup/--n-chains ignored (not applicable for method={args.method})"
             )

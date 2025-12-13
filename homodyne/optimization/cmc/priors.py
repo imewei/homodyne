@@ -8,7 +8,6 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-import jax.numpy as jnp
 import numpy as np
 import numpyro.distributions as dist
 
@@ -208,6 +207,7 @@ def estimate_per_angle_scaling(
         )
 
     return estimates
+
 
 # Physical parameter names in canonical order
 STATIC_PARAMS = ["D0", "alpha", "D_offset"]
@@ -728,4 +728,3 @@ def validate_init_values_order(
             f"Expected {len(expected_names)} params: {expected_names}\n"
             f"Actual {len(actual_names)} params: {actual_names}"
         )
-

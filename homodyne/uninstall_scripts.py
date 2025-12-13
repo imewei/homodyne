@@ -241,7 +241,9 @@ def interactive_cleanup():
         print("   - Removes $VIRTUAL_ENV/etc/homodyne/activation/ scripts")
         print("   - Can be regenerated with: homodyne-post-install --interactive")
 
-        remove_xla = input("   Remove XLA configuration? [y/N]: ").lower().startswith("y")
+        remove_xla = (
+            input("   Remove XLA configuration? [y/N]: ").lower().startswith("y")
+        )
 
         # Perform cleanup
         all_removed = []
@@ -423,8 +425,16 @@ def show_dry_run():
     # XLA config file and activation scripts
     xla_files = [
         (Path.home() / ".homodyne_xla_mode", "XLA config", ".homodyne_xla_mode"),
-        (venv_path / "etc" / "homodyne" / "activation" / "xla_config.bash", "XLA activation", "xla_config.bash"),
-        (venv_path / "etc" / "homodyne" / "activation" / "xla_config.fish", "XLA activation", "xla_config.fish"),
+        (
+            venv_path / "etc" / "homodyne" / "activation" / "xla_config.bash",
+            "XLA activation",
+            "xla_config.bash",
+        ),
+        (
+            venv_path / "etc" / "homodyne" / "activation" / "xla_config.fish",
+            "XLA activation",
+            "xla_config.fish",
+        ),
     ]
 
     all_files = completion_files + gpu_files + advanced_files + xla_files
@@ -488,7 +498,9 @@ def main():
                 print("   • Advanced features CLI commands")
                 print("   • All conda activation hooks")
                 print("   • XLA configuration (~/.homodyne_xla_mode)")
-                print("   • XLA activation scripts ($VIRTUAL_ENV/etc/homodyne/activation/)")
+                print(
+                    "   • XLA activation scripts ($VIRTUAL_ENV/etc/homodyne/activation/)"
+                )
                 print("\n💡 To restore these files later, run:")
                 print("   homodyne-post-install --interactive")
                 print()
@@ -518,7 +530,9 @@ def main():
                 print("   ├─ GPU acceleration setup (JAX with CUDA)")
                 print("   ├─ Conda activation hooks")
                 print("   ├─ XLA configuration (~/.homodyne_xla_mode)")
-                print("   ├─ XLA activation scripts ($VIRTUAL_ENV/etc/homodyne/activation/)")
+                print(
+                    "   ├─ XLA activation scripts ($VIRTUAL_ENV/etc/homodyne/activation/)"
+                )
                 print("   └─ Legacy system files")
             print("\n🔄 Next steps:")
             print("   • Restart your shell session")

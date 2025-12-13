@@ -129,7 +129,9 @@ def main(args: argparse.Namespace) -> None:
 
     shard = load_shard(Path(args.cache), angle_ranges)
 
-    init_cfg = cm.config.get("optimization", {}).get("mcmc", {}).get("initial_values", {})
+    init_cfg = (
+        cm.config.get("optimization", {}).get("mcmc", {}).get("initial_values", {})
+    )
     contrast = float(init_cfg.get("contrast", 0.5))
     offset = float(init_cfg.get("offset", 1.0))
 
@@ -153,7 +155,9 @@ def main(args: argparse.Namespace) -> None:
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Probe laminar log-density at given inits")
+    parser = argparse.ArgumentParser(
+        description="Probe laminar log-density at given inits"
+    )
     parser.add_argument("--config", required=True, type=Path, help="YAML config path")
     parser.add_argument("--cache", required=True, type=Path, help="cached C2 npz path")
     parser.add_argument("--tamed-d0", type=float, default=2000.0)

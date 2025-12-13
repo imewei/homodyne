@@ -300,8 +300,7 @@ def _check_deprecated_config(config: "ConfigManager") -> None:
             "Migration: NLSQ v3.0+ uses native large dataset handling.\n"
             "Simply remove the deprecated sections - no replacement needed.\n"
             "See: https://nlsq.readthedocs.io/en/latest/guides/large_datasets.html\n"
-            + "="
-            * 70
+            + "=" * 70
         )
 
 
@@ -1009,25 +1008,32 @@ def _run_optimization(args, config: ConfigManager, data: dict[str, Any]) -> Any:
                 logger.info(
                     f"Overriding CMC num_shards from CLI: {args.cmc_num_shards}",
                 )
-                cmc_config.setdefault("sharding", {})["num_shards"] = (
-                    args.cmc_num_shards
-                )
+                cmc_config.setdefault("sharding", {})[
+                    "num_shards"
+                ] = args.cmc_num_shards
 
             if args.cmc_backend is not None:
                 logger.info(f"Overriding CMC backend from CLI: {args.cmc_backend}")
                 backend_cfg["name"] = args.cmc_backend
 
             # If user requested multiple shards but backend is auto/jax, default to multiprocessing
-            num_shards_override = cmc_config.get("sharding", {}).get("num_shards", "auto")
+            num_shards_override = cmc_config.get("sharding", {}).get(
+                "num_shards", "auto"
+            )
             try:
                 num_shards_int = int(num_shards_override)
             except (TypeError, ValueError):
                 num_shards_int = None
 
             backend_name_current = backend_cfg.get("name", "auto")
-            if num_shards_int and num_shards_int > 1 and backend_name_current in (
-                "auto",
-                "jax",
+            if (
+                num_shards_int
+                and num_shards_int > 1
+                and backend_name_current
+                in (
+                    "auto",
+                    "jax",
+                )
             ):
                 logger.warning(
                     "Multiple shards requested but backend is 'auto/jax'; defaulting to multiprocessing. "
@@ -1097,10 +1103,10 @@ def _run_optimization(args, config: ConfigManager, data: dict[str, Any]) -> Any:
                     f"[CMC DEBUG] Meshgrid verification:\n"
                     f"  t1_raw[:3]={t1_raw[:3] if len(t1_raw) >= 3 else t1_raw}\n"
                     f"  t2_raw[:3]={t2_raw[:3] if len(t2_raw) >= 3 else t2_raw}\n"
-                    f"  t1_2d[0,:3]={t1_2d[0,:3] if t1_2d.shape[1] >= 3 else t1_2d[0,:]}\n"
-                    f"  t1_2d[:3,0]={t1_2d[:3,0] if t1_2d.shape[0] >= 3 else t1_2d[:,0]}\n"
-                    f"  t2_2d[0,:3]={t2_2d[0,:3] if t2_2d.shape[1] >= 3 else t2_2d[0,:]}\n"
-                    f"  t2_2d[:3,0]={t2_2d[:3,0] if t2_2d.shape[0] >= 3 else t2_2d[:,0]}"
+                    f"  t1_2d[0,:3]={t1_2d[0, :3] if t1_2d.shape[1] >= 3 else t1_2d[0, :]}\n"
+                    f"  t1_2d[:3,0]={t1_2d[:3, 0] if t1_2d.shape[0] >= 3 else t1_2d[:, 0]}\n"
+                    f"  t2_2d[0,:3]={t2_2d[0, :3] if t2_2d.shape[1] >= 3 else t2_2d[0, :]}\n"
+                    f"  t2_2d[:3,0]={t2_2d[:3, 0] if t2_2d.shape[0] >= 3 else t2_2d[:, 0]}"
                 )
             elif t1_raw.ndim == 2 and t2_raw.ndim == 2:
                 # Already 2D meshgrids

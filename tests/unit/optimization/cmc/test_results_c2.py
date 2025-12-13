@@ -44,7 +44,9 @@ def test_compute_fitted_c2_uses_unique_phi(monkeypatch):
 
     captured = {}
 
-    def fake_compute_g1_total(params, t1, t2, phi_unique, q, L, dt, time_grid=None, _debug=False):
+    def fake_compute_g1_total(
+        params, t1, t2, phi_unique, q, L, dt, time_grid=None, _debug=False
+    ):
         captured["phi_unique"] = np.array(phi_unique)
         # return ones to keep shapes simple
         return np.ones_like(t1)

@@ -437,9 +437,7 @@ class TestDiffusionModelEdgeCases:
         t = jnp.array([0.1, 1.0])
         # Lower bound is D0 >= 1.0, so this tests boundary behavior
         # In practice, validation would catch this, but computation should be stable
-        g1 = model.compute_g1(
-            params, t, t, jnp.array([0.0]), q=0.01, L=1e6, dt=0.1
-        )
+        g1 = model.compute_g1(params, t, t, jnp.array([0.0]), q=0.01, L=1e6, dt=0.1)
         assert np.all(np.isfinite(g1))
 
     def test_parameter_bounds_cover_physical_range(self, model):

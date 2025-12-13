@@ -437,12 +437,12 @@ class TestDataFlattening:
         xdata, ydata = wrapper._prepare_data(mock_data)
 
         # Assertions
-        assert xdata.shape[0] == expected_size, (
-            f"xdata should have {expected_size} elements, got {xdata.shape[0]}"
-        )
-        assert ydata.shape[0] == expected_size, (
-            f"ydata should have {expected_size} elements, got {ydata.shape[0]}"
-        )
+        assert (
+            xdata.shape[0] == expected_size
+        ), f"xdata should have {expected_size} elements, got {xdata.shape[0]}"
+        assert (
+            ydata.shape[0] == expected_size
+        ), f"ydata should have {expected_size} elements, got {ydata.shape[0]}"
         assert xdata.ndim == 1, f"xdata should be 1D, got {xdata.ndim}D"
         assert ydata.ndim == 1, f"ydata should be 1D, got {ydata.ndim}D"
 
@@ -605,9 +605,9 @@ class TestGradientWithRealParameters:
         gradient_norm = jnp.linalg.norm(gradient)
 
         # With actual parameters, gradient norm was ~1972 (very large!)
-        assert gradient_norm > 1.0, (
-            f"Gradient norm {gradient_norm:.6e} should be >1.0 with real parameters"
-        )
+        assert (
+            gradient_norm > 1.0
+        ), f"Gradient norm {gradient_norm:.6e} should be >1.0 with real parameters"
 
         # Verify no parameters have zero gradient
         zero_grad_mask = jnp.abs(gradient) < 1e-10
@@ -674,9 +674,9 @@ class TestGradientWithRealParameters:
         relative_diff_1pct = jnp.mean(diff_1pct) / jnp.mean(g2_actual)
 
         # Real parameters showed 0.1161% relative difference for 1% change
-        assert relative_diff_1pct > 0.0001, (
-            f"1% param change produced {relative_diff_1pct * 100:.4f}% output change (should be >0.01%)"
-        )
+        assert (
+            relative_diff_1pct > 0.0001
+        ), f"1% param change produced {relative_diff_1pct * 100:.4f}% output change (should be >0.01%)"
 
         # Test 10% perturbation
         perturbed_params_10pct = actual_params * 1.10
@@ -697,14 +697,14 @@ class TestGradientWithRealParameters:
         relative_diff_10pct = jnp.mean(diff_10pct) / jnp.mean(g2_actual)
 
         # Real parameters showed 1.02% relative difference for 10% change
-        assert relative_diff_10pct > 0.001, (
-            f"10% param change produced {relative_diff_10pct * 100:.4f}% output change (should be >0.1%)"
-        )
+        assert (
+            relative_diff_10pct > 0.001
+        ), f"10% param change produced {relative_diff_10pct * 100:.4f}% output change (should be >0.1%)"
 
         # 10% change should produce larger effect than 1% change
-        assert relative_diff_10pct > relative_diff_1pct, (
-            "10% perturbation should have larger effect than 1% perturbation"
-        )
+        assert (
+            relative_diff_10pct > relative_diff_1pct
+        ), "10% perturbation should have larger effect than 1% perturbation"
 
     def test_negative_parameters_handled_correctly(self, jax_backend):
         """
@@ -750,9 +750,9 @@ class TestGradientWithRealParameters:
 
         # Verify output is physically reasonable
         assert g2.shape[0] == len(phi), "Output shape must match phi"
-        assert jnp.all(jnp.isfinite(g2)), (
-            "Output must be finite with negative parameters"
-        )
+        assert jnp.all(
+            jnp.isfinite(g2)
+        ), "Output must be finite with negative parameters"
         assert jnp.all(g2 >= 0), "g2 must be non-negative even with negative parameters"
 
         # Gradient computation should also work
@@ -773,9 +773,9 @@ class TestGradientWithRealParameters:
         grad_fn = jax.grad(loss_fn)
         gradient = grad_fn(params_with_negatives)
 
-        assert jnp.all(jnp.isfinite(gradient)), (
-            "Gradient must be finite with negative parameters"
-        )
+        assert jnp.all(
+            jnp.isfinite(gradient)
+        ), "Gradient must be finite with negative parameters"
 
     def test_gradient_consistency_across_parameter_scales(self, jax_backend):
         """Test that gradient computation is consistent across different parameter scales."""
@@ -819,12 +819,12 @@ class TestGradientWithRealParameters:
         grad_norm_moderate = compute_gradient_norm(moderate_params)
 
         # Both should have non-zero gradients (actual values will differ)
-        assert grad_norm_real > 1.0, (
-            f"Real params gradient norm {grad_norm_real:.2f} should be >1.0"
-        )
-        assert grad_norm_moderate > 1e-3, (
-            f"Moderate params gradient norm {grad_norm_moderate:.6e} should be >1e-3"
-        )
+        assert (
+            grad_norm_real > 1.0
+        ), f"Real params gradient norm {grad_norm_real:.2f} should be >1.0"
+        assert (
+            grad_norm_moderate > 1e-3
+        ), f"Moderate params gradient norm {grad_norm_moderate:.6e} should be >1e-3"
 
 
 if __name__ == "__main__":

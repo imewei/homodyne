@@ -649,7 +649,10 @@ class TestCMCDataSharding:
 
         max_per_shard = 1000
         shards = shard_data_random(
-            prepared, num_shards=None, max_points_per_shard=max_per_shard, max_shards=100
+            prepared,
+            num_shards=None,
+            max_points_per_shard=max_per_shard,
+            max_shards=100,
         )
 
         # Each shard should have at most max_per_shard points
@@ -710,9 +713,7 @@ class TestCMCResultEdgeCases:
 class TestNLSQWrapperEdgeCases:
     """Test edge cases for NLSQWrapper if available."""
 
-    @pytest.mark.skipif(
-        not JAX_AVAILABLE, reason="JAX required for NLSQWrapper tests"
-    )
+    @pytest.mark.skipif(not JAX_AVAILABLE, reason="JAX required for NLSQWrapper tests")
     def test_wrapper_import(self):
         """NLSQWrapper should be importable."""
         try:
@@ -722,9 +723,7 @@ class TestNLSQWrapperEdgeCases:
         except ImportError:
             pytest.skip("NLSQWrapper not available")
 
-    @pytest.mark.skipif(
-        not JAX_AVAILABLE, reason="JAX required for NLSQWrapper tests"
-    )
+    @pytest.mark.skipif(not JAX_AVAILABLE, reason="JAX required for NLSQWrapper tests")
     def test_wrapper_enable_recovery_flag(self):
         """NLSQWrapper should accept enable_recovery flag."""
         try:

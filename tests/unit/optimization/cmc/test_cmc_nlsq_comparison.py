@@ -54,9 +54,7 @@ class TestCMCNLSQDiffusionComparison:
         time_grid = np.linspace(0, dt * (n_times - 1), n_times)
 
         # Compute D(t) at each time point
-        D_t = calculate_diffusion_coefficient(
-            jnp.array(time_grid), D0, alpha, D_offset
-        )
+        D_t = calculate_diffusion_coefficient(jnp.array(time_grid), D0, alpha, D_offset)
         D_t_np = np.array(D_t)
 
         # Method 1: NLSQ uses create_time_integral_matrix
@@ -100,25 +98,29 @@ class TestCMCNLSQDiffusionComparison:
 
         # Physics parameters
         params = jnp.array([D0, alpha, D_offset])
-        wavevector_q_squared_half_dt = 0.5 * (q ** 2) * dt
+        wavevector_q_squared_half_dt = 0.5 * (q**2) * dt
 
         # NLSQ: Compute g1_diffusion using meshgrid
-        g1_nlsq = np.array(_compute_g1_diffusion_meshgrid(
-            params,
-            jnp.array(t1_mesh),
-            jnp.array(t2_mesh),
-            wavevector_q_squared_half_dt,
-            dt,
-        ))
+        g1_nlsq = np.array(
+            _compute_g1_diffusion_meshgrid(
+                params,
+                jnp.array(t1_mesh),
+                jnp.array(t2_mesh),
+                wavevector_q_squared_half_dt,
+                dt,
+            )
+        )
 
         # CMC: Compute g1_diffusion using element-wise
-        g1_cmc_flat = np.array(_compute_g1_diffusion_elementwise(
-            params,
-            jnp.array(t1_pooled),
-            jnp.array(t2_pooled),
-            jnp.array(time_grid),
-            wavevector_q_squared_half_dt,
-        ))
+        g1_cmc_flat = np.array(
+            _compute_g1_diffusion_elementwise(
+                params,
+                jnp.array(t1_pooled),
+                jnp.array(t2_pooled),
+                jnp.array(time_grid),
+                wavevector_q_squared_half_dt,
+            )
+        )
 
         # Reshape CMC result to match NLSQ shape
         g1_cmc = g1_cmc_flat.reshape(n_times, n_times)
@@ -137,7 +139,7 @@ class TestCMCNLSQDiffusionComparison:
         sample_indices = [(0, 0), (0, 10), (10, 10), (10, 40), (49, 49)]
         print(f"\n  Sample comparisons (i,j): NLSQ vs CMC")
         for i, j in sample_indices:
-            print(f"    ({i},{j}): {g1_nlsq[i,j]:.6f} vs {g1_cmc[i,j]:.6f}")
+            print(f"    ({i},{j}): {g1_nlsq[i, j]:.6f} vs {g1_cmc[i, j]:.6f}")
 
         # Assert they're close (allowing small numerical differences)
         assert max_diff < 1e-5, f"g1_diffusion mismatch: max_diff={max_diff:.2e}"
@@ -172,33 +174,39 @@ class TestCMCNLSQDiffusionComparison:
         t2_pooled = t2_mesh.flatten()
 
         # Physics parameters (7 params for laminar flow)
-        params = jnp.array([D0, alpha, D_offset, gamma_dot_0, beta, gamma_dot_offset, phi0])
-        wavevector_q_squared_half_dt = 0.5 * (q ** 2) * dt
+        params = jnp.array(
+            [D0, alpha, D_offset, gamma_dot_0, beta, gamma_dot_offset, phi0]
+        )
+        wavevector_q_squared_half_dt = 0.5 * (q**2) * dt
         sinc_prefactor = 0.5 / np.pi * q * L * dt
 
         # NLSQ: Compute g1_total using meshgrid
-        g1_nlsq = np.array(_compute_g1_total_meshgrid(
-            params,
-            jnp.array(t1_mesh),
-            jnp.array(t2_mesh),
-            jnp.array(phi_unique),
-            wavevector_q_squared_half_dt,
-            sinc_prefactor,
-            dt,
-        ))  # Shape: (n_phi, n_times, n_times)
+        g1_nlsq = np.array(
+            _compute_g1_total_meshgrid(
+                params,
+                jnp.array(t1_mesh),
+                jnp.array(t2_mesh),
+                jnp.array(phi_unique),
+                wavevector_q_squared_half_dt,
+                sinc_prefactor,
+                dt,
+            )
+        )  # Shape: (n_phi, n_times, n_times)
 
         # CMC: Compute g1_total using element-wise
-        g1_cmc_2d = np.array(compute_g1_total_cmc(
-            params,
-            jnp.array(t1_pooled),
-            jnp.array(t2_pooled),
-            jnp.array(phi_unique),
-            q,
-            L,
-            dt,
-            time_grid=jnp.array(time_grid),
-            _debug=False,
-        ))  # Shape: (n_phi, n_points)
+        g1_cmc_2d = np.array(
+            compute_g1_total_cmc(
+                params,
+                jnp.array(t1_pooled),
+                jnp.array(t2_pooled),
+                jnp.array(phi_unique),
+                q,
+                L,
+                dt,
+                time_grid=jnp.array(time_grid),
+                _debug=False,
+            )
+        )  # Shape: (n_phi, n_points)
 
         print(f"\n=== g1_total comparison (with shear) ===")
         print(f"  NLSQ shape: {g1_nlsq.shape}")
@@ -216,16 +224,24 @@ class TestCMCNLSQDiffusionComparison:
             mean_diff = np.abs(g1_nlsq_phi - g1_cmc_phi).mean()
 
             print(f"\n  phi={phi_val}°:")
-            print(f"    NLSQ g1 range: [{g1_nlsq_phi.min():.6f}, {g1_nlsq_phi.max():.6f}]")
-            print(f"    CMC g1 range:  [{g1_cmc_phi.min():.6f}, {g1_cmc_phi.max():.6f}]")
+            print(
+                f"    NLSQ g1 range: [{g1_nlsq_phi.min():.6f}, {g1_nlsq_phi.max():.6f}]"
+            )
+            print(
+                f"    CMC g1 range:  [{g1_cmc_phi.min():.6f}, {g1_cmc_phi.max():.6f}]"
+            )
             print(f"    Max diff: {max_diff:.2e}, Mean diff: {mean_diff:.2e}")
 
             # Sample points
             print(f"    Sample (i,j): NLSQ vs CMC")
             for i, j in [(0, 10), (25, 25), (10, 40)]:
-                print(f"      ({i},{j}): {g1_nlsq_phi[i,j]:.6f} vs {g1_cmc_phi[i,j]:.6f}")
+                print(
+                    f"      ({i},{j}): {g1_nlsq_phi[i, j]:.6f} vs {g1_cmc_phi[i, j]:.6f}"
+                )
 
-            assert max_diff < 1e-4, f"g1_total mismatch at phi={phi_val}: max_diff={max_diff:.2e}"
+            assert (
+                max_diff < 1e-4
+            ), f"g1_total mismatch at phi={phi_val}: max_diff={max_diff:.2e}"
 
 
 class TestCMCSearchsortedIndexing:
@@ -301,29 +317,33 @@ class TestCMCPhysicsValues:
 
         time_grid = np.linspace(0, dt * (n_times - 1), n_times)
         params = jnp.array([D0, alpha, D_offset])
-        wavevector_q_squared_half_dt = 0.5 * (q ** 2) * dt
+        wavevector_q_squared_half_dt = 0.5 * (q**2) * dt
 
         # CMC element-wise at diagonal (t1 = t2 = varying)
         t1_diag = time_grid
         t2_diag = time_grid
-        g1_diagonal = np.array(_compute_g1_diffusion_elementwise(
-            params,
-            jnp.array(t1_diag),
-            jnp.array(t2_diag),
-            jnp.array(time_grid),
-            wavevector_q_squared_half_dt,
-        ))
+        g1_diagonal = np.array(
+            _compute_g1_diffusion_elementwise(
+                params,
+                jnp.array(t1_diag),
+                jnp.array(t2_diag),
+                jnp.array(time_grid),
+                wavevector_q_squared_half_dt,
+            )
+        )
 
         # CMC element-wise at off-diagonal (t1 = 0, t2 = varying)
         t1_off = np.zeros_like(time_grid)
         t2_off = time_grid
-        g1_off_diagonal = np.array(_compute_g1_diffusion_elementwise(
-            params,
-            jnp.array(t1_off),
-            jnp.array(t2_off),
-            jnp.array(time_grid),
-            wavevector_q_squared_half_dt,
-        ))
+        g1_off_diagonal = np.array(
+            _compute_g1_diffusion_elementwise(
+                params,
+                jnp.array(t1_off),
+                jnp.array(t2_off),
+                jnp.array(time_grid),
+                wavevector_q_squared_half_dt,
+            )
+        )
 
         print(f"\n=== g1 decay test ===")
         print(f"  wavevector_q_squared_half_dt = {wavevector_q_squared_half_dt:.6g}")
@@ -339,12 +359,14 @@ class TestCMCPhysicsValues:
         print(f"    g1 at delta_t=10: {g1_off_diagonal[-1]:.6f}")
 
         # Diagonal should be ~1 (no time separation)
-        assert g1_diagonal[0] > 0.99, f"g1 at t1=t2=0 should be ~1, got {g1_diagonal[0]}"
+        assert (
+            g1_diagonal[0] > 0.99
+        ), f"g1 at t1=t2=0 should be ~1, got {g1_diagonal[0]}"
 
         # Off-diagonal should decay as time separation increases
-        assert g1_off_diagonal[-1] < g1_off_diagonal[0], (
-            f"g1 should decay: g1(0)={g1_off_diagonal[0]:.4f} vs g1(max)={g1_off_diagonal[-1]:.4f}"
-        )
+        assert (
+            g1_off_diagonal[-1] < g1_off_diagonal[0]
+        ), f"g1 should decay: g1(0)={g1_off_diagonal[0]:.4f} vs g1(max)={g1_off_diagonal[-1]:.4f}"
 
     def test_prefactor_magnitude(self):
         """Debug test to check physics prefactor magnitudes."""
@@ -358,7 +380,7 @@ class TestCMCPhysicsValues:
         alpha = -0.5
         D_offset = 1e9  # nm²/s
 
-        wavevector_q_squared_half_dt = 0.5 * (q ** 2) * dt
+        wavevector_q_squared_half_dt = 0.5 * (q**2) * dt
         sinc_prefactor = 0.5 / np.pi * q * L * dt
 
         print(f"\n=== Physics prefactor check ===")
@@ -368,14 +390,18 @@ class TestCMCPhysicsValues:
         print(f"  D0 = {D0:.2e} nm²/s")
         print(f"  alpha = {alpha}")
         print(f"  D_offset = {D_offset:.2e} nm²/s")
-        print(f"\n  wavevector_q_squared_half_dt = 0.5 * {q}² * {dt} = {wavevector_q_squared_half_dt:.6g}")
+        print(
+            f"\n  wavevector_q_squared_half_dt = 0.5 * {q}² * {dt} = {wavevector_q_squared_half_dt:.6g}"
+        )
         print(f"  sinc_prefactor = 0.5/π * {q} * {L:.2e} * {dt} = {sinc_prefactor:.6g}")
 
         # Estimate D values at different times
         t_samples = np.array([0.0, 1.0, 5.0, 10.0])
-        D_samples = np.array(calculate_diffusion_coefficient(
-            jnp.array(t_samples + 1e-10), D0, alpha, D_offset
-        ))
+        D_samples = np.array(
+            calculate_diffusion_coefficient(
+                jnp.array(t_samples + 1e-10), D0, alpha, D_offset
+            )
+        )
 
         print(f"\n  D(t) values:")
         for t, D in zip(t_samples, D_samples):
@@ -392,7 +418,9 @@ class TestCMCPhysicsValues:
         estimated_g1 = np.exp(max(exponent, -700))
 
         print(f"\n  Estimated integral for {n_steps} steps: {estimated_integral:.4e}")
-        print(f"  Exponent = -{wavevector_q_squared_half_dt:.6g} * {estimated_integral:.4e} = {exponent:.4g}")
+        print(
+            f"  Exponent = -{wavevector_q_squared_half_dt:.6g} * {estimated_integral:.4e} = {exponent:.4g}"
+        )
         print(f"  Estimated g1 = exp({exponent:.4g}) = {estimated_g1:.6g}")
 
         # This should give us insight into whether the physics produces reasonable decay

@@ -259,9 +259,9 @@ class TestJAXBackendProperties:
 
         # Should be monotonically decreasing (or at least non-increasing)
         for i in range(len(result) - 1):
-            assert result[i] >= result[i + 1] - 1e-10, (
-                f"g1_diffusion should decrease with time: {result[i]} >= {result[i + 1]}"
-            )
+            assert (
+                result[i] >= result[i + 1] - 1e-10
+            ), f"g1_diffusion should decrease with time: {result[i]} >= {result[i + 1]}"
 
 
 @pytest.mark.property
@@ -333,9 +333,9 @@ class TestResidualProperties:
         chi2_offset = chi_squared_jax(params, c2_offset, sigma, t1, t2, phi, q)
 
         # Chi-squared should increase with worse fit
-        assert chi2_offset > chi2_perfect, (
-            "Imperfect fit should have higher chi-squared"
-        )
+        assert (
+            chi2_offset > chi2_perfect
+        ), "Imperfect fit should have higher chi-squared"
 
         # Chi-squared should always be non-negative
         assert chi2_offset >= 0.0, "Chi-squared must be non-negative"
@@ -400,9 +400,9 @@ class TestNumericalStabilityProperties:
         result_small = compute_g1_diffusion_jax(t1, t2, 0.01, 0.1)
 
         # Should still be finite and within bounds
-        assert jnp.all(jnp.isfinite(result_small)), (
-            "Small values should give finite results"
-        )
+        assert jnp.all(
+            jnp.isfinite(result_small)
+        ), "Small values should give finite results"
         assert jnp.all(result_small >= 0.0), "Small values should respect bounds"
         assert jnp.all(result_small <= 1.0), "Small values should respect bounds"
 
@@ -414,9 +414,9 @@ class TestNumericalStabilityProperties:
         result_large = compute_g1_diffusion_jax(t1_large, t2_large, 0.01, 0.1)
 
         # Should decay to near zero but remain finite
-        assert jnp.all(jnp.isfinite(result_large)), (
-            "Large values should give finite results"
-        )
+        assert jnp.all(
+            jnp.isfinite(result_large)
+        ), "Large values should give finite results"
         assert jnp.all(result_large >= 0.0), "Large values should respect bounds"
 
     @given(
@@ -439,12 +439,12 @@ class TestNumericalStabilityProperties:
         result = compute_c2_model_jax(params, t1, t2, phi, 0.01)
 
         # Should maintain numerical stability regardless of size
-        assert jnp.all(jnp.isfinite(result)), (
-            f"Size {dimension} should give finite results"
-        )
-        assert jnp.all(result >= 1.0 - 1e-10), (
-            f"Size {dimension} should respect physical bounds"
-        )
+        assert jnp.all(
+            jnp.isfinite(result)
+        ), f"Size {dimension} should give finite results"
+        assert jnp.all(
+            result >= 1.0 - 1e-10
+        ), f"Size {dimension} should respect physical bounds"
 
         # Shape should be correct
         expected_shape = (len(phi), dimension, dimension)

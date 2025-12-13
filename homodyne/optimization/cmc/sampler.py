@@ -21,7 +21,147 @@ from homodyne.optimization.cmc.priors import (
     build_init_values_dict,
     get_param_names_in_order,
 )
+from homodyne.optimization.cmc.scaling import (
+    compute_scaling_factors,
+    transform_initial_values_to_z,
+)
 from homodyne.utils.logging import get_logger, with_context
+
+
+def _compute_mcmc_safe_d0(
+    initial_values: dict[str, float] | None,
+    q: float,
+    dt: float,
+    time_grid: np.ndarray | None,
+    logger_inst,
+    *,
+    target_g1: float = 0.5,
+    g1_threshold: float = 0.1,
+) -> dict[str, float] | None:
+    """Check if initial D0 causes g1→0 and compute MCMC-safe adjustment.
+
+    When D0 is very large (or alpha very negative), the diffusion integral
+    can become enormous, causing g1 = exp(-integral) → 0. This creates
+    a flat likelihood surface with vanishing gradients, causing NUTS to
+    reject all proposals (0% acceptance rate).
+
+    This function detects this condition and computes a scaled D0 that
+    produces g1 ≈ target_g1 at a typical time lag, ensuring gradients
+    are alive for MCMC exploration.
+
+    Parameters
+    ----------
+    initial_values : dict[str, float] | None
+        Initial parameter values containing D0, alpha, D_offset.
+    q : float
+        Wavevector magnitude.
+    dt : float
+        Time step.
+    time_grid : np.ndarray | None
+        Time grid for integration.
+    logger_inst
+        Logger instance for warnings.
+    target_g1 : float
+        Target g1 value for adjusted D0 (default 0.5).
+    g1_threshold : float
+        Threshold below which D0 is adjusted (default 0.1).
+
+    Returns
+    -------
+    dict[str, float] | None
+        Adjusted initial values if D0 was scaled, None otherwise.
+    """
+    if initial_values is None:
+        return None
+
+    # Get diffusion parameters
+    d0 = initial_values.get("D0")
+    alpha = initial_values.get("alpha")
+    d_offset = initial_values.get("D_offset")
+
+    if d0 is None or alpha is None or d_offset is None:
+        return None
+
+    if time_grid is None or len(time_grid) < 2:
+        return None
+
+    # Safety checks
+    if not np.isfinite(d0) or not np.isfinite(alpha) or not np.isfinite(d_offset):
+        return None
+
+    try:
+        # Compute D(t) on the time grid
+        # D(t) = D0 * t^alpha + D_offset
+        epsilon = 1e-10
+        time_safe = np.asarray(time_grid) + epsilon
+        D_grid = d0 * (time_safe**alpha) + d_offset
+        D_grid = np.maximum(D_grid, 1e-10)
+
+        # Compute trapezoidal cumsum (without dt scaling)
+        if len(D_grid) > 1:
+            trap_avg = 0.5 * (D_grid[:-1] + D_grid[1:])
+            cumsum = np.concatenate([[0.0], np.cumsum(trap_avg)])
+        else:
+            cumsum = np.cumsum(D_grid)
+
+        # Estimate integral at typical time lag (1/4 to 3/4 of range)
+        n = len(cumsum)
+        idx_low = n // 4
+        idx_high = 3 * n // 4
+        integral_estimate = abs(cumsum[idx_high] - cumsum[idx_low])
+
+        # Compute g1 = exp(-0.5 * q^2 * dt * integral)
+        prefactor = 0.5 * q**2 * dt
+        log_g1 = -prefactor * integral_estimate
+        log_g1_clipped = max(log_g1, -700.0)  # Prevent underflow
+        g1_estimate = np.exp(log_g1_clipped)
+
+        logger_inst.debug(
+            f"[MCMC-SAFE] g1 estimate: D0={d0:.4g}, alpha={alpha:.4g}, "
+            f"integral={integral_estimate:.4g}, log_g1={log_g1:.4g}, g1={g1_estimate:.4g}"
+        )
+
+        # If g1 is too small, compute scaled D0
+        if g1_estimate < g1_threshold:
+            # For g1 = target_g1:
+            # log(target_g1) = -prefactor * target_integral
+            # target_integral = -log(target_g1) / prefactor
+            target_log_g1 = np.log(target_g1)
+            target_integral = -target_log_g1 / prefactor
+
+            # Scale factor: how much smaller should the integral be?
+            if integral_estimate > 0:
+                scale_factor = target_integral / integral_estimate
+            else:
+                scale_factor = 0.01  # Fallback
+
+            # Apply scaling to D0 (approximately linear for moderate adjustments)
+            # Also adjust D_offset proportionally for consistency
+            new_d0 = d0 * scale_factor
+            new_d_offset = d_offset * scale_factor
+
+            # Ensure new values are within reasonable range
+            new_d0 = max(new_d0, 1.0)  # Minimum D0
+            new_d_offset = max(new_d_offset, -1e6)  # Allow negative but bound
+
+            logger_inst.warning(
+                f"⚠️ MCMC-SAFE ADJUSTMENT: Initial D0={d0:.4g} causes g1≈{g1_estimate:.2e} (vanishing gradients). "
+                f"Scaling D0 to {new_d0:.4g} (×{scale_factor:.4f}) for MCMC exploration stability. "
+                f"The sampler can still converge to optimal values if supported by likelihood."
+            )
+
+            # Return adjusted values
+            adjusted = dict(initial_values)
+            adjusted["D0"] = new_d0
+            adjusted["D_offset"] = new_d_offset
+            return adjusted
+
+        return None  # No adjustment needed
+
+    except Exception as e:
+        logger_inst.debug(f"[MCMC-SAFE] Check failed: {e}")
+        return None
+
 
 if TYPE_CHECKING:
     from homodyne.config.parameter_space import ParameterSpace
@@ -89,23 +229,37 @@ def create_init_strategy(
     initial_values: dict[str, float] | None,
     param_names: list[str],
     use_init_to_value: bool = True,
+    z_space_values: dict[str, float] | None = None,
 ) -> Callable:
     """Create initialization strategy for NUTS.
 
     Parameters
     ----------
     initial_values : dict[str, float] | None
-        Initial values from config.
+        Initial values from config (original space).
     param_names : list[str]
         Expected parameter names in order.
     use_init_to_value : bool
         If True, use init_to_value when values provided.
+    z_space_values : dict[str, float] | None
+        Initial values in z-space (for scaled model). If provided,
+        these are used directly as {name}_z values.
 
     Returns
     -------
     Callable
         NumPyro initialization function.
     """
+    # For scaled model, use z-space values
+    if z_space_values is not None and use_init_to_value:
+        if z_space_values:
+            logger.debug(
+                f"Using init_to_value (z-space) for {len(z_space_values)} params: "
+                f"{list(z_space_values.keys())[:5]}..."
+            )
+            return init_to_value(values=z_space_values)
+
+    # For unscaled model, use original values
     if initial_values is not None and use_init_to_value:
         # Filter to only parameters we're sampling (exclude deterministics)
         init_dict = {}
@@ -187,10 +341,37 @@ def run_nuts_sampling(
     if phi_indices is not None and hasattr(phi_indices, "__array__"):
         phi_indices = np.asarray(phi_indices)
 
+    # =========================================================================
+    # MCMC-SAFE D0 CHECK: Detect and fix vanishing gradient regime
+    # =========================================================================
+    # When D0 is very large (or alpha very negative), g1 → 0 everywhere,
+    # causing vanishing gradients and 0% NUTS acceptance rate.
+    # This check detects that condition and scales D0 to ensure gradients are alive.
+    q = model_kwargs.get("q", 0.01)
+    dt = model_kwargs.get("dt", 0.1)
+    time_grid = model_kwargs.get("time_grid")
+    if time_grid is not None and hasattr(time_grid, "__array__"):
+        time_grid_np = np.asarray(time_grid)
+    else:
+        time_grid_np = time_grid
+
+    adjusted_init = _compute_mcmc_safe_d0(
+        initial_values=initial_values,
+        q=q,
+        dt=dt,
+        time_grid=time_grid_np,
+        logger_inst=run_logger,
+    )
+
+    # Use adjusted values if D0 was scaled
+    effective_init_values = (
+        adjusted_init if adjusted_init is not None else initial_values
+    )
+
     full_init = build_init_values_dict(
         n_phi=n_phi,
         analysis_mode=analysis_mode,
-        initial_values=initial_values,
+        initial_values=effective_init_values,
         parameter_space=parameter_space,
         c2_data=c2_data,
         t1=t1_data,
@@ -198,8 +379,26 @@ def run_nuts_sampling(
         phi_indices=phi_indices,
     )
 
-    # Create init strategy
-    init_strategy = create_init_strategy(full_init, param_names_with_sigma)
+    # =========================================================================
+    # GRADIENT BALANCING: Transform initial values to z-space for scaled model
+    # =========================================================================
+    # The scaled model (xpcs_model_scaled) samples in normalized z-space where
+    # z ~ Normal(0, 1). We need to transform our initial values to this space
+    # for proper initialization with init_to_value.
+    scalings = compute_scaling_factors(parameter_space, n_phi, analysis_mode)
+    z_space_init = transform_initial_values_to_z(full_init, scalings)
+
+    # Log scaling transformation info
+    run_logger.info(
+        f"Gradient balancing: {len(scalings)} params transformed to unit scale. "
+        f"Sample scale range: {min(s.scale for s in scalings.values()):.2e} to "
+        f"{max(s.scale for s in scalings.values()):.2e}"
+    )
+
+    # Create init strategy with z-space values for scaled model
+    init_strategy = create_init_strategy(
+        full_init, param_names_with_sigma, z_space_values=z_space_init
+    )
 
     # Create NUTS kernel
     kernel = NUTS(

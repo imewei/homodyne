@@ -3407,7 +3407,9 @@ class NLSQWrapper:
                         contrast=c_val,
                         offset=o_val,
                         dt=dt,
-                    )[0, 0],  # Extract scalar from (1, 1) output
+                    )[
+                        0, 0
+                    ],  # Extract scalar from (1, 1) output
                     in_axes=(0, 0, 0, 0, 0),  # Vmap over all arrays
                 )
 

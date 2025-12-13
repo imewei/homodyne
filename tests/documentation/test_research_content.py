@@ -72,9 +72,9 @@ class TestLatexEquations:
         content = theoretical.read_text()
 
         # Check for math directive
-        assert ".. math::" in content, (
-            "theoretical_framework.rst missing math directive"
-        )
+        assert (
+            ".. math::" in content
+        ), "theoretical_framework.rst missing math directive"
 
     def test_core_equation_present(self):
         """Test that the core equation c2 = 1 + contrast * [c1]^2 is documented."""
@@ -90,9 +90,9 @@ class TestLatexEquations:
         ]
 
         for pattern in equation_patterns:
-            assert re.search(pattern, content, re.IGNORECASE), (
-                f"Core equation missing element matching pattern: {pattern}"
-            )
+            assert re.search(
+                pattern, content, re.IGNORECASE
+            ), f"Core equation missing element matching pattern: {pattern}"
 
     def test_transport_coefficient_equations(self):
         """Test that transport coefficient equations are documented."""
@@ -108,9 +108,9 @@ class TestLatexEquations:
         ]
 
         for pattern in transport_patterns:
-            assert re.search(pattern, content, re.IGNORECASE), (
-                f"Transport coefficient equation missing: {pattern}"
-            )
+            assert re.search(
+                pattern, content, re.IGNORECASE
+            ), f"Transport coefficient equation missing: {pattern}"
 
     def test_shear_rate_equations(self):
         """Test that shear rate equations are documented."""
@@ -125,9 +125,9 @@ class TestLatexEquations:
         ]
 
         for pattern in shear_patterns:
-            assert re.search(pattern, content, re.IGNORECASE), (
-                f"Shear rate equation missing: {pattern}"
-            )
+            assert re.search(
+                pattern, content, re.IGNORECASE
+            ), f"Shear rate equation missing: {pattern}"
 
 
 class TestCitationContent:
@@ -230,9 +230,9 @@ class TestAnalysisModes:
             "phi0",
         ]
         for param in laminar_params:
-            assert param.lower() in content.lower(), (
-                f"Laminar flow mode missing parameter: {param}"
-            )
+            assert (
+                param.lower() in content.lower()
+            ), f"Laminar flow mode missing parameter: {param}"
 
         # Check for "7" with "param" context (flexible matching for tables and headings)
         # Matches: "7 parameters", "Parameters (7)", "- 7" in table
@@ -251,9 +251,9 @@ class TestAnalysisModes:
         # These deprecated modes should NOT be present
         deprecated_modes = ["static_isotropic", "static_anisotropic"]
         for mode in deprecated_modes:
-            assert mode not in content.lower(), (
-                f"Deprecated mode '{mode}' should not be documented"
-            )
+            assert (
+                mode not in content.lower()
+            ), f"Deprecated mode '{mode}' should not be documented"
 
     def test_per_angle_scaling_documented(self):
         """Test that per-angle scaling is documented."""
@@ -262,9 +262,9 @@ class TestAnalysisModes:
         content = modes.read_text()
 
         # Check for per-angle scaling mention
-        assert re.search(r"per.?angle|per_angle", content, re.IGNORECASE), (
-            "Per-angle scaling should be documented"
-        )
+        assert re.search(
+            r"per.?angle|per_angle", content, re.IGNORECASE
+        ), "Per-angle scaling should be documented"
 
 
 class TestJAXFirstArchitecture:
@@ -283,9 +283,9 @@ class TestJAXFirstArchitecture:
 
         # Check for JAX mentions
         assert "JAX" in content, "computational_methods.rst should mention JAX"
-        assert "JIT" in content, (
-            "computational_methods.rst should mention JIT compilation"
-        )
+        assert (
+            "JIT" in content
+        ), "computational_methods.rst should mention JIT compilation"
 
     def test_no_numba_references(self):
         """Test that documentation does not reference Numba."""
@@ -294,9 +294,9 @@ class TestJAXFirstArchitecture:
         content = methods.read_text()
 
         # Check that Numba is NOT mentioned (JAX-first architecture)
-        assert "numba" not in content.lower(), (
-            "computational_methods.rst should not reference Numba (JAX-first architecture)"
-        )
+        assert (
+            "numba" not in content.lower()
+        ), "computational_methods.rst should not reference Numba (JAX-first architecture)"
 
     def test_theoretical_framework_no_numba(self):
         """Test that theoretical_framework.rst does not reference Numba."""
@@ -305,6 +305,6 @@ class TestJAXFirstArchitecture:
         content = theoretical.read_text()
 
         # Check that Numba is NOT mentioned
-        assert "numba" not in content.lower(), (
-            "theoretical_framework.rst should not reference Numba"
-        )
+        assert (
+            "numba" not in content.lower()
+        ), "theoretical_framework.rst should not reference Numba"

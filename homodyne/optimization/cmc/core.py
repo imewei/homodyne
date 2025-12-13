@@ -24,7 +24,7 @@ from homodyne.optimization.cmc.data_prep import (
 from homodyne.optimization.cmc.diagnostics import (
     summarize_diagnostics,
 )
-from homodyne.optimization.cmc.model import xpcs_model
+from homodyne.optimization.cmc.model import xpcs_model_scaled
 from homodyne.optimization.cmc.priors import get_param_names_in_order
 from homodyne.optimization.cmc.results import CMCResult
 from homodyne.optimization.cmc.sampler import run_nuts_sampling
@@ -258,7 +258,9 @@ def fit_mcmc_jax(
         )
 
     # Derive a suggested per-shard timeout from cost
-    cost_per_shard = config.num_chains * (config.num_warmup + config.num_samples) * max_per_shard
+    cost_per_shard = (
+        config.num_chains * (config.num_warmup + config.num_samples) * max_per_shard
+    )
     suggested_timeout = _compute_suggested_timeout(
         cost_per_shard=cost_per_shard,
         max_timeout=config.per_shard_timeout,
@@ -269,11 +271,7 @@ def fit_mcmc_jax(
         f"max_points_per_shard={max_per_shard:,}, clamp=[600,{config.per_shard_timeout}])"
     )
 
-    requested_shards = (
-        int(config.num_shards)
-        if _int_like(config.num_shards)
-        else None
-    )
+    requested_shards = int(config.num_shards) if _int_like(config.num_shards) else None
 
     if use_cmc and prepared.n_phi > 1:
         # Shard by phi angle (stratified)
@@ -373,9 +371,7 @@ def fit_mcmc_jax(
         f"[CMC DEBUG] model_kwargs: q={q:.6g}, L={L:.6g}, dt={dt_used:.6g}, "
         f"n_phi={prepared.n_phi}, noise_scale={prepared.noise_scale:.6g}"
     )
-    run_logger.info(
-        f"[CMC DEBUG] phi_unique: {prepared.phi_unique}"
-    )
+    run_logger.info(f"[CMC DEBUG] phi_unique: {prepared.phi_unique}")
 
     # DEBUG: Compute and log D values at sample times to verify physics
     if initial_values:
@@ -385,7 +381,7 @@ def fit_mcmc_jax(
         # Sample D at a few time points
         t_samples = np.array([0.0, 1.0, 10.0, 50.0])
         t_safe = t_samples + 1e-10
-        D_samples = D0_init * (t_safe ** alpha_init) + D_offset_init
+        D_samples = D0_init * (t_safe**alpha_init) + D_offset_init
         run_logger.info(
             f"[CMC DEBUG] D(t) at sample times with initial params:\n"
             f"  D0={D0_init:.4g}, alpha={alpha_init:.4g}, D_offset={D_offset_init:.4g}\n"
@@ -420,7 +416,7 @@ def fit_mcmc_jax(
             )
 
         mcmc_samples = backend.run(
-            model=xpcs_model,
+            model=xpcs_model_scaled,
             model_kwargs=model_kwargs,
             config=config,
             shards=shards,
@@ -434,7 +430,7 @@ def fit_mcmc_jax(
     else:
         # Single-shard: run directly
         mcmc_samples, stats = run_nuts_sampling(
-            model=xpcs_model,
+            model=xpcs_model_scaled,
             model_kwargs=model_kwargs,
             config=config,
             initial_values=initial_values,

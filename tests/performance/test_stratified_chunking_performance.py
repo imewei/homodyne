@@ -124,9 +124,9 @@ class TestStratificationOverhead:
 
         # Performance assertions
         mean_time = perf["mean_time"]
-        assert mean_time < 0.5, (
-            f"Stratification too slow: {mean_time:.3f}s (target: <0.5s)"
-        )
+        assert (
+            mean_time < 0.5
+        ), f"Stratification too slow: {mean_time:.3f}s (target: <0.5s)"
 
         # Overhead should be <1% of typical optimization (assume 10s optimization)
         typical_optimization_time = 10.0  # seconds
@@ -152,9 +152,9 @@ class TestStratificationOverhead:
         )
 
         mean_time = perf["mean_time"]
-        assert mean_time < 2.0, (
-            f"Stratification too slow: {mean_time:.3f}s (target: <2.0s)"
-        )
+        assert (
+            mean_time < 2.0
+        ), f"Stratification too slow: {mean_time:.3f}s (target: <2.0s)"
 
         # Overhead check
         typical_optimization_time = 30.0  # seconds for 1M points
@@ -181,9 +181,9 @@ class TestStratificationOverhead:
 
         mean_time = perf["mean_time"]
         # Ultra-Think target: 0.15s, but be lenient for CI
-        assert mean_time < 5.0, (
-            f"Stratification too slow: {mean_time:.3f}s (target: <5.0s)"
-        )
+        assert (
+            mean_time < 5.0
+        ), f"Stratification too slow: {mean_time:.3f}s (target: <5.0s)"
 
         print(f"\n3M points: {mean_time:.4f}s (Ultra-Think target: 0.15s)")
 
@@ -294,9 +294,9 @@ class TestChunkSizeVariations:
         variation = (time_range / mean_time) * 100
 
         # Variation should be <50% (chunk size is not a major factor)
-        assert variation < 50.0, (
-            f"Too much variation across chunk sizes: {variation:.1f}%"
-        )
+        assert (
+            variation < 50.0
+        ), f"Too much variation across chunk sizes: {variation:.1f}%"
 
         print(f"\nChunk size results: {results}")
         print(f"Variation: {variation:.1f}%")
@@ -469,9 +469,9 @@ class TestScalabilityAnalysis:
         # Should be close to linear (exponent ≈ 1.0)
         # Allow sub-linear (caching benefits) to O(n log n) behavior
         # Sub-linear scaling (< 1.0) is acceptable and indicates efficiency gains
-        assert 0.7 <= scaling_exponent <= 1.3, (
-            f"Unexpected scaling: exponent={scaling_exponent:.2f} (expected 0.7-1.3)"
-        )
+        assert (
+            0.7 <= scaling_exponent <= 1.3
+        ), f"Unexpected scaling: exponent={scaling_exponent:.2f} (expected 0.7-1.3)"
 
         print(f"\nScaling analysis: time ∝ size^{scaling_exponent:.2f}")
         print(
@@ -513,8 +513,8 @@ class TestScalabilityAnalysis:
         throughput_variation = (max_throughput - min_throughput) / min_throughput * 100
 
         # Allow 100% variation (2x difference) for consistent linear scaling
-        assert throughput_variation < 100.0, (
-            f"Inconsistent throughput: {throughput_variation:.1f}%"
-        )
+        assert (
+            throughput_variation < 100.0
+        ), f"Inconsistent throughput: {throughput_variation:.1f}%"
 
         print(f"\nThroughput variation: {throughput_variation:.1f}%")

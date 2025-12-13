@@ -1,4 +1,6 @@
-from homodyne.optimization.cmc.backends.multiprocessing import _compute_threads_per_worker
+from homodyne.optimization.cmc.backends.multiprocessing import (
+    _compute_threads_per_worker,
+)
 
 
 def test_compute_threads_per_worker_caps_by_physical_guess():
@@ -9,4 +11,3 @@ def test_compute_threads_per_worker_caps_by_physical_guess():
 def test_compute_threads_per_worker_never_zero():
     # More workers than safe_pool should still return 1
     assert _compute_threads_per_worker(total_threads=14, workers=18) == 1
-

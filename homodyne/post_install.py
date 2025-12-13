@@ -649,9 +649,7 @@ def show_installation_summary(interactive_results=None):
     print("     hconfig  = homodyne-config")
     print("\n   Method shortcuts (hm- prefix):")
     print("     hm-nlsq  = homodyne --method nlsq  # NLSQ trust-region (primary)")
-    print(
-        "     hm-cmc  = homodyne --method cmc  # Consensus Monte Carlo"
-    )
+    print("     hm-cmc  = homodyne --method cmc  # Consensus Monte Carlo")
     print("\n   Config mode shortcuts (hc- prefix):")
     print("     hc-stat  = homodyne-config --mode static")
     print("     hc-flow  = homodyne-config --mode laminar_flow")

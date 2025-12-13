@@ -144,9 +144,11 @@ class PjitBackend(CMCBackend):
                     "q": model_kwargs.get("q"),
                     "L": model_kwargs.get("L"),
                     "dt": model_kwargs.get("dt"),
-                    "time_grid": jnp.array(model_kwargs.get("time_grid"))
-                    if model_kwargs.get("time_grid") is not None
-                    else None,
+                    "time_grid": (
+                        jnp.array(model_kwargs.get("time_grid"))
+                        if model_kwargs.get("time_grid") is not None
+                        else None
+                    ),
                     "analysis_mode": analysis_mode or "laminar_flow",
                     "parameter_space": parameter_space,
                     "n_phi": prepared_data.n_phi,
@@ -194,9 +196,11 @@ class PjitBackend(CMCBackend):
                         "q": model_kwargs.get("q"),
                         "L": model_kwargs.get("L"),
                         "dt": model_kwargs.get("dt"),
-                        "time_grid": jnp.array(model_kwargs.get("time_grid"))
-                        if model_kwargs.get("time_grid") is not None
-                        else None,
+                        "time_grid": (
+                            jnp.array(model_kwargs.get("time_grid"))
+                            if model_kwargs.get("time_grid") is not None
+                            else None
+                        ),
                         "analysis_mode": analysis_mode or "laminar_flow",
                         "parameter_space": parameter_space,
                         "n_phi": shard.n_phi,

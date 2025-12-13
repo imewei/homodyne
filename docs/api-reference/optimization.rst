@@ -220,6 +220,61 @@ NUTS sampler interface with warmup and sampling phases.
    :undoc-members:
    :show-inheritance:
 
+Parameter Scaling (Gradient Balancing)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. automodule:: homodyne.optimization.cmc.scaling
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+**Understanding Z-Space Parameters**
+
+CMC uses non-centered parameterization to balance gradient magnitudes across
+parameters with vastly different scales (e.g., D0 ~ 10^4 vs gamma_dot_t0 ~ 10^-3).
+
+When sampling, parameters are transformed to normalized z-space:
+
+- Each parameter is sampled as ``z ~ Normal(0, 1)``
+- Transformed to original space: ``param = center + scale * z``
+- Clipped to physical bounds
+
+**MCMC Sample Names**:
+
+The MCMC output includes both z-space and original-space parameter names:
+
+.. list-table::
+   :header-rows: 1
+   :widths: 30 30 40
+
+   * - Z-Space Name
+     - Original Name
+     - Description
+   * - ``D0_z``
+     - ``D0``
+     - Diffusion coefficient (normalized / original)
+   * - ``alpha_z``
+     - ``alpha``
+     - Diffusion exponent
+   * - ``contrast_0_z``
+     - ``contrast_0``
+     - Per-angle contrast (phi index 0)
+   * - ``offset_0_z``
+     - ``offset_0``
+     - Per-angle offset (phi index 0)
+
+**Filtering Samples**:
+
+When working with MCMC samples, you may want to filter out z-space parameters::
+
+    # Get only original-space parameters
+    original_params = {k: v for k, v in samples.items() if not k.endswith('_z')}
+
+    # Get only physical parameters (exclude sigma, n_numerical_issues)
+    physical_params = ['D0', 'alpha', 'D_offset', 'gamma_dot_t0', 'beta',
+                       'gamma_dot_t_offset', 'phi0']
+    physical_samples = {k: v for k, v in samples.items() if k in physical_params}
+
 Results
 ~~~~~~~
 

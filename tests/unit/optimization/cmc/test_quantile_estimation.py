@@ -36,12 +36,14 @@ class TestEstimateContrastOffsetFromData:
 
         # C2 = contrast * g1^2 + offset, where g1^2 = exp(-decay_rate * delta_t)
         g1_squared = np.exp(-decay_rate * delta_t)
-        c2_data = true_contrast * g1_squared + true_offset + np.random.normal(0, 0.02, n_points)
+        c2_data = (
+            true_contrast * g1_squared
+            + true_offset
+            + np.random.normal(0, 0.02, n_points)
+        )
 
         contrast_est, offset_est = estimate_contrast_offset_from_data(
-            c2_data, t1, t2,
-            contrast_bounds=(0.0, 1.0),
-            offset_bounds=(0.5, 1.5)
+            c2_data, t1, t2, contrast_bounds=(0.0, 1.0), offset_bounds=(0.5, 1.5)
         )
 
         # Should be within 15% of true values
@@ -56,7 +58,7 @@ class TestEstimateContrastOffsetFromData:
 
         # Data that would estimate outside bounds
         c2_high = np.ones(n_points) * 3.0  # Would give contrast > 1, offset > 1.5
-        c2_low = np.ones(n_points) * 0.3   # Would give offset < 0.5
+        c2_low = np.ones(n_points) * 0.3  # Would give offset < 0.5
 
         contrast_bounds = (0.0, 1.0)
         offset_bounds = (0.5, 1.5)
@@ -106,21 +108,25 @@ class TestEstimateContrastOffsetFromData:
         true_contrast = 0.4
 
         # Create data where offset dominates at large lags
-        t1 = np.concatenate([
-            np.random.uniform(0, 1, n_points // 2),   # Small lags
-            np.random.uniform(50, 100, n_points // 2)  # Large lags
-        ])
+        t1 = np.concatenate(
+            [
+                np.random.uniform(0, 1, n_points // 2),  # Small lags
+                np.random.uniform(50, 100, n_points // 2),  # Large lags
+            ]
+        )
         t2 = np.zeros(n_points)
         delta_t = np.abs(t1 - t2)
 
         # g1^2 -> 0 at large lags, so C2 -> offset
         g1_squared = np.exp(-0.2 * delta_t)
-        c2_data = true_contrast * g1_squared + true_offset + np.random.normal(0, 0.01, n_points)
+        c2_data = (
+            true_contrast * g1_squared
+            + true_offset
+            + np.random.normal(0, 0.01, n_points)
+        )
 
         _, offset_est = estimate_contrast_offset_from_data(
-            c2_data, t1, t2,
-            contrast_bounds=(0.0, 1.0),
-            offset_bounds=(0.5, 1.5)
+            c2_data, t1, t2, contrast_bounds=(0.0, 1.0), offset_bounds=(0.5, 1.5)
         )
 
         # Offset estimate should be close to true value
@@ -157,9 +163,13 @@ class TestEstimatePerAngleScaling:
             )
 
         estimates = estimate_per_angle_scaling(
-            c2_data, t1, t2, phi_indices, n_phi,
+            c2_data,
+            t1,
+            t2,
+            phi_indices,
+            n_phi,
             contrast_bounds=(0.0, 1.0),
-            offset_bounds=(0.5, 1.5)
+            offset_bounds=(0.5, 1.5),
         )
 
         # Verify all angles have estimates
@@ -168,8 +178,14 @@ class TestEstimatePerAngleScaling:
             assert f"offset_{i}" in estimates
 
             # Should be within 20% of true values
-            assert abs(estimates[f"contrast_{i}"] - true_contrasts[i]) < 0.2 * true_contrasts[i] + 0.05
-            assert abs(estimates[f"offset_{i}"] - true_offsets[i]) < 0.2 * true_offsets[i] + 0.05
+            assert (
+                abs(estimates[f"contrast_{i}"] - true_contrasts[i])
+                < 0.2 * true_contrasts[i] + 0.05
+            )
+            assert (
+                abs(estimates[f"offset_{i}"] - true_offsets[i])
+                < 0.2 * true_offsets[i] + 0.05
+            )
 
     def test_insufficient_angle_data(self):
         """Verify fallback when angle has too few data points."""
@@ -183,8 +199,7 @@ class TestEstimatePerAngleScaling:
         offset_bounds = (0.5, 1.5)
 
         estimates = estimate_per_angle_scaling(
-            c2_data, t1, t2, phi_indices, n_phi,
-            contrast_bounds, offset_bounds
+            c2_data, t1, t2, phi_indices, n_phi, contrast_bounds, offset_bounds
         )
 
         # Angle 1 should use midpoint fallback (only 25 points)
@@ -201,6 +216,7 @@ class TestBuildInitValuesDictWithData:
     @pytest.fixture
     def mock_parameter_space(self):
         """Create a minimal parameter space for testing."""
+
         class MockParameterSpace:
             def get_bounds(self, name):
                 bounds_map = {
@@ -211,9 +227,12 @@ class TestBuildInitValuesDictWithData:
                     "D_offset": (0.0, 1e4),
                 }
                 return bounds_map.get(name, (0.0, 1.0))
+
         return MockParameterSpace()
 
-    def test_uses_data_estimation_when_contrast_offset_missing(self, mock_parameter_space):
+    def test_uses_data_estimation_when_contrast_offset_missing(
+        self, mock_parameter_space
+    ):
         """Verify data-driven estimation is used when contrast/offset not in initial_values."""
         np.random.seed(789)
         n_points = 2000
@@ -222,7 +241,11 @@ class TestBuildInitValuesDictWithData:
         t1 = np.random.uniform(0.1, 100, n_points)
         t2 = np.random.uniform(0.1, 100, n_points)
         phi_indices = np.zeros(n_points, dtype=int)
-        c2_data = 0.3 * np.exp(-0.1 * np.abs(t1 - t2)) + 0.85 + np.random.normal(0, 0.02, n_points)
+        c2_data = (
+            0.3 * np.exp(-0.1 * np.abs(t1 - t2))
+            + 0.85
+            + np.random.normal(0, 0.02, n_points)
+        )
 
         # initial_values with only physical params (no contrast/offset)
         initial_values = {"D0": 1e4, "alpha": -0.5, "D_offset": 500.0}
@@ -251,7 +274,11 @@ class TestBuildInitValuesDictWithData:
         t1 = np.random.uniform(0.1, 100, n_points)
         t2 = np.random.uniform(0.1, 100, n_points)
         phi_indices = np.zeros(n_points, dtype=int)
-        c2_data = 0.3 * np.exp(-0.1 * np.abs(t1 - t2)) + 0.85 + np.random.normal(0, 0.02, n_points)
+        c2_data = (
+            0.3 * np.exp(-0.1 * np.abs(t1 - t2))
+            + 0.85
+            + np.random.normal(0, 0.02, n_points)
+        )
 
         # Explicit contrast/offset in initial_values
         explicit_contrast = 0.42

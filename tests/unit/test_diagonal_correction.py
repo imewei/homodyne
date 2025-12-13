@@ -607,9 +607,9 @@ try:
             for i in range(size):
                 for j in range(size):
                     if i != j:
-                        assert corrected[i, j] == matrix_jax[i, j], (
-                            f"Off-diagonal element [{i},{j}] changed"
-                        )
+                        assert (
+                            corrected[i, j] == matrix_jax[i, j]
+                        ), f"Off-diagonal element [{i},{j}] changed"
 
         @given(
             size=st.integers(2, 100),

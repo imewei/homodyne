@@ -128,9 +128,9 @@ class TestMemoryUsageValidation:
         final_memory = get_memory_usage_mb()
         memory_used = final_memory - initial_memory
 
-        assert memory_used < memory_limit_mb, (
-            f"Memory usage {memory_used:.1f} MB exceeds limit {memory_limit_mb:.1f} MB"
-        )
+        assert (
+            memory_used < memory_limit_mb
+        ), f"Memory usage {memory_used:.1f} MB exceeds limit {memory_limit_mb:.1f} MB"
 
     def test_large_strategy_memory_bounded(self):
         """Test LARGE strategy memory usage is bounded."""
@@ -162,9 +162,9 @@ class TestMemoryUsageValidation:
         del jacobian, residuals
         gc.collect()
 
-        assert memory_used < memory_limit_mb, (
-            f"Memory usage {memory_used:.1f} MB exceeds limit {memory_limit_mb:.1f} MB"
-        )
+        assert (
+            memory_used < memory_limit_mb
+        ), f"Memory usage {memory_used:.1f} MB exceeds limit {memory_limit_mb:.1f} MB"
 
     def test_streaming_constant_memory(self):
         """Test STREAMING strategy maintains constant memory.
@@ -294,9 +294,9 @@ class TestCheckpointSaveTiming:
         assert duration < 2.0, f"Checkpoint save took {duration:.3f}s (limit: 2.0s)"
 
         # Should actually be much faster (<< 0.1s for small state)
-        assert duration < 0.5, (
-            f"Checkpoint save took {duration:.3f}s (expected < 0.5s for small state)"
-        )
+        assert (
+            duration < 0.5
+        ), f"Checkpoint save took {duration:.3f}s (expected < 0.5s for small state)"
 
     def test_checkpoint_save_time_large_state(self, tmp_path):
         """Test checkpoint save time for large optimizer state."""
@@ -364,9 +364,9 @@ class TestCheckpointSaveTiming:
             save_times.append(duration)
 
         # All saves should be under 2 seconds
-        assert all(t < 2.0 for t in save_times), (
-            f"Some checkpoints exceeded 2s: {save_times}"
-        )
+        assert all(
+            t < 2.0 for t in save_times
+        ), f"Some checkpoints exceeded 2s: {save_times}"
 
         # Save time should be consistent (no degradation)
         time_variance = np.var(save_times)
@@ -377,9 +377,9 @@ class TestCheckpointSaveTiming:
             # Relaxed from CV < 0.5 to CV < 1.0 to account for disk I/O variability
             # in test environments. CV=1.0 allows standard deviation equal to mean,
             # which is reasonable for I/O-bound operations.
-            assert time_cv < 1.0, (
-                f"Checkpoint save time not consistent: CV={time_cv:.2%}"
-            )
+            assert (
+                time_cv < 1.0
+            ), f"Checkpoint save time not consistent: CV={time_cv:.2%}"
 
 
 # ============================================================================
@@ -489,9 +489,9 @@ class TestStrategyOverhead:
         if time_without > 0:
             overhead_pct = (time_with - time_without) / time_without * 100
             # Overhead should be < 5% (spec requirement)
-            assert overhead_pct < 5.0, (
-                f"Fault tolerance overhead: {overhead_pct:.1f}% (limit: 5.0%)"
-            )
+            assert (
+                overhead_pct < 5.0
+            ), f"Fault tolerance overhead: {overhead_pct:.1f}% (limit: 5.0%)"
 
 
 # ============================================================================
@@ -549,9 +549,9 @@ class TestFastModePerformance:
         if baseline_time > 0:
             overhead_pct = (fast_time - baseline_time) / baseline_time * 100
             # Should be < 1% (spec requirement)
-            assert overhead_pct < 1.0, (
-                f"Fast mode overhead: {overhead_pct:.1f}% (limit: 1.0%)"
-            )
+            assert (
+                overhead_pct < 1.0
+            ), f"Fast mode overhead: {overhead_pct:.1f}% (limit: 1.0%)"
 
     def test_fast_mode_vs_normal_mode(self):
         """Compare fast mode vs normal mode performance."""
@@ -622,9 +622,9 @@ class TestBatchStatisticsPerformance:
         # Overhead should be minimal (< 20 MB for 100 batches)
         # Relaxed from 10 MB to 20 MB to account for Python interpreter overhead,
         # garbage collection timing, and test environment variability
-        assert memory_overhead < 20.0, (
-            f"Batch statistics memory overhead: {memory_overhead:.1f} MB"
-        )
+        assert (
+            memory_overhead < 20.0
+        ), f"Batch statistics memory overhead: {memory_overhead:.1f} MB"
 
     @pytest.mark.skip(
         reason="Timing-sensitive: Millisecond-level timing measurements (< 10ms threshold) "
@@ -661,9 +661,9 @@ class TestBatchStatisticsPerformance:
         _, duration = measure_execution_time(add_batch_results)
 
         # Should be very fast (< 10 ms for 100 batches)
-        assert duration < 0.01, (
-            f"Batch statistics overhead: {duration * 1000:.1f}ms for 100 batches"
-        )
+        assert (
+            duration < 0.01
+        ), f"Batch statistics overhead: {duration * 1000:.1f}ms for 100 batches"
 
 
 # ============================================================================

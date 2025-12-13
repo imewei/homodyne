@@ -1272,11 +1272,7 @@ alias hc-iso >/dev/null 2>&1 && echo "shortcut_alias_works" || echo "shortcut_al
         health_emoji = (
             "🟢"
             if health_score >= 90
-            else "🟡"
-            if health_score >= 70
-            else "🟠"
-            if health_score >= 50
-            else "🔴"
+            else "🟡" if health_score >= 70 else "🟠" if health_score >= 50 else "🔴"
         )
         health_status = (
             "Excellent"
@@ -1284,9 +1280,7 @@ alias hc-iso >/dev/null 2>&1 && echo "shortcut_alias_works" || echo "shortcut_al
             else (
                 "Good"
                 if health_score >= 70
-                else "Fair"
-                if health_score >= 50
-                else "Poor"
+                else "Fair" if health_score >= 50 else "Poor"
             )
         )
         report.append(

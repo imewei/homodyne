@@ -466,7 +466,9 @@ class TestT0Exclusion:
 
         # Contrast with t=0: would produce infinity
         D_t_with_zero = D0 * (base_times**alpha) + D_offset
-        assert not np.isfinite(D_t_with_zero[0]), "D(0) should be infinite with negative alpha"
+        assert not np.isfinite(
+            D_t_with_zero[0]
+        ), "D(0) should be infinite with negative alpha"
 
     def test_exclude_t0_2d_meshgrid(self):
         """Test t=0 exclusion with 2D meshgrid arrays."""

@@ -336,13 +336,17 @@ def shard_data_stratified(
         effective_max_points = max_points_per_shard
 
         if max_points_per_shard is not None and n_points > max_points_per_shard:
-            n_angle_shards = (n_points + max_points_per_shard - 1) // max_points_per_shard
+            n_angle_shards = (
+                n_points + max_points_per_shard - 1
+            ) // max_points_per_shard
 
             # Cap shards per angle - increase points per shard to use ALL data
             if n_angle_shards > max_shards_per_angle:
                 n_angle_shards = max_shards_per_angle
                 # Recalculate points per shard to fit all data into capped shards
-                effective_max_points = (n_points + max_shards_per_angle - 1) // max_shards_per_angle
+                effective_max_points = (
+                    n_points + max_shards_per_angle - 1
+                ) // max_shards_per_angle
                 logger.info(
                     f"Angle {angle_idx} (phi={angle_phi_value:.4f}): {n_points:,} points → "
                     f"{max_shards_per_angle} shards (~{effective_max_points:,} points each, "
@@ -423,7 +427,7 @@ def shard_data_stratified(
                 )
                 logger.debug(
                     f"Shard {shard_idx}: {len(shard_data):,} points, "
-                    f"angle {angle_idx} part {j+1}/{n_angle_shards} (phi={angle_phi_value:.4f})"
+                    f"angle {angle_idx} part {j + 1}/{n_angle_shards} (phi={angle_phi_value:.4f})"
                 )
                 shard_idx += 1
 
@@ -470,7 +474,9 @@ def shard_data_random(
     # Calculate number of shards if not provided
     if num_shards is None:
         if max_points_per_shard is not None:
-            num_shards = (prepared.n_total + max_points_per_shard - 1) // max_points_per_shard
+            num_shards = (
+                prepared.n_total + max_points_per_shard - 1
+            ) // max_points_per_shard
         else:
             num_shards = 1
 
@@ -535,9 +541,7 @@ def shard_data_random(
             )
         )
 
-        logger.debug(
-            f"Shard {i}: {len(shard_data):,} points (random split)"
-        )
+        logger.debug(f"Shard {i}: {len(shard_data):,} points (random split)")
 
     return shards
 

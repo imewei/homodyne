@@ -375,14 +375,14 @@ class TestXPCSModelStructure:
         d0_index = sampled_order.index("D0")
 
         # All contrast before all offset
-        assert max(contrast_indices) < min(offset_indices), (
-            f"Contrast indices {contrast_indices} should all come before offset indices {offset_indices}"
-        )
+        assert max(contrast_indices) < min(
+            offset_indices
+        ), f"Contrast indices {contrast_indices} should all come before offset indices {offset_indices}"
 
         # All offset before physical params
-        assert max(offset_indices) < d0_index, (
-            f"Offset indices {offset_indices} should all come before D0 at {d0_index}"
-        )
+        assert (
+            max(offset_indices) < d0_index
+        ), f"Offset indices {offset_indices} should all come before D0 at {d0_index}"
 
 
 # =============================================================================
@@ -484,7 +484,7 @@ class TestModelPhysics:
         n_contrast = sum(1 for p in sampled_params if p.startswith("contrast_"))
         n_offset = sum(1 for p in sampled_params if p.startswith("offset_"))
 
-        assert n_contrast == n_phi, (
-            f"Expected {n_phi} contrast params, got {n_contrast}"
-        )
+        assert (
+            n_contrast == n_phi
+        ), f"Expected {n_phi} contrast params, got {n_contrast}"
         assert n_offset == n_phi, f"Expected {n_phi} offset params, got {n_offset}"
