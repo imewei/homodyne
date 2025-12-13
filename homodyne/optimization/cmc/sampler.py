@@ -401,10 +401,17 @@ def run_nuts_sampling(
     )
 
     # Create NUTS kernel
+    # GRADIENT BALANCING FIX (Dec 2025): Use dense_mass=True to learn
+    # cross-correlations between parameters with vastly different scales.
+    # Without this, the 10^6:1 gradient imbalance between D0 (~10^4) and
+    # gamma_dot_t0 (~10^-3) causes 0% acceptance rate because no single
+    # step size ε works for all dimensions. Dense mass matrix allows NUTS
+    # to adapt per-dimension and learn covariance structure during warmup.
     kernel = NUTS(
         model,
         init_strategy=init_strategy,
         target_accept_prob=config.target_accept_prob,
+        dense_mass=True,
     )
 
     # Create MCMC runner

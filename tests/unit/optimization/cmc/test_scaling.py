@@ -183,8 +183,13 @@ class TestComputeScalingFactors:
         assert "D0" in scalings
         assert "contrast_0" in scalings
 
-        # Center should be midpoint of bounds
-        assert scalings["D0"].center == pytest.approx((1e3 + 1e5) / 2)
+        # D0 now uses log-space for gradient balancing (Dec 2025 fix)
+        # Center is log-midpoint: (log(1e3) + log(1e5)) / 2 = (6.9 + 11.5) / 2 ≈ 9.2
+        import numpy as np
+
+        expected_log_center = (np.log(1e3) + np.log(1e5)) / 2
+        assert scalings["D0"].use_log_space is True
+        assert scalings["D0"].center == pytest.approx(expected_log_center)
 
 
 class TestTransformInitialValuesToZ:
@@ -295,3 +300,79 @@ class TestGradientBalancing:
         # So the "effective" scale ratio is 1
         normalized_ratio = 1.0
         assert normalized_ratio < original_ratio / 100
+
+    def test_d0_uses_log_space_when_bounds_positive(self):
+        """Test D0 uses log-space for gradient balancing (Dec 2025 fix)."""
+        ps = ParameterSpace.from_defaults("laminar_flow")
+        scalings = compute_scaling_factors(ps, n_phi=1, analysis_mode="laminar_flow")
+
+        # D0 should use log-space since it has positive bounds
+        assert scalings["D0"].use_log_space is True
+
+        # D0 center should be in log domain
+        d0_low, d0_high = ps.get_bounds("D0")
+        expected_log_center = (np.log(d0_low) + np.log(d0_high)) / 2
+        assert scalings["D0"].center == pytest.approx(expected_log_center, rel=0.01)
+
+    def test_log_space_roundtrip(self):
+        """Test log-space to_normalized and to_original are inverses."""
+        # Create a log-space scaling
+        scaling = ParameterScaling(
+            name="D0",
+            center=np.log(10000),  # log-midpoint of [100, 1e6]
+            scale=2.0,
+            low=100.0,
+            high=1e6,
+            use_log_space=True,
+        )
+
+        # Test roundtrip
+        original = 5000.0
+        z = scaling.to_normalized(original)
+        recovered = float(scaling.to_original(np.array(z)))
+        assert recovered == pytest.approx(original, rel=0.01)
+
+    def test_log_space_clips_to_bounds(self):
+        """Test log-space to_original clips extreme values."""
+        scaling = ParameterScaling(
+            name="D0",
+            center=np.log(10000),
+            scale=1.0,
+            low=100.0,
+            high=100000.0,
+            use_log_space=True,
+        )
+
+        # Very large z should clip to high bound
+        value_high = float(scaling.to_original(np.array(100.0)))
+        assert value_high == pytest.approx(100000.0)
+
+        # Very negative z should clip to low bound
+        value_low = float(scaling.to_original(np.array(-100.0)))
+        assert value_low == pytest.approx(100.0)
+
+    def test_d_offset_uses_linear_when_bounds_include_negative(self):
+        """Test D_offset uses linear scaling when lower bound can be negative."""
+
+        # Create parameter space where D_offset has negative lower bound
+        class MockPS:
+            def get_bounds(self, name):
+                if name == "D_offset":
+                    return (-1000.0, 5000.0)  # Includes negative
+                elif name == "D0":
+                    return (100.0, 100000.0)
+                elif name == "alpha":
+                    return (-3.0, 1.0)
+                return (0.0, 1.0)
+
+            def get_prior(self, name):
+                raise KeyError(name)
+
+        mock_ps = MockPS()
+        scalings = compute_scaling_factors(mock_ps, n_phi=1, analysis_mode="static")
+
+        # D0 should use log-space (positive bounds)
+        assert scalings["D0"].use_log_space is True
+
+        # D_offset should NOT use log-space (negative lower bound)
+        assert scalings["D_offset"].use_log_space is False

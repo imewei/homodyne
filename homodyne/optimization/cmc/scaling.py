@@ -64,6 +64,9 @@ class ParameterScaling:
         Lower bound for clipping.
     high : float
         Upper bound for clipping.
+    use_log_space : bool
+        If True, sample in log-space for better gradient balancing.
+        Used for large-scale parameters like D0, D_offset.
     """
 
     name: str
@@ -71,13 +74,29 @@ class ParameterScaling:
     scale: float
     low: float
     high: float
+    use_log_space: bool = False
 
     def to_normalized(self, value: float) -> float:
         """Transform from original to normalized space."""
+        import numpy as np
+
+        if self.use_log_space:
+            # Transform to log-space first, then normalize
+            # Ensure value is positive for log
+            safe_value = max(value, 1e-10)
+            log_value = float(np.log(safe_value))
+            return (log_value - self.center) / self.scale
         return (value - self.center) / self.scale
 
     def to_original(self, z_value: jnp.ndarray) -> jnp.ndarray:
         """Transform from normalized to original space with clipping."""
+        if self.use_log_space:
+            # Transform from z-space to log-space, then exp to original
+            log_value = self.center + self.scale * z_value
+            # Clip log_value to avoid overflow (exp(700) is near float max)
+            log_clipped = jnp.clip(log_value, -700.0, 700.0)
+            raw = jnp.exp(log_clipped)
+            return jnp.clip(raw, self.low, self.high)
         raw = self.center + self.scale * z_value
         return jnp.clip(raw, self.low, self.high)
 
@@ -137,6 +156,15 @@ def compute_scaling_factors(
     if analysis_mode == "laminar_flow":
         physical_params.extend(["gamma_dot_t0", "beta", "gamma_dot_t_offset", "phi0"])
 
+    # GRADIENT BALANCING FIX (Dec 2025): Use log-space for large-scale parameters
+    # D0 and D_offset can span 10^4-10^5, causing 10^6:1 gradient imbalance
+    # with small parameters like gamma_dot_t0 (~10^-3). Log-space sampling
+    # naturally balances gradients: log(10^4) ≈ 9.2, log(10^-3) ≈ -6.9,
+    # giving a much more manageable ~16:1 ratio instead of 10^7:1.
+    import numpy as np
+
+    log_space_params = {"D0", "D_offset"}
+
     for param_name in physical_params:
         try:
             low, high = parameter_space.get_bounds(param_name)
@@ -144,18 +172,35 @@ def compute_scaling_factors(
             logger.warning(f"Parameter {param_name} not in parameter_space, skipping")
             continue
 
-        # Try to get prior, fall back to bounds-based scaling
-        try:
-            prior = parameter_space.get_prior(param_name)
-            center = prior.mu if hasattr(prior, "mu") else (low + high) / 2
-            scale = prior.sigma if hasattr(prior, "sigma") else (high - low) / 4
-        except KeyError:
-            # No prior defined, use bounds midpoint and 1/4 range
-            center = (low + high) / 2
-            scale = (high - low) / 4
+        use_log = param_name in log_space_params and low > 0
 
-        # Ensure scale is positive and reasonable
-        scale = max(scale, (high - low) / 10, 1e-6)
+        if use_log:
+            # For log-space: center and scale are in log domain
+            # Use log of bounds to define the log-space range
+            log_low = np.log(max(low, 1e-10))
+            log_high = np.log(max(high, 1e-10))
+            center = (log_low + log_high) / 2
+            scale = (log_high - log_low) / 4
+            # Ensure reasonable scale
+            scale = max(scale, 0.5)  # At least 0.5 in log-space
+
+            logger.debug(
+                f"Using LOG-SPACE for {param_name}: "
+                f"log_center={center:.3f}, log_scale={scale:.3f}, "
+                f"bounds=[{low:.3g}, {high:.3g}]"
+            )
+        else:
+            # Standard linear scaling
+            try:
+                prior = parameter_space.get_prior(param_name)
+                center = prior.mu if hasattr(prior, "mu") else (low + high) / 2
+                scale = prior.sigma if hasattr(prior, "sigma") else (high - low) / 4
+            except KeyError:
+                center = (low + high) / 2
+                scale = (high - low) / 4
+
+            # Ensure scale is positive and reasonable
+            scale = max(scale, (high - low) / 10, 1e-6)
 
         scalings[param_name] = ParameterScaling(
             name=param_name,
@@ -163,6 +208,7 @@ def compute_scaling_factors(
             scale=scale,
             low=low,
             high=high,
+            use_log_space=use_log,
         )
 
     return scalings
