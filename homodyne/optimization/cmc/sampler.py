@@ -704,18 +704,15 @@ def run_nuts_sampling(
     run_logger.info("NUTS phase: JIT compile + sampling started (may take minutes)...")
 
     try:
-        # Explicitly request extra fields so diagnostics are reliable across
-        # NumPyro versions.
+        # Request only essential extra fields to minimize extraction overhead.
+        # Previously we requested 7 fields which caused 25-45 minute extraction times
+        # due to JAX lazy evaluation materializing large intermediate arrays.
         mcmc.run(
             rng_key,
             extra_fields=(
                 "accept_prob",
                 "diverging",
-                "energy",
-                "potential_energy",
-                "mean_accept_prob",
                 "num_steps",
-                "adapt_state.step_size",
             ),
             **model_kwargs,
         )
@@ -723,13 +720,23 @@ def run_nuts_sampling(
         run_logger.error(f"MCMC sampling failed: {e}")
         raise RuntimeError(f"MCMC sampling failed: {e}") from e
 
+    # Force JAX to complete all pending computations before timing extraction.
+    # JAX uses lazy evaluation, so without this the actual computation happens
+    # during device_get(), causing misleading timing and 25-45 min "extraction" times.
+    last_state = getattr(mcmc, "last_state", None)
+    if last_state is not None:
+        jax.block_until_ready(last_state)
+
     total_time = time.perf_counter() - start_time
     run_logger.info(f"NUTS finished in {total_time:.1f}s")
 
-    # Extract samples
+    # Extract samples - should be fast now that computation is complete
     t_extract = time.perf_counter()
     run_logger.info("Extracting samples + extra_fields...")
     samples = mcmc.get_samples(group_by_chain=True)
+
+    # Use block_until_ready before device_get to ensure computation is complete
+    jax.block_until_ready(samples)
     samples = jax.device_get(samples)
 
     # Convert to numpy and proper format
@@ -739,6 +746,7 @@ def run_nuts_sampling(
 
     # Get extra fields (divergences, etc.)
     extra = mcmc.get_extra_fields(group_by_chain=True)
+    jax.block_until_ready(extra)
     extra = jax.device_get(extra)
     extra_fields = {k: np.asarray(v) for k, v in extra.items()}
     run_logger.info(

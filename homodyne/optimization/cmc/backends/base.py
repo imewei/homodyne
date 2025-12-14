@@ -97,9 +97,14 @@ def select_backend(
         backend_name = "multiprocessing"
 
     # Backward compatibility: allow legacy "jax" alias
+    # NOTE: Map to multiprocessing, not pjit, because pjit backend is sequential
+    # (it processes shards one at a time in a for loop, not in parallel)
     if backend_name == "jax":
-        logger.warning("CMC backend 'jax' is deprecated; mapping to 'pjit'.")
-        backend_name = "pjit"
+        logger.warning(
+            "CMC backend 'jax' is deprecated; mapping to 'multiprocessing' for parallel execution. "
+            "Set backend_config.name to 'multiprocessing' or 'auto' instead."
+        )
+        backend_name = "multiprocessing"
 
     if backend_name == "multiprocessing":
         from homodyne.optimization.cmc.backends.multiprocessing import (
