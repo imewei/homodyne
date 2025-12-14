@@ -422,7 +422,7 @@ optimization:
 
     # Backend configuration for parallel execution
     backend_config:
-      name: "auto"               # "auto" | "multiprocessing" | "pjit" | "pbs" | "slurm"
+      name: "auto"               # "auto" | "multiprocessing" | "pjit" | "pbs" | "slurm"; legacy "jax" maps to "multiprocessing"
       enable_checkpoints: true
       checkpoint_frequency: 1    # Save every N shards
       checkpoint_dir: "./cmc_checkpoints"
