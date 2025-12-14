@@ -123,33 +123,45 @@ class CMCConfig:
         # Extract nested sections
         sharding = config_dict.get("sharding", {})
         backend = config_dict.get("backend", {})
+        backend_config = config_dict.get("backend_config", {})
         per_shard = config_dict.get("per_shard_mcmc", {})
         validation = config_dict.get("validation", {})
         combination = config_dict.get("combination", {})
 
-        # Handle both old dict schema and new string schema for backend
-        if isinstance(backend, str):
-            # New schema: backend is computational backend string
-            backend_name = config_dict.get("backend_config", {}).get("name", "auto")
-            enable_checkpoints = config_dict.get("backend_config", {}).get(
-                "enable_checkpoints", True
-            )
-            checkpoint_dir = config_dict.get("backend_config", {}).get(
-                "checkpoint_dir", "./checkpoints/cmc"
-            )
-        else:
-            # Old schema: backend is dict
+        # Handle multiple schema variants for backend configuration:
+        # 1. New schema: backend_config.name (preferred)
+        # 2. Old schema: backend.name (dict)
+        # 3. Legacy: backend as string (computational backend, separate from parallel backend)
+        if backend_config and backend_config.get("name"):
+            # New schema: use backend_config section
+            backend_name = backend_config.get("name", "auto")
+            enable_checkpoints = backend_config.get("enable_checkpoints", True)
+            checkpoint_dir = backend_config.get("checkpoint_dir", "./checkpoints/cmc")
+        elif isinstance(backend, str):
+            # Legacy: backend is computational backend string, check backend_config
+            backend_name = backend_config.get("name", "auto")
+            enable_checkpoints = backend_config.get("enable_checkpoints", True)
+            checkpoint_dir = backend_config.get("checkpoint_dir", "./checkpoints/cmc")
+        elif isinstance(backend, dict) and backend.get("name"):
+            # Old schema: backend is dict with name
             backend_name = backend.get("name", "auto")
             enable_checkpoints = backend.get("enable_checkpoints", True)
             checkpoint_dir = backend.get("checkpoint_dir", "./checkpoints/cmc")
+        else:
+            # Default
+            backend_name = "auto"
+            enable_checkpoints = True
+            checkpoint_dir = "./checkpoints/cmc"
 
-        # Backward compatibility: map legacy "jax" backend name to pjit
+        # Backward compatibility: map legacy "jax" backend name to multiprocessing
+        # NOTE: Map to multiprocessing, NOT pjit, because pjit backend is sequential
+        # (it processes shards one at a time in a for loop, not in parallel)
         if backend_name == "jax":
             logger.warning(
-                "CMC backend 'jax' is deprecated; mapping to 'pjit'. "
-                "Set backend_config.name to 'pjit' or 'auto' instead."
+                "CMC backend 'jax' is deprecated; mapping to 'multiprocessing' for parallel execution. "
+                "Set backend_config.name to 'multiprocessing' or 'auto' instead."
             )
-            backend_name = "pjit"
+            backend_name = "multiprocessing"
 
         # Normalize possibly stringified ints
         num_shards_val = sharding.get("num_shards", "auto")

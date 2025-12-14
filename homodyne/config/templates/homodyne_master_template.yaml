@@ -569,11 +569,11 @@ optimization:
     run_id: null                 # Optional: tag for multi-run tracking
 
     # Computational backend
-    backend: "jax"               # "jax" | "numpy"; for parallel backend use backend_config.name (prefer "pjit"/"auto"; legacy "jax" maps to "pjit")
+    backend: "jax"               # "jax" | "numpy"; for parallel backend use backend_config.name (prefer "multiprocessing"/"auto")
 
     # Parallel execution configuration
     backend_config:
-      name: "auto"               # "auto" | "multiprocessing" | "pjit" | "pbs" | "slurm"; legacy "jax" maps to "pjit"
+      name: "auto"               # "auto" | "multiprocessing" | "pjit" | "pbs" | "slurm"; legacy "jax" maps to "multiprocessing"
       enable_checkpoints: true
       checkpoint_frequency: 1    # Save every N shards
       checkpoint_dir: "./cmc_checkpoints"

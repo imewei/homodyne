@@ -487,7 +487,7 @@ optimization:
 
     # Backend configuration for parallel execution
     backend_config:
-      name: "auto" # Options: "auto" | "pjit" | "multiprocessing" | "pbs" | "slurm"; legacy "jax" maps to "pjit"
+      name: "auto" # Options: "auto" | "multiprocessing" | "pjit" | "pbs" | "slurm"; legacy "jax" maps to "multiprocessing"
       enable_checkpoints: true # Enable checkpoint functionality
       checkpoint_frequency: 1 # Save checkpoint every N shards
       checkpoint_dir: "./cmc_checkpoints" # Directory for CMC checkpoint files
