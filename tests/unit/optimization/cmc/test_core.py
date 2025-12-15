@@ -464,8 +464,9 @@ class TestT0Exclusion:
         assert np.all(np.isfinite(D_t)), f"D(t) has non-finite values: {D_t}"
         assert np.all(D_t > 0), f"D(t) has non-positive values: {D_t}"
 
-        # Contrast with t=0: would produce infinity
-        D_t_with_zero = D0 * (base_times**alpha) + D_offset
+        # Contrast with t=0: would produce infinity (suppress expected warning)
+        with np.errstate(divide="ignore"):
+            D_t_with_zero = D0 * (base_times**alpha) + D_offset
         assert not np.isfinite(
             D_t_with_zero[0]
         ), "D(0) should be infinite with negative alpha"

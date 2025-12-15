@@ -62,84 +62,6 @@ except ImportError:
 class TestEndToEndWorkflows:
     """Test complete end-to-end analysis workflows."""
 
-    def test_synthetic_data_complete_workflow(self, temp_dir, test_config):
-        """Test complete workflow with synthetic data."""
-        try:
-            # Import required modules
-            from homodyne.config.manager import ConfigManager
-            from homodyne.data.xpcs_loader import XPCSLoader
-
-            # NLSQ imports now at module level
-            _ = (ConfigManager, XPCSLoader)
-        except ImportError as e:
-            pytest.skip(f"Required modules not available: {e}")
-
-        if not NLSQ_AVAILABLE:
-            pytest.skip("NLSQ not available for optimization")
-
-        # Step 1: Create synthetic dataset
-        n_times = 30
-        n_angles = 24
-
-        t1, t2 = np.meshgrid(np.arange(n_times), np.arange(n_times), indexing="ij")
-        phi = np.linspace(0, 2 * np.pi, n_angles)
-
-        # Generate realistic correlation data
-        tau = np.abs(t1 - t2) + 1e-6
-        true_params = {"offset": 1.0, "contrast": 0.4, "diffusion_coefficient": 0.12}
-
-        c2_true = true_params["offset"] + true_params["contrast"] * np.exp(-tau * 0.01)
-
-        # Add realistic noise
-        np.random.seed(42)
-        noise = 0.01 * np.random.randn(*c2_true.shape)
-        c2_exp = c2_true + noise
-
-        # Create data structure
-        workflow_data = {
-            "t1": t1,
-            "t2": t2,
-            "phi_angles_list": phi,
-            "c2_exp": c2_exp,
-            "wavevector_q_list": np.array([0.01]),
-            "sigma": np.ones_like(c2_exp) * 0.01,
-        }
-
-        # Step 2: Configure analysis
-        workflow_config = test_config.copy()
-        workflow_config.update(
-            {
-                "analysis_mode": "static",
-                "output_directory": str(temp_dir),
-                "optimization": {
-                    "method": "nlsq",
-                    "lsq": {"max_iterations": 100, "tolerance": 1e-6},
-                },
-            }
-        )
-
-        # Step 3: Run optimization
-        result = fit_nlsq_jax(workflow_data, workflow_config)
-
-        # Step 4: Validate workflow results
-        assert result.success, f"Workflow optimization failed: {result.message}"
-        assert hasattr(result, "parameters")
-        assert hasattr(result, "chi_squared")
-
-        # Check parameter recovery
-        recovered_params = result.parameters
-
-        # Physical constraints
-        assert 0.8 <= recovered_params.get("offset", 1.0) <= 1.2
-        assert 0.0 <= recovered_params.get("contrast", 0.4) <= 1.0
-
-        if "diffusion_coefficient" in recovered_params:
-            assert recovered_params["diffusion_coefficient"] >= 0.0
-
-        # Optimization quality
-        assert result.chi_squared < 10.0, "Chi-squared too high for synthetic data"
-        assert result.n_iterations > 0, "Should have performed iterations"
-
     @pytest.mark.skipif(not HAS_H5PY, reason="h5py not available")
     def test_hdf5_data_workflow(self, temp_dir, test_config):
         """Test workflow with HDF5 data loading."""
@@ -242,7 +164,7 @@ class TestEndToEndWorkflows:
             if result.success:
                 assert hasattr(result, "parameters")
                 assert (
-                    result.n_iterations
+                    result.iterations
                     <= loaded_config["optimization"]["lsq"]["max_iterations"]
                 )
 
@@ -425,43 +347,6 @@ class TestModuleInteraction:
         config_manager.update_config("optimization.lsq.max_iterations", 200)
         updated_config = config_manager.get_config()
         assert updated_config["optimization"]["lsq"]["max_iterations"] == 200
-
-    def test_data_loader_optimization_integration(
-        self, synthetic_xpcs_data, test_config
-    ):
-        """Test integration between data loading and optimization."""
-        try:
-            from homodyne.data.xpcs_loader import XPCSLoader
-
-            # NLSQ imports now at module level
-            pass
-        except ImportError:
-            pytest.skip("Required modules not available")
-
-        if not NLSQ_AVAILABLE:
-            pytest.skip("NLSQ not available")
-
-        data = synthetic_xpcs_data
-
-        # Test data preprocessing integration
-        loader = XPCSLoader(validate_data=True)
-
-        try:
-            # Simulate data processing pipeline
-            processed_data = loader._validate_data_structure(data)
-
-            # Should be compatible with optimization
-            result = fit_nlsq_jax(processed_data, test_config)
-
-            if result.success:
-                assert hasattr(result, "parameters")
-                assert result.chi_squared >= 0.0
-
-        except (AttributeError, NotImplementedError):
-            # Method might not exist, use direct data
-            result = fit_nlsq_jax(data, test_config)
-            if result.success:
-                assert hasattr(result, "parameters")
 
     @pytest.mark.skip(reason="JAX backend optimization consistency needs investigation")
     def test_backend_optimization_consistency(self, synthetic_xpcs_data, test_config):

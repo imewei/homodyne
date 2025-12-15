@@ -473,50 +473,6 @@ class TestMultiStrategyFallback:
 
 
 # ============================================================================
-# Test Group 4: Error Recovery Validation
-# ============================================================================
-
-
-@pytest.mark.skip(
-    reason="NumericalValidator API changed - validation now raises exceptions"
-)
-class TestErrorRecoveryValidation:
-    """Test error recovery in realistic scenarios."""
-
-    def test_nan_recovery_in_batch_optimization(self):
-        """NumericalValidator.validate_parameters now raises exceptions instead of returning tuples."""
-        pass
-
-    def test_bounds_violation_recovery(self):
-        """NumericalValidator API has changed."""
-        pass
-
-    def test_loss_divergence_recovery(self):
-        """NumericalValidator.validate_loss signature changed."""
-        pass
-
-    def test_batch_statistics_track_recovery_attempts(self):
-        """BatchStatistics API has changed."""
-        pass
-
-
-# ============================================================================
-# Test Group 5: Complete Workflow Integration
-# ============================================================================
-
-
-@pytest.mark.skip(
-    reason="API changed: validate_parameters, BatchStatistics, and checkpoint APIs have changed"
-)
-class TestCompleteWorkflowIntegration:
-    """Test complete workflows combining all components."""
-
-    def test_complete_workflow_with_all_components(self, tmp_path):
-        """Test complete workflow using all components together."""
-        pass
-
-
-# ============================================================================
 # Summary Test
 # ============================================================================
 
@@ -528,8 +484,6 @@ def test_end_to_end_integration_summary():
     1. Full pipeline with all strategies
     2. Checkpoint save/resume functionality
     3. Multi-strategy fallback chain
-    4. Error recovery in realistic scenarios
-    5. Complete workflow integration
     """
     integration_scenarios = {
         "full_pipeline_standard": True,
@@ -540,13 +494,11 @@ def test_end_to_end_integration_summary():
         "checkpoint_resume": True,
         "multiple_resume_cycles": True,
         "fallback_chain": True,
-        "error_recovery": True,
-        "complete_workflow": True,
     }
 
     # All scenarios tested
     assert all(integration_scenarios.values())
-    assert len(integration_scenarios) == 10
+    assert len(integration_scenarios) == 8
 
 
 if __name__ == "__main__":

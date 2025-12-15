@@ -97,15 +97,15 @@ class TestPublicAPIStability:
     def test_data_api_functions(self):
         """Test data loading API function availability."""
         try:
-            from homodyne.data.xpcs_loader import XPCSLoader, load_xpcs_data
+            from homodyne.data.xpcs_loader import XPCSDataLoader, load_xpcs_data
 
             assert callable(load_xpcs_data), "load_xpcs_data not callable"
-            assert inspect.isclass(XPCSLoader), "XPCSLoader not a class"
+            assert inspect.isclass(XPCSDataLoader), "XPCSDataLoader not a class"
 
             # Check load_xpcs_data signature
             sig = inspect.signature(load_xpcs_data)
             params = list(sig.parameters.keys())
-            assert "config" in params, "Missing config parameter in load_xpcs_data"
+            assert "config_path" in params, "Missing config_path parameter in load_xpcs_data"
 
         except ImportError as e:
             pytest.skip(f"Data functions not available: {e}")
@@ -204,6 +204,8 @@ class TestReturnTypes:
 
     def test_optimization_return_types(self, synthetic_xpcs_data, test_config):
         """Test optimization return types are consistent."""
+        import numpy as np
+
         try:
             from homodyne.optimization.nlsq import (
                 NLSQ_AVAILABLE,
@@ -221,7 +223,7 @@ class TestReturnTypes:
         try:
             result = fit_nlsq_jax(data, config)
 
-            # Should return NLSQResult or compatible object
+            # Should return OptimizationResult or compatible object
             assert hasattr(result, "parameters"), "Result missing parameters attribute"
             assert hasattr(
                 result, "chi_squared"
@@ -229,8 +231,8 @@ class TestReturnTypes:
             assert hasattr(result, "success"), "Result missing success attribute"
             assert hasattr(result, "message"), "Result missing message attribute"
 
-            # Type checking
-            assert isinstance(result.parameters, dict), "Parameters should be dict"
+            # Type checking (parameters is np.ndarray in modern API)
+            assert isinstance(result.parameters, np.ndarray), "Parameters should be ndarray"
             assert isinstance(result.success, bool), "Success should be bool"
             assert isinstance(result.message, str), "Message should be string"
 
@@ -439,9 +441,9 @@ class TestDocumentationCompatibility:
             assert hasattr(result, "success")
             assert hasattr(result, "parameters")
 
-            # Should work as documented
+            # Should work as documented (parameters is now np.ndarray)
             if result.success:
-                assert "offset" in result.parameters
+                assert len(result.parameters) > 0
                 assert result.chi_squared >= 0.0
 
         except Exception as e:
