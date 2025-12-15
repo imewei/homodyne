@@ -251,6 +251,7 @@ agent-os/
 .specify/
 specs/
 .code/
+.agent/
 
 # Node.js
 node_modules/
