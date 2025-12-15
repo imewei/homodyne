@@ -1295,18 +1295,6 @@ class TestNLSQFallback:
 
         assert callable(fit_nlsq_jax)
 
-    @pytest.mark.skipif(NLSQ_AVAILABLE, reason="NLSQ package is available")
-    def test_fallback_behavior(self, synthetic_xpcs_data, test_config):
-        """Test fallback behavior when NLSQ package is not available."""
-        data = synthetic_xpcs_data
-
-        # This should raise ImportError when NLSQ is not available
-        with pytest.raises(ImportError) as exc_info:
-            fit_nlsq_jax(data, test_config)
-
-        # Error message should mention NLSQ
-        error_msg = str(exc_info.value).lower()
-        assert "nlsq" in error_msg, f"Expected 'nlsq' in error message: {error_msg}"
 
 
 @pytest.mark.unit

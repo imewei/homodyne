@@ -29,16 +29,15 @@ class TestMCMCModuleAvailability:
 
     def test_cmc_module_imports(self):
         """Test CMC (Consensus Monte Carlo) module availability."""
-        try:
-            from homodyne.optimization.cmc import (
-                CMCRunner,
-                run_cmc,
-            )
+        from homodyne.optimization.cmc import (
+            CMCConfig,
+            CMCResult,
+            fit_mcmc_jax,
+        )
 
-            assert callable(run_cmc)
-            assert CMCRunner is not None
-        except ImportError:
-            pytest.skip("CMC module not available")
+        assert callable(fit_mcmc_jax)
+        assert CMCConfig is not None
+        assert CMCResult is not None
 
     def test_numpyro_availability(self):
         """Test NumPyro availability for MCMC sampling."""

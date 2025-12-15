@@ -25,18 +25,13 @@ except ImportError:
     JAX_AVAILABLE = False
     jnp = np
 
-# Handle Hypothesis imports
-try:
-    from hypothesis import assume, given, settings
-    from hypothesis import strategies as st
-    from hypothesis.extra.numpy import arrays
+# Handle Hypothesis imports - require hypothesis for property tests
+hypothesis = pytest.importorskip("hypothesis", reason="Hypothesis required for property tests")
+from hypothesis import assume, given, settings
+from hypothesis import strategies as st
+from hypothesis.extra.numpy import arrays
 
-    _ = arrays
-
-    HAS_HYPOTHESIS = True
-except ImportError:
-    HAS_HYPOTHESIS = False
-    pytest.skip("Hypothesis not available", allow_module_level=True)
+_ = arrays
 
 
 # Custom strategies for physical parameters

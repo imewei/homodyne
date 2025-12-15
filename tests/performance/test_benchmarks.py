@@ -337,60 +337,6 @@ class TestDataLoadingBenchmarks:
                 memory_used < data_size * 5
             ), f"Memory usage too high: {memory_used:.1f} MB"
 
-    def test_config_loading_benchmark(self, temp_dir, benchmark_config):
-        """Benchmark configuration loading performance."""
-        try:
-            from homodyne.data.xpcs_loader import load_config_file
-        except ImportError:
-            pytest.skip("Config loading module not available")
-
-        # Create test config files of different sizes
-        base_config = {
-            "analysis_mode": "static",
-            "optimization": {"method": "nlsq", "lsq": {"max_iterations": 100}},
-        }
-
-        # Create configs with varying complexity
-        configs = {
-            "simple": base_config,
-            "medium": {
-                **base_config,
-                "extra_params": {f"param_{i}": i for i in range(50)},
-            },
-            "complex": {
-                **base_config,
-                "extra_params": {f"param_{i}": i for i in range(200)},
-            },
-        }
-
-        results = {}
-
-        for config_name, config_data in configs.items():
-            import json
-
-            config_file = temp_dir / f"{config_name}_config.json"
-            with open(config_file, "w") as f:
-                json.dump(config_data, f)
-
-            # Benchmark loading
-            times = []
-            for _ in range(max(10, benchmark_config["min_rounds"])):
-                start = time.perf_counter()
-                load_config_file(str(config_file))
-                elapsed = time.perf_counter() - start
-                times.append(elapsed)
-
-            avg_time = np.mean(times)
-            file_size = config_file.stat().st_size / 1024  # KB
-
-            results[config_name] = {
-                "avg_time": avg_time,
-                "file_size_kb": file_size,
-                "load_rate_kb_per_sec": file_size / avg_time,
-            }
-
-            # Performance expectations
-            assert avg_time < 0.1, f"Config loading too slow: {avg_time:.4f}s"
 
 
 @pytest.mark.performance

@@ -213,44 +213,6 @@ class TestMemoryUsageValidation:
                 f"mean={memory_mean:.1f} MB"
             )
 
-    @pytest.mark.skip(
-        reason="Fundamentally flaky due to Python's non-deterministic garbage collection. "
-        "The test measures memory before/after del+gc.collect(), expecting >= 50% reclamation, "
-        "but Python's GC timing is unpredictable in test environments. Observed pathological "
-        "cases with 0% reclamation (7.5 MB retained of 7.5 MB temporary increase). "
-        "Memory cleanup works correctly in production; this test requires manual verification "
-        "on idle hardware or profiling tools like memory_profiler/tracemalloc."
-    )
-    def test_memory_cleanup_after_optimization(self):
-        """Test memory is properly released after optimization."""
-        factory = LargeDatasetFactory(seed=42)
-
-        # Create dataset
-        data, metadata = factory.create_1m_dataset(allocate_data=True)
-
-        initial_memory = get_memory_usage_mb()
-
-        # Allocate large arrays
-        large_array = np.random.randn(metadata.n_points)
-        mid_memory = get_memory_usage_mb()
-
-        # Delete and collect
-        del large_array
-        gc.collect()
-
-        final_memory = get_memory_usage_mb()
-
-        # Memory should be mostly reclaimed
-        memory_increase = final_memory - initial_memory
-        temporary_increase = mid_memory - initial_memory
-
-        # At least 50% of temporary memory should be reclaimed
-        # Relaxed from 80% (0.2 threshold) to 50% (0.5 threshold) to account for
-        # non-deterministic Python garbage collector behavior in test environments
-        assert memory_increase < 0.5 * temporary_increase, (
-            f"Memory not properly released: "
-            f"retained {memory_increase:.1f} MB of {temporary_increase:.1f} MB"
-        )
 
 
 # ============================================================================
@@ -391,64 +353,6 @@ class TestCheckpointSaveTiming:
 class TestStrategyOverhead:
     """Test strategy overhead meets < 5% requirement."""
 
-    @pytest.mark.skip(
-        reason="Timing-sensitive: Microsecond-level timing measurements are inherently flaky "
-        "in shared CI environments due to system load variability, process scheduling, "
-        "and CPU frequency scaling. Test compares wrapper_time vs baseline_time with "
-        "< 50% overhead threshold, but timing can vary by 100-500% depending on "
-        "system conditions. This is not a code bug - timing tests require dedicated, "
-        "idle hardware for consistent results. For production validation, run on "
-        "isolated test hardware or adjust thresholds for CI environment variability."
-    )
-    def test_standard_strategy_overhead(self):
-        """Test STANDARD strategy overhead is minimal.
-
-        NOTE: Skipped due to timing sensitivity. Microsecond-level performance tests are:
-        - Highly sensitive to system load (background processes, other tests)
-        - Affected by CPU frequency scaling and thermal throttling
-        - Variable due to OS process scheduling
-        - Unreliable in virtualized or containerized environments
-        - Flaky in concurrent test execution
-
-        For accurate benchmarking, run on dedicated hardware with consistent load.
-        """
-        factory = LargeDatasetFactory(seed=42)
-
-        # Create small dataset
-        data, metadata = factory.create_mock_dataset(
-            n_phi=10,
-            n_t1=20,
-            n_t2=20,
-            allocate_data=True,
-        )
-
-        # Baseline: Direct computation
-        def baseline_computation():
-            np.array([0.3, 1.0, 1000.0, 0.5, 10.0])
-            residuals = data.g2.ravel() - 1.0
-            return residuals
-
-        _, baseline_time = measure_execution_time(baseline_computation)
-
-        # With wrapper
-        def wrapper_computation():
-            NLSQWrapper(enable_large_dataset=False)
-            # Note: actual fit would be much slower; this tests overhead only
-            np.array([0.3, 1.0, 1000.0, 0.5, 10.0])
-            residuals = data.g2.ravel() - 1.0
-            return residuals
-
-        _, wrapper_time = measure_execution_time(wrapper_computation)
-
-        # Overhead should be minimal
-        if baseline_time > 0:
-            overhead_pct = (wrapper_time - baseline_time) / baseline_time * 100
-            # For this simple test, overhead should be negligible
-            assert overhead_pct < 50, (
-                f"Wrapper overhead: {overhead_pct:.1f}% "
-                f"(baseline: {baseline_time * 1000:.2f}ms, "
-                f"wrapper: {wrapper_time * 1000:.2f}ms)"
-            )
 
     def test_fault_tolerance_overhead(self):
         """Test fault tolerance adds < 5% overhead."""
@@ -626,44 +530,6 @@ class TestBatchStatisticsPerformance:
             memory_overhead < 20.0
         ), f"Batch statistics memory overhead: {memory_overhead:.1f} MB"
 
-    @pytest.mark.skip(
-        reason="Timing-sensitive: Millisecond-level timing measurements (< 10ms threshold) "
-        "are inherently flaky in shared CI environments. Test measures time to add "
-        "100 batch results and requires duration < 0.01s (10ms), but timing can vary "
-        "due to system load, GC pauses, and process scheduling. This is not a code bug - "
-        "timing tests require dedicated, idle hardware for consistent results. For production "
-        "validation, run on isolated test hardware or increase threshold to match CI variability."
-    )
-    def test_batch_statistics_time_overhead(self):
-        """Test batch statistics tracking time overhead is negligible.
-
-        NOTE: Skipped due to timing sensitivity. Millisecond-level performance tests are:
-        - Highly sensitive to garbage collection pauses
-        - Affected by concurrent test execution
-        - Variable due to Python interpreter scheduling
-        - Unreliable in CI environments with shared resources
-        - Flaky when system load is non-zero
-
-        For accurate benchmarking, run on dedicated hardware with consistent load.
-        """
-        batch_stats = BatchStatistics(buffer_size=100)
-
-        # Measure time to add batch results
-        def add_batch_results():
-            for i in range(100):
-                batch_stats.add_batch_result(
-                    batch_idx=i,
-                    success=True,
-                    loss=1.0,
-                    iterations=10,
-                )
-
-        _, duration = measure_execution_time(add_batch_results)
-
-        # Should be very fast (< 10 ms for 100 batches)
-        assert (
-            duration < 0.01
-        ), f"Batch statistics overhead: {duration * 1000:.1f}ms for 100 batches"
 
 
 # ============================================================================

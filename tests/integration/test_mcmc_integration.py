@@ -1732,58 +1732,6 @@ def test_automatic_nuts_selection_small_dataset(simple_static_data):
     assert result.parameters is not None
 
 
-@pytest.mark.skip(reason="MCMC implementation needs full testing setup")
-def test_convergence_with_physics_priors_only(simple_static_data):
-    """Test MCMC convergence using only physics-informed priors.
-
-    No initialization provided - MCMC should converge using ParameterSpace
-    priors alone. This tests the core simplification: priors are good enough.
-    """
-    data = simple_static_data
-    param_space = ParameterSpace.from_defaults("static")
-
-    # Run MCMC without any initialization
-    # initial_params=None → use priors from ParameterSpace only
-    result = fit_mcmc_jax(
-        data=data["data"],
-        t1=data["t1"],
-        t2=data["t2"],
-        phi=data["phi"],
-        q=data["q"],
-        L=data["L"],
-        analysis_mode="static",
-        parameter_space=param_space,
-        initial_params=None,  # NO initialization
-        # CMC framework (CMC-only in v3.0)
-        n_samples=500,  # More samples to ensure convergence
-        n_warmup=300,
-        n_chains=2,  # Multiple chains for diagnostics
-    )
-
-    # Verify convergence (CMCResult v3.0 API)
-    assert isinstance(result, MCMCResult)
-    assert result.success is True  # Should converge (success property)
-
-    # Verify R-hat (CMCResult v3.0 always has r_hat dict)
-    for param_name, r_hat_value in result.r_hat.items():
-        if r_hat_value is not None:
-            assert (
-                r_hat_value < 1.2
-            ), f"Poor convergence for {param_name}: R-hat={r_hat_value}"
-
-    # Verify ESS (CMCResult v3.0 uses ess_bulk dict)
-    for param_name, ess_value in result.ess_bulk.items():
-        if ess_value is not None:
-            assert ess_value > 50, f"Low ESS for {param_name}: ESS={ess_value}"
-
-    # Verify parameters are finite and valid
-    # With physics priors and minimal data, exact recovery not guaranteed
-    assert np.all(np.isfinite(result.parameters))
-    # D0 is physical param in parameters array
-    d0_idx = result.param_names.index("D0")
-    alpha_idx = result.param_names.index("alpha")
-    assert result.parameters[d0_idx] > 0  # D0 must be positive
-    assert result.parameters[alpha_idx] > 0  # alpha must be positive
 
 
 def test_auto_retry_on_poor_convergence():

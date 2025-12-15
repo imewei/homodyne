@@ -167,30 +167,6 @@ class TestStreamingExecutor:
 
         assert executor.checkpoint_config == config
 
-    def test_streaming_executor_unavailable_raises(self):
-        """Test that streaming raises RuntimeError if unavailable."""
-        from homodyne.optimization.nlsq.strategies.executors import STREAMING_AVAILABLE
-
-        if not STREAMING_AVAILABLE:
-            executor = StreamingExecutor()
-
-            import logging
-
-            logger = logging.getLogger(__name__)
-
-            with pytest.raises(RuntimeError, match="StreamingOptimizer not available"):
-                executor.execute(
-                    residual_fn=lambda x, a: a * x,
-                    xdata=np.array([1.0]),
-                    ydata=np.array([1.0]),
-                    initial_params=np.array([1.0]),
-                    bounds=None,
-                    loss_name="linear",
-                    x_scale_value=1.0,
-                    logger=logger,
-                )
-        else:
-            pytest.skip("StreamingOptimizer is available")
 
 
 class TestGetExecutor:

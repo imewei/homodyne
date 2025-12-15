@@ -446,32 +446,6 @@ class TestDiagonalCorrectionJAX:
 # ============================================================================
 
 
-class TestDiagonalCorrectionNLSQIntegration:
-    """Integration tests with NLSQ optimization"""
-
-    def test_experimental_theoretical_consistency(self, rng):
-        """Test that experimental and theoretical data have same preprocessing"""
-        # This is an integration test that would require full pipeline
-        # Marking as placeholder for end-to-end test
-        pytest.skip("End-to-end test - requires full data pipeline")
-
-
-# ============================================================================
-# Integration Tests - Data Pipeline
-# ============================================================================
-
-
-class TestDiagonalCorrectionDataPipeline:
-    """Integration tests with data loading pipeline"""
-
-    def test_experimental_data_is_corrected(self):
-        """Test that experimental data from xpcs_loader has diagonal correction"""
-        # This would require loading real HDF5 data
-        pytest.skip("Requires HDF5 test data")
-
-    def test_cached_data_preserves_correction(self):
-        """Test that cached data preserves diagonal correction"""
-        pytest.skip("Requires cache infrastructure")
 
 
 # ============================================================================
