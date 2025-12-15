@@ -420,12 +420,12 @@ optimization:
   # For laminar_flow with 7 parameters: increased warmup recommended
   mcmc:
     backend: "numpyro"           # "numpyro" | "blackjax"
-    # Base MCMC settings (single-shard). These are
-    # intentionally moderate; CMC-specific per-shard
-    # settings are configured separately below.
-    num_warmup: 500              # Increase if divergences persist
-    num_samples: 2000            # Lower for quick diagnostics, raise for publication
-    num_chains: 2                # ≥2 for R-hat calculation
+    # Base MCMC settings - IMPORTANT: CLI applies these to per_shard_mcmc,
+    # so keep them aligned with cmc.per_shard_mcmc below to avoid surprises.
+    # See homodyne/optimization/cmc/config.py for details.
+    num_warmup: 500              # Aligned with per_shard_mcmc
+    num_samples: 1500            # Aligned with per_shard_mcmc (was 2000)
+    num_chains: 2                # Aligned with per_shard_mcmc
     progress_bar: true
     target_accept_prob: 0.90     # NUTS target acceptance
     max_tree_depth: 12

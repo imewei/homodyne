@@ -87,6 +87,52 @@ def _compute_suggested_timeout(
     return int(clamped)
 
 
+def _log_runtime_estimate(
+    logger,
+    n_shards: int,
+    n_chains: int,
+    n_warmup: int,
+    n_samples: int,
+    avg_points_per_shard: int,
+    n_workers: int = 18,
+) -> None:
+    """Log estimated CMC runtime for user awareness.
+
+    Provides rough estimates based on empirical observations:
+    - JIT compilation: ~30-60s per worker process
+    - MCMC step: ~0.1-0.5s per iteration (varies with point count)
+    """
+    # Estimate per-shard time
+    jit_overhead_per_shard = 45  # seconds, average JIT compilation
+    iterations_per_shard = n_chains * (n_warmup + n_samples)
+
+    # MCMC step time scales roughly with point count
+    # Empirical: ~0.0001s per point per iteration for moderate complexity
+    secs_per_iteration = 0.2 + (avg_points_per_shard / 100_000) * 0.3
+    sampling_time_per_shard = iterations_per_shard * secs_per_iteration
+
+    total_per_shard = jit_overhead_per_shard + sampling_time_per_shard
+
+    # Parallel execution estimate
+    batches = (n_shards + n_workers - 1) // n_workers
+    total_parallel = batches * total_per_shard
+
+    # Format time nicely
+    def _fmt_time(secs: float) -> str:
+        if secs < 60:
+            return f"{secs:.0f}s"
+        elif secs < 3600:
+            return f"{secs / 60:.1f}min"
+        else:
+            return f"{secs / 3600:.1f}h"
+
+    logger.info(
+        f"Runtime estimate: {_fmt_time(total_parallel)} total "
+        f"({n_shards} shards / {n_workers} workers, "
+        f"~{_fmt_time(total_per_shard)}/shard with {iterations_per_shard:,} iterations)"
+    )
+
+
 def _infer_time_step(t1: np.ndarray, t2: np.ndarray) -> float:
     """Infer time step from pooled t1/t2 arrays (seconds).
 
@@ -289,6 +335,14 @@ def fit_mcmc_jax(
             f"Using CMC with {len(shards)} shards (stratified by phi), "
             f"{total_shard_points:,} total points"
         )
+        _log_runtime_estimate(
+            run_logger,
+            n_shards=len(shards),
+            n_chains=config.num_chains,
+            n_warmup=config.num_warmup,
+            n_samples=config.num_samples,
+            avg_points_per_shard=total_shard_points // len(shards),
+        )
     elif use_cmc and prepared.n_phi == 1:
         # Single phi angle but large dataset - use random sharding
         # shard_data_random handles num_shards calculation and capping internally
@@ -302,6 +356,14 @@ def fit_mcmc_jax(
         run_logger.info(
             f"Using CMC with {len(shards)} shards (random split, single phi), "
             f"{total_shard_points:,} total points"
+        )
+        _log_runtime_estimate(
+            run_logger,
+            n_shards=len(shards),
+            n_chains=config.num_chains,
+            n_warmup=config.num_warmup,
+            n_samples=config.num_samples,
+            avg_points_per_shard=total_shard_points // len(shards),
         )
     else:
         shards = None

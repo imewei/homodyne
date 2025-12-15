@@ -2,6 +2,26 @@
 
 This module provides the CMCConfig dataclass for parsing and validating
 CMC-specific configuration settings from the YAML config file.
+
+Config Precedence (Important)
+-----------------------------
+The CLI reads base `optimization.mcmc` settings and applies them to
+`per_shard_mcmc`. This means if base mcmc differs from per_shard_mcmc
+in your YAML config, the CLI will overwrite per_shard_mcmc with base
+values. To avoid surprises, keep base mcmc and per_shard_mcmc aligned.
+
+Example aligned config::
+
+    optimization:
+      mcmc:
+        num_warmup: 500
+        num_samples: 1500
+        num_chains: 2
+      cmc:
+        per_shard_mcmc:
+          num_warmup: 500
+          num_samples: 1500
+          num_chains: 2
 """
 
 from __future__ import annotations
@@ -30,6 +50,8 @@ class CMCConfig:
         Number of data shards. "auto" calculates from data size.
     max_points_per_shard : int | str
         Maximum points per shard. "auto" calculates optimally.
+        Default: 100K points/shard. For typical 3M point, 3-angle laminar
+        flow datasets, this produces 18-30 shards (not 150+ as with 20K).
     backend_name : str
         Execution backend: "auto", "multiprocessing", "pjit", "pbs".
     enable_checkpoints : bool
@@ -206,6 +228,13 @@ class CMCConfig:
             for error in errors:
                 logger.warning(f"CMC config validation: {error}")
 
+        # Warn about config precedence (CLI overwrites per_shard_mcmc with base mcmc)
+        if per_shard:
+            logger.debug(
+                "Note: CLI applies base mcmc settings to per_shard_mcmc. "
+                "If using CLI, ensure base mcmc and per_shard_mcmc are aligned."
+            )
+
         return config
 
     def validate(self) -> list[str]:
@@ -241,6 +270,13 @@ class CMCConfig:
                 errors.append(
                     f"num_shards must be 'auto' or positive int, got: {self.num_shards}"
                 )
+
+        # Warn about small max_points_per_shard (creates excessive shards)
+        if isinstance(self.max_points_per_shard, int) and self.max_points_per_shard < 10000:
+            logger.warning(
+                f"max_points_per_shard={self.max_points_per_shard:,} is very small. "
+                "This will create many shards with high overhead. Recommended: 50000-100000."
+            )
 
         # Validate backend_name (allow legacy 'jax' but normalize earlier)
         valid_backends = ["auto", "multiprocessing", "pjit", "pbs", "slurm", "jax"]
