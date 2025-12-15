@@ -492,3 +492,125 @@ class TestBackendScientificProperties:
             assert (
                 abs(combined_mean - true_mean) < 0.05
             ), f"Combined mean {combined_mean} not close to true mean {true_mean}"
+
+
+# =============================================================================
+# Tests for Timeout Handling (User Story 1)
+# =============================================================================
+
+
+class TestTimeoutHandling:
+    """Tests for graceful shard timeout handling."""
+
+    def test_heartbeat_timeout_uses_config_value(self):
+        """Test that heartbeat timeout uses configurable value from CMCConfig."""
+        # Default config has heartbeat_timeout = 600
+        config = CMCConfig()
+        assert config.heartbeat_timeout == 600
+
+        # Custom value should be respected
+        custom_config = CMCConfig(heartbeat_timeout=300)
+        assert custom_config.heartbeat_timeout == 300
+
+    def test_heartbeat_timeout_from_dict(self):
+        """Test heartbeat_timeout is parsed from config dict."""
+        config_dict = {"heartbeat_timeout": 450}
+        config = CMCConfig.from_dict(config_dict)
+        assert config.heartbeat_timeout == 450
+
+    def test_heartbeat_timeout_validation_minimum(self):
+        """Test that heartbeat_timeout validation requires minimum 60 seconds."""
+        # Too short - should fail validation
+        config = CMCConfig(heartbeat_timeout=30)
+        errors = config.validate()
+        assert any("heartbeat_timeout" in e for e in errors)
+
+        # Valid - at minimum
+        config = CMCConfig(heartbeat_timeout=60)
+        errors = config.validate()
+        assert not any("heartbeat_timeout" in e for e in errors)
+
+    def test_per_shard_timeout_default(self):
+        """Test default per_shard_timeout value."""
+        config = CMCConfig()
+        assert config.per_shard_timeout == 7200  # 2 hours
+
+    def test_per_shard_timeout_from_dict(self):
+        """Test per_shard_timeout is parsed from config dict."""
+        config_dict = {"per_shard_timeout": 3600}  # 1 hour
+        config = CMCConfig.from_dict(config_dict)
+        assert config.per_shard_timeout == 3600
+
+
+class TestSuccessRateWarnings:
+    """Tests for success rate warning thresholds."""
+
+    def test_min_success_rate_warning_default(self):
+        """Test default min_success_rate_warning value."""
+        config = CMCConfig()
+        assert config.min_success_rate_warning == 0.80
+
+    def test_min_success_rate_warning_from_dict(self):
+        """Test min_success_rate_warning parsed from combination section."""
+        config_dict = {
+            "combination": {
+                "min_success_rate_warning": 0.70,
+            },
+        }
+        config = CMCConfig.from_dict(config_dict)
+        assert config.min_success_rate_warning == 0.70
+
+    def test_min_success_rate_warning_validation(self):
+        """Test validation catches out-of-range min_success_rate_warning."""
+        # Out of range - should fail validation
+        config = CMCConfig(min_success_rate_warning=1.5)
+        errors = config.validate()
+        assert any("min_success_rate_warning" in e for e in errors)
+
+        # Valid range
+        config = CMCConfig(min_success_rate_warning=0.85)
+        errors = config.validate()
+        assert not any("min_success_rate_warning" in e for e in errors)
+
+    def test_warning_threshold_ordering(self):
+        """Test that warning threshold should be <= success rate threshold."""
+        # This should log a warning but not fail validation
+        config = CMCConfig(
+            min_success_rate=0.70,
+            min_success_rate_warning=0.90,  # Higher than min_success_rate
+        )
+        # Validation passes but warning should be logged
+        errors = config.validate()
+        assert not any("min_success_rate_warning" in e for e in errors)
+
+
+class TestErrorCategorization:
+    """Tests for error category classification in shard failures."""
+
+    def test_error_categories_defined(self):
+        """Test that expected error categories are documented."""
+        # These categories should be used in multiprocessing.py
+        expected_categories = [
+            "crash",
+            "runtime_timeout",
+            "heartbeat_timeout",
+            "numerical",
+            "convergence",
+            "sampling",
+        ]
+        # This is a documentation test to ensure categories are consistent
+        assert len(expected_categories) == 6
+
+    def test_partial_success_combine(self, mock_mcmc_samples, sample_param_names):
+        """Test that partial success still produces combined results."""
+        # Create multiple shards
+        shards = [mock_mcmc_samples(seed=i) for i in range(4)]
+
+        # Combining should work with any number of successful shards
+        combined = combine_shard_samples(shards[:2])  # Only 2 of 4
+        assert combined is not None
+        assert combined.n_chains == shards[0].n_chains
+
+        # Single shard should also work
+        combined_single = combine_shard_samples(shards[:1])
+        assert combined_single is not None

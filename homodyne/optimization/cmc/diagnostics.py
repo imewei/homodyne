@@ -354,3 +354,156 @@ def summarize_diagnostics(
         f"ESS(min)={min_ess:.0f}, "
         f"divergences={divergences} ({div_rate:.1%})"
     )
+
+
+def log_analysis_summary(
+    convergence_status: str,
+    r_hat: dict[str, float],
+    ess_bulk: dict[str, float],
+    divergences: int,
+    n_samples: int,
+    n_chains: int,
+    n_shards: int,
+    shards_succeeded: int,
+    execution_time: float,
+) -> None:
+    """Log a comprehensive summary at the end of CMC analysis.
+
+    Parameters
+    ----------
+    convergence_status : str
+        Final convergence status.
+    r_hat : dict[str, float]
+        Per-parameter R-hat values.
+    ess_bulk : dict[str, float]
+        Per-parameter bulk ESS values.
+    divergences : int
+        Total divergent transitions.
+    n_samples : int
+        Samples per chain.
+    n_chains : int
+        Number of chains.
+    n_shards : int
+        Total number of shards.
+    shards_succeeded : int
+        Number of successful shards.
+    execution_time : float
+        Total execution time in seconds.
+    """
+    r_hat_values = [v for v in r_hat.values() if not np.isnan(v)]
+    ess_values = [v for v in ess_bulk.values() if not np.isnan(v)]
+
+    max_rhat = max(r_hat_values) if r_hat_values else np.nan
+    min_ess = min(ess_values) if ess_values else np.nan
+
+    total_transitions = n_samples * n_chains
+    div_rate = divergences / total_transitions if total_transitions > 0 else 0
+    success_rate = shards_succeeded / n_shards if n_shards > 0 else 0
+
+    # Visual separator for easy identification in logs
+    logger.info("=" * 60)
+    logger.info("CMC ANALYSIS SUMMARY")
+    logger.info("=" * 60)
+
+    # Status with clear indicator
+    if convergence_status == "converged":
+        logger.info(f"✓ Status: CONVERGED")
+    else:
+        logger.warning(f"✗ Status: {convergence_status.upper()}")
+
+    # Key metrics
+    logger.info(f"  Shards: {shards_succeeded}/{n_shards} ({success_rate:.0%} success)")
+    logger.info(f"  Runtime: {execution_time:.1f}s ({execution_time/60:.1f} min)")
+    logger.info(f"  R-hat (max): {max_rhat:.4f} {'✓' if max_rhat <= 1.05 else '✗'}")
+    logger.info(f"  ESS (min): {min_ess:.0f} {'✓' if min_ess >= 100 else '✗'}")
+    logger.info(f"  Divergences: {divergences} ({div_rate:.1%})")
+
+    # Recommendations if there are issues
+    recommendations = get_convergence_recommendations(
+        max_rhat, min_ess, divergences, n_samples, n_chains
+    )
+    if recommendations:
+        logger.info("-" * 40)
+        logger.info("RECOMMENDATIONS:")
+        for rec in recommendations:
+            logger.info(f"  → {rec}")
+
+    logger.info("=" * 60)
+
+
+def get_convergence_recommendations(
+    max_rhat: float,
+    min_ess: float,
+    divergences: int,
+    n_samples: int,
+    n_chains: int,
+) -> list[str]:
+    """Generate specific recommendations for convergence issues.
+
+    Parameters
+    ----------
+    max_rhat : float
+        Maximum R-hat value across parameters.
+    min_ess : float
+        Minimum bulk ESS across parameters.
+    divergences : int
+        Number of divergent transitions.
+    n_samples : int
+        Samples per chain.
+    n_chains : int
+        Number of chains.
+
+    Returns
+    -------
+    list[str]
+        List of recommendation strings.
+    """
+    recommendations: list[str] = []
+
+    total_transitions = n_samples * n_chains
+    div_rate = divergences / total_transitions if total_transitions > 0 else 0
+
+    # R-hat recommendations
+    if np.isfinite(max_rhat) and max_rhat > 1.1:
+        recommendations.append(
+            f"HIGH R-HAT ({max_rhat:.3f}): Chains have not mixed. "
+            "Try: increase num_warmup (currently {n_warmup}), "
+            "or use more chains (currently {n_chains})."
+        )
+    elif np.isfinite(max_rhat) and max_rhat > 1.05:
+        recommendations.append(
+            f"MARGINAL R-HAT ({max_rhat:.3f}): Consider increasing num_samples "
+            f"or num_warmup for better convergence."
+        )
+
+    # ESS recommendations
+    if np.isfinite(min_ess) and min_ess < 100:
+        recommendations.append(
+            f"LOW ESS ({min_ess:.0f}): High autocorrelation in samples. "
+            f"Try: increase num_samples (currently {n_samples}) to at least {int(100 * n_samples / max(min_ess, 1))}."
+        )
+    elif np.isfinite(min_ess) and min_ess < 400:
+        recommendations.append(
+            f"MODERATE ESS ({min_ess:.0f}): Consider increasing num_samples "
+            f"for more reliable uncertainty estimates."
+        )
+
+    # Divergence recommendations
+    if div_rate > 0.10:
+        recommendations.append(
+            f"HIGH DIVERGENCES ({div_rate:.1%}): Model geometry issues. "
+            "Try: reduce max_points_per_shard, increase target_accept_prob to 0.95, "
+            "or check for data outliers."
+        )
+    elif div_rate > 0.01:
+        recommendations.append(
+            f"MODERATE DIVERGENCES ({div_rate:.1%}): Some geometry issues. "
+            "Consider increasing target_accept_prob to 0.90."
+        )
+
+    # General efficiency recommendations
+    if not recommendations and np.isfinite(max_rhat) and max_rhat <= 1.05:
+        # Everything looks good - no recommendations needed
+        pass
+
+    return recommendations

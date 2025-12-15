@@ -87,6 +87,16 @@ def _compute_suggested_timeout(
     return int(clamped)
 
 
+def _fmt_time(secs: float) -> str:
+    """Format time nicely for display."""
+    if secs < 60:
+        return f"{secs:.0f}s"
+    elif secs < 3600:
+        return f"{secs / 60:.1f}min"
+    else:
+        return f"{secs / 3600:.1f}h"
+
+
 def _log_runtime_estimate(
     logger,
     n_shards: int,
@@ -95,12 +105,18 @@ def _log_runtime_estimate(
     n_samples: int,
     avg_points_per_shard: int,
     n_workers: int = 18,
-) -> None:
+    analysis_mode: str = "static",
+) -> float:
     """Log estimated CMC runtime for user awareness.
 
     Provides rough estimates based on empirical observations:
     - JIT compilation: ~30-60s per worker process
     - MCMC step: ~0.1-0.5s per iteration (varies with point count)
+
+    Returns
+    -------
+    float
+        Estimated total runtime in seconds.
     """
     # Estimate per-shard time
     jit_overhead_per_shard = 45  # seconds, average JIT compilation
@@ -108,7 +124,12 @@ def _log_runtime_estimate(
 
     # MCMC step time scales roughly with point count
     # Empirical: ~0.0001s per point per iteration for moderate complexity
-    secs_per_iteration = 0.2 + (avg_points_per_shard / 100_000) * 0.3
+    base_secs_per_iteration = 0.2 + (avg_points_per_shard / 100_000) * 0.3
+
+    # Analysis mode factor - laminar_flow has more parameters and complexity
+    mode_factor = 1.5 if analysis_mode == "laminar_flow" else 1.0
+    secs_per_iteration = base_secs_per_iteration * mode_factor
+
     sampling_time_per_shard = iterations_per_shard * secs_per_iteration
 
     total_per_shard = jit_overhead_per_shard + sampling_time_per_shard
@@ -117,20 +138,62 @@ def _log_runtime_estimate(
     batches = (n_shards + n_workers - 1) // n_workers
     total_parallel = batches * total_per_shard
 
-    # Format time nicely
-    def _fmt_time(secs: float) -> str:
-        if secs < 60:
-            return f"{secs:.0f}s"
-        elif secs < 3600:
-            return f"{secs / 60:.1f}min"
-        else:
-            return f"{secs / 3600:.1f}h"
-
     logger.info(
         f"Runtime estimate: {_fmt_time(total_parallel)} total "
         f"({n_shards} shards / {n_workers} workers, "
         f"~{_fmt_time(total_per_shard)}/shard with {iterations_per_shard:,} iterations)"
     )
+
+    return total_parallel
+
+
+def _log_runtime_comparison(
+    logger,
+    estimated_time: float,
+    actual_time: float,
+) -> None:
+    """Log comparison of estimated vs actual runtime.
+
+    Parameters
+    ----------
+    logger
+        Logger instance.
+    estimated_time : float
+        Estimated runtime in seconds.
+    actual_time : float
+        Actual runtime in seconds.
+    """
+    if estimated_time <= 0:
+        return
+
+    accuracy = actual_time / estimated_time * 100
+    diff = actual_time - estimated_time
+
+    if accuracy < 50:
+        status = "much faster than estimated"
+    elif accuracy < 90:
+        status = "faster than estimated"
+    elif accuracy <= 110:
+        status = "close to estimate"
+    elif accuracy <= 150:
+        status = "slower than estimated"
+    else:
+        status = "much slower than estimated"
+
+    logger.info(
+        f"Runtime: {_fmt_time(actual_time)} actual vs {_fmt_time(estimated_time)} estimated "
+        f"({accuracy:.0f}% - {status})"
+    )
+
+    # Provide suggestions if significantly off
+    if accuracy > 200:
+        logger.info(
+            "  → Consider reducing num_samples or num_chains for faster runs"
+        )
+    elif accuracy < 30:
+        logger.info(
+            "  → Actual runtime much faster than expected - estimate may be conservative"
+        )
 
 
 def _infer_time_step(t1: np.ndarray, t2: np.ndarray) -> float:
@@ -335,13 +398,14 @@ def fit_mcmc_jax(
             f"Using CMC with {len(shards)} shards (stratified by phi), "
             f"{total_shard_points:,} total points"
         )
-        _log_runtime_estimate(
+        estimated_runtime = _log_runtime_estimate(
             run_logger,
             n_shards=len(shards),
             n_chains=config.num_chains,
             n_warmup=config.num_warmup,
             n_samples=config.num_samples,
             avg_points_per_shard=total_shard_points // len(shards),
+            analysis_mode=analysis_mode,
         )
     elif use_cmc and prepared.n_phi == 1:
         # Single phi angle but large dataset - use random sharding
@@ -357,16 +421,18 @@ def fit_mcmc_jax(
             f"Using CMC with {len(shards)} shards (random split, single phi), "
             f"{total_shard_points:,} total points"
         )
-        _log_runtime_estimate(
+        estimated_runtime = _log_runtime_estimate(
             run_logger,
             n_shards=len(shards),
             n_chains=config.num_chains,
             n_warmup=config.num_warmup,
             n_samples=config.num_samples,
             avg_points_per_shard=total_shard_points // len(shards),
+            analysis_mode=analysis_mode,
         )
     else:
         shards = None
+        estimated_runtime = 0.0  # No estimate for single-shard
         run_logger.info("Using single-shard MCMC (no CMC sharding)")
 
     # =========================================================================
@@ -548,6 +614,10 @@ def fit_mcmc_jax(
 
     total_time = time.perf_counter() - start_time
     run_logger.info(f"Total execution time: {total_time:.1f}s")
+
+    # Log runtime comparison if we had an estimate
+    if estimated_runtime > 0:
+        _log_runtime_comparison(run_logger, estimated_runtime, total_time)
 
     return result
 

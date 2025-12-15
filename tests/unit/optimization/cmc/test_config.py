@@ -138,3 +138,51 @@ class TestCMCConfig:
         config = CMCConfig(enable=False)
 
         assert config.should_enable_cmc(n_points=10000000) is False
+
+    def test_heartbeat_timeout_default(self):
+        """Test default heartbeat timeout value."""
+        config = CMCConfig()
+        assert config.heartbeat_timeout == 600  # 10 minutes
+
+    def test_heartbeat_timeout_from_dict(self):
+        """Test heartbeat_timeout parsed from config dict."""
+        config_dict = {
+            "heartbeat_timeout": 300,
+        }
+        config = CMCConfig.from_dict(config_dict)
+        assert config.heartbeat_timeout == 300
+
+    def test_heartbeat_timeout_validation(self):
+        """Test validation catches invalid heartbeat timeout."""
+        config = CMCConfig(heartbeat_timeout=30)  # Too short
+        errors = config.validate()
+        assert any("heartbeat_timeout" in e for e in errors)
+
+    def test_min_success_rate_warning_default(self):
+        """Test default min_success_rate_warning value."""
+        config = CMCConfig()
+        assert config.min_success_rate_warning == 0.80
+
+    def test_min_success_rate_warning_from_dict(self):
+        """Test min_success_rate_warning parsed from config dict."""
+        config_dict = {
+            "combination": {
+                "min_success_rate_warning": 0.70,
+            },
+        }
+        config = CMCConfig.from_dict(config_dict)
+        assert config.min_success_rate_warning == 0.70
+
+    def test_min_success_rate_warning_validation(self):
+        """Test validation catches invalid min_success_rate_warning."""
+        config = CMCConfig(min_success_rate_warning=1.5)  # Out of range
+        errors = config.validate()
+        assert any("min_success_rate_warning" in e for e in errors)
+
+    def test_to_dict_includes_new_fields(self):
+        """Test to_dict includes heartbeat_timeout and min_success_rate_warning."""
+        config = CMCConfig(heartbeat_timeout=450, min_success_rate_warning=0.75)
+        result = config.to_dict()
+
+        assert result["heartbeat_timeout"] == 450
+        assert result["combination"]["min_success_rate_warning"] == 0.75

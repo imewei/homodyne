@@ -7,6 +7,8 @@ pytest.importorskip("arviz", reason="ArviZ required for CMC unit tests")
 from homodyne.optimization.cmc.diagnostics import (  # noqa: E402
     check_convergence,
     create_diagnostics_dict,
+    get_convergence_recommendations,
+    log_analysis_summary,
     summarize_diagnostics,
 )
 
@@ -238,3 +240,132 @@ class TestCreateDiagnosticsDict:
 
         assert "timing" in diag
         assert diag["timing"]["warmup_seconds"] == 60.0
+
+
+class TestGetConvergenceRecommendations:
+    """Tests for get_convergence_recommendations function."""
+
+    def test_no_recommendations_when_converged(self):
+        """Test no recommendations for good convergence."""
+        recommendations = get_convergence_recommendations(
+            max_rhat=1.01,
+            min_ess=500.0,
+            divergences=0,
+            n_samples=2000,
+            n_chains=4,
+        )
+        assert len(recommendations) == 0
+
+    def test_high_rhat_recommendation(self):
+        """Test recommendation generated for high R-hat."""
+        recommendations = get_convergence_recommendations(
+            max_rhat=1.15,
+            min_ess=500.0,
+            divergences=0,
+            n_samples=2000,
+            n_chains=4,
+        )
+        assert len(recommendations) > 0
+        assert any("R-HAT" in r for r in recommendations)
+
+    def test_marginal_rhat_recommendation(self):
+        """Test recommendation for marginal R-hat (1.05 < rhat <= 1.1)."""
+        recommendations = get_convergence_recommendations(
+            max_rhat=1.07,
+            min_ess=500.0,
+            divergences=0,
+            n_samples=2000,
+            n_chains=4,
+        )
+        assert len(recommendations) > 0
+        assert any("MARGINAL" in r for r in recommendations)
+
+    def test_low_ess_recommendation(self):
+        """Test recommendation for low ESS."""
+        recommendations = get_convergence_recommendations(
+            max_rhat=1.01,
+            min_ess=50.0,
+            divergences=0,
+            n_samples=2000,
+            n_chains=4,
+        )
+        assert len(recommendations) > 0
+        assert any("ESS" in r for r in recommendations)
+
+    def test_moderate_ess_recommendation(self):
+        """Test recommendation for moderate ESS (100 <= ess < 400)."""
+        recommendations = get_convergence_recommendations(
+            max_rhat=1.01,
+            min_ess=200.0,
+            divergences=0,
+            n_samples=2000,
+            n_chains=4,
+        )
+        assert len(recommendations) > 0
+        assert any("MODERATE ESS" in r for r in recommendations)
+
+    def test_high_divergence_recommendation(self):
+        """Test recommendation for high divergence rate."""
+        # 15% divergence rate
+        recommendations = get_convergence_recommendations(
+            max_rhat=1.01,
+            min_ess=500.0,
+            divergences=1200,
+            n_samples=2000,
+            n_chains=4,
+        )
+        assert len(recommendations) > 0
+        assert any("DIVERGENCE" in r for r in recommendations)
+
+    def test_moderate_divergence_recommendation(self):
+        """Test recommendation for moderate divergence rate."""
+        # 2% divergence rate
+        recommendations = get_convergence_recommendations(
+            max_rhat=1.01,
+            min_ess=500.0,
+            divergences=160,
+            n_samples=2000,
+            n_chains=4,
+        )
+        assert len(recommendations) > 0
+        assert any("DIVERGENCE" in r for r in recommendations)
+
+
+class TestLogAnalysisSummary:
+    """Tests for log_analysis_summary function."""
+
+    def test_log_analysis_summary_runs(self):
+        """Test that log_analysis_summary runs without error."""
+        r_hat = {"D0": 1.01, "alpha": 1.02}
+        ess_bulk = {"D0": 500.0, "alpha": 600.0}
+
+        # Should not raise any errors
+        log_analysis_summary(
+            convergence_status="converged",
+            r_hat=r_hat,
+            ess_bulk=ess_bulk,
+            divergences=0,
+            n_samples=2000,
+            n_chains=4,
+            n_shards=3,
+            shards_succeeded=3,
+            execution_time=120.0,
+        )
+
+    def test_log_analysis_summary_with_warnings(self):
+        """Test log_analysis_summary with convergence issues."""
+        r_hat = {"D0": 1.15, "alpha": 1.02}  # High R-hat
+        ess_bulk = {"D0": 50.0, "alpha": 600.0}  # Low ESS
+
+        # Should not raise any errors
+        log_analysis_summary(
+            convergence_status="not_converged",
+            r_hat=r_hat,
+            ess_bulk=ess_bulk,
+            divergences=100,
+            n_samples=2000,
+            n_chains=4,
+            n_shards=5,
+            shards_succeeded=4,
+            execution_time=300.0,
+        )

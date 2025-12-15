@@ -244,11 +244,20 @@ def _run_shard_worker(
     except Exception as e:
         duration = time.perf_counter() - start_time
         worker_logger.error(f"Shard {shard_idx} failed after {duration:.2f}s: {e}")
+        # Classify error type for diagnostics
+        error_str = str(e).lower()
+        if "nan" in error_str or "inf" in error_str or "singular" in error_str:
+            error_category = "numerical"
+        elif "convergence" in error_str or "diverge" in error_str:
+            error_category = "convergence"
+        else:
+            error_category = "sampling"
         result = {
             "type": "result",
             "success": False,
             "shard_idx": shard_idx,
             "error": str(e),
+            "error_category": error_category,
             "duration": duration,
         }
         if result_queue is not None:
@@ -385,6 +394,10 @@ class MultiprocessingBackend(CMCBackend):
         run_logger.info(
             f"Per-shard timeout: {per_shard_timeout / 3600:.1f} hours "
             f"(processes will be terminated if exceeded)"
+        )
+        run_logger.info(
+            f"Heartbeat timeout: {config.heartbeat_timeout}s "
+            f"(unresponsive workers will be terminated)"
         )
 
         # Prepare shard data for workers
@@ -539,6 +552,7 @@ class MultiprocessingBackend(CMCBackend):
                                     "success": False,
                                     "shard_idx": shard_idx,
                                     "error": "Process exited without returning a result",
+                                    "error_category": "crash",
                                     "duration": proc_elapsed,
                                 }
                             )
@@ -570,6 +584,7 @@ class MultiprocessingBackend(CMCBackend):
                                     "success": False,
                                     "shard_idx": shard_idx,
                                     "error": f"Runtime timeout after {proc_elapsed:.0f}s (limit: {per_shard_timeout}s)",
+                                    "error_category": "runtime_timeout",
                                     "duration": proc_elapsed,
                                 }
                             )
@@ -578,11 +593,12 @@ class MultiprocessingBackend(CMCBackend):
                             pbar.update(1)
                             pbar.set_postfix(shard=shard_idx, status="timeout")
 
-                    elif inactive_elapsed > 600:
-                        # No heartbeat for 10 minutes - process likely frozen
+                    elif inactive_elapsed > config.heartbeat_timeout:
+                        # No heartbeat for configured timeout - process likely frozen
                         run_logger.warning(
                             f"Shard {shard_idx} unresponsive for {inactive_elapsed:.0f}s "
-                            f"(no heartbeat), terminating process (pid={process.pid})"
+                            f"(heartbeat timeout: {config.heartbeat_timeout}s), "
+                            f"terminating process (pid={process.pid})"
                         )
                         process.terminate()
                         process.join(timeout=5)
@@ -600,7 +616,8 @@ class MultiprocessingBackend(CMCBackend):
                                     "type": "result",
                                     "success": False,
                                     "shard_idx": shard_idx,
-                                    "error": f"Unresponsive after {inactive_elapsed:.0f}s (no heartbeat)",
+                                    "error": f"Unresponsive after {inactive_elapsed:.0f}s (heartbeat timeout: {config.heartbeat_timeout}s)",
+                                    "error_category": "heartbeat_timeout",
                                     "duration": proc_elapsed,
                                 }
                             )
@@ -649,6 +666,7 @@ class MultiprocessingBackend(CMCBackend):
                                 "success": False,
                                 "shard_idx": shard_idx,
                                 "error": "Shard exited without emitting a result",
+                                "error_category": "crash",
                                 "duration": None,
                             }
                         )
@@ -692,18 +710,39 @@ class MultiprocessingBackend(CMCBackend):
                 successful_samples.append(samples)
                 shard_timings.append((result.get("shard_idx"), result.get("duration")))
             else:
+                error_cat = result.get("error_category", "unknown")
                 run_logger.warning(
-                    f"Shard {result.get('shard_idx', '?')} failed: {result.get('error', 'unknown')}"
+                    f"Shard {result.get('shard_idx', '?')} failed [{error_cat}]: "
+                    f"{result.get('error', 'unknown')}"
                 )
 
         if not successful_samples:
-            raise RuntimeError("All shards failed")
+            # Aggregate error categories for better diagnostics
+            error_categories: dict[str, int] = {}
+            for result in results:
+                if not result.get("success"):
+                    category = result.get("error_category", "unknown")
+                    error_categories[category] = error_categories.get(category, 0) + 1
+            run_logger.error(
+                f"All {n_shards} shards failed. Error breakdown: {error_categories}"
+            )
+            raise RuntimeError(
+                f"All shards failed. Error categories: {error_categories}"
+            )
 
         # Check success rate
         success_rate = len(successful_samples) / n_shards
         if success_rate < config.min_success_rate:
+            # Critical: below minimum threshold
+            run_logger.error(
+                f"Success rate {success_rate:.1%} below minimum threshold "
+                f"{config.min_success_rate:.1%} - analysis may be unreliable"
+            )
+        elif success_rate < config.min_success_rate_warning:
+            # Warning: below warning threshold but above minimum
             run_logger.warning(
-                f"Success rate {success_rate:.1%} below threshold {config.min_success_rate:.1%}"
+                f"Success rate {success_rate:.1%} below recommended threshold "
+                f"{config.min_success_rate_warning:.1%} - consider investigating failed shards"
             )
 
         for shard_idx, duration in shard_timings:

@@ -119,6 +119,10 @@ class CMCConfig:
 
     # Timeout
     per_shard_timeout: int = 7200  # 2 hours per shard in seconds
+    heartbeat_timeout: int = 600  # 10 minutes - terminate unresponsive workers
+
+    # Warning thresholds
+    min_success_rate_warning: float = 0.80  # Warn if success rate below this
 
     # Computed fields
     _validation_errors: list[str] = field(default_factory=list, repr=False)
@@ -220,6 +224,9 @@ class CMCConfig:
             run_id=config_dict.get("run_id"),
             # Timeout
             per_shard_timeout=config_dict.get("per_shard_timeout", 7200),
+            heartbeat_timeout=config_dict.get("heartbeat_timeout", 600),
+            # Warning thresholds
+            min_success_rate_warning=combination.get("min_success_rate_warning", 0.80),
         )
 
         # Validate and log any issues
@@ -314,6 +321,23 @@ class CMCConfig:
         if not 0.0 <= self.min_success_rate <= 1.0:
             errors.append(
                 f"min_success_rate must be in [0, 1], got: {self.min_success_rate}"
+            )
+
+        # Validate timeout settings
+        if not isinstance(self.heartbeat_timeout, int) or self.heartbeat_timeout < 60:
+            errors.append(
+                f"heartbeat_timeout must be int >= 60 seconds, got: {self.heartbeat_timeout}"
+            )
+
+        # Validate warning threshold
+        if not 0.0 <= self.min_success_rate_warning <= 1.0:
+            errors.append(
+                f"min_success_rate_warning must be in [0, 1], got: {self.min_success_rate_warning}"
+            )
+        if self.min_success_rate_warning > self.min_success_rate:
+            logger.warning(
+                f"min_success_rate_warning ({self.min_success_rate_warning}) > "
+                f"min_success_rate ({self.min_success_rate}); warning will never trigger"
             )
 
         self._validation_errors = errors
@@ -415,6 +439,8 @@ class CMCConfig:
             "combination": {
                 "method": self.combination_method,
                 "min_success_rate": self.min_success_rate,
+                "min_success_rate_warning": self.min_success_rate_warning,
             },
             "per_shard_timeout": self.per_shard_timeout,
+            "heartbeat_timeout": self.heartbeat_timeout,
         }

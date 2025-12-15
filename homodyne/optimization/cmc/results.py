@@ -340,6 +340,64 @@ class CMCResult:
 
         return samples_3d
 
+    def validate_parameters(self, n_phi: int | None = None) -> list[str]:
+        """Validate that result contains expected parameters.
+
+        Parameters
+        ----------
+        n_phi : int | None
+            Number of phi angles expected. If None, infers from samples.
+
+        Returns
+        -------
+        list[str]
+            List of validation warnings (empty if all valid).
+        """
+        warnings: list[str] = []
+
+        # Check required physical parameters for analysis mode
+        if self.analysis_mode == "laminar_flow":
+            required_physical = ["D0", "alpha", "D_offset", "gamma_dot_0", "beta", "gamma_dot_offset", "phi_0"]
+        else:
+            required_physical = ["D0", "alpha", "D_offset"]
+
+        for param in required_physical:
+            if param not in self.samples:
+                warnings.append(f"Missing required parameter: {param}")
+            elif not np.all(np.isfinite(self.samples[param])):
+                warnings.append(f"Non-finite values in parameter: {param}")
+
+        # Check for contrast/offset parameters
+        if n_phi is None:
+            # Infer from samples
+            contrast_params = [p for p in self.param_names if p.startswith("contrast_")]
+            n_phi = len(contrast_params) if contrast_params else 1
+
+        for i in range(n_phi):
+            contrast_name = f"contrast_{i}"
+            offset_name = f"offset_{i}"
+            if contrast_name not in self.samples:
+                warnings.append(f"Missing per-angle parameter: {contrast_name}")
+            if offset_name not in self.samples:
+                warnings.append(f"Missing per-angle parameter: {offset_name}")
+
+        # Check diagnostic values
+        max_r_hat = max(self.r_hat.values()) if self.r_hat else float("nan")
+        min_ess = min(self.ess_bulk.values()) if self.ess_bulk else 0.0
+
+        if max_r_hat > 1.1:
+            warnings.append(f"High R-hat detected: {max_r_hat:.3f} > 1.1")
+        if min_ess < 100:
+            warnings.append(f"Low ESS detected: {min_ess:.0f} < 100")
+
+        # Check for divergences
+        if self.divergences > 0:
+            div_rate = self.divergences / (self.n_chains * self.n_samples)
+            if div_rate > 0.01:
+                warnings.append(f"High divergence rate: {div_rate:.1%}")
+
+        return warnings
+
 
 def create_inference_data(mcmc_samples: MCMCSamples) -> az.InferenceData:
     """Create ArviZ InferenceData from MCMC samples.

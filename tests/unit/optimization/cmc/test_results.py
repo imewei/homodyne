@@ -154,3 +154,85 @@ class TestCMCResultMethods:
         np.testing.assert_array_almost_equal(
             arr[:, :, 1], result_with_samples.samples["D0"]
         )
+
+
+class TestCMCResultValidation:
+    """Tests for CMCResult.validate_parameters method."""
+
+    @pytest.fixture
+    def complete_static_result(self):
+        """Create a complete static result for validation testing."""
+        n_chains = 2
+        n_samples = 100
+        param_names = ["contrast_0", "offset_0", "D0", "alpha", "D_offset"]
+
+        samples = {name: np.random.randn(n_chains, n_samples) for name in param_names}
+
+        return CMCResult(
+            parameters=np.array([0.5, 1.0, 1000.0, 0.5, 10.0]),
+            uncertainties=np.array([0.1, 0.1, 100.0, 0.1, 5.0]),
+            param_names=param_names,
+            samples=samples,
+            convergence_status="converged",
+            r_hat=dict.fromkeys(param_names, 1.01),
+            ess_bulk=dict.fromkeys(param_names, 500.0),
+            ess_tail=dict.fromkeys(param_names, 400.0),
+            divergences=0,
+            inference_data=None,
+            execution_time=30.0,
+            warmup_time=15.0,
+            n_chains=n_chains,
+            n_samples=n_samples,
+            n_warmup=50,
+            analysis_mode="static",
+        )
+
+    def test_validate_complete_static_result(self, complete_static_result):
+        """Test validation passes for complete static result."""
+        warnings = complete_static_result.validate_parameters(n_phi=1)
+        assert len(warnings) == 0
+
+    def test_validate_missing_physical_parameter(self, complete_static_result):
+        """Test validation catches missing physical parameter."""
+        del complete_static_result.samples["D0"]
+        warnings = complete_static_result.validate_parameters()
+        assert any("Missing required parameter: D0" in w for w in warnings)
+
+    def test_validate_non_finite_values(self, complete_static_result):
+        """Test validation catches non-finite values."""
+        complete_static_result.samples["D0"][0, 0] = np.nan
+        warnings = complete_static_result.validate_parameters()
+        assert any("Non-finite values" in w for w in warnings)
+
+    def test_validate_high_r_hat(self, complete_static_result):
+        """Test validation warns about high R-hat."""
+        complete_static_result.r_hat["D0"] = 1.5
+        warnings = complete_static_result.validate_parameters()
+        assert any("High R-hat" in w for w in warnings)
+
+    def test_validate_low_ess(self, complete_static_result):
+        """Test validation warns about low ESS."""
+        complete_static_result.ess_bulk = dict.fromkeys(
+            complete_static_result.param_names, 50.0
+        )
+        warnings = complete_static_result.validate_parameters()
+        assert any("Low ESS" in w for w in warnings)
+
+    def test_validate_high_divergence_rate(self, complete_static_result):
+        """Test validation warns about high divergence rate."""
+        complete_static_result.divergences = 50  # 25% rate with 200 samples
+        warnings = complete_static_result.validate_parameters()
+        assert any("divergence rate" in w for w in warnings)
+
+    def test_validate_infers_n_phi_from_samples(self, complete_static_result):
+        """Test validation can infer n_phi from sample names."""
+        # Already has contrast_0 and offset_0
+        warnings = complete_static_result.validate_parameters(n_phi=None)
+        # Should pass since contrast_0 and offset_0 exist
+        assert not any("Missing per-angle" in w for w in warnings)
+
+    def test_validate_missing_per_angle_parameter(self, complete_static_result):
+        """Test validation catches missing per-angle parameters."""
+        del complete_static_result.samples["contrast_0"]
+        warnings = complete_static_result.validate_parameters(n_phi=1)
+        assert any("Missing per-angle parameter: contrast_0" in w for w in warnings)
