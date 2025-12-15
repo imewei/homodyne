@@ -603,7 +603,9 @@ class TestCMCDataSharding:
         t2 = t1 + 0.01
 
         prepared = prepare_mcmc_data(data, t1, t2, phi)
-        shards = shard_data_stratified(prepared, num_shards=len(phi_vals))
+        # Don't pass num_shards to get exactly one shard per angle
+        # (passing num_shards derives max_points_per_shard which may split angles)
+        shards = shard_data_stratified(prepared, max_points_per_shard=None)
 
         # Expect one shard per angle; each shard's phi_indices should be 0..0 or 1..1 and sorted
         assert len(shards) == len(phi_vals)

@@ -238,10 +238,10 @@ class TestPrepareParameterData:
 class TestComputeNLSQFits:
     """Test theoretical fit generation with least squares scaling."""
 
-    @patch("homodyne.cli.commands.compute_g2_scaled")
+    @patch("homodyne.optimization.nlsq.fit_computation.compute_g2_scaled")
     def test_compute_nlsq_fits_sequential(self, mock_compute_g2):
         """Test sequential per-angle computation with mocked compute_g2_scaled."""
-        from homodyne.cli.commands import _compute_nlsq_fits
+        from homodyne.optimization.nlsq.fit_computation import compute_theoretical_fits
 
         # Create mock result and data
         result = create_mock_optimization_result("static")
@@ -252,7 +252,7 @@ class TestComputeNLSQFits:
         mock_compute_g2.return_value = jnp.ones((10, 10)) * 1.5
 
         # Compute fits
-        fits_dict = _compute_nlsq_fits(result, data, metadata)
+        fits_dict = compute_theoretical_fits(result, data, metadata)
 
         # Verify compute_g2_scaled was called twice per angle (raw + solver surface)
         assert mock_compute_g2.call_count == 6
@@ -267,7 +267,7 @@ class TestComputeNLSQFits:
 
     def test_compute_nlsq_fits_shape_validation(self):
         """Test that output shapes match experimental data."""
-        from homodyne.cli.commands import _compute_nlsq_fits
+        from homodyne.optimization.nlsq.fit_computation import compute_theoretical_fits
 
         # Create data with specific dimensions
         n_angles, n_t1, n_t2 = 5, 20, 20
@@ -276,7 +276,7 @@ class TestComputeNLSQFits:
         metadata = {"L": 2000000.0, "dt": 0.1, "q": 0.0123}
 
         # Compute fits
-        fits_dict = _compute_nlsq_fits(
+        fits_dict = compute_theoretical_fits(
             result,
             data,
             metadata,
@@ -293,7 +293,7 @@ class TestComputeNLSQFits:
 
     def test_compute_nlsq_fits_least_squares_scaling(self):
         """Test that per-angle scaling parameters are computed correctly."""
-        from homodyne.cli.commands import _compute_nlsq_fits
+        from homodyne.optimization.nlsq.fit_computation import compute_theoretical_fits
 
         # Create data where we know the expected scaling
         result = create_mock_optimization_result("static")
@@ -301,7 +301,7 @@ class TestComputeNLSQFits:
         metadata = {"L": 2000000.0, "dt": 0.1, "q": 0.0123}
 
         # Compute fits
-        fits_dict = _compute_nlsq_fits(result, data, metadata)
+        fits_dict = compute_theoretical_fits(result, data, metadata)
 
         # Verify scaling parameters exist for each angle
         scaling = fits_dict["per_angle_scaling"]

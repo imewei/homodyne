@@ -51,6 +51,9 @@ from homodyne.io.nlsq_writers import (  # noqa: E402
 from homodyne.io.nlsq_writers import (  # noqa: E402
     save_nlsq_npz_file as _io_save_nlsq_npz_file,
 )
+from homodyne.optimization.nlsq.fit_computation import (  # noqa: E402
+    compute_theoretical_fits,
+)
 from homodyne.utils.logging import configure_logging, get_logger  # noqa: E402
 from homodyne.viz.experimental_plots import (  # noqa: E402
     plot_experimental_data as _viz_plot_experimental_data,
@@ -1905,284 +1908,6 @@ def _prepare_parameter_data(
     return param_dict
 
 
-def _compute_nlsq_fits(
-    result: Any,
-    data: dict[str, Any],
-    metadata: dict[str, Any],
-    *,
-    analysis_mode: str | None = None,
-    include_solver_surface: bool = True,
-) -> dict[str, Any]:
-    """Compute theoretical fits with per-angle least squares scaling.
-
-    Generates theoretical correlation functions using optimized parameters,
-    then applies per-angle scaling (contrast, offset) via least squares fitting
-    to match experimental intensities.
-
-    Parameters
-    ----------
-    result : OptimizationResult
-        NLSQ optimization result with physical parameters
-    data : dict[str, Any]
-        Experimental data with phi_angles_list, c2_exp, t1, t2
-    metadata : dict[str, Any]
-        Metadata with L, dt, q for theoretical computation
-
-    Returns
-    -------
-    dict[str, Any]
-        Dictionary with keys:
-        - 'c2_theoretical_raw': Raw theoretical fits (n_angles, n_t1, n_t2)
-        - 'c2_theoretical_scaled': Scaled fits (n_angles, n_t1, n_t2)
-        - 'per_angle_scaling': Scaling params (n_angles, 2) [contrast, offset]
-        - 'residuals': Exp - scaled fit (n_angles, n_t1, n_t2)
-
-    Notes
-    -----
-    Uses sequential per-angle computation (not vectorized). Each angle calls
-    compute_g2_scaled() independently. Per-angle scaling via np.linalg.lstsq
-    solves: c2_exp = contrast * c2_theory + offset.
-    """
-    phi_angles = np.asarray(data["phi_angles_list"])
-    c2_exp = np.asarray(data["c2_exp"])
-    t1 = np.asarray(data["t1"])
-    t2 = np.asarray(data["t2"])
-
-    # Convert 2D meshgrids to 1D if needed
-    if t1.ndim == 2:
-        t1 = t1[:, 0]  # Extract first column
-    if t2.ndim == 2:
-        t2 = t2[0, :]  # Extract first row
-
-    # Extract fitted parameters - prefer per-angle scaling but tolerate scalar fallback
-    n_params = len(result.parameters)
-    n_angles = len(phi_angles)
-
-    def _normalize_mode(mode: str | None) -> str:
-        """Resolve analysis mode, inferring from parameter counts if needed."""
-
-        if mode:
-            mode_lower = mode.lower()
-            if mode_lower in {"static", "static_isotropic"}:
-                return "static"
-            if mode_lower == "laminar_flow":
-                return "laminar_flow"
-
-        # Infer from parameter counts (legacy scalar vs per-angle layout)
-        candidates = {
-            "static": 3,
-            "laminar_flow": 7,
-        }
-        for candidate_mode, n_phys in candidates.items():
-            if n_params in {n_phys + 2, 2 * n_angles + n_phys}:
-                return candidate_mode
-
-        # Default to static for backward compatibility
-        logger.debug(
-            "Unable to infer analysis_mode from params=%s angles=%s; defaulting to static",
-            n_params,
-            n_angles,
-        )
-        return "static"
-
-    normalized_mode = _normalize_mode(
-        analysis_mode or getattr(result, "analysis_mode", None)
-    )
-
-    # Determine number of physical parameters based on analysis mode
-    if normalized_mode == "static":
-        n_physical = 3  # D0, alpha, D_offset
-    elif normalized_mode == "laminar_flow":
-        n_physical = (
-            7  # D0, alpha, D_offset, gamma_dot_t0, beta, gamma_dot_t_offset, phi0
-        )
-    else:
-        raise ValueError(
-            f"Unknown analysis_mode: '{analysis_mode}'. Expected 'static' or 'laminar_flow'"
-        )
-
-    expected_params_per_angle = 2 * n_angles + n_physical
-
-    scalar_per_angle_expansion = False
-    if n_params == expected_params_per_angle:
-        fitted_contrasts = result.parameters[0:n_angles]
-        fitted_offsets = result.parameters[n_angles : 2 * n_angles]
-        physical_params = result.parameters[2 * n_angles :]
-    elif n_params == (n_physical + 2):
-        logger.warning(
-            "Solver returned scalar contrast/offset (parameter count %d). Expanding "
-            "scalars across %d filtered angles for result saving.",
-            n_params,
-            n_angles,
-        )
-        scalar_per_angle_expansion = True
-        scalar_contrast = float(result.parameters[0])
-        scalar_offset = float(result.parameters[1])
-        fitted_contrasts = np.full(n_angles, scalar_contrast, dtype=float)
-        fitted_offsets = np.full(n_angles, scalar_offset, dtype=float)
-        physical_params = result.parameters[2:]
-    else:
-        raise ValueError(
-            f"Parameter count mismatch! Expected {expected_params_per_angle} "
-            f"(2×{n_angles} scaling + {n_physical} physical), got {n_params}. "
-            f"Per-angle scaling is REQUIRED in v2.4.0+"
-        )
-
-    logger.info(
-        f"Per-angle scaling: {n_angles} angles, using FITTED scaling parameters from NLSQ optimization"
-    )
-    logger.debug(
-        f"Extracted fitted parameters - "
-        f"contrasts: mean={np.mean(fitted_contrasts):.4f}, "
-        f"offsets: mean={np.mean(fitted_offsets):.4f}"
-    )
-    logger.debug(
-        f"DEBUG: result.parameters shape: {result.parameters.shape}, "
-        f"n_angles={n_angles}, 2*n_angles={2 * n_angles}"
-    )
-    logger.debug(f"DEBUG: physical_params extracted = {physical_params}")
-
-    # Extract metadata with defaults
-    L = metadata["L"]
-    dt = metadata.get("dt")
-    if dt is None:
-        dt = 0.1  # Default time resolution in seconds
-        logger.debug(f"Using default dt = {dt}s (not found in config)")
-    q = metadata["q"]
-
-    if q is None:
-        raise ValueError("q (wavevector) is required but was not found")
-
-    logger.info(
-        f"Computing theoretical fits for {len(phi_angles)} angles using L={L:.1f} Å, q={q:.6f} Å⁻¹"
-    )
-    logger.info(
-        "Using FITTED per-angle scaling parameters (contrast, offset) from NLSQ optimization"
-    )
-    logger.info(
-        "Diagonal correction will be applied to theoretical fits to match experimental data processing"
-    )
-
-    # Sequential per-angle computation
-    c2_theoretical_raw_list = []
-    c2_theoretical_fitted = []
-    solver_surface = []
-    per_angle_scaling_posthoc = []  # Preserve legacy behavior
-    solver_scaling = np.column_stack((fitted_contrasts, fitted_offsets))
-
-    for i, phi_angle in enumerate(phi_angles):
-        # Convert to JAX arrays
-        phi_jax = jnp.array([float(phi_angle)])
-        t1_jax = jnp.array(t1)
-        t2_jax = jnp.array(t2)
-        params_jax = jnp.array(physical_params)
-
-        # ✅ FIXED (Nov 11, 2025): Compute RAW theory WITHOUT scaling
-        # NLSQ optimization minimizes weighted residuals (c2_exp - c2_theory)/sigma,
-        # so fitted contrast/offset are optimized for residuals, NOT for absolute scale matching.
-        # For visualization, we compute raw theory and use lstsq to find scaling that maps
-        # theory → experiment (following old working version approach).
-        # Formula: c₂_raw = 1.0 + 1.0 × c₁²  (normalized baseline without experimental scaling)
-        c2_theory_raw = compute_g2_scaled(
-            params=params_jax,
-            t1=t1_jax,
-            t2=t2_jax,
-            phi=phi_jax,
-            q=float(q),
-            L=float(L),
-            contrast=1.0,  # ✅ No contrast scaling for raw theory
-            offset=1.0,  # ✅ Normalized baseline (homodyne c2 baseline)
-            dt=float(dt),
-        )
-
-        # Convert to NumPy and squeeze out extra dimension (phi axis)
-        c2_theory_raw_np = np.asarray(c2_theory_raw)
-        if c2_theory_raw_np.ndim == 3:
-            c2_theory_raw_np = c2_theory_raw_np[0]  # Remove phi dimension (size 1)
-
-        # Apply diagonal correction to match experimental data processing
-        # This fixes the constant diagonal issue in theoretical model (c1(t,t) = 1 always)
-
-        # Store raw theory
-        c2_theoretical_raw_list.append(c2_theory_raw_np)
-
-        if include_solver_surface:
-            # Evaluate solver surface using original per-angle contrast/offset
-            c2_solver = compute_g2_scaled(
-                params=params_jax,
-                t1=t1_jax,
-                t2=t2_jax,
-                phi=phi_jax,
-                q=float(q),
-                L=float(L),
-                contrast=float(fitted_contrasts[i]),
-                offset=float(fitted_offsets[i]),
-                dt=float(dt),
-            )
-            c2_solver_np = np.asarray(c2_solver)
-            if c2_solver_np.ndim == 3:
-                c2_solver_np = c2_solver_np[0]
-            solver_surface.append(c2_solver_np)
-
-        # ✅ POST-HOC LEAST-SQUARES SCALING (Nov 11, 2025)
-        # Find optimal contrast/offset that maps theory → experiment for visualization
-        # Solve: c2_exp = contrast * c2_theory_raw + offset (per-angle)
-        # This matches the old working version approach (homodyne-analysis)
-        # JAX-first implementation for consistency with codebase
-        theory_flat_jax = jnp.array(c2_theory_raw_np.flatten())
-        exp_flat_jax = jnp.array(c2_exp[i].flatten())
-
-        # Build design matrix A = [theory, ones] using JAX
-        A_jax = jnp.column_stack([theory_flat_jax, jnp.ones_like(theory_flat_jax)])
-        # Solve: A @ [contrast, offset] = exp using JAX lstsq
-        solution_jax, _, _, _ = jnp.linalg.lstsq(A_jax, exp_flat_jax, rcond=None)
-        contrast_lstsq = float(solution_jax[0])
-        offset_lstsq = float(solution_jax[1])
-
-        # Apply lstsq scaling (keep as NumPy for storage)
-        c2_theoretical_scaled_angle = contrast_lstsq * c2_theory_raw_np + offset_lstsq
-        c2_theoretical_fitted.append(c2_theoretical_scaled_angle)
-
-        # Store lstsq scaling parameters (for visualization, not from optimization)
-        per_angle_scaling_posthoc.append([contrast_lstsq, offset_lstsq])
-
-        # Log scaling parameters
-        logger.debug(
-            f"Angle {phi_angle:.1f}°: lstsq contrast={contrast_lstsq:.4f}, offset={offset_lstsq:.4f} "
-            f"(post-hoc for visualization)"
-        )
-
-    # Stack arrays
-    c2_theoretical_raw = np.array(
-        c2_theoretical_raw_list
-    )  # Raw theory (contrast=1.0, offset=1.0)
-    c2_theoretical_fitted = np.array(c2_theoretical_fitted)  # Scaled via lstsq
-    c2_solver_surface = (
-        np.array(solver_surface) if include_solver_surface and solver_surface else None
-    )
-    per_angle_scaling = np.array(per_angle_scaling_posthoc)
-
-    # Scaled version is the lstsq-fitted result for visualization
-    c2_theoretical_scaled = c2_theoretical_fitted
-
-    # Compute residuals
-    residuals = c2_exp - c2_theoretical_scaled
-
-    logger.info(
-        f"Computed theoretical fits for {len(phi_angles)} angles (sequential computation, diagonal corrected, lstsq scaled)",
-    )
-
-    return {
-        "c2_theoretical_raw": c2_theoretical_raw,
-        "c2_theoretical_scaled": c2_theoretical_scaled,
-        "c2_solver_scaled": c2_solver_surface,
-        "per_angle_scaling": per_angle_scaling,
-        "per_angle_scaling_solver": solver_scaling,
-        "residuals": residuals,
-        "scalar_per_angle_expansion": scalar_per_angle_expansion,
-    }
-
-
 def _json_safe(value: Any) -> Any:
     """Convert nested objects to JSON-serializable primitives.
 
@@ -2319,7 +2044,7 @@ def save_nlsq_results(
 
     # Step 3: Compute theoretical fits with per-angle scaling
     logger.info("Computing theoretical fits with per-angle scaling")
-    fits_dict = _compute_nlsq_fits(
+    fits_dict = compute_theoretical_fits(
         result,
         filtered_data,
         metadata,
@@ -2805,10 +2530,8 @@ def _compute_theoretical_c2_from_mcmc(
     np.ndarray
         Theoretical C2 with shape (n_angles, n_t1, n_t2)
     """
-    import jax.numpy as jnp
     import numpy as np
 
-    from homodyne.core.jax_backend import compute_g2_scaled
 
     # Extract parameters from MCMC result
     contrast = getattr(result, "mean_contrast", 0.5)

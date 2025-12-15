@@ -780,6 +780,7 @@ def test_override_priority_cli_beats_config(mock_config):
         initial_gamma_dot_offset=None,
         initial_phi0=None,
         dense_mass_matrix=False,
+        cmc_num_shards=None,
     )
 
     # Apply overrides
@@ -813,6 +814,7 @@ def test_override_priority_config_beats_default(mock_config):
         initial_gamma_dot_offset=None,
         initial_phi0=None,
         dense_mass_matrix=False,
+        cmc_num_shards=None,
     )
 
     # Apply overrides
@@ -842,6 +844,7 @@ def test_override_priority_multiple_parameters(mock_config):
         initial_gamma_dot_offset=None,
         initial_phi0=None,
         dense_mass_matrix=False,
+        cmc_num_shards=None,
     )
 
     # Apply overrides
@@ -881,6 +884,7 @@ def test_parameter_override_static_mode_d0(mock_config):
         initial_gamma_dot_offset=None,
         initial_phi0=None,
         dense_mass_matrix=False,
+        cmc_num_shards=None,
     )
 
     _apply_cli_overrides(mock_config, args)
@@ -931,6 +935,7 @@ def test_parameter_override_laminar_flow_gamma_dot(mock_config):
         initial_gamma_dot_offset=None,
         initial_phi0=None,
         dense_mass_matrix=False,
+        cmc_num_shards=None,
     )
 
     _apply_cli_overrides(mock_config, args)
@@ -964,6 +969,7 @@ def test_parameter_override_creates_initial_parameters_section(mock_config):
         initial_gamma_dot_offset=None,
         initial_phi0=None,
         dense_mass_matrix=False,
+        cmc_num_shards=None,
     )
 
     _apply_cli_overrides(mock_config, args)
@@ -1003,6 +1009,7 @@ def test_parameter_override_handles_null_values(mock_config):
         initial_gamma_dot_offset=None,
         initial_phi0=None,
         dense_mass_matrix=False,
+        cmc_num_shards=None,
     )
 
     _apply_cli_overrides(mock_config, args)
@@ -1038,6 +1045,7 @@ def test_parameter_override_partial_override(mock_config):
         initial_gamma_dot_offset=None,
         initial_phi0=None,
         dense_mass_matrix=False,
+        cmc_num_shards=None,
     )
 
     _apply_cli_overrides(mock_config, args)
@@ -1091,6 +1099,7 @@ def test_parameter_override_all_seven_parameters(mock_config):
         initial_gamma_dot_offset=0.0005,
         initial_phi0=0.5,
         dense_mass_matrix=False,
+        cmc_num_shards=None,
     )
 
     _apply_cli_overrides(mock_config, args)
@@ -1120,6 +1129,7 @@ def test_threshold_override_dense_mass_matrix(mock_config):
         initial_gamma_dot_offset=None,
         initial_phi0=None,
         dense_mass_matrix=True,  # Override from False
+        cmc_num_shards=None,
     )
 
     _apply_cli_overrides(mock_config, args)
@@ -1153,6 +1163,7 @@ def test_logging_parameter_override(mock_logger, mock_config):
         initial_gamma_dot_offset=None,
         initial_phi0=None,
         dense_mass_matrix=False,
+        cmc_num_shards=None,
     )
 
     _apply_cli_overrides(mock_config, args)

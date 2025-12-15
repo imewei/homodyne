@@ -665,10 +665,11 @@ def _compute_g2_scaled_core(
 # =============================================================================
 # COMPATIBILITY WRAPPER FUNCTIONS
 # =============================================================================
-# Note: apply_diagonal_correction is imported from physics_utils.py
+# Re-export apply_diagonal_correction from physics_utils.py
 # to eliminate code duplication between NLSQ and CMC backends.
 # These maintain the old API for backward compatibility while using correct
 # configuration values internally
+from homodyne.core.physics_utils import apply_diagonal_correction  # noqa: F401, E402
 
 
 def compute_g1_diffusion(

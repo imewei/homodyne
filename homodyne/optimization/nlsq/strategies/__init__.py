@@ -6,6 +6,7 @@ This subpackage contains strategy implementations for NLSQ optimization:
 - residual.py: Stratified residual function for per-angle optimization
 - residual_jit.py: JIT-compiled version of stratified residual
 - sequential.py: Sequential per-angle optimization
+- executors.py: Strategy pattern executors for optimization algorithms
 """
 
 from homodyne.optimization.nlsq.strategies.chunking import (
@@ -17,6 +18,14 @@ from homodyne.optimization.nlsq.strategies.chunking import (
     estimate_stratification_memory,
     format_diagnostics_report,
     should_use_stratification,
+)
+from homodyne.optimization.nlsq.strategies.executors import (
+    ExecutionResult,
+    LargeDatasetExecutor,
+    OptimizationExecutor,
+    StandardExecutor,
+    StreamingExecutor,
+    get_executor,
 )
 from homodyne.optimization.nlsq.strategies.residual import (
     StratifiedResidualFunction,
@@ -56,4 +65,11 @@ __all__ = [
     # Sequential
     "JAC_SAMPLE_SIZE",
     "optimize_per_angle_sequential",
+    # Executors (Strategy pattern)
+    "ExecutionResult",
+    "OptimizationExecutor",
+    "StandardExecutor",
+    "LargeDatasetExecutor",
+    "StreamingExecutor",
+    "get_executor",
 ]

@@ -90,22 +90,21 @@ from homodyne.optimization.nlsq.strategies.sequential import (
     JAC_SAMPLE_SIZE,
     optimize_per_angle_sequential,
 )
+from homodyne.optimization.nlsq.transforms import (
+    adjust_covariance_for_transforms,
+    apply_forward_shear_transforms_to_bounds,
+    apply_forward_shear_transforms_to_vector,
+    apply_inverse_shear_transforms_to_vector,
+    build_per_parameter_x_scale,
+    build_physical_index_map,
+    format_x_scale_for_log,
+    normalize_x_scale_map,
+    parse_shear_transform_config,
+    wrap_model_function_with_transforms,
+    wrap_stratified_function_with_transforms,
+)
 from homodyne.optimization.numerical_validation import NumericalValidator
 from homodyne.optimization.recovery_strategies import RecoveryStrategyApplicator
-
-DEFAULT_SHEAR_X_SCALE = {
-    "gamma_dot_t0": 524.0,  # Canonical name (was gamma_dot_0)
-    "beta": 4.0,
-    "gamma_dot_t_offset": 771.0,  # Canonical name (was gamma_dot_offset)
-}
-
-PARAMETER_NAME_ALIASES = {
-    # Legacy names → canonical names (for backwards compatibility)
-    "gamma_dot_0": "gamma_dot_t0",
-    "gamma_dot_t_0": "gamma_dot_t0",
-    "gamma_dot_offset": "gamma_dot_t_offset",
-    "phi_0": "phi0",
-}
 
 
 @dataclass
@@ -158,242 +157,6 @@ def _sample_xdata(xdata: np.ndarray, max_points: int) -> np.ndarray:
         return xdata
     indices = np.linspace(0, xdata.size - 1, max_points, dtype=np.int64)
     return xdata[indices]
-
-
-def _normalize_param_key(name: str | None) -> str:
-    if not name:
-        return ""
-    key = str(name).strip()
-    return PARAMETER_NAME_ALIASES.get(key, key)
-
-
-def _normalize_x_scale_map(raw_map: Any) -> dict[str, float]:
-    if not isinstance(raw_map, dict):
-        return {}
-    normalized: dict[str, float] = {}
-    for raw_key, raw_value in raw_map.items():
-        key = _normalize_param_key(raw_key)
-        if not key:
-            continue
-        try:
-            normalized[key] = float(raw_value)
-        except (TypeError, ValueError):
-            continue
-    return normalized
-
-
-def _build_per_parameter_x_scale(
-    per_angle_scaling: bool,
-    n_angles: int,
-    physical_param_names: list[str],
-    analysis_mode: str,
-    override_map: dict[str, float],
-) -> np.ndarray | None:
-    effective_physical: dict[str, float] = dict.fromkeys(physical_param_names, 1.0)
-    if analysis_mode == "laminar_flow":
-        for alias_key, scale in DEFAULT_SHEAR_X_SCALE.items():
-            canonical = _normalize_param_key(alias_key)
-            if canonical in effective_physical:
-                effective_physical[canonical] = scale
-    for key, value in override_map.items():
-        canonical = _normalize_param_key(key)
-        if canonical in effective_physical:
-            effective_physical[canonical] = value
-
-    contrast_scale = float(override_map.get("contrast", 1.0))
-    offset_scale = float(override_map.get("offset", 1.0))
-
-    has_nonunity = (
-        any(abs(scale - 1.0) > 1e-12 for scale in effective_physical.values())
-        or abs(contrast_scale - 1.0) > 1e-12
-        or abs(offset_scale - 1.0) > 1e-12
-    )
-    if not has_nonunity:
-        return None
-
-    scales: list[float] = []
-    if per_angle_scaling:
-        if n_angles <= 0:
-            return None
-        scales.extend([contrast_scale] * n_angles)
-        scales.extend([offset_scale] * n_angles)
-    else:
-        scales.extend([contrast_scale, offset_scale])
-
-    for name in physical_param_names:
-        scales.append(effective_physical.get(name, 1.0))
-
-    return np.asarray(scales, dtype=float)
-
-
-def _format_x_scale_for_log(value: Any) -> str:
-    if isinstance(value, np.ndarray):
-        return f"array(len={value.size})"
-    return str(value)
-
-
-def _parse_shear_transform_config(config: Any | None) -> dict[str, Any]:
-    if not isinstance(config, dict):
-        return {
-            "enable_gamma_dot_log": False,
-            "enable_beta_centering": False,
-            "beta_reference": 0.0,
-        }
-    return {
-        "enable_gamma_dot_log": bool(config.get("enable_gamma_dot_log", False)),
-        "enable_beta_centering": bool(config.get("enable_beta_centering", False)),
-        "beta_reference": float(config.get("beta_reference", 0.0)),
-    }
-
-
-def _build_physical_index_map(
-    per_angle_scaling: bool,
-    n_angles: int,
-    physical_param_names: list[str],
-) -> dict[str, int]:
-    start = 2 * n_angles if per_angle_scaling else 2
-    return {name: start + idx for idx, name in enumerate(physical_param_names)}
-
-
-def _apply_forward_shear_transforms_to_vector(
-    params: np.ndarray,
-    index_map: dict[str, int],
-    transform_cfg: dict[str, Any],
-) -> tuple[np.ndarray, dict[str, Any]]:
-    vector = np.asarray(params, dtype=float).copy()
-    state: dict[str, Any] = {
-        "gamma_log_idx": None,
-        "beta_center_idx": None,
-        "beta_reference": float(transform_cfg.get("beta_reference", 0.0)),
-    }
-
-    if transform_cfg.get("enable_gamma_dot_log", False):
-        # Try canonical name first, fallback to old name for backwards compatibility
-        idx = index_map.get("gamma_dot_t0") or index_map.get("gamma_dot_0")
-        if idx is not None:
-            value = vector[idx]
-            if value <= 0:
-                raise ValueError(
-                    "gamma_dot_t0 must be > 0 when enable_gamma_dot_log is true"
-                )
-            vector[idx] = np.log(value)
-            state["gamma_log_idx"] = idx
-
-    if transform_cfg.get("enable_beta_centering", False):
-        idx = index_map.get("beta")
-        if idx is not None:
-            vector[idx] = vector[idx] - state["beta_reference"]
-            state["beta_center_idx"] = idx
-
-    if state["gamma_log_idx"] is None and state["beta_center_idx"] is None:
-        return params, {}
-
-    return vector, state
-
-
-def _apply_forward_shear_transforms_to_bounds(
-    bounds: tuple[np.ndarray, np.ndarray] | None,
-    state: dict[str, Any],
-) -> tuple[np.ndarray, np.ndarray] | None:
-    if not bounds or not state:
-        return bounds
-    lower, upper = (
-        np.asarray(bounds[0], dtype=float).copy(),
-        np.asarray(bounds[1], dtype=float).copy(),
-    )
-    gamma_idx = state.get("gamma_log_idx")
-    if gamma_idx is not None:
-        if lower[gamma_idx] <= 0 or upper[gamma_idx] <= 0:
-            raise ValueError(
-                "gamma_dot_t0 bounds must be > 0 when enable_gamma_dot_log is true"
-            )
-        lower[gamma_idx] = np.log(lower[gamma_idx])
-        upper[gamma_idx] = np.log(upper[gamma_idx])
-    beta_idx = state.get("beta_center_idx")
-    if beta_idx is not None:
-        beta_ref = state.get("beta_reference", 0.0)
-        lower[beta_idx] = lower[beta_idx] - beta_ref
-        upper[beta_idx] = upper[beta_idx] - beta_ref
-    return (lower, upper)
-
-
-def _apply_inverse_shear_transforms_to_vector(
-    params: np.ndarray,
-    state: dict[str, Any] | None,
-) -> np.ndarray:
-    if not state:
-        return params
-    vector = np.asarray(params, dtype=float).copy()
-    gamma_idx = state.get("gamma_log_idx")
-    if gamma_idx is not None:
-        vector[gamma_idx] = np.exp(vector[gamma_idx])
-    beta_idx = state.get("beta_center_idx")
-    if beta_idx is not None:
-        vector[beta_idx] = vector[beta_idx] + state.get("beta_reference", 0.0)
-    return vector
-
-
-def _adjust_covariance_for_transforms(
-    covariance: np.ndarray,
-    transformed_params: np.ndarray,
-    physical_params: np.ndarray,
-    state: dict[str, Any] | None,
-) -> np.ndarray:
-    if not state or covariance.size == 0:
-        return covariance
-    adjusted = np.asarray(covariance, dtype=float).copy()
-    gamma_idx = state.get("gamma_log_idx")
-    if gamma_idx is not None:
-        scale = physical_params[gamma_idx]
-        adjusted[gamma_idx, :] *= scale
-        adjusted[:, gamma_idx] *= scale
-    # beta centering derivative is 1, so covariance unchanged
-    return adjusted
-
-
-def _wrap_model_function_with_transforms(
-    model_fn: Any,
-    state: dict[str, Any] | None,
-) -> Any:
-    if not state:
-        return model_fn
-
-    if not callable(model_fn):
-        return model_fn
-
-    def wrapped_model(xdata: np.ndarray, *solver_params):
-        physical = _apply_inverse_shear_transforms_to_vector(
-            np.asarray(solver_params), state
-        )
-        return model_fn(xdata, *physical)
-
-    # Preserve helpful attributes for downstream logging/diagnostics
-    for attr in ["n_phi", "n_angles", "per_angle_scaling"]:
-        if hasattr(model_fn, attr):
-            setattr(wrapped_model, attr, getattr(model_fn, attr))
-    return wrapped_model
-
-
-def _wrap_stratified_function_with_transforms(
-    residual_fn: Any,
-    state: dict[str, Any] | None,
-) -> Any:
-    if not state:
-        return residual_fn
-
-    class _TransformedStratified:
-        def __init__(self, base_fn: Any, transform_state: dict[str, Any]):
-            self._base_fn = base_fn
-            self._state = transform_state
-
-        def __call__(self, params: np.ndarray) -> np.ndarray:
-            physical = _apply_inverse_shear_transforms_to_vector(params, self._state)
-            return self._base_fn(physical)
-
-        def __getattr__(self, item):
-            return getattr(self._base_fn, item)
-
-    return _TransformedStratified(residual_fn, state)
 
 
 def _compute_jacobian_stats(
@@ -836,7 +599,7 @@ class NLSQWrapper:
         x_scale_value = (
             x_scale_override if x_scale_override is not None else trust_region_scale
         )
-        x_scale_map_config = _normalize_x_scale_map(nlsq_settings.get("x_scale_map"))
+        x_scale_map_config = normalize_x_scale_map(nlsq_settings.get("x_scale_map"))
         diagnostics_cfg = nlsq_settings.get("diagnostics", {})
         diagnostics_enabled = diagnostics_enabled or bool(
             diagnostics_cfg.get("enabled", False),
@@ -845,7 +608,7 @@ class NLSQWrapper:
         diagnostics_payload = (
             {"solver_settings": {"loss": loss_name}} if diagnostics_enabled else None
         )
-        transform_cfg = _parse_shear_transform_config(shear_transforms)
+        transform_cfg = parse_shear_transform_config(shear_transforms)
         # Step 1: Apply angle-stratified chunking if needed (BEFORE data preparation)
         # This fixes per-angle parameter incompatibility with NLSQ chunking (ultra-think-20251106-012247)
         stratified_data = self._apply_stratification_if_needed(
@@ -1301,18 +1064,18 @@ class NLSQWrapper:
                 )
 
         n_angles_for_map = n_phi_unique if per_angle_scaling else 1
-        physical_index_map = _build_physical_index_map(
+        physical_index_map = build_physical_index_map(
             per_angle_scaling,
             n_angles_for_map,
             physical_param_names,
         )
-        validated_params, transform_state = _apply_forward_shear_transforms_to_vector(
+        validated_params, transform_state = apply_forward_shear_transforms_to_vector(
             validated_params,
             physical_index_map,
             transform_cfg,
         )
         if transform_state:
-            nlsq_bounds = _apply_forward_shear_transforms_to_bounds(
+            nlsq_bounds = apply_forward_shear_transforms_to_bounds(
                 nlsq_bounds,
                 transform_state,
             )
@@ -1320,12 +1083,12 @@ class NLSQWrapper:
         solver_residual_fn = base_residual_fn
         if transform_state:
             if isinstance(base_residual_fn, StratifiedResidualFunction):
-                solver_residual_fn = _wrap_stratified_function_with_transforms(
+                solver_residual_fn = wrap_stratified_function_with_transforms(
                     base_residual_fn,
                     transform_state,
                 )
             else:
-                solver_residual_fn = _wrap_model_function_with_transforms(
+                solver_residual_fn = wrap_model_function_with_transforms(
                     base_residual_fn,
                     transform_state,
                 )
@@ -1336,7 +1099,7 @@ class NLSQWrapper:
             physical_param_names,
         )
 
-        per_param_x_scale = _build_per_parameter_x_scale(
+        per_param_x_scale = build_per_parameter_x_scale(
             per_angle_scaling,
             n_phi_unique if per_angle_scaling else 0,
             physical_param_names,
@@ -1361,7 +1124,7 @@ class NLSQWrapper:
             logger.info(
                 "Diagnostics enabled: loss=%s, x_scale=%s, sample_size=%d",
                 loss_name,
-                _format_x_scale_for_log(x_scale_value),
+                format_x_scale_for_log(x_scale_value),
                 diagnostics_sample_size,
             )
 
@@ -1638,13 +1401,13 @@ class NLSQWrapper:
 
         solver_params = np.asarray(popt, dtype=float)
         if transform_state:
-            physical_params = _apply_inverse_shear_transforms_to_vector(
+            physical_params = apply_inverse_shear_transforms_to_vector(
                 solver_params,
                 transform_state,
             )
             popt = physical_params
             if pcov is not None:
-                pcov = _adjust_covariance_for_transforms(
+                pcov = adjust_covariance_for_transforms(
                     np.asarray(pcov, dtype=float),
                     solver_params,
                     physical_params,
@@ -2900,7 +2663,7 @@ class NLSQWrapper:
         t1_unique_jnp = jnp.asarray(t1_unique_all)
         t2_unique_jnp = jnp.asarray(t2_unique_all)
 
-        physical_index_map = _build_physical_index_map(
+        physical_index_map = build_physical_index_map(
             solver_per_angle_scaling,
             n_phi_total if solver_per_angle_scaling else 0,
             physical_param_names,
@@ -2909,14 +2672,14 @@ class NLSQWrapper:
         transform_state = {}
         if transform_cfg:
             solver_initial_params, transform_state = (
-                _apply_forward_shear_transforms_to_vector(
+                apply_forward_shear_transforms_to_vector(
                     solver_initial_params,
                     physical_index_map,
                     transform_cfg,
                 )
             )
             if bounds is not None:
-                bounds = _apply_forward_shear_transforms_to_bounds(
+                bounds = apply_forward_shear_transforms_to_bounds(
                     bounds,
                     transform_state,
                 )
@@ -2957,7 +2720,7 @@ class NLSQWrapper:
 
             params_np = np.asarray(params, dtype=np.float64)
             if transform_state:
-                params_np = _apply_inverse_shear_transforms_to_vector(
+                params_np = apply_inverse_shear_transforms_to_vector(
                     params_np,
                     transform_state,
                 )
@@ -3058,7 +2821,7 @@ class NLSQWrapper:
         combined_solver = sequential_result.combined_parameters.copy()
         combined_physical = combined_solver.copy()
         if transform_state:
-            combined_physical = _apply_inverse_shear_transforms_to_vector(
+            combined_physical = apply_inverse_shear_transforms_to_vector(
                 combined_physical,
                 transform_state,
             )
@@ -3452,7 +3215,7 @@ class NLSQWrapper:
                 # Shape: (n_phi, n_t1, n_t2)
 
                 # Apply diagonal correction
-                from homodyne.core.physics_nlsq import apply_diagonal_correction
+                from homodyne.core.jax_backend import apply_diagonal_correction
 
                 apply_diagonal_vmap = jax.vmap(apply_diagonal_correction, in_axes=0)
                 g2_theory = apply_diagonal_vmap(g2_theory)
