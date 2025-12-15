@@ -207,7 +207,8 @@ def compute_theoretical_fits(
 
     # Extract metadata
     L = metadata["L"]
-    dt = metadata.get("dt", 0.1)
+    dt_value = metadata.get("dt")
+    dt = float(dt_value) if dt_value is not None else 0.1
     q = metadata["q"]
 
     if q is None:

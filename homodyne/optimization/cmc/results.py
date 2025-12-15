@@ -243,11 +243,15 @@ class CMCResult:
                     mean_params_physical.append(float(parameters[i]))
                     std_params_physical.append(float(uncertainties[i]))
 
-        # Compute covariance
+        # Compute covariance (requires at least 2 samples)
         all_samples = np.column_stack(
             [mcmc_samples.samples[name].flatten() for name in param_names]
         )
-        covariance = np.cov(all_samples, rowvar=False)
+        if all_samples.shape[0] < 2:
+            # Not enough samples for covariance - return zeros
+            covariance = np.zeros((all_samples.shape[1], all_samples.shape[1]))
+        else:
+            covariance = np.cov(all_samples, rowvar=False)
 
         # Create ArviZ InferenceData
         inference_data = create_inference_data(mcmc_samples)
