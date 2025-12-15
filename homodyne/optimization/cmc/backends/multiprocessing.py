@@ -13,7 +13,6 @@ import time
 from collections.abc import Callable
 from typing import TYPE_CHECKING, Any
 
-import jax
 import numpy as np
 from tqdm import tqdm
 
@@ -124,6 +123,7 @@ def _run_shard_worker(
     os.environ["MKL_NUM_THREADS"] = str(threads_per_worker)
     os.environ["OPENBLAS_NUM_THREADS"] = str(threads_per_worker)
 
+    import jax
     import jax.numpy as jnp
 
     from homodyne.config.parameter_space import ParameterSpace
@@ -283,11 +283,18 @@ class MultiprocessingBackend(CMCBackend):
         spawn_method : str
             Process start method: "spawn", "fork", or "forkserver".
         """
-        if n_workers is None:
-            # Use physical cores, leave some for main process
-            n_workers = max(1, mp.cpu_count() - 2)
+        # Estimate physical cores (half of logical threads for HT systems)
+        logical_cpus = mp.cpu_count()
+        physical_cores_estimate = max(1, logical_cpus // 2)
 
-        self.n_workers = n_workers
+        if n_workers is None:
+            # Default to estimated physical cores, leaving some headroom
+            n_workers = max(1, physical_cores_estimate - 1)
+        else:
+            # Cap user-specified workers to avoid over-subscription
+            n_workers = min(n_workers, physical_cores_estimate)
+
+        self.n_workers = max(1, n_workers)
         self.spawn_method = spawn_method
 
     def get_name(self) -> str:
@@ -540,9 +547,10 @@ class MultiprocessingBackend(CMCBackend):
                             pbar.update(1)
                             pbar.set_postfix(shard=shard_idx, status="no-result")
 
-                    elif inactive_elapsed > per_shard_timeout:
+                    elif proc_elapsed > per_shard_timeout:
+                        # Total runtime exceeded - terminate regardless of heartbeats
                         run_logger.warning(
-                            f"Shard {shard_idx} inactive for {inactive_elapsed:.0f}s "
+                            f"Shard {shard_idx} exceeded runtime limit: {proc_elapsed:.0f}s "
                             f"(limit: {per_shard_timeout}s), terminating process (pid={process.pid})"
                         )
                         process.terminate()
@@ -561,7 +569,7 @@ class MultiprocessingBackend(CMCBackend):
                                     "type": "result",
                                     "success": False,
                                     "shard_idx": shard_idx,
-                                    "error": f"Timeout after {inactive_elapsed:.0f}s (limit: {per_shard_timeout}s)",
+                                    "error": f"Runtime timeout after {proc_elapsed:.0f}s (limit: {per_shard_timeout}s)",
                                     "duration": proc_elapsed,
                                 }
                             )
@@ -569,6 +577,37 @@ class MultiprocessingBackend(CMCBackend):
                             completed_count += 1
                             pbar.update(1)
                             pbar.set_postfix(shard=shard_idx, status="timeout")
+
+                    elif inactive_elapsed > 600:
+                        # No heartbeat for 10 minutes - process likely frozen
+                        run_logger.warning(
+                            f"Shard {shard_idx} unresponsive for {inactive_elapsed:.0f}s "
+                            f"(no heartbeat), terminating process (pid={process.pid})"
+                        )
+                        process.terminate()
+                        process.join(timeout=5)
+                        if process.is_alive():
+                            run_logger.warning(
+                                f"Shard {shard_idx} did not terminate, killing"
+                            )
+                            process.kill()
+                            process.join(timeout=2)
+
+                        del active_processes[shard_idx]
+                        if shard_idx not in recorded_shards:
+                            results.append(
+                                {
+                                    "type": "result",
+                                    "success": False,
+                                    "shard_idx": shard_idx,
+                                    "error": f"Unresponsive after {inactive_elapsed:.0f}s (no heartbeat)",
+                                    "duration": proc_elapsed,
+                                }
+                            )
+                            recorded_shards.add(shard_idx)
+                            completed_count += 1
+                            pbar.update(1)
+                            pbar.set_postfix(shard=shard_idx, status="frozen")
 
                 # Update progress bar with elapsed time
                 if completed_count < n_shards:
