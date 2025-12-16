@@ -212,15 +212,12 @@ python_classes = ["Test*"]
 python_functions = ["test_*"]
 markers = [
     "slow: marks tests as slow (deselect with '-m \"not slow\"')",
-    "gpu: marks tests as requiring GPU (DEPRECATED in v2.3.0 - CPU-only)",
     "integration: marks tests as integration tests",
     "linux: marks tests as requiring Linux OS",
     "unit: marks tests as unit tests",
     "performance: marks tests as performance benchmarks",
     "mcmc: marks tests as MCMC statistical tests",
-    "property: marks tests as property-based tests",
     "requires_jax: marks tests as requiring JAX",
-    "requires_gpu: marks tests as requiring GPU hardware (DEPRECATED)",
     "api: marks tests as API compatibility tests",
     "self_consistency: marks tests as CMC self-consistency tests",
     "validation: marks tests as CMC accuracy validation tests",
@@ -229,7 +226,6 @@ markers = [
 ]
 filterwarnings = [
     "ignore:There are not enough devices to run parallel chains:UserWarning",
-    "ignore:JAXopt is no longer maintained:DeprecationWarning",
     "ignore:Covariance of the parameters could not be estimated:scipy.optimize.OptimizeWarning",
     "ignore:invalid escape sequence:SyntaxWarning",
 ]
