@@ -71,12 +71,14 @@ class CMCConfig:
     min_ess : float
         Minimum effective sample size.
     combination_method : str
-        How to combine shard posteriors:
-        - "consensus_mc": Correct Consensus Monte Carlo (precision-weighted means).
+        How to combine shard posteriors. Options:
+
+        - ``"consensus_mc"``: Correct Consensus Monte Carlo (precision-weighted means).
           Recommended. Combines per-shard posterior moments, then generates new
           samples from the combined Gaussian.
-        - "weighted_gaussian": Legacy element-wise weighted averaging (deprecated).
-        - "simple_average": Simple element-wise averaging (deprecated).
+        - ``"weighted_gaussian"``: Legacy element-wise weighted averaging (deprecated).
+        - ``"simple_average"``: Simple element-wise averaging (deprecated).
+
     min_success_rate : float
         Minimum fraction of shards that must succeed.
     run_id : str | None
