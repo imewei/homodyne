@@ -8,8 +8,8 @@
 # Use for: Nonequilibrium systems, shear flow, time-dependent shear rates
 # Parameter count: 7 physical + 2 × N_angles scaling = 7 + 2N total
 #
-# VERSION: 2.4.1
-# UPDATED: 2025-12-04
+# VERSION: 2.4.3
+# UPDATED: 2025-12-16
 # ==============================================================================
 
 # ==============================================================================
@@ -17,7 +17,7 @@
 # ==============================================================================
 # Template metadata describing analysis configuration
 metadata:
-  config_version: "2.4.1" # Configuration file format version
+  config_version: "2.4.3" # Configuration file format version
   description: "Laminar flow analysis - 7-parameter model"
   analysis_mode: "laminar_flow" # Laminar flow mode
   parameter_count: 7 # D₀, α, D_offset, γ̇₀, β, γ̇_offset, φ₀
@@ -27,8 +27,12 @@ metadata:
   shear_model: "γ̇(t) = γ̇₀·t^β + γ̇_offset" # Time-dependent shear rate
 
   # Integration and correction methods
+  # v2.4.3: NLSQ element-wise integration now matches CMC physics exactly
+  # Uses cumulative trapezoidal integration with searchsorted-based time grid lookup
+  # Eliminates up to 3.4% C₂ error in dynamic transitions between methods
   integration_method: "discrete_numerical" # Discrete numerical integration for stability
   diagonal_correction: "mandatory" # Diagonal correction for consistency
+  nlsq_cmc_physics_match: true # v2.4.3: NLSQ and CMC use identical integration
 
   # Template classification
   recommended_use: "Nonequilibrium XPCS systems under shear flow with time-dependent dynamics"
@@ -297,7 +301,42 @@ parameter_space:
       # Automatically normalized to [-180°, 180°]
 
   # Optional: Prior distributions for Bayesian methods
-  priors: null # Advanced prior specifications (rarely needed)
+  # priors: null # Set to null if using default priors
+  #
+  # DATA-DRIVEN PRIORS (v2.4.3 Best Practice):
+  # ------------------------------------------
+  # For improved MCMC convergence, estimate priors from data:
+  #
+  # Step 1: Compute data statistics
+  #   p05 = np.percentile(c2_data, 5)   # e.g., 1.03
+  #   p95 = np.percentile(c2_data, 95)  # e.g., 1.30
+  #   mean = np.mean(c2_data)           # e.g., 1.13
+  #
+  # Step 2: Derive contrast prior (signal amplitude)
+  #   contrast_mu = p95 - p05           # e.g., 0.27
+  #   contrast_sigma = 0.15             # moderate uncertainty
+  #
+  # Step 3: Derive offset prior (baseline)
+  #   offset_mu = p05 - contrast_mu/2   # or use 1.0 for normalized data
+  #   offset_sigma = 0.15               # moderate uncertainty
+  #
+  # Example data-driven priors (uncomment to use):
+  priors:
+    contrast:
+      dist_type: TruncatedNormal
+      mu: 0.27                          # Data-driven: (p95 - p05)
+      sigma: 0.15                       # Moderate uncertainty
+      min_val: 0.0                      # Physical lower bound
+      max_val: 1.0                      # Physical upper bound (XPCS contrast ≤ 1)
+      # Physical meaning: Per-angle contrast in c2_fitted = offset + contrast × c2_theory
+
+    offset:
+      dist_type: TruncatedNormal
+      mu: 1.0                           # Data-driven: baseline C2 value
+      sigma: 0.15                       # Moderate uncertainty
+      min_val: 0.5                      # Physical lower bound
+      max_val: 1.5                      # Physical upper bound
+      # Physical meaning: Per-angle offset in c2_fitted = offset + contrast × c2_theory
 
 # ==============================================================================
 # OPTIMIZATION METHODS
@@ -412,10 +451,62 @@ optimization:
       log_jacobian_norms: false # Log parameter sensitivity (Jacobian norms)
 
   # ---------------------------------------------------------------------------
+  # STRATIFICATION - Angle-Stratified Chunking (v2.2+)
+  # ---------------------------------------------------------------------------
+  # Fixes per-angle parameter compatibility with NLSQ chunking for large datasets
+  # Automatically reorganizes data to ensure all chunks contain all phi angles
+  # Prevents silent optimization failures (0 iterations, zero gradients)
+  stratification:
+    enabled: "auto"                           # Options: "auto" | true | false
+                                              # "auto" activates when: per_angle_scaling=True AND n_points>=100k
+    target_chunk_size: 100000                 # Target size for stratified chunks [points]
+                                              # Should match NLSQ's internal chunk size
+    max_imbalance_ratio: 5.0                  # Maximum angle imbalance ratio before fallback
+                                              # Fallback to sequential if max_count/min_count > threshold
+    force_sequential_fallback: false          # Force sequential per-angle optimization
+                                              # Useful for highly imbalanced angle distributions
+    check_memory_safety: true                 # Check available memory before stratification
+                                              # Warns if peak memory > 70% of available
+    use_index_based: false                    # Use zero-copy index-based stratification
+                                              # Reduces memory overhead from 2x to ~1%
+                                              # Recommended for very large datasets (>10M points)
+    collect_diagnostics: false                # Collect detailed stratification diagnostics
+                                              # Performance metrics, chunk balance, angle coverage
+                                              # Minimal overhead (~0.01s)
+    log_diagnostics: false                    # Log diagnostic report to console
+                                              # Requires collect_diagnostics=true
+                                              # Useful for troubleshooting and validation
+
+  # Performance Impact:
+  # - Time overhead: <1% (0.15s for 3M points)
+  # - Memory overhead: 2x peak (temporary) or ~1% (index-based)
+  # - Diagnostics overhead: <0.1% (0.01s for 3M points)
+  # - Fixes: Silent failures with per-angle scaling on large datasets
+
+  # ---------------------------------------------------------------------------
+  # SEQUENTIAL - Sequential Per-Angle Optimization (v2.2+)
+  # ---------------------------------------------------------------------------
+  # Fallback strategy when stratification cannot be applied
+  # Optimizes each phi angle independently and combines results
+  # Used when: angle imbalance > threshold OR force_sequential_fallback=true
+  sequential:
+    min_success_rate: 0.5                     # Minimum fraction of angles that must converge
+                                              # Optimization fails if fewer angles converge
+    weighting: "inverse_variance"             # Result combination method
+                                              # Options: "inverse_variance" | "uniform" | "n_points"
+                                              # "inverse_variance" provides optimal statistical weighting
+
+  # Usage Notes:
+  # - Automatically activated when: imbalance_ratio > max_imbalance_ratio
+  # - Can be forced via: optimization.stratification.force_sequential_fallback=true
+  # - Uses scipy.optimize.least_squares per angle (CPU only)
+  # - Combines results using weighted averaging
+
+  # ---------------------------------------------------------------------------
   # MCMC - Markov Chain Monte Carlo (Uncertainty Quantification)
   # ---------------------------------------------------------------------------
   # CMC-only architecture (v2.4.1): per-shard NUTS sampling with
-  # weighted Gaussian combination of subposteriors
+  # Consensus Monte Carlo (precision-weighted) combination of subposteriors
   # Provides full posterior distributions and uncertainty estimates
   # For laminar_flow with 7 parameters: increased warmup recommended
   mcmc:
@@ -464,7 +555,7 @@ optimization:
   # ---------------------------------------------------------------------------
   # CMC is the only MCMC path in v2.4.1+ (NUTS auto-selection removed)
   # Parallelizes MCMC across data shards with per-shard NUTS sampling
-  # and combines subposteriors using weighted Gaussian combination
+  # and combines subposteriors using Consensus Monte Carlo (precision-weighted means)
   cmc:
     backend: "jax" # Options: "jax" (CPU-only) | "numpy"; for parallel backend use backend_config.name="pjit"/"auto"
     diagonal_correction: true # Apply diagonal correction to correlation matrix
@@ -481,9 +572,29 @@ optimization:
       num_shards: "auto" # Number of shards (int or "auto" for automatic)
       max_points_per_shard: "auto" # auto -> 20k (laminar_flow) or 10k if pooled ≥2M points
 
-    # Per-shard timeout (seconds). Matches multiprocessing backend default
-    # and can be lowered/raised here if site walltimes differ.
+    # Per-shard timeout (seconds). Matches multiprocessing backend default.
+    # Can be lowered/raised based on dataset size and shard configuration.
+    #
+    # TIMEOUT TUNING GUIDANCE (v2.4.3):
+    # ----------------------------------
+    # | Dataset Size | Shard Size | Recommended Timeout |
+    # |--------------|------------|---------------------|
+    # | < 2M points  | 20K auto   | 7200s (2 hours)     |
+    # | 2M - 10M     | 10K auto   | 7200s (2 hours)     |
+    # | 10M - 50M    | 10K auto   | 10800s (3 hours)    |
+    # | > 50M        | 5K-10K     | 14400s (4 hours)    |
+    #
+    # Increase timeout if:
+    # - Running on slower CPUs (< 36 cores)
+    # - Higher num_warmup/num_samples per shard
+    # - Complex posteriors requiring deep tree exploration
+    # - Consistently hitting timeout limits in logs
+    #
+    # Decrease timeout if:
+    # - Shards completing quickly with margin
+    # - Need faster failure detection for debugging
     per_shard_timeout: 7200
+    heartbeat_timeout: 600       # 10 minutes - terminate unresponsive workers
 
     # Backend configuration for parallel execution
     backend_config:
@@ -496,9 +607,14 @@ optimization:
 
     # Subposterior combination method
     combination:
-      method: "weighted_gaussian" # Options: "weighted_gaussian" | "simple_average" | "auto"
-      validate_results: true # Validate combined posterior quality
-      min_success_rate: 0.8 # Minimum fraction of shards that must converge (0.0-1.0)
+      method: "consensus_mc"     # "consensus_mc" (recommended) | "weighted_gaussian" | "simple_average"
+      validate_results: true     # Validate combined posterior quality
+      # NOTE: Laminar flow uses 0.80 (vs 0.90 for static) because:
+      # - 7-parameter model has more complex posteriors with slower convergence
+      # - Shear parameters (gamma_dot_t0, beta) often show multimodal behavior
+      # - Higher failure tolerance prevents premature termination on challenging datasets
+      min_success_rate: 0.80     # Lower threshold for complex 7-parameter model
+      min_success_rate_warning: 0.70  # Warn if success rate below this threshold
 
     # Per-shard MCMC (overrides base mcmc settings for shards)
     # Tuned to avoid per-shard timeouts on large laminar_flow
@@ -788,9 +904,9 @@ validation:
 #   - Slower: ~hours for 7 parameters
 #   - Full posterior distributions with credible intervals
 #   - CMC-only architecture (v2.4.1): per-shard NUTS sampling with
-#     weighted Gaussian combination of subposteriors
+#     Consensus Monte Carlo (precision-weighted) combination of subposteriors
 #   - Convergence diagnostics (R-hat, ESS, divergences)
-#   - Increased warmup (2500) recommended for 7 parameters
+#   - Increased warmup (500+) recommended for 7 parameters
 #   - Manual workflow: Run NLSQ → copy results → update YAML → run MCMC
 #
 # Streaming (Automatic for >100M points):

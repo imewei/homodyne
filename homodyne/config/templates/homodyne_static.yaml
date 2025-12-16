@@ -7,8 +7,8 @@
 # Use for: Equilibrium systems, pure diffusion, anomalous diffusion
 # Parameter count: 3 physical + 2 × N_angles scaling = 3 + 2N total
 #
-# VERSION: 2.4.1
-# UPDATED: 2025-12-04
+# VERSION: 2.4.3
+# UPDATED: 2025-12-16
 # ==============================================================================
 
 # ==============================================================================
@@ -16,7 +16,7 @@
 # ==============================================================================
 # Template metadata describing analysis configuration
 metadata:
-  config_version: "2.4.1" # Configuration file format version
+  config_version: "2.4.3" # Configuration file format version
   description: "Static diffusion analysis - 3-parameter model"
   analysis_mode: "static" # Static diffusion mode
   parameter_count: 3 # D₀, α, D_offset
@@ -25,8 +25,12 @@ metadata:
   physics_model: "D(t) = D₀·t^α + D_offset" # No shear effects (equilibrium)
 
   # Integration and correction methods
+  # v2.4.3: NLSQ element-wise integration now matches CMC physics exactly
+  # Uses cumulative trapezoidal integration with searchsorted-based time grid lookup
+  # Eliminates up to 3.4% C₂ error in dynamic transitions between methods
   integration_method: "discrete_numerical" # Discrete numerical integration for stability
   diagonal_correction: "mandatory" # Diagonal correction for consistency
+  nlsq_cmc_physics_match: true # v2.4.3: NLSQ and CMC use identical integration
 
   # Template classification
   recommended_use: "Equilibrium XPCS systems with pure diffusion and anomalous diffusion"
@@ -243,7 +247,42 @@ parameter_space:
       # Typical range: -100 to 100 for most systems
 
   # Optional: Prior distributions for Bayesian methods
-  priors: null # Advanced prior specifications (rarely needed)
+  # priors: null # Set to null if using default priors
+  #
+  # DATA-DRIVEN PRIORS (v2.4.3 Best Practice):
+  # ------------------------------------------
+  # For improved MCMC convergence, estimate priors from data:
+  #
+  # Step 1: Compute data statistics
+  #   p05 = np.percentile(c2_data, 5)   # e.g., 1.03
+  #   p95 = np.percentile(c2_data, 95)  # e.g., 1.30
+  #   mean = np.mean(c2_data)           # e.g., 1.13
+  #
+  # Step 2: Derive contrast prior (signal amplitude)
+  #   contrast_mu = p95 - p05           # e.g., 0.27
+  #   contrast_sigma = 0.15             # moderate uncertainty
+  #
+  # Step 3: Derive offset prior (baseline)
+  #   offset_mu = p05 - contrast_mu/2   # or use 1.0 for normalized data
+  #   offset_sigma = 0.15               # moderate uncertainty
+  #
+  # Example data-driven priors (uncomment to use):
+  priors:
+    contrast:
+      dist_type: TruncatedNormal
+      mu: 0.06                          # Data-driven: (p95 - p05) - static typically has lower contrast
+      sigma: 0.05                       # Moderate uncertainty
+      min_val: 0.0                      # Physical lower bound
+      max_val: 0.5                      # Physical upper bound (static systems have lower contrast)
+      # Physical meaning: Per-angle contrast in c2_fitted = offset + contrast × c2_theory
+
+    offset:
+      dist_type: TruncatedNormal
+      mu: 1.0                           # Data-driven: baseline C2 value
+      sigma: 0.1                        # Moderate uncertainty
+      min_val: 0.8                      # Physical lower bound
+      max_val: 1.2                      # Physical upper bound
+      # Physical meaning: Per-angle offset in c2_fitted = offset + contrast × c2_theory
 
 # ==============================================================================
 # OPTIMIZATION METHODS
@@ -414,7 +453,7 @@ optimization:
   # CMC - Consensus Monte Carlo (v2.4.1: Only MCMC Path)
   # ---------------------------------------------------------------------------
   # Parallelizes MCMC across data shards using per-shard NUTS sampling.
-  # Combines subposteriors via weighted Gaussian product.
+  # Combines subposteriors via Consensus Monte Carlo (precision-weighted means).
   cmc:
     enable: "auto"               # true | false | "auto"
     min_points_for_cmc: 500000   # Threshold for auto-enable
@@ -436,11 +475,16 @@ optimization:
       max_points_per_shard: "auto"  # "auto" resolves to 100000 for static mode.
       seed_base: 0               # Shard seed = seed_base + shard_id
 
+    # Per-shard timeout settings
+    per_shard_timeout: 7200      # 2 hours per shard (static mode converges faster)
+    heartbeat_timeout: 600       # 10 minutes - terminate unresponsive workers
+
     # Subposterior combination
     combination:
-      method: "weighted_gaussian"  # "weighted_gaussian" | "simple_average" | "auto"
+      method: "consensus_mc"     # "consensus_mc" (recommended) | "weighted_gaussian" | "simple_average"
       validate_results: true
-      min_success_rate: 0.90     # Require 90% shard convergence
+      min_success_rate: 0.90     # Require 90% shard convergence (static mode has simpler posteriors)
+      min_success_rate_warning: 0.80  # Warn if success rate below this threshold
 
     # Per-shard MCMC (overrides base mcmc settings for shards). No
     # subsampling is performed; each shard uses all assigned points.
@@ -716,7 +760,7 @@ validation:
 #   - Slower: ~minutes to hours (faster than laminar_flow for 3 params)
 #   - Full posterior distributions with credible intervals
 #   - CMC-only architecture (v2.4.1): per-shard NUTS sampling with
-#     weighted Gaussian combination of subposteriors
+#     Consensus Monte Carlo (precision-weighted) combination of subposteriors
 #   - Convergence diagnostics (R-hat, ESS, divergences)
 #   - Manual workflow: Run NLSQ → copy results → update YAML → run MCMC
 #

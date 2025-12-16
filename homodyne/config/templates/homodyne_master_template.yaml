@@ -18,8 +18,8 @@
 #   - homodyne_static.yaml: 3-parameter equilibrium diffusion
 #   - homodyne_laminar_flow.yaml: 7-parameter shear flow
 #
-# VERSION: 2.4.1
-# UPDATED: 2025-12-06
+# VERSION: 2.4.3
+# UPDATED: 2025-12-16
 # ==============================================================================
 
 # ==============================================================================
@@ -28,7 +28,7 @@
 # Template metadata for documentation and validation.
 # The config_version must match the homodyne package version.
 metadata:
-  config_version: "2.4.1"  # Configuration schema version (must match package)
+  config_version: "2.4.3"  # Configuration schema version (must match package)
   description: "Master template - comprehensive reference with all configuration options"
   analysis_mode: "laminar_flow"  # Default mode; set in analysis_mode section below
 
@@ -43,8 +43,12 @@ metadata:
   shear_model: "γ̇(t) = γ̇₀·t^β + γ̇_offset"  # Laminar flow only
 
   # Numerical methods
+  # v2.4.3: NLSQ element-wise integration now matches CMC physics exactly
+  # Uses cumulative trapezoidal integration with searchsorted-based time grid lookup
+  # Eliminates up to 3.4% C₂ error in dynamic transitions between methods
   integration_method: "discrete_numerical"  # Stable trapezoidal integration
   diagonal_correction: "mandatory"  # Siegert relation correction (always applied)
+  nlsq_cmc_physics_match: true  # v2.4.3: NLSQ and CMC use identical integration
 
   # Template classification
   recommended_use: "Comprehensive reference for homodyne analyses; slim down for production"
@@ -557,7 +561,7 @@ optimization:
   # CMC - Consensus Monte Carlo (v2.4.1: Only MCMC Path)
   # ---------------------------------------------------------------------------
   # Parallelizes MCMC across data shards using per-shard NUTS sampling.
-  # Combines subposteriors via weighted Gaussian product.
+  # Combines subposteriors via Consensus Monte Carlo (precision-weighted means).
   #
   # AUTO-ACTIVATION:
   #   CMC is used when: enable="auto" AND dataset ≥ min_points_for_cmc
@@ -588,11 +592,32 @@ optimization:
       # Note: Tune based on timeout behavior. ~20-40 min per shard expected.
       seed_base: 0               # Shard seed = seed_base + shard_id
 
+    # Per-shard timeout (seconds). Matches multiprocessing backend default.
+    # Can be lowered/raised based on dataset size and shard configuration.
+    #
+    # TIMEOUT TUNING GUIDANCE (v2.4.3):
+    # ----------------------------------
+    # | Dataset Size | Shard Size | Recommended Timeout |
+    # |--------------|------------|---------------------|
+    # | < 2M points  | 20K auto   | 7200s (2 hours)     |
+    # | 2M - 10M     | 10K auto   | 7200s (2 hours)     |
+    # | 10M - 50M    | 10K auto   | 10800s (3 hours)    |
+    # | > 50M        | 5K-10K     | 14400s (4 hours)    |
+    #
+    # Increase timeout if:
+    # - Running on slower CPUs (< 36 cores)
+    # - Higher num_warmup/num_samples per shard
+    # - Complex posteriors requiring deep tree exploration
+    # - Consistently hitting timeout limits in logs
+    per_shard_timeout: 7200
+    heartbeat_timeout: 600       # 10 minutes - terminate unresponsive workers
+
     # Subposterior combination
     combination:
-      method: "weighted_gaussian"  # "weighted_gaussian" | "simple_average" | "auto"
+      method: "consensus_mc"     # "consensus_mc" (recommended) | "weighted_gaussian" | "simple_average"
       validate_results: true
       min_success_rate: 0.90     # Require 90% shard convergence
+      min_success_rate_warning: 0.80  # Warn if success rate below this threshold
 
     # Per-shard MCMC (overrides base mcmc settings for shards). No
     # subsampling is performed; each shard uses all assigned points.
