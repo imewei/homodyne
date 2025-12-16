@@ -169,6 +169,35 @@ def _fmt_time(secs: float) -> str:
         return f"{secs / 3600:.1f}h"
 
 
+def _estimate_n_workers() -> int:
+    """Estimate the number of workers that will be used by the multiprocessing backend.
+
+    This mirrors the logic in MultiprocessingBackend.__init__ to provide
+    accurate runtime estimates before the backend is instantiated.
+
+    Returns
+    -------
+    int
+        Estimated number of worker processes.
+    """
+    import os
+    import multiprocessing as mp
+
+    # Try to get physical core count (same logic as multiprocessing backend)
+    try:
+        logical_cores = mp.cpu_count()
+    except NotImplementedError:
+        logical_cores = 4  # Conservative default
+
+    # Estimate physical cores (assume 2 threads per core for HT)
+    physical_cores_estimate = max(1, logical_cores // 2)
+
+    # Reserve 1 core for main process (same as backend)
+    n_workers = max(1, physical_cores_estimate - 1)
+
+    return n_workers
+
+
 def _log_runtime_estimate(
     logger,
     n_shards: int,
@@ -176,7 +205,7 @@ def _log_runtime_estimate(
     n_warmup: int,
     n_samples: int,
     avg_points_per_shard: int,
-    n_workers: int = 18,
+    n_workers: int | None = None,
     analysis_mode: str = "static",
 ) -> float:
     """Log estimated CMC runtime for user awareness.
@@ -190,6 +219,10 @@ def _log_runtime_estimate(
     float
         Estimated total runtime in seconds.
     """
+    # Estimate worker count if not provided
+    if n_workers is None:
+        n_workers = _estimate_n_workers()
+
     # Estimate per-shard time
     jit_overhead_per_shard = 45  # seconds, average JIT compilation
     iterations_per_shard = n_chains * (n_warmup + n_samples)
