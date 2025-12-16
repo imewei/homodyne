@@ -187,7 +187,7 @@ The cumulative trapezoid approach builds a running sum on the discrete time grid
      - Cumulative trapezoid via ``create_time_integral_matrix``
    * - NLSQ (element-wise)
      - n > 2000
-     - **Single trapezoid approximation** (see note below)
+     - Cumulative trapezoid via ``trapezoid_cumsum`` with fixed grid
    * - CMC
      - All sizes
      - Cumulative trapezoid via ``trapezoid_cumsum`` with index lookup
@@ -200,41 +200,35 @@ The cumulative trapezoid approach builds a running sum on the discrete time grid
   ``_create_time_integral_matrix_impl_jax``.
 
 * **NLSQ element-wise mode** (``homodyne/core/jax_backend.py``, n > 2000):
-  Uses a single trapezoid approximation for memory efficiency:
+  Builds a cumulative trapezoid on a fixed grid (MAX_GRID_SIZE=10001 points
+  with exact ``dt`` spacing), maps each ``(t1, t2)`` pair to grid indices
+  with ``searchsorted``, and computes the integral via cumulative sum
+  differences. This matches the CMC physics exactly.
 
   .. code-block:: python
 
-     frame_diff = jnp.abs(t2 - t1) / dt
-     D_integral = frame_diff * 0.5 * (D(t1) + D(t2))
+     # Fixed grid with exact dt spacing (JAX JIT requires static shapes)
+     time_grid = jnp.arange(MAX_GRID_SIZE) * dt
+     D_grid = compute_D(time_grid, D0, alpha, D_offset)
+     D_cumsum = trapezoid_cumsum(D_grid)
 
-  This approximates the integral using only the endpoint values, without
-  summing intermediate trapezoids. For most time pairs this produces
-  acceptable results, but can differ from the cumulative method when
-  α ≠ 0 or β ≠ 0 (anomalous dynamics).
+     # Map times to indices and compute integral
+     idx1 = searchsorted(time_grid, t1, side='left')
+     idx2 = searchsorted(time_grid, t2, side='left')
+     D_integral = |D_cumsum[idx2] - D_cumsum[idx1]|
 
 * **CMC** (``homodyne/core/physics_cmc.py``):
   Builds the cumulative trapezoid on a dense time grid (spacing = ``dt``),
   maps each pooled ``(t1, t2)`` pair to grid indices with ``searchsorted``,
   and uses the absolute cumulative difference per pair.
 
-.. warning::
-   **Integration Discrepancy for Large Arrays**
+.. note::
+   **NLSQ and CMC Physics Now Match**
 
-   When n > 2000 (triggering NLSQ element-wise mode), the single trapezoid
-   approximation can produce different integral values than the cumulative
-   trapezoid method used by CMC. The error is largest near t=0 when α < 0
-   (subdiffusion), where D(t) changes rapidly.
-
-   **Impact on C₂**: Despite potentially large integral errors (up to 900% near
-   t=0 for extreme cases), the C₂ correlation error is typically < 3.5% because:
-
-   1. **g₁ saturation**: The field correlation g₁ = exp(-integral) saturates
-      to 0 or 1 at most points, masking integral differences.
-   2. **Interior time pairs**: Most (t1, t2) pairs are away from t=0 where
-      D(t) varies less rapidly.
-
-   For rigorous uncertainty quantification, use CMC which always applies the
-   full cumulative trapezoid method.
+   As of version 2.4.3, both NLSQ element-wise mode and CMC use the same
+   cumulative trapezoid integration method with ``searchsorted`` index lookup.
+   This ensures identical physics output for the same parameters, enabling
+   direct comparison between optimization methods.
 
 **Smooth Absolute for Gradients**
 

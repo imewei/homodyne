@@ -89,6 +89,7 @@ from homodyne.core.physics_utils import (
     safe_exp,
     safe_len,
     safe_sinc,
+    trapezoid_cumsum as _trapezoid_cumsum,
 )
 from homodyne.core.physics_utils import (
     calculate_diffusion_coefficient as _calculate_diffusion_coefficient_impl_jax,
@@ -264,19 +265,34 @@ def _compute_g1_diffusion_core(
     is_elementwise = t1.ndim == 1 and safe_len(t1) > 2000
 
     if is_elementwise:
-        # ELEMENT-WISE MODE: Compute integrals directly for each (t1[i], t2[i]) pair
+        # ELEMENT-WISE MODE: Use cumulative trapezoid for accurate integration
+        # FIX (Dec 2025): Replace single trapezoid with cumulative trapezoid
+        # to match CMC physics accuracy (fixes up to 3.4% C2 error in transitions)
         t1_arr = jnp.atleast_1d(t1)
         t2_arr = jnp.atleast_1d(t2)
 
-        # Compute D(t) at both t1[i] and t2[i] for all i
-        D_t1 = _calculate_diffusion_coefficient_impl_jax(t1_arr, D0, alpha, D_offset)
-        D_t2 = _calculate_diffusion_coefficient_impl_jax(t2_arr, D0, alpha, D_offset)
+        # Build dense time grid for cumulative trapezoid
+        # Use fixed max grid size (JAX JIT requires static shapes)
+        # 10001 points covers t_max up to 10000*dt (e.g., 1000s at dt=0.1s)
+        MAX_GRID_SIZE = 10001
+        # Create grid with exact dt spacing: [0, dt, 2*dt, 3*dt, ...]
+        grid_indices = jnp.arange(MAX_GRID_SIZE, dtype=jnp.float64)
+        time_grid = grid_indices * dt
 
-        # Element-wise trapezoidal integration (dimensionless, like matrix mode)
-        # Compute frame separation: |t2[i] - t1[i]| / dt = number of frames
-        # For XPCS data, times are always on uniform grid: t = dt * frame_index
-        frame_diff = jnp.abs(t2_arr - t1_arr) / dt  # Dimensionless (number of frames)
-        D_integral = frame_diff * 0.5 * (D_t1 + D_t2)  # Dimensionless, Shape: (n,)
+        # Compute D(t) on grid and build cumulative trapezoid
+        D_grid = _calculate_diffusion_coefficient_impl_jax(time_grid, D0, alpha, D_offset)
+        D_cumsum = _trapezoid_cumsum(D_grid)
+
+        # Map times to grid indices using searchsorted (FR-007: clamp to valid range)
+        # CRITICAL: Use searchsorted to match CMC physics exactly (not round(t/dt))
+        # searchsorted finds insertion point, giving correct integral bounds
+        max_index = MAX_GRID_SIZE - 1
+        idx1 = jnp.clip(jnp.searchsorted(time_grid, t1_arr, side="left"), 0, max_index)
+        idx2 = jnp.clip(jnp.searchsorted(time_grid, t2_arr, side="left"), 0, max_index)
+
+        # Lookup integrals with smooth abs for gradient stability (FR-008)
+        epsilon_abs = 1e-20
+        D_integral = jnp.sqrt((D_cumsum[idx2] - D_cumsum[idx1]) ** 2 + epsilon_abs)
 
     else:
         # MATRIX MODE: Standard approach for small datasets or meshgrids
@@ -388,31 +404,38 @@ def _compute_g1_shear_core(
     is_elementwise = t1.ndim == 1 and safe_len(t1) > 2000
 
     if is_elementwise:
-        # ELEMENT-WISE MODE: Compute integrals directly for each (t1[i], t2[i]) pair
-        # Each measurement i needs: ∫_{t1[i]}^{t2[i]} γ̇(t') dt'
-        # Trapezoidal approximation: |t2[i] - t1[i]| × 0.5 × (γ̇(t1[i]) + γ̇(t2[i]))
-
+        # ELEMENT-WISE MODE: Use cumulative trapezoid for accurate integration
+        # FIX (Dec 2025): Replace single trapezoid with cumulative trapezoid
+        # to match CMC physics accuracy (fixes up to 3.4% C2 error in transitions)
         t1_arr = jnp.atleast_1d(t1)
         t2_arr = jnp.atleast_1d(t2)
 
-        # Compute γ̇(t) at both t1[i] and t2[i] for all i
-        gamma_t1 = _calculate_shear_rate_impl_jax(
-            t1_arr, gamma_dot_0, beta, gamma_dot_offset
-        )
-        gamma_t2 = _calculate_shear_rate_impl_jax(
-            t2_arr, gamma_dot_0, beta, gamma_dot_offset
-        )
+        # Build dense time grid for cumulative trapezoid
+        # Use fixed max grid size (JAX JIT requires static shapes)
+        # 10001 points covers t_max up to 10000*dt (e.g., 1000s at dt=0.1s)
+        MAX_GRID_SIZE = 10001
+        # Create grid with exact dt spacing: [0, dt, 2*dt, 3*dt, ...]
+        grid_indices = jnp.arange(MAX_GRID_SIZE, dtype=jnp.float64)
+        time_grid = grid_indices * dt
 
-        # Element-wise trapezoidal integration (dimensionless, like matrix mode)
-        # Compute frame separation: |t2[i] - t1[i]| / dt = number of frames
-        # For XPCS data, times are always on uniform grid: t = dt * frame_index
-        frame_diff = jnp.abs(t2_arr - t1_arr) / dt  # Dimensionless (number of frames)
-        gamma_integral_elementwise = (
-            frame_diff * 0.5 * (gamma_t1 + gamma_t2)
-        )  # Dimensionless
+        # Compute γ̇(t) on grid and build cumulative trapezoid
+        gamma_grid = _calculate_shear_rate_impl_jax(
+            time_grid, gamma_dot_0, beta, gamma_dot_offset
+        )
+        gamma_cumsum = _trapezoid_cumsum(gamma_grid)
 
-        # For consistency with matrix mode, store as 1D array
-        gamma_integral = gamma_integral_elementwise  # Shape: (n,)
+        # Map times to grid indices using searchsorted (FR-007: clamp to valid range)
+        # CRITICAL: Use searchsorted to match CMC physics exactly (not round(t/dt))
+        # searchsorted finds insertion point, giving correct integral bounds
+        max_index = MAX_GRID_SIZE - 1
+        idx1 = jnp.clip(jnp.searchsorted(time_grid, t1_arr, side="left"), 0, max_index)
+        idx2 = jnp.clip(jnp.searchsorted(time_grid, t2_arr, side="left"), 0, max_index)
+
+        # Lookup integrals with smooth abs for gradient stability (FR-008)
+        epsilon_abs = 1e-20
+        gamma_integral = jnp.sqrt(
+            (gamma_cumsum[idx2] - gamma_cumsum[idx1]) ** 2 + epsilon_abs
+        )
         n_times = safe_len(t1_arr)
 
     else:
