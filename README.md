@@ -2,13 +2,23 @@
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Python](https://img.shields.io/badge/Python-3.12%2B-blue)](https://www.python.org/)
-[![Version](https://img.shields.io/badge/Version-2.4.1-green.svg)](#)
+[![Version](https://img.shields.io/badge/Version-2.4.3-green.svg)](#)
 [![Documentation](https://img.shields.io/badge/docs-sphinx-blue.svg)](https://homodyne.readthedocs.io)
 [![ReadTheDocs](https://readthedocs.org/projects/homodyne/badge/?version=latest)](https://homodyne.readthedocs.io/en/latest/)
 [![GitHub Actions](https://github.com/imewei/homodyne/actions/workflows/docs.yml/badge.svg)](https://github.com/imewei/homodyne/actions/workflows/docs.yml)
 [![DOI](https://zenodo.org/badge/DOI/10.1073/pnas.2401162121.svg)](https://doi.org/10.1073/pnas.2401162121)
 
 ## ⚠️ **BREAKING CHANGES: v2.4.x**
+
+### v2.4.3 - NLSQ Element-wise Integration Fix
+
+**NLSQ element-wise mode now uses cumulative trapezoid integration** matching CMC physics.
+
+**Key Changes:**
+
+- **Fixed**: Up to 3.4% C₂ error in dynamic transitions (α ≠ 0 or β ≠ 0) eliminated
+- **Unified physics**: NLSQ and CMC now produce identical results for same parameters
+- **No action required**: Fix is automatic, no configuration changes needed
 
 ### v2.4.1 - CMC-Only MCMC Architecture
 

@@ -9,6 +9,37 @@ ______________________________________________________________________
 
 ## [Unreleased]
 
+### Fixed
+
+#### NLSQ Element-wise Integration Now Matches CMC Physics
+
+**Fixed cumulative trapezoid integration in NLSQ element-wise mode** to match CMC physics
+exactly, eliminating up to 3.4% C₂ error in dynamic transitions.
+
+**Problem:**
+For large arrays (n > 2000), NLSQ element-wise mode previously used a single trapezoid
+approximation `frame_diff * 0.5 * (D(t1) + D(t2))` which could produce different
+integral values than the cumulative trapezoid method used by CMC, especially when
+α ≠ 0 or β ≠ 0 (anomalous dynamics).
+
+**Solution:**
+NLSQ element-wise mode now builds a cumulative trapezoid on a fixed grid
+(MAX_GRID_SIZE=10001 points with exact `dt` spacing), maps each `(t1, t2)` pair to
+grid indices with `searchsorted`, and computes the integral via cumulative sum
+differences—the same method used by CMC.
+
+**Changes:**
+- `homodyne/core/jax_backend.py`: `_compute_g1_diffusion_core` and `_compute_g1_shear_core`
+  now use `trapezoid_cumsum` with `searchsorted` index lookup in element-wise mode
+- `docs/research/theoretical_framework.rst`: Updated integration method documentation
+- Added `tests/integration/test_nlsq_cmc_consistency.py`: New consistency test
+- Added comprehensive `tests/unit/test_jax_backend.py`: 400+ lines of unit tests
+
+**Impact:**
+- NLSQ and CMC now produce identical C₂ values for the same parameters
+- Direct comparison between optimization methods is now valid
+- No changes required for users—fix is automatic
+
 ### Added
 
 #### Automatic XLA_FLAGS Configuration System
