@@ -232,16 +232,21 @@ class CMCResult:
                 parameters[i] = np.mean(samples_flat)
                 uncertainties[i] = np.std(samples_flat)
 
-                if name.startswith("contrast_"):
+                # CRITICAL FIX (Dec 2025): Exclude _z (z-space) parameters from legacy stats
+                # The scaled model samples contrast_0_z ~ N(0,1) and registers contrast_0 as
+                # deterministic. Only use original-space values (without _z suffix).
+                if name.startswith("contrast_") and not name.endswith("_z"):
                     contrast_values.append(float(parameters[i]))
                     contrast_stds.append(float(uncertainties[i]))
-                elif name.startswith("offset_"):
+                elif name.startswith("offset_") and not name.endswith("_z"):
                     offset_values.append(float(parameters[i]))
                     offset_stds.append(float(uncertainties[i]))
-                else:
+                elif not name.endswith("_z"):
+                    # Physical parameters (D0, alpha, etc.) - exclude _z variants
                     physical_param_names.append(name)
                     mean_params_physical.append(float(parameters[i]))
                     std_params_physical.append(float(uncertainties[i]))
+                # Skip _z parameters - they are z-space samples, not original-space values
 
         # Compute covariance (requires at least 2 samples)
         all_samples = np.column_stack(
