@@ -338,7 +338,7 @@ class CMCCombinationConfig(TypedDict, total=False):
     Attributes
     ----------
     method : str
-        Combination method: "weighted_gaussian", "simple_average", or "auto"
+        Combination method: "consensus_mc" (recommended), "weighted_gaussian", "simple_average", or "auto"
     validate_results : bool
         Validate combined posterior quality
     min_success_rate : float

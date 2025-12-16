@@ -878,10 +878,11 @@ class ConfigManager:
 
         # Validate combination
         combination = cmc_config.get("combination", {})
-        comb_method = combination.get("method", "weighted_gaussian")
-        if comb_method not in ["weighted_gaussian", "simple_average", "auto"]:
+        comb_method = combination.get("method", "consensus_mc")
+        valid_methods = ["consensus_mc", "weighted_gaussian", "simple_average", "auto"]
+        if comb_method not in valid_methods:
             raise ValueError(
-                f"Combination method must be 'weighted_gaussian', 'simple_average', or 'auto', got: {comb_method}"
+                f"Combination method must be one of {valid_methods}, got: {comb_method}"
             )
 
         min_success = combination.get("min_success_rate", 0.9)

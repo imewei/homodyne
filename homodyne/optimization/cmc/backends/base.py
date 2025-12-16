@@ -166,7 +166,7 @@ def combine_shard_samples(
     shard_samples : list[MCMCSamples]
         Samples from each shard.
     method : str
-        Combination method: "weighted_gaussian" or "simple_average".
+        Combination method: "consensus_mc" (recommended), "weighted_gaussian", "simple_average", or "auto".
     chunk_size : int
         Number of shards to combine at once for hierarchical combination.
         Default 500 keeps peak memory under ~50MB per combination step.
