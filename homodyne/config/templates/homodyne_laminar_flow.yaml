@@ -557,6 +557,8 @@ optimization:
   # Parallelizes MCMC across data shards with per-shard NUTS sampling
   # and combines subposteriors using Consensus Monte Carlo (precision-weighted means)
   cmc:
+    enable: "auto"               # true | false | "auto"
+    min_points_for_cmc: 100000   # Threshold for auto-enable (100K for laminar_flow vs 500K for static)
     backend: "jax" # Options: "jax" (CPU-only) | "numpy"; for parallel backend use backend_config.name="pjit"/"auto"
     diagonal_correction: true # Apply diagonal correction to correlation matrix
 

@@ -360,25 +360,46 @@ class CMCConfig:
         """
         return len(self.validate()) == 0
 
-    def should_enable_cmc(self, n_points: int) -> bool:
-        """Determine if CMC should be enabled for given data size.
+    def should_enable_cmc(
+        self, n_points: int, analysis_mode: str | None = None
+    ) -> bool:
+        """Determine if CMC should be enabled for given data size and mode.
 
         Parameters
         ----------
         n_points : int
             Number of data points.
+        analysis_mode : str | None
+            Analysis mode ("static" or "laminar_flow"). If provided, uses
+            mode-specific thresholds when min_points_for_cmc is at default.
 
         Returns
         -------
         bool
             True if CMC should be enabled.
+
+        Notes
+        -----
+        Mode-specific default thresholds (when min_points_for_cmc=500000):
+        - laminar_flow: 100,000 (7-param model benefits from earlier sharding)
+        - static: 500,000 (3-param model handles larger single-shard runs)
+
+        If min_points_for_cmc is explicitly set to non-default value, that
+        value is used regardless of analysis_mode.
         """
         if self.enable is True:
             return True
         if self.enable is False:
             return False
-        # "auto" mode
-        return n_points >= self.min_points_for_cmc
+
+        # "auto" mode - apply mode-specific thresholds
+        threshold = self.min_points_for_cmc
+
+        # Apply mode-specific threshold if using default value
+        if self.min_points_for_cmc == 500000 and analysis_mode == "laminar_flow":
+            threshold = 100000  # Lower threshold for complex 7-param model
+
+        return n_points >= threshold
 
     def get_num_shards(self, n_points: int, n_phi: int) -> int:
         """Calculate number of shards for given data.

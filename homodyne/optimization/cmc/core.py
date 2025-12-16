@@ -455,7 +455,7 @@ def fit_mcmc_jax(
     forced_shards = _int_like(config.num_shards) or _int_like(
         config.max_points_per_shard
     )
-    use_cmc = config.should_enable_cmc(prepared.n_total) or forced_shards
+    use_cmc = config.should_enable_cmc(prepared.n_total, analysis_mode) or forced_shards
 
     # Resolve max_points_per_shard - critical for NUTS tractability
     # Scale inversely with parameter count: more params = fewer points per shard
