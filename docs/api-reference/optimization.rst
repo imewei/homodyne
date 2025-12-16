@@ -230,6 +230,122 @@ Configuration
    :undoc-members:
    :show-inheritance:
 
+.. _cmc-decision-logic:
+
+CMC vs Single-Shard MCMC Decision Logic
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+CMC uses a **unified sampler architecture**: both single-shard (standard) MCMC and
+per-shard CMC sampling use the identical ``run_nuts_sampling()`` function from
+``homodyne/optimization/cmc/sampler.py``. The only difference is data volume and
+orchestration:
+
+**Decision Flow** (see ``homodyne/optimization/cmc/core.py:620-664``):
+
+.. code-block:: text
+
+   fit_mcmc_jax() called
+         │
+         ▼
+   ┌─────────────────────────────────────────┐
+   │ n_points >= min_points_for_cmc (500K)?  │
+   │         OR explicit shards requested?   │
+   └─────────────────────────────────────────┘
+         │                    │
+        YES                   NO
+         │                    │
+         ▼                    ▼
+   ┌─────────────┐     ┌─────────────────────┐
+   │ CMC Path    │     │ Single-Shard Path   │
+   │             │     │                     │
+   │ 1. Shard    │     │ run_nuts_sampling() │
+   │    data     │     │ with ALL data       │
+   │             │     │                     │
+   │ 2. Backend  │     │ Returns MCMCSamples │
+   │    runs     │     │ directly            │
+   │    run_nuts │     └─────────────────────┘
+   │    _sampling│
+   │    per shard│
+   │             │
+   │ 3. Combine  │
+   │    posteriors│
+   └─────────────┘
+
+**Comparison**:
+
+.. list-table::
+   :header-rows: 1
+   :widths: 25 35 40
+
+   * - Aspect
+     - Single-Shard (Standard)
+     - CMC (Sharded)
+   * - Data handling
+     - All points in one call
+     - Subsets per shard (e.g., 10K each)
+   * - Execution
+     - Single ``run_nuts_sampling()``
+     - Backend orchestrates parallel ``run_nuts_sampling()`` per shard
+   * - Results
+     - Direct posterior samples
+     - Combined via precision-weighted Gaussian consensus
+   * - Parallelization
+     - Within-chain only
+     - Across shards + within-chain
+   * - Memory
+     - Must fit entire dataset
+     - Each shard fits independently
+   * - Typical use
+     - < 500K points
+     - > 500K points
+
+**Key Configuration Parameter**:
+
+The ``min_points_for_cmc`` threshold (default: 500,000) controls automatic switching:
+
+.. code-block:: yaml
+
+   optimization:
+     cmc:
+       enable: "auto"              # "auto" | true | false
+       min_points_for_cmc: 500000  # Threshold for auto-enable
+
+- ``enable: "auto"``: Uses CMC when ``n_points >= min_points_for_cmc``
+- ``enable: true``: Always uses CMC sharding (even for small datasets)
+- ``enable: false``: Always uses single-shard MCMC
+
+**Code Reference**:
+
+The decision is made in ``fit_mcmc_jax()`` (``core.py:425-508``):
+
+.. code-block:: python
+
+   # Determine if CMC sharding is needed
+   use_cmc = config.should_enable_cmc(prepared.n_total) or forced_shards
+
+   if shards is not None and len(shards) > 1:
+       # CMC path: parallel backend
+       backend = select_backend(config)
+       mcmc_samples = backend.run(
+           model=xpcs_model_scaled,
+           ...
+       )
+   else:
+       # Single-shard path: direct sampling
+       mcmc_samples, stats = run_nuts_sampling(
+           model=xpcs_model_scaled,
+           model_kwargs=model_kwargs,
+           config=config,
+           ...
+       )
+
+Both paths use identical:
+
+- Model: ``xpcs_model_scaled`` (scaled/z-space parameterization)
+- Sampler: ``run_nuts_sampling()`` with NumPyro NUTS
+- Configuration: ``num_warmup``, ``num_samples``, ``num_chains``, ``target_accept_prob``
+- Gradient balancing: Dense mass matrix (``dense_mass=True``)
+
 .. _cmc-sharding-strategy:
 
 Sharding Strategy (Detailed)
@@ -698,6 +814,57 @@ The backend is auto-selected based on environment, but can be overridden via con
      cmc:
        sharding:
          backend: multiprocessing  # or pjit, pbs
+
+Per-Shard Sampling Behavior
+^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+All backends follow the same per-shard sampling pattern:
+
+1. **Shard preparation**: Extract data subset with associated metadata (phi indices, time arrays)
+2. **Model kwargs construction**: Build model arguments for the shard's data
+3. **Sampler invocation**: Call ``run_nuts_sampling()`` with shard-specific data
+4. **Result collection**: Gather ``MCMCSamples`` and ``SamplingStats``
+
+**Per-shard execution** (simplified from ``backends/multiprocessing.py``):
+
+.. code-block:: python
+
+   def _run_single_shard(shard_data, config, model, ...):
+       # Build model kwargs for this shard
+       model_kwargs = {
+           "data": shard_data.data,
+           "t1": shard_data.t1,
+           "t2": shard_data.t2,
+           "phi_indices": shard_data.phi_indices,
+           ...
+       }
+
+       # Same sampler as single-shard path
+       samples, stats = run_nuts_sampling(
+           model=model,
+           model_kwargs=model_kwargs,
+           config=config,
+           initial_values=initial_values,
+           ...
+       )
+       return samples, stats
+
+**What each shard receives**:
+
+- Subset of data points (respecting ``max_points_per_shard``)
+- Full ``phi_unique`` array (all angles, for proper indexing)
+- Shard-specific ``phi_indices`` (mapping points to angles)
+- Same physics parameters (``q``, ``L``, ``dt``, ``time_grid``)
+- Same MCMC configuration (``num_warmup``, ``num_samples``, etc.)
+
+**What each shard produces**:
+
+- ``MCMCSamples``: Posterior samples for all parameters
+- ``SamplingStats``: Timing, divergences, acceptance rate
+- Per-shard diagnostics: R-hat, ESS (within-shard convergence)
+
+The combination phase (see :ref:`cmc-sharding-strategy`) then merges these
+independent subposteriors using precision-weighted Gaussian consensus.
 
 Base Backend
 ^^^^^^^^^^^^
