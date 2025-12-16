@@ -148,8 +148,18 @@ def select_backend(
 def combine_shard_samples(
     shard_samples: list[MCMCSamples],
     method: str = "weighted_gaussian",
+    chunk_size: int = 500,
 ) -> MCMCSamples:
     """Combine samples from multiple shards.
+
+    Uses hierarchical combination for large shard counts to limit peak memory.
+    For K > chunk_size shards, combines in chunks of chunk_size, then combines
+    the intermediate results. This reduces peak memory from O(K) to O(chunk_size).
+
+    Memory scaling:
+    - Each shard result: ~100KB (13 params × 2 chains × 1500 samples × 8 bytes)
+    - Direct combination: K × 100KB peak memory
+    - Hierarchical (chunk=500): max(500 × 100KB, K/500 × 100KB) ≈ 50MB peak
 
     Parameters
     ----------
@@ -157,11 +167,59 @@ def combine_shard_samples(
         Samples from each shard.
     method : str
         Combination method: "weighted_gaussian" or "simple_average".
+    chunk_size : int
+        Number of shards to combine at once for hierarchical combination.
+        Default 500 keeps peak memory under ~50MB per combination step.
 
     Returns
     -------
     MCMCSamples
         Combined samples.
+    """
+    import numpy as np
+
+    from homodyne.optimization.cmc.sampler import MCMCSamples
+
+    if len(shard_samples) == 1:
+        return shard_samples[0]
+
+    # For large shard counts, use hierarchical combination to limit memory
+    if len(shard_samples) > chunk_size:
+        logger.info(
+            f"Hierarchical combination: {len(shard_samples)} shards in chunks of {chunk_size}"
+        )
+        intermediate_results = []
+        for i in range(0, len(shard_samples), chunk_size):
+            chunk = shard_samples[i : i + chunk_size]
+            chunk_result = _combine_shard_chunk(chunk, method)
+            intermediate_results.append(chunk_result)
+            logger.debug(
+                f"Combined chunk {i // chunk_size + 1}/{(len(shard_samples) + chunk_size - 1) // chunk_size}"
+            )
+
+        # Recursively combine intermediate results
+        return combine_shard_samples(intermediate_results, method, chunk_size)
+
+    return _combine_shard_chunk(shard_samples, method)
+
+
+def _combine_shard_chunk(
+    shard_samples: list[MCMCSamples],
+    method: str,
+) -> MCMCSamples:
+    """Combine a chunk of shard samples (internal helper).
+
+    Parameters
+    ----------
+    shard_samples : list[MCMCSamples]
+        Samples from each shard in the chunk.
+    method : str
+        Combination method: "weighted_gaussian" or "simple_average".
+
+    Returns
+    -------
+    MCMCSamples
+        Combined samples for this chunk.
     """
     import numpy as np
 

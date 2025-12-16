@@ -40,16 +40,88 @@ def _resolve_max_points_per_shard(
     analysis_mode: str,
     n_total: int,
     max_points_per_shard: int | str | None,
+    max_shards: int = 2000,
 ) -> int:
-    """Determine a shard size bound based on mode and data volume."""
+    """Determine optimal shard size based on mode and data volume.
 
-    if max_points_per_shard is None or max_points_per_shard == "auto":
+    NUTS MCMC is O(n) per iteration - evaluates ALL points in a shard.
+    Laminar flow (7 params) needs ~10x smaller shards than static (3 params)
+    due to complex gradient computation (trigonometric functions, cumulative integrals).
+
+    Scaling guidelines (laminar_flow mode with 2 chains, 1000 iterations):
+    - 5K points → ~2-3 min/shard
+    - 10K points → ~5-8 min/shard (sweet spot)
+    - 20K points → ~15-25 min/shard
+    - 50K points → ~45-75 min/shard
+    - 100K points → ~2+ hours/shard (too slow)
+
+    Memory scalability for shard combination:
+    - Each shard result: ~100KB (13 params × 2 chains × 1500 samples × 8 bytes)
+    - Peak memory: ~6 × K MB where K = number of shards
+    - Safe limits: K=1000 → ~6GB, K=2000 → ~12GB, K=5000 → ~30GB
+
+    For production HPC environments:
+    - Bebop (36 cores, 128GB): max ~2500 shards → 10K points for <25M datasets
+    - Improv (128 cores, 256GB): max ~5000 shards → 8K points for <40M datasets
+    - Personal (8-36 cores, 32GB): max ~500 shards → ~5M dataset limit
+
+    Parameters
+    ----------
+    analysis_mode : str
+        Analysis mode: "static" or "laminar_flow".
+    n_total : int
+        Total number of data points.
+    max_points_per_shard : int | str | None
+        User-specified shard size or "auto".
+    max_shards : int
+        Maximum number of shards to create (caps memory usage).
+        Default 2000 requires ~12GB for combination phase.
+    """
+    if max_points_per_shard is not None and max_points_per_shard != "auto":
+        return int(max_points_per_shard)
+
+    # Auto-detection based on analysis mode and dataset size
+    if analysis_mode == "laminar_flow":
+        # Laminar flow needs smaller shards due to complex gradients (7+ params)
+        if n_total >= 100_000_000:      # 100M+ points
+            base = 5_000                 # ~20K shards, ~3 min each
+        elif n_total >= 50_000_000:     # 50M+ points
+            base = 6_000                 # ~8K shards, ~4 min each
+        elif n_total >= 20_000_000:     # 20M+ points
+            base = 8_000                 # ~2.5K shards, ~5 min each
+        elif n_total >= 2_000_000:      # 2M+ points
+            base = 10_000                # ~200-300 shards, ~5-8 min each
+        else:
+            base = 20_000                # Small datasets can use larger shards
+    else:
+        # Static mode (3 params) - simpler gradients, can handle larger shards
+        if n_total >= 100_000_000:      # 100M+ points
+            base = 50_000                # ~2K shards
+        elif n_total >= 50_000_000:     # 50M+ points
+            base = 80_000                # ~625 shards
+        else:
+            base = 100_000               # Default for static mode
+
+    # Cap shard count to prevent memory exhaustion during combination
+    # Each shard result ~100KB → max_shards=2000 needs ~12GB peak memory
+    estimated_shards = n_total // base
+    if estimated_shards > max_shards:
+        # Increase shard size to respect max_shards limit
+        adjusted = (n_total + max_shards - 1) // max_shards
+        # Don't go too large for laminar_flow - cap at 50K for runtime
         if analysis_mode == "laminar_flow":
-            # Very large pools need tighter caps to avoid timeouts
-            return 10_000 if n_total >= 2_000_000 else 20_000
-        return 100_000
+            if adjusted > 50_000:
+                final_shards = n_total // 50_000
+                # Warn user: need more memory for very large laminar_flow datasets
+                logger.warning(
+                    f"Dataset ({n_total:,} points) exceeds recommended limits for laminar_flow. "
+                    f"Will create {final_shards:,} shards (>max_shards={max_shards}). "
+                    f"Ensure sufficient memory (~{final_shards * 6 // 1000}GB) or reduce dataset size."
+                )
+            adjusted = min(adjusted, 50_000)
+        return adjusted
 
-    return int(max_points_per_shard)
+    return base
 
 
 def _cap_laminar_max_points(max_points_per_shard: int, logger) -> int:
