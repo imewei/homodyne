@@ -100,6 +100,7 @@ Version Information
 
 This documentation covers Homodyne.4.x with the following key features:
 
+* **v2.4.3**: NLSQ element-wise integration fix (matches CMC physics)
 * **v2.4.1**: CMC-only MCMC architecture, module reorganization
 * **v2.4.0**: Per-angle scaling mandatory, legacy scalar mode removed
 * **v2.3.0**: CPU-only architecture (GPU support removed for maintenance simplicity)

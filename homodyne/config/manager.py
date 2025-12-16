@@ -157,7 +157,7 @@ class ConfigManager:
         """
         return {
             "metadata": {
-                "config_version": "2.4.1",
+                "config_version": "2.4.3",
                 "description": "Default minimal configuration (CPU-only)",
             },
             "analysis_mode": "static",

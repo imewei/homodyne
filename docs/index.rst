@@ -11,7 +11,7 @@ Homodyne Documentation
 
    c_2(\phi, t_1, t_2) = 1 + \text{contrast} \times [c_1(\phi, t_1, t_2)]^2
 
-**Version:** 2.4.1 | **Python:** 3.12+ | **JAX:** 0.8.0 (CPU-only)
+**Version:** 2.4.3 | **Python:** 3.12+ | **JAX:** 0.8.0 (CPU-only)
 
 Homodyne is a CPU-optimized X-ray Photon Correlation Spectroscopy (XPCS) analysis framework
 built on JAX. It implements state-of-the-art algorithms for analyzing time-dependent dynamics

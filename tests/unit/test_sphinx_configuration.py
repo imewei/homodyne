@@ -273,11 +273,11 @@ def test_project_metadata():
             conf.project == "Homodyne"
         ), f"Project should be 'Homodyne', got '{conf.project}'"
         assert (
-            conf.version == "2.4.1"
-        ), f"Version should be '2.4.1', got '{conf.version}'"
+            conf.version == "2.4.3"
+        ), f"Version should be '2.4.3', got '{conf.version}'"
         assert (
-            conf.release == "2.4.1"
-        ), f"Release should be '2.4.1', got '{conf.release}'"
+            conf.release == "2.4.3"
+        ), f"Release should be '2.4.3', got '{conf.release}'"
 
         # Check autodoc settings
         assert (
