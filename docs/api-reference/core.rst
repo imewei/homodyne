@@ -163,8 +163,22 @@ Key Shared Functions
    homodyne.core.physics_utils.safe_sinc
    homodyne.core.physics_utils.calculate_diffusion_coefficient
    homodyne.core.physics_utils.calculate_shear_rate
+   homodyne.core.physics_utils.calculate_shear_rate_cmc
    homodyne.core.physics_utils.create_time_integral_matrix
    homodyne.core.physics_utils.trapezoid_cumsum
+   homodyne.core.physics_utils.apply_diagonal_correction
+
+Numerical Stability
+^^^^^^^^^^^^^^^^^^^
+
+The physics_utils module implements several numerical stability techniques:
+
+- **Overflow protection**: ``safe_exp`` clips values to prevent overflow
+- **Division by zero**: ``safe_sinc`` handles x→0 limit smoothly
+- **Singular exponents**: ``calculate_diffusion_coefficient`` and ``calculate_shear_rate`` handle t=0 with negative exponents
+- **Smooth gradients**: ``create_time_integral_matrix`` uses sqrt(x²+ε) instead of abs(x) for differentiability
+
+These techniques ensure robust optimization with JAX autodiff.
 
 Specialized Physics Modules
 ---------------------------
