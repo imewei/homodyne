@@ -27,7 +27,9 @@ Diffusion Contribution
 
 .. math::
 
-   c_1^{\text{diff}}(t_1, t_2) = \exp\!\left[-\frac{q^2}{2} \int\limits_{|t_2 - t_1|} D(t') \, dt'\right]
+   c_1^{\text{diff}}(t_1, t_2) = \exp\!\left[-\frac{q^2}{2} \int_{t_{\min}}^{t_{\max}} D(t') \, dt'\right]
+
+where :math:`t_{\min} = \min(t_1, t_2)` and :math:`t_{\max} = \max(t_1, t_2)`.
 
 Shear Contribution
 ~~~~~~~~~~~~~~~~~~
@@ -40,7 +42,9 @@ with
 
 .. math::
 
-   \Phi(\phi, t_1, t_2) = \frac{1}{2\pi} \, q \, L \, \cos(\phi_0 - \phi) \, \int\limits_{|t_2 - t_1|} \dot{\gamma}(t') \, dt'
+   \Phi(\phi, t_1, t_2) = \frac{1}{2\pi} \, q \, L \, \cos(\phi_0 - \phi) \, \int_{t_{\min}}^{t_{\max}} \dot{\gamma}(t') \, dt'
+
+where :math:`t_{\min} = \min(t_1, t_2)` and :math:`t_{\max} = \max(t_1, t_2)`.
 
 Time-Dependent Transport Coefficients
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -144,29 +148,22 @@ Numerical Evaluation (NLSQ vs CMC)
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 While the analytic expressions above are useful for intuition, the code evaluates
-the time integrals numerically using a cumulative trapezoid built on the discrete
-time grid:
+the time integrals numerically. The implementation differs between NLSQ and CMC
+backends, and also within NLSQ depending on array size.
 
-* Build trapezoid averages between adjacent samples: ``trap_avg[k] = 0.5*(f[k] + f[k+1])``.
-* Cumulative sum of those averages (no ``dt`` applied here): ``cumsum[0]=0`` and
-  ``cumsum[i] = Σ_{k=0}^{i-1} trap_avg[k]``.
-* The integral between any two frames is the absolute difference of cumulative sums:
-  ``|cumsum[i2] - cumsum[i1]|`` (a smooth abs is used for JAX gradients). The actual
-  ``dt`` scaling is applied outside via the precomputed physics factors
-  (``wavevector_q_squared_half_dt`` and ``sinc_prefactor``).
+**Cumulative Trapezoid Method (Preferred)**
 
-Implementation differences:
+The cumulative trapezoid approach builds a running sum on the discrete time grid:
 
-* NLSQ (meshgrid): builds a full cumulative-trapezoid matrix once on the 1D grid,
-  then uses ``|cumsum[i] - cumsum[j]|`` for every meshgrid pair (see
-  ``homodyne/core/physics_nlsq.py::_create_time_integral_matrix_impl_jax``).
-* CMC (element-wise): builds the same cumulative trapezoid on the 1D grid, maps
-  each pooled ``(t1, t2)`` pair to grid indices with ``searchsorted``, and uses the
-  same absolute cumulative difference per pair (see
-  ``homodyne/core/physics_cmc.py``). This replaces the old single-endpoint trapezoid,
-  ensuring multi-step intervals sum all intermediate trapezoids just like NLSQ.
+1. Build trapezoid averages between adjacent samples: ``trap_avg[k] = 0.5*(f[k] + f[k+1])``.
+2. Cumulative sum of those averages (no ``dt`` applied here): ``cumsum[0]=0`` and
+   ``cumsum[i] = Σ_{k=0}^{i-1} trap_avg[k]``.
+3. The integral between any two frames is the absolute difference of cumulative sums:
+   ``|cumsum[i2] - cumsum[i1]|`` (a smooth abs is used for JAX gradients). The actual
+   ``dt`` scaling is applied outside via the precomputed physics factors
+   (``wavevector_q_squared_half_dt`` and ``sinc_prefactor``).
 
-Concrete example (uniform grid, no ``dt`` scaling shown):
+**Concrete example** (uniform grid, no ``dt`` scaling shown):
 
 * Samples: ``f = [f0, f1, f2]``.
 * Trapezoid averages: ``trap_avg = [0.5(f0+f1), 0.5(f1+f2)]``.
@@ -176,8 +173,73 @@ Concrete example (uniform grid, no ``dt`` scaling shown):
 * Interval ``[t1, t2]`` uses only the last trapezoid:
   ``|cumsum[2] - cumsum[1]| = 0.5(f1+f2)``.
 
-CMC applies a smooth absolute (``sqrt(diff**2 + eps)``) so gradients stay finite
-for zero-length intervals; NLSQ uses the same smooth-abs on the meshgrid matrix.
+**Implementation Differences**
+
+.. list-table:: Integration Method by Backend and Array Size
+   :header-rows: 1
+   :widths: 20 20 60
+
+   * - Backend
+     - Array Size
+     - Integration Method
+   * - NLSQ (matrix mode)
+     - n ≤ 2000
+     - Cumulative trapezoid via ``create_time_integral_matrix``
+   * - NLSQ (element-wise)
+     - n > 2000
+     - **Single trapezoid approximation** (see note below)
+   * - CMC
+     - All sizes
+     - Cumulative trapezoid via ``trapezoid_cumsum`` with index lookup
+
+**Detailed Implementation:**
+
+* **NLSQ matrix mode** (``homodyne/core/jax_backend.py``, n ≤ 2000):
+  Builds a full cumulative-trapezoid matrix once on the 1D grid,
+  then uses ``|cumsum[i] - cumsum[j]|`` for every meshgrid pair via
+  ``_create_time_integral_matrix_impl_jax``.
+
+* **NLSQ element-wise mode** (``homodyne/core/jax_backend.py``, n > 2000):
+  Uses a single trapezoid approximation for memory efficiency:
+
+  .. code-block:: python
+
+     frame_diff = jnp.abs(t2 - t1) / dt
+     D_integral = frame_diff * 0.5 * (D(t1) + D(t2))
+
+  This approximates the integral using only the endpoint values, without
+  summing intermediate trapezoids. For most time pairs this produces
+  acceptable results, but can differ from the cumulative method when
+  α ≠ 0 or β ≠ 0 (anomalous dynamics).
+
+* **CMC** (``homodyne/core/physics_cmc.py``):
+  Builds the cumulative trapezoid on a dense time grid (spacing = ``dt``),
+  maps each pooled ``(t1, t2)`` pair to grid indices with ``searchsorted``,
+  and uses the absolute cumulative difference per pair.
+
+.. warning::
+   **Integration Discrepancy for Large Arrays**
+
+   When n > 2000 (triggering NLSQ element-wise mode), the single trapezoid
+   approximation can produce different integral values than the cumulative
+   trapezoid method used by CMC. The error is largest near t=0 when α < 0
+   (subdiffusion), where D(t) changes rapidly.
+
+   **Impact on C₂**: Despite potentially large integral errors (up to 900% near
+   t=0 for extreme cases), the C₂ correlation error is typically < 3.5% because:
+
+   1. **g₁ saturation**: The field correlation g₁ = exp(-integral) saturates
+      to 0 or 1 at most points, masking integral differences.
+   2. **Interior time pairs**: Most (t1, t2) pairs are away from t=0 where
+      D(t) varies less rapidly.
+
+   For rigorous uncertainty quantification, use CMC which always applies the
+   full cumulative trapezoid method.
+
+**Smooth Absolute for Gradients**
+
+Both backends apply a smooth absolute function (``sqrt(diff**2 + eps)``) so
+gradients stay finite for zero-length intervals.
 
 Parameter Space and Priors (CMC)
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~

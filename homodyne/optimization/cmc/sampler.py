@@ -468,6 +468,9 @@ class MCMCSamples:
         Number of samples per chain.
     extra_fields : dict[str, Any]
         Additional MCMC info (divergences, energy, etc.).
+    num_shards : int
+        Number of shards combined (1 for single shard, >1 for CMC).
+        Used for correct divergence rate calculation in CMC.
     """
 
     samples: dict[str, np.ndarray]
@@ -475,6 +478,7 @@ class MCMCSamples:
     n_chains: int
     n_samples: int
     extra_fields: dict[str, Any] = field(default_factory=dict)
+    num_shards: int = 1
 
 
 def create_init_strategy(

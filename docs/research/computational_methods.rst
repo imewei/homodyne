@@ -26,8 +26,8 @@ memory management complexity.
    :widths: 25 35 40
 
    * - Aspect
-     - NLSQ Backend (``physics_nlsq.py``)
-     - CMC Backend (``jax_backend.py``)
+     - NLSQ Backend (``jax_backend.py``)
+     - CMC Backend (``physics_cmc.py``)
    * - Purpose
      - Deterministic point estimates
      - Bayesian uncertainty quantification

@@ -510,24 +510,18 @@ def fit_mcmc_jax(
     # =========================================================================
     # 4. Build model function
     # =========================================================================
-    # Build the 1D time grid once to mirror NLSQ trapezoidal integration
-    time_grid_np = np.unique(
-        np.concatenate([np.asarray(prepared.t1), np.asarray(prepared.t2)])
-    )
-    time_grid = jnp.array(time_grid_np)
+    # CRITICAL FIX (Dec 2025): Construct time_grid with PROPER dt spacing
+    # Previously used np.unique(t1, t2) which gave incorrect grid density
+    # when data is subsampled or pooled from shards with different time points.
+    #
+    # The physics integration (trapezoidal cumsum) depends critically on grid density:
+    # - With dt=0.1s and t_max=100s, need 1001 points for correct physics
+    # - Using np.unique gave variable n_points (e.g., 201 with subsampled data)
+    # - This caused up to 26% error in C2 values vs NLSQ (see scripts/compare_nlsq_cmc_c2.py)
+    #
+    # Fix: Construct time_grid from config dt, NOT from data unique values
 
-    # DEBUG: Log time_grid construction details
-    run_logger.info(
-        f"[CMC DEBUG] time_grid constructed: n_points={len(time_grid_np)}, "
-        f"range=[{time_grid_np.min():.6g}, {time_grid_np.max():.6g}]"
-    )
-    run_logger.info(
-        f"[CMC DEBUG] pooled t1: n={len(prepared.t1)}, range=[{prepared.t1.min():.6g}, {prepared.t1.max():.6g}]"
-    )
-    run_logger.info(
-        f"[CMC DEBUG] pooled t2: n={len(prepared.t2)}, range=[{prepared.t2.min():.6g}, {prepared.t2.max():.6g}]"
-    )
-
+    # First determine dt to use (config dt takes precedence)
     inferred_dt = _infer_time_step(prepared.t1, prepared.t2)
     dt_used = dt if dt is not None else inferred_dt
 
@@ -549,6 +543,33 @@ def fit_mcmc_jax(
                 f"dt mismatch: provided dt={dt_used:.6g}s vs inferred {inferred_dt:.6g}s; "
                 "using provided dt for physics; results may not match NLSQ"
             )
+
+    # CRITICAL: Construct time_grid with CORRECT dt spacing to match NLSQ physics
+    # The grid must have the same density as NLSQ (e.g., dt=0.1s gives 1001 points for [0, 100])
+    t1_np = np.asarray(prepared.t1)
+    t2_np = np.asarray(prepared.t2)
+    t_min = 0.0  # Always start from t=0 for consistent integration
+    t_max = float(max(t1_np.max(), t2_np.max()))
+    n_time_points = int(round(t_max / dt_used)) + 1
+    time_grid_np = np.linspace(t_min, t_max, n_time_points)
+    time_grid = jnp.array(time_grid_np)
+
+    # Log time_grid construction details
+    run_logger.info(
+        f"[CMC] time_grid constructed with dt={dt_used:.6g}s: "
+        f"n_points={n_time_points}, range=[{t_min:.6g}, {t_max:.6g}]"
+    )
+    run_logger.info(
+        f"[CMC] Data time ranges: t1=[{t1_np.min():.6g}, {t1_np.max():.6g}], "
+        f"t2=[{t2_np.min():.6g}, {t2_np.max():.6g}]"
+    )
+
+    # Verify grid spacing matches config dt
+    actual_grid_dt = (time_grid_np[1] - time_grid_np[0]) if len(time_grid_np) > 1 else dt_used
+    if abs(actual_grid_dt - dt_used) > 1e-6:
+        run_logger.warning(
+            f"[CMC] Grid spacing {actual_grid_dt:.6g}s differs from config dt={dt_used:.6g}s"
+        )
 
     model_kwargs = {
         "data": jnp.array(prepared.data),
@@ -670,6 +691,7 @@ def fit_mcmc_jax(
         divergences=result.divergences,
         n_samples=result.n_samples,
         n_chains=result.n_chains,
+        num_shards=result.num_shards,
     )
     run_logger.info(f"CMC complete: {result.convergence_status}")
     run_logger.info(summary)

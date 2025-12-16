@@ -214,12 +214,29 @@ def _combine_shard_chunk(
     shard_samples : list[MCMCSamples]
         Samples from each shard in the chunk.
     method : str
-        Combination method: "weighted_gaussian" or "simple_average".
+        Combination method:
+        - "consensus_mc": Correct Consensus Monte Carlo (precision-weighted means)
+        - "weighted_gaussian": Legacy element-wise weighted averaging (deprecated)
+        - "simple_average": Simple element-wise averaging (deprecated)
 
     Returns
     -------
     MCMCSamples
         Combined samples for this chunk.
+
+    Notes
+    -----
+    The "consensus_mc" method implements the correct Consensus Monte Carlo
+    algorithm (Scott et al., 2016):
+
+    1. For each shard s, compute posterior mean μ_s and variance σ²_s
+    2. Combined precision: 1/σ² = Σ_s (1/σ²_s)
+    3. Combined mean: μ = σ² × Σ_s (μ_s / σ²_s)
+    4. Generate new samples from N(μ, σ²)
+
+    The legacy methods do element-wise averaging of sample arrays, which is
+    mathematically incorrect as sample indices have no correspondence across
+    shards.
     """
     import numpy as np
 
@@ -233,28 +250,60 @@ def _combine_shard_chunk(
     n_chains = shard_samples[0].n_chains
     n_samples = shard_samples[0].n_samples
 
-    if method == "simple_average":
-        # Simple average across shards
+    if method == "consensus_mc":
+        # CORRECT Consensus Monte Carlo (Scott et al., 2016):
+        # Combine posterior moments, then generate new samples
         combined_samples: dict[str, np.ndarray] = {}
-        for name in param_names:
-            all_shard_samples = [s.samples[name] for s in shard_samples]
-            # Average the posterior means
-            combined_samples[name] = np.mean(all_shard_samples, axis=0)
+        rng = np.random.default_rng(42)  # Deterministic for reproducibility
 
-    else:  # weighted_gaussian
-        # Weighted combination based on precision (1/variance)
+        for name in param_names:
+            # Compute per-shard posterior mean and variance
+            shard_means = []
+            shard_variances = []
+            for s in shard_samples:
+                samples = s.samples[name].flatten()
+                shard_means.append(np.mean(samples))
+                shard_variances.append(np.var(samples))
+
+            # Precision-weighted combination
+            # Combined precision = sum of precisions
+            precisions = [1.0 / max(v, 1e-10) for v in shard_variances]
+            combined_precision = sum(precisions)
+            combined_variance = 1.0 / combined_precision
+
+            # Combined mean = (combined_variance) * sum(precision_s * mean_s)
+            weighted_mean_sum = sum(
+                p * m for p, m in zip(precisions, shard_means, strict=False)
+            )
+            combined_mean = combined_variance * weighted_mean_sum
+
+            # Generate new samples from the combined Gaussian
+            # Shape: (n_chains, n_samples)
+            combined_std = np.sqrt(combined_variance)
+            new_samples = rng.normal(
+                loc=combined_mean,
+                scale=combined_std,
+                size=(n_chains, n_samples),
+            )
+            combined_samples[name] = new_samples
+
+    elif method == "simple_average":
+        # Legacy: Simple element-wise average across shards (deprecated)
         combined_samples = {}
         for name in param_names:
-            # Get samples from all shards
             all_shard_samples = [s.samples[name] for s in shard_samples]
+            combined_samples[name] = np.mean(all_shard_samples, axis=0)
 
-            # Compute weights based on inverse variance
+    else:  # weighted_gaussian (legacy default)
+        # Legacy: Element-wise weighted averaging (deprecated)
+        # WARNING: This is mathematically incorrect but kept for backward compatibility
+        combined_samples = {}
+        for name in param_names:
+            all_shard_samples = [s.samples[name] for s in shard_samples]
             variances = [np.var(s) for s in all_shard_samples]
             precisions = [1.0 / max(v, 1e-10) for v in variances]
             total_precision = sum(precisions)
             weights = [p / total_precision for p in precisions]
-
-            # Weighted average
             weighted_sum = sum(
                 w * s for w, s in zip(weights, all_shard_samples, strict=False)
             )
@@ -269,10 +318,14 @@ def _combine_shard_chunk(
         if all_extra:
             combined_extra[key] = np.concatenate(all_extra, axis=0)
 
+    # Track total shards for correct divergence rate calculation
+    total_shards = sum(getattr(s, "num_shards", 1) for s in shard_samples)
+
     return MCMCSamples(
         samples=combined_samples,
         param_names=param_names,
         n_chains=n_chains,
         n_samples=n_samples,
         extra_fields=combined_extra,
+        num_shards=total_shards,
     )

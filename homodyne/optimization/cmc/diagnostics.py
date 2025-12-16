@@ -158,6 +158,7 @@ def check_convergence(
     max_rhat: float = DEFAULT_MAX_RHAT,
     min_ess: float = DEFAULT_MIN_ESS,
     max_divergence_rate: float = DEFAULT_MAX_DIVERGENCE_RATE,
+    num_shards: int = 1,
 ) -> tuple[str, list[str]]:
     """Check convergence and generate warnings.
 
@@ -179,6 +180,9 @@ def check_convergence(
         Minimum acceptable ESS.
     max_divergence_rate : float
         Maximum acceptable divergence rate.
+    num_shards : int
+        Number of shards (for CMC). Divergences are summed across shards,
+        so total transitions = num_shards × n_chains × n_samples.
 
     Returns
     -------
@@ -210,7 +214,9 @@ def check_convergence(
         )
 
     # Check divergences
-    total_transitions = n_samples * n_chains
+    # For CMC, divergences are summed across all shards, so total transitions
+    # must account for num_shards to get the correct rate
+    total_transitions = num_shards * n_samples * n_chains
     divergence_rate = divergences / total_transitions if total_transitions > 0 else 0
 
     if divergence_rate > max_divergence_rate:
@@ -319,6 +325,7 @@ def summarize_diagnostics(
     divergences: int,
     n_samples: int,
     n_chains: int,
+    num_shards: int = 1,
 ) -> str:
     """Create human-readable diagnostics summary.
 
@@ -334,6 +341,8 @@ def summarize_diagnostics(
         Samples per chain.
     n_chains : int
         Number of chains.
+    num_shards : int
+        Number of shards (for CMC).
 
     Returns
     -------
@@ -346,7 +355,7 @@ def summarize_diagnostics(
     max_rhat = max(r_hat_values) if r_hat_values else np.nan
     min_ess = min(ess_values) if ess_values else np.nan
 
-    total = n_samples * n_chains
+    total = num_shards * n_samples * n_chains
     div_rate = divergences / total if total > 0 else 0
 
     return (
@@ -396,7 +405,8 @@ def log_analysis_summary(
     max_rhat = max(r_hat_values) if r_hat_values else np.nan
     min_ess = min(ess_values) if ess_values else np.nan
 
-    total_transitions = n_samples * n_chains
+    # For CMC, total transitions = n_shards × n_samples × n_chains
+    total_transitions = n_shards * n_samples * n_chains
     div_rate = divergences / total_transitions if total_transitions > 0 else 0
     success_rate = shards_succeeded / n_shards if n_shards > 0 else 0
 
@@ -407,7 +417,7 @@ def log_analysis_summary(
 
     # Status with clear indicator
     if convergence_status == "converged":
-        logger.info(f"✓ Status: CONVERGED")
+        logger.info("✓ Status: CONVERGED")
     else:
         logger.warning(f"✗ Status: {convergence_status.upper()}")
 
@@ -420,7 +430,7 @@ def log_analysis_summary(
 
     # Recommendations if there are issues
     recommendations = get_convergence_recommendations(
-        max_rhat, min_ess, divergences, n_samples, n_chains
+        max_rhat, min_ess, divergences, n_samples, n_chains, n_shards
     )
     if recommendations:
         logger.info("-" * 40)
@@ -437,6 +447,7 @@ def get_convergence_recommendations(
     divergences: int,
     n_samples: int,
     n_chains: int,
+    num_shards: int = 1,
 ) -> list[str]:
     """Generate specific recommendations for convergence issues.
 
@@ -452,6 +463,8 @@ def get_convergence_recommendations(
         Samples per chain.
     n_chains : int
         Number of chains.
+    num_shards : int
+        Number of shards (for CMC).
 
     Returns
     -------
@@ -460,7 +473,7 @@ def get_convergence_recommendations(
     """
     recommendations: list[str] = []
 
-    total_transitions = n_samples * n_chains
+    total_transitions = num_shards * n_samples * n_chains
     div_rate = divergences / total_transitions if total_transitions > 0 else 0
 
     # R-hat recommendations

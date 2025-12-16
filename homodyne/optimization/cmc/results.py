@@ -127,6 +127,7 @@ class CMCResult:
     n_samples: int = 2000
     n_warmup: int = 500
     analysis_mode: str = "static"
+    num_shards: int = 1  # Number of shards combined (for correct divergence rate)
 
     # Compatibility fields
     covariance: np.ndarray = field(default_factory=lambda: np.array([]))
@@ -158,7 +159,9 @@ class CMCResult:
         if self.convergence_status == "converged":
             return f"CMC sampling converged. {self.divergences} divergences."
         elif self.convergence_status == "divergences":
-            rate = self.divergences / (self.n_chains * self.n_samples)
+            # Account for num_shards in divergence rate calculation
+            total_transitions = self.num_shards * self.n_chains * self.n_samples
+            rate = self.divergences / total_transitions if total_transitions > 0 else 0
             return f"CMC completed with {rate:.1%} divergence rate."
         else:
             return f"CMC did not converge: {self.convergence_status}"
@@ -200,12 +203,14 @@ class CMCResult:
         ess_bulk, ess_tail = compute_ess(mcmc_samples.samples)
 
         # Check convergence
+        # Pass num_shards for correct divergence rate calculation in CMC
         convergence_status, warnings = check_convergence(
             r_hat=r_hat,
             ess_bulk=ess_bulk,
             divergences=stats.num_divergent,
             n_samples=mcmc_samples.n_samples,
             n_chains=mcmc_samples.n_chains,
+            num_shards=getattr(mcmc_samples, "num_shards", 1),
         )
 
         if warnings:
@@ -288,6 +293,7 @@ class CMCResult:
             n_samples=mcmc_samples.n_samples,
             n_warmup=n_warmup,
             analysis_mode=analysis_mode,
+            num_shards=getattr(mcmc_samples, "num_shards", 1),
             covariance=covariance,
             device_info={"platform": "cpu", "device": "CPU"},
             # Legacy/compat fields expected by CLI writers/plots
@@ -397,7 +403,8 @@ class CMCResult:
 
         # Check for divergences
         if self.divergences > 0:
-            div_rate = self.divergences / (self.n_chains * self.n_samples)
+            total_transitions = self.num_shards * self.n_chains * self.n_samples
+            div_rate = self.divergences / total_transitions if total_transitions > 0 else 0
             if div_rate > 0.01:
                 warnings.append(f"High divergence rate: {div_rate:.1%}")
 

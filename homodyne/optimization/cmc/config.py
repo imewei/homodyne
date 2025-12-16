@@ -71,7 +71,12 @@ class CMCConfig:
     min_ess : float
         Minimum effective sample size.
     combination_method : str
-        How to combine shard posteriors: "weighted_gaussian", "simple_average".
+        How to combine shard posteriors:
+        - "consensus_mc": Correct Consensus Monte Carlo (precision-weighted means).
+          Recommended. Combines per-shard posterior moments, then generates new
+          samples from the combined Gaussian.
+        - "weighted_gaussian": Legacy element-wise weighted averaging (deprecated).
+        - "simple_average": Simple element-wise averaging (deprecated).
     min_success_rate : float
         Minimum fraction of shards that must succeed.
     run_id : str | None
@@ -113,7 +118,7 @@ class CMCConfig:
     min_ess: float = 100.0
 
     # Combination
-    combination_method: str = "weighted_gaussian"
+    combination_method: str = "consensus_mc"  # Correct CMC method (v2.4.3+)
     min_success_rate: float = 0.90
     run_id: str | None = None
 
@@ -313,7 +318,7 @@ class CMCConfig:
             errors.append(f"min_ess must be non-negative, got: {self.min_ess}")
 
         # Validate combination settings
-        valid_methods = ["weighted_gaussian", "simple_average", "auto"]
+        valid_methods = ["consensus_mc", "weighted_gaussian", "simple_average", "auto"]
         if self.combination_method not in valid_methods:
             errors.append(
                 f"combination_method must be one of {valid_methods}, got: {self.combination_method}"

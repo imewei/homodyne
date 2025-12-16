@@ -749,6 +749,34 @@ class MultiprocessingBackend(CMCBackend):
             if shard_idx is not None and duration is not None:
                 run_logger.debug(f"Shard {shard_idx} completed in {duration:.2f}s")
 
+        # Log per-shard posterior statistics BEFORE combination
+        # This helps diagnose why combined posteriors may differ from initial values
+        if len(successful_samples) > 1:
+            key_params = ["D0", "alpha", "D_offset", "gamma_dot_t0", "beta"]
+            run_logger.info(
+                f"Per-shard posterior statistics ({len(successful_samples)} shards):"
+            )
+            for param in key_params:
+                if param in successful_samples[0].samples:
+                    means = [
+                        float(np.mean(s.samples[param]))
+                        for s in successful_samples
+                    ]
+                    stds = [float(np.std(s.samples[param])) for s in successful_samples]
+                    run_logger.info(
+                        f"  {param}: shard_means=[{np.min(means):.4g}, {np.max(means):.4g}], "
+                        f"range={np.max(means) - np.min(means):.4g}, "
+                        f"mean_of_means={np.mean(means):.4g}, "
+                        f"std_of_means={np.std(means):.4g}"
+                    )
+                    # Warn if shard posteriors are highly heterogeneous
+                    cv = np.std(means) / max(abs(np.mean(means)), 1e-10)
+                    if cv > 0.5:
+                        run_logger.warning(
+                            f"    HIGH HETEROGENEITY: {param} has CV={cv:.2f} across shards! "
+                            f"Combined posterior may be unreliable."
+                        )
+
         # Combine samples
         combined = combine_shard_samples(
             successful_samples,
