@@ -2606,11 +2606,15 @@ def _compute_theoretical_c2_from_mcmc(
     config_dict = config.get_config() if hasattr(config, "get_config") else config
     _analysis_mode = config_dict.get("analysis_mode", "static_isotropic")  # noqa: F841
 
-    # Get L parameter (stator-rotor gap)
-    L = config_dict.get("model_params", {}).get("L", 2000000.0)
+    # Get L parameter (stator-rotor gap) from correct config path
+    analyzer_params = config_dict.get("analyzer_parameters", {})
+    L = analyzer_params.get("geometry", {}).get("stator_rotor_gap", 2000000.0)
 
-    # Get dt parameter (required for correct physics)
-    dt = config_dict.get("acquisition", {}).get("dt", 1e-8)
+    # Get dt parameter (required for correct physics) from correct config path
+    # BUG FIX: Was using wrong path "acquisition.dt" with default 1e-8 (10 ns)
+    # Correct path is "analyzer_parameters.dt" with default 0.001 (1 ms, APS-U standard)
+    # Config file can override this (e.g., dt: 0.1 for 100ms frame rate)
+    dt = analyzer_params.get("dt", 0.001)
 
     # Compute theoretical C2 for all angles with per-angle scaling estimation
     c2_theoretical_list = []

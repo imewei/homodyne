@@ -629,33 +629,22 @@ def generate_nlsq_plots(
     percentile_min = color_scale_cfg.get("percentile_min", 1.0)
     percentile_max = color_scale_cfg.get("percentile_max", 99.0)
 
-    # Adaptive color scaling
+    # Color scaling configuration
+    # Don't set explicit vmin/vmax here - let _resolve_color_limits compute
+    # per-panel percentile-based limits to show structure in both exp and fit data
     c2_min = min(np.min(c2_exp), np.min(c2_fit_display))
     c2_max = max(np.max(c2_exp), np.max(c2_fit_display))
-    vmin_adaptive = float(max(1.0, c2_min))
-    vmax_adaptive = float(min(1.6, c2_max))
 
     logger.debug(
-        f"C2 data range [{c2_min:.4f}, {c2_max:.4f}] → "
-        f"color scale [{vmin_adaptive:.4f}, {vmax_adaptive:.4f}] (clamped to [1.0, 1.6])"
+        f"C2 data range: exp=[{np.min(c2_exp):.4f}, {np.max(c2_exp):.4f}], "
+        f"fit=[{np.min(c2_fit_display):.4f}, {np.max(c2_fit_display):.4f}]"
     )
 
-    if pin_legacy_range:
-        color_options = {
-            "vmin": vmin_adaptive,
-            "vmax": vmax_adaptive,
-            "adaptive": False,
-            "percentile_min": percentile_min,
-            "percentile_max": percentile_max,
-        }
-    else:
-        color_options = {
-            "vmin": color_scale_cfg.get("fixed_min", vmin_adaptive),
-            "vmax": color_scale_cfg.get("fixed_max", vmax_adaptive),
-            "adaptive": color_mode == "adaptive",
-            "percentile_min": percentile_min,
-            "percentile_max": percentile_max,
-        }
+    # Pass percentile settings but NOT fixed vmin/vmax - let each panel auto-scale
+    color_options = {
+        "percentile_min": percentile_min,
+        "percentile_max": percentile_max,
+    }
 
     surface_label = "solver" if use_solver_surface else "posthoc"
     logger.info(f"Plotting fit surface: {surface_label}")
@@ -866,17 +855,20 @@ def _generate_plots_matplotlib(
     for i, phi in enumerate(phi_angles):
         fig, axes = plt.subplots(1, 3, figsize=(15, 5))
 
-        vmin_use, vmax_use = _resolve_color_limits(c2_exp[i], color_options)
+        # Use separate color limits for experimental and fitted panels
+        # This allows seeing structure in both even if they have different amplitudes
+        vmin_exp, vmax_exp = _resolve_color_limits(c2_exp[i], color_options)
+        vmin_fit, vmax_fit = _resolve_color_limits(c2_fit_display[i], color_options)
 
-        # Panel 1: Experimental data
+        # Panel 1: Experimental data with its own scale
         im0 = axes[0].imshow(
             c2_exp[i].T,
             origin="lower",
             aspect="equal",
             cmap="jet",
             extent=[t1[0], t1[-1], t2[0], t2[-1]],
-            vmin=vmin_use,
-            vmax=vmax_use,
+            vmin=vmin_exp,
+            vmax=vmax_exp,
         )
         axes[0].set_title(f"Experimental C₂ (φ={phi:.1f}°)", fontsize=12)
         axes[0].set_xlabel("t₁ (s)", fontsize=10)
@@ -884,15 +876,15 @@ def _generate_plots_matplotlib(
         cbar0 = plt.colorbar(im0, ax=axes[0], label="C₂(t₁,t₂)")
         cbar0.ax.tick_params(labelsize=8)
 
-        # Panel 2: Theoretical fit
+        # Panel 2: Theoretical fit with its own scale (shows structure even if amplitude differs)
         im1 = axes[1].imshow(
             c2_fit_display[i].T,
             origin="lower",
             aspect="equal",
             cmap="jet",
             extent=[t1[0], t1[-1], t2[0], t2[-1]],
-            vmin=vmin_use,
-            vmax=vmax_use,
+            vmin=vmin_fit,
+            vmax=vmax_fit,
         )
         axes[1].set_title(f"Classical Fit (φ={phi:.1f}°)", fontsize=12)
         axes[1].set_xlabel("t₁ (s)", fontsize=10)
@@ -932,20 +924,26 @@ def _resolve_color_limits(
     matrix: np.ndarray,
     color_options: dict[str, Any] | None,
 ) -> tuple[float, float]:
-    """Resolve color limits for heatmap plotting."""
+    """Resolve color limits for heatmap plotting.
+
+    Uses percentile-based limits by default to show data structure,
+    with fallback to [1.0, 1.5] only for empty data.
+    """
     opts = color_options or {}
-    adaptive = opts.get("adaptive", False)
     vmin = opts.get("vmin")
     vmax = opts.get("vmax")
     percentile_min = opts.get("percentile_min", 1.0)
     percentile_max = opts.get("percentile_max", 99.0)
 
-    if adaptive and matrix.size > 0:
+    # Always use percentile-based limits if not explicitly set
+    # This ensures we see the structure in the data regardless of absolute range
+    if matrix.size > 0:
         if vmin is None:
             vmin = float(np.percentile(matrix, percentile_min))
         if vmax is None:
             vmax = float(np.percentile(matrix, percentile_max))
 
+    # Fallback only for empty data
     if vmin is None:
         vmin = 1.0
     if vmax is None:
