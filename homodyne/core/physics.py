@@ -102,12 +102,12 @@ class PhysicsConstants:
     MIN_POSITIVE = 1e-100  # Minimum positive value
 
     # Physical parameter bounds
-    ALPHA_MIN = (
-        -10.0
-    )  # Minimum diffusion exponent (wider range for extreme anomalous diffusion)
-    ALPHA_MAX = 10.0  # Maximum diffusion exponent
-    BETA_MIN = -10.0  # Minimum shear exponent (wider range for extreme time dependence)
-    BETA_MAX = 10.0  # Maximum shear exponent
+    # NOTE: These are reference values. The PRIMARY bounds used by NLSQ/CMC
+    # are defined in homodyne.core.fitting.ParameterSpace
+    ALPHA_MIN = -2.0  # Minimum diffusion exponent (tighter for numerical stability)
+    ALPHA_MAX = 2.0  # Maximum diffusion exponent
+    BETA_MIN = -2.0  # Minimum shear exponent (tighter for numerical stability)
+    BETA_MAX = 2.0  # Maximum shear exponent
 
 
 def parameter_bounds() -> dict[str, list[tuple[float, float]]]:
