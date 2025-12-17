@@ -2663,11 +2663,26 @@ def _compute_theoretical_c2_from_mcmc(
             # Solve least squares
             try:
                 lstsq_result = np.linalg.lstsq(A, c2_flat, rcond=None)
-                contrast_i, offset_i = lstsq_result[0]
+                contrast_raw, offset_raw = lstsq_result[0]
 
-                # Validate fitted values
-                contrast_i = float(np.clip(contrast_i, 0.01, 2.0))  # Reasonable bounds
-                offset_i = float(np.clip(offset_i, 0.5, 2.0))
+                # Physical bounds for contrast: (0, 1] - must be positive and ≤ 1
+                # Physical bounds for offset: [0.5, 1.5] - baseline around 1.0
+                # Log warning if lstsq produces unphysical values (indicates model mismatch)
+                if contrast_raw > 1.0:
+                    logger.warning(
+                        f"Angle {i} (φ={phi:.2f}°): lstsq contrast={contrast_raw:.4f} > 1.0 "
+                        "(unphysical). This indicates the physics model underestimates "
+                        "the C2 variation. Clipping to 1.0."
+                    )
+                elif contrast_raw <= 0:
+                    logger.warning(
+                        f"Angle {i} (φ={phi:.2f}°): lstsq contrast={contrast_raw:.4f} <= 0 "
+                        "(unphysical). Clipping to 0.01."
+                    )
+
+                # Enforce physical bounds
+                contrast_i = float(np.clip(contrast_raw, 0.01, 1.0))  # Physical: (0, 1]
+                offset_i = float(np.clip(offset_raw, 0.5, 1.5))  # Physical: around 1.0
 
                 if i == 0:  # Log first angle details
                     logger.debug(
