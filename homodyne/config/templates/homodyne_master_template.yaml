@@ -264,6 +264,20 @@ initial_parameters:
 # ==============================================================================
 # Parameter bounds and prior distributions.
 #
+# DEFAULT BOUNDS (from homodyne.core.fitting.ParameterSpace):
+# -----------------------------------------------------------
+# | Parameter          | Default Bounds      | Notes                              |
+# |--------------------|---------------------|------------------------------------|
+# | contrast           | (0.0, 1.0)          | Physical: visibility/coherence     |
+# | offset             | (0.5, 1.5)          | Baseline around 1.0 ± 50%          |
+# | D0                 | (1.0, 1,000,000)    | Diffusion coefficient              |
+# | alpha              | (-2.0, 2.0)         | Tighter for numerical stability    |
+# | D_offset           | (-100,000, 100,000) | Diffusion baseline correction      |
+# | gamma_dot_t0       | (1e-5, 1.0)         | Shear rate                         |
+# | beta               | (-2.0, 2.0)         | Tighter for numerical stability    |
+# | gamma_dot_t_offset | (-1.0, 1.0)         | Shear baseline correction          |
+# | phi0               | (-30.0, 30.0)       | Flow direction angle [degrees]     |
+#
 # BOUNDS GUIDELINES:
 #   - Too narrow: May miss true optimum
 #   - Too wide: Slow convergence, numerical issues
@@ -282,14 +296,16 @@ parameter_space:
     # -------------------------------------------------------------------------
     - name: contrast
       min: 0.0      # Physical minimum (no negative contrast)
-      max: 1.0      # Maximum contrast (fully coherent)
+      max: 1.0      # Physical maximum (fully coherent) - CANNOT exceed 1.0
       type: TruncatedNormal
+      # DEFAULT BOUNDS: (0.0, 1.0) - Physical range for visibility/coherence
       # Typical XPCS values: 0.01-0.2
 
     - name: offset
       min: 0.5      # Baseline should be near 1.0
       max: 1.5      # Allow some variation
       type: TruncatedNormal
+      # DEFAULT BOUNDS: (0.5, 1.5) - Baseline around 1.0 ± 50%
       # Typical XPCS values: 0.9-1.1
 
     # -------------------------------------------------------------------------
@@ -302,6 +318,7 @@ parameter_space:
       prior_mu: 1000.0     # Prior mean for MCMC
       prior_sigma: 1000.0  # Prior std for MCMC
       unit: "Å²/s"
+      # DEFAULT BOUNDS: (1.0, 1,000,000) - Wide range for diverse systems
       # Physical meaning: Diffusion coefficient magnitude
       # D(t) = D₀·t^α + D_offset
 
@@ -312,6 +329,7 @@ parameter_space:
       prior_mu: -1.2       # Prior mean (subdiffusive default)
       prior_sigma: 0.3     # Prior std
       unit: "dimensionless"
+      # DEFAULT BOUNDS: (-2.0, 2.0) - Tighter for numerical stability
       # Physical meaning: Anomalous diffusion exponent
       #   α < 0: Subdiffusion (crowded, jammed systems)
       #   α = 0: Normal diffusion
@@ -324,6 +342,7 @@ parameter_space:
       prior_mu: 0.0
       prior_sigma: 150.0
       unit: "Å²/s"
+      # DEFAULT BOUNDS: (-100,000, 100,000) - Allows negative for arrested systems
       # Physical meaning: Constant diffusion baseline
       # Negative values may indicate arrested dynamics
 
@@ -337,6 +356,7 @@ parameter_space:
       prior_mu: 0.01
       prior_sigma: 0.1
       unit: "s⁻¹"
+      # DEFAULT BOUNDS: (1e-5, 1.0) - Realistic shear rates for XPCS
       # Physical meaning: Shear rate magnitude
       # γ̇(t) = γ̇₀·t^β + γ̇_offset
 
@@ -347,6 +367,7 @@ parameter_space:
       prior_mu: 0.0        # Default: constant shear
       prior_sigma: 0.5
       unit: "dimensionless"
+      # DEFAULT BOUNDS: (-2.0, 2.0) - Tighter for numerical stability
       # Physical meaning: Shear rate time evolution
       #   β = 0: Constant shear
       #   β > 0: Shear increases with time
@@ -359,6 +380,7 @@ parameter_space:
       prior_mu: 0.0
       prior_sigma: 0.02
       unit: "s⁻¹"
+      # DEFAULT BOUNDS: (-1.0, 1.0) - Allows negative offsets
       # Physical meaning: Baseline shear rate offset
       # Usually small or zero
 
@@ -369,6 +391,7 @@ parameter_space:
       prior_mu: 0.0
       prior_sigma: 5.0
       unit: "degrees"
+      # DEFAULT BOUNDS: (-30.0, 30.0) - Flow direction angle offset
       # Physical meaning: Flow direction angle offset
       # Accounts for misalignment between flow and detector axes
 

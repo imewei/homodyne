@@ -207,10 +207,40 @@ initial_parameters:
 # PARAMETER SPACE (Required)
 # ==============================================================================
 # Parameter bounds and constraints for static diffusion model
+#
+# DEFAULT BOUNDS (from homodyne.core.fitting.ParameterSpace):
+# -----------------------------------------------------------
+# | Parameter | Default Bounds      | Notes                              |
+# |-----------|---------------------|------------------------------------|
+# | contrast  | (0.0, 1.0)          | Physical: visibility/coherence     |
+# | offset    | (0.5, 1.5)          | Baseline around 1.0 ± 50%          |
+# | D0        | (1.0, 1,000,000)    | Diffusion coefficient              |
+# | alpha     | (-2.0, 2.0)         | Tighter for numerical stability    |
+# | D_offset  | (-100,000, 100,000) | Diffusion baseline correction      |
+#
+# Values below can override defaults. If omitted, defaults are used.
+#
 parameter_space:
   model: "static" # Static diffusion mode
 
   bounds:
+    # -------------------------------------------------------------------------
+    # SCALING PARAMETERS (per-angle; defaults: contrast (0,1), offset (0.5,1.5))
+    # -------------------------------------------------------------------------
+    - name: contrast
+      min: 0.0      # Physical minimum (no negative contrast)
+      max: 1.0      # Physical maximum (fully coherent) - CANNOT exceed 1.0
+      type: TruncatedNormal
+      # DEFAULT BOUNDS: (0.0, 1.0) - Physical range for visibility/coherence
+      # Typical XPCS values for static: 0.01-0.1 (lower than flow systems)
+
+    - name: offset
+      min: 0.5      # Baseline should be near 1.0
+      max: 1.5      # Allow some variation
+      type: TruncatedNormal
+      # DEFAULT BOUNDS: (0.5, 1.5) - Baseline around 1.0 ± 50%
+      # Typical XPCS values: 0.9-1.1
+
     # -------------------------------------------------------------------------
     # DIFFUSION PARAMETERS (3 parameters for static mode)
     # -------------------------------------------------------------------------
@@ -221,6 +251,7 @@ parameter_space:
       prior_mu: 1000.0 # Prior mean (for Bayesian methods)
       prior_sigma: 1000.0 # Prior std dev (for Bayesian methods)
       unit: "Å²/s"
+      # DEFAULT BOUNDS: (1.0, 1,000,000) - Wide range for diverse systems
       # Physical meaning: Controls magnitude of diffusion in D(t) = D₀·t^α + D_offset
       # Typical range: 100-10000 for colloidal systems
 
@@ -230,10 +261,11 @@ parameter_space:
       type: TruncatedNormal # ✅ FIXED: Changed from Normal to enforce bounds
       prior_mu: -1.2 # Prior mean
       prior_sigma: 0.3 # Prior std dev
-      # ✅ Bounds tightened: [-10,10] caused numerical underflow (alpha=-4.96 → theory≈0)
       unit: "dimensionless"
+      # DEFAULT BOUNDS: (-2.0, 2.0) - Tighter for numerical stability
       # Physical meaning: Anomalous diffusion exponent
       # 0 = normal diffusion, <0 = subdiffusion, >0 = superdiffusion
+      # ✅ Bounds tightened: [-10,10] caused numerical underflow (alpha=-4.96 → theory≈0)
       # Typical range: -2 to 2 for equilibrium systems
 
     - name: D_offset
@@ -243,6 +275,7 @@ parameter_space:
       prior_mu: 0.0 # Prior mean
       prior_sigma: 150.0 # Prior std dev
       unit: "Å²/s"
+      # DEFAULT BOUNDS: (-100,000, 100,000) - Allows negative for arrested systems
       # Physical meaning: Constant diffusion contribution (can be negative)
       # Typical range: -100 to 100 for most systems
 

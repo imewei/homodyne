@@ -218,10 +218,44 @@ initial_parameters:
 # PARAMETER SPACE (Required)
 # ==============================================================================
 # Parameter bounds and constraints for laminar flow model
+#
+# DEFAULT BOUNDS (from homodyne.core.fitting.ParameterSpace):
+# -----------------------------------------------------------
+# | Parameter          | Default Bounds      | Notes                              |
+# |--------------------|---------------------|------------------------------------|
+# | contrast           | (0.0, 1.0)          | Physical: visibility/coherence     |
+# | offset             | (0.5, 1.5)          | Baseline around 1.0 ± 50%          |
+# | D0                 | (1.0, 1,000,000)    | Diffusion coefficient              |
+# | alpha              | (-2.0, 2.0)         | Tighter for numerical stability    |
+# | D_offset           | (-100,000, 100,000) | Diffusion baseline correction      |
+# | gamma_dot_t0       | (1e-5, 1.0)         | Shear rate                         |
+# | beta               | (-2.0, 2.0)         | Tighter for numerical stability    |
+# | gamma_dot_t_offset | (-1.0, 1.0)         | Shear baseline correction          |
+# | phi0               | (-30.0, 30.0)       | Flow direction angle [degrees]     |
+#
+# Values below can override defaults. If omitted, defaults are used.
+#
 parameter_space:
   model: "laminar_flow" # Laminar flow mode
 
   bounds:
+    # -------------------------------------------------------------------------
+    # SCALING PARAMETERS (per-angle; defaults: contrast (0,1), offset (0.5,1.5))
+    # -------------------------------------------------------------------------
+    - name: contrast
+      min: 0.0      # Physical minimum (no negative contrast)
+      max: 1.0      # Physical maximum (fully coherent) - CANNOT exceed 1.0
+      type: TruncatedNormal
+      # DEFAULT BOUNDS: (0.0, 1.0) - Physical range for visibility/coherence
+      # Typical XPCS values: 0.01-0.2
+
+    - name: offset
+      min: 0.5      # Baseline should be near 1.0
+      max: 1.5      # Allow some variation
+      type: TruncatedNormal
+      # DEFAULT BOUNDS: (0.5, 1.5) - Baseline around 1.0 ± 50%
+      # Typical XPCS values: 0.9-1.1
+
     # -------------------------------------------------------------------------
     # DIFFUSION PARAMETERS (Required for all models)
     # -------------------------------------------------------------------------
@@ -232,6 +266,7 @@ parameter_space:
       prior_mu: 1000.0 # Prior mean (for Bayesian methods)
       prior_sigma: 1000.0 # Prior std dev (for Bayesian methods)
       unit: "Å²/s"
+      # DEFAULT BOUNDS: (1.0, 1,000,000) - Wide range for diverse systems
       # Physical meaning: Controls magnitude of diffusion in D(t) = D₀·t^α + D_offset
       # Typical range: 100-10000 for colloidal systems (may be higher under shear)
 
@@ -242,6 +277,7 @@ parameter_space:
       prior_mu: 0.5 # Prior mean (superdiffusion common under shear)
       prior_sigma: 0.5 # Prior std dev
       unit: "dimensionless"
+      # DEFAULT BOUNDS: (-2.0, 2.0) - Tighter for numerical stability
       # Physical meaning: Anomalous diffusion exponent
       # 0 = normal diffusion, <0 = subdiffusion, >0 = superdiffusion
       # Shear often induces superdiffusion (α > 0)
@@ -254,6 +290,7 @@ parameter_space:
       prior_mu: 10.0 # Prior mean (nonzero offset common under shear)
       prior_sigma: 200.0 # Prior std dev
       unit: "Å²/s"
+      # DEFAULT BOUNDS: (-100,000, 100,000) - Allows negative for arrested systems
       # Physical meaning: Constant diffusion contribution (can be negative)
       # Shear may enhance baseline diffusion
 
@@ -267,6 +304,7 @@ parameter_space:
       prior_mu: 0.01 # Prior mean
       prior_sigma: 0.1 # Prior std dev
       unit: "s⁻¹"
+      # DEFAULT BOUNDS: (1e-5, 1.0) - Realistic shear rates for XPCS
       # Physical meaning: Shear rate prefactor in γ̇(t) = γ̇₀·t^β + γ̇_offset
       # Adjust based on experimental shear rates
 
@@ -277,6 +315,7 @@ parameter_space:
       prior_mu: 0.0 # Prior mean (constant shear common)
       prior_sigma: 0.5 # Prior std dev
       unit: "dimensionless"
+      # DEFAULT BOUNDS: (-2.0, 2.0) - Tighter for numerical stability
       # Physical meaning: Shear rate time evolution exponent
       # 0 = constant shear, >0 = increasing shear, <0 = decreasing shear
 
@@ -287,6 +326,7 @@ parameter_space:
       prior_mu: 0.0 # Prior mean
       prior_sigma: 0.02 # Prior std dev
       unit: "s⁻¹"
+      # DEFAULT BOUNDS: (-1.0, 1.0) - Allows negative offsets
       # Physical meaning: Constant shear contribution
       # Typically small or zero
 
@@ -297,6 +337,7 @@ parameter_space:
       prior_mu: 0.0 # Prior mean (aligned with flow)
       prior_sigma: 30.0 # Prior std dev
       unit: "degrees"
+      # DEFAULT BOUNDS: (-30.0, 30.0) - Flow direction angle offset
       # Physical meaning: Angle between flow direction and scattering vector
       # Automatically normalized to [-180°, 180°]
 
