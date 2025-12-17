@@ -145,13 +145,16 @@ def _compute_suggested_timeout(
     *,
     cost_per_shard: int,
     max_timeout: int,
-    secs_per_unit: float = 2.0e-5,
+    secs_per_unit: float = 5.0e-5,
     safety_factor: float = 5.0,
     min_timeout: int = 600,
 ) -> int:
     """Derive a timeout (seconds) from shard cost with clamping.
 
     cost_per_shard = num_chains * (num_warmup + num_samples) * max_points_per_shard
+
+    Note: secs_per_unit=5.0e-5 with safety_factor=5.0 provides ~2.5x headroom
+    above observed real-world runtimes to handle variance across different machines.
     """
 
     raw = safety_factor * secs_per_unit * cost_per_shard
