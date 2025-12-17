@@ -994,6 +994,69 @@ class TestNLSQWrapperErrorRecovery:
         assert isinstance(result, OptimizationResult)
         print("\n✅ TC-NLSQ-011 passed: Memory pressure handled gracefully")
 
+    def test_nlsq_stability_parameter_propagation(self):
+        """
+        TC-NLSQ-016: Test that stability='auto' parameter is passed to NLSQ.
+
+        Acceptance: Verify curve_fit calls include stability='auto' for
+        automatic memory management.
+        """
+        from tests.factories.synthetic_data import generate_static_mode_dataset
+
+        synthetic_data = generate_static_mode_dataset(
+            D0=1000.0,
+            alpha=0.5,
+            D_offset=10.0,
+            noise_level=0.01,
+            n_phi=5,
+            n_t1=20,
+            n_t2=20,
+        )
+
+        class MockConfig:
+            def __init__(self):
+                self.optimization = {"lsq": {"max_iterations": 100, "tolerance": 1e-6}}
+
+        mock_config = MockConfig()
+        wrapper = NLSQWrapper(enable_large_dataset=True, enable_recovery=True)
+
+        initial_params = np.array([0.5, 1.0, 1000.0, 0.5, 10.0])
+        bounds = (
+            np.array([0.0, 0.8, 100.0, 0.3, 1.0]),
+            np.array([1.0, 1.2, 1e5, 1.5, 1000.0]),
+        )
+
+        captured_kwargs = {}
+
+        from nlsq import curve_fit as real_curve_fit
+
+        def mock_curve_fit_capture(*args, **kwargs):
+            """Capture kwargs to verify stability parameter."""
+            captured_kwargs.update(kwargs)
+            return real_curve_fit(*args, **kwargs)
+
+        with patch(
+            "homodyne.optimization.nlsq.wrapper.curve_fit",
+            side_effect=mock_curve_fit_capture,
+        ):
+            result = wrapper.fit(
+                data=synthetic_data,
+                config=mock_config,
+                initial_params=initial_params,
+                bounds=bounds,
+                analysis_mode="static",
+            )
+
+        # Verify stability parameter was passed
+        assert "stability" in captured_kwargs, (
+            "stability parameter not passed to curve_fit"
+        )
+        assert captured_kwargs["stability"] == "auto", (
+            f"Expected stability='auto', got {captured_kwargs['stability']}"
+        )
+        assert isinstance(result, OptimizationResult)
+        print("\n✅ TC-NLSQ-016 passed: stability='auto' parameter propagated")
+
 
 # =============================================================================
 # NLSQ Optimization Tests (from test_optimization_nlsq.py)
