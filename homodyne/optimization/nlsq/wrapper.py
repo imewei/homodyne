@@ -912,21 +912,16 @@ class NLSQWrapper:
         n_data = len(ydata)
         logger.info(f"Data prepared: {n_data} points")
 
-        # Check for very large datasets that may cause memory issues
+        # Note: Memory estimation is deferred to NLSQ's estimate_memory_requirements()
+        # which provides accurate Jacobian sizing based on actual parameter count.
         if n_data > 10_000_000:
             logger.warning(
-                f"VERY LARGE DATASET: {n_data:,} points detected!\n"
-                f"  Estimated Jacobian size: ~{n_data * 9 * 8 / 1e9:.2f} GB\n"
-                f"  Using curve_fit_large() with automatic chunking\n"
-                f"  Recommendations if OOM occurs:\n"
-                f"    1. Enable phi angle filtering to reduce dataset size\n"
-                f"    2. Reduce time points via config (frames or subsampling)\n"
-                f"    3. Use a machine with more system memory"
+                f"Very large dataset: {n_data:,} points. "
+                f"NLSQ will use memory-efficient strategies automatically."
             )
         elif n_data > 1_000_000:
             logger.info(
-                f"Large dataset: {n_data:,} points detected. Using curve_fit_large() for optimization.\n"
-                f"  Memory will be managed automatically with chunking."
+                f"Large dataset: {n_data:,} points. Memory managed automatically."
             )
 
         # Step 3: Validate initial parameters
@@ -1298,6 +1293,7 @@ class NLSQWrapper:
                             verbose=2,
                             full_output=True,
                             show_progress=strategy_info["supports_progress"],
+                            stability="auto",  # Enable automatic memory management
                         )
                     else:
                         # Use standard curve_fit for small datasets
@@ -1313,6 +1309,7 @@ class NLSQWrapper:
                             ftol=1e-6,
                             max_nfev=5000,
                             verbose=2,
+                            stability="auto",  # Enable automatic memory management
                         )
                         info = {}
 
@@ -1650,6 +1647,7 @@ class NLSQWrapper:
                         max_nfev=5000,  # Increased max function evaluations
                         verbose=2,  # Show iteration details
                         show_progress=show_progress,  # Enable progress for large datasets
+                        stability="auto",  # Enable automatic memory management
                     )
                     # Normalize result format and extract iterations if available
                     popt, pcov, info = self._handle_nlsq_result(
@@ -1708,6 +1706,7 @@ class NLSQWrapper:
                         ftol=1e-6,  # Relaxed function tolerance
                         max_nfev=5000,  # Increased max function evaluations
                         verbose=2,  # Show iteration details
+                        stability="auto",  # Enable automatic memory management
                     )
                     info = {"initial_cost": initial_cost}
 
@@ -3255,6 +3254,8 @@ class NLSQWrapper:
         logger : logging.Logger
             Logger instance for reporting
         """
+        if params is None:
+            return  # Cannot update without parameters
         if loss < self.best_loss:
             self.best_params = params.copy()
             self.best_loss = loss
@@ -3824,13 +3825,18 @@ class NLSQWrapper:
         logger.info("Starting NLSQ least_squares() optimization...")
         logger.info(f"  Initial parameters: {len(initial_params)} parameters")
         logger.info(f"  Bounds: {'provided' if bounds is not None else 'unbounded'}")
+        logger.info(f"  Residual chunks: {residual_fn.n_chunks}")
+        logger.info(f"  Real data points: {residual_fn.n_real_points:,}")
 
         # Call NLSQ's least_squares() - NO xdata/ydata needed!
         # Data is encapsulated in residual_fn
         optimization_start = time.perf_counter()
 
-        # Instantiate LeastSquares class and call its least_squares method
-        ls = LeastSquares()
+        # Instantiate LeastSquares with stability enabled for:
+        # - Automatic memory management (switches to LSMR when memory tight)
+        # - Numerical stability checks and fixes
+        # - Jacobian conditioning monitoring
+        ls = LeastSquares(enable_stability=True, enable_diagnostics=True)
 
         result = ls.least_squares(
             fun=residual_fn,  # Residual function (we control chunking!)
