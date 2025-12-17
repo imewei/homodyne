@@ -572,6 +572,179 @@ MCMC sampling uses BlackJAX with NUTS (No-U-Turn Sampler):
        samples = run_sampling(kernel, num_samples, num_warmup)
        return samples
 
+Parameter Bound Enforcement
+---------------------------
+
+Both NLSQ and CMC enforce parameter bounds to ensure physically meaningful results
+and numerical stability. This section documents the canonical bounds and enforcement
+mechanisms across the codebase.
+
+Canonical Physical Bounds
+~~~~~~~~~~~~~~~~~~~~~~~~~
+
+The primary source of truth for parameter bounds is ``homodyne.core.fitting.ParameterSpace``.
+All optimization methods (NLSQ and CMC) read bounds from this class.
+
+.. list-table:: Canonical Parameter Bounds
+   :header-rows: 1
+   :widths: 20 15 15 50
+
+   * - Parameter
+     - Min
+     - Max
+     - Notes
+   * - contrast
+     - 0.0
+     - 1.0
+     - Physical range for visibility/coherence. **Cannot exceed 1.0.**
+   * - offset
+     - 0.5
+     - 1.5
+     - Baseline around 1.0 ± 50%
+   * - D0
+     - 1.0
+     - 1,000,000
+     - Diffusion coefficient [length²/time^(1+α)]
+   * - alpha
+     - -2.0
+     - 2.0
+     - Diffusion exponent (tighter for numerical stability)
+   * - D_offset
+     - -100,000
+     - 100,000
+     - Diffusion baseline correction
+   * - gamma_dot_t0
+     - 1e-5
+     - 1.0
+     - Shear rate [1/time^(1+β)]
+   * - beta
+     - -2.0
+     - 2.0
+     - Shear exponent (tighter for numerical stability)
+   * - gamma_dot_t_offset
+     - -1.0
+     - 1.0
+     - Shear rate baseline correction [s⁻¹]
+   * - phi0
+     - -30.0
+     - 30.0
+     - Flow direction angle offset [degrees]
+
+**Important**: The alpha and beta bounds were tightened from (±10) to (±2) for
+numerical stability. Extreme values like alpha=-10 cause numerical underflow in
+``exp(-q² × D₀ × t^α × dt/2) → 0``.
+
+Bound Enforcement Locations
+~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Bounds are enforced at multiple points in the codebase to ensure robustness:
+
+.. list-table:: Bound Enforcement Mechanisms
+   :header-rows: 1
+   :widths: 30 25 45
+
+   * - Location
+     - Parameters
+     - Enforcement Method
+   * - ``core/fitting.py:484-485``
+     - contrast, offset
+     - ``np.clip()`` via ``parameter_space.contrast_bounds``
+   * - ``cmc/priors.py:107,124``
+     - contrast, offset
+     - ``np.clip()`` for data-based initial estimates
+   * - ``cmc/scaling.py``
+     - ALL parameters
+     - ``smooth_bound()`` via differentiable tanh transform
+   * - ``cli/commands.py:2684-2685``
+     - contrast, offset
+     - ``np.clip(0.01, 1.0)``, ``np.clip(0.5, 1.5)``
+
+CMC Shard Bound Enforcement
+~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Each CMC shard uses the same model and parameter space, ensuring consistent bound
+enforcement across all parallel workers:
+
+1. **Initial Value Validation** (``cmc/priors.py:validate_initial_value_bounds``)
+
+   - Clips out-of-bounds initial values to bounds ± 1% margin
+   - Logs warning when clipping occurs
+   - Handles NaN/Inf by resetting to bound midpoint
+
+2. **Smooth Tanh Bounds** (``cmc/scaling.py:_smooth_bound``)
+
+   Maps ℝ → (low, high) smoothly during MCMC sampling:
+
+   .. math::
+
+      \text{smooth\_bound}(x; \text{low}, \text{high}) = \text{mid} + \frac{\text{high} - \text{low}}{2} \times \tanh\left(\frac{x - \text{mid}}{\frac{\text{high} - \text{low}}{2}}\right)
+
+   This ensures:
+
+   - All gradients remain finite (differentiable everywhere)
+   - Parameters stay within bounds during NUTS exploration
+   - Smooth behavior near bound edges (no hard clipping)
+
+3. **Per-Angle Contrast/Offset Estimation**
+
+   When estimating per-angle scaling from data via least squares:
+
+   .. code-block:: python
+
+      # Enforce physical bounds after lstsq estimation
+      contrast_i = np.clip(contrast_raw, 0.01, 1.0)  # Physical: (0, 1]
+      offset_i = np.clip(offset_raw, 0.5, 1.5)      # Physical: around 1.0
+
+   **Warning**: If lstsq produces contrast > 1.0, this indicates the physics model
+   underestimates the C₂ variation—a symptom of model-data mismatch, not an error
+   in bound enforcement.
+
+NLSQ Bound Enforcement
+~~~~~~~~~~~~~~~~~~~~~~
+
+NLSQ uses the trust-region reflective algorithm which natively supports box constraints:
+
+.. code-block:: python
+
+   from nlsq import curve_fit_large
+
+   # Bounds passed directly to optimizer
+   popt, pcov = curve_fit_large(
+       model_func,
+       xdata=time_data,
+       ydata=experimental_data,
+       p0=initial_params,
+       bounds=(lower_bounds, upper_bounds),  # Enforced by scipy
+       method='trf',  # Trust Region Reflective
+   )
+
+The bounds are constructed from ``ParameterSpace``:
+
+.. code-block:: python
+
+   lower_bounds, upper_bounds = parameter_space.get_bounds_array()
+   # Returns numpy arrays for all parameters in model order
+
+Contrast Physical Constraint
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+The contrast parameter has special physical significance:
+
+- **Definition**: Represents visibility/coherence of the scattering pattern
+- **Physical Formula**: ``β = (I_max - I_min) / (I_max + I_min)`` which is always in [0, 1]
+- **Hard Upper Bound**: contrast > 1.0 is physically impossible
+
+When per-angle least squares fitting produces contrast > 1.0, the system logs a warning:
+
+.. code-block:: text
+
+   WARNING: Angle 0 (φ=4.90°): lstsq contrast=1.2345 > 1.0 (unphysical).
+   This indicates the physics model underestimates the C2 variation.
+   Clipping to 1.0.
+
+This warning indicates the fitted physics parameters (D0, alpha, etc.) don't fully
+capture the dynamics in the data—a model quality issue separate from bound enforcement.
+
 Chi-Squared Objective Function
 ------------------------------
 

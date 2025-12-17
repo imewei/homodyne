@@ -71,16 +71,16 @@ Parameter Bounds (Static Mode)
      - Max
      - Notes
    * - D0
-     - 1e2
-     - 1e5
-     - Realistic range for colloidal systems
+     - 1.0
+     - 1,000,000
+     - Wide range for diverse diffusion systems
    * - alpha
      - -2.0
      - 2.0
-     - Covers subdiffusion through superdiffusion
+     - Tighter bounds for numerical stability (was ±10)
    * - D_offset
-     - -1e5
-     - 1e5
+     - -100,000
+     - 100,000
      - Negative values allowed for arrested systems
 
 Diffusion Integral
@@ -164,33 +164,33 @@ Parameter Bounds (Laminar Flow Mode)
      - Max
      - Notes
    * - D0
-     - 1e2
-     - 1e5
-     - Realistic diffusion range
+     - 1.0
+     - 1,000,000
+     - Wide range for diverse diffusion systems
    * - alpha
      - -2.0
      - 2.0
-     - Anomalous diffusion exponent
+     - Tighter bounds for numerical stability (was ±10)
    * - D_offset
-     - -1e5
-     - 1e5
+     - -100,000
+     - 100,000
      - Allows negative for arrested systems
    * - gamma_dot_t0
-     - 1e-6
-     - 0.5
+     - 1e-5
+     - 1.0
      - Realistic shear rates for XPCS
    * - beta
      - -2.0
      - 2.0
-     - Shear rate scaling exponent
+     - Tighter bounds for numerical stability (was ±10)
    * - gamma_dot_t_offset
-     - -0.1
-     - 0.1
-     - Allows small negative offsets
+     - -1.0
+     - 1.0
+     - Allows negative offsets
    * - phi0
-     - -10.0
-     - 10.0
-     - Tight bounds for MCMC convergence (degrees)
+     - -30.0
+     - 30.0
+     - Flow direction angle offset (degrees)
 
 Shear Integral
 ~~~~~~~~~~~~~~
