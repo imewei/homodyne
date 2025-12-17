@@ -2612,28 +2612,75 @@ def _compute_theoretical_c2_from_mcmc(
     # Get dt parameter (required for correct physics)
     dt = config_dict.get("acquisition", {}).get("dt", 1e-8)
 
-    # Compute theoretical C2 for all angles
+    # Compute theoretical C2 for all angles with per-angle scaling estimation
     c2_theoretical_list = []
 
-    for phi in phi_angles:
+    # Get experimental data for per-angle lstsq fitting
+    c2_exp = data.get("c2_exp", None)
+    use_per_angle_lstsq = c2_exp is not None and len(c2_exp) == len(phi_angles)
+
+    if use_per_angle_lstsq:
+        logger.info(
+            "Using per-angle least squares estimation for contrast/offset "
+            "(fixes CMC sharding aggregation issue)"
+        )
+
+    for i, phi in enumerate(phi_angles):
         # Convert parameters to JAX arrays
         params_jax = jnp.array(mean_params)
 
-        # Compute G2 for this angle
-        c2_theoretical = compute_g2_scaled(
+        # Compute UNSCALED g2_theory first (contrast=1.0, offset=0.0)
+        # This gives us the theoretical correlation shape without scaling
+        g2_theory = compute_g2_scaled(
             params=params_jax,
             t1=jnp.array(t1),
             t2=jnp.array(t2),
             phi=jnp.array([phi]),  # Single angle as array
             q=q_val,
             L=L,
-            contrast=contrast,
-            offset=offset,
+            contrast=1.0,  # Unscaled
+            offset=0.0,    # Unscaled
             dt=dt,
         )
+        g2_theory_np = np.array(g2_theory[0])  # Shape: (n_t1, n_t2)
 
-        # Extract result for this single angle
-        c2_theoretical_np = np.array(c2_theoretical[0])  # First angle
+        if use_per_angle_lstsq:
+            # Per-angle least squares: c2_exp[i] = contrast_i * g2_theory + offset_i
+            # Solve: [g2_theory, 1] @ [contrast, offset]^T = c2_exp
+            c2_exp_angle = np.array(c2_exp[i])
+
+            # Flatten for lstsq
+            g2_flat = g2_theory_np.flatten()
+            c2_flat = c2_exp_angle.flatten()
+
+            # Build design matrix [g2_theory, 1]
+            A = np.vstack([g2_flat, np.ones_like(g2_flat)]).T
+
+            # Solve least squares
+            try:
+                lstsq_result = np.linalg.lstsq(A, c2_flat, rcond=None)
+                contrast_i, offset_i = lstsq_result[0]
+
+                # Validate fitted values
+                contrast_i = float(np.clip(contrast_i, 0.01, 2.0))  # Reasonable bounds
+                offset_i = float(np.clip(offset_i, 0.5, 2.0))
+
+                if i == 0:  # Log first angle details
+                    logger.debug(
+                        f"  Angle {i} (φ={phi:.2f}°): fitted contrast={contrast_i:.4f}, "
+                        f"offset={offset_i:.4f}"
+                    )
+            except Exception as e:
+                logger.warning(f"lstsq failed for angle {i}, using global values: {e}")
+                contrast_i = contrast
+                offset_i = offset
+        else:
+            # Fallback to global averaged values (original behavior)
+            contrast_i = contrast
+            offset_i = offset
+
+        # Apply fitted scaling: c2_fitted = contrast_i * g2_theory + offset_i
+        c2_theoretical_np = contrast_i * g2_theory_np + offset_i
         c2_theoretical_list.append(c2_theoretical_np)
 
     # Stack all angles
@@ -2646,6 +2693,17 @@ def _compute_theoretical_c2_from_mcmc(
     logger.info(
         f"Theoretical C2 range: [{c2_min:.6f}, {c2_max:.6f}], variation: {c2_range:.6f}"
     )
+
+    # Check if per-angle scaling produced reasonable variation
+    if use_per_angle_lstsq:
+        exp_min = float(np.min(c2_exp))
+        exp_max = float(np.max(c2_exp))
+        exp_range = exp_max - exp_min
+        coverage = c2_range / exp_range if exp_range > 0.01 else 0
+        logger.info(
+            f"Per-angle lstsq scaling: fitted range covers {coverage:.1%} of "
+            f"experimental range [{exp_min:.4f}, {exp_max:.4f}]"
+        )
 
     if c2_range < 0.01:
         logger.warning(
