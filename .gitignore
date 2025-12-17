@@ -252,6 +252,7 @@ agent-os/
 specs/
 .code/
 .agent/
+.optimization
 
 # Node.js
 node_modules/

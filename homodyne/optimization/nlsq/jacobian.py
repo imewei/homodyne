@@ -56,7 +56,8 @@ def compute_jacobian_stats(
             def residual_vector(p):
                 return jnp.asarray(residual_fn(x_subset, *tuple(p))).reshape(-1)
 
-        jac = jax.jacfwd(residual_vector)(params_jnp)
+        # Use jacrev (VJP-based) instead of jacfwd for m >> n efficiency
+        jac = jax.jacrev(residual_vector)(params_jnp)
         jac_np = np.asarray(jac)
         jtj = jac_np.T @ jac_np * scaling_factor
         col_norms = np.linalg.norm(jac_np, axis=0) * np.sqrt(scaling_factor)
@@ -102,7 +103,8 @@ def compute_jacobian_condition_number(
             def residual_vector(p):
                 return jnp.asarray(residual_fn(x_subset, *tuple(p))).reshape(-1)
 
-        jac = jax.jacfwd(residual_vector)(params_jnp)
+        # Use jacrev (VJP-based) instead of jacfwd for m >> n efficiency
+        jac = jax.jacrev(residual_vector)(params_jnp)
         jac_np = np.asarray(jac)
         return float(np.linalg.cond(jac_np))
     except Exception:
@@ -206,7 +208,8 @@ def estimate_gradient_noise(
                 def residual_vector(p):
                     return jnp.asarray(residual_fn(x_subset, *tuple(p))).reshape(-1)
 
-            jac = jax.jacfwd(residual_vector)(params_jnp)
+            # Use jacrev (VJP-based) instead of jacfwd for m >> n efficiency
+            jac = jax.jacrev(residual_vector)(params_jnp)
             jacobians.append(np.asarray(jac))
 
         # Compute coefficient of variation across samples

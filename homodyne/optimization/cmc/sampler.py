@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import time
 from collections.abc import Callable
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from typing import TYPE_CHECKING, Any
 
 import jax
@@ -1006,22 +1006,33 @@ def run_nuts_with_retry(
     last_error = None
     run_logger = with_context(logger, run=getattr(config, "run_id", None))
 
+    # Track current target_accept_prob for adaptive escalation
+    current_target_accept_prob = config.target_accept_prob
+
     for attempt in range(max_retries):
         attempt_num = attempt + 1
         attempt_logger = with_context(run_logger, attempt=attempt_num)
         attempt_start = time.perf_counter()
+
+        # Adaptive divergence threshold: stricter on first attempt
+        divergence_threshold = 0.05 if attempt == 0 else 0.10
+
         attempt_logger.info(
             f"🔄 Attempt {attempt_num}/{max_retries}: starting NUTS "
-            f"(chains={config.num_chains}, samples={config.num_samples})"
+            f"(chains={config.num_chains}, samples={config.num_samples}, "
+            f"target_accept={current_target_accept_prob:.2f}, div_threshold={divergence_threshold:.0%})"
         )
         try:
             # Use different RNG key for each attempt
             attempt_key = jax.random.fold_in(rng_key, attempt)
 
+            # Create config with potentially escalated target_accept_prob
+            attempt_config = replace(config, target_accept_prob=current_target_accept_prob)
+
             samples, stats = run_nuts_sampling(
                 model=model,
                 model_kwargs=model_kwargs,
-                config=config,
+                config=attempt_config,
                 initial_values=initial_values,
                 parameter_space=parameter_space,
                 n_phi=n_phi,
@@ -1030,15 +1041,18 @@ def run_nuts_with_retry(
                 progress_bar=attempt == 0,  # Only show progress on first attempt
             )
 
-            # Check for excessive divergences
+            # Check for excessive divergences (adaptive threshold)
             divergence_rate = stats.num_divergent / (
                 config.num_samples * config.num_chains
             )
             duration = time.perf_counter() - attempt_start
-            if divergence_rate > 0.1:  # More than 10% divergences
+            if divergence_rate > divergence_threshold:
                 attempt_logger.warning(
-                    f"🔄 Attempt {attempt_num}/{max_retries}: divergence_rate={divergence_rate:.1%}, retrying..."
+                    f"🔄 Attempt {attempt_num}/{max_retries}: divergence_rate={divergence_rate:.1%} "
+                    f"> threshold {divergence_threshold:.0%}, retrying with smaller step sizes..."
                 )
+                # Escalate target_accept_prob for next retry (smaller step sizes)
+                current_target_accept_prob = min(0.95, current_target_accept_prob + 0.05)
                 last_error = RuntimeError(
                     f"High divergence rate: {divergence_rate:.1%}"
                 )

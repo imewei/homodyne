@@ -112,7 +112,7 @@ class CMCConfig:
     # providing usable posteriors and R-hat diagnostics.
     num_warmup: int = 500
     num_samples: int = 1500
-    num_chains: int = 2
+    num_chains: int = 4  # Increased from 2 for better R-hat convergence diagnostics
     target_accept_prob: float = 0.85
 
     # Validation thresholds
