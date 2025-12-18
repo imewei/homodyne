@@ -61,7 +61,7 @@ except ImportError:
     StreamingOptimizer = None
     StreamingConfig = None
 
-# Try importing AdaptiveHybridStreamingOptimizer (available in NLSQ >= 0.2.0)
+# Try importing AdaptiveHybridStreamingOptimizer (available in NLSQ >= 0.3.2)
 # Fixes: 1) Shear-term weak gradients, 2) Slow convergence, 3) Crude covariance
 try:
     from nlsq import AdaptiveHybridStreamingOptimizer, HybridStreamingConfig
@@ -3744,7 +3744,7 @@ class NLSQWrapper:
         if not HYBRID_STREAMING_AVAILABLE:
             raise RuntimeError(
                 "AdaptiveHybridStreamingOptimizer not available. "
-                "Please upgrade NLSQ to version >= 0.2.0: pip install --upgrade nlsq"
+                "Please upgrade NLSQ to version >= 0.3.2: pip install --upgrade nlsq"
             )
 
         logger.info(
