@@ -4428,9 +4428,11 @@ class NLSQWrapper:
             y_data = stratified_data.g2_flat
 
         # Vectorized index conversion using searchsorted
+        # Note: Both t1 and t2 represent time values on the same grid,
+        # so we use t1_unique for both to ensure correct indexing into D_cumsum
         phi_idx_arr = np.searchsorted(phi_unique, all_phi)
         t1_idx_arr = np.searchsorted(t1_unique, all_t1)
-        t2_idx_arr = np.searchsorted(t2_unique, all_t2)
+        t2_idx_arr = np.searchsorted(t1_unique, all_t2)  # Use t1_unique, not t2_unique!
 
         # Stack into x_data array
         x_data = np.column_stack([phi_idx_arr, t1_idx_arr, t2_idx_arr]).astype(
