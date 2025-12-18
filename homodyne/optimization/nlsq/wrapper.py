@@ -4298,7 +4298,11 @@ class NLSQWrapper:
                         t1_unique, D0, alpha, D_offset
                     )
                     D_cumsum = trapezoid_cumsum(D_t)
-                    D_integral_batch = jnp.abs(D_cumsum[t1_idx] - D_cumsum[t2_idx])
+                    # CRITICAL FIX: Use smooth abs for gradient stability
+                    # jnp.abs() has undefined gradient at x=0 (when t1_idx == t2_idx)
+                    # sqrt(x² + ε) ≈ |x| but is differentiable everywhere
+                    D_diff = D_cumsum[t1_idx] - D_cumsum[t2_idx]
+                    D_integral_batch = jnp.sqrt(D_diff**2 + 1e-20)
 
                     log_g1_diff = -q_sq_half_dt * D_integral_batch
                     log_g1_diff_bounded = jnp.clip(log_g1_diff, -700.0, 0.0)
@@ -4311,9 +4315,9 @@ class NLSQWrapper:
                         t1_unique, gamma_dot_0, beta, gamma_dot_offset
                     )
                     gamma_cumsum = trapezoid_cumsum(gamma_t)
-                    gamma_integral_batch = jnp.abs(
-                        gamma_cumsum[t1_idx] - gamma_cumsum[t2_idx]
-                    )
+                    # CRITICAL FIX: Use smooth abs for gradient stability
+                    gamma_diff = gamma_cumsum[t1_idx] - gamma_cumsum[t2_idx]
+                    gamma_integral_batch = jnp.sqrt(gamma_diff**2 + 1e-20)
 
                     phi_batch = phi_unique[phi_idx]
                     angle_diff = jnp.deg2rad(phi0 - phi_batch)
@@ -4372,7 +4376,10 @@ class NLSQWrapper:
                         t1_unique, D0, alpha, D_offset
                     )
                     D_cumsum = trapezoid_cumsum(D_t)
-                    D_integral_batch = jnp.abs(D_cumsum[t1_idx] - D_cumsum[t2_idx])
+                    # CRITICAL FIX: Use smooth abs for gradient stability
+                    # jnp.abs() has undefined gradient at x=0 (when t1_idx == t2_idx)
+                    D_diff = D_cumsum[t1_idx] - D_cumsum[t2_idx]
+                    D_integral_batch = jnp.sqrt(D_diff**2 + 1e-20)
 
                     log_g1_diff = -q_sq_half_dt * D_integral_batch
                     log_g1_diff_bounded = jnp.clip(log_g1_diff, -700.0, 0.0)
