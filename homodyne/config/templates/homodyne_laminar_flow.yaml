@@ -491,6 +491,41 @@ optimization:
       check_gradients: true # Verify gradient computations
       log_jacobian_norms: false # Log parameter sensitivity (Jacobian norms)
 
+    # ---------------------------------------------------------------------------
+    # HYBRID STREAMING - Four-Phase Adaptive Optimizer (v2.6.0)
+    # ---------------------------------------------------------------------------
+    # Fixes three critical issues with large laminar_flow datasets:
+    # 1. Shear-term weak gradients (scale imbalance) - via parameter normalization
+    # 2. Slow convergence - via Adam warmup + Gauss-Newton refinement
+    # 3. Crude covariance - via exact J^T J accumulation + covariance transform
+    #
+    # Four Phases:
+    # - Phase 0: Parameter normalization setup (bounds-based, equalizes gradients)
+    # - Phase 1: Adam warmup with adaptive switching (fast initial exploration)
+    # - Phase 2: Streaming Gauss-Newton (quadratic convergence near optimum)
+    # - Phase 3: Denormalization and covariance transform (proper uncertainties)
+    #
+    # Use for: Datasets > 10M points with laminar_flow mode
+    # Expected speedup: ~10x fewer iterations (110 vs 1000+)
+    # Memory: Bounded at ~2 GB regardless of dataset size
+    hybrid_streaming:
+      enable: true                              # Use hybrid optimizer for large datasets
+      normalize: true                           # Enable parameter normalization
+      normalization_strategy: "bounds"          # Options: "auto" | "bounds" | "p0" | "none"
+                                                # "bounds" normalizes to [0,1] using parameter bounds
+                                                # Recommended for laminar_flow (D₀~10⁴ vs γ̇₀~10⁻³)
+      warmup_iterations: 100                    # Adam warmup iterations before checking switch
+      max_warmup_iterations: 500                # Maximum Adam iterations before forcing switch
+      warmup_learning_rate: 0.001               # Adam learning rate during warmup
+      gauss_newton_max_iterations: 50           # Maximum Gauss-Newton iterations in Phase 2
+      gauss_newton_tol: 1.0e-8                  # Convergence tolerance for Gauss-Newton
+      chunk_size: 50000                         # Points per chunk for streaming J^T J
+      trust_region_initial: 1.0                 # Initial trust region size
+      regularization_factor: 1.0e-10            # Tikhonov regularization for J^T J inversion
+      enable_checkpoints: true                  # Enable checkpoint save/resume
+      checkpoint_frequency: 100                 # Save checkpoint every N iterations
+      validate_numerics: true                   # Enable numerical validation (NaN/Inf checks)
+
   # ---------------------------------------------------------------------------
   # STRATIFICATION - Angle-Stratified Chunking (v2.2+)
   # ---------------------------------------------------------------------------

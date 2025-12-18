@@ -87,6 +87,23 @@ class NLSQConfig:
     enable_recovery: bool = True
     max_recovery_attempts: int = 3
 
+    # Hybrid streaming optimizer settings (v2.6.0)
+    # Fixes: 1) Shear-term weak gradients, 2) Slow convergence, 3) Crude covariance
+    enable_hybrid_streaming: bool = True
+    hybrid_normalize: bool = True
+    hybrid_normalization_strategy: str = "bounds"  # 'auto', 'bounds', 'p0', 'none'
+    hybrid_warmup_iterations: int = 100
+    hybrid_max_warmup_iterations: int = 500
+    hybrid_warmup_learning_rate: float = 0.001
+    hybrid_gauss_newton_max_iterations: int = 50
+    hybrid_gauss_newton_tol: float = 1e-8
+    hybrid_chunk_size: int = 50000
+    hybrid_trust_region_initial: float = 1.0
+    hybrid_regularization_factor: float = 1e-10
+    hybrid_enable_checkpoints: bool = True
+    hybrid_checkpoint_frequency: int = 100
+    hybrid_validate_numerics: bool = True
+
     # Computed fields
     _validation_errors: list[str] = field(default_factory=list, repr=False)
 
@@ -109,6 +126,7 @@ class NLSQConfig:
         streaming = config_dict.get("streaming", {})
         stratified = config_dict.get("stratified", {})
         recovery = config_dict.get("recovery", {})
+        hybrid_streaming = config_dict.get("hybrid_streaming", {})
 
         config = cls(
             # Loss function
@@ -133,6 +151,35 @@ class NLSQConfig:
             # Recovery
             enable_recovery=recovery.get("enable", True),
             max_recovery_attempts=recovery.get("max_attempts", 3),
+            # Hybrid streaming (v2.6.0)
+            enable_hybrid_streaming=hybrid_streaming.get("enable", True),
+            hybrid_normalize=hybrid_streaming.get("normalize", True),
+            hybrid_normalization_strategy=hybrid_streaming.get(
+                "normalization_strategy", "bounds"
+            ),
+            hybrid_warmup_iterations=hybrid_streaming.get("warmup_iterations", 100),
+            hybrid_max_warmup_iterations=hybrid_streaming.get(
+                "max_warmup_iterations", 500
+            ),
+            hybrid_warmup_learning_rate=float(
+                hybrid_streaming.get("warmup_learning_rate", 0.001)
+            ),
+            hybrid_gauss_newton_max_iterations=hybrid_streaming.get(
+                "gauss_newton_max_iterations", 50
+            ),
+            hybrid_gauss_newton_tol=float(
+                hybrid_streaming.get("gauss_newton_tol", 1e-8)
+            ),
+            hybrid_chunk_size=hybrid_streaming.get("chunk_size", 50000),
+            hybrid_trust_region_initial=float(
+                hybrid_streaming.get("trust_region_initial", 1.0)
+            ),
+            hybrid_regularization_factor=float(
+                hybrid_streaming.get("regularization_factor", 1e-10)
+            ),
+            hybrid_enable_checkpoints=hybrid_streaming.get("enable_checkpoints", True),
+            hybrid_checkpoint_frequency=hybrid_streaming.get("checkpoint_frequency", 100),
+            hybrid_validate_numerics=hybrid_streaming.get("validate_numerics", True),
         )
 
         # Validate and log any issues
@@ -194,6 +241,41 @@ class NLSQConfig:
                 f"max_recovery_attempts must be non-negative, got: {self.max_recovery_attempts}"
             )
 
+        # Validate hybrid streaming settings
+        valid_norm_strategies = ["auto", "bounds", "p0", "none"]
+        if self.hybrid_normalization_strategy not in valid_norm_strategies:
+            errors.append(
+                f"hybrid_normalization_strategy must be one of {valid_norm_strategies}, "
+                f"got: {self.hybrid_normalization_strategy}"
+            )
+        if self.hybrid_warmup_iterations <= 0:
+            errors.append(
+                f"hybrid_warmup_iterations must be positive, got: {self.hybrid_warmup_iterations}"
+            )
+        if self.hybrid_max_warmup_iterations <= 0:
+            errors.append(
+                f"hybrid_max_warmup_iterations must be positive, "
+                f"got: {self.hybrid_max_warmup_iterations}"
+            )
+        if self.hybrid_warmup_learning_rate <= 0:
+            errors.append(
+                f"hybrid_warmup_learning_rate must be positive, "
+                f"got: {self.hybrid_warmup_learning_rate}"
+            )
+        if self.hybrid_gauss_newton_max_iterations <= 0:
+            errors.append(
+                f"hybrid_gauss_newton_max_iterations must be positive, "
+                f"got: {self.hybrid_gauss_newton_max_iterations}"
+            )
+        if self.hybrid_gauss_newton_tol <= 0:
+            errors.append(
+                f"hybrid_gauss_newton_tol must be positive, got: {self.hybrid_gauss_newton_tol}"
+            )
+        if self.hybrid_chunk_size <= 0:
+            errors.append(
+                f"hybrid_chunk_size must be positive, got: {self.hybrid_chunk_size}"
+            )
+
         self._validation_errors = errors
         return errors
 
@@ -238,5 +320,21 @@ class NLSQConfig:
             "recovery": {
                 "enable": self.enable_recovery,
                 "max_attempts": self.max_recovery_attempts,
+            },
+            "hybrid_streaming": {
+                "enable": self.enable_hybrid_streaming,
+                "normalize": self.hybrid_normalize,
+                "normalization_strategy": self.hybrid_normalization_strategy,
+                "warmup_iterations": self.hybrid_warmup_iterations,
+                "max_warmup_iterations": self.hybrid_max_warmup_iterations,
+                "warmup_learning_rate": self.hybrid_warmup_learning_rate,
+                "gauss_newton_max_iterations": self.hybrid_gauss_newton_max_iterations,
+                "gauss_newton_tol": self.hybrid_gauss_newton_tol,
+                "chunk_size": self.hybrid_chunk_size,
+                "trust_region_initial": self.hybrid_trust_region_initial,
+                "regularization_factor": self.hybrid_regularization_factor,
+                "enable_checkpoints": self.hybrid_enable_checkpoints,
+                "checkpoint_frequency": self.hybrid_checkpoint_frequency,
+                "validate_numerics": self.hybrid_validate_numerics,
             },
         }

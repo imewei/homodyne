@@ -397,6 +397,35 @@ optimization:
     #   alpha: 0.01                            # If alpha gradient is 100× larger
     #   D_offset: 1.0
 
+    # ---------------------------------------------------------------------------
+    # HYBRID STREAMING - Four-Phase Adaptive Optimizer (v2.6.0)
+    # ---------------------------------------------------------------------------
+    # Fixes three issues with large datasets:
+    # 1. Parameter gradient imbalance - via bounds-based normalization
+    # 2. Slow convergence - via Adam warmup + Gauss-Newton refinement
+    # 3. Crude covariance - via exact J^T J accumulation + covariance transform
+    #
+    # For static mode, gradient imbalance is less severe than laminar_flow,
+    # but hybrid streaming still provides faster convergence for large datasets.
+    #
+    # Use for: Datasets > 10M points
+    # Memory: Bounded at ~2 GB regardless of dataset size
+    hybrid_streaming:
+      enable: true                              # Use hybrid optimizer for large datasets
+      normalize: true                           # Enable parameter normalization
+      normalization_strategy: "bounds"          # Options: "auto" | "bounds" | "p0" | "none"
+      warmup_iterations: 100                    # Adam warmup iterations
+      max_warmup_iterations: 500                # Maximum Adam iterations
+      warmup_learning_rate: 0.001               # Adam learning rate
+      gauss_newton_max_iterations: 50           # Maximum Gauss-Newton iterations
+      gauss_newton_tol: 1.0e-8                  # Convergence tolerance
+      chunk_size: 50000                         # Points per chunk for streaming
+      trust_region_initial: 1.0                 # Initial trust region size
+      regularization_factor: 1.0e-10            # Tikhonov regularization
+      enable_checkpoints: true                  # Enable checkpoint save/resume
+      checkpoint_frequency: 100                 # Checkpoint every N iterations
+      validate_numerics: true                   # Numerical validation (NaN/Inf)
+
   # ---------------------------------------------------------------------------
   # STRATIFICATION - Angle-Stratified Chunking (v2.2+)
   # ---------------------------------------------------------------------------

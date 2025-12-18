@@ -61,6 +61,17 @@ except ImportError:
     StreamingOptimizer = None
     StreamingConfig = None
 
+# Try importing AdaptiveHybridStreamingOptimizer (available in NLSQ >= 0.2.0)
+# Fixes: 1) Shear-term weak gradients, 2) Slow convergence, 3) Crude covariance
+try:
+    from nlsq import AdaptiveHybridStreamingOptimizer, HybridStreamingConfig
+
+    HYBRID_STREAMING_AVAILABLE = True
+except ImportError:
+    HYBRID_STREAMING_AVAILABLE = False
+    AdaptiveHybridStreamingOptimizer = None
+    HybridStreamingConfig = None
+
 from homodyne.optimization.batch_statistics import BatchStatistics
 from homodyne.optimization.checkpoint_manager import CheckpointManager
 from homodyne.optimization.exceptions import NLSQCheckpointError, NLSQOptimizationError
@@ -3671,6 +3682,187 @@ class NLSQWrapper:
             else:
                 raise NLSQOptimizationError(
                     f"StreamingOptimizer failed: {str(e)}",
+                    error_context={"original_error": type(e).__name__},
+                ) from e
+
+    def _fit_with_hybrid_streaming_optimizer(
+        self,
+        residual_fn: Any,
+        xdata: np.ndarray,
+        ydata: np.ndarray,
+        initial_params: np.ndarray,
+        bounds: tuple[np.ndarray, np.ndarray] | None,
+        logger: Any,
+        nlsq_config: Any = None,
+    ) -> tuple[np.ndarray, np.ndarray, dict]:
+        """Fit using NLSQ AdaptiveHybridStreamingOptimizer for large datasets.
+
+        This method uses NLSQ's four-phase hybrid optimizer to fix three key issues:
+        1. Shear-term weak gradients (scale imbalance) - via parameter normalization
+        2. Slow convergence - via Adam warmup + Gauss-Newton refinement
+        3. Crude covariance - via exact J^T J accumulation + covariance transform
+
+        Four Phases:
+        - Phase 0: Parameter normalization setup (bounds-based)
+        - Phase 1: Adam warmup with adaptive switching
+        - Phase 2: Streaming Gauss-Newton with exact J^T J accumulation
+        - Phase 3: Denormalization and covariance transform
+
+        Parameters
+        ----------
+        residual_fn : callable
+            Residual function (StratifiedResidualFunction or similar)
+        xdata : np.ndarray
+            Independent variable data (flattened)
+        ydata : np.ndarray
+            Dependent variable data (flattened)
+        initial_params : np.ndarray
+            Initial parameter guess
+        bounds : tuple of np.ndarray or None
+            Parameter bounds (lower, upper)
+        logger : logging.Logger
+            Logger instance
+        nlsq_config : NLSQConfig, optional
+            NLSQ configuration with hybrid streaming settings
+
+        Returns
+        -------
+        popt : np.ndarray
+            Optimized parameters
+        pcov : np.ndarray
+            Covariance matrix (properly transformed to original space)
+        info : dict
+            Optimization information including phase diagnostics
+
+        Raises
+        ------
+        RuntimeError
+            If AdaptiveHybridStreamingOptimizer is not available
+        NLSQOptimizationError
+            If optimization fails
+        """
+        if not HYBRID_STREAMING_AVAILABLE:
+            raise RuntimeError(
+                "AdaptiveHybridStreamingOptimizer not available. "
+                "Please upgrade NLSQ to version >= 0.2.0: pip install --upgrade nlsq"
+            )
+
+        logger.info(
+            "Initializing NLSQ AdaptiveHybridStreamingOptimizer..."
+        )
+        logger.info("Fixes: 1) Shear-term gradients, 2) Convergence, 3) Covariance")
+
+        # Create HybridStreamingConfig from NLSQConfig
+        if nlsq_config is not None:
+            config = HybridStreamingConfig(
+                normalize=nlsq_config.hybrid_normalize,
+                normalization_strategy=nlsq_config.hybrid_normalization_strategy,
+                warmup_iterations=nlsq_config.hybrid_warmup_iterations,
+                max_warmup_iterations=nlsq_config.hybrid_max_warmup_iterations,
+                warmup_learning_rate=nlsq_config.hybrid_warmup_learning_rate,
+                gauss_newton_max_iterations=nlsq_config.hybrid_gauss_newton_max_iterations,
+                gauss_newton_tol=nlsq_config.hybrid_gauss_newton_tol,
+                chunk_size=nlsq_config.hybrid_chunk_size,
+                trust_region_initial=nlsq_config.hybrid_trust_region_initial,
+                regularization_factor=nlsq_config.hybrid_regularization_factor,
+                enable_checkpoints=nlsq_config.hybrid_enable_checkpoints,
+                checkpoint_frequency=nlsq_config.hybrid_checkpoint_frequency,
+                validate_numerics=nlsq_config.hybrid_validate_numerics,
+            )
+        else:
+            # Use defaults
+            config = HybridStreamingConfig(
+                normalize=True,
+                normalization_strategy="bounds",
+                warmup_iterations=100,
+                max_warmup_iterations=500,
+                gauss_newton_max_iterations=50,
+                gauss_newton_tol=1e-8,
+                chunk_size=50000,
+            )
+
+        logger.info(f"  Normalization: {config.normalization_strategy}")
+        logger.info(f"  Warmup iterations: {config.warmup_iterations}")
+        logger.info(f"  Gauss-Newton max: {config.gauss_newton_max_iterations}")
+        logger.info(f"  Chunk size: {config.chunk_size}")
+
+        # Initialize optimizer
+        optimizer = AdaptiveHybridStreamingOptimizer(config)
+
+        # Create model function from residual function
+        # The hybrid optimizer expects: func(x, *params) -> predictions
+        # Our residual function computes: residuals = y - predictions
+        # We need: predictions = y - residuals
+        if hasattr(residual_fn, "jax_residual"):
+            # Stratified residual function
+
+            def model_fn(x, *params):
+                params_array = jnp.asarray(params)
+                residuals = residual_fn.jax_residual(params_array)
+                return ydata - residuals
+
+        else:
+            # Standard residual function
+
+            def model_fn(x, *params):
+                residuals = residual_fn(x, *params)
+                return ydata - residuals
+
+        try:
+            # Run optimization
+            result = optimizer.fit(
+                data_source=(xdata, ydata),
+                func=model_fn,
+                p0=initial_params,
+                bounds=bounds,
+                sigma=None,  # TODO: Add sigma support if needed
+                verbose=1 if not self.fast_mode else 0,
+            )
+
+            # Extract results
+            popt = np.asarray(result["x"])
+            pcov = np.asarray(result.get("pcov", np.eye(len(popt))))
+            perr = np.asarray(result.get("perr", np.sqrt(np.diag(pcov))))
+
+            # Build info dict with phase diagnostics
+            info = {
+                "success": result.get("success", True),
+                "message": result.get("message", "Hybrid optimization completed"),
+                "hybrid_streaming_diagnostics": result.get("streaming_diagnostics", {}),
+                "perr": perr,
+                "sigma_sq": result.get("streaming_diagnostics", {}).get(
+                    "gauss_newton_diagnostics", {}
+                ).get("final_cost"),
+                "phase_timings": result.get("streaming_diagnostics", {}).get(
+                    "phase_timings", {}
+                ),
+            }
+
+            logger.info("Hybrid streaming optimization completed successfully")
+            phase_timings = info.get("phase_timings", {})
+            if phase_timings:
+                logger.info(
+                    f"  Phase 0 (normalization): {phase_timings.get('phase0_normalization', 0):.3f}s"
+                )
+                logger.info(
+                    f"  Phase 1 (Adam warmup): {phase_timings.get('phase1_warmup', 0):.3f}s"
+                )
+                logger.info(
+                    f"  Phase 2 (Gauss-Newton): {phase_timings.get('phase2_gauss_newton', 0):.3f}s"
+                )
+                logger.info(
+                    f"  Phase 3 (covariance): {phase_timings.get('phase3_finalize', 0):.3f}s"
+                )
+
+            return popt, pcov, info
+
+        except Exception as e:
+            logger.error(f"AdaptiveHybridStreamingOptimizer failed: {e}")
+            if isinstance(e, NLSQOptimizationError):
+                raise
+            else:
+                raise NLSQOptimizationError(
+                    f"AdaptiveHybridStreamingOptimizer failed: {str(e)}",
                     error_context={"original_error": type(e).__name__},
                 ) from e
 
