@@ -531,7 +531,8 @@ def compute_fitted_c2(
     offsets = np.array([stats[f"offset_{i}"]["mean"] for i in range(n_phi)])
 
     # Map phi to indices
-    phi_indices = np.searchsorted(phi_unique, phi)
+    # CRITICAL FIX: Clip indices to valid range to prevent out-of-bounds access
+    phi_indices = np.clip(np.searchsorted(phi_unique, phi), 0, n_phi - 1)
 
     # Apply scaling
     contrast_per_point = contrasts[phi_indices]

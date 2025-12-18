@@ -315,9 +315,17 @@ class StratifiedResidualFunctionJIT:
         n_t1 = len(self.t1_unique)
         n_t2 = len(self.t2_unique)
 
-        phi_indices = jnp.searchsorted(self.phi_unique, phi_chunk)
-        t1_indices = jnp.searchsorted(self.t1_unique, t1_chunk)
-        t2_indices = jnp.searchsorted(self.t2_unique, t2_chunk)
+        # CRITICAL FIX: Clip indices to valid range to prevent out-of-bounds access
+        # searchsorted returns len(array) when value >= max, which is out of bounds
+        phi_indices = jnp.clip(
+            jnp.searchsorted(self.phi_unique, phi_chunk), 0, len(self.phi_unique) - 1
+        )
+        t1_indices = jnp.clip(
+            jnp.searchsorted(self.t1_unique, t1_chunk), 0, len(self.t1_unique) - 1
+        )
+        t2_indices = jnp.clip(
+            jnp.searchsorted(self.t2_unique, t2_chunk), 0, len(self.t2_unique) - 1
+        )
 
         # Compute flat indices
         flat_indices = phi_indices * (n_t1 * n_t2) + t1_indices * n_t2 + t2_indices

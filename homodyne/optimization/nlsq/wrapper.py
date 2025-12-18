@@ -2840,11 +2840,19 @@ class NLSQWrapper:
                 offset_params = float(params_np[1])
                 physical_params = params_np[2:]
 
-            phi_indices = np.searchsorted(
-                phi_unique_all, np.round(phi_section, decimals=6)
+            # CRITICAL FIX: Clip indices to valid range to prevent out-of-bounds access
+            # np.searchsorted returns len(array) when value >= max, which is out of bounds
+            phi_indices = np.clip(
+                np.searchsorted(phi_unique_all, np.round(phi_section, decimals=6)),
+                0,
+                len(phi_unique_all) - 1,
             )
-            t1_indices = np.searchsorted(t1_unique_all, t1_section)
-            t2_indices = np.searchsorted(t2_unique_all, t2_section)
+            t1_indices = np.clip(
+                np.searchsorted(t1_unique_all, t1_section), 0, len(t1_unique_all) - 1
+            )
+            t2_indices = np.clip(
+                np.searchsorted(t2_unique_all, t2_section), 0, len(t2_unique_all) - 1
+            )
 
             g2_model = np.empty_like(g2_section, dtype=np.float64)
             sigma_vals = np.empty_like(g2_section, dtype=np.float64)
@@ -3251,8 +3259,11 @@ class NLSQWrapper:
                 # Find which unique phi each requested phi corresponds to
                 # Since phi values come from phi_unique, we can use searchsorted
                 # CRITICAL: Keep all arrays in JAX (no np.asarray) for JIT compatibility
-                phi_idx = jnp.searchsorted(
-                    phi_unique, phi_requested
+                # CRITICAL FIX: Clip indices to valid range to prevent out-of-bounds access
+                phi_idx = jnp.clip(
+                    jnp.searchsorted(phi_unique, phi_requested),
+                    0,
+                    len(phi_unique) - 1,
                 )  # Shape: (chunk_size,)
 
                 # Select per-angle contrast and offset for each data point
@@ -4430,9 +4441,21 @@ class NLSQWrapper:
         # Vectorized index conversion using searchsorted
         # Note: Both t1 and t2 represent time values on the same grid,
         # so we use t1_unique for both to ensure correct indexing into D_cumsum
-        phi_idx_arr = np.searchsorted(phi_unique, all_phi)
-        t1_idx_arr = np.searchsorted(t1_unique, all_t1)
-        t2_idx_arr = np.searchsorted(t1_unique, all_t2)  # Use t1_unique, not t2_unique!
+        #
+        # CRITICAL FIX: np.searchsorted returns indices in [0, len(array)], so when a
+        # value equals or exceeds the max value, it returns len(array) which is OUT OF
+        # BOUNDS. This causes undefined gradients (NaN/Inf) when indexing into D_cumsum
+        # and gamma_cumsum arrays in the model function.
+        # Solution: Clip indices to valid range [0, len(array)-1]
+        phi_idx_arr = np.clip(
+            np.searchsorted(phi_unique, all_phi), 0, len(phi_unique) - 1
+        )
+        t1_idx_arr = np.clip(
+            np.searchsorted(t1_unique, all_t1), 0, len(t1_unique) - 1
+        )
+        t2_idx_arr = np.clip(
+            np.searchsorted(t1_unique, all_t2), 0, len(t1_unique) - 1
+        )  # Use t1_unique, not t2_unique!
 
         # Stack into x_data array
         x_data = np.column_stack([phi_idx_arr, t1_idx_arr, t2_idx_arr]).astype(
