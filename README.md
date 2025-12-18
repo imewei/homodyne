@@ -2,13 +2,13 @@
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Python](https://img.shields.io/badge/Python-3.12%2B-blue)](https://www.python.org/)
-[![Version](https://img.shields.io/badge/Version-2.4.3-green.svg)](#)
+[![Version](https://img.shields.io/badge/Version-2.5.0-green.svg)](#)
 [![Documentation](https://img.shields.io/badge/docs-sphinx-blue.svg)](https://homodyne.readthedocs.io)
 [![ReadTheDocs](https://readthedocs.org/projects/homodyne/badge/?version=latest)](https://homodyne.readthedocs.io/en/latest/)
 [![GitHub Actions](https://github.com/imewei/homodyne/actions/workflows/docs.yml/badge.svg)](https://github.com/imewei/homodyne/actions/workflows/docs.yml)
 [![DOI](https://zenodo.org/badge/DOI/10.1073/pnas.2401162121.svg)](https://doi.org/10.1073/pnas.2401162121)
 
-## ⚠️ **BREAKING CHANGES: v2.4.x**
+## ⚠️ **BREAKING CHANGES: v2.5.x**
 
 ### v2.5.0 - Streaming Optimizer for Large Datasets
 

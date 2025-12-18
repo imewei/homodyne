@@ -228,7 +228,7 @@ Each template includes:
 Version Information
 -------------------
 
-- **Configuration Version**: 2.4.3 (matches Homodyne.4.3)
+- **Configuration Version**: 2.5.0 (matches Homodyne v2.5.0)
 - **Required Python**: 3.12+
 - **JAX**: 0.8.0 (CPU-only)
 - **Analysis Modes**: static, laminar_flow

@@ -98,8 +98,9 @@ See :doc:`analysis_modes` for detailed parameter descriptions and usage.
 Version Information
 -------------------
 
-This documentation covers Homodyne.4.x with the following key features:
+This documentation covers Homodyne v2.5.x with the following key features:
 
+* **v2.5.0**: Memory-bounded streaming optimizer for large datasets (>10M points)
 * **v2.4.3**: NLSQ element-wise integration fix (matches CMC physics)
 * **v2.4.1**: CMC-only MCMC architecture, module reorganization
 * **v2.4.0**: Per-angle scaling mandatory, legacy scalar mode removed
