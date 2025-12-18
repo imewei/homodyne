@@ -368,7 +368,15 @@ class CMCResult:
 
         # Check required physical parameters for analysis mode
         if self.analysis_mode == "laminar_flow":
-            required_physical = ["D0", "alpha", "D_offset", "gamma_dot_0", "beta", "gamma_dot_offset", "phi_0"]
+            required_physical = [
+                "D0",
+                "alpha",
+                "D_offset",
+                "gamma_dot_0",
+                "beta",
+                "gamma_dot_offset",
+                "phi_0",
+            ]
         else:
             required_physical = ["D0", "alpha", "D_offset"]
 
@@ -404,7 +412,9 @@ class CMCResult:
         # Check for divergences
         if self.divergences > 0:
             total_transitions = self.num_shards * self.n_chains * self.n_samples
-            div_rate = self.divergences / total_transitions if total_transitions > 0 else 0
+            div_rate = (
+                self.divergences / total_transitions if total_transitions > 0 else 0
+            )
             if div_rate > 0.01:
                 warnings.append(f"High divergence rate: {div_rate:.1%}")
 

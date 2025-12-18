@@ -303,7 +303,8 @@ def _check_deprecated_config(config: "ConfigManager") -> None:
             "Migration: NLSQ v3.0+ uses native large dataset handling.\n"
             "Simply remove the deprecated sections - no replacement needed.\n"
             "See: https://nlsq.readthedocs.io/en/latest/guides/large_datasets.html\n"
-            + "=" * 70
+            + "="
+            * 70
         )
 
 
@@ -1011,9 +1012,9 @@ def _run_optimization(args, config: ConfigManager, data: dict[str, Any]) -> Any:
                 logger.info(
                     f"Overriding CMC num_shards from CLI: {args.cmc_num_shards}",
                 )
-                cmc_config.setdefault("sharding", {})[
-                    "num_shards"
-                ] = args.cmc_num_shards
+                cmc_config.setdefault("sharding", {})["num_shards"] = (
+                    args.cmc_num_shards
+                )
 
             if args.cmc_backend is not None:
                 logger.info(f"Overriding CMC backend from CLI: {args.cmc_backend}")
@@ -2532,7 +2533,6 @@ def _compute_theoretical_c2_from_mcmc(
     """
     import numpy as np
 
-
     # Extract parameters from MCMC result
     contrast = getattr(result, "mean_contrast", 0.5)
     offset = getattr(result, "mean_offset", 1.0)
@@ -2643,7 +2643,7 @@ def _compute_theoretical_c2_from_mcmc(
             q=q_val,
             L=L,
             contrast=1.0,  # Unscaled
-            offset=0.0,    # Unscaled
+            offset=0.0,  # Unscaled
             dt=dt,
         )
         g2_theory_np = np.array(g2_theory[0])  # Shape: (n_t1, n_t2)

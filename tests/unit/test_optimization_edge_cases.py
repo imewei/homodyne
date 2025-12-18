@@ -15,34 +15,35 @@ Edge Cases Covered:
 - Data validation edge cases
 """
 
+from unittest.mock import MagicMock
+
 import numpy as np
 import pytest
-from unittest.mock import MagicMock, patch
+from numpy.testing import assert_allclose
 
-from numpy.testing import assert_allclose, assert_array_equal
-
-# Import modules under test - NLSQ
-from homodyne.optimization.nlsq.core import (
-    _array_to_params,
-    _bounds_to_arrays,
-    _get_analysis_mode,
-    _get_default_initial_params,
-    _get_param_names,
-    _params_to_array,
-    _validate_data,
-    _estimate_contrast_offset_from_data,
-    NLSQResult,
-)
+from homodyne.optimization.cmc.config import CMCConfig
 
 # Import modules under test - CMC
 from homodyne.optimization.cmc.core import (
     _infer_time_step,
 )
-from homodyne.optimization.cmc.config import CMCConfig
 from homodyne.optimization.cmc.data_prep import (
     prepare_mcmc_data,
     shard_data_random,
     shard_data_stratified,
+)
+
+# Import modules under test - NLSQ
+from homodyne.optimization.nlsq.core import (
+    NLSQResult,
+    _array_to_params,
+    _bounds_to_arrays,
+    _estimate_contrast_offset_from_data,
+    _get_analysis_mode,
+    _get_default_initial_params,
+    _get_param_names,
+    _params_to_array,
+    _validate_data,
 )
 
 # Conditionally import JAX

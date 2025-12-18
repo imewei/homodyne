@@ -15,9 +15,9 @@ import pytest
 pytest.importorskip("arviz", reason="ArviZ required for CMC unit tests")
 
 from homodyne.optimization.cmc.config import CMCConfig  # noqa: E402
+from homodyne.optimization.cmc.core import _infer_time_step, fit_mcmc_jax  # noqa: E402
 from homodyne.optimization.cmc.data_prep import PreparedData  # noqa: E402
 from homodyne.optimization.cmc.results import CMCResult  # noqa: E402
-from homodyne.optimization.cmc.core import _infer_time_step, fit_mcmc_jax  # noqa: E402
 from homodyne.optimization.cmc.sampler import (  # noqa: E402
     MCMCSamples,
     SamplingStats,
@@ -467,9 +467,9 @@ class TestT0Exclusion:
         # Contrast with t=0: would produce infinity (suppress expected warning)
         with np.errstate(divide="ignore"):
             D_t_with_zero = D0 * (base_times**alpha) + D_offset
-        assert not np.isfinite(
-            D_t_with_zero[0]
-        ), "D(0) should be infinite with negative alpha"
+        assert not np.isfinite(D_t_with_zero[0]), (
+            "D(0) should be infinite with negative alpha"
+        )
 
     def test_exclude_t0_2d_meshgrid(self):
         """Test t=0 exclusion with 2D meshgrid arrays."""

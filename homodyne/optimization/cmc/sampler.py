@@ -1027,7 +1027,9 @@ def run_nuts_with_retry(
             attempt_key = jax.random.fold_in(rng_key, attempt)
 
             # Create config with potentially escalated target_accept_prob
-            attempt_config = replace(config, target_accept_prob=current_target_accept_prob)
+            attempt_config = replace(
+                config, target_accept_prob=current_target_accept_prob
+            )
 
             samples, stats = run_nuts_sampling(
                 model=model,
@@ -1052,7 +1054,9 @@ def run_nuts_with_retry(
                     f"> threshold {divergence_threshold:.0%}, retrying with smaller step sizes..."
                 )
                 # Escalate target_accept_prob for next retry (smaller step sizes)
-                current_target_accept_prob = min(0.95, current_target_accept_prob + 0.05)
+                current_target_accept_prob = min(
+                    0.95, current_target_accept_prob + 0.05
+                )
                 last_error = RuntimeError(
                     f"High divergence rate: {divergence_rate:.1%}"
                 )

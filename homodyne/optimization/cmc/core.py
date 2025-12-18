@@ -83,24 +83,24 @@ def _resolve_max_points_per_shard(
     # Auto-detection based on analysis mode and dataset size
     if analysis_mode == "laminar_flow":
         # Laminar flow needs smaller shards due to complex gradients (7+ params)
-        if n_total >= 100_000_000:      # 100M+ points
-            base = 5_000                 # ~20K shards, ~3 min each
-        elif n_total >= 50_000_000:     # 50M+ points
-            base = 6_000                 # ~8K shards, ~4 min each
-        elif n_total >= 20_000_000:     # 20M+ points
-            base = 8_000                 # ~2.5K shards, ~5 min each
-        elif n_total >= 2_000_000:      # 2M+ points
-            base = 10_000                # ~200-300 shards, ~5-8 min each
+        if n_total >= 100_000_000:  # 100M+ points
+            base = 5_000  # ~20K shards, ~3 min each
+        elif n_total >= 50_000_000:  # 50M+ points
+            base = 6_000  # ~8K shards, ~4 min each
+        elif n_total >= 20_000_000:  # 20M+ points
+            base = 8_000  # ~2.5K shards, ~5 min each
+        elif n_total >= 2_000_000:  # 2M+ points
+            base = 10_000  # ~200-300 shards, ~5-8 min each
         else:
-            base = 20_000                # Small datasets can use larger shards
+            base = 20_000  # Small datasets can use larger shards
     else:
         # Static mode (3 params) - simpler gradients, can handle larger shards
-        if n_total >= 100_000_000:      # 100M+ points
-            base = 50_000                # ~2K shards
-        elif n_total >= 50_000_000:     # 50M+ points
-            base = 80_000                # ~625 shards
+        if n_total >= 100_000_000:  # 100M+ points
+            base = 50_000  # ~2K shards
+        elif n_total >= 50_000_000:  # 50M+ points
+            base = 80_000  # ~625 shards
         else:
-            base = 100_000               # Default for static mode
+            base = 100_000  # Default for static mode
 
     # Cap shard count to prevent memory exhaustion during combination
     # Each shard result ~100KB → max_shards=2000 needs ~12GB peak memory
@@ -183,7 +183,6 @@ def _estimate_n_workers() -> int:
     int
         Estimated number of worker processes.
     """
-    import os
     import multiprocessing as mp
 
     # Try to get physical core count (same logic as multiprocessing backend)
@@ -295,9 +294,7 @@ def _log_runtime_comparison(
 
     # Provide suggestions if significantly off
     if accuracy > 200:
-        logger.info(
-            "  → Consider reducing num_samples or num_chains for faster runs"
-        )
+        logger.info("  → Consider reducing num_samples or num_chains for faster runs")
     elif accuracy < 30:
         logger.info(
             "  → Actual runtime much faster than expected - estimate may be conservative"
@@ -601,7 +598,9 @@ def fit_mcmc_jax(
     )
 
     # Verify grid spacing matches config dt
-    actual_grid_dt = (time_grid_np[1] - time_grid_np[0]) if len(time_grid_np) > 1 else dt_used
+    actual_grid_dt = (
+        (time_grid_np[1] - time_grid_np[0]) if len(time_grid_np) > 1 else dt_used
+    )
     if abs(actual_grid_dt - dt_used) > 1e-6:
         run_logger.warning(
             f"[CMC] Grid spacing {actual_grid_dt:.6g}s differs from config dt={dt_used:.6g}s"

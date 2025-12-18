@@ -17,7 +17,6 @@ import time
 
 import numpy as np
 import pytest
-from numpy.testing import assert_allclose
 
 # JAX imports with fallback
 try:
@@ -38,7 +37,6 @@ from homodyne.core.physics_utils import (
     safe_sinc,
     trapezoid_cumsum,
 )
-
 
 # =============================================================================
 # Utility Functions
@@ -175,21 +173,21 @@ class TestSafeExpPerformance:
     def test_safe_exp_small_array(self, small_array):
         """Benchmark safe_exp with small array."""
         perf = measure_execution_time(safe_exp, small_array)
-        print(f"\nsafe_exp (100 elements): {perf['mean_time']*1000:.3f}ms")
+        print(f"\nsafe_exp (100 elements): {perf['mean_time'] * 1000:.3f}ms")
         # Should complete in < 10ms
         assert perf["mean_time"] < 0.01
 
     def test_safe_exp_medium_array(self, medium_array):
         """Benchmark safe_exp with medium array."""
         perf = measure_execution_time(safe_exp, medium_array)
-        print(f"\nsafe_exp (1000 elements): {perf['mean_time']*1000:.3f}ms")
+        print(f"\nsafe_exp (1000 elements): {perf['mean_time'] * 1000:.3f}ms")
         # Should complete in < 50ms
         assert perf["mean_time"] < 0.05
 
     def test_safe_exp_large_array(self, large_array):
         """Benchmark safe_exp with large array."""
         perf = measure_execution_time(safe_exp, large_array)
-        print(f"\nsafe_exp (10000 elements): {perf['mean_time']*1000:.3f}ms")
+        print(f"\nsafe_exp (10000 elements): {perf['mean_time'] * 1000:.3f}ms")
         # Should complete in < 100ms
         assert perf["mean_time"] < 0.1
 
@@ -199,7 +197,7 @@ class TestSafeExpPerformance:
         arr = jnp.linspace(-10, 10, size)
         perf = measure_execution_time(safe_exp, arr, iterations=5)
         throughput = size / perf["mean_time"]
-        print(f"\nsafe_exp ({size} elements): {throughput/1e6:.2f}M elements/s")
+        print(f"\nsafe_exp ({size} elements): {throughput / 1e6:.2f}M elements/s")
         # Minimum throughput requirement - scales with size
         # Small arrays have high overhead per element; larger arrays are more efficient
         # Note: Thresholds are conservative to account for system load variability
@@ -221,13 +219,13 @@ class TestSafeSincPerformance:
     def test_safe_sinc_small_array(self, small_array):
         """Benchmark safe_sinc with small array."""
         perf = measure_execution_time(safe_sinc, small_array)
-        print(f"\nsafe_sinc (100 elements): {perf['mean_time']*1000:.3f}ms")
+        print(f"\nsafe_sinc (100 elements): {perf['mean_time'] * 1000:.3f}ms")
         assert perf["mean_time"] < 0.01
 
     def test_safe_sinc_large_array(self, large_array):
         """Benchmark safe_sinc with large array."""
         perf = measure_execution_time(safe_sinc, large_array)
-        print(f"\nsafe_sinc (10000 elements): {perf['mean_time']*1000:.3f}ms")
+        print(f"\nsafe_sinc (10000 elements): {perf['mean_time'] * 1000:.3f}ms")
         assert perf["mean_time"] < 0.1
 
 
@@ -245,7 +243,7 @@ class TestDiffusionCoefficientPerformance:
         perf = measure_execution_time(
             calculate_diffusion_coefficient, small_array, 1.0, 0.5, 0.1
         )
-        print(f"\ndiffusion (100 points): {perf['mean_time']*1000:.3f}ms")
+        print(f"\ndiffusion (100 points): {perf['mean_time'] * 1000:.3f}ms")
         assert perf["mean_time"] < 0.01
 
     def test_diffusion_large_array(self, large_array):
@@ -253,7 +251,7 @@ class TestDiffusionCoefficientPerformance:
         perf = measure_execution_time(
             calculate_diffusion_coefficient, large_array, 1.0, 0.5, 0.1
         )
-        print(f"\ndiffusion (10000 points): {perf['mean_time']*1000:.3f}ms")
+        print(f"\ndiffusion (10000 points): {perf['mean_time'] * 1000:.3f}ms")
         assert perf["mean_time"] < 0.1
 
     @pytest.mark.parametrize("alpha", [-1.0, 0.0, 0.5, 1.0, 2.0])
@@ -262,7 +260,7 @@ class TestDiffusionCoefficientPerformance:
         perf = measure_execution_time(
             calculate_diffusion_coefficient, medium_array, 1.0, alpha, 0.1
         )
-        print(f"\ndiffusion (alpha={alpha}): {perf['mean_time']*1000:.3f}ms")
+        print(f"\ndiffusion (alpha={alpha}): {perf['mean_time'] * 1000:.3f}ms")
         # Performance should be similar regardless of alpha
         assert perf["mean_time"] < 0.05
 
@@ -278,18 +276,14 @@ class TestShearRatePerformance:
 
     def test_shear_rate_small_array(self, small_array):
         """Benchmark shear rate with small array."""
-        perf = measure_execution_time(
-            calculate_shear_rate, small_array, 0.5, 0.3, 0.1
-        )
-        print(f"\nshear_rate (100 points): {perf['mean_time']*1000:.3f}ms")
+        perf = measure_execution_time(calculate_shear_rate, small_array, 0.5, 0.3, 0.1)
+        print(f"\nshear_rate (100 points): {perf['mean_time'] * 1000:.3f}ms")
         assert perf["mean_time"] < 0.01
 
     def test_shear_rate_large_array(self, large_array):
         """Benchmark shear rate with large array."""
-        perf = measure_execution_time(
-            calculate_shear_rate, large_array, 0.5, 0.3, 0.1
-        )
-        print(f"\nshear_rate (10000 points): {perf['mean_time']*1000:.3f}ms")
+        perf = measure_execution_time(calculate_shear_rate, large_array, 0.5, 0.3, 0.1)
+        print(f"\nshear_rate (10000 points): {perf['mean_time'] * 1000:.3f}ms")
         assert perf["mean_time"] < 0.1
 
 
@@ -306,21 +300,21 @@ class TestTimeIntegralMatrixPerformance:
         """Benchmark time integral matrix with small input."""
         values = jnp.ones(50)
         perf = measure_execution_time(create_time_integral_matrix, values)
-        print(f"\ntime_integral_matrix (50x50): {perf['mean_time']*1000:.3f}ms")
+        print(f"\ntime_integral_matrix (50x50): {perf['mean_time'] * 1000:.3f}ms")
         assert perf["mean_time"] < 0.05
 
     def test_time_integral_medium(self):
         """Benchmark time integral matrix with medium input."""
         values = jnp.ones(200)
         perf = measure_execution_time(create_time_integral_matrix, values)
-        print(f"\ntime_integral_matrix (200x200): {perf['mean_time']*1000:.3f}ms")
+        print(f"\ntime_integral_matrix (200x200): {perf['mean_time'] * 1000:.3f}ms")
         assert perf["mean_time"] < 0.5
 
     def test_time_integral_large(self):
         """Benchmark time integral matrix with large input."""
         values = jnp.ones(500)
         perf = measure_execution_time(create_time_integral_matrix, values)
-        print(f"\ntime_integral_matrix (500x500): {perf['mean_time']*1000:.3f}ms")
+        print(f"\ntime_integral_matrix (500x500): {perf['mean_time'] * 1000:.3f}ms")
         assert perf["mean_time"] < 2.0
 
     @pytest.mark.parametrize("n", [50, 100, 200, 500])
@@ -330,7 +324,9 @@ class TestTimeIntegralMatrixPerformance:
         perf = measure_execution_time(create_time_integral_matrix, values, iterations=5)
         # Time should scale as O(n²)
         time_per_element = perf["mean_time"] / (n * n)
-        print(f"\ntime_integral_matrix ({n}x{n}): {time_per_element*1e9:.1f}ns/element")
+        print(
+            f"\ntime_integral_matrix ({n}x{n}): {time_per_element * 1e9:.1f}ns/element"
+        )
 
 
 # =============================================================================
@@ -345,13 +341,13 @@ class TestTrapezoidCumsumPerformance:
     def test_trapezoid_small(self, small_array):
         """Benchmark trapezoid_cumsum with small array."""
         perf = measure_execution_time(trapezoid_cumsum, small_array)
-        print(f"\ntrapezoid_cumsum (100 elements): {perf['mean_time']*1000:.3f}ms")
+        print(f"\ntrapezoid_cumsum (100 elements): {perf['mean_time'] * 1000:.3f}ms")
         assert perf["mean_time"] < 0.01
 
     def test_trapezoid_large(self, large_array):
         """Benchmark trapezoid_cumsum with large array."""
         perf = measure_execution_time(trapezoid_cumsum, large_array)
-        print(f"\ntrapezoid_cumsum (10000 elements): {perf['mean_time']*1000:.3f}ms")
+        print(f"\ntrapezoid_cumsum (10000 elements): {perf['mean_time'] * 1000:.3f}ms")
         assert perf["mean_time"] < 0.1
 
 
@@ -367,19 +363,19 @@ class TestDiagonalCorrectionPerformance:
     def test_diagonal_correction_small(self, small_matrix):
         """Benchmark diagonal correction with small matrix."""
         perf = measure_execution_time(apply_diagonal_correction, small_matrix)
-        print(f"\ndiagonal_correction (50x50): {perf['mean_time']*1000:.3f}ms")
+        print(f"\ndiagonal_correction (50x50): {perf['mean_time'] * 1000:.3f}ms")
         assert perf["mean_time"] < 0.05
 
     def test_diagonal_correction_medium(self, medium_matrix):
         """Benchmark diagonal correction with medium matrix."""
         perf = measure_execution_time(apply_diagonal_correction, medium_matrix)
-        print(f"\ndiagonal_correction (200x200): {perf['mean_time']*1000:.3f}ms")
+        print(f"\ndiagonal_correction (200x200): {perf['mean_time'] * 1000:.3f}ms")
         assert perf["mean_time"] < 0.2
 
     def test_diagonal_correction_large(self, large_matrix):
         """Benchmark diagonal correction with large matrix."""
         perf = measure_execution_time(apply_diagonal_correction, large_matrix)
-        print(f"\ndiagonal_correction (500x500): {perf['mean_time']*1000:.3f}ms")
+        print(f"\ndiagonal_correction (500x500): {perf['mean_time'] * 1000:.3f}ms")
         assert perf["mean_time"] < 1.0
 
     @pytest.mark.parametrize("n", [50, 100, 200, 500])
@@ -389,7 +385,7 @@ class TestDiagonalCorrectionPerformance:
         perf = measure_execution_time(apply_diagonal_correction, mat, iterations=5)
         # Time should scale roughly linearly with n
         time_per_element = perf["mean_time"] / n
-        print(f"\ndiagonal_correction ({n}x{n}): {time_per_element*1e6:.1f}µs/row")
+        print(f"\ndiagonal_correction ({n}x{n}): {time_per_element * 1e6:.1f}µs/row")
 
 
 # =============================================================================
@@ -454,7 +450,9 @@ class TestJITOverhead:
             result.block_until_ready()
         second_call = time.perf_counter() - start
 
-        print(f"\nsafe_exp JIT: first={first_call*1000:.2f}ms, compiled={second_call*1000:.3f}ms")
+        print(
+            f"\nsafe_exp JIT: first={first_call * 1000:.2f}ms, compiled={second_call * 1000:.3f}ms"
+        )
         # Compiled version should be faster or similar
         # (first call may not be slower if already cached)
 
@@ -476,7 +474,9 @@ class TestJITOverhead:
             result.block_until_ready()
         second_call = time.perf_counter() - start
 
-        print(f"\ndiffusion JIT: first={first_call*1000:.2f}ms, compiled={second_call*1000:.3f}ms")
+        print(
+            f"\ndiffusion JIT: first={first_call * 1000:.2f}ms, compiled={second_call * 1000:.3f}ms"
+        )
 
 
 # =============================================================================
@@ -494,7 +494,7 @@ class TestThroughput:
         arr = jnp.linspace(-10, 10, size)
         perf = measure_execution_time(safe_exp, arr, iterations=5)
         throughput = size / perf["mean_time"]
-        print(f"\nsafe_exp throughput ({size}): {throughput/1e6:.1f}M elements/s")
+        print(f"\nsafe_exp throughput ({size}): {throughput / 1e6:.1f}M elements/s")
         # Should maintain good throughput
         assert throughput > 1e6
 
@@ -506,7 +506,7 @@ class TestThroughput:
             calculate_diffusion_coefficient, time_arr, 1.0, 0.5, 0.1, iterations=5
         )
         throughput = size / perf["mean_time"]
-        print(f"\ndiffusion throughput ({size}): {throughput/1e6:.1f}M points/s")
+        print(f"\ndiffusion throughput ({size}): {throughput / 1e6:.1f}M points/s")
         # Minimum throughput scales with size (small arrays have higher overhead)
         min_throughput = {1000: 2e5, 10000: 1e6, 100000: 1e6}
         assert throughput > min_throughput[size]
@@ -519,7 +519,7 @@ class TestThroughput:
             calculate_shear_rate, time_arr, 0.5, 0.3, 0.1, iterations=5
         )
         throughput = size / perf["mean_time"]
-        print(f"\nshear_rate throughput ({size}): {throughput/1e6:.1f}M points/s")
+        print(f"\nshear_rate throughput ({size}): {throughput / 1e6:.1f}M points/s")
         # Minimum throughput scales with size (small arrays have higher overhead)
         min_throughput = {1000: 2e5, 10000: 1e6, 100000: 1e6}
         assert throughput > min_throughput[size]
@@ -547,13 +547,15 @@ class TestComparativePerformance:
             calculate_shear_rate_cmc, time_arr, 0.5, 0.3, 0.1
         )
 
-        print(f"\nshear_rate: {perf_regular['mean_time']*1000:.3f}ms")
-        print(f"shear_rate_cmc: {perf_cmc['mean_time']*1000:.3f}ms")
+        print(f"\nshear_rate: {perf_regular['mean_time'] * 1000:.3f}ms")
+        print(f"shear_rate_cmc: {perf_cmc['mean_time'] * 1000:.3f}ms")
 
         # CMC variant should be within reasonable range of regular version
         # Note: Wider tolerance to account for JIT compilation variability
         ratio = perf_cmc["mean_time"] / perf_regular["mean_time"]
-        assert 0.2 < ratio < 5.0, f"Performance ratio {ratio:.2f} outside expected range"
+        assert 0.2 < ratio < 5.0, (
+            f"Performance ratio {ratio:.2f} outside expected range"
+        )
 
     def test_numpy_vs_jax_safe_exp(self):
         """Compare NumPy vs JAX safe_exp performance."""
@@ -569,8 +571,8 @@ class TestComparativePerformance:
         data_jax = jnp.array(data)
         perf_jax = measure_execution_time(safe_exp, data_jax)
 
-        print(f"\nNumPy safe_exp: {perf_numpy['mean_time']*1000:.3f}ms")
-        print(f"JAX safe_exp: {perf_jax['mean_time']*1000:.3f}ms")
+        print(f"\nNumPy safe_exp: {perf_numpy['mean_time'] * 1000:.3f}ms")
+        print(f"JAX safe_exp: {perf_jax['mean_time'] * 1000:.3f}ms")
 
         # Both should be fast
         assert perf_numpy["mean_time"] < 0.1

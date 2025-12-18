@@ -7,23 +7,24 @@ Created: Dec 2025
 Purpose: Diagnose CMC constant C2 output bug
 """
 
-import numpy as np
 import jax.numpy as jnp
+import numpy as np
 import pytest
 
 from homodyne.core.physics_cmc import (
-    compute_g1_total as compute_g1_total_cmc,
     _compute_g1_diffusion_elementwise,
 )
+from homodyne.core.physics_cmc import (
+    compute_g1_total as compute_g1_total_cmc,
+)
 from homodyne.core.physics_nlsq import (
-    compute_g2_scaled as compute_g2_scaled_nlsq,
     _compute_g1_diffusion_meshgrid,
     _compute_g1_total_meshgrid,
 )
 from homodyne.core.physics_utils import (
-    trapezoid_cumsum,
-    create_time_integral_matrix,
     calculate_diffusion_coefficient,
+    create_time_integral_matrix,
+    trapezoid_cumsum,
 )
 
 
@@ -73,7 +74,7 @@ class TestCMCNLSQDiffusionComparison:
                     f"cumsum_diff={expected:.6g}"
                 )
 
-        print(f"✓ D_matrix and cumsum method produce identical integrals")
+        print("✓ D_matrix and cumsum method produce identical integrals")
         print(f"  D_matrix range: [{D_matrix.min():.4g}, {D_matrix.max():.4g}]")
         print(f"  D_cumsum range: [{D_cumsum.min():.4g}, {D_cumsum.max():.4g}]")
 
@@ -129,7 +130,7 @@ class TestCMCNLSQDiffusionComparison:
         max_diff = np.abs(g1_nlsq - g1_cmc).max()
         mean_diff = np.abs(g1_nlsq - g1_cmc).mean()
 
-        print(f"\n=== g1_diffusion comparison ===")
+        print("\n=== g1_diffusion comparison ===")
         print(f"  NLSQ g1 range: [{g1_nlsq.min():.6f}, {g1_nlsq.max():.6f}]")
         print(f"  CMC g1 range:  [{g1_cmc.min():.6f}, {g1_cmc.max():.6f}]")
         print(f"  Max difference: {max_diff:.2e}")
@@ -137,7 +138,7 @@ class TestCMCNLSQDiffusionComparison:
 
         # Sample points for detailed comparison
         sample_indices = [(0, 0), (0, 10), (10, 10), (10, 40), (49, 49)]
-        print(f"\n  Sample comparisons (i,j): NLSQ vs CMC")
+        print("\n  Sample comparisons (i,j): NLSQ vs CMC")
         for i, j in sample_indices:
             print(f"    ({i},{j}): {g1_nlsq[i, j]:.6f} vs {g1_cmc[i, j]:.6f}")
 
@@ -208,7 +209,7 @@ class TestCMCNLSQDiffusionComparison:
             )
         )  # Shape: (n_phi, n_points)
 
-        print(f"\n=== g1_total comparison (with shear) ===")
+        print("\n=== g1_total comparison (with shear) ===")
         print(f"  NLSQ shape: {g1_nlsq.shape}")
         print(f"  CMC shape: {g1_cmc_2d.shape}")
 
@@ -233,15 +234,15 @@ class TestCMCNLSQDiffusionComparison:
             print(f"    Max diff: {max_diff:.2e}, Mean diff: {mean_diff:.2e}")
 
             # Sample points
-            print(f"    Sample (i,j): NLSQ vs CMC")
+            print("    Sample (i,j): NLSQ vs CMC")
             for i, j in [(0, 10), (25, 25), (10, 40)]:
                 print(
                     f"      ({i},{j}): {g1_nlsq_phi[i, j]:.6f} vs {g1_cmc_phi[i, j]:.6f}"
                 )
 
-            assert (
-                max_diff < 1e-4
-            ), f"g1_total mismatch at phi={phi_val}: max_diff={max_diff:.2e}"
+            assert max_diff < 1e-4, (
+                f"g1_total mismatch at phi={phi_val}: max_diff={max_diff:.2e}"
+            )
 
 
 class TestCMCSearchsortedIndexing:
@@ -257,7 +258,7 @@ class TestCMCSearchsortedIndexing:
 
         indices = jnp.searchsorted(time_grid, test_times, side="left")
 
-        print(f"\nSearchsorted exact match test:")
+        print("\nSearchsorted exact match test:")
         for t, idx, expected in zip(test_times, indices, expected_indices):
             print(f"  t={float(t):.1f} -> idx={int(idx)} (expected={expected})")
             assert int(idx) == expected
@@ -273,7 +274,7 @@ class TestCMCSearchsortedIndexing:
 
         indices = jnp.searchsorted(time_grid, test_times, side="left")
 
-        print(f"\nSearchsorted between-values test:")
+        print("\nSearchsorted between-values test:")
         for t, idx, expected in zip(test_times, indices, expected_indices):
             print(f"  t={float(t):.2f} -> idx={int(idx)} (expected={expected})")
             assert int(idx) == expected, f"Mismatch at t={t}"
@@ -284,7 +285,7 @@ class TestCMCSearchsortedIndexing:
         D_t = jnp.array([1.0, 1.0, 1.0, 1.0, 1.0])  # 5 time points
         D_cumsum = trapezoid_cumsum(D_t)
 
-        print(f"\nCumsum integral test (D=1 constant):")
+        print("\nCumsum integral test (D=1 constant):")
         print(f"  D_t = {np.array(D_t)}")
         print(f"  D_cumsum = {np.array(D_cumsum)}")
 
@@ -345,28 +346,28 @@ class TestCMCPhysicsValues:
             )
         )
 
-        print(f"\n=== g1 decay test ===")
+        print("\n=== g1 decay test ===")
         print(f"  wavevector_q_squared_half_dt = {wavevector_q_squared_half_dt:.6g}")
-        print(f"\n  Diagonal (t1=t2): g1 should be ~1")
+        print("\n  Diagonal (t1=t2): g1 should be ~1")
         print(f"    g1 at t=0: {g1_diagonal[0]:.6f}")
         print(f"    g1 at t=5: {g1_diagonal[50]:.6f}")
         print(f"    g1 at t=10: {g1_diagonal[-1]:.6f}")
 
-        print(f"\n  Off-diagonal (t1=0, t2=varying): g1 should decay")
+        print("\n  Off-diagonal (t1=0, t2=varying): g1 should decay")
         print(f"    g1 at delta_t=0: {g1_off_diagonal[0]:.6f}")
         print(f"    g1 at delta_t=1: {g1_off_diagonal[10]:.6f}")
         print(f"    g1 at delta_t=5: {g1_off_diagonal[50]:.6f}")
         print(f"    g1 at delta_t=10: {g1_off_diagonal[-1]:.6f}")
 
         # Diagonal should be ~1 (no time separation)
-        assert (
-            g1_diagonal[0] > 0.99
-        ), f"g1 at t1=t2=0 should be ~1, got {g1_diagonal[0]}"
+        assert g1_diagonal[0] > 0.99, (
+            f"g1 at t1=t2=0 should be ~1, got {g1_diagonal[0]}"
+        )
 
         # Off-diagonal should decay as time separation increases
-        assert (
-            g1_off_diagonal[-1] < g1_off_diagonal[0]
-        ), f"g1 should decay: g1(0)={g1_off_diagonal[0]:.4f} vs g1(max)={g1_off_diagonal[-1]:.4f}"
+        assert g1_off_diagonal[-1] < g1_off_diagonal[0], (
+            f"g1 should decay: g1(0)={g1_off_diagonal[0]:.4f} vs g1(max)={g1_off_diagonal[-1]:.4f}"
+        )
 
     def test_prefactor_magnitude(self):
         """Debug test to check physics prefactor magnitudes."""
@@ -383,7 +384,7 @@ class TestCMCPhysicsValues:
         wavevector_q_squared_half_dt = 0.5 * (q**2) * dt
         sinc_prefactor = 0.5 / np.pi * q * L * dt
 
-        print(f"\n=== Physics prefactor check ===")
+        print("\n=== Physics prefactor check ===")
         print(f"  q = {q} nm^-1")
         print(f"  L = {L:.2e} nm")
         print(f"  dt = {dt} s")
@@ -403,7 +404,7 @@ class TestCMCPhysicsValues:
             )
         )
 
-        print(f"\n  D(t) values:")
+        print("\n  D(t) values:")
         for t, D in zip(t_samples, D_samples):
             print(f"    D(t={t:.0f}s) = {D:.4e} nm²/s")
 

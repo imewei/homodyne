@@ -146,7 +146,9 @@ def expand_per_angle_parameters(
 
     if logger:
         logger.info(f"  Expanded to {len(expanded_params)} parameters:")
-        logger.info(f"    - Contrast per angle: {n_angles} (indices 0 to {n_angles - 1})")
+        logger.info(
+            f"    - Contrast per angle: {n_angles} (indices 0 to {n_angles - 1})"
+        )
         logger.info(
             f"    - Offset per angle: {n_angles} (indices {n_angles} to {2 * n_angles - 1})"
         )
@@ -230,15 +232,13 @@ def validate_initial_params(
     if not np.allclose(params, clipped):
         n_clipped = np.sum(~np.isclose(params, clipped))
         if logger:
-            logger.warning(
-                f"Clipped {n_clipped} initial parameters to bounds"
-            )
+            logger.warning(f"Clipped {n_clipped} initial parameters to bounds")
 
     return clipped
 
 
 def convert_bounds_to_nlsq_format(
-    bounds: tuple[np.ndarray, np.ndarray] | tuple[list, list] | None
+    bounds: tuple[np.ndarray, np.ndarray] | tuple[list, list] | None,
 ) -> tuple[np.ndarray, np.ndarray] | None:
     """Convert bounds to NLSQ-compatible format.
 

@@ -62,7 +62,6 @@ except ImportError:
 class TestEndToEndWorkflows:
     """Test complete end-to-end analysis workflows."""
 
-
     @pytest.mark.skipif(not HAS_YAML, reason="PyYAML not available")
     def test_yaml_config_workflow(self, temp_dir):
         """Test workflow with YAML configuration."""
@@ -129,8 +128,6 @@ class TestEndToEndWorkflows:
             pytest.skip(f"YAML config workflow failed: {e}")
 
 
-
-
 @pytest.mark.integration
 class TestModuleInteraction:
     """Test interaction between different modules."""
@@ -182,7 +179,6 @@ class TestModuleInteraction:
         config_manager.update_config("optimization.lsq.max_iterations", 200)
         updated_config = config_manager.get_config()
         assert updated_config["optimization"]["lsq"]["max_iterations"] == 200
-
 
 
 @pytest.mark.integration
@@ -251,7 +247,6 @@ class TestCrossplatformCompatibility:
 
         # Test symmetry (should be exact)
         symmetry_diff = jnp.max(jnp.abs(result - result.T))
-        assert (
-            symmetry_diff < 1e-14
-        ), f"Symmetry precision inconsistent: {symmetry_diff}"
-
+        assert symmetry_diff < 1e-14, (
+            f"Symmetry precision inconsistent: {symmetry_diff}"
+        )

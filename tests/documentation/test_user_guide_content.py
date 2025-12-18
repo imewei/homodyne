@@ -23,9 +23,9 @@ class TestUserGuideStructure:
         docs_path = self.get_docs_path()
         user_guide_index = docs_path / "user-guide" / "index.rst"
         content = user_guide_index.read_text()
-        assert (
-            ".. toctree::" in content
-        ), "user-guide/index.rst missing toctree directive"
+        assert ".. toctree::" in content, (
+            "user-guide/index.rst missing toctree directive"
+        )
 
     def test_main_index_exists(self):
         """Test that main index.rst exists."""
@@ -73,9 +73,9 @@ class TestUserGuideStructure:
         index = docs_path / "index.rst"
         content = index.read_text()
 
-        assert (
-            "He et al" in content or "PNAS 2024" in content
-        ), "Main index.rst missing He et al. PNAS 2024 citation"
+        assert "He et al" in content or "PNAS 2024" in content, (
+            "Main index.rst missing He et al. PNAS 2024 citation"
+        )
 
 
 class TestUserGuidePages:
@@ -122,9 +122,9 @@ class TestUserGuidePages:
         content = quickstart.read_text()
 
         # Check for YAML configuration block
-        assert (
-            ".. code-block::" in content or "```" in content
-        ), "quickstart.rst missing code block"
+        assert ".. code-block::" in content or "```" in content, (
+            "quickstart.rst missing code block"
+        )
         assert "homodyne" in content, "quickstart.rst missing homodyne command"
 
     def test_cli_page_exists(self):
@@ -170,9 +170,9 @@ class TestUserGuidePages:
         ]
 
         for required in required_content:
-            assert (
-                required in content or required.lower() in content.lower()
-            ), f"configuration.rst missing '{required}' content"
+            assert required in content or required.lower() in content.lower(), (
+                f"configuration.rst missing '{required}' content"
+            )
 
     def test_examples_page_exists(self):
         """Test that examples.rst exists."""
@@ -195,9 +195,9 @@ class TestUserGuidePages:
         ]
 
         for required in required_content:
-            assert (
-                required in content or required.lower() in content.lower()
-            ), f"examples.rst missing '{required}' content"
+            assert required in content or required.lower() in content.lower(), (
+                f"examples.rst missing '{required}' content"
+            )
 
 
 class TestCodeExamples:
@@ -242,9 +242,9 @@ class TestCodeExamples:
         code_blocks = self.extract_code_blocks(content)
 
         # At least one code block should exist
-        assert (
-            len(code_blocks) > 0
-        ), "quickstart.rst should have at least one code block"
+        assert len(code_blocks) > 0, (
+            "quickstart.rst should have at least one code block"
+        )
 
     def test_examples_yaml_config_valid(self):
         """Test that examples.rst YAML configs are valid."""
@@ -256,9 +256,9 @@ class TestCodeExamples:
 
         content = examples.read_text()
         # Just verify YAML code blocks are present
-        assert (
-            ".. code-block::" in content or "```" in content
-        ), "examples.rst should have code blocks"
+        assert ".. code-block::" in content or "```" in content, (
+            "examples.rst should have code blocks"
+        )
 
 
 class TestInternalLinks:
@@ -292,9 +292,9 @@ class TestInternalLinks:
             # Check if page is referenced in toctree
             # Look for either "   installation" or similar patterns
             pattern = rf"^\s+{page}\s*$"
-            assert re.search(
-                pattern, content, re.MULTILINE
-            ), f"user-guide/index.rst should reference {page}"
+            assert re.search(pattern, content, re.MULTILINE), (
+                f"user-guide/index.rst should reference {page}"
+            )
 
     def test_main_index_user_guide_reference(self):
         """Test that main index.rst references user-guide."""
@@ -303,6 +303,6 @@ class TestInternalLinks:
         content = index.read_text()
 
         # Check for user-guide reference
-        assert (
-            "user-guide" in content or "User Guide" in content
-        ), "Main index.rst should reference user-guide"
+        assert "user-guide" in content or "User Guide" in content, (
+            "Main index.rst should reference user-guide"
+        )

@@ -330,12 +330,8 @@ class StratifiedResidualFunction:
         phi_indices = jnp.clip(
             jnp.searchsorted(phi_unique, phi), 0, len(phi_unique) - 1
         )
-        t1_indices = jnp.clip(
-            jnp.searchsorted(t1_unique, t1), 0, len(t1_unique) - 1
-        )
-        t2_indices = jnp.clip(
-            jnp.searchsorted(t2_unique, t2), 0, len(t2_unique) - 1
-        )
+        t1_indices = jnp.clip(jnp.searchsorted(t1_unique, t1), 0, len(t1_unique) - 1)
+        t2_indices = jnp.clip(jnp.searchsorted(t2_unique, t2), 0, len(t2_unique) - 1)
 
         # Convert to flat grid indices
         n_t1 = len(t1_unique)

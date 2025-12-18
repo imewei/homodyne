@@ -489,9 +489,9 @@ class TestBackendScientificProperties:
         # Combined mean should be close to true mean
         for name in sample_param_names:
             combined_mean = np.mean(combined.samples[name])
-            assert (
-                abs(combined_mean - true_mean) < 0.05
-            ), f"Combined mean {combined_mean} not close to true mean {true_mean}"
+            assert abs(combined_mean - true_mean) < 0.05, (
+                f"Combined mean {combined_mean} not close to true mean {true_mean}"
+            )
 
 
 # =============================================================================

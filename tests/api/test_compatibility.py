@@ -105,7 +105,9 @@ class TestPublicAPIStability:
             # Check load_xpcs_data signature
             sig = inspect.signature(load_xpcs_data)
             params = list(sig.parameters.keys())
-            assert "config_path" in params, "Missing config_path parameter in load_xpcs_data"
+            assert "config_path" in params, (
+                "Missing config_path parameter in load_xpcs_data"
+            )
 
         except ImportError as e:
             pytest.skip(f"Data functions not available: {e}")
@@ -120,9 +122,9 @@ class TestPublicAPIStability:
             # Should have expected methods
             expected_methods = ["get_config", "update_config"]
             for method_name in expected_methods:
-                assert hasattr(
-                    ConfigManager, method_name
-                ), f"ConfigManager missing method {method_name}"
+                assert hasattr(ConfigManager, method_name), (
+                    f"ConfigManager missing method {method_name}"
+                )
 
         except ImportError as e:
             pytest.skip(f"Config functions not available: {e}")
@@ -155,9 +157,9 @@ class TestFunctionSignatures:
             ]
             for i, expected_param in enumerate(expected_params):
                 assert i < len(params), f"Missing parameter {expected_param}"
-                assert (
-                    params[i] == expected_param
-                ), f"Parameter order changed: expected {expected_param}, got {params[i]}"
+                assert params[i] == expected_param, (
+                    f"Parameter order changed: expected {expected_param}, got {params[i]}"
+                )
 
         except ImportError:
             pytest.skip("Core functions not available")
@@ -171,12 +173,12 @@ class TestFunctionSignatures:
             params = list(sig.parameters.keys())
 
             # Should have data and config as first parameters
-            assert (
-                params[0] == "data"
-            ), f"First parameter should be 'data', got {params[0]}"
-            assert (
-                params[1] == "config"
-            ), f"Second parameter should be 'config', got {params[1]}"
+            assert params[0] == "data", (
+                f"First parameter should be 'data', got {params[0]}"
+            )
+            assert params[1] == "config", (
+                f"Second parameter should be 'config', got {params[1]}"
+            )
 
         except ImportError:
             pytest.skip("Optimization functions not available")
@@ -190,9 +192,9 @@ class TestFunctionSignatures:
             params = list(sig.parameters.keys())
 
             # Should have config_path as parameter (renamed from config in v2.1.0)
-            assert (
-                "config_path" in params
-            ), "load_xpcs_data should have config_path parameter"
+            assert "config_path" in params, (
+                "load_xpcs_data should have config_path parameter"
+            )
 
         except ImportError:
             pytest.skip("Data loader not available")
@@ -225,14 +227,16 @@ class TestReturnTypes:
 
             # Should return OptimizationResult or compatible object
             assert hasattr(result, "parameters"), "Result missing parameters attribute"
-            assert hasattr(
-                result, "chi_squared"
-            ), "Result missing chi_squared attribute"
+            assert hasattr(result, "chi_squared"), (
+                "Result missing chi_squared attribute"
+            )
             assert hasattr(result, "success"), "Result missing success attribute"
             assert hasattr(result, "message"), "Result missing message attribute"
 
             # Type checking (parameters is np.ndarray in modern API)
-            assert isinstance(result.parameters, np.ndarray), "Parameters should be ndarray"
+            assert isinstance(result.parameters, np.ndarray), (
+                "Parameters should be ndarray"
+            )
             assert isinstance(result.success, bool), "Success should be bool"
             assert isinstance(result.message, str), "Message should be string"
 

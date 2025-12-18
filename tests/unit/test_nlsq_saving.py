@@ -567,9 +567,9 @@ class TestGenerateNLSQPlots:
             for phi in phi_angles:
                 png_file = output_dir / f"c2_heatmaps_phi_{phi:.1f}deg.png"
                 assert png_file.exists(), f"PNG file not created for phi={phi}"
-                assert (
-                    png_file.stat().st_size > 1000
-                ), f"PNG file too small for phi={phi}"
+                assert png_file.stat().st_size > 1000, (
+                    f"PNG file too small for phi={phi}"
+                )
 
             # Verify correct number of files
             png_files = list(output_dir.glob("*.png"))

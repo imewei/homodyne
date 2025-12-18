@@ -176,9 +176,7 @@ def combine_shard_samples(
     MCMCSamples
         Combined samples.
     """
-    import numpy as np
 
-    from homodyne.optimization.cmc.sampler import MCMCSamples
 
     if len(shard_samples) == 1:
         return shard_samples[0]

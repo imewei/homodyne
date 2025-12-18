@@ -13,9 +13,7 @@ This validates:
 """
 
 import logging
-from pathlib import Path
 
-import numpy as np
 import pytest
 
 # Configure logging
@@ -47,9 +45,9 @@ class TestRealDataStratification:
         logger.info(f"  Is safe: {mem_stats['is_safe']}")
 
         # Should be safe for 500k points
-        assert mem_stats[
-            "is_safe"
-        ], "Memory estimation should be safe for C020-like data"
+        assert mem_stats["is_safe"], (
+            "Memory estimation should be safe for C020-like data"
+        )
         assert mem_stats["peak_memory_mb"] < 1000, "Peak memory should be reasonable"
 
 

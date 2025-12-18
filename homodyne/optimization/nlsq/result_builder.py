@@ -138,7 +138,9 @@ def normalize_nlsq_result(
             popt, pcov = result
             info = {}
             if logger:
-                logger.debug(f"Normalized (popt, pcov) tuple (strategy: {strategy_name})")
+                logger.debug(
+                    f"Normalized (popt, pcov) tuple (strategy: {strategy_name})"
+                )
         elif len(result) == 3:
             popt, pcov, info = result
             if not isinstance(info, dict):
@@ -316,9 +318,7 @@ class ResultBuilder:
         if residual_fn is not None and xdata is not None:
             try:
                 residuals = residual_fn(xdata, *self.parameters)
-                quality = compute_quality_metrics(
-                    residuals, self.n_data, n_params
-                )
+                quality = compute_quality_metrics(residuals, self.n_data, n_params)
             except Exception:
                 # Fallback if residual computation fails
                 quality = QualityMetrics(
@@ -342,7 +342,9 @@ class ResultBuilder:
         return {
             "parameters": self.parameters,
             "uncertainties": uncertainties,
-            "covariance": self.covariance if self.covariance is not None else np.eye(n_params),
+            "covariance": self.covariance
+            if self.covariance is not None
+            else np.eye(n_params),
             "chi_squared": quality.chi_squared,
             "reduced_chi_squared": quality.reduced_chi_squared,
             "convergence_status": convergence_status,

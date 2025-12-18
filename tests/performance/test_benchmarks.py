@@ -217,9 +217,9 @@ class TestComputationalBenchmarks:
         data_size = np.prod(data["c2_exp"].shape)
         elements_per_sec = data_size / avg_time
 
-        assert (
-            elements_per_sec > 100
-        ), f"Processing rate too slow: {elements_per_sec:.0f} elements/sec"
+        assert elements_per_sec > 100, (
+            f"Processing rate too slow: {elements_per_sec:.0f} elements/sec"
+        )
 
     @pytest.mark.skipif(not HAS_PSUTIL, reason="psutil not available")
     def test_memory_usage_benchmark(self, jax_backend):
@@ -270,9 +270,9 @@ class TestComputationalBenchmarks:
             }
 
             # Memory should not grow excessively
-            assert (
-                memory_used < expected_data_size * 10
-            ), f"Memory usage too high for size {size}"
+            assert memory_used < expected_data_size * 10, (
+                f"Memory usage too high for size {size}"
+            )
 
         # Check for memory leaks
         final_memory = process.memory_info().rss / (1024 * 1024)
@@ -333,10 +333,9 @@ class TestDataLoadingBenchmarks:
 
             # Performance expectations
             assert avg_time < 5.0, f"Data generation too slow: {avg_time:.3f}s"
-            assert (
-                memory_used < data_size * 5
-            ), f"Memory usage too high: {memory_used:.1f} MB"
-
+            assert memory_used < data_size * 5, (
+                f"Memory usage too high: {memory_used:.1f} MB"
+            )
 
 
 @pytest.mark.performance
@@ -380,15 +379,15 @@ class TestScalingBenchmarks:
 
         # Report metrics
         assert compilation_time < 10.0, f"Compilation too slow: {compilation_time:.3f}s"
-        assert (
-            avg_execution_time < 1.0
-        ), f"Execution too slow: {avg_execution_time:.3f}s"
+        assert avg_execution_time < 1.0, (
+            f"Execution too slow: {avg_execution_time:.3f}s"
+        )
         # Increased threshold to 3000x to account for system variability
         # v2.3.0 CPU-only: First JIT compilation can be slower on some systems
         # Ratio depends on system load, CPU state, and cache behavior
-        assert (
-            compilation_overhead < 3000
-        ), f"Compilation overhead too high: {compilation_overhead:.1f}x"
+        assert compilation_overhead < 3000, (
+            f"Compilation overhead too high: {compilation_overhead:.1f}x"
+        )
 
     def test_vectorization_scaling(self, jax_backend):
         """Test performance scaling with vectorization."""
@@ -512,9 +511,9 @@ class TestScalingBenchmarks:
             scaling_factor = avg_memory_ratio / expected_memory_scaling
 
             # Should be close to expected scaling (within factor of 2)
-            assert (
-                0.5 < scaling_factor < 2.0
-            ), f"Memory scaling unexpected: {scaling_factor:.2f} (expected ~1.0)"
+            assert 0.5 < scaling_factor < 2.0, (
+                f"Memory scaling unexpected: {scaling_factor:.2f} (expected ~1.0)"
+            )
 
 
 @pytest.mark.performance
@@ -562,12 +561,12 @@ class TestRegressionBenchmarks:
         BASELINE_THROUGHPUT = 10000  # elements per second (conservative)
         BASELINE_MAX_TIME = 5.0  # maximum seconds for standard dataset
 
-        assert (
-            throughput > BASELINE_THROUGHPUT
-        ), f"Performance regression: {throughput:.0f} < {BASELINE_THROUGHPUT} elements/sec"
-        assert (
-            avg_time < BASELINE_MAX_TIME
-        ), f"Performance regression: {avg_time:.3f}s > {BASELINE_MAX_TIME}s"
+        assert throughput > BASELINE_THROUGHPUT, (
+            f"Performance regression: {throughput:.0f} < {BASELINE_THROUGHPUT} elements/sec"
+        )
+        assert avg_time < BASELINE_MAX_TIME, (
+            f"Performance regression: {avg_time:.3f}s > {BASELINE_MAX_TIME}s"
+        )
 
     def test_optimization_performance_regression(
         self, synthetic_xpcs_data, test_config
@@ -620,12 +619,12 @@ class TestRegressionBenchmarks:
         BASELINE_OPT_TIME = 120.0  # maximum seconds (increased for per-angle scaling)
         BASELINE_SUCCESS_RATE = 0.8  # minimum success rate
 
-        assert (
-            avg_time < BASELINE_OPT_TIME
-        ), f"Optimization regression: {avg_time:.3f}s > {BASELINE_OPT_TIME}s"
-        assert (
-            success_rate >= BASELINE_SUCCESS_RATE
-        ), f"Success rate regression: {success_rate:.2f} < {BASELINE_SUCCESS_RATE}"
+        assert avg_time < BASELINE_OPT_TIME, (
+            f"Optimization regression: {avg_time:.3f}s > {BASELINE_OPT_TIME}s"
+        )
+        assert success_rate >= BASELINE_SUCCESS_RATE, (
+            f"Success rate regression: {success_rate:.2f} < {BASELINE_SUCCESS_RATE}"
+        )
 
 
 # =============================================================================
@@ -666,9 +665,9 @@ class TestMCMCPerformanceBenchmarks:
         memory_per_chain_mb = (n_samples * n_params * 8) / (1024 * 1024)
 
         # Each chain should use < 1 MB
-        assert (
-            memory_per_chain_mb < 1.0
-        ), f"Chain memory too high: {memory_per_chain_mb:.3f} MB"
+        assert memory_per_chain_mb < 1.0, (
+            f"Chain memory too high: {memory_per_chain_mb:.3f} MB"
+        )
 
     def test_mcmc_warmup_time(self):
         """Test MCMC warmup phase timing."""
@@ -709,9 +708,9 @@ class TestMCMCPerformanceBenchmarks:
         avg_check_time = np.mean(check_times)
 
         # Convergence check should be fast
-        assert (
-            avg_check_time < 0.1
-        ), f"R-hat computation too slow: {avg_check_time:.3f}s"
+        assert avg_check_time < 0.1, (
+            f"R-hat computation too slow: {avg_check_time:.3f}s"
+        )
 
 
 @pytest.mark.performance
@@ -753,9 +752,9 @@ class TestMemoryEfficiencyBenchmarks:
 
         # All should be approximately equal
         memory_variance = np.var(peak_memories)
-        assert (
-            memory_variance < 0.01
-        ), f"Streaming memory not constant: variance={memory_variance}"
+        assert memory_variance < 0.01, (
+            f"Streaming memory not constant: variance={memory_variance}"
+        )
 
     def test_memory_per_angle_scaling_overhead(self):
         """Test memory overhead of per-angle scaling parameters."""
@@ -825,9 +824,9 @@ class TestAdditionalBenchmarks:
 
         # First call may be slower due to JIT, but not excessively
         # Cached calls should be significantly faster
-        assert (
-            avg_subsequent < first_call_time or first_call_time < 1.0
-        ), f"JIT caching not effective: first={first_call_time:.3f}s, avg={avg_subsequent:.3f}s"
+        assert avg_subsequent < first_call_time or first_call_time < 1.0, (
+            f"JIT caching not effective: first={first_call_time:.3f}s, avg={avg_subsequent:.3f}s"
+        )
 
     def test_data_loading_speed(self):
         """Test HDF5 loading performance baseline."""
@@ -839,9 +838,9 @@ class TestAdditionalBenchmarks:
         expected_load_time = data_size_mb / 100  # seconds
 
         # Loading should be fast for reasonable sizes
-        assert (
-            expected_load_time < 0.1
-        ), f"Expected load time: {expected_load_time:.3f}s"
+        assert expected_load_time < 0.1, (
+            f"Expected load time: {expected_load_time:.3f}s"
+        )
 
         # For 100M point dataset
         large_data_size_mb = (100_000_000 * 8) / (1024 * 1024)

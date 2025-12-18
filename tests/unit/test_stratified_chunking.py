@@ -100,18 +100,18 @@ def test_stratification_preserves_data_count(balanced_data):
 
     # Check that at least 95% of points are preserved (balanced chunking may discard some)
     min_expected = int(0.95 * original_count)
-    assert (
-        len(phi_s) >= min_expected
-    ), f"Expected >= {min_expected} points, got {len(phi_s)}"
-    assert (
-        len(t1_s) >= min_expected
-    ), f"Expected >= {min_expected} points, got {len(t1_s)}"
-    assert (
-        len(t2_s) >= min_expected
-    ), f"Expected >= {min_expected} points, got {len(t2_s)}"
-    assert (
-        len(g2_s) >= min_expected
-    ), f"Expected >= {min_expected} points, got {len(g2_s)}"
+    assert len(phi_s) >= min_expected, (
+        f"Expected >= {min_expected} points, got {len(phi_s)}"
+    )
+    assert len(t1_s) >= min_expected, (
+        f"Expected >= {min_expected} points, got {len(t1_s)}"
+    )
+    assert len(t2_s) >= min_expected, (
+        f"Expected >= {min_expected} points, got {len(t2_s)}"
+    )
+    assert len(g2_s) >= min_expected, (
+        f"Expected >= {min_expected} points, got {len(g2_s)}"
+    )
 
 
 def test_stratification_preserves_data_values(balanced_data):
@@ -135,9 +135,9 @@ def test_stratification_preserves_data_values(balanced_data):
     for strat_point in stratified_data:
         # Find if this point exists in original data
         matches = np.all(np.abs(original_data - strat_point) < 1e-10, axis=1)
-        assert np.any(
-            matches
-        ), f"Stratified point {strat_point} not found in original data"
+        assert np.any(matches), (
+            f"Stratified point {strat_point} not found in original data"
+        )
 
 
 def test_stratification_no_duplicates(balanced_data):
@@ -166,9 +166,9 @@ def test_stratification_no_duplicates(balanced_data):
     assert len(stratified_ids) == len(phi_s_np)
 
     # Check stratified points are a subset of original (may discard some points for balance)
-    assert stratified_ids.issubset(
-        original_ids
-    ), "Stratified data contains points not in original"
+    assert stratified_ids.issubset(original_ids), (
+        "Stratified data contains points not in original"
+    )
 
 
 # ============================================================================
@@ -479,9 +479,9 @@ def test_stratification_jax_array_input(balanced_data):
 
     # Check result is valid (at least 95% data preserved)
     min_expected = int(0.95 * len(phi))
-    assert (
-        len(phi_s) >= min_expected
-    ), f"Expected >= {min_expected} points, got {len(phi_s)}"
+    assert len(phi_s) >= min_expected, (
+        f"Expected >= {min_expected} points, got {len(phi_s)}"
+    )
 
 
 def test_stratification_output_numpy_compatible(balanced_data):

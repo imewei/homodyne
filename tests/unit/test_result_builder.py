@@ -76,7 +76,13 @@ class TestComputeQualityMetrics:
         residuals = np.random.randn(100) * 0.5
         n_data = 100
         n_params = 5
-        parameter_status = ["active", "at_lower_bound", "active", "at_upper_bound", "active"]
+        parameter_status = [
+            "active",
+            "at_lower_bound",
+            "active",
+            "at_upper_bound",
+            "active",
+        ]
 
         metrics = compute_quality_metrics(
             residuals, n_data, n_params, parameter_status=parameter_status

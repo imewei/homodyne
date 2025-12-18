@@ -298,9 +298,9 @@ class TestNLSQWrapperFit:
     def test_fit_nan_detection_and_reset(self, mock_config, mock_xpcs_data):
         """TC-FIT-006: fit() detects NaN and resets."""
         # NaN handling is critical for production reliability
-        assert not np.any(
-            np.isnan(mock_xpcs_data["c2"])
-        ), "Test data should not have NaN"
+        assert not np.any(np.isnan(mock_xpcs_data["c2"])), (
+            "Test data should not have NaN"
+        )
 
     def test_fit_covariance_singular_handling(self, mock_config):
         """TC-FIT-007: fit() handles singular covariance matrix."""

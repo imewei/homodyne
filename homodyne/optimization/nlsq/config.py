@@ -174,7 +174,9 @@ class NLSQConfig:
 
         # Validate max_iterations
         if self.max_iterations <= 0:
-            errors.append(f"max_iterations must be positive, got: {self.max_iterations}")
+            errors.append(
+                f"max_iterations must be positive, got: {self.max_iterations}"
+            )
 
         # Validate chunk sizes
         if self.streaming_chunk_size <= 0:

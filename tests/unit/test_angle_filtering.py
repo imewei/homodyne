@@ -1326,10 +1326,10 @@ class TestAngleFilteringConsistency:
         np.testing.assert_array_equal(core_c2, plot_c2)
 
         # Verify no duplicates in indices
-        assert len(core_indices) == len(
-            set(core_indices)
-        ), "Core indices contain duplicates"
-        assert len(plot_indices) == len(
-            set(plot_indices)
-        ), "Plot indices contain duplicates"
+        assert len(core_indices) == len(set(core_indices)), (
+            "Core indices contain duplicates"
+        )
+        assert len(plot_indices) == len(set(plot_indices)), (
+            "Plot indices contain duplicates"
+        )
         assert core_indices == plot_indices

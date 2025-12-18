@@ -360,8 +360,7 @@ def get_executor(
 
     if strategy_name not in executors:
         raise ValueError(
-            f"Unknown strategy: {strategy_name}. "
-            f"Available: {list(executors.keys())}"
+            f"Unknown strategy: {strategy_name}. Available: {list(executors.keys())}"
         )
 
     executor_class = executors[strategy_name]

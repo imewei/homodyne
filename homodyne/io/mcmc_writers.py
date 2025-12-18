@@ -425,9 +425,9 @@ def create_mcmc_diagnostics_dict(result: Any) -> dict:
         total_samples = result.n_samples * getattr(result, "n_chains", 1)
         if total_samples > 0:
             ess_ratio = float(np.mean(ess) / total_samples)
-            diagnostics_dict["posterior_checks"][
-                "effective_sample_size_ratio"
-            ] = ess_ratio
+            diagnostics_dict["posterior_checks"]["effective_sample_size_ratio"] = (
+                ess_ratio
+            )
 
     # Fallback per-parameter diagnostics
     if "per_parameter_diagnostics" not in diagnostics_dict["convergence"]:
@@ -467,9 +467,9 @@ def create_mcmc_diagnostics_dict(result: Any) -> dict:
                         or stats.get("deterministic", False),
                     }
                 )
-            diagnostics_dict["convergence"][
-                "per_parameter_diagnostics"
-            ] = fallback_entries
+            diagnostics_dict["convergence"]["per_parameter_diagnostics"] = (
+                fallback_entries
+            )
 
     # CMC-specific diagnostics
     if hasattr(result, "is_cmc_result") and result.is_cmc_result():
@@ -535,9 +535,9 @@ def create_mcmc_diagnostics_dict(result: Any) -> dict:
                 if "success_rate" in cmc_diag:
                     overall_metrics["success_rate"] = float(cmc_diag["success_rate"])
 
-                diagnostics_dict["cmc_specific"][
-                    "overall_diagnostics"
-                ] = overall_metrics
+                diagnostics_dict["cmc_specific"]["overall_diagnostics"] = (
+                    overall_metrics
+                )
 
         if hasattr(result, "combination_method") and result.combination_method:
             diagnostics_dict["cmc_specific"]["combination_method"] = str(

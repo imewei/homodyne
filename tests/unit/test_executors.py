@@ -168,7 +168,6 @@ class TestStreamingExecutor:
         assert executor.checkpoint_config == config
 
 
-
 class TestGetExecutor:
     """Tests for get_executor factory function."""
 
@@ -329,5 +328,3 @@ class TestExecutorErrorHandling:
                 x_scale_value=1.0,
                 logger=logger,
             )
-
-

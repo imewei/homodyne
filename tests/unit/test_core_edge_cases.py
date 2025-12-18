@@ -14,8 +14,15 @@ Scientific Computing Edge Cases:
 
 import numpy as np
 import pytest
+from numpy.testing import assert_allclose
 
-from numpy.testing import assert_allclose, assert_array_less
+from homodyne.core.models import (
+    CombinedModel,
+    DiffusionModel,
+    ShearModel,
+    create_model,
+    get_available_models,
+)
 
 # Import modules under test
 from homodyne.core.physics import (
@@ -29,14 +36,6 @@ from homodyne.core.physics import (
     validate_experimental_setup,
     validate_parameters,
     validate_parameters_detailed,
-)
-from homodyne.core.models import (
-    CombinedModel,
-    DiffusionModel,
-    PhysicsModelBase,
-    ShearModel,
-    create_model,
-    get_available_models,
 )
 from homodyne.core.theory import TheoryEngine
 
@@ -679,7 +678,6 @@ class TestJaxBackendEdgeCases:
 
     def test_jit_compilation_stability(self):
         """JIT compilation should produce stable results."""
-        from jax import jit
         from homodyne.core.jax_backend import compute_g1_diffusion
 
         params = jnp.array([100.0, 0.0, 10.0])

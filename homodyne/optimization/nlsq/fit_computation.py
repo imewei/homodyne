@@ -297,9 +297,7 @@ def compute_theoretical_fits(
 
     residuals = c2_exp - c2_theoretical_fitted
 
-    logger.info(
-        f"Computed theoretical fits for {len(phi_angles)} angles"
-    )
+    logger.info(f"Computed theoretical fits for {len(phi_angles)} angles")
 
     return {
         "c2_theoretical_raw": c2_theoretical_raw,

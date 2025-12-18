@@ -567,9 +567,9 @@ class TestNLSQFullWorkflow:
             assert "chi_squared" in params, "Missing chi_squared"
             assert "parameters" in params, "Missing parameters dict"
             # Static isotropic has 5 parameters
-            assert (
-                len(params["parameters"]) == 5
-            ), f"Expected 5 parameters, got {len(params['parameters'])}"
+            assert len(params["parameters"]) == 5, (
+                f"Expected 5 parameters, got {len(params['parameters'])}"
+            )
             assert "contrast" in params["parameters"]
             assert "offset" in params["parameters"]
             assert "D0" in params["parameters"]
@@ -584,18 +584,18 @@ class TestNLSQFullWorkflow:
             assert "c2_theoretical_scaled" in npz_data, "Missing c2_theoretical_scaled"
             assert "c2_solver_scaled" in npz_data, "Missing c2_solver_scaled"
             assert "per_angle_scaling" in npz_data, "Missing per_angle_scaling"
-            assert (
-                "per_angle_scaling_solver" in npz_data
-            ), "Missing per_angle_scaling_solver"
+            assert "per_angle_scaling_solver" in npz_data, (
+                "Missing per_angle_scaling_solver"
+            )
             assert "residuals" in npz_data, "Missing residuals"
             assert "residuals_normalized" in npz_data, "Missing residuals_normalized"
             assert "t1" in npz_data, "Missing t1"
             assert "t2" in npz_data, "Missing t2"
             assert "q" in npz_data, "Missing q"
             # Total should be 12 arrays: 2 experimental + 4 theoretical + 2 scaling + 2 residuals + 3 coordinates
-            assert (
-                len(npz_data.files) == 12
-            ), f"Expected 12 arrays in NPZ, got {len(npz_data.files)}"
+            assert len(npz_data.files) == 12, (
+                f"Expected 12 arrays in NPZ, got {len(npz_data.files)}"
+            )
 
             # Verify array shapes
             assert npz_data["phi_angles"].shape == (5,), "Wrong phi_angles shape"
@@ -654,9 +654,9 @@ class TestNLSQFullWorkflow:
             with open(param_file_lf) as f:
                 params_lf = json.load(f)
             assert params_lf["analysis_mode"] == "laminar_flow"
-            assert (
-                len(params_lf["parameters"]) == 9
-            ), f"Expected 9 parameters, got {len(params_lf['parameters'])}"
+            assert len(params_lf["parameters"]) == 9, (
+                f"Expected 9 parameters, got {len(params_lf['parameters'])}"
+            )
             assert "gamma_dot_t0" in params_lf["parameters"]
             assert "beta" in params_lf["parameters"]
             assert "gamma_dot_t_offset" in params_lf["parameters"]
@@ -707,9 +707,9 @@ class TestNLSQFullWorkflow:
                 png_file = nlsq_dir / expected_name
                 assert png_file.exists(), f"PNG file not found: {expected_name}"
                 # Verify file is not empty
-                assert (
-                    png_file.stat().st_size > 1000
-                ), f"PNG file too small: {expected_name}"
+                assert png_file.stat().st_size > 1000, (
+                    f"PNG file too small: {expected_name}"
+                )
 
 
 # ==============================================================================
@@ -798,9 +798,9 @@ class TestNLSQErrorRecovery:
 
             # Verify PNG plots were NOT created (plotting failed)
             png_files = list(nlsq_dir.glob("*.png"))
-            assert (
-                len(png_files) == 0
-            ), "PNG files should not be created if plotting fails"
+            assert len(png_files) == 0, (
+                "PNG files should not be created if plotting fails"
+            )
 
 
 # ==============================================================================
@@ -971,18 +971,18 @@ class TestNLSQCLIIntegration:
             # Verify NLSQ directory and files were created
             nlsq_dir = output_dir / "nlsq"
             assert nlsq_dir.exists(), "NLSQ directory not created via routing"
-            assert (
-                nlsq_dir / "parameters.json"
-            ).exists(), "parameters.json not created"
-            assert (
-                nlsq_dir / "fitted_data.npz"
-            ).exists(), "fitted_data.npz not created"
-            assert (
-                nlsq_dir / "analysis_results_nlsq.json"
-            ).exists(), "analysis_results not created"
-            assert (
-                nlsq_dir / "convergence_metrics.json"
-            ).exists(), "convergence_metrics not created"
+            assert (nlsq_dir / "parameters.json").exists(), (
+                "parameters.json not created"
+            )
+            assert (nlsq_dir / "fitted_data.npz").exists(), (
+                "fitted_data.npz not created"
+            )
+            assert (nlsq_dir / "analysis_results_nlsq.json").exists(), (
+                "analysis_results not created"
+            )
+            assert (nlsq_dir / "convergence_metrics.json").exists(), (
+                "convergence_metrics not created"
+            )
 
     def test_save_results_routing_mcmc(self):
         """Test that _save_results() uses legacy format for MCMC method."""
@@ -1023,9 +1023,9 @@ class TestNLSQCLIIntegration:
             assert legacy_file.exists(), "Legacy results file not created for MCMC"
             # Verify nlsq directory was NOT created
             nlsq_dir = output_dir / "nlsq"
-            assert (
-                not nlsq_dir.exists()
-            ), "NLSQ directory should not be created for MCMC"
+            assert not nlsq_dir.exists(), (
+                "NLSQ directory should not be created for MCMC"
+            )
 
     @pytest.mark.slow
     def test_cli_end_to_end_nlsq(self):
@@ -1568,12 +1568,12 @@ def test_stratification_diagnostics_passed_to_result():
 
     # Verify result was created successfully
     assert isinstance(result, OptimizationResult), "Result is not OptimizationResult"
-    assert hasattr(
-        result, "stratification_diagnostics"
-    ), "Result missing stratification_diagnostics attribute"
-    assert (
-        result.stratification_diagnostics is None
-    ), "Expected stratification_diagnostics=None"
+    assert hasattr(result, "stratification_diagnostics"), (
+        "Result missing stratification_diagnostics attribute"
+    )
+    assert result.stratification_diagnostics is None, (
+        "Expected stratification_diagnostics=None"
+    )
 
     # Success: The parameter is now accepted without NameError
     # This prevents the bug from recurring where _create_fit_result() tried to
@@ -1674,12 +1674,12 @@ def test_full_nlsq_workflow_with_stratification():
         pytest.fail(f"Stratification failed: {e}")
 
     # Validate stratification occurred
-    assert hasattr(
-        stratified_data, "stratification_diagnostics"
-    ), "Stratification diagnostics not created"
-    assert (
-        stratified_data.stratification_diagnostics is not None
-    ), "Stratification diagnostics is None (Bug #2 would cause NameError later)"
+    assert hasattr(stratified_data, "stratification_diagnostics"), (
+        "Stratification diagnostics not created"
+    )
+    assert stratified_data.stratification_diagnostics is not None, (
+        "Stratification diagnostics is None (Bug #2 would cause NameError later)"
+    )
 
     # Validate metadata preserved (Bug #1 fix)
     assert hasattr(stratified_data, "sigma"), "sigma not preserved"
@@ -1691,15 +1691,15 @@ def test_full_nlsq_workflow_with_stratification():
     diag = stratified_data.stratification_diagnostics
     assert diag.n_chunks > 0, "Should have created chunks"
     assert len(diag.chunk_sizes) == diag.n_chunks, "Chunk sizes list length mismatch"
-    assert (
-        len(diag.angles_per_chunk) == diag.n_chunks
-    ), "Angles per chunk list length mismatch"
+    assert len(diag.angles_per_chunk) == diag.n_chunks, (
+        "Angles per chunk list length mismatch"
+    )
 
     # Validate all chunks have all angles (key stratification requirement)
     for i, n_angles in enumerate(diag.angles_per_chunk):
-        assert (
-            n_angles == 3
-        ), f"Chunk {i} has {n_angles} angles, expected 3 (stratification failed)"
+        assert n_angles == 3, (
+            f"Chunk {i} has {n_angles} angles, expected 3 (stratification failed)"
+        )
 
     # CRITICAL TEST: Create result with diagnostics (Bug #2 fix)
     try:
@@ -1724,12 +1724,12 @@ def test_full_nlsq_workflow_with_stratification():
             raise
 
     # Validate result contains diagnostics
-    assert hasattr(
-        result, "stratification_diagnostics"
-    ), "Result missing stratification_diagnostics"
-    assert (
-        result.stratification_diagnostics is not None
-    ), "Result stratification_diagnostics is None"
+    assert hasattr(result, "stratification_diagnostics"), (
+        "Result missing stratification_diagnostics"
+    )
+    assert result.stratification_diagnostics is not None, (
+        "Result stratification_diagnostics is None"
+    )
 
     # Success: Full workflow completed with both fixes validated
     print("✓ Full stratification workflow test passed:")
@@ -1841,9 +1841,9 @@ class TestNLSQWithAngleFiltering:
             pass
 
         # Assert - Dataset size reduction (filtering worked)
-        assert (
-            len(filtered_data["phi_angles_list"]) == 3
-        ), "Should have 3 filtered angles"
+        assert len(filtered_data["phi_angles_list"]) == 3, (
+            "Should have 3 filtered angles"
+        )
         np.testing.assert_array_almost_equal(
             filtered_data["phi_angles_list"], [85.0, 90.0, 95.0], decimal=1
         )
@@ -1852,9 +1852,9 @@ class TestNLSQWithAngleFiltering:
         assert filtered_data["c2_exp"].shape[0] == 3, "C2 first dimension should be 3"
 
         # Assert - Other dimensions preserved
-        assert (
-            "wavevector_q_list" in filtered_data
-        ), "wavevector_q_list should be preserved"
+        assert "wavevector_q_list" in filtered_data, (
+            "wavevector_q_list should be preserved"
+        )
         assert "t1" in filtered_data, "t1 should be preserved"
         assert "t2" in filtered_data, "t2 should be preserved"
 
@@ -1927,9 +1927,9 @@ class TestNLSQWithAngleFiltering:
             pass
 
         # Assert - All 9 angles used (no filtering)
-        assert (
-            len(filtered_data["phi_angles_list"]) == 9
-        ), "Should use all 9 angles when disabled"
+        assert len(filtered_data["phi_angles_list"]) == 9, (
+            "Should use all 9 angles when disabled"
+        )
         np.testing.assert_array_almost_equal(
             filtered_data["phi_angles_list"], angles, decimal=1
         )
@@ -2070,12 +2070,12 @@ class TestNLSQWithAngleFiltering:
         assert "wavevector_q_list" in filtered_data, "Should have wavevector_q_list key"
 
         # Verify filtered data dimensions
-        assert (
-            len(filtered_data["phi_angles_list"]) == 3
-        ), "Should have 3 filtered angles"
-        assert (
-            filtered_data["c2_exp"].shape[0] == 3
-        ), "c2_exp first dimension should be 3"
+        assert len(filtered_data["phi_angles_list"]) == 3, (
+            "Should have 3 filtered angles"
+        )
+        assert filtered_data["c2_exp"].shape[0] == 3, (
+            "c2_exp first dimension should be 3"
+        )
 
         # Act - Attempt optimization (may not converge, but should accept data structure)
         # Note: fit_nlsq_jax expects a dict, not SimpleNamespace
@@ -2743,9 +2743,9 @@ def test_summary_all_strategies_tested():
     }
 
     all_strategies = {s.name for s in OptimizationStrategy}
-    assert (
-        strategies_tested == all_strategies
-    ), f"Missing tests for: {all_strategies - strategies_tested}"
+    assert strategies_tested == all_strategies, (
+        f"Missing tests for: {all_strategies - strategies_tested}"
+    )
 
 
 if __name__ == "__main__":

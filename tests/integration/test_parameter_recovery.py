@@ -6,11 +6,9 @@ from synthetic data within acceptable error bounds.
 """
 
 import numpy as np
-import pytest
 
 from homodyne.optimization.nlsq.wrapper import NLSQWrapper
 from tests.factories.synthetic_data import (
-    generate_laminar_flow_dataset,
     generate_static_mode_dataset,
 )
 
@@ -127,20 +125,19 @@ class TestParameterRecoveryAccuracy:
 
         # Check core parameters with stricter tolerance
         for name in core_params:
-            assert (
-                relative_errors[name] < tolerance_pct
-            ), f"{name} recovery error {relative_errors[name]:.2f}% exceeds {tolerance_pct}%"
+            assert relative_errors[name] < tolerance_pct, (
+                f"{name} recovery error {relative_errors[name]:.2f}% exceeds {tolerance_pct}%"
+            )
 
         # D_offset can be less constrained - check it separately with relaxed tolerance
-        assert (
-            relative_errors["D_offset"] < 250.0
-        ), f"D_offset recovery error {relative_errors['D_offset']:.2f}% exceeds 250%"
+        assert relative_errors["D_offset"] < 250.0, (
+            f"D_offset recovery error {relative_errors['D_offset']:.2f}% exceeds 250%"
+        )
 
         # Additional checks
-        assert (
-            result.convergence_status == "converged"
-        ), "Optimization should converge for synthetic data"
-        assert (
-            result.reduced_chi_squared < 5.0
-        ), f"Reduced chi-squared {result.reduced_chi_squared:.2f} should be reasonable"
-
+        assert result.convergence_status == "converged", (
+            "Optimization should converge for synthetic data"
+        )
+        assert result.reduced_chi_squared < 5.0, (
+            f"Reduced chi-squared {result.reduced_chi_squared:.2f} should be reasonable"
+        )

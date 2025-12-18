@@ -196,9 +196,9 @@ class TestParameterRecoveryQuality:
         max_allowed_errors = np.array([max_errors[name] for name in param_names])
 
         # All parameters should be recovered within tolerance
-        assert np.all(
-            recovery_errors_pct <= max_allowed_errors
-        ), "Parameter recovery errors exceed tolerance for laminar flow"
+        assert np.all(recovery_errors_pct <= max_allowed_errors), (
+            "Parameter recovery errors exceed tolerance for laminar flow"
+        )
 
 
 # ============================================================================
@@ -285,9 +285,9 @@ class TestResultQualityMetrics:
         # Relative uncertainties should be reasonable (< 10%)
         relative_uncertainties = uncertainties / np.abs(parameters)
 
-        assert np.all(
-            relative_uncertainties < 0.1
-        ), f"Some uncertainties exceed 10%: {relative_uncertainties}"
+        assert np.all(relative_uncertainties < 0.1), (
+            f"Some uncertainties exceed 10%: {relative_uncertainties}"
+        )
 
     def test_covariance_matrix_quality(self):
         """Test covariance matrix quality."""
@@ -297,14 +297,14 @@ class TestResultQualityMetrics:
 
         # Should be positive semi-definite
         eigenvalues = np.linalg.eigvalsh(covariance)
-        assert np.all(
-            eigenvalues >= -1e-10
-        ), "Covariance matrix not positive semi-definite"
+        assert np.all(eigenvalues >= -1e-10), (
+            "Covariance matrix not positive semi-definite"
+        )
 
         # Should not be identity (would indicate no information)
-        assert not np.allclose(
-            covariance, np.eye(n_params)
-        ), "Covariance is identity matrix (no optimization occurred)"
+        assert not np.allclose(covariance, np.eye(n_params)), (
+            "Covariance is identity matrix (no optimization occurred)"
+        )
 
     def test_residuals_distribution(self):
         """Test residuals follow expected distribution."""
@@ -479,9 +479,9 @@ class TestPerformanceRegression:
         # Should be within 10% of baseline
         throughput_ratio = simulated_throughput / baseline_throughput
 
-        assert (
-            throughput_ratio > 0.9
-        ), f"Throughput dropped to {throughput_ratio:.1%} of baseline"
+        assert throughput_ratio > 0.9, (
+            f"Throughput dropped to {throughput_ratio:.1%} of baseline"
+        )
 
 
 # ============================================================================
@@ -507,12 +507,12 @@ class TestReferenceDataValidation:
         simulated_errors = np.array([2.0, 1.5, 5.0, 3.0, 8.0])  # % errors
 
         # All errors should be within scientific validation bounds
-        assert np.all(
-            simulated_errors >= expected_min_error * 0.5
-        ), "Some parameters recovered too well (suspiciously low error)"
-        assert np.all(
-            simulated_errors <= expected_max_error * 1.5
-        ), "Some parameters exceeded maximum acceptable error"
+        assert np.all(simulated_errors >= expected_min_error * 0.5), (
+            "Some parameters recovered too well (suspiciously low error)"
+        )
+        assert np.all(simulated_errors <= expected_max_error * 1.5), (
+            "Some parameters exceeded maximum acceptable error"
+        )
 
     def test_consistency_across_initial_conditions(self):
         """Test consistency across different initial conditions.

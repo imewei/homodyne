@@ -286,7 +286,10 @@ class CMCConfig:
                 )
 
         # Warn about small max_points_per_shard (creates excessive shards)
-        if isinstance(self.max_points_per_shard, int) and self.max_points_per_shard < 10000:
+        if (
+            isinstance(self.max_points_per_shard, int)
+            and self.max_points_per_shard < 10000
+        ):
             logger.warning(
                 f"max_points_per_shard={self.max_points_per_shard:,} is very small. "
                 "This will create many shards with high overhead. Recommended: 50000-100000."

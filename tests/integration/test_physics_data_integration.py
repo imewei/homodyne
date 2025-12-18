@@ -13,8 +13,6 @@ together correctly in realistic workflows.
 import json
 import os
 import tempfile
-from pathlib import Path
-from unittest.mock import MagicMock, patch
 
 import numpy as np
 import pytest
@@ -39,7 +37,6 @@ from homodyne.data.xpcs_loader import (
     XPCSDataLoader,
     load_xpcs_data,
 )
-
 
 # =============================================================================
 # Test Fixtures
@@ -162,12 +159,16 @@ class TestDataLoadingIntegration:
         time_arr = jnp.array(data["t1"])
 
         # Calculate diffusion coefficient
-        D_t = calculate_diffusion_coefficient(time_arr, D0=100.0, alpha=0.0, D_offset=0.0)
+        D_t = calculate_diffusion_coefficient(
+            time_arr, D0=100.0, alpha=0.0, D_offset=0.0
+        )
         assert jnp.all(jnp.isfinite(D_t))
         assert len(D_t) == len(data["t1"])
 
         # Calculate shear rate
-        gamma_t = calculate_shear_rate(time_arr, gamma_dot_0=0.5, beta=0.0, gamma_dot_offset=0.0)
+        gamma_t = calculate_shear_rate(
+            time_arr, gamma_dot_0=0.5, beta=0.0, gamma_dot_offset=0.0
+        )
         assert jnp.all(jnp.isfinite(gamma_t))
         assert len(gamma_t) == len(data["t1"])
 
@@ -201,7 +202,9 @@ class TestDataLoadingIntegration:
 class TestPhysicsCalculationIntegration:
     """Integration tests for physics calculations on real data structures."""
 
-    def test_time_integral_matrix_with_diffusion(self, temp_dir, realistic_npz_cache, xpcs_config):
+    def test_time_integral_matrix_with_diffusion(
+        self, temp_dir, realistic_npz_cache, xpcs_config
+    ):
         """Test time integral matrix calculation with diffusion coefficient."""
         cache_path, metadata = realistic_npz_cache
 
@@ -210,7 +213,9 @@ class TestPhysicsCalculationIntegration:
 
         # Calculate time-dependent diffusion
         time_arr = jnp.array(data["t1"])
-        D_t = calculate_diffusion_coefficient(time_arr, D0=100.0, alpha=0.3, D_offset=10.0)
+        D_t = calculate_diffusion_coefficient(
+            time_arr, D0=100.0, alpha=0.3, D_offset=10.0
+        )
 
         # Create time integral matrix from diffusion
         integral_matrix = create_time_integral_matrix(D_t)
@@ -238,14 +243,15 @@ class TestPhysicsCalculationIntegration:
 
         for params in scenarios:
             gamma_t = calculate_shear_rate(
-                time_arr, params["gamma_dot_0"], params["beta"], params["gamma_dot_offset"]
+                time_arr,
+                params["gamma_dot_0"],
+                params["beta"],
+                params["gamma_dot_offset"],
             )
             assert jnp.all(jnp.isfinite(gamma_t))
             assert jnp.all(gamma_t > 0)
 
-    def test_physics_calculations_with_jax_arrays(
-        self, temp_dir, realistic_npz_cache
-    ):
+    def test_physics_calculations_with_jax_arrays(self, temp_dir, realistic_npz_cache):
         """Test physics calculations with JAX array output."""
         cache_path, metadata = realistic_npz_cache
 
@@ -286,7 +292,9 @@ class TestPhysicsCalculationIntegration:
 class TestEndToEndWorkflows:
     """End-to-end workflow integration tests."""
 
-    def test_load_process_analyze_workflow(self, temp_dir, realistic_npz_cache, xpcs_config):
+    def test_load_process_analyze_workflow(
+        self, temp_dir, realistic_npz_cache, xpcs_config
+    ):
         """Test complete workflow: load → process → analyze."""
         cache_path, metadata = realistic_npz_cache
 
@@ -301,8 +309,12 @@ class TestEndToEndWorkflows:
         c2_exp = jnp.array(data["c2_exp"])
 
         # Step 3: Calculate physics quantities
-        D_t = calculate_diffusion_coefficient(time_arr, D0=100.0, alpha=0.0, D_offset=0.0)
-        gamma_t = calculate_shear_rate(time_arr, gamma_dot_0=0.0, beta=0.0, gamma_dot_offset=0.0)
+        D_t = calculate_diffusion_coefficient(
+            time_arr, D0=100.0, alpha=0.0, D_offset=0.0
+        )
+        gamma_t = calculate_shear_rate(
+            time_arr, gamma_dot_0=0.0, beta=0.0, gamma_dot_offset=0.0
+        )
 
         # Step 4: Create time integral matrix
         D_integral = create_time_integral_matrix(D_t)
@@ -313,7 +325,9 @@ class TestEndToEndWorkflows:
         assert gamma_integral.shape == (len(time_arr), len(time_arr))
         assert c2_exp.shape[0] == len(phi_angles)
 
-    def test_multi_angle_analysis_workflow(self, temp_dir, realistic_npz_cache, xpcs_config):
+    def test_multi_angle_analysis_workflow(
+        self, temp_dir, realistic_npz_cache, xpcs_config
+    ):
         """Test workflow that processes multiple phi angles."""
         cache_path, metadata = realistic_npz_cache
 
@@ -329,10 +343,12 @@ class TestEndToEndWorkflows:
 
             # Calculate mean correlation
             mean_corr = jnp.mean(c2_corrected)
-            results.append({
-                "phi": phi,
-                "mean_correlation": float(mean_corr),
-            })
+            results.append(
+                {
+                    "phi": phi,
+                    "mean_correlation": float(mean_corr),
+                }
+            )
 
         # Should have processed all angles
         assert len(results) == metadata["n_phi"]
@@ -375,7 +391,9 @@ class TestEndToEndWorkflows:
 class TestErrorHandlingIntegration:
     """Integration tests for error handling across modules."""
 
-    def test_invalid_time_array_handling(self, temp_dir, realistic_npz_cache, xpcs_config):
+    def test_invalid_time_array_handling(
+        self, temp_dir, realistic_npz_cache, xpcs_config
+    ):
         """Test handling of edge cases in time arrays."""
         cache_path, metadata = realistic_npz_cache
 
@@ -389,7 +407,9 @@ class TestErrorHandlingIntegration:
             D_t = calculate_diffusion_coefficient(empty_time, 100.0, 0.0, 0.0)
             assert len(D_t) == 0
 
-    def test_extreme_parameter_handling(self, temp_dir, realistic_npz_cache, xpcs_config):
+    def test_extreme_parameter_handling(
+        self, temp_dir, realistic_npz_cache, xpcs_config
+    ):
         """Test handling of extreme physics parameters."""
         cache_path, metadata = realistic_npz_cache
 
@@ -435,11 +455,11 @@ experimental_data:
   data_file_name: "cached_c2_frames_1_100.npz"
 
 analyzer_parameters:
-  dt: {metadata['dt']}
+  dt: {metadata["dt"]}
   start_frame: 1
-  end_frame: {metadata['n_frames']}
+  end_frame: {metadata["n_frames"]}
   scattering:
-    wavevector_q: {metadata['wavevector_q']}
+    wavevector_q: {metadata["wavevector_q"]}
 
 v2_features:
   output_format: jax
@@ -513,7 +533,9 @@ class TestDataConsistencyIntegration:
         dt_calculated = data["t1"][1] - data["t1"][0]
         assert_allclose(dt_calculated, metadata["dt"], rtol=1e-10)
 
-    def test_correlation_matrix_symmetry(self, temp_dir, realistic_npz_cache, xpcs_config):
+    def test_correlation_matrix_symmetry(
+        self, temp_dir, realistic_npz_cache, xpcs_config
+    ):
         """Test that correlation matrices maintain symmetry after processing."""
         cache_path, metadata = realistic_npz_cache
 

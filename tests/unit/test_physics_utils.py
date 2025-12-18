@@ -19,7 +19,7 @@ Test Coverage:
 
 import numpy as np
 import pytest
-from numpy.testing import assert_allclose, assert_array_equal
+from numpy.testing import assert_allclose
 
 # JAX imports with fallback
 try:
@@ -44,7 +44,6 @@ from homodyne.core.physics_utils import (
     safe_sinc,
     trapezoid_cumsum,
 )
-
 
 # =============================================================================
 # Test Fixtures
@@ -312,9 +311,7 @@ class TestCalculateDiffusionCoefficient:
         """Test superdiffusive behavior (alpha > 1)."""
         D0, alpha, D_offset = 1.0, 1.5, 0.0
         time_positive = time_array_large[time_array_large > 0]
-        result = calculate_diffusion_coefficient(
-            time_positive, D0, alpha, D_offset
-        )
+        result = calculate_diffusion_coefficient(time_positive, D0, alpha, D_offset)
         # D(t) = D0 * t^1.5 increases faster than linear
         assert jnp.all(jnp.diff(result) > 0)
 
@@ -367,9 +364,7 @@ class TestCalculateShearRate:
         """Test with single time point uses fallback dt."""
         time_single = jnp.array([0.5])
         gamma_dot_0, beta, gamma_dot_offset = 1.0, 0.5, 0.0
-        result = calculate_shear_rate(
-            time_single, gamma_dot_0, beta, gamma_dot_offset
-        )
+        result = calculate_shear_rate(time_single, gamma_dot_0, beta, gamma_dot_offset)
         assert jnp.all(jnp.isfinite(result))
         assert result.shape == (1,)
 
@@ -714,7 +709,9 @@ class TestBackwardCompatibilityAliases:
             _calculate_diffusion_coefficient_impl_jax,
         )
 
-        assert _calculate_diffusion_coefficient_impl_jax is calculate_diffusion_coefficient
+        assert (
+            _calculate_diffusion_coefficient_impl_jax is calculate_diffusion_coefficient
+        )
 
     def test_shear_rate_alias(self):
         """Test _calculate_shear_rate_impl_jax alias exists."""

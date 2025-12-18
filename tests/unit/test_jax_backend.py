@@ -257,9 +257,9 @@ class TestJAXBackendCore:
 
         # Imperfect fit should have positive chi-squared
         assert chi2_imperfect > 0, "Imperfect fit should have positive chi-squared"
-        assert (
-            chi2_imperfect > chi2_perfect
-        ), "Imperfect fit should have higher chi-squared"
+        assert chi2_imperfect > chi2_perfect, (
+            "Imperfect fit should have higher chi-squared"
+        )
 
     def test_jax_jit_compilation(self, jax_backend):
         """Test JAX JIT compilation works correctly."""
@@ -418,9 +418,9 @@ class TestJAXBackendProperties:
         result = compute_g1_diffusion_jax(t1_base, t2_varying, q, D)
 
         # Should be monotonically decreasing
-        assert jnp.all(
-            result[:-1] >= result[1:]
-        ), "g1_diffusion should decrease with tau"
+        assert jnp.all(result[:-1] >= result[1:]), (
+            "g1_diffusion should decrease with tau"
+        )
 
     @pytest.mark.requires_jax
     def test_c2_model_scaling(self, jax_backend):
@@ -482,9 +482,9 @@ class TestJAXBackendProperties:
 
         # Mean residual should be very close to zero
         mean_residual = jnp.mean(residuals)
-        assert (
-            abs(mean_residual) < 1e-10
-        ), "Mean residual should be zero for perfect fit"
+        assert abs(mean_residual) < 1e-10, (
+            "Mean residual should be zero for perfect fit"
+        )
 
 
 @pytest.mark.unit
@@ -626,9 +626,9 @@ class TestParameterDependency:
 
         # Verify gradient is non-zero
         gradient_norm = jnp.linalg.norm(gradient)
-        assert (
-            gradient_norm > 1e-6
-        ), f"Gradient norm {gradient_norm:.6e} is too small (should be >1e-6)"
+        assert gradient_norm > 1e-6, (
+            f"Gradient norm {gradient_norm:.6e} is too small (should be >1e-6)"
+        )
         assert jnp.all(jnp.isfinite(gradient)), "Gradient must be finite"
 
     # Note: More detailed parameter sensitivity tests with ACTUAL config parameters
@@ -725,12 +725,12 @@ class TestPhysicsConstraints:
                 result = compute_g1_diffusion_jax(t1, t2, q, D)
 
                 # g1 bounds: [0, 1]
-                assert jnp.all(
-                    result >= 0.0
-                ), f"g1 lower bound violated: min={jnp.min(result):.6f} (q={q}, D={D})"
-                assert jnp.all(
-                    result <= 1.0
-                ), f"g1 upper bound violated: max={jnp.max(result):.6f} (q={q}, D={D})"
+                assert jnp.all(result >= 0.0), (
+                    f"g1 lower bound violated: min={jnp.min(result):.6f} (q={q}, D={D})"
+                )
+                assert jnp.all(result <= 1.0), (
+                    f"g1 upper bound violated: max={jnp.max(result):.6f} (q={q}, D={D})"
+                )
 
     def test_siegert_relation_form(self, jax_backend):
         """TC-CORE-004: Verify c2 follows Siegert relation form c2 = offset + contrast × (g1)²."""
@@ -758,12 +758,12 @@ class TestPhysicsConstraints:
         g1_squared = (c2_2d - offset) / contrast
 
         # Verify g1² bounds: must be in [0, 1]
-        assert jnp.all(
-            g1_squared >= -1e-6
-        ), f"g1² lower bound violated: min={jnp.min(g1_squared):.6f}"
-        assert jnp.all(
-            g1_squared <= 1.0 + 1e-6
-        ), f"g1² upper bound violated: max={jnp.max(g1_squared):.6f}"
+        assert jnp.all(g1_squared >= -1e-6), (
+            f"g1² lower bound violated: min={jnp.min(g1_squared):.6f}"
+        )
+        assert jnp.all(g1_squared <= 1.0 + 1e-6), (
+            f"g1² upper bound violated: max={jnp.max(g1_squared):.6f}"
+        )
 
         # Verify diagonal g1² = 1.0 (g1(t,t) = 1)
         diagonal_g1_sq = g1_squared[jnp.arange(n), jnp.arange(n)]
@@ -775,12 +775,12 @@ class TestPhysicsConstraints:
         )
 
         # Verify c2 form: c2 should be in [offset, offset + contrast]
-        assert jnp.all(
-            c2_2d >= offset - 1e-6
-        ), f"c2 lower bound violated: min={jnp.min(c2_2d):.6f} < offset={offset}"
-        assert jnp.all(
-            c2_2d <= offset + contrast + 1e-6
-        ), f"c2 upper bound violated: max={jnp.max(c2_2d):.6f} > {offset + contrast}"
+        assert jnp.all(c2_2d >= offset - 1e-6), (
+            f"c2 lower bound violated: min={jnp.min(c2_2d):.6f} < offset={offset}"
+        )
+        assert jnp.all(c2_2d <= offset + contrast + 1e-6), (
+            f"c2 upper bound violated: max={jnp.max(c2_2d):.6f} > {offset + contrast}"
+        )
 
     def test_diagonal_value_constraint(self, jax_backend):
         """TC-CORE-005: Diagonal values (t1=t2) should equal offset + contrast."""
@@ -879,13 +879,13 @@ class TestPhysicsConstraints:
             result = compute_c2_model_jax(params, t1, t2, phi, q)
 
             # Should be finite (no NaN/Inf)
-            assert jnp.all(
-                jnp.isfinite(result)
-            ), f"Non-finite values with params: {case}"
+            assert jnp.all(jnp.isfinite(result)), (
+                f"Non-finite values with params: {case}"
+            )
             # Should satisfy physical minimum
-            assert jnp.all(
-                result >= 1.0 - 1e-6
-            ), f"Physical minimum violated with params: {case}"
+            assert jnp.all(result >= 1.0 - 1e-6), (
+                f"Physical minimum violated with params: {case}"
+            )
 
 
 @pytest.mark.unit
@@ -1279,9 +1279,9 @@ class TestNumericalStabilityExpanded:
         assert jnp.all(g1_manual >= 0.0)
         # Large tau should give g1 close to 0
         min_val = float(jnp.min(g1_manual))
-        assert (
-            min_val < 1e-10 or min_val >= 0
-        ), f"Expected min value < 1e-10, got {min_val}"
+        assert min_val < 1e-10 or min_val >= 0, (
+            f"Expected min value < 1e-10, got {min_val}"
+        )
 
     def test_no_overflow_small_tau(self, jax_backend):
         """Test no overflow for very small time separations."""
@@ -1905,7 +1905,9 @@ class TestNLSQCMCConsistency:
 
         # Should match within floating-point precision
         max_diff_error = float(
-            jnp.max(jnp.abs(g1_nlsq_diff - g1_cmc_diff) / jnp.maximum(g1_cmc_diff, 1e-10))
+            jnp.max(
+                jnp.abs(g1_nlsq_diff - g1_cmc_diff) / jnp.maximum(g1_cmc_diff, 1e-10)
+            )
         )
         assert max_diff_error < 1e-4, (
             f"Diffusion g1 mismatch between NLSQ and CMC. "
@@ -1932,7 +1934,9 @@ class TestNLSQCMCConsistency:
 
         # Use time values that are exact multiples of dt for fair comparison
         n_small = 100
-        time_values = jnp.arange(1, n_small + 1, dtype=jnp.float64) * dt  # [0.1, 0.2, ..., 10.0]
+        time_values = (
+            jnp.arange(1, n_small + 1, dtype=jnp.float64) * dt
+        )  # [0.1, 0.2, ..., 10.0]
 
         # Create meshgrid for matrix mode
         t1_mesh, t2_mesh = jnp.meshgrid(time_values, time_values, indexing="ij")

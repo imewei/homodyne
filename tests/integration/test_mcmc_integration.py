@@ -834,9 +834,9 @@ class TestManualNLSQMCMCWorkflow:
         # Total: 2*n_angles + 3 = 13 parameters
         nlsq_params = nlsq_result.parameters
         expected_total = 2 * n_angles + 3  # Per-angle scaling + 3 physical params
-        assert (
-            len(nlsq_params) == expected_total
-        ), f"NLSQ should return {expected_total} params"
+        assert len(nlsq_params) == expected_total, (
+            f"NLSQ should return {expected_total} params"
+        )
 
         # Act - User manually copies NLSQ results to YAML config
         # Extract physics parameters (skip per-angle contrast and offset)
@@ -1043,9 +1043,9 @@ class TestMCMCWithAngleFiltering:
         filtered_data = _apply_angle_filtering_for_optimization(data, config)
 
         # Assert - Dataset size reduction (filtering worked)
-        assert (
-            len(filtered_data["phi_angles_list"]) == 3
-        ), "Should have 3 filtered angles"
+        assert len(filtered_data["phi_angles_list"]) == 3, (
+            "Should have 3 filtered angles"
+        )
         np.testing.assert_array_almost_equal(
             filtered_data["phi_angles_list"], [85.0, 90.0, 95.0], decimal=1
         )
@@ -1097,9 +1097,9 @@ class TestMCMCWithAngleFiltering:
         filtered_data = _apply_angle_filtering_for_optimization(data, config)
 
         # Assert - All 9 angles used (no filtering)
-        assert (
-            len(filtered_data["phi_angles_list"]) == 9
-        ), "Should use all 9 angles when disabled"
+        assert len(filtered_data["phi_angles_list"]) == 9, (
+            "Should use all 9 angles when disabled"
+        )
         np.testing.assert_array_almost_equal(
             filtered_data["phi_angles_list"], angles, decimal=1
         )
@@ -1277,12 +1277,12 @@ class TestMCMCConvergenceQuality:
         }
 
         # Assert convergence standards met
-        assert (
-            v21_diagnostics["r_hat"] < expected_diagnostics["r_hat_threshold"]
-        ), "R-hat should indicate convergence"
-        assert (
-            v21_diagnostics["ess"] >= expected_diagnostics["ess_min"]
-        ), "ESS should indicate adequate samples"
+        assert v21_diagnostics["r_hat"] < expected_diagnostics["r_hat_threshold"], (
+            "R-hat should indicate convergence"
+        )
+        assert v21_diagnostics["ess"] >= expected_diagnostics["ess_min"], (
+            "ESS should indicate adequate samples"
+        )
         assert (
             expected_diagnostics["acceptance_rate_min"]
             <= v21_diagnostics["acceptance_rate"]
@@ -1326,9 +1326,9 @@ class TestMCMCConvergenceQuality:
             error = abs(recovered_val - truth_val) / truth_val
             tolerance = tolerances[param]
 
-            assert (
-                error < tolerance
-            ), f"{param}: error {error:.2%} exceeds tolerance {tolerance:.2%}"
+            assert error < tolerance, (
+                f"{param}: error {error:.2%} exceeds tolerance {tolerance:.2%}"
+            )
 
     def test_automatic_selection_convergence_not_degraded(self):
         """Verify automatic NUTS/CMC selection doesn't degrade convergence.
@@ -1390,9 +1390,9 @@ class TestMCMCConvergenceQuality:
         config_init_r_hat = 1.03
 
         # Verify improvement or maintenance
-        assert (
-            config_init_r_hat < random_init_r_hat
-        ), "Config-driven initialization should improve convergence"
+        assert config_init_r_hat < random_init_r_hat, (
+            "Config-driven initialization should improve convergence"
+        )
 
     def test_backward_compatibility_initial_parameters_structure(self):
         """Verify v2.1.0 handles v2.0 config format correctly.
@@ -1465,9 +1465,9 @@ class TestCMCConvergencePreservation:
 
         # Verify they're comparable (within 0.02)
         difference = abs(nuts_r_hat - cmc_r_hat)
-        assert (
-            difference < 0.02
-        ), f"NUTS and CMC R-hat differ by {difference:.3f} (should be < 0.02)"
+        assert difference < 0.02, (
+            f"NUTS and CMC R-hat differ by {difference:.3f} (should be < 0.02)"
+        )
 
 
 class TestParameterSpaceLoadingRegression:
@@ -1730,8 +1730,6 @@ def test_automatic_nuts_selection_small_dataset(simple_static_data):
     assert result.is_cmc_result()
     # CMCResult doesn't have sampler attribute; it always uses NUTS
     assert result.parameters is not None
-
-
 
 
 def test_auto_retry_on_poor_convergence():

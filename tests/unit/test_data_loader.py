@@ -383,9 +383,6 @@ class TestXPCSDataLoading:
             pass
 
 
-
-
-
 @pytest.mark.unit
 @pytest.mark.property
 class TestXPCSDataLoaderProperties:
@@ -403,20 +400,20 @@ class TestXPCSDataLoaderProperties:
         n_times_t1, n_times_t2 = data["t1"].shape
 
         expected_shape = (n_angles, n_times_t1, n_times_t2)
-        assert (
-            data["c2_exp"].shape == expected_shape
-        ), f"c2_exp shape mismatch: {data['c2_exp'].shape} vs {expected_shape}"
+        assert data["c2_exp"].shape == expected_shape, (
+            f"c2_exp shape mismatch: {data['c2_exp'].shape} vs {expected_shape}"
+        )
 
         # Sigma should match c2_exp
         if "sigma" in data:
-            assert (
-                data["sigma"].shape == data["c2_exp"].shape
-            ), "sigma should match c2_exp shape"
+            assert data["sigma"].shape == data["c2_exp"].shape, (
+                "sigma should match c2_exp shape"
+            )
 
         # Physical constraints
-        assert np.all(
-            data["c2_exp"] >= 0.8
-        ), "Correlation should be close to or above 1.0"
+        assert np.all(data["c2_exp"] >= 0.8), (
+            "Correlation should be close to or above 1.0"
+        )
         assert np.all(np.isfinite(data["c2_exp"])), "Correlation should be finite"
 
         # q-values should be positive
@@ -424,9 +421,9 @@ class TestXPCSDataLoaderProperties:
 
         # Angles should be in [0, 2π] range
         phi = data["phi_angles_list"]
-        assert np.all(phi >= 0) and np.all(
-            phi <= 2 * np.pi + 1e-6
-        ), "Angles should be in [0, 2π]"
+        assert np.all(phi >= 0) and np.all(phi <= 2 * np.pi + 1e-6), (
+            "Angles should be in [0, 2π]"
+        )
 
     def test_symmetry_properties(self, synthetic_xpcs_data):
         """Test symmetry properties of loaded data."""
@@ -687,9 +684,9 @@ class TestCorrelationData:
             # Mean diagonal should be >= mean off-diagonal
             mean_diag = np.mean(diagonal)
             mean_off_diag = np.mean(np.abs(off_diag))
-            assert (
-                mean_diag >= mean_off_diag * 0.9
-            ), f"Diagonal ({mean_diag:.3f}) should be >= off-diagonal ({mean_off_diag:.3f})"
+            assert mean_diag >= mean_off_diag * 0.9, (
+                f"Diagonal ({mean_diag:.3f}) should be >= off-diagonal ({mean_off_diag:.3f})"
+            )
 
     def test_c2_symmetry_check(self, synthetic_xpcs_data):
         """Test c2 symmetry (c2[t1,t2] ≈ c2[t2,t1])."""
@@ -722,9 +719,9 @@ class TestCorrelationData:
             # Values should generally decrease (correlation decays)
             # Allow some flexibility due to noise
             if len(values) > 2:
-                assert (
-                    values[0] >= values[-1] - 0.1
-                ), "Correlation should generally decay with lag"
+                assert values[0] >= values[-1] - 0.1, (
+                    "Correlation should generally decay with lag"
+                )
 
     def test_c2_minimum_value(self, synthetic_xpcs_data):
         """Test c2 minimum value constraint."""

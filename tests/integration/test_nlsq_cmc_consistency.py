@@ -93,9 +93,7 @@ class TestNLSQCMCConsistencyIntegration:
             return jnp.mean((c2_pred - c2_data) ** 2)
 
         # Verify the true parameters give low residual
-        true_residual = compute_residual(
-            true_params, data["contrast"], data["offset"]
-        )
+        true_residual = compute_residual(true_params, data["contrast"], data["offset"])
         assert true_residual < 1e-5, (
             f"True parameters should give near-zero residual, got {true_residual:.2e}"
         )

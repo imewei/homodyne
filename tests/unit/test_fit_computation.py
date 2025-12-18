@@ -217,7 +217,9 @@ class TestComputeTheoreticalFitsIntegration:
         assert fits["per_angle_scaling"].shape == (2, 2)
         assert fits["residuals"].shape == (2, 10, 10)
 
-    def test_compute_fits_with_solver_surface(self, mock_result, mock_data, mock_metadata):
+    def test_compute_fits_with_solver_surface(
+        self, mock_result, mock_data, mock_metadata
+    ):
         """Test fit computation includes solver surface."""
         from homodyne.optimization.nlsq.fit_computation import compute_theoretical_fits
 
@@ -263,7 +265,9 @@ class TestComputeTheoreticalFitsIntegration:
         metadata = {"L": 1000.0, "dt": 0.1, "q": None}
 
         with pytest.raises(ValueError, match="q.*required"):
-            compute_theoretical_fits(result, mock_data, metadata, analysis_mode="static")
+            compute_theoretical_fits(
+                result, mock_data, metadata, analysis_mode="static"
+            )
 
     def test_compute_fits_2d_time_arrays(self, mock_result, mock_metadata):
         """Test fit computation with 2D meshgrid time arrays."""

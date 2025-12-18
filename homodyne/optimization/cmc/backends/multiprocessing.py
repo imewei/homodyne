@@ -759,8 +759,7 @@ class MultiprocessingBackend(CMCBackend):
             for param in key_params:
                 if param in successful_samples[0].samples:
                     means = [
-                        float(np.mean(s.samples[param]))
-                        for s in successful_samples
+                        float(np.mean(s.samples[param])) for s in successful_samples
                     ]
                     stds = [float(np.std(s.samples[param])) for s in successful_samples]
                     run_logger.info(

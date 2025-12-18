@@ -14,7 +14,6 @@ import json
 import os
 import tempfile
 from pathlib import Path
-from unittest.mock import MagicMock, patch
 
 import numpy as np
 import pytest
@@ -29,7 +28,6 @@ from homodyne.data.xpcs_loader import (
     load_xpcs_config,
     load_xpcs_data,
 )
-
 
 # =============================================================================
 # Test Fixtures
@@ -830,9 +828,9 @@ class TestCachePathGeneration:
 
     def test_generate_cache_path_with_template(self, nested_config_dict):
         """Test cache path with custom template."""
-        nested_config_dict["experimental_data"][
-            "cache_filename_template"
-        ] = "cache_{start_frame}_{end_frame}_q{wavevector_q}.npz"
+        nested_config_dict["experimental_data"]["cache_filename_template"] = (
+            "cache_{start_frame}_{end_frame}_q{wavevector_q}.npz"
+        )
         loader = XPCSDataLoader(config_dict=nested_config_dict)
         cache_path = loader._generate_cache_path()
 

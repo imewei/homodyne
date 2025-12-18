@@ -89,7 +89,6 @@ from homodyne.core.physics_utils import (
     safe_exp,
     safe_len,
     safe_sinc,
-    trapezoid_cumsum as _trapezoid_cumsum,
 )
 from homodyne.core.physics_utils import (
     calculate_diffusion_coefficient as _calculate_diffusion_coefficient_impl_jax,
@@ -99,6 +98,9 @@ from homodyne.core.physics_utils import (
 )
 from homodyne.core.physics_utils import (
     create_time_integral_matrix as _create_time_integral_matrix_impl_jax,
+)
+from homodyne.core.physics_utils import (
+    trapezoid_cumsum as _trapezoid_cumsum,
 )
 from homodyne.utils.logging import get_logger, log_performance
 
@@ -280,7 +282,9 @@ def _compute_g1_diffusion_core(
         time_grid = grid_indices * dt
 
         # Compute D(t) on grid and build cumulative trapezoid
-        D_grid = _calculate_diffusion_coefficient_impl_jax(time_grid, D0, alpha, D_offset)
+        D_grid = _calculate_diffusion_coefficient_impl_jax(
+            time_grid, D0, alpha, D_offset
+        )
         D_cumsum = _trapezoid_cumsum(D_grid)
 
         # Map times to grid indices using searchsorted (FR-007: clamp to valid range)
