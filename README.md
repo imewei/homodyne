@@ -10,6 +10,17 @@
 
 ## ⚠️ **BREAKING CHANGES: v2.4.x**
 
+### v2.5.0 - Streaming Optimizer for Large Datasets
+
+**NLSQ now supports streaming optimization** for memory-constrained large datasets.
+
+**Key Changes:**
+
+- **Streaming mode**: Mini-batch gradient descent for datasets >10M points
+- **Automatic selection**: Switches based on estimated memory vs available RAM
+- **Memory bounded**: ~2 GB usage vs 30+ GB for standard Jacobian computation
+- **Configuration**: New `streaming` section in YAML for batch size, epochs, learning rate
+
 ### v2.4.3 - NLSQ Element-wise Integration Fix
 
 **NLSQ element-wise mode now uses cumulative trapezoid integration** matching CMC physics.
@@ -784,6 +795,68 @@ performance:
 - ✅ **Automatic activation**: Only triggers for large datasets
 - ✅ **Transparent operation**: No user intervention required
 - ✅ **Backward compatible**: Existing configs work without changes
+
+### Streaming Optimizer for Memory-Bounded Large Datasets (v2.5.0+)
+
+For datasets exceeding available memory (>10M points on 64GB systems), the NLSQ wrapper
+automatically switches to **streaming optimization** using mini-batch gradient descent.
+This eliminates OOM errors by processing data in small batches.
+
+**Why Streaming?**
+
+Standard Levenberg-Marquardt optimization requires computing a dense Jacobian matrix
+(n_points × n_params × 8 bytes) plus JAX autodiff intermediates (~3× Jacobian size).
+For 23M points with 53 parameters, this exceeds 30 GB. Streaming mode processes data
+in 10K-point batches, keeping memory usage below 2 GB.
+
+**Memory-Based Auto-Selection**:
+
+```text
+Estimated Memory    | Mode Selected      | Reason
+--------------------|--------------------|---------------------------------
+< 16 GB             | Stratified L-M     | Full Jacobian fits in memory
+16 GB - 70% RAM     | Stratified L-M     | Within safety margin
+> 70% available RAM | Streaming (Adam)   | Prevents OOM
+```
+
+**Configuration**:
+
+```yaml
+optimization:
+  nlsq:
+    # Memory threshold for automatic streaming mode (GB)
+    memory_threshold_gb: 16.0
+
+    # Force streaming mode regardless of memory (default: false)
+    use_streaming: false
+
+    # Streaming optimizer settings (used when streaming mode is active)
+    streaming:
+      batch_size: 10000       # Points per mini-batch
+      max_epochs: 50          # Maximum training epochs
+      learning_rate: 0.001    # Adam learning rate
+      convergence_tol: 1e-6   # Convergence tolerance
+```
+
+**Performance Comparison**:
+
+| Mode | Memory Usage | Convergence | Time (23M pts) |
+|------|--------------|-------------|----------------|
+| Stratified L-M | ~30+ GB | Exact (Newton) | 10-15 min |
+| Streaming | ~2 GB | Approximate (Adam) | 15-30 min |
+
+**Key Benefits**:
+
+- ✅ **No OOM errors**: Memory bounded by batch size, not dataset size
+- ✅ **Automatic selection**: Switches based on estimated memory usage
+- ✅ **Fault tolerance**: Retries failed batches, checkpoints progress
+- ✅ **Configurable**: Tune batch size, learning rate, epochs via YAML
+- ✅ **Physics compliance**: Same residual function and constraints
+
+**When to Use**:
+
+- **Stratified L-M (default)**: Datasets < 10M points, sufficient RAM (64GB+)
+- **Streaming**: Datasets > 10M points, memory-constrained systems (32GB RAM)
 
 ## Pipeline Architecture: CPU-Optimized (v2.3.0+)
 

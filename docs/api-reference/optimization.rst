@@ -202,6 +202,141 @@ Key Classes
    homodyne.optimization.nlsq.strategies.executors.LargeDatasetExecutor
    homodyne.optimization.nlsq.strategies.executors.StreamingExecutor
 
+.. _nlsq-streaming-optimizer:
+
+Streaming Optimizer for Large Datasets
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+For datasets exceeding available memory (>10M points on typical systems), the NLSQ
+wrapper automatically switches to **streaming optimization** using mini-batch gradient
+descent. This eliminates OOM errors by processing data in small batches.
+
+**Why Streaming?**
+
+Standard Levenberg-Marquardt optimization requires computing a dense Jacobian matrix
+(n_points × n_params × 8 bytes) plus JAX autodiff intermediates (~3× Jacobian size).
+For 23M points with 53 parameters, this exceeds 30 GB. Streaming mode processes data
+in 10K-point batches, keeping memory usage below 2 GB.
+
+Memory-Based Auto-Selection
+^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+The ``NLSQWrapper._should_use_streaming()`` method estimates peak memory usage and
+automatically selects streaming mode when:
+
+1. Estimated memory > ``memory_threshold_gb`` (default: 16 GB), OR
+2. Estimated memory > 70% of available system RAM
+
+**Decision Logic**:
+
+.. code-block:: text
+
+   fit() called
+         │
+         ▼
+   ┌─────────────────────────────────────────┐
+   │ Estimate memory for Jacobian + autodiff │
+   │ = n_points × n_params × 8 × 4           │
+   └─────────────────────────────────────────┘
+         │
+         ▼
+   ┌─────────────────────────────────────────┐
+   │ Estimated > threshold OR > 70% RAM?     │
+   └─────────────────────────────────────────┘
+         │                    │
+        YES                   NO
+         │                    │
+         ▼                    ▼
+   ┌─────────────┐     ┌─────────────────────┐
+   │ Streaming   │     │ Stratified L-M      │
+   │ Optimizer   │     │ (Full Jacobian)     │
+   │             │     │                     │
+   │ Mini-batch  │     │ Trust-region        │
+   │ Adam        │     │ Levenberg-Marquardt │
+   └─────────────┘     └─────────────────────┘
+
+Configuration
+^^^^^^^^^^^^^
+
+Streaming mode can be configured via YAML:
+
+.. code-block:: yaml
+
+   optimization:
+     nlsq:
+       # Memory threshold for automatic streaming mode (GB)
+       memory_threshold_gb: 16.0
+
+       # Force streaming mode regardless of memory (default: false)
+       use_streaming: false
+
+       # Streaming optimizer settings
+       streaming:
+         batch_size: 10000       # Points per mini-batch
+         max_epochs: 50          # Maximum training epochs
+         learning_rate: 0.001    # Adam learning rate
+         convergence_tol: 1e-6   # Convergence tolerance
+
+Performance Characteristics
+^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+.. list-table::
+   :header-rows: 1
+   :widths: 20 20 25 35
+
+   * - Mode
+     - Memory Usage
+     - Convergence
+     - Time (23M points)
+   * - Stratified L-M
+     - ~30+ GB
+     - Exact (Newton)
+     - 10-15 min
+   * - Streaming
+     - ~2 GB
+     - Approximate (Adam)
+     - 15-30 min
+
+**When to Use**:
+
+- **Stratified L-M (default)**: Datasets < 10M points, sufficient RAM (64GB+)
+- **Streaming**: Datasets > 10M points, memory-constrained systems (32GB RAM)
+
+Implementation Details
+^^^^^^^^^^^^^^^^^^^^^^
+
+The streaming optimizer uses NLSQ's ``StreamingOptimizer`` class:
+
+.. code-block:: python
+
+   from nlsq import StreamingConfig, StreamingOptimizer
+
+   config = StreamingConfig(
+       batch_size=10000,
+       max_epochs=50,
+       learning_rate=0.001,
+       use_adam=True,
+       gradient_clip=1.0,
+       warmup_steps=100,
+       enable_fault_tolerance=True,
+   )
+
+   optimizer = StreamingOptimizer(config)
+   result = optimizer.fit(
+       data_source=(x_data, y_data),
+       func=model_fn,
+       p0=initial_params,
+       bounds=bounds,
+   )
+
+Key features:
+
+- **Mini-batch processing**: Data is processed in configurable batches
+- **Adam optimizer**: Adaptive learning rate for stable convergence
+- **Gradient clipping**: Prevents exploding gradients
+- **Fault tolerance**: Retries failed batches with different random seeds
+- **Progress tracking**: Logs epoch progress and convergence metrics
+
 CMC: Consensus Monte Carlo
 ---------------------------
 

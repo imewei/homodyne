@@ -10,6 +10,7 @@ development setup, code quality standards, testing practices, and contribution w
 
    contributing
    testing
+   ../architecture/memory-fix-plan
 
 Quick Links
 -----------
@@ -48,7 +49,7 @@ For configuration file documentation and deployment guidance, see the
 Version Information
 ^^^^^^^^^^^^^^^^^^^
 
-- **Homodyne**: v2.4.3
+- **Homodyne**: v2.5.0
 - **Python**: 3.12+
 - **JAX**: 0.8.0 (CPU-only)
 - **Package Manager**: uv
