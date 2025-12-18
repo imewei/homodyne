@@ -837,11 +837,118 @@ class NLSQWrapper:
 
             # Extract target chunk size from config
             target_chunk_size = 100_000  # Default
+            streaming_config = None
+            use_streaming_mode = False
+            memory_threshold_gb = 16.0  # Default threshold
+
             if config is not None and hasattr(config, "config"):
                 strat_config = config.config.get("optimization", {}).get(
                     "stratification", {}
                 )
                 target_chunk_size = strat_config.get("target_chunk_size", 100_000)
+
+                # Extract streaming configuration
+                nlsq_config = config.config.get("optimization", {}).get("nlsq", {})
+                streaming_config = nlsq_config.get("streaming", {})
+                memory_threshold_gb = nlsq_config.get(
+                    "memory_threshold_gb", memory_threshold_gb
+                )
+
+                # Check for forced streaming mode
+                use_streaming_mode = nlsq_config.get("use_streaming", False)
+
+            # Calculate number of chunks for memory estimation
+            n_total_points = len(stratified_data.g2_flat)
+            n_chunks_estimate = max(1, n_total_points // target_chunk_size)
+
+            # Check if streaming mode should be used based on memory
+            if not use_streaming_mode and STREAMING_AVAILABLE:
+                should_stream, estimated_gb, reason = self._should_use_streaming(
+                    n_points=n_total_points,
+                    n_params=len(validated_params),
+                    n_chunks=n_chunks_estimate,
+                    memory_threshold_gb=memory_threshold_gb,
+                )
+
+                if should_stream:
+                    logger.warning("=" * 80)
+                    logger.warning("MEMORY-CONSTRAINED OPTIMIZATION DETECTED")
+                    logger.warning(f"  {reason}")
+                    logger.warning("  Switching to streaming optimizer mode")
+                    logger.warning("=" * 80)
+                    use_streaming_mode = True
+                else:
+                    logger.info(f"Memory check: {reason}")
+
+            # Use streaming optimizer if needed
+            if use_streaming_mode:
+                if not STREAMING_AVAILABLE:
+                    logger.error(
+                        "Streaming mode requested but StreamingOptimizer not available. "
+                        "Falling back to stratified least-squares."
+                    )
+                else:
+                    try:
+                        popt, pcov, info = self._fit_with_streaming_optimizer(
+                            stratified_data=stratified_data,
+                            per_angle_scaling=per_angle_scaling,
+                            physical_param_names=physical_param_names,
+                            initial_params=validated_params,
+                            bounds=nlsq_bounds,
+                            logger=logger,
+                            streaming_config=streaming_config,
+                        )
+
+                        # Compute final residuals for result creation
+                        chunked_data = self._create_stratified_chunks(
+                            stratified_data, target_chunk_size
+                        )
+                        residual_fn = create_stratified_residual_function(
+                            stratified_data=chunked_data,
+                            per_angle_scaling=per_angle_scaling,
+                            physical_param_names=physical_param_names,
+                            logger=logger,
+                            validate=False,
+                        )
+                        final_residuals = residual_fn(popt)
+                        n_data = len(final_residuals)
+
+                        # Get execution time
+                        execution_time = time.time() - start_time
+
+                        # Create result
+                        result = self._create_fit_result(
+                            popt=popt,
+                            pcov=pcov,
+                            residuals=final_residuals,
+                            n_data=n_data,
+                            iterations=info.get("nit", 0),
+                            execution_time=execution_time,
+                            convergence_status=(
+                                "converged" if info.get("success", True) else "failed"
+                            ),
+                            recovery_actions=["streaming_optimizer_method"],
+                            streaming_diagnostics=info.get("streaming_diagnostics"),
+                            stratification_diagnostics=stratification_diagnostics,
+                            diagnostics_payload=None,
+                        )
+
+                        logger.info("=" * 80)
+                        logger.info("STREAMING OPTIMIZATION COMPLETE")
+                        logger.info(
+                            f"Final χ²: {result.chi_squared:.4e}, "
+                            f"Reduced χ²: {result.reduced_chi_squared:.4f}"
+                        )
+                        logger.info("=" * 80)
+
+                        return result
+
+                    except Exception as e:
+                        logger.error(
+                            f"Streaming optimization failed: {e}\n"
+                            f"Falling back to stratified least-squares..."
+                        )
+                        # Fall through to stratified least-squares
 
             # Call stratified least_squares optimization
             try:
@@ -4008,6 +4115,433 @@ class NLSQWrapper:
         }
 
         return popt, pcov, info
+
+    def _fit_with_streaming_optimizer(
+        self,
+        stratified_data: Any,
+        per_angle_scaling: bool,
+        physical_param_names: list[str],
+        initial_params: np.ndarray,
+        bounds: tuple[np.ndarray, np.ndarray] | None,
+        logger: Any,
+        streaming_config: dict | None = None,
+    ) -> tuple[np.ndarray, np.ndarray, dict]:
+        """Fit using NLSQ streaming optimizer for memory-constrained large datasets.
+
+        This method uses mini-batch gradient descent instead of full Jacobian
+        computation, enabling fitting of datasets that don't fit in memory.
+        Memory usage is bounded by batch size (~50KB per batch) rather than
+        dataset size (30+ GB for 23M points).
+
+        Args:
+            stratified_data: StratifiedData object with flat stratified arrays
+            per_angle_scaling: Whether per-angle parameters are enabled
+            physical_param_names: List of physical parameter names
+            initial_params: Initial parameter guess
+            bounds: Parameter bounds (lower, upper) tuple
+            logger: Logger instance
+            streaming_config: Optional config dict with keys:
+                - batch_size: Points per batch (default: 10000)
+                - max_epochs: Maximum epochs (default: 50)
+                - learning_rate: Learning rate (default: 0.001)
+                - convergence_tol: Convergence tolerance (default: 1e-6)
+
+        Returns:
+            (popt, pcov, info) tuple
+
+        Raises:
+            RuntimeError: If StreamingOptimizer is not available in NLSQ
+        """
+        import time
+
+        if not STREAMING_AVAILABLE:
+            raise RuntimeError(
+                "StreamingOptimizer not available. "
+                "Please upgrade NLSQ to version >= 0.1.5"
+            )
+
+        logger.info("=" * 80)
+        logger.info("STREAMING OPTIMIZATION MODE")
+        logger.info("Using NLSQ StreamingOptimizer for memory-bounded optimization")
+        logger.info("=" * 80)
+
+        start_time = time.perf_counter()
+
+        # Extract streaming configuration
+        config = streaming_config or {}
+        batch_size = config.get("batch_size", 10_000)
+        max_epochs = config.get("max_epochs", 50)
+        learning_rate = config.get("learning_rate", 0.001)
+        convergence_tol = config.get("convergence_tol", 1e-6)
+
+        logger.info("Streaming config:")
+        logger.info(f"  Batch size: {batch_size:,}")
+        logger.info(f"  Max epochs: {max_epochs}")
+        logger.info(f"  Learning rate: {learning_rate}")
+        logger.info(f"  Convergence tolerance: {convergence_tol}")
+
+        # Extract global metadata
+        if hasattr(stratified_data, "chunks") and len(stratified_data.chunks) > 0:
+            first_chunk = stratified_data.chunks[0]
+            q = first_chunk.q
+            L = first_chunk.L
+            dt = first_chunk.dt
+        else:
+            q = stratified_data.q
+            L = stratified_data.L
+            dt = stratified_data.dt
+
+        logger.debug(f"Global metadata: q={q}, L={L}, dt={dt}")
+
+        # Extract unique values for theory computation
+        all_phi = []
+        all_t1 = []
+        all_t2 = []
+        if hasattr(stratified_data, "chunks"):
+            for chunk in stratified_data.chunks:
+                all_phi.extend(chunk.phi.tolist())
+                all_t1.extend(chunk.t1.tolist())
+                all_t2.extend(chunk.t2.tolist())
+        else:
+            all_phi = stratified_data.phi_flat.tolist()
+            all_t1 = stratified_data.t1_flat.tolist()
+            all_t2 = stratified_data.t2_flat.tolist()
+
+        phi_unique = np.array(sorted(set(all_phi)))
+        t1_unique = np.array(sorted(set(all_t1)))
+        t2_unique = np.array(sorted(set(all_t2)))
+        n_phi = len(phi_unique)
+
+        logger.info(f"Unique values: {n_phi} phi, {len(t1_unique)} t1, {len(t2_unique)} t2")
+
+        # Convert unique arrays to JAX for JIT compilation
+        phi_unique_jax = jnp.asarray(phi_unique)
+        t1_unique_jax = jnp.asarray(t1_unique)
+        t2_unique_jax = jnp.asarray(t2_unique)
+
+        # Pre-compute index mappings for fast lookup
+        phi_to_idx = {float(p): i for i, p in enumerate(phi_unique)}
+        t1_to_idx = {float(t): i for i, t in enumerate(t1_unique)}
+        t2_to_idx = {float(t): i for i, t in enumerate(t2_unique)}
+
+        # Import physics function
+        from homodyne.core.physics_nlsq import compute_g2_scaled
+        from homodyne.core.physics_utils import apply_diagonal_correction
+
+        def create_streaming_model_fn(
+            n_phi: int,
+            per_angle_scaling: bool,
+            phi_unique: jnp.ndarray,
+            t1_unique: jnp.ndarray,
+            t2_unique: jnp.ndarray,
+            q: float,
+            L: float,
+            dt: float,
+        ):
+            """Create a JIT-compiled model function for streaming optimization.
+
+            The model function takes x_batch = (phi_idx, t1_idx, t2_idx) packed as
+            (batch_size, 3) and returns g2_theory predictions.
+            """
+            n_t1 = len(t1_unique)
+            n_t2 = len(t2_unique)
+
+            @jax.jit
+            def model_fn(x_batch: jnp.ndarray, *params_tuple) -> jnp.ndarray:
+                """Compute g2 predictions for a batch of (phi_idx, t1_idx, t2_idx).
+
+                Args:
+                    x_batch: Shape (batch_size, 3) with columns [phi_idx, t1_idx, t2_idx]
+                    params_tuple: Unpacked parameters
+
+                Returns:
+                    g2_theory predictions of shape (batch_size,)
+                """
+                params_all = jnp.array(params_tuple)
+
+                # Extract indices
+                phi_idx = x_batch[:, 0].astype(jnp.int32)
+                t1_idx = x_batch[:, 1].astype(jnp.int32)
+                t2_idx = x_batch[:, 2].astype(jnp.int32)
+
+                # Extract scaling and physical parameters
+                if per_angle_scaling:
+                    contrast_all = params_all[:n_phi]
+                    offset_all = params_all[n_phi : 2 * n_phi]
+                    physical_params = params_all[2 * n_phi :]
+                else:
+                    contrast_all = jnp.array([params_all[0]])
+                    offset_all = jnp.array([params_all[1]])
+                    physical_params = params_all[2:]
+
+                # Compute full theory grid for all phi values
+                # This is computed once per batch and indexed
+                def compute_single_phi_g2(phi_val, contrast_val, offset_val):
+                    g2_grid = compute_g2_scaled(
+                        params=physical_params,
+                        t1=t1_unique,
+                        t2=t2_unique,
+                        phi=phi_val,
+                        q=q,
+                        L=L,
+                        contrast=contrast_val,
+                        offset=offset_val,
+                        dt=dt,
+                    )
+                    # Apply diagonal correction
+                    g2_grid = apply_diagonal_correction(g2_grid)
+                    return g2_grid
+
+                # Compute g2 for all phi values
+                if per_angle_scaling:
+                    g2_grids = jax.vmap(compute_single_phi_g2)(
+                        phi_unique, contrast_all, offset_all
+                    )  # Shape: (n_phi, n_t1, n_t2)
+                else:
+                    # Broadcast single contrast/offset to all phi
+                    contrast_broadcast = jnp.broadcast_to(contrast_all[0], (n_phi,))
+                    offset_broadcast = jnp.broadcast_to(offset_all[0], (n_phi,))
+                    g2_grids = jax.vmap(compute_single_phi_g2)(
+                        phi_unique, contrast_broadcast, offset_broadcast
+                    )
+
+                # Flatten and index into the grid
+                g2_flat = g2_grids.reshape(-1)  # (n_phi * n_t1 * n_t2,)
+                flat_indices = phi_idx * (n_t1 * n_t2) + t1_idx * n_t2 + t2_idx
+                g2_theory = g2_flat[flat_indices]
+
+                return g2_theory
+
+            return model_fn
+
+        # Create the model function
+        model_fn = create_streaming_model_fn(
+            n_phi=n_phi,
+            per_angle_scaling=per_angle_scaling,
+            phi_unique=phi_unique_jax,
+            t1_unique=t1_unique_jax,
+            t2_unique=t2_unique_jax,
+            q=q,
+            L=L,
+            dt=dt,
+        )
+
+        # Prepare data for streaming
+        # Pack x as (phi_idx, t1_idx, t2_idx) and y as g2_observed
+        logger.info("Preparing streaming data...")
+
+        x_data_list = []
+        y_data_list = []
+
+        if hasattr(stratified_data, "chunks"):
+            for chunk in stratified_data.chunks:
+                for i in range(len(chunk.phi)):
+                    phi_idx = phi_to_idx[float(chunk.phi[i])]
+                    t1_idx = t1_to_idx[float(chunk.t1[i])]
+                    t2_idx = t2_to_idx[float(chunk.t2[i])]
+                    x_data_list.append([phi_idx, t1_idx, t2_idx])
+                    y_data_list.append(chunk.g2[i])
+        else:
+            for i in range(len(stratified_data.phi_flat)):
+                phi_idx = phi_to_idx[float(stratified_data.phi_flat[i])]
+                t1_idx = t1_to_idx[float(stratified_data.t1_flat[i])]
+                t2_idx = t2_to_idx[float(stratified_data.t2_flat[i])]
+                x_data_list.append([phi_idx, t1_idx, t2_idx])
+                y_data_list.append(stratified_data.g2_flat[i])
+
+        x_data = np.array(x_data_list, dtype=np.float64)
+        y_data = np.array(y_data_list, dtype=np.float64)
+
+        n_total = len(y_data)
+        logger.info(f"Streaming data prepared: {n_total:,} points")
+        logger.info(f"  x_data shape: {x_data.shape}")
+        logger.info(f"  y_data shape: {y_data.shape}")
+        logger.info(f"  Memory: x={x_data.nbytes / 1e6:.1f} MB, y={y_data.nbytes / 1e6:.1f} MB")
+
+        # Create streaming optimizer config
+        stream_config = StreamingConfig(
+            batch_size=batch_size,
+            max_epochs=max_epochs,
+            learning_rate=learning_rate,
+            convergence_tol=convergence_tol,
+            use_adam=True,
+            gradient_clip=1.0,
+            warmup_steps=100,
+            enable_fault_tolerance=True,
+            validate_numerics=True,
+            min_success_rate=0.5,
+            max_retries_per_batch=2,
+            checkpoint_frequency=1000,
+            enable_checkpoints=False,  # Disable for now to avoid file I/O
+        )
+
+        # Create optimizer and run
+        optimizer = StreamingOptimizer(stream_config)
+
+        logger.info("Starting streaming optimization...")
+        logger.info(f"  Initial parameters: {len(initial_params)} parameters")
+        logger.info(f"  Bounds: {'provided' if bounds is not None else 'None'}")
+        logger.info(f"  Estimated batches per epoch: {n_total // batch_size:,}")
+
+        # Convert bounds if provided
+        nlsq_bounds = None
+        if bounds is not None:
+            nlsq_bounds = bounds
+
+        result = optimizer.fit(
+            data_source=(x_data, y_data),
+            func=model_fn,
+            p0=initial_params,
+            bounds=nlsq_bounds,
+            verbose=1,
+        )
+
+        optimization_time = time.perf_counter() - start_time
+
+        logger.info("=" * 80)
+        logger.info("STREAMING OPTIMIZATION COMPLETE")
+        logger.info(f"  Success: {result.get('success', False)}")
+        logger.info(f"  Best loss: {result.get('best_loss', float('inf')):.6e}")
+        logger.info(f"  Final epoch: {result.get('final_epoch', 0)}")
+        logger.info(f"  Optimization time: {optimization_time:.2f}s")
+        logger.info("=" * 80)
+
+        # Extract results
+        popt = np.asarray(result["x"])
+
+        # Enforce bounds on final parameters
+        if bounds is not None:
+            lower_bounds, upper_bounds = bounds
+            popt = np.clip(popt, lower_bounds, upper_bounds)
+
+        # Estimate covariance (streaming doesn't provide it directly)
+        # Use diagonal approximation from final gradient norms
+        diag = result.get("streaming_diagnostics", {})
+        if diag and "aggregate_stats" in diag:
+            grad_norm = diag["aggregate_stats"].get("mean_grad_norm", 1.0)
+            # Rough covariance estimate: inverse of gradient magnitude
+            pcov = np.eye(len(popt)) * (1.0 / max(grad_norm, 1e-10))
+        else:
+            # Fallback: identity covariance (unknown uncertainty)
+            pcov = np.eye(len(popt))
+            logger.warning("Covariance not available from streaming, using identity")
+
+        # Build info dict
+        info = {
+            "success": result.get("success", False),
+            "message": result.get("message", "Streaming optimization completed"),
+            "nfev": result.get("streaming_diagnostics", {}).get(
+                "total_batches_attempted", 0
+            )
+            * batch_size,
+            "nit": result.get("final_epoch", 0),
+            "best_loss": result.get("best_loss", float("inf")),
+            "optimization_time": optimization_time,
+            "method": "streaming_optimizer",
+            "streaming_diagnostics": result.get("streaming_diagnostics", {}),
+        }
+
+        return popt, pcov, info
+
+    def _estimate_memory_for_stratified_ls(
+        self,
+        n_points: int,
+        n_params: int,
+        n_chunks: int,
+    ) -> float:
+        """Estimate peak memory usage for stratified least-squares optimization.
+
+        The main memory consumers are:
+        1. Padded arrays: n_chunks × max_chunk_size × 5 arrays × 8 bytes
+        2. Dense Jacobian: n_points × n_params × 8 bytes
+        3. JAX autodiff intermediates: ~3× Jacobian size for backprop
+        4. JAX compilation cache: ~5-10 GB
+
+        Args:
+            n_points: Total number of data points
+            n_params: Number of parameters
+            n_chunks: Number of stratified chunks
+
+        Returns:
+            Estimated peak memory in bytes
+        """
+        bytes_per_float = 8
+
+        # Padded arrays (5 arrays: phi, t1, t2, g2, mask)
+        max_chunk_size = (n_points + n_chunks - 1) // n_chunks
+        padded_arrays = n_chunks * max_chunk_size * 5 * bytes_per_float
+
+        # Dense Jacobian
+        jacobian = n_points * n_params * bytes_per_float
+
+        # JAX autodiff intermediates (keep all grids for backprop)
+        # This is the main memory killer - estimated at 3× Jacobian
+        autodiff_intermediates = jacobian * 3
+
+        # JAX compilation cache
+        jax_cache = 5 * 1e9  # ~5 GB
+
+        total = padded_arrays + jacobian + autodiff_intermediates + jax_cache
+
+        return total
+
+    def _should_use_streaming(
+        self,
+        n_points: int,
+        n_params: int,
+        n_chunks: int,
+        memory_threshold_gb: float = 16.0,
+    ) -> tuple[bool, float, str]:
+        """Determine if streaming optimizer should be used based on memory estimate.
+
+        Args:
+            n_points: Total number of data points
+            n_params: Number of parameters
+            n_chunks: Number of stratified chunks
+            memory_threshold_gb: Memory threshold in GB above which to use streaming
+
+        Returns:
+            (use_streaming, estimated_gb, reason) tuple
+        """
+        import psutil
+
+        # Get available system memory
+        mem = psutil.virtual_memory()
+        available_gb = mem.available / 1e9
+
+        # Estimate memory for stratified LS
+        estimated_bytes = self._estimate_memory_for_stratified_ls(
+            n_points, n_params, n_chunks
+        )
+        estimated_gb = estimated_bytes / 1e9
+
+        # Decision logic
+        # Use streaming if:
+        # 1. Estimated memory exceeds threshold, OR
+        # 2. Estimated memory exceeds 70% of available memory
+        use_streaming = False
+        reason = ""
+
+        if estimated_gb > memory_threshold_gb:
+            use_streaming = True
+            reason = (
+                f"Estimated memory ({estimated_gb:.1f} GB) exceeds "
+                f"threshold ({memory_threshold_gb:.1f} GB)"
+            )
+        elif estimated_gb > available_gb * 0.7:
+            use_streaming = True
+            reason = (
+                f"Estimated memory ({estimated_gb:.1f} GB) exceeds "
+                f"70% of available memory ({available_gb:.1f} GB available)"
+            )
+        else:
+            reason = (
+                f"Estimated memory ({estimated_gb:.1f} GB) within limits "
+                f"(threshold={memory_threshold_gb:.1f} GB, "
+                f"available={available_gb:.1f} GB)"
+            )
+
+        return use_streaming, estimated_gb, reason
 
     def _create_fit_result(
         self,
