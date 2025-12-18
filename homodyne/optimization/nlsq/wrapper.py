@@ -4417,7 +4417,7 @@ class NLSQWrapper:
         )
 
         # Create the efficient point-wise model function
-        model_fn = create_streaming_model_fn_pointwise(
+        model_fn_raw = create_streaming_model_fn_pointwise(
             n_phi=n_phi,
             per_angle_scaling=per_angle_scaling,
             phi_unique=phi_unique_jax,
@@ -4426,6 +4426,66 @@ class NLSQWrapper:
             sinc_pref=sinc_prefactor,
             is_laminar_flow=is_laminar_flow,
         )
+
+        # =====================================================
+        # PARAMETER NORMALIZATION FOR GRADIENT BALANCING
+        # =====================================================
+        # Problem: Parameters have vastly different scales (D0~10^4, gamma_dot_t0~10^-3)
+        # This causes weak gradients for small-scale parameters in Adam optimizer.
+        #
+        # Solution: Normalize parameters to [0,1] using bounds
+        # - p_norm = (p - lower) / (upper - lower)
+        # - Gradients scale by (upper - lower) via chain rule
+        # - All parameters have comparable gradient magnitudes
+        #
+        # Reference: nlsq3 vs nlsq divergence analysis (Dec 2025)
+
+        use_normalization = bounds is not None
+        if use_normalization:
+            lower_bounds, upper_bounds = bounds
+            lower_jax = jnp.asarray(lower_bounds)
+            upper_jax = jnp.asarray(upper_bounds)
+            scale_jax = upper_jax - lower_jax
+
+            # Prevent division by zero for fixed parameters
+            scale_jax = jnp.where(scale_jax < 1e-10, 1.0, scale_jax)
+
+            logger.info("Parameter normalization ENABLED for streaming optimizer")
+            logger.info(f"  Parameter scales range: {float(scale_jax.min()):.2e} to {float(scale_jax.max()):.2e}")
+
+            @jax.jit
+            def denormalize_params(p_norm: jnp.ndarray) -> jnp.ndarray:
+                """Transform normalized [0,1] params to real space."""
+                return p_norm * scale_jax + lower_jax
+
+            @jax.jit
+            def normalize_params(p_real: jnp.ndarray) -> jnp.ndarray:
+                """Transform real params to normalized [0,1] space."""
+                return (p_real - lower_jax) / scale_jax
+
+            def model_fn_normalized(x_batch: jnp.ndarray, *params_norm_tuple) -> jnp.ndarray:
+                """Model function operating in normalized parameter space."""
+                params_norm = jnp.array(params_norm_tuple)
+                params_real = denormalize_params(params_norm)
+                return model_fn_raw(x_batch, *tuple(params_real))
+
+            # JIT compile the normalized model
+            model_fn = jax.jit(model_fn_normalized)
+
+            # Normalize initial parameters
+            initial_params_normalized = np.asarray(normalize_params(jnp.asarray(initial_params)))
+            logger.info(f"  Initial params normalized: min={initial_params_normalized.min():.4f}, max={initial_params_normalized.max():.4f}")
+
+            # Set normalized bounds [0, 1]
+            normalized_bounds = (
+                np.zeros(len(initial_params)),
+                np.ones(len(initial_params)),
+            )
+        else:
+            model_fn = model_fn_raw
+            initial_params_normalized = initial_params
+            normalized_bounds = None
+            logger.warning("Parameter normalization DISABLED (no bounds provided)")
 
         # =====================================================
         # VECTORIZED DATA PREPARATION (no Python for-loop)
@@ -4457,9 +4517,7 @@ class NLSQWrapper:
         phi_idx_arr = np.clip(
             np.searchsorted(phi_unique, all_phi), 0, len(phi_unique) - 1
         )
-        t1_idx_arr = np.clip(
-            np.searchsorted(t1_unique, all_t1), 0, len(t1_unique) - 1
-        )
+        t1_idx_arr = np.clip(np.searchsorted(t1_unique, all_t1), 0, len(t1_unique) - 1)
         t2_idx_arr = np.clip(
             np.searchsorted(t1_unique, all_t2), 0, len(t1_unique) - 1
         )  # Use t1_unique, not t2_unique!
@@ -4561,16 +4619,19 @@ class NLSQWrapper:
 
             return True  # Continue optimization
 
-        # Convert bounds if provided
-        nlsq_bounds = None
-        if bounds is not None:
-            nlsq_bounds = bounds
+        # Use normalized parameters and bounds if normalization is enabled
+        if use_normalization:
+            fit_p0 = initial_params_normalized
+            fit_bounds = normalized_bounds
+        else:
+            fit_p0 = initial_params
+            fit_bounds = bounds
 
         result = optimizer.fit(
             data_source=(x_data, y_data),
             func=model_fn,
-            p0=initial_params,
-            bounds=nlsq_bounds,
+            p0=fit_p0,
+            bounds=fit_bounds,
             callback=progress_callback,
             verbose=0,  # Use our custom callback for logging
         )
@@ -4585,18 +4646,42 @@ class NLSQWrapper:
         logger.info(f"  Optimization time: {optimization_time:.2f}s")
         logger.info("=" * 80)
 
-        # Extract results
-        popt = np.asarray(result["x"])
+        # Extract results and denormalize if needed
+        popt_raw = np.asarray(result["x"])
 
-        # Enforce bounds on final parameters
+        if use_normalization:
+            # Denormalize parameters back to real space
+            popt = np.asarray(denormalize_params(jnp.asarray(popt_raw)))
+            logger.info("  Parameters denormalized from [0,1] to real space")
+        else:
+            popt = popt_raw
+
+        # Enforce bounds on final parameters (safety check)
         if bounds is not None:
             lower_bounds, upper_bounds = bounds
             popt = np.clip(popt, lower_bounds, upper_bounds)
 
         # Estimate covariance (streaming doesn't provide it directly)
-        # Use diagonal approximation from final gradient norms
+        # Use diagonal approximation scaled by parameter ranges
         diag = result.get("streaming_diagnostics", {})
-        if diag and "aggregate_stats" in diag:
+        if use_normalization and bounds is not None:
+            # Scale-aware covariance: uncertainty proportional to parameter range
+            # This provides more meaningful relative uncertainties
+            lower_bounds, upper_bounds = bounds
+            param_scales = np.asarray(upper_bounds) - np.asarray(lower_bounds)
+            param_scales = np.where(param_scales < 1e-10, 1.0, param_scales)
+
+            if diag and "aggregate_stats" in diag:
+                grad_norm = diag["aggregate_stats"].get("mean_grad_norm", 1.0)
+                # Covariance diagonal scales with parameter range squared
+                # (variance has units of parameter^2)
+                base_var = 1.0 / max(grad_norm, 1e-10)
+                pcov = np.diag((param_scales ** 2) * base_var)
+            else:
+                # Fallback: use 1% of parameter range as std dev
+                pcov = np.diag((param_scales * 0.01) ** 2)
+            logger.info("  Covariance estimated using parameter scale information")
+        elif diag and "aggregate_stats" in diag:
             grad_norm = diag["aggregate_stats"].get("mean_grad_norm", 1.0)
             # Rough covariance estimate: inverse of gradient magnitude
             pcov = np.eye(len(popt)) * (1.0 / max(grad_norm, 1e-10))
@@ -4618,6 +4703,7 @@ class NLSQWrapper:
             "optimization_time": optimization_time,
             "method": "streaming_optimizer",
             "streaming_diagnostics": result.get("streaming_diagnostics", {}),
+            "parameter_normalization": use_normalization,
         }
 
         return popt, pcov, info
