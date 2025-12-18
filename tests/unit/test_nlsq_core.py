@@ -994,12 +994,17 @@ class TestNLSQWrapperErrorRecovery:
         assert isinstance(result, OptimizationResult)
         print("\n✅ TC-NLSQ-011 passed: Memory pressure handled gracefully")
 
-    def test_nlsq_stability_parameter_propagation(self):
+    def test_nlsq_stability_parameter_not_used(self):
         """
-        TC-NLSQ-016: Test that stability='auto' parameter is passed to NLSQ.
+        TC-NLSQ-016: Test that stability parameter is NOT passed to NLSQ.
 
-        Acceptance: Verify curve_fit calls include stability='auto' for
-        automatic memory management.
+        Note: stability='auto' was removed because it causes optimization divergence
+        for XPCS physics data. XPCS Jacobians are well-conditioned and don't benefit
+        from per-iteration stability checks, which can modify the Jacobian and
+        cause different optimization paths. See commit 4ceb9f3 for analysis.
+
+        Acceptance: Verify curve_fit calls do NOT include stability parameter
+        to avoid unintended data rescaling and Jacobian modification.
         """
         from tests.factories.synthetic_data import generate_static_mode_dataset
 
@@ -1031,7 +1036,7 @@ class TestNLSQWrapperErrorRecovery:
         from nlsq import curve_fit as real_curve_fit
 
         def mock_curve_fit_capture(*args, **kwargs):
-            """Capture kwargs to verify stability parameter."""
+            """Capture kwargs to verify stability parameter is NOT passed."""
             captured_kwargs.update(kwargs)
             return real_curve_fit(*args, **kwargs)
 
@@ -1047,15 +1052,13 @@ class TestNLSQWrapperErrorRecovery:
                 analysis_mode="static",
             )
 
-        # Verify stability parameter was passed
-        assert "stability" in captured_kwargs, (
-            "stability parameter not passed to curve_fit"
-        )
-        assert captured_kwargs["stability"] == "auto", (
-            f"Expected stability='auto', got {captured_kwargs['stability']}"
+        # Verify stability parameter was NOT passed (intentionally removed)
+        assert "stability" not in captured_kwargs, (
+            "stability parameter should NOT be passed to curve_fit for XPCS data "
+            "(causes divergence due to per-iteration Jacobian modification)"
         )
         assert isinstance(result, OptimizationResult)
-        print("\n✅ TC-NLSQ-016 passed: stability='auto' parameter propagated")
+        print("\n✅ TC-NLSQ-016 passed: stability parameter correctly omitted")
 
 
 # =============================================================================
