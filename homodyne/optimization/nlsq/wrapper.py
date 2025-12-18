@@ -3272,9 +3272,7 @@ class NLSQWrapper:
                         contrast=c_val,
                         offset=o_val,
                         dt=dt,
-                    )[
-                        0, 0
-                    ],  # Extract scalar from (1, 1) output
+                    )[0, 0],  # Extract scalar from (1, 1) output
                     in_axes=(0, 0, 0, 0, 0),  # Vmap over all arrays
                 )
 
@@ -4212,151 +4210,244 @@ class NLSQWrapper:
         t2_unique = np.array(sorted(set(all_t2)))
         n_phi = len(phi_unique)
 
-        logger.info(f"Unique values: {n_phi} phi, {len(t1_unique)} t1, {len(t2_unique)} t2")
+        logger.info(
+            f"Unique values: {n_phi} phi, {len(t1_unique)} t1, {len(t2_unique)} t2"
+        )
 
         # Convert unique arrays to JAX for JIT compilation
         phi_unique_jax = jnp.asarray(phi_unique)
         t1_unique_jax = jnp.asarray(t1_unique)
-        t2_unique_jax = jnp.asarray(t2_unique)
+        # Note: t2_unique uses same time grid as t1, so we only need t1_unique_jax
 
-        # Pre-compute index mappings for fast lookup
-        phi_to_idx = {float(p): i for i, p in enumerate(phi_unique)}
-        t1_to_idx = {float(t): i for i, t in enumerate(t1_unique)}
-        t2_to_idx = {float(t): i for i, t in enumerate(t2_unique)}
+        # Import physics utilities for point-wise computation
+        from homodyne.core.physics_utils import (
+            PI,
+            calculate_diffusion_coefficient,
+            calculate_shear_rate,
+            safe_exp,
+            safe_sinc,
+            trapezoid_cumsum,
+        )
 
-        # Import physics function
-        from homodyne.core.physics_nlsq import compute_g2_scaled
-        from homodyne.core.physics_utils import apply_diagonal_correction
+        # Pre-compute physics factors (once, not per batch)
+        wavevector_q_squared_half_dt = 0.5 * (q**2) * dt
+        sinc_prefactor = 0.5 / PI * q * L * dt
 
-        def create_streaming_model_fn(
+        def create_streaming_model_fn_pointwise(
             n_phi: int,
             per_angle_scaling: bool,
             phi_unique: jnp.ndarray,
             t1_unique: jnp.ndarray,
-            t2_unique: jnp.ndarray,
-            q: float,
-            L: float,
-            dt: float,
+            q_sq_half_dt: float,
+            sinc_pref: float,
+            is_laminar_flow: bool,
         ):
-            """Create a JIT-compiled model function for streaming optimization.
+            """Create efficient point-wise model function for streaming optimization.
 
-            The model function takes x_batch = (phi_idx, t1_idx, t2_idx) packed as
-            (batch_size, 3) and returns g2_theory predictions.
+            CRITICAL FIX: Instead of computing the full (n_phi, n_t1, n_t2) grid
+            for each batch and indexing into it, this computes g2 ONLY for the
+            specific (phi, t1, t2) points in the batch.
+
+            Performance improvement: O(batch_size) vs O(n_phi * n_t1 * n_t2)
+            For 23M point dataset: ~2300x faster per batch
             """
-            n_t1 = len(t1_unique)
-            n_t2 = len(t2_unique)
 
-            @jax.jit
-            def model_fn(x_batch: jnp.ndarray, *params_tuple) -> jnp.ndarray:
-                """Compute g2 predictions for a batch of (phi_idx, t1_idx, t2_idx).
+            # Create separate JIT functions for laminar vs static modes
+            # (JAX JIT doesn't allow Python if-statements on traced values)
+            if is_laminar_flow:
 
-                Args:
-                    x_batch: Shape (batch_size, 3) with columns [phi_idx, t1_idx, t2_idx]
-                    params_tuple: Unpacked parameters
+                @jax.jit
+                def model_fn(x_batch: jnp.ndarray, *params_tuple) -> jnp.ndarray:
+                    """Compute g2 for laminar flow mode (with shear)."""
+                    params_all = jnp.array(params_tuple)
 
-                Returns:
-                    g2_theory predictions of shape (batch_size,)
-                """
-                params_all = jnp.array(params_tuple)
+                    # Extract indices
+                    phi_idx = x_batch[:, 0].astype(jnp.int32)
+                    t1_idx = x_batch[:, 1].astype(jnp.int32)
+                    t2_idx = x_batch[:, 2].astype(jnp.int32)
 
-                # Extract indices
-                phi_idx = x_batch[:, 0].astype(jnp.int32)
-                t1_idx = x_batch[:, 1].astype(jnp.int32)
-                t2_idx = x_batch[:, 2].astype(jnp.int32)
-
-                # Extract scaling and physical parameters
-                if per_angle_scaling:
+                    # Extract scaling and physical parameters (per-angle scaling)
                     contrast_all = params_all[:n_phi]
                     offset_all = params_all[n_phi : 2 * n_phi]
                     physical_params = params_all[2 * n_phi :]
-                else:
-                    contrast_all = jnp.array([params_all[0]])
-                    offset_all = jnp.array([params_all[1]])
-                    physical_params = params_all[2:]
 
-                # Compute full theory grid for all phi values
-                # This is computed once per batch and indexed
-                def compute_single_phi_g2(phi_val, contrast_val, offset_val):
-                    g2_grid = compute_g2_scaled(
-                        params=physical_params,
-                        t1=t1_unique,
-                        t2=t2_unique,
-                        phi=phi_val,
-                        q=q,
-                        L=L,
-                        contrast=contrast_val,
-                        offset=offset_val,
-                        dt=dt,
+                    # Extract physical parameters
+                    D0 = physical_params[0]
+                    alpha = physical_params[1]
+                    D_offset = physical_params[2]
+                    gamma_dot_0 = physical_params[3]
+                    beta = physical_params[4]
+                    gamma_dot_offset = physical_params[5]
+                    phi0 = physical_params[6]
+
+                    # =====================================================
+                    # DIFFUSION
+                    # =====================================================
+                    D_t = calculate_diffusion_coefficient(
+                        t1_unique, D0, alpha, D_offset
                     )
-                    # Apply diagonal correction
-                    g2_grid = apply_diagonal_correction(g2_grid)
-                    return g2_grid
+                    D_cumsum = trapezoid_cumsum(D_t)
+                    D_integral_batch = jnp.abs(D_cumsum[t1_idx] - D_cumsum[t2_idx])
 
-                # Compute g2 for all phi values
-                if per_angle_scaling:
-                    g2_grids = jax.vmap(compute_single_phi_g2)(
-                        phi_unique, contrast_all, offset_all
-                    )  # Shape: (n_phi, n_t1, n_t2)
-                else:
-                    # Broadcast single contrast/offset to all phi
-                    contrast_broadcast = jnp.broadcast_to(contrast_all[0], (n_phi,))
-                    offset_broadcast = jnp.broadcast_to(offset_all[0], (n_phi,))
-                    g2_grids = jax.vmap(compute_single_phi_g2)(
-                        phi_unique, contrast_broadcast, offset_broadcast
+                    log_g1_diff = -q_sq_half_dt * D_integral_batch
+                    log_g1_diff_bounded = jnp.clip(log_g1_diff, -700.0, 0.0)
+                    g1_diffusion = safe_exp(log_g1_diff_bounded)
+
+                    # =====================================================
+                    # SHEAR
+                    # =====================================================
+                    gamma_t = calculate_shear_rate(
+                        t1_unique, gamma_dot_0, beta, gamma_dot_offset
+                    )
+                    gamma_cumsum = trapezoid_cumsum(gamma_t)
+                    gamma_integral_batch = jnp.abs(
+                        gamma_cumsum[t1_idx] - gamma_cumsum[t2_idx]
                     )
 
-                # Flatten and index into the grid
-                g2_flat = g2_grids.reshape(-1)  # (n_phi * n_t1 * n_t2,)
-                flat_indices = phi_idx * (n_t1 * n_t2) + t1_idx * n_t2 + t2_idx
-                g2_theory = g2_flat[flat_indices]
+                    phi_batch = phi_unique[phi_idx]
+                    angle_diff = jnp.deg2rad(phi0 - phi_batch)
+                    cos_term = jnp.cos(angle_diff)
+                    phase = sinc_pref * cos_term * gamma_integral_batch
 
-                return g2_theory
+                    sinc_val = safe_sinc(phase)
+                    g1_shear = sinc_val**2
+
+                    # =====================================================
+                    # COMBINE
+                    # =====================================================
+                    g1_total = g1_diffusion * g1_shear
+                    g1_bounded = jnp.clip(g1_total, 1e-10, 2.0)
+
+                    # =====================================================
+                    # SCALING
+                    # =====================================================
+                    contrast_batch = contrast_all[phi_idx]
+                    offset_batch = offset_all[phi_idx]
+                    g2_theory = offset_batch + contrast_batch * g1_bounded**2
+                    g2_bounded = jnp.clip(g2_theory, 0.5, 2.5)
+
+                    return g2_bounded
+
+            else:
+                # Static mode (diffusion only)
+                @jax.jit
+                def model_fn(x_batch: jnp.ndarray, *params_tuple) -> jnp.ndarray:
+                    """Compute g2 for static mode (diffusion only)."""
+                    params_all = jnp.array(params_tuple)
+
+                    # Extract indices
+                    phi_idx = x_batch[:, 0].astype(jnp.int32)
+                    t1_idx = x_batch[:, 1].astype(jnp.int32)
+                    t2_idx = x_batch[:, 2].astype(jnp.int32)
+
+                    # Extract scaling and physical parameters
+                    if per_angle_scaling:
+                        contrast_all = params_all[:n_phi]
+                        offset_all = params_all[n_phi : 2 * n_phi]
+                        physical_params = params_all[2 * n_phi :]
+                    else:
+                        contrast_all = jnp.array([params_all[0]])
+                        offset_all = jnp.array([params_all[1]])
+                        physical_params = params_all[2:]
+
+                    D0 = physical_params[0]
+                    alpha = physical_params[1]
+                    D_offset = physical_params[2]
+
+                    # =====================================================
+                    # DIFFUSION ONLY
+                    # =====================================================
+                    D_t = calculate_diffusion_coefficient(
+                        t1_unique, D0, alpha, D_offset
+                    )
+                    D_cumsum = trapezoid_cumsum(D_t)
+                    D_integral_batch = jnp.abs(D_cumsum[t1_idx] - D_cumsum[t2_idx])
+
+                    log_g1_diff = -q_sq_half_dt * D_integral_batch
+                    log_g1_diff_bounded = jnp.clip(log_g1_diff, -700.0, 0.0)
+                    g1_diffusion = safe_exp(log_g1_diff_bounded)
+
+                    g1_bounded = jnp.clip(g1_diffusion, 1e-10, 2.0)
+
+                    # =====================================================
+                    # SCALING
+                    # =====================================================
+                    if per_angle_scaling:
+                        contrast_batch = contrast_all[phi_idx]
+                        offset_batch = offset_all[phi_idx]
+                    else:
+                        contrast_batch = contrast_all[0]
+                        offset_batch = offset_all[0]
+
+                    g2_theory = offset_batch + contrast_batch * g1_bounded**2
+                    g2_bounded = jnp.clip(g2_theory, 0.5, 2.5)
+
+                    return g2_bounded
 
             return model_fn
 
-        # Create the model function
-        model_fn = create_streaming_model_fn(
+        # Determine if laminar flow mode (7 physical params) or static (3 params)
+        # With per-angle scaling: total = n_phi (contrast) + n_phi (offset) + n_physical
+        # Laminar: 2*n_phi + 7, Static: 2*n_phi + 3
+        n_physical_params = len(initial_params) - (
+            2 * n_phi if per_angle_scaling else 2
+        )
+        is_laminar_flow = n_physical_params >= 7
+        logger.info(
+            f"Mode: {'laminar_flow' if is_laminar_flow else 'static'} "
+            f"({n_physical_params} physical parameters)"
+        )
+
+        # Create the efficient point-wise model function
+        model_fn = create_streaming_model_fn_pointwise(
             n_phi=n_phi,
             per_angle_scaling=per_angle_scaling,
             phi_unique=phi_unique_jax,
             t1_unique=t1_unique_jax,
-            t2_unique=t2_unique_jax,
-            q=q,
-            L=L,
-            dt=dt,
+            q_sq_half_dt=wavevector_q_squared_half_dt,
+            sinc_pref=sinc_prefactor,
+            is_laminar_flow=is_laminar_flow,
         )
 
-        # Prepare data for streaming
-        # Pack x as (phi_idx, t1_idx, t2_idx) and y as g2_observed
-        logger.info("Preparing streaming data...")
-
-        x_data_list = []
-        y_data_list = []
+        # =====================================================
+        # VECTORIZED DATA PREPARATION (no Python for-loop)
+        # =====================================================
+        logger.info("Preparing streaming data (vectorized)...")
+        prep_start = time.perf_counter()
 
         if hasattr(stratified_data, "chunks"):
-            for chunk in stratified_data.chunks:
-                for i in range(len(chunk.phi)):
-                    phi_idx = phi_to_idx[float(chunk.phi[i])]
-                    t1_idx = t1_to_idx[float(chunk.t1[i])]
-                    t2_idx = t2_to_idx[float(chunk.t2[i])]
-                    x_data_list.append([phi_idx, t1_idx, t2_idx])
-                    y_data_list.append(chunk.g2[i])
+            # Concatenate all chunk data
+            all_phi = np.concatenate([chunk.phi for chunk in stratified_data.chunks])
+            all_t1 = np.concatenate([chunk.t1 for chunk in stratified_data.chunks])
+            all_t2 = np.concatenate([chunk.t2 for chunk in stratified_data.chunks])
+            y_data = np.concatenate([chunk.g2 for chunk in stratified_data.chunks])
         else:
-            for i in range(len(stratified_data.phi_flat)):
-                phi_idx = phi_to_idx[float(stratified_data.phi_flat[i])]
-                t1_idx = t1_to_idx[float(stratified_data.t1_flat[i])]
-                t2_idx = t2_to_idx[float(stratified_data.t2_flat[i])]
-                x_data_list.append([phi_idx, t1_idx, t2_idx])
-                y_data_list.append(stratified_data.g2_flat[i])
+            all_phi = stratified_data.phi_flat
+            all_t1 = stratified_data.t1_flat
+            all_t2 = stratified_data.t2_flat
+            y_data = stratified_data.g2_flat
 
-        x_data = np.array(x_data_list, dtype=np.float64)
-        y_data = np.array(y_data_list, dtype=np.float64)
+        # Vectorized index conversion using searchsorted
+        phi_idx_arr = np.searchsorted(phi_unique, all_phi)
+        t1_idx_arr = np.searchsorted(t1_unique, all_t1)
+        t2_idx_arr = np.searchsorted(t2_unique, all_t2)
+
+        # Stack into x_data array
+        x_data = np.column_stack([phi_idx_arr, t1_idx_arr, t2_idx_arr]).astype(
+            np.float64
+        )
+        y_data = np.asarray(y_data, dtype=np.float64)
+
+        prep_time = time.perf_counter() - prep_start
+        logger.info(f"Data preparation completed in {prep_time:.2f}s")
 
         n_total = len(y_data)
         logger.info(f"Streaming data prepared: {n_total:,} points")
         logger.info(f"  x_data shape: {x_data.shape}")
         logger.info(f"  y_data shape: {y_data.shape}")
-        logger.info(f"  Memory: x={x_data.nbytes / 1e6:.1f} MB, y={y_data.nbytes / 1e6:.1f} MB")
+        logger.info(
+            f"  Memory: x={x_data.nbytes / 1e6:.1f} MB, y={y_data.nbytes / 1e6:.1f} MB"
+        )
 
         # Create streaming optimizer config
         stream_config = StreamingConfig(
@@ -4378,10 +4469,65 @@ class NLSQWrapper:
         # Create optimizer and run
         optimizer = StreamingOptimizer(stream_config)
 
+        batches_per_epoch = max(1, n_total // batch_size)
         logger.info("Starting streaming optimization...")
         logger.info(f"  Initial parameters: {len(initial_params)} parameters")
         logger.info(f"  Bounds: {'provided' if bounds is not None else 'None'}")
-        logger.info(f"  Estimated batches per epoch: {n_total // batch_size:,}")
+        logger.info(f"  Batches per epoch: {batches_per_epoch:,}")
+
+        # =====================================================
+        # PROGRESS CALLBACK: Log epoch progress
+        # =====================================================
+        progress_state = {
+            "epoch_start_time": time.perf_counter(),
+            "last_epoch": -1,
+            "epoch_losses": [],
+            "best_loss_so_far": float("inf"),
+        }
+
+        def progress_callback(iteration: int, params: np.ndarray, loss: float) -> bool:
+            """Log progress at the end of each epoch."""
+            current_epoch = (iteration - 1) // batches_per_epoch
+
+            # Track loss for current epoch
+            progress_state["epoch_losses"].append(loss)
+
+            # Update best loss
+            if loss < progress_state["best_loss_so_far"]:
+                progress_state["best_loss_so_far"] = loss
+
+            # Log at end of each epoch (or every N batches for very large epochs)
+            log_interval = min(batches_per_epoch, 500)  # Log at least every 500 batches
+            if (
+                iteration % log_interval == 0
+                or current_epoch > progress_state["last_epoch"]
+            ):
+                elapsed = time.perf_counter() - progress_state["epoch_start_time"]
+
+                if current_epoch > progress_state["last_epoch"]:
+                    # New epoch started
+                    if progress_state["epoch_losses"]:
+                        avg_loss = np.mean(progress_state["epoch_losses"])
+                        logger.info(
+                            f"Epoch {current_epoch + 1}/{max_epochs} | "
+                            f"Avg Loss: {avg_loss:.6e} | "
+                            f"Best: {progress_state['best_loss_so_far']:.6e} | "
+                            f"Time: {elapsed:.1f}s"
+                        )
+                    progress_state["last_epoch"] = current_epoch
+                    progress_state["epoch_losses"] = []
+                    progress_state["epoch_start_time"] = time.perf_counter()
+                else:
+                    # Progress within epoch
+                    batch_in_epoch = (iteration - 1) % batches_per_epoch + 1
+                    pct = 100.0 * batch_in_epoch / batches_per_epoch
+                    logger.info(
+                        f"  Epoch {current_epoch + 1} | "
+                        f"Batch {batch_in_epoch}/{batches_per_epoch} ({pct:.0f}%) | "
+                        f"Loss: {loss:.6e}"
+                    )
+
+            return True  # Continue optimization
 
         # Convert bounds if provided
         nlsq_bounds = None
@@ -4393,7 +4539,8 @@ class NLSQWrapper:
             func=model_fn,
             p0=initial_params,
             bounds=nlsq_bounds,
-            verbose=1,
+            callback=progress_callback,
+            verbose=0,  # Use our custom callback for logging
         )
 
         optimization_time = time.perf_counter() - start_time
