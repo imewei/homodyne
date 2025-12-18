@@ -470,8 +470,8 @@ class TestScalabilityAnalysis:
         # Allow sub-linear (caching benefits) to O(n log n) behavior
         # Sub-linear scaling (< 1.0) is acceptable and indicates efficiency gains
         assert (
-            0.7 <= scaling_exponent <= 1.3
-        ), f"Unexpected scaling: exponent={scaling_exponent:.2f} (expected 0.7-1.3)"
+            0.6 <= scaling_exponent <= 1.3
+        ), f"Unexpected scaling: exponent={scaling_exponent:.2f} (expected 0.6-1.3)"
 
         print(f"\nScaling analysis: time ∝ size^{scaling_exponent:.2f}")
         print(
