@@ -849,7 +849,9 @@ class NLSQWrapper:
             # Extract target chunk size from config
             target_chunk_size = 100_000  # Default
             streaming_config = None
+            hybrid_streaming_config = None
             use_streaming_mode = False
+            use_hybrid_streaming = False
             memory_threshold_gb = 16.0  # Default threshold
 
             if config is not None and hasattr(config, "config"):
@@ -861,9 +863,13 @@ class NLSQWrapper:
                 # Extract streaming configuration
                 nlsq_config = config.config.get("optimization", {}).get("nlsq", {})
                 streaming_config = nlsq_config.get("streaming", {})
+                hybrid_streaming_config = nlsq_config.get("hybrid_streaming", {})
                 memory_threshold_gb = nlsq_config.get(
                     "memory_threshold_gb", memory_threshold_gb
                 )
+
+                # Check for hybrid streaming mode (preferred for large datasets)
+                use_hybrid_streaming = hybrid_streaming_config.get("enable", False)
 
                 # Check for forced streaming mode
                 use_streaming_mode = nlsq_config.get("use_streaming", False)
@@ -893,6 +899,85 @@ class NLSQWrapper:
 
             # Use streaming optimizer if needed
             if use_streaming_mode:
+                # Prefer AdaptiveHybridStreamingOptimizer when available and enabled
+                # It fixes shear-term gradients, convergence, and covariance issues
+                use_hybrid = (
+                    use_hybrid_streaming
+                    and HYBRID_STREAMING_AVAILABLE
+                )
+
+                if use_hybrid:
+                    logger.info("=" * 80)
+                    logger.info("ADAPTIVE HYBRID STREAMING MODE (Preferred)")
+                    logger.info(
+                        "Using NLSQ AdaptiveHybridStreamingOptimizer for better "
+                        "convergence and parameter estimation"
+                    )
+                    logger.info("=" * 80)
+                    try:
+                        popt, pcov, info = self._fit_with_stratified_hybrid_streaming(
+                            stratified_data=stratified_data,
+                            per_angle_scaling=per_angle_scaling,
+                            physical_param_names=physical_param_names,
+                            initial_params=validated_params,
+                            bounds=nlsq_bounds,
+                            logger=logger,
+                            hybrid_config=hybrid_streaming_config,
+                        )
+
+                        # Compute final residuals for result creation
+                        chunked_data = self._create_stratified_chunks(
+                            stratified_data, target_chunk_size
+                        )
+                        residual_fn = create_stratified_residual_function(
+                            stratified_data=chunked_data,
+                            per_angle_scaling=per_angle_scaling,
+                            physical_param_names=physical_param_names,
+                            logger=logger,
+                            validate=False,
+                        )
+                        final_residuals = residual_fn(popt)
+                        n_data = len(final_residuals)
+
+                        # Get execution time
+                        execution_time = time.time() - start_time
+
+                        # Create result
+                        result = self._create_fit_result(
+                            popt=popt,
+                            pcov=pcov,
+                            residuals=final_residuals,
+                            n_data=n_data,
+                            iterations=info.get("nit", 0),
+                            execution_time=execution_time,
+                            convergence_status=(
+                                "converged" if info.get("success", True) else "failed"
+                            ),
+                            recovery_actions=["hybrid_streaming_optimizer_method"],
+                            streaming_diagnostics=info.get(
+                                "hybrid_streaming_diagnostics"
+                            ),
+                            stratification_diagnostics=stratification_diagnostics,
+                            diagnostics_payload=None,
+                        )
+
+                        logger.info("=" * 80)
+                        logger.info("HYBRID STREAMING OPTIMIZATION COMPLETE")
+                        logger.info(
+                            f"Final χ²: {result.chi_squared:.4e}, "
+                            f"Reduced χ²: {result.reduced_chi_squared:.4f}"
+                        )
+                        logger.info("=" * 80)
+
+                        return result
+
+                    except Exception as e:
+                        logger.warning(
+                            f"Hybrid streaming optimization failed: {e}\n"
+                            f"Falling back to basic streaming optimizer..."
+                        )
+                        # Fall through to basic streaming optimizer
+
                 if not STREAMING_AVAILABLE:
                     logger.error(
                         "Streaming mode requested but StreamingOptimizer not available. "
@@ -4896,6 +4981,328 @@ class NLSQWrapper:
             "method": "streaming_optimizer",
             "streaming_diagnostics": result.get("streaming_diagnostics", {}),
             "parameter_normalization": use_normalization,
+        }
+
+        return popt, pcov, info
+
+    def _fit_with_stratified_hybrid_streaming(
+        self,
+        stratified_data: Any,
+        per_angle_scaling: bool,
+        physical_param_names: list[str],
+        initial_params: np.ndarray,
+        bounds: tuple[np.ndarray, np.ndarray] | None,
+        logger: Any,
+        hybrid_config: dict | None = None,
+    ) -> tuple[np.ndarray, np.ndarray, dict]:
+        """Fit using NLSQ AdaptiveHybridStreamingOptimizer for large datasets.
+
+        This method implements the 4-phase hybrid optimization from NLSQ >=0.3.2:
+        - Phase 0: Parameter normalization setup (bounds-based)
+        - Phase 1: Adam warmup with adaptive switching
+        - Phase 2: Streaming Gauss-Newton with exact J^T J accumulation
+        - Phase 3: Denormalization and covariance transform
+
+        Key improvements over basic StreamingOptimizer:
+        1. Shear-term weak gradients: Fixed via parameter normalization
+        2. Slow convergence: Fixed via Adam warmup + Gauss-Newton refinement
+        3. Crude covariance: Fixed via exact J^T J accumulation
+
+        Args:
+            stratified_data: StratifiedData object with flat stratified arrays
+            per_angle_scaling: Whether per-angle parameters are enabled
+            physical_param_names: List of physical parameter names
+            initial_params: Initial parameter guess
+            bounds: Parameter bounds (lower, upper) tuple
+            logger: Logger instance
+            hybrid_config: Optional config dict with keys:
+                - normalize: Enable parameter normalization (default: True)
+                - normalization_strategy: "bounds" or "scale" (default: "bounds")
+                - warmup_iterations: Adam warmup iterations (default: 100)
+                - max_warmup_iterations: Max Adam iterations (default: 500)
+                - warmup_learning_rate: Adam learning rate (default: 0.001)
+                - gauss_newton_max_iterations: GN iterations (default: 50)
+                - gauss_newton_tol: Convergence tolerance (default: 1e-8)
+                - chunk_size: Points per chunk for streaming (default: 50000)
+
+        Returns:
+            (popt, pcov, info) tuple
+
+        Raises:
+            RuntimeError: If AdaptiveHybridStreamingOptimizer is not available
+        """
+        import time
+
+        if not HYBRID_STREAMING_AVAILABLE:
+            raise RuntimeError(
+                "AdaptiveHybridStreamingOptimizer not available. "
+                "Please upgrade NLSQ to version >= 0.3.2: pip install --upgrade nlsq"
+            )
+
+        logger.info("Initializing NLSQ AdaptiveHybridStreamingOptimizer...")
+        logger.info("Fixes: 1) Shear-term gradients, 2) Convergence, 3) Covariance")
+
+        start_time = time.perf_counter()
+
+        # Parse hybrid streaming configuration
+        config_dict = hybrid_config or {}
+        normalize = config_dict.get("normalize", True)
+        normalization_strategy = config_dict.get("normalization_strategy", "bounds")
+        warmup_iterations = config_dict.get("warmup_iterations", 100)
+        max_warmup_iterations = config_dict.get("max_warmup_iterations", 500)
+        warmup_learning_rate = config_dict.get("warmup_learning_rate", 0.001)
+        gauss_newton_max_iterations = config_dict.get("gauss_newton_max_iterations", 50)
+        gauss_newton_tol = config_dict.get("gauss_newton_tol", 1e-8)
+        chunk_size = config_dict.get("chunk_size", 50_000)
+        trust_region_initial = config_dict.get("trust_region_initial", 1.0)
+        regularization_factor = config_dict.get("regularization_factor", 1e-10)
+        enable_checkpoints = config_dict.get("enable_checkpoints", False)
+        checkpoint_frequency = config_dict.get("checkpoint_frequency", 100)
+        validate_numerics = config_dict.get("validate_numerics", True)
+
+        logger.info("Hybrid streaming config:")
+        logger.info(f"  Normalization: {normalization_strategy}")
+        logger.info(f"  Warmup iterations: {warmup_iterations}")
+        logger.info(f"  Max warmup iterations: {max_warmup_iterations}")
+        logger.info(f"  Learning rate: {warmup_learning_rate}")
+        logger.info(f"  Gauss-Newton iterations: {gauss_newton_max_iterations}")
+        logger.info(f"  Gauss-Newton tolerance: {gauss_newton_tol}")
+        logger.info(f"  Chunk size: {chunk_size:,}")
+
+        # Create HybridStreamingConfig
+        optimizer_config = HybridStreamingConfig(
+            normalize=normalize,
+            normalization_strategy=normalization_strategy,
+            warmup_iterations=warmup_iterations,
+            max_warmup_iterations=max_warmup_iterations,
+            warmup_learning_rate=warmup_learning_rate,
+            gauss_newton_max_iterations=gauss_newton_max_iterations,
+            gauss_newton_tol=gauss_newton_tol,
+            chunk_size=chunk_size,
+            trust_region_initial=trust_region_initial,
+            regularization_factor=regularization_factor,
+            enable_checkpoints=enable_checkpoints,
+            checkpoint_frequency=checkpoint_frequency,
+            validate_numerics=validate_numerics,
+        )
+
+        # Initialize optimizer
+        optimizer = AdaptiveHybridStreamingOptimizer(optimizer_config)
+
+        # Extract global metadata from stratified data
+        if hasattr(stratified_data, "chunks") and len(stratified_data.chunks) > 0:
+            first_chunk = stratified_data.chunks[0]
+            q = first_chunk.q
+            L = first_chunk.L
+            dt = first_chunk.dt
+        else:
+            q = stratified_data.q
+            L = stratified_data.L
+            dt = stratified_data.dt
+
+        logger.debug(f"Global metadata: q={q}, L={L}, dt={dt}")
+
+        # Extract unique values for theory computation
+        all_phi = []
+        all_t1 = []
+        all_t2 = []
+        if hasattr(stratified_data, "chunks"):
+            for chunk in stratified_data.chunks:
+                all_phi.extend(chunk.phi.tolist())
+                all_t1.extend(chunk.t1.tolist())
+                all_t2.extend(chunk.t2.tolist())
+        else:
+            all_phi = stratified_data.phi_flat.tolist()
+            all_t1 = stratified_data.t1_flat.tolist()
+            all_t2 = stratified_data.t2_flat.tolist()
+
+        phi_unique = np.array(sorted(set(all_phi)))
+        t1_unique = np.array(sorted(set(all_t1)))
+        n_phi = len(phi_unique)
+
+        logger.info(
+            f"Unique values: {n_phi} phi, {len(t1_unique)} t1"
+        )
+
+        # Import physics utilities
+        from homodyne.core.physics_utils import (
+            PI,
+            calculate_diffusion_coefficient,
+            calculate_shear_rate,
+            safe_exp,
+            safe_sinc,
+            trapezoid_cumsum,
+        )
+
+        # Pre-compute physics factors
+        wavevector_q_squared_half_dt = 0.5 * (q**2) * dt
+        sinc_prefactor = 0.5 / PI * q * L * dt
+
+        # Convert to JAX arrays
+        phi_unique_jax = jnp.asarray(phi_unique)
+        t1_unique_jax = jnp.asarray(t1_unique)
+
+        # Create model function
+        is_laminar_flow = "gamma_dot_t0" in physical_param_names
+
+        @jax.jit
+        def model_fn_pointwise(x_batch: jnp.ndarray, *params_tuple) -> jnp.ndarray:
+            """Point-wise model function for hybrid streaming optimizer."""
+            params_all = jnp.array(params_tuple)
+
+            # Extract indices from x_batch
+            phi_idx = x_batch[:, 0].astype(jnp.int32)
+            t1_idx = x_batch[:, 1].astype(jnp.int32)
+            t2_idx = x_batch[:, 2].astype(jnp.int32)
+
+            # Extract scaling and physical parameters
+            contrast_all = params_all[:n_phi]
+            offset_all = params_all[n_phi : 2 * n_phi]
+            physical_params = params_all[2 * n_phi :]
+
+            # Extract physical parameters
+            D0 = physical_params[0]
+            alpha = physical_params[1]
+            D_offset = physical_params[2]
+
+            # Compute diffusion
+            D_t = calculate_diffusion_coefficient(t1_unique_jax, D0, alpha, D_offset)
+            D_cumsum = trapezoid_cumsum(D_t)
+            D_diff = D_cumsum[t1_idx] - D_cumsum[t2_idx]
+            D_integral_batch = jnp.sqrt(D_diff**2 + 1e-20)
+
+            log_g1_diff = -wavevector_q_squared_half_dt * D_integral_batch
+            log_g1_diff_bounded = jnp.clip(log_g1_diff, -700.0, 0.0)
+            g1_diffusion = safe_exp(log_g1_diff_bounded)
+
+            if is_laminar_flow:
+                # Shear parameters
+                gamma_dot_0 = physical_params[3]
+                beta = physical_params[4]
+                gamma_dot_offset = physical_params[5]
+                phi0 = physical_params[6]
+
+                # Compute shear
+                gamma_t = calculate_shear_rate(
+                    t1_unique_jax, gamma_dot_0, beta, gamma_dot_offset
+                )
+                gamma_cumsum = trapezoid_cumsum(gamma_t)
+                gamma_diff = gamma_cumsum[t1_idx] - gamma_cumsum[t2_idx]
+                gamma_integral_batch = jnp.sqrt(gamma_diff**2 + 1e-20)
+
+                # Shear contribution with angle dependence
+                # Formula: g₁_shear = [sinc(Φ)]² where Φ = sinc_prefactor * cos(φ₀-φ) * ∫γ̇
+                phi_values = phi_unique_jax[phi_idx]
+                angle_diff = jnp.deg2rad(phi0 - phi_values)  # Match physics: cos(φ₀-φ)
+                cos_phi = jnp.cos(angle_diff)
+
+                sinc_arg = sinc_prefactor * gamma_integral_batch * cos_phi
+                sinc_val = safe_sinc(sinc_arg)
+                g1_shear = sinc_val**2  # CRITICAL: g1_shear = sinc²(Φ)
+
+                g1_total = g1_diffusion * g1_shear
+                # Clip for numerical stability (same as existing streaming optimizer)
+                g1 = jnp.clip(g1_total, 1e-10, 2.0)
+            else:
+                g1 = jnp.clip(g1_diffusion, 1e-10, 2.0)
+
+            # Compute g2 with per-angle scaling
+            contrast = contrast_all[phi_idx]
+            offset = offset_all[phi_idx]
+            g2_theory = offset + contrast * g1**2
+            # Clip g2 for numerical stability
+            g2 = jnp.clip(g2_theory, 0.5, 2.5)
+
+            return g2
+
+        # Prepare data
+        logger.info("Preparing hybrid streaming data...")
+        prep_start = time.perf_counter()
+
+        if hasattr(stratified_data, "chunks"):
+            all_phi_data = np.concatenate([c.phi for c in stratified_data.chunks])
+            all_t1_data = np.concatenate([c.t1 for c in stratified_data.chunks])
+            all_t2_data = np.concatenate([c.t2 for c in stratified_data.chunks])
+            y_data = np.concatenate([c.g2 for c in stratified_data.chunks])
+        else:
+            all_phi_data = stratified_data.phi_flat
+            all_t1_data = stratified_data.t1_flat
+            all_t2_data = stratified_data.t2_flat
+            y_data = stratified_data.g2_flat
+
+        # Convert to indices (vectorized)
+        phi_idx_arr = np.clip(
+            np.searchsorted(phi_unique, all_phi_data), 0, len(phi_unique) - 1
+        )
+        t1_idx_arr = np.clip(
+            np.searchsorted(t1_unique, all_t1_data), 0, len(t1_unique) - 1
+        )
+        t2_idx_arr = np.clip(
+            np.searchsorted(t1_unique, all_t2_data), 0, len(t1_unique) - 1
+        )
+
+        x_data = np.column_stack([phi_idx_arr, t1_idx_arr, t2_idx_arr]).astype(
+            np.float64
+        )
+        y_data = np.asarray(y_data, dtype=np.float64)
+
+        prep_time = time.perf_counter() - prep_start
+        logger.info(f"Data preparation completed in {prep_time:.2f}s")
+        logger.info(f"  Dataset size: {len(y_data):,} points")
+
+        # Run hybrid optimization
+        logger.info("Starting hybrid optimization (Adam + Gauss-Newton)...")
+        opt_start = time.perf_counter()
+
+        result = optimizer.fit(
+            data_source=(x_data, y_data),
+            func=model_fn_pointwise,
+            p0=initial_params,
+            bounds=bounds,
+            verbose=1,
+        )
+
+        opt_time = time.perf_counter() - opt_start
+        total_time = time.perf_counter() - start_time
+
+        logger.info("=" * 80)
+        logger.info("HYBRID STREAMING OPTIMIZATION COMPLETE")
+        logger.info(f"  Success: {result.get('success', False)}")
+        logger.info(f"  Final loss: {result.get('final_loss', float('inf')):.6e}")
+        logger.info(f"  Adam epochs: {result.get('adam_epochs', 0)}")
+        logger.info(f"  GN iterations: {result.get('gauss_newton_iterations', 0)}")
+        logger.info(f"  Optimization time: {opt_time:.2f}s")
+        logger.info(f"  Total time: {total_time:.2f}s")
+        logger.info("=" * 80)
+
+        # Extract results
+        popt = np.asarray(result["x"])
+
+        # Get covariance (properly transformed from normalized space)
+        pcov = result.get("pcov", np.eye(len(popt)))
+        if pcov is None:
+            pcov = np.eye(len(popt))
+
+        # Enforce bounds on final parameters
+        if bounds is not None:
+            lower_bounds, upper_bounds = bounds
+            popt = np.clip(popt, lower_bounds, upper_bounds)
+
+        # Build info dict
+        info = {
+            "success": result.get("success", False),
+            "message": result.get("message", "Hybrid streaming optimization completed"),
+            "nfev": result.get("function_evaluations", 0),
+            "nit": result.get("adam_epochs", 0) + result.get(
+                "gauss_newton_iterations", 0
+            ),
+            "final_loss": result.get("final_loss", float("inf")),
+            "adam_epochs": result.get("adam_epochs", 0),
+            "gauss_newton_iterations": result.get("gauss_newton_iterations", 0),
+            "optimization_time": opt_time,
+            "total_time": total_time,
+            "method": "adaptive_hybrid_streaming",
+            "hybrid_streaming_diagnostics": result.get("diagnostics", {}),
         }
 
         return popt, pcov, info
