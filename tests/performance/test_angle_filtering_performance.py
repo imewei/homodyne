@@ -16,6 +16,7 @@ from tests.factories.config_factory import (
 from tests.factories.data_factory import create_angle_filtering_test_data
 
 
+@pytest.mark.performance
 class TestAngleFilteringPerformance:
     """Performance benchmarks for angle filtering operations."""
 

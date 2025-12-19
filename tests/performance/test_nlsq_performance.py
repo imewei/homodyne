@@ -98,6 +98,7 @@ def measure_execution_time(func, *args, **kwargs) -> tuple[any, float]:
 
 
 @pytest.mark.performance
+@pytest.mark.slow
 class TestMemoryUsageValidation:
     """Test memory usage stays constant during streaming optimization."""
 
@@ -220,6 +221,7 @@ class TestMemoryUsageValidation:
 
 
 @pytest.mark.performance
+@pytest.mark.slow
 class TestCheckpointSaveTiming:
     """Test checkpoint saves complete within 2 seconds."""
 
@@ -349,6 +351,7 @@ class TestCheckpointSaveTiming:
 
 
 @pytest.mark.performance
+@pytest.mark.slow
 class TestStrategyOverhead:
     """Test strategy overhead meets < 5% requirement."""
 
@@ -402,6 +405,7 @@ class TestStrategyOverhead:
 
 
 @pytest.mark.performance
+@pytest.mark.slow
 class TestFastModePerformance:
     """Test fast mode overhead < 1%."""
 
@@ -499,6 +503,7 @@ class TestFastModePerformance:
 
 
 @pytest.mark.performance
+@pytest.mark.slow
 class TestBatchStatisticsPerformance:
     """Test batch statistics tracking has minimal overhead."""
 
@@ -536,6 +541,7 @@ class TestBatchStatisticsPerformance:
 
 
 @pytest.mark.performance
+@pytest.mark.slow
 def test_performance_summary():
     """Summary test to validate all performance requirements.
 

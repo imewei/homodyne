@@ -194,6 +194,7 @@ class TestStratificationOverhead:
 
 
 @pytest.mark.performance
+@pytest.mark.slow
 class TestDatasetSizeScaling:
     """Benchmark stratification across different dataset sizes."""
 
@@ -259,6 +260,7 @@ class TestDatasetSizeScaling:
 
 
 @pytest.mark.performance
+@pytest.mark.slow
 class TestChunkSizeVariations:
     """Benchmark impact of different chunk sizes."""
 
@@ -308,6 +310,7 @@ class TestChunkSizeVariations:
 
 
 @pytest.mark.performance
+@pytest.mark.slow
 class TestAngleCountScaling:
     """Benchmark stratification with different angle counts."""
 
@@ -356,6 +359,7 @@ class TestAngleCountScaling:
 
 
 @pytest.mark.performance
+@pytest.mark.slow
 @pytest.mark.skipif(not HAS_PSUTIL, reason="psutil not available")
 class TestMemoryUsage:
     """Benchmark memory usage during stratification."""

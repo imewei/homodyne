@@ -32,6 +32,7 @@ except ImportError:
 
 
 @pytest.mark.performance
+@pytest.mark.slow
 @pytest.mark.skipif(not NLSQ_AVAILABLE, reason="NLSQ package not available")
 class TestNLSQWrapperOverhead:
     """Test NLSQWrapper performance overhead (T031, NFR-003)."""
