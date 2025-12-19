@@ -5271,12 +5271,25 @@ class NLSQWrapper:
         opt_time = time.perf_counter() - opt_start
         total_time = time.perf_counter() - start_time
 
+        # Extract diagnostics from NLSQ result structure
+        # NLSQ uses nested dicts: streaming_diagnostics -> phase_iterations/warmup_diagnostics
+        diagnostics = result.get("streaming_diagnostics", {})
+        phase_iterations = diagnostics.get("phase_iterations", {})
+        warmup_diag = diagnostics.get("warmup_diagnostics", {})
+        gn_diag = diagnostics.get("gauss_newton_diagnostics", {})
+
+        adam_epochs = phase_iterations.get("phase1", 0)
+        gn_iterations = phase_iterations.get("phase2", 0)
+        final_adam_loss = warmup_diag.get("final_loss", float("inf"))
+        final_gn_cost = gn_diag.get("final_cost", float("inf"))
+
         logger.info("=" * 80)
         logger.info("HYBRID STREAMING OPTIMIZATION COMPLETE")
         logger.info(f"  Success: {result.get('success', False)}")
-        logger.info(f"  Final loss: {result.get('final_loss', float('inf')):.6e}")
-        logger.info(f"  Adam epochs: {result.get('adam_epochs', 0)}")
-        logger.info(f"  GN iterations: {result.get('gauss_newton_iterations', 0)}")
+        logger.info(f"  Adam final loss: {final_adam_loss:.6e}")
+        logger.info(f"  GN final cost: {final_gn_cost:.6e}")
+        logger.info(f"  Adam epochs: {adam_epochs}")
+        logger.info(f"  GN iterations: {gn_iterations}")
         logger.info(f"  Optimization time: {opt_time:.2f}s")
         logger.info(f"  Total time: {total_time:.2f}s")
         logger.info("=" * 80)
@@ -5299,16 +5312,14 @@ class NLSQWrapper:
             "success": result.get("success", False),
             "message": result.get("message", "Hybrid streaming optimization completed"),
             "nfev": result.get("function_evaluations", 0),
-            "nit": result.get("adam_epochs", 0) + result.get(
-                "gauss_newton_iterations", 0
-            ),
-            "final_loss": result.get("final_loss", float("inf")),
-            "adam_epochs": result.get("adam_epochs", 0),
-            "gauss_newton_iterations": result.get("gauss_newton_iterations", 0),
+            "nit": adam_epochs + gn_iterations,
+            "final_loss": final_gn_cost if final_gn_cost != float("inf") else final_adam_loss,
+            "adam_epochs": adam_epochs,
+            "gauss_newton_iterations": gn_iterations,
             "optimization_time": opt_time,
             "total_time": total_time,
             "method": "adaptive_hybrid_streaming",
-            "hybrid_streaming_diagnostics": result.get("diagnostics", {}),
+            "hybrid_streaming_diagnostics": diagnostics,
         }
 
         return popt, pcov, info
