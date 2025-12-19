@@ -5148,12 +5148,16 @@ class NLSQWrapper:
         @jax.jit
         def model_fn_pointwise(x_batch: jnp.ndarray, *params_tuple) -> jnp.ndarray:
             """Point-wise model function for hybrid streaming optimizer."""
+            # Handle both single points (1D) and batches (2D)
+            # The optimizer may call with single points during Jacobian computation
+            x_batch_2d = jnp.atleast_2d(x_batch)
+
             params_all = jnp.array(params_tuple)
 
-            # Extract indices from x_batch
-            phi_idx = x_batch[:, 0].astype(jnp.int32)
-            t1_idx = x_batch[:, 1].astype(jnp.int32)
-            t2_idx = x_batch[:, 2].astype(jnp.int32)
+            # Extract indices from x_batch (now guaranteed 2D)
+            phi_idx = x_batch_2d[:, 0].astype(jnp.int32)
+            t1_idx = x_batch_2d[:, 1].astype(jnp.int32)
+            t2_idx = x_batch_2d[:, 2].astype(jnp.int32)
 
             # Extract scaling and physical parameters
             contrast_all = params_all[:n_phi]
@@ -5213,7 +5217,9 @@ class NLSQWrapper:
             # Clip g2 for numerical stability
             g2 = jnp.clip(g2_theory, 0.5, 2.5)
 
-            return g2
+            # Squeeze output to match input dimensionality
+            # Returns 0D scalar for single point, 1D array for batch
+            return g2.squeeze()
 
         # Prepare data
         logger.info("Preparing hybrid streaming data...")
