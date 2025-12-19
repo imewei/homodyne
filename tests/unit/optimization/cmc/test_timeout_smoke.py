@@ -9,7 +9,10 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
-from homodyne.optimization.cmc import core
+# Require ArviZ for CMC imports; skip module if missing optional dependency
+pytest.importorskip("arviz", reason="ArviZ required for CMC unit tests")
+
+from homodyne.optimization.cmc import core  # noqa: E402
 from homodyne.optimization.cmc.core import (
     _resolve_max_points_per_shard,
     fit_mcmc_jax,

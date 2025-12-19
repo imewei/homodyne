@@ -1,6 +1,11 @@
 import logging
 
-from homodyne.optimization.cmc import core
+import pytest
+
+# Require ArviZ for CMC imports; skip module if missing optional dependency
+pytest.importorskip("arviz", reason="ArviZ required for CMC unit tests")
+
+from homodyne.optimization.cmc import core  # noqa: E402
 
 
 def test_cap_laminar_max_points_caps_high_values(caplog):

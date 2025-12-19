@@ -54,6 +54,12 @@ from homodyne.config.manager import ConfigManager
 from homodyne.config.parameter_space import ParameterSpace
 from homodyne.optimization import MCMCResult, fit_mcmc_jax
 
+# Skip marker for tests that require CMC (fit_mcmc_jax)
+requires_cmc = pytest.mark.skipif(
+    fit_mcmc_jax is None,
+    reason="CMC not available (arviz missing)",
+)
+
 # Test factory imports
 from tests.factories.config_factory import (
     create_disabled_filtering_config,
@@ -1640,6 +1646,7 @@ def simple_static_data():
     }
 
 
+@requires_cmc
 def test_mcmc_with_manual_initial_params(simple_static_data):
     """Test MCMC accepts manual initial_params parameter.
 
@@ -1698,6 +1705,7 @@ def test_mcmc_with_manual_initial_params(simple_static_data):
     assert np.all(np.isfinite(result.samples["offset_0"]))
 
 
+@requires_cmc
 def test_automatic_nuts_selection_small_dataset(simple_static_data):
     """Test MCMC on small dataset.
 
@@ -1732,6 +1740,7 @@ def test_automatic_nuts_selection_small_dataset(simple_static_data):
     assert result.parameters is not None
 
 
+@requires_cmc
 def test_auto_retry_on_poor_convergence():
     """Test automatic retry mechanism on convergence failure.
 
@@ -1785,6 +1794,7 @@ def test_auto_retry_on_poor_convergence():
     assert len(result.param_names) >= 3  # At least 3 physical params
 
 
+@requires_cmc
 def test_warning_on_poor_convergence_metrics(simple_static_data, caplog):
     """Test that warnings are logged for poor convergence metrics.
 
@@ -1830,6 +1840,7 @@ def test_warning_on_poor_convergence_metrics(simple_static_data, caplog):
 # min_samples_for_cmc and memory_threshold_pct are no longer used
 
 
+@requires_cmc
 def test_no_automatic_nlsq_initialization():
     """Test that MCMC never automatically runs NLSQ initialization.
 
@@ -1878,6 +1889,7 @@ def test_no_automatic_nlsq_initialization():
     # The absence of automatic initialization is the key feature
 
 
+@requires_cmc
 def test_enhanced_retry_logging(caplog):
     """Test enhanced retry logging with emojis and quantitative diagnostics.
 

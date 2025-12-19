@@ -72,6 +72,14 @@ from homodyne.cli.args_parser import create_parser, validate_args
 from homodyne.cli.commands import _apply_cli_overrides
 from homodyne.config.manager import ConfigManager
 
+# Check if arviz is available for CMC diagnostic plot tests
+try:
+    import arviz  # noqa: F401
+
+    ARVIZ_AVAILABLE = True
+except ImportError:
+    ARVIZ_AVAILABLE = False
+
 # ==============================================================================
 # CMC CLI Integration Tests (from test_cli_integration.py)
 # ==============================================================================
@@ -478,6 +486,7 @@ class TestCMCDiagnosticPlotGeneration:
         mock_generate_plots.assert_called_once()
 
 
+@pytest.mark.skipif(not ARVIZ_AVAILABLE, reason="ArviZ required for CMC diagnostic plot tests")
 class TestCMCDiagnosticPlotFunction:
     """Test _generate_cmc_diagnostic_plots function directly."""
 

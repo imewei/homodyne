@@ -3,8 +3,12 @@
 from __future__ import annotations
 
 import numpy as np
+import pytest
 
-from homodyne.optimization.cmc import results
+# Require ArviZ for CMC imports; skip module if missing optional dependency
+pytest.importorskip("arviz", reason="ArviZ required for CMC unit tests")
+
+from homodyne.optimization.cmc import results  # noqa: E402
 
 
 class _FakeCMCResult:

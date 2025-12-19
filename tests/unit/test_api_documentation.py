@@ -55,7 +55,11 @@ def test_optimization_module_imports():
 
         # Check subpackages exist
         assert hasattr(optimization, "nlsq"), "nlsq subpackage not found"
+        # cmc may be None if arviz is not installed
         assert hasattr(optimization, "cmc"), "cmc subpackage not found"
+        # If cmc is None, that's ok - it means arviz is missing
+        if optimization.cmc is None:
+            pytest.skip("cmc subpackage not available (arviz missing)")
 
     except ImportError as e:
         pytest.fail(f"Failed to import homodyne.optimization: {e}")
@@ -113,6 +117,9 @@ def test_autosummary_generation():
     This is a slow test that actually runs sphinx-autogen to verify
     that module stubs can be generated without errors.
     """
+    # Skip if sphinx is not installed
+    pytest.importorskip("sphinx", reason="Sphinx required for autosummary generation test")
+
     docs_path = Path(__file__).parent.parent.parent / "docs"
 
     # Create a minimal test RST file with autosummary directive

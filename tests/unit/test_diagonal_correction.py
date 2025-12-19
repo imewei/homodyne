@@ -537,25 +537,24 @@ try:
         )
         @settings(max_examples=50, deadline=None)
         def test_idempotent_property(self, matrix):
-            """Property: Applying correction twice should equal applying once
+            """Property: Applying correction twice should equal applying once.
 
-            However, this is NOT true for diagonal correction! Second application
-            will further interpolate the already-interpolated diagonal.
+            The diagonal correction IS idempotent because:
+            1. The side band (super-diagonal elements) is not modified
+            2. New diagonal is computed from the unchanged side band
+            3. Second application uses same side band, producing same diagonal
 
-            This test verifies that diagonal correction is NOT idempotent,
-            which is expected behavior.
+            This test verifies that diagonal correction is idempotent.
             """
             matrix_jax = jnp.array(matrix)
 
             result1 = apply_diagonal_correction(matrix_jax)
             result2 = apply_diagonal_correction(result1)
 
-            # These should NOT be equal (not idempotent)
-            if matrix.shape[0] > 2:  # Need at least 3x3 to see difference
-                diagonal1 = jnp.diag(result1)
-                diagonal2 = jnp.diag(result2)
-                # At least one diagonal element should change
-                assert not jnp.allclose(diagonal1, diagonal2, rtol=1e-10)
+            # Diagonals should be equal (idempotent)
+            diagonal1 = jnp.diag(result1)
+            diagonal2 = jnp.diag(result2)
+            assert jnp.allclose(diagonal1, diagonal2, rtol=1e-10)
 
         @given(
             matrix=arrays(

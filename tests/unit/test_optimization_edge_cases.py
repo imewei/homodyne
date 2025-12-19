@@ -21,13 +21,16 @@ import numpy as np
 import pytest
 from numpy.testing import assert_allclose
 
-from homodyne.optimization.cmc.config import CMCConfig
+# Require ArviZ for CMC imports; skip module if missing optional dependency
+pytest.importorskip("arviz", reason="ArviZ required for CMC unit tests")
+
+from homodyne.optimization.cmc.config import CMCConfig  # noqa: E402
 
 # Import modules under test - CMC
-from homodyne.optimization.cmc.core import (
+from homodyne.optimization.cmc.core import (  # noqa: E402
     _infer_time_step,
 )
-from homodyne.optimization.cmc.data_prep import (
+from homodyne.optimization.cmc.data_prep import (  # noqa: E402
     prepare_mcmc_data,
     shard_data_random,
     shard_data_stratified,

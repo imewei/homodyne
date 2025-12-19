@@ -88,7 +88,9 @@ class TestPublicAPIStability:
         try:
             from homodyne.optimization import fit_mcmc_jax
 
-            assert callable(fit_mcmc_jax), "fit_mcmc_jax not callable"
+            # fit_mcmc_jax may be None if arviz is not installed
+            if fit_mcmc_jax is not None:
+                assert callable(fit_mcmc_jax), "fit_mcmc_jax not callable"
 
         except ImportError:
             # MCMC might not be available

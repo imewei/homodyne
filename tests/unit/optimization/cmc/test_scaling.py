@@ -7,8 +7,11 @@ gradient magnitudes across parameters with vastly different scales.
 import numpy as np
 import pytest
 
-from homodyne.config.parameter_space import ParameterSpace
-from homodyne.optimization.cmc.scaling import (
+# Require ArviZ for CMC imports; skip module if missing optional dependency
+pytest.importorskip("arviz", reason="ArviZ required for CMC unit tests")
+
+from homodyne.config.parameter_space import ParameterSpace  # noqa: E402
+from homodyne.optimization.cmc.scaling import (  # noqa: E402
     ParameterScaling,
     compute_scaling_factors,
     transform_initial_values_to_z,

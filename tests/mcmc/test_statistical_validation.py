@@ -22,6 +22,9 @@ class TestMCMCModuleAvailability:
         try:
             from homodyne.optimization import NUMPYRO_AVAILABLE, fit_mcmc_jax
 
+            # fit_mcmc_jax may be None if arviz is not installed
+            if fit_mcmc_jax is None:
+                pytest.skip("fit_mcmc_jax not available (arviz missing)")
             assert callable(fit_mcmc_jax)
             assert isinstance(NUMPYRO_AVAILABLE, bool)
         except ImportError:
@@ -29,6 +32,9 @@ class TestMCMCModuleAvailability:
 
     def test_cmc_module_imports(self):
         """Test CMC (Consensus Monte Carlo) module availability."""
+        # Skip if arviz is not available
+        pytest.importorskip("arviz", reason="ArviZ required for CMC imports")
+
         from homodyne.optimization.cmc import (
             CMCConfig,
             CMCResult,

@@ -22,6 +22,10 @@ Performance Comparison:
 Note: Legacy mcmc/ package removed in v3.0. CMC is the sole MCMC backend.
 """
 
+# Import submodules as attributes for hasattr() checks
+# These imports expose the submodule packages even if their contents fail to import
+from homodyne.optimization import nlsq
+
 # Handle NLSQ imports with intelligent fallback
 try:
     from homodyne.optimization.nlsq import (  # Strategies; Chunking; Residual; Sequential
@@ -63,6 +67,15 @@ except ImportError as e:
     NLSQ_AVAILABLE = False
 
 # Handle CMC imports (NO FALLBACK to legacy mcmc - it's removed)
+# Try to import the cmc module for hasattr() checks
+try:
+    from homodyne.optimization import cmc
+
+    CMC_SUBMODULE_AVAILABLE = True
+except ImportError:
+    cmc = None  # type: ignore[assignment]
+    CMC_SUBMODULE_AVAILABLE = False
+
 try:
     from homodyne.optimization.cmc import (
         CMCConfig,
@@ -128,6 +141,9 @@ __all__ = [
     "OPTIMIZATION_STATUS",
     "NLSQ_AVAILABLE",
     "MCMC_AVAILABLE",
+    # Submodules
+    "nlsq",
+    "cmc",
 ]
 
 

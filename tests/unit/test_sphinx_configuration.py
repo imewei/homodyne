@@ -272,11 +272,22 @@ def test_project_metadata():
         assert conf.project == "Homodyne", (
             f"Project should be 'Homodyne', got '{conf.project}'"
         )
-        assert conf.version == "2.4.3", (
-            f"Version should be '2.4.3', got '{conf.version}'"
+        # Get expected version from homodyne package (dynamic versioning)
+        # Note: Package version may include post-release info (e.g., "2.5.0.post6+dirty")
+        # while conf.py version is the base version (e.g., "2.5.0")
+        try:
+            from homodyne import __version__ as pkg_version
+
+            # Extract base version (before any post-release info)
+            expected_version = pkg_version.split(".post")[0].split("+")[0]
+        except ImportError:
+            expected_version = conf.version  # Fall back to conf.py value
+
+        assert conf.version == expected_version, (
+            f"Version should be '{expected_version}', got '{conf.version}'"
         )
-        assert conf.release == "2.4.3", (
-            f"Release should be '2.4.3', got '{conf.release}'"
+        assert conf.release == expected_version, (
+            f"Release should be '{expected_version}', got '{conf.release}'"
         )
 
         # Check autodoc settings
