@@ -76,6 +76,10 @@ optimization:
       # Only used for datasets 1M - 100M points
       subsample_size: 500000  # 500K points
 
+      # Threshold for Phase 1 (warmup-only) strategy
+      # Datasets larger than this use parallel Adam warmup + single GN refinement
+      warmup_only_threshold: 100000000  # 100M points
+
       # Refinement: Polish top solutions with tighter tolerance
       refine_top_k: 3  # Refine top 3 solutions
       refinement_ftol: 1.0e-12  # Tighter tolerance for refinement
