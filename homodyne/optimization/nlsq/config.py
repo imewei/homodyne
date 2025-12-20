@@ -104,7 +104,7 @@ class NLSQConfig:
     hybrid_checkpoint_frequency: int = 100
     hybrid_validate_numerics: bool = True
 
-    # Multi-start optimization settings (v2.8.0)
+    # Multi-start optimization settings (v2.6.0)
     # Enables exploration of parameter space via Latin Hypercube Sampling
     enable_multi_start: bool = False  # Default OFF - user opt-in
     multi_start_n_starts: int = 10
@@ -202,7 +202,7 @@ class NLSQConfig:
                 "checkpoint_frequency", 100
             ),
             hybrid_validate_numerics=hybrid_streaming.get("validate_numerics", True),
-            # Multi-start (v2.8.0)
+            # Multi-start (v2.6.0)
             enable_multi_start=multi_start.get("enable", False),
             multi_start_n_starts=multi_start.get("n_starts", 10),
             multi_start_seed=multi_start.get("seed", 42),

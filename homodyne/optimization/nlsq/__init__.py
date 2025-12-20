@@ -12,7 +12,7 @@ Structure:
 - data_prep.py: Data preparation utilities
 - result_builder.py: Result building utilities
 - fit_computation.py: Fit computation utilities
-- multistart.py: Multi-start optimization with LHS (v2.8.0)
+- multistart.py: Multi-start optimization with LHS (v2.6.0)
 - strategies/: Optimization strategy modules
   - selection.py: DatasetSizeStrategy and OptimizationStrategy
   - chunking.py: Angle-stratified chunking for large datasets
@@ -49,7 +49,7 @@ from homodyne.optimization.nlsq.fit_computation import (
     normalize_analysis_mode,
 )
 
-# Multi-start optimization (v2.8.0)
+# Multi-start optimization (v2.6.0)
 from homodyne.optimization.nlsq.multistart import (
     MultiStartConfig,
     MultiStartResult,
@@ -122,7 +122,7 @@ __all__ = [
     "JAX_AVAILABLE",
     "NLSQ_AVAILABLE",
     "_get_param_names",
-    # Multi-start (v2.8.0)
+    # Multi-start (v2.6.0)
     "MultiStartConfig",
     "MultiStartResult",
     "MultiStartStrategy",

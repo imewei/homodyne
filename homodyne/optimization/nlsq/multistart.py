@@ -7,7 +7,7 @@ and avoid local minima. It uses dataset size-based strategy selection:
 - 1M - 100M points: Subsample multi-start (multi-start on 500K subsample)
 - > 100M points: Phase 1 multi-start (parallel Adam warmup, single Gauss-Newton)
 
-Part of homodyne v2.8.0 architecture.
+Part of homodyne v2.6.0 architecture.
 """
 
 from __future__ import annotations

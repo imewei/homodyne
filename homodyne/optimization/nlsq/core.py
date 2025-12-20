@@ -106,7 +106,7 @@ except ImportError:
     NLSQWrapper = None
     OptimizationResult = None
 
-# Multi-start optimization import (v2.8.0)
+# Multi-start optimization import (v2.6.0)
 try:
     from homodyne.optimization.nlsq.multistart import (
         MultiStartConfig,
@@ -964,7 +964,7 @@ def _get_iteration_count(result: Any) -> int:
 
 
 # =============================================================================
-# Multi-Start Optimization Entry Point (v2.8.0)
+# Multi-Start Optimization Entry Point (v2.6.0)
 # =============================================================================
 
 

@@ -398,7 +398,7 @@ optimization:
     #   D_offset: 1.0
 
     # ---------------------------------------------------------------------------
-    # MULTI-START OPTIMIZATION (v2.8.0+)
+    # MULTI-START OPTIMIZATION (v2.6.0+)
     # ---------------------------------------------------------------------------
     # Explores parameter space from multiple starting points using Latin
     # Hypercube Sampling to find global optimum and detect parameter degeneracy.

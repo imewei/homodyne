@@ -558,7 +558,7 @@ optimization:
     weighting: "inverse_variance"  # "inverse_variance" | "uniform" | "n_points"
 
   # ---------------------------------------------------------------------------
-  # NLSQ MULTI-START OPTIMIZATION (v2.8.0+)
+  # NLSQ MULTI-START OPTIMIZATION (v2.6.0+)
   # ---------------------------------------------------------------------------
   # Explores parameter space from multiple starting points using Latin
   # Hypercube Sampling to find global optimum and detect parameter degeneracy.
