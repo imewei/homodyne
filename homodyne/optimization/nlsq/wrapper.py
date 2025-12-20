@@ -290,7 +290,7 @@ def get_adaptive_memory_threshold(
 
         _memory_logger.info(
             f"Adaptive memory threshold: {threshold_gb:.1f} GB "
-            f"({effective_fraction*100:.0f}% of {total_gb:.1f} GB total, "
+            f"({effective_fraction * 100:.0f}% of {total_gb:.1f} GB total, "
             f"source={fraction_source}, method={info['detection_method']})"
         )
 
@@ -393,6 +393,187 @@ def _compute_jacobian_stats(
         return jtj, col_norms
     except Exception:
         return None, None
+
+
+
+def create_multistart_warmup_func(
+    model_func: Callable[..., np.ndarray],
+    xdata: np.ndarray,
+    ydata: np.ndarray,
+    bounds: tuple[np.ndarray, np.ndarray] | None = None,
+    warmup_learning_rate: float = 0.001,
+    normalize: bool = True,
+    chunk_size: int = 50_000,
+) -> Callable[[dict[str, Any], np.ndarray, int], Any]:
+    """Create a warmup-only fit function for multi-start Phase 1 strategy.
+
+    This function creates a warmup_fit_func compatible with the multi-start
+    optimization module's Phase 1 strategy. It uses the Adam warmup phase
+    from NLSQ's AdaptiveHybridStreamingOptimizer to quickly explore the
+    parameter space without full Gauss-Newton refinement.
+
+    Parameters
+    ----------
+    model_func : Callable
+        Model function with signature: func(x, *params) -> predictions
+    xdata : np.ndarray
+        Independent variable data
+    ydata : np.ndarray
+        Dependent variable data (observations)
+    bounds : tuple[np.ndarray, np.ndarray] | None, optional
+        Parameter bounds as (lower, upper)
+    warmup_learning_rate : float, default=0.001
+        Adam learning rate for warmup phase
+    normalize : bool, default=True
+        Whether to use parameter normalization (recommended for scale imbalance)
+    chunk_size : int, default=50000
+        Points per chunk for streaming computation
+
+    Returns
+    -------
+    warmup_fit_func : Callable
+        Function with signature: (data, initial_params, n_iterations) -> SingleStartResult
+        Compatible with run_multistart_nlsq() warmup_fit_func parameter.
+
+    Raises
+    ------
+    RuntimeError
+        If AdaptiveHybridStreamingOptimizer is not available (NLSQ < 0.3.2)
+
+    Examples
+    --------
+    >>> from homodyne.optimization.nlsq.wrapper import create_multistart_warmup_func
+    >>> from homodyne.optimization.nlsq.multistart import run_multistart_nlsq
+    >>>
+    >>> # Create warmup function
+    >>> warmup_func = create_multistart_warmup_func(
+    ...     model_func=my_model,
+    ...     xdata=x_data,
+    ...     ydata=y_data,
+    ...     bounds=(lower, upper),
+    ... )
+    >>>
+    >>> # Use with multi-start
+    >>> result = run_multistart_nlsq(
+    ...     data=my_data,
+    ...     bounds=bounds,
+    ...     config=config,
+    ...     single_fit_func=full_fit_func,
+    ...     warmup_fit_func=warmup_func,  # For Phase 1 strategy
+    ... )
+
+    Notes
+    -----
+    This function integrates with the Phase 1 multi-start strategy which:
+    1. Runs parallel Adam warmup from multiple starting points
+    2. Selects the best warmup result
+    3. Performs full Gauss-Newton refinement from the best starting point
+
+    This approach is memory-efficient for very large datasets (>100M points)
+    and provides good exploration of the parameter space.
+
+    See Also
+    --------
+    homodyne.optimization.nlsq.multistart.run_multistart_nlsq : Main multi-start function
+    homodyne.optimization.nlsq.multistart._run_phase1_strategy : Phase 1 strategy implementation
+    """
+    from homodyne.optimization.nlsq.multistart import SingleStartResult
+
+    if not HYBRID_STREAMING_AVAILABLE:
+        raise RuntimeError(
+            "AdaptiveHybridStreamingOptimizer not available. "
+            "Please upgrade NLSQ to version >= 0.3.2: pip install --upgrade nlsq"
+        )
+
+    def warmup_fit_func(
+        data: dict[str, Any],
+        initial_params: np.ndarray,
+        n_iterations: int,
+    ) -> SingleStartResult:
+        """Run warmup-only optimization from a starting point.
+
+        Parameters
+        ----------
+        data : dict
+            Data dictionary (not used directly; uses captured xdata/ydata)
+        initial_params : np.ndarray
+            Initial parameter values
+        n_iterations : int
+            Number of Adam warmup iterations
+
+        Returns
+        -------
+        SingleStartResult
+            Optimization result with warmup parameters and cost
+        """
+        import time
+
+        start_time = time.perf_counter()
+
+        try:
+            # Configure for warmup-only: skip Gauss-Newton phase
+            config = HybridStreamingConfig(
+                normalize=normalize,
+                normalization_strategy="bounds",
+                warmup_iterations=n_iterations,
+                max_warmup_iterations=n_iterations,  # Force stop at n_iterations
+                warmup_learning_rate=warmup_learning_rate,
+                gauss_newton_max_iterations=0,  # Skip GN phase
+                gauss_newton_tol=1e-8,
+                chunk_size=chunk_size,
+                validate_numerics=True,
+            )
+
+            optimizer = AdaptiveHybridStreamingOptimizer(config)
+
+            # Run warmup-only optimization
+            result = optimizer.fit(
+                data_source=(xdata, ydata),
+                func=model_func,
+                p0=initial_params,
+                bounds=bounds,
+                verbose=0,  # Quiet mode
+            )
+
+            # Extract results
+            final_params = np.asarray(result["x"])
+
+            # Compute chi-squared from final cost
+            # The optimizer returns cost as 0.5 * sum(residuals^2)
+            diagnostics = result.get("streaming_diagnostics", {})
+            warmup_diag = diagnostics.get("warmup_diagnostics", {})
+            final_loss = warmup_diag.get("final_loss", float("inf"))
+
+            # Convert loss to chi-squared (loss = 0.5 * chi_sq for LSQ)
+            chi_squared = 2.0 * final_loss if final_loss != float("inf") else float("inf")
+
+            wall_time = time.perf_counter() - start_time
+
+            return SingleStartResult(
+                start_idx=0,
+                initial_params=initial_params,
+                final_params=final_params,
+                chi_squared=chi_squared,
+                success=result.get("success", False),
+                n_iterations=n_iterations,
+                wall_time=wall_time,
+                message="Adam warmup completed",
+            )
+
+        except Exception as e:
+            wall_time = time.perf_counter() - start_time
+            return SingleStartResult(
+                start_idx=0,
+                initial_params=initial_params,
+                final_params=initial_params,
+                chi_squared=float("inf"),
+                success=False,
+                n_iterations=0,
+                wall_time=wall_time,
+                message=f"Warmup failed: {str(e)}",
+            )
+
+    return warmup_fit_func
 
 
 @dataclass
@@ -1126,10 +1307,7 @@ class NLSQWrapper:
             if use_streaming_mode:
                 # Prefer AdaptiveHybridStreamingOptimizer when available and enabled
                 # It fixes shear-term gradients, convergence, and covariance issues
-                use_hybrid = (
-                    use_hybrid_streaming
-                    and HYBRID_STREAMING_AVAILABLE
-                )
+                use_hybrid = use_hybrid_streaming and HYBRID_STREAMING_AVAILABLE
 
                 if use_hybrid:
                     logger.info("=" * 80)
@@ -3583,7 +3761,9 @@ class NLSQWrapper:
                 # Note: clip removed - phi_requested is a subset of phi which was used to
                 # build phi_unique, so all values are guaranteed to be in range.
                 # The clip was causing optimization to converge to wrong local minima.
-                phi_idx = jnp.searchsorted(phi_unique, phi_requested)  # Shape: (chunk_size,)
+                phi_idx = jnp.searchsorted(
+                    phi_unique, phi_requested
+                )  # Shape: (chunk_size,)
 
                 # Select per-angle contrast and offset for each data point
                 contrast_requested = contrast[phi_idx]  # Shape: (chunk_size,)
@@ -4055,9 +4235,7 @@ class NLSQWrapper:
                 "Please upgrade NLSQ to version >= 0.3.2: pip install --upgrade nlsq"
             )
 
-        logger.info(
-            "Initializing NLSQ AdaptiveHybridStreamingOptimizer..."
-        )
+        logger.info("Initializing NLSQ AdaptiveHybridStreamingOptimizer...")
         logger.info("Fixes: 1) Shear-term gradients, 2) Convergence, 3) Covariance")
 
         # Create HybridStreamingConfig from NLSQConfig
@@ -4138,9 +4316,9 @@ class NLSQWrapper:
                 "message": result.get("message", "Hybrid optimization completed"),
                 "hybrid_streaming_diagnostics": result.get("streaming_diagnostics", {}),
                 "perr": perr,
-                "sigma_sq": result.get("streaming_diagnostics", {}).get(
-                    "gauss_newton_diagnostics", {}
-                ).get("final_cost"),
+                "sigma_sq": result.get("streaming_diagnostics", {})
+                .get("gauss_newton_diagnostics", {})
+                .get("final_cost"),
                 "phase_timings": result.get("streaming_diagnostics", {}).get(
                     "phase_timings", {}
                 ),
@@ -4954,7 +5132,9 @@ class NLSQWrapper:
             scale_jax = jnp.where(scale_jax < 1e-10, 1.0, scale_jax)
 
             logger.info("Parameter normalization ENABLED for streaming optimizer")
-            logger.info(f"  Parameter scales range: {float(scale_jax.min()):.2e} to {float(scale_jax.max()):.2e}")
+            logger.info(
+                f"  Parameter scales range: {float(scale_jax.min()):.2e} to {float(scale_jax.max()):.2e}"
+            )
 
             @jax.jit
             def denormalize_params(p_norm: jnp.ndarray) -> jnp.ndarray:
@@ -4966,7 +5146,9 @@ class NLSQWrapper:
                 """Transform real params to normalized [0,1] space."""
                 return (p_real - lower_jax) / scale_jax
 
-            def model_fn_normalized(x_batch: jnp.ndarray, *params_norm_tuple) -> jnp.ndarray:
+            def model_fn_normalized(
+                x_batch: jnp.ndarray, *params_norm_tuple
+            ) -> jnp.ndarray:
                 """Model function operating in normalized parameter space."""
                 params_norm = jnp.array(params_norm_tuple)
                 params_real = denormalize_params(params_norm)
@@ -4976,8 +5158,12 @@ class NLSQWrapper:
             model_fn = jax.jit(model_fn_normalized)
 
             # Normalize initial parameters
-            initial_params_normalized = np.asarray(normalize_params(jnp.asarray(initial_params)))
-            logger.info(f"  Initial params normalized: min={initial_params_normalized.min():.4f}, max={initial_params_normalized.max():.4f}")
+            initial_params_normalized = np.asarray(
+                normalize_params(jnp.asarray(initial_params))
+            )
+            logger.info(
+                f"  Initial params normalized: min={initial_params_normalized.min():.4f}, max={initial_params_normalized.max():.4f}"
+            )
 
             # Set normalized bounds [0, 1]
             normalized_bounds = (
@@ -5179,7 +5365,7 @@ class NLSQWrapper:
                 # Covariance diagonal scales with parameter range squared
                 # (variance has units of parameter^2)
                 base_var = 1.0 / max(grad_norm, 1e-10)
-                pcov = np.diag((param_scales ** 2) * base_var)
+                pcov = np.diag((param_scales**2) * base_var)
             else:
                 # Fallback: use 1% of parameter range as std dev
                 pcov = np.diag((param_scales * 0.01) ** 2)
@@ -5346,9 +5532,7 @@ class NLSQWrapper:
         t1_unique = np.array(sorted(set(all_t1)))
         n_phi = len(phi_unique)
 
-        logger.info(
-            f"Unique values: {n_phi} phi, {len(t1_unique)} t1"
-        )
+        logger.info(f"Unique values: {n_phi} phi, {len(t1_unique)} t1")
 
         # Import physics utilities
         from homodyne.core.physics_utils import (
@@ -5539,7 +5723,9 @@ class NLSQWrapper:
             "message": result.get("message", "Hybrid streaming optimization completed"),
             "nfev": result.get("function_evaluations", 0),
             "nit": adam_epochs + gn_iterations,
-            "final_loss": final_gn_cost if final_gn_cost != float("inf") else final_adam_loss,
+            "final_loss": final_gn_cost
+            if final_gn_cost != float("inf")
+            else final_adam_loss,
             "adam_epochs": adam_epochs,
             "gauss_newton_iterations": gn_iterations,
             "optimization_time": opt_time,

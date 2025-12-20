@@ -749,7 +749,8 @@ class TestHybridStreamingOptimizer:
 
     @pytest.mark.skipif(
         not __import__(
-            "homodyne.optimization.nlsq.wrapper", fromlist=["HYBRID_STREAMING_AVAILABLE"]
+            "homodyne.optimization.nlsq.wrapper",
+            fromlist=["HYBRID_STREAMING_AVAILABLE"],
         ).HYBRID_STREAMING_AVAILABLE,
         reason="AdaptiveHybridStreamingOptimizer not available",
     )
@@ -937,19 +938,25 @@ class TestAdaptiveMemoryThreshold:
 
         _, info = get_adaptive_memory_threshold()
 
-        expected_keys = ["memory_fraction", "source", "total_memory_gb", "detection_method"]
+        expected_keys = [
+            "memory_fraction",
+            "source",
+            "total_memory_gb",
+            "detection_method",
+        ]
         for key in expected_keys:
             assert key in info, f"Missing key: {key}"
 
     def test_adaptive_threshold_default_fraction(self):
         """TC-ADAPT-MEM-004: Default memory fraction is 0.75."""
+        # Clear env var to ensure default is used
+        import os
+
         from homodyne.optimization.nlsq.wrapper import (
             _DEFAULT_MEMORY_FRACTION,
             get_adaptive_memory_threshold,
         )
 
-        # Clear env var to ensure default is used
-        import os
         env_backup = os.environ.pop("NLSQ_MEMORY_FRACTION", None)
 
         try:

@@ -104,6 +104,25 @@ class NLSQConfig:
     hybrid_checkpoint_frequency: int = 100
     hybrid_validate_numerics: bool = True
 
+    # Multi-start optimization settings (v2.8.0)
+    # Enables exploration of parameter space via Latin Hypercube Sampling
+    enable_multi_start: bool = False  # Default OFF - user opt-in
+    multi_start_n_starts: int = 10
+    multi_start_seed: int = 42
+    multi_start_sampling_strategy: str = (
+        "latin_hypercube"  # 'latin_hypercube' or 'random'
+    )
+    multi_start_n_workers: int = 0  # 0 = auto (min of n_starts, cpu_count)
+    multi_start_use_screening: bool = True
+    multi_start_screen_keep_fraction: float = 0.5
+    multi_start_subsample_size: int = 500_000  # For 1M-100M datasets
+    multi_start_warmup_only_threshold: int = (
+        100_000_000  # 100M: switch to phase1 strategy
+    )
+    multi_start_refine_top_k: int = 3
+    multi_start_refinement_ftol: float = 1e-12
+    multi_start_degeneracy_threshold: float = 0.1
+
     # Computed fields
     _validation_errors: list[str] = field(default_factory=list, repr=False)
 
@@ -127,6 +146,7 @@ class NLSQConfig:
         stratified = config_dict.get("stratified", {})
         recovery = config_dict.get("recovery", {})
         hybrid_streaming = config_dict.get("hybrid_streaming", {})
+        multi_start = config_dict.get("multi_start", {})
 
         config = cls(
             # Loss function
@@ -178,8 +198,33 @@ class NLSQConfig:
                 hybrid_streaming.get("regularization_factor", 1e-10)
             ),
             hybrid_enable_checkpoints=hybrid_streaming.get("enable_checkpoints", True),
-            hybrid_checkpoint_frequency=hybrid_streaming.get("checkpoint_frequency", 100),
+            hybrid_checkpoint_frequency=hybrid_streaming.get(
+                "checkpoint_frequency", 100
+            ),
             hybrid_validate_numerics=hybrid_streaming.get("validate_numerics", True),
+            # Multi-start (v2.8.0)
+            enable_multi_start=multi_start.get("enable", False),
+            multi_start_n_starts=multi_start.get("n_starts", 10),
+            multi_start_seed=multi_start.get("seed", 42),
+            multi_start_sampling_strategy=multi_start.get(
+                "sampling_strategy", "latin_hypercube"
+            ),
+            multi_start_n_workers=multi_start.get("n_workers", 0),
+            multi_start_use_screening=multi_start.get("use_screening", True),
+            multi_start_screen_keep_fraction=float(
+                multi_start.get("screen_keep_fraction", 0.5)
+            ),
+            multi_start_subsample_size=multi_start.get("subsample_size", 500_000),
+            multi_start_warmup_only_threshold=multi_start.get(
+                "warmup_only_threshold", 100_000_000
+            ),
+            multi_start_refine_top_k=multi_start.get("refine_top_k", 3),
+            multi_start_refinement_ftol=float(
+                multi_start.get("refinement_ftol", 1e-12)
+            ),
+            multi_start_degeneracy_threshold=float(
+                multi_start.get("degeneracy_threshold", 0.1)
+            ),
         )
 
         # Validate and log any issues
@@ -276,6 +321,52 @@ class NLSQConfig:
                 f"hybrid_chunk_size must be positive, got: {self.hybrid_chunk_size}"
             )
 
+        # Validate multi-start settings
+        valid_sampling_strategies = ["latin_hypercube", "random"]
+        if self.multi_start_sampling_strategy not in valid_sampling_strategies:
+            errors.append(
+                f"multi_start_sampling_strategy must be one of {valid_sampling_strategies}, "
+                f"got: {self.multi_start_sampling_strategy}"
+            )
+        if self.multi_start_n_starts <= 0:
+            errors.append(
+                f"multi_start_n_starts must be positive, got: {self.multi_start_n_starts}"
+            )
+        if self.multi_start_n_workers < 0:
+            errors.append(
+                f"multi_start_n_workers must be non-negative, got: {self.multi_start_n_workers}"
+            )
+        if not 0 < self.multi_start_screen_keep_fraction <= 1:
+            errors.append(
+                f"multi_start_screen_keep_fraction must be in (0, 1], "
+                f"got: {self.multi_start_screen_keep_fraction}"
+            )
+        if self.multi_start_subsample_size <= 0:
+            errors.append(
+                f"multi_start_subsample_size must be positive, "
+                f"got: {self.multi_start_subsample_size}"
+            )
+        if self.multi_start_warmup_only_threshold <= 0:
+            errors.append(
+                f"multi_start_warmup_only_threshold must be positive, "
+                f"got: {self.multi_start_warmup_only_threshold}"
+            )
+        if self.multi_start_refine_top_k < 0:
+            errors.append(
+                f"multi_start_refine_top_k must be non-negative, "
+                f"got: {self.multi_start_refine_top_k}"
+            )
+        if self.multi_start_refinement_ftol <= 0:
+            errors.append(
+                f"multi_start_refinement_ftol must be positive, "
+                f"got: {self.multi_start_refinement_ftol}"
+            )
+        if not 0 < self.multi_start_degeneracy_threshold < 1:
+            errors.append(
+                f"multi_start_degeneracy_threshold must be in (0, 1), "
+                f"got: {self.multi_start_degeneracy_threshold}"
+            )
+
         self._validation_errors = errors
         return errors
 
@@ -336,5 +427,19 @@ class NLSQConfig:
                 "enable_checkpoints": self.hybrid_enable_checkpoints,
                 "checkpoint_frequency": self.hybrid_checkpoint_frequency,
                 "validate_numerics": self.hybrid_validate_numerics,
+            },
+            "multi_start": {
+                "enable": self.enable_multi_start,
+                "n_starts": self.multi_start_n_starts,
+                "seed": self.multi_start_seed,
+                "sampling_strategy": self.multi_start_sampling_strategy,
+                "n_workers": self.multi_start_n_workers,
+                "use_screening": self.multi_start_use_screening,
+                "screen_keep_fraction": self.multi_start_screen_keep_fraction,
+                "subsample_size": self.multi_start_subsample_size,
+                "warmup_only_threshold": self.multi_start_warmup_only_threshold,
+                "refine_top_k": self.multi_start_refine_top_k,
+                "refinement_ftol": self.multi_start_refinement_ftol,
+                "degeneracy_threshold": self.multi_start_degeneracy_threshold,
             },
         }

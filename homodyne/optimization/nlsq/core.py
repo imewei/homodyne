@@ -106,6 +106,23 @@ except ImportError:
     NLSQWrapper = None
     OptimizationResult = None
 
+# Multi-start optimization import (v2.8.0)
+try:
+    from homodyne.optimization.nlsq.multistart import (
+        MultiStartConfig,
+        MultiStartResult,
+        SingleStartResult,
+        run_multistart_nlsq,
+    )
+
+    HAS_MULTISTART = True
+except ImportError:
+    HAS_MULTISTART = False
+    MultiStartConfig = None
+    MultiStartResult = None
+    SingleStartResult = None
+    run_multistart_nlsq = None
+
 # Export NLSQ availability for tests and external code
 NLSQ_AVAILABLE = HAS_NLSQ_WRAPPER and JAX_AVAILABLE
 
@@ -944,3 +961,204 @@ def _get_iteration_count(result: Any) -> int:
     if hasattr(result, "stats") and "num_steps" in result.stats:
         return int(result.stats["num_steps"])
     return 0
+
+
+# =============================================================================
+# Multi-Start Optimization Entry Point (v2.8.0)
+# =============================================================================
+
+
+@log_performance(threshold=1.0)
+def fit_nlsq_multistart(
+    data: dict[str, Any],
+    config: ConfigManager,
+    initial_params: dict[str, float] | None = None,
+    per_angle_scaling: bool = True,
+) -> MultiStartResult:
+    """Multi-start NLSQ optimization with dataset size-based strategy selection.
+
+    This function explores the parameter space using Latin Hypercube Sampling
+    to avoid local minima. The strategy is automatically selected based on
+    dataset size:
+
+    - < 1M points: Full multi-start (N complete fits)
+    - 1M - 100M points: Subsample multi-start (multi-start on 500K subsample)
+    - > 100M points: Phase 1 multi-start (parallel warmup, single Gauss-Newton)
+
+    Parameters
+    ----------
+    data : dict[str, Any]
+        XPCS experimental data with keys:
+        - wavevector_q_list: Q-vector values
+        - phi_angles_list: Azimuthal angles
+        - t1, t2: Time coordinates
+        - c2_exp: Experimental g2 correlation data
+        - sigma (optional): Error weights
+    config : ConfigManager
+        Configuration manager with optimization.nlsq.multi_start settings.
+    initial_params : dict[str, float], optional
+        Initial parameter guess. If provided, included as one of the starts.
+    per_angle_scaling : bool
+        Whether to use per-angle contrast/offset scaling. Default: True.
+
+    Returns
+    -------
+    MultiStartResult
+        Aggregated results including:
+        - best: Best result by chi-squared
+        - all_results: All optimization attempts
+        - strategy_used: "full", "subsample", or "phase1"
+        - n_unique_basins: Number of distinct local minima found
+        - degeneracy_detected: Whether parameter degeneracy was detected
+
+    Raises
+    ------
+    ImportError
+        If multi-start module is not available.
+    ValueError
+        If multi-start is not enabled in configuration.
+
+    Examples
+    --------
+    >>> config = ConfigManager("config.yaml")
+    >>> # Ensure multi_start.enable: true in config
+    >>> result = fit_nlsq_multistart(data, config)
+    >>> print(f"Best chi²: {result.best.chi_squared:.4g}")
+    >>> print(f"Strategy used: {result.strategy_used}")
+    >>> if result.degeneracy_detected:
+    ...     print(f"Warning: {result.n_unique_basins} distinct basins found")
+    """
+    if not HAS_MULTISTART:
+        raise ImportError(
+            "Multi-start optimization requires homodyne.optimization.nlsq.multistart. "
+            "Ensure the multistart module is properly installed."
+        )
+
+    if not HAS_NLSQ_WRAPPER:
+        raise ImportError("NLSQWrapper is required for multi-start optimization")
+
+    # Extract multi-start config
+    nlsq_dict = config.config.get("optimization", {}).get("nlsq", {})
+    multi_start_dict = nlsq_dict.get("multi_start", {})
+
+    if not multi_start_dict.get("enable", False):
+        raise ValueError(
+            "Multi-start optimization is not enabled. "
+            "Set optimization.nlsq.multi_start.enable: true in config."
+        )
+
+    from homodyne.optimization.nlsq.config import NLSQConfig
+
+    nlsq_config = NLSQConfig.from_dict(nlsq_dict)
+    ms_config = MultiStartConfig.from_nlsq_config(nlsq_config)
+
+    # Validate data
+    _validate_data(data)
+
+    # Get analysis mode and parameter setup
+    analysis_mode = _get_analysis_mode(config)
+    param_space = ParameterSpace() if HAS_CORE_MODULES else None
+
+    # Get bounds
+    if HAS_PARAMETER_MANAGER:
+        param_manager = ParameterManager(config)
+        bounds_list = param_manager.get_all_bounds()
+        bounds_dict = {b["name"]: (b["min"], b["max"]) for b in bounds_list}
+    else:
+        bounds_dict = _get_parameter_bounds(analysis_mode, param_space)
+
+    lower_bounds, upper_bounds = _bounds_to_arrays(bounds_dict, analysis_mode)
+    bounds_array = np.column_stack([lower_bounds, upper_bounds])
+
+    # Create single fit function wrapper
+    def single_fit_func(
+        fit_data: dict[str, Any], start_params: np.ndarray
+    ) -> SingleStartResult:
+        """Wrapper for single NLSQ fit."""
+        import time
+
+        start_time = time.perf_counter()
+
+        # Convert array to dict
+        param_names = _get_param_names(analysis_mode)
+        params_dict = {
+            name: float(start_params[i]) for i, name in enumerate(param_names)
+        }
+
+        try:
+            result = fit_nlsq_jax(
+                data=fit_data,
+                config=config,
+                initial_params=params_dict,
+                per_angle_scaling=per_angle_scaling,
+            )
+
+            return SingleStartResult(
+                start_idx=0,
+                initial_params=start_params,
+                final_params=np.array(result.popt),
+                chi_squared=result.chi_squared,
+                reduced_chi_squared=result.reduced_chi_squared,
+                success=result.success,
+                status=0,
+                message=result.message,
+                n_iterations=result.n_iterations,
+                n_fev=result.n_fev,
+                wall_time=time.perf_counter() - start_time,
+                covariance=result.pcov if hasattr(result, "pcov") else None,
+            )
+        except Exception as e:
+            return SingleStartResult(
+                start_idx=0,
+                initial_params=start_params,
+                final_params=start_params,
+                chi_squared=np.inf,
+                success=False,
+                message=str(e),
+                wall_time=time.perf_counter() - start_time,
+            )
+
+    # Create cost function for screening
+    def cost_func(params: np.ndarray) -> float:
+        """Quick cost evaluation for screening.
+
+        Uses a heuristic based on distance from bounds center rather than
+        full residual evaluation for efficiency during screening phase.
+        """
+        try:
+            # Check if params are at bounds (return large cost)
+            for i, (low, high) in enumerate(
+                zip(lower_bounds, upper_bounds, strict=True)
+            ):
+                if params[i] <= low or params[i] >= high:
+                    return 1e20
+
+            # Approximate cost from parameter distance to center
+            center = (lower_bounds + upper_bounds) / 2
+            scale = upper_bounds - lower_bounds
+            normalized_dist = np.sum(((params - center) / scale) ** 2)
+            return normalized_dist
+        except Exception:
+            return 1e20
+
+    # Run multi-start optimization
+    logger.info(
+        f"Starting multi-start NLSQ with {ms_config.n_starts} starts, "
+        f"strategy will be auto-selected based on dataset size"
+    )
+
+    result = run_multistart_nlsq(
+        data=data,
+        bounds=bounds_array,
+        config=ms_config,
+        single_fit_func=single_fit_func,
+        cost_func=cost_func if ms_config.use_screening else None,
+    )
+
+    logger.info(
+        f"Multi-start complete: strategy={result.strategy_used}, "
+        f"best χ²={result.best.chi_squared:.4g}, "
+        f"basins={result.n_unique_basins}"
+    )
+
+    return result

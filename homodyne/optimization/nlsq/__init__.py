@@ -12,6 +12,7 @@ Structure:
 - data_prep.py: Data preparation utilities
 - result_builder.py: Result building utilities
 - fit_computation.py: Fit computation utilities
+- multistart.py: Multi-start optimization with LHS (v2.8.0)
 - strategies/: Optimization strategy modules
   - selection.py: DatasetSizeStrategy and OptimizationStrategy
   - chunking.py: Angle-stratified chunking for large datasets
@@ -27,6 +28,7 @@ from homodyne.optimization.nlsq.core import (
     NLSQResult,
     _get_param_names,
     fit_nlsq_jax,
+    fit_nlsq_multistart,
 )
 
 # New refactored modules (Dec 2025)
@@ -45,6 +47,24 @@ from homodyne.optimization.nlsq.fit_computation import (
     extract_parameters_from_result,
     get_physical_param_count,
     normalize_analysis_mode,
+)
+
+# Multi-start optimization (v2.8.0)
+from homodyne.optimization.nlsq.multistart import (
+    MultiStartConfig,
+    MultiStartResult,
+    MultiStartStrategy,
+    SingleStartResult,
+    check_zero_volume_bounds,
+    create_stratified_subsample,
+    detect_degeneracy,
+    generate_lhs_starts,
+    generate_random_starts,
+    include_custom_starts,
+    run_multistart_nlsq,
+    screen_starts,
+    select_multistart_strategy,
+    validate_n_starts_for_lhs,
 )
 from homodyne.optimization.nlsq.result_builder import (
     QualityMetrics,
@@ -97,10 +117,26 @@ from homodyne.optimization.nlsq.wrapper import NLSQWrapper
 __all__ = [
     # Core
     "fit_nlsq_jax",
+    "fit_nlsq_multistart",
     "NLSQResult",
     "JAX_AVAILABLE",
     "NLSQ_AVAILABLE",
     "_get_param_names",
+    # Multi-start (v2.8.0)
+    "MultiStartConfig",
+    "MultiStartResult",
+    "MultiStartStrategy",
+    "SingleStartResult",
+    "generate_lhs_starts",
+    "generate_random_starts",
+    "screen_starts",
+    "detect_degeneracy",
+    "select_multistart_strategy",
+    "create_stratified_subsample",
+    "run_multistart_nlsq",
+    "include_custom_starts",
+    "check_zero_volume_bounds",
+    "validate_n_starts_for_lhs",
     # Wrapper
     "NLSQWrapper",
     "OptimizationResult",

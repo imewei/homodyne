@@ -1,0 +1,195 @@
+# ==============================================================================
+# MULTI-START NLSQ OPTIMIZATION EXAMPLE CONFIGURATION
+# ==============================================================================
+# This example shows how to configure multi-start optimization to explore
+# the parameter space and avoid local minima.
+#
+# Multi-start optimization uses Latin Hypercube Sampling (LHS) to generate
+# diverse starting points, then runs optimization from each and selects
+# the best result.
+#
+# VERSION: 2.8.0
+# UPDATED: 2025-12-20
+# ==============================================================================
+
+# Analysis mode (static or laminar_flow)
+analysis_mode: "laminar_flow"
+
+# ==============================================================================
+# OPTIMIZATION SETTINGS
+# ==============================================================================
+optimization:
+  method: "nlsq"  # Primary method: non-linear least squares
+
+  # ---------------------------------------------------------------------------
+  # NLSQ CONFIGURATION
+  # ---------------------------------------------------------------------------
+  nlsq:
+    max_iterations: 100
+    tolerance: 1.0e-8
+    loss: "soft_l1"  # Robust loss function
+
+    # -------------------------------------------------------------------------
+    # MULTI-START CONFIGURATION (v2.8.0+)
+    # -------------------------------------------------------------------------
+    # Multi-start optimization explores parameter space from multiple starting
+    # points to find the global optimum and detect parameter degeneracy.
+    #
+    # WHEN TO USE:
+    # - Initial parameter guesses are uncertain
+    # - Objective function may have multiple local minima
+    # - Need robust global optimization
+    # - Want to detect parameter degeneracy
+    #
+    # STRATEGY SELECTION (automatic based on dataset size):
+    # - < 1M points:    FULL strategy (N complete fits in parallel)
+    # - 1M - 100M:      SUBSAMPLE strategy (multi-start on 500K subsample)
+    # - > 100M points:  PHASE1 strategy (parallel Adam warmup, single GN)
+    #
+    multi_start:
+      # Enable/disable multi-start optimization
+      enable: true
+
+      # Number of starting points to generate
+      # Recommendation: 10-20 for exploration, 5-10 for refinement
+      n_starts: 10
+
+      # Random seed for reproducibility
+      seed: 42
+
+      # Starting point generation strategy
+      # - "latin_hypercube": Better space-filling coverage (recommended)
+      # - "random": Simple random uniform sampling
+      sampling_strategy: "latin_hypercube"
+
+      # Number of parallel workers
+      # - 0: Auto-detect (min of n_starts, cpu_count)
+      # - >0: Explicit worker count
+      n_workers: 0
+
+      # Screening: Pre-filter starting points by initial cost
+      # Reduces computation by discarding obviously poor starting points
+      use_screening: true
+      screen_keep_fraction: 0.5  # Keep top 50% after screening
+
+      # Subsample size for SUBSAMPLE strategy
+      # Only used for datasets 1M - 100M points
+      subsample_size: 500000  # 500K points
+
+      # Refinement: Polish top solutions with tighter tolerance
+      refine_top_k: 3  # Refine top 3 solutions
+      refinement_ftol: 1.0e-12  # Tighter tolerance for refinement
+
+      # Degeneracy detection: Identify multiple solutions with similar cost
+      # Useful for identifying non-unique parameter combinations
+      degeneracy_threshold: 0.1  # 10% chi-squared similarity
+
+      # Custom starting points (optional)
+      # Include user-specified starting points alongside LHS-generated ones
+      # These are always included (not filtered by screening)
+      # custom_starts:
+      #   - [1000.0, 0.5, 10.0, 0.01, 0.0, 0.0, 0.0]  # Previous best fit
+      #   - [2000.0, 0.8, 5.0, 0.02, 0.1, 0.001, 5.0]  # Alternative guess
+
+    # -------------------------------------------------------------------------
+    # HYBRID STREAMING (for large datasets)
+    # -------------------------------------------------------------------------
+    # When multi-start selects PHASE1 strategy (>100M points), it uses
+    # hybrid streaming with Adam warmup for parallel exploration.
+    hybrid_streaming:
+      enable: true
+      normalize: true
+      normalization_strategy: "bounds"
+      warmup_iterations: 100
+      max_warmup_iterations: 500
+      warmup_learning_rate: 0.001
+      gauss_newton_max_iterations: 50
+      gauss_newton_tol: 1.0e-8
+      chunk_size: 50000
+
+# ==============================================================================
+# PARAMETER BOUNDS
+# ==============================================================================
+# Multi-start generates starting points within these bounds using LHS.
+# Ensure bounds are wide enough to capture the global minimum.
+parameter_space:
+  model: "laminar_flow"
+
+  bounds:
+    - name: contrast
+      min: 0.0
+      max: 1.0
+
+    - name: offset
+      min: 0.5
+      max: 1.5
+
+    - name: D0
+      min: 100.0
+      max: 100000.0
+
+    - name: alpha
+      min: -2.0
+      max: 2.0
+
+    - name: D_offset
+      min: -100000.0
+      max: 100000.0
+
+    - name: gamma_dot_t0
+      min: 1.0e-6
+      max: 0.5
+
+    - name: beta
+      min: -2.0
+      max: 2.0
+
+    - name: gamma_dot_t_offset
+      min: -0.1
+      max: 0.1
+
+    - name: phi0
+      min: -180.0
+      max: 180.0
+
+# ==============================================================================
+# USAGE NOTES
+# ==============================================================================
+#
+# BASIC USAGE:
+# ------------
+# Run analysis with multi-start enabled:
+#   homodyne --config multistart_example.yaml --method nlsq
+#
+# INTERPRETING RESULTS:
+# ---------------------
+# The output will include:
+#   - best: Best result by chi-squared
+#   - all_results: All optimization results
+#   - n_unique_basins: Number of distinct local minima found
+#   - degeneracy_detected: Whether multiple solutions exist
+#
+# If degeneracy_detected=True, examine all_results to understand
+# which parameters are not uniquely determined.
+#
+# PERFORMANCE TIPS:
+# -----------------
+# 1. Start with n_starts=5 for quick testing
+# 2. Increase to n_starts=10-20 for production runs
+# 3. Enable screening to reduce computation time
+# 4. For very large datasets, the PHASE1 strategy auto-selects
+#
+# CUSTOM STARTING POINTS:
+# -----------------------
+# If you have prior knowledge (e.g., from previous fits), add
+# custom_starts to ensure those points are explored:
+#
+#   multi_start:
+#     custom_starts:
+#       - [1234.5, 0.567, 12.34, 0.01, 0.0, 0.0, 0.0]
+#
+# Custom starts are always included (not filtered by screening).
+#
+# ==============================================================================
+# END OF MULTI-START EXAMPLE
+# ==============================================================================

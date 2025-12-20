@@ -3,8 +3,6 @@
 Tests the NLSQConfig dataclass for parsing and validating NLSQ configuration.
 """
 
-import pytest
-
 from homodyne.optimization.nlsq.config import NLSQConfig
 
 
@@ -90,12 +88,14 @@ class TestNLSQConfigFromDict:
 
     def test_from_dict_with_convergence_settings(self):
         """Test parsing convergence settings from dict."""
-        config = NLSQConfig.from_dict({
-            "max_iterations": 500,
-            "tolerance": 1e-6,  # maps to ftol
-            "xtol": 1e-7,
-            "gtol": 1e-9,
-        })
+        config = NLSQConfig.from_dict(
+            {
+                "max_iterations": 500,
+                "tolerance": 1e-6,  # maps to ftol
+                "xtol": 1e-7,
+                "gtol": 1e-9,
+            }
+        )
         assert config.max_iterations == 500
         assert config.ftol == 1e-6
         assert config.xtol == 1e-7
@@ -103,64 +103,70 @@ class TestNLSQConfigFromDict:
 
     def test_from_dict_with_nested_diagnostics(self):
         """Test parsing nested diagnostics section."""
-        config = NLSQConfig.from_dict({
-            "diagnostics": {"enable": False}
-        })
+        config = NLSQConfig.from_dict({"diagnostics": {"enable": False}})
         assert config.enable_diagnostics is False
 
     def test_from_dict_with_nested_streaming(self):
         """Test parsing nested streaming section."""
-        config = NLSQConfig.from_dict({
-            "streaming": {
-                "enable": False,
-                "chunk_size": 25000,
+        config = NLSQConfig.from_dict(
+            {
+                "streaming": {
+                    "enable": False,
+                    "chunk_size": 25000,
+                }
             }
-        })
+        )
         assert config.enable_streaming is False
         assert config.streaming_chunk_size == 25000
 
     def test_from_dict_with_nested_stratified(self):
         """Test parsing nested stratified section."""
-        config = NLSQConfig.from_dict({
-            "stratified": {
-                "enable": False,
-                "target_chunk_size": 200000,
+        config = NLSQConfig.from_dict(
+            {
+                "stratified": {
+                    "enable": False,
+                    "target_chunk_size": 200000,
+                }
             }
-        })
+        )
         assert config.enable_stratified is False
         assert config.target_chunk_size == 200000
 
     def test_from_dict_with_nested_recovery(self):
         """Test parsing nested recovery section."""
-        config = NLSQConfig.from_dict({
-            "recovery": {
-                "enable": False,
-                "max_attempts": 5,
+        config = NLSQConfig.from_dict(
+            {
+                "recovery": {
+                    "enable": False,
+                    "max_attempts": 5,
+                }
             }
-        })
+        )
         assert config.enable_recovery is False
         assert config.max_recovery_attempts == 5
 
     def test_from_dict_with_nested_hybrid_streaming(self):
         """Test parsing nested hybrid_streaming section."""
-        config = NLSQConfig.from_dict({
-            "hybrid_streaming": {
-                "enable": False,
-                "normalize": False,
-                "normalization_strategy": "p0",
-                "warmup_iterations": 50,
-                "max_warmup_iterations": 200,
-                "warmup_learning_rate": 0.01,
-                "gauss_newton_max_iterations": 25,
-                "gauss_newton_tol": 1e-6,
-                "chunk_size": 100000,
-                "trust_region_initial": 2.0,
-                "regularization_factor": 1e-8,
-                "enable_checkpoints": False,
-                "checkpoint_frequency": 50,
-                "validate_numerics": False,
+        config = NLSQConfig.from_dict(
+            {
+                "hybrid_streaming": {
+                    "enable": False,
+                    "normalize": False,
+                    "normalization_strategy": "p0",
+                    "warmup_iterations": 50,
+                    "max_warmup_iterations": 200,
+                    "warmup_learning_rate": 0.01,
+                    "gauss_newton_max_iterations": 25,
+                    "gauss_newton_tol": 1e-6,
+                    "chunk_size": 100000,
+                    "trust_region_initial": 2.0,
+                    "regularization_factor": 1e-8,
+                    "enable_checkpoints": False,
+                    "checkpoint_frequency": 50,
+                    "validate_numerics": False,
+                }
             }
-        })
+        )
         assert config.enable_hybrid_streaming is False
         assert config.hybrid_normalize is False
         assert config.hybrid_normalization_strategy == "p0"
@@ -178,19 +184,23 @@ class TestNLSQConfigFromDict:
 
     def test_from_dict_with_x_scale_map(self):
         """Test parsing x_scale_map from dict."""
-        config = NLSQConfig.from_dict({
-            "x_scale": "jac",
-            "x_scale_map": {"D0": 1e4, "alpha": 1.0},
-        })
+        config = NLSQConfig.from_dict(
+            {
+                "x_scale": "jac",
+                "x_scale_map": {"D0": 1e4, "alpha": 1.0},
+            }
+        )
         assert config.x_scale == "jac"
         assert config.x_scale_map == {"D0": 1e4, "alpha": 1.0}
 
     def test_from_dict_float_conversion(self):
         """Test that numeric values are properly converted to float."""
-        config = NLSQConfig.from_dict({
-            "trust_region_scale": "2.5",  # string should be converted
-            "tolerance": "1e-10",
-        })
+        config = NLSQConfig.from_dict(
+            {
+                "trust_region_scale": "2.5",  # string should be converted
+                "tolerance": "1e-10",
+            }
+        )
         assert config.trust_region_scale == 2.5
         assert config.ftol == 1e-10
 
@@ -303,7 +313,9 @@ class TestNLSQConfigValidation:
         """Test validation catches invalid Gauss-Newton settings."""
         config = NLSQConfig(hybrid_gauss_newton_max_iterations=0)
         errors = config.validate()
-        assert any("hybrid_gauss_newton_max_iterations must be positive" in e for e in errors)
+        assert any(
+            "hybrid_gauss_newton_max_iterations must be positive" in e for e in errors
+        )
 
         config = NLSQConfig(hybrid_gauss_newton_tol=-1e-8)
         errors = config.validate()
