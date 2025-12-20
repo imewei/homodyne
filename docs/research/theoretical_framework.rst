@@ -225,7 +225,7 @@ The cumulative trapezoid approach builds a running sum on the discrete time grid
 .. note::
    **NLSQ and CMC Physics Now Match**
 
-   As of version 2.4.3, both NLSQ element-wise mode and CMC use the same
+   As of version 2.6.0, both NLSQ element-wise mode and CMC use the same
    cumulative trapezoid integration method with ``searchsorted`` index lookup.
    This ensures identical physics output for the same parameters, enabling
    direct comparison between optimization methods.

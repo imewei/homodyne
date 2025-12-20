@@ -49,7 +49,7 @@ To cite the Homodyne software package directly:
      author={Chen, Wei and He, Hongrui},
      year={2024},
      url={https://github.com/imewei/homodyne},
-     version={2.5.0},
+     version={2.6.0},
      institution={Argonne National Laboratory}
    }
 
@@ -60,7 +60,7 @@ When citing Homodyne, we recommend:
 
 1. **Always cite the primary PNAS paper** for the theoretical framework
 2. **Optionally cite the software package** if describing computational methods
-3. **Include the version number** (e.g., v2.5.0) for reproducibility
+3. **Include the version number** (e.g., v2.6.0) for reproducibility
 4. **Mention the DOI** in supplementary materials for persistent identification
 
 Example Citation Text

@@ -8,8 +8,8 @@
 # Use for: Nonequilibrium systems, shear flow, time-dependent shear rates
 # Parameter count: 7 physical + 2 × N_angles scaling = 7 + 2N total
 #
-# VERSION: 2.4.3
-# UPDATED: 2025-12-16
+# VERSION: 2.6.0
+# UPDATED: 2025-12-20
 # ==============================================================================
 
 # ==============================================================================
@@ -17,7 +17,7 @@
 # ==============================================================================
 # Template metadata describing analysis configuration
 metadata:
-  config_version: "2.4.3" # Configuration file format version
+  config_version: "2.6.0" # Configuration file format version
   description: "Laminar flow analysis - 7-parameter model"
   analysis_mode: "laminar_flow" # Laminar flow mode
   parameter_count: 7 # D₀, α, D_offset, γ̇₀, β, γ̇_offset, φ₀
