@@ -4223,9 +4223,8 @@ class NLSQWrapper:
         # Stability mode provides:
         # - Automatic memory management (switches to LSMR when memory tight)
         # - Numerical stability checks and Jacobian conditioning monitoring
-        # - More thorough optimization that avoids local minima (15 vs 7 iterations)
-        # Note: Removing stability mode (d0744d6) caused 18.5% worse chi-squared
-        # and convergence to local minima with drastically wrong D0/D_offset values
+        # Note: Requires NLSQ <= 0.3.0 for correct results. Later versions
+        # introduced regressions in stability mode that cause divergence.
         ls = LeastSquares(enable_stability=True, enable_diagnostics=True)
 
         result = ls.least_squares(
