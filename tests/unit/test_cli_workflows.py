@@ -486,7 +486,9 @@ class TestCMCDiagnosticPlotGeneration:
         mock_generate_plots.assert_called_once()
 
 
-@pytest.mark.skipif(not ARVIZ_AVAILABLE, reason="ArviZ required for CMC diagnostic plot tests")
+@pytest.mark.skipif(
+    not ARVIZ_AVAILABLE, reason="ArviZ required for CMC diagnostic plot tests"
+)
 class TestCMCDiagnosticPlotFunction:
     """Test _generate_cmc_diagnostic_plots function directly."""
 

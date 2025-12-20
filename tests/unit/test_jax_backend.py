@@ -975,9 +975,9 @@ class TestJAXArrayCreation:
         device_str = str(list(devices)[0]) if devices else ""
         # Accept either CPU or GPU (JAX default behavior depends on available hardware)
         valid_devices = ["cpu", "cuda", "gpu", "tpu"]
-        assert any(
-            d in device_str.lower() for d in valid_devices
-        ), f"Expected valid device, got {device_str}"
+        assert any(d in device_str.lower() for d in valid_devices), (
+            f"Expected valid device, got {device_str}"
+        )
 
     def test_array_reshape_preserves_data(self, jax_backend):
         """TC-CORE-JAX-008: Test reshape operations preserve data."""

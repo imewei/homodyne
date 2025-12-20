@@ -177,7 +177,6 @@ def combine_shard_samples(
         Combined samples.
     """
 
-
     if len(shard_samples) == 1:
         return shard_samples[0]
 

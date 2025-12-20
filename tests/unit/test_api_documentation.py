@@ -118,7 +118,9 @@ def test_autosummary_generation():
     that module stubs can be generated without errors.
     """
     # Skip if sphinx is not installed
-    pytest.importorskip("sphinx", reason="Sphinx required for autosummary generation test")
+    pytest.importorskip(
+        "sphinx", reason="Sphinx required for autosummary generation test"
+    )
 
     docs_path = Path(__file__).parent.parent.parent / "docs"
 

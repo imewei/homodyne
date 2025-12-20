@@ -4,8 +4,6 @@ Tests path validation utilities that prevent path traversal attacks
 and ensure secure file operations.
 """
 
-from pathlib import Path
-
 import pytest
 
 from homodyne.utils.path_validation import (
