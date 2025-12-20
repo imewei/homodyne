@@ -998,17 +998,22 @@ class TestNLSQWrapperErrorRecovery:
         assert isinstance(result, OptimizationResult)
         print("\n✅ TC-NLSQ-011 passed: Memory pressure handled gracefully")
 
-    def test_nlsq_stability_parameter_not_used(self):
+    def test_nlsq_stability_parameter_propagation(self):
         """
-        TC-NLSQ-016: Test that stability parameter is NOT passed to NLSQ.
+        TC-NLSQ-016: Test that stability='auto' parameter is passed to NLSQ.
 
-        Note: stability='auto' was removed because it causes optimization divergence
-        for XPCS physics data. XPCS Jacobians are well-conditioned and don't benefit
-        from per-iteration stability checks, which can modify the Jacobian and
-        cause different optimization paths. See commit 4ceb9f3 for analysis.
+        Note: stability='auto' MUST be enabled because removing it causes
+        optimization to converge to local minima with 18.5% worse chi-squared.
+        Evidence from C020 dataset (Dec 2025):
+        - WITH stability: chi²=100.6M, 15 iterations, correct D0/D_offset
+        - WITHOUT stability: chi²=119.2M, 7 iterations, wrong D0/D_offset
 
-        Acceptance: Verify curve_fit calls do NOT include stability parameter
-        to avoid unintended data rescaling and Jacobian modification.
+        The incorrect commit d0744d6 removed stability claiming it caused
+        divergence, but the opposite is true - stability helps avoid
+        premature convergence to local minima.
+
+        Acceptance: Verify curve_fit calls include stability='auto' for
+        automatic memory management and numerical stability.
         """
         from tests.factories.synthetic_data import generate_static_mode_dataset
 
@@ -1040,7 +1045,7 @@ class TestNLSQWrapperErrorRecovery:
         from nlsq import curve_fit as real_curve_fit
 
         def mock_curve_fit_capture(*args, **kwargs):
-            """Capture kwargs to verify stability parameter is NOT passed."""
+            """Capture kwargs to verify stability parameter is passed."""
             captured_kwargs.update(kwargs)
             return real_curve_fit(*args, **kwargs)
 
@@ -1056,13 +1061,16 @@ class TestNLSQWrapperErrorRecovery:
                 analysis_mode="static",
             )
 
-        # Verify stability parameter was NOT passed (intentionally removed)
-        assert "stability" not in captured_kwargs, (
-            "stability parameter should NOT be passed to curve_fit for XPCS data "
-            "(causes divergence due to per-iteration Jacobian modification)"
+        # Verify stability parameter was passed (required for proper convergence)
+        assert "stability" in captured_kwargs, (
+            "stability parameter MUST be passed to curve_fit to avoid "
+            "convergence to local minima (see Dec 2025 C020 dataset analysis)"
+        )
+        assert captured_kwargs["stability"] == "auto", (
+            f"Expected stability='auto', got {captured_kwargs['stability']}"
         )
         assert isinstance(result, OptimizationResult)
-        print("\n✅ TC-NLSQ-016 passed: stability parameter correctly omitted")
+        print("\n✅ TC-NLSQ-016 passed: stability='auto' parameter propagated")
 
 
 # =============================================================================

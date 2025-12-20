@@ -151,6 +151,7 @@ class StandardExecutor(OptimizationExecutor):
                 ftol=1e-6,
                 max_nfev=5000,
                 verbose=2,
+                stability="auto",  # Enable memory management and stability
             )
 
             info = {"success": True, "strategy": "standard"}
@@ -227,6 +228,7 @@ class LargeDatasetExecutor(OptimizationExecutor):
                 max_nfev=5000,
                 verbose=2,
                 show_progress=True,
+                stability="auto",  # Enable memory management and stability
             )
 
             # Handle different return formats from curve_fit_large
