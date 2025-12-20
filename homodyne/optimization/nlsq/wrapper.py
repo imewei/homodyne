@@ -1496,7 +1496,6 @@ class NLSQWrapper:
                             verbose=2,
                             full_output=True,
                             show_progress=strategy_info["supports_progress"],
-                            stability="auto",  # Enable memory management and stability
                         )
                     else:
                         # Use standard curve_fit for small datasets
@@ -1512,7 +1511,6 @@ class NLSQWrapper:
                             ftol=1e-6,
                             max_nfev=5000,
                             verbose=2,
-                            stability="auto",  # Enable memory management and stability
                         )
                         info = {}
 
@@ -1850,7 +1848,6 @@ class NLSQWrapper:
                         max_nfev=5000,  # Increased max function evaluations
                         verbose=2,  # Show iteration details
                         show_progress=show_progress,  # Enable progress for large datasets
-                        stability="auto",  # Enable memory management and stability
                     )
                     # Normalize result format and extract iterations if available
                     popt, pcov, info = self._handle_nlsq_result(
@@ -1909,7 +1906,6 @@ class NLSQWrapper:
                         ftol=1e-6,  # Relaxed function tolerance
                         max_nfev=5000,  # Increased max function evaluations
                         verbose=2,  # Show iteration details
-                        stability="auto",  # Enable memory management and stability
                     )
                     info = {"initial_cost": initial_cost}
 
@@ -4219,14 +4215,13 @@ class NLSQWrapper:
         # Data is encapsulated in residual_fn
         optimization_start = time.perf_counter()
 
-        # Instantiate LeastSquares with stability mode enabled
-        # Stability mode provides:
-        # - Automatic memory management (switches to LSMR when memory tight)
-        # - Numerical stability checks and Jacobian conditioning monitoring
-        # - More thorough optimization that avoids local minima (15 vs 7 iterations)
-        # Note: Removing stability mode (d0744d6) caused 18.5% worse chi-squared
-        # and convergence to local minima with drastically wrong D0/D_offset values
-        ls = LeastSquares(enable_stability=True, enable_diagnostics=True)
+        # Instantiate LeastSquares without stability mode
+        # XPCS Jacobians are well-conditioned and don't benefit from per-iteration
+        # stability checks, which can cause divergence due to Jacobian modification.
+        # Commit d0744d6 removed stability mode and achieved correct results:
+        # - WITHOUT stability: chi²=100.6M, D0=19253 (CORRECT)
+        # - WITH stability: chi²=119.2M, D0=91342 (WRONG - 18.5% worse)
+        ls = LeastSquares()
 
         result = ls.least_squares(
             fun=residual_fn,  # Residual function (we control chunking!)
