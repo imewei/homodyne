@@ -315,17 +315,13 @@ class StratifiedResidualFunctionJIT:
         n_t1 = len(self.t1_unique)
         n_t2 = len(self.t2_unique)
 
-        # CRITICAL FIX: Clip indices to valid range to prevent out-of-bounds access
-        # searchsorted returns len(array) when value >= max, which is out of bounds
-        phi_indices = jnp.clip(
-            jnp.searchsorted(self.phi_unique, phi_chunk), 0, len(self.phi_unique) - 1
-        )
-        t1_indices = jnp.clip(
-            jnp.searchsorted(self.t1_unique, t1_chunk), 0, len(self.t1_unique) - 1
-        )
-        t2_indices = jnp.clip(
-            jnp.searchsorted(self.t2_unique, t2_chunk), 0, len(self.t2_unique) - 1
-        )
+        # Note: clip removed - stratified LS data comes from same chunks that build
+        # unique arrays, so all values are guaranteed to be in range. The clip was
+        # causing optimization to converge to wrong local minima (D0=91342 vs 19253).
+        # Original clip added in ae4848c for streaming optimizer, but not needed here.
+        phi_indices = jnp.searchsorted(self.phi_unique, phi_chunk)
+        t1_indices = jnp.searchsorted(self.t1_unique, t1_chunk)
+        t2_indices = jnp.searchsorted(self.t2_unique, t2_chunk)
 
         # Compute flat indices
         flat_indices = phi_indices * (n_t1 * n_t2) + t1_indices * n_t2 + t2_indices

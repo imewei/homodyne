@@ -325,13 +325,12 @@ class StratifiedResidualFunction:
 
         # Create index mapping from chunk points to grid points
         # For each (phi, t1, t2) in chunk, find its index in the flattened grid
-        # CRITICAL FIX: Clip indices to valid range to prevent out-of-bounds access
-        # searchsorted returns len(array) when value >= max, which is out of bounds
-        phi_indices = jnp.clip(
-            jnp.searchsorted(phi_unique, phi), 0, len(phi_unique) - 1
-        )
-        t1_indices = jnp.clip(jnp.searchsorted(t1_unique, t1), 0, len(t1_unique) - 1)
-        t2_indices = jnp.clip(jnp.searchsorted(t2_unique, t2), 0, len(t2_unique) - 1)
+        # Note: clip removed - stratified LS data comes from same chunks that build
+        # unique arrays, so all values are guaranteed to be in range. The clip was
+        # causing optimization to converge to wrong local minima (D0=91342 vs 19253).
+        phi_indices = jnp.searchsorted(phi_unique, phi)
+        t1_indices = jnp.searchsorted(t1_unique, t1)
+        t2_indices = jnp.searchsorted(t2_unique, t2)
 
         # Convert to flat grid indices
         n_t1 = len(t1_unique)

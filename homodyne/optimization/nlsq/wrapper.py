@@ -2940,19 +2940,15 @@ class NLSQWrapper:
                 offset_params = float(params_np[1])
                 physical_params = params_np[2:]
 
-            # CRITICAL FIX: Clip indices to valid range to prevent out-of-bounds access
-            # np.searchsorted returns len(array) when value >= max, which is out of bounds
-            phi_indices = np.clip(
-                np.searchsorted(phi_unique_all, np.round(phi_section, decimals=6)),
-                0,
-                len(phi_unique_all) - 1,
+            # Note: clip removed - sequential residual data comes from same source as
+            # unique arrays (phi_flat, t1, t2), so all values are guaranteed to be in range.
+            # The clip was causing optimization to converge to wrong local minima.
+            # See: stratified LS fix in residual.py (D0=91342 vs 19253 issue).
+            phi_indices = np.searchsorted(
+                phi_unique_all, np.round(phi_section, decimals=6)
             )
-            t1_indices = np.clip(
-                np.searchsorted(t1_unique_all, t1_section), 0, len(t1_unique_all) - 1
-            )
-            t2_indices = np.clip(
-                np.searchsorted(t2_unique_all, t2_section), 0, len(t2_unique_all) - 1
-            )
+            t1_indices = np.searchsorted(t1_unique_all, t1_section)
+            t2_indices = np.searchsorted(t2_unique_all, t2_section)
 
             g2_model = np.empty_like(g2_section, dtype=np.float64)
             sigma_vals = np.empty_like(g2_section, dtype=np.float64)
@@ -3359,12 +3355,10 @@ class NLSQWrapper:
                 # Find which unique phi each requested phi corresponds to
                 # Since phi values come from phi_unique, we can use searchsorted
                 # CRITICAL: Keep all arrays in JAX (no np.asarray) for JIT compatibility
-                # CRITICAL FIX: Clip indices to valid range to prevent out-of-bounds access
-                phi_idx = jnp.clip(
-                    jnp.searchsorted(phi_unique, phi_requested),
-                    0,
-                    len(phi_unique) - 1,
-                )  # Shape: (chunk_size,)
+                # Note: clip removed - phi_requested is a subset of phi which was used to
+                # build phi_unique, so all values are guaranteed to be in range.
+                # The clip was causing optimization to converge to wrong local minima.
+                phi_idx = jnp.searchsorted(phi_unique, phi_requested)  # Shape: (chunk_size,)
 
                 # Select per-angle contrast and offset for each data point
                 contrast_requested = contrast[phi_idx]  # Shape: (chunk_size,)
