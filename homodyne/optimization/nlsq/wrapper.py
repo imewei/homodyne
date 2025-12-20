@@ -72,6 +72,10 @@ except ImportError:
     AdaptiveHybridStreamingOptimizer = None
     HybridStreamingConfig = None
 
+import logging
+import os
+import warnings
+
 from homodyne.optimization.batch_statistics import BatchStatistics
 from homodyne.optimization.checkpoint_manager import CheckpointManager
 from homodyne.optimization.exceptions import NLSQCheckpointError, NLSQOptimizationError
@@ -116,6 +120,200 @@ from homodyne.optimization.nlsq.transforms import (
 )
 from homodyne.optimization.numerical_validation import NumericalValidator
 from homodyne.optimization.recovery_strategies import RecoveryStrategyApplicator
+
+# Module-level logger for memory threshold logging
+_memory_logger = logging.getLogger(__name__)
+
+
+# =============================================================================
+# Adaptive Memory Threshold (v2.7.0+)
+# =============================================================================
+
+# Default memory fraction and environment variable name
+_DEFAULT_MEMORY_FRACTION = 0.75
+_MEMORY_FRACTION_ENV_VAR = "NLSQ_MEMORY_FRACTION"
+_FALLBACK_THRESHOLD_GB = 16.0
+_MIN_MEMORY_FRACTION = 0.1
+_MAX_MEMORY_FRACTION = 0.9
+
+
+def _detect_total_system_memory() -> float | None:
+    """Detect total system memory in bytes using multiple methods.
+
+    Returns
+    -------
+    float | None
+        Total system memory in bytes, or None if detection fails.
+
+    Notes
+    -----
+    Detection priority:
+    1. psutil.virtual_memory().total (preferred, cross-platform)
+    2. os.sysconf('SC_PAGE_SIZE') * os.sysconf('SC_PHYS_PAGES') (Linux fallback)
+    """
+    # Method 1: psutil (preferred, cross-platform)
+    try:
+        import psutil
+
+        total_bytes = psutil.virtual_memory().total
+        if total_bytes > 0:
+            return float(total_bytes)
+    except ImportError:
+        _memory_logger.debug("psutil not available, trying os.sysconf fallback")
+    except Exception as e:
+        _memory_logger.debug(f"psutil memory detection failed: {e}")
+
+    # Method 2: os.sysconf (Linux/Unix fallback)
+    try:
+        page_size = os.sysconf("SC_PAGE_SIZE")
+        phys_pages = os.sysconf("SC_PHYS_PAGES")
+        if page_size > 0 and phys_pages > 0:
+            total_bytes = page_size * phys_pages
+            return float(total_bytes)
+    except (ValueError, OSError, AttributeError) as e:
+        _memory_logger.debug(f"os.sysconf memory detection failed: {e}")
+
+    return None
+
+
+def get_adaptive_memory_threshold(
+    memory_fraction: float | None = None,
+) -> tuple[float, dict[str, float | str]]:
+    """Compute adaptive memory threshold based on system memory.
+
+    The memory threshold determines when NLSQ switches to streaming mode
+    for memory-bounded optimization. Instead of a fixed 16 GB threshold,
+    this function computes an adaptive threshold as a fraction of total
+    system memory.
+
+    Parameters
+    ----------
+    memory_fraction : float | None, optional
+        Fraction of total system memory to use as threshold (0.1 to 0.9).
+        If None, uses:
+        1. Environment variable NLSQ_MEMORY_FRACTION (if set)
+        2. Default value of 0.75 (75% of total memory)
+
+    Returns
+    -------
+    threshold_gb : float
+        Memory threshold in gigabytes.
+    info : dict
+        Diagnostic information with keys:
+        - 'total_memory_gb': Detected total system memory (GB)
+        - 'memory_fraction': Fraction used
+        - 'source': How the fraction was determined ('argument', 'env', 'default')
+        - 'detection_method': How memory was detected ('psutil', 'sysconf', 'fallback')
+
+    Notes
+    -----
+    - If total memory cannot be detected, falls back to 16.0 GB with a warning.
+    - Memory fraction is clamped to [0.1, 0.9] for safety.
+    - Environment variable NLSQ_MEMORY_FRACTION can override the default.
+
+    Examples
+    --------
+    >>> threshold_gb, info = get_adaptive_memory_threshold()
+    >>> pct = info['memory_fraction'] * 100
+    >>> tot = info['total_memory_gb']
+    >>> print(f"Threshold: {threshold_gb:.1f} GB ({pct:.0f}% of {tot:.1f} GB)")
+    Threshold: 24.0 GB (75% of 32.0 GB)
+
+    >>> # Override with specific fraction
+    >>> threshold_gb, _ = get_adaptive_memory_threshold(memory_fraction=0.5)
+
+    >>> # Override via environment variable
+    >>> import os
+    >>> os.environ["NLSQ_MEMORY_FRACTION"] = "0.6"
+    >>> threshold_gb, info = get_adaptive_memory_threshold()
+    >>> assert info['source'] == 'env'
+    """
+    info: dict[str, float | str] = {}
+
+    # Step 1: Determine memory fraction
+    fraction_source = "default"
+    effective_fraction = _DEFAULT_MEMORY_FRACTION
+
+    if memory_fraction is not None:
+        # Use explicit argument
+        effective_fraction = memory_fraction
+        fraction_source = "argument"
+    else:
+        # Check environment variable
+        env_value = os.environ.get(_MEMORY_FRACTION_ENV_VAR)
+        if env_value is not None:
+            try:
+                effective_fraction = float(env_value)
+                fraction_source = "env"
+            except ValueError:
+                warnings.warn(
+                    f"Invalid {_MEMORY_FRACTION_ENV_VAR}='{env_value}', "
+                    f"using default {_DEFAULT_MEMORY_FRACTION}",
+                    UserWarning,
+                    stacklevel=2,
+                )
+
+    # Step 2: Clamp fraction to safe range
+    original_fraction = effective_fraction
+    effective_fraction = max(
+        _MIN_MEMORY_FRACTION, min(effective_fraction, _MAX_MEMORY_FRACTION)
+    )
+
+    if effective_fraction != original_fraction:
+        warnings.warn(
+            f"Memory fraction {original_fraction} clamped to "
+            f"[{_MIN_MEMORY_FRACTION}, {_MAX_MEMORY_FRACTION}]: "
+            f"using {effective_fraction}",
+            UserWarning,
+            stacklevel=2,
+        )
+
+    info["memory_fraction"] = effective_fraction
+    info["source"] = fraction_source
+
+    # Step 3: Detect total system memory
+    total_bytes = _detect_total_system_memory()
+
+    if total_bytes is not None:
+        total_gb = total_bytes / (1024**3)
+        threshold_gb = total_gb * effective_fraction
+
+        # Determine detection method for logging
+        try:
+            import psutil  # noqa: F401
+
+            info["detection_method"] = "psutil"
+        except ImportError:
+            info["detection_method"] = "sysconf"
+
+        info["total_memory_gb"] = total_gb
+
+        _memory_logger.info(
+            f"Adaptive memory threshold: {threshold_gb:.1f} GB "
+            f"({effective_fraction*100:.0f}% of {total_gb:.1f} GB total, "
+            f"source={fraction_source}, method={info['detection_method']})"
+        )
+
+        return threshold_gb, info
+
+    # Step 4: Fallback if memory detection fails
+    warnings.warn(
+        f"Could not detect system memory. "
+        f"Using fallback threshold of {_FALLBACK_THRESHOLD_GB} GB. "
+        "Install psutil for accurate memory detection: pip install psutil",
+        UserWarning,
+        stacklevel=2,
+    )
+
+    info["total_memory_gb"] = 0.0
+    info["detection_method"] = "fallback"
+
+    _memory_logger.warning(
+        f"Memory detection failed. "
+        f"Using fallback threshold: {_FALLBACK_THRESHOLD_GB} GB"
+    )
+
+    return _FALLBACK_THRESHOLD_GB, info
 
 
 @dataclass
@@ -852,7 +1050,11 @@ class NLSQWrapper:
             hybrid_streaming_config = None
             use_streaming_mode = False
             use_hybrid_streaming = False
-            memory_threshold_gb = 16.0  # Default threshold
+
+            # Compute adaptive memory threshold (v2.7.0+)
+            # Default: 75% of total system memory instead of fixed 16 GB
+            memory_fraction: float | None = None  # Will use default or env var
+            memory_threshold_gb: float | None = None  # Will be computed adaptively
 
             if config is not None and hasattr(config, "config"):
                 strat_config = config.config.get("optimization", {}).get(
@@ -864,14 +1066,37 @@ class NLSQWrapper:
                 nlsq_config = config.config.get("optimization", {}).get("nlsq", {})
                 streaming_config = nlsq_config.get("streaming", {})
                 hybrid_streaming_config = nlsq_config.get("hybrid_streaming", {})
-                memory_threshold_gb = nlsq_config.get(
-                    "memory_threshold_gb", memory_threshold_gb
+
+                # Support for explicit memory_threshold_gb (backwards compatible)
+                # or memory_fraction (new adaptive approach)
+                if "memory_threshold_gb" in nlsq_config:
+                    memory_threshold_gb = nlsq_config["memory_threshold_gb"]
+                if "memory_fraction" in nlsq_config:
+                    memory_fraction = nlsq_config["memory_fraction"]
+
+            # Compute adaptive threshold if not explicitly set
+            if memory_threshold_gb is None:
+                memory_threshold_gb, threshold_info = get_adaptive_memory_threshold(
+                    memory_fraction=memory_fraction
+                )
+                logger.debug(
+                    f"Using adaptive memory threshold: {memory_threshold_gb:.1f} GB "
+                    f"(fraction={threshold_info['memory_fraction']}, "
+                    f"total={threshold_info['total_memory_gb']:.1f} GB, "
+                    f"source={threshold_info['source']})"
+                )
+            else:
+                logger.debug(
+                    f"Using explicit memory threshold from config: {memory_threshold_gb:.1f} GB"
                 )
 
-                # Check for hybrid streaming mode (preferred for large datasets)
+            # Check for hybrid streaming mode (preferred for large datasets)
+            if hybrid_streaming_config is not None:
                 use_hybrid_streaming = hybrid_streaming_config.get("enable", False)
 
-                # Check for forced streaming mode
+            # Check for forced streaming mode
+            if config is not None and hasattr(config, "config"):
+                nlsq_config = config.config.get("optimization", {}).get("nlsq", {})
                 use_streaming_mode = nlsq_config.get("use_streaming", False)
 
             # Calculate number of chunks for memory estimation
@@ -5372,20 +5597,37 @@ class NLSQWrapper:
         n_points: int,
         n_params: int,
         n_chunks: int,
-        memory_threshold_gb: float = 16.0,
+        memory_threshold_gb: float | None = None,
+        memory_fraction: float | None = None,
     ) -> tuple[bool, float, str]:
         """Determine if streaming optimizer should be used based on memory estimate.
+
+        Uses adaptive memory thresholding (v2.7.0+) to automatically compute
+        an appropriate threshold based on total system memory.
 
         Args:
             n_points: Total number of data points
             n_params: Number of parameters
             n_chunks: Number of stratified chunks
-            memory_threshold_gb: Memory threshold in GB above which to use streaming
+            memory_threshold_gb: Memory threshold in GB above which to use streaming.
+                If None (default), computes adaptive threshold as 75% of total memory.
+            memory_fraction: Fraction of total memory for adaptive threshold (0.1-0.9).
+                Only used if memory_threshold_gb is None.
 
         Returns:
             (use_streaming, estimated_gb, reason) tuple
         """
         import psutil
+
+        # Compute adaptive threshold if not explicitly provided
+        if memory_threshold_gb is None:
+            memory_threshold_gb, threshold_info = get_adaptive_memory_threshold(
+                memory_fraction=memory_fraction
+            )
+            _memory_logger.debug(
+                f"_should_use_streaming using adaptive threshold: "
+                f"{memory_threshold_gb:.1f} GB ({threshold_info})"
+            )
 
         # Get available system memory
         mem = psutil.virtual_memory()

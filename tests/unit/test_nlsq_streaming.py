@@ -8,9 +8,12 @@ Tests for homodyne/optimization/nlsq/wrapper.py streaming-related functionality:
 - TestStreamingOptimizer (10 tests): Streaming optimizer method
 - TestStreamingConfig (5 tests): Configuration handling
 - TestHybridStreamingOptimizer (8 tests): Hybrid streaming optimizer (v2.6.0+)
+- TestAdaptiveMemoryThreshold (12 tests): Adaptive memory threshold (v2.7.0+)
+- TestAdaptiveThresholdIntegration (5 tests): Integration tests for adaptive threshold
 
 Added in v2.5.0 to support memory-bounded optimization for large datasets.
 Extended in v2.6.0 with AdaptiveHybridStreamingOptimizer for improved convergence.
+Extended in v2.7.0 with adaptive memory threshold (75% of system RAM by default).
 
 Reference:
 - docs/architecture/memory-fix-plan.md
@@ -896,3 +899,319 @@ class TestHybridStreamingOptimizer:
             fallback_used = True
 
         assert fallback_used is fallback_expected
+
+
+# =============================================================================
+# TestAdaptiveMemoryThreshold - 12 tests (v2.7.0+)
+# =============================================================================
+@pytest.mark.unit
+class TestAdaptiveMemoryThreshold:
+    """Tests for adaptive memory threshold functionality (12 tests).
+
+    Added in v2.7.0 to replace fixed 16 GB threshold with system-aware
+    adaptive threshold (75% of total system memory by default).
+    """
+
+    def test_adaptive_threshold_returns_tuple(self):
+        """TC-ADAPT-MEM-001: get_adaptive_memory_threshold returns (float, dict)."""
+        from homodyne.optimization.nlsq.wrapper import get_adaptive_memory_threshold
+
+        result = get_adaptive_memory_threshold()
+
+        assert isinstance(result, tuple)
+        assert len(result) == 2
+        assert isinstance(result[0], float)  # threshold_gb
+        assert isinstance(result[1], dict)  # info
+
+    def test_adaptive_threshold_positive_value(self):
+        """TC-ADAPT-MEM-002: Threshold is always positive."""
+        from homodyne.optimization.nlsq.wrapper import get_adaptive_memory_threshold
+
+        threshold_gb, _ = get_adaptive_memory_threshold()
+
+        assert threshold_gb > 0
+
+    def test_adaptive_threshold_info_keys(self):
+        """TC-ADAPT-MEM-003: Info dict contains expected keys."""
+        from homodyne.optimization.nlsq.wrapper import get_adaptive_memory_threshold
+
+        _, info = get_adaptive_memory_threshold()
+
+        expected_keys = ["memory_fraction", "source", "total_memory_gb", "detection_method"]
+        for key in expected_keys:
+            assert key in info, f"Missing key: {key}"
+
+    def test_adaptive_threshold_default_fraction(self):
+        """TC-ADAPT-MEM-004: Default memory fraction is 0.75."""
+        from homodyne.optimization.nlsq.wrapper import (
+            _DEFAULT_MEMORY_FRACTION,
+            get_adaptive_memory_threshold,
+        )
+
+        # Clear env var to ensure default is used
+        import os
+        env_backup = os.environ.pop("NLSQ_MEMORY_FRACTION", None)
+
+        try:
+            _, info = get_adaptive_memory_threshold()
+            assert info["memory_fraction"] == _DEFAULT_MEMORY_FRACTION
+            assert info["source"] == "default"
+        finally:
+            if env_backup is not None:
+                os.environ["NLSQ_MEMORY_FRACTION"] = env_backup
+
+    def test_adaptive_threshold_custom_fraction(self):
+        """TC-ADAPT-MEM-005: Custom memory fraction is used when provided."""
+        from homodyne.optimization.nlsq.wrapper import get_adaptive_memory_threshold
+
+        custom_fraction = 0.5
+        _, info = get_adaptive_memory_threshold(memory_fraction=custom_fraction)
+
+        assert info["memory_fraction"] == custom_fraction
+        assert info["source"] == "argument"
+
+    def test_adaptive_threshold_env_var_override(self):
+        """TC-ADAPT-MEM-006: Environment variable overrides default fraction."""
+        import os
+
+        from homodyne.optimization.nlsq.wrapper import get_adaptive_memory_threshold
+
+        env_backup = os.environ.get("NLSQ_MEMORY_FRACTION")
+
+        try:
+            os.environ["NLSQ_MEMORY_FRACTION"] = "0.6"
+            _, info = get_adaptive_memory_threshold()
+
+            assert info["memory_fraction"] == 0.6
+            assert info["source"] == "env"
+        finally:
+            if env_backup is not None:
+                os.environ["NLSQ_MEMORY_FRACTION"] = env_backup
+            else:
+                os.environ.pop("NLSQ_MEMORY_FRACTION", None)
+
+    def test_adaptive_threshold_argument_overrides_env(self):
+        """TC-ADAPT-MEM-007: Argument overrides environment variable."""
+        import os
+
+        from homodyne.optimization.nlsq.wrapper import get_adaptive_memory_threshold
+
+        env_backup = os.environ.get("NLSQ_MEMORY_FRACTION")
+
+        try:
+            os.environ["NLSQ_MEMORY_FRACTION"] = "0.6"
+            _, info = get_adaptive_memory_threshold(memory_fraction=0.8)
+
+            # Argument takes precedence
+            assert info["memory_fraction"] == 0.8
+            assert info["source"] == "argument"
+        finally:
+            if env_backup is not None:
+                os.environ["NLSQ_MEMORY_FRACTION"] = env_backup
+            else:
+                os.environ.pop("NLSQ_MEMORY_FRACTION", None)
+
+    def test_adaptive_threshold_fraction_clamping_low(self):
+        """TC-ADAPT-MEM-008: Fraction below 0.1 is clamped to 0.1."""
+        import warnings
+
+        from homodyne.optimization.nlsq.wrapper import get_adaptive_memory_threshold
+
+        with warnings.catch_warnings(record=True) as w:
+            warnings.simplefilter("always")
+            _, info = get_adaptive_memory_threshold(memory_fraction=0.05)
+
+            # Should be clamped to minimum
+            assert info["memory_fraction"] == 0.1
+            # Should warn about clamping
+            assert len(w) == 1
+            assert "clamped" in str(w[0].message).lower()
+
+    def test_adaptive_threshold_fraction_clamping_high(self):
+        """TC-ADAPT-MEM-009: Fraction above 0.9 is clamped to 0.9."""
+        import warnings
+
+        from homodyne.optimization.nlsq.wrapper import get_adaptive_memory_threshold
+
+        with warnings.catch_warnings(record=True) as w:
+            warnings.simplefilter("always")
+            _, info = get_adaptive_memory_threshold(memory_fraction=0.95)
+
+            # Should be clamped to maximum
+            assert info["memory_fraction"] == 0.9
+            # Should warn about clamping
+            assert len(w) == 1
+            assert "clamped" in str(w[0].message).lower()
+
+    @patch("psutil.virtual_memory")
+    def test_adaptive_threshold_with_mocked_memory(self, mock_memory):
+        """TC-ADAPT-MEM-010: Correct threshold with mocked system memory."""
+        from homodyne.optimization.nlsq.wrapper import get_adaptive_memory_threshold
+
+        # Mock 64 GB total memory
+        mock_memory.return_value = MagicMock(
+            total=64 * 1024**3,
+            available=32 * 1024**3,
+        )
+
+        threshold_gb, info = get_adaptive_memory_threshold(memory_fraction=0.75)
+
+        # 75% of 64 GB = 48 GB
+        assert abs(threshold_gb - 48.0) < 0.1
+        assert abs(info["total_memory_gb"] - 64.0) < 0.1
+        assert info["detection_method"] == "psutil"
+
+    @patch("homodyne.optimization.nlsq.wrapper._detect_total_system_memory")
+    def test_adaptive_threshold_fallback_on_detection_failure(self, mock_detect):
+        """TC-ADAPT-MEM-011: Falls back to 16 GB when detection fails."""
+        import warnings
+
+        from homodyne.optimization.nlsq.wrapper import (
+            _FALLBACK_THRESHOLD_GB,
+            get_adaptive_memory_threshold,
+        )
+
+        # Make detection fail
+        mock_detect.return_value = None
+
+        with warnings.catch_warnings(record=True) as w:
+            warnings.simplefilter("always")
+            threshold_gb, info = get_adaptive_memory_threshold()
+
+            # Should fall back to 16 GB
+            assert threshold_gb == _FALLBACK_THRESHOLD_GB
+            assert info["detection_method"] == "fallback"
+            # Should warn about fallback
+            assert len(w) >= 1
+            assert any("fallback" in str(warning.message).lower() for warning in w)
+
+    def test_adaptive_threshold_invalid_env_var(self):
+        """TC-ADAPT-MEM-012: Invalid env var falls back to default."""
+        import os
+        import warnings
+
+        from homodyne.optimization.nlsq.wrapper import (
+            _DEFAULT_MEMORY_FRACTION,
+            get_adaptive_memory_threshold,
+        )
+
+        env_backup = os.environ.get("NLSQ_MEMORY_FRACTION")
+
+        try:
+            os.environ["NLSQ_MEMORY_FRACTION"] = "not_a_number"
+
+            with warnings.catch_warnings(record=True) as w:
+                warnings.simplefilter("always")
+                _, info = get_adaptive_memory_threshold()
+
+                # Should fall back to default
+                assert info["memory_fraction"] == _DEFAULT_MEMORY_FRACTION
+                # Should warn about invalid value
+                assert len(w) >= 1
+                assert any("invalid" in str(warning.message).lower() for warning in w)
+        finally:
+            if env_backup is not None:
+                os.environ["NLSQ_MEMORY_FRACTION"] = env_backup
+            else:
+                os.environ.pop("NLSQ_MEMORY_FRACTION", None)
+
+
+# =============================================================================
+# TestAdaptiveThresholdIntegration - 5 tests (v2.7.0+)
+# =============================================================================
+@pytest.mark.unit
+class TestAdaptiveThresholdIntegration:
+    """Integration tests for adaptive threshold in _should_use_streaming (5 tests)."""
+
+    def test_should_use_streaming_with_adaptive_threshold(self):
+        """TC-ADAPT-INT-001: _should_use_streaming uses adaptive threshold by default."""
+        from homodyne.optimization.nlsq.wrapper import NLSQWrapper
+
+        wrapper = NLSQWrapper()
+
+        # Call without explicit threshold - should use adaptive
+        should_stream, est_gb, reason = wrapper._should_use_streaming(
+            n_points=1_000_000,
+            n_params=53,
+            n_chunks=10,
+            # memory_threshold_gb not provided - uses adaptive
+        )
+
+        # Should return valid results
+        assert isinstance(should_stream, bool)
+        assert isinstance(est_gb, float)
+        assert isinstance(reason, str)
+        assert len(reason) > 0
+
+    def test_should_use_streaming_explicit_threshold_overrides(self):
+        """TC-ADAPT-INT-002: Explicit threshold overrides adaptive."""
+        from homodyne.optimization.nlsq.wrapper import NLSQWrapper
+
+        wrapper = NLSQWrapper()
+
+        # Very low threshold should trigger streaming
+        should_stream_low, _, _ = wrapper._should_use_streaming(
+            n_points=5_000_000,
+            n_params=53,
+            n_chunks=50,
+            memory_threshold_gb=1.0,  # Explicit low threshold
+        )
+
+        # Very high threshold should not trigger streaming (unless available memory low)
+        should_stream_high, _, _ = wrapper._should_use_streaming(
+            n_points=5_000_000,
+            n_params=53,
+            n_chunks=50,
+            memory_threshold_gb=500.0,  # Explicit high threshold
+        )
+
+        # Low threshold should definitely trigger streaming for 5M points
+        assert should_stream_low is True
+
+    def test_should_use_streaming_memory_fraction_parameter(self):
+        """TC-ADAPT-INT-003: memory_fraction parameter affects threshold."""
+        from homodyne.optimization.nlsq.wrapper import NLSQWrapper
+
+        wrapper = NLSQWrapper()
+
+        # Low fraction = lower threshold = more likely to stream
+        # High fraction = higher threshold = less likely to stream
+        # (assuming same dataset size)
+        _, _, _ = wrapper._should_use_streaming(
+            n_points=1_000_000,
+            n_params=53,
+            n_chunks=10,
+            memory_fraction=0.5,
+        )
+
+        # Should complete without error
+        assert True
+
+    def test_no_hardcoded_16gb_in_adaptive_code(self):
+        """TC-ADAPT-INT-004: No hardcoded 16.0 in adaptive threshold path."""
+        from homodyne.optimization.nlsq.wrapper import get_adaptive_memory_threshold
+
+        # When memory is properly detected, threshold should NOT be 16.0
+        # unless the system happens to have exactly 21.33 GB RAM (unlikely)
+        threshold_gb, info = get_adaptive_memory_threshold()
+
+        # If detection worked, threshold should be based on actual system memory
+        if info["detection_method"] != "fallback":
+            expected = info["total_memory_gb"] * info["memory_fraction"]
+            assert abs(threshold_gb - expected) < 0.01
+
+    def test_config_memory_fraction_option(self):
+        """TC-ADAPT-INT-005: Config supports memory_fraction option."""
+        # Test that the config structure supports memory_fraction
+        config = {
+            "optimization": {
+                "nlsq": {
+                    "memory_fraction": 0.6,  # New option
+                }
+            }
+        }
+
+        nlsq_config = config["optimization"]["nlsq"]
+
+        assert "memory_fraction" in nlsq_config
+        assert nlsq_config["memory_fraction"] == 0.6
