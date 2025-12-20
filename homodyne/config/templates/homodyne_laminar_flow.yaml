@@ -492,6 +492,31 @@ optimization:
       log_jacobian_norms: false # Log parameter sensitivity (Jacobian norms)
 
     # ---------------------------------------------------------------------------
+    # MULTI-START OPTIMIZATION (v2.8.0+)
+    # ---------------------------------------------------------------------------
+    # Explores parameter space from multiple starting points using Latin
+    # Hypercube Sampling to find global optimum and detect parameter degeneracy.
+    # See multistart_example.yaml for detailed configuration options.
+    #
+    # Strategy Selection (automatic based on dataset size):
+    # - < 1M points:    FULL strategy (N complete fits in parallel)
+    # - 1M - 100M:      SUBSAMPLE strategy (multi-start on 500K subsample)
+    # - > 100M points:  PHASE1 strategy (parallel Adam warmup, single GN)
+    multi_start:
+      enable: false                     # Default OFF - user opt-in
+      n_starts: 10                      # Number of LHS starting points
+      seed: 42                          # Random seed for reproducibility
+      sampling_strategy: "latin_hypercube"  # or "random"
+      n_workers: 0                      # 0 = auto (min of n_starts, cpu_count)
+      use_screening: true               # Pre-filter by initial cost
+      screen_keep_fraction: 0.5         # Keep top 50%
+      subsample_size: 500000            # Subsample size for 1M-100M datasets
+      warmup_only_threshold: 100000000  # 100M: switch to Phase 1 strategy
+      refine_top_k: 3                   # Polish top 3 solutions
+      refinement_ftol: 1.0e-12          # Tighter tolerance for refinement
+      degeneracy_threshold: 0.1         # Flag if chi² within 10%
+
+    # ---------------------------------------------------------------------------
     # HYBRID STREAMING - Four-Phase Adaptive Optimizer (v2.6.0)
     # ---------------------------------------------------------------------------
     # Fixes three critical issues with large laminar_flow datasets:
