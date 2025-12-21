@@ -996,14 +996,20 @@ class _SingleFitWorker:
     """Picklable worker class for parallel multi-start optimization.
 
     This class encapsulates the state needed for single NLSQ fits,
-    making it suitable for use with ProcessPoolExecutor. Unlike nested
-    closures, class instances with __call__ can be pickled as long as
-    their attributes are picklable.
+    making it suitable for use with ProcessPoolExecutor. The key is
+    storing only picklable data (dict, str, bool) rather than complex
+    objects like ConfigManager.
+
+    The ConfigManager is reconstructed in the worker process using
+    config_override, which avoids pickle issues with loggers, file
+    handles, and cached objects.
 
     Attributes
     ----------
-    config : ConfigManager
-        Configuration manager for the optimization.
+    config_dict : dict
+        Raw configuration dictionary (picklable).
+    config_file : str
+        Path to the original config file.
     per_angle_scaling : bool
         Whether to use per-angle contrast/offset scaling.
     analysis_mode : str
@@ -1012,11 +1018,14 @@ class _SingleFitWorker:
 
     def __init__(
         self,
-        config: Any,  # ConfigManager, but using Any for pickle compatibility
+        config: Any,  # ConfigManager
         per_angle_scaling: bool,
         analysis_mode: str,
     ) -> None:
-        self.config = config
+        # Extract picklable data from ConfigManager
+        # This avoids pickle issues with loggers, file handles, etc.
+        self.config_dict = config.config.copy()  # Raw dict is picklable
+        self.config_file = config.config_file  # str is picklable
         self.per_angle_scaling = per_angle_scaling
         self.analysis_mode = analysis_mode
 
@@ -1041,6 +1050,15 @@ class _SingleFitWorker:
 
         start_time = time.perf_counter()
 
+        # Reconstruct ConfigManager in the worker process
+        # Using config_override avoids file I/O and is faster
+        from homodyne.config.manager import ConfigManager
+
+        config = ConfigManager(
+            config_file=self.config_file,
+            config_override=self.config_dict,
+        )
+
         # Convert array to dict
         param_names = _get_param_names(self.analysis_mode)
         params_dict = {
@@ -1050,7 +1068,7 @@ class _SingleFitWorker:
         try:
             result = fit_nlsq_jax(
                 data=fit_data,
-                config=self.config,
+                config=config,
                 initial_params=params_dict,
                 per_angle_scaling=self.per_angle_scaling,
             )
