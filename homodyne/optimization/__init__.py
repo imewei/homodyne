@@ -30,6 +30,8 @@ from homodyne.optimization import nlsq
 try:
     from homodyne.optimization.nlsq import (  # Strategies; Chunking; Residual; Sequential
         DatasetSizeStrategy,
+        MultiStartConfig,
+        MultiStartResult,
         NLSQResult,
         NLSQWrapper,
         OptimizationResult,
@@ -42,6 +44,7 @@ try:
         create_stratified_residual_function,
         estimate_memory_requirements,
         fit_nlsq_jax,
+        fit_nlsq_multistart,
         optimize_per_angle_sequential,
         should_use_stratification,
     )
@@ -50,6 +53,9 @@ try:
 except ImportError as e:
     print(f"Warning: Could not import NLSQ optimization: {e}")
     fit_nlsq_jax = None
+    fit_nlsq_multistart = None
+    MultiStartConfig = None
+    MultiStartResult = None
     NLSQResult = None
     NLSQWrapper = None
     OptimizationResult = None
@@ -117,9 +123,12 @@ OPTIMIZATION_STATUS = {
 __all__ = [
     # Primary optimization methods
     "fit_nlsq_jax",  # NLSQ trust-region (PRIMARY)
+    "fit_nlsq_multistart",  # Multi-start NLSQ (v2.6.0)
     "fit_mcmc_jax",  # CMC NumPyro/NUTS (SECONDARY)
     # Result classes
     "NLSQResult",
+    "MultiStartConfig",
+    "MultiStartResult",
     "CMCResult",  # CMC result class
     "MCMCResult",  # Alias for backward compatibility
     "CMCConfig",  # CMC configuration
