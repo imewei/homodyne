@@ -87,6 +87,12 @@ class NLSQConfig:
     enable_recovery: bool = True
     max_recovery_attempts: int = 3
 
+    # Progress and logging settings (v2.7.0)
+    # Controls progress bar display and logging verbosity during optimization
+    enable_progress_bar: bool = True  # Show tqdm progress bar during fitting
+    verbose: int = 1  # Verbosity level: 0=quiet, 1=normal, 2=detailed
+    log_iteration_interval: int = 10  # Log every N iterations (for verbose >= 2)
+
     # Hybrid streaming optimizer settings (v2.6.0)
     # Fixes: 1) Shear-term weak gradients, 2) Slow convergence, 3) Crude covariance
     enable_hybrid_streaming: bool = True
@@ -146,6 +152,9 @@ class NLSQConfig:
         hybrid_streaming = config_dict.get("hybrid_streaming", {})
         multi_start = config_dict.get("multi_start", {})
 
+        # Extract progress/logging settings
+        progress = config_dict.get("progress", {})
+
         config = cls(
             # Loss function
             loss=config_dict.get("loss", "soft_l1"),
@@ -169,6 +178,10 @@ class NLSQConfig:
             # Recovery
             enable_recovery=recovery.get("enable", True),
             max_recovery_attempts=recovery.get("max_attempts", 3),
+            # Progress and logging (v2.7.0)
+            enable_progress_bar=progress.get("enable", True),
+            verbose=progress.get("verbose", 1),
+            log_iteration_interval=progress.get("log_interval", 10),
             # Hybrid streaming (v2.6.0)
             enable_hybrid_streaming=hybrid_streaming.get("enable", True),
             hybrid_normalize=hybrid_streaming.get("normalize", True),
@@ -396,6 +409,11 @@ class NLSQConfig:
             "recovery": {
                 "enable": self.enable_recovery,
                 "max_attempts": self.max_recovery_attempts,
+            },
+            "progress": {
+                "enable": self.enable_progress_bar,
+                "verbose": self.verbose,
+                "log_interval": self.log_iteration_interval,
             },
             "hybrid_streaming": {
                 "enable": self.enable_hybrid_streaming,

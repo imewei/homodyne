@@ -118,6 +118,11 @@ from homodyne.optimization.nlsq.transforms import (
     wrap_model_function_with_transforms,
     wrap_stratified_function_with_transforms,
 )
+from homodyne.optimization.nlsq.progress import (
+    ProgressConfig,
+    create_progress_callback,
+    create_streaming_progress_callback,
+)
 from homodyne.optimization.numerical_validation import NumericalValidator
 from homodyne.optimization.recovery_strategies import RecoveryStrategyApplicator
 

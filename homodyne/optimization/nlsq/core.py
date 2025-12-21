@@ -223,11 +223,14 @@ def fit_nlsq_jax(
             "Ensure homodyne.optimization.nlsq_wrapper is available.",
         )
 
-    logger.info("Starting NLSQ optimization via NLSQWrapper")
+    logger.info("=" * 60)
+    logger.info("NLSQ OPTIMIZATION")
+    logger.info("=" * 60)
 
     # Determine analysis mode
     analysis_mode = _get_analysis_mode(config)
     logger.info(f"Analysis mode: {analysis_mode}")
+    logger.info(f"Per-angle scaling: {per_angle_scaling}")
 
     # Set up initial parameters
     per_angle_scaling_initial: dict[str, list[float]] | None = None
@@ -437,10 +440,31 @@ def fit_nlsq_jax(
         per_angle_scaling_initial=per_angle_scaling_initial,
     )
 
-    logger.info(f"NLSQ optimization completed in {result.execution_time:.3f}s")
-    logger.info(
-        f"Final χ² = {result.chi_squared:.6f}, reduced χ² = {result.reduced_chi_squared:.6f}",
-    )
+    # Log optimization results
+    logger.info("=" * 60)
+    logger.info("NLSQ OPTIMIZATION COMPLETE")
+    logger.info("=" * 60)
+    logger.info(f"Status: {'SUCCESS' if result.success else 'FAILED'}")
+    logger.info(f"Iterations: {result.iterations}")
+    logger.info(f"Execution time: {result.execution_time:.3f}s")
+    logger.info(f"χ² = {result.chi_squared:.6e}")
+    logger.info(f"Reduced χ² = {result.reduced_chi_squared:.6f}")
+
+    # Log fitted parameters
+    if hasattr(result, "parameters") and result.parameters is not None:
+        param_names = _get_param_names(analysis_mode)
+        n_display = min(len(param_names), len(result.parameters))
+        logger.info("Fitted parameters:")
+        for i in range(n_display):
+            param_val = result.parameters[i]
+            unc_val = (
+                result.uncertainties[i]
+                if hasattr(result, "uncertainties") and result.uncertainties is not None
+                else 0.0
+            )
+            logger.info(f"  {param_names[i]}: {param_val:.6g} ± {unc_val:.6g}")
+
+    logger.info("=" * 60)
 
     return result
 
@@ -968,6 +992,95 @@ def _get_iteration_count(result: Any) -> int:
 # =============================================================================
 
 
+class _SingleFitWorker:
+    """Picklable worker class for parallel multi-start optimization.
+
+    This class encapsulates the state needed for single NLSQ fits,
+    making it suitable for use with ProcessPoolExecutor. Unlike nested
+    closures, class instances with __call__ can be pickled as long as
+    their attributes are picklable.
+
+    Attributes
+    ----------
+    config : ConfigManager
+        Configuration manager for the optimization.
+    per_angle_scaling : bool
+        Whether to use per-angle contrast/offset scaling.
+    analysis_mode : str
+        Analysis mode ("laminar_flow" or "static").
+    """
+
+    def __init__(
+        self,
+        config: Any,  # ConfigManager, but using Any for pickle compatibility
+        per_angle_scaling: bool,
+        analysis_mode: str,
+    ) -> None:
+        self.config = config
+        self.per_angle_scaling = per_angle_scaling
+        self.analysis_mode = analysis_mode
+
+    def __call__(
+        self, fit_data: dict[str, Any], start_params: np.ndarray
+    ) -> SingleStartResult:
+        """Run a single NLSQ fit.
+
+        Parameters
+        ----------
+        fit_data : dict
+            XPCS data dictionary.
+        start_params : np.ndarray
+            Starting parameter values as array.
+
+        Returns
+        -------
+        SingleStartResult
+            Result from this optimization run.
+        """
+        import time
+
+        start_time = time.perf_counter()
+
+        # Convert array to dict
+        param_names = _get_param_names(self.analysis_mode)
+        params_dict = {
+            name: float(start_params[i]) for i, name in enumerate(param_names)
+        }
+
+        try:
+            result = fit_nlsq_jax(
+                data=fit_data,
+                config=self.config,
+                initial_params=params_dict,
+                per_angle_scaling=self.per_angle_scaling,
+            )
+
+            return SingleStartResult(
+                start_idx=0,
+                initial_params=start_params,
+                final_params=np.array(result.parameters),
+                chi_squared=result.chi_squared,
+                reduced_chi_squared=result.reduced_chi_squared,
+                success=result.success,
+                status=0,
+                message=result.message,
+                n_iterations=result.iterations,
+                n_fev=result.iterations,
+                wall_time=time.perf_counter() - start_time,
+                covariance=result.covariance if hasattr(result, "covariance") else None,
+            )
+        except Exception as e:
+            return SingleStartResult(
+                start_idx=0,
+                initial_params=start_params,
+                final_params=start_params,
+                chi_squared=np.inf,
+                success=False,
+                message=str(e),
+                wall_time=time.perf_counter() - start_time,
+            )
+
+
 @log_performance(threshold=1.0)
 def fit_nlsq_multistart(
     data: dict[str, Any],
@@ -1062,7 +1175,9 @@ def fit_nlsq_multistart(
     # the known-good solution is explored, especially for laminar_flow mode where
     # LHS starting points may not converge to the correct physical parameters
     if initial_params is None:
-        initial_params, _ = _load_initial_params_from_config(config, analysis_mode, data)
+        initial_params, _ = _load_initial_params_from_config(
+            config, analysis_mode, data
+        )
         if initial_params is not None:
             logger.info(
                 "Loaded initial parameters from configuration for multi-start optimization"
@@ -1079,53 +1194,13 @@ def fit_nlsq_multistart(
     lower_bounds, upper_bounds = _bounds_to_arrays(bounds_dict, analysis_mode)
     bounds_array = np.column_stack([lower_bounds, upper_bounds])
 
-    # Create single fit function wrapper
-    def single_fit_func(
-        fit_data: dict[str, Any], start_params: np.ndarray
-    ) -> SingleStartResult:
-        """Wrapper for single NLSQ fit."""
-        import time
-
-        start_time = time.perf_counter()
-
-        # Convert array to dict
-        param_names = _get_param_names(analysis_mode)
-        params_dict = {
-            name: float(start_params[i]) for i, name in enumerate(param_names)
-        }
-
-        try:
-            result = fit_nlsq_jax(
-                data=fit_data,
-                config=config,
-                initial_params=params_dict,
-                per_angle_scaling=per_angle_scaling,
-            )
-
-            return SingleStartResult(
-                start_idx=0,
-                initial_params=start_params,
-                final_params=np.array(result.parameters),
-                chi_squared=result.chi_squared,
-                reduced_chi_squared=result.reduced_chi_squared,
-                success=result.success,
-                status=0,
-                message=result.message,
-                n_iterations=result.iterations,
-                n_fev=result.iterations,  # n_fev not available, use iterations
-                wall_time=time.perf_counter() - start_time,
-                covariance=result.covariance if hasattr(result, "covariance") else None,
-            )
-        except Exception as e:
-            return SingleStartResult(
-                start_idx=0,
-                initial_params=start_params,
-                final_params=start_params,
-                chi_squared=np.inf,
-                success=False,
-                message=str(e),
-                wall_time=time.perf_counter() - start_time,
-            )
+    # Create picklable single fit worker (replaces closure-based function)
+    # This enables parallel execution with ProcessPoolExecutor
+    single_fit_func = _SingleFitWorker(
+        config=config,
+        per_angle_scaling=per_angle_scaling,
+        analysis_mode=analysis_mode,
+    )
 
     # Create cost function for screening
     def cost_func(params: np.ndarray) -> float:
@@ -1157,9 +1232,7 @@ def fit_nlsq_multistart(
         param_names = _get_param_names(analysis_mode)
         initial_array = np.array([initial_params[name] for name in param_names])
         custom_starts = [initial_array.tolist()]
-        logger.info(
-            "Including user-specified initial parameters as custom start point"
-        )
+        logger.info("Including user-specified initial parameters as custom start point")
 
     # Run multi-start optimization
     logger.info(

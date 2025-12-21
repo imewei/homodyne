@@ -491,6 +491,14 @@ optimization:
       check_gradients: true # Verify gradient computations
       log_jacobian_norms: false # Log parameter sensitivity (Jacobian norms)
 
+    # Progress Bar and Logging (v2.7.0+)
+    # -----------------------------------
+    # Controls progress bar display and logging verbosity during optimization
+    progress:
+      enable: true       # Show tqdm progress bar during fitting
+      verbose: 1         # Verbosity level: 0=quiet, 1=normal (milestones), 2=detailed
+      log_interval: 10   # Log every N iterations (for verbose >= 2)
+
     # ---------------------------------------------------------------------------
     # MULTI-START OPTIMIZATION (v2.6.0+)
     # ---------------------------------------------------------------------------

@@ -21,6 +21,7 @@ from typing import TYPE_CHECKING, Any
 import numpy as np
 from scipy.stats import qmc
 
+from homodyne.optimization.nlsq.progress import MultiStartProgressTracker
 from homodyne.utils.logging import get_logger
 
 if TYPE_CHECKING:
@@ -908,9 +909,7 @@ def run_multistart_nlsq(
     n_points = _get_dataset_size(data)
 
     # Always use FULL strategy - no subsampling
-    logger.info(
-        f"Using FULL multi-start strategy (dataset size: {n_points:,} points)"
-    )
+    logger.info(f"Using FULL multi-start strategy (dataset size: {n_points:,} points)")
 
     # Validate n_starts for LHS
     n_params = bounds.shape[0]
@@ -938,7 +937,14 @@ def run_multistart_nlsq(
 
     # Execute FULL strategy (N complete fits)
     logger.info(f"Running full multi-start with {len(starts)} starting points")
-    results = _run_full_strategy(data, starts, single_fit_func, n_workers)
+    results = _run_full_strategy(
+        data,
+        starts,
+        single_fit_func,
+        n_workers,
+        enable_progress_bar=True,  # Always show progress for multi-start
+        verbose=1,
+    )
 
     # Find best result
     successful = [r for r in results if r.success]
@@ -992,23 +998,231 @@ def run_multistart_nlsq(
 # =============================================================================
 
 
-def _run_full_strategy(
-    data: dict[str, Any],
-    starts: NDArray[np.float64],
-    single_fit_func: Callable[[dict[str, Any], NDArray[np.float64]], SingleStartResult],
-    n_workers: int,
-) -> list[SingleStartResult]:
-    """Full multi-start: run N complete fits in parallel.
+class _OptimizeWorker:
+    """Picklable worker class for parallel optimization.
 
-    This is the ONLY supported strategy. No subsampling is performed.
+    This class wraps the single_fit_func and data, making them picklable
+    for use with ProcessPoolExecutor. Unlike nested closures, class instances
+    with __call__ can be pickled as long as their attributes are picklable.
     """
 
-    def optimize_wrapper(idx: int, start: NDArray[np.float64]) -> SingleStartResult:
+    def __init__(
+        self,
+        data: dict[str, Any],
+        single_fit_func: Callable[
+            [dict[str, Any], NDArray[np.float64]], SingleStartResult
+        ],
+    ) -> None:
+        self.data = data
+        self.single_fit_func = single_fit_func
+
+    def __call__(self, idx: int, start: NDArray[np.float64]) -> SingleStartResult:
+        """Run optimization for a single starting point."""
         start_time = time.perf_counter()
-        result = single_fit_func(data, start)
+        result = self.single_fit_func(self.data, start)
         result.start_idx = idx
         result.initial_params = start
         result.wall_time = time.perf_counter() - start_time
         return result
 
-    return run_parallel_optimizations(optimize_wrapper, starts, n_workers)
+
+def _run_full_strategy(
+    data: dict[str, Any],
+    starts: NDArray[np.float64],
+    single_fit_func: Callable[[dict[str, Any], NDArray[np.float64]], SingleStartResult],
+    n_workers: int,
+    enable_progress_bar: bool = True,
+    verbose: int = 1,
+) -> list[SingleStartResult]:
+    """Full multi-start: run N complete fits in parallel.
+
+    This is the ONLY supported strategy. No subsampling is performed.
+
+    Parameters
+    ----------
+    data : dict
+        XPCS data dictionary.
+    starts : NDArray
+        Starting points as (n_starts, n_params) array.
+    single_fit_func : Callable
+        Function to run single NLSQ fit.
+    n_workers : int
+        Number of parallel workers.
+    enable_progress_bar : bool
+        Whether to show progress bar.
+    verbose : int
+        Verbosity level.
+
+    Returns
+    -------
+    list[SingleStartResult]
+        Results from all starting points.
+    """
+    n_starts = len(starts)
+
+    # Use a picklable worker class instead of a closure
+    worker = _OptimizeWorker(data, single_fit_func)
+
+    # Sequential mode with progress tracking
+    if n_workers == 1:
+        results: list[SingleStartResult] = []
+        with MultiStartProgressTracker(
+            n_starts=n_starts,
+            enable_progress_bar=enable_progress_bar,
+            verbose=verbose,
+        ) as progress:
+            for idx, start in enumerate(starts):
+                try:
+                    result = worker(idx, start)
+                    results.append(result)
+                    progress.update(
+                        start_idx=idx,
+                        success=result.success,
+                        chi_squared=result.chi_squared,
+                        message=result.message,
+                    )
+                except Exception as e:
+                    failed_result = SingleStartResult(
+                        start_idx=idx,
+                        initial_params=start,
+                        final_params=start,
+                        chi_squared=np.inf,
+                        success=False,
+                        message=str(e),
+                    )
+                    results.append(failed_result)
+                    progress.update(
+                        start_idx=idx,
+                        success=False,
+                        chi_squared=np.inf,
+                        message=str(e),
+                    )
+        return results
+
+    # Parallel mode - progress bar updated as results complete
+    with MultiStartProgressTracker(
+        n_starts=n_starts,
+        enable_progress_bar=enable_progress_bar,
+        verbose=verbose,
+    ) as progress:
+        results = _run_parallel_with_progress(worker, starts, n_workers, progress)
+
+    return results
+
+
+def _run_parallel_with_progress(
+    optimize_func: Callable[[int, NDArray[np.float64]], SingleStartResult],
+    starts: NDArray[np.float64],
+    n_workers: int,
+    progress: MultiStartProgressTracker,
+) -> list[SingleStartResult]:
+    """Run optimizations in parallel with progress tracking.
+
+    Parameters
+    ----------
+    optimize_func : Callable
+        Function that takes (start_idx, initial_params) and returns SingleStartResult.
+    starts : NDArray[np.float64]
+        Starting points as (n_starts, n_params) array.
+    n_workers : int
+        Number of parallel workers.
+    progress : MultiStartProgressTracker
+        Progress tracker to update.
+
+    Returns
+    -------
+    list[SingleStartResult]
+        Results from all starting points.
+    """
+    results: list[SingleStartResult] = []
+    pickle_error_detected = False
+
+    try:
+        with ProcessPoolExecutor(max_workers=n_workers) as executor:
+            futures = {
+                executor.submit(optimize_func, idx, start): idx
+                for idx, start in enumerate(starts)
+            }
+
+            for future in as_completed(futures):
+                idx = futures[future]
+                try:
+                    result = future.result()
+                    results.append(result)
+                    progress.update(
+                        start_idx=idx,
+                        success=result.success,
+                        chi_squared=result.chi_squared,
+                        message=result.message,
+                    )
+                except Exception as e:
+                    error_msg = str(e)
+                    if _is_pickle_error(error_msg):
+                        pickle_error_detected = True
+                        logger.warning(
+                            f"Pickle error detected, falling back to sequential: {e}"
+                        )
+                        for f in futures:
+                            f.cancel()
+                        break
+                    else:
+                        failed_result = SingleStartResult(
+                            start_idx=idx,
+                            initial_params=starts[idx],
+                            final_params=starts[idx],
+                            chi_squared=np.inf,
+                            success=False,
+                            message=str(e),
+                        )
+                        results.append(failed_result)
+                        progress.update(
+                            start_idx=idx,
+                            success=False,
+                            chi_squared=np.inf,
+                            message=str(e),
+                        )
+
+    except Exception as e:
+        error_msg = str(e)
+        if _is_pickle_error(error_msg):
+            pickle_error_detected = True
+            logger.warning(f"ProcessPoolExecutor pickle error: {e}")
+        else:
+            logger.warning(f"ProcessPoolExecutor failed: {e}")
+            pickle_error_detected = True
+
+    # If pickle error, fall back to sequential
+    if pickle_error_detected:
+        logger.info("Running multi-start sequentially due to pickle constraints")
+        # Clear any partial results
+        results = []
+        for idx, start in enumerate(starts):
+            try:
+                result = optimize_func(idx, start)
+                results.append(result)
+                progress.update(
+                    start_idx=idx,
+                    success=result.success,
+                    chi_squared=result.chi_squared,
+                    message=result.message,
+                )
+            except Exception as e:
+                failed_result = SingleStartResult(
+                    start_idx=idx,
+                    initial_params=start,
+                    final_params=start,
+                    chi_squared=np.inf,
+                    success=False,
+                    message=str(e),
+                )
+                results.append(failed_result)
+                progress.update(
+                    start_idx=idx,
+                    success=False,
+                    chi_squared=np.inf,
+                    message=str(e),
+                )
+
+    # Sort by start_idx for consistent ordering
+    results.sort(key=lambda r: r.start_idx)
+    return results

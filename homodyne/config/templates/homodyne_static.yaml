@@ -397,6 +397,16 @@ optimization:
     #   alpha: 0.01                            # If alpha gradient is 100× larger
     #   D_offset: 1.0
 
+    # -------------------------------------------------------------------------
+    # PROGRESS BAR AND LOGGING (v2.7.0+)
+    # -------------------------------------------------------------------------
+    # Controls progress bar display and logging verbosity during optimization.
+    # Provides real-time feedback on optimization progress.
+    progress:
+      enable: true       # Show tqdm progress bar during fitting
+      verbose: 1         # Verbosity level: 0=quiet, 1=normal (milestones), 2=detailed
+      log_interval: 10   # Log every N iterations (for verbose >= 2)
+
     # ---------------------------------------------------------------------------
     # MULTI-START OPTIMIZATION (v2.6.0+)
     # ---------------------------------------------------------------------------

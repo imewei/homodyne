@@ -30,6 +30,15 @@ optimization:
     loss: "soft_l1"  # Robust loss function
 
     # -------------------------------------------------------------------------
+    # PROGRESS BAR AND LOGGING (v2.7.0+)
+    # -------------------------------------------------------------------------
+    # Controls progress bar display and logging verbosity during optimization.
+    progress:
+      enable: true       # Show tqdm progress bar during fitting
+      verbose: 1         # Verbosity level: 0=quiet, 1=normal (milestones), 2=detailed
+      log_interval: 10   # Log every N iterations (for verbose >= 2)
+
+    # -------------------------------------------------------------------------
     # MULTI-START CONFIGURATION (v2.6.0+)
     # -------------------------------------------------------------------------
     # Multi-start optimization explores parameter space from multiple starting
