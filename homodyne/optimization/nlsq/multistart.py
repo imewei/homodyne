@@ -231,6 +231,66 @@ class MultiStartResult:
     screening_costs: NDArray[np.float64] | None = None
     basin_labels: NDArray[np.int64] | None = None
 
+    def to_optimization_result(self) -> "OptimizationResult":
+        """Convert MultiStartResult to OptimizationResult for CLI compatibility.
+
+        Returns
+        -------
+        OptimizationResult
+            Optimization result object containing the best solution with
+            multi-start metadata in nlsq_diagnostics.
+        """
+        from homodyne.optimization.nlsq.results import OptimizationResult
+
+        best = self.best
+        n_params = len(best.final_params)
+
+        # Determine convergence status
+        if best.success:
+            convergence_status = "converged"
+        else:
+            convergence_status = "failed"
+
+        # Determine quality flag based on chi-squared
+        if best.reduced_chi_squared < 2.0:
+            quality_flag = "good"
+        elif best.reduced_chi_squared < 10.0:
+            quality_flag = "marginal"
+        else:
+            quality_flag = "poor"
+
+        # Build multi-start diagnostics
+        multistart_diagnostics = {
+            "strategy_used": self.strategy_used,
+            "n_starts": len(self.all_results),
+            "n_successful": self.n_successful,
+            "n_unique_basins": self.n_unique_basins,
+            "degeneracy_detected": self.degeneracy_detected,
+            "total_wall_time": self.total_wall_time,
+            "best_start_idx": best.start_idx,
+        }
+
+        return OptimizationResult(
+            parameters=best.final_params,
+            uncertainties=(
+                np.sqrt(np.diag(best.covariance))
+                if best.covariance is not None
+                else np.zeros(n_params)
+            ),
+            covariance=(
+                best.covariance if best.covariance is not None else np.eye(n_params)
+            ),
+            chi_squared=best.chi_squared,
+            reduced_chi_squared=best.reduced_chi_squared,
+            convergence_status=convergence_status,
+            iterations=best.n_iterations,
+            execution_time=self.total_wall_time,
+            device_info={"type": "cpu", "multistart": True},
+            recovery_actions=[],
+            quality_flag=quality_flag,
+            nlsq_diagnostics=multistart_diagnostics,
+        )
+
 
 # =============================================================================
 # Helper Functions
@@ -738,6 +798,44 @@ def get_n_workers(config: MultiStartConfig, n_starts: int) -> int:
     return n_workers
 
 
+def _run_sequential(
+    optimize_func: Callable[[int, NDArray[np.float64]], SingleStartResult],
+    starts: NDArray[np.float64],
+) -> list[SingleStartResult]:
+    """Run optimizations sequentially."""
+    results: list[SingleStartResult] = []
+    for idx, start in enumerate(starts):
+        try:
+            result = optimize_func(idx, start)
+            results.append(result)
+        except Exception as e:
+            logger.warning(f"Start {idx} failed: {e}")
+            results.append(
+                SingleStartResult(
+                    start_idx=idx,
+                    initial_params=start,
+                    final_params=start,
+                    chi_squared=np.inf,
+                    success=False,
+                    message=str(e),
+                )
+            )
+    return results
+
+
+def _is_pickle_error(error_msg: str) -> bool:
+    """Check if an error message indicates a pickle/serialization issue."""
+    pickle_indicators = [
+        "pickle",
+        "local object",
+        "can't get local",
+        "cannot serialize",
+        "attributeerror",
+    ]
+    error_lower = error_msg.lower()
+    return any(indicator in error_lower for indicator in pickle_indicators)
+
+
 def run_parallel_optimizations(
     optimize_func: Callable[[int, NDArray[np.float64]], SingleStartResult],
     starts: NDArray[np.float64],
@@ -758,30 +856,23 @@ def run_parallel_optimizations(
     -------
     list[SingleStartResult]
         Results from all starting points.
-    """
-    results: list[SingleStartResult] = []
 
+    Notes
+    -----
+    Falls back to sequential execution if the optimize_func cannot be pickled
+    (e.g., when it's a closure or nested function).
+    """
     if n_workers == 1:
         # Sequential execution
-        for idx, start in enumerate(starts):
-            try:
-                result = optimize_func(idx, start)
-                results.append(result)
-            except Exception as e:
-                logger.warning(f"Start {idx} failed: {e}")
-                results.append(
-                    SingleStartResult(
-                        start_idx=idx,
-                        initial_params=start,
-                        final_params=start,
-                        chi_squared=np.inf,
-                        success=False,
-                        message=str(e),
-                    )
-                )
-    else:
-        # Parallel execution
+        return _run_sequential(optimize_func, starts)
+
+    # Parallel execution - try ProcessPoolExecutor, fall back to sequential
+    results: list[SingleStartResult] = []
+    pickle_error_detected = False
+
+    try:
         with ProcessPoolExecutor(max_workers=n_workers) as executor:
+            # Submit all tasks
             futures = {
                 executor.submit(optimize_func, idx, start): idx
                 for idx, start in enumerate(starts)
@@ -793,17 +884,47 @@ def run_parallel_optimizations(
                     result = future.result()
                     results.append(result)
                 except Exception as e:
-                    logger.warning(f"Start {idx} failed: {e}")
-                    results.append(
-                        SingleStartResult(
-                            start_idx=idx,
-                            initial_params=starts[idx],
-                            final_params=starts[idx],
-                            chi_squared=np.inf,
-                            success=False,
-                            message=str(e),
+                    error_msg = str(e)
+                    if _is_pickle_error(error_msg):
+                        pickle_error_detected = True
+                        logger.warning(
+                            f"Pickle error detected on start {idx}, "
+                            f"will fall back to sequential: {error_msg}"
                         )
-                    )
+                        # Cancel remaining futures
+                        for f in futures:
+                            f.cancel()
+                        break
+                    else:
+                        logger.warning(f"Start {idx} failed: {e}")
+                        results.append(
+                            SingleStartResult(
+                                start_idx=idx,
+                                initial_params=starts[idx],
+                                final_params=starts[idx],
+                                chi_squared=np.inf,
+                                success=False,
+                                message=str(e),
+                            )
+                        )
+
+    except Exception as e:
+        error_msg = str(e)
+        if _is_pickle_error(error_msg):
+            pickle_error_detected = True
+            logger.warning(
+                f"ProcessPoolExecutor pickle error, falling back to sequential: {e}"
+            )
+        else:
+            logger.warning(
+                f"ProcessPoolExecutor failed, falling back to sequential: {e}"
+            )
+            pickle_error_detected = True  # Fall back anyway
+
+    # If pickle error detected, run sequentially instead
+    if pickle_error_detected:
+        logger.info("Running multi-start sequentially due to pickle constraints")
+        return _run_sequential(optimize_func, starts)
 
     # Sort by start_idx for consistent ordering
     results.sort(key=lambda r: r.start_idx)

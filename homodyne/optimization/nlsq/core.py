@@ -1061,8 +1061,8 @@ def fit_nlsq_multistart(
 
     # Get bounds
     if HAS_PARAMETER_MANAGER:
-        param_manager = ParameterManager(config)
-        bounds_list = param_manager.get_all_bounds()
+        param_manager = ParameterManager(config.config, analysis_mode=analysis_mode)
+        bounds_list = param_manager.get_parameter_bounds()
         bounds_dict = {b["name"]: (b["min"], b["max"]) for b in bounds_list}
     else:
         bounds_dict = _get_parameter_bounds(analysis_mode, param_space)
@@ -1096,16 +1096,16 @@ def fit_nlsq_multistart(
             return SingleStartResult(
                 start_idx=0,
                 initial_params=start_params,
-                final_params=np.array(result.popt),
+                final_params=np.array(result.parameters),
                 chi_squared=result.chi_squared,
                 reduced_chi_squared=result.reduced_chi_squared,
                 success=result.success,
                 status=0,
                 message=result.message,
-                n_iterations=result.n_iterations,
-                n_fev=result.n_fev,
+                n_iterations=result.iterations,
+                n_fev=result.iterations,  # n_fev not available, use iterations
                 wall_time=time.perf_counter() - start_time,
-                covariance=result.pcov if hasattr(result, "pcov") else None,
+                covariance=result.covariance if hasattr(result, "covariance") else None,
             )
         except Exception as e:
             return SingleStartResult(
