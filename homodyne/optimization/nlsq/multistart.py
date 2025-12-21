@@ -893,6 +893,20 @@ def run_multistart_nlsq(
     """
     start_time = time.perf_counter()
 
+    # Log configuration
+    logger.info("=" * 60)
+    logger.info("MULTI-START NLSQ OPTIMIZATION")
+    logger.info("=" * 60)
+    logger.info(
+        f"Configuration: n_starts={config.n_starts}, "
+        f"sampling={config.sampling_strategy}, seed={config.seed}"
+    )
+    logger.info(
+        f"Options: screening={'ON' if config.use_screening else 'OFF'}, "
+        f"keep_fraction={config.screen_keep_fraction:.0%}, "
+        f"n_workers={config.n_workers if config.n_workers > 0 else 'auto'}"
+    )
+
     # Check for zero-volume bounds (all parameters fixed)
     if check_zero_volume_bounds(bounds):
         logger.warning(
@@ -917,36 +931,76 @@ def run_multistart_nlsq(
 
     # Determine dataset size from data arrays (not just phi array length)
     n_points = _get_dataset_size(data)
+    n_params = bounds.shape[0]
+
+    # Log dataset and parameter info
+    logger.info(f"Dataset: {n_points:,} total data points")
+    logger.info(f"Parameters: {n_params} free parameters")
+    logger.debug(f"Parameter bounds:\n{bounds}")
 
     # Always use FULL strategy - no subsampling
-    logger.info(f"Using FULL multi-start strategy (dataset size: {n_points:,} points)")
+    logger.info("Strategy: FULL (all starting points run complete optimization)")
 
     # Validate n_starts for LHS
-    n_params = bounds.shape[0]
     validate_n_starts_for_lhs(config.n_starts, n_params)
 
     # Generate starting points
+    logger.info("-" * 40)
+    logger.info("PHASE 1: Generating starting points")
+    logger.info("-" * 40)
     if config.sampling_strategy == "latin_hypercube":
+        logger.info(
+            f"Using Latin Hypercube Sampling (n={config.n_starts}, seed={config.seed})"
+        )
         starts = generate_lhs_starts(bounds, config.n_starts, config.seed)
     else:
+        logger.info(
+            f"Using random uniform sampling (n={config.n_starts}, seed={config.seed})"
+        )
         starts = generate_random_starts(bounds, config.n_starts, config.seed)
+    logger.info(f"Generated {len(starts)} starting points")
 
     # Include custom starting points (from argument or config)
     custom = custom_starts if custom_starts is not None else config.custom_starts
+    n_before = len(starts)
     starts = include_custom_starts(starts, custom, bounds)
+    n_added = len(starts) - n_before
+    if n_added > 0:
+        logger.info(f"Added {n_added} custom starting point(s), total: {len(starts)}")
 
     # Screening phase (optional)
     screening_costs = None
     if config.use_screening and cost_func is not None:
+        logger.info("-" * 40)
+        logger.info("PHASE 2: Screening starting points")
+        logger.info("-" * 40)
+        n_before_screen = len(starts)
         starts, screening_costs = screen_starts(
             cost_func, starts, config.screen_keep_fraction
         )
+        n_filtered = n_before_screen - len(starts)
+        logger.info(f"Screening filtered {n_filtered} starts, keeping {len(starts)}")
+    else:
+        logger.debug("Screening disabled, proceeding with all starting points")
 
     # Get worker count
     n_workers = get_n_workers(config, len(starts))
+    cpu_count = os.cpu_count() or 1
 
     # Execute FULL strategy (N complete fits)
-    logger.info(f"Running full multi-start with {len(starts)} starting points")
+    logger.info("-" * 40)
+    logger.info("PHASE 3: Running optimizations")
+    logger.info("-" * 40)
+    logger.info(
+        f"Starting {len(starts)} optimizations with "
+        f"{n_workers} worker(s) (CPUs available: {cpu_count})"
+    )
+    if n_points > _MAX_POINTS_FOR_PARALLEL:
+        logger.info(
+            f"Note: Large dataset ({n_points:,} > {_MAX_POINTS_FOR_PARALLEL:,}), "
+            f"forcing sequential execution to avoid serialization overhead"
+        )
+
     results = _run_full_strategy(
         data,
         starts,
@@ -957,9 +1011,20 @@ def run_multistart_nlsq(
     )
 
     # Find best result
+    logger.info("-" * 40)
+    logger.info("PHASE 4: Analyzing results")
+    logger.info("-" * 40)
+
     successful = [r for r in results if r.success]
+    failed = [r for r in results if not r.success]
+
     if not successful:
-        logger.error("All multi-start optimizations failed")
+        logger.error("All multi-start optimizations failed!")
+        for r in failed[:5]:  # Show first 5 failures
+            logger.error(f"  Start {r.start_idx}: {r.message}")
+        if len(failed) > 5:
+            logger.error(f"  ... and {len(failed) - 5} more failures")
+
         best = (
             results[0]
             if results
@@ -974,6 +1039,11 @@ def run_multistart_nlsq(
         )
     else:
         best = min(successful, key=lambda r: r.chi_squared)
+        logger.info(f"Successful optimizations: {len(successful)}/{len(results)}")
+        if failed:
+            logger.warning(f"Failed optimizations: {len(failed)}")
+            for r in failed:
+                logger.debug(f"  Start {r.start_idx} failed: {r.message}")
 
     # Degeneracy detection
     degeneracy_detected, n_unique_basins, basin_labels = detect_degeneracy(
@@ -982,12 +1052,19 @@ def run_multistart_nlsq(
 
     total_time = time.perf_counter() - start_time
 
-    logger.info(
-        f"Multi-start complete: strategy=full, "
-        f"best chi²={best.chi_squared:.4g}, "
-        f"successful={len(successful)}/{len(results)}, "
-        f"basins={n_unique_basins}, time={total_time:.1f}s"
-    )
+    # Final summary
+    logger.info("=" * 60)
+    logger.info("MULTI-START OPTIMIZATION COMPLETE")
+    logger.info("=" * 60)
+    logger.info(f"Best result: χ²={best.chi_squared:.6e} (start {best.start_idx})")
+    logger.info(f"Best reduced χ²: {best.reduced_chi_squared:.6f}")
+    logger.info(f"Unique basins found: {n_unique_basins}")
+    if degeneracy_detected:
+        logger.warning(
+            f"DEGENERACY DETECTED: {n_unique_basins} distinct minima with similar χ²"
+        )
+    logger.info(f"Total wall time: {total_time:.1f}s")
+    logger.info("=" * 60)
 
     return MultiStartResult(
         best=best,
@@ -1072,22 +1149,26 @@ def _run_full_strategy(
         Results from all starting points.
     """
     n_starts = len(starts)
+    execution_mode = "parallel"
 
     # Check dataset size - force sequential for large datasets
     # Parallel execution with large data causes serialization overhead and hangs
     n_points = _get_dataset_size(data)
     if n_points > _MAX_POINTS_FOR_PARALLEL and n_workers > 1:
-        logger.info(
-            f"Large dataset ({n_points:,} points > {_MAX_POINTS_FOR_PARALLEL:,}): "
-            f"using sequential execution to avoid serialization overhead"
-        )
+        # Note: The caller (run_multistart_nlsq) already logs this decision
         n_workers = 1
+        execution_mode = "sequential (large dataset)"
+    elif n_workers == 1:
+        execution_mode = "sequential"
+
+    logger.debug(f"Execution mode: {execution_mode}, workers: {n_workers}")
 
     # Use a picklable worker class instead of a closure
     worker = _OptimizeWorker(data, single_fit_func)
 
     # Sequential mode with progress tracking
     if n_workers == 1:
+        logger.info(f"Running {n_starts} optimizations sequentially")
         results: list[SingleStartResult] = []
         with MultiStartProgressTracker(
             n_starts=n_starts,
@@ -1095,6 +1176,7 @@ def _run_full_strategy(
             verbose=verbose,
         ) as progress:
             for idx, start in enumerate(starts):
+                logger.debug(f"Starting optimization {idx + 1}/{n_starts}")
                 try:
                     result = worker(idx, start)
                     results.append(result)
@@ -1103,8 +1185,10 @@ def _run_full_strategy(
                         success=result.success,
                         chi_squared=result.chi_squared,
                         message=result.message,
+                        wall_time=result.wall_time,
                     )
                 except Exception as e:
+                    logger.debug(f"Optimization {idx + 1} raised exception: {e}")
                     failed_result = SingleStartResult(
                         start_idx=idx,
                         initial_params=start,
@@ -1123,6 +1207,9 @@ def _run_full_strategy(
         return results
 
     # Parallel mode - progress bar updated as results complete
+    logger.info(
+        f"Running {n_starts} optimizations in parallel with {n_workers} workers"
+    )
     with MultiStartProgressTracker(
         n_starts=n_starts,
         enable_progress_bar=enable_progress_bar,
@@ -1169,9 +1256,13 @@ def _run_parallel_with_progress(
     mp_context = multiprocessing.get_context("spawn")
 
     try:
-        logger.debug(
-            f"Starting parallel execution with {n_workers} workers (spawn context)"
+        logger.info(
+            f"Launching parallel execution: {n_workers} workers, "
+            f"{len(starts)} tasks, spawn context"
         )
+        logger.debug(f"Worker timeout: {_WORKER_TIMEOUT}s per task")
+
+        parallel_start_time = time.perf_counter()
 
         with ProcessPoolExecutor(
             max_workers=n_workers, mp_context=mp_context
@@ -1180,6 +1271,7 @@ def _run_parallel_with_progress(
                 executor.submit(optimize_func, idx, start): idx
                 for idx, start in enumerate(starts)
             }
+            logger.debug(f"Submitted {len(futures)} tasks to executor")
 
             # Track completion with timeout
             completed_count = 0
@@ -1197,14 +1289,17 @@ def _run_parallel_with_progress(
                         success=result.success,
                         chi_squared=result.chi_squared,
                         message=result.message,
+                        wall_time=result.wall_time,
                     )
                     logger.debug(
-                        f"Worker {idx} completed ({completed_count}/{total_count})"
+                        f"Worker {idx} completed: χ²={result.chi_squared:.4e}, "
+                        f"time={result.wall_time:.1f}s ({completed_count}/{total_count})"
                     )
                 except TimeoutError:
                     logger.warning(
-                        f"Worker {idx} timed out, falling back to sequential"
+                        f"Worker {idx} timed out after 60s waiting for result"
                     )
+                    logger.info("Falling back to sequential execution")
                     fallback_to_sequential = True
                     fallback_reason = f"Worker {idx} timeout"
                     # Cancel remaining futures
@@ -1215,15 +1310,15 @@ def _run_parallel_with_progress(
                     error_msg = str(e)
                     if _is_pickle_error(error_msg):
                         fallback_to_sequential = True
-                        fallback_reason = f"Pickle error: {error_msg}"
-                        logger.warning(
-                            f"Pickle error detected, falling back to sequential: {e}"
-                        )
+                        fallback_reason = f"Pickle error: {error_msg[:100]}"
+                        logger.warning(f"Pickle/serialization error detected: {e}")
+                        logger.info("Falling back to sequential execution")
                         for f in futures:
                             f.cancel()
                         break
                     else:
                         # Non-fatal error for this worker
+                        logger.warning(f"Worker {idx} failed: {e}")
                         failed_result = SingleStartResult(
                             start_idx=idx,
                             initial_params=starts[idx],
@@ -1241,31 +1336,39 @@ def _run_parallel_with_progress(
                             message=str(e),
                         )
 
+        if not fallback_to_sequential:
+            parallel_time = time.perf_counter() - parallel_start_time
+            logger.info(
+                f"Parallel execution complete: {completed_count}/{total_count} tasks "
+                f"in {parallel_time:.1f}s"
+            )
+
     except TimeoutError:
-        logger.warning(
-            f"Parallel execution timed out after {_WORKER_TIMEOUT}s, "
-            f"falling back to sequential"
-        )
+        logger.warning(f"Parallel execution timed out after {_WORKER_TIMEOUT}s")
+        logger.info("Falling back to sequential execution")
         fallback_to_sequential = True
-        fallback_reason = "Overall timeout"
+        fallback_reason = f"Overall timeout ({_WORKER_TIMEOUT}s)"
 
     except Exception as e:
         error_msg = str(e)
         if _is_pickle_error(error_msg):
             fallback_to_sequential = True
-            fallback_reason = f"Pickle error: {error_msg}"
+            fallback_reason = f"Pickle error: {error_msg[:100]}"
             logger.warning(f"ProcessPoolExecutor pickle error: {e}")
         else:
             fallback_to_sequential = True
-            fallback_reason = f"ProcessPoolExecutor error: {error_msg}"
+            fallback_reason = f"Executor error: {error_msg[:100]}"
             logger.warning(f"ProcessPoolExecutor failed: {e}")
+        logger.info("Falling back to sequential execution")
 
     # If parallel failed, fall back to sequential
     if fallback_to_sequential:
-        logger.info(f"Running multi-start sequentially ({fallback_reason})")
+        logger.info(f"Sequential fallback reason: {fallback_reason}")
+        logger.info(f"Running {len(starts)} optimizations sequentially")
         # Clear any partial results
         results = []
         for idx, start in enumerate(starts):
+            logger.debug(f"Starting sequential optimization {idx + 1}/{len(starts)}")
             try:
                 result = optimize_func(idx, start)
                 results.append(result)
@@ -1274,8 +1377,10 @@ def _run_parallel_with_progress(
                     success=result.success,
                     chi_squared=result.chi_squared,
                     message=result.message,
+                    wall_time=result.wall_time,
                 )
             except Exception as e:
+                logger.debug(f"Sequential optimization {idx + 1} failed: {e}")
                 failed_result = SingleStartResult(
                     start_idx=idx,
                     initial_params=start,

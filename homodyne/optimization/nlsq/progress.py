@@ -14,7 +14,6 @@ Part of homodyne v2.7.0 architecture.
 
 from __future__ import annotations
 
-import logging
 import time
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -22,12 +21,16 @@ from typing import TYPE_CHECKING, Any
 
 import numpy as np
 
+from homodyne.utils.logging import get_logger
+
 if TYPE_CHECKING:
+    import logging
+
     from nlsq.callbacks import CallbackBase
 
     from homodyne.optimization.nlsq.config import NLSQConfig
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 @dataclass
@@ -286,8 +289,10 @@ class MultiStartProgressTracker:
         self._start_time = time.perf_counter()
         self._completed = 0
         self._successful = 0
+        self._failed = 0
         self._best_chi_squared = float("inf")
         self._best_start_idx: int | None = None
+        self._tqdm_available = False
 
         # Initialize progress bar
         if enable_progress_bar:
@@ -298,12 +303,24 @@ class MultiStartProgressTracker:
                     total=n_starts,
                     desc=description,
                     unit="start",
+                    dynamic_ncols=True,
+                    leave=True,
                 )
+                self._tqdm_available = True
+                logger.debug(f"Progress bar initialized: {n_starts} starts")
             except ImportError:
-                logger.debug("tqdm not available for multi-start progress")
+                logger.warning(
+                    "tqdm not available for progress bar display. "
+                    "Install with: pip install tqdm"
+                )
+            except Exception as e:
+                logger.warning(f"Failed to initialize progress bar: {e}")
 
         if verbose >= 1:
-            logger.info(f"Starting multi-start optimization with {n_starts} starts")
+            logger.info(
+                f"Multi-start optimization: {n_starts} starting points, "
+                f"progress_bar={'enabled' if self._tqdm_available else 'disabled'}"
+            )
 
     def update(
         self,
@@ -311,6 +328,7 @@ class MultiStartProgressTracker:
         success: bool,
         chi_squared: float,
         message: str = "",
+        wall_time: float | None = None,
     ) -> None:
         """Update progress after a single start completes.
 
@@ -324,32 +342,58 @@ class MultiStartProgressTracker:
             Final chi-squared value.
         message : str, optional
             Status message.
+        wall_time : float, optional
+            Time taken for this optimization in seconds.
         """
         self._completed += 1
+        is_new_best = False
+
         if success:
             self._successful += 1
             if chi_squared < self._best_chi_squared:
                 self._best_chi_squared = chi_squared
                 self._best_start_idx = start_idx
+                is_new_best = True
+        else:
+            self._failed += 1
+
+        # Calculate elapsed time and ETA
+        elapsed = time.perf_counter() - self._start_time
+        remaining = self.n_starts - self._completed
+        avg_time_per_start = elapsed / self._completed if self._completed > 0 else 0
+        eta = avg_time_per_start * remaining
 
         # Update progress bar
         if self._pbar is not None:
-            self._pbar.set_postfix(
-                {
-                    "ok": f"{self._successful}/{self._completed}",
-                    "best": f"{self._best_chi_squared:.4e}",
-                }
-            )
+            postfix = {
+                "ok": f"{self._successful}/{self._completed}",
+                "best": f"{self._best_chi_squared:.4e}",
+            }
+            if eta > 0:
+                postfix["ETA"] = f"{eta:.0f}s"
+            self._pbar.set_postfix(postfix)
             self._pbar.update(1)
 
         # Log detailed progress for verbose >= 2
         if self.verbose >= 2:
             status = "OK" if success else "FAILED"
+            time_str = f", time={wall_time:.1f}s" if wall_time is not None else ""
+            new_best_str = " [NEW BEST]" if is_new_best else ""
             logger.info(
-                f"Start {start_idx + 1}/{self.n_starts} [{status}] | "
-                f"chi²: {chi_squared:.4e} | "
-                f"best: {self._best_chi_squared:.4e}"
+                f"Start {start_idx + 1:3d}/{self.n_starts} [{status:6s}] | "
+                f"χ²={chi_squared:.4e} | best={self._best_chi_squared:.4e}"
+                f"{new_best_str}{time_str}"
             )
+        elif self.verbose >= 1 and is_new_best:
+            # Log new best even at verbose=1
+            logger.info(
+                f"New best at start {start_idx + 1}/{self.n_starts}: "
+                f"χ²={chi_squared:.4e}"
+            )
+
+        # Log failures at verbose >= 1
+        if not success and self.verbose >= 1 and message:
+            logger.warning(f"Start {start_idx + 1}/{self.n_starts} failed: {message}")
 
     def close(self) -> None:
         """Close progress bar and log summary."""
@@ -358,15 +402,20 @@ class MultiStartProgressTracker:
             self._pbar = None
 
         elapsed = time.perf_counter() - self._start_time
+        avg_time = elapsed / self._completed if self._completed > 0 else 0
 
         if self.verbose >= 1:
-            logger.info(
-                f"Multi-start complete: "
-                f"{self._successful}/{self._completed} successful | "
-                f"best chi²: {self._best_chi_squared:.4e} "
-                f"(start {self._best_start_idx}) | "
-                f"time: {elapsed:.2f}s"
+            success_rate = (
+                self._successful / self._completed * 100 if self._completed > 0 else 0
             )
+            logger.info(
+                f"Multi-start summary: {self._successful}/{self._completed} successful "
+                f"({success_rate:.0f}%), {self._failed} failed"
+            )
+            logger.info(
+                f"Best result: χ²={self._best_chi_squared:.4e} at start {self._best_start_idx}"
+            )
+            logger.info(f"Timing: total={elapsed:.1f}s, avg={avg_time:.1f}s/start")
 
     def __enter__(self):
         """Context manager entry."""
