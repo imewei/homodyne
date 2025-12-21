@@ -2,10 +2,12 @@
 
 Tests cover:
 - Full multi-start workflow with synthetic data (T011)
-- Subsample strategy end-to-end (T039)
 - Custom starting points inclusion
 - Result reproducibility with fixed seeds
 - Degeneracy detection in practice
+
+NOTE: Subsampling is explicitly NOT supported per project requirements.
+All tests use FULL strategy only.
 """
 
 from __future__ import annotations
@@ -16,11 +18,9 @@ import pytest
 from homodyne.optimization.nlsq.multistart import (
     MultiStartConfig,
     MultiStartResult,
-    MultiStartStrategy,
     SingleStartResult,
-    create_stratified_subsample,
     run_multistart_nlsq,
-    select_multistart_strategy,
+    _get_dataset_size,
 )
 
 # =============================================================================
@@ -285,104 +285,40 @@ class TestFullMultiStartWorkflow:
         for i in range(2):
             assert result.all_results[i].chi_squared < 0.1
 
-
-# =============================================================================
-# T039: Integration test for subsample strategy end-to-end
-# =============================================================================
-
-
-class TestSubsampleStrategy:
-    """Integration tests for the subsample multi-start strategy."""
-
-    @pytest.fixture
-    def large_synthetic_data(self):
-        """Create synthetic data for subsample strategy testing.
-
-        Creates 2M points to trigger subsample strategy (threshold is 1M).
-        """
+    def test_large_dataset_uses_full_strategy(self):
+        """Test that large datasets still use FULL strategy (no subsampling)."""
         np.random.seed(42)
-        n_points = 2_000_000
-        n_angles = 4
 
-        # Create phi angles with even distribution
-        angles = [0.0, 30.0, 60.0, 90.0]
-        points_per_angle = n_points // n_angles
-        phi = np.concatenate([np.full(points_per_angle, a) for a in angles])
-
-        data = {
-            "phi": phi,
-            "g2": np.random.randn(n_points),
-            "t1": np.arange(n_points, dtype=np.float64),
-            "t2": np.arange(n_points, dtype=np.float64),
+        # Create a 2M point dataset
+        large_data = {
+            "phi_angles_list": np.array([0.0, 30.0, 60.0, 90.0]),
+            "c2_exp": np.random.randn(4, 500, 500),  # 1M points
         }
 
-        return data
+        n_points = _get_dataset_size(large_data)
+        assert n_points == 1_000_000
 
-    def test_strategy_selection_for_large_dataset(self, large_synthetic_data):
-        """Test that subsample strategy is selected for large datasets."""
-        config = MultiStartConfig(enable=True)
-
-        strategy = select_multistart_strategy(len(large_synthetic_data["phi"]), config)
-
-        assert strategy == MultiStartStrategy.SUBSAMPLE
-
-    def test_stratified_subsample_preserves_angles(self, large_synthetic_data):
-        """Test that stratified subsampling preserves angle distribution."""
-        target_size = 100_000  # 100K subsample
-
-        subsample = create_stratified_subsample(
-            large_synthetic_data, target_size=target_size, seed=42
-        )
-
-        # Check size is approximately target
-        actual_size = len(subsample["phi"])
-        assert actual_size >= target_size * 0.9
-        assert actual_size <= target_size
-
-        # Check angle distribution is preserved
-        original_angles = np.unique(large_synthetic_data["phi"])
-        subsample_angles = np.unique(subsample["phi"])
-        np.testing.assert_array_equal(original_angles, subsample_angles)
-
-        # Check proportions are approximately equal
-        for angle in original_angles:
-            original_frac = np.mean(large_synthetic_data["phi"] == angle)
-            subsample_frac = np.mean(subsample["phi"] == angle)
-            # Within 10% of original proportion
-            assert abs(original_frac - subsample_frac) < 0.1
-
-    def test_subsample_strategy_end_to_end(self, large_synthetic_data, simple_bounds):
-        """Test the complete subsample strategy workflow."""
-        target = np.array([3.0, 5.0, 7.0])
+        # Even for large datasets, we should use FULL strategy (no subsampling)
+        target = np.array([5.0, 5.0, 5.0])
         fit_func = create_quadratic_fit_function(target)
 
-        config = MultiStartConfig(
-            enable=True,
-            n_starts=3,
-            seed=42,
-            n_workers=1,
-            subsample_size=50_000,  # Small subsample for faster tests
-        )
+        # Add phi for the fit function
+        large_data["phi"] = np.repeat([0.0, 30.0, 60.0, 90.0], 250000)
+
+        simple_bounds = np.array([[0.0, 10.0], [0.0, 10.0], [0.0, 10.0]])
+
+        config = MultiStartConfig(enable=True, n_starts=2, seed=42, n_workers=1)
 
         result = run_multistart_nlsq(
-            data=large_synthetic_data,
+            data=large_data,
             bounds=simple_bounds,
             config=config,
             single_fit_func=fit_func,
         )
 
-        # Check strategy was used
-        assert result.strategy_used == "subsample"
-
-        # Check result quality
-        assert result.best.success
-        np.testing.assert_allclose(result.best.final_params, target, rtol=0.1)
-
-        # Should have n_starts + 1 results (subsample results + final full fit)
-        assert len(result.all_results) == config.n_starts + 1
-
-        # Last result should be the final refinement (start_idx = -1)
-        assert result.all_results[-1].start_idx == -1
+        # Strategy should always be "full" - no subsampling
+        assert result.strategy_used == "full"
+        assert len(result.all_results) == 2  # Exactly n_starts, no extra subsample fits
 
 
 # =============================================================================
@@ -575,17 +511,13 @@ class TestRegressionFixes:
         Regression test for bug where dataset size was calculated from
         len(phi_angles_list) (3 unique angles) instead of c2_exp.size (3M points).
 
-        Bug symptom: Multi-start selected "full" strategy for 3M point dataset
+        Bug symptom: Multi-start selected wrong strategy for 3M point dataset
         because it thought there were only 3 data points.
 
         Fixed in v2.6.1: _get_dataset_size() now correctly extracts size from
         g2/c2_exp arrays.
         """
-        from homodyne.optimization.nlsq.multistart import (
-            MultiStartStrategy,
-            _get_dataset_size,
-            select_multistart_strategy,
-        )
+        from homodyne.optimization.nlsq.multistart import _get_dataset_size
 
         # Simulate XPCS data format (what CLI produces)
         xpcs_data = {
@@ -596,80 +528,6 @@ class TestRegressionFixes:
         # Should correctly identify 30,000 points, not 3
         n_points = _get_dataset_size(xpcs_data)
         assert n_points == 30_000, f"Expected 30,000 points, got {n_points}"
-
-        # With default config, 30K points should use FULL strategy (< 1M threshold)
-        config = MultiStartConfig(enable=True)
-        strategy = select_multistart_strategy(n_points, config)
-        assert strategy == MultiStartStrategy.FULL
-
-    def test_xpcs_large_dataset_uses_subsample_strategy(self):
-        """Test that large XPCS datasets correctly use subsample strategy.
-
-        Ensures that a 2M+ point dataset (simulated by c2_exp shape) correctly
-        triggers the SUBSAMPLE strategy rather than FULL.
-        """
-        from homodyne.optimization.nlsq.multistart import (
-            MultiStartStrategy,
-            _get_dataset_size,
-            select_multistart_strategy,
-        )
-
-        # Simulate large XPCS data (> 1M points)
-        large_xpcs_data = {
-            "phi_angles_list": np.array([0.0, 30.0, 60.0, 90.0]),  # 4 angles
-            "c2_exp": np.random.randn(4, 500, 500),  # 1M points (4 × 500 × 500)
-        }
-
-        n_points = _get_dataset_size(large_xpcs_data)
-        assert n_points == 1_000_000, f"Expected 1,000,000 points, got {n_points}"
-
-        # 1M points should trigger SUBSAMPLE strategy (>= 1M threshold)
-        config = MultiStartConfig(enable=True)
-        strategy = select_multistart_strategy(n_points, config)
-        assert strategy == MultiStartStrategy.SUBSAMPLE
-
-    def test_xpcs_3d_data_subsampling(self):
-        """Test that 3D XPCS data (c2_exp) is subsampled correctly.
-
-        Regression test for bug where create_stratified_subsample used
-        len(phi_angles_list) (3 unique angles) instead of c2_exp.size (3M points).
-
-        Bug symptom: "Dataset (3) <= target (500000), no subsampling" in logs
-        when dataset actually had 3,000,000 points.
-
-        Fixed in v2.6.1: create_stratified_subsample now correctly handles
-        3D XPCS data by subsampling in (t1, t2) dimensions.
-        """
-        from homodyne.optimization.nlsq.multistart import create_stratified_subsample
-
-        # Simulate XPCS data format (3D c2_exp)
-        xpcs_data = {
-            "phi_angles_list": np.array([-5.8, 4.9, 90.0]),  # 3 unique angles
-            "c2_exp": np.random.randn(3, 100, 100),  # 30K points (3 × 100 × 100)
-            "t1": np.arange(100, dtype=np.float64),
-            "t2": np.arange(100, dtype=np.float64),
-        }
-
-        # Subsample to 5K target
-        subsample = create_stratified_subsample(xpcs_data, target_size=5_000, seed=42)
-
-        # Verify subsampling occurred
-        original_size = xpcs_data["c2_exp"].size  # 30,000
-        subsample_size = subsample["c2_exp"].size
-
-        assert subsample_size < original_size, (
-            f"Expected subsample ({subsample_size}) < original ({original_size})"
-        )
-        # Should be roughly target_size (5K), allowing for rounding
-        assert subsample_size >= 3_000, f"Subsample too small: {subsample_size}"
-        assert subsample_size <= 10_000, f"Subsample too large: {subsample_size}"
-
-        # All angles should be preserved
-        assert subsample["c2_exp"].shape[0] == 3, "All angles should be preserved"
-
-        # t1, t2 should be reduced
-        assert len(subsample["t1"]) < len(xpcs_data["t1"])
-        assert len(subsample["t2"]) < len(xpcs_data["t2"])
 
     def test_custom_starts_included_in_multistart(self, simple_bounds):
         """Test that custom starting points are included in multi-start.
@@ -687,7 +545,6 @@ class TestRegressionFixes:
 
         # Generate 5 LHS starts
         n_starts = 5
-        n_params = 3
         lhs_starts = generate_lhs_starts(simple_bounds, n_starts, seed=42)
 
         # Add custom start (simulating user's initial parameters)

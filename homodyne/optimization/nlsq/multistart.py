@@ -1,11 +1,10 @@
 """Multi-start NLSQ optimization with Latin Hypercube Sampling.
 
 This module implements multi-start optimization to explore the parameter space
-and avoid local minima. It uses dataset size-based strategy selection:
+and avoid local minima. All datasets use the FULL strategy (N complete fits).
 
-- < 1M points: Full multi-start (N complete fits)
-- 1M - 100M points: Subsample multi-start (multi-start on 500K subsample)
-- > 100M points: Phase 1 multi-start (parallel Adam warmup, single Gauss-Newton)
+NOTE: Subsampling is explicitly NOT supported per project requirements.
+Numerical precision and reproducibility take priority over computational speed.
 
 Part of homodyne v2.6.0 architecture.
 """
@@ -17,7 +16,6 @@ import time
 from collections.abc import Callable
 from concurrent.futures import ProcessPoolExecutor, as_completed
 from dataclasses import dataclass
-from enum import Enum
 from typing import TYPE_CHECKING, Any
 
 import numpy as np
@@ -28,24 +26,9 @@ from homodyne.utils.logging import get_logger
 if TYPE_CHECKING:
     from numpy.typing import NDArray
 
+    from homodyne.optimization.nlsq.results import OptimizationResult
+
 logger = get_logger(__name__)
-
-
-# =============================================================================
-# Constants
-# =============================================================================
-
-THRESHOLD_SMALL = 1_000_000  # 1M points
-THRESHOLD_LARGE = 100_000_000  # 100M points
-DEFAULT_SUBSAMPLE_SIZE = 500_000  # 500K points
-
-
-class MultiStartStrategy(Enum):
-    """Dataset size-based multi-start strategy."""
-
-    FULL = "full"  # < 1M points: N complete fits
-    SUBSAMPLE = "subsample"  # 1M - 100M: multi-start on subsample
-    PHASE1 = "phase1"  # > 100M: parallel warmup, single GN
 
 
 # =============================================================================
@@ -75,10 +58,6 @@ class MultiStartConfig:
         Whether to pre-filter starting points by initial cost.
     screen_keep_fraction : float
         Fraction of starting points to keep after screening.
-    subsample_size : int
-        Number of points to use for subsample strategy.
-    warmup_only_threshold : int
-        Dataset size threshold for phase1 strategy.
     refine_top_k : int
         Number of top solutions to refine with tighter tolerance.
     refinement_ftol : float
@@ -95,8 +74,6 @@ class MultiStartConfig:
     n_workers: int = 0
     use_screening: bool = True
     screen_keep_fraction: float = 0.5
-    subsample_size: int = DEFAULT_SUBSAMPLE_SIZE
-    warmup_only_threshold: int = THRESHOLD_LARGE
     refine_top_k: int = 3
     refinement_ftol: float = 1e-12
     degeneracy_threshold: float = 0.1
@@ -127,8 +104,6 @@ class MultiStartConfig:
             n_workers=nlsq_config.multi_start_n_workers,
             use_screening=nlsq_config.multi_start_use_screening,
             screen_keep_fraction=nlsq_config.multi_start_screen_keep_fraction,
-            subsample_size=nlsq_config.multi_start_subsample_size,
-            warmup_only_threshold=nlsq_config.multi_start_warmup_only_threshold,
             refine_top_k=nlsq_config.multi_start_refine_top_k,
             refinement_ftol=nlsq_config.multi_start_refinement_ftol,
             degeneracy_threshold=nlsq_config.multi_start_degeneracy_threshold,
@@ -205,7 +180,7 @@ class MultiStartResult:
     config : MultiStartConfig
         Configuration used.
     strategy_used : str
-        Strategy that was used ("full", "subsample", "phase1").
+        Strategy that was used (always "full").
     n_successful : int
         Number of successful optimizations.
     n_unique_basins : int
@@ -231,7 +206,7 @@ class MultiStartResult:
     screening_costs: NDArray[np.float64] | None = None
     basin_labels: NDArray[np.int64] | None = None
 
-    def to_optimization_result(self) -> "OptimizationResult":
+    def to_optimization_result(self) -> OptimizationResult:
         """Convert MultiStartResult to OptimizationResult for CLI compatibility.
 
         Returns
@@ -701,209 +676,6 @@ def detect_degeneracy(
 
 
 # =============================================================================
-# Core Functions: Strategy Selection
-# =============================================================================
-
-
-def select_multistart_strategy(
-    n_points: int,
-    config: MultiStartConfig,
-) -> MultiStartStrategy:
-    """Select multi-start strategy based on dataset size.
-
-    Parameters
-    ----------
-    n_points : int
-        Number of data points.
-    config : MultiStartConfig
-        Multi-start configuration.
-
-    Returns
-    -------
-    MultiStartStrategy
-        Selected strategy.
-    """
-    if n_points < THRESHOLD_SMALL:
-        strategy = MultiStartStrategy.FULL
-    elif n_points < config.warmup_only_threshold:
-        strategy = MultiStartStrategy.SUBSAMPLE
-    else:
-        strategy = MultiStartStrategy.PHASE1
-
-    logger.info(
-        f"Selected multi-start strategy: {strategy.value} "
-        f"(dataset size: {n_points:,} points)"
-    )
-    return strategy
-
-
-# =============================================================================
-# Core Functions: Stratified Subsampling
-# =============================================================================
-
-
-def create_stratified_subsample(
-    data: dict[str, Any],
-    target_size: int = DEFAULT_SUBSAMPLE_SIZE,
-    seed: int = 42,
-) -> dict[str, Any]:
-    """Create stratified subsample preserving angle distribution.
-
-    Handles both flat data structures (test fixtures) and XPCS data structures:
-    - Flat: phi is repeated array matching g2 length (1D)
-    - XPCS: phi_angles_list is unique angles, c2_exp is (n_phi, n_t1, n_t2)
-
-    Parameters
-    ----------
-    data : dict
-        XPCS data dictionary with phi, g2, t1, t2, sigma.
-    target_size : int
-        Target number of points in subsample.
-    seed : int
-        Random seed for reproducibility.
-
-    Returns
-    -------
-    dict
-        Subsampled data dictionary.
-    """
-    rng = np.random.default_rng(seed)
-
-    # Use _get_dataset_size for correct dataset size (handles XPCS vs flat data)
-    n_points = _get_dataset_size(data)
-
-    if n_points <= target_size:
-        logger.debug(f"Dataset ({n_points:,}) <= target ({target_size:,}), no subsampling")
-        return data
-
-    # Get phi angles
-    phi = _get_phi_from_data(data)
-    if phi is None:
-        raise ValueError("Data must contain 'phi' or 'phi_angles_list'")
-
-    phi = np.asarray(phi).ravel()
-
-    # Detect data structure: XPCS (3D c2_exp) vs flat (1D arrays)
-    c2_exp = data.get("c2_exp")
-    g2 = data.get("g2")
-
-    if c2_exp is not None and np.asarray(c2_exp).ndim == 3:
-        # XPCS data structure: c2_exp is (n_phi, n_t1, n_t2)
-        c2_exp = np.asarray(c2_exp)
-        n_phi, n_t1, n_t2 = c2_exp.shape
-        unique_angles = phi  # phi_angles_list contains unique angles
-
-        # Subsample in (t1, t2) space, keeping all angles
-        # Calculate how many t1, t2 points to keep
-        points_per_angle = n_t1 * n_t2
-        target_per_angle = target_size // n_phi
-
-        # Calculate subsample ratio
-        ratio = min(1.0, np.sqrt(target_per_angle / points_per_angle))
-        n_t1_sub = max(10, int(n_t1 * ratio))
-        n_t2_sub = max(10, int(n_t2 * ratio))
-
-        # Randomly select t1, t2 indices
-        t1_indices = np.sort(rng.choice(n_t1, size=n_t1_sub, replace=False))
-        t2_indices = np.sort(rng.choice(n_t2, size=n_t2_sub, replace=False))
-
-        # Create subsampled c2_exp
-        c2_sub = c2_exp[:, t1_indices, :][:, :, t2_indices]
-
-        # Create subsampled t1, t2
-        t1 = np.asarray(data["t1"])
-        t2 = np.asarray(data["t2"])
-        t1_sub = t1[t1_indices]
-        t2_sub = t2[t2_indices]
-
-        # Build subsample dict
-        subsample = dict(data)  # Copy all keys
-        subsample["c2_exp"] = c2_sub
-        subsample["t1"] = t1_sub
-        subsample["t2"] = t2_sub
-
-        actual_size = c2_sub.size
-        logger.info(
-            f"Created XPCS stratified subsample: {actual_size:,}/{n_points:,} points "
-            f"(t1: {n_t1_sub}/{n_t1}, t2: {n_t2_sub}/{n_t2}, all {n_phi} angles preserved)"
-        )
-        return subsample
-
-    elif g2 is not None and np.asarray(g2).ndim == 3:
-        # Also handle g2 as 3D array (same logic)
-        g2_arr = np.asarray(g2)
-        n_phi, n_t1, n_t2 = g2_arr.shape
-        unique_angles = phi
-
-        points_per_angle = n_t1 * n_t2
-        target_per_angle = target_size // n_phi
-        ratio = min(1.0, np.sqrt(target_per_angle / points_per_angle))
-        n_t1_sub = max(10, int(n_t1 * ratio))
-        n_t2_sub = max(10, int(n_t2 * ratio))
-
-        t1_indices = np.sort(rng.choice(n_t1, size=n_t1_sub, replace=False))
-        t2_indices = np.sort(rng.choice(n_t2, size=n_t2_sub, replace=False))
-
-        g2_sub = g2_arr[:, t1_indices, :][:, :, t2_indices]
-
-        t1 = np.asarray(data["t1"])
-        t2 = np.asarray(data["t2"])
-        t1_sub = t1[t1_indices]
-        t2_sub = t2[t2_indices]
-
-        subsample = dict(data)
-        subsample["g2"] = g2_sub
-        subsample["t1"] = t1_sub
-        subsample["t2"] = t2_sub
-
-        actual_size = g2_sub.size
-        logger.info(
-            f"Created XPCS stratified subsample: {actual_size:,}/{n_points:,} points "
-            f"(t1: {n_t1_sub}/{n_t1}, t2: {n_t2_sub}/{n_t2}, all {n_phi} angles preserved)"
-        )
-        return subsample
-
-    else:
-        # Flat data structure: phi has same length as data arrays
-        # Original logic for test fixtures
-        n_flat_points = len(phi)
-
-        if n_flat_points <= target_size:
-            logger.debug(
-                f"Flat dataset ({n_flat_points:,}) <= target ({target_size:,}), no subsampling"
-            )
-            return data
-
-        unique_angles = np.unique(phi)
-        n_angles = len(unique_angles)
-        samples_per_angle = target_size // n_angles
-
-        indices: list[int] = []
-        for angle in unique_angles:
-            angle_mask = phi == angle
-            angle_indices = np.where(angle_mask)[0]
-            n_select = min(samples_per_angle, len(angle_indices))
-            selected = rng.choice(angle_indices, size=n_select, replace=False)
-            indices.extend(selected.tolist())
-
-        indices_arr = np.array(sorted(indices))
-
-        # Create subsampled data
-        subsample = {}
-        for key, value in data.items():
-            if isinstance(value, np.ndarray) and len(value) == n_flat_points:
-                subsample[key] = value[indices_arr]
-            else:
-                subsample[key] = value
-
-        logger.info(
-            f"Created flat stratified subsample: {len(indices_arr):,}/{n_flat_points:,} points "
-            f"({n_angles} angles, ~{samples_per_angle} per angle)"
-        )
-        return subsample
-
-
-# =============================================================================
 # Core Functions: Parallel Execution
 # =============================================================================
 
@@ -1079,13 +851,12 @@ def run_multistart_nlsq(
     config: MultiStartConfig,
     single_fit_func: Callable[[dict[str, Any], NDArray[np.float64]], SingleStartResult],
     cost_func: Callable[[NDArray[np.float64]], float] | None = None,
-    warmup_fit_func: Callable[
-        [dict[str, Any], NDArray[np.float64], int], SingleStartResult
-    ]
-    | None = None,
     custom_starts: list[list[float]] | NDArray[np.float64] | None = None,
 ) -> MultiStartResult:
-    """Run multi-start NLSQ optimization with strategy selection.
+    """Run multi-start NLSQ optimization with FULL strategy.
+
+    NOTE: Only FULL strategy is supported. Subsampling is explicitly NOT used
+    per project requirements - numerical precision takes priority over speed.
 
     Parameters
     ----------
@@ -1101,9 +872,6 @@ def run_multistart_nlsq(
     cost_func : Callable, optional
         Function that computes cost for screening.
         Signature: (params) -> float
-    warmup_fit_func : Callable, optional
-        Function for Phase 1 warmup (required for phase1 strategy).
-        Signature: (data, initial_params, n_iterations) -> SingleStartResult
     custom_starts : list[list[float]] | NDArray, optional
         User-provided custom starting points (overrides config.custom_starts).
 
@@ -1139,8 +907,10 @@ def run_multistart_nlsq(
     # Determine dataset size from data arrays (not just phi array length)
     n_points = _get_dataset_size(data)
 
-    # Select strategy
-    strategy = select_multistart_strategy(n_points, config)
+    # Always use FULL strategy - no subsampling
+    logger.info(
+        f"Using FULL multi-start strategy (dataset size: {n_points:,} points)"
+    )
 
     # Validate n_starts for LHS
     n_params = bounds.shape[0]
@@ -1166,25 +936,9 @@ def run_multistart_nlsq(
     # Get worker count
     n_workers = get_n_workers(config, len(starts))
 
-    # Execute based on strategy
-    if strategy == MultiStartStrategy.FULL:
-        results = _run_full_strategy(data, starts, single_fit_func, n_workers)
-    elif strategy == MultiStartStrategy.SUBSAMPLE:
-        results = _run_subsample_strategy(
-            data, starts, single_fit_func, config, n_workers
-        )
-    else:  # PHASE1
-        if warmup_fit_func is None:
-            logger.warning(
-                "Phase1 strategy requires warmup_fit_func, falling back to subsample"
-            )
-            results = _run_subsample_strategy(
-                data, starts, single_fit_func, config, n_workers
-            )
-        else:
-            results = _run_phase1_strategy(
-                data, starts, single_fit_func, warmup_fit_func, config, n_workers
-            )
+    # Execute FULL strategy (N complete fits)
+    logger.info(f"Running full multi-start with {len(starts)} starting points")
+    results = _run_full_strategy(data, starts, single_fit_func, n_workers)
 
     # Find best result
     successful = [r for r in results if r.success]
@@ -1213,7 +967,7 @@ def run_multistart_nlsq(
     total_time = time.perf_counter() - start_time
 
     logger.info(
-        f"Multi-start complete: strategy={strategy.value}, "
+        f"Multi-start complete: strategy=full, "
         f"best chi²={best.chi_squared:.4g}, "
         f"successful={len(successful)}/{len(results)}, "
         f"basins={n_unique_basins}, time={total_time:.1f}s"
@@ -1223,7 +977,7 @@ def run_multistart_nlsq(
         best=best,
         all_results=results,
         config=config,
-        strategy_used=strategy.value,
+        strategy_used="full",
         n_successful=len(successful),
         n_unique_basins=n_unique_basins,
         degeneracy_detected=degeneracy_detected,
@@ -1234,7 +988,7 @@ def run_multistart_nlsq(
 
 
 # =============================================================================
-# Strategy Implementations
+# Strategy Implementation
 # =============================================================================
 
 
@@ -1246,9 +1000,8 @@ def _run_full_strategy(
 ) -> list[SingleStartResult]:
     """Full multi-start: run N complete fits in parallel.
 
-    For datasets < 1M points.
+    This is the ONLY supported strategy. No subsampling is performed.
     """
-    logger.info(f"Running full multi-start with {len(starts)} starting points")
 
     def optimize_wrapper(idx: int, start: NDArray[np.float64]) -> SingleStartResult:
         start_time = time.perf_counter()
@@ -1259,114 +1012,3 @@ def _run_full_strategy(
         return result
 
     return run_parallel_optimizations(optimize_wrapper, starts, n_workers)
-
-
-def _run_subsample_strategy(
-    data: dict[str, Any],
-    starts: NDArray[np.float64],
-    single_fit_func: Callable[[dict[str, Any], NDArray[np.float64]], SingleStartResult],
-    config: MultiStartConfig,
-    n_workers: int,
-) -> list[SingleStartResult]:
-    """Subsample multi-start: multi-start on subsample, full fit from best.
-
-    For datasets 1M - 100M points.
-    """
-    logger.info(
-        f"Running subsample multi-start: {len(starts)} starts on "
-        f"{config.subsample_size:,} point subsample"
-    )
-
-    # Create stratified subsample
-    subsample = create_stratified_subsample(data, config.subsample_size, config.seed)
-
-    # Run multi-start on subsample
-    def optimize_subsample(idx: int, start: NDArray[np.float64]) -> SingleStartResult:
-        start_time = time.perf_counter()
-        result = single_fit_func(subsample, start)
-        result.start_idx = idx
-        result.initial_params = start
-        result.wall_time = time.perf_counter() - start_time
-        return result
-
-    subsample_results = run_parallel_optimizations(
-        optimize_subsample, starts, n_workers
-    )
-
-    # Find best from subsample
-    successful = [r for r in subsample_results if r.success]
-    if not successful:
-        logger.warning("All subsample fits failed, using first start")
-        best_start = starts[0]
-    else:
-        best = min(successful, key=lambda r: r.chi_squared)
-        best_start = best.final_params
-        logger.info(f"Best subsample result: chi²={best.chi_squared:.4g}")
-
-    # Run full fit from best starting point
-    logger.info("Running full fit from best subsample result")
-    start_time = time.perf_counter()
-    final_result = single_fit_func(data, best_start)
-    final_result.start_idx = -1  # Mark as final refinement
-    final_result.initial_params = best_start
-    final_result.wall_time = time.perf_counter() - start_time
-
-    # Combine results (subsample results + final full fit)
-    all_results = subsample_results + [final_result]
-
-    return all_results
-
-
-def _run_phase1_strategy(
-    data: dict[str, Any],
-    starts: NDArray[np.float64],
-    single_fit_func: Callable[[dict[str, Any], NDArray[np.float64]], SingleStartResult],
-    warmup_fit_func: Callable[
-        [dict[str, Any], NDArray[np.float64], int], SingleStartResult
-    ],
-    config: MultiStartConfig,
-    n_workers: int,
-) -> list[SingleStartResult]:
-    """Phase 1 multi-start: parallel warmup, single Gauss-Newton from best.
-
-    For datasets > 100M points.
-    """
-    warmup_iterations = 100  # Match hybrid streaming default
-    logger.info(
-        f"Running Phase 1 multi-start: {len(starts)} starts × "
-        f"{warmup_iterations} warmup iterations"
-    )
-
-    # Run parallel warmup
-    def warmup_wrapper(idx: int, start: NDArray[np.float64]) -> SingleStartResult:
-        start_time = time.perf_counter()
-        result = warmup_fit_func(data, start, warmup_iterations)
-        result.start_idx = idx
-        result.initial_params = start
-        result.wall_time = time.perf_counter() - start_time
-        return result
-
-    warmup_results = run_parallel_optimizations(warmup_wrapper, starts, n_workers)
-
-    # Find best warmup result
-    successful = [r for r in warmup_results if r.success]
-    if not successful:
-        logger.warning("All warmup fits failed, using first start")
-        best_start = starts[0]
-    else:
-        best = min(successful, key=lambda r: r.chi_squared)
-        best_start = best.final_params
-        logger.info(f"Best warmup result: chi²={best.chi_squared:.4g}")
-
-    # Run full Gauss-Newton refinement from best starting point
-    logger.info("Running Gauss-Newton refinement from best warmup result")
-    start_time = time.perf_counter()
-    final_result = single_fit_func(data, best_start)
-    final_result.start_idx = -1  # Mark as final refinement
-    final_result.initial_params = best_start
-    final_result.wall_time = time.perf_counter() - start_time
-
-    # Combine results
-    all_results = warmup_results + [final_result]
-
-    return all_results

@@ -2,11 +2,13 @@
 
 Tests cover:
 - LHS generation (coverage, bounds, reproducibility)
-- Strategy selection by dataset size
 - Screening phase
 - Degeneracy detection
 - Configuration parsing
-- Stratified subsampling
+
+NOTE: Subsampling is explicitly NOT supported per project requirements.
+Numerical precision and reproducibility take priority over computational speed.
+All tests use FULL strategy only.
 """
 
 from __future__ import annotations
@@ -14,18 +16,13 @@ from __future__ import annotations
 import numpy as np
 
 from homodyne.optimization.nlsq.multistart import (
-    THRESHOLD_LARGE,
-    THRESHOLD_SMALL,
     MultiStartConfig,
     MultiStartResult,
-    MultiStartStrategy,
     SingleStartResult,
-    create_stratified_subsample,
     detect_degeneracy,
     generate_lhs_starts,
     generate_random_starts,
     screen_starts,
-    select_multistart_strategy,
 )
 
 
@@ -43,8 +40,6 @@ class TestMultiStartConfig:
         assert config.n_workers == 0  # Auto
         assert config.use_screening is True
         assert config.screen_keep_fraction == 0.5
-        assert config.subsample_size == 500_000
-        assert config.warmup_only_threshold == 100_000_000
         assert config.refine_top_k == 3
         assert config.refinement_ftol == 1e-12
         assert config.degeneracy_threshold == 0.1
@@ -59,8 +54,6 @@ class TestMultiStartConfig:
             n_workers=4,
             use_screening=False,
             screen_keep_fraction=0.3,
-            subsample_size=1_000_000,
-            warmup_only_threshold=50_000_000,
             refine_top_k=5,
             refinement_ftol=1e-14,
             degeneracy_threshold=0.05,
@@ -73,8 +66,6 @@ class TestMultiStartConfig:
         assert config.n_workers == 4
         assert config.use_screening is False
         assert config.screen_keep_fraction == 0.3
-        assert config.subsample_size == 1_000_000
-        assert config.warmup_only_threshold == 50_000_000
         assert config.refine_top_k == 5
         assert config.refinement_ftol == 1e-14
         assert config.degeneracy_threshold == 0.05
@@ -198,62 +189,6 @@ class TestRandomGeneration:
         starts2 = generate_random_starts(bounds, n_starts=10, seed=42)
 
         np.testing.assert_array_equal(starts1, starts2)
-
-
-class TestStrategySelection:
-    """Tests for dataset size-based strategy selection."""
-
-    def test_select_full_strategy_small_dataset(self):
-        """Test full strategy selected for < 1M points."""
-        config = MultiStartConfig()
-
-        # Small dataset
-        strategy = select_multistart_strategy(500_000, config)
-        assert strategy == MultiStartStrategy.FULL
-
-        # Just below threshold
-        strategy = select_multistart_strategy(THRESHOLD_SMALL - 1, config)
-        assert strategy == MultiStartStrategy.FULL
-
-    def test_select_subsample_strategy_medium_dataset(self):
-        """Test subsample strategy selected for 1M-100M points."""
-        config = MultiStartConfig()
-
-        # At threshold
-        strategy = select_multistart_strategy(THRESHOLD_SMALL, config)
-        assert strategy == MultiStartStrategy.SUBSAMPLE
-
-        # Middle of range
-        strategy = select_multistart_strategy(50_000_000, config)
-        assert strategy == MultiStartStrategy.SUBSAMPLE
-
-        # Just below large threshold
-        strategy = select_multistart_strategy(THRESHOLD_LARGE - 1, config)
-        assert strategy == MultiStartStrategy.SUBSAMPLE
-
-    def test_select_phase1_strategy_large_dataset(self):
-        """Test phase1 strategy selected for > 100M points."""
-        config = MultiStartConfig()
-
-        # At threshold
-        strategy = select_multistart_strategy(THRESHOLD_LARGE, config)
-        assert strategy == MultiStartStrategy.PHASE1
-
-        # Well above threshold
-        strategy = select_multistart_strategy(500_000_000, config)
-        assert strategy == MultiStartStrategy.PHASE1
-
-    def test_custom_threshold(self):
-        """Test custom warmup_only_threshold is respected."""
-        config = MultiStartConfig(warmup_only_threshold=50_000_000)
-
-        # Below custom threshold - subsample
-        strategy = select_multistart_strategy(40_000_000, config)
-        assert strategy == MultiStartStrategy.SUBSAMPLE
-
-        # At custom threshold - phase1
-        strategy = select_multistart_strategy(50_000_000, config)
-        assert strategy == MultiStartStrategy.PHASE1
 
 
 class TestScreening:
@@ -434,68 +369,6 @@ class TestDegeneracyDetection:
         assert n_basins == 1
 
 
-class TestStratifiedSubsample:
-    """Tests for stratified subsampling."""
-
-    def test_subsample_preserves_angles(self):
-        """Test subsampling preserves angle distribution."""
-        # Create data with 3 angles
-        n_per_angle = 10000
-        data = {
-            "phi": np.concatenate(
-                [
-                    np.full(n_per_angle, 0.0),
-                    np.full(n_per_angle, 30.0),
-                    np.full(n_per_angle, 60.0),
-                ]
-            ),
-            "g2": np.random.randn(3 * n_per_angle),
-            "t1": np.random.randn(3 * n_per_angle),
-            "t2": np.random.randn(3 * n_per_angle),
-        }
-
-        subsample = create_stratified_subsample(data, target_size=3000, seed=42)
-
-        # Check each angle has ~1000 points
-        phi_sub = subsample["phi"]
-        for angle in [0.0, 30.0, 60.0]:
-            count = np.sum(phi_sub == angle)
-            assert 900 <= count <= 1100  # Within 10% of expected
-
-    def test_subsample_size(self):
-        """Test subsample achieves target size."""
-        n_per_angle = 100000
-        data = {
-            "phi": np.concatenate(
-                [
-                    np.full(n_per_angle, 0.0),
-                    np.full(n_per_angle, 30.0),
-                ]
-            ),
-            "g2": np.random.randn(2 * n_per_angle),
-        }
-
-        target = 10000
-        subsample = create_stratified_subsample(data, target_size=target, seed=42)
-
-        # Should be close to target (may be slightly less due to integer division)
-        assert len(subsample["phi"]) >= target * 0.9
-        assert len(subsample["phi"]) <= target
-
-    def test_subsample_no_op_small_dataset(self):
-        """Test no subsampling when dataset is smaller than target."""
-        data = {
-            "phi": np.array([0.0, 30.0, 60.0]),
-            "g2": np.array([1.0, 2.0, 3.0]),
-        }
-
-        subsample = create_stratified_subsample(data, target_size=10000, seed=42)
-
-        # Should return original data unchanged
-        assert len(subsample["phi"]) == 3
-        np.testing.assert_array_equal(subsample["phi"], data["phi"])
-
-
 class TestSingleStartResult:
     """Tests for SingleStartResult dataclass."""
 
@@ -570,8 +443,6 @@ class TestConfigFromNLSQConfig:
             multi_start_n_workers=8,
             multi_start_use_screening=False,
             multi_start_screen_keep_fraction=0.3,
-            multi_start_subsample_size=1_000_000,
-            multi_start_warmup_only_threshold=50_000_000,
             multi_start_refine_top_k=5,
             multi_start_refinement_ftol=1e-14,
             multi_start_degeneracy_threshold=0.05,
@@ -586,8 +457,6 @@ class TestConfigFromNLSQConfig:
         assert ms_config.n_workers == 8
         assert ms_config.use_screening is False
         assert ms_config.screen_keep_fraction == 0.3
-        assert ms_config.subsample_size == 1_000_000
-        assert ms_config.warmup_only_threshold == 50_000_000
         assert ms_config.refine_top_k == 5
         assert ms_config.refinement_ftol == 1e-14
         assert ms_config.degeneracy_threshold == 0.05

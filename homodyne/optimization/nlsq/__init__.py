@@ -50,20 +50,19 @@ from homodyne.optimization.nlsq.fit_computation import (
 )
 
 # Multi-start optimization (v2.6.0)
+# NOTE: Subsampling is explicitly NOT supported per project requirements.
+# Numerical precision and reproducibility take priority over computational speed.
 from homodyne.optimization.nlsq.multistart import (
     MultiStartConfig,
     MultiStartResult,
-    MultiStartStrategy,
     SingleStartResult,
     check_zero_volume_bounds,
-    create_stratified_subsample,
     detect_degeneracy,
     generate_lhs_starts,
     generate_random_starts,
     include_custom_starts,
     run_multistart_nlsq,
     screen_starts,
-    select_multistart_strategy,
     validate_n_starts_for_lhs,
 )
 from homodyne.optimization.nlsq.result_builder import (
@@ -123,16 +122,14 @@ __all__ = [
     "NLSQ_AVAILABLE",
     "_get_param_names",
     # Multi-start (v2.6.0)
+    # NOTE: No subsampling - numerical precision takes priority
     "MultiStartConfig",
     "MultiStartResult",
-    "MultiStartStrategy",
     "SingleStartResult",
     "generate_lhs_starts",
     "generate_random_starts",
     "screen_starts",
     "detect_degeneracy",
-    "select_multistart_strategy",
-    "create_stratified_subsample",
     "run_multistart_nlsq",
     "include_custom_starts",
     "check_zero_volume_bounds",

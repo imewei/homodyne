@@ -106,6 +106,8 @@ class NLSQConfig:
 
     # Multi-start optimization settings (v2.6.0)
     # Enables exploration of parameter space via Latin Hypercube Sampling
+    # NOTE: Subsampling is explicitly NOT supported per project requirements.
+    # Numerical precision and reproducibility take priority over computational speed.
     enable_multi_start: bool = False  # Default OFF - user opt-in
     multi_start_n_starts: int = 10
     multi_start_seed: int = 42
@@ -115,10 +117,6 @@ class NLSQConfig:
     multi_start_n_workers: int = 0  # 0 = auto (min of n_starts, cpu_count)
     multi_start_use_screening: bool = True
     multi_start_screen_keep_fraction: float = 0.5
-    multi_start_subsample_size: int = 500_000  # For 1M-100M datasets
-    multi_start_warmup_only_threshold: int = (
-        100_000_000  # 100M: switch to phase1 strategy
-    )
     multi_start_refine_top_k: int = 3
     multi_start_refinement_ftol: float = 1e-12
     multi_start_degeneracy_threshold: float = 0.1
@@ -203,6 +201,7 @@ class NLSQConfig:
             ),
             hybrid_validate_numerics=hybrid_streaming.get("validate_numerics", True),
             # Multi-start (v2.6.0)
+            # NOTE: No subsampling - numerical precision takes priority
             enable_multi_start=multi_start.get("enable", False),
             multi_start_n_starts=multi_start.get("n_starts", 10),
             multi_start_seed=multi_start.get("seed", 42),
@@ -213,10 +212,6 @@ class NLSQConfig:
             multi_start_use_screening=multi_start.get("use_screening", True),
             multi_start_screen_keep_fraction=float(
                 multi_start.get("screen_keep_fraction", 0.5)
-            ),
-            multi_start_subsample_size=multi_start.get("subsample_size", 500_000),
-            multi_start_warmup_only_threshold=multi_start.get(
-                "warmup_only_threshold", 100_000_000
             ),
             multi_start_refine_top_k=multi_start.get("refine_top_k", 3),
             multi_start_refinement_ftol=float(
@@ -341,16 +336,6 @@ class NLSQConfig:
                 f"multi_start_screen_keep_fraction must be in (0, 1], "
                 f"got: {self.multi_start_screen_keep_fraction}"
             )
-        if self.multi_start_subsample_size <= 0:
-            errors.append(
-                f"multi_start_subsample_size must be positive, "
-                f"got: {self.multi_start_subsample_size}"
-            )
-        if self.multi_start_warmup_only_threshold <= 0:
-            errors.append(
-                f"multi_start_warmup_only_threshold must be positive, "
-                f"got: {self.multi_start_warmup_only_threshold}"
-            )
         if self.multi_start_refine_top_k < 0:
             errors.append(
                 f"multi_start_refine_top_k must be non-negative, "
@@ -436,8 +421,6 @@ class NLSQConfig:
                 "n_workers": self.multi_start_n_workers,
                 "use_screening": self.multi_start_use_screening,
                 "screen_keep_fraction": self.multi_start_screen_keep_fraction,
-                "subsample_size": self.multi_start_subsample_size,
-                "warmup_only_threshold": self.multi_start_warmup_only_threshold,
                 "refine_top_k": self.multi_start_refine_top_k,
                 "refinement_ftol": self.multi_start_refinement_ftol,
                 "degeneracy_threshold": self.multi_start_degeneracy_threshold,

@@ -975,15 +975,13 @@ def fit_nlsq_multistart(
     initial_params: dict[str, float] | None = None,
     per_angle_scaling: bool = True,
 ) -> MultiStartResult:
-    """Multi-start NLSQ optimization with dataset size-based strategy selection.
+    """Multi-start NLSQ optimization with Latin Hypercube Sampling.
 
     This function explores the parameter space using Latin Hypercube Sampling
-    to avoid local minima. The strategy is automatically selected based on
-    dataset size:
+    to avoid local minima. FULL strategy is always used regardless of dataset
+    size - numerical precision and reproducibility take priority over speed.
 
-    - < 1M points: Full multi-start (N complete fits)
-    - 1M - 100M points: Subsample multi-start (multi-start on 500K subsample)
-    - > 100M points: Phase 1 multi-start (parallel warmup, single Gauss-Newton)
+    NOTE: Subsampling is explicitly NOT supported per project requirements.
 
     Parameters
     ----------
@@ -1007,7 +1005,7 @@ def fit_nlsq_multistart(
         Aggregated results including:
         - best: Best result by chi-squared
         - all_results: All optimization attempts
-        - strategy_used: "full", "subsample", or "phase1"
+        - strategy_used: "full" (only supported strategy)
         - n_unique_basins: Number of distinct local minima found
         - degeneracy_detected: Whether parameter degeneracy was detected
 
