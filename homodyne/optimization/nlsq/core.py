@@ -1141,6 +1141,17 @@ def fit_nlsq_multistart(
         except Exception:
             return 1e20
 
+    # Prepare custom_starts with user's initial parameters (if provided)
+    custom_starts = None
+    if initial_params is not None:
+        # Convert initial_params dict to array in correct order
+        param_names = _get_param_names(analysis_mode)
+        initial_array = np.array([initial_params[name] for name in param_names])
+        custom_starts = [initial_array.tolist()]
+        logger.info(
+            "Including user-specified initial parameters as custom start point"
+        )
+
     # Run multi-start optimization
     logger.info(
         f"Starting multi-start NLSQ with {ms_config.n_starts} starts, "
@@ -1153,6 +1164,7 @@ def fit_nlsq_multistart(
         config=ms_config,
         single_fit_func=single_fit_func,
         cost_func=cost_func if ms_config.use_screening else None,
+        custom_starts=custom_starts,
     )
 
     logger.info(

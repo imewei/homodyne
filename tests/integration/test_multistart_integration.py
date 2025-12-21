@@ -559,3 +559,143 @@ class TestEdgeCases:
         assert result.n_successful == 0
         assert not result.best.success
         assert result.best.chi_squared == np.inf
+
+
+# =============================================================================
+# Regression Tests
+# =============================================================================
+
+
+class TestRegressionFixes:
+    """Regression tests for previously identified bugs."""
+
+    def test_xpcs_data_format_dataset_size_calculation(self):
+        """Test that XPCS data format (c2_exp) calculates dataset size correctly.
+
+        Regression test for bug where dataset size was calculated from
+        len(phi_angles_list) (3 unique angles) instead of c2_exp.size (3M points).
+
+        Bug symptom: Multi-start selected "full" strategy for 3M point dataset
+        because it thought there were only 3 data points.
+
+        Fixed in v2.6.1: _get_dataset_size() now correctly extracts size from
+        g2/c2_exp arrays.
+        """
+        from homodyne.optimization.nlsq.multistart import (
+            MultiStartStrategy,
+            _get_dataset_size,
+            select_multistart_strategy,
+        )
+
+        # Simulate XPCS data format (what CLI produces)
+        xpcs_data = {
+            "phi_angles_list": np.array([-5.8, 4.9, 90.0]),  # 3 unique angles
+            "c2_exp": np.random.randn(3, 100, 100),  # 30K points (3 × 100 × 100)
+        }
+
+        # Should correctly identify 30,000 points, not 3
+        n_points = _get_dataset_size(xpcs_data)
+        assert n_points == 30_000, f"Expected 30,000 points, got {n_points}"
+
+        # With default config, 30K points should use FULL strategy (< 1M threshold)
+        config = MultiStartConfig(enable=True)
+        strategy = select_multistart_strategy(n_points, config)
+        assert strategy == MultiStartStrategy.FULL
+
+    def test_xpcs_large_dataset_uses_subsample_strategy(self):
+        """Test that large XPCS datasets correctly use subsample strategy.
+
+        Ensures that a 2M+ point dataset (simulated by c2_exp shape) correctly
+        triggers the SUBSAMPLE strategy rather than FULL.
+        """
+        from homodyne.optimization.nlsq.multistart import (
+            MultiStartStrategy,
+            _get_dataset_size,
+            select_multistart_strategy,
+        )
+
+        # Simulate large XPCS data (> 1M points)
+        large_xpcs_data = {
+            "phi_angles_list": np.array([0.0, 30.0, 60.0, 90.0]),  # 4 angles
+            "c2_exp": np.random.randn(4, 500, 500),  # 1M points (4 × 500 × 500)
+        }
+
+        n_points = _get_dataset_size(large_xpcs_data)
+        assert n_points == 1_000_000, f"Expected 1,000,000 points, got {n_points}"
+
+        # 1M points should trigger SUBSAMPLE strategy (>= 1M threshold)
+        config = MultiStartConfig(enable=True)
+        strategy = select_multistart_strategy(n_points, config)
+        assert strategy == MultiStartStrategy.SUBSAMPLE
+
+    def test_xpcs_3d_data_subsampling(self):
+        """Test that 3D XPCS data (c2_exp) is subsampled correctly.
+
+        Regression test for bug where create_stratified_subsample used
+        len(phi_angles_list) (3 unique angles) instead of c2_exp.size (3M points).
+
+        Bug symptom: "Dataset (3) <= target (500000), no subsampling" in logs
+        when dataset actually had 3,000,000 points.
+
+        Fixed in v2.6.1: create_stratified_subsample now correctly handles
+        3D XPCS data by subsampling in (t1, t2) dimensions.
+        """
+        from homodyne.optimization.nlsq.multistart import create_stratified_subsample
+
+        # Simulate XPCS data format (3D c2_exp)
+        xpcs_data = {
+            "phi_angles_list": np.array([-5.8, 4.9, 90.0]),  # 3 unique angles
+            "c2_exp": np.random.randn(3, 100, 100),  # 30K points (3 × 100 × 100)
+            "t1": np.arange(100, dtype=np.float64),
+            "t2": np.arange(100, dtype=np.float64),
+        }
+
+        # Subsample to 5K target
+        subsample = create_stratified_subsample(xpcs_data, target_size=5_000, seed=42)
+
+        # Verify subsampling occurred
+        original_size = xpcs_data["c2_exp"].size  # 30,000
+        subsample_size = subsample["c2_exp"].size
+
+        assert subsample_size < original_size, (
+            f"Expected subsample ({subsample_size}) < original ({original_size})"
+        )
+        # Should be roughly target_size (5K), allowing for rounding
+        assert subsample_size >= 3_000, f"Subsample too small: {subsample_size}"
+        assert subsample_size <= 10_000, f"Subsample too large: {subsample_size}"
+
+        # All angles should be preserved
+        assert subsample["c2_exp"].shape[0] == 3, "All angles should be preserved"
+
+        # t1, t2 should be reduced
+        assert len(subsample["t1"]) < len(xpcs_data["t1"])
+        assert len(subsample["t2"]) < len(xpcs_data["t2"])
+
+    def test_custom_starts_included_in_multistart(self, simple_bounds):
+        """Test that custom starting points are included in multi-start.
+
+        Regression test for bug where fit_nlsq_multistart accepted initial_params
+        but never passed them to run_multistart_nlsq as custom_starts.
+
+        Fixed in v2.6.1: fit_nlsq_multistart now passes initial_params as
+        custom_starts[0] to ensure user's initial guess is included.
+        """
+        from homodyne.optimization.nlsq.multistart import (
+            include_custom_starts,
+            generate_lhs_starts,
+        )
+
+        # Generate 5 LHS starts
+        n_starts = 5
+        n_params = 3
+        lhs_starts = generate_lhs_starts(simple_bounds, n_starts, seed=42)
+
+        # Add custom start (simulating user's initial parameters)
+        custom_start = np.array([5.0, 5.0, 5.0])
+        combined = include_custom_starts(lhs_starts, [custom_start.tolist()], simple_bounds)
+
+        # Should have n_starts + 1 starts
+        assert len(combined) == n_starts + 1, f"Expected {n_starts + 1}, got {len(combined)}"
+
+        # First start should be the custom start
+        np.testing.assert_allclose(combined[0], custom_start)

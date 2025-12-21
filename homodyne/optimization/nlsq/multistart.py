@@ -319,6 +319,46 @@ def _get_phi_from_data(data: dict[str, Any]) -> NDArray[np.float64] | None:
     return None
 
 
+def _get_dataset_size(data: dict[str, Any]) -> int:
+    """Calculate total number of data points from data dictionary.
+
+    This function handles both test fixtures (where 'phi' is flattened with
+    repeated angles) and actual XPCS data (where 'phi_angles_list' contains
+    only unique angles and 'g2'/'c2_exp' contains the actual 3D data).
+
+    Parameters
+    ----------
+    data : dict
+        Data dictionary that may contain:
+        - 'g2' or 'c2_exp': Experimental data array (n_phi, n_t1, n_t2)
+        - 'phi' or 'phi_angles_list': Phi angles
+
+    Returns
+    -------
+    int
+        Total number of data points.
+
+    Raises
+    ------
+    ValueError
+        If no valid data array is found.
+    """
+    # First, try to get size from actual data arrays (most reliable)
+    for key in ("g2", "c2_exp"):
+        arr = data.get(key)
+        if arr is not None:
+            arr = np.asarray(arr)
+            return int(arr.size)
+
+    # Fallback: calculate from phi array
+    # This handles test fixtures where phi is already flattened
+    phi = _get_phi_from_data(data)
+    if phi is not None:
+        return len(np.asarray(phi).ravel())
+
+    raise ValueError("Cannot determine dataset size: no 'g2', 'c2_exp', or 'phi' found")
+
+
 # =============================================================================
 # Core Functions: Bounds Validation
 # =============================================================================
@@ -709,6 +749,10 @@ def create_stratified_subsample(
 ) -> dict[str, Any]:
     """Create stratified subsample preserving angle distribution.
 
+    Handles both flat data structures (test fixtures) and XPCS data structures:
+    - Flat: phi is repeated array matching g2 length (1D)
+    - XPCS: phi_angles_list is unique angles, c2_exp is (n_phi, n_t1, n_t2)
+
     Parameters
     ----------
     data : dict
@@ -725,45 +769,138 @@ def create_stratified_subsample(
     """
     rng = np.random.default_rng(seed)
 
-    # Get phi angles using helper function
+    # Use _get_dataset_size for correct dataset size (handles XPCS vs flat data)
+    n_points = _get_dataset_size(data)
+
+    if n_points <= target_size:
+        logger.debug(f"Dataset ({n_points:,}) <= target ({target_size:,}), no subsampling")
+        return data
+
+    # Get phi angles
     phi = _get_phi_from_data(data)
     if phi is None:
         raise ValueError("Data must contain 'phi' or 'phi_angles_list'")
 
     phi = np.asarray(phi).ravel()
-    n_points = len(phi)
 
-    if n_points <= target_size:
-        logger.debug(f"Dataset ({n_points}) <= target ({target_size}), no subsampling")
-        return data
+    # Detect data structure: XPCS (3D c2_exp) vs flat (1D arrays)
+    c2_exp = data.get("c2_exp")
+    g2 = data.get("g2")
 
-    unique_angles = np.unique(phi)
-    n_angles = len(unique_angles)
-    samples_per_angle = target_size // n_angles
+    if c2_exp is not None and np.asarray(c2_exp).ndim == 3:
+        # XPCS data structure: c2_exp is (n_phi, n_t1, n_t2)
+        c2_exp = np.asarray(c2_exp)
+        n_phi, n_t1, n_t2 = c2_exp.shape
+        unique_angles = phi  # phi_angles_list contains unique angles
 
-    indices: list[int] = []
-    for angle in unique_angles:
-        angle_mask = phi == angle
-        angle_indices = np.where(angle_mask)[0]
-        n_select = min(samples_per_angle, len(angle_indices))
-        selected = rng.choice(angle_indices, size=n_select, replace=False)
-        indices.extend(selected.tolist())
+        # Subsample in (t1, t2) space, keeping all angles
+        # Calculate how many t1, t2 points to keep
+        points_per_angle = n_t1 * n_t2
+        target_per_angle = target_size // n_phi
 
-    indices = np.array(sorted(indices))
+        # Calculate subsample ratio
+        ratio = min(1.0, np.sqrt(target_per_angle / points_per_angle))
+        n_t1_sub = max(10, int(n_t1 * ratio))
+        n_t2_sub = max(10, int(n_t2 * ratio))
 
-    # Create subsampled data
-    subsample = {}
-    for key, value in data.items():
-        if isinstance(value, np.ndarray) and len(value) == n_points:
-            subsample[key] = value[indices]
-        else:
-            subsample[key] = value
+        # Randomly select t1, t2 indices
+        t1_indices = np.sort(rng.choice(n_t1, size=n_t1_sub, replace=False))
+        t2_indices = np.sort(rng.choice(n_t2, size=n_t2_sub, replace=False))
 
-    logger.info(
-        f"Created stratified subsample: {len(indices):,}/{n_points:,} points "
-        f"({n_angles} angles, ~{samples_per_angle} per angle)"
-    )
-    return subsample
+        # Create subsampled c2_exp
+        c2_sub = c2_exp[:, t1_indices, :][:, :, t2_indices]
+
+        # Create subsampled t1, t2
+        t1 = np.asarray(data["t1"])
+        t2 = np.asarray(data["t2"])
+        t1_sub = t1[t1_indices]
+        t2_sub = t2[t2_indices]
+
+        # Build subsample dict
+        subsample = dict(data)  # Copy all keys
+        subsample["c2_exp"] = c2_sub
+        subsample["t1"] = t1_sub
+        subsample["t2"] = t2_sub
+
+        actual_size = c2_sub.size
+        logger.info(
+            f"Created XPCS stratified subsample: {actual_size:,}/{n_points:,} points "
+            f"(t1: {n_t1_sub}/{n_t1}, t2: {n_t2_sub}/{n_t2}, all {n_phi} angles preserved)"
+        )
+        return subsample
+
+    elif g2 is not None and np.asarray(g2).ndim == 3:
+        # Also handle g2 as 3D array (same logic)
+        g2_arr = np.asarray(g2)
+        n_phi, n_t1, n_t2 = g2_arr.shape
+        unique_angles = phi
+
+        points_per_angle = n_t1 * n_t2
+        target_per_angle = target_size // n_phi
+        ratio = min(1.0, np.sqrt(target_per_angle / points_per_angle))
+        n_t1_sub = max(10, int(n_t1 * ratio))
+        n_t2_sub = max(10, int(n_t2 * ratio))
+
+        t1_indices = np.sort(rng.choice(n_t1, size=n_t1_sub, replace=False))
+        t2_indices = np.sort(rng.choice(n_t2, size=n_t2_sub, replace=False))
+
+        g2_sub = g2_arr[:, t1_indices, :][:, :, t2_indices]
+
+        t1 = np.asarray(data["t1"])
+        t2 = np.asarray(data["t2"])
+        t1_sub = t1[t1_indices]
+        t2_sub = t2[t2_indices]
+
+        subsample = dict(data)
+        subsample["g2"] = g2_sub
+        subsample["t1"] = t1_sub
+        subsample["t2"] = t2_sub
+
+        actual_size = g2_sub.size
+        logger.info(
+            f"Created XPCS stratified subsample: {actual_size:,}/{n_points:,} points "
+            f"(t1: {n_t1_sub}/{n_t1}, t2: {n_t2_sub}/{n_t2}, all {n_phi} angles preserved)"
+        )
+        return subsample
+
+    else:
+        # Flat data structure: phi has same length as data arrays
+        # Original logic for test fixtures
+        n_flat_points = len(phi)
+
+        if n_flat_points <= target_size:
+            logger.debug(
+                f"Flat dataset ({n_flat_points:,}) <= target ({target_size:,}), no subsampling"
+            )
+            return data
+
+        unique_angles = np.unique(phi)
+        n_angles = len(unique_angles)
+        samples_per_angle = target_size // n_angles
+
+        indices: list[int] = []
+        for angle in unique_angles:
+            angle_mask = phi == angle
+            angle_indices = np.where(angle_mask)[0]
+            n_select = min(samples_per_angle, len(angle_indices))
+            selected = rng.choice(angle_indices, size=n_select, replace=False)
+            indices.extend(selected.tolist())
+
+        indices_arr = np.array(sorted(indices))
+
+        # Create subsampled data
+        subsample = {}
+        for key, value in data.items():
+            if isinstance(value, np.ndarray) and len(value) == n_flat_points:
+                subsample[key] = value[indices_arr]
+            else:
+                subsample[key] = value
+
+        logger.info(
+            f"Created flat stratified subsample: {len(indices_arr):,}/{n_flat_points:,} points "
+            f"({n_angles} angles, ~{samples_per_angle} per angle)"
+        )
+        return subsample
 
 
 # =============================================================================
@@ -999,11 +1136,8 @@ def run_multistart_nlsq(
             total_wall_time=time.perf_counter() - start_time,
         )
 
-    # Determine dataset size using helper function
-    phi = _get_phi_from_data(data)
-    if phi is None:
-        raise ValueError("Data must contain 'phi' or 'phi_angles_list'")
-    n_points = len(np.asarray(phi).ravel())
+    # Determine dataset size from data arrays (not just phi array length)
+    n_points = _get_dataset_size(data)
 
     # Select strategy
     strategy = select_multistart_strategy(n_points, config)
