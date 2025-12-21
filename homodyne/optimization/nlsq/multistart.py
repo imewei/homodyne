@@ -11,10 +11,11 @@ Part of homodyne v2.6.0 architecture.
 
 from __future__ import annotations
 
+import multiprocessing
 import os
 import time
 from collections.abc import Callable
-from concurrent.futures import ProcessPoolExecutor, as_completed
+from concurrent.futures import ProcessPoolExecutor, TimeoutError, as_completed
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
@@ -23,6 +24,15 @@ from scipy.stats import qmc
 
 from homodyne.optimization.nlsq.progress import MultiStartProgressTracker
 from homodyne.utils.logging import get_logger
+
+# Timeout for individual worker results (seconds)
+# If a worker doesn't return within this time, we fall back to sequential
+_WORKER_TIMEOUT = 1800  # 30 minutes per worker
+
+# Maximum data points for parallel execution
+# Beyond this, sequential execution is used to avoid memory/serialization issues
+# 5 workers × 1M points × ~100 bytes/point = ~500MB serialization overhead per worker
+_MAX_POINTS_FOR_PARALLEL = 500_000  # 500K points
 
 if TYPE_CHECKING:
     from numpy.typing import NDArray
@@ -1038,6 +1048,9 @@ def _run_full_strategy(
 
     This is the ONLY supported strategy. No subsampling is performed.
 
+    For large datasets (>500K points), sequential execution is used to avoid
+    memory/serialization overhead from sending data to worker processes.
+
     Parameters
     ----------
     data : dict
@@ -1059,6 +1072,16 @@ def _run_full_strategy(
         Results from all starting points.
     """
     n_starts = len(starts)
+
+    # Check dataset size - force sequential for large datasets
+    # Parallel execution with large data causes serialization overhead and hangs
+    n_points = _get_dataset_size(data)
+    if n_points > _MAX_POINTS_FOR_PARALLEL and n_workers > 1:
+        logger.info(
+            f"Large dataset ({n_points:,} points > {_MAX_POINTS_FOR_PARALLEL:,}): "
+            f"using sequential execution to avoid serialization overhead"
+        )
+        n_workers = 1
 
     # Use a picklable worker class instead of a closure
     worker = _OptimizeWorker(data, single_fit_func)
@@ -1118,6 +1141,9 @@ def _run_parallel_with_progress(
 ) -> list[SingleStartResult]:
     """Run optimizations in parallel with progress tracking.
 
+    Uses 'spawn' multiprocessing context to avoid JAX JIT compilation deadlocks.
+    Falls back to sequential execution if parallel execution fails or hangs.
+
     Parameters
     ----------
     optimize_func : Callable
@@ -1135,30 +1161,61 @@ def _run_parallel_with_progress(
         Results from all starting points.
     """
     results: list[SingleStartResult] = []
-    pickle_error_detected = False
+    fallback_to_sequential = False
+    fallback_reason = ""
+
+    # Use 'spawn' context to avoid JAX/XLA deadlocks
+    # 'fork' can cause issues with JAX's XLA compilation locks
+    mp_context = multiprocessing.get_context("spawn")
 
     try:
-        with ProcessPoolExecutor(max_workers=n_workers) as executor:
+        logger.debug(
+            f"Starting parallel execution with {n_workers} workers (spawn context)"
+        )
+
+        with ProcessPoolExecutor(
+            max_workers=n_workers, mp_context=mp_context
+        ) as executor:
             futures = {
                 executor.submit(optimize_func, idx, start): idx
                 for idx, start in enumerate(starts)
             }
 
-            for future in as_completed(futures):
+            # Track completion with timeout
+            completed_count = 0
+            total_count = len(futures)
+
+            for future in as_completed(futures, timeout=_WORKER_TIMEOUT):
                 idx = futures[future]
                 try:
-                    result = future.result()
+                    # Timeout for individual result retrieval
+                    result = future.result(timeout=60)
                     results.append(result)
+                    completed_count += 1
                     progress.update(
                         start_idx=idx,
                         success=result.success,
                         chi_squared=result.chi_squared,
                         message=result.message,
                     )
+                    logger.debug(
+                        f"Worker {idx} completed ({completed_count}/{total_count})"
+                    )
+                except TimeoutError:
+                    logger.warning(
+                        f"Worker {idx} timed out, falling back to sequential"
+                    )
+                    fallback_to_sequential = True
+                    fallback_reason = f"Worker {idx} timeout"
+                    # Cancel remaining futures
+                    for f in futures:
+                        f.cancel()
+                    break
                 except Exception as e:
                     error_msg = str(e)
                     if _is_pickle_error(error_msg):
-                        pickle_error_detected = True
+                        fallback_to_sequential = True
+                        fallback_reason = f"Pickle error: {error_msg}"
                         logger.warning(
                             f"Pickle error detected, falling back to sequential: {e}"
                         )
@@ -1166,6 +1223,7 @@ def _run_parallel_with_progress(
                             f.cancel()
                         break
                     else:
+                        # Non-fatal error for this worker
                         failed_result = SingleStartResult(
                             start_idx=idx,
                             initial_params=starts[idx],
@@ -1175,6 +1233,7 @@ def _run_parallel_with_progress(
                             message=str(e),
                         )
                         results.append(failed_result)
+                        completed_count += 1
                         progress.update(
                             start_idx=idx,
                             success=False,
@@ -1182,18 +1241,28 @@ def _run_parallel_with_progress(
                             message=str(e),
                         )
 
+    except TimeoutError:
+        logger.warning(
+            f"Parallel execution timed out after {_WORKER_TIMEOUT}s, "
+            f"falling back to sequential"
+        )
+        fallback_to_sequential = True
+        fallback_reason = "Overall timeout"
+
     except Exception as e:
         error_msg = str(e)
         if _is_pickle_error(error_msg):
-            pickle_error_detected = True
+            fallback_to_sequential = True
+            fallback_reason = f"Pickle error: {error_msg}"
             logger.warning(f"ProcessPoolExecutor pickle error: {e}")
         else:
+            fallback_to_sequential = True
+            fallback_reason = f"ProcessPoolExecutor error: {error_msg}"
             logger.warning(f"ProcessPoolExecutor failed: {e}")
-            pickle_error_detected = True
 
-    # If pickle error, fall back to sequential
-    if pickle_error_detected:
-        logger.info("Running multi-start sequentially due to pickle constraints")
+    # If parallel failed, fall back to sequential
+    if fallback_to_sequential:
+        logger.info(f"Running multi-start sequentially ({fallback_reason})")
         # Clear any partial results
         results = []
         for idx, start in enumerate(starts):
