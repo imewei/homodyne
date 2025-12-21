@@ -2282,21 +2282,23 @@ class NLSQWrapper:
                     )  # Avoid zero scale for small params
 
                     # DEBUG: Print bounds and scaling for diagnostics
-                    logger.info("DEBUG: Bounds and scaling being passed to curve_fit:")
+                    # Show first 8 parameters to avoid log spam (covers scaling + key physical)
+                    n_show = min(8, len(current_params))
+                    logger.info(
+                        f"DEBUG: Bounds and scaling (showing first {n_show} of {len(current_params)} params):"
+                    )
                     if bounds is not None:
                         lower, upper = bounds
-                        param_names = ["contrast", "offset", "D0", "alpha", "D_offset"]
-                        for i, name in enumerate(param_names[: len(current_params)]):
+                        for i in range(n_show):
                             logger.info(
-                                f"  {name}: [{lower[i]:.6f}, {upper[i]:.6f}], "
+                                f"  param[{i}]: [{lower[i]:.6f}, {upper[i]:.6f}], "
                                 f"initial={current_params[i]:.6f}, x_scale={x_scale_array[i]:.6e}"
                             )
                     else:
                         logger.info("  bounds=None (unbounded)")
-                        param_names = ["contrast", "offset", "D0", "alpha", "D_offset"]
-                        for i, name in enumerate(param_names[: len(current_params)]):
+                        for i in range(n_show):
                             logger.info(
-                                f"  {name}: initial={current_params[i]:.6f}, "
+                                f"  param[{i}]: initial={current_params[i]:.6f}, "
                                 f"x_scale={x_scale_array[i]:.6e}"
                             )
 

@@ -1059,6 +1059,17 @@ def fit_nlsq_multistart(
     analysis_mode = _get_analysis_mode(config)
     param_space = ParameterSpace() if HAS_CORE_MODULES else None
 
+    # Load initial_params from config if not provided as argument
+    # CRITICAL: User's initial parameters must be included in multi-start to ensure
+    # the known-good solution is explored, especially for laminar_flow mode where
+    # LHS starting points may not converge to the correct physical parameters
+    if initial_params is None:
+        initial_params, _ = _load_initial_params_from_config(config, analysis_mode, data)
+        if initial_params is not None:
+            logger.info(
+                "Loaded initial parameters from configuration for multi-start optimization"
+            )
+
     # Get bounds
     if HAS_PARAMETER_MANAGER:
         param_manager = ParameterManager(config.config, analysis_mode=analysis_mode)

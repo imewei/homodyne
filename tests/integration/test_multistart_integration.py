@@ -699,3 +699,41 @@ class TestRegressionFixes:
 
         # First start should be the custom start
         np.testing.assert_allclose(combined[0], custom_start)
+
+    def test_initial_params_loaded_from_config(self):
+        """Test that initial_params are loaded from config when not provided.
+
+        Regression test for bug where fit_nlsq_multistart was called without
+        initial_params by the CLI, so user's initial parameters from config
+        were never used as custom_starts.
+
+        Fixed in v2.6.1: fit_nlsq_multistart now calls _load_initial_params_from_config
+        when initial_params argument is None, ensuring config values are used.
+        """
+        from homodyne.optimization.nlsq.core import _load_initial_params_from_config
+
+        # Create a mock config with initial_parameters section
+        class MockConfig:
+            def __init__(self):
+                self.config = {
+                    "initial_parameters": {
+                        "parameter_names": ["D0", "alpha", "D_offset"],
+                        "values": [19253.67, -1.064, 879.66],
+                    },
+                    "analysis_mode": "static",
+                }
+
+        mock_config = MockConfig()
+
+        # Test that initial params are loaded from config
+        params, per_angle = _load_initial_params_from_config(
+            mock_config, "static", data=None
+        )
+
+        assert params is not None, "Should load params from config"
+        assert "D0" in params, "Should have D0"
+        assert "alpha" in params, "Should have alpha"
+        assert "D_offset" in params, "Should have D_offset"
+        assert abs(params["D0"] - 19253.67) < 1e-6, f"D0 wrong: {params['D0']}"
+        assert abs(params["alpha"] - (-1.064)) < 1e-6, f"alpha wrong: {params['alpha']}"
+        assert abs(params["D_offset"] - 879.66) < 1e-6, f"D_offset wrong: {params['D_offset']}"
