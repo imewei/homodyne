@@ -1144,7 +1144,7 @@ wheels = [
 
 [[package]]
 name = "nlsq"
-version = "0.3.2"
+version = "0.3.4"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "h5py" },
@@ -1157,18 +1157,18 @@ dependencies = [
     { name = "scipy" },
     { name = "tqdm" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/83/50/ba0713f8e7a24e125bfd40ee657b8fbba4ccd71999272486524f9026c20e/nlsq-0.3.2.tar.gz", hash = "sha256:1a591e8d0a271bee9a60a1a82fc71ced2afec132ae411067b04033d9e2cae617", size = 22124337, upload-time = "2025-12-18T23:01:41.429Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/72/6e/588932d8b671fbcbe705a1c694aaaaed0cd67f799966162d22ea91bd1d2a/nlsq-0.3.4.tar.gz", hash = "sha256:579daf3cbc42789a61ec4698db2b508c87d533a399fd2551ddec2cec56404c1f", size = 53424571, upload-time = "2025-12-21T23:54:43.793Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/4b/47/16170ccb1bb27c5262009dbdbf892d65feaff6d87d7ed479d8d278898d1d/nlsq-0.3.2-py3-none-any.whl", hash = "sha256:badb7de66bcd69d114387a25d969e9894c26b6563f151a9e8dc1ed68b1336166", size = 300828, upload-time = "2025-12-18T23:01:38.878Z" },
+    { url = "https://files.pythonhosted.org/packages/0f/de/93256177f222ef6dc3299ff4884014e35b8aaaceb304c7246e8f3d05df89/nlsq-0.3.4-py3-none-any.whl", hash = "sha256:6fe5e4f4816d391052d1f1a3a1a666d6c370f0132e272ec43b76530995fe50dd", size = 352642, upload-time = "2025-12-21T23:54:40.556Z" },
 ]
 
 [[package]]
 name = "nodeenv"
-version = "1.9.1"
+version = "1.10.0"
 source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/43/16/fc88b08840de0e0a72a2f9d8c6bae36be573e475a6326ae854bcc549fc45/nodeenv-1.9.1.tar.gz", hash = "sha256:6ec12890a2dab7946721edbfbcd91f3319c6ccc9aec47be7c7e6b7011ee6645f", size = 47437, upload-time = "2024-06-04T18:44:11.171Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/24/bf/d1bda4f6168e0b2e9e5958945e01910052158313224ada5ce1fb2e1113b8/nodeenv-1.10.0.tar.gz", hash = "sha256:996c191ad80897d076bdfba80a41994c2b47c68e224c542b48feba42ba00f8bb", size = 55611, upload-time = "2025-12-20T14:08:54.006Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/d2/1d/1b658dbd2b9fa9c4c9f32accbfc0205d532c8c6194dc0f2a4c0428e7128a/nodeenv-1.9.1-py2.py3-none-any.whl", hash = "sha256:ba11c9782d29c27c70ffbdda2d7415098754709be8a7056d79a737cd901155c9", size = 22314, upload-time = "2024-06-04T18:44:08.352Z" },
+    { url = "https://files.pythonhosted.org/packages/88/b2/d0896bdcdc8d28a7fc5717c305f1a861c26e18c05047949fb371034d98bd/nodeenv-1.10.0-py2.py3-none-any.whl", hash = "sha256:5bb13e3eed2923615535339b3c620e76779af4cb4c6a90deccc9e36b274d3827", size = 23438, upload-time = "2025-12-20T14:08:52.782Z" },
 ]
 
 [[package]]
