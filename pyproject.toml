@@ -59,12 +59,10 @@ dependencies = [
     # Core scientific computing
     "numpy>=2.0.0,<3.0.0",
     "scipy>=1.14.0,<2.0.0",
-
     # JAX ecosystem (CPU-only in v2.3.0+)
     "jax==0.8.0",
     "jaxlib==0.8.0",
-    "nlsq>=0.3.0",
-
+    "nlsq>=0.3.6",
     # Bayesian inference
     "numpyro>=0.19.0,<0.20.0",
     "blackjax>=1.2.0,<2.0.0",
@@ -72,18 +70,14 @@ dependencies = [
     "arviz-stats",
     "arviz-plots",
     "arviz",
-
     # Data handling
     "h5py>=3.10.0,<4.0.0",
     "pyyaml>=6.0.2",
-
     # System utilities
     "psutil>=6.0.0,<8.0.0",
     "cloudpickle>=3.0.0,<4.0.0",
-
     # Plotting
     "matplotlib>=3.8.0,<4.0.0",
-
     # Fast visualization (optional - graceful degradation if unavailable)
     "datashader>=0.16.0,<0.19.0",
     "xarray>=2024.1.0",

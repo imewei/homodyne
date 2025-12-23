@@ -448,13 +448,14 @@ optimization:
     hybrid_streaming:
       enable: true                              # Use hybrid optimizer for large datasets
       normalize: true                           # Enable parameter normalization
-      normalization_strategy: "bounds"          # Options: "auto" | "bounds" | "p0" | "none"
-      warmup_iterations: 1                      # Minimal Adam (1 iter), then Gauss-Newton
-      max_warmup_iterations: 1                  # NLSQ requires >0, else falls back to Adam-only
-      warmup_learning_rate: 0.001               # Adam learning rate (only 1 iteration used)
-      gauss_newton_max_iterations: 50           # Maximum Gauss-Newton iterations
+      normalization_strategy: "auto"            # Options: "auto" | "bounds" | "p0" | "none"
+                                                # "auto" selects best strategy based on bounds/p0
+      warmup_iterations: 200                    # Adam warmup iterations before switch check
+      max_warmup_iterations: 500                # Maximum Adam iterations (force switch to GN)
+      warmup_learning_rate: 0.001               # Adam base learning rate
+      gauss_newton_max_iterations: 100          # Maximum Gauss-Newton iterations
       gauss_newton_tol: 1.0e-8                  # Convergence tolerance
-      chunk_size: 50000                         # Points per chunk for streaming
+      chunk_size: 10000                         # Points per chunk for streaming
       trust_region_initial: 1.0                 # Initial trust region size
       regularization_factor: 1.0e-10            # Tikhonov regularization
       enable_checkpoints: true                  # Enable checkpoint save/resume
@@ -462,6 +463,45 @@ optimization:
       validate_numerics: true                   # Numerical validation (NaN/Inf)
       verbose: 1                                # Verbosity: 0=silent, 1=progress, 2=debug
       log_frequency: 1                          # Log every N iterations (Phase 2 progress)
+
+      # -------------------------------------------------------------------------
+      # 4-LAYER DEFENSE STRATEGY (NLSQ 0.3.6)
+      # -------------------------------------------------------------------------
+      # Prevents Adam warmup from diverging when starting from good parameters.
+      # All layers are ENABLED BY DEFAULT - no configuration needed for most cases.
+      #
+      # Problem: Adam warmup can drift away from good initial parameters because
+      # its momentum accumulates gradients even near the optimum.
+      #
+      # Solution: 4 complementary defense layers that protect good starting points
+      # while preserving Adam's exploration benefits for poor starting points.
+      #
+      # Layer 1: Warm Start Detection
+      # - Skips Adam warmup entirely if initial loss is already low
+      # - Threshold: loss/variance < warm_start_threshold
+      enable_warm_start_detection: true         # Enable warm start detection
+      warm_start_threshold: 0.01                # Skip warmup if loss/variance < this
+      #
+      # Layer 2: Adaptive Learning Rate
+      # - Scales learning rate based on initial loss quality
+      # - Good starts (rel_loss < 0.1): use warmup_lr_refinement
+      # - Moderate starts (rel_loss < 1.0): use warmup_lr_careful
+      # - Poor starts: use warmup_learning_rate (full exploration)
+      enable_adaptive_warmup_lr: true           # Enable adaptive LR
+      warmup_lr_refinement: 1.0e-6              # LR for refinement mode (good starts)
+      warmup_lr_careful: 1.0e-5                 # LR for careful mode (moderate starts)
+      #
+      # Layer 3: Cost-Increase Guard
+      # - Aborts Adam warmup if loss increases too much from initial
+      # - Reverts to best parameters found during warmup
+      enable_cost_guard: true                   # Enable cost guard
+      cost_increase_tolerance: 0.05             # Abort if loss increases >5%
+      #
+      # Layer 4: Step Clipping
+      # - Limits maximum parameter change per Adam iteration
+      # - Prevents catastrophic jumps to wrong basins
+      enable_step_clipping: true                # Enable step clipping
+      max_warmup_step_size: 0.1                 # Max step (fraction of normalized range)
 
   # ---------------------------------------------------------------------------
   # STRATIFICATION - Angle-Stratified Chunking

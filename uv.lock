@@ -615,7 +615,7 @@ requires-dist = [
     { name = "matplotlib", specifier = ">=3.8.0,<4.0.0" },
     { name = "mypy", marker = "extra == 'dev'", specifier = ">=1.19.0,<2.0.0" },
     { name = "myst-parser", marker = "extra == 'docs'", specifier = ">=4.0.0,<5.0.0" },
-    { name = "nlsq", specifier = ">=0.3.0" },
+    { name = "nlsq", specifier = ">=0.3.6" },
     { name = "numpy", specifier = ">=2.0.0,<3.0.0" },
     { name = "numpyro", specifier = ">=0.19.0,<0.20.0" },
     { name = "pre-commit", marker = "extra == 'dev'", specifier = ">=4.0.0,<5.0.0" },
@@ -1144,7 +1144,7 @@ wheels = [
 
 [[package]]
 name = "nlsq"
-version = "0.3.5"
+version = "0.3.6"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "h5py" },
@@ -1157,9 +1157,9 @@ dependencies = [
     { name = "scipy" },
     { name = "tqdm" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/54/aa/87e04c2dede4ecabaff7d6cfca01f067b8ca7c70eb640c5191aa2c1cc3d4/nlsq-0.3.5.tar.gz", hash = "sha256:cb475e2f831cca092226cf8cda02ed0e1b72d886b6b8512dbf9c67396415c027", size = 53434275, upload-time = "2025-12-23T02:24:12.189Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/05/c7/d017ea159dd7101e2c2f38748b449a863782dcc775ba195aa79675f8ae41/nlsq-0.3.6.tar.gz", hash = "sha256:e3fd7403156c4fe16cc0130accfb05450d48107601f42a759cb87c86e5ac3523", size = 53459967, upload-time = "2025-12-23T07:32:20.765Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/dd/07/1769453c636185e0c4db7c807fd806ae47208d28e774b3af54d95df91cd9/nlsq-0.3.5-py3-none-any.whl", hash = "sha256:4583fbd5c1ab6040047406e232598632dccfb45947fdc8cd26bb8535b5b5cf0f", size = 353844, upload-time = "2025-12-23T02:24:09.067Z" },
+    { url = "https://files.pythonhosted.org/packages/1c/4a/0a4696e1db9f60999915661b1dc9f4699b951d645b90571b68d80a84ffe9/nlsq-0.3.6-py3-none-any.whl", hash = "sha256:23cab1ba6633b7b6d7e4ee1303e88072046fd533b7e492239a6aac3347aae942", size = 360314, upload-time = "2025-12-23T07:32:17.579Z" },
 ]
 
 [[package]]

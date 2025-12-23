@@ -523,6 +523,58 @@ optimization:
       verbose: 1         # Verbosity level: 0=quiet, 1=normal (milestones), 2=detailed
       log_interval: 10   # Log every N iterations (for verbose >= 2)
 
+    # -------------------------------------------------------------------------
+    # HYBRID STREAMING OPTIMIZER (AdaptiveHybridStreamingOptimizer)
+    # -------------------------------------------------------------------------
+    # Four-phase optimizer for large datasets (>10M points):
+    #   Phase 0: Parameter normalization setup
+    #   Phase 1: Adam warmup with adaptive switching
+    #   Phase 2: Streaming Gauss-Newton (quadratic convergence)
+    #   Phase 3: Denormalization and covariance transform
+    #
+    # Memory: Bounded at ~2 GB regardless of dataset size
+    # Expected: ~10x fewer iterations (110 vs 1000+)
+    hybrid_streaming:
+      enable: true                              # Use hybrid optimizer for large datasets
+      normalize: true                           # Enable parameter normalization
+      normalization_strategy: "auto"            # "auto" | "bounds" | "p0" | "none"
+      warmup_iterations: 200                    # Adam warmup before switch check
+      max_warmup_iterations: 500                # Force switch to Gauss-Newton
+      warmup_learning_rate: 0.001               # Adam base learning rate
+      gauss_newton_max_iterations: 100          # Max Gauss-Newton iterations
+      gauss_newton_tol: 1.0e-8                  # Convergence tolerance
+      chunk_size: 10000                         # Points per chunk for streaming J^T J
+      trust_region_initial: 1.0                 # Initial trust region size
+      regularization_factor: 1.0e-10            # Tikhonov regularization for J^T J
+      enable_checkpoints: true                  # Enable checkpoint save/resume
+      checkpoint_frequency: 100                 # Checkpoint every N iterations
+      validate_numerics: true                   # Numerical validation (NaN/Inf)
+      verbose: 1                                # 0=silent, 1=progress, 2=debug
+      log_frequency: 1                          # Log every N iterations
+
+      # 4-LAYER DEFENSE STRATEGY (NLSQ 0.3.6)
+      # ------------------------------------
+      # Prevents Adam warmup from diverging when starting from good parameters.
+      # All layers ENABLED BY DEFAULT - protects good starting points while
+      # preserving Adam's exploration benefits for poor starting points.
+      #
+      # Layer 1: Warm Start Detection - skip warmup if already at good solution
+      enable_warm_start_detection: true         # Enable warm start detection
+      warm_start_threshold: 0.01                # Skip warmup if loss/variance < this
+      #
+      # Layer 2: Adaptive Learning Rate - scale LR based on initial loss quality
+      enable_adaptive_warmup_lr: true           # Enable adaptive LR
+      warmup_lr_refinement: 1.0e-6              # LR for good starts (rel_loss < 0.1)
+      warmup_lr_careful: 1.0e-5                 # LR for moderate starts (rel_loss < 1.0)
+      #
+      # Layer 3: Cost-Increase Guard - abort if loss increases during warmup
+      enable_cost_guard: true                   # Enable cost guard
+      cost_increase_tolerance: 0.05             # Abort if loss increases >5%
+      #
+      # Layer 4: Step Clipping - limit max parameter change per iteration
+      enable_step_clipping: true                # Enable step clipping
+      max_warmup_step_size: 0.1                 # Max step (fraction of normalized range)
+
   # ---------------------------------------------------------------------------
   # STREAMING - Checkpoint/Resume for Large Datasets (>100M points)
   # ---------------------------------------------------------------------------

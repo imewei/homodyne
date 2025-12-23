@@ -97,18 +97,38 @@ class NLSQConfig:
     # Fixes: 1) Shear-term weak gradients, 2) Slow convergence, 3) Crude covariance
     enable_hybrid_streaming: bool = True
     hybrid_normalize: bool = True
-    hybrid_normalization_strategy: str = "bounds"  # 'auto', 'bounds', 'p0', 'none'
-    hybrid_warmup_iterations: int = 100
+    hybrid_normalization_strategy: str = "auto"  # 'auto', 'bounds', 'p0', 'none'
+    hybrid_warmup_iterations: int = 200
     hybrid_max_warmup_iterations: int = 500
     hybrid_warmup_learning_rate: float = 0.001
-    hybrid_gauss_newton_max_iterations: int = 50
+    hybrid_gauss_newton_max_iterations: int = 100
     hybrid_gauss_newton_tol: float = 1e-8
-    hybrid_chunk_size: int = 50000
+    hybrid_chunk_size: int = 10000
     hybrid_trust_region_initial: float = 1.0
     hybrid_regularization_factor: float = 1e-10
     hybrid_enable_checkpoints: bool = True
     hybrid_checkpoint_frequency: int = 100
     hybrid_validate_numerics: bool = True
+
+    # 4-Layer Defense Strategy for Adam Warmup (v2.8.0 / NLSQ 0.3.6)
+    # Prevents divergence when starting from good initial parameters
+    #
+    # Layer 1: Warm Start Detection - skip warmup if already at good solution
+    hybrid_enable_warm_start_detection: bool = True
+    hybrid_warm_start_threshold: float = 0.01  # Skip if loss/variance < this
+    #
+    # Layer 2: Adaptive Learning Rate - scale LR based on initial loss quality
+    hybrid_enable_adaptive_warmup_lr: bool = True
+    hybrid_warmup_lr_refinement: float = 1e-6  # LR for good starts (relative_loss < 0.1)
+    hybrid_warmup_lr_careful: float = 1e-5  # LR for moderate starts (relative_loss < 1.0)
+    #
+    # Layer 3: Cost-Increase Guard - abort if loss increases during warmup
+    hybrid_enable_cost_guard: bool = True
+    hybrid_cost_increase_tolerance: float = 0.05  # Abort if loss increases >5%
+    #
+    # Layer 4: Step Clipping - limit max parameter change per Adam iteration
+    hybrid_enable_step_clipping: bool = True
+    hybrid_max_warmup_step_size: float = 0.1  # Max step in normalized units
 
     # Multi-start optimization settings (v2.6.0)
     # Enables exploration of parameter space via Latin Hypercube Sampling
@@ -213,6 +233,36 @@ class NLSQConfig:
                 "checkpoint_frequency", 100
             ),
             hybrid_validate_numerics=hybrid_streaming.get("validate_numerics", True),
+            # 4-Layer Defense Strategy (v2.8.0 / NLSQ 0.3.6)
+            # Layer 1: Warm Start Detection
+            hybrid_enable_warm_start_detection=hybrid_streaming.get(
+                "enable_warm_start_detection", True
+            ),
+            hybrid_warm_start_threshold=float(
+                hybrid_streaming.get("warm_start_threshold", 0.01)
+            ),
+            # Layer 2: Adaptive Learning Rate
+            hybrid_enable_adaptive_warmup_lr=hybrid_streaming.get(
+                "enable_adaptive_warmup_lr", True
+            ),
+            hybrid_warmup_lr_refinement=float(
+                hybrid_streaming.get("warmup_lr_refinement", 1e-6)
+            ),
+            hybrid_warmup_lr_careful=float(
+                hybrid_streaming.get("warmup_lr_careful", 1e-5)
+            ),
+            # Layer 3: Cost-Increase Guard
+            hybrid_enable_cost_guard=hybrid_streaming.get("enable_cost_guard", True),
+            hybrid_cost_increase_tolerance=float(
+                hybrid_streaming.get("cost_increase_tolerance", 0.05)
+            ),
+            # Layer 4: Step Clipping
+            hybrid_enable_step_clipping=hybrid_streaming.get(
+                "enable_step_clipping", True
+            ),
+            hybrid_max_warmup_step_size=float(
+                hybrid_streaming.get("max_warmup_step_size", 0.1)
+            ),
             # Multi-start (v2.6.0)
             # NOTE: No subsampling - numerical precision takes priority
             enable_multi_start=multi_start.get("enable", False),
@@ -329,6 +379,37 @@ class NLSQConfig:
                 f"hybrid_chunk_size must be positive, got: {self.hybrid_chunk_size}"
             )
 
+        # Validate 4-Layer Defense parameters
+        # Layer 1: Warm Start Detection
+        if self.hybrid_warm_start_threshold <= 0:
+            errors.append(
+                f"hybrid_warm_start_threshold must be positive, "
+                f"got: {self.hybrid_warm_start_threshold}"
+            )
+        # Layer 2: Adaptive Learning Rate
+        if self.hybrid_warmup_lr_refinement <= 0:
+            errors.append(
+                f"hybrid_warmup_lr_refinement must be positive, "
+                f"got: {self.hybrid_warmup_lr_refinement}"
+            )
+        if self.hybrid_warmup_lr_careful <= 0:
+            errors.append(
+                f"hybrid_warmup_lr_careful must be positive, "
+                f"got: {self.hybrid_warmup_lr_careful}"
+            )
+        # Layer 3: Cost-Increase Guard
+        if not 0 < self.hybrid_cost_increase_tolerance < 1:
+            errors.append(
+                f"hybrid_cost_increase_tolerance must be in (0, 1), "
+                f"got: {self.hybrid_cost_increase_tolerance}"
+            )
+        # Layer 4: Step Clipping
+        if self.hybrid_max_warmup_step_size <= 0:
+            errors.append(
+                f"hybrid_max_warmup_step_size must be positive, "
+                f"got: {self.hybrid_max_warmup_step_size}"
+            )
+
         # Validate multi-start settings
         valid_sampling_strategies = ["latin_hypercube", "random"]
         if self.multi_start_sampling_strategy not in valid_sampling_strategies:
@@ -430,6 +511,16 @@ class NLSQConfig:
                 "enable_checkpoints": self.hybrid_enable_checkpoints,
                 "checkpoint_frequency": self.hybrid_checkpoint_frequency,
                 "validate_numerics": self.hybrid_validate_numerics,
+                # 4-Layer Defense Strategy (v2.8.0 / NLSQ 0.3.6)
+                "enable_warm_start_detection": self.hybrid_enable_warm_start_detection,
+                "warm_start_threshold": self.hybrid_warm_start_threshold,
+                "enable_adaptive_warmup_lr": self.hybrid_enable_adaptive_warmup_lr,
+                "warmup_lr_refinement": self.hybrid_warmup_lr_refinement,
+                "warmup_lr_careful": self.hybrid_warmup_lr_careful,
+                "enable_cost_guard": self.hybrid_enable_cost_guard,
+                "cost_increase_tolerance": self.hybrid_cost_increase_tolerance,
+                "enable_step_clipping": self.hybrid_enable_step_clipping,
+                "max_warmup_step_size": self.hybrid_max_warmup_step_size,
             },
             "multi_start": {
                 "enable": self.enable_multi_start,

@@ -57,18 +57,28 @@ class TestNLSQConfigDefaults:
         config = NLSQConfig()
         assert config.enable_hybrid_streaming is True
         assert config.hybrid_normalize is True
-        assert config.hybrid_normalization_strategy == "bounds"
-        assert config.hybrid_warmup_iterations == 100
+        assert config.hybrid_normalization_strategy == "auto"
+        assert config.hybrid_warmup_iterations == 200
         assert config.hybrid_max_warmup_iterations == 500
         assert config.hybrid_warmup_learning_rate == 0.001
-        assert config.hybrid_gauss_newton_max_iterations == 50
+        assert config.hybrid_gauss_newton_max_iterations == 100
         assert config.hybrid_gauss_newton_tol == 1e-8
-        assert config.hybrid_chunk_size == 50000
+        assert config.hybrid_chunk_size == 10000
         assert config.hybrid_trust_region_initial == 1.0
         assert config.hybrid_regularization_factor == 1e-10
         assert config.hybrid_enable_checkpoints is True
         assert config.hybrid_checkpoint_frequency == 100
         assert config.hybrid_validate_numerics is True
+        # 4-Layer Defense Strategy (NLSQ 0.3.6)
+        assert config.hybrid_enable_warm_start_detection is True
+        assert config.hybrid_warm_start_threshold == 0.01
+        assert config.hybrid_enable_adaptive_warmup_lr is True
+        assert config.hybrid_warmup_lr_refinement == 1e-6
+        assert config.hybrid_warmup_lr_careful == 1e-5
+        assert config.hybrid_enable_cost_guard is True
+        assert config.hybrid_cost_increase_tolerance == 0.05
+        assert config.hybrid_enable_step_clipping is True
+        assert config.hybrid_max_warmup_step_size == 0.1
 
 
 class TestNLSQConfigFromDict:

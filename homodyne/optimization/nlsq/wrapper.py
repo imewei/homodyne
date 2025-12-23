@@ -4245,7 +4245,7 @@ class NLSQWrapper:
         logger.info("Initializing NLSQ AdaptiveHybridStreamingOptimizer...")
         logger.info("Fixes: 1) Shear-term gradients, 2) Convergence, 3) Covariance")
 
-        # Create HybridStreamingConfig from NLSQConfig
+        # Create HybridStreamingConfig from NLSQConfig with 4-layer defense
         if nlsq_config is not None:
             config = HybridStreamingConfig(
                 normalize=nlsq_config.hybrid_normalize,
@@ -4261,17 +4261,37 @@ class NLSQWrapper:
                 enable_checkpoints=nlsq_config.hybrid_enable_checkpoints,
                 checkpoint_frequency=nlsq_config.hybrid_checkpoint_frequency,
                 validate_numerics=nlsq_config.hybrid_validate_numerics,
+                # 4-Layer Defense Strategy (NLSQ 0.3.6)
+                enable_warm_start_detection=nlsq_config.hybrid_enable_warm_start_detection,
+                warm_start_threshold=nlsq_config.hybrid_warm_start_threshold,
+                enable_adaptive_warmup_lr=nlsq_config.hybrid_enable_adaptive_warmup_lr,
+                warmup_lr_refinement=nlsq_config.hybrid_warmup_lr_refinement,
+                warmup_lr_careful=nlsq_config.hybrid_warmup_lr_careful,
+                enable_cost_guard=nlsq_config.hybrid_enable_cost_guard,
+                cost_increase_tolerance=nlsq_config.hybrid_cost_increase_tolerance,
+                enable_step_clipping=nlsq_config.hybrid_enable_step_clipping,
+                max_warmup_step_size=nlsq_config.hybrid_max_warmup_step_size,
             )
         else:
-            # Use defaults
+            # Use NLSQ 0.3.6 defaults with 4-layer defense enabled
             config = HybridStreamingConfig(
                 normalize=True,
-                normalization_strategy="bounds",
-                warmup_iterations=100,
+                normalization_strategy="auto",
+                warmup_iterations=200,
                 max_warmup_iterations=500,
-                gauss_newton_max_iterations=50,
+                gauss_newton_max_iterations=100,
                 gauss_newton_tol=1e-8,
-                chunk_size=50000,
+                chunk_size=10000,
+                # 4-Layer Defense enabled by default
+                enable_warm_start_detection=True,
+                warm_start_threshold=0.01,
+                enable_adaptive_warmup_lr=True,
+                warmup_lr_refinement=1e-6,
+                warmup_lr_careful=1e-5,
+                enable_cost_guard=True,
+                cost_increase_tolerance=0.05,
+                enable_step_clipping=True,
+                max_warmup_step_size=0.1,
             )
 
         logger.info(f"  Normalization: {config.normalization_strategy}")
@@ -5464,24 +5484,25 @@ class NLSQWrapper:
         start_time = time.perf_counter()
 
         # Parse hybrid streaming configuration
+        # Uses NLSQ 0.3.6 defaults which include 4-layer defense strategy
         config_dict = hybrid_config or {}
         normalize = config_dict.get("normalize", True)
-        normalization_strategy = config_dict.get("normalization_strategy", "bounds")
-        # Minimal Adam warmup (1 iteration), then immediately Gauss-Newton
-        # NLSQ requires max_warmup_iterations > 0, otherwise falls back to Adam-only
-        warmup_iterations = config_dict.get("warmup_iterations", 1)
-        max_warmup_iterations = config_dict.get("max_warmup_iterations", 1)
+        normalization_strategy = config_dict.get("normalization_strategy", "auto")
+        # Standard warmup iterations - NLSQ 0.3.6 has 4-layer defense to prevent
+        # divergence when starting from good parameters
+        warmup_iterations = config_dict.get("warmup_iterations", 200)
+        max_warmup_iterations = config_dict.get("max_warmup_iterations", 500)
         warmup_learning_rate = config_dict.get("warmup_learning_rate", 0.001)
-        gauss_newton_max_iterations = config_dict.get("gauss_newton_max_iterations", 50)
+        gauss_newton_max_iterations = config_dict.get("gauss_newton_max_iterations", 100)
         gauss_newton_tol = config_dict.get("gauss_newton_tol", 1e-8)
-        chunk_size = config_dict.get("chunk_size", 50_000)
+        chunk_size = config_dict.get("chunk_size", 10_000)
         trust_region_initial = config_dict.get("trust_region_initial", 1.0)
         regularization_factor = config_dict.get("regularization_factor", 1e-10)
-        enable_checkpoints = config_dict.get("enable_checkpoints", False)
+        enable_checkpoints = config_dict.get("enable_checkpoints", True)
         checkpoint_frequency = config_dict.get("checkpoint_frequency", 100)
         validate_numerics = config_dict.get("validate_numerics", True)
 
-        # Learning rate scheduling - disabled by default (minimal Adam warmup)
+        # Learning rate scheduling
         use_learning_rate_schedule = config_dict.get("use_learning_rate_schedule", False)
         lr_schedule_warmup_steps = config_dict.get(
             "lr_schedule_warmup_steps", warmup_iterations
@@ -5490,6 +5511,24 @@ class NLSQWrapper:
             "lr_schedule_decay_steps", max_warmup_iterations - warmup_iterations
         )
         lr_schedule_end_value = config_dict.get("lr_schedule_end_value", 0.0001)
+
+        # 4-Layer Defense Strategy (NLSQ 0.3.6)
+        # Prevents Adam warmup from diverging when starting from good parameters
+        # Layer 1: Warm Start Detection - skip warmup if already at good solution
+        enable_warm_start_detection = config_dict.get(
+            "enable_warm_start_detection", True
+        )
+        warm_start_threshold = float(config_dict.get("warm_start_threshold", 0.01))
+        # Layer 2: Adaptive Learning Rate - scale LR based on initial loss quality
+        enable_adaptive_warmup_lr = config_dict.get("enable_adaptive_warmup_lr", True)
+        warmup_lr_refinement = float(config_dict.get("warmup_lr_refinement", 1e-6))
+        warmup_lr_careful = float(config_dict.get("warmup_lr_careful", 1e-5))
+        # Layer 3: Cost-Increase Guard - abort if loss increases during warmup
+        enable_cost_guard = config_dict.get("enable_cost_guard", True)
+        cost_increase_tolerance = float(config_dict.get("cost_increase_tolerance", 0.05))
+        # Layer 4: Step Clipping - limit max parameter change per Adam iteration
+        enable_step_clipping = config_dict.get("enable_step_clipping", True)
+        max_warmup_step_size = float(config_dict.get("max_warmup_step_size", 0.1))
 
         logger.info("Hybrid streaming config:")
         logger.info(f"  Normalization: {normalization_strategy}")
@@ -5504,8 +5543,13 @@ class NLSQWrapper:
         logger.info(f"  Gauss-Newton iterations: {gauss_newton_max_iterations}")
         logger.info(f"  Gauss-Newton tolerance: {gauss_newton_tol}")
         logger.info(f"  Chunk size: {chunk_size:,}")
+        logger.info("  4-Layer Defense Strategy (NLSQ 0.3.6):")
+        logger.info(f"    L1 Warm Start Detection: {enable_warm_start_detection}")
+        logger.info(f"    L2 Adaptive LR: {enable_adaptive_warmup_lr}")
+        logger.info(f"    L3 Cost Guard: {enable_cost_guard}")
+        logger.info(f"    L4 Step Clipping: {enable_step_clipping}")
 
-        # Create HybridStreamingConfig
+        # Create HybridStreamingConfig with 4-layer defense
         optimizer_config = HybridStreamingConfig(
             normalize=normalize,
             normalization_strategy=normalization_strategy,
@@ -5524,6 +5568,16 @@ class NLSQWrapper:
             lr_schedule_warmup_steps=lr_schedule_warmup_steps,
             lr_schedule_decay_steps=lr_schedule_decay_steps,
             lr_schedule_end_value=lr_schedule_end_value,
+            # 4-Layer Defense Strategy
+            enable_warm_start_detection=enable_warm_start_detection,
+            warm_start_threshold=warm_start_threshold,
+            enable_adaptive_warmup_lr=enable_adaptive_warmup_lr,
+            warmup_lr_refinement=warmup_lr_refinement,
+            warmup_lr_careful=warmup_lr_careful,
+            enable_cost_guard=enable_cost_guard,
+            cost_increase_tolerance=cost_increase_tolerance,
+            enable_step_clipping=enable_step_clipping,
+            max_warmup_step_size=max_warmup_step_size,
             verbose=config_dict.get("verbose", 1),
             log_frequency=config_dict.get("log_frequency", 1),
         )
