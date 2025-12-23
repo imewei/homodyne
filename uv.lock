@@ -1144,7 +1144,7 @@ wheels = [
 
 [[package]]
 name = "nlsq"
-version = "0.3.6"
+version = "0.3.7"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "h5py" },
@@ -1157,9 +1157,9 @@ dependencies = [
     { name = "scipy" },
     { name = "tqdm" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/05/c7/d017ea159dd7101e2c2f38748b449a863782dcc775ba195aa79675f8ae41/nlsq-0.3.6.tar.gz", hash = "sha256:e3fd7403156c4fe16cc0130accfb05450d48107601f42a759cb87c86e5ac3523", size = 53459967, upload-time = "2025-12-23T07:32:20.765Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/a1/17/29ff888401e15d114f3cad8f2bc8bac0040234efff6ddbea3972c9230e86/nlsq-0.3.7.tar.gz", hash = "sha256:2392145a24c268144b6e5b80e608678001b0db23e0bcc66165fce5533b6f23ff", size = 53480216, upload-time = "2025-12-23T15:50:50.433Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/1c/4a/0a4696e1db9f60999915661b1dc9f4699b951d645b90571b68d80a84ffe9/nlsq-0.3.6-py3-none-any.whl", hash = "sha256:23cab1ba6633b7b6d7e4ee1303e88072046fd533b7e492239a6aac3347aae942", size = 360314, upload-time = "2025-12-23T07:32:17.579Z" },
+    { url = "https://files.pythonhosted.org/packages/77/7a/06f8347f353d472d8051066a1ff4258914edce4ed310edd0546c46338c4f/nlsq-0.3.7-py3-none-any.whl", hash = "sha256:8094c3d033062306200d139e15a03a0bd00c50919bc236859ea17bd9f96766be", size = 360932, upload-time = "2025-12-23T15:50:47.845Z" },
 ]
 
 [[package]]
