@@ -373,6 +373,199 @@ def _sample_xdata(xdata: np.ndarray, max_points: int) -> np.ndarray:
     return xdata[indices]
 
 
+def _compute_consistent_per_angle_init(
+    stratified_data: Any,
+    physical_params: np.ndarray,
+    physical_param_names: list[str],
+    default_contrast: float = 0.5,
+    default_offset: float = 1.0,
+    logger: Any = None,
+) -> tuple[np.ndarray, np.ndarray]:
+    """Compute per-angle contrast/offset consistent with initial physical parameters.
+
+    This function solves a critical initialization problem in laminar_flow mode:
+    when physical shear parameters (gamma_dot_t0) are nonzero, the model predicts
+    DIFFERENT g2 values at different angles. If per-angle contrast/offset are
+    initialized uniformly, large initial residuals can cause the optimizer to
+    incorrectly reduce gamma_dot_t0 to zero.
+
+    Instead, we compute per-angle contrast/offset by fitting:
+        g2_data[angle] ≈ offset[angle] + contrast[angle] × g1_model²[angle]
+
+    where g1_model is computed using the initial physical parameters.
+
+    Parameters
+    ----------
+    stratified_data : StratifiedData
+        Data containing per-angle g2, phi, t1, t2 arrays
+    physical_params : np.ndarray
+        Initial physical parameters [D0, alpha, D_offset, (gamma_dot_t0, beta, gamma_dot_t_offset, phi0)]
+    physical_param_names : list[str]
+        Names of physical parameters to determine analysis mode
+    default_contrast : float
+        Default contrast value if fitting fails
+    default_offset : float
+        Default offset value if fitting fails
+    logger : logging.Logger, optional
+        Logger for diagnostic messages
+
+    Returns
+    -------
+    contrast_per_angle : np.ndarray
+        Per-angle contrast values consistent with physical params
+    offset_per_angle : np.ndarray
+        Per-angle offset values consistent with physical params
+    """
+    from homodyne.core.physics_utils import (
+        calculate_diffusion_coefficient,
+        calculate_shear_rate,
+        safe_exp,
+        safe_sinc,
+        trapezoid_cumsum,
+    )
+
+    # Extract data by angle
+    if hasattr(stratified_data, "chunks"):
+        phi_unique = np.array(sorted(set(
+            phi for chunk in stratified_data.chunks for phi in chunk.phi.tolist()
+        )))
+        n_phi = len(phi_unique)
+        # Get metadata from first chunk
+        first_chunk = stratified_data.chunks[0]
+        q = first_chunk.q
+        L = first_chunk.L
+        dt = first_chunk.dt
+        t1_unique = np.array(sorted(set(
+            t for chunk in stratified_data.chunks for t in chunk.t1.tolist()
+        )))
+    else:
+        phi_unique = np.unique(stratified_data.phi_flat)
+        n_phi = len(phi_unique)
+        q = stratified_data.q
+        L = stratified_data.L
+        dt = stratified_data.dt
+        t1_unique = np.unique(stratified_data.t1_flat)
+
+    # Extract physical parameters
+    is_laminar_flow = "gamma_dot_t0" in physical_param_names
+    D0 = physical_params[0]
+    alpha = physical_params[1]
+    D_offset = physical_params[2]
+    if is_laminar_flow:
+        gamma_dot_t0 = physical_params[3]
+        beta = physical_params[4]
+        gamma_dot_t_offset = physical_params[5]
+        phi0 = physical_params[6]
+    else:
+        gamma_dot_t0 = 0.0
+        beta = 0.0
+        gamma_dot_t_offset = 0.0
+        phi0 = 0.0
+
+    # Precompute time-dependent quantities (same for all angles)
+    # Note: trapezoid_cumsum returns cumulative trapezoid sum (no dt scaling)
+    # dt scaling is applied via wavevector_q_squared_half_dt and sinc_prefactor
+    t_values = np.asarray(t1_unique)
+    D_t = calculate_diffusion_coefficient(t_values, D0, alpha, D_offset)
+    D_cumsum = np.asarray(trapezoid_cumsum(D_t))  # No dt argument
+    wavevector_q_squared_half_dt = 0.5 * (q**2) * dt
+
+    if is_laminar_flow:
+        gamma_t = calculate_shear_rate(t_values, gamma_dot_t0, beta, gamma_dot_t_offset)
+        gamma_cumsum = np.asarray(trapezoid_cumsum(gamma_t))  # No dt argument
+        sinc_prefactor = 0.5 / np.pi * q * L * dt
+
+    # Initialize output arrays
+    contrast_per_angle = np.full(n_phi, default_contrast)
+    offset_per_angle = np.full(n_phi, default_offset)
+
+    # Process each angle
+    for i, phi in enumerate(phi_unique):
+        try:
+            # Get data for this angle
+            if hasattr(stratified_data, "chunks"):
+                # Find data in chunks
+                g2_list = []
+                t1_list = []
+                t2_list = []
+                for chunk in stratified_data.chunks:
+                    mask = np.isclose(chunk.phi, phi, atol=0.1)
+                    if np.any(mask):
+                        g2_list.extend(chunk.g2[mask].tolist())
+                        t1_list.extend(chunk.t1[mask].tolist())
+                        t2_list.extend(chunk.t2[mask].tolist())
+                if not g2_list:
+                    continue
+                g2_data = np.array(g2_list)
+                t1_data = np.array(t1_list)
+                t2_data = np.array(t2_list)
+            else:
+                mask = np.isclose(stratified_data.phi_flat, phi, atol=0.1)
+                if not np.any(mask):
+                    continue
+                g2_data = stratified_data.g2_flat[mask]
+                t1_data = stratified_data.t1_flat[mask]
+                t2_data = stratified_data.t2_flat[mask]
+
+            # Compute g1_model for each data point at this angle
+            # Use index lookup for efficiency
+            t1_idx = np.clip(
+                np.searchsorted(t1_unique, t1_data), 0, len(t1_unique) - 1
+            )
+            t2_idx = np.clip(
+                np.searchsorted(t1_unique, t2_data), 0, len(t1_unique) - 1
+            )
+
+            # Diffusion term: g1_diff = exp(-q² × 0.5 × dt × |D_cumsum[t1] - D_cumsum[t2]|)
+            D_diff = D_cumsum[t1_idx] - D_cumsum[t2_idx]
+            D_integral_batch = np.abs(D_diff)
+            log_g1_diff = -wavevector_q_squared_half_dt * D_integral_batch
+            g1_diffusion = safe_exp(np.clip(log_g1_diff, -700.0, 0.0))
+
+            if is_laminar_flow:
+                # Shear term: g1_shear = sinc²(sinc_prefactor × cos(φ₀-φ) × |γ_cumsum[t1] - γ_cumsum[t2]|)
+                angle_diff = np.deg2rad(phi0 - phi)
+                cos_phi = np.cos(angle_diff)
+                gamma_diff = gamma_cumsum[t1_idx] - gamma_cumsum[t2_idx]
+                gamma_integral_batch = np.abs(gamma_diff)
+                sinc_arg = sinc_prefactor * cos_phi * gamma_integral_batch
+                sinc_val = safe_sinc(sinc_arg)
+                g1_shear = sinc_val**2
+                g1_model = g1_diffusion * g1_shear
+            else:
+                g1_model = g1_diffusion
+
+            # Clip for numerical stability
+            g1_model = np.clip(g1_model, 1e-10, 2.0)
+            g1_sq = g1_model**2
+
+            # Linear regression: g2 = offset + contrast × g1²
+            # Use least squares: [1, g1²] @ [offset, contrast]ᵀ = g2
+            if len(g2_data) > 2:
+                A = np.column_stack([np.ones_like(g1_sq), g1_sq])
+                result = np.linalg.lstsq(A, g2_data, rcond=None)
+                fit_offset, fit_contrast = result[0]
+
+                # Sanity checks
+                if 0.0 < fit_contrast < 2.0 and 0.5 < fit_offset < 1.5:
+                    contrast_per_angle[i] = fit_contrast
+                    offset_per_angle[i] = fit_offset
+
+        except Exception as e:
+            if logger:
+                logger.debug(f"Failed to compute consistent init for angle {phi}: {e}")
+            # Keep default values
+
+    if logger:
+        logger.info(
+            f"Computed consistent per-angle initialization:\n"
+            f"  Contrast range: [{contrast_per_angle.min():.4f}, {contrast_per_angle.max():.4f}]\n"
+            f"  Offset range: [{offset_per_angle.min():.4f}, {offset_per_angle.max():.4f}]"
+        )
+
+    return contrast_per_angle, offset_per_angle
+
+
 def _compute_jacobian_stats(
     residual_fn: Callable[..., Any],
     x_subset: np.ndarray,
@@ -1617,14 +1810,45 @@ class NLSQWrapper:
             physical_params = validated_params[2:]
 
             # Replicate contrast and offset for each angle
-            if per_angle_contrast_override is not None:
-                contrast_per_angle = per_angle_contrast_override
+            # CRITICAL FIX (v2.7.1): For laminar_flow mode, use consistent initialization
+            # to prevent per-angle params from absorbing the shear signal
+            is_laminar_flow = "gamma_dot_t0" in physical_param_names
+            use_consistent_init = (
+                is_laminar_flow
+                and per_angle_contrast_override is None
+                and per_angle_offset_override is None
+                and n_phi > 3  # Only for many angles where absorption is a problem
+            )
+
+            if use_consistent_init:
+                logger.info(
+                    "Computing consistent per-angle initialization for laminar_flow mode..."
+                )
+                try:
+                    contrast_per_angle, offset_per_angle = _compute_consistent_per_angle_init(
+                        stratified_data=stratified_data,
+                        physical_params=physical_params,
+                        physical_param_names=physical_param_names,
+                        default_contrast=contrast_single,
+                        default_offset=offset_single,
+                        logger=logger,
+                    )
+                except Exception as e:
+                    logger.warning(
+                        f"Failed to compute consistent per-angle init: {e}\n"
+                        "Falling back to uniform replication."
+                    )
+                    contrast_per_angle = np.full(n_phi, contrast_single)
+                    offset_per_angle = np.full(n_phi, offset_single)
             else:
-                contrast_per_angle = np.full(n_phi, contrast_single)
-            if per_angle_offset_override is not None:
-                offset_per_angle = per_angle_offset_override
-            else:
-                offset_per_angle = np.full(n_phi, offset_single)
+                if per_angle_contrast_override is not None:
+                    contrast_per_angle = per_angle_contrast_override
+                else:
+                    contrast_per_angle = np.full(n_phi, contrast_single)
+                if per_angle_offset_override is not None:
+                    offset_per_angle = per_angle_offset_override
+                else:
+                    offset_per_angle = np.full(n_phi, offset_single)
 
             # Concatenate: [contrasts, offsets, physical]
             validated_params = np.concatenate(
@@ -4831,6 +5055,26 @@ class NLSQWrapper:
             "method": "stratified_least_squares",
         }
 
+        # Check for shear collapse in laminar_flow mode
+        is_laminar_flow = "gamma_dot_t0" in physical_param_names
+        if is_laminar_flow:
+            n_phi = len(stratified_data.chunks) if hasattr(stratified_data, 'chunks') else 1
+            if len(popt) > 2 * n_phi + 3:
+                gamma_dot_t0_idx = 2 * n_phi + 3
+                gamma_dot_t0_value = popt[gamma_dot_t0_idx]
+                if abs(gamma_dot_t0_value) < 1e-5:
+                    logger.warning("=" * 80)
+                    logger.warning("SHEAR COLLAPSE WARNING")
+                    logger.warning(f"gamma_dot_t0 = {gamma_dot_t0_value:.2e} s⁻¹ is effectively zero")
+                    logger.warning("The model has effectively collapsed to static_isotropic mode.")
+                    logger.warning("RECOMMENDED: Use phi_filtering for angles near 0° and 90°")
+                    logger.warning("=" * 80)
+                    info["shear_collapse_warning"] = {
+                        "gamma_dot_t0": float(gamma_dot_t0_value),
+                        "threshold": 1e-5,
+                        "message": "Shear contribution effectively zero"
+                    }
+
         return popt, pcov, info
 
     def _fit_with_streaming_optimizer(
@@ -5801,6 +6045,58 @@ class NLSQWrapper:
             lower_bounds, upper_bounds = bounds
             popt = np.clip(popt, lower_bounds, upper_bounds)
 
+        # Check for parameters stuck at bounds with zero/near-zero uncertainty
+        # This indicates the optimizer could not move these parameters away from bounds
+        bound_stuck_warning = None
+        if bounds is not None and is_laminar_flow:
+            perr = np.sqrt(np.diag(pcov))
+            param_statuses = _classify_parameter_status(
+                popt, lower_bounds, upper_bounds, atol=1e-6
+            )
+
+            # Map indices to physical parameter names for laminar_flow mode
+            # Layout: [n_phi contrasts] + [n_phi offsets] + [7 physical params]
+            physical_indices = list(range(2 * n_phi, len(popt)))
+            physical_param_names_local = [
+                "D0", "alpha", "D_offset",
+                "gamma_dot_t0", "beta", "gamma_dot_t_offset", "phi0"
+            ]
+
+            bound_stuck_params = []
+            for i, idx in enumerate(physical_indices):
+                if idx < len(param_statuses) and idx < len(popt):
+                    status = param_statuses[idx]
+                    uncertainty = perr[idx] if idx < len(perr) else 0.0
+                    if status != "active" and (uncertainty == 0.0 or uncertainty < 1e-15):
+                        param_name = physical_param_names_local[i] if i < len(physical_param_names_local) else f"param[{idx}]"
+                        bound_stuck_params.append((param_name, status, popt[idx], uncertainty))
+
+            if bound_stuck_params:
+                logger.warning("=" * 80)
+                logger.warning("PARAMETER BOUNDS WARNING")
+                logger.warning("The following parameters are stuck at bounds with zero uncertainty:")
+                for param_name, status, value, unc in bound_stuck_params:
+                    logger.warning(f"  {param_name}: {value:.6e} ({status}, uncertainty={unc:.2e})")
+                logger.warning("")
+                logger.warning("This may indicate:")
+                logger.warning("  1. The optimizer cannot find gradient information for these parameters")
+                logger.warning("  2. The initial guess was already at or near the bounds")
+                logger.warning("  3. The model is insensitive to these parameters with this data coverage")
+                logger.warning("")
+                logger.warning("RECOMMENDED ACTIONS:")
+                logger.warning("  - Enable phi_filtering to use only angles near 0° and 90° for laminar flow")
+                logger.warning("  - Use multi-start optimization to explore multiple parameter basins")
+                logger.warning("  - Check if gamma_dot_t0 ≈ 0 means shear contribution is missing")
+                logger.warning("=" * 80)
+
+                # Store for info dict
+                bound_stuck_warning = {
+                    "parameters_at_bounds": [
+                        {"name": name, "status": status, "value": float(val), "uncertainty": float(unc)}
+                        for name, status, val, unc in bound_stuck_params
+                    ]
+                }
+
         # Build info dict
         info = {
             "success": result.get("success", False),
@@ -5817,6 +6113,41 @@ class NLSQWrapper:
             "method": "adaptive_hybrid_streaming",
             "hybrid_streaming_diagnostics": diagnostics,
         }
+
+        # Add bounds warning info if detected
+        if bound_stuck_warning is not None:
+            info["bound_stuck_warning"] = bound_stuck_warning
+
+        # Check for shear collapse: gamma_dot_t0 essentially zero
+        if is_laminar_flow and len(popt) > 2 * n_phi + 3:
+            gamma_dot_t0_idx = 2 * n_phi + 3
+            gamma_dot_t0_value = popt[gamma_dot_t0_idx]
+            # Check if shear rate is effectively zero (< 1e-5 s^-1)
+            if abs(gamma_dot_t0_value) < 1e-5:
+                logger.warning("=" * 80)
+                logger.warning("SHEAR COLLAPSE WARNING")
+                logger.warning(f"gamma_dot_t0 = {gamma_dot_t0_value:.2e} s⁻¹ is effectively zero")
+                logger.warning("")
+                logger.warning("This means the shear contribution to g₁ is negligible.")
+                logger.warning("The model has effectively collapsed to static_isotropic mode.")
+                logger.warning("")
+                logger.warning("POSSIBLE CAUSES:")
+                logger.warning("  1. Per-angle contrast/offset absorbed the shear signal")
+                logger.warning("  2. Inconsistent initialization of per-angle vs physical params")
+                logger.warning("  3. Physical parameters at bounds with weak gradient signal")
+                logger.warning("  4. The data may genuinely have no measurable shear")
+                logger.warning("")
+                logger.warning("RECOMMENDED ACTIONS:")
+                logger.warning("  - Enable multi-start optimization to explore parameter basins")
+                logger.warning("  - Check reduced chi-squared: if worse than expected, re-run optimization")
+                logger.warning("  - Verify per-angle contrast/offset are not varying excessively")
+                logger.warning("  - Consider static_isotropic mode if shear is truly absent")
+                logger.warning("=" * 80)
+                info["shear_collapse_warning"] = {
+                    "gamma_dot_t0": float(gamma_dot_t0_value),
+                    "threshold": 1e-5,
+                    "message": "Shear contribution effectively zero"
+                }
 
         return popt, pcov, info
 
