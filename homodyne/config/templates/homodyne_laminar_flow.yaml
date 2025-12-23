@@ -27,12 +27,12 @@ metadata:
   shear_model: "γ̇(t) = γ̇₀·t^β + γ̇_offset" # Time-dependent shear rate
 
   # Integration and correction methods
-  # v2.4.3: NLSQ element-wise integration now matches CMC physics exactly
+  # NLSQ element-wise integration now matches CMC physics exactly
   # Uses cumulative trapezoidal integration with searchsorted-based time grid lookup
   # Eliminates up to 3.4% C₂ error in dynamic transitions between methods
   integration_method: "discrete_numerical" # Discrete numerical integration for stability
   diagonal_correction: "mandatory" # Diagonal correction for consistency
-  nlsq_cmc_physics_match: true # v2.4.3: NLSQ and CMC use identical integration
+  nlsq_cmc_physics_match: true # NLSQ and CMC use identical integration
 
   # Template classification
   recommended_use: "Nonequilibrium XPCS systems under shear flow with time-dependent dynamics"
@@ -161,7 +161,7 @@ phi_filtering:
 #
 # PARAMETER COUNT (Laminar Flow):
 # --------------------------------
-# **PER-ANGLE SCALING MANDATORY (v2.4.0)**:
+# **PER-ANGLE SCALING MANDATORY**:
 #   - Legacy scalar contrast/offset mode REMOVED
 #   - Each scattering angle has unique optical/detector properties
 #   - Passing per_angle_scaling=False will raise ValueError
@@ -185,7 +185,7 @@ initial_parameters:
   values: null # List of 7 floats matching parameter_names order
   # Example: [1000.0, 0.5, 10.0, 0.01, 0.0, 0.0, 0.0]
 
-  # Per-angle scaling initialization (v2.4.0 mandatory)
+  # Per-angle scaling initialization (mandatory)
   # IMPORTANT: Initialize from NLSQ results or estimate from data to prevent MCMC convergence failures
   # For NLSQ→MCMC workflow: Run NLSQ first, copy contrast/offset from results
   # For data estimation: contrast ≈ (C2_max - C2_min), offset ≈ C2_min
@@ -344,7 +344,7 @@ parameter_space:
   # Optional: Prior distributions for Bayesian methods
   # priors: null # Set to null if using default priors
   #
-  # DATA-DRIVEN PRIORS (v2.4.3 Best Practice):
+  # DATA-DRIVEN PRIORS (Best Practice):
   # ------------------------------------------
   # For improved MCMC convergence, estimate priors from data:
   #
@@ -386,13 +386,13 @@ parameter_space:
 optimization:
   method:
     "nlsq" # Options: "nlsq" | "mcmc"
-    # Note: MCMC uses CMC-only architecture (v2.4.1) with per-shard NUTS sampling
+    # Note: MCMC uses CMC-only architecture with per-shard NUTS sampling
 
   # ---------------------------------------------------------------------------
   # NLSQ - Trust-Region Nonlinear Least Squares (Primary Method)
   # ---------------------------------------------------------------------------
   # Fast, deterministic optimization using Levenberg-Marquardt algorithm
-  # CPU-optimized with JAX 0.8.0 (v2.3.0+), JIT-compiled for performance
+  # CPU-optimized with JAX 0.8.0, JIT-compiled for performance
   # Automatic strategy selection based on dataset size:
   #   < 1M points     → STANDARD (curve_fit)
   #   1M-10M points   → LARGE (curve_fit_large)
@@ -491,7 +491,7 @@ optimization:
       check_gradients: true # Verify gradient computations
       log_jacobian_norms: false # Log parameter sensitivity (Jacobian norms)
 
-    # Progress Bar and Logging (v2.7.0+)
+    # Progress Bar and Logging
     # -----------------------------------
     # Controls progress bar display and logging verbosity during optimization
     progress:
@@ -500,7 +500,7 @@ optimization:
       log_interval: 10   # Log every N iterations (for verbose >= 2)
 
     # ---------------------------------------------------------------------------
-    # MULTI-START OPTIMIZATION (v2.6.0+)
+    # MULTI-START OPTIMIZATION
     # ---------------------------------------------------------------------------
     # Explores parameter space from multiple starting points using Latin
     # Hypercube Sampling to find global optimum and detect parameter degeneracy.
@@ -525,7 +525,7 @@ optimization:
       degeneracy_threshold: 0.1         # Flag if chi² within 10%
 
     # ---------------------------------------------------------------------------
-    # HYBRID STREAMING - Four-Phase Adaptive Optimizer (v2.6.0)
+    # HYBRID STREAMING - Four-Phase Adaptive Optimizer
     # ---------------------------------------------------------------------------
     # Fixes three critical issues with large laminar_flow datasets:
     # 1. Shear-term weak gradients (scale imbalance) - via parameter normalization
@@ -547,9 +547,9 @@ optimization:
       normalization_strategy: "bounds"          # Options: "auto" | "bounds" | "p0" | "none"
                                                 # "bounds" normalizes to [0,1] using parameter bounds
                                                 # Recommended for laminar_flow (D₀~10⁴ vs γ̇₀~10⁻³)
-      warmup_iterations: 100                    # Adam warmup iterations before checking switch
-      max_warmup_iterations: 500                # Maximum Adam iterations before forcing switch
-      warmup_learning_rate: 0.001               # Adam learning rate during warmup
+      warmup_iterations: 1                      # Minimal Adam (1 iter), then Gauss-Newton
+      max_warmup_iterations: 1                  # NLSQ requires >0, else falls back to Adam-only
+      warmup_learning_rate: 0.001               # Adam learning rate (only 1 iteration used)
       gauss_newton_max_iterations: 50           # Maximum Gauss-Newton iterations in Phase 2
       gauss_newton_tol: 1.0e-8                  # Convergence tolerance for Gauss-Newton
       chunk_size: 50000                         # Points per chunk for streaming J^T J
@@ -558,9 +558,11 @@ optimization:
       enable_checkpoints: true                  # Enable checkpoint save/resume
       checkpoint_frequency: 100                 # Save checkpoint every N iterations
       validate_numerics: true                   # Enable numerical validation (NaN/Inf checks)
+      verbose: 1                                # Verbosity: 0=silent, 1=progress, 2=debug
+      log_frequency: 1                          # Log every N iterations (Phase 2 progress)
 
   # ---------------------------------------------------------------------------
-  # STRATIFICATION - Angle-Stratified Chunking (v2.2+)
+  # STRATIFICATION - Angle-Stratified Chunking
   # ---------------------------------------------------------------------------
   # Fixes per-angle parameter compatibility with NLSQ chunking for large datasets
   # Automatically reorganizes data to ensure all chunks contain all phi angles
@@ -593,7 +595,7 @@ optimization:
   # - Fixes: Silent failures with per-angle scaling on large datasets
 
   # ---------------------------------------------------------------------------
-  # SEQUENTIAL - Sequential Per-Angle Optimization (v2.2+)
+  # SEQUENTIAL - Sequential Per-Angle Optimization
   # ---------------------------------------------------------------------------
   # Fallback strategy when stratification cannot be applied
   # Optimizes each phi angle independently and combines results
@@ -614,7 +616,7 @@ optimization:
   # ---------------------------------------------------------------------------
   # MCMC - Markov Chain Monte Carlo (Uncertainty Quantification)
   # ---------------------------------------------------------------------------
-  # CMC-only architecture (v2.4.1): per-shard NUTS sampling with
+  # CMC-only architecture: per-shard NUTS sampling with
   # Consensus Monte Carlo (precision-weighted) combination of subposteriors
   # Provides full posterior distributions and uncertainty estimates
   # For laminar_flow with 7 parameters: increased warmup recommended
@@ -660,9 +662,9 @@ optimization:
     adaptive_batching: true # Dynamically adjust batch size based on performance
 
   # ---------------------------------------------------------------------------
-  # CMC - Consensus Monte Carlo (v2.4.1: Default MCMC Architecture)
+  # CMC - Consensus Monte Carlo (Default MCMC Architecture)
   # ---------------------------------------------------------------------------
-  # CMC is the only MCMC path in v2.4.1+ (NUTS auto-selection removed)
+  # CMC is the only MCMC path (NUTS auto-selection removed)
   # Parallelizes MCMC across data shards with per-shard NUTS sampling
   # and combines subposteriors using Consensus Monte Carlo (precision-weighted means)
   cmc:
@@ -686,7 +688,7 @@ optimization:
     # Per-shard timeout (seconds). Matches multiprocessing backend default.
     # Can be lowered/raised based on dataset size and shard configuration.
     #
-    # TIMEOUT TUNING GUIDANCE (v2.4.3):
+    # TIMEOUT TUNING GUIDANCE:
     # ----------------------------------
     # | Dataset Size | Shard Size | Recommended Timeout |
     # |--------------|------------|---------------------|
@@ -795,12 +797,12 @@ performance:
     enable_caching: true # Enable intelligent caching
     cache_strategy: "adaptive" # Options: "adaptive" | "aggressive" | "conservative"
 
-  # Computation settings (CPU-only in v2.3.0+)
+  # Computation settings (CPU-only)
   computation:
     enable_jit: true # Enable JAX JIT compilation
     cpu_threads: "auto" # Number of CPU threads (int or "auto")
     vectorization_level: "high" # Options: "low" | "medium" | "high"
-    # Note: GPU support removed in v2.3.0 (use v2.2.x for GPU)
+    # Note: GPU support removed
 
 # ==============================================================================
 # LOGGING
@@ -883,7 +885,7 @@ plotting:
   datashader:
     canvas_width: 1200 # Rendering resolution in pixels
     canvas_height: 1200 # Higher values = more detail, larger files
-    # Note: CPU-only rendering in v2.3.0+
+    # Note: CPU-only rendering
 
   # Matplotlib configuration (used when preview_mode: false)
   matplotlib:
@@ -946,7 +948,7 @@ validation:
 # LAMINAR FLOW - USAGE NOTES
 # ==============================================================================
 #
-# QUICK START (v2.4.1 Workflow):
+# QUICK START (Workflow):
 # ----------------------------------------
 # Step 1 - NLSQ optimization:
 #   1. Update experimental_data paths to your HDF5 file
@@ -1002,7 +1004,7 @@ validation:
 #
 # Use require_orthogonal_angles: true to ensure both directions sampled
 #
-# OPTIMIZATION METHOD SELECTION (v2.4.1):
+# OPTIMIZATION METHOD SELECTION:
 # ----------------------------------------
 # NLSQ (Recommended first):
 #   - Fast: ~seconds to minutes
@@ -1014,7 +1016,7 @@ validation:
 # MCMC (For publication with uncertainty quantification):
 #   - Slower: ~hours for 7 parameters
 #   - Full posterior distributions with credible intervals
-#   - CMC-only architecture (v2.4.1): per-shard NUTS sampling with
+#   - CMC-only architecture: per-shard NUTS sampling with
 #     Consensus Monte Carlo (precision-weighted) combination of subposteriors
 #   - Convergence diagnostics (R-hat, ESS, divergences)
 #   - Increased warmup (500+) recommended for 7 parameters
@@ -1066,10 +1068,10 @@ validation:
 #   10M-100M points → CHUNKED
 #   > 100M points   → STREAMING
 #
-# PLATFORM SUPPORT (v2.3.0):
+# PLATFORM SUPPORT:
 # ---------------------------
 # CPU-only: Linux, macOS, Windows (full support, multi-core optimized)
-# GPU support removed in v2.3.0 (use v2.2.1 for GPU features)
+# GPU support removed
 # HPC-ready: Optimized for 14+ core CPUs, tested on 36-128 core nodes
 #
 # Installation:
@@ -1078,7 +1080,7 @@ validation:
 # Requirements:
 #   - Python 3.12+
 #   - JAX==0.8.0 and jaxlib==0.8.0 (exact match required, CPU-only)
-#   - For GPU: Stay on homodyne v2.2.1 (last GPU-supporting version)
+#   - For GPU: Stay on older homodyne versions
 #
 # PHYSICAL INTERPRETATION:
 # ------------------------

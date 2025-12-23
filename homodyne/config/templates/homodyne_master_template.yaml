@@ -43,12 +43,12 @@ metadata:
   shear_model: "γ̇(t) = γ̇₀·t^β + γ̇_offset"  # Laminar flow only
 
   # Numerical methods
-  # v2.4.3: NLSQ element-wise integration now matches CMC physics exactly
+  # NLSQ element-wise integration now matches CMC physics exactly
   # Uses cumulative trapezoidal integration with searchsorted-based time grid lookup
   # Eliminates up to 3.4% C₂ error in dynamic transitions between methods
   integration_method: "discrete_numerical"  # Stable trapezoidal integration
   diagonal_correction: "mandatory"  # Siegert relation correction (always applied)
-  nlsq_cmc_physics_match: true  # v2.4.3: NLSQ and CMC use identical integration
+  nlsq_cmc_physics_match: true  # NLSQ and CMC use identical integration
 
   # Template classification
   recommended_use: "Comprehensive reference for homodyne analyses; slim down for production"
@@ -217,7 +217,7 @@ phi_filtering:
 #   3. Paste into values: [...] for MCMC initialization
 #   4. Run MCMC with good starting point
 #
-# PER-ANGLE SCALING (v2.4.0+):
+# PER-ANGLE SCALING:
 #   MANDATORY - each angle has unique contrast/offset
 #   Legacy scalar mode removed; per_angle_scaling=False raises ValueError
 #
@@ -413,7 +413,7 @@ parameter_space:
 # METHOD SELECTION:
 #   "nlsq" - Nonlinear least squares (seconds to minutes)
 #   "mcmc" - Markov Chain Monte Carlo via CMC (minutes to hours)
-#   "cmc"  - Same as "mcmc" (CMC is the only MCMC path in v2.4.1+)
+#   "cmc"  - Same as "mcmc" (CMC is the only MCMC path)
 #
 optimization:
   method: "nlsq"
@@ -514,7 +514,7 @@ optimization:
       log_jacobian_norms: false
 
     # -------------------------------------------------------------------------
-    # PROGRESS BAR AND LOGGING (v2.7.0+)
+    # PROGRESS BAR AND LOGGING
     # -------------------------------------------------------------------------
     # Controls progress bar display and logging verbosity during optimization.
     # Provides real-time feedback on optimization progress.
@@ -541,7 +541,7 @@ optimization:
     adaptive_batching: true
 
   # ---------------------------------------------------------------------------
-  # STRATIFICATION - Angle-Stratified Chunking (v2.2+)
+  # STRATIFICATION - Angle-Stratified Chunking
   # ---------------------------------------------------------------------------
   # Fixes per-angle scaling compatibility with NLSQ chunking.
   # Reorganizes data so every chunk contains all phi angles.
@@ -559,7 +559,7 @@ optimization:
     log_diagnostics: false
 
   # ---------------------------------------------------------------------------
-  # SEQUENTIAL - Per-Angle Optimization Fallback (v2.2+)
+  # SEQUENTIAL - Per-Angle Optimization Fallback
   # ---------------------------------------------------------------------------
   # Used when stratification cannot be applied (extreme angle imbalance).
   # Optimizes each angle independently, then combines with weighted averaging.
@@ -568,7 +568,7 @@ optimization:
     weighting: "inverse_variance"  # "inverse_variance" | "uniform" | "n_points"
 
   # ---------------------------------------------------------------------------
-  # NLSQ MULTI-START OPTIMIZATION (v2.6.0+)
+  # NLSQ MULTI-START OPTIMIZATION
   # ---------------------------------------------------------------------------
   # Explores parameter space from multiple starting points using Latin
   # Hypercube Sampling to find global optimum and detect parameter degeneracy.
@@ -619,7 +619,7 @@ optimization:
         offset_pct: 50
 
   # ---------------------------------------------------------------------------
-  # CMC - Consensus Monte Carlo (v2.4.1: Only MCMC Path)
+  # CMC - Consensus Monte Carlo (Only MCMC Path)
   # ---------------------------------------------------------------------------
   # Parallelizes MCMC across data shards using per-shard NUTS sampling.
   # Combines subposteriors via Consensus Monte Carlo (precision-weighted means).
@@ -660,7 +660,7 @@ optimization:
     # Per-shard timeout (seconds). Matches multiprocessing backend default.
     # Can be lowered/raised based on dataset size and shard configuration.
     #
-    # TIMEOUT TUNING GUIDANCE (v2.4.3):
+    # TIMEOUT TUNING GUIDANCE:
     # ----------------------------------
     # | Dataset Size | Shard Size | Recommended Timeout |
     # |--------------|------------|---------------------|
@@ -730,7 +730,7 @@ noise_estimation:
 # PERFORMANCE (CPU Only)
 # ==============================================================================
 # Memory management and computation settings.
-# GPU support removed in v2.3.0 (CPU-only execution).
+# GPU support removed (CPU-only).
 performance:
   strategy_override: null        # null | "standard" | "large" | "chunked" | "streaming"
   memory_limit_gb: null          # null = auto-detect
@@ -927,12 +927,12 @@ validation:
 #   10M-100M:      CHUNKED - progress bar, checkpoints
 #   > 100M:        STREAMING - constant memory, fault tolerance
 #
-# PLATFORM REQUIREMENTS (v2.3.0+):
+# PLATFORM REQUIREMENTS:
 # --------------------------------
 #   - Python 3.12+
 #   - JAX 0.8.0 / jaxlib 0.8.0 (CPU-only)
 #   - NumPy 2.x
-#   - GPU support removed (use v2.2.1 for GPU)
+#   - GPU support removed
 #
 # CONFIGURATION VALIDATION:
 # -------------------------

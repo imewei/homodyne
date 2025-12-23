@@ -1144,7 +1144,7 @@ wheels = [
 
 [[package]]
 name = "nlsq"
-version = "0.3.4"
+version = "0.3.5"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "h5py" },
@@ -1157,9 +1157,9 @@ dependencies = [
     { name = "scipy" },
     { name = "tqdm" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/72/6e/588932d8b671fbcbe705a1c694aaaaed0cd67f799966162d22ea91bd1d2a/nlsq-0.3.4.tar.gz", hash = "sha256:579daf3cbc42789a61ec4698db2b508c87d533a399fd2551ddec2cec56404c1f", size = 53424571, upload-time = "2025-12-21T23:54:43.793Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/54/aa/87e04c2dede4ecabaff7d6cfca01f067b8ca7c70eb640c5191aa2c1cc3d4/nlsq-0.3.5.tar.gz", hash = "sha256:cb475e2f831cca092226cf8cda02ed0e1b72d886b6b8512dbf9c67396415c027", size = 53434275, upload-time = "2025-12-23T02:24:12.189Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/0f/de/93256177f222ef6dc3299ff4884014e35b8aaaceb304c7246e8f3d05df89/nlsq-0.3.4-py3-none-any.whl", hash = "sha256:6fe5e4f4816d391052d1f1a3a1a666d6c370f0132e272ec43b76530995fe50dd", size = 352642, upload-time = "2025-12-21T23:54:40.556Z" },
+    { url = "https://files.pythonhosted.org/packages/dd/07/1769453c636185e0c4db7c807fd806ae47208d28e774b3af54d95df91cd9/nlsq-0.3.5-py3-none-any.whl", hash = "sha256:4583fbd5c1ab6040047406e232598632dccfb45947fdc8cd26bb8535b5b5cf0f", size = 353844, upload-time = "2025-12-23T02:24:09.067Z" },
 ]
 
 [[package]]
@@ -1525,11 +1525,11 @@ wheels = [
 
 [[package]]
 name = "pyparsing"
-version = "3.2.5"
+version = "3.3.1"
 source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/f2/a5/181488fc2b9d093e3972d2a472855aae8a03f000592dbfce716a512b3359/pyparsing-3.2.5.tar.gz", hash = "sha256:2df8d5b7b2802ef88e8d016a2eb9c7aeaa923529cd251ed0fe4608275d4105b6", size = 1099274, upload-time = "2025-09-21T04:11:06.277Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/33/c1/1d9de9aeaa1b89b0186e5fe23294ff6517fce1bc69149185577cd31016b2/pyparsing-3.3.1.tar.gz", hash = "sha256:47fad0f17ac1e2cad3de3b458570fbc9b03560aa029ed5e16ee5554da9a2251c", size = 1550512, upload-time = "2025-12-23T03:14:04.391Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/10/5e/1aa9a93198c6b64513c9d7752de7422c06402de6600a8767da1524f9570b/pyparsing-3.2.5-py3-none-any.whl", hash = "sha256:e38a4f02064cf41fe6593d328d0512495ad1f3d8a91c4f73fc401b3079a59a5e", size = 113890, upload-time = "2025-09-21T04:11:04.117Z" },
+    { url = "https://files.pythonhosted.org/packages/8b/40/2614036cdd416452f5bf98ec037f38a1afb17f327cb8e6b652d4729e0af8/pyparsing-3.3.1-py3-none-any.whl", hash = "sha256:023b5e7e5520ad96642e2c6db4cb683d3970bd640cdf7115049a6e9c3682df82", size = 121793, upload-time = "2025-12-23T03:14:02.103Z" },
 ]
 
 [[package]]

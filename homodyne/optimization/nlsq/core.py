@@ -450,19 +450,62 @@ def fit_nlsq_jax(
     logger.info(f"χ² = {result.chi_squared:.6e}")
     logger.info(f"Reduced χ² = {result.reduced_chi_squared:.6f}")
 
-    # Log fitted parameters
+    # Log fitted parameters with proper labels for per-angle scaling
     if hasattr(result, "parameters") and result.parameters is not None:
-        param_names = _get_param_names(analysis_mode)
-        n_display = min(len(param_names), len(result.parameters))
-        logger.info("Fitted parameters:")
-        for i in range(n_display):
-            param_val = result.parameters[i]
-            unc_val = (
-                result.uncertainties[i]
-                if hasattr(result, "uncertainties") and result.uncertainties is not None
-                else 0.0
+        physical_param_names = _get_physical_param_names(analysis_mode)
+        n_physical = len(physical_param_names)
+        n_params = len(result.parameters)
+
+        # Detect per-angle scaling from parameter count
+        # Per-angle: n_params = 2 * n_angles + n_physical
+        # Legacy: n_params = 2 + n_physical
+        if per_angle_scaling and n_params > (2 + n_physical):
+            n_angles = (n_params - n_physical) // 2
+            # Build proper parameter labels
+            from homodyne.optimization.nlsq.results import build_parameter_labels
+
+            param_labels = build_parameter_labels(
+                per_angle_scaling=True,
+                n_phi=n_angles,
+                physical_param_names=physical_param_names,
             )
-            logger.info(f"  {param_names[i]}: {param_val:.6g} ± {unc_val:.6g}")
+
+            # Log summary with physical parameters first (most important)
+            logger.info(f"Fitted parameters (per-angle scaling: {n_angles} angles):")
+            logger.info("  Physical parameters:")
+            physical_start_idx = 2 * n_angles
+            for i, name in enumerate(physical_param_names):
+                idx = physical_start_idx + i
+                param_val = result.parameters[idx]
+                unc_val = (
+                    result.uncertainties[idx]
+                    if hasattr(result, "uncertainties")
+                    and result.uncertainties is not None
+                    else 0.0
+                )
+                logger.info(f"    {name}: {param_val:.6g} ± {unc_val:.6g}")
+
+            # Log mean contrast/offset for summary
+            contrast_vals = result.parameters[:n_angles]
+            offset_vals = result.parameters[n_angles : 2 * n_angles]
+            logger.info(
+                f"  Mean scaling: contrast={np.mean(contrast_vals):.4f}, "
+                f"offset={np.mean(offset_vals):.4f}"
+            )
+        else:
+            # Legacy mode or single angle
+            param_names = _get_param_names(analysis_mode)
+            n_display = min(len(param_names), n_params)
+            logger.info("Fitted parameters:")
+            for i in range(n_display):
+                param_val = result.parameters[i]
+                unc_val = (
+                    result.uncertainties[i]
+                    if hasattr(result, "uncertainties")
+                    and result.uncertainties is not None
+                    else 0.0
+                )
+                logger.info(f"  {param_names[i]}: {param_val:.6g} ± {unc_val:.6g}")
 
     logger.info("=" * 60)
 
@@ -857,6 +900,36 @@ def _get_param_names(analysis_mode: str) -> list[str]:
         return [
             "contrast",
             "offset",
+            "D0",
+            "alpha",
+            "D_offset",
+            "gamma_dot_t0",
+            "beta",
+            "gamma_dot_t_offset",
+            "phi0",
+        ]
+
+
+def _get_physical_param_names(analysis_mode: str) -> list[str]:
+    """Get physical parameter names for a given analysis mode.
+
+    Unlike _get_param_names, this excludes scaling parameters (contrast, offset)
+    and returns only the physical parameters.
+
+    Parameters
+    ----------
+    analysis_mode : str
+        Analysis mode (e.g., 'static', 'laminar_flow')
+
+    Returns
+    -------
+    list[str]
+        List of physical parameter names
+    """
+    if "static" in analysis_mode.lower():
+        return ["D0", "alpha", "D_offset"]
+    else:
+        return [
             "D0",
             "alpha",
             "D_offset",

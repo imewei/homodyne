@@ -5467,8 +5467,10 @@ class NLSQWrapper:
         config_dict = hybrid_config or {}
         normalize = config_dict.get("normalize", True)
         normalization_strategy = config_dict.get("normalization_strategy", "bounds")
-        warmup_iterations = config_dict.get("warmup_iterations", 100)
-        max_warmup_iterations = config_dict.get("max_warmup_iterations", 500)
+        # Minimal Adam warmup (1 iteration), then immediately Gauss-Newton
+        # NLSQ requires max_warmup_iterations > 0, otherwise falls back to Adam-only
+        warmup_iterations = config_dict.get("warmup_iterations", 1)
+        max_warmup_iterations = config_dict.get("max_warmup_iterations", 1)
         warmup_learning_rate = config_dict.get("warmup_learning_rate", 0.001)
         gauss_newton_max_iterations = config_dict.get("gauss_newton_max_iterations", 50)
         gauss_newton_tol = config_dict.get("gauss_newton_tol", 1e-8)
@@ -5479,11 +5481,26 @@ class NLSQWrapper:
         checkpoint_frequency = config_dict.get("checkpoint_frequency", 100)
         validate_numerics = config_dict.get("validate_numerics", True)
 
+        # Learning rate scheduling - disabled by default (minimal Adam warmup)
+        use_learning_rate_schedule = config_dict.get("use_learning_rate_schedule", False)
+        lr_schedule_warmup_steps = config_dict.get(
+            "lr_schedule_warmup_steps", warmup_iterations
+        )
+        lr_schedule_decay_steps = config_dict.get(
+            "lr_schedule_decay_steps", max_warmup_iterations - warmup_iterations
+        )
+        lr_schedule_end_value = config_dict.get("lr_schedule_end_value", 0.0001)
+
         logger.info("Hybrid streaming config:")
         logger.info(f"  Normalization: {normalization_strategy}")
         logger.info(f"  Warmup iterations: {warmup_iterations}")
         logger.info(f"  Max warmup iterations: {max_warmup_iterations}")
         logger.info(f"  Learning rate: {warmup_learning_rate}")
+        if use_learning_rate_schedule:
+            logger.info(
+                f"  LR schedule: warmup={lr_schedule_warmup_steps}, "
+                f"decay={lr_schedule_decay_steps}, end={lr_schedule_end_value}"
+            )
         logger.info(f"  Gauss-Newton iterations: {gauss_newton_max_iterations}")
         logger.info(f"  Gauss-Newton tolerance: {gauss_newton_tol}")
         logger.info(f"  Chunk size: {chunk_size:,}")
@@ -5503,6 +5520,12 @@ class NLSQWrapper:
             enable_checkpoints=enable_checkpoints,
             checkpoint_frequency=checkpoint_frequency,
             validate_numerics=validate_numerics,
+            use_learning_rate_schedule=use_learning_rate_schedule,
+            lr_schedule_warmup_steps=lr_schedule_warmup_steps,
+            lr_schedule_decay_steps=lr_schedule_decay_steps,
+            lr_schedule_end_value=lr_schedule_end_value,
+            verbose=config_dict.get("verbose", 1),
+            log_frequency=config_dict.get("log_frequency", 1),
         )
 
         # Initialize optimizer
@@ -5775,8 +5798,10 @@ class NLSQWrapper:
         jacobian = n_points * n_params * bytes_per_float
 
         # JAX autodiff intermediates (keep all grids for backprop)
-        # This is the main memory killer - estimated at 3× Jacobian
-        autodiff_intermediates = jacobian * 3
+        # This is the main memory killer - originally estimated at 3× Jacobian
+        # but empirical testing shows 5× is more accurate for large datasets
+        # (C020 dataset: estimated 44.9 GB at 3×, actual ~60 GB at 96% pressure)
+        autodiff_intermediates = jacobian * 5
 
         # JAX compilation cache
         jax_cache = 5 * 1e9  # ~5 GB
@@ -5835,7 +5860,11 @@ class NLSQWrapper:
         # Decision logic
         # Use streaming if:
         # 1. Estimated memory exceeds threshold, OR
-        # 2. Estimated memory exceeds 70% of available memory
+        # 2. Estimated memory exceeds 85% of available memory
+        #
+        # Note: Increased from 70% to 85% because non-streaming Levenberg-Marquardt
+        # is more accurate than streaming optimization. The 85% threshold allows
+        # more datasets to use the preferred non-streaming path.
         use_streaming = False
         reason = ""
 
@@ -5845,11 +5874,11 @@ class NLSQWrapper:
                 f"Estimated memory ({estimated_gb:.1f} GB) exceeds "
                 f"threshold ({memory_threshold_gb:.1f} GB)"
             )
-        elif estimated_gb > available_gb * 0.7:
+        elif estimated_gb > available_gb * 0.85:
             use_streaming = True
             reason = (
                 f"Estimated memory ({estimated_gb:.1f} GB) exceeds "
-                f"70% of available memory ({available_gb:.1f} GB available)"
+                f"85% of available memory ({available_gb:.1f} GB available)"
             )
         else:
             reason = (
