@@ -238,6 +238,12 @@ class MemoryPressureMonitor:
         # Pressure state tracking to prevent duplicate logs
         self._last_pressure_state: str = "normal"  # "normal", "warning", "critical"
         self._recovery_logged: bool = False  # Track if recovery was already logged
+        self._warning_logged: bool = False  # Track if warning was already logged
+        self._critical_logged: bool = False  # Track if critical was already logged
+
+        # GC rate limiting to avoid wasteful calls
+        self._last_gc_freed: int = -1  # Objects freed in last GC (-1 = never run)
+        self._consecutive_zero_gc: int = 0  # Count of consecutive GC calls that freed 0
 
         # Pressure history for trend analysis
         self._pressure_history: deque = deque(maxlen=300)  # 5 minutes at 1s intervals
@@ -300,17 +306,29 @@ class MemoryPressureMonitor:
         self._pressure_history.append(pressure_snapshot)
 
     def _check_pressure_levels(self) -> None:
-        """Check memory pressure levels and trigger responses."""
+        """Check memory pressure levels and trigger responses.
+
+        Only logs state transitions to avoid log spam. Callbacks are triggered
+        on state entry only, not every monitoring cycle.
+        """
         current_pressure = self.stats.memory_pressure
         new_state = "normal"
 
         if current_pressure >= self.critical_threshold:
             new_state = "critical"
-            self._trigger_critical_response()
+            # Only trigger on state transition to critical
+            if not self._critical_logged:
+                self._trigger_critical_response()
+                self._critical_logged = True
+                self._warning_logged = False  # Reset warning flag
             self._recovery_logged = False  # Reset recovery flag
         elif current_pressure >= self.warning_threshold:
             new_state = "warning"
-            self._trigger_warning_response()
+            # Only trigger on state transition to warning
+            if not self._warning_logged:
+                self._trigger_warning_response()
+                self._warning_logged = True
+                self._critical_logged = False  # Reset critical flag
             self._recovery_logged = False  # Reset recovery flag
         elif current_pressure < self.warning_threshold * 0.8:  # Recovery threshold
             new_state = "normal"
@@ -321,6 +339,9 @@ class MemoryPressureMonitor:
             ):
                 self._trigger_recovery_response()
                 self._recovery_logged = True
+            # Reset warning/critical flags when recovered
+            self._warning_logged = False
+            self._critical_logged = False
 
         # Update state
         self._last_pressure_state = new_state
@@ -666,13 +687,34 @@ class AdvancedMemoryManager:
             raise AllocationError("Virtual memory allocation failed") from e
 
     def _handle_memory_warning(self, stats: MemoryStats) -> None:
-        """Handle memory pressure warning."""
+        """Handle memory pressure warning.
+
+        Includes GC rate-limiting to avoid wasteful calls when GC cannot
+        free memory (e.g., during JAX/NumPy-heavy workloads where memory
+        is actively referenced).
+        """
         logger.warning("Memory pressure warning - triggering optimization")
 
-        # Trigger garbage collection
+        # Trigger garbage collection with rate-limiting
+        # Skip GC if previous calls consistently freed 0 objects (JAX/NumPy workload)
         if self._gc_optimization_enabled:
-            collected = gc.collect()
-            logger.debug(f"Garbage collection freed {collected} objects")
+            # Skip GC if we've had 3+ consecutive zero-result collections
+            # This indicates memory is in use by JAX/NumPy, not collectable
+            if self.pressure_monitor._consecutive_zero_gc >= 3:
+                logger.debug(
+                    "Skipping GC - previous calls freed 0 objects "
+                    "(memory likely in JAX/NumPy arrays)"
+                )
+            else:
+                collected = gc.collect()
+                logger.debug(f"Garbage collection freed {collected} objects")
+
+                # Track consecutive zero-result collections
+                if collected == 0:
+                    self.pressure_monitor._consecutive_zero_gc += 1
+                else:
+                    self.pressure_monitor._consecutive_zero_gc = 0
+                self.pressure_monitor._last_gc_freed = collected
 
         # Clean up old pools
         self._cleanup_old_pools()
