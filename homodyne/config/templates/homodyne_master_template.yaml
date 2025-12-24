@@ -575,6 +575,25 @@ optimization:
       enable_step_clipping: true                # Enable step clipping
       max_warmup_step_size: 0.1                 # Max step (fraction of normalized range)
 
+      # -------------------------------------------------------------------------
+      # GROUP VARIANCE REGULARIZATION (NLSQ 0.3.8)
+      # -------------------------------------------------------------------------
+      # Prevents per-angle parameters from absorbing angle-dependent physical signals.
+      #
+      # Problem: With many angles (n_phi > 3), per-angle contrast/offset can
+      # absorb shear effects, causing gamma_dot_t0 collapse to zero.
+      #
+      # Solution: L = MSE + λ × [Var(contrast_per_angle) + Var(offset_per_angle)]
+      #
+      # RECOMMENDED: Enable for laminar_flow with per_angle_scaling and n_phi > 3
+      # NOT NEEDED: For static mode (no shear parameters)
+      #
+      # Lambda: 0.001 (subtle) | 0.01 (recommended) | 0.1 (strong)
+      # Indices: Auto-computed as [(0, n_phi), (n_phi, 2*n_phi)] for laminar_flow
+      enable_group_variance_regularization: false  # Enable for laminar_flow
+      group_variance_lambda: 0.01                  # Regularization strength
+      # group_variance_indices: null               # Auto-computed
+
   # ---------------------------------------------------------------------------
   # STREAMING - Checkpoint/Resume for Large Datasets (>100M points)
   # ---------------------------------------------------------------------------

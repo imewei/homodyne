@@ -5774,6 +5774,54 @@ class NLSQWrapper:
         enable_step_clipping = config_dict.get("enable_step_clipping", True)
         max_warmup_step_size = float(config_dict.get("max_warmup_step_size", 0.1))
 
+        # Group Variance Regularization (NLSQ 0.3.8)
+        # Prevents per-angle parameters from absorbing angle-dependent physical signals
+        enable_group_variance_regularization = config_dict.get(
+            "enable_group_variance_regularization", False
+        )
+        group_variance_lambda = float(config_dict.get("group_variance_lambda", 0.01))
+        # group_variance_indices will be auto-computed if not provided
+        group_variance_indices_raw = config_dict.get("group_variance_indices", None)
+
+        # Compute n_phi early for auto-computing group_variance_indices
+        # Extract unique phi angles from stratified data
+        all_phi_early = []
+        if hasattr(stratified_data, "chunks") and len(stratified_data.chunks) > 0:
+            for chunk in stratified_data.chunks:
+                all_phi_early.extend(chunk.phi.tolist())
+        else:
+            all_phi_early = stratified_data.phi_flat.tolist()
+        n_phi = len(set(all_phi_early))
+
+        # Auto-compute group_variance_indices for laminar_flow with per-angle scaling
+        is_laminar_flow = "gamma_dot_t0" in physical_param_names
+        if enable_group_variance_regularization and group_variance_indices_raw is None:
+            if is_laminar_flow and per_angle_scaling and n_phi > 3:
+                # Per-angle contrast: params[0:n_phi]
+                # Per-angle offset: params[n_phi:2*n_phi]
+                group_variance_indices = [(0, n_phi), (n_phi, 2 * n_phi)]
+                logger.info(
+                    f"  Auto-computed group_variance_indices for {n_phi} angles: "
+                    f"{group_variance_indices}"
+                )
+            else:
+                group_variance_indices = None
+                if enable_group_variance_regularization:
+                    logger.warning(
+                        "Group variance regularization enabled but no indices provided. "
+                        "Auto-computation requires laminar_flow mode with per_angle_scaling "
+                        f"and n_phi > 3. (is_laminar_flow={is_laminar_flow}, "
+                        f"per_angle_scaling={per_angle_scaling}, n_phi={n_phi})"
+                    )
+        else:
+            # Convert raw indices to list of tuples if provided
+            if group_variance_indices_raw is not None:
+                group_variance_indices = [
+                    tuple(idx) for idx in group_variance_indices_raw
+                ]
+            else:
+                group_variance_indices = None
+
         logger.info("Hybrid streaming config:")
         logger.info(f"  Normalization: {normalization_strategy}")
         logger.info(f"  Warmup iterations: {warmup_iterations}")
@@ -5792,6 +5840,11 @@ class NLSQWrapper:
         logger.info(f"    L2 Adaptive LR: {enable_adaptive_warmup_lr}")
         logger.info(f"    L3 Cost Guard: {enable_cost_guard}")
         logger.info(f"    L4 Step Clipping: {enable_step_clipping}")
+        if enable_group_variance_regularization:
+            logger.info("  Group Variance Regularization (NLSQ 0.3.8):")
+            logger.info(f"    Enabled: {enable_group_variance_regularization}")
+            logger.info(f"    Lambda: {group_variance_lambda}")
+            logger.info(f"    Indices: {group_variance_indices}")
 
         # Create HybridStreamingConfig with 4-layer defense
         optimizer_config = HybridStreamingConfig(
@@ -5822,6 +5875,10 @@ class NLSQWrapper:
             cost_increase_tolerance=cost_increase_tolerance,
             enable_step_clipping=enable_step_clipping,
             max_warmup_step_size=max_warmup_step_size,
+            # Group Variance Regularization (NLSQ 0.3.8)
+            enable_group_variance_regularization=enable_group_variance_regularization,
+            group_variance_lambda=group_variance_lambda,
+            group_variance_indices=group_variance_indices,
             verbose=config_dict.get("verbose", 1),
             log_frequency=config_dict.get("log_frequency", 1),
         )

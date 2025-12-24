@@ -600,6 +600,35 @@ optimization:
       enable_step_clipping: true                # Enable step clipping
       max_warmup_step_size: 0.1                 # Max step (fraction of normalized range)
 
+      # -------------------------------------------------------------------------
+      # GROUP VARIANCE REGULARIZATION (NLSQ 0.3.8)
+      # -------------------------------------------------------------------------
+      # Prevents per-angle parameters from absorbing angle-dependent physical signals.
+      #
+      # Problem: With many angles (n_phi > 3), the optimizer can incorrectly use
+      # per-angle contrast/offset to fit angle-dependent shear effects instead of
+      # the physical parameters (gamma_dot_t0, phi0). This causes shear parameter
+      # collapse where gamma_dot_t0 → 0.
+      #
+      # Solution: Add variance penalty to per-angle parameters:
+      #   L = MSE + λ × [Var(contrast_per_angle) + Var(offset_per_angle)]
+      #
+      # This encourages uniform per-angle parameters, forcing the optimizer to
+      # use physical parameters for angle-dependent structure.
+      #
+      # Lambda Selection Guide:
+      #   0.001  - Minimal regularization (subtle guidance)
+      #   0.01   - RECOMMENDED for laminar_flow with per_angle_scaling
+      #   0.1    - Strong regularization (may over-constrain)
+      #
+      # Note: Indices are AUTO-COMPUTED for laminar_flow mode when:
+      #   - per_angle_scaling: true
+      #   - n_phi > 3
+      # Manual override: group_variance_indices: [[0, n_phi], [n_phi, 2*n_phi]]
+      enable_group_variance_regularization: true  # RECOMMENDED for laminar_flow
+      group_variance_lambda: 0.01                 # Regularization strength
+      # group_variance_indices: null              # Auto-computed for laminar_flow
+
   # ---------------------------------------------------------------------------
   # STRATIFICATION - Angle-Stratified Chunking
   # ---------------------------------------------------------------------------
