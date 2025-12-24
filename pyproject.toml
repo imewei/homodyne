@@ -58,51 +58,47 @@ requires-python = ">=3.12"
 dependencies = [
     # Core scientific computing
     "numpy>=2.0,<2.4",
-    "scipy>=1.16.0",
+    "scipy>=1.16",
     # JAX ecosystem
     "jax==0.8.0",
     "jaxlib==0.8.0",
     "nlsq>=0.4.0",
     # Bayesian inference
     "numpyro>=0.19.0",
-    "blackjax>=1.2.0",
+    "blackjax>=1.3",
     "arviz-base",
     "arviz-stats",
     "arviz-plots",
     "arviz",
     # Data handling
-    "h5py>=3.10.0",
-    "pyyaml>=6.0.2",
+    "h5py>=3.15",
+    "pyyaml>=6.0.3",
     # System utilities
-    "psutil>=6.0.0",
-    "cloudpickle>=3.0.0",
+    "psutil>=7.2",
+    "cloudpickle>=3.1",
     # Plotting
-    "matplotlib>=3.8.0",
-    # Fast visualization (optional - graceful degradation if unavailable)
+    "matplotlib>=3.10",
+    # Fast visualization (includes numba as transitive dependency)
     "datashader>=0.18.2",
-    "xarray>=2024.1.0",
-    # Numba/llvmlite: Pin to Python 3.13-compatible versions
-    # numba 0.63.0+ supports Python 3.13
-    "numba>=0.63.1",
-    "llvmlite>=0.46.0",
+    "xarray>=2025.1",
 ]
 
 [project.optional-dependencies]
 dev = [
-    "pytest>=8.3.0",
-    "pytest-cov>=6.0.0",
-    "pytest-xdist>=3.5.0",
-    "ruff>=0.14.0",
-    "mypy>=1.19.0",
-    "pre-commit>=4.0.0",
-    "tqdm>=4.66.0",
+    "pytest>=9.0",
+    "pytest-cov>=7.0",
+    "pytest-xdist>=3.8",
+    "ruff>=0.14.10",
+    "mypy>=1.19",
+    "pre-commit>=4.5",
+    "tqdm>=4.67",
 ]
 
 docs = [
-    "sphinx>=8.0.0",
-    "sphinx-rtd-theme>=3.0.0",
-    "myst-parser>=4.0.0",
-    "sphinx-autodoc-typehints>=2.0.0",
+    "sphinx>=8.2",
+    "sphinx-rtd-theme>=3.0.2",
+    "myst-parser>=4.0.1",
+    "sphinx-autodoc-typehints>=3.5",
     "sphinx-copybutton>=0.5.2",
 ]
 
@@ -202,7 +198,7 @@ follow_imports = "skip"
 ignore_errors = true
 
 [tool.pytest.ini_options]
-minversion = "8.4"
+minversion = "9.0"
 addopts = "-ra -q --strict-markers --strict-config"
 testpaths = ["tests"]
 python_files = ["test_*.py", "*_test.py"]
@@ -302,3 +298,6 @@ output_format = "yaml"
 cpu_threads = "auto"
 enable_jit = true
 cache_compilation = true
+
+[tool.uv.sources]
+nlsq = { path = "../NLSQ", editable = true }
