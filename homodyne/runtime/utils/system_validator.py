@@ -753,7 +753,7 @@ alias hc-iso >/dev/null 2>&1 && echo "shortcut_alias_works" || echo "shortcut_al
             # Test 5: Strategy selection logic
             try:
                 from homodyne.optimization.nlsq.strategies.selection import (  # noqa: F401
-                    build_streaming_config,
+                    DatasetSizeStrategy,
                 )
 
                 details["strategy_selection"] = "available"

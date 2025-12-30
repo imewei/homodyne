@@ -1867,9 +1867,9 @@ class TestNLSQWithAngleFiltering:
         )
         assert found_filtering_msg, "Should log '3 angles selected from 9 total angles'"
 
-        # Assert - NLSQ was attempted (log shows "Starting NLSQ optimization")
+        # Assert - NLSQ was attempted (log shows "NLSQ OPTIMIZATION")
         found_nlsq_start = any(
-            "Starting NLSQ optimization" in msg for msg in log_messages
+            "NLSQ OPTIMIZATION" in msg for msg in log_messages
         )
         assert found_nlsq_start, "NLSQ optimization should have been attempted"
 
@@ -1937,7 +1937,7 @@ class TestNLSQWithAngleFiltering:
         # Assert - NLSQ was attempted
         log_messages = [rec.message for rec in caplog.records]
         found_nlsq_start = any(
-            "Starting NLSQ optimization" in msg for msg in log_messages
+            "NLSQ OPTIMIZATION" in msg for msg in log_messages
         )
         assert found_nlsq_start, "NLSQ optimization should have been attempted"
 
