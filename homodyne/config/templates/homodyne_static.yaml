@@ -503,6 +503,59 @@ optimization:
       enable_step_clipping: true                # Enable step clipping
       max_warmup_step_size: 0.1                 # Max step (fraction of normalized range)
 
+    # ---------------------------------------------------------------------------
+    # ANTI-DEGENERACY DEFENSE SYSTEM (v2.9.0)
+    # ---------------------------------------------------------------------------
+    # NOTE: This system is designed for laminar_flow mode where shear parameters
+    # can collapse due to per-angle parameter absorption. For static mode with
+    # only 3 physical parameters, this is generally NOT NEEDED and is disabled
+    # by default.
+    #
+    # Enable only if you observe parameter collapse in static mode with many
+    # angles (n_phi > 10) where contrast/offset absorb all signal.
+    #
+    # See: docs/specs/anti-degeneracy-defense-v2.9.0.md
+    anti_degeneracy:
+      enable: false                   # Disabled for static mode by default
+      per_angle_mode: "direct"        # Use direct per-angle (no Fourier)
+
+      # Layer 1: Fourier Reparameterization (disabled)
+      fourier:
+        order: 2
+        min_phi_for_fourier: 6
+        regularize_high_order: false
+
+      # Layer 2: Hierarchical Optimization (disabled)
+      hierarchical:
+        enable: false
+        max_outer_iterations: 5
+        outer_tolerance: 1.0e-6
+        physical_max_iterations: 100
+        physical_ftol: 1.0e-8
+        per_angle_max_iterations: 50
+        per_angle_ftol: 1.0e-6
+        log_stage_transitions: false
+        save_intermediate_results: false
+
+      # Layer 3: Adaptive Regularization (disabled)
+      regularization:
+        enable: false
+        mode: "absolute"              # Use simpler absolute mode if enabled
+        lambda: 0.01
+        target_cv: 0.10
+        target_contribution: 0.10
+        auto_tune_lambda: false
+        max_cv: 0.20
+
+      # Layer 4: Gradient Monitor (disabled)
+      gradient_monitoring:
+        enable: false
+        ratio_threshold: 0.01
+        consecutive_triggers: 5
+        response: "warn"              # Just warn, don't take action
+        check_interval: 1
+        lambda_multiplier_on_collapse: 10.0
+
   # ---------------------------------------------------------------------------
   # STRATIFICATION - Angle-Stratified Chunking
   # ---------------------------------------------------------------------------

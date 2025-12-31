@@ -576,23 +576,76 @@ optimization:
       max_warmup_step_size: 0.1                 # Max step (fraction of normalized range)
 
       # -------------------------------------------------------------------------
-      # GROUP VARIANCE REGULARIZATION (NLSQ 0.3.8)
+      # GROUP VARIANCE REGULARIZATION (NLSQ 0.3.8) - DEPRECATED
       # -------------------------------------------------------------------------
-      # Prevents per-angle parameters from absorbing angle-dependent physical signals.
+      # NOTE: This section is DEPRECATED in favor of the new anti_degeneracy
+      # system below. Group variance regularization is now part of Layer 3
+      # (Adaptive CV-based Regularization) in the 4-layer defense system.
       #
-      # Problem: With many angles (n_phi > 3), per-angle contrast/offset can
-      # absorb shear effects, causing gamma_dot_t0 collapse to zero.
-      #
-      # Solution: L = MSE + λ × [Var(contrast_per_angle) + Var(offset_per_angle)]
-      #
-      # RECOMMENDED: Enable for laminar_flow with per_angle_scaling and n_phi > 3
-      # NOT NEEDED: For static mode (no shear parameters)
-      #
-      # Lambda: 0.001 (subtle) | 0.01 (recommended) | 0.1 (strong)
-      # Indices: Auto-computed as [(0, n_phi), (n_phi, 2*n_phi)] for laminar_flow
-      enable_group_variance_regularization: false  # Enable for laminar_flow
-      group_variance_lambda: 0.01                  # Regularization strength
-      # group_variance_indices: null               # Auto-computed
+      # Legacy settings preserved for backward compatibility:
+      enable_group_variance_regularization: false  # Use anti_degeneracy instead
+      group_variance_lambda: 0.01                  # Legacy value
+      # group_variance_indices: null
+
+    # ---------------------------------------------------------------------------
+    # ANTI-DEGENERACY DEFENSE SYSTEM (v2.9.0)
+    # ---------------------------------------------------------------------------
+    # Comprehensive 4-layer defense against structural degeneracy where per-angle
+    # parameters absorb physical signals (especially shear parameters).
+    #
+    # Problem: With many angles (n_phi > 3), per-angle params can "absorb"
+    # angle-dependent shear signals, causing gamma_dot_t0 to collapse to zero.
+    #
+    # Solution: 4 complementary defense layers:
+    #   Layer 1: Fourier Reparameterization - reduces per-angle param count
+    #   Layer 2: Hierarchical Optimization - alternating physical/per-angle stages
+    #   Layer 3: Adaptive CV Regularization - auto-tuned λ≈10 (100× stronger)
+    #   Layer 4: Gradient Collapse Monitor - runtime detection with auto-response
+    #
+    # When to enable: laminar_flow mode with per_angle_scaling and n_phi > 3
+    # For static mode: Can disable (enable: false) as no shear parameters
+    #
+    # See: docs/specs/anti-degeneracy-defense-v2.9.0.md
+    anti_degeneracy:
+      enable: true                    # Master enable for all defenses
+      per_angle_mode: "auto"          # "direct" | "fourier" | "auto"
+
+      # Layer 1: Fourier Reparameterization
+      fourier:
+        order: 2                      # Fourier series order
+        min_phi_for_fourier: 6        # Minimum n_phi to use Fourier mode
+        regularize_high_order: false
+
+      # Layer 2: Hierarchical Two-Stage Optimization
+      hierarchical:
+        enable: true
+        max_outer_iterations: 5
+        outer_tolerance: 1.0e-6
+        physical_max_iterations: 100
+        physical_ftol: 1.0e-8
+        per_angle_max_iterations: 50
+        per_angle_ftol: 1.0e-6
+        log_stage_transitions: true
+        save_intermediate_results: false
+
+      # Layer 3: Adaptive CV-based Regularization
+      regularization:
+        enable: true
+        mode: "relative"              # "absolute" | "relative" | "auto"
+        lambda: 1.0
+        target_cv: 0.10               # Target coefficient of variation (10%)
+        target_contribution: 0.10     # Target regularization contribution (10%)
+        auto_tune_lambda: true
+        max_cv: 0.20
+
+      # Layer 4: Gradient Collapse Monitor
+      gradient_monitoring:
+        enable: true
+        ratio_threshold: 0.01         # Collapse threshold (1% of per-angle grad)
+        consecutive_triggers: 5
+        response: "hierarchical"      # "warn" | "hierarchical" | "reset" | "abort"
+        check_interval: 1
+        lambda_multiplier_on_collapse: 10.0
 
   # ---------------------------------------------------------------------------
   # STREAMING - Checkpoint/Resume for Large Datasets (>100M points)
