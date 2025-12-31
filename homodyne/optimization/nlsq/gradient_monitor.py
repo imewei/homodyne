@@ -71,10 +71,23 @@ class GradientMonitorConfig:
     reset_per_angle_to_mean: bool = True
     lambda_multiplier_on_collapse: float = 10.0
     check_interval: int = 1
+    # NEW (Dec 2025): Watch specific parameter indices for gradient collapse
+    # For laminar_flow: index 2*n_phi + 3 is gamma_dot_t0
+    watch_parameters: list[int] | None = None
+    watch_threshold: float = 1e-8  # Gradient magnitude below this triggers warning
 
     @classmethod
     def from_dict(cls, config_dict: dict) -> GradientMonitorConfig:
         """Create config from dictionary with safe type conversion."""
+        # Parse watch_parameters list
+        watch_params_raw = config_dict.get("watch_parameters")
+        watch_parameters = None
+        if watch_params_raw is not None:
+            if isinstance(watch_params_raw, list):
+                watch_parameters = [int(x) for x in watch_params_raw]
+            elif isinstance(watch_params_raw, int):
+                watch_parameters = [watch_params_raw]
+
         return cls(
             enable=bool(config_dict.get("enable", True)),
             ratio_threshold=safe_float(config_dict.get("ratio_threshold"), 0.01),
@@ -88,6 +101,8 @@ class GradientMonitorConfig:
                 config_dict.get("lambda_multiplier_on_collapse"), 10.0
             ),
             check_interval=safe_int(config_dict.get("check_interval"), 1),
+            watch_parameters=watch_parameters,
+            watch_threshold=safe_float(config_dict.get("watch_threshold"), 1e-8),
         )
 
 
@@ -284,6 +299,22 @@ class GradientCollapseMonitor:
                 logger.warning(f"  Response mode: {self.config.response_mode}")
 
             return "COLLAPSE_DETECTED"
+
+        # NEW (Dec 2025): Check watched parameters for gradient collapse
+        # This specifically monitors parameters like gamma_dot_t0 that can
+        # collapse to zero during Adam warmup when data is angle-sequential
+        if self.config.watch_parameters is not None:
+            for param_idx in self.config.watch_parameters:
+                if param_idx < len(gradients):
+                    grad_mag = abs(gradients[param_idx])
+                    if grad_mag < self.config.watch_threshold:
+                        logger.warning(
+                            f"WATCHED PARAMETER GRADIENT COLLAPSE at iteration {iteration}! "
+                            f"param[{param_idx}] gradient={grad_mag:.2e} < "
+                            f"threshold={self.config.watch_threshold:.2e}"
+                        )
+                        # Store in history for diagnostics
+                        self.history[-1][f"watched_param_{param_idx}_grad"] = float(grad_mag)
 
         if self.consecutive_count > 0:
             return "WARNING"
