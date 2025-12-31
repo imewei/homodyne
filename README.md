@@ -1,4 +1,4 @@
-# Homodyne.4: CPU-Optimized JAX-First XPCS Analysis
+# Homodyne 2.9: CPU-Optimized JAX-First XPCS Analysis
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Python](https://img.shields.io/badge/Python-3.12%2B-blue)](https://www.python.org/)
@@ -245,9 +245,10 @@ print(f"✓ CMC used with {result.num_shards} shards")
 **Performance:**
 
 | Scenario | Shards | Data Size | Runtime | Speedup |
-|----------|--------|-----------|---------|---------| | Multi-core CPU (14 cores) | 4 |
-50M | ~40 min | 1.4x | | HPC CPU (36 cores) | 8 | 200M | ~2 hours | 1.5x | |
-Single-shard (small data) | 1 | 5M | ~10 min | baseline |
+|----------|--------|-----------|---------|---------|
+| Multi-core CPU (14 cores) | 4 | 50M | ~40 min | 1.4x |
+| HPC CPU (36 cores) | 8 | 200M | ~2 hours | 1.5x |
+| Single-shard (small data) | 1 | 5M | ~10 min | baseline |
 
 **Documentation:**
 
@@ -560,11 +561,12 @@ homodyne-post-install --xla-mode mcmc  # Configure for MCMC (4 devices)
 
 ### Configuration Modes
 
-| Mode | Devices | Best For | Hardware | |------|---------|----------|----------| |
-**mcmc** | 4 | Multi-core workstations, parallel MCMC chains | 8-15 CPU cores | |
-**mcmc-hpc** | 8 | HPC clusters with many CPU cores | 36+ CPU cores | | **nlsq** | 1 |
-NLSQ-only workflows, memory-constrained systems | Any CPU | | **auto** | 2-8 | Automatic
-detection based on CPU core count | Auto-adaptive |
+| Mode | Devices | Best For | Hardware |
+|------|---------|----------|----------|
+| **mcmc** | 4 | Multi-core workstations, parallel MCMC chains | 8-15 CPU cores |
+| **mcmc-hpc** | 8 | HPC clusters with many CPU cores | 36+ CPU cores |
+| **nlsq** | 1 | NLSQ-only workflows, memory-constrained systems | Any CPU |
+| **auto** | 2-8 | Automatic detection based on CPU core count | Auto-adaptive |
 
 **Auto mode detection logic:**
 
@@ -618,10 +620,11 @@ source ~/.bashrc
 ### Performance Impact
 
 | Workflow | Device Count | Hardware | Performance |
-|----------|--------------|----------|-------------| | MCMC (4 chains) | 4 devices |
-14-core CPU | 1.4x speedup | | MCMC (8 chains) | 8 devices | 36-core HPC | 1.8x speedup
-| | NLSQ optimization | 1 device | Any CPU | Optimal (no overhead) | | Auto mode | 2-8
-devices | Adapts to CPU | Automatic optimization |
+|----------|--------------|----------|-------------|
+| MCMC (4 chains) | 4 devices | 14-core CPU | 1.4x speedup |
+| MCMC (8 chains) | 8 devices | 36-core HPC | 1.8x speedup |
+| NLSQ optimization | 1 device | Any CPU | Optimal (no overhead) |
+| Auto mode | 2-8 devices | Adapts to CPU | Automatic optimization |
 
 ### Best Practices
 
@@ -693,31 +696,30 @@ source venv/bin/activate
 Default bounds for NLSQ optimization and MCMC priors (updated Nov 15, 2025):
 
 | Parameter | Min | Max | Units | Physical Meaning | Notes |
-|-----------|-----|-----|-------|------------------|-------| | **D0** | 1×10² | 1×10⁵ |
-Å²/s | Diffusion coefficient prefactor | Typical colloidal range | | **alpha** | -2.0 |
-2.0 | - | Diffusion time exponent | Anomalous diffusion | | **D_offset** | -1×10⁵ |
-1×10⁵ | Å²/s | Diffusion baseline correction | **Negative for jammed systems** | |
-**gamma_dot_t0** | 1×10⁻⁶ | 0.5 | s⁻¹ | Initial shear rate | Laminar flow only | |
-**beta** | -2.0 | 2.0 | - | Shear rate time exponent | Laminar flow only | |
-**gamma_dot_t_offset** | -0.1 | 0.1 | s⁻¹ | Shear rate baseline correction | Laminar
-flow only | | **phi0** | -10 | 10 | degrees | Initial flow angle | **Uses degrees, not
-radians** |
+|-----------|-----|-----|-------|------------------|-------|
+| **D0** | 1×10² | 1×10⁵ | Å²/s | Diffusion coefficient prefactor | Typical colloidal range |
+| **alpha** | -2.0 | 2.0 | - | Diffusion time exponent | Anomalous diffusion |
+| **D_offset** | -1×10⁵ | 1×10⁵ | Å²/s | Diffusion baseline correction | **Negative for jammed systems** |
+| **gamma_dot_t0** | 1×10⁻⁶ | 0.5 | s⁻¹ | Initial shear rate | Laminar flow only |
+| **beta** | -2.0 | 2.0 | - | Shear rate time exponent | Laminar flow only |
+| **gamma_dot_t_offset** | -0.1 | 0.1 | s⁻¹ | Shear rate baseline correction | Laminar flow only |
+| **phi0** | -10 | 10 | degrees | Initial flow angle | **Uses degrees, not radians** |
 
 ### Scaling Parameters
 
 | Parameter | Min | Max | Physical Meaning | Notes |
-|-----------|-----|-----|------------------|-------| | **contrast** | 0.0 | 1.0 |
-Visibility parameter | Homodyne detection efficiency | | **offset** | 0.5 | 1.5 |
-Baseline level | ±50% from theoretical g2=1.0 |
+|-----------|-----|-----|------------------|-------|
+| **contrast** | 0.0 | 1.0 | Visibility parameter | Homodyne detection efficiency |
+| **offset** | 0.5 | 1.5 | Baseline level | ±50% from theoretical g2=1.0 |
 
 ### Correlation Function Constraints
 
 Physics-enforced constraints applied during optimization:
 
-| Function | Min | Max | Notes | |----------|-----|-----|-------| | **g1 (c1)** | 0.0 |
-1.0 | Normalized correlation function<br>Log-space clipping: `log(g1) ∈ [-700, 0]` | |
-**g2 (c2)** | 0.5 | 2.5 | Experimental range with headroom<br>Theoretical: g2 = 1 +
-contrast × g1² |
+| Function | Min | Max | Notes |
+|----------|-----|-----|-------|
+| **g1 (c1)** | 0.0 | 1.0 | Normalized correlation function; log-space clipping: `log(g1) ∈ [-700, 0]` |
+| **g2 (c2)** | 0.5 | 2.5 | Experimental range with headroom; Theoretical: g2 = 1 + contrast × g1² |
 
 **Important Notes:**
 
@@ -751,18 +753,20 @@ hardware:
 
 ### Optimization Methods
 
-| Method | Speed | Accuracy | Use Case | |--------|-------|----------|----------| |
-**NLSQ** | Fast | Excellent | Production workflows, real-time analysis | | **MCMC** |
-Slower | Excellent | Publication-quality, uncertainty quantification |
+| Method | Speed | Accuracy | Use Case |
+|--------|-------|----------|----------|
+| **NLSQ** | Fast | Excellent | Production workflows, real-time analysis |
+| **MCMC** | Slower | Excellent | Publication-quality, uncertainty quantification |
 
 ### Validated Performance Benchmarks
 
 Based on comprehensive scientific validation (T036-T041):
 
 | Dataset Size | Points | Optimization Time | Throughput | Convergence |
-|--------------|--------|-------------------|------------|-------------| | Small | 500 |
-1.6s | 317 pts/s | 100% | | Medium | 4,000 | 1.5s | 2,758 pts/s | 100% | | Large | 9,375
-| 1.6s | 5,977 pts/s | 100% |
+|--------------|--------|-------------------|------------|-------------|
+| Small | 500 | 1.6s | 317 pts/s | 100% |
+| Medium | 4,000 | 1.5s | 2,758 pts/s | 100% |
+| Large | 9,375 | 1.6s | 5,977 pts/s | 100% |
 
 **Key Performance Features**:
 
@@ -868,8 +872,8 @@ optimization:
 
 **Performance Comparison**:
 
-| Mode | Memory Usage | Convergence | Time (23M pts) |
-|------|--------------|-------------|----------------|
+| Mode | Memory | Convergence | Time (23M pts) |
+|------|--------|-------------|----------------|
 | Stratified L-M | ~30+ GB | Exact (Newton) | 10-15 min |
 | Streaming | ~2 GB | Approximate (Adam) | 15-30 min |
 
@@ -909,16 +913,20 @@ optimized for multi-core systems and HPC clusters.
 
 ### Performance Summary (14-Core CPU)
 
-| Stage | Backend | Duration | Notes | |-------|---------|----------|-------| | Config
-Loading | PyYAML | \<1s | I/O bound | | Data Loading | h5py+NumPy | ~2s | I/O bound | |
-Data Validation | NumPy+SciPy | \<1s | Fast validation | | Angle Filtering | NumPy |
-\<1ms | Array operations | | **NLSQ Optimization** | **JAX JIT** | **30-60s** |
-**Multi-core parallel** | | **Theoretical Fits** | **JAX JIT** | **~2-3s** |
-**CPU-accelerated** | | Result Saving | json+npz | ~1s | I/O bound | | Plotting
-(Workers) | Datashader | ~12s | Parallel workers |
+| Stage | Backend | Duration | Notes |
+|-------|---------|----------|-------|
+| Config Loading | PyYAML | <1s | I/O bound |
+| Data Loading | h5py+NumPy | ~2s | I/O bound |
+| Data Validation | NumPy+SciPy | <1s | Fast validation |
+| Angle Filtering | NumPy | <1ms | Array operations |
+| **NLSQ Optimization** | **JAX JIT** | **30-60s** | **Multi-core parallel** |
+| **Theoretical Fits** | **JAX JIT** | **~2-3s** | **CPU-accelerated** |
+| Result Saving | json+npz | ~1s | I/O bound |
+| Plotting (Workers) | Datashader | ~12s | Parallel workers |
 
-**Total Runtime**: ~50-80 seconds (14-core CPU) **HPC Speedup**: ~2-3x faster on 36-core
-nodes
+**Total Runtime**: ~50-80 seconds (14-core CPU)
+
+**HPC Speedup**: ~2-3x faster on 36-core nodes
 
 ### Key Architectural Insights
 
