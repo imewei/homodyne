@@ -108,14 +108,18 @@ class HierarchicalConfig:
             enable=bool(config_dict.get("enable", True)),
             max_outer_iterations=safe_int(config_dict.get("max_outer_iterations"), 5),
             outer_tolerance=safe_float(config_dict.get("outer_tolerance"), 1e-6),
-            physical_max_iterations=safe_int(config_dict.get("physical_max_iterations"), 100),
+            physical_max_iterations=safe_int(
+                config_dict.get("physical_max_iterations"), 100
+            ),
             physical_ftol=safe_float(config_dict.get("physical_ftol"), 1e-8),
-            per_angle_max_iterations=safe_int(config_dict.get("per_angle_max_iterations"), 50),
+            per_angle_max_iterations=safe_int(
+                config_dict.get("per_angle_max_iterations"), 50
+            ),
             per_angle_ftol=safe_float(config_dict.get("per_angle_ftol"), 1e-6),
             log_stage_transitions=bool(config_dict.get("log_stage_transitions", True)),
-            save_intermediate_results=bool(config_dict.get(
-                "save_intermediate_results", False
-            )),
+            save_intermediate_results=bool(
+                config_dict.get("save_intermediate_results", False)
+            ),
         )
 
 
@@ -209,15 +213,19 @@ class HierarchicalOptimizer:
         self.n_physical = n_physical
         self.fourier = fourier_reparameterizer
 
-        # Determine parameter indices
+        # Determine parameter indices based on Fourier mode
+        # When Fourier mode is active, per-angle params are Fourier coefficients
+        # not 2 * n_phi independent values
         if self.fourier is not None:
             self.n_per_angle = self.fourier.n_coeffs
         else:
             self.n_per_angle = 2 * n_phi
 
-        self.per_angle_indices = list(range(self.n_per_angle))
-        self.physical_indices = list(
-            range(self.n_per_angle, self.n_per_angle + n_physical)
+        # Use numpy arrays for indices to support both NumPy and JAX array indexing
+        # JAX arrays don't support Python list indexing (non-tuple sequence error)
+        self.per_angle_indices: np.ndarray = np.arange(self.n_per_angle, dtype=np.intp)
+        self.physical_indices: np.ndarray = np.arange(
+            self.n_per_angle, self.n_per_angle + n_physical, dtype=np.intp
         )
 
         logger.debug(

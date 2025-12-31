@@ -444,18 +444,26 @@ def _compute_consistent_per_angle_init(
 
     # Extract data by angle
     if hasattr(stratified_data, "chunks"):
-        phi_unique = np.array(sorted(set(
-            phi for chunk in stratified_data.chunks for phi in chunk.phi.tolist()
-        )))
+        phi_unique = np.array(
+            sorted(
+                set(
+                    phi
+                    for chunk in stratified_data.chunks
+                    for phi in chunk.phi.tolist()
+                )
+            )
+        )
         n_phi = len(phi_unique)
         # Get metadata from first chunk
         first_chunk = stratified_data.chunks[0]
         q = first_chunk.q
         L = first_chunk.L
         dt = first_chunk.dt
-        t1_unique = np.array(sorted(set(
-            t for chunk in stratified_data.chunks for t in chunk.t1.tolist()
-        )))
+        t1_unique = np.array(
+            sorted(
+                set(t for chunk in stratified_data.chunks for t in chunk.t1.tolist())
+            )
+        )
     else:
         phi_unique = np.unique(stratified_data.phi_flat)
         n_phi = len(phi_unique)
@@ -527,12 +535,8 @@ def _compute_consistent_per_angle_init(
 
             # Compute g1_model for each data point at this angle
             # Use index lookup for efficiency
-            t1_idx = np.clip(
-                np.searchsorted(t1_unique, t1_data), 0, len(t1_unique) - 1
-            )
-            t2_idx = np.clip(
-                np.searchsorted(t1_unique, t2_data), 0, len(t1_unique) - 1
-            )
+            t1_idx = np.clip(np.searchsorted(t1_unique, t1_data), 0, len(t1_unique) - 1)
+            t2_idx = np.clip(np.searchsorted(t1_unique, t2_data), 0, len(t1_unique) - 1)
 
             # Diffusion term: g1_diff = exp(-q² × 0.5 × dt × |D_cumsum[t1] - D_cumsum[t2]|)
             D_diff = D_cumsum[t1_idx] - D_cumsum[t2_idx]
@@ -609,7 +613,6 @@ def _compute_jacobian_stats(
         return jtj, col_norms
     except Exception:
         return None, None
-
 
 
 def create_multistart_warmup_func(
@@ -761,7 +764,9 @@ def create_multistart_warmup_func(
             final_loss = warmup_diag.get("final_loss", float("inf"))
 
             # Convert loss to chi-squared (loss = 0.5 * chi_sq for LSQ)
-            chi_squared = 2.0 * final_loss if final_loss != float("inf") else float("inf")
+            chi_squared = (
+                2.0 * final_loss if final_loss != float("inf") else float("inf")
+            )
 
             wall_time = time.perf_counter() - start_time
 
@@ -1846,13 +1851,15 @@ class NLSQWrapper:
                     "Computing consistent per-angle initialization for laminar_flow mode..."
                 )
                 try:
-                    contrast_per_angle, offset_per_angle = _compute_consistent_per_angle_init(
-                        stratified_data=stratified_data,
-                        physical_params=physical_params,
-                        physical_param_names=physical_param_names,
-                        default_contrast=contrast_single,
-                        default_offset=offset_single,
-                        logger=logger,
+                    contrast_per_angle, offset_per_angle = (
+                        _compute_consistent_per_angle_init(
+                            stratified_data=stratified_data,
+                            physical_params=physical_params,
+                            physical_param_names=physical_param_names,
+                            default_contrast=contrast_single,
+                            default_offset=offset_single,
+                            logger=logger,
+                        )
                     )
                 except Exception as e:
                     logger.warning(
@@ -3234,7 +3241,9 @@ class NLSQWrapper:
         t1_stratified = t1_stratified[perm]
         t2_stratified = t2_stratified[perm]
         g2_stratified = g2_stratified[perm]
-        logger.info(f"Pre-shuffled stratified data (seed={shuffle_seed}) to prevent local minimum traps")
+        logger.info(
+            f"Pre-shuffled stratified data (seed={shuffle_seed}) to prevent local minimum traps"
+        )
 
         stratified_data = StratifiedData(
             phi_stratified,
@@ -5115,21 +5124,29 @@ class NLSQWrapper:
         # Check for shear collapse in laminar_flow mode
         is_laminar_flow = "gamma_dot_t0" in physical_param_names
         if is_laminar_flow:
-            n_phi = len(stratified_data.chunks) if hasattr(stratified_data, 'chunks') else 1
+            n_phi = (
+                len(stratified_data.chunks) if hasattr(stratified_data, "chunks") else 1
+            )
             if len(popt) > 2 * n_phi + 3:
                 gamma_dot_t0_idx = 2 * n_phi + 3
                 gamma_dot_t0_value = popt[gamma_dot_t0_idx]
                 if abs(gamma_dot_t0_value) < 1e-5:
                     logger.warning("=" * 80)
                     logger.warning("SHEAR COLLAPSE WARNING")
-                    logger.warning(f"gamma_dot_t0 = {gamma_dot_t0_value:.2e} s⁻¹ is effectively zero")
-                    logger.warning("The model has effectively collapsed to static_isotropic mode.")
-                    logger.warning("RECOMMENDED: Use phi_filtering for angles near 0° and 90°")
+                    logger.warning(
+                        f"gamma_dot_t0 = {gamma_dot_t0_value:.2e} s⁻¹ is effectively zero"
+                    )
+                    logger.warning(
+                        "The model has effectively collapsed to static_isotropic mode."
+                    )
+                    logger.warning(
+                        "RECOMMENDED: Use phi_filtering for angles near 0° and 90°"
+                    )
                     logger.warning("=" * 80)
                     info["shear_collapse_warning"] = {
                         "gamma_dot_t0": float(gamma_dot_t0_value),
                         "threshold": 1e-5,
-                        "message": "Shear contribution effectively zero"
+                        "message": "Shear contribution effectively zero",
                     }
 
         return popt, pcov, info
@@ -5810,7 +5827,9 @@ class NLSQWrapper:
         warmup_iterations = config_dict.get("warmup_iterations", 200)
         max_warmup_iterations = config_dict.get("max_warmup_iterations", 500)
         warmup_learning_rate = config_dict.get("warmup_learning_rate", 0.001)
-        gauss_newton_max_iterations = config_dict.get("gauss_newton_max_iterations", 100)
+        gauss_newton_max_iterations = config_dict.get(
+            "gauss_newton_max_iterations", 100
+        )
         gauss_newton_tol = config_dict.get("gauss_newton_tol", 1e-8)
         chunk_size = config_dict.get("chunk_size", 10_000)
         trust_region_initial = config_dict.get("trust_region_initial", 1.0)
@@ -5820,7 +5839,9 @@ class NLSQWrapper:
         validate_numerics = config_dict.get("validate_numerics", True)
 
         # Learning rate scheduling
-        use_learning_rate_schedule = config_dict.get("use_learning_rate_schedule", False)
+        use_learning_rate_schedule = config_dict.get(
+            "use_learning_rate_schedule", False
+        )
         lr_schedule_warmup_steps = config_dict.get(
             "lr_schedule_warmup_steps", warmup_iterations
         )
@@ -5842,7 +5863,9 @@ class NLSQWrapper:
         warmup_lr_careful = float(config_dict.get("warmup_lr_careful", 1e-5))
         # Layer 3: Cost-Increase Guard - abort if loss increases during warmup
         enable_cost_guard = config_dict.get("enable_cost_guard", True)
-        cost_increase_tolerance = float(config_dict.get("cost_increase_tolerance", 0.05))
+        cost_increase_tolerance = float(
+            config_dict.get("cost_increase_tolerance", 0.05)
+        )
         # Layer 4: Step Clipping - limit max parameter change per Adam iteration
         enable_step_clipping = config_dict.get("enable_step_clipping", True)
         max_warmup_step_size = float(config_dict.get("max_warmup_step_size", 0.1))
@@ -5886,7 +5909,9 @@ class NLSQWrapper:
         # Determine actual per-angle mode
         if per_angle_mode == "auto":
             # Use Fourier when n_phi > threshold (reduces DoF from 2*n_phi to 2*(order+1))
-            per_angle_mode_actual = "fourier" if n_phi > fourier_auto_threshold else "independent"
+            per_angle_mode_actual = (
+                "fourier" if n_phi > fourier_auto_threshold else "independent"
+            )
         else:
             per_angle_mode_actual = per_angle_mode
 
@@ -5900,12 +5925,16 @@ class NLSQWrapper:
                 fourier_order=fourier_order,
                 auto_threshold=fourier_auto_threshold,
             )
-            fourier_reparameterizer = FourierReparameterizer(phi_unique_rad, fourier_config)
+            fourier_reparameterizer = FourierReparameterizer(
+                phi_unique_rad, fourier_config
+            )
             logger.info("=" * 60)
             logger.info("ANTI-DEGENERACY DEFENSE: Layer 1 - Fourier Reparameterization")
             logger.info(f"  Mode: {per_angle_mode_actual}")
             logger.info(f"  n_phi: {n_phi}, Fourier order: {fourier_order}")
-            logger.info(f"  Parameter reduction: {2*n_phi} -> {fourier_reparameterizer.n_coeffs}")
+            logger.info(
+                f"  Parameter reduction: {2 * n_phi} -> {fourier_reparameterizer.n_coeffs}"
+            )
             logger.info("=" * 60)
 
         # Layer 2: Hierarchical Optimization Configuration
@@ -5917,8 +5946,12 @@ class NLSQWrapper:
                 enable=True,
                 max_outer_iterations=hierarchical_config.get("max_outer_iterations", 5),
                 outer_tolerance=float(hierarchical_config.get("outer_tolerance", 1e-6)),
-                physical_max_iterations=hierarchical_config.get("physical_max_iterations", 100),
-                per_angle_max_iterations=hierarchical_config.get("per_angle_max_iterations", 50),
+                physical_max_iterations=hierarchical_config.get(
+                    "physical_max_iterations", 100
+                ),
+                per_angle_max_iterations=hierarchical_config.get(
+                    "per_angle_max_iterations", 50
+                ),
             )
             hierarchical_optimizer = HierarchicalOptimizer(
                 config=hier_config,
@@ -5938,11 +5971,37 @@ class NLSQWrapper:
         regularization_mode = regularization_config.get("mode", "relative")
         regularization_lambda = float(regularization_config.get("lambda", 1.0))
         target_cv = float(regularization_config.get("target_cv", 0.10))
-        target_contribution = float(regularization_config.get("target_contribution", 0.10))
+        target_contribution = float(
+            regularization_config.get("target_contribution", 0.10)
+        )
         max_cv = float(regularization_config.get("max_cv", 0.20))
 
         adaptive_regularizer = None
         if per_angle_scaling and is_laminar_flow:
+            # Compute Fourier-aware group indices
+            # When Fourier mode is active, per-angle params are Fourier coefficients
+            # not n_phi independent values
+            if (
+                fourier_reparameterizer is not None
+                and fourier_reparameterizer.use_fourier
+            ):
+                n_coeffs_per_param = fourier_reparameterizer.n_coeffs_per_param
+                fourier_group_indices = [
+                    (0, n_coeffs_per_param),  # contrast Fourier coefficients
+                    (
+                        n_coeffs_per_param,
+                        2 * n_coeffs_per_param,
+                    ),  # offset Fourier coefficients
+                ]
+                logger.debug(
+                    f"Fourier-aware regularization groups: {fourier_group_indices} "
+                    f"(n_coeffs_per_param={n_coeffs_per_param})"
+                )
+            else:
+                fourier_group_indices = (
+                    None  # Use default: [(0, n_phi), (n_phi, 2*n_phi)]
+                )
+
             reg_config = AdaptiveRegularizationConfig(
                 enable=True,
                 mode=regularization_mode,
@@ -5950,13 +6009,14 @@ class NLSQWrapper:
                 target_cv=target_cv,
                 target_contribution=target_contribution,
                 max_cv=max_cv,
+                group_indices=fourier_group_indices,
             )
             adaptive_regularizer = AdaptiveRegularizer(reg_config, n_phi)
             logger.info("=" * 60)
             logger.info("ANTI-DEGENERACY DEFENSE: Layer 3 - Adaptive Regularization")
             logger.info(f"  Mode: {regularization_mode}")
             logger.info(f"  Auto-tuned lambda: {adaptive_regularizer.lambda_value:.2f}")
-            logger.info(f"  Target CV: {target_cv} ({target_cv*100:.0f}% variation)")
+            logger.info(f"  Target CV: {target_cv} ({target_cv * 100:.0f}% variation)")
             logger.info(f"  Max CV: {max_cv}")
             logger.info("=" * 60)
 
@@ -5969,25 +6029,44 @@ class NLSQWrapper:
         gradient_monitor_enabled = gradient_monitoring_config.get("enable", True)
         gradient_monitor = None
         if gradient_monitor_enabled and per_angle_scaling and is_laminar_flow:
-            n_per_angle = 2 * n_phi if fourier_reparameterizer is None else fourier_reparameterizer.n_coeffs
+            # Compute Fourier-aware parameter count
+            # When Fourier mode is active, per-angle params are Fourier coefficients
+            n_per_angle = (
+                2 * n_phi
+                if fourier_reparameterizer is None
+                else fourier_reparameterizer.n_coeffs
+            )
             n_physical = len(physical_param_names)
-            per_angle_indices = list(range(n_per_angle))
-            physical_indices = list(range(n_per_angle, n_per_angle + n_physical))
+            # Use numpy arrays for indices (JAX compatibility)
+            per_angle_indices = np.arange(n_per_angle, dtype=np.intp)
+            physical_indices = np.arange(
+                n_per_angle, n_per_angle + n_physical, dtype=np.intp
+            )
 
             # Compute gamma_dot_t0 index for watch_parameters
             # In laminar_flow, physical params are [D0, alpha, D_offset, gamma_dot_t0, beta, gamma_dot_t_offset, phi0]
             # gamma_dot_t0 is at physical_indices[3] = n_per_angle + 3
-            gamma_dot_t0_idx = n_per_angle + 3  # Index of gamma_dot_t0 in full param vector
+            gamma_dot_t0_idx = (
+                n_per_angle + 3
+            )  # Index of gamma_dot_t0 in full param vector
 
             monitor_config = GradientMonitorConfig(
                 enable=True,
-                ratio_threshold=float(gradient_monitoring_config.get("ratio_threshold", 0.01)),
-                consecutive_triggers=gradient_monitoring_config.get("consecutive_triggers", 5),
-                response_mode=gradient_monitoring_config.get("response", "hierarchical"),
+                ratio_threshold=float(
+                    gradient_monitoring_config.get("ratio_threshold", 0.01)
+                ),
+                consecutive_triggers=gradient_monitoring_config.get(
+                    "consecutive_triggers", 5
+                ),
+                response_mode=gradient_monitoring_config.get(
+                    "response", "hierarchical"
+                ),
                 # NEW (Dec 2025): Watch gamma_dot_t0 specifically for gradient collapse
                 # This detects when shear parameter gradient vanishes during Adam warmup
                 watch_parameters=[gamma_dot_t0_idx],
-                watch_threshold=float(gradient_monitoring_config.get("watch_threshold", 1e-8)),
+                watch_threshold=float(
+                    gradient_monitoring_config.get("watch_threshold", 1e-8)
+                ),
             )
             gradient_monitor = GradientCollapseMonitor(
                 config=monitor_config,
@@ -5998,7 +6077,9 @@ class NLSQWrapper:
             logger.info("ANTI-DEGENERACY DEFENSE: Layer 4 - Gradient Collapse Monitor")
             logger.info(f"  Enabled: {gradient_monitor_enabled}")
             logger.info(f"  Ratio threshold: {monitor_config.ratio_threshold}")
-            logger.info(f"  Consecutive triggers: {monitor_config.consecutive_triggers}")
+            logger.info(
+                f"  Consecutive triggers: {monitor_config.consecutive_triggers}"
+            )
             logger.info(f"  Response mode: {monitor_config.response_mode}")
             logger.info("=" * 60)
 
@@ -6021,7 +6102,10 @@ class NLSQWrapper:
                     n_per_group = n_phi
                 # Per-angle contrast: params[0:n_per_group]
                 # Per-angle offset: params[n_per_group:2*n_per_group]
-                group_variance_indices = [(0, n_per_group), (n_per_group, 2 * n_per_group)]
+                group_variance_indices = [
+                    (0, n_per_group),
+                    (n_per_group, 2 * n_per_group),
+                ]
                 logger.info(
                     f"  Auto-computed group_variance_indices for {n_phi} angles: "
                     f"{group_variance_indices}"
@@ -6303,23 +6387,27 @@ class NLSQWrapper:
             logger.info("=" * 60)
             logger.info("ANTI-DEGENERACY EXECUTION: Fourier Reparameterization")
             # Transform per-angle params to Fourier coefficients
-            per_angle_params = initial_params[:2 * n_phi]
-            physical_params = initial_params[2 * n_phi:]
+            per_angle_params = initial_params[: 2 * n_phi]
+            physical_params = initial_params[2 * n_phi :]
 
             # Split per-angle into contrast and offset groups
             contrast_per_angle = per_angle_params[:n_phi]
-            offset_per_angle = per_angle_params[n_phi:2 * n_phi]
+            offset_per_angle = per_angle_params[n_phi : 2 * n_phi]
 
             # Transform to Fourier coefficients
             contrast_coeffs = fourier_reparameterizer.to_fourier(contrast_per_angle)
             offset_coeffs = fourier_reparameterizer.to_fourier(offset_per_angle)
 
             # New parameter layout: [contrast_coeffs, offset_coeffs, physical_params]
-            fit_initial_params = np.concatenate([contrast_coeffs, offset_coeffs, physical_params])
+            fit_initial_params = np.concatenate(
+                [contrast_coeffs, offset_coeffs, physical_params]
+            )
 
             logger.info(f"  Original params: {len(initial_params)}")
             logger.info(f"  Fourier params: {len(fit_initial_params)}")
-            logger.info(f"  Per-angle reduction: {2*n_phi} -> {len(contrast_coeffs) + len(offset_coeffs)}")
+            logger.info(
+                f"  Per-angle reduction: {2 * n_phi} -> {len(contrast_coeffs) + len(offset_coeffs)}"
+            )
 
             # Transform bounds for Fourier space
             if bounds is not None:
@@ -6329,25 +6417,37 @@ class NLSQWrapper:
                 n_coeffs = fourier_reparameterizer.n_coeffs
 
                 # Fourier coefficient bounds: a0 keeps the mean, others can be ±range
-                contrast_lower = np.concatenate([
-                    [lower_bounds[0]],  # a0 (mean) lower bound
-                    np.full(n_coeffs - 1, -1.0)  # Other coeffs can be negative
-                ])
-                contrast_upper = np.concatenate([
-                    [upper_bounds[0]],  # a0 (mean) upper bound
-                    np.full(n_coeffs - 1, 1.0)  # Other coeffs bounded
-                ])
-                offset_lower = np.concatenate([
-                    [lower_bounds[n_phi]],  # a0 (mean) lower bound
-                    np.full(n_coeffs - 1, -0.5)  # Other coeffs
-                ])
-                offset_upper = np.concatenate([
-                    [upper_bounds[n_phi]],  # a0 (mean) upper bound
-                    np.full(n_coeffs - 1, 0.5)  # Other coeffs
-                ])
+                contrast_lower = np.concatenate(
+                    [
+                        [lower_bounds[0]],  # a0 (mean) lower bound
+                        np.full(n_coeffs - 1, -1.0),  # Other coeffs can be negative
+                    ]
+                )
+                contrast_upper = np.concatenate(
+                    [
+                        [upper_bounds[0]],  # a0 (mean) upper bound
+                        np.full(n_coeffs - 1, 1.0),  # Other coeffs bounded
+                    ]
+                )
+                offset_lower = np.concatenate(
+                    [
+                        [lower_bounds[n_phi]],  # a0 (mean) lower bound
+                        np.full(n_coeffs - 1, -0.5),  # Other coeffs
+                    ]
+                )
+                offset_upper = np.concatenate(
+                    [
+                        [upper_bounds[n_phi]],  # a0 (mean) upper bound
+                        np.full(n_coeffs - 1, 0.5),  # Other coeffs
+                    ]
+                )
 
-                fit_lower = np.concatenate([contrast_lower, offset_lower, lower_bounds[2*n_phi:]])
-                fit_upper = np.concatenate([contrast_upper, offset_upper, upper_bounds[2*n_phi:]])
+                fit_lower = np.concatenate(
+                    [contrast_lower, offset_lower, lower_bounds[2 * n_phi :]]
+                )
+                fit_upper = np.concatenate(
+                    [contrast_upper, offset_upper, upper_bounds[2 * n_phi :]]
+                )
                 fit_bounds = (fit_lower, fit_upper)
             logger.info("=" * 60)
 
@@ -6369,8 +6469,8 @@ class NLSQWrapper:
                 # Layout: [contrast_coeffs, offset_coeffs, physical_params]
                 n_coeffs = fourier_reparameterizer.n_coeffs_per_param
                 contrast_coeffs = params_all[:n_coeffs]
-                offset_coeffs = params_all[n_coeffs:2*n_coeffs]
-                physical_params = params_all[2*n_coeffs:]
+                offset_coeffs = params_all[n_coeffs : 2 * n_coeffs]
+                physical_params = params_all[2 * n_coeffs :]
 
                 # Convert Fourier coefficients to per-angle values
                 # Uses precomputed basis matrix: values = B @ coeffs
@@ -6389,7 +6489,9 @@ class NLSQWrapper:
                 D_offset = physical_params[2]
 
                 # Compute diffusion
-                D_t = calculate_diffusion_coefficient(t1_unique_jax, D0, alpha, D_offset)
+                D_t = calculate_diffusion_coefficient(
+                    t1_unique_jax, D0, alpha, D_offset
+                )
                 D_cumsum = trapezoid_cumsum(D_t)
                 D_diff = D_cumsum[t1_idx] - D_cumsum[t2_idx]
                 D_integral_batch = jnp.sqrt(D_diff**2 + 1e-20)
@@ -6451,7 +6553,9 @@ class NLSQWrapper:
         if use_hierarchical:
             # Use hierarchical two-stage optimization
             logger.info("=" * 60)
-            logger.info("ANTI-DEGENERACY EXECUTION: Hierarchical Two-Stage Optimization")
+            logger.info(
+                "ANTI-DEGENERACY EXECUTION: Hierarchical Two-Stage Optimization"
+            )
 
             def loss_fn(params):
                 """Loss function for hierarchical optimizer."""
@@ -6474,7 +6578,9 @@ class NLSQWrapper:
 
                 # Layer 4: Gradient monitoring
                 if gradient_monitor is not None:
-                    gradient_monitor.check(grad, iteration_counter[0], params, loss_fn(params))
+                    gradient_monitor.check(
+                        grad, iteration_counter[0], params, loss_fn(params)
+                    )
                     iteration_counter[0] += 1
 
                 return grad
@@ -6494,7 +6600,8 @@ class NLSQWrapper:
                 "pcov": np.eye(len(hier_result.x)),  # Placeholder
                 "success": hier_result.success,
                 "message": hier_result.message,
-                "function_evaluations": hier_result.n_outer_iterations * 150,  # Estimate
+                "function_evaluations": hier_result.n_outer_iterations
+                * 150,  # Estimate
                 "streaming_diagnostics": {
                     "phase_iterations": {
                         "phase1": 0,
@@ -6561,17 +6668,23 @@ class NLSQWrapper:
 
             # Extract Fourier coefficients and physical params from optimized result
             fourier_contrast_coeffs = popt[:n_coeffs]
-            fourier_offset_coeffs = popt[n_coeffs:2*n_coeffs]
-            physical_params_opt = popt[2*n_coeffs:]
+            fourier_offset_coeffs = popt[n_coeffs : 2 * n_coeffs]
+            physical_params_opt = popt[2 * n_coeffs :]
 
             # Transform back to per-angle parameters
-            contrast_per_angle_opt = fourier_reparameterizer.from_fourier(fourier_contrast_coeffs)
-            offset_per_angle_opt = fourier_reparameterizer.from_fourier(fourier_offset_coeffs)
+            contrast_per_angle_opt = fourier_reparameterizer.from_fourier(
+                fourier_contrast_coeffs
+            )
+            offset_per_angle_opt = fourier_reparameterizer.from_fourier(
+                fourier_offset_coeffs
+            )
 
             # Reconstruct full parameter vector in original layout
-            popt = np.concatenate([contrast_per_angle_opt, offset_per_angle_opt, physical_params_opt])
+            popt = np.concatenate(
+                [contrast_per_angle_opt, offset_per_angle_opt, physical_params_opt]
+            )
 
-            logger.info(f"  Fourier params: {2*n_coeffs + len(physical_params_opt)}")
+            logger.info(f"  Fourier params: {2 * n_coeffs + len(physical_params_opt)}")
             logger.info(f"  Restored per-angle params: {len(popt)}")
             logger.info("=" * 60)
 
@@ -6588,9 +6701,13 @@ class NLSQWrapper:
             if gradient_monitor.collapse_detected:
                 logger.warning("=" * 60)
                 logger.warning("GRADIENT COLLAPSE WAS DETECTED DURING OPTIMIZATION")
-                logger.warning(f"  Collapse events: {len(gradient_monitor.collapse_events)}")
+                logger.warning(
+                    f"  Collapse events: {len(gradient_monitor.collapse_events)}"
+                )
                 for event in gradient_monitor.collapse_events:
-                    logger.warning(f"    Iteration {event.iteration}: ratio={event.ratio:.6f}")
+                    logger.warning(
+                        f"    Iteration {event.iteration}: ratio={event.ratio:.6f}"
+                    )
                 logger.warning("=" * 60)
 
         # Get covariance (properly transformed from normalized space)
@@ -6616,8 +6733,13 @@ class NLSQWrapper:
             # Layout: [n_phi contrasts] + [n_phi offsets] + [7 physical params]
             physical_indices = list(range(2 * n_phi, len(popt)))
             physical_param_names_local = [
-                "D0", "alpha", "D_offset",
-                "gamma_dot_t0", "beta", "gamma_dot_t_offset", "phi0"
+                "D0",
+                "alpha",
+                "D_offset",
+                "gamma_dot_t0",
+                "beta",
+                "gamma_dot_t_offset",
+                "phi0",
             ]
 
             bound_stuck_params = []
@@ -6625,32 +6747,61 @@ class NLSQWrapper:
                 if idx < len(param_statuses) and idx < len(popt):
                     status = param_statuses[idx]
                     uncertainty = perr[idx] if idx < len(perr) else 0.0
-                    if status != "active" and (uncertainty == 0.0 or uncertainty < 1e-15):
-                        param_name = physical_param_names_local[i] if i < len(physical_param_names_local) else f"param[{idx}]"
-                        bound_stuck_params.append((param_name, status, popt[idx], uncertainty))
+                    if status != "active" and (
+                        uncertainty == 0.0 or uncertainty < 1e-15
+                    ):
+                        param_name = (
+                            physical_param_names_local[i]
+                            if i < len(physical_param_names_local)
+                            else f"param[{idx}]"
+                        )
+                        bound_stuck_params.append(
+                            (param_name, status, popt[idx], uncertainty)
+                        )
 
             if bound_stuck_params:
                 logger.warning("=" * 80)
                 logger.warning("PARAMETER BOUNDS WARNING")
-                logger.warning("The following parameters are stuck at bounds with zero uncertainty:")
+                logger.warning(
+                    "The following parameters are stuck at bounds with zero uncertainty:"
+                )
                 for param_name, status, value, unc in bound_stuck_params:
-                    logger.warning(f"  {param_name}: {value:.6e} ({status}, uncertainty={unc:.2e})")
+                    logger.warning(
+                        f"  {param_name}: {value:.6e} ({status}, uncertainty={unc:.2e})"
+                    )
                 logger.warning("")
                 logger.warning("This may indicate:")
-                logger.warning("  1. The optimizer cannot find gradient information for these parameters")
-                logger.warning("  2. The initial guess was already at or near the bounds")
-                logger.warning("  3. The model is insensitive to these parameters with this data coverage")
+                logger.warning(
+                    "  1. The optimizer cannot find gradient information for these parameters"
+                )
+                logger.warning(
+                    "  2. The initial guess was already at or near the bounds"
+                )
+                logger.warning(
+                    "  3. The model is insensitive to these parameters with this data coverage"
+                )
                 logger.warning("")
                 logger.warning("RECOMMENDED ACTIONS:")
-                logger.warning("  - Enable phi_filtering to use only angles near 0° and 90° for laminar flow")
-                logger.warning("  - Use multi-start optimization to explore multiple parameter basins")
-                logger.warning("  - Check if gamma_dot_t0 ≈ 0 means shear contribution is missing")
+                logger.warning(
+                    "  - Enable phi_filtering to use only angles near 0° and 90° for laminar flow"
+                )
+                logger.warning(
+                    "  - Use multi-start optimization to explore multiple parameter basins"
+                )
+                logger.warning(
+                    "  - Check if gamma_dot_t0 ≈ 0 means shear contribution is missing"
+                )
                 logger.warning("=" * 80)
 
                 # Store for info dict
                 bound_stuck_warning = {
                     "parameters_at_bounds": [
-                        {"name": name, "status": status, "value": float(val), "uncertainty": float(unc)}
+                        {
+                            "name": name,
+                            "status": status,
+                            "value": float(val),
+                            "uncertainty": float(unc),
+                        }
                         for name, status, val, unc in bound_stuck_params
                     ]
                 }
@@ -6685,14 +6836,20 @@ class NLSQWrapper:
             info["anti_degeneracy"]["fourier"] = {
                 "order": fourier_order,
                 "n_coeffs": fourier_reparameterizer.n_coeffs,
-                "param_reduction": f"{2*n_phi} -> {fourier_reparameterizer.n_coeffs}",
+                "param_reduction": f"{2 * n_phi} -> {fourier_reparameterizer.n_coeffs}",
             }
         if hierarchical_optimizer is not None:
-            info["anti_degeneracy"]["hierarchical"] = hierarchical_optimizer.get_diagnostics()
+            info["anti_degeneracy"]["hierarchical"] = (
+                hierarchical_optimizer.get_diagnostics()
+            )
         if adaptive_regularizer is not None:
-            info["anti_degeneracy"]["regularization"] = adaptive_regularizer.get_diagnostics()
+            info["anti_degeneracy"]["regularization"] = (
+                adaptive_regularizer.get_diagnostics()
+            )
         if gradient_monitor is not None:
-            info["anti_degeneracy"]["gradient_monitor"] = gradient_monitor.get_diagnostics()
+            info["anti_degeneracy"]["gradient_monitor"] = (
+                gradient_monitor.get_diagnostics()
+            )
 
         # Add bounds warning info if detected
         if bound_stuck_warning is not None:
@@ -6706,27 +6863,45 @@ class NLSQWrapper:
             if abs(gamma_dot_t0_value) < 1e-5:
                 logger.warning("=" * 80)
                 logger.warning("SHEAR COLLAPSE WARNING")
-                logger.warning(f"gamma_dot_t0 = {gamma_dot_t0_value:.2e} s⁻¹ is effectively zero")
+                logger.warning(
+                    f"gamma_dot_t0 = {gamma_dot_t0_value:.2e} s⁻¹ is effectively zero"
+                )
                 logger.warning("")
                 logger.warning("This means the shear contribution to g₁ is negligible.")
-                logger.warning("The model has effectively collapsed to static_isotropic mode.")
+                logger.warning(
+                    "The model has effectively collapsed to static_isotropic mode."
+                )
                 logger.warning("")
                 logger.warning("POSSIBLE CAUSES:")
-                logger.warning("  1. Per-angle contrast/offset absorbed the shear signal")
-                logger.warning("  2. Inconsistent initialization of per-angle vs physical params")
-                logger.warning("  3. Physical parameters at bounds with weak gradient signal")
+                logger.warning(
+                    "  1. Per-angle contrast/offset absorbed the shear signal"
+                )
+                logger.warning(
+                    "  2. Inconsistent initialization of per-angle vs physical params"
+                )
+                logger.warning(
+                    "  3. Physical parameters at bounds with weak gradient signal"
+                )
                 logger.warning("  4. The data may genuinely have no measurable shear")
                 logger.warning("")
                 logger.warning("RECOMMENDED ACTIONS:")
-                logger.warning("  - Enable multi-start optimization to explore parameter basins")
-                logger.warning("  - Check reduced chi-squared: if worse than expected, re-run optimization")
-                logger.warning("  - Verify per-angle contrast/offset are not varying excessively")
-                logger.warning("  - Consider static_isotropic mode if shear is truly absent")
+                logger.warning(
+                    "  - Enable multi-start optimization to explore parameter basins"
+                )
+                logger.warning(
+                    "  - Check reduced chi-squared: if worse than expected, re-run optimization"
+                )
+                logger.warning(
+                    "  - Verify per-angle contrast/offset are not varying excessively"
+                )
+                logger.warning(
+                    "  - Consider static_isotropic mode if shear is truly absent"
+                )
                 logger.warning("=" * 80)
                 info["shear_collapse_warning"] = {
                     "gamma_dot_t0": float(gamma_dot_t0_value),
                     "threshold": 1e-5,
-                    "message": "Shear contribution effectively zero"
+                    "message": "Shear contribution effectively zero",
                 }
 
         return popt, pcov, info

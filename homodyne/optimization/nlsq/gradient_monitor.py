@@ -25,11 +25,12 @@ Response Actions
 
 from __future__ import annotations
 
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from typing import Literal, cast
 
 import numpy as np
+from numpy.typing import ArrayLike
 
 from homodyne.optimization.nlsq.config_utils import safe_float, safe_int
 from homodyne.utils.logging import get_logger
@@ -96,7 +97,9 @@ class GradientMonitorConfig:
                 Literal["warn", "hierarchical", "reset", "abort"],
                 config_dict.get("response", "hierarchical"),
             ),
-            reset_per_angle_to_mean=bool(config_dict.get("reset_per_angle_to_mean", True)),
+            reset_per_angle_to_mean=bool(
+                config_dict.get("reset_per_angle_to_mean", True)
+            ),
             lambda_multiplier_on_collapse=safe_float(
                 config_dict.get("lambda_multiplier_on_collapse"), 10.0
             ),
@@ -181,8 +184,8 @@ class GradientCollapseMonitor:
     def __init__(
         self,
         config: GradientMonitorConfig,
-        physical_indices: list[int],
-        per_angle_indices: list[int],
+        physical_indices: Sequence[int] | np.ndarray,
+        per_angle_indices: Sequence[int] | np.ndarray,
     ):
         """Initialize gradient collapse monitor.
 
@@ -190,14 +193,27 @@ class GradientCollapseMonitor:
         ----------
         config : GradientMonitorConfig
             Monitor configuration.
-        physical_indices : list of int
-            Indices of physical parameters.
-        per_angle_indices : list of int
-            Indices of per-angle parameters.
+        physical_indices : Sequence[int] or np.ndarray
+            Indices of physical parameters. Converted to numpy array internally
+            to support both NumPy and JAX array indexing.
+        per_angle_indices : Sequence[int] or np.ndarray
+            Indices of per-angle parameters (or Fourier coefficients when
+            Fourier reparameterization is active). Converted to numpy array
+            internally.
+
+        Notes
+        -----
+        When Fourier reparameterization is active, per_angle_indices should
+        correspond to Fourier coefficient indices (typically 10 for order=2),
+        not independent per-angle indices (2 * n_phi).
         """
         self.config = config
-        self.physical_indices = list(physical_indices)
-        self.per_angle_indices = list(per_angle_indices)
+        # Use numpy arrays for indices to support both NumPy and JAX array indexing
+        # JAX arrays don't support Python list indexing (non-tuple sequence error)
+        self.physical_indices: np.ndarray = np.asarray(physical_indices, dtype=np.intp)
+        self.per_angle_indices: np.ndarray = np.asarray(
+            per_angle_indices, dtype=np.intp
+        )
 
         self.history: list[dict] = []
         self.consecutive_count: int = 0
@@ -290,12 +306,8 @@ class GradientCollapseMonitor:
                     f"GRADIENT COLLAPSE DETECTED at iteration {iteration}! "
                     f"ratio={ratio:.6f} < threshold={self.config.ratio_threshold}"
                 )
-                logger.warning(
-                    f"  Physical gradient norm: {physical_grad_norm:.6e}"
-                )
-                logger.warning(
-                    f"  Per-angle gradient norm: {per_angle_grad_norm:.6e}"
-                )
+                logger.warning(f"  Physical gradient norm: {physical_grad_norm:.6e}")
+                logger.warning(f"  Per-angle gradient norm: {per_angle_grad_norm:.6e}")
                 logger.warning(f"  Response mode: {self.config.response_mode}")
 
             return "COLLAPSE_DETECTED"
@@ -314,7 +326,9 @@ class GradientCollapseMonitor:
                             f"threshold={self.config.watch_threshold:.2e}"
                         )
                         # Store in history for diagnostics
-                        self.history[-1][f"watched_param_{param_idx}_grad"] = float(grad_mag)
+                        self.history[-1][f"watched_param_{param_idx}_grad"] = float(
+                            grad_mag
+                        )
 
         if self.consecutive_count > 0:
             return "WARNING"
@@ -342,9 +356,7 @@ class GradientCollapseMonitor:
             "collapse_events": self.collapse_events,
         }
 
-    def compute_reset_params(
-        self, params: np.ndarray, n_phi: int
-    ) -> np.ndarray:
+    def compute_reset_params(self, params: np.ndarray, n_phi: int) -> np.ndarray:
         """Compute parameters with per-angle values reset to mean.
 
         Parameters

@@ -215,8 +215,9 @@ class TestHierarchicalOptimizer:
         opt = simple_optimizer
         # 5 phi -> 10 per-angle params (5 contrast + 5 offset)
         assert opt.n_per_angle == 10
-        assert opt.per_angle_indices == list(range(10))
-        assert opt.physical_indices == list(range(10, 13))
+        # Indices are now numpy arrays for JAX compatibility
+        np.testing.assert_array_equal(opt.per_angle_indices, np.arange(10))
+        np.testing.assert_array_equal(opt.physical_indices, np.arange(10, 13))
 
     def test_fit_convergence(self, simple_optimizer):
         """T051d: Test hierarchical fit converges on simple problem."""
@@ -320,11 +321,13 @@ class TestAdaptiveRegularizer:
 
     def test_regularization_gradient(self, regularizer):
         """T052e: Test regularization gradient computation."""
-        params = np.concatenate([
-            np.full(10, 0.5),  # contrast
-            np.full(10, 1.0),  # offset
-            np.array([1000.0, 0.5, 10.0]),  # physical
-        ])
+        params = np.concatenate(
+            [
+                np.full(10, 0.5),  # contrast
+                np.full(10, 1.0),  # offset
+                np.array([1000.0, 0.5, 10.0]),  # physical
+            ]
+        )
 
         mse = 0.04
         n_points = 1000000
@@ -579,13 +582,17 @@ class TestAntiDegeneracyIntegration:
         )
 
         # Create params and compute regularization gradient
-        params = np.concatenate([
-            np.full(10, 0.5),
-            np.full(10, 1.0),
-            np.array([1000.0, 0.5, 10.0, 0.001, 0.5, 0.0, 0.0]),
-        ])
+        params = np.concatenate(
+            [
+                np.full(10, 0.5),
+                np.full(10, 1.0),
+                np.array([1000.0, 0.5, 10.0, 0.001, 0.5, 0.0, 0.0]),
+            ]
+        )
 
-        grad = regularizer.compute_regularization_gradient(params, mse=0.04, n_points=1000)
+        grad = regularizer.compute_regularization_gradient(
+            params, mse=0.04, n_points=1000
+        )
 
         # Check gradient with monitor
         status = monitor.check(grad, iteration=0)
@@ -666,7 +673,9 @@ class TestAntiDegeneracyFull23Angle:
         phi_angles = np.linspace(-np.pi, np.pi, n_phi, endpoint=False)
 
         # Physical parameters
-        n_physical = 7  # D0, alpha, D_offset, gamma_dot_t0, beta, gamma_dot_offset, phi0
+        n_physical = (
+            7  # D0, alpha, D_offset, gamma_dot_t0, beta, gamma_dot_offset, phi0
+        )
 
         # Layer 1: Fourier Reparameterization
         fourier_config = FourierReparamConfig(mode="fourier", fourier_order=2)
@@ -695,9 +704,12 @@ class TestAntiDegeneracyFull23Angle:
         regularizer = AdaptiveRegularizer(reg_config, n_phi=n_phi)
 
         # Layer 4: Gradient Monitor (using Fourier indices)
+        # Use numpy arrays for JAX compatibility
         n_fourier_per_angle = fourier.n_coeffs
-        per_angle_indices = list(range(n_fourier_per_angle))
-        physical_indices = list(range(n_fourier_per_angle, n_fourier_per_angle + n_physical))
+        per_angle_indices = np.arange(n_fourier_per_angle, dtype=np.intp)
+        physical_indices = np.arange(
+            n_fourier_per_angle, n_fourier_per_angle + n_physical, dtype=np.intp
+        )
 
         monitor_config = GradientMonitorConfig(
             enable=True,
@@ -769,7 +781,9 @@ class TestAntiDegeneracyFull23Angle:
         physical_params = np.array([1000.0, 0.5, 10.0, 0.01, 0.5, 0.0, 0.0])
 
         # Combine into full Fourier-space parameter vector
-        fourier_params = np.concatenate([contrast_coeffs, offset_coeffs, physical_params])
+        fourier_params = np.concatenate(
+            [contrast_coeffs, offset_coeffs, physical_params]
+        )
 
         # Transform back to per-angle
         contrast_out = fourier.from_fourier(contrast_coeffs)
@@ -795,7 +809,9 @@ class TestAntiDegeneracyFull23Angle:
         status = monitor.check(gradients, iteration=0)
         assert status == "OK"  # Healthy gradient ratio
 
-    def test_gradient_collapse_detection_in_fourier_space(self, synthetic_23angle_setup):
+    def test_gradient_collapse_detection_in_fourier_space(
+        self, synthetic_23angle_setup
+    ):
         """T056e: Gradient monitor detects collapse with Fourier parameters."""
         monitor = synthetic_23angle_setup["monitor"]
 
@@ -982,11 +998,13 @@ class TestAntiDegeneracyController:
     def test_transform_params_to_fourier(self, controller_23angle):
         """T057g: Parameter transformation to Fourier space."""
         # Create per-angle params: [23 contrast, 23 offset, 7 physical]
-        params = np.concatenate([
-            np.full(23, 0.3),  # contrast
-            np.full(23, 1.0),  # offset
-            np.array([1000.0, 0.5, 10.0, 0.01, 0.5, 0.0, 0.0]),  # physical
-        ])
+        params = np.concatenate(
+            [
+                np.full(23, 0.3),  # contrast
+                np.full(23, 1.0),  # offset
+                np.array([1000.0, 0.5, 10.0, 0.01, 0.5, 0.0, 0.0]),  # physical
+            ]
+        )
 
         fourier_params, _ = controller_23angle.transform_params_to_fourier(params)
 
@@ -997,14 +1015,18 @@ class TestAntiDegeneracyController:
         """T057h: Fourier transformation roundtrip preserves params."""
         # Create smooth per-angle params
         phi = controller_23angle.phi_angles
-        params = np.concatenate([
-            0.3 + 0.05 * np.cos(phi),  # smooth contrast
-            1.0 + 0.02 * np.sin(phi),  # smooth offset
-            np.array([1000.0, 0.5, 10.0, 0.01, 0.5, 0.0, 0.0]),
-        ])
+        params = np.concatenate(
+            [
+                0.3 + 0.05 * np.cos(phi),  # smooth contrast
+                1.0 + 0.02 * np.sin(phi),  # smooth offset
+                np.array([1000.0, 0.5, 10.0, 0.01, 0.5, 0.0, 0.0]),
+            ]
+        )
 
         fourier_params, _ = controller_23angle.transform_params_to_fourier(params)
-        restored_params = controller_23angle.transform_params_from_fourier(fourier_params)
+        restored_params = controller_23angle.transform_params_from_fourier(
+            fourier_params
+        )
 
         # Smooth functions should be well-preserved
         np.testing.assert_allclose(params, restored_params, atol=0.01)
@@ -1069,3 +1091,206 @@ class TestAntiDegeneracyController:
         # Reset
         controller_23angle.reset_monitor()
         assert len(monitor.history) == 0
+
+
+# =============================================================================
+# JAX Array Indexing Compatibility Tests
+# =============================================================================
+
+
+class TestJAXArrayIndexingCompatibility:
+    """Test that all anti-degeneracy components work correctly with JAX arrays.
+
+    This test class verifies the fix for the "non-tuple sequence for
+    multidimensional indexing" error that occurs when Python lists are used
+    to index JAX arrays. All components should use numpy arrays for indices.
+
+    Test IDs: T058
+    """
+
+    @pytest.fixture
+    def jax_available(self):
+        """Check if JAX is available."""
+        try:
+            import jax.numpy as jnp
+
+            return True
+        except ImportError:
+            pytest.skip("JAX not available")
+
+    def test_hierarchical_indices_are_numpy_arrays(self):
+        """T058a: HierarchicalOptimizer indices are numpy arrays."""
+        config = HierarchicalConfig()
+        opt = HierarchicalOptimizer(config, n_phi=10, n_physical=3)
+
+        assert isinstance(opt.per_angle_indices, np.ndarray)
+        assert isinstance(opt.physical_indices, np.ndarray)
+        assert opt.per_angle_indices.dtype == np.intp
+        assert opt.physical_indices.dtype == np.intp
+
+    def test_gradient_monitor_indices_are_numpy_arrays(self):
+        """T058b: GradientCollapseMonitor indices are numpy arrays."""
+        config = GradientMonitorConfig()
+        monitor = GradientCollapseMonitor(
+            config=config,
+            physical_indices=range(10, 17),
+            per_angle_indices=range(10),
+        )
+
+        assert isinstance(monitor.per_angle_indices, np.ndarray)
+        assert isinstance(monitor.physical_indices, np.ndarray)
+        assert monitor.per_angle_indices.dtype == np.intp
+        assert monitor.physical_indices.dtype == np.intp
+
+    def test_hierarchical_indices_work_with_jax_arrays(self, jax_available):
+        """T058c: HierarchicalOptimizer indices can index JAX arrays."""
+        import jax.numpy as jnp
+
+        config = HierarchicalConfig()
+        opt = HierarchicalOptimizer(config, n_phi=10, n_physical=3)
+
+        # Create JAX array
+        jax_array = jnp.arange(23)  # 20 per-angle + 3 physical
+
+        # This should not raise "non-tuple sequence" error
+        per_angle_subset = jax_array[opt.per_angle_indices]
+        physical_subset = jax_array[opt.physical_indices]
+
+        assert per_angle_subset.shape == (20,)
+        assert physical_subset.shape == (3,)
+
+    def test_gradient_monitor_indices_work_with_jax_arrays(self, jax_available):
+        """T058d: GradientCollapseMonitor indices can index JAX arrays."""
+        import jax.numpy as jnp
+
+        config = GradientMonitorConfig()
+        monitor = GradientCollapseMonitor(
+            config=config,
+            physical_indices=range(10, 17),
+            per_angle_indices=range(10),
+        )
+
+        # Create JAX gradient array
+        jax_grad = jnp.ones(17) * 0.1
+
+        # This should not raise "non-tuple sequence" error
+        phys_grad = jax_grad[monitor.physical_indices]
+        per_angle_grad = jax_grad[monitor.per_angle_indices]
+
+        assert phys_grad.shape == (7,)
+        assert per_angle_grad.shape == (10,)
+
+    def test_gradient_monitor_check_with_jax_gradient(self, jax_available):
+        """T058e: GradientCollapseMonitor.check() works with JAX gradients."""
+        import jax.numpy as jnp
+
+        config = GradientMonitorConfig(enable=True)
+        monitor = GradientCollapseMonitor(
+            config=config,
+            physical_indices=range(10, 17),
+            per_angle_indices=range(10),
+        )
+
+        # Simulate JAX gradient
+        jax_grad = jnp.ones(17) * 0.5
+
+        # Should not raise error
+        status = monitor.check(jax_grad, iteration=0)
+        assert status in ["OK", "WARNING"]
+
+    def test_hierarchical_with_fourier_uses_correct_indices(self, jax_available):
+        """T058f: HierarchicalOptimizer with Fourier uses Fourier indices."""
+        import jax.numpy as jnp
+
+        # Create Fourier reparameterizer
+        phi_angles = np.linspace(-np.pi, np.pi, 23)
+        fourier_config = FourierReparamConfig(mode="fourier", fourier_order=2)
+        fourier = FourierReparameterizer(phi_angles, fourier_config)
+
+        # Create hierarchical optimizer with Fourier
+        config = HierarchicalConfig()
+        opt = HierarchicalOptimizer(
+            config, n_phi=23, n_physical=7, fourier_reparameterizer=fourier
+        )
+
+        # Should have 10 Fourier coefficients, not 46 per-angle
+        assert opt.n_per_angle == 10
+        assert len(opt.per_angle_indices) == 10
+        assert len(opt.physical_indices) == 7
+
+        # Indices should work with JAX arrays
+        jax_params = jnp.arange(17)
+        per_angle_subset = jax_params[opt.per_angle_indices]
+        physical_subset = jax_params[opt.physical_indices]
+
+        assert per_angle_subset.shape == (10,)
+        assert physical_subset.shape == (7,)
+
+    def test_full_fourier_hierarchical_jax_gradient_flow(self, jax_available):
+        """T058g: Full integration test with JAX gradient through all components."""
+        import jax
+        import jax.numpy as jnp
+
+        # Setup
+        n_phi = 23
+        n_physical = 7
+        phi_angles = np.linspace(-np.pi, np.pi, n_phi)
+
+        # Layer 1: Fourier
+        fourier_config = FourierReparamConfig(mode="fourier", fourier_order=2)
+        fourier = FourierReparameterizer(phi_angles, fourier_config)
+
+        # Layer 2: Hierarchical
+        hier_config = HierarchicalConfig()
+        hier = HierarchicalOptimizer(
+            hier_config, n_phi, n_physical, fourier_reparameterizer=fourier
+        )
+
+        # Layer 3: Regularizer with Fourier-aware group indices
+        n_coeffs_per_param = fourier.n_coeffs_per_param
+        fourier_group_indices = [
+            (0, n_coeffs_per_param),
+            (n_coeffs_per_param, 2 * n_coeffs_per_param),
+        ]
+        reg_config = AdaptiveRegularizationConfig(
+            enable=True,
+            mode="relative",
+            group_indices=fourier_group_indices,
+        )
+        regularizer = AdaptiveRegularizer(reg_config, n_phi)
+
+        # Layer 4: Gradient monitor with Fourier indices
+        monitor_config = GradientMonitorConfig(enable=True)
+        monitor = GradientCollapseMonitor(
+            config=monitor_config,
+            physical_indices=hier.physical_indices,
+            per_angle_indices=hier.per_angle_indices,
+        )
+
+        # Create a simple JAX loss function
+        def loss_fn(params):
+            # Simple quadratic loss
+            return jnp.sum((params - 1.0) ** 2)
+
+        # Compute gradient using JAX
+        grad_fn = jax.grad(loss_fn)
+        params = jnp.zeros(17)  # 10 Fourier + 7 physical
+        jax_grad = grad_fn(params)
+
+        # All components should work with JAX gradient
+        # Hierarchical indices
+        physical_grad = jax_grad[hier.physical_indices]
+        per_angle_grad = jax_grad[hier.per_angle_indices]
+        assert physical_grad.shape == (7,)
+        assert per_angle_grad.shape == (10,)
+
+        # Gradient monitor
+        status = monitor.check(jax_grad, iteration=0)
+        assert status in ["OK", "WARNING"]
+
+        # Regularizer (uses numpy internally, so convert)
+        numpy_params = np.asarray(params)
+        reg_term = regularizer.compute_regularization(
+            numpy_params, mse=0.04, n_points=1000
+        )
+        assert reg_term >= 0
