@@ -1,0 +1,472 @@
+"""Gradient Collapse Monitor for Anti-Degeneracy Defense.
+
+This module provides runtime detection of gradient collapse (physical params
+losing gradient signal) with automatic response actions.
+
+Part of Anti-Degeneracy Defense System v2.9.0.
+See: docs/specs/anti-degeneracy-defense-v2.9.0.md
+
+Detection Mechanism
+-------------------
+Monitor the ratio:
+    ratio = |∇_physical| / |∇_per_angle|
+
+If ratio < threshold for N consecutive iterations:
+    - Gradient collapse detected
+    - Physical params are losing signal to per-angle params
+
+Response Actions
+----------------
+- "warn": Log warning only
+- "hierarchical": Switch to hierarchical optimization mode
+- "reset": Reset per-angle params to mean values
+- "abort": Abort optimization and return best params so far
+"""
+
+from __future__ import annotations
+
+from collections.abc import Callable
+from dataclasses import dataclass
+from typing import Literal, cast
+
+import numpy as np
+
+from homodyne.utils.logging import get_logger
+
+logger = get_logger(__name__)
+
+
+@dataclass
+class GradientMonitorConfig:
+    """Configuration for gradient collapse detection.
+
+    Attributes
+    ----------
+    enable : bool
+        Whether to enable gradient monitoring. Default True.
+    ratio_threshold : float
+        |∇_physical| / |∇_per_angle| below this triggers detection.
+        Default 0.01 (physical gradient is 1% of per-angle gradient).
+    consecutive_triggers : int
+        Must trigger N consecutive times to confirm collapse. Default 5.
+    response_mode : str
+        Response action on collapse detection:
+        - "warn": Log warning only
+        - "hierarchical": Switch to hierarchical optimization
+        - "reset": Reset per-angle params to mean
+        - "abort": Abort and return best params
+    reset_per_angle_to_mean : bool
+        When resetting, reset per-angle to mean values. Default True.
+    lambda_multiplier_on_collapse : float
+        Multiply regularization λ by this on collapse. Default 10.0.
+    check_interval : int
+        Check every N iterations. Default 1 (every iteration).
+    """
+
+    enable: bool = True
+    ratio_threshold: float = 0.01
+    consecutive_triggers: int = 5
+    response_mode: Literal["warn", "hierarchical", "reset", "abort"] = "hierarchical"
+    reset_per_angle_to_mean: bool = True
+    lambda_multiplier_on_collapse: float = 10.0
+    check_interval: int = 1
+
+    @classmethod
+    def from_dict(cls, config_dict: dict) -> GradientMonitorConfig:
+        """Create config from dictionary with safe type conversion."""
+        # Safe type conversion helpers
+        def safe_float(value, default: float) -> float:
+            """Convert value to float safely, returning default on failure."""
+            if value is None:
+                return default
+            try:
+                return float(value)
+            except (ValueError, TypeError):
+                logger.warning(
+                    f"Could not convert {value!r} to float, using default {default}"
+                )
+                return default
+
+        def safe_int(value, default: int) -> int:
+            """Convert value to int safely, returning default on failure."""
+            if value is None:
+                return default
+            try:
+                return int(value)
+            except (ValueError, TypeError):
+                logger.warning(
+                    f"Could not convert {value!r} to int, using default {default}"
+                )
+                return default
+
+        return cls(
+            enable=bool(config_dict.get("enable", True)),
+            ratio_threshold=safe_float(config_dict.get("ratio_threshold"), 0.01),
+            consecutive_triggers=safe_int(config_dict.get("consecutive_triggers"), 5),
+            response_mode=cast(
+                Literal["warn", "hierarchical", "reset", "abort"],
+                config_dict.get("response", "hierarchical"),
+            ),
+            reset_per_angle_to_mean=bool(config_dict.get("reset_per_angle_to_mean", True)),
+            lambda_multiplier_on_collapse=safe_float(
+                config_dict.get("lambda_multiplier_on_collapse"), 10.0
+            ),
+            check_interval=safe_int(config_dict.get("check_interval"), 1),
+        )
+
+
+@dataclass
+class CollapseEvent:
+    """Record of a gradient collapse event.
+
+    Attributes
+    ----------
+    iteration : int
+        Iteration when collapse was detected.
+    ratio : float
+        Gradient ratio at detection.
+    physical_grad_norm : float
+        Physical parameter gradient norm.
+    per_angle_grad_norm : float
+        Per-angle parameter gradient norm.
+    response_mode : str
+        Response action taken.
+    """
+
+    iteration: int
+    ratio: float
+    physical_grad_norm: float
+    per_angle_grad_norm: float
+    response_mode: str
+
+
+class GradientCollapseMonitor:
+    """Monitor for detecting and responding to gradient collapse.
+
+    This monitor tracks the ratio of physical to per-angle gradient norms
+    during optimization. When the ratio drops below a threshold for
+    consecutive iterations, it indicates that physical parameters are
+    losing gradient signal (being absorbed by per-angle parameters).
+
+    Parameters
+    ----------
+    config : GradientMonitorConfig
+        Monitor configuration.
+    physical_indices : list of int
+        Indices of physical parameters in the full parameter vector.
+    per_angle_indices : list of int
+        Indices of per-angle parameters in the full parameter vector.
+
+    Attributes
+    ----------
+    collapse_detected : bool
+        Whether gradient collapse has been detected.
+    consecutive_count : int
+        Current count of consecutive low-ratio iterations.
+
+    Notes
+    -----
+    History is capped at MAX_HISTORY_SIZE to prevent memory leaks during
+    long-running optimizations. Older entries are discarded when the limit
+    is reached.
+
+    Examples
+    --------
+    >>> config = GradientMonitorConfig(ratio_threshold=0.01, consecutive_triggers=5)
+    >>> monitor = GradientCollapseMonitor(config, physical_indices=[6,7,8,9,10,11,12],
+    ...                                    per_angle_indices=list(range(6)))
+    >>> for iter in range(100):
+    ...     gradients = compute_gradients(params)
+    ...     status = monitor.check(gradients, iter)
+    ...     if status == "COLLAPSE_DETECTED":
+    ...         response = monitor.get_response()
+    ...         # Take action based on response
+    """
+
+    # Maximum history entries to prevent memory leaks
+    # At ~100 bytes per entry, 1000 entries = ~100 KB max
+    MAX_HISTORY_SIZE: int = 1000
+
+    def __init__(
+        self,
+        config: GradientMonitorConfig,
+        physical_indices: list[int],
+        per_angle_indices: list[int],
+    ):
+        """Initialize gradient collapse monitor.
+
+        Parameters
+        ----------
+        config : GradientMonitorConfig
+            Monitor configuration.
+        physical_indices : list of int
+            Indices of physical parameters.
+        per_angle_indices : list of int
+            Indices of per-angle parameters.
+        """
+        self.config = config
+        self.physical_indices = list(physical_indices)
+        self.per_angle_indices = list(per_angle_indices)
+
+        self.history: list[dict] = []
+        self.consecutive_count: int = 0
+        self.collapse_detected: bool = False
+        self.collapse_events: list[CollapseEvent] = []
+
+        # Track best params for recovery
+        self.best_params: np.ndarray | None = None
+        self.best_loss: float = float("inf")
+
+    def check(
+        self,
+        gradients: np.ndarray,
+        iteration: int,
+        params: np.ndarray | None = None,
+        loss: float | None = None,
+    ) -> str:
+        """Check for gradient collapse.
+
+        Parameters
+        ----------
+        gradients : np.ndarray
+            Full gradient vector.
+        iteration : int
+            Current iteration number.
+        params : np.ndarray, optional
+            Current parameters (for response actions and tracking).
+        loss : float, optional
+            Current loss value (for tracking best params).
+
+        Returns
+        -------
+        str
+            Status: "OK", "WARNING", "COLLAPSE_DETECTED"
+        """
+        if not self.config.enable:
+            return "OK"
+
+        # Skip if not on check interval
+        if iteration % self.config.check_interval != 0:
+            return "OK"
+
+        # Track best params
+        if params is not None and loss is not None:
+            if loss < self.best_loss:
+                self.best_loss = loss
+                self.best_params = params.copy()
+
+        # Compute gradient norms
+        physical_grad_norm = np.linalg.norm(gradients[self.physical_indices])
+        per_angle_grad_norm = np.linalg.norm(gradients[self.per_angle_indices])
+
+        # Compute ratio (avoid division by zero)
+        ratio = physical_grad_norm / (per_angle_grad_norm + 1e-12)
+
+        # Record history with size limit to prevent memory leaks
+        # Drop oldest entries when limit is reached
+        if len(self.history) >= self.MAX_HISTORY_SIZE:
+            self.history.pop(0)
+
+        self.history.append(
+            {
+                "iteration": iteration,
+                "physical_grad_norm": float(physical_grad_norm),
+                "per_angle_grad_norm": float(per_angle_grad_norm),
+                "ratio": float(ratio),
+            }
+        )
+
+        # Check for collapse
+        if ratio < self.config.ratio_threshold:
+            self.consecutive_count += 1
+        else:
+            self.consecutive_count = 0
+
+        # Trigger collapse detection
+        if self.consecutive_count >= self.config.consecutive_triggers:
+            if not self.collapse_detected:
+                self.collapse_detected = True
+                event = CollapseEvent(
+                    iteration=iteration,
+                    ratio=ratio,
+                    physical_grad_norm=physical_grad_norm,
+                    per_angle_grad_norm=per_angle_grad_norm,
+                    response_mode=self.config.response_mode,
+                )
+                self.collapse_events.append(event)
+
+                logger.warning(
+                    f"GRADIENT COLLAPSE DETECTED at iteration {iteration}! "
+                    f"ratio={ratio:.6f} < threshold={self.config.ratio_threshold}"
+                )
+                logger.warning(
+                    f"  Physical gradient norm: {physical_grad_norm:.6e}"
+                )
+                logger.warning(
+                    f"  Per-angle gradient norm: {per_angle_grad_norm:.6e}"
+                )
+                logger.warning(f"  Response mode: {self.config.response_mode}")
+
+            return "COLLAPSE_DETECTED"
+
+        if self.consecutive_count > 0:
+            return "WARNING"
+
+        return "OK"
+
+    def get_response(self) -> dict | None:
+        """Get response action after collapse detection.
+
+        Returns
+        -------
+        dict or None
+            Response action dictionary, or None if no collapse.
+        """
+        if not self.collapse_detected:
+            return None
+
+        return {
+            "mode": self.config.response_mode,
+            "reset_per_angle": self.config.reset_per_angle_to_mean,
+            "lambda_multiplier": self.config.lambda_multiplier_on_collapse,
+            "best_params": self.best_params,
+            "best_loss": self.best_loss,
+            "history": self.history[-10:],  # Last 10 entries
+            "collapse_events": self.collapse_events,
+        }
+
+    def compute_reset_params(
+        self, params: np.ndarray, n_phi: int
+    ) -> np.ndarray:
+        """Compute parameters with per-angle values reset to mean.
+
+        Parameters
+        ----------
+        params : np.ndarray
+            Current parameter vector.
+        n_phi : int
+            Number of phi angles.
+
+        Returns
+        -------
+        np.ndarray
+            Parameters with per-angle values reset.
+        """
+        reset_params = params.copy()
+
+        # Assuming per-angle layout: [contrast_0..n_phi, offset_0..n_phi, physical...]
+        if len(self.per_angle_indices) >= 2 * n_phi:
+            # Reset contrast to mean
+            contrast_indices = self.per_angle_indices[:n_phi]
+            contrast_mean = np.mean(params[contrast_indices])
+            reset_params[contrast_indices] = contrast_mean
+
+            # Reset offset to mean
+            offset_indices = self.per_angle_indices[n_phi : 2 * n_phi]
+            offset_mean = np.mean(params[offset_indices])
+            reset_params[offset_indices] = offset_mean
+
+            logger.info(
+                f"Reset per-angle params: contrast={contrast_mean:.4f}, "
+                f"offset={offset_mean:.4f}"
+            )
+
+        return reset_params
+
+    def reset(self) -> None:
+        """Reset monitor state for new optimization run."""
+        self.history = []
+        self.consecutive_count = 0
+        self.collapse_detected = False
+        self.collapse_events = []
+        self.best_params = None
+        self.best_loss = float("inf")
+
+    def get_diagnostics(self) -> dict:
+        """Get monitoring diagnostics for logging.
+
+        Returns
+        -------
+        dict
+            Diagnostic information.
+        """
+        if not self.history:
+            return {
+                "enabled": self.config.enable,
+                "n_checks": 0,
+            }
+
+        ratios = [h["ratio"] for h in self.history]
+        physical_norms = [h["physical_grad_norm"] for h in self.history]
+
+        return {
+            "enabled": self.config.enable,
+            "n_checks": len(self.history),
+            "min_ratio": min(ratios),
+            "max_ratio": max(ratios),
+            "mean_ratio": float(np.mean(ratios)),
+            "final_ratio": ratios[-1] if ratios else None,
+            "min_physical_grad": min(physical_norms),
+            "max_physical_grad": max(physical_norms),
+            "mean_physical_grad": float(np.mean(physical_norms)),
+            "collapse_detected": self.collapse_detected,
+            "consecutive_triggers": self.consecutive_count,
+            "n_collapse_events": len(self.collapse_events),
+            "response_mode": self.config.response_mode,
+            "threshold": self.config.ratio_threshold,
+        }
+
+    def log_summary(self) -> None:
+        """Log monitoring summary."""
+        diag = self.get_diagnostics()
+
+        if not diag["enabled"]:
+            logger.info("Gradient monitoring: DISABLED")
+            return
+
+        if diag["n_checks"] == 0:
+            logger.info("Gradient monitoring: No checks performed")
+            return
+
+        logger.info("Gradient Collapse Monitor Summary:")
+        logger.info(f"  Checks performed: {diag['n_checks']}")
+        logger.info(
+            f"  Gradient ratio: min={diag['min_ratio']:.6f}, "
+            f"max={diag['max_ratio']:.6f}, mean={diag['mean_ratio']:.6f}"
+        )
+        logger.info(f"  Threshold: {diag['threshold']}")
+
+        if diag["collapse_detected"]:
+            logger.warning(f"  COLLAPSE DETECTED: {diag['n_collapse_events']} events")
+            logger.warning(f"  Response mode: {diag['response_mode']}")
+        else:
+            logger.info("  Status: No collapse detected")
+
+
+def create_gradient_function_with_monitoring(
+    grad_fn: Callable[[np.ndarray], np.ndarray],
+    monitor: GradientCollapseMonitor,
+) -> Callable[[np.ndarray], np.ndarray]:
+    """Wrap gradient function to include monitoring.
+
+    Parameters
+    ----------
+    grad_fn : Callable[[np.ndarray], np.ndarray]
+        Original gradient function.
+    monitor : GradientCollapseMonitor
+        Monitor instance.
+
+    Returns
+    -------
+    Callable[[np.ndarray], np.ndarray]
+        Wrapped gradient function that records to monitor.
+    """
+    iteration_counter = [0]  # Mutable counter
+
+    def monitored_grad_fn(params: np.ndarray) -> np.ndarray:
+        gradients = grad_fn(params)
+        monitor.check(gradients, iteration_counter[0], params=params)
+        iteration_counter[0] += 1
+        return gradients
+
+    return monitored_grad_fn
