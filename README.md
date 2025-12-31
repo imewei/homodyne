@@ -2,13 +2,41 @@
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Python](https://img.shields.io/badge/Python-3.12%2B-blue)](https://www.python.org/)
-[![Version](https://img.shields.io/badge/Version-2.6.0-green.svg)](#)
+[![Version](https://img.shields.io/badge/Version-2.9.0-green.svg)](#)
 [![Documentation](https://img.shields.io/badge/docs-sphinx-blue.svg)](https://homodyne.readthedocs.io)
 [![ReadTheDocs](https://readthedocs.org/projects/homodyne/badge/?version=latest)](https://homodyne.readthedocs.io/en/latest/)
 [![GitHub Actions](https://github.com/imewei/homodyne/actions/workflows/docs.yml/badge.svg)](https://github.com/imewei/homodyne/actions/workflows/docs.yml)
 [![DOI](https://zenodo.org/badge/DOI/10.1073/pnas.2401162121.svg)](https://doi.org/10.1073/pnas.2401162121)
 
-## ⚠️ **BREAKING CHANGES: v2.5.x**
+## ⚠️ **BREAKING CHANGES: v2.9.x**
+
+### v2.9.0 - Anti-Degeneracy Defense System
+
+**Comprehensive solution for parameter collapse** in laminar flow mode with many phi angles.
+
+**Key Features:**
+
+- **Layer 1 - Fourier Reparameterization**: Reduces 46 per-angle params to 10 Fourier coefficients (78% reduction for 23 angles)
+- **Layer 2 - Hierarchical Optimization**: Alternates physical/per-angle stages to break gradient cancellation
+- **Layer 3 - Adaptive CV Regularization**: Auto-tuned lambda (100× stronger than v2.8)
+- **Layer 4 - Gradient Collapse Detection**: Runtime monitoring with automatic response
+
+**Configuration:**
+
+```yaml
+optimization:
+  nlsq:
+    anti_degeneracy:
+      per_angle_mode: "auto"        # "independent", "fourier", "auto"
+      hierarchical:
+        enable: true
+      regularization:
+        mode: "relative"
+        lambda: 1.0                 # 100× stronger than v2.8
+        target_cv: 0.10
+```
+
+See [Anti-Degeneracy Defense Documentation](docs/research/anti_degeneracy_defense.rst) for details.
 
 ### v2.5.0 - Streaming Optimizer for Large Datasets
 
