@@ -381,7 +381,7 @@ class StratifiedResidualFunction:
     def __call__(self, params: np.ndarray) -> np.ndarray:
         params_jax = jnp.asarray(params)
         residuals_jax = self._call_jax(params_jax)
-        return np.asarray(np.array(residuals_jax))
+        return np.asarray(residuals_jax)
 
     def validate_chunk_structure(self) -> bool:
         """
