@@ -46,6 +46,7 @@ from homodyne.optimization.nlsq.hierarchical import (
     HierarchicalConfig,
     HierarchicalOptimizer,
 )
+from homodyne.optimization.nlsq.parameter_index_mapper import ParameterIndexMapper
 from homodyne.utils.logging import get_logger
 
 logger = get_logger(__name__)
@@ -212,6 +213,7 @@ class AntiDegeneracyController:
     hierarchical: HierarchicalOptimizer | None = None
     regularizer: AdaptiveRegularizer | None = None
     monitor: GradientCollapseMonitor | None = None
+    mapper: ParameterIndexMapper | None = None  # T018: Centralized index mapping
     per_angle_mode_actual: str = "independent"
     _is_initialized: bool = field(default=False, repr=False)
 
@@ -289,6 +291,17 @@ class AntiDegeneracyController:
             logger.info(f"  Parameter reduction: {2*self.n_phi} -> {self.fourier.n_coeffs}")
             logger.info("=" * 60)
 
+        # T019: Create ParameterIndexMapper after Layer 1 initialization
+        # This provides centralized, consistent index mapping for all subsequent layers
+        self.mapper = ParameterIndexMapper(
+            n_phi=self.n_phi,
+            n_physical=self.n_physical,
+            fourier=self.fourier,
+        )
+        logger.debug(
+            f"ANTI-DEGENERACY: ParameterIndexMapper created: {self.mapper.get_diagnostics()}"
+        )
+
         # Layer 2: Hierarchical Optimization
         if config.hierarchical_enable:
             hier_config = HierarchicalConfig(
@@ -312,6 +325,8 @@ class AntiDegeneracyController:
             logger.info("=" * 60)
 
         # Layer 3: Adaptive Regularization
+        # T020: Use mapper.get_group_indices() instead of n_phi-based calculation
+        # This fixes the dimension mismatch when Fourier reparameterization is active
         reg_config = AdaptiveRegularizationConfig(
             enable=True,
             mode=config.regularization_mode,
@@ -319,8 +334,11 @@ class AntiDegeneracyController:
             target_cv=config.regularization_target_cv,
             target_contribution=config.regularization_target_contribution,
             max_cv=config.regularization_max_cv,
+            group_indices=self.mapper.get_group_indices(),  # T020: Use mapper indices
         )
-        self.regularizer = AdaptiveRegularizer(reg_config, self.n_phi)
+        self.regularizer = AdaptiveRegularizer(
+            reg_config, self.mapper.n_per_group  # T020: Use Fourier-aware n_per_group
+        )
         logger.info("=" * 60)
         logger.info("ANTI-DEGENERACY: Layer 3 - Adaptive Regularization")
         logger.info(f"  Mode: {config.regularization_mode}")
@@ -329,12 +347,10 @@ class AntiDegeneracyController:
         logger.info("=" * 60)
 
         # Layer 4: Gradient Collapse Monitor
+        # Use mapper for consistent index calculation
         if config.gradient_monitoring_enable:
-            n_per_angle = (
-                self.fourier.n_coeffs if self.fourier else 2 * self.n_phi
-            )
-            per_angle_indices = list(range(n_per_angle))
-            physical_indices = list(range(n_per_angle, n_per_angle + self.n_physical))
+            per_angle_indices = self.mapper.get_per_angle_indices()
+            physical_indices = self.mapper.get_physical_indices()
 
             monitor_config = GradientMonitorConfig(
                 enable=True,
@@ -441,6 +457,9 @@ class AntiDegeneracyController:
     def get_group_variance_indices(self) -> list[tuple[int, int]] | None:
         """Get group variance indices for NLSQ regularization.
 
+        T024: Delegates to ParameterIndexMapper for consistent index calculation
+        regardless of Fourier mode.
+
         Returns
         -------
         list[tuple[int, int]] | None
@@ -449,6 +468,11 @@ class AntiDegeneracyController:
         if not self.is_enabled:
             return None
 
+        # T024: Delegate to mapper for consistent Fourier-aware indices
+        if self.mapper is not None:
+            return self.mapper.get_group_indices()
+
+        # Fallback for backward compatibility (should not reach here in normal use)
         n_per_group = (
             self.fourier.n_coeffs_per_param if self.use_fourier else self.n_phi
         )
@@ -469,6 +493,10 @@ class AntiDegeneracyController:
             "n_phi": self.n_phi,
             "n_physical": self.n_physical,
         }
+
+        # T032: Add mapper diagnostics
+        if self.mapper:
+            diag["mapper"] = self.mapper.get_diagnostics()
 
         if self.fourier:
             diag["fourier"] = self.fourier.get_diagnostics()

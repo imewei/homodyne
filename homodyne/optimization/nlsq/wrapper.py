@@ -3222,6 +3222,20 @@ class NLSQWrapper:
                 # to preserve stratification boundaries during re-chunking
                 self.chunk_sizes = chunk_sizes
 
+        # CRITICAL FIX (Dec 2025): Pre-shuffle stratified data before returning
+        # This prevents the hybrid streaming optimizer from seeing angle-sequential data
+        # during Adam warmup, which would cause local minimum traps (gamma_dot_t0 -> 0)
+        # The shuffle must happen HERE, not in _fit_with_stratified_hybrid_streaming,
+        # because other code paths may also use the stratified data.
+        shuffle_seed = 42  # Fixed seed for reproducibility
+        rng = np.random.RandomState(shuffle_seed)
+        perm = rng.permutation(len(phi_stratified))
+        phi_stratified = phi_stratified[perm]
+        t1_stratified = t1_stratified[perm]
+        t2_stratified = t2_stratified[perm]
+        g2_stratified = g2_stratified[perm]
+        logger.info(f"Pre-shuffled stratified data (seed={shuffle_seed}) to prevent local minimum traps")
+
         stratified_data = StratifiedData(
             phi_stratified,
             t1_stratified,
@@ -4615,7 +4629,29 @@ class NLSQWrapper:
             return popt, pcov, info
 
         except Exception as e:
+            # T031: Log detailed warning explaining failure and lost capabilities
             logger.error(f"AdaptiveHybridStreamingOptimizer failed: {e}")
+            logger.warning(
+                "=" * 60 + "\n"
+                "HYBRID OPTIMIZER FAILURE - Falling back to basic streaming\n"
+                "=" * 60 + "\n"
+                "The AdaptiveHybridStreamingOptimizer encountered an error.\n"
+                "\n"
+                "Capabilities lost with fallback:\n"
+                "  - Parameter normalization (gradient equalization)\n"
+                "  - Adam warmup + Gauss-Newton hybrid convergence\n"
+                "  - Exact J^T J covariance accumulation\n"
+                "\n"
+                "Fallback uses basic streaming optimizer which may:\n"
+                "  - Converge slower (1000+ vs ~110 iterations)\n"
+                "  - Miss shear parameters (imbalanced gradients)\n"
+                "  - Produce less accurate uncertainties\n"
+                "\n"
+                f"Error details: {type(e).__name__}: {str(e)}\n"
+                "=" * 60
+            )
+            # T030: TODO - Implement 3-attempt retry with HybridRecoveryConfig
+            # For now, immediately raise to trigger fallback to streaming
             if isinstance(e, NLSQOptimizationError):
                 raise
             else:
@@ -5938,11 +5974,20 @@ class NLSQWrapper:
             per_angle_indices = list(range(n_per_angle))
             physical_indices = list(range(n_per_angle, n_per_angle + n_physical))
 
+            # Compute gamma_dot_t0 index for watch_parameters
+            # In laminar_flow, physical params are [D0, alpha, D_offset, gamma_dot_t0, beta, gamma_dot_t_offset, phi0]
+            # gamma_dot_t0 is at physical_indices[3] = n_per_angle + 3
+            gamma_dot_t0_idx = n_per_angle + 3  # Index of gamma_dot_t0 in full param vector
+
             monitor_config = GradientMonitorConfig(
                 enable=True,
                 ratio_threshold=float(gradient_monitoring_config.get("ratio_threshold", 0.01)),
                 consecutive_triggers=gradient_monitoring_config.get("consecutive_triggers", 5),
                 response_mode=gradient_monitoring_config.get("response", "hierarchical"),
+                # NEW (Dec 2025): Watch gamma_dot_t0 specifically for gradient collapse
+                # This detects when shear parameter gradient vanishes during Adam warmup
+                watch_parameters=[gamma_dot_t0_idx],
+                watch_threshold=float(gradient_monitoring_config.get("watch_threshold", 1e-8)),
             )
             gradient_monitor = GradientCollapseMonitor(
                 config=monitor_config,
@@ -6228,19 +6273,10 @@ class NLSQWrapper:
         logger.info(f"Data preparation completed in {prep_time:.2f}s")
         logger.info(f"  Dataset size: {len(y_data):,} points")
 
-        # CRITICAL FIX (Dec 2025): Shuffle data to prevent local minimum traps
-        # The streaming optimizer processes data in chunks. If data is ordered by angle
-        # (sequentially), the optimizer sees only one angle at a time during warmup.
-        # This causes it to fit parameters to the first angle (local minimum) and fail
-        # to recover when later angles appear. Shuffling ensures each chunk is
-        # statistically representative of the global dataset.
-        logger.info("Shuffling data for hybrid streaming optimization...")
-        shuffle_seed = 42  # Fixed seed for reproducibility
-        rng = np.random.RandomState(shuffle_seed)
-        perm = rng.permutation(len(y_data))
-        x_data = x_data[perm]
-        y_data = y_data[perm]
-        logger.info(f"  Data shuffled (seed={shuffle_seed})")
+        # NOTE (Dec 2025): Data is already pre-shuffled at stratification stage
+        # in _apply_stratification_if_needed(). No additional shuffle needed here.
+        # The pre-shuffle prevents Adam warmup from seeing angle-sequential data,
+        # which would cause local minimum traps (gamma_dot_t0 -> 0).
 
         # =====================================================================
         # Anti-Degeneracy Defense System v2.9.0 - EXECUTION INTEGRATION

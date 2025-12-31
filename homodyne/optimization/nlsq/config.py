@@ -17,6 +17,57 @@ logger = get_logger(__name__)
 
 
 @dataclass
+class HybridRecoveryConfig:
+    """Configuration for hybrid streaming optimizer recovery strategy.
+
+    T029: Implements 3-attempt recovery with progressively conservative settings.
+
+    When the hybrid streaming optimizer fails, it retries with:
+    - Reduced learning rate (0.5× per retry)
+    - Increased regularization (2× per retry)
+    - Smaller trust region (0.5× per retry)
+
+    Attributes
+    ----------
+    max_retries : int
+        Maximum retry attempts. Default: 3.
+    lr_decay : float
+        Learning rate multiplier per retry. Default: 0.5.
+    lambda_growth : float
+        Regularization multiplier per retry. Default: 2.0.
+    trust_decay : float
+        Trust region multiplier per retry. Default: 0.5.
+    log_retries : bool
+        Whether to log retry attempts. Default: True.
+    """
+
+    max_retries: int = 3
+    lr_decay: float = 0.5
+    lambda_growth: float = 2.0
+    trust_decay: float = 0.5
+    log_retries: bool = True
+
+    def get_retry_settings(self, attempt: int) -> dict:
+        """Get settings for a specific retry attempt.
+
+        Parameters
+        ----------
+        attempt : int
+            Retry attempt number (1-based).
+
+        Returns
+        -------
+        dict
+            Settings for this retry attempt.
+        """
+        return {
+            "lr_multiplier": self.lr_decay ** attempt,
+            "lambda_multiplier": self.lambda_growth ** attempt,
+            "trust_multiplier": self.trust_decay ** attempt,
+        }
+
+
+@dataclass
 class NLSQConfig:
     """Configuration for NLSQ (Nonlinear Least Squares) optimization.
 

@@ -31,6 +31,9 @@ from homodyne.optimization.nlsq.core import (
     fit_nlsq_multistart,
 )
 
+# Anti-degeneracy defense system (v2.9.0)
+from homodyne.optimization.nlsq.parameter_index_mapper import ParameterIndexMapper
+
 # New refactored modules (Dec 2025)
 from homodyne.optimization.nlsq.data_prep import (
     ExpandedParameters,
@@ -121,6 +124,8 @@ __all__ = [
     "JAX_AVAILABLE",
     "NLSQ_AVAILABLE",
     "_get_param_names",
+    # Anti-degeneracy defense system (v2.9.0)
+    "ParameterIndexMapper",
     # Multi-start (v2.6.0)
     # NOTE: No subsampling - numerical precision takes priority
     "MultiStartConfig",
