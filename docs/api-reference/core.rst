@@ -70,6 +70,36 @@ Model Classes
    homodyne.core.models.ShearModel
    homodyne.core.models.CombinedModel
 
+Model Mixins (v2.9.0)
+~~~~~~~~~~~~~~~~~~~~~
+
+Reusable mixins for gradient computation and benchmarking capabilities.
+
+.. automodule:: homodyne.core.model_mixins
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+Key Classes
+"""""""""""
+
+.. autosummary::
+   :nosignatures:
+
+   homodyne.core.model_mixins.GradientCapabilityMixin
+   homodyne.core.model_mixins.BenchmarkingMixin
+   homodyne.core.model_mixins.OptimizationRecommendationMixin
+
+Backend API
+~~~~~~~~~~~
+
+Abstract base class for physics backend implementations.
+
+.. automodule:: homodyne.core.backend_api
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
 Homodyne Model
 --------------
 
@@ -169,7 +199,7 @@ Key Shared Functions
    homodyne.core.physics_utils.apply_diagonal_correction
 
 Numerical Stability
-^^^^^^^^^^^^^^^^^^^
+~~~~~~~~~~~~~~~~~~~
 
 The physics_utils module implements several numerical stability techniques:
 

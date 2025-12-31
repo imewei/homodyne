@@ -361,6 +361,26 @@ Performance Considerations
 - Streaming loader for ultra-large datasets
 - Automatic memory estimation before loading
 
+**Selective HDF5 Loading (v2.9.0)**:
+
+The ``XPCSDataLoader`` now supports selective loading of HDF5 datasets with memory-mapped
+arrays for improved performance on large files:
+
+- Loads only specified phi angles from multi-angle datasets
+- Uses memory-mapped (mmap) arrays to avoid loading entire files
+- Reduces memory footprint by 50-80% for typical multi-angle datasets
+- Automatic fallback to standard loading if mmap fails
+
+Configuration::
+
+    from homodyne.data import XPCSDataLoader
+
+    loader = XPCSDataLoader(config_path="config.yaml")
+    data = loader.load_experimental_data(
+        phi_indices=[0, 5, 10],  # Load only specific angles
+        use_mmap=True            # Enable memory mapping
+    )
+
 See Also
 --------
 

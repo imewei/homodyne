@@ -202,6 +202,65 @@ Key Classes
    homodyne.optimization.nlsq.strategies.executors.LargeDatasetExecutor
    homodyne.optimization.nlsq.strategies.executors.StreamingExecutor
 
+.. _nlsq-multistart-optimizer:
+
+Multi-Start Optimization (v2.6.0)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Multi-start optimization explores parameter space from multiple starting points
+using Latin Hypercube Sampling to find the global optimum and detect parameter
+degeneracy.
+
+.. automodule:: homodyne.optimization.nlsq.multistart
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+Key Classes
+^^^^^^^^^^^
+
+.. autosummary::
+   :nosignatures:
+
+   homodyne.optimization.nlsq.multistart.MultiStartConfig
+   homodyne.optimization.nlsq.multistart.MultiStartResult
+   homodyne.optimization.nlsq.multistart.SingleStartResult
+
+Configuration
+^^^^^^^^^^^^^
+
+Multi-start can be enabled via YAML configuration:
+
+.. code-block:: yaml
+
+   optimization:
+     nlsq:
+       multi_start:
+         enable: true
+         n_starts: 10
+         seed: 42
+         sampling_strategy: latin_hypercube
+         use_screening: true
+         screen_keep_fraction: 0.5
+         refine_top_k: 3
+         degeneracy_threshold: 0.1
+
+Key Features
+^^^^^^^^^^^^
+
+- **Latin Hypercube Sampling**: Better space-filling than random sampling
+- **Screening Phase**: Filters poor starting points before expensive optimization
+- **Parallel Execution**: Uses ProcessPoolExecutor for multi-core parallelism
+- **Basin Clustering**: Identifies unique local minima in parameter space
+- **Degeneracy Detection**: Warns when multiple solutions have similar chi-squared
+
+CLI Integration
+^^^^^^^^^^^^^^^
+
+.. code-block:: bash
+
+   homodyne --config config.yaml --method nlsq --multi-start
+
 .. _nlsq-streaming-optimizer:
 
 Streaming Optimizer for Large Datasets
@@ -1143,6 +1202,26 @@ Key Classes
 
    homodyne.optimization.nlsq.anti_degeneracy_controller.AntiDegeneracyConfig
    homodyne.optimization.nlsq.anti_degeneracy_controller.AntiDegeneracyController
+
+NLSQ Configuration (v2.9.0)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Configuration dataclasses and utilities for NLSQ optimization.
+
+.. automodule:: homodyne.optimization.nlsq.config
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+Configuration Utilities
+^^^^^^^^^^^^^^^^^^^^^^^
+
+Shared configuration extraction utilities used across NLSQ components.
+
+.. automodule:: homodyne.optimization.nlsq.config_utils
+   :members:
+   :undoc-members:
+   :show-inheritance:
 
 Supporting Modules
 ------------------
