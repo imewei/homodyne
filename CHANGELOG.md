@@ -9,36 +9,258 @@ ______________________________________________________________________
 
 ## [Unreleased]
 
+*No unreleased changes*
+
+______________________________________________________________________
+
+## [2.9.0] - 2025-12-31
+
+### Anti-Degeneracy Defense System
+
+Major feature release addressing **structural degeneracy** in laminar_flow mode with many
+phi angles. When using hybrid streaming with n_phi > 6 angles, the optimizer could
+incorrectly collapse shear parameters (gamma_dot_t0) to zero because per-angle parameters
+absorbed the angle-dependent signal.
+
+#### 4-Layer Defense System
+
+| Layer | Solution | Effect |
+|-------|----------|--------|
+| 1 | Fourier Reparameterization | Reduces 2×n_phi per-angle params to 10 Fourier coefficients |
+| 2 | Hierarchical Optimization | Alternates physical/per-angle stages to break gradient cancellation |
+| 3 | Adaptive CV Regularization | Auto-tunes λ to contribute ~10% to loss |
+| 4 | Gradient Collapse Monitor | Runtime detection with automatic response |
+
+#### New Files
+
+- `homodyne/optimization/nlsq/fourier_reparam.py` - Layer 1: Fourier basis expansion
+- `homodyne/optimization/nlsq/hierarchical.py` - Layer 2: Alternating optimization
+- `homodyne/optimization/nlsq/adaptive_regularization.py` - Layer 3: CV-based tuning
+- `homodyne/optimization/nlsq/gradient_monitor.py` - Layer 4: Collapse detection
+- `homodyne/optimization/nlsq/anti_degeneracy_controller.py` - Unified controller
+- `docs/specs/anti-degeneracy-defense-v2.9.0.md` - Full specification
+
+#### Configuration
+
+```yaml
+optimization:
+  nlsq:
+    anti_degeneracy:
+      per_angle_mode: "auto"     # "independent", "fourier", or "auto"
+      fourier_order: 2           # 5 coeffs per param group
+      hierarchical:
+        enable: true
+        max_outer_iterations: 5
+      regularization:
+        mode: "relative"
+        target_cv: 0.10          # 10% variation target
+```
+
+#### When to Use
+
+- laminar_flow mode with n_phi > 6 angles
+- gamma_dot_t0 collapsing to lower bound
+- Per-angle contrast/offset showing high variance (CV > 20%)
+
+### Performance Optimizations
+
+- **perf(nlsq)**: Parallelized multi-start screening for faster global optimization
+- **perf(data)**: Selective HDF5 loading with memory-mapped arrays
+- **perf(cmc)**: Vectorized per-angle scaling estimation
+- **perf(cmc)**: Batch PRNG generation and adaptive polling
+- **perf(jax)**: Meshgrid caching for repeated time arrays
+
+### Refactoring
+
+- **refactor(nlsq)**: Extract shared config utilities to `config_utils.py`
+- **refactor(core)**: Extract model mixins for gradient and benchmarking
+
+### Testing
+
+- **test(cmc)**: Update multiprocessing tests for psutil detection
+- **test(nlsq)**: Add anti-degeneracy defense unit tests
+
+______________________________________________________________________
+
+## [2.7.2] - 2025-12-15
+
+### Group Variance Regularization (NLSQ 0.3.8)
+
+Added regularization to prevent per-angle parameter absorption in laminar_flow mode.
+
+**Problem**: With 23 angles, 46 per-angle params (contrast + offset) vs 7 physical params.
+Per-angle params have larger gradients and can "absorb" shear signal.
+
+**Solution**: Add penalty term constraining per-angle parameter variance:
+```
+L = MSE + λ × [Var(contrast_per_angle) + Var(offset_per_angle)]
+```
+
+**Configuration**:
+```yaml
+optimization:
+  nlsq:
+    hybrid_streaming:
+      enable_group_variance_regularization: true
+      group_variance_lambda: 0.01
+```
+
+______________________________________________________________________
+
+## [2.7.1] - 2025-12-12
+
+### Per-Angle Initialization Fix
+
+**Fixed shear parameter collapse** in laminar_flow mode with many angles (n_phi > 3).
+
+**Root Cause**: When expanding parameters to per-angle form, code used uniform
+initialization (`np.full(n_phi, contrast_single)`), creating physics mismatch with
+nonzero gamma_dot_t0. The Adam optimizer found it easier to absorb shear signal into
+per-angle params, collapsing gamma_dot_t0 to zero.
+
+**Fix**: New `_compute_consistent_per_angle_init()` computes per-angle contrast/offset
+consistent with initial physical parameters via linear regression per angle.
+
+______________________________________________________________________
+
+## [2.7.0] - 2025-12-10
+
+### Adaptive Memory Threshold
+
+Added adaptive memory threshold based on system RAM for NLSQ streaming mode selection.
+
+- Default: 75% of total system RAM as threshold
+- Fallback: 16 GB if memory detection fails
+- Override via config: `memory_threshold_gb` (explicit) or `memory_fraction` (adaptive)
+- Override via env var: `NLSQ_MEMORY_FRACTION` (0.1-0.9)
+
+### Dependency Updates
+
+- NLSQ: 0.3.6 → 0.3.7 → 0.4.2 compatibility
+- Added numba/llvmlite for Python 3.13 compatibility
+- Relaxed version upper bounds for better compatibility
+
+______________________________________________________________________
+
+## [2.6.0] - 2025-12-05
+
+### Multi-Start NLSQ Optimization
+
+Added multi-start optimization with Latin Hypercube Sampling for global optimization and
+parameter degeneracy detection.
+
+#### Dataset Size-Based Strategy Selection
+
+| Dataset Size | Strategy | Approach | Overhead |
+|--------------|----------|----------|----------|
+| < 1M points | **full** | Run N complete fits in parallel | N× |
+| 1M - 100M | **subsample** | Multi-start on 500K subsample, full fit from best | ~1.1× |
+| > 100M | **phase1** | Parallel Adam warmup, streaming from best | ~1.2× |
+
+#### Configuration
+
+```yaml
+optimization:
+  nlsq:
+    multi_start:
+      enable: false               # User opt-in
+      n_starts: 10                # Number of starting points
+      seed: 42                    # Random seed for reproducibility
+      sampling_strategy: latin_hypercube
+      use_screening: true         # Pre-filter poor starting points
+      screen_keep_fraction: 0.5   # Keep top 50% after screening
+```
+
+#### Features
+
+- **Latin Hypercube Sampling**: Better space-filling than random sampling
+- **Screening Phase**: Filters poor starting points before expensive optimization
+- **Parallel Execution**: Uses ProcessPoolExecutor for multi-core parallelism
+- **Basin Clustering**: Identifies unique local minima in parameter space
+- **Degeneracy Detection**: Warns when multiple solutions have similar chi-squared
+- **Progress Tracking**: Rich progress bar and phase-based logging
+
+#### CLI Integration
+
+```bash
+homodyne --config config.yaml --method nlsq --multi-start
+```
+
+### Progress Bar and Logging
+
+Added progress bar for NLSQ optimization with real-time parameter updates and convergence
+monitoring.
+
+______________________________________________________________________
+
+## [2.5.0] - 2025-11-25
+
+### Adaptive Hybrid Streaming Optimizer
+
+For large datasets (>10M points), NLSQ can use streaming optimization to avoid OOM errors.
+
+#### Four Phases
+
+1. **Phase 0**: Parameter normalization setup (bounds-based)
+2. **Phase 1**: Adam warmup with adaptive switching (fast initial exploration)
+3. **Phase 2**: Streaming Gauss-Newton with exact J^T J accumulation
+4. **Phase 3**: Denormalization and covariance transform
+
+#### Memory-Based Auto-Selection
+
+- Estimates peak memory: Jacobian (n_points × n_params × 8 bytes) + 3× intermediates
+- Switches to streaming if estimated memory > 75% available RAM
+- Default threshold: 75% of total system RAM (adaptive)
+
+#### Configuration
+
+```yaml
+optimization:
+  nlsq:
+    memory_fraction: 0.75
+    hybrid_streaming:
+      enable: true
+      normalize: true
+      warmup_iterations: 100
+      gauss_newton_max_iterations: 50
+      chunk_size: 50000
+```
+
+#### Performance Characteristics
+
+| Mode | Memory | Convergence | Covariance |
+|------|--------|-------------|------------|
+| Stratified LS | ~30+ GB | Exact (L-M) | Exact |
+| Old Streaming | ~2 GB | Slow (Adam) | Crude |
+| **Hybrid Streaming** | ~2 GB | Fast (Hybrid) | Exact |
+
 ### Fixed
 
-#### NLSQ Element-wise Integration Now Matches CMC Physics
+- NLSQ integration fixes for cumulative trapezoid integration matching CMC physics
+- Searchsorted index bounds checking
 
-**Fixed cumulative trapezoid integration in NLSQ element-wise mode** to match CMC physics
-exactly, eliminating up to 3.4% C₂ error in dynamic transitions.
+______________________________________________________________________
 
-**Problem:**
-For large arrays (n > 2000), NLSQ element-wise mode previously used a single trapezoid
-approximation `frame_diff * 0.5 * (D(t1) + D(t2))` which could produce different
-integral values than the cumulative trapezoid method used by CMC, especially when
-α ≠ 0 or β ≠ 0 (anomalous dynamics).
+## [2.4.3] - 2025-11-20
 
-**Solution:**
-NLSQ element-wise mode now builds a cumulative trapezoid on a fixed grid
-(MAX_GRID_SIZE=10001 points with exact `dt` spacing), maps each `(t1, t2)` pair to
-grid indices with `searchsorted`, and computes the integral via cumulative sum
-differences—the same method used by CMC.
+### Fixed
 
-**Changes:**
-- `homodyne/core/jax_backend.py`: `_compute_g1_diffusion_core` and `_compute_g1_shear_core`
-  now use `trapezoid_cumsum` with `searchsorted` index lookup in element-wise mode
-- `docs/research/theoretical_framework.rst`: Updated integration method documentation
-- Added `tests/integration/test_nlsq_cmc_consistency.py`: New consistency test
-- Added comprehensive `tests/unit/test_jax_backend.py`: 400+ lines of unit tests
+- **fix(cmc)**: Use cumulative trapezoid integration to match CMC physics exactly
+- **fix(config)**: Sync CMC template settings with CMCConfig defaults
+- **fix(cmc)**: Exclude z-space parameters from legacy stats extraction
 
-**Impact:**
-- NLSQ and CMC now produce identical C₂ values for the same parameters
-- Direct comparison between optimization methods is now valid
-- No changes required for users—fix is automatic
+### Added
+
+- **feat(cmc)**: Hierarchical shard combination with memory caps (max 2000 shards)
+- **feat(cmc)**: Add configurable timeouts, diagnostics, and runtime estimation
+
+### Documentation
+
+- Expanded optimization and core module API documentation
+
+______________________________________________________________________
+
+## [2.4.0] - 2025-11-15
 
 ### Added
 
@@ -61,96 +283,27 @@ hardware detection.
   - 16-35 cores → 6 devices (large workstations)
   - 36+ cores → 8 devices (HPC nodes)
 - **Configuration modes**:
-  - `mcmc`: 4 devices for parallel MCMC chains (multi-core workstations)
-  - `mcmc-hpc`: 8 devices for HPC clusters with 36+ cores
-  - `nlsq`: 1 device for optimal NLSQ performance (no parallelism overhead)
-  - `auto`: Automatic detection based on CPU hardware
+  - `mcmc`: 4 devices for parallel MCMC chains
+  - `mcmc-hpc`: 8 devices for HPC clusters
+  - `nlsq`: 1 device for optimal NLSQ performance
+  - `auto`: Automatic detection based on hardware
 - **Persistent configuration**: Saves mode preference to `~/.homodyne_xla_mode`
-- **Automatic activation**: XLA_FLAGS set when virtual environment is activated
 - **Shell integration**: Works with bash, zsh, and fish shells
-- **Conda/Mamba support**: Auto-sources XLA configuration on environment activation
-- **Environment variable override**: `HOMODYNE_XLA_MODE` takes precedence over config
-  file
-- **Manual override safety**: Respects existing `XLA_FLAGS` and never overwrites manual
-  settings
-- **Verbose mode**: `HOMODYNE_VERBOSE=1` shows XLA configuration details
-
-**New Files:**
-
-- `homodyne/cli/xla_config.py` - CLI utility for XLA configuration management
-- `homodyne/runtime/shell/activation/xla_config.bash` - Bash/Zsh activation script
-- `homodyne/runtime/shell/activation/xla_config.fish` - Fish shell activation script
-- `homodyne/runtime/shell/activation/__init__.py` - Activation module package marker
-
-**Modified Files:**
-
-- `homodyne/post_install.py` - Integrated XLA configuration into post-install workflow
-  - Added `create_xla_activation_scripts()` function
-  - Added `integrate_xla_with_venv_activate()` function
-  - Added `configure_xla_mode()` function
-  - Added `--xla-mode` CLI argument
-  - Updated interactive setup to include XLA configuration prompts
-  - Updated conda activation scripts to source XLA configuration
-- `pyproject.toml` - Added `homodyne-config-xla` entry point
-
-**Integration Points:**
-
-- **homodyne-post-install**: Interactive and non-interactive XLA setup
-  - `homodyne-post-install --interactive` - Prompts for XLA mode selection
-  - `homodyne-post-install --xla-mode auto` - Quick XLA configuration
-  - `homodyne-post-install --shell bash --xla-mode mcmc` - Combined setup
-- **Virtual environment activation**: Automatic XLA_FLAGS configuration
-  - Conda/Mamba: Auto-activated via `etc/conda/activate.d/`
-  - uv/venv/virtualenv: Activated via modified `activate` scripts
 
 **Performance Impact:**
 
-- **MCMC (4 chains, 14-core CPU)**: 1.4x speedup with 4 devices vs single device
-- **MCMC (8 chains, 36-core HPC)**: 1.8x speedup with 8 devices vs single device
-- **NLSQ optimization**: Optimal performance with 1 device (no overhead)
-- **Auto mode**: Adapts device count automatically based on hardware
+- **MCMC (4 chains, 14-core CPU)**: 1.4x speedup with 4 devices
+- **MCMC (8 chains, 36-core HPC)**: 1.8x speedup with 8 devices
+- **NLSQ optimization**: Optimal performance with 1 device
 
-**Documentation:**
+#### CMC v3.0 with ArviZ-Native Output
 
-- Updated `README.md` with XLA Configuration section after Shell Completion
-- Updated `docs/user-guide/shell-completion.rst` with comprehensive XLA system
-  documentation
-  - Configuration modes and detection logic
-  - Quick setup instructions
-  - How XLA configuration works (storage, activation, JAX detection)
-  - Verification commands
-  - Mode switching guide
-  - Advanced features (manual override, verbose mode, per-environment config)
-  - Best practices for MCMC/NLSQ/mixed workflows
-  - HPC batch job examples
-  - Troubleshooting guide
+Complete rewrite of Consensus Monte Carlo with ArviZ-native output format.
 
-**Usage Examples:**
-
-```bash
-# Interactive setup
-homodyne-post-install --interactive
-
-# Quick configuration
-homodyne-config-xla --mode auto  # Auto-detect optimal device count
-homodyne-config-xla --mode mcmc  # Configure for MCMC (4 devices)
-homodyne-config-xla --mode nlsq  # Configure for NLSQ (1 device)
-
-# Show current configuration
-homodyne-config-xla --show
-
-# Verify XLA_FLAGS
-echo $XLA_FLAGS
-# Output: --xla_force_host_platform_device_count=6
-
-# Verify JAX devices
-python -c "import jax; print(len(jax.devices()))"
-# Output: 6
-```
-
-**See Also:**
-
-- [XLA Configuration Guide](https://homodyne.readthedocs.io/en/latest/user-guide/shell-completion.html#xla-configuration-system)
+- **refactor(optimization)**: Replace legacy mcmc with CMC v3.0
+- **feat(cmc)**: Add CMC v3.0 implementation with ArviZ InferenceData output
+- **refactor(mcmc)**: Remove tier system for single-angle sampling
+- **refactor(config)**: Add centralized parameter registry
 
 ______________________________________________________________________
 
@@ -1073,239 +1226,6 @@ ______________________________________________________________________
 
 - GitHub Issues: https://github.com/imewei/homodyne/issues
 - Migration Questions: Tag with `migration-v2.1`
-
-______________________________________________________________________
-
-## [Unreleased]
-
-### Changed
-
-#### **Critical: CMC Memory Threshold Optimization (OOM Prevention)**
-
-- ✅ **Fixed MCMC Out-of-Memory (OOM) Errors** - Corrected memory estimation for NUTS
-  MCMC
-
-  - **Sample threshold:** 20 → **15** (optimized for 14-core CPUs, 1.07 samples/core
-    minimum)
-  - **Memory threshold:** 40% → **30%** (conservative OOM prevention with safety margin)
-  - **Memory multiplier:** 6x → **30x** (empirically calibrated from real OOM failure)
-
-- ✅ **Root Cause** - Previous formula underestimated NUTS memory by 5x
-
-  - Old estimate: 23M points → 1.1 GB (6x multiplier) → 6.9% of 16 GB → "safe" ❌
-  - Actual usage: 23M points → 12-14 GB → **CUDA OOM error**
-  - New estimate: 23M points → 5.5 GB (30x multiplier) → 34.5% of 16 GB → CMC triggered
-    ✓
-
-- ✅ **Memory Multiplier Components** (30x total)
-
-  - Data arrays: 1x
-  - Gradients (9 parameters): 9x
-  - NUTS trajectory tree (10+ leapfrog steps): 15x
-  - JAX compilation cache & overhead: 3x
-  - MCMC state (position, momentum): 2x
-
-- ✅ **Validation** - Correctly triggers CMC for problematic datasets
-
-  - 23 samples × 1M points = 23M → CMC (both sample≥15 AND memory>30%) ✓
-  - Prevents OOM on 16 GB GPUs
-  - Maintains GPU performance for small datasets (< 15 samples, < 30% memory)
-
-**Impact**:
-
-- **OOM prediction accuracy:** 5x improvement
-- **Sample criterion:** 15-19 sample datasets now use CMC (better CPU parallelization)
-- **Memory safety:** 30% threshold provides margin for OS/driver overhead (~2 GB)
-
-**Files Modified**:
-
-- `homodyne/device/config.py` - Updated `should_use_cmc()` defaults and formula
-
-### Added
-
-#### **Architecture Documentation**
-
-- ✅ **Comprehensive Architecture Documentation** - New architecture documentation
-  section in Sphinx
-  - `docs/architecture.rst` - Central architecture documentation hub
-  - `docs/architecture/README.md` - Navigation and overview
-  - `docs/architecture/cmc-dual-mode-strategy.md` - CMC design (3,500+ words)
-  - `docs/architecture/cmc-decision-quick-reference.md` - Quick CMC reference
-  - `docs/architecture/nuts-chain-parallelization.md` - NUTS chains (4,000+ words)
-  - `docs/architecture/nuts-chain-parallelization-quick-reference.md` - Quick NUTS
-    reference
-- ✅ **Integrated into Sphinx** - New "Architecture" section in documentation
-- ✅ **Cross-References Added** - Updated CMC and MCMC advanced topics to link to
-  architecture docs
-- ✅ **Built HTML Documentation** - All architecture pages successfully built and
-  accessible
-
-**Topics Covered**:
-
-- CMC dual-criteria decision logic (parallelism OR memory)
-- NUTS chain parallelization (CPU parallel, GPU sequential, multi-GPU parallel)
-- Platform-specific execution modes and performance characteristics
-- Convergence diagnostics (R-hat, ESS, divergences)
-- Configuration presets and troubleshooting guides
-
-### Fixed
-
-#### **MCMC NLSQ Initialization** - Removed automatic NLSQ execution before MCMC (2025-11-03)
-
-- ✅ **Fixed MCMC incorrectly running NLSQ initialization** - Properly implements v2.1.0
-  breaking change #3
-
-  - Previous: `--method mcmc` was still running "NLSQ pre-optimization for MCMC
-    initialization" despite v2.1.0 removal
-  - Root cause: Code in `commands.py:1176` read `run_nlsq_init` from removed
-    `mcmc.initialization` config section, defaulting to `True`
-  - Fix: Removed entire 67-line NLSQ initialization block, replaced with direct
-    `initial_params = None` assignment
-  - Impact: MCMC now starts immediately with physics-informed priors from
-    `ParameterSpace` as documented
-
-- ✅ **Simplified CLI workflow** - MCMC initialization behavior now matches v2.1.0
-  specification
-
-  - No automatic NLSQ execution before MCMC
-  - Users must manually run NLSQ first if initialization desired (NLSQ → copy results →
-    update YAML → MCMC)
-  - Physics-informed priors from `ParameterSpace` used directly for MCMC sampling
-
-**Files Modified**:
-
-- `homodyne/cli/commands.py` (lines 1171-1185, 1217) - Removed NLSQ initialization block
-  and updated comments
-
-**Verification**: `/tmp/verify_mcmc_no_nlsq.py` and `/tmp/mcmc_nlsq_init_fix_report.md`
-
-#### **CMC Pipeline Errors** - Critical bug fixes enabling CMC execution
-
-- ✅ **Fixed CMC shard validation** - Corrected data point counting to use total across
-  all shards instead of per-shard
-
-  - Previous: Validation failed with "Total data points in shards (1002001) != original
-    (23046023)"
-  - Root cause: Summing shard['data'].shape instead of counting across all shards
-  - Fix: Calculate `sum(len(shard['data']) for shard in shards)`
-  - Impact: CMC now correctly validates 23 shards with 1M points each = 23M total
-
-- ✅ **Added data flattening before sharding** - Ensured coordinator receives flattened
-  1D arrays
-
-  - Previous: Sharding failed with multi-dimensional array shape errors
-  - Fix: Added explicit flattening in coordinator before calling
-    `shard_data_stratified()`
-  - Flattens: data, t1, t2, phi arrays to 1D before sharding
-  - Impact: CMC sharding now works with any data shape
-
-- ✅ **Made sigma optional in SVI pooling** - Removed hardcoded sigma requirement
-
-  - Previous: "Shard 0 missing required key 'sigma'" even when sigma not provided
-  - Fix: Split keys into required ['data', 't1', 't2', 'phi'] and optional ['sigma']
-  - Impact: SVI initialization works with or without uncertainty estimates
-
-- ✅ **Fixed NumPyro model creation for SVI** - Properly instantiated model with pooled
-  data
-
-  - Previous: "\_create_numpyro_model() missing 8 required positional arguments"
-  - Root cause: Coordinator called model creation with only analysis_mode
-  - Fix: Create model with full signature: data, sigma, t1, t2, phi, q, L,
-    analysis_mode, parameter_space, initial_params
-  - Added: ParameterSpace creation, sigma estimation if missing, q/L to pooled_data
-  - Impact: NumPyro model function successfully created for SVI
-
-- ✅ **Fixed SVI timeout parameter name** - Corrected parameter mismatch
-
-  - Previous: "run_svi_initialization() got an unexpected keyword argument 'timeout'"
-  - Fix: Changed `timeout` → `timeout_minutes` with seconds-to-minutes conversion
-  - Impact: SVI initialization accepts timeout configuration
-
-- ✅ **Fixed SVI model interface** - Removed incorrect model_args passing to
-  closure-based model
-
-  - Previous: "homodyne_model() takes 0 positional arguments but 7 were given"
-  - Root cause: `_create_numpyro_model()` returns a closure that captures data
-    internally, but SVI was passing 7 runtime arguments
-  - Fix: Removed `model_args` extraction and passing from `svi.init()` and
-    `svi.update()` calls
-  - Changed: `svi.init(rng_key, *model_args)` → `svi.init(rng_key)` and
-    `svi.update(svi_state, *model_args)` → `svi.update(svi_state)`
-  - Impact: SVI initialization and optimization now work correctly with closure-based
-    NumPyro models
-
-**Files Modified**:
-
-- `homodyne/optimization/cmc/coordinator.py` - Data flattening, model creation, timeout
-  fix
-- `homodyne/optimization/cmc/svi_init.py` - Optional sigma handling, SVI model interface
-  fix
-- `homodyne/optimization/cmc/sharding.py` - Fixed total data point counting
-
-**Pipeline Status**:
-
-- ✅ Step 1: Data sharding (23 shards created)
-- ✅ Step 2: SVI pooling (4600 samples pooled)
-- ✅ Step 2: Model creation (NumPyro model instantiated)
-- ✅ Step 2: SVI initialization (closure-based model interface working)
-- 🔄 Step 2: SVI optimization (running, long compute time expected)
-- ✅ Step 3: MCMC execution (can run with identity mass matrix fallback if SVI times out)
-
-#### **NLSQ Result Saving**
-
-- ✅ **Comprehensive NLSQ Result Saving** - New `save_nlsq_results()` function saves 4
-  files (3 JSON + 1 NPZ with 10 arrays)
-- ✅ **Per-Angle Theoretical Fits** - Sequential computation with least squares scaling
-  per angle
-- ✅ **Multi-Level Metadata Fallback** - Robust extraction of L, dt, q with cascading
-  fallback hierarchy
-- ✅ **CLI Integration** - Automatic routing in `_save_results()` based on optimization
-  method
-- ✅ **Both Analysis Modes** - Full support for static_isotropic (5 params) and
-  laminar_flow (9 params)
-
-#### **Testing**
-
-- ✅ **19 New Tests** - 13 unit tests, 3 integration tests, 3 regression tests (100% pass
-  rate)
-- ✅ **Test-First Development** - All tests written before implementation per TDD
-  methodology
-- ✅ **Mock Data Factories** - New factories for OptimizationResult, ConfigManager, and
-  data dicts
-
-#### **New Files**
-
-- `tests/factories/optimization_factory.py` (208 lines) - Mock data generators for
-  testing
-- `tests/unit/test_nlsq_saving.py` (460+ lines) - Comprehensive unit tests
-- `tests/integration/test_nlsq_workflow.py` - End-to-end workflow tests
-- `tests/regression/test_save_results_compat.py` - Backward compatibility tests
-
-### Changed
-
-#### **Breaking Changes**
-
-**⚠️ INTERNAL API CHANGE**: Updated `_save_results()` function signature in
-`homodyne/cli/commands.py`
-
-```python
-# OLD (v2.0.0)
-def _save_results(args, result, device_config):
-    ...
-
-# NEW (Unreleased)
-def _save_results(args, result, device_config, data, config):
-    ...
-```
-
-**Impact**:
-
-- **Internal function only** - No external call sites found via `git grep`
-- **MCMC saving unchanged** - Existing MCMC workflows continue to work
-- **Migration not required** - Change is internal to CLI implementation
-
-**Rationale**: Required to support comprehensive NLSQ result saving with per-angle
-theoretical fits
 
 ______________________________________________________________________
 
