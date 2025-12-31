@@ -31,6 +31,7 @@ from typing import Literal, cast
 
 import numpy as np
 
+from homodyne.optimization.nlsq.config_utils import safe_float, safe_int
 from homodyne.utils.logging import get_logger
 
 logger = get_logger(__name__)
@@ -74,31 +75,6 @@ class GradientMonitorConfig:
     @classmethod
     def from_dict(cls, config_dict: dict) -> GradientMonitorConfig:
         """Create config from dictionary with safe type conversion."""
-        # Safe type conversion helpers
-        def safe_float(value, default: float) -> float:
-            """Convert value to float safely, returning default on failure."""
-            if value is None:
-                return default
-            try:
-                return float(value)
-            except (ValueError, TypeError):
-                logger.warning(
-                    f"Could not convert {value!r} to float, using default {default}"
-                )
-                return default
-
-        def safe_int(value, default: int) -> int:
-            """Convert value to int safely, returning default on failure."""
-            if value is None:
-                return default
-            try:
-                return int(value)
-            except (ValueError, TypeError):
-                logger.warning(
-                    f"Could not convert {value!r} to int, using default {default}"
-                )
-                return default
-
         return cls(
             enable=bool(config_dict.get("enable", True)),
             ratio_threshold=safe_float(config_dict.get("ratio_threshold"), 0.01),
