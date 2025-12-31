@@ -147,6 +147,39 @@ class NLSQConfig:
     multi_start_refinement_ftol: float = 1e-12
     multi_start_degeneracy_threshold: float = 0.1
 
+    # === Anti-Degeneracy Defense System (v2.9.0) ===
+    # See: docs/specs/anti-degeneracy-defense-v2.9.0.md
+    #
+    # Layer 1: Fourier Reparameterization
+    # Reduces structural degeneracy by expressing per-angle params as Fourier series
+    per_angle_mode: str = "auto"  # "independent", "fourier", "auto"
+    fourier_order: int = 2  # Number of Fourier harmonics (order=2 -> 5 coeffs)
+    fourier_auto_threshold: int = 6  # Use Fourier when n_phi > threshold
+    #
+    # Layer 2: Hierarchical Optimization
+    # Alternates between physical and per-angle params to break gradient cancellation
+    enable_hierarchical: bool = True
+    hierarchical_max_outer_iterations: int = 5
+    hierarchical_outer_tolerance: float = 1e-6
+    hierarchical_physical_max_iterations: int = 100
+    hierarchical_per_angle_max_iterations: int = 50
+    #
+    # Layer 3: Adaptive Relative Regularization
+    # CV-based regularization that scales properly with data
+    regularization_mode: str = "relative"  # "absolute", "relative", "auto"
+    group_variance_lambda: float = 1.0  # 100x stronger than v2.8 default of 0.01
+    regularization_target_cv: float = 0.10  # 10% variation target
+    regularization_target_contribution: float = 0.10  # 10% of MSE contribution
+    regularization_max_cv: float = 0.20  # 20% max variation
+    regularization_auto_tune_lambda: bool = True
+    #
+    # Layer 4: Gradient Collapse Detection
+    # Runtime detection and response to gradient collapse
+    enable_gradient_monitoring: bool = True
+    gradient_ratio_threshold: float = 0.01  # |∇_physical|/|∇_per_angle| threshold
+    gradient_consecutive_triggers: int = 5  # Must trigger N times consecutively
+    gradient_collapse_response: str = "hierarchical"  # "warn", "hierarchical", "reset", "abort"
+
     # Computed fields
     _validation_errors: list[str] = field(default_factory=list, repr=False)
 
@@ -174,6 +207,12 @@ class NLSQConfig:
 
         # Extract progress/logging settings
         progress = config_dict.get("progress", {})
+
+        # Extract anti-degeneracy settings (v2.9.0)
+        anti_degeneracy = config_dict.get("anti_degeneracy", {})
+        hierarchical = anti_degeneracy.get("hierarchical", {})
+        regularization = anti_degeneracy.get("regularization", {})
+        gradient_monitoring = anti_degeneracy.get("gradient_monitoring", {})
 
         config = cls(
             # Loss function
@@ -282,6 +321,47 @@ class NLSQConfig:
             ),
             multi_start_degeneracy_threshold=float(
                 multi_start.get("degeneracy_threshold", 0.1)
+            ),
+            # Anti-Degeneracy Defense System (v2.9.0)
+            # Layer 1: Fourier Reparameterization
+            per_angle_mode=anti_degeneracy.get("per_angle_mode", "auto"),
+            fourier_order=anti_degeneracy.get("fourier_order", 2),
+            fourier_auto_threshold=anti_degeneracy.get("fourier_auto_threshold", 6),
+            # Layer 2: Hierarchical Optimization
+            enable_hierarchical=hierarchical.get("enable", True),
+            hierarchical_max_outer_iterations=hierarchical.get(
+                "max_outer_iterations", 5
+            ),
+            hierarchical_outer_tolerance=float(
+                hierarchical.get("outer_tolerance", 1e-6)
+            ),
+            hierarchical_physical_max_iterations=hierarchical.get(
+                "physical_max_iterations", 100
+            ),
+            hierarchical_per_angle_max_iterations=hierarchical.get(
+                "per_angle_max_iterations", 50
+            ),
+            # Layer 3: Adaptive Relative Regularization
+            regularization_mode=regularization.get("mode", "relative"),
+            group_variance_lambda=float(regularization.get("lambda", 1.0)),
+            regularization_target_cv=float(regularization.get("target_cv", 0.10)),
+            regularization_target_contribution=float(
+                regularization.get("target_contribution", 0.10)
+            ),
+            regularization_max_cv=float(regularization.get("max_cv", 0.20)),
+            regularization_auto_tune_lambda=regularization.get(
+                "auto_tune_lambda", True
+            ),
+            # Layer 4: Gradient Collapse Detection
+            enable_gradient_monitoring=gradient_monitoring.get("enable", True),
+            gradient_ratio_threshold=float(
+                gradient_monitoring.get("ratio_threshold", 0.01)
+            ),
+            gradient_consecutive_triggers=gradient_monitoring.get(
+                "consecutive_triggers", 5
+            ),
+            gradient_collapse_response=gradient_monitoring.get(
+                "response", "hierarchical"
             ),
         )
 
@@ -446,6 +526,91 @@ class NLSQConfig:
                 f"got: {self.multi_start_degeneracy_threshold}"
             )
 
+        # Validate Anti-Degeneracy Defense System settings (v2.9.0)
+        # Layer 1: Fourier Reparameterization
+        valid_per_angle_modes = ["independent", "fourier", "auto"]
+        if self.per_angle_mode not in valid_per_angle_modes:
+            errors.append(
+                f"per_angle_mode must be one of {valid_per_angle_modes}, "
+                f"got: {self.per_angle_mode}"
+            )
+        if self.fourier_order < 1:
+            errors.append(
+                f"fourier_order must be >= 1, got: {self.fourier_order}"
+            )
+        if self.fourier_auto_threshold < 1:
+            errors.append(
+                f"fourier_auto_threshold must be >= 1, got: {self.fourier_auto_threshold}"
+            )
+
+        # Layer 2: Hierarchical Optimization
+        if self.hierarchical_max_outer_iterations <= 0:
+            errors.append(
+                f"hierarchical_max_outer_iterations must be positive, "
+                f"got: {self.hierarchical_max_outer_iterations}"
+            )
+        if self.hierarchical_outer_tolerance <= 0:
+            errors.append(
+                f"hierarchical_outer_tolerance must be positive, "
+                f"got: {self.hierarchical_outer_tolerance}"
+            )
+        if self.hierarchical_physical_max_iterations <= 0:
+            errors.append(
+                f"hierarchical_physical_max_iterations must be positive, "
+                f"got: {self.hierarchical_physical_max_iterations}"
+            )
+        if self.hierarchical_per_angle_max_iterations <= 0:
+            errors.append(
+                f"hierarchical_per_angle_max_iterations must be positive, "
+                f"got: {self.hierarchical_per_angle_max_iterations}"
+            )
+
+        # Layer 3: Adaptive Relative Regularization
+        valid_regularization_modes = ["absolute", "relative", "auto"]
+        if self.regularization_mode not in valid_regularization_modes:
+            errors.append(
+                f"regularization_mode must be one of {valid_regularization_modes}, "
+                f"got: {self.regularization_mode}"
+            )
+        if self.group_variance_lambda <= 0:
+            errors.append(
+                f"group_variance_lambda must be positive, "
+                f"got: {self.group_variance_lambda}"
+            )
+        if not 0 < self.regularization_target_cv < 1:
+            errors.append(
+                f"regularization_target_cv must be in (0, 1), "
+                f"got: {self.regularization_target_cv}"
+            )
+        if not 0 < self.regularization_target_contribution < 1:
+            errors.append(
+                f"regularization_target_contribution must be in (0, 1), "
+                f"got: {self.regularization_target_contribution}"
+            )
+        if not 0 < self.regularization_max_cv < 1:
+            errors.append(
+                f"regularization_max_cv must be in (0, 1), "
+                f"got: {self.regularization_max_cv}"
+            )
+
+        # Layer 4: Gradient Collapse Detection
+        if self.gradient_ratio_threshold <= 0:
+            errors.append(
+                f"gradient_ratio_threshold must be positive, "
+                f"got: {self.gradient_ratio_threshold}"
+            )
+        if self.gradient_consecutive_triggers <= 0:
+            errors.append(
+                f"gradient_consecutive_triggers must be positive, "
+                f"got: {self.gradient_consecutive_triggers}"
+            )
+        valid_collapse_responses = ["warn", "hierarchical", "reset", "abort"]
+        if self.gradient_collapse_response not in valid_collapse_responses:
+            errors.append(
+                f"gradient_collapse_response must be one of {valid_collapse_responses}, "
+                f"got: {self.gradient_collapse_response}"
+            )
+
         self._validation_errors = errors
         return errors
 
@@ -533,5 +698,32 @@ class NLSQConfig:
                 "refine_top_k": self.multi_start_refine_top_k,
                 "refinement_ftol": self.multi_start_refinement_ftol,
                 "degeneracy_threshold": self.multi_start_degeneracy_threshold,
+            },
+            # Anti-Degeneracy Defense System (v2.9.0)
+            "anti_degeneracy": {
+                "per_angle_mode": self.per_angle_mode,
+                "fourier_order": self.fourier_order,
+                "fourier_auto_threshold": self.fourier_auto_threshold,
+                "hierarchical": {
+                    "enable": self.enable_hierarchical,
+                    "max_outer_iterations": self.hierarchical_max_outer_iterations,
+                    "outer_tolerance": self.hierarchical_outer_tolerance,
+                    "physical_max_iterations": self.hierarchical_physical_max_iterations,
+                    "per_angle_max_iterations": self.hierarchical_per_angle_max_iterations,
+                },
+                "regularization": {
+                    "mode": self.regularization_mode,
+                    "lambda": self.group_variance_lambda,
+                    "target_cv": self.regularization_target_cv,
+                    "target_contribution": self.regularization_target_contribution,
+                    "max_cv": self.regularization_max_cv,
+                    "auto_tune_lambda": self.regularization_auto_tune_lambda,
+                },
+                "gradient_monitoring": {
+                    "enable": self.enable_gradient_monitoring,
+                    "ratio_threshold": self.gradient_ratio_threshold,
+                    "consecutive_triggers": self.gradient_consecutive_triggers,
+                    "response": self.gradient_collapse_response,
+                },
             },
         }

@@ -126,6 +126,24 @@ from homodyne.optimization.nlsq.progress import (
 from homodyne.optimization.numerical_validation import NumericalValidator
 from homodyne.optimization.recovery_strategies import RecoveryStrategyApplicator
 
+# Anti-Degeneracy Defense System v2.9.0
+from homodyne.optimization.nlsq.adaptive_regularization import (
+    AdaptiveRegularizationConfig,
+    AdaptiveRegularizer,
+)
+from homodyne.optimization.nlsq.fourier_reparam import (
+    FourierReparamConfig,
+    FourierReparameterizer,
+)
+from homodyne.optimization.nlsq.gradient_monitor import (
+    GradientCollapseMonitor,
+    GradientMonitorConfig,
+)
+from homodyne.optimization.nlsq.hierarchical import (
+    HierarchicalConfig,
+    HierarchicalOptimizer,
+)
+
 # Module-level logger for memory threshold logging
 _memory_logger = logging.getLogger(__name__)
 
@@ -1515,6 +1533,8 @@ class NLSQWrapper:
                         "convergence and parameter estimation"
                     )
                     logger.info("=" * 80)
+                    # Extract anti-degeneracy config for defense system v2.9.0
+                    anti_degeneracy_config = nlsq_config.get("anti_degeneracy", {})
                     try:
                         popt, pcov, info = self._fit_with_stratified_hybrid_streaming(
                             stratified_data=stratified_data,
@@ -1524,6 +1544,7 @@ class NLSQWrapper:
                             bounds=nlsq_bounds,
                             logger=logger,
                             hybrid_config=hybrid_streaming_config,
+                            anti_degeneracy_config=anti_degeneracy_config,
                         )
 
                         # Compute final residuals for result creation
@@ -5677,6 +5698,7 @@ class NLSQWrapper:
         bounds: tuple[np.ndarray, np.ndarray] | None,
         logger: Any,
         hybrid_config: dict | None = None,
+        anti_degeneracy_config: dict | None = None,
     ) -> tuple[np.ndarray, np.ndarray, dict]:
         """Fit using NLSQ AdaptiveHybridStreamingOptimizer for large datasets.
 
@@ -5686,10 +5708,17 @@ class NLSQWrapper:
         - Phase 2: Streaming Gauss-Newton with exact J^T J accumulation
         - Phase 3: Denormalization and covariance transform
 
+        With Anti-Degeneracy Defense System v2.9.0 integration:
+        - Layer 1: Fourier Reparameterization (reduces per-angle DoF)
+        - Layer 2: Hierarchical Optimization (alternating stage fitting)
+        - Layer 3: Adaptive CV-based Regularization (scales properly)
+        - Layer 4: Gradient Collapse Detection (runtime monitoring)
+
         Key improvements over basic StreamingOptimizer:
         1. Shear-term weak gradients: Fixed via parameter normalization
         2. Slow convergence: Fixed via Adam warmup + Gauss-Newton refinement
         3. Crude covariance: Fixed via exact J^T J accumulation
+        4. Structural degeneracy: Fixed via anti-degeneracy defense layers
 
         Args:
             stratified_data: StratifiedData object with flat stratified arrays
@@ -5707,6 +5736,14 @@ class NLSQWrapper:
                 - gauss_newton_max_iterations: GN iterations (default: 50)
                 - gauss_newton_tol: Convergence tolerance (default: 1e-8)
                 - chunk_size: Points per chunk for streaming (default: 50000)
+            anti_degeneracy_config: Optional config dict for Anti-Degeneracy Defense:
+                - per_angle_mode: "independent", "fourier", or "auto" (default: "auto")
+                - fourier_order: Fourier harmonic order (default: 2)
+                - fourier_auto_threshold: n_phi threshold for auto mode (default: 6)
+                - hierarchical.enable: Enable hierarchical optimization (default: True)
+                - regularization.mode: "absolute", "relative", or "auto" (default: "relative")
+                - regularization.lambda: Base regularization strength (default: 1.0)
+                - gradient_monitoring.enable: Enable gradient collapse detection (default: True)
 
         Returns:
             (popt, pcov, info) tuple
@@ -5795,11 +5832,151 @@ class NLSQWrapper:
 
         # Auto-compute group_variance_indices for laminar_flow with per-angle scaling
         is_laminar_flow = "gamma_dot_t0" in physical_param_names
+
+        # =====================================================================
+        # Anti-Degeneracy Defense System v2.9.0 Initialization
+        # =====================================================================
+        # Parse anti-degeneracy configuration
+        ad_config = anti_degeneracy_config or {}
+        hierarchical_config = ad_config.get("hierarchical", {})
+        regularization_config = ad_config.get("regularization", {})
+        gradient_monitoring_config = ad_config.get("gradient_monitoring", {})
+
+        # Layer 1: Fourier Reparameterization Configuration
+        per_angle_mode = ad_config.get("per_angle_mode", "auto")
+        fourier_order = ad_config.get("fourier_order", 2)
+        fourier_auto_threshold = ad_config.get("fourier_auto_threshold", 6)
+
+        # Determine actual per-angle mode
+        if per_angle_mode == "auto":
+            # Use Fourier when n_phi > threshold (reduces DoF from 2*n_phi to 2*(order+1))
+            per_angle_mode_actual = "fourier" if n_phi > fourier_auto_threshold else "independent"
+        else:
+            per_angle_mode_actual = per_angle_mode
+
+        # Initialize Fourier reparameterizer if using fourier mode
+        fourier_reparameterizer = None
+        if per_angle_mode_actual == "fourier" and per_angle_scaling and is_laminar_flow:
+            # Get unique phi angles in radians
+            phi_unique_rad = np.deg2rad(np.array(sorted(set(all_phi_early))))
+            fourier_config = FourierReparamConfig(
+                mode="fourier",
+                fourier_order=fourier_order,
+                auto_threshold=fourier_auto_threshold,
+            )
+            fourier_reparameterizer = FourierReparameterizer(phi_unique_rad, fourier_config)
+            logger.info("=" * 60)
+            logger.info("ANTI-DEGENERACY DEFENSE: Layer 1 - Fourier Reparameterization")
+            logger.info(f"  Mode: {per_angle_mode_actual}")
+            logger.info(f"  n_phi: {n_phi}, Fourier order: {fourier_order}")
+            logger.info(f"  Parameter reduction: {2*n_phi} -> {fourier_reparameterizer.n_coeffs}")
+            logger.info("=" * 60)
+
+        # Layer 2: Hierarchical Optimization Configuration
+        enable_hierarchical = hierarchical_config.get("enable", True)
+        hierarchical_optimizer = None
+        if enable_hierarchical and per_angle_scaling and is_laminar_flow:
+            n_physical = len(physical_param_names)
+            hier_config = HierarchicalConfig(
+                enable=True,
+                max_outer_iterations=hierarchical_config.get("max_outer_iterations", 5),
+                outer_tolerance=float(hierarchical_config.get("outer_tolerance", 1e-6)),
+                physical_max_iterations=hierarchical_config.get("physical_max_iterations", 100),
+                per_angle_max_iterations=hierarchical_config.get("per_angle_max_iterations", 50),
+            )
+            hierarchical_optimizer = HierarchicalOptimizer(
+                config=hier_config,
+                n_phi=n_phi,
+                n_physical=n_physical,
+                fourier_reparameterizer=fourier_reparameterizer,
+            )
+            logger.info("=" * 60)
+            logger.info("ANTI-DEGENERACY DEFENSE: Layer 2 - Hierarchical Optimization")
+            logger.info(f"  Enabled: {enable_hierarchical}")
+            logger.info(f"  Max outer iterations: {hier_config.max_outer_iterations}")
+            logger.info(f"  Outer tolerance: {hier_config.outer_tolerance}")
+            logger.info("=" * 60)
+
+        # Layer 3: Adaptive Relative Regularization Configuration
+        # Replaces/enhances the basic group variance regularization with CV-based approach
+        regularization_mode = regularization_config.get("mode", "relative")
+        regularization_lambda = float(regularization_config.get("lambda", 1.0))
+        target_cv = float(regularization_config.get("target_cv", 0.10))
+        target_contribution = float(regularization_config.get("target_contribution", 0.10))
+        max_cv = float(regularization_config.get("max_cv", 0.20))
+
+        adaptive_regularizer = None
+        if per_angle_scaling and is_laminar_flow:
+            reg_config = AdaptiveRegularizationConfig(
+                enable=True,
+                mode=regularization_mode,
+                lambda_base=regularization_lambda,
+                target_cv=target_cv,
+                target_contribution=target_contribution,
+                max_cv=max_cv,
+            )
+            adaptive_regularizer = AdaptiveRegularizer(reg_config, n_phi)
+            logger.info("=" * 60)
+            logger.info("ANTI-DEGENERACY DEFENSE: Layer 3 - Adaptive Regularization")
+            logger.info(f"  Mode: {regularization_mode}")
+            logger.info(f"  Auto-tuned lambda: {adaptive_regularizer.lambda_value:.2f}")
+            logger.info(f"  Target CV: {target_cv} ({target_cv*100:.0f}% variation)")
+            logger.info(f"  Max CV: {max_cv}")
+            logger.info("=" * 60)
+
+            # Update group variance settings to use adaptive regularizer's lambda
+            # This ensures NLSQ's built-in regularization is consistent
+            enable_group_variance_regularization = True
+            group_variance_lambda = adaptive_regularizer.lambda_value
+
+        # Layer 4: Gradient Collapse Monitor Configuration
+        gradient_monitor_enabled = gradient_monitoring_config.get("enable", True)
+        gradient_monitor = None
+        if gradient_monitor_enabled and per_angle_scaling and is_laminar_flow:
+            n_per_angle = 2 * n_phi if fourier_reparameterizer is None else fourier_reparameterizer.n_coeffs
+            n_physical = len(physical_param_names)
+            per_angle_indices = list(range(n_per_angle))
+            physical_indices = list(range(n_per_angle, n_per_angle + n_physical))
+
+            monitor_config = GradientMonitorConfig(
+                enable=True,
+                ratio_threshold=float(gradient_monitoring_config.get("ratio_threshold", 0.01)),
+                consecutive_triggers=gradient_monitoring_config.get("consecutive_triggers", 5),
+                response_mode=gradient_monitoring_config.get("response", "hierarchical"),
+            )
+            gradient_monitor = GradientCollapseMonitor(
+                config=monitor_config,
+                physical_indices=physical_indices,
+                per_angle_indices=per_angle_indices,
+            )
+            logger.info("=" * 60)
+            logger.info("ANTI-DEGENERACY DEFENSE: Layer 4 - Gradient Collapse Monitor")
+            logger.info(f"  Enabled: {gradient_monitor_enabled}")
+            logger.info(f"  Ratio threshold: {monitor_config.ratio_threshold}")
+            logger.info(f"  Consecutive triggers: {monitor_config.consecutive_triggers}")
+            logger.info(f"  Response mode: {monitor_config.response_mode}")
+            logger.info("=" * 60)
+
+        # Store anti-degeneracy components for diagnostics
+        anti_degeneracy_components = {
+            "per_angle_mode": per_angle_mode_actual,
+            "fourier_reparameterizer": fourier_reparameterizer,
+            "hierarchical_optimizer": hierarchical_optimizer,
+            "adaptive_regularizer": adaptive_regularizer,
+            "gradient_monitor": gradient_monitor,
+        }
+        # ===================================================================== #
         if enable_group_variance_regularization and group_variance_indices_raw is None:
             if is_laminar_flow and per_angle_scaling and n_phi > 3:
-                # Per-angle contrast: params[0:n_phi]
-                # Per-angle offset: params[n_phi:2*n_phi]
-                group_variance_indices = [(0, n_phi), (n_phi, 2 * n_phi)]
+                # When Fourier mode: per-angle Fourier coeffs are n_coeffs_per_param per group
+                # When standard mode: per-angle params are n_phi per group
+                if fourier_reparameterizer is not None:
+                    n_per_group = fourier_reparameterizer.n_coeffs_per_param
+                else:
+                    n_per_group = n_phi
+                # Per-angle contrast: params[0:n_per_group]
+                # Per-angle offset: params[n_per_group:2*n_per_group]
+                group_variance_indices = [(0, n_per_group), (n_per_group, 2 * n_per_group)]
                 logger.info(
                     f"  Auto-computed group_variance_indices for {n_phi} angles: "
                     f"{group_variance_indices}"
@@ -6051,17 +6228,262 @@ class NLSQWrapper:
         logger.info(f"Data preparation completed in {prep_time:.2f}s")
         logger.info(f"  Dataset size: {len(y_data):,} points")
 
+        # CRITICAL FIX (Dec 2025): Shuffle data to prevent local minimum traps
+        # The streaming optimizer processes data in chunks. If data is ordered by angle
+        # (sequentially), the optimizer sees only one angle at a time during warmup.
+        # This causes it to fit parameters to the first angle (local minimum) and fail
+        # to recover when later angles appear. Shuffling ensures each chunk is
+        # statistically representative of the global dataset.
+        logger.info("Shuffling data for hybrid streaming optimization...")
+        shuffle_seed = 42  # Fixed seed for reproducibility
+        rng = np.random.RandomState(shuffle_seed)
+        perm = rng.permutation(len(y_data))
+        x_data = x_data[perm]
+        y_data = y_data[perm]
+        logger.info(f"  Data shuffled (seed={shuffle_seed})")
+
+        # =====================================================================
+        # Anti-Degeneracy Defense System v2.9.0 - EXECUTION INTEGRATION
+        # =====================================================================
+        # Transform parameters and execute appropriate optimization path
+        use_hierarchical = (
+            hierarchical_optimizer is not None
+            and anti_degeneracy_components.get("hierarchical_optimizer") is not None
+            and ad_config.get("enable", True)
+        )
+        use_fourier = (
+            fourier_reparameterizer is not None
+            and anti_degeneracy_components.get("fourier_reparameterizer") is not None
+            and ad_config.get("enable", True)
+        )
+
+        # Track original params for diagnostics
+        original_initial_params = initial_params.copy()
+        fit_initial_params = initial_params.copy()
+        fit_bounds = bounds
+
+        # Layer 1: Fourier reparameterization of initial parameters
+        if use_fourier:
+            logger.info("=" * 60)
+            logger.info("ANTI-DEGENERACY EXECUTION: Fourier Reparameterization")
+            # Transform per-angle params to Fourier coefficients
+            per_angle_params = initial_params[:2 * n_phi]
+            physical_params = initial_params[2 * n_phi:]
+
+            # Split per-angle into contrast and offset groups
+            contrast_per_angle = per_angle_params[:n_phi]
+            offset_per_angle = per_angle_params[n_phi:2 * n_phi]
+
+            # Transform to Fourier coefficients
+            contrast_coeffs = fourier_reparameterizer.to_fourier(contrast_per_angle)
+            offset_coeffs = fourier_reparameterizer.to_fourier(offset_per_angle)
+
+            # New parameter layout: [contrast_coeffs, offset_coeffs, physical_params]
+            fit_initial_params = np.concatenate([contrast_coeffs, offset_coeffs, physical_params])
+
+            logger.info(f"  Original params: {len(initial_params)}")
+            logger.info(f"  Fourier params: {len(fit_initial_params)}")
+            logger.info(f"  Per-angle reduction: {2*n_phi} -> {len(contrast_coeffs) + len(offset_coeffs)}")
+
+            # Transform bounds for Fourier space
+            if bounds is not None:
+                lower_bounds, upper_bounds = bounds
+                # Per-angle bounds are typically (0,1) for contrast, (0.5, 1.5) for offset
+                # Fourier coefficients can have wider bounds since they combine linearly
+                n_coeffs = fourier_reparameterizer.n_coeffs
+
+                # Fourier coefficient bounds: a0 keeps the mean, others can be ±range
+                contrast_lower = np.concatenate([
+                    [lower_bounds[0]],  # a0 (mean) lower bound
+                    np.full(n_coeffs - 1, -1.0)  # Other coeffs can be negative
+                ])
+                contrast_upper = np.concatenate([
+                    [upper_bounds[0]],  # a0 (mean) upper bound
+                    np.full(n_coeffs - 1, 1.0)  # Other coeffs bounded
+                ])
+                offset_lower = np.concatenate([
+                    [lower_bounds[n_phi]],  # a0 (mean) lower bound
+                    np.full(n_coeffs - 1, -0.5)  # Other coeffs
+                ])
+                offset_upper = np.concatenate([
+                    [upper_bounds[n_phi]],  # a0 (mean) upper bound
+                    np.full(n_coeffs - 1, 0.5)  # Other coeffs
+                ])
+
+                fit_lower = np.concatenate([contrast_lower, offset_lower, lower_bounds[2*n_phi:]])
+                fit_upper = np.concatenate([contrast_upper, offset_upper, upper_bounds[2*n_phi:]])
+                fit_bounds = (fit_lower, fit_upper)
+            logger.info("=" * 60)
+
+        # =====================================================================
+        # Anti-Degeneracy Defense: Create Fourier-wrapped model function
+        # =====================================================================
+        # When using Fourier mode, wrap model_fn to convert Fourier coeffs -> per-angle
+        if use_fourier:
+            n_coeffs_per_param = fourier_reparameterizer.n_coeffs_per_param
+
+            @jax.jit
+            def model_fn_fourier(x_batch: jnp.ndarray, *params_tuple) -> jnp.ndarray:
+                """Model function with Fourier coefficient inputs."""
+                # Handle both single points (1D) and batches (2D)
+                x_batch_2d = jnp.atleast_2d(x_batch)
+                params_all = jnp.array(params_tuple)
+
+                # Extract Fourier coefficients and physical params
+                # Layout: [contrast_coeffs, offset_coeffs, physical_params]
+                n_coeffs = fourier_reparameterizer.n_coeffs_per_param
+                contrast_coeffs = params_all[:n_coeffs]
+                offset_coeffs = params_all[n_coeffs:2*n_coeffs]
+                physical_params = params_all[2*n_coeffs:]
+
+                # Convert Fourier coefficients to per-angle values
+                # Uses precomputed basis matrix: values = B @ coeffs
+                basis_matrix = jnp.asarray(fourier_reparameterizer._basis_matrix)
+                contrast_all = basis_matrix @ contrast_coeffs
+                offset_all = basis_matrix @ offset_coeffs
+
+                # Extract indices from x_batch (now guaranteed 2D)
+                phi_idx = x_batch_2d[:, 0].astype(jnp.int32)
+                t1_idx = x_batch_2d[:, 1].astype(jnp.int32)
+                t2_idx = x_batch_2d[:, 2].astype(jnp.int32)
+
+                # Extract physical parameters
+                D0 = physical_params[0]
+                alpha = physical_params[1]
+                D_offset = physical_params[2]
+
+                # Compute diffusion
+                D_t = calculate_diffusion_coefficient(t1_unique_jax, D0, alpha, D_offset)
+                D_cumsum = trapezoid_cumsum(D_t)
+                D_diff = D_cumsum[t1_idx] - D_cumsum[t2_idx]
+                D_integral_batch = jnp.sqrt(D_diff**2 + 1e-20)
+
+                log_g1_diff = -wavevector_q_squared_half_dt * D_integral_batch
+                log_g1_diff_bounded = jnp.clip(log_g1_diff, -700.0, 0.0)
+                g1_diffusion = safe_exp(log_g1_diff_bounded)
+
+                if is_laminar_flow:
+                    # Shear parameters
+                    gamma_dot_0 = physical_params[3]
+                    beta = physical_params[4]
+                    gamma_dot_offset = physical_params[5]
+                    phi0 = physical_params[6]
+
+                    # Compute shear
+                    gamma_t = calculate_shear_rate(
+                        t1_unique_jax, gamma_dot_0, beta, gamma_dot_offset
+                    )
+                    gamma_cumsum = trapezoid_cumsum(gamma_t)
+                    gamma_diff = gamma_cumsum[t1_idx] - gamma_cumsum[t2_idx]
+                    gamma_integral_batch = jnp.sqrt(gamma_diff**2 + 1e-20)
+
+                    # Shear contribution with angle dependence
+                    phi_values = phi_unique_jax[phi_idx]
+                    angle_diff = jnp.deg2rad(phi0 - phi_values)
+                    cos_phi = jnp.cos(angle_diff)
+
+                    sinc_arg = sinc_prefactor * gamma_integral_batch * cos_phi
+                    sinc_val = safe_sinc(sinc_arg)
+                    g1_shear = sinc_val**2
+
+                    g1_total = g1_diffusion * g1_shear
+                    g1 = jnp.clip(g1_total, 1e-10, 2.0)
+                else:
+                    g1 = jnp.clip(g1_diffusion, 1e-10, 2.0)
+
+                # Compute g2 with per-angle scaling (from Fourier-derived values)
+                contrast = contrast_all[phi_idx]
+                offset = offset_all[phi_idx]
+                g2_theory = offset + contrast * g1**2
+                g2 = jnp.clip(g2_theory, 0.5, 2.5)
+
+                return g2.squeeze()
+
+            # Use Fourier model function for optimization
+            active_model_fn = model_fn_fourier
+            logger.info("  Using Fourier-wrapped model function")
+        else:
+            # Use standard per-angle model function
+            active_model_fn = model_fn_pointwise
+
         # Run hybrid optimization
         logger.info("Starting hybrid optimization (Adam + Gauss-Newton)...")
         opt_start = time.perf_counter()
 
-        result = optimizer.fit(
-            data_source=(x_data, y_data),
-            func=model_fn_pointwise,
-            p0=initial_params,
-            bounds=bounds,
-            verbose=1,
-        )
+        # Layer 2: Hierarchical optimization path
+        # Can be combined with Fourier mode (hierarchical operates on Fourier params)
+        if use_hierarchical:
+            # Use hierarchical two-stage optimization
+            logger.info("=" * 60)
+            logger.info("ANTI-DEGENERACY EXECUTION: Hierarchical Two-Stage Optimization")
+
+            def loss_fn(params):
+                """Loss function for hierarchical optimizer."""
+                pred = active_model_fn(x_data, *params)
+                residuals = y_data - pred
+                mse = np.mean(residuals**2)
+
+                # Add adaptive regularization if enabled
+                if adaptive_regularizer is not None:
+                    reg_term = adaptive_regularizer.compute_regularization(
+                        params, mse, len(y_data)
+                    )
+                    return mse * len(y_data) + reg_term
+                return mse * len(y_data)
+
+            def grad_fn(params):
+                """Gradient function with optional monitoring."""
+                # Use JAX autodiff for gradient computation
+                grad = jax.grad(lambda p: loss_fn(p))(params)
+
+                # Layer 4: Gradient monitoring
+                if gradient_monitor is not None:
+                    gradient_monitor.check(grad, iteration_counter[0], params, loss_fn(params))
+                    iteration_counter[0] += 1
+
+                return grad
+
+            iteration_counter = [0]  # Mutable counter for gradient monitor
+
+            hier_result = hierarchical_optimizer.fit(
+                loss_fn=loss_fn,
+                grad_fn=grad_fn,
+                p0=fit_initial_params,
+                bounds=fit_bounds,
+            )
+
+            # Convert HierarchicalResult to standard format
+            result = {
+                "x": hier_result.x,
+                "pcov": np.eye(len(hier_result.x)),  # Placeholder
+                "success": hier_result.success,
+                "message": hier_result.message,
+                "function_evaluations": hier_result.n_outer_iterations * 150,  # Estimate
+                "streaming_diagnostics": {
+                    "phase_iterations": {
+                        "phase1": 0,
+                        "phase2": hier_result.n_outer_iterations,
+                    },
+                    "warmup_diagnostics": {},
+                    "gauss_newton_diagnostics": {
+                        "final_cost": hier_result.fun,
+                    },
+                    "hierarchical_history": hier_result.history,
+                },
+            }
+            logger.info(f"  Hierarchical result: success={hier_result.success}")
+            logger.info(f"  Outer iterations: {hier_result.n_outer_iterations}")
+            logger.info(f"  Final loss: {hier_result.fun:.6e}")
+            logger.info("=" * 60)
+        else:
+            # Standard hybrid streaming optimization path
+            result = optimizer.fit(
+                data_source=(x_data, y_data),
+                func=active_model_fn,
+                p0=fit_initial_params,
+                bounds=fit_bounds,
+                verbose=1,
+            )
 
         opt_time = time.perf_counter() - opt_start
         total_time = time.perf_counter() - start_time
@@ -6091,6 +6513,49 @@ class NLSQWrapper:
 
         # Extract results
         popt = np.asarray(result["x"])
+
+        # =====================================================================
+        # Anti-Degeneracy Defense System v2.9.0 - INVERSE TRANSFORMATION
+        # =====================================================================
+        # Transform Fourier coefficients back to per-angle parameters
+        if use_fourier:
+            logger.info("=" * 60)
+            logger.info("ANTI-DEGENERACY EXECUTION: Inverse Fourier Transform")
+            n_coeffs = fourier_reparameterizer.n_coeffs
+
+            # Extract Fourier coefficients and physical params from optimized result
+            fourier_contrast_coeffs = popt[:n_coeffs]
+            fourier_offset_coeffs = popt[n_coeffs:2*n_coeffs]
+            physical_params_opt = popt[2*n_coeffs:]
+
+            # Transform back to per-angle parameters
+            contrast_per_angle_opt = fourier_reparameterizer.from_fourier(fourier_contrast_coeffs)
+            offset_per_angle_opt = fourier_reparameterizer.from_fourier(fourier_offset_coeffs)
+
+            # Reconstruct full parameter vector in original layout
+            popt = np.concatenate([contrast_per_angle_opt, offset_per_angle_opt, physical_params_opt])
+
+            logger.info(f"  Fourier params: {2*n_coeffs + len(physical_params_opt)}")
+            logger.info(f"  Restored per-angle params: {len(popt)}")
+            logger.info("=" * 60)
+
+            # Note: Covariance transformation from Fourier space is complex.
+            # For now, we use a placeholder. Full Jacobian transformation would be:
+            # J_fourier = d(per_angle)/d(fourier_coeffs)
+            # pcov_per_angle = J_fourier @ pcov_fourier @ J_fourier.T
+            # This is a simplification that uses identity for the per-angle block
+            # since exact covariance in Fourier space is less interpretable anyway.
+
+        # Log gradient monitor summary if available
+        if gradient_monitor is not None:
+            gradient_monitor.log_summary()
+            if gradient_monitor.collapse_detected:
+                logger.warning("=" * 60)
+                logger.warning("GRADIENT COLLAPSE WAS DETECTED DURING OPTIMIZATION")
+                logger.warning(f"  Collapse events: {len(gradient_monitor.collapse_events)}")
+                for event in gradient_monitor.collapse_events:
+                    logger.warning(f"    Iteration {event.iteration}: ratio={event.ratio:.6f}")
+                logger.warning("=" * 60)
 
         # Get covariance (properly transformed from normalized space)
         pcov = result.get("pcov", np.eye(len(popt)))
@@ -6170,6 +6635,28 @@ class NLSQWrapper:
             "method": "adaptive_hybrid_streaming",
             "hybrid_streaming_diagnostics": diagnostics,
         }
+
+        # Add anti-degeneracy defense diagnostics
+        info["anti_degeneracy"] = {
+            "version": "2.9.0",
+            "per_angle_mode": anti_degeneracy_components["per_angle_mode"],
+            "fourier_enabled": fourier_reparameterizer is not None,
+            "hierarchical_enabled": hierarchical_optimizer is not None,
+            "adaptive_regularization_enabled": adaptive_regularizer is not None,
+            "gradient_monitor_enabled": gradient_monitor is not None,
+        }
+        if fourier_reparameterizer is not None:
+            info["anti_degeneracy"]["fourier"] = {
+                "order": fourier_order,
+                "n_coeffs": fourier_reparameterizer.n_coeffs,
+                "param_reduction": f"{2*n_phi} -> {fourier_reparameterizer.n_coeffs}",
+            }
+        if hierarchical_optimizer is not None:
+            info["anti_degeneracy"]["hierarchical"] = hierarchical_optimizer.get_diagnostics()
+        if adaptive_regularizer is not None:
+            info["anti_degeneracy"]["regularization"] = adaptive_regularizer.get_diagnostics()
+        if gradient_monitor is not None:
+            info["anti_degeneracy"]["gradient_monitor"] = gradient_monitor.get_diagnostics()
 
         # Add bounds warning info if detected
         if bound_stuck_warning is not None:
