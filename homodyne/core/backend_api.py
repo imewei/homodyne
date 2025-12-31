@@ -14,27 +14,25 @@ The physics backends are intentionally separate:
 This facade provides a clean import interface for users who don't need
 to know about the underlying implementation details.
 
-Usage:
-------
-```python
-# For NLSQ optimization (meshgrid mode)
-from homodyne.core.backend_api import compute_g2_nlsq, apply_diagonal_correction
+Usage::
 
-# For CMC MCMC (element-wise mode)
-from homodyne.core.backend_api import compute_g1_cmc
+    # For NLSQ optimization (meshgrid mode)
+    from homodyne.core.backend_api import compute_g2_nlsq, apply_diagonal_correction
 
-# For shared utilities
-from homodyne.core.backend_api import (
-    calculate_diffusion_coefficient,
-    calculate_shear_rate,
-    safe_sinc,
-    safe_exp,
-)
+    # For CMC MCMC (element-wise mode)
+    from homodyne.core.backend_api import compute_g1_cmc
 
-# Check available backends
-from homodyne.core.backend_api import get_available_backends
-print(get_available_backends())  # {'nlsq': True, 'cmc': True, 'jax': True}
-```
+    # For shared utilities
+    from homodyne.core.backend_api import (
+        calculate_diffusion_coefficient,
+        calculate_shear_rate,
+        safe_sinc,
+        safe_exp,
+    )
+
+    # Check available backends
+    from homodyne.core.backend_api import get_available_backends
+    print(get_available_backends())  # {'nlsq': True, 'cmc': True, 'jax': True}
 
 Part of Architecture Refactoring v2.9.1.
 """

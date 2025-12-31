@@ -6,14 +6,14 @@ losing gradient signal) with automatic response actions.
 Part of Anti-Degeneracy Defense System v2.9.0.
 See: docs/specs/anti-degeneracy-defense-v2.9.0.md
 
-Detection Mechanism
--------------------
-Monitor the ratio:
-    ratio = |∇_physical| / |∇_per_angle|
+Detection Mechanism::
 
-If ratio < threshold for N consecutive iterations:
-    - Gradient collapse detected
-    - Physical params are losing signal to per-angle params
+    Monitor the ratio:
+        ratio = norm(grad_physical) / norm(grad_per_angle)
+
+    If ratio < threshold for N consecutive iterations:
+        - Gradient collapse detected
+        - Physical params are losing signal to per-angle params
 
 Response Actions
 ----------------
@@ -46,7 +46,7 @@ class GradientMonitorConfig:
     enable : bool
         Whether to enable gradient monitoring. Default True.
     ratio_threshold : float
-        |∇_physical| / |∇_per_angle| below this triggers detection.
+        Ratio of norm(grad_physical) / norm(grad_per_angle) below this triggers detection.
         Default 0.01 (physical gradient is 1% of per-angle gradient).
     consecutive_triggers : int
         Must trigger N consecutive times to confirm collapse. Default 5.

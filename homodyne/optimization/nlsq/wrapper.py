@@ -624,14 +624,14 @@ def create_multistart_warmup_func(
     """Create a warmup-only fit function for multi-start Phase 1 strategy.
 
     This function creates a warmup_fit_func compatible with the multi-start
-    optimization module's Phase 1 strategy. It uses the Adam warmup phase
-    from NLSQ's AdaptiveHybridStreamingOptimizer to quickly explore the
+    optimization module Phase 1 strategy. It uses the Adam warmup phase
+    from the NLSQ AdaptiveHybridStreamingOptimizer to quickly explore the
     parameter space without full Gauss-Newton refinement.
 
     Parameters
     ----------
     model_func : Callable
-        Model function with signature: func(x, *params) -> predictions
+        Model function with signature: ``func(x, *params) -> predictions``
     xdata : np.ndarray
         Independent variable data
     ydata : np.ndarray

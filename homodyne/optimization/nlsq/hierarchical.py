@@ -7,33 +7,33 @@ degeneracy in streaming optimization.
 Part of Anti-Degeneracy Defense System v2.9.0.
 See: docs/specs/anti-degeneracy-defense-v2.9.0.md
 
-Algorithm
----------
-Initialize: params = [per_angle_params, physical_params]
+Algorithm::
 
-for outer_iter in range(max_outer_iterations):
+    Initialize: params = [per_angle_params, physical_params]
 
-    # Stage 1: Fit PHYSICAL params only
-    freeze(per_angle_params)
-    result1 = L-BFGS(
-        loss_fn(physical_params | frozen_per_angle),
-        physical_params
-    )
-    physical_params = result1.x
+    for outer_iter in range(max_outer_iterations):
 
-    # Stage 2: Fit PER-ANGLE params only
-    freeze(physical_params)
-    result2 = L-BFGS(
-        loss_fn(per_angle_params | frozen_physical),
-        per_angle_params
-    )
-    per_angle_params = result2.x
+        # Stage 1: Fit PHYSICAL params only
+        freeze(per_angle_params)
+        result1 = L-BFGS(
+            loss_fn(physical_params | frozen_per_angle),
+            physical_params
+        )
+        physical_params = result1.x
 
-    # Check convergence
-    if converged(physical_params, previous_physical_params):
-        break
+        # Stage 2: Fit PER-ANGLE params only
+        freeze(physical_params)
+        result2 = L-BFGS(
+            loss_fn(per_angle_params | frozen_physical),
+            per_angle_params
+        )
+        per_angle_params = result2.x
 
-return [per_angle_params, physical_params]
+        # Check convergence
+        if converged(physical_params, previous_physical_params):
+            break
+
+    return [per_angle_params, physical_params]
 
 Why It Works
 ------------

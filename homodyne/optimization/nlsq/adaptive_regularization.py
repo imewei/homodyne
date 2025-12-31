@@ -7,20 +7,20 @@ regularization.
 Part of Anti-Degeneracy Defense System v2.9.0.
 See: docs/specs/anti-degeneracy-defense-v2.9.0.md
 
-Mathematical Formulation
-------------------------
-Current (ineffective):
-    L_reg = λ × Var(params) × n_points
+Mathematical Formulation::
 
-Proposed (CV-based):
-    CV = std(params) / |mean(params)|
-    L_reg = λ × CV² × MSE × n_points
+    Current (ineffective):
+        L_reg = lambda * Var(params) * n_points
 
-Auto-tuned λ:
-    λ = target_contribution / target_cv²
+    Proposed (CV-based):
+        CV = std(params) / abs(mean(params))
+        L_reg = lambda * CV^2 * MSE * n_points
 
-    Example: Allow 10% variation (CV=0.1), contribute 10% to loss
-    λ = 0.1 / 0.01 = 10
+    Auto-tuned lambda:
+        lambda = target_contribution / target_cv^2
+
+        Example: Allow 10% variation (CV=0.1), contribute 10% to loss
+        lambda = 0.1 / 0.01 = 10
 """
 
 from __future__ import annotations

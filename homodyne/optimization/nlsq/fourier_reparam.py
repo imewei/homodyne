@@ -16,17 +16,17 @@ For order=2:
 - Offset: 5 coefficients [o₀, o₁, t₁, o₂, t₂]
 - Total: 10 Fourier coefficients vs 2×n_phi independent params
 
-Parameter Count Comparison
---------------------------
-| n_phi | Independent | Fourier (order=2) | Reduction |
-|-------|-------------|-------------------|-----------|
-| 2     | 4           | 4*                | 0%        |
-| 3     | 6           | 6*                | 0%        |
-| 10    | 20          | 10                | 50%       |
-| 23    | 46          | 10                | 78%       |
-| 100   | 200         | 10                | 95%       |
+Parameter Count Comparison::
 
-*For n_phi ≤ 2×(order+1), independent mode is used
+    n_phi | Independent | Fourier (order=2) | Reduction
+    ------|-------------|-------------------|----------
+      2   |     4       |        4          |    0%
+      3   |     6       |        6          |    0%
+     10   |    20       |       10          |   50%
+     23   |    46       |       10          |   78%
+    100   |   200       |       10          |   95%
+
+Note: For n_phi <= 2*(order+1), independent mode is used.
 """
 
 from __future__ import annotations

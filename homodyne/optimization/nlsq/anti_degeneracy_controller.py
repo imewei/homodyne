@@ -9,8 +9,11 @@ The controller encapsulates:
 - Layer 3: Adaptive CV-based Regularization
 - Layer 4: Gradient Collapse Monitoring
 
-Usage:
-    controller = AntiDegeneracyController.from_config(config_dict, n_phi, phi_angles, n_physical)
+Usage::
+
+    controller = AntiDegeneracyController.from_config(
+        config_dict, n_phi, phi_angles, n_physical
+    )
     if controller.is_enabled:
         # Use controller.fourier, controller.hierarchical, etc.
         transformed_params = controller.transform_params_to_fourier(initial_params)
@@ -79,7 +82,7 @@ class AntiDegeneracyConfig:
     gradient_monitoring_enable : bool
         Enable gradient collapse monitoring.
     gradient_ratio_threshold : float
-        Collapse threshold for |∇_physical|/|∇_per_angle|.
+        Collapse threshold for norm(grad_physical)/norm(grad_per_angle).
     gradient_consecutive_triggers : int
         Number of consecutive triggers to confirm collapse.
     gradient_response_mode : str
@@ -112,16 +115,17 @@ class AntiDegeneracyConfig:
         Parameters
         ----------
         config_dict : dict
-            Configuration dictionary with structure:
-            {
-                "enable": bool,
-                "per_angle_mode": str,
-                "fourier_order": int,
-                "fourier_auto_threshold": int,
-                "hierarchical": {...},
-                "regularization": {...},
-                "gradient_monitoring": {...}
-            }
+            Configuration dictionary with structure::
+
+                {
+                    "enable": bool,
+                    "per_angle_mode": str,
+                    "fourier_order": int,
+                    "fourier_auto_threshold": int,
+                    "hierarchical": {...},
+                    "regularization": {...},
+                    "gradient_monitoring": {...}
+                }
 
         Returns
         -------
