@@ -6001,6 +6001,11 @@ class NLSQWrapper:
                 fourier_group_indices = (
                     None  # Use default: [(0, n_phi), (n_phi, 2*n_phi)]
                 )
+                logger.debug(
+                    f"Using default regularization groups (Fourier mode not active): "
+                    f"fourier_reparameterizer={fourier_reparameterizer is not None}, "
+                    f"use_fourier={fourier_reparameterizer.use_fourier if fourier_reparameterizer else 'N/A'}"
+                )
 
             reg_config = AdaptiveRegularizationConfig(
                 enable=True,
@@ -6018,6 +6023,7 @@ class NLSQWrapper:
             logger.info(f"  Auto-tuned lambda: {adaptive_regularizer.lambda_value:.2f}")
             logger.info(f"  Target CV: {target_cv} ({target_cv * 100:.0f}% variation)")
             logger.info(f"  Max CV: {max_cv}")
+            logger.info(f"  Group indices: {adaptive_regularizer.group_indices}")
             logger.info("=" * 60)
 
             # Update group variance settings to use adaptive regularizer's lambda
