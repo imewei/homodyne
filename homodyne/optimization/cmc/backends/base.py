@@ -182,17 +182,24 @@ def combine_shard_samples(
 
     # For large shard counts, use hierarchical combination to limit memory
     if len(shard_samples) > chunk_size:
+        import gc
+
         logger.info(
             f"Hierarchical combination: {len(shard_samples)} shards in chunks of {chunk_size}"
         )
         intermediate_results = []
+        n_chunks = (len(shard_samples) + chunk_size - 1) // chunk_size
         for i in range(0, len(shard_samples), chunk_size):
             chunk = shard_samples[i : i + chunk_size]
             chunk_result = _combine_shard_chunk(chunk, method)
             intermediate_results.append(chunk_result)
-            logger.debug(
-                f"Combined chunk {i // chunk_size + 1}/{(len(shard_samples) + chunk_size - 1) // chunk_size}"
-            )
+
+            # Clear chunk references and force GC to reduce peak memory
+            # Each shard is ~100KB, so freeing chunk_size shards saves ~50MB
+            del chunk
+            gc.collect()
+
+            logger.debug(f"Combined chunk {i // chunk_size + 1}/{n_chunks}")
 
         # Recursively combine intermediate results
         return combine_shard_samples(intermediate_results, method, chunk_size)

@@ -2,6 +2,11 @@
 
 This module provides parallel MCMC execution using Python's
 multiprocessing module for CPU-based parallelism.
+
+Optimizations (v2.9.1):
+- Batch PRNG key generation: Pre-generate all shard keys in single JAX call
+- Adaptive polling: Adjust poll interval based on shard activity
+- Event.wait heartbeat: Efficient heartbeat using Event.wait(timeout)
 """
 
 from __future__ import annotations
@@ -28,14 +33,73 @@ if TYPE_CHECKING:
 logger = get_logger(__name__)
 
 
+def _generate_shard_keys(n_shards: int, seed: int = 42) -> list[tuple[int, int]]:
+    """Pre-generate all shard PRNG keys in a single JAX call.
+
+    This is more efficient than generating keys one-at-a-time in each worker,
+    as it amortizes JAX compilation overhead across all shards.
+
+    Parameters
+    ----------
+    n_shards : int
+        Number of shards to generate keys for.
+    seed : int
+        Base seed for PRNG key generation.
+
+    Returns
+    -------
+    list[tuple[int, int]]
+        List of (key_high, key_low) tuples that can be used to reconstruct
+        JAX PRNG keys in worker processes without importing JAX here.
+    """
+    import jax
+    import jax.numpy as jnp
+
+    # Generate all keys at once using jax.random.split
+    base_key = jax.random.PRNGKey(seed)
+    # Split into n_shards + 1 keys (first is throwaway, rest are for shards)
+    all_keys = jax.random.split(base_key, n_shards + 1)
+    shard_keys = all_keys[1:]  # Skip the first key
+
+    # Convert to serializable format (tuples of ints)
+    # JAX keys are uint32[2] arrays
+    key_tuples = []
+    for key in shard_keys:
+        key_array = jnp.array(key, dtype=jnp.uint32)
+        key_tuples.append((int(key_array[0]), int(key_array[1])))
+
+    return key_tuples
+
+
+def _get_physical_cores() -> int:
+    """Get physical core count using psutil for accurate detection.
+
+    Falls back to os.cpu_count() // 2 if psutil unavailable.
+    """
+    try:
+        import psutil
+
+        physical = psutil.cpu_count(logical=False)
+        if physical is not None:
+            return physical
+    except ImportError:
+        pass
+    # Fallback: assume hyperthreading (logical = 2 * physical)
+    import os
+
+    return max(1, (os.cpu_count() or 1) // 2)
+
+
 def _compute_threads_per_worker(total_threads: int, workers: int) -> int:
     """Derive a conservative thread budget per worker to avoid oversubscription.
 
-    We approximate physical cores as half of logical (common HT layout) and divide
-    that budget across workers, clamping to at least 1.
+    Uses psutil for accurate physical core detection when available,
+    otherwise approximates physical cores as half of logical (common HT layout).
+    Divides the budget across workers, clamping to at least 1.
     """
-
-    safe_pool = max(1, total_threads // 2)
+    physical_cores = _get_physical_cores()
+    # Use physical cores as the safe pool (avoid hyperthreading contention)
+    safe_pool = max(1, min(total_threads, physical_cores))
     worker_count = max(1, workers)
     return max(1, safe_pool // worker_count)
 
@@ -51,6 +115,7 @@ def _run_shard_worker_with_queue(
     analysis_mode: str,
     threads_per_worker: int,
     result_queue: mp.Queue,
+    rng_key_tuple: tuple[int, int] | None = None,
 ) -> None:
     """Worker function that puts result in a queue for proper timeout handling."""
     result = _run_shard_worker(
@@ -64,6 +129,7 @@ def _run_shard_worker_with_queue(
         analysis_mode=analysis_mode,
         threads_per_worker=threads_per_worker,
         result_queue=result_queue,
+        rng_key_tuple=rng_key_tuple,
     )
     try:
         result_queue.put_nowait(result)
@@ -84,6 +150,7 @@ def _run_shard_worker(
     analysis_mode: str,
     threads_per_worker: int = 2,
     result_queue: mp.Queue | None = None,
+    rng_key_tuple: tuple[int, int] | None = None,
 ) -> dict[str, Any]:
     """Worker function for processing a single shard.
 
@@ -109,6 +176,9 @@ def _run_shard_worker(
         Analysis mode.
     threads_per_worker : int
         Number of threads for JAX/XLA in this worker process.
+    rng_key_tuple : tuple[int, int] | None
+        Pre-generated PRNG key as (high, low) tuple. If None, generates
+        a key based on shard_idx (legacy behavior).
 
     Returns
     -------
@@ -148,7 +218,13 @@ def _run_shard_worker(
     )
 
     # Create RNG key for this shard
-    rng_key = jax.random.PRNGKey(42 + shard_idx)
+    # Use pre-generated key if available (batch optimization), else generate locally
+    if rng_key_tuple is not None:
+        # Reconstruct JAX PRNG key from tuple
+        rng_key = jnp.array(rng_key_tuple, dtype=jnp.uint32)
+    else:
+        # Legacy behavior: generate key based on shard index
+        rng_key = jax.random.PRNGKey(42 + shard_idx)
 
     # Prepare model kwargs - must match xpcs_model() signature
     model_kwargs = {
@@ -172,26 +248,29 @@ def _run_shard_worker(
     }
 
     # Heartbeat thread to emit liveness updates back to the parent.
+    # Optimization: Use Event.wait(timeout) instead of busy-wait loop.
+    # This reduces wake-ups by 75% (from 4 per interval to 1).
     stop_hb = threading.Event()
     heartbeat_interval = 30.0
 
     def _heartbeat_loop() -> None:
-        last_sent = time.perf_counter()
-        while not stop_hb.is_set():
-            now = time.perf_counter()
-            if now - last_sent >= heartbeat_interval:
-                payload = {
-                    "type": "heartbeat",
-                    "shard_idx": shard_idx,
-                    "elapsed": now - start_time,
-                }
-                if result_queue is not None:
-                    try:
-                        result_queue.put_nowait(payload)
-                    except Exception:
-                        pass
-                last_sent = now
-            time.sleep(heartbeat_interval / 4)
+        while True:
+            # Wait for stop signal OR timeout (whichever comes first)
+            # This is much more efficient than sleep + check loop
+            if stop_hb.wait(timeout=heartbeat_interval):
+                # Event was set - time to exit
+                break
+            # Timeout expired - send heartbeat
+            payload = {
+                "type": "heartbeat",
+                "shard_idx": shard_idx,
+                "elapsed": time.perf_counter() - start_time,
+            }
+            if result_queue is not None:
+                try:
+                    result_queue.put_nowait(payload)
+                except Exception:
+                    pass
 
     hb_thread = threading.Thread(target=_heartbeat_loop, daemon=True)
     hb_thread.start()
@@ -430,6 +509,14 @@ class MultiprocessingBackend(CMCBackend):
         else:
             ps_dict = model_kwargs.get("config_dict", {})
 
+        # Pre-generate all shard PRNG keys in single JAX call (batch optimization)
+        # This amortizes JAX compilation overhead across all shards
+        run_logger.debug(f"Pre-generating {n_shards} PRNG keys...")
+        key_gen_start = time.time()
+        shard_keys = _generate_shard_keys(n_shards, seed=42)
+        key_gen_time = time.time() - key_gen_start
+        run_logger.debug(f"PRNG key generation completed in {key_gen_time:.3f}s")
+
         # Use spawn context for clean process isolation
         ctx = mp.get_context(self.spawn_method)
         result_queue = ctx.Queue()
@@ -456,7 +543,11 @@ class MultiprocessingBackend(CMCBackend):
         pbar.refresh()
 
         start_time = time.time()
-        poll_interval = 2.0  # Check every 2 seconds
+        # Adaptive polling: start with faster polling, slow down as shards run longer
+        poll_interval_min = 0.5  # Fast polling during startup
+        poll_interval_max = 5.0  # Slow polling during long-running shards
+        poll_interval = poll_interval_min
+        last_completion_time = start_time  # Track when last shard completed
         status_log_interval = 300.0  # parent status log every 5 minutes
         last_status_log = start_time
 
@@ -484,6 +575,9 @@ class MultiprocessingBackend(CMCBackend):
                             recorded_shards.add(shard_idx)
                         completed_count += 1
                         pbar.update(1)
+                        # Reset to fast polling on completion (adaptive polling)
+                        last_completion_time = time.time()
+                        poll_interval = poll_interval_min
                         if message.get("success"):
                             pbar.set_postfix(
                                 shard=message.get("shard_idx", "?"),
@@ -521,6 +615,7 @@ class MultiprocessingBackend(CMCBackend):
                             analysis_mode,
                             threads_per_worker,
                             result_queue,
+                            shard_keys[shard_idx],  # Pre-generated PRNG key
                         ),
                     )
                     process.start()
@@ -650,6 +745,16 @@ class MultiprocessingBackend(CMCBackend):
                             f"active={len(active_processes)}; last_heartbeats={heartbeat_snapshot}"
                         )
                         last_status_log = time.time()
+
+                    # Adaptive polling: gradually increase interval if no recent completions
+                    # This reduces CPU overhead during long-running shards
+                    time_since_completion = time.time() - last_completion_time
+                    if time_since_completion > 30.0:
+                        # Gradually increase poll interval (10% per 30s of inactivity)
+                        poll_interval = min(
+                            poll_interval * 1.1,
+                            poll_interval_max,
+                        )
 
                     time.sleep(poll_interval)
 
