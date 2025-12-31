@@ -12,6 +12,7 @@ for X-ray Photon Correlation Spectroscopy (XPCS) under nonequilibrium conditions
    theoretical_framework
    analysis_modes
    computational_methods
+   anti_degeneracy_defense
    citations
 
 Overview
@@ -98,12 +99,16 @@ See :doc:`analysis_modes` for detailed parameter descriptions and usage.
 Version Information
 -------------------
 
-This documentation covers Homodyne v2.5.x with the following key features:
+This documentation covers Homodyne v2.9.x with the following key features:
 
+* **v2.9.0**: Anti-Degeneracy Defense System (Fourier reparameterization, hierarchical optimization, adaptive regularization, gradient monitoring)
+* **v2.7.2**: Group Variance Regularization for per-angle parameter absorption
+* **v2.7.1**: Per-Angle Initialization Fix
+* **v2.6.0**: Adaptive Hybrid Streaming Optimizer, Multi-Start Optimization
 * **v2.5.0**: Memory-bounded streaming optimizer for large datasets (>10M points)
 * **v2.4.3**: NLSQ element-wise integration fix (matches CMC physics)
 * **v2.4.1**: CMC-only MCMC architecture, module reorganization
 * **v2.4.0**: Per-angle scaling mandatory, legacy scalar mode removed
 * **v2.3.0**: CPU-only architecture (GPU support removed for maintenance simplicity)
 
-For migration guidance, see the project repository documentation.
+For migration guidance, see :doc:`anti_degeneracy_defense` and the project repository documentation.

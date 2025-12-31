@@ -1040,6 +1040,110 @@ PBS Backend
    :undoc-members:
    :show-inheritance:
 
+Anti-Degeneracy Defense System (v2.9.0)
+----------------------------------------
+
+The NLSQ module includes a comprehensive anti-degeneracy defense system for laminar flow
+analysis with many phi angles. See :doc:`/research/anti_degeneracy_defense` for theoretical
+background and usage tutorials.
+
+Fourier Reparameterization (Layer 1)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Reduces per-angle parameter count by expressing contrast/offset as Fourier series.
+
+.. automodule:: homodyne.optimization.nlsq.fourier_reparam
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+Key Classes
+^^^^^^^^^^^
+
+.. autosummary::
+   :nosignatures:
+
+   homodyne.optimization.nlsq.fourier_reparam.FourierReparamConfig
+   homodyne.optimization.nlsq.fourier_reparam.FourierReparameterizer
+
+Hierarchical Optimization (Layer 2)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Alternates between physical and per-angle parameter optimization to break gradient cancellation.
+
+.. automodule:: homodyne.optimization.nlsq.hierarchical
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+Key Classes
+^^^^^^^^^^^
+
+.. autosummary::
+   :nosignatures:
+
+   homodyne.optimization.nlsq.hierarchical.HierarchicalConfig
+   homodyne.optimization.nlsq.hierarchical.HierarchicalResult
+   homodyne.optimization.nlsq.hierarchical.HierarchicalOptimizer
+
+Adaptive Regularization (Layer 3)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+CV-based regularization with automatic lambda tuning.
+
+.. automodule:: homodyne.optimization.nlsq.adaptive_regularization
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+Key Classes
+^^^^^^^^^^^
+
+.. autosummary::
+   :nosignatures:
+
+   homodyne.optimization.nlsq.adaptive_regularization.AdaptiveRegularizationConfig
+   homodyne.optimization.nlsq.adaptive_regularization.AdaptiveRegularizer
+
+Gradient Collapse Monitor (Layer 4)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Runtime detection of gradient collapse with automatic response actions.
+
+.. automodule:: homodyne.optimization.nlsq.gradient_monitor
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+Key Classes
+^^^^^^^^^^^
+
+.. autosummary::
+   :nosignatures:
+
+   homodyne.optimization.nlsq.gradient_monitor.GradientMonitorConfig
+   homodyne.optimization.nlsq.gradient_monitor.CollapseEvent
+   homodyne.optimization.nlsq.gradient_monitor.GradientCollapseMonitor
+
+Anti-Degeneracy Controller
+~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Unified controller that orchestrates all defense layers.
+
+.. automodule:: homodyne.optimization.nlsq.anti_degeneracy_controller
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+Key Classes
+^^^^^^^^^^^
+
+.. autosummary::
+   :nosignatures:
+
+   homodyne.optimization.nlsq.anti_degeneracy_controller.AntiDegeneracyConfig
+   homodyne.optimization.nlsq.anti_degeneracy_controller.AntiDegeneracyController
+
 Supporting Modules
 ------------------
 
