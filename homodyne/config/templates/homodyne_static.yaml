@@ -7,7 +7,7 @@
 # Use for: Equilibrium systems, pure diffusion, anomalous diffusion
 # Parameter count: 3 physical + 2 × N_angles scaling = 3 + 2N total
 #
-# VERSION: 2.6.0
+# VERSION: 2.9.0
 # UPDATED: 2025-12-20
 # ==============================================================================
 
@@ -16,7 +16,7 @@
 # ==============================================================================
 # Template metadata describing analysis configuration
 metadata:
-  config_version: "2.6.0" # Configuration file format version
+  config_version: "2.9.0" # Configuration file format version
   description: "Static diffusion analysis - 3-parameter model"
   analysis_mode: "static" # Static diffusion mode
   parameter_count: 3 # D₀, α, D_offset
