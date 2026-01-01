@@ -327,7 +327,7 @@ class GradientCollapseMonitor:
 
         # NEW (Dec 2025): Check watched parameters for gradient collapse
         # This specifically monitors parameters like gamma_dot_t0 that can
-        # collapse to zero during Adam warmup when data is angle-sequential
+        # collapse to zero during L-BFGS warmup when data is angle-sequential
         # Uses consecutive trigger mechanism to avoid false positives during warmup
         if self.config.watch_parameters is not None:
             # Skip checks before minimum iteration (warmup grace period)

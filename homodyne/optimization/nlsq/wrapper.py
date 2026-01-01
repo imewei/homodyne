@@ -632,7 +632,7 @@ def create_multistart_warmup_func(
     """Create a warmup-only fit function for multi-start Phase 1 strategy.
 
     This function creates a warmup_fit_func compatible with the multi-start
-    optimization module Phase 1 strategy. It uses the Adam warmup phase
+    optimization module Phase 1 strategy. It uses the L-BFGS warmup phase
     from the NLSQ AdaptiveHybridStreamingOptimizer to quickly explore the
     parameter space without full Gauss-Newton refinement.
 
@@ -647,7 +647,7 @@ def create_multistart_warmup_func(
     bounds : tuple[np.ndarray, np.ndarray] | None, optional
         Parameter bounds as (lower, upper)
     warmup_learning_rate : float, default=0.001
-        Adam learning rate for warmup phase
+        L-BFGS line search scale for warmup phase
     normalize : bool, default=True
         Whether to use parameter normalization (recommended for scale imbalance)
     chunk_size : int, default=50000
@@ -689,7 +689,7 @@ def create_multistart_warmup_func(
     Notes
     -----
     This function integrates with the Phase 1 multi-start strategy which:
-    1. Runs parallel Adam warmup from multiple starting points
+    1. Runs parallel L-BFGS warmup from multiple starting points
     2. Selects the best warmup result
     3. Performs full Gauss-Newton refinement from the best starting point
 
@@ -723,7 +723,7 @@ def create_multistart_warmup_func(
         initial_params : np.ndarray
             Initial parameter values
         n_iterations : int
-            Number of Adam warmup iterations
+            Number of L-BFGS warmup iterations
 
         Returns
         -------
@@ -783,7 +783,7 @@ def create_multistart_warmup_func(
                 success=result.get("success", False),
                 n_iterations=n_iterations,
                 wall_time=wall_time,
-                message="Adam warmup completed",
+                message="L-BFGS warmup completed",
             )
 
         except Exception as e:
@@ -3236,7 +3236,7 @@ class NLSQWrapper:
 
         # CRITICAL FIX (Dec 2025): Pre-shuffle stratified data before returning
         # This prevents the hybrid streaming optimizer from seeing angle-sequential data
-        # during Adam warmup, which would cause local minimum traps (gamma_dot_t0 -> 0)
+        # during L-BFGS warmup, which would cause local minimum traps (gamma_dot_t0 -> 0)
         # The shuffle must happen HERE, not in _fit_with_stratified_hybrid_streaming,
         # because other code paths may also use the stratified data.
         shuffle_seed = 42  # Fixed seed for reproducibility
@@ -4467,12 +4467,12 @@ class NLSQWrapper:
 
         This method uses NLSQ's four-phase hybrid optimizer to fix three key issues:
         1. Shear-term weak gradients (scale imbalance) - via parameter normalization
-        2. Slow convergence - via Adam warmup + Gauss-Newton refinement
+        2. Slow convergence - via L-BFGS warmup + Gauss-Newton refinement
         3. Crude covariance - via exact J^T J accumulation + covariance transform
 
         Four Phases:
         - Phase 0: Parameter normalization setup (bounds-based)
-        - Phase 1: Adam warmup with adaptive switching
+        - Phase 1: L-BFGS warmup with adaptive switching
         - Phase 2: Streaming Gauss-Newton with exact J^T J accumulation
         - Phase 3: Denormalization and covariance transform
 
@@ -4631,7 +4631,7 @@ class NLSQWrapper:
                     f"  Phase 0 (normalization): {phase_timings.get('phase0_normalization', 0):.3f}s"
                 )
                 logger.info(
-                    f"  Phase 1 (Adam warmup): {phase_timings.get('phase1_warmup', 0):.3f}s"
+                    f"  Phase 1 (L-BFGS warmup): {phase_timings.get('phase1_warmup', 0):.3f}s"
                 )
                 logger.info(
                     f"  Phase 2 (Gauss-Newton): {phase_timings.get('phase2_gauss_newton', 0):.3f}s"
@@ -4653,7 +4653,7 @@ class NLSQWrapper:
                 "\n"
                 "Capabilities lost with fallback:\n"
                 "  - Parameter normalization (gradient equalization)\n"
-                "  - Adam warmup + Gauss-Newton hybrid convergence\n"
+                "  - L-BFGS warmup + Gauss-Newton hybrid convergence\n"
                 "  - Exact J^T J covariance accumulation\n"
                 "\n"
                 "Fallback uses basic streaming optimizer which may:\n"
@@ -5462,7 +5462,7 @@ class NLSQWrapper:
         # PARAMETER NORMALIZATION FOR GRADIENT BALANCING
         # =====================================================
         # Problem: Parameters have vastly different scales (D0~10^4, gamma_dot_t0~10^-3)
-        # This causes weak gradients for small-scale parameters in Adam optimizer.
+        # This causes weak gradients for small-scale parameters in L-BFGS optimizer.
         #
         # Solution: Normalize parameters to [0,1] using bounds
         # - p_norm = (p - lower) / (upper - lower)
@@ -5762,7 +5762,7 @@ class NLSQWrapper:
 
         This method implements the 4-phase hybrid optimization from NLSQ >=0.3.2:
         - Phase 0: Parameter normalization setup (bounds-based)
-        - Phase 1: Adam warmup with adaptive switching
+        - Phase 1: L-BFGS warmup with adaptive switching
         - Phase 2: Streaming Gauss-Newton with exact J^T J accumulation
         - Phase 3: Denormalization and covariance transform
 
@@ -5774,7 +5774,7 @@ class NLSQWrapper:
 
         Key improvements over basic StreamingOptimizer:
         1. Shear-term weak gradients: Fixed via parameter normalization
-        2. Slow convergence: Fixed via Adam warmup + Gauss-Newton refinement
+        2. Slow convergence: Fixed via L-BFGS warmup + Gauss-Newton refinement
         3. Crude covariance: Fixed via exact J^T J accumulation
         4. Structural degeneracy: Fixed via anti-degeneracy defense layers
 
@@ -5788,9 +5788,9 @@ class NLSQWrapper:
             hybrid_config: Optional config dict with keys:
                 - normalize: Enable parameter normalization (default: True)
                 - normalization_strategy: "bounds" or "scale" (default: "bounds")
-                - warmup_iterations: Adam warmup iterations (default: 100)
-                - max_warmup_iterations: Max Adam iterations (default: 500)
-                - warmup_learning_rate: Adam learning rate (default: 0.001)
+                - warmup_iterations: L-BFGS warmup iterations (default: 100)
+                - max_warmup_iterations: Max L-BFGS iterations (default: 500)
+                - warmup_learning_rate: L-BFGS line search scale (default: 0.001)
                 - gauss_newton_max_iterations: GN iterations (default: 50)
                 - gauss_newton_tol: Convergence tolerance (default: 1e-8)
                 - chunk_size: Points per chunk for streaming (default: 50000)
@@ -5856,7 +5856,7 @@ class NLSQWrapper:
         lr_schedule_end_value = config_dict.get("lr_schedule_end_value", 0.0001)
 
         # 4-Layer Defense Strategy (NLSQ 0.3.6)
-        # Prevents Adam warmup from diverging when starting from good parameters
+        # Prevents L-BFGS warmup from diverging when starting from good parameters
         # Layer 1: Warm Start Detection - skip warmup if already at good solution
         enable_warm_start_detection = config_dict.get(
             "enable_warm_start_detection", True
@@ -5871,7 +5871,7 @@ class NLSQWrapper:
         cost_increase_tolerance = float(
             config_dict.get("cost_increase_tolerance", 0.05)
         )
-        # Layer 4: Step Clipping - limit max parameter change per Adam iteration
+        # Layer 4: Step Clipping - limit max parameter change per L-BFGS iteration
         enable_step_clipping = config_dict.get("enable_step_clipping", True)
         max_warmup_step_size = float(config_dict.get("max_warmup_step_size", 0.1))
 
@@ -5901,6 +5901,13 @@ class NLSQWrapper:
         # =====================================================================
         # Anti-Degeneracy Defense System v2.9.0 Initialization
         # =====================================================================
+        # CRITICAL FIX (Jan 2026): Define n_physical unconditionally FIRST
+        # This variable is used by multiple conditional blocks (hierarchical,
+        # gradient_monitor, shear_weighter). Previously it was only defined
+        # inside conditional blocks, causing UnboundLocalError when those
+        # conditions were false but shear_weighter tried to use it.
+        n_physical = len(physical_param_names)
+
         # Parse anti-degeneracy configuration
         ad_config = anti_degeneracy_config or {}
         hierarchical_config = ad_config.get("hierarchical", {})
@@ -6004,7 +6011,7 @@ class NLSQWrapper:
         enable_hierarchical = hierarchical_config.get("enable", True)
         hierarchical_optimizer = None
         if enable_hierarchical and per_angle_scaling and is_laminar_flow:
-            n_physical = len(physical_param_names)
+            # n_physical defined unconditionally above
             hier_config = HierarchicalConfig(
                 enable=True,
                 max_outer_iterations=hierarchical_config.get("max_outer_iterations", 5),
@@ -6105,7 +6112,7 @@ class NLSQWrapper:
                 if fourier_reparameterizer is None
                 else fourier_reparameterizer.n_coeffs
             )
-            n_physical = len(physical_param_names)
+            # n_physical defined unconditionally above
             # Use numpy arrays for indices (JAX compatibility)
             per_angle_indices = np.arange(n_per_angle, dtype=np.intp)
             physical_indices = np.arange(
@@ -6131,7 +6138,7 @@ class NLSQWrapper:
                     "response", "hierarchical"
                 ),
                 # NEW (Dec 2025): Watch gamma_dot_t0 specifically for gradient collapse
-                # This detects when shear parameter gradient vanishes during Adam warmup
+                # This detects when shear parameter gradient vanishes during L-BFGS warmup
                 watch_parameters=[gamma_dot_t0_idx],
                 watch_threshold=float(
                     gradient_monitoring_config.get("watch_threshold", 1e-8)
@@ -6494,7 +6501,7 @@ class NLSQWrapper:
 
         # NOTE (Dec 2025): Data is already pre-shuffled at stratification stage
         # in _apply_stratification_if_needed(). No additional shuffle needed here.
-        # The pre-shuffle prevents Adam warmup from seeing angle-sequential data,
+        # The pre-shuffle prevents L-BFGS warmup from seeing angle-sequential data,
         # which would cause local minimum traps (gamma_dot_t0 -> 0).
 
         # =====================================================================
@@ -6731,7 +6738,7 @@ class NLSQWrapper:
             active_model_fn = model_fn_pointwise
 
         # Run hybrid optimization
-        logger.info("Starting hybrid optimization (Adam + Gauss-Newton)...")
+        logger.info("Starting hybrid optimization (L-BFGS + Gauss-Newton)...")
         opt_start = time.perf_counter()
 
         # Layer 2: Hierarchical optimization path
@@ -6866,17 +6873,17 @@ class NLSQWrapper:
         warmup_diag = diagnostics.get("warmup_diagnostics", {})
         gn_diag = diagnostics.get("gauss_newton_diagnostics", {})
 
-        adam_epochs = phase_iterations.get("phase1", 0)
+        lbfgs_epochs = phase_iterations.get("phase1", 0)
         gn_iterations = phase_iterations.get("phase2", 0)
-        final_adam_loss = warmup_diag.get("final_loss", float("inf"))
+        final_lbfgs_loss = warmup_diag.get("final_loss", float("inf"))
         final_gn_cost = gn_diag.get("final_cost", float("inf"))
 
         logger.info("=" * 80)
         logger.info("HYBRID STREAMING OPTIMIZATION COMPLETE")
         logger.info(f"  Success: {result.get('success', False)}")
-        logger.info(f"  Adam final loss: {final_adam_loss:.6e}")
+        logger.info(f"  L-BFGS final loss: {final_lbfgs_loss:.6e}")
         logger.info(f"  GN final cost: {final_gn_cost:.6e}")
-        logger.info(f"  Adam epochs: {adam_epochs}")
+        logger.info(f"  L-BFGS epochs: {lbfgs_epochs}")
         logger.info(f"  GN iterations: {gn_iterations}")
         logger.info(f"  Optimization time: {opt_time:.2f}s")
         logger.info(f"  Total time: {total_time:.2f}s")
@@ -7167,11 +7174,11 @@ class NLSQWrapper:
             "success": result.get("success", False),
             "message": result.get("message", "Hybrid streaming optimization completed"),
             "nfev": result.get("function_evaluations", 0),
-            "nit": adam_epochs + gn_iterations,
+            "nit": lbfgs_epochs + gn_iterations,
             "final_loss": final_gn_cost
             if final_gn_cost != float("inf")
-            else final_adam_loss,
-            "adam_epochs": adam_epochs,
+            else final_lbfgs_loss,
+            "lbfgs_epochs": lbfgs_epochs,
             "gauss_newton_iterations": gn_iterations,
             "optimization_time": opt_time,
             "total_time": total_time,

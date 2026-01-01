@@ -705,7 +705,7 @@ class TestHybridStreamingOptimizer:
 
     Added in v2.6.0 to improve convergence for large datasets with:
     - Parameter normalization for gradient balancing
-    - Adam warmup + Gauss-Newton refinement
+    - L-BFGS warmup + Gauss-Newton refinement
     - Exact J^T J accumulation for covariance
     """
 
@@ -784,7 +784,7 @@ class TestHybridStreamingOptimizer:
                 "success": True,
                 "message": "Test",
                 "final_loss": 0.01,
-                "adam_epochs": 50,
+                "lbfgs_epochs": 50,
                 "gauss_newton_iterations": 10,
                 "diagnostics": {},
             }
@@ -837,7 +837,7 @@ class TestHybridStreamingOptimizer:
             "nfev",
             "nit",
             "final_loss",
-            "adam_epochs",
+            "lbfgs_epochs",
             "gauss_newton_iterations",
             "optimization_time",
             "method",
@@ -851,7 +851,7 @@ class TestHybridStreamingOptimizer:
             "nfev": 1000,
             "nit": 60,
             "final_loss": 0.001,
-            "adam_epochs": 50,
+            "lbfgs_epochs": 50,
             "gauss_newton_iterations": 10,
             "optimization_time": 120.5,
             "method": "adaptive_hybrid_streaming",

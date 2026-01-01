@@ -161,7 +161,7 @@ class NLSQConfig:
     hybrid_checkpoint_frequency: int = 100
     hybrid_validate_numerics: bool = True
 
-    # 4-Layer Defense Strategy for Adam Warmup (v2.8.0 / NLSQ 0.3.6)
+    # 4-Layer Defense Strategy for L-BFGS Warmup (v2.8.0 / NLSQ 0.3.6)
     # Prevents divergence when starting from good initial parameters
     #
     # Layer 1: Warm Start Detection - skip warmup if already at good solution
@@ -181,7 +181,7 @@ class NLSQConfig:
     hybrid_enable_cost_guard: bool = True
     hybrid_cost_increase_tolerance: float = 0.05  # Abort if loss increases >5%
     #
-    # Layer 4: Step Clipping - limit max parameter change per Adam iteration
+    # Layer 4: Step Clipping - limit max parameter change per L-BFGS iteration
     hybrid_enable_step_clipping: bool = True
     hybrid_max_warmup_step_size: float = 0.1  # Max step in normalized units
 
