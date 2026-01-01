@@ -5920,10 +5920,30 @@ class NLSQWrapper:
         if per_angle_mode_actual == "fourier" and per_angle_scaling and is_laminar_flow:
             # Get unique phi angles in radians
             phi_unique_rad = np.deg2rad(np.array(sorted(set(all_phi_early))))
+
+            # Extract user-configured bounds for contrast and offset from bounds tuple
+            # Bounds layout: [contrast(n_phi), offset(n_phi), physical(7)]
+            # Use first contrast/offset bound as the c0/o0 (mean) bounds
+            c0_bounds = (0.1, 0.8)  # Default
+            o0_bounds = (0.5, 1.5)  # Default
+            if bounds is not None:
+                lower_bounds, upper_bounds = bounds
+                if len(lower_bounds) >= n_phi and len(upper_bounds) >= n_phi:
+                    # Extract contrast bounds from first contrast element
+                    c0_bounds = (float(lower_bounds[0]), float(upper_bounds[0]))
+                    # Extract offset bounds from first offset element
+                    o0_bounds = (float(lower_bounds[n_phi]), float(upper_bounds[n_phi]))
+                    logger.debug(
+                        f"  Using user-configured Fourier bounds: "
+                        f"c0={c0_bounds}, o0={o0_bounds}"
+                    )
+
             fourier_config = FourierReparamConfig(
                 mode="fourier",
                 fourier_order=fourier_order,
                 auto_threshold=fourier_auto_threshold,
+                c0_bounds=c0_bounds,
+                o0_bounds=o0_bounds,
             )
             fourier_reparameterizer = FourierReparameterizer(
                 phi_unique_rad, fourier_config
@@ -5932,6 +5952,8 @@ class NLSQWrapper:
             logger.info("ANTI-DEGENERACY DEFENSE: Layer 1 - Fourier Reparameterization")
             logger.info(f"  Mode: {per_angle_mode_actual}")
             logger.info(f"  n_phi: {n_phi}, Fourier order: {fourier_order}")
+            logger.info(f"  Contrast bounds (c0): {c0_bounds}")
+            logger.info(f"  Offset bounds (o0): {o0_bounds}")
             logger.info(
                 f"  Parameter reduction: {2 * n_phi} -> {fourier_reparameterizer.n_coeffs}"
             )
@@ -6420,31 +6442,32 @@ class NLSQWrapper:
                 lower_bounds, upper_bounds = bounds
                 # Per-angle bounds are typically (0,1) for contrast, (0.5, 1.5) for offset
                 # Fourier coefficients can have wider bounds since they combine linearly
-                n_coeffs = fourier_reparameterizer.n_coeffs
+                # Use n_coeffs_per_param (e.g., 5 for order=2), NOT n_coeffs (total=10)
+                n_half = fourier_reparameterizer.n_coeffs_per_param
 
                 # Fourier coefficient bounds: a0 keeps the mean, others can be ±range
                 contrast_lower = np.concatenate(
                     [
                         [lower_bounds[0]],  # a0 (mean) lower bound
-                        np.full(n_coeffs - 1, -1.0),  # Other coeffs can be negative
+                        np.full(n_half - 1, -1.0),  # Other coeffs can be negative
                     ]
                 )
                 contrast_upper = np.concatenate(
                     [
                         [upper_bounds[0]],  # a0 (mean) upper bound
-                        np.full(n_coeffs - 1, 1.0),  # Other coeffs bounded
+                        np.full(n_half - 1, 1.0),  # Other coeffs bounded
                     ]
                 )
                 offset_lower = np.concatenate(
                     [
                         [lower_bounds[n_phi]],  # a0 (mean) lower bound
-                        np.full(n_coeffs - 1, -0.5),  # Other coeffs
+                        np.full(n_half - 1, -0.5),  # Other coeffs
                     ]
                 )
                 offset_upper = np.concatenate(
                     [
                         [upper_bounds[n_phi]],  # a0 (mean) upper bound
-                        np.full(n_coeffs - 1, 0.5),  # Other coeffs
+                        np.full(n_half - 1, 0.5),  # Other coeffs
                     ]
                 )
 
@@ -6670,12 +6693,14 @@ class NLSQWrapper:
         if use_fourier:
             logger.info("=" * 60)
             logger.info("ANTI-DEGENERACY EXECUTION: Inverse Fourier Transform")
-            n_coeffs = fourier_reparameterizer.n_coeffs
+            # Use n_coeffs_per_param (e.g., 5 for order=2), NOT n_coeffs (total=10)
+            # Layout: [contrast_coeffs (5), offset_coeffs (5), physical (7)]
+            n_half = fourier_reparameterizer.n_coeffs_per_param
 
             # Extract Fourier coefficients and physical params from optimized result
-            fourier_contrast_coeffs = popt[:n_coeffs]
-            fourier_offset_coeffs = popt[n_coeffs : 2 * n_coeffs]
-            physical_params_opt = popt[2 * n_coeffs :]
+            fourier_contrast_coeffs = popt[:n_half]
+            fourier_offset_coeffs = popt[n_half : 2 * n_half]
+            physical_params_opt = popt[2 * n_half :]
 
             # Transform back to per-angle parameters
             contrast_per_angle_opt = fourier_reparameterizer.from_fourier(
@@ -6690,7 +6715,7 @@ class NLSQWrapper:
                 [contrast_per_angle_opt, offset_per_angle_opt, physical_params_opt]
             )
 
-            logger.info(f"  Fourier params: {2 * n_coeffs + len(physical_params_opt)}")
+            logger.info(f"  Fourier params: {2 * n_half + len(physical_params_opt)}")
             logger.info(f"  Restored per-angle params: {len(popt)}")
             logger.info("=" * 60)
 
