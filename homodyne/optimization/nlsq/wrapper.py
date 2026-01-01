@@ -5907,19 +5907,41 @@ class NLSQWrapper:
         regularization_config = ad_config.get("regularization", {})
         gradient_monitoring_config = ad_config.get("gradient_monitoring", {})
 
-        # Layer 1: Fourier Reparameterization Configuration
+        # Layer 1: Fourier Reparameterization / Constant Scaling Configuration
         per_angle_mode = ad_config.get("per_angle_mode", "auto")
         fourier_order = ad_config.get("fourier_order", 2)
         fourier_auto_threshold = ad_config.get("fourier_auto_threshold", 6)
+        constant_scaling_threshold = ad_config.get("constant_scaling_threshold", 3)
 
         # Determine actual per-angle mode
+        # T029: Add constant scaling auto-selection logic
         if per_angle_mode == "auto":
-            # Use Fourier when n_phi > threshold (reduces DoF from 2*n_phi to 2*(order+1))
-            per_angle_mode_actual = (
-                "fourier" if n_phi > fourier_auto_threshold else "independent"
-            )
+            if n_phi >= constant_scaling_threshold:
+                # T029: Use constant scaling when n_phi >= threshold
+                per_angle_mode_actual = "constant"
+                logger.info("=" * 60)
+                logger.info("ANTI-DEGENERACY DEFENSE: Auto-selected 'constant' scaling")
+                logger.info(
+                    f"  Reason: n_phi ({n_phi}) >= "
+                    f"constant_scaling_threshold ({constant_scaling_threshold})"
+                )
+                logger.info("  Parameter reduction: 2*n_phi -> 2")
+                logger.info("=" * 60)
+            elif n_phi > fourier_auto_threshold:
+                # Use Fourier when n_phi > fourier threshold
+                per_angle_mode_actual = "fourier"
+            else:
+                # Use individual per-angle parameters for few angles
+                per_angle_mode_actual = "individual"
         else:
+            # T030: Explicit mode - log the user's choice
             per_angle_mode_actual = per_angle_mode
+            logger.debug(
+                f"ANTI-DEGENERACY: Using explicit per_angle_mode: {per_angle_mode_actual}"
+            )
+
+        # T031: Determine use_constant flag
+        use_constant = per_angle_mode_actual == "constant"
 
         # Initialize Fourier reparameterizer if using fourier mode
         fourier_reparameterizer = None
@@ -5963,6 +5985,19 @@ class NLSQWrapper:
             logger.info(
                 f"  Parameter reduction: {2 * n_phi} -> {fourier_reparameterizer.n_coeffs}"
             )
+            logger.info("=" * 60)
+        elif (
+            per_angle_mode_actual == "constant"
+            and per_angle_scaling
+            and is_laminar_flow
+        ):
+            # T031: Log constant mode initialization (when explicitly selected)
+            logger.info("=" * 60)
+            logger.info("ANTI-DEGENERACY DEFENSE: Layer 1 - Constant Scaling Mode")
+            logger.info(f"  Mode: {per_angle_mode_actual}")
+            logger.info(f"  n_phi: {n_phi}")
+            logger.info(f"  Parameter reduction: {2 * n_phi} -> 2")
+            logger.info("  Single contrast and offset shared across all angles")
             logger.info("=" * 60)
 
         # Layer 2: Hierarchical Optimization Configuration
@@ -6129,7 +6164,9 @@ class NLSQWrapper:
             initial_phi0 = shear_weighting_config.get("initial_phi0", None)
             if initial_phi0 is None:
                 # Try to get from initial parameters
-                initial_phi0 = float(initial_params[-1]) if len(initial_params) > 0 else 0.0
+                initial_phi0 = (
+                    float(initial_params[-1]) if len(initial_params) > 0 else 0.0
+                )
 
             sw_config = ShearWeightingConfig(
                 enable=True,
@@ -6146,7 +6183,9 @@ class NLSQWrapper:
                 config=sw_config,
             )
             logger.info("=" * 60)
-            logger.info("ANTI-DEGENERACY DEFENSE: Layer 5 - Shear-Sensitivity Weighting")
+            logger.info(
+                "ANTI-DEGENERACY DEFENSE: Layer 5 - Shear-Sensitivity Weighting"
+            )
             logger.info(f"  Enabled: {shear_weighting_enabled}")
             logger.info(f"  n_phi: {n_phi}")
             logger.info(f"  min_weight: {sw_config.min_weight:.2f}")
@@ -6157,6 +6196,7 @@ class NLSQWrapper:
         # Store anti-degeneracy components for diagnostics
         anti_degeneracy_components = {
             "per_angle_mode": per_angle_mode_actual,
+            "use_constant": use_constant,  # T031: Track constant mode status
             "fourier_reparameterizer": fourier_reparameterizer,
             "hierarchical_optimizer": hierarchical_optimizer,
             "adaptive_regularizer": adaptive_regularizer,
@@ -6166,9 +6206,13 @@ class NLSQWrapper:
         # ===================================================================== #
         if enable_group_variance_regularization and group_variance_indices_raw is None:
             if is_laminar_flow and per_angle_scaling and n_phi > 3:
-                # When Fourier mode: per-angle Fourier coeffs are n_coeffs_per_param per group
-                # When standard mode: per-angle params are n_phi per group
-                if fourier_reparameterizer is not None:
+                # T031: Handle constant, Fourier, and individual modes
+                # Constant mode: 1 value per group (contrast/offset)
+                # Fourier mode: n_coeffs_per_param values per group
+                # Individual mode: n_phi values per group
+                if use_constant:
+                    n_per_group = 1
+                elif fourier_reparameterizer is not None:
                     n_per_group = fourier_reparameterizer.n_coeffs_per_param
                 else:
                     n_per_group = n_phi
@@ -6180,7 +6224,7 @@ class NLSQWrapper:
                 ]
                 logger.info(
                     f"  Auto-computed group_variance_indices for {n_phi} angles: "
-                    f"{group_variance_indices}"
+                    f"{group_variance_indices} (mode: {per_angle_mode_actual})"
                 )
             else:
                 group_variance_indices = None
@@ -6318,6 +6362,17 @@ class NLSQWrapper:
         # Create model function
         is_laminar_flow = "gamma_dot_t0" in physical_param_names
 
+        # T042: Compute n_per_angle for model function based on mode
+        # In constant mode: 1 contrast + 1 offset = 2
+        # In individual mode: n_phi contrast + n_phi offset = 2*n_phi
+        # In Fourier mode: n_coeffs contrast + n_coeffs offset = 2*n_coeffs
+        if use_constant:
+            n_per_angle = 2
+        elif fourier_reparameterizer is not None:
+            n_per_angle = fourier_reparameterizer.n_coeffs
+        else:
+            n_per_angle = 2 * n_phi
+
         @jax.jit
         def model_fn_pointwise(x_batch: jnp.ndarray, *params_tuple) -> jnp.ndarray:
             """Point-wise model function for hybrid streaming optimizer."""
@@ -6332,10 +6387,18 @@ class NLSQWrapper:
             t1_idx = x_batch_2d[:, 1].astype(jnp.int32)
             t2_idx = x_batch_2d[:, 2].astype(jnp.int32)
 
-            # Extract scaling and physical parameters
-            contrast_all = params_all[:n_phi]
-            offset_all = params_all[n_phi : 2 * n_phi]
-            physical_params = params_all[2 * n_phi :]
+            # T042: Extract scaling and physical parameters based on mode
+            # Constant mode: params[0]=contrast, params[1]=offset, params[2:]=physical
+            # Individual mode: params[:n_phi]=contrast, params[n_phi:2*n_phi]=offset, params[2*n_phi:]=physical
+            if use_constant:
+                # Single contrast and offset shared across all angles
+                contrast_all = jnp.full(n_phi, params_all[0])
+                offset_all = jnp.full(n_phi, params_all[1])
+                physical_params = params_all[2:]
+            else:
+                contrast_all = params_all[:n_phi]
+                offset_all = params_all[n_phi : 2 * n_phi]
+                physical_params = params_all[2 * n_phi :]
 
             # Extract physical parameters
             D0 = physical_params[0]
@@ -6454,8 +6517,58 @@ class NLSQWrapper:
         fit_initial_params = initial_params.copy()
         fit_bounds = bounds
 
+        # T034-T038: Constant mode parameter transformation
+        # Transform per-angle params (2*n_phi) to constant (2) by taking means
+        if use_constant:
+            logger.info("=" * 60)
+            logger.info("ANTI-DEGENERACY EXECUTION: Constant Scaling Mode")
+            # Transform per-angle params to single values (means)
+            per_angle_params = initial_params[: 2 * n_phi]
+            physical_params = initial_params[2 * n_phi :]
+
+            # Split per-angle into contrast and offset groups
+            contrast_per_angle = per_angle_params[:n_phi]
+            offset_per_angle = per_angle_params[n_phi : 2 * n_phi]
+
+            # Take means to get constant values
+            contrast_mean = np.mean(contrast_per_angle)
+            offset_mean = np.mean(offset_per_angle)
+
+            # New parameter layout: [contrast_const, offset_const, physical_params]
+            fit_initial_params = np.concatenate(
+                [[contrast_mean], [offset_mean], physical_params]
+            )
+
+            logger.info(f"  Original params: {len(initial_params)}")
+            logger.info(f"  Constant params: {len(fit_initial_params)}")
+            logger.info(f"  Per-angle reduction: {2 * n_phi} -> 2")
+            logger.info(f"  Contrast mean: {contrast_mean:.6f}")
+            logger.info(f"  Offset mean: {offset_mean:.6f}")
+
+            # T039: Transform bounds for constant mode
+            if bounds is not None:
+                lower_bounds, upper_bounds = bounds
+                # For constant mode, use the bounds of the first per-angle param
+                # (all per-angle bounds are typically the same)
+                fit_lower = np.concatenate(
+                    [
+                        [lower_bounds[0]],
+                        [lower_bounds[n_phi]],
+                        lower_bounds[2 * n_phi :],
+                    ]
+                )
+                fit_upper = np.concatenate(
+                    [
+                        [upper_bounds[0]],
+                        [upper_bounds[n_phi]],
+                        upper_bounds[2 * n_phi :],
+                    ]
+                )
+                fit_bounds = (fit_lower, fit_upper)
+            logger.info("=" * 60)
+
         # Layer 1: Fourier reparameterization of initial parameters
-        if use_fourier:
+        elif use_fourier:
             logger.info("=" * 60)
             logger.info("ANTI-DEGENERACY EXECUTION: Fourier Reparameterization")
             # Transform per-angle params to Fourier coefficients
@@ -6694,7 +6807,9 @@ class NLSQWrapper:
 
             # Layer 5: Create callback for shear weight updates
             # Updates weights based on current phi0 estimate at start of each outer iteration
-            def shear_weight_update_callback(params: np.ndarray, outer_iter: int) -> None:
+            def shear_weight_update_callback(
+                params: np.ndarray, outer_iter: int
+            ) -> None:
                 """Update shear-sensitivity weights based on current phi0."""
                 if shear_weighter_local is not None:
                     shear_weighter_local.update_phi0(params, outer_iter)
@@ -6837,7 +6952,9 @@ class NLSQWrapper:
                     pcov_transformed = J_full @ pcov_fourier @ J_full.T
                     # Store for later use (override the result dict lookup)
                     result["pcov_transformed"] = pcov_transformed
-                    logger.info("  Covariance transformed from Fourier to per-angle space")
+                    logger.info(
+                        "  Covariance transformed from Fourier to per-angle space"
+                    )
                 except Exception as e:
                     logger.warning(
                         f"  Covariance transformation failed: {e}. Using identity fallback."
@@ -6848,6 +6965,79 @@ class NLSQWrapper:
                 logger.warning(
                     f"  Fourier covariance unavailable or wrong shape (got {pcov_shape}, "
                     f"expected ({n_fourier_total}, {n_fourier_total})). "
+                    "Using identity fallback."
+                )
+                result["pcov_transformed"] = None
+
+            logger.info("=" * 60)
+
+        # T046-T049: Constant mode inverse transformation
+        # Expand constant parameters back to per-angle format for backward compatibility
+        elif use_constant:
+            logger.info("=" * 60)
+            logger.info("ANTI-DEGENERACY EXECUTION: Inverse Constant Transform")
+            # Layout: [contrast_const, offset_const, physical_params]
+            contrast_const = popt[0]
+            offset_const = popt[1]
+            physical_params_opt = popt[2:]
+
+            # Expand to per-angle format by broadcasting
+            contrast_per_angle_opt = np.full(n_phi, contrast_const)
+            offset_per_angle_opt = np.full(n_phi, offset_const)
+
+            # Reconstruct full parameter vector in original layout
+            popt = np.concatenate(
+                [contrast_per_angle_opt, offset_per_angle_opt, physical_params_opt]
+            )
+
+            logger.info(f"  Constant params: 2 + {len(physical_params_opt)} physical")
+            logger.info(f"  Restored per-angle params: {len(popt)}")
+            logger.info(f"  Contrast (uniform): {contrast_const:.6f}")
+            logger.info(f"  Offset (uniform): {offset_const:.6f}")
+
+            # Transform covariance from constant space to per-angle space
+            # For constant mode, the Jacobian is simpler: broadcasting matrix
+            # J[i, 0] = 1 for i in 0..n_phi-1 (contrast params)
+            # J[n_phi+i, 1] = 1 for i in 0..n_phi-1 (offset params)
+            # J[2*n_phi+i, 2+i] = 1 for physical params (identity)
+            pcov_constant = result.get("pcov", None)
+            n_constant_total = 2 + len(physical_params_opt)
+
+            if (
+                pcov_constant is not None
+                and pcov_constant.shape[0] == n_constant_total
+                and pcov_constant.shape[1] == n_constant_total
+            ):
+                n_per_angle_total = 2 * n_phi  # contrast + offset per-angle
+                n_physical = len(physical_params_opt)
+                n_total_restored = n_per_angle_total + n_physical
+
+                # Build Jacobian for constant → per-angle transformation
+                J_full = np.zeros((n_total_restored, n_constant_total))
+                # Contrast broadcast: d(contrast_per_angle[i])/d(contrast_const) = 1
+                J_full[:n_phi, 0] = 1.0
+                # Offset broadcast: d(offset_per_angle[i])/d(offset_const) = 1
+                J_full[n_phi : 2 * n_phi, 1] = 1.0
+                # Physical params: identity (pass-through)
+                J_full[2 * n_phi :, 2:] = np.eye(n_physical)
+
+                # Transform covariance: pcov_full = J @ pcov_constant @ J.T
+                try:
+                    pcov_transformed = J_full @ pcov_constant @ J_full.T
+                    result["pcov_transformed"] = pcov_transformed
+                    logger.info(
+                        "  Covariance transformed from constant to per-angle space"
+                    )
+                except Exception as e:
+                    logger.warning(
+                        f"  Covariance transformation failed: {e}. Using identity fallback."
+                    )
+                    result["pcov_transformed"] = None
+            else:
+                pcov_shape = pcov_constant.shape if pcov_constant is not None else None
+                logger.warning(
+                    f"  Constant covariance unavailable or wrong shape (got {pcov_shape}, "
+                    f"expected ({n_constant_total}, {n_constant_total})). "
                     "Using identity fallback."
                 )
                 result["pcov_transformed"] = None
@@ -6994,6 +7184,7 @@ class NLSQWrapper:
         info["anti_degeneracy"] = {
             "version": "2.9.1",
             "per_angle_mode": anti_degeneracy_components["per_angle_mode"],
+            "use_constant": anti_degeneracy_components.get("use_constant", False),
             "fourier_enabled": fourier_reparameterizer is not None,
             "hierarchical_enabled": hierarchical_optimizer is not None,
             "adaptive_regularization_enabled": adaptive_regularizer is not None,
@@ -7005,6 +7196,13 @@ class NLSQWrapper:
                 "order": fourier_order,
                 "n_coeffs": fourier_reparameterizer.n_coeffs,
                 "param_reduction": f"{2 * n_phi} -> {fourier_reparameterizer.n_coeffs}",
+            }
+        # T048: Add constant mode diagnostics
+        if use_constant:
+            info["anti_degeneracy"]["constant"] = {
+                "param_reduction": f"{2 * n_phi} -> 2",
+                "contrast_optimized": float(popt[0]) if len(popt) > 0 else None,
+                "offset_optimized": float(popt[n_phi]) if len(popt) > n_phi else None,
             }
         if hierarchical_optimizer is not None:
             info["anti_degeneracy"]["hierarchical"] = (
@@ -7019,7 +7217,9 @@ class NLSQWrapper:
                 gradient_monitor.get_diagnostics()
             )
         if shear_weighter is not None:
-            info["anti_degeneracy"]["shear_weighting"] = shear_weighter.get_diagnostics()
+            info["anti_degeneracy"]["shear_weighting"] = (
+                shear_weighter.get_diagnostics()
+            )
 
         # Add bounds warning info if detected
         if bound_stuck_warning is not None:
