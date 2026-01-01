@@ -528,7 +528,7 @@ optimization:
     # -------------------------------------------------------------------------
     # Four-phase optimizer for large datasets (>10M points):
     #   Phase 0: Parameter normalization setup
-    #   Phase 1: Adam warmup with adaptive switching
+    #   Phase 1: L-BFGS warmup with adaptive switching
     #   Phase 2: Streaming Gauss-Newton (quadratic convergence)
     #   Phase 3: Denormalization and covariance transform
     #
@@ -538,9 +538,9 @@ optimization:
       enable: true                              # Use hybrid optimizer for large datasets
       normalize: true                           # Enable parameter normalization
       normalization_strategy: "auto"            # "auto" | "bounds" | "p0" | "none"
-      warmup_iterations: 200                    # Adam warmup before switch check
+      warmup_iterations: 200                    # L-BFGS warmup before switch check
       max_warmup_iterations: 500                # Force switch to Gauss-Newton
-      warmup_learning_rate: 0.001               # Adam base learning rate
+      warmup_learning_rate: 0.001               # L-BFGS line search scale
       gauss_newton_max_iterations: 100          # Max Gauss-Newton iterations
       gauss_newton_tol: 1.0e-8                  # Convergence tolerance
       chunk_size: 10000                         # Points per chunk for streaming J^T J
@@ -554,9 +554,9 @@ optimization:
 
       # 4-LAYER DEFENSE STRATEGY (NLSQ 0.3.6)
       # ------------------------------------
-      # Prevents Adam warmup from diverging when starting from good parameters.
+      # Prevents L-BFGS warmup from diverging when starting from good parameters.
       # All layers ENABLED BY DEFAULT - protects good starting points while
-      # preserving Adam's exploration benefits for poor starting points.
+      # preserving L-BFGS exploration benefits for poor starting points.
       #
       # Layer 1: Warm Start Detection - skip warmup if already at good solution
       enable_warm_start_detection: true         # Enable warm start detection
@@ -631,10 +631,10 @@ optimization:
         target_cv: 0.10
 
       gradient_monitoring:
-        enable: false                 # Disabled - constant mode handles degeneracy
-        ratio_threshold: 0.01
-        consecutive_triggers: 5
-        response: "warn"
+        enable: true              # Lightweight diagnostic
+        ratio_threshold: 0.01     # Trigger if |∇_physical|/|∇_scaling| < 0.01
+        consecutive_triggers: 5   # Must trigger 5× before warning
+        response: "warn"          # Just log warning, don't intervene
 
   # ---------------------------------------------------------------------------
   # STREAMING - Checkpoint/Resume for Large Datasets (>100M points)
@@ -690,7 +690,7 @@ optimization:
   # Strategy Selection (automatic based on dataset size):
   # - < 1M points:    FULL strategy (N complete fits in parallel)
   # - 1M - 100M:      SUBSAMPLE strategy (multi-start on 500K subsample)
-  # - > 100M points:  PHASE1 strategy (parallel Adam warmup, single GN)
+  # - > 100M points:  PHASE1 strategy (parallel L-BFGS warmup, single GN)
   #
   # Configure in nlsq section:
   #   nlsq:

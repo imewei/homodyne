@@ -417,7 +417,7 @@ optimization:
     # Strategy Selection (automatic based on dataset size):
     # - < 1M points:    FULL strategy (N complete fits in parallel)
     # - 1M - 100M:      SUBSAMPLE strategy (multi-start on 500K subsample)
-    # - > 100M points:  PHASE1 strategy (parallel Adam warmup, single GN)
+    # - > 100M points:  PHASE1 strategy (parallel L-BFGS warmup, single GN)
     multi_start:
       enable: false                     # Default OFF - user opt-in
       n_starts: 10                      # Number of LHS starting points
@@ -437,7 +437,7 @@ optimization:
     # ---------------------------------------------------------------------------
     # Fixes three issues with large datasets:
     # 1. Parameter gradient imbalance - via bounds-based normalization
-    # 2. Slow convergence - via Adam warmup + Gauss-Newton refinement
+    # 2. Slow convergence - via L-BFGS warmup + Gauss-Newton refinement
     # 3. Crude covariance - via exact J^T J accumulation + covariance transform
     #
     # For static mode, gradient imbalance is less severe than laminar_flow,
@@ -450,9 +450,9 @@ optimization:
       normalize: true                           # Enable parameter normalization
       normalization_strategy: "auto"            # Options: "auto" | "bounds" | "p0" | "none"
                                                 # "auto" selects best strategy based on bounds/p0
-      warmup_iterations: 200                    # Adam warmup iterations before switch check
-      max_warmup_iterations: 500                # Maximum Adam iterations (force switch to GN)
-      warmup_learning_rate: 0.001               # Adam base learning rate
+      warmup_iterations: 200                    # L-BFGS warmup iterations before switch check
+      max_warmup_iterations: 500                # Maximum L-BFGS iterations (force switch to GN)
+      warmup_learning_rate: 0.001               # L-BFGS line search scale
       gauss_newton_max_iterations: 100          # Maximum Gauss-Newton iterations
       gauss_newton_tol: 1.0e-8                  # Convergence tolerance
       chunk_size: 10000                         # Points per chunk for streaming
@@ -467,17 +467,17 @@ optimization:
       # -------------------------------------------------------------------------
       # 4-LAYER DEFENSE STRATEGY (NLSQ 0.3.6)
       # -------------------------------------------------------------------------
-      # Prevents Adam warmup from diverging when starting from good parameters.
+      # Prevents L-BFGS warmup from diverging when starting from good parameters.
       # All layers are ENABLED BY DEFAULT - no configuration needed for most cases.
       #
-      # Problem: Adam warmup can drift away from good initial parameters because
-      # its momentum accumulates gradients even near the optimum.
+      # Problem: L-BFGS warmup can overshoot good initial parameters due to
+      # aggressive step sizes from approximate Hessian information.
       #
       # Solution: 4 complementary defense layers that protect good starting points
-      # while preserving Adam's exploration benefits for poor starting points.
+      # while preserving L-BFGS exploration benefits for poor starting points.
       #
       # Layer 1: Warm Start Detection
-      # - Skips Adam warmup entirely if initial loss is already low
+      # - Skips L-BFGS warmup entirely if initial loss is already low
       # - Threshold: loss/variance < warm_start_threshold
       enable_warm_start_detection: true         # Enable warm start detection
       warm_start_threshold: 0.01                # Skip warmup if loss/variance < this
@@ -492,13 +492,13 @@ optimization:
       warmup_lr_careful: 1.0e-5                 # LR for careful mode (moderate starts)
       #
       # Layer 3: Cost-Increase Guard
-      # - Aborts Adam warmup if loss increases too much from initial
+      # - Aborts L-BFGS warmup if loss increases too much from initial
       # - Reverts to best parameters found during warmup
       enable_cost_guard: true                   # Enable cost guard
       cost_increase_tolerance: 0.05             # Abort if loss increases >5%
       #
       # Layer 4: Step Clipping
-      # - Limits maximum parameter change per Adam iteration
+      # - Limits maximum parameter change per L-BFGS iteration
       # - Prevents catastrophic jumps to wrong basins
       enable_step_clipping: true                # Enable step clipping
       max_warmup_step_size: 0.1                 # Max step (fraction of normalized range)
@@ -538,10 +538,10 @@ optimization:
         target_cv: 0.10
 
       gradient_monitoring:
-        enable: false
-        ratio_threshold: 0.01
-        consecutive_triggers: 5
-        response: "warn"
+        enable: true              # Lightweight diagnostic
+        ratio_threshold: 0.01     # Trigger if |∇_physical|/|∇_scaling| < 0.01
+        consecutive_triggers: 5   # Must trigger 5× before warning
+        response: "warn"          # Just log warning, don't intervene
 
   # ---------------------------------------------------------------------------
   # STRATIFICATION - Angle-Stratified Chunking
