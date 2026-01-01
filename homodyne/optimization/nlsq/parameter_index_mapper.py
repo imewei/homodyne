@@ -24,8 +24,8 @@ class ParameterIndexMapper:
     """Centralized index mapping for anti-degeneracy layers.
 
     Provides consistent index ranges regardless of whether Fourier
-    reparameterization is active. This class is the single source of
-    truth for parameter group boundaries.
+    reparameterization or constant scaling is active. This class is the
+    single source of truth for parameter group boundaries.
 
     Parameters
     ----------
@@ -35,20 +35,36 @@ class ParameterIndexMapper:
         Number of physical parameters (typically 7 for laminar_flow mode).
     fourier : FourierReparameterizer | None
         Reference to Fourier reparameterizer if Layer 1 is active.
+    use_constant : bool
+        Whether constant scaling mode is active (single contrast/offset
+        shared across all angles).
 
     Attributes
     ----------
     n_per_angle_total : int
-        Total number of per-angle parameters (Fourier coefficients or raw).
+        Total number of per-angle parameters (Fourier coefficients, raw, or 2).
     n_per_group : int
         Number of parameters per group (contrast or offset).
     use_fourier : bool
         Whether Fourier reparameterization is active.
+    use_constant : bool
+        Whether constant scaling mode is active.
     total_params : int
         Total number of parameters.
+    mode_name : str
+        Human-readable name of current mode ("constant", "fourier", or "individual").
 
     Examples
     --------
+    >>> # Constant mode (23 phi angles)
+    >>> mapper = ParameterIndexMapper(n_phi=23, n_physical=7, use_constant=True)
+    >>> mapper.get_group_indices()
+    [(0, 1), (1, 2)]
+    >>> mapper.n_per_angle_total
+    2
+    >>> mapper.mode_name
+    'constant'
+
     >>> # Non-Fourier mode (23 phi angles)
     >>> mapper = ParameterIndexMapper(n_phi=23, n_physical=7, fourier=None)
     >>> mapper.get_group_indices()
@@ -67,6 +83,7 @@ class ParameterIndexMapper:
     n_phi: int
     n_physical: int
     fourier: FourierReparameterizer | None = None
+    use_constant: bool = False
 
     def __post_init__(self) -> None:
         """Validate inputs and cache computed values."""
@@ -74,6 +91,12 @@ class ParameterIndexMapper:
             raise ValueError(f"n_phi must be >= 1, got {self.n_phi}")
         if self.n_physical < 1:
             raise ValueError(f"n_physical must be >= 1, got {self.n_physical}")
+        # T011: Mutual exclusion - cannot use both Fourier and constant mode
+        if self.use_constant and self.fourier is not None and self.fourier.use_fourier:
+            raise ValueError(
+                "Cannot use both Fourier reparameterization and constant scaling mode. "
+                "Choose one: set use_constant=False or fourier=None."
+            )
 
     @property
     def use_fourier(self) -> bool:
@@ -82,14 +105,40 @@ class ParameterIndexMapper:
 
     @property
     def n_per_group(self) -> int:
-        """Get number of parameters per group (contrast or offset)."""
+        """Get number of parameters per group (contrast or offset).
+
+        Returns
+        -------
+        int
+            1 for constant mode, n_coeffs for Fourier, n_phi for individual.
+        """
+        # T010: Return 1 for constant mode (single value per group)
+        if self.use_constant:
+            return 1
         if self.use_fourier:
             return self.fourier.n_coeffs_per_param
         return self.n_phi
 
     @property
+    def mode_name(self) -> str:
+        """Get human-readable name of current mode.
+
+        Returns
+        -------
+        str
+            "constant", "fourier", or "individual"
+        """
+        if self.use_constant:
+            return "constant"
+        if self.use_fourier:
+            return "fourier"
+        return "individual"
+
+    @property
     def n_per_angle_total(self) -> int:
-        """Get total number of per-angle parameters."""
+        """Get total number of per-angle parameters (scaling params)."""
+        if self.use_constant:
+            return 2  # One contrast + one offset
         if self.use_fourier:
             return self.fourier.n_coeffs
         return 2 * self.n_phi
@@ -178,6 +227,8 @@ class ParameterIndexMapper:
             Diagnostic information including mode, counts, and indices.
         """
         return {
+            "mode_name": self.mode_name,
+            "use_constant": self.use_constant,
             "use_fourier": self.use_fourier,
             "n_phi": self.n_phi,
             "n_physical": self.n_physical,

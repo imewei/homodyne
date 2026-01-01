@@ -608,7 +608,9 @@ optimization:
     # See: docs/specs/anti-degeneracy-defense-v2.9.0.md
     anti_degeneracy:
       enable: true                    # Master enable for all defenses
-      per_angle_mode: "auto"          # "direct" | "fourier" | "auto"
+      per_angle_mode: "auto"          # "individual" | "constant" | "fourier" | "auto"
+                                      # "auto" selects: constant (n_phi>=3), fourier (n_phi>6), else individual
+      constant_scaling_threshold: 3   # Threshold for auto → constant mode
 
       # Layer 1: Fourier Reparameterization
       fourier:

@@ -517,7 +517,8 @@ optimization:
     # See: docs/specs/anti-degeneracy-defense-v2.9.0.md
     anti_degeneracy:
       enable: false                   # Disabled for static mode by default
-      per_angle_mode: "direct"        # Use direct per-angle (no Fourier)
+      per_angle_mode: "individual"    # "individual" | "constant" | "fourier" | "auto"
+      constant_scaling_threshold: 3   # Threshold for auto → constant mode
 
       # Layer 1: Fourier Reparameterization (disabled)
       fourier:

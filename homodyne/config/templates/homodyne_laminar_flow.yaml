@@ -635,8 +635,14 @@ optimization:
     anti_degeneracy:
       # Master switch and mode selection
       enable: true                    # Master enable for all defenses
-      per_angle_mode: "auto"          # "direct" | "fourier" | "auto"
-                                      # "auto" uses Fourier when n_phi > 6
+      per_angle_mode: "auto"          # "individual" | "constant" | "fourier" | "auto"
+                                      # "auto" selects based on n_phi:
+                                      #   n_phi >= constant_scaling_threshold → "constant"
+                                      #   n_phi > fourier_auto_threshold → "fourier"
+                                      #   else → "individual"
+      constant_scaling_threshold: 3   # Threshold for auto → constant mode (default: 3)
+                                      # When n_phi >= threshold, uses single contrast/offset
+                                      # Reduces 2×n_phi params to just 2, preventing absorption
       # -----------------------------------------------------------------------
       # Layer 1: Fourier Reparameterization
       # -----------------------------------------------------------------------

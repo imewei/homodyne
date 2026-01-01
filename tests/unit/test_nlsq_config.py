@@ -487,3 +487,88 @@ class TestNLSQConfigValidationErrors:
         errors2 = config.validate()
         assert errors2 == []
         assert config._validation_errors == []
+
+
+class TestNLSQConfigConstantScaling:
+    """Test constant scaling configuration (T013-T015)."""
+
+    def test_config_constant_mode_valid(self):
+        """T013: Test 'constant' is accepted as valid per_angle_mode."""
+        config = NLSQConfig(per_angle_mode="constant")
+        errors = config.validate()
+        # Filter to only per_angle_mode errors
+        mode_errors = [e for e in errors if "per_angle_mode" in e]
+        assert mode_errors == [], f"'constant' should be valid, got: {mode_errors}"
+
+    def test_config_all_per_angle_modes_valid(self):
+        """Test all per_angle_mode options are accepted."""
+        valid_modes = ["individual", "constant", "fourier", "auto"]
+        for mode in valid_modes:
+            config = NLSQConfig(per_angle_mode=mode)
+            errors = config.validate()
+            mode_errors = [e for e in errors if "per_angle_mode" in e]
+            assert mode_errors == [], f"Mode '{mode}' should be valid"
+
+    def test_config_threshold_default(self):
+        """Test constant_scaling_threshold has default value of 3."""
+        config = NLSQConfig()
+        assert config.constant_scaling_threshold == 3
+
+    def test_config_threshold_parsing(self):
+        """T014: Test constant_scaling_threshold is parsed from dict."""
+        config = NLSQConfig.from_dict(
+            {
+                "anti_degeneracy": {
+                    "constant_scaling_threshold": 5,
+                }
+            }
+        )
+        assert config.constant_scaling_threshold == 5
+
+    def test_config_threshold_with_per_angle_mode(self):
+        """Test constant_scaling_threshold parsed alongside per_angle_mode."""
+        config = NLSQConfig.from_dict(
+            {
+                "anti_degeneracy": {
+                    "per_angle_mode": "auto",
+                    "constant_scaling_threshold": 4,
+                }
+            }
+        )
+        assert config.per_angle_mode == "auto"
+        assert config.constant_scaling_threshold == 4
+
+    def test_config_invalid_threshold_raises(self):
+        """T015: Test threshold < 1 produces validation error."""
+        config = NLSQConfig(constant_scaling_threshold=0)
+        errors = config.validate()
+        threshold_errors = [e for e in errors if "constant_scaling_threshold" in e]
+        assert len(threshold_errors) == 1
+        assert "must be >= 1" in threshold_errors[0]
+
+    def test_config_negative_threshold_raises(self):
+        """Test negative threshold produces validation error."""
+        config = NLSQConfig(constant_scaling_threshold=-5)
+        errors = config.validate()
+        threshold_errors = [e for e in errors if "constant_scaling_threshold" in e]
+        assert len(threshold_errors) == 1
+        assert "must be >= 1" in threshold_errors[0]
+
+    def test_config_threshold_to_dict(self):
+        """Test constant_scaling_threshold is serialized to dict."""
+        config = NLSQConfig(constant_scaling_threshold=10)
+        d = config.to_dict()
+        assert "anti_degeneracy" in d
+        assert d["anti_degeneracy"]["constant_scaling_threshold"] == 10
+
+    def test_config_to_dict_roundtrip(self):
+        """Test constant_scaling_threshold survives to_dict/from_dict cycle."""
+        original = NLSQConfig(
+            per_angle_mode="constant",
+            constant_scaling_threshold=7,
+        )
+        d = original.to_dict()
+        restored = NLSQConfig.from_dict(d)
+
+        assert restored.per_angle_mode == "constant"
+        assert restored.constant_scaling_threshold == 7

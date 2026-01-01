@@ -61,9 +61,9 @@ class HybridRecoveryConfig:
             Settings for this retry attempt.
         """
         return {
-            "lr_multiplier": self.lr_decay ** attempt,
-            "lambda_multiplier": self.lambda_growth ** attempt,
-            "trust_multiplier": self.trust_decay ** attempt,
+            "lr_multiplier": self.lr_decay**attempt,
+            "lambda_multiplier": self.lambda_growth**attempt,
+            "trust_multiplier": self.trust_decay**attempt,
         }
 
 
@@ -170,8 +170,12 @@ class NLSQConfig:
     #
     # Layer 2: Adaptive Learning Rate - scale LR based on initial loss quality
     hybrid_enable_adaptive_warmup_lr: bool = True
-    hybrid_warmup_lr_refinement: float = 1e-6  # LR for good starts (relative_loss < 0.1)
-    hybrid_warmup_lr_careful: float = 1e-5  # LR for moderate starts (relative_loss < 1.0)
+    hybrid_warmup_lr_refinement: float = (
+        1e-6  # LR for good starts (relative_loss < 0.1)
+    )
+    hybrid_warmup_lr_careful: float = (
+        1e-5  # LR for moderate starts (relative_loss < 1.0)
+    )
     #
     # Layer 3: Cost-Increase Guard - abort if loss increases during warmup
     hybrid_enable_cost_guard: bool = True
@@ -201,11 +205,15 @@ class NLSQConfig:
     # === Anti-Degeneracy Defense System (v2.9.0) ===
     # See: docs/specs/anti-degeneracy-defense-v2.9.0.md
     #
-    # Layer 1: Fourier Reparameterization
+    # Layer 1: Fourier Reparameterization / Constant Scaling
     # Reduces structural degeneracy by expressing per-angle params as Fourier series
-    per_angle_mode: str = "auto"  # "independent", "fourier", "auto"
+    # or using a single constant value shared across all angles
+    per_angle_mode: str = "auto"  # "individual", "constant", "fourier", "auto"
     fourier_order: int = 2  # Number of Fourier harmonics (order=2 -> 5 coeffs)
     fourier_auto_threshold: int = 6  # Use Fourier when n_phi > threshold
+    constant_scaling_threshold: int = (
+        3  # Use constant when n_phi >= threshold (auto mode)
+    )
     #
     # Layer 2: Hierarchical Optimization
     # Alternates between physical and per-angle params to break gradient cancellation
@@ -229,7 +237,9 @@ class NLSQConfig:
     enable_gradient_monitoring: bool = True
     gradient_ratio_threshold: float = 0.01  # |∇_physical|/|∇_per_angle| threshold
     gradient_consecutive_triggers: int = 5  # Must trigger N times consecutively
-    gradient_collapse_response: str = "hierarchical"  # "warn", "hierarchical", "reset", "abort"
+    gradient_collapse_response: str = (
+        "hierarchical"  # "warn", "hierarchical", "reset", "abort"
+    )
 
     # Computed fields
     _validation_errors: list[str] = field(default_factory=list, repr=False)
@@ -374,10 +384,13 @@ class NLSQConfig:
                 multi_start.get("degeneracy_threshold", 0.1)
             ),
             # Anti-Degeneracy Defense System (v2.9.0)
-            # Layer 1: Fourier Reparameterization
+            # Layer 1: Fourier Reparameterization / Constant Scaling
             per_angle_mode=anti_degeneracy.get("per_angle_mode", "auto"),
             fourier_order=anti_degeneracy.get("fourier_order", 2),
             fourier_auto_threshold=anti_degeneracy.get("fourier_auto_threshold", 6),
+            constant_scaling_threshold=anti_degeneracy.get(
+                "constant_scaling_threshold", 3
+            ),
             # Layer 2: Hierarchical Optimization
             enable_hierarchical=hierarchical.get("enable", True),
             hierarchical_max_outer_iterations=hierarchical.get(
@@ -578,20 +591,23 @@ class NLSQConfig:
             )
 
         # Validate Anti-Degeneracy Defense System settings (v2.9.0)
-        # Layer 1: Fourier Reparameterization
-        valid_per_angle_modes = ["independent", "fourier", "auto"]
+        # Layer 1: Fourier Reparameterization / Constant Scaling
+        valid_per_angle_modes = ["individual", "constant", "fourier", "auto"]
         if self.per_angle_mode not in valid_per_angle_modes:
             errors.append(
                 f"per_angle_mode must be one of {valid_per_angle_modes}, "
                 f"got: {self.per_angle_mode}"
             )
         if self.fourier_order < 1:
-            errors.append(
-                f"fourier_order must be >= 1, got: {self.fourier_order}"
-            )
+            errors.append(f"fourier_order must be >= 1, got: {self.fourier_order}")
         if self.fourier_auto_threshold < 1:
             errors.append(
                 f"fourier_auto_threshold must be >= 1, got: {self.fourier_auto_threshold}"
+            )
+        if self.constant_scaling_threshold < 1:
+            errors.append(
+                f"constant_scaling_threshold must be >= 1, "
+                f"got: {self.constant_scaling_threshold}"
             )
 
         # Layer 2: Hierarchical Optimization
@@ -755,6 +771,7 @@ class NLSQConfig:
                 "per_angle_mode": self.per_angle_mode,
                 "fourier_order": self.fourier_order,
                 "fourier_auto_threshold": self.fourier_auto_threshold,
+                "constant_scaling_threshold": self.constant_scaling_threshold,
                 "hierarchical": {
                     "enable": self.enable_hierarchical,
                     "max_outer_iterations": self.hierarchical_max_outer_iterations,
