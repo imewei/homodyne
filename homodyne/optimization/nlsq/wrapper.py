@@ -6587,15 +6587,28 @@ class NLSQWrapper:
             )
 
             def loss_fn(params):
-                """Loss function for hierarchical optimizer."""
-                pred = active_model_fn(x_data, *params)
-                residuals = y_data - pred
-                mse = np.mean(residuals**2)
+                """Loss function for hierarchical optimizer.
+
+                CRITICAL: Must use jnp (JAX) operations, NOT np (NumPy).
+                Using np.mean breaks the JAX autodiff computation graph,
+                resulting in zero gradients for all parameters.
+                """
+                # Convert params to JAX array if needed for tracing
+                params_jax = jnp.asarray(params)
+                pred = active_model_fn(x_data, *params_jax)
+
+                # Convert y_data to JAX for proper gradient flow
+                y_data_jax = jnp.asarray(y_data)
+                residuals = y_data_jax - pred
+
+                # CRITICAL: Use jnp.mean, NOT np.mean!
+                # np.mean breaks JAX autodiff and causes zero gradients
+                mse = jnp.mean(residuals**2)
 
                 # Add adaptive regularization if enabled
                 if adaptive_regularizer is not None:
                     reg_term = adaptive_regularizer.compute_regularization(
-                        params, mse, len(y_data)
+                        params_jax, float(mse), len(y_data)
                     )
                     return mse * len(y_data) + reg_term
                 return mse * len(y_data)
