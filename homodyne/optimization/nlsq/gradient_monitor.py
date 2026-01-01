@@ -30,7 +30,6 @@ from dataclasses import dataclass
 from typing import Literal, cast
 
 import numpy as np
-from numpy.typing import ArrayLike
 
 from homodyne.optimization.nlsq.config_utils import safe_float, safe_int
 from homodyne.utils.logging import get_logger
@@ -76,6 +75,8 @@ class GradientMonitorConfig:
     # For laminar_flow: index 2*n_phi + 3 is gamma_dot_t0
     watch_parameters: list[int] | None = None
     watch_threshold: float = 1e-8  # Gradient magnitude below this triggers warning
+    watch_consecutive_triggers: int = 3  # Must trigger N consecutive times (like ratio-based)
+    watch_min_iteration: int = 5  # Skip checks before this iteration (warmup grace period)
 
     @classmethod
     def from_dict(cls, config_dict: dict) -> GradientMonitorConfig:
@@ -106,6 +107,10 @@ class GradientMonitorConfig:
             check_interval=safe_int(config_dict.get("check_interval"), 1),
             watch_parameters=watch_parameters,
             watch_threshold=safe_float(config_dict.get("watch_threshold"), 1e-8),
+            watch_consecutive_triggers=safe_int(
+                config_dict.get("watch_consecutive_triggers"), 3
+            ),
+            watch_min_iteration=safe_int(config_dict.get("watch_min_iteration"), 5),
         )
 
 
@@ -224,6 +229,14 @@ class GradientCollapseMonitor:
         self.best_params: np.ndarray | None = None
         self.best_loss: float = float("inf")
 
+        # Track consecutive triggers for watched parameters
+        self._watch_consecutive_counts: dict[int, int] = {}
+        self._watch_collapse_detected: dict[int, bool] = {}
+        if config.watch_parameters:
+            for param_idx in config.watch_parameters:
+                self._watch_consecutive_counts[param_idx] = 0
+                self._watch_collapse_detected[param_idx] = False
+
     def check(
         self,
         gradients: np.ndarray,
@@ -315,20 +328,44 @@ class GradientCollapseMonitor:
         # NEW (Dec 2025): Check watched parameters for gradient collapse
         # This specifically monitors parameters like gamma_dot_t0 that can
         # collapse to zero during Adam warmup when data is angle-sequential
+        # Uses consecutive trigger mechanism to avoid false positives during warmup
         if self.config.watch_parameters is not None:
-            for param_idx in self.config.watch_parameters:
-                if param_idx < len(gradients):
-                    grad_mag = abs(gradients[param_idx])
-                    if grad_mag < self.config.watch_threshold:
-                        logger.warning(
-                            f"WATCHED PARAMETER GRADIENT COLLAPSE at iteration {iteration}! "
-                            f"param[{param_idx}] gradient={grad_mag:.2e} < "
-                            f"threshold={self.config.watch_threshold:.2e}"
-                        )
+            # Skip checks before minimum iteration (warmup grace period)
+            if iteration >= self.config.watch_min_iteration:
+                for param_idx in self.config.watch_parameters:
+                    if param_idx < len(gradients):
+                        grad_mag = abs(float(gradients[param_idx]))
                         # Store in history for diagnostics
-                        self.history[-1][f"watched_param_{param_idx}_grad"] = float(
-                            grad_mag
-                        )
+                        self.history[-1][f"watched_param_{param_idx}_grad"] = grad_mag
+
+                        if grad_mag < self.config.watch_threshold:
+                            self._watch_consecutive_counts[param_idx] += 1
+                        else:
+                            # Reset consecutive count when gradient recovers
+                            self._watch_consecutive_counts[param_idx] = 0
+
+                        # Check for collapse (consecutive triggers threshold)
+                        if (
+                            self._watch_consecutive_counts[param_idx]
+                            >= self.config.watch_consecutive_triggers
+                            and not self._watch_collapse_detected[param_idx]
+                        ):
+                            self._watch_collapse_detected[param_idx] = True
+                            logger.warning(
+                                f"WATCHED PARAMETER GRADIENT COLLAPSE CONFIRMED at iteration {iteration}! "
+                                f"param[{param_idx}] gradient={grad_mag:.2e} < "
+                                f"threshold={self.config.watch_threshold:.2e} "
+                                f"for {self._watch_consecutive_counts[param_idx]} consecutive iterations"
+                            )
+                        elif (
+                            grad_mag < self.config.watch_threshold
+                            and self._watch_consecutive_counts[param_idx] == 1
+                        ):
+                            # Log debug info on first trigger (not yet confirmed)
+                            logger.debug(
+                                f"Watched parameter gradient low at iteration {iteration}: "
+                                f"param[{param_idx}] gradient={grad_mag:.2e}"
+                            )
 
         if self.consecutive_count > 0:
             return "WARNING"
@@ -400,6 +437,11 @@ class GradientCollapseMonitor:
         self.collapse_events = []
         self.best_params = None
         self.best_loss = float("inf")
+        # Reset watched parameter tracking
+        if self.config.watch_parameters:
+            for param_idx in self.config.watch_parameters:
+                self._watch_consecutive_counts[param_idx] = 0
+                self._watch_collapse_detected[param_idx] = False
 
     def get_diagnostics(self) -> dict:
         """Get monitoring diagnostics for logging.
@@ -418,7 +460,7 @@ class GradientCollapseMonitor:
         ratios = [h["ratio"] for h in self.history]
         physical_norms = [h["physical_grad_norm"] for h in self.history]
 
-        return {
+        diag = {
             "enabled": self.config.enable,
             "n_checks": len(self.history),
             "min_ratio": min(ratios),
@@ -434,6 +476,12 @@ class GradientCollapseMonitor:
             "response_mode": self.config.response_mode,
             "threshold": self.config.ratio_threshold,
         }
+        # Add watched parameter diagnostics
+        if self.config.watch_parameters:
+            diag["watch_parameters"] = self.config.watch_parameters
+            diag["watch_consecutive_counts"] = dict(self._watch_consecutive_counts)
+            diag["watch_collapse_detected"] = dict(self._watch_collapse_detected)
+        return diag
 
     def log_summary(self) -> None:
         """Log monitoring summary."""
