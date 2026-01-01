@@ -240,6 +240,7 @@ class HierarchicalOptimizer:
         grad_fn: Callable[[np.ndarray], np.ndarray] | None,
         p0: np.ndarray,
         bounds: tuple[np.ndarray, np.ndarray],
+        outer_iteration_callback: Callable[[np.ndarray, int], None] | None = None,
     ) -> HierarchicalResult:
         """Run hierarchical optimization.
 
@@ -254,6 +255,10 @@ class HierarchicalOptimizer:
             Initial parameters.
         bounds : tuple
             (lower_bounds, upper_bounds).
+        outer_iteration_callback : callable or None
+            Optional callback called at the start of each outer iteration.
+            Signature: callback(current_params, outer_iter). Used for updating
+            shear-sensitivity weights based on current phi0 estimate.
 
         Returns
         -------
@@ -277,6 +282,10 @@ class HierarchicalOptimizer:
         converged = False
 
         for outer_iter in range(self.config.max_outer_iterations):
+            # Call outer iteration callback if provided (e.g., for shear weight updates)
+            if outer_iteration_callback is not None:
+                outer_iteration_callback(current_params, outer_iter)
+
             previous_physical = current_params[self.physical_indices].copy()
             iter_start = time.perf_counter()
 

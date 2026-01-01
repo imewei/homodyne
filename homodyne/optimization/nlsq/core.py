@@ -474,13 +474,24 @@ def fit_nlsq_jax(
             logger.info(f"Fitted parameters (per-angle scaling: {n_angles} angles):")
             logger.info("  Physical parameters:")
             physical_start_idx = 2 * n_angles
+
+            # Check uncertainty array size matches parameter array size
+            unc_array = result.uncertainties if hasattr(result, "uncertainties") else None
+            unc_size = len(unc_array) if unc_array is not None else 0
+            if unc_array is not None and unc_size != n_params:
+                logger.warning(
+                    f"Uncertainty array size mismatch: expected {n_params}, got {unc_size}. "
+                    "This may occur when Fourier covariance transformation failed."
+                )
+                # Use available uncertainties where possible, NaN for missing
+                unc_array = None  # Force fallback to 0.0
+
             for i, name in enumerate(physical_param_names):
                 idx = physical_start_idx + i
                 param_val = result.parameters[idx]
                 unc_val = (
-                    result.uncertainties[idx]
-                    if hasattr(result, "uncertainties")
-                    and result.uncertainties is not None
+                    unc_array[idx]
+                    if unc_array is not None and idx < len(unc_array)
                     else 0.0
                 )
                 logger.info(f"    {name}: {param_val:.6g} ± {unc_val:.6g}")

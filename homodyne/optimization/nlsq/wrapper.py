@@ -143,6 +143,11 @@ from homodyne.optimization.nlsq.hierarchical import (
     HierarchicalConfig,
     HierarchicalOptimizer,
 )
+from homodyne.optimization.nlsq.shear_weighting import (
+    ShearSensitivityWeighting,
+    ShearWeightingConfig,
+    create_shear_weighting,
+)
 
 # Module-level logger for memory threshold logging
 _memory_logger = logging.getLogger(__name__)
@@ -6111,6 +6116,43 @@ class NLSQWrapper:
             logger.info(f"  Response mode: {monitor_config.response_mode}")
             logger.info("=" * 60)
 
+        # Layer 5: Shear-Sensitivity Weighting (v2.9.1)
+        # Prevents gradient cancellation for shear parameters by emphasizing
+        # shear-sensitive angles (parallel/antiparallel to flow direction)
+        shear_weighting_config = ad_config.get("shear_weighting", {})
+        shear_weighting_enabled = shear_weighting_config.get("enable", True)
+        shear_weighter: ShearSensitivityWeighting | None = None
+
+        if is_laminar_flow and shear_weighting_enabled and n_phi > 3:
+            # Get initial phi0 from config or use default
+            initial_phi0 = shear_weighting_config.get("initial_phi0", None)
+            if initial_phi0 is None:
+                # Try to get from initial parameters
+                initial_phi0 = float(initial_params[-1]) if len(initial_params) > 0 else 0.0
+
+            sw_config = ShearWeightingConfig(
+                enable=True,
+                min_weight=float(shear_weighting_config.get("min_weight", 0.3)),
+                alpha=float(shear_weighting_config.get("alpha", 1.0)),
+                update_frequency=int(shear_weighting_config.get("update_frequency", 1)),
+                initial_phi0=initial_phi0,
+                normalize=shear_weighting_config.get("normalize", True),
+            )
+            shear_weighter = ShearSensitivityWeighting(
+                phi_angles=phi_unique,
+                n_physical=n_physical,
+                phi0_index=6,  # phi0 is last of 7 physical params
+                config=sw_config,
+            )
+            logger.info("=" * 60)
+            logger.info("ANTI-DEGENERACY DEFENSE: Layer 5 - Shear-Sensitivity Weighting")
+            logger.info(f"  Enabled: {shear_weighting_enabled}")
+            logger.info(f"  n_phi: {n_phi}")
+            logger.info(f"  min_weight: {sw_config.min_weight:.2f}")
+            logger.info(f"  alpha: {sw_config.alpha:.1f}")
+            logger.info(f"  initial_phi0: {initial_phi0:.1f}°")
+            logger.info("=" * 60)
+
         # Store anti-degeneracy components for diagnostics
         anti_degeneracy_components = {
             "per_angle_mode": per_angle_mode_actual,
@@ -6118,6 +6160,7 @@ class NLSQWrapper:
             "hierarchical_optimizer": hierarchical_optimizer,
             "adaptive_regularizer": adaptive_regularizer,
             "gradient_monitor": gradient_monitor,
+            "shear_weighter": shear_weighter,
         }
         # ===================================================================== #
         if enable_group_variance_regularization and group_variance_indices_raw is None:
@@ -6586,12 +6629,19 @@ class NLSQWrapper:
                 "ANTI-DEGENERACY EXECUTION: Hierarchical Two-Stage Optimization"
             )
 
+            # Pre-extract phi indices for shear weighting (x_data[:, 0] contains phi indices)
+            phi_indices_jax = jnp.asarray(x_data[:, 0], dtype=jnp.int32)
+            shear_weighter_local = anti_degeneracy_components.get("shear_weighter")
+
             def loss_fn(params):
                 """Loss function for hierarchical optimizer.
 
                 CRITICAL: Must use jnp (JAX) operations, NOT np (NumPy).
                 Using np.mean breaks the JAX autodiff computation graph,
                 resulting in zero gradients for all parameters.
+
+                Layer 5: Shear-sensitivity weighting is applied here to prevent
+                gradient cancellation for shear parameters (gamma_dot_t0, phi0).
                 """
                 # Convert params to JAX array if needed for tracing
                 params_jax = jnp.asarray(params)
@@ -6601,18 +6651,29 @@ class NLSQWrapper:
                 y_data_jax = jnp.asarray(y_data)
                 residuals = y_data_jax - pred
 
-                # CRITICAL: Use jnp.mean, NOT np.mean!
-                # np.mean breaks JAX autodiff and causes zero gradients
-                mse = jnp.mean(residuals**2)
+                # Layer 5: Apply shear-sensitivity weighting if enabled
+                # This emphasizes angles parallel/antiparallel to flow direction,
+                # preventing gradient cancellation for shear parameters
+                if shear_weighter_local is not None:
+                    # Use shear-weighted loss instead of uniform MSE
+                    weighted_loss = shear_weighter_local.apply_weights_to_loss(
+                        residuals, phi_indices_jax
+                    )
+                else:
+                    # CRITICAL: Use jnp.mean, NOT np.mean!
+                    # np.mean breaks JAX autodiff and causes zero gradients
+                    weighted_loss = jnp.mean(residuals**2) * len(y_data)
 
                 # Add adaptive regularization if enabled
                 if adaptive_regularizer is not None:
                     # Use JAX-compatible method for autodiff compatibility
+                    # Note: weighted_loss already includes the normalization
+                    mse_for_reg = weighted_loss / len(y_data)
                     reg_term = adaptive_regularizer.compute_regularization_jax(
-                        params_jax, mse, len(y_data)
+                        params_jax, mse_for_reg, len(y_data)
                     )
-                    return mse * len(y_data) + reg_term
-                return mse * len(y_data)
+                    return weighted_loss + reg_term
+                return weighted_loss
 
             def grad_fn(params):
                 """Gradient function with optional monitoring."""
@@ -6630,11 +6691,19 @@ class NLSQWrapper:
 
             iteration_counter = [0]  # Mutable counter for gradient monitor
 
+            # Layer 5: Create callback for shear weight updates
+            # Updates weights based on current phi0 estimate at start of each outer iteration
+            def shear_weight_update_callback(params: np.ndarray, outer_iter: int) -> None:
+                """Update shear-sensitivity weights based on current phi0."""
+                if shear_weighter_local is not None:
+                    shear_weighter_local.update_phi0(params, outer_iter)
+
             hier_result = hierarchical_optimizer.fit(
                 loss_fn=loss_fn,
                 grad_fn=grad_fn,
                 p0=fit_initial_params,
                 bounds=fit_bounds,
+                outer_iteration_callback=shear_weight_update_callback,
             )
 
             # Convert HierarchicalResult to standard format
@@ -6731,14 +6800,58 @@ class NLSQWrapper:
 
             logger.info(f"  Fourier params: {2 * n_half + len(physical_params_opt)}")
             logger.info(f"  Restored per-angle params: {len(popt)}")
-            logger.info("=" * 60)
 
-            # Note: Covariance transformation from Fourier space is complex.
-            # For now, we use a placeholder. Full Jacobian transformation would be:
+            # Transform covariance from Fourier space to per-angle space
             # J_fourier = d(per_angle)/d(fourier_coeffs)
-            # pcov_per_angle = J_fourier @ pcov_fourier @ J_fourier.T
-            # This is a simplification that uses identity for the per-angle block
-            # since exact covariance in Fourier space is less interpretable anyway.
+            # pcov_per_angle = J_full @ pcov_fourier @ J_full.T
+            pcov_fourier = result.get("pcov", None)
+            n_fourier_total = 2 * n_half + len(physical_params_opt)
+
+            if (
+                pcov_fourier is not None
+                and pcov_fourier.shape[0] == n_fourier_total
+                and pcov_fourier.shape[1] == n_fourier_total
+            ):
+                # Get Jacobian for per-angle transformation
+                # This is the Fourier basis matrix that maps coefficients to per-angle values
+                jacobian_per_angle = fourier_reparameterizer.get_jacobian_transform()
+                # jacobian_per_angle shape: (2 * n_phi, n_coeffs_fourier)
+                # where n_coeffs_fourier = 2 * n_half
+
+                # Build full Jacobian for complete parameter space transformation
+                # Layout: [n_phi contrast, n_phi offset, n_physical]
+                # Fourier layout: [n_half contrast_coeffs, n_half offset_coeffs, n_physical]
+                n_per_angle_total = 2 * n_phi  # contrast + offset per-angle
+                n_physical = len(physical_params_opt)
+                n_total_restored = n_per_angle_total + n_physical
+
+                J_full = np.zeros((n_total_restored, n_fourier_total))
+                # Block for per-angle params: use Fourier Jacobian
+                J_full[:n_per_angle_total, : 2 * n_half] = jacobian_per_angle
+                # Block for physical params: identity (pass-through)
+                J_full[n_per_angle_total:, 2 * n_half :] = np.eye(n_physical)
+
+                # Transform covariance: pcov_full = J @ pcov_fourier @ J.T
+                try:
+                    pcov_transformed = J_full @ pcov_fourier @ J_full.T
+                    # Store for later use (override the result dict lookup)
+                    result["pcov_transformed"] = pcov_transformed
+                    logger.info("  Covariance transformed from Fourier to per-angle space")
+                except Exception as e:
+                    logger.warning(
+                        f"  Covariance transformation failed: {e}. Using identity fallback."
+                    )
+                    result["pcov_transformed"] = None
+            else:
+                pcov_shape = pcov_fourier.shape if pcov_fourier is not None else None
+                logger.warning(
+                    f"  Fourier covariance unavailable or wrong shape (got {pcov_shape}, "
+                    f"expected ({n_fourier_total}, {n_fourier_total})). "
+                    "Using identity fallback."
+                )
+                result["pcov_transformed"] = None
+
+            logger.info("=" * 60)
 
         # Log gradient monitor summary if available
         if gradient_monitor is not None:
@@ -6756,8 +6869,15 @@ class NLSQWrapper:
                 logger.warning("=" * 60)
 
         # Get covariance (properly transformed from normalized space)
-        pcov = result.get("pcov", np.eye(len(popt)))
+        # Priority: 1) pcov_transformed (from Fourier space), 2) pcov, 3) identity fallback
+        pcov = result.get("pcov_transformed", None)
         if pcov is None:
+            pcov = result.get("pcov", None)
+        if pcov is None or pcov.shape[0] != len(popt):
+            logger.debug(
+                f"Covariance size mismatch or unavailable: expected ({len(popt)}, {len(popt)}), "
+                f"got {pcov.shape if pcov is not None else None}. Using identity fallback."
+            )
             pcov = np.eye(len(popt))
 
         # Enforce bounds on final parameters
@@ -6869,13 +6989,15 @@ class NLSQWrapper:
         }
 
         # Add anti-degeneracy defense diagnostics
+        shear_weighter = anti_degeneracy_components.get("shear_weighter")
         info["anti_degeneracy"] = {
-            "version": "2.9.0",
+            "version": "2.9.1",
             "per_angle_mode": anti_degeneracy_components["per_angle_mode"],
             "fourier_enabled": fourier_reparameterizer is not None,
             "hierarchical_enabled": hierarchical_optimizer is not None,
             "adaptive_regularization_enabled": adaptive_regularizer is not None,
             "gradient_monitor_enabled": gradient_monitor is not None,
+            "shear_weighting_enabled": shear_weighter is not None,
         }
         if fourier_reparameterizer is not None:
             info["anti_degeneracy"]["fourier"] = {
@@ -6895,6 +7017,8 @@ class NLSQWrapper:
             info["anti_degeneracy"]["gradient_monitor"] = (
                 gradient_monitor.get_diagnostics()
             )
+        if shear_weighter is not None:
+            info["anti_degeneracy"]["shear_weighting"] = shear_weighter.get_diagnostics()
 
         # Add bounds warning info if detected
         if bound_stuck_warning is not None:
