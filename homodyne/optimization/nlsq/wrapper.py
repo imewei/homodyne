@@ -6607,8 +6607,9 @@ class NLSQWrapper:
 
                 # Add adaptive regularization if enabled
                 if adaptive_regularizer is not None:
-                    reg_term = adaptive_regularizer.compute_regularization(
-                        params_jax, float(mse), len(y_data)
+                    # Use JAX-compatible method for autodiff compatibility
+                    reg_term = adaptive_regularizer.compute_regularization_jax(
+                        params_jax, mse, len(y_data)
                     )
                     return mse * len(y_data) + reg_term
                 return mse * len(y_data)

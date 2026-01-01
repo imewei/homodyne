@@ -28,6 +28,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Literal, cast
 
+import jax.numpy as jnp
 import numpy as np
 
 from homodyne.optimization.nlsq.config_utils import safe_float
@@ -244,6 +245,73 @@ class AdaptiveRegularizer:
             total_reg += group_reg
 
         self._last_reg_contribution = total_reg
+        return total_reg
+
+    def compute_regularization_jax(
+        self, params: jnp.ndarray, mse: jnp.ndarray, n_points: int
+    ) -> jnp.ndarray:
+        """Compute regularization term using JAX for autodiff compatibility.
+
+        This method uses JAX operations (jnp) instead of NumPy, making it
+        compatible with JAX's JIT compilation and autodiff (jax.grad).
+
+        Use this method when the regularization needs to be part of a
+        differentiable loss function.
+
+        Parameters
+        ----------
+        params : jnp.ndarray
+            Full parameter vector (JAX array, possibly traced).
+        mse : jnp.ndarray
+            Current mean squared error (JAX scalar, possibly traced).
+        n_points : int
+            Number of data points.
+
+        Returns
+        -------
+        jnp.ndarray
+            Regularization term to add to loss (SSE scale, JAX scalar).
+        """
+        if not self.config.enable:
+            return jnp.array(0.0)
+
+        total_reg = jnp.array(0.0)
+
+        for group_idx, (start, end) in enumerate(self.group_indices):
+            if start >= len(params) or end > len(params):
+                continue
+
+            group_params = params[start:end]
+
+            # Security: Validate n_group to prevent division by zero
+            n_group = end - start
+            if n_group < 2:
+                continue
+
+            if self.config.mode == "relative" or (
+                self.config.mode == "auto" and self.n_phi > 5
+            ):
+                # CV-based regularization using JAX operations
+                mean_val = jnp.mean(group_params)
+                std_val = jnp.std(group_params)
+
+                # Use jnp.where for safe division (avoids conditional on traced value)
+                cv = jnp.where(
+                    jnp.abs(mean_val) > 1e-10,
+                    std_val / jnp.abs(mean_val),
+                    std_val,  # Fallback to absolute std
+                )
+
+                # L_reg = λ × CV² × MSE × n_points
+                group_reg = self.lambda_value * (cv**2) * mse * n_points
+
+            else:
+                # Original absolute variance using JAX operations
+                var_val = jnp.var(group_params)
+                group_reg = self.lambda_value * var_val * n_points
+
+            total_reg = total_reg + group_reg
+
         return total_reg
 
     def compute_regularization_gradient(
