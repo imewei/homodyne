@@ -61,11 +61,13 @@ class AntiDegeneracyConfig:
     enable : bool
         Master switch for all anti-degeneracy defenses.
     per_angle_mode : str
-        Mode for per-angle parameters: "independent", "fourier", or "auto".
+        Mode for per-angle parameters: "individual", "constant", "fourier", or "auto".
     fourier_order : int
         Order of Fourier series (order=2 -> 5 coefficients per group).
     fourier_auto_threshold : int
         n_phi threshold for auto mode to switch to Fourier.
+    constant_scaling_threshold : int
+        n_phi threshold for auto mode to use constant scaling (n_phi >= threshold).
     hierarchical_enable : bool
         Enable hierarchical two-stage optimization.
     hierarchical_max_outer_iterations : int
@@ -94,6 +96,7 @@ class AntiDegeneracyConfig:
     per_angle_mode: str = "auto"
     fourier_order: int = 2
     fourier_auto_threshold: int = 6
+    constant_scaling_threshold: int = 3
     hierarchical_enable: bool = True
     hierarchical_max_outer_iterations: int = 5
     hierarchical_outer_tolerance: float = 1e-6
@@ -142,6 +145,7 @@ class AntiDegeneracyConfig:
             per_angle_mode=config_dict.get("per_angle_mode", "auto"),
             fourier_order=config_dict.get("fourier_order", 2),
             fourier_auto_threshold=config_dict.get("fourier_auto_threshold", 6),
+            constant_scaling_threshold=config_dict.get("constant_scaling_threshold", 3),
             # Hierarchical
             hierarchical_enable=hierarchical.get("enable", True),
             hierarchical_max_outer_iterations=hierarchical.get(
@@ -268,15 +272,41 @@ class AntiDegeneracyController:
         """Initialize all 4 layers of the defense system."""
         config = self.config
 
-        # Determine actual per-angle mode
+        # T018-T020: Determine actual per-angle mode with auto-selection logic
+        # Priority: constant < individual < fourier (based on n_phi thresholds)
         if config.per_angle_mode == "auto":
-            self.per_angle_mode_actual = (
-                "fourier" if self.n_phi > config.fourier_auto_threshold else "independent"
-            )
+            if self.n_phi >= config.constant_scaling_threshold:
+                # T019: Use constant scaling when n_phi >= constant_scaling_threshold
+                # This provides the simplest model with minimal per-angle parameters
+                self.per_angle_mode_actual = "constant"
+                logger.info("=" * 60)
+                logger.info("ANTI-DEGENERACY: Auto-selected 'constant' scaling mode")
+                logger.info(
+                    f"  Reason: n_phi ({self.n_phi}) >= "
+                    f"constant_scaling_threshold ({config.constant_scaling_threshold})"
+                )
+                logger.info(
+                    "  Parameter reduction: 2*n_phi -> 2 (one contrast, one offset)"
+                )
+                logger.info("=" * 60)
+            elif self.n_phi > config.fourier_auto_threshold:
+                # Use Fourier when above Fourier threshold but below constant threshold
+                self.per_angle_mode_actual = "fourier"
+            else:
+                # Use individual per-angle parameters for few angles
+                self.per_angle_mode_actual = "individual"
         else:
+            # T020: Explicit mode - log the user's choice
             self.per_angle_mode_actual = config.per_angle_mode
+            logger.debug(
+                f"ANTI-DEGENERACY: Using explicit per_angle_mode: "
+                f"{self.per_angle_mode_actual}"
+            )
 
-        # Layer 1: Fourier Reparameterization
+        # T021: Determine use_constant flag for mapper
+        use_constant = self.per_angle_mode_actual == "constant"
+
+        # Layer 1: Fourier Reparameterization (only if fourier mode)
         if self.per_angle_mode_actual == "fourier":
             fourier_config = FourierReparamConfig(
                 mode="fourier",
@@ -288,15 +318,27 @@ class AntiDegeneracyController:
             logger.info("ANTI-DEGENERACY: Layer 1 - Fourier Reparameterization")
             logger.info(f"  Mode: {self.per_angle_mode_actual}")
             logger.info(f"  n_phi: {self.n_phi}, Fourier order: {config.fourier_order}")
-            logger.info(f"  Parameter reduction: {2*self.n_phi} -> {self.fourier.n_coeffs}")
+            logger.info(
+                f"  Parameter reduction: {2 * self.n_phi} -> {self.fourier.n_coeffs}"
+            )
+            logger.info("=" * 60)
+        elif self.per_angle_mode_actual == "constant":
+            # T020: Log constant mode selection
+            logger.info("=" * 60)
+            logger.info("ANTI-DEGENERACY: Layer 1 - Constant Scaling Mode")
+            logger.info(f"  Mode: {self.per_angle_mode_actual}")
+            logger.info(f"  n_phi: {self.n_phi}")
+            logger.info(f"  Parameter reduction: {2 * self.n_phi} -> 2")
+            logger.info("  Single contrast and offset shared across all angles")
             logger.info("=" * 60)
 
-        # T019: Create ParameterIndexMapper after Layer 1 initialization
+        # T022: Create ParameterIndexMapper with correct use_constant flag
         # This provides centralized, consistent index mapping for all subsequent layers
         self.mapper = ParameterIndexMapper(
             n_phi=self.n_phi,
             n_physical=self.n_physical,
             fourier=self.fourier,
+            use_constant=use_constant,
         )
         logger.debug(
             f"ANTI-DEGENERACY: ParameterIndexMapper created: {self.mapper.get_diagnostics()}"
@@ -320,7 +362,9 @@ class AntiDegeneracyController:
             logger.info("=" * 60)
             logger.info("ANTI-DEGENERACY: Layer 2 - Hierarchical Optimization")
             logger.info("  Enabled: True")
-            logger.info(f"  Max outer iterations: {config.hierarchical_max_outer_iterations}")
+            logger.info(
+                f"  Max outer iterations: {config.hierarchical_max_outer_iterations}"
+            )
             logger.info(f"  Outer tolerance: {config.hierarchical_outer_tolerance}")
             logger.info("=" * 60)
 
@@ -337,7 +381,8 @@ class AntiDegeneracyController:
             group_indices=self.mapper.get_group_indices(),  # T020: Use mapper indices
         )
         self.regularizer = AdaptiveRegularizer(
-            reg_config, self.mapper.n_per_group  # T020: Use Fourier-aware n_per_group
+            reg_config,
+            self.mapper.n_per_group,  # T020: Use Fourier-aware n_per_group
         )
         logger.info("=" * 60)
         logger.info("ANTI-DEGENERACY: Layer 3 - Adaptive Regularization")
@@ -383,13 +428,20 @@ class AntiDegeneracyController:
         return self.fourier is not None
 
     @property
+    def use_constant(self) -> bool:
+        """Check if constant scaling mode is active."""
+        return self.per_angle_mode_actual == "constant"
+
+    @property
     def use_hierarchical(self) -> bool:
         """Check if hierarchical optimization is active."""
         return self.hierarchical is not None
 
     @property
     def n_per_angle_params(self) -> int:
-        """Get the number of per-angle parameters (Fourier or direct)."""
+        """Get the number of per-angle parameters (constant, Fourier, or direct)."""
+        if self.use_constant:
+            return 2  # One contrast, one offset
         if self.fourier:
             return self.fourier.n_coeffs
         return 2 * self.n_phi
@@ -454,6 +506,64 @@ class AntiDegeneracyController:
 
         return np.concatenate([contrast, offset, physical])
 
+    def transform_params_to_constant(self, params: np.ndarray) -> np.ndarray:
+        """Transform per-angle parameters to constant mode.
+
+        Computes mean contrast and offset across all angles.
+
+        Parameters
+        ----------
+        params : np.ndarray
+            Full parameter array: [contrast(n_phi), offset(n_phi), physical].
+
+        Returns
+        -------
+        np.ndarray
+            Constant mode parameters: [contrast_mean, offset_mean, physical].
+        """
+        if not self.use_constant:
+            return params
+
+        # Split parameters
+        contrast = params[: self.n_phi]
+        offset = params[self.n_phi : 2 * self.n_phi]
+        physical = params[2 * self.n_phi :]
+
+        # Compute mean values
+        contrast_mean = np.mean(contrast)
+        offset_mean = np.mean(offset)
+
+        return np.concatenate([[contrast_mean], [offset_mean], physical])
+
+    def transform_params_from_constant(self, constant_params: np.ndarray) -> np.ndarray:
+        """Transform constant mode parameters to per-angle form.
+
+        Expands single contrast/offset values to all angles.
+
+        Parameters
+        ----------
+        constant_params : np.ndarray
+            Constant mode parameters: [contrast, offset, physical].
+
+        Returns
+        -------
+        np.ndarray
+            Per-angle parameters: [contrast(n_phi), offset(n_phi), physical].
+        """
+        if not self.use_constant:
+            return constant_params
+
+        # Extract constant values and physical parameters
+        contrast_const = constant_params[0]
+        offset_const = constant_params[1]
+        physical = constant_params[2:]
+
+        # Expand to per-angle arrays
+        contrast = np.full(self.n_phi, contrast_const)
+        offset = np.full(self.n_phi, offset_const)
+
+        return np.concatenate([contrast, offset, physical])
+
     def get_group_variance_indices(self) -> list[tuple[int, int]] | None:
         """Get group variance indices for NLSQ regularization.
 
@@ -487,14 +597,17 @@ class AntiDegeneracyController:
             Nested diagnostics from all 4 layers.
         """
         diag: dict[str, Any] = {
-            "version": "2.9.0",
+            "version": "2.9.1",
             "enabled": self.is_enabled,
             "per_angle_mode": self.per_angle_mode_actual,
+            "use_constant": self.use_constant,
+            "use_fourier": self.use_fourier,
             "n_phi": self.n_phi,
             "n_physical": self.n_physical,
+            "n_per_angle_params": self.n_per_angle_params,
         }
 
-        # T032: Add mapper diagnostics
+        # Add mapper diagnostics
         if self.mapper:
             diag["mapper"] = self.mapper.get_diagnostics()
 
