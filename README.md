@@ -848,7 +848,7 @@ Estimated Memory    | Mode Selected      | Reason
 --------------------|--------------------|---------------------------------
 < 16 GB             | Stratified L-M     | Full Jacobian fits in memory
 16 GB - 70% RAM     | Stratified L-M     | Within safety margin
-> 70% available RAM | Streaming (Adam)   | Prevents OOM
+> 70% available RAM | Streaming (L-BFGS) | Prevents OOM
 ```
 
 **Configuration**:
@@ -866,7 +866,7 @@ optimization:
     streaming:
       batch_size: 10000       # Points per mini-batch
       max_epochs: 50          # Maximum training epochs
-      learning_rate: 0.001    # Adam learning rate
+      learning_rate: 0.001    # L-BFGS line search scale
       convergence_tol: 1e-6   # Convergence tolerance
 ```
 
@@ -875,7 +875,7 @@ optimization:
 | Mode | Memory | Convergence | Time (23M pts) |
 |------|--------|-------------|----------------|
 | Stratified L-M | ~30+ GB | Exact (Newton) | 10-15 min |
-| Streaming | ~2 GB | Approximate (Adam) | 15-30 min |
+| Streaming | ~2 GB | Approximate (L-BFGS) | 15-30 min |
 
 **Key Benefits**:
 

@@ -43,7 +43,7 @@ Cost-Only Computation Performance:
 
 The AdaptiveHybridStreamingOptimizer implements a four-phase approach:
 - **Phase 0**: Parameter normalization setup
-- **Phase 1**: Adam warmup with 4-layer defense strategy
+- **Phase 1**: L-BFGS warmup with 4-layer defense strategy
 - **Phase 2**: Streaming Gauss-Newton with J^T J accumulation
 - **Phase 3**: Denormalization and covariance transformation
 
@@ -420,7 +420,7 @@ def _accumulate_jtj_jtr_donated(x_chunk, y_chunk, params, JTJ_prev, JTr_prev):
 #### 2.5.2 Mixed Precision for Phase 1
 
 ```python
-# Phase 1 can use float32 for faster Adam updates
+# Phase 1 can use float32 for faster L-BFGS updates
 if self.config.precision == 'auto':
     phase1_dtype = jnp.float32
     phase2_dtype = jnp.float64

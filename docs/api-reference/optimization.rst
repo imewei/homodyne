@@ -311,7 +311,7 @@ automatically selects streaming mode when:
    │ Optimizer   │     │ (Full Jacobian)     │
    │             │     │                     │
    │ Mini-batch  │     │ Trust-region        │
-   │ Adam        │     │ Levenberg-Marquardt │
+   │ L-BFGS      │     │ Levenberg-Marquardt │
    └─────────────┘     └─────────────────────┘
 
 Configuration
@@ -333,7 +333,7 @@ Streaming mode can be configured via YAML:
        streaming:
          batch_size: 10000       # Points per mini-batch
          max_epochs: 50          # Maximum training epochs
-         learning_rate: 0.001    # Adam learning rate
+         learning_rate: 0.001    # L-BFGS line search scale
          convergence_tol: 1e-6   # Convergence tolerance
 
 Performance Characteristics
@@ -353,7 +353,7 @@ Performance Characteristics
      - 10-15 min
    * - Streaming
      - ~2 GB
-     - Approximate (Adam)
+     - Approximate (L-BFGS)
      - 15-30 min
 
 **When to Use**:
@@ -391,7 +391,7 @@ The streaming optimizer uses NLSQ's ``StreamingOptimizer`` class:
 Key features:
 
 - **Mini-batch processing**: Data is processed in configurable batches
-- **Adam optimizer**: Adaptive learning rate for stable convergence
+- **L-BFGS optimizer**: Second-order approximation for fast convergence
 - **Gradient clipping**: Prevents exploding gradients
 - **Fault tolerance**: Retries failed batches with different random seeds
 - **Progress tracking**: Logs epoch progress and convergence metrics

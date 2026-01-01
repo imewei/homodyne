@@ -115,7 +115,7 @@ ______________________________________________________________________
 
 **Root Cause**: When expanding parameters to per-angle form, code used uniform
 initialization (`np.full(n_phi, contrast_single)`), creating physics mismatch with
-nonzero gamma_dot_t0. The Adam optimizer found it easier to absorb shear signal into
+nonzero gamma_dot_t0. The optimizer found it easier to absorb shear signal into
 per-angle params, collapsing gamma_dot_t0 to zero.
 
 **Fix**: New `_compute_consistent_per_angle_init()` computes per-angle contrast/offset
@@ -155,7 +155,7 @@ parameter degeneracy detection.
 |--------------|----------|----------|----------|
 | < 1M points | **full** | Run N complete fits in parallel | N× |
 | 1M - 100M | **subsample** | Multi-start on 500K subsample, full fit from best | ~1.1× |
-| > 100M | **phase1** | Parallel Adam warmup, streaming from best | ~1.2× |
+| > 100M | **phase1** | Parallel L-BFGS warmup, streaming from best | ~1.2× |
 
 #### Configuration
 
@@ -202,7 +202,7 @@ For large datasets (>10M points), NLSQ can use streaming optimization to avoid O
 #### Four Phases
 
 1. **Phase 0**: Parameter normalization setup (bounds-based)
-2. **Phase 1**: Adam warmup with adaptive switching (fast initial exploration)
+2. **Phase 1**: L-BFGS warmup with adaptive switching (fast initial exploration)
 3. **Phase 2**: Streaming Gauss-Newton with exact J^T J accumulation
 4. **Phase 3**: Denormalization and covariance transform
 
@@ -231,7 +231,7 @@ optimization:
 | Mode | Memory | Convergence | Covariance |
 |------|--------|-------------|------------|
 | Stratified LS | ~30+ GB | Exact (L-M) | Exact |
-| Old Streaming | ~2 GB | Slow (Adam) | Crude |
+| Old Streaming | ~2 GB | Slow | Crude |
 | **Hybrid Streaming** | ~2 GB | Fast (Hybrid) | Exact |
 
 ### Fixed
