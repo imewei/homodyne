@@ -5893,6 +5893,7 @@ class NLSQWrapper:
         else:
             all_phi_early = stratified_data.phi_flat.tolist()
         n_phi = len(set(all_phi_early))
+        phi_unique = np.array(sorted(set(all_phi_early)))  # For shear weighting
 
         # Auto-compute group_variance_indices for laminar_flow with per-angle scaling
         is_laminar_flow = "gamma_dot_t0" in physical_param_names
