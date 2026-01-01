@@ -8,8 +8,8 @@
 # Use for: Nonequilibrium systems, shear flow, time-dependent shear rates
 # Parameter count: 7 physical + 2 × N_angles scaling = 7 + 2N total
 #
-# VERSION: 2.9.0
-# UPDATED: 2025-12-20
+# VERSION: 2.10.0
+# UPDATED: 2026-01-01
 # ==============================================================================
 
 # ==============================================================================
@@ -17,7 +17,7 @@
 # ==============================================================================
 # Template metadata describing analysis configuration
 metadata:
-  config_version: "2.9.0" # Configuration file format version
+  config_version: "2.10.0" # Configuration file format version
   description: "Laminar flow analysis - 7-parameter model"
   analysis_mode: "laminar_flow" # Laminar flow mode
   parameter_count: 7 # D₀, α, D_offset, γ̇₀, β, γ̇_offset, φ₀
@@ -613,122 +613,51 @@ optimization:
       # group_variance_indices: null
 
     # ---------------------------------------------------------------------------
-    # ANTI-DEGENERACY DEFENSE SYSTEM (v2.9.0)
+    # ANTI-DEGENERACY DEFENSE SYSTEM (v2.10.0) - SIMPLIFIED
     # ---------------------------------------------------------------------------
-    # Comprehensive 4-layer defense against structural degeneracy where per-angle
-    # parameters absorb physical signals (especially shear parameters).
+    # Prevents per-angle parameter absorption in laminar_flow mode.
     #
-    # Problem: With many angles (n_phi > 3), 46 per-angle params (contrast + offset)
-    # vs 7 physical params creates gradient imbalance. Per-angle params have larger,
-    # more consistent gradients and can "absorb" angle-dependent shear signals,
-    # causing gamma_dot_t0 to collapse to zero.
+    # SIMPLIFIED ARCHITECTURE:
+    # With per_angle_mode="auto" and n_phi >= constant_scaling_threshold:
+    #   → Uses CONSTANT SCALING: 2×n_phi per-angle params → just 2 params
+    #   → All complex defense layers (Fourier, hierarchical, regularization)
+    #     are BYPASSED because constant mode eliminates structural degeneracy
     #
-    # Solution: 4 complementary defense layers:
-    #   Layer 1: Fourier Reparameterization - reduces 46 params to 10 coefficients
-    #   Layer 2: Hierarchical Optimization - alternating physical/per-angle stages
-    #   Layer 3: Adaptive CV Regularization - auto-tuned λ≈10 (100× stronger)
-    #   Layer 4: Gradient Collapse Monitor - runtime detection with auto-response
-    #
-    # When to enable: laminar_flow mode with per_angle_scaling and n_phi > 3
+    # When to use each mode:
+    #   - "auto" (default): constant if n_phi >= 3, else individual
+    #   - "constant": Force single contrast/offset for all angles
+    #   - "fourier": Fourier basis for smooth angle variation (legacy)
+    #   - "individual": Independent per-angle params (legacy, prone to absorption)
     #
     # See: docs/specs/anti-degeneracy-defense-v2.9.0.md
     anti_degeneracy:
-      # Master switch and mode selection
-      enable: true                    # Master enable for all defenses
+      enable: true                    # Master enable
       per_angle_mode: "auto"          # "individual" | "constant" | "fourier" | "auto"
-                                      # "auto" selects based on n_phi:
-                                      #   n_phi >= constant_scaling_threshold → "constant"
-                                      #   n_phi > fourier_auto_threshold → "fourier"
-                                      #   else → "individual"
-      constant_scaling_threshold: 3   # Threshold for auto → constant mode (default: 3)
-                                      # When n_phi >= threshold, uses single contrast/offset
-                                      # Reduces 2×n_phi params to just 2, preventing absorption
-      # -----------------------------------------------------------------------
-      # Layer 1: Fourier Reparameterization
-      # -----------------------------------------------------------------------
-      # Reduces per-angle DoF from 2×n_phi to 2×(2×order+1) coefficients.
-      # Example: n_phi=23, order=2 → 46 params → 10 Fourier coefficients
-      #
-      # Benefits:
-      #   - Smoother per-angle variation (physically plausible)
-      #   - Reduces parameter count, improving conditioning
-      #   - Breaks degeneracy by limiting per-angle flexibility
+      constant_scaling_threshold: 3   # Use constant mode when n_phi >= this
+
+      # Legacy layers below - ONLY active when per_angle_mode="fourier" or "individual"
+      # With "auto" or "constant" mode, these are bypassed automatically
       fourier:
-        order: 2                      # Fourier series order (2 = 5 coeffs per group)
-                                      # Total coeffs = 2 × (2×order + 1) = 10 for order=2
-        min_phi_for_fourier: 6        # Minimum n_phi to use Fourier mode
-                                      # Below this, direct per-angle is used
-        regularize_high_order: false  # Add penalty on high-order coefficients
+        order: 2
+        min_phi_for_fourier: 6
+        regularize_high_order: false
 
-      # -----------------------------------------------------------------------
-      # Layer 2: Hierarchical Two-Stage Optimization
-      # -----------------------------------------------------------------------
-      # Alternates between physical and per-angle parameter optimization.
-      # Breaks gradient cancellation by ensuring physical params get
-      # uncontested gradient signal in Stage 1.
-      #
-      # Algorithm:
-      #   for outer_iter in range(max_outer_iterations):
-      #     Stage 1: Optimize PHYSICAL params only (per-angle frozen)
-      #     Stage 2: Optimize PER-ANGLE params only (physical frozen)
-      #     Check convergence on physical param change
       hierarchical:
-        enable: true                  # Enable hierarchical optimization
-        max_outer_iterations: 5       # Maximum outer iterations
-        outer_tolerance: 1.0e-6       # Convergence tolerance on physical params
-        physical_max_iterations: 100  # Stage 1 L-BFGS-B iterations
-        physical_ftol: 1.0e-8         # Stage 1 function tolerance
-        per_angle_max_iterations: 50  # Stage 2 L-BFGS-B iterations
-        per_angle_ftol: 1.0e-6        # Stage 2 function tolerance
-        log_stage_transitions: true   # Log stage 1/2 transitions
-        save_intermediate_results: false  # Save params after each outer iter
+        enable: false                 # Disabled - constant mode handles degeneracy
+        max_outer_iterations: 5
+        outer_tolerance: 1.0e-6
 
-      # -----------------------------------------------------------------------
-      # Layer 3: Adaptive CV-based Regularization
-      # -----------------------------------------------------------------------
-      # Adds regularization term that scales properly with data:
-      #   L_reg = λ × CV² × MSE × n_points
-      # where CV = std(params) / |mean(params)|
-      #
-      # Auto-tuned λ:
-      #   λ = target_contribution / target_cv²
-      #   Example: 10% contribution, 10% CV target → λ = 0.1 / 0.01 = 10
-      #
-      # This is 100× stronger than v2.8 absolute variance regularization
-      # and properly constrains per-angle variation.
       regularization:
-        enable: true                  # Enable adaptive regularization
-        mode: "relative"              # "absolute" | "relative" | "auto"
-                                      # "relative" = CV-based (recommended)
-                                      # "absolute" = legacy variance-based
-                                      # "auto" = relative for n_phi > 5
-        lambda: 1.0                   # Base λ (overridden if auto_tune_lambda)
-        target_cv: 0.10               # Target coefficient of variation (10%)
-        target_contribution: 0.10     # Target regularization contribution (10% of MSE)
-        auto_tune_lambda: true        # Auto-compute λ from target_cv/contribution
-        max_cv: 0.20                  # Maximum allowed CV before warning
+        enable: false                 # Disabled - constant mode handles degeneracy
+        mode: "relative"
+        lambda: 1.0
+        target_cv: 0.10
 
-      # -----------------------------------------------------------------------
-      # Layer 4: Gradient Collapse Monitor
-      # -----------------------------------------------------------------------
-      # Runtime monitoring of gradient ratio:
-      #   ratio = |∇_physical| / |∇_per_angle|
-      #
-      # If ratio < threshold for N consecutive iterations:
-      #   - Gradient collapse detected
-      #   - Physical params losing signal to per-angle absorption
-      #   - Response action triggered
       gradient_monitoring:
-        enable: true                  # Enable gradient monitoring
-        ratio_threshold: 0.01         # Collapse threshold (1% of per-angle grad)
-        consecutive_triggers: 5       # Must trigger N times to confirm
-        response: "hierarchical"      # Response action on collapse:
-                                      # "warn" - log warning only
-                                      # "hierarchical" - switch to hierarchical mode
-                                      # "reset" - reset per-angle to mean
-                                      # "abort" - stop and return best params
-        check_interval: 1             # Check every N iterations
-        lambda_multiplier_on_collapse: 10.0  # Multiply λ on collapse
+        enable: false                 # Disabled - constant mode handles degeneracy
+        ratio_threshold: 0.01
+        consecutive_triggers: 5
+        response: "warn"
 
   # ---------------------------------------------------------------------------
   # STRATIFICATION - Angle-Stratified Chunking

@@ -7,8 +7,8 @@
 # Use for: Equilibrium systems, pure diffusion, anomalous diffusion
 # Parameter count: 3 physical + 2 × N_angles scaling = 3 + 2N total
 #
-# VERSION: 2.9.0
-# UPDATED: 2025-12-20
+# VERSION: 2.10.0
+# UPDATED: 2026-01-01
 # ==============================================================================
 
 # ==============================================================================
@@ -16,7 +16,7 @@
 # ==============================================================================
 # Template metadata describing analysis configuration
 metadata:
-  config_version: "2.9.0" # Configuration file format version
+  config_version: "2.10.0" # Configuration file format version
   description: "Static diffusion analysis - 3-parameter model"
   analysis_mode: "static" # Static diffusion mode
   parameter_count: 3 # D₀, α, D_offset
@@ -504,7 +504,7 @@ optimization:
       max_warmup_step_size: 0.1                 # Max step (fraction of normalized range)
 
     # ---------------------------------------------------------------------------
-    # ANTI-DEGENERACY DEFENSE SYSTEM (v2.9.0)
+    # ANTI-DEGENERACY DEFENSE SYSTEM (v2.10.0) - SIMPLIFIED
     # ---------------------------------------------------------------------------
     # NOTE: This system is designed for laminar_flow mode where shear parameters
     # can collapse due to per-angle parameter absorption. For static mode with
@@ -518,44 +518,30 @@ optimization:
     anti_degeneracy:
       enable: false                   # Disabled for static mode by default
       per_angle_mode: "individual"    # "individual" | "constant" | "fourier" | "auto"
-      constant_scaling_threshold: 3   # Threshold for auto → constant mode
+      constant_scaling_threshold: 3   # Use constant mode when n_phi >= this
 
-      # Layer 1: Fourier Reparameterization (disabled)
+      # Legacy layers - all disabled for static mode
       fourier:
         order: 2
         min_phi_for_fourier: 6
         regularize_high_order: false
 
-      # Layer 2: Hierarchical Optimization (disabled)
       hierarchical:
         enable: false
         max_outer_iterations: 5
         outer_tolerance: 1.0e-6
-        physical_max_iterations: 100
-        physical_ftol: 1.0e-8
-        per_angle_max_iterations: 50
-        per_angle_ftol: 1.0e-6
-        log_stage_transitions: false
-        save_intermediate_results: false
 
-      # Layer 3: Adaptive Regularization (disabled)
       regularization:
         enable: false
-        mode: "absolute"              # Use simpler absolute mode if enabled
+        mode: "absolute"
         lambda: 0.01
         target_cv: 0.10
-        target_contribution: 0.10
-        auto_tune_lambda: false
-        max_cv: 0.20
 
-      # Layer 4: Gradient Monitor (disabled)
       gradient_monitoring:
         enable: false
         ratio_threshold: 0.01
         consecutive_triggers: 5
-        response: "warn"              # Just warn, don't take action
-        check_interval: 1
-        lambda_multiplier_on_collapse: 10.0
+        response: "warn"
 
   # ---------------------------------------------------------------------------
   # STRATIFICATION - Angle-Stratified Chunking
