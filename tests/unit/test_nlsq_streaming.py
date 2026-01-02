@@ -1070,13 +1070,13 @@ class TestAdaptiveMemoryThreshold:
         assert abs(info["total_memory_gb"] - 64.0) < 0.1
         assert info["detection_method"] == "psutil"
 
-    @patch("homodyne.optimization.nlsq.wrapper._detect_total_system_memory")
+    @patch("homodyne.optimization.nlsq.memory.detect_total_system_memory")
     def test_adaptive_threshold_fallback_on_detection_failure(self, mock_detect):
         """TC-ADAPT-MEM-011: Falls back to 16 GB when detection fails."""
         import warnings
 
-        from homodyne.optimization.nlsq.wrapper import (
-            _FALLBACK_THRESHOLD_GB,
+        from homodyne.optimization.nlsq.memory import (
+            FALLBACK_THRESHOLD_GB,
             get_adaptive_memory_threshold,
         )
 
@@ -1088,7 +1088,7 @@ class TestAdaptiveMemoryThreshold:
             threshold_gb, info = get_adaptive_memory_threshold()
 
             # Should fall back to 16 GB
-            assert threshold_gb == _FALLBACK_THRESHOLD_GB
+            assert threshold_gb == FALLBACK_THRESHOLD_GB
             assert info["detection_method"] == "fallback"
             # Should warn about fallback
             assert len(w) >= 1

@@ -6,6 +6,8 @@ components organized into logical modules.
 Structure:
 - core.py: Main fit_nlsq_jax function and NLSQResult class
 - wrapper.py: NLSQWrapper adapter class
+- memory.py: Memory management utilities (extracted Jan 2026)
+- parameter_utils.py: Parameter utilities (extracted Jan 2026)
 - jacobian.py: Jacobian computation utilities
 - results.py: OptimizationResult and related dataclasses
 - transforms.py: Parameter transformation utilities
@@ -116,6 +118,25 @@ from homodyne.optimization.nlsq.strategies.sequential import (
 )
 from homodyne.optimization.nlsq.wrapper import NLSQWrapper
 
+# Memory management utilities (extracted Jan 2026)
+from homodyne.optimization.nlsq.memory import (
+    DEFAULT_MEMORY_FRACTION,
+    FALLBACK_THRESHOLD_GB,
+    detect_total_system_memory,
+    estimate_peak_memory_gb,
+    get_adaptive_memory_threshold,
+    should_use_streaming,
+)
+
+# Parameter utilities (extracted Jan 2026)
+from homodyne.optimization.nlsq.parameter_utils import (
+    build_parameter_labels as build_parameter_labels_utils,
+    classify_parameter_status as classify_parameter_status_utils,
+    compute_consistent_per_angle_init,
+    compute_jacobian_stats,
+    sample_xdata,
+)
+
 __all__ = [
     # Core
     "fit_nlsq_jax",
@@ -191,4 +212,17 @@ __all__ = [
     "LargeDatasetExecutor",
     "StreamingExecutor",
     "get_executor",
+    # Memory management (extracted Jan 2026)
+    "DEFAULT_MEMORY_FRACTION",
+    "FALLBACK_THRESHOLD_GB",
+    "detect_total_system_memory",
+    "estimate_peak_memory_gb",
+    "get_adaptive_memory_threshold",
+    "should_use_streaming",
+    # Parameter utilities (extracted Jan 2026)
+    "build_parameter_labels_utils",
+    "classify_parameter_status_utils",
+    "compute_consistent_per_angle_init",
+    "compute_jacobian_stats",
+    "sample_xdata",
 ]
