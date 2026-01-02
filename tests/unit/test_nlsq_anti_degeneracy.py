@@ -929,12 +929,18 @@ class TestAntiDegeneracyController:
 
     @pytest.fixture
     def controller_23angle(self):
-        """Create controller for 23-angle laminar flow."""
+        """Create controller for 23-angle laminar flow using Fourier mode.
+
+        Note: We set constant_scaling_threshold=100 to force Fourier mode selection
+        for this test, since the default constant_scaling_threshold=3 would otherwise
+        select constant mode first.
+        """
         config_dict = {
             "enable": True,
             "per_angle_mode": "auto",
             "fourier_order": 2,
             "fourier_auto_threshold": 6,
+            "constant_scaling_threshold": 100,  # Disable constant mode for this test
             "hierarchical": {"enable": True},
             "regularization": {"mode": "relative"},
             "gradient_monitoring": {"enable": True},
@@ -951,12 +957,18 @@ class TestAntiDegeneracyController:
 
     @pytest.fixture
     def controller_5angle(self):
-        """Create controller for 5-angle (below threshold)."""
+        """Create controller for 5-angle (below Fourier threshold) using independent mode.
+
+        Note: We set constant_scaling_threshold=100 to force independent mode selection
+        for this test, since the default constant_scaling_threshold=3 would otherwise
+        select constant mode first.
+        """
         config_dict = {
             "enable": True,
             "per_angle_mode": "auto",
             "fourier_order": 2,
             "fourier_auto_threshold": 6,
+            "constant_scaling_threshold": 100,  # Disable constant mode for this test
             "hierarchical": {"enable": True},
             "regularization": {"mode": "relative"},
             "gradient_monitoring": {"enable": True},
@@ -983,8 +995,8 @@ class TestAntiDegeneracyController:
         assert controller_23angle.n_per_angle_params == 10  # 2 * 5 coeffs
 
     def test_auto_selects_independent_for_5angle(self, controller_5angle):
-        """T057e: Auto mode selects independent for n_phi < threshold."""
-        assert controller_5angle.per_angle_mode_actual == "independent"
+        """T057e: Auto mode selects individual for n_phi < threshold."""
+        assert controller_5angle.per_angle_mode_actual == "individual"
         assert not controller_5angle.use_fourier
         assert controller_5angle.n_per_angle_params == 10  # 2 * 5 direct params
 
@@ -1053,7 +1065,7 @@ class TestAntiDegeneracyController:
         """T057k: Controller provides comprehensive diagnostics."""
         diag = controller_23angle.get_diagnostics()
 
-        assert diag["version"] == "2.9.0"
+        assert diag["version"] == "2.9.1"
         assert diag["enabled"] is True
         assert diag["per_angle_mode"] == "fourier"
         assert "fourier" in diag

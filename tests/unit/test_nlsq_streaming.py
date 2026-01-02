@@ -376,16 +376,16 @@ class TestStreamingOptimizer:
         mock_data.chunks = [mock_chunk]
         mock_data.g2_flat = mock_chunk.g2
 
-        # Mock the StreamingOptimizer to avoid actual optimization
+        # Mock the AdaptiveHybridStreamingOptimizer to avoid actual optimization
+        # Note: _fit_with_streaming_optimizer now delegates to _fit_with_stratified_hybrid_streaming
         with patch(
-            "homodyne.optimization.nlsq.wrapper.StreamingOptimizer"
+            "homodyne.optimization.nlsq.wrapper.AdaptiveHybridStreamingOptimizer"
         ) as mock_optimizer:
             mock_result = {
                 "x": np.array([0.5] * 9),
                 "success": True,
                 "message": "Test",
-                "best_loss": 0.01,
-                "final_epoch": 10,
+                "nit": 10,
                 "streaming_diagnostics": {},
             }
             mock_optimizer.return_value.fit.return_value = mock_result
@@ -797,6 +797,8 @@ class TestHybridStreamingOptimizer:
                 initial_params=np.array([0.5] * 9),
                 bounds=(np.zeros(9), np.ones(9)),
                 logger=MagicMock(),
+                # Disable anti-degeneracy constant mode to preserve 9 params
+                anti_degeneracy_config={"per_angle_mode": "individual"},
             )
 
             assert isinstance(result, tuple)
