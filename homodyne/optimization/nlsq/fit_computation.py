@@ -11,12 +11,172 @@ from __future__ import annotations
 import logging
 from typing import Any
 
+import jax
 import jax.numpy as jnp
 import numpy as np
 
 from homodyne.core.jax_backend import compute_g2_scaled
 
 logger = logging.getLogger(__name__)
+
+
+# Performance Optimization (Spec 006 - FR-007, FR-007a): Vectorized computation
+def compute_g2_batch(
+    physical_params: jnp.ndarray,
+    t1: jnp.ndarray,
+    t2: jnp.ndarray,
+    phi_angles: jnp.ndarray,
+    q: float,
+    L: float,
+    dt: float,
+    contrast: float = 1.0,
+    offset: float = 1.0,
+) -> jnp.ndarray:
+    """Compute g2 for all phi angles in a single vectorized operation.
+
+    Performance Optimization (Spec 006 - FR-007):
+    Uses jax.vmap to compute g2 for all angles in parallel instead of
+    sequential Python loop. Expected speedup: 10-20x for post-fitting.
+
+    Parameters
+    ----------
+    physical_params : jnp.ndarray
+        Physical parameters array
+    t1 : jnp.ndarray
+        t1 time values, shape (n_t1,)
+    t2 : jnp.ndarray
+        t2 time values, shape (n_t2,)
+    phi_angles : jnp.ndarray
+        Phi angles in radians, shape (n_phi,)
+    q : float
+        Wave vector magnitude
+    L : float
+        Sample-to-detector distance
+    dt : float
+        Time step
+    contrast : float
+        Contrast parameter (default 1.0 for raw computation)
+    offset : float
+        Offset parameter (default 1.0 for raw computation)
+
+    Returns
+    -------
+    jnp.ndarray
+        g2 values, shape (n_phi, n_t1, n_t2)
+    """
+    n_t1 = len(t1)
+    n_t2 = len(t2)
+
+    # Define single-angle computation
+    def compute_single_angle(phi_val):
+        g2 = compute_g2_scaled(
+            params=physical_params,
+            t1=t1,
+            t2=t2,
+            phi=jnp.array([phi_val]),
+            q=q,
+            L=L,
+            contrast=contrast,
+            offset=offset,
+            dt=dt,
+        )
+        # Reshape to ensure consistent (n_t1, n_t2) output
+        # compute_g2_scaled may return different shapes, so flatten and reshape
+        return g2.reshape(n_t1, n_t2)
+
+    # Vectorize over phi angles
+    compute_all_angles = jax.vmap(compute_single_angle)
+    return compute_all_angles(phi_angles)
+
+
+def compute_g2_batch_with_per_angle_scaling(
+    physical_params: jnp.ndarray,
+    t1: jnp.ndarray,
+    t2: jnp.ndarray,
+    phi_angles: jnp.ndarray,
+    q: float,
+    L: float,
+    dt: float,
+    contrasts: jnp.ndarray,
+    offsets: jnp.ndarray,
+) -> jnp.ndarray:
+    """Compute g2 with per-angle contrast/offset in single vectorized operation.
+
+    Performance Optimization (Spec 006 - FR-007a):
+    Extends compute_g2_batch for per-angle scaling parameters.
+
+    Parameters
+    ----------
+    physical_params : jnp.ndarray
+        Physical parameters array
+    t1, t2 : jnp.ndarray
+        Time values
+    phi_angles : jnp.ndarray
+        Phi angles in radians, shape (n_phi,)
+    q, L, dt : float
+        Experimental parameters
+    contrasts : jnp.ndarray
+        Per-angle contrasts, shape (n_phi,)
+    offsets : jnp.ndarray
+        Per-angle offsets, shape (n_phi,)
+
+    Returns
+    -------
+    jnp.ndarray
+        g2 values with scaling applied, shape (n_phi, n_t1, n_t2)
+    """
+    n_t1 = len(t1)
+    n_t2 = len(t2)
+
+    def compute_single_angle_scaled(phi_val, contrast_val, offset_val):
+        g2 = compute_g2_scaled(
+            params=physical_params,
+            t1=t1,
+            t2=t2,
+            phi=jnp.array([phi_val]),
+            q=q,
+            L=L,
+            contrast=contrast_val,
+            offset=offset_val,
+            dt=dt,
+        )
+        # Reshape to ensure consistent (n_t1, n_t2) output
+        return g2.reshape(n_t1, n_t2)
+
+    compute_all_angles = jax.vmap(compute_single_angle_scaled, in_axes=(0, 0, 0))
+    return compute_all_angles(phi_angles, contrasts, offsets)
+
+
+def solve_lstsq_batch(
+    theory_batch: jnp.ndarray,
+    exp_batch: jnp.ndarray,
+) -> tuple[jnp.ndarray, jnp.ndarray]:
+    """Batch least squares solving for all angles.
+
+    Performance Optimization (Spec 006 - FR-008):
+    Vectorized least squares using jax.vmap for all angles simultaneously.
+
+    Parameters
+    ----------
+    theory_batch : jnp.ndarray
+        Theory values flattened, shape (n_phi, n_t1 * n_t2)
+    exp_batch : jnp.ndarray
+        Experimental values flattened, shape (n_phi, n_t1 * n_t2)
+
+    Returns
+    -------
+    tuple[jnp.ndarray, jnp.ndarray]
+        (contrasts, offsets) each shape (n_phi,)
+    """
+
+    def solve_single(theory_flat, exp_flat):
+        A = jnp.column_stack([theory_flat, jnp.ones_like(theory_flat)])
+        solution, _, _, _ = jnp.linalg.lstsq(A, exp_flat, rcond=None)
+        return solution[0], solution[1]  # contrast, offset
+
+    solve_all = jax.vmap(solve_single, in_axes=(0, 0))
+    contrasts, offsets = solve_all(theory_batch, exp_batch)
+    return contrasts, offsets
 
 
 def normalize_analysis_mode(
@@ -218,82 +378,73 @@ def compute_theoretical_fits(
         f"Computing theoretical fits for {len(phi_angles)} angles using L={L:.1f} Å, q={q:.6f} Å⁻¹"
     )
 
-    # Sequential per-angle computation
-    c2_theoretical_raw_list = []
-    c2_theoretical_fitted = []
-    solver_surface = []
-    per_angle_scaling_posthoc = []
-    solver_scaling = np.column_stack((fitted_contrasts, fitted_offsets))
+    # Performance Optimization (Spec 006 - FR-007, FR-008):
+    # Vectorized computation replaces sequential per-angle loop.
+    # Expected speedup: 10-20x for post-fitting analysis.
 
-    for i, phi_angle in enumerate(phi_angles):
-        # Convert to JAX arrays
-        phi_jax = jnp.array([float(phi_angle)])
-        t1_jax = jnp.array(t1)
-        t2_jax = jnp.array(t2)
-        params_jax = jnp.array(physical_params)
+    # Convert to JAX arrays
+    t1_jax = jnp.array(t1)
+    t2_jax = jnp.array(t2)
+    phi_jax = jnp.array(phi_angles)
+    params_jax = jnp.array(physical_params)
 
-        # Compute RAW theory WITHOUT scaling
-        c2_theory_raw = compute_g2_scaled(
-            params=params_jax,
+    # Compute RAW theory for ALL angles at once (FR-007)
+    c2_theoretical_raw = compute_g2_batch(
+        physical_params=params_jax,
+        t1=t1_jax,
+        t2=t2_jax,
+        phi_angles=phi_jax,
+        q=float(q),
+        L=float(L),
+        dt=float(dt),
+        contrast=1.0,
+        offset=1.0,
+    )
+    c2_theoretical_raw = np.asarray(c2_theoretical_raw)  # Shape: (n_angles, n_t1, n_t2)
+
+    # Compute solver surface for ALL angles at once (FR-007a) if requested
+    if include_solver_surface:
+        c2_solver_surface = compute_g2_batch_with_per_angle_scaling(
+            physical_params=params_jax,
             t1=t1_jax,
             t2=t2_jax,
-            phi=phi_jax,
+            phi_angles=phi_jax,
             q=float(q),
             L=float(L),
-            contrast=1.0,
-            offset=1.0,
             dt=float(dt),
+            contrasts=jnp.array(fitted_contrasts),
+            offsets=jnp.array(fitted_offsets),
         )
+        c2_solver_surface = np.asarray(c2_solver_surface)
+    else:
+        c2_solver_surface = None
 
-        # Convert to NumPy and squeeze out phi dimension
-        c2_theory_raw_np = np.asarray(c2_theory_raw)
-        if c2_theory_raw_np.ndim == 3:
-            c2_theory_raw_np = c2_theory_raw_np[0]
+    # Batch least-squares scaling (FR-008)
+    # Flatten theory and exp for batch lstsq: shape (n_angles, n_t1 * n_t2)
+    theory_batch_flat = jnp.array(c2_theoretical_raw.reshape(n_angles, -1))
+    exp_batch_flat = jnp.array(c2_exp.reshape(n_angles, -1))
 
-        c2_theoretical_raw_list.append(c2_theory_raw_np)
+    # Solve all angles at once
+    contrasts_lstsq, offsets_lstsq = solve_lstsq_batch(theory_batch_flat, exp_batch_flat)
+    contrasts_lstsq = np.asarray(contrasts_lstsq)
+    offsets_lstsq = np.asarray(offsets_lstsq)
 
-        if include_solver_surface:
-            # Evaluate solver surface using original per-angle contrast/offset
-            c2_solver = compute_g2_scaled(
-                params=params_jax,
-                t1=t1_jax,
-                t2=t2_jax,
-                phi=phi_jax,
-                q=float(q),
-                L=float(L),
-                contrast=float(fitted_contrasts[i]),
-                offset=float(fitted_offsets[i]),
-                dt=float(dt),
-            )
-            c2_solver_np = np.asarray(c2_solver)
-            if c2_solver_np.ndim == 3:
-                c2_solver_np = c2_solver_np[0]
-            solver_surface.append(c2_solver_np)
-
-        # Post-hoc least-squares scaling for visualization
-        theory_flat_jax = jnp.array(c2_theory_raw_np.flatten())
-        exp_flat_jax = jnp.array(c2_exp[i].flatten())
-
-        A_jax = jnp.column_stack([theory_flat_jax, jnp.ones_like(theory_flat_jax)])
-        solution_jax, _, _, _ = jnp.linalg.lstsq(A_jax, exp_flat_jax, rcond=None)
-        contrast_lstsq = float(solution_jax[0])
-        offset_lstsq = float(solution_jax[1])
-
-        c2_theoretical_scaled_angle = contrast_lstsq * c2_theory_raw_np + offset_lstsq
-        c2_theoretical_fitted.append(c2_theoretical_scaled_angle)
-        per_angle_scaling_posthoc.append([contrast_lstsq, offset_lstsq])
-
-        logger.debug(
-            f"Angle {phi_angle:.1f}°: lstsq contrast={contrast_lstsq:.4f}, offset={offset_lstsq:.4f}"
-        )
-
-    # Stack arrays
-    c2_theoretical_raw = np.array(c2_theoretical_raw_list)
-    c2_theoretical_fitted = np.array(c2_theoretical_fitted)
-    c2_solver_surface = (
-        np.array(solver_surface) if include_solver_surface and solver_surface else None
+    # Apply scaling: c2_scaled = contrast * c2_raw + offset
+    # Broadcasting: (n_angles, 1, 1) * (n_angles, n_t1, n_t2) + (n_angles, 1, 1)
+    c2_theoretical_fitted = (
+        contrasts_lstsq[:, None, None] * c2_theoretical_raw
+        + offsets_lstsq[:, None, None]
     )
-    per_angle_scaling = np.array(per_angle_scaling_posthoc)
+
+    # Build per-angle scaling array
+    per_angle_scaling = np.column_stack((contrasts_lstsq, offsets_lstsq))
+    solver_scaling = np.column_stack((fitted_contrasts, fitted_offsets))
+
+    # Log statistics
+    logger.debug(
+        f"Batch lstsq - contrasts: mean={np.mean(contrasts_lstsq):.4f}, "
+        f"offsets: mean={np.mean(offsets_lstsq):.4f}"
+    )
 
     residuals = c2_exp - c2_theoretical_fitted
 
