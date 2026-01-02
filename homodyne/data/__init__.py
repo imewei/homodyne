@@ -148,7 +148,7 @@ except ImportError:
     HAS_OPTIMIZATION = False
 
 # Version and feature information
-__version__ = "2.9.0"
+__version__ = "2.10.0"
 __features__ = {
     "xpcs_loader": HAS_XPCS_LOADER,
     "validation": HAS_VALIDATION,
@@ -156,6 +156,7 @@ __features__ = {
     "angle_filtering": HAS_ANGLE_FILTERING,
     "preprocessing": HAS_PREPROCESSING,
     "optimization": HAS_OPTIMIZATION,
+    "validators": True,  # Validators module (v2.7+)
     "yaml_config": True,  # Always available through fallbacks
     "json_support": True,  # Always available
 }
@@ -245,3 +246,30 @@ if HAS_OPTIMIZATION:
             "create_dataset_optimizer",
         ],
     )
+
+# Validators (v2.7+)
+try:
+    from homodyne.data.validators import (  # noqa: F401
+        VALIDATION_RULES,
+        validate_by_rules,
+        validate_enum_value,
+        validate_file_path,
+        validate_frame_range,
+        validate_numeric_range,
+        validate_positive_value,
+    )
+
+    HAS_VALIDATORS = True
+    __all__.extend(
+        [
+            "VALIDATION_RULES",
+            "validate_by_rules",
+            "validate_enum_value",
+            "validate_file_path",
+            "validate_frame_range",
+            "validate_numeric_range",
+            "validate_positive_value",
+        ],
+    )
+except ImportError:
+    HAS_VALIDATORS = False
