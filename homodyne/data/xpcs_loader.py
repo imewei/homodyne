@@ -610,17 +610,9 @@ class XPCSDataLoader:
         data = self._convert_arrays_to_target_format(data)
 
         # Apply mandatory diagonal correction (post-load for consistent behavior)
+        # Performance Optimization (Spec 006 - FR-006, FR-006a): Use batch correction
         logger.debug("Applying mandatory diagonal correction to correlation matrices")
-        c2_exp_corrected = []
-        for i in range(len(data["c2_exp"])):
-            c2_corrected = self._correct_diagonal(data["c2_exp"][i])
-            c2_exp_corrected.append(c2_corrected)
-
-        # Update data with corrected matrices
-        if HAS_JAX and isinstance(data["c2_exp"], jnp.ndarray):
-            data["c2_exp"] = jnp.array(c2_exp_corrected)
-        else:
-            data["c2_exp"] = np.array(c2_exp_corrected)
+        data["c2_exp"] = self._correct_diagonal_batch(data["c2_exp"])
 
         # Final quality control validation
         if quality_controller:
@@ -1100,6 +1092,97 @@ class XPCSDataLoader:
             # Use fill_diagonal for efficient in-place update
             np.fill_diagonal(c2_corrected, diag_val / norm)
             return c2_corrected
+
+    # Performance Optimization (Spec 006 - FR-006, FR-006a): Batch diagonal correction
+    def _correct_diagonal_batch(self, c2_matrices: NDArray) -> NDArray:
+        """Apply diagonal correction to all matrices in batch.
+
+        Performance Optimization (Spec 006 - FR-006):
+        Pre-allocates output array and uses direct assignment instead of
+        list append pattern. Expected memory reduction: 30%.
+
+        Args:
+            c2_matrices: Correlation matrices, shape (n_phi, n_t1, n_t2)
+
+        Returns:
+            Corrected matrices with same shape
+        """
+        n_phi = c2_matrices.shape[0]
+        size = c2_matrices.shape[1]
+
+        # FR-006: Pre-allocate output array (avoid list append)
+        if HAS_JAX and hasattr(c2_matrices, "device"):
+            # JAX path: use vmap for vectorized correction (FR-006a)
+            return self._correct_diagonal_batch_jax(c2_matrices)
+        else:
+            # NumPy path: pre-allocate and direct assignment
+            c2_corrected = np.empty_like(c2_matrices)
+
+            # Pre-compute normalization array (reused for all matrices)
+            norm = np.ones(size)
+            norm[1:-1] = 2
+
+            # Pre-compute index arrays
+            idx_upper = np.arange(size - 1)
+            idx_lower = np.arange(1, size)
+            diag_indices = np.diag_indices(size)
+
+            for i in range(n_phi):
+                c2_mat = c2_matrices[i]
+                # Extract side band values
+                side_band = c2_mat[(idx_upper, idx_lower)]
+
+                # Compute diagonal values
+                diag_val = np.zeros(size)
+                diag_val[:-1] += side_band
+                diag_val[1:] += side_band
+
+                # Copy and apply correction (direct assignment)
+                c2_corrected[i] = c2_mat.copy()
+                c2_corrected[i][diag_indices] = diag_val / norm
+
+            return c2_corrected
+
+    def _correct_diagonal_batch_jax(self, c2_matrices: jnp.ndarray) -> jnp.ndarray:
+        """Vectorized diagonal correction using JAX vmap.
+
+        Performance Optimization (Spec 006 - FR-006a):
+        Uses jax.vmap for parallel diagonal correction across all angles.
+        Expected speedup: 2-4x for diagonal correction.
+
+        Args:
+            c2_matrices: JAX array of shape (n_phi, n_t1, n_t2)
+
+        Returns:
+            Corrected matrices with same shape
+        """
+        import jax
+
+        size = c2_matrices.shape[1]
+
+        # Pre-compute normalization and indices once
+        norm = jnp.ones(size)
+        norm = norm.at[1:-1].set(2)
+        idx_upper = jnp.arange(size - 1)
+        idx_lower = jnp.arange(1, size)
+
+        def correct_single(c2_mat):
+            """Correct diagonal for a single matrix."""
+            # Extract side band
+            side_band = c2_mat[idx_upper, idx_lower]
+
+            # Compute diagonal values
+            diag_val = jnp.zeros(size, dtype=c2_mat.dtype)
+            diag_val = diag_val.at[:-1].add(side_band)
+            diag_val = diag_val.at[1:].add(side_band)
+
+            # Apply correction
+            diag_indices = jnp.diag_indices(size)
+            return c2_mat.at[diag_indices].set(diag_val / norm)
+
+        # Vectorize over all matrices
+        correct_all = jax.vmap(correct_single)
+        return correct_all(c2_matrices)
 
     def _get_selected_indices(
         self,
