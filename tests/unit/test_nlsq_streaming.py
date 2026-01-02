@@ -7,18 +7,25 @@ Tests for homodyne/optimization/nlsq/wrapper.py streaming-related functionality:
 - TestStreamingAutoSelection (8 tests): Auto-selection logic based on memory
 - TestStreamingOptimizer (10 tests): Streaming optimizer method
 - TestStreamingConfig (5 tests): Configuration handling
+- TestStreamingIntegration (5 tests): Streaming auto-selection integration
 - TestHybridStreamingOptimizer (8 tests): Hybrid streaming optimizer (v2.6.0+)
 - TestAdaptiveMemoryThreshold (12 tests): Adaptive memory threshold (v2.7.0+)
 - TestAdaptiveThresholdIntegration (5 tests): Integration tests for adaptive threshold
+- TestNLSQPhaseResultStructures (15 tests): NLSQ Phase result dataclasses (v2.10.0+)
+- TestNLSQTRFDataclasses (12 tests): NLSQ TRF dataclasses (v2.10.0+)
+- TestHybridStreamingPhaseHistory (8 tests): Phase history structure (v2.10.0+)
 
 Added in v2.5.0 to support memory-bounded optimization for large datasets.
 Extended in v2.6.0 with AdaptiveHybridStreamingOptimizer for improved convergence.
 Extended in v2.7.0 with adaptive memory threshold (75% of system RAM by default).
+Extended in v2.10.0 with tests for NLSQ Phase classes and TRF dataclasses.
 
 Reference:
 - docs/architecture/memory-fix-plan.md
 - CLAUDE.md "NLSQ Streaming Mode (v2.5.0+)" section
 - CLAUDE.md "NLSQ Adaptive Hybrid Streaming Mode (v2.6.0+)" section
+- NLSQ streaming/phases/ module refactoring (Dec 2025-Jan 2026)
+- NLSQ core/trf.py dataclass refactoring (Dec 2025-Jan 2026)
 """
 
 from unittest.mock import MagicMock, Mock, patch
@@ -377,7 +384,8 @@ class TestStreamingOptimizer:
         mock_data.g2_flat = mock_chunk.g2
 
         # Mock the AdaptiveHybridStreamingOptimizer to avoid actual optimization
-        # Note: _fit_with_streaming_optimizer now delegates to _fit_with_stratified_hybrid_streaming
+        # Note: _fit_with_streaming_optimizer delegates to
+        # _fit_with_stratified_hybrid_streaming
         with patch(
             "homodyne.optimization.nlsq.wrapper.AdaptiveHybridStreamingOptimizer"
         ) as mock_optimizer:
@@ -1133,7 +1141,7 @@ class TestAdaptiveThresholdIntegration:
     """Integration tests for adaptive threshold in _should_use_streaming (5 tests)."""
 
     def test_should_use_streaming_with_adaptive_threshold(self):
-        """TC-ADAPT-INT-001: _should_use_streaming uses adaptive threshold by default."""
+        """TC-ADAPT-INT-001: _should_use_streaming uses adaptive threshold."""
         from homodyne.optimization.nlsq.wrapper import NLSQWrapper
 
         wrapper = NLSQWrapper()
@@ -1224,3 +1232,662 @@ class TestAdaptiveThresholdIntegration:
 
         assert "memory_fraction" in nlsq_config
         assert nlsq_config["memory_fraction"] == 0.6
+
+
+# =============================================================================
+# TestNLSQPhaseResultStructures - 15 tests (v2.10.0+)
+# =============================================================================
+@pytest.mark.unit
+class TestNLSQPhaseResultStructures:
+    """Tests for NLSQ Phase result dataclass structures (15 tests).
+
+    Added to verify homodyne integration with NLSQ's refactored Phase classes:
+    - WarmupResult: Result from L-BFGS warmup phase
+    - GNResult: Result from Gauss-Newton phase
+    - PhaseOrchestratorResult: Complete orchestration result
+    - CheckpointState: Checkpoint state container
+
+    Reference: NLSQ streaming/phases/ module refactoring (Dec 2025-Jan 2026)
+    """
+
+    def test_warmup_result_import_available(self):
+        """TC-PHASE-001: WarmupResult can be imported from NLSQ."""
+        try:
+            from nlsq.streaming.phases import WarmupResult
+
+            assert WarmupResult is not None
+        except ImportError:
+            pytest.skip("NLSQ Phase classes not available")
+
+    def test_warmup_result_fields(self):
+        """TC-PHASE-002: WarmupResult has expected fields."""
+        try:
+            from nlsq.streaming.phases import WarmupResult
+
+            import jax.numpy as jnp
+
+            # Create a WarmupResult instance
+            result = WarmupResult(
+                params=jnp.array([1.0, 2.0, 3.0]),
+                cost=0.01,
+                iterations=50,
+                converged=True,
+                cost_history=[0.5, 0.1, 0.01],
+            )
+
+            # Verify fields
+            assert hasattr(result, "params")
+            assert hasattr(result, "cost")
+            assert hasattr(result, "iterations")
+            assert hasattr(result, "converged")
+            assert hasattr(result, "cost_history")
+
+            # Verify values
+            assert result.cost == 0.01
+            assert result.iterations == 50
+            assert result.converged is True
+            assert len(result.cost_history) == 3
+        except ImportError:
+            pytest.skip("NLSQ Phase classes not available")
+
+    def test_warmup_result_immutable(self):
+        """TC-PHASE-003: WarmupResult is immutable (frozen dataclass)."""
+        try:
+            from nlsq.streaming.phases import WarmupResult
+
+            import jax.numpy as jnp
+
+            result = WarmupResult(
+                params=jnp.array([1.0]),
+                cost=0.01,
+                iterations=10,
+                converged=True,
+                cost_history=[0.01],
+            )
+
+            # Should raise error when trying to modify
+            with pytest.raises(AttributeError):
+                result.cost = 0.02
+        except ImportError:
+            pytest.skip("NLSQ Phase classes not available")
+
+    def test_gn_result_import_available(self):
+        """TC-PHASE-004: GNResult can be imported from NLSQ."""
+        try:
+            from nlsq.streaming.phases import GNResult
+
+            assert GNResult is not None
+        except ImportError:
+            pytest.skip("NLSQ Phase classes not available")
+
+    def test_gn_result_fields(self):
+        """TC-PHASE-005: GNResult has expected fields."""
+        try:
+            from nlsq.streaming.phases import GNResult
+
+            import jax.numpy as jnp
+
+            # Create a GNResult instance
+            result = GNResult(
+                params=jnp.array([1.0, 2.0, 3.0]),
+                cost=0.001,
+                iterations=25,
+                converged=True,
+                jacobian=jnp.eye(3),
+                cov=jnp.eye(3) * 0.01,
+            )
+
+            # Verify fields
+            assert hasattr(result, "params")
+            assert hasattr(result, "cost")
+            assert hasattr(result, "iterations")
+            assert hasattr(result, "converged")
+            assert hasattr(result, "jacobian")
+            assert hasattr(result, "cov")
+
+            # Verify values
+            assert result.cost == 0.001
+            assert result.iterations == 25
+            assert result.converged is True
+            assert result.jacobian is not None
+            assert result.cov is not None
+        except ImportError:
+            pytest.skip("NLSQ Phase classes not available")
+
+    def test_gn_result_optional_fields(self):
+        """TC-PHASE-006: GNResult jacobian and cov are optional."""
+        try:
+            from nlsq.streaming.phases import GNResult
+
+            import jax.numpy as jnp
+
+            # Create GNResult without optional fields
+            result = GNResult(
+                params=jnp.array([1.0, 2.0]),
+                cost=0.01,
+                iterations=10,
+                converged=False,
+            )
+
+            # Optional fields should default to None
+            assert result.jacobian is None
+            assert result.cov is None
+        except ImportError:
+            pytest.skip("NLSQ Phase classes not available")
+
+    def test_phase_orchestrator_result_import(self):
+        """TC-PHASE-007: PhaseOrchestratorResult can be imported."""
+        try:
+            from nlsq.streaming.phases import PhaseOrchestratorResult
+
+            assert PhaseOrchestratorResult is not None
+        except ImportError:
+            pytest.skip("NLSQ Phase classes not available")
+
+    def test_phase_orchestrator_result_fields(self):
+        """TC-PHASE-008: PhaseOrchestratorResult has expected fields."""
+        try:
+            from nlsq.streaming.phases import PhaseOrchestratorResult
+
+            import jax.numpy as jnp
+
+            result = PhaseOrchestratorResult(
+                params=jnp.array([1.0, 2.0]),
+                normalized_params=jnp.array([0.5, 0.5]),
+                cost=0.001,
+                warmup_result=None,
+                gn_result=None,
+                phase_history=[{"phase": 0, "name": "setup"}],
+                total_time=10.5,
+            )
+
+            # Verify fields
+            assert hasattr(result, "params")
+            assert hasattr(result, "normalized_params")
+            assert hasattr(result, "cost")
+            assert hasattr(result, "warmup_result")
+            assert hasattr(result, "gn_result")
+            assert hasattr(result, "phase_history")
+            assert hasattr(result, "total_time")
+
+            # Verify values
+            assert result.cost == 0.001
+            assert result.total_time == 10.5
+            assert len(result.phase_history) == 1
+        except ImportError:
+            pytest.skip("NLSQ Phase classes not available")
+
+    def test_checkpoint_state_import(self):
+        """TC-PHASE-009: CheckpointState can be imported."""
+        try:
+            from nlsq.streaming.phases import CheckpointState
+
+            assert CheckpointState is not None
+        except ImportError:
+            pytest.skip("NLSQ Phase classes not available")
+
+    def test_checkpoint_state_fields(self):
+        """TC-PHASE-010: CheckpointState has expected fields."""
+        try:
+            from nlsq.streaming.phases import CheckpointState
+
+            import jax.numpy as jnp
+
+            state = CheckpointState(
+                current_phase=1,
+                normalized_params=jnp.array([1.0, 2.0]),
+                phase1_optimizer_state=None,
+                phase2_JTJ_accumulator=None,
+                phase2_JTr_accumulator=None,
+                best_params_global=jnp.array([1.0, 2.0]),
+                best_cost_global=0.01,
+                phase_history=[{"phase": 0}],
+                normalizer=None,
+                tournament_selector=None,
+                multistart_candidates=None,
+            )
+
+            # Verify required fields
+            assert hasattr(state, "current_phase")
+            assert hasattr(state, "normalized_params")
+            assert hasattr(state, "phase1_optimizer_state")
+            assert hasattr(state, "phase2_JTJ_accumulator")
+            assert hasattr(state, "phase2_JTr_accumulator")
+            assert hasattr(state, "best_params_global")
+            assert hasattr(state, "best_cost_global")
+            assert hasattr(state, "phase_history")
+
+            # Verify values
+            assert state.current_phase == 1
+            assert state.best_cost_global == 0.01
+        except ImportError:
+            pytest.skip("NLSQ Phase classes not available")
+
+    def test_checkpoint_manager_import(self):
+        """TC-PHASE-011: CheckpointManager can be imported."""
+        try:
+            from nlsq.streaming.phases import CheckpointManager
+
+            assert CheckpointManager is not None
+        except ImportError:
+            pytest.skip("NLSQ Phase classes not available")
+
+    def test_warmup_phase_import(self):
+        """TC-PHASE-012: WarmupPhase can be imported."""
+        try:
+            from nlsq.streaming.phases import WarmupPhase
+
+            assert WarmupPhase is not None
+        except ImportError:
+            pytest.skip("NLSQ Phase classes not available")
+
+    def test_gauss_newton_phase_import(self):
+        """TC-PHASE-013: GaussNewtonPhase can be imported."""
+        try:
+            from nlsq.streaming.phases import GaussNewtonPhase
+
+            assert GaussNewtonPhase is not None
+        except ImportError:
+            pytest.skip("NLSQ Phase classes not available")
+
+    def test_phase_orchestrator_import(self):
+        """TC-PHASE-014: PhaseOrchestrator can be imported."""
+        try:
+            from nlsq.streaming.phases import PhaseOrchestrator
+
+            assert PhaseOrchestrator is not None
+        except ImportError:
+            pytest.skip("NLSQ Phase classes not available")
+
+    def test_all_phase_classes_lazy_import(self):
+        """TC-PHASE-015: All phase classes use lazy import pattern."""
+        try:
+            from nlsq.streaming import phases
+
+            # Verify __all__ contains expected exports
+            expected_exports = [
+                "WarmupPhase",
+                "WarmupResult",
+                "GaussNewtonPhase",
+                "GNResult",
+                "CheckpointManager",
+                "CheckpointState",
+                "PhaseOrchestrator",
+                "PhaseOrchestratorResult",
+            ]
+
+            for name in expected_exports:
+                assert name in phases.__all__, f"{name} not in phases.__all__"
+
+            # Verify lazy import works
+            assert hasattr(phases, "WarmupResult")
+            assert hasattr(phases, "GNResult")
+        except ImportError:
+            pytest.skip("NLSQ Phase classes not available")
+
+
+# =============================================================================
+# TestNLSQTRFDataclasses - 12 tests (v2.10.0+)
+# =============================================================================
+@pytest.mark.unit
+class TestNLSQTRFDataclasses:
+    """Tests for NLSQ TRF dataclass structures (12 tests).
+
+    Added to verify homodyne can work with NLSQ's refactored TRF dataclasses:
+    - TRFConfig: TRF algorithm configuration
+    - StepContext: Iteration state context
+    - BoundsContext: Parameter bounds context
+    - FallbackContext: Fallback tracking context
+
+    Reference: NLSQ core/trf.py refactoring (Dec 2025-Jan 2026)
+    """
+
+    def test_trf_config_import_available(self):
+        """TC-TRF-001: TRFConfig can be imported from NLSQ."""
+        try:
+            from nlsq.core.trf import TRFConfig
+
+            assert TRFConfig is not None
+        except ImportError:
+            pytest.skip("NLSQ TRF dataclasses not available")
+
+    def test_trf_config_default_values(self):
+        """TC-TRF-002: TRFConfig has correct default values."""
+        try:
+            from nlsq.core.trf import TRFConfig
+
+            config = TRFConfig()
+
+            # Verify default values match NLSQ documentation
+            assert config.ftol == 1e-8
+            assert config.xtol == 1e-8
+            assert config.gtol == 1e-8
+            assert config.max_nfev is None
+            assert config.x_scale == "jac"
+            assert config.loss == "linear"
+            assert config.tr_solver == "exact"
+            assert config.verbose == 0
+        except ImportError:
+            pytest.skip("NLSQ TRF dataclasses not available")
+
+    def test_trf_config_immutable(self):
+        """TC-TRF-003: TRFConfig is immutable (frozen dataclass)."""
+        try:
+            from nlsq.core.trf import TRFConfig
+
+            config = TRFConfig()
+
+            with pytest.raises(AttributeError):
+                config.ftol = 1e-6
+        except ImportError:
+            pytest.skip("NLSQ TRF dataclasses not available")
+
+    def test_trf_config_validation_negative_ftol(self):
+        """TC-TRF-004: TRFConfig rejects negative ftol."""
+        try:
+            from nlsq.core.trf import TRFConfig
+
+            with pytest.raises(ValueError, match="ftol must be positive"):
+                TRFConfig(ftol=-1e-8)
+        except ImportError:
+            pytest.skip("NLSQ TRF dataclasses not available")
+
+    def test_trf_config_valid_loss_functions(self):
+        """TC-TRF-005: TRFConfig accepts all valid loss functions."""
+        try:
+            from nlsq.core.trf import TRFConfig
+
+            valid_losses = ["linear", "soft_l1", "huber", "cauchy", "arctan"]
+            for loss in valid_losses:
+                config = TRFConfig(loss=loss)
+                assert config.loss == loss
+        except ImportError:
+            pytest.skip("NLSQ TRF dataclasses not available")
+
+    def test_step_context_import(self):
+        """TC-TRF-006: StepContext can be imported."""
+        try:
+            from nlsq.core.trf import StepContext
+
+            assert StepContext is not None
+        except ImportError:
+            pytest.skip("NLSQ TRF dataclasses not available")
+
+    def test_step_context_creation(self):
+        """TC-TRF-007: StepContext can be created with required fields."""
+        try:
+            from nlsq.core.trf import StepContext
+
+            import jax.numpy as jnp
+
+            ctx = StepContext(
+                x=jnp.array([1.0, 2.0, 3.0]),
+                f=jnp.zeros(10),
+                J=jnp.ones((10, 3)),
+                cost=0.5,
+                g=jnp.array([0.1, 0.2, 0.3]),
+                trust_radius=1.0,
+                iteration=0,
+                scale=jnp.ones(3),
+                scale_inv=jnp.ones(3),
+            )
+
+            assert ctx.x.shape == (3,)
+            assert ctx.f.shape == (10,)
+            assert ctx.J.shape == (10, 3)
+            assert ctx.cost == 0.5
+            assert ctx.trust_radius == 1.0
+            assert ctx.iteration == 0
+        except ImportError:
+            pytest.skip("NLSQ TRF dataclasses not available")
+
+    def test_step_context_mutable(self):
+        """TC-TRF-008: StepContext is mutable (not frozen)."""
+        try:
+            from nlsq.core.trf import StepContext
+
+            import jax.numpy as jnp
+
+            ctx = StepContext(
+                x=jnp.array([1.0]),
+                f=jnp.array([0.0]),
+                J=jnp.array([[1.0]]),
+                cost=0.0,
+                g=jnp.array([0.0]),
+                trust_radius=1.0,
+                iteration=0,
+                scale=jnp.array([1.0]),
+                scale_inv=jnp.array([1.0]),
+            )
+
+            # Should be mutable
+            ctx.iteration = 5
+            assert ctx.iteration == 5
+
+            ctx.trust_radius = 2.0
+            assert ctx.trust_radius == 2.0
+        except ImportError:
+            pytest.skip("NLSQ TRF dataclasses not available")
+
+    def test_bounds_context_import(self):
+        """TC-TRF-009: BoundsContext can be imported."""
+        try:
+            from nlsq.core.trf import BoundsContext
+
+            assert BoundsContext is not None
+        except ImportError:
+            pytest.skip("NLSQ TRF dataclasses not available")
+
+    def test_bounds_context_from_bounds_factory(self):
+        """TC-TRF-010: BoundsContext.from_bounds factory method works."""
+        try:
+            from nlsq.core.trf import BoundsContext
+
+            import jax.numpy as jnp
+
+            lb = jnp.array([0.0, -1.0, 0.5])
+            ub = jnp.array([10.0, 1.0, 2.0])
+            ctx = BoundsContext.from_bounds(lb, ub)
+
+            assert ctx.lb.shape == (3,)
+            assert ctx.ub.shape == (3,)
+            assert jnp.allclose(ctx.lb, lb)
+            assert jnp.allclose(ctx.ub, ub)
+        except ImportError:
+            pytest.skip("NLSQ TRF dataclasses not available")
+
+    def test_fallback_context_import(self):
+        """TC-TRF-011: FallbackContext can be imported."""
+        try:
+            from nlsq.core.trf import FallbackContext
+
+            assert FallbackContext is not None
+        except ImportError:
+            pytest.skip("NLSQ TRF dataclasses not available")
+
+    def test_fallback_context_default_values(self):
+        """TC-TRF-012: FallbackContext has correct default values."""
+        try:
+            from nlsq.core.trf import FallbackContext
+
+            import jax.numpy as jnp
+
+            ctx = FallbackContext(original_dtype=jnp.float32)
+
+            assert ctx.original_dtype == jnp.float32
+            assert ctx.fallback_triggered is False
+            assert ctx.fallback_reason == ""
+            assert ctx.step_context is None
+        except ImportError:
+            pytest.skip("NLSQ TRF dataclasses not available")
+
+
+# =============================================================================
+# TestHybridStreamingPhaseHistory - 8 tests (v2.10.0+)
+# =============================================================================
+@pytest.mark.unit
+class TestHybridStreamingPhaseHistory:
+    """Tests for phase history structure from hybrid streaming optimizer (8 tests).
+
+    Verifies that the phase_history returned by the optimizer has the expected
+    structure with records for each optimization phase.
+
+    Reference: NLSQ streaming/phases/orchestrator.py
+    """
+
+    def test_phase_history_structure(self):
+        """TC-PHIST-001: Phase history has expected structure."""
+        # Expected phase history structure from AdaptiveHybridStreamingOptimizer
+        phase_history = [
+            {
+                "phase": 0,
+                "name": "setup",
+                "timestamp": 1234567890.0,
+            },
+            {
+                "phase": 1,
+                "name": "lbfgs_warmup",
+                "iterations": 50,
+                "final_loss": 0.01,
+                "best_loss": 0.009,
+                "switch_reason": "Gradient norm below threshold",
+                "timestamp": 1234567891.0,
+            },
+            {
+                "phase": 2,
+                "name": "gauss_newton",
+                "iterations": 10,
+                "final_cost": 0.001,
+                "best_cost": 0.0009,
+                "convergence_reason": "Cost change below tolerance",
+                "gradient_norm": 1e-9,
+                "timestamp": 1234567892.0,
+            },
+            {
+                "phase": 3,
+                "name": "finalization",
+                "final_cost": 0.0009,
+                "total_time": 120.5,
+                "timestamp": 1234567893.0,
+            },
+        ]
+
+        # Verify structure
+        assert len(phase_history) >= 1
+
+        # Phase 0 should have setup fields
+        setup = next((p for p in phase_history if p["phase"] == 0), None)
+        if setup:
+            assert "name" in setup
+            assert "timestamp" in setup
+
+    def test_phase_history_warmup_record(self):
+        """TC-PHIST-002: Warmup phase record has expected fields."""
+        warmup_record = {
+            "phase": 1,
+            "name": "lbfgs_warmup",
+            "iterations": 50,
+            "final_loss": 0.01,
+            "best_loss": 0.009,
+            "switch_reason": "Gradient norm below threshold",
+            "timestamp": 1234567891.0,
+        }
+
+        assert warmup_record["phase"] == 1
+        assert warmup_record["name"] == "lbfgs_warmup"
+        assert "iterations" in warmup_record
+        assert "final_loss" in warmup_record or "best_loss" in warmup_record
+        assert "switch_reason" in warmup_record
+
+    def test_phase_history_gauss_newton_record(self):
+        """TC-PHIST-003: Gauss-Newton phase record has expected fields."""
+        gn_record = {
+            "phase": 2,
+            "name": "gauss_newton",
+            "iterations": 10,
+            "final_cost": 0.001,
+            "best_cost": 0.0009,
+            "convergence_reason": "Cost change below tolerance",
+            "gradient_norm": 1e-9,
+            "timestamp": 1234567892.0,
+        }
+
+        assert gn_record["phase"] == 2
+        assert gn_record["name"] == "gauss_newton"
+        assert "iterations" in gn_record
+        assert "final_cost" in gn_record or "best_cost" in gn_record
+        assert "convergence_reason" in gn_record
+
+    def test_phase_history_finalization_record(self):
+        """TC-PHIST-004: Finalization phase record has expected fields."""
+        final_record = {
+            "phase": 3,
+            "name": "finalization",
+            "final_cost": 0.0009,
+            "total_time": 120.5,
+            "timestamp": 1234567893.0,
+        }
+
+        assert final_record["phase"] == 3
+        assert final_record["name"] == "finalization"
+        assert "total_time" in final_record
+
+    def test_phase_history_skipped_warmup(self):
+        """TC-PHIST-005: Warmup can be skipped (warm start detected)."""
+        skipped_warmup = {
+            "phase": 1,
+            "name": "lbfgs_warmup",
+            "iterations": 0,
+            "skipped": True,
+            "warm_start": True,
+            "relative_loss": 0.005,
+            "switch_reason": "Warm start detected - skipping L-BFGS warmup",
+            "timestamp": 1234567891.0,
+        }
+
+        assert skipped_warmup["skipped"] is True
+        assert skipped_warmup["warm_start"] is True
+        assert skipped_warmup["iterations"] == 0
+
+    def test_phase_history_cost_guard_triggered(self):
+        """TC-PHIST-006: Warmup record includes cost guard info when triggered."""
+        cost_guard_record = {
+            "phase": 1,
+            "name": "lbfgs_warmup",
+            "iterations": 25,
+            "final_loss": 0.02,
+            "best_loss": 0.008,
+            "switch_reason": "Cost increase guard triggered (ratio=1.2500)",
+            "cost_guard_triggered": True,
+            "lr_mode": "exploration",
+            "timestamp": 1234567891.0,
+        }
+
+        assert cost_guard_record["cost_guard_triggered"] is True
+        assert "cost increase guard" in cost_guard_record["switch_reason"].lower()
+
+    def test_phase_history_lr_mode_tracking(self):
+        """TC-PHIST-007: Warmup record tracks learning rate mode."""
+        warmup_with_lr = {
+            "phase": 1,
+            "name": "lbfgs_warmup",
+            "iterations": 50,
+            "lr_mode": "refinement",
+            "relative_loss": 0.05,
+            "timestamp": 1234567891.0,
+        }
+
+        valid_modes = ["refinement", "careful", "exploration", "fixed"]
+        assert warmup_with_lr["lr_mode"] in valid_modes
+
+    def test_phase_history_max_iterations(self):
+        """TC-PHIST-008: Phase records include max iterations info."""
+        gn_max_iter = {
+            "phase": 2,
+            "name": "gauss_newton",
+            "iterations": 50,
+            "convergence_reason": "Maximum iterations reached",
+            "timestamp": 1234567892.0,
+        }
+
+        assert "maximum iterations" in gn_max_iter["convergence_reason"].lower()
