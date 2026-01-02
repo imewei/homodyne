@@ -1184,6 +1184,26 @@ Key Classes
    homodyne.optimization.nlsq.gradient_monitor.CollapseEvent
    homodyne.optimization.nlsq.gradient_monitor.GradientCollapseMonitor
 
+Shear-Sensitivity Weighting (Layer 5)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Weights residuals by |cos(φ₀-φ)| to prevent gradient cancellation. Computed in
+Homodyne and passed to NLSQ as generic residual weights.
+
+.. automodule:: homodyne.optimization.nlsq.shear_weighting
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+Key Classes
+^^^^^^^^^^^
+
+.. autosummary::
+   :nosignatures:
+
+   homodyne.optimization.nlsq.shear_weighting.ShearWeightingConfig
+   homodyne.optimization.nlsq.shear_weighting.ShearSensitivityWeighting
+
 Anti-Degeneracy Controller
 ~~~~~~~~~~~~~~~~~~~~~~~~~~
 

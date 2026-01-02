@@ -26,7 +26,7 @@ absorb physical signals.
 - Observed: ``gamma_dot_t0 → 10^-6`` (collapsed to lower bound)
 - Root cause: Per-angle contrast/offset parameters absorb angle-dependent shear signal
 
-The Anti-Degeneracy Defense System provides a four-layer solution:
+The Anti-Degeneracy Defense System provides a five-layer solution:
 
 .. list-table:: Defense Layers Summary
    :header-rows: 1
@@ -57,6 +57,11 @@ The Anti-Degeneracy Defense System provides a four-layer solution:
      - Runtime Monitoring
      - NEW
      - Medium
+   * - 5
+     - Shear-Sensitivity Weighting
+     - Gradient Cancellation
+     - NEW (v2.9.1)
+     - **High**
    * - —
      - Data Shuffling
      - Sequential Bias
@@ -592,6 +597,173 @@ Implementation
    diagnostics = monitor.get_diagnostics()
    print(f"Gradient monitoring: {diagnostics}")
 
+Layer 5: Shear-Sensitivity Weighting
+------------------------------------
+
+Mathematical Foundation
+~~~~~~~~~~~~~~~~~~~~~~~
+
+Layer 5 addresses gradient cancellation by weighting residuals according to their
+sensitivity to the shear parameter ``gamma_dot_t0``. The shear term in the XPCS model
+produces gradients that scale with :math:`|\cos(\phi_0 - \phi)|`:
+
+- Angles where :math:`\phi \approx \phi_0` or :math:`\phi \approx \phi_0 + \pi` are
+  **highly sensitive** to shear (parallel/anti-parallel flow)
+- Angles where :math:`\phi \approx \phi_0 \pm \pi/2` are **insensitive** to shear
+  (perpendicular flow)
+
+**Weight Formula**:
+
+.. math::
+
+   w(\phi) = w_{\min} + (1 - w_{\min}) \times |\cos(\phi_0 - \phi)|^\alpha
+
+where:
+
+- :math:`w_{\min}` is the minimum weight (default: 0.3) ensuring perpendicular angles
+  still contribute
+- :math:`\alpha` is the sensitivity exponent (default: 1.0 for linear weighting)
+
+The weights are normalized so their mean equals 1.0, preserving the overall loss scale.
+
+Why This Works
+~~~~~~~~~~~~~~
+
+Standard unweighted least squares gives equal importance to all angles. When angles
+span 360°, the positive and negative contributions to :math:`\partial L / \partial \dot{\gamma}_0`
+partially cancel (94.6% cancellation for 23 uniformly-spaced angles).
+
+Shear-sensitivity weighting addresses this by:
+
+1. **Amplifying informative residuals**: Errors at shear-sensitive angles (parallel flow)
+   contribute more to the loss gradient
+2. **Attenuating uninformative residuals**: Errors at insensitive angles (perpendicular flow)
+   contribute less
+3. **Breaking symmetry**: The asymmetric weighting prevents gradient cancellation
+
+.. code-block:: text
+
+   Weight distribution for 8 angles with φ₀ = 0°:
+
+   φ = 0°:   |cos(0°)|   = 1.0  → w = 1.0   (HIGH weight)
+   φ = 45°:  |cos(45°)|  = 0.71 → w = 0.80
+   φ = 90°:  |cos(90°)|  = 0.0  → w = 0.30  (LOW weight)
+   φ = 135°: |cos(135°)| = 0.71 → w = 0.80
+   φ = 180°: |cos(180°)| = 1.0  → w = 1.0   (HIGH weight)
+   ...
+
+   Net effect: Gradient from parallel angles dominates,
+               preventing cancellation
+
+Data Flow
+~~~~~~~~~
+
+Shear-sensitivity weighting is computed in Homodyne and passed to NLSQ as generic
+residual weights, maintaining separation of concerns:
+
+.. code-block:: text
+
+   ┌─────────────────────────────────────────────────────────────────────────┐
+   │ Homodyne wrapper.py                                                     │
+   │  ┌──────────────────────┐    ┌─────────────────────────────────────┐   │
+   │  │ ShearSensitivity     │───▶│ get_weights() → numpy array (n_phi) │   │
+   │  │ Weighting            │    └─────────────────────────────────────┘   │
+   │  └──────────────────────┘                      │                        │
+   │                                                ▼                        │
+   │                                    .tolist() → Python list              │
+   │                                                │                        │
+   │  ┌─────────────────────────────────────────────▼────────────────────┐  │
+   │  │ HybridStreamingConfig(                                           │  │
+   │  │   enable_residual_weighting=True,                                │  │
+   │  │   residual_weights=[w0, w1, ..., w_{n_phi-1}]                    │  │
+   │  │ )                                                                │  │
+   │  └──────────────────────────────────────────────────────────────────┘  │
+   └─────────────────────────────────────────────────────────────────────────┘
+                                       │
+                                       ▼
+   ┌─────────────────────────────────────────────────────────────────────────┐
+   │ NLSQ adaptive_hybrid.py                                                 │
+   │  ┌─────────────────────┐                                               │
+   │  │ _setup_residual_    │ Converts list → jnp.array(float64)            │
+   │  │ weights()           │                                               │
+   │  └─────────────────────┘                                               │
+   │           │                                                             │
+   │           ▼                                                             │
+   │  ┌─────────────────────────────────────────────────────────────────┐   │
+   │  │ loss_fn(params, x_batch, y_batch):                              │   │
+   │  │   group_idx = x_batch[:, 0].astype(int32)  # φ index per point  │   │
+   │  │   weights = residual_weights[group_idx]    # lookup per-point   │   │
+   │  │   wmse = sum(w * r²) / sum(w)              # weighted MSE       │   │
+   │  └─────────────────────────────────────────────────────────────────┘   │
+   └─────────────────────────────────────────────────────────────────────────┘
+
+Dynamic Weight Updates
+~~~~~~~~~~~~~~~~~~~~~~
+
+As the optimizer converges, :math:`\phi_0` may change from its initial guess. The
+``ShearSensitivityWeighter`` class supports dynamic weight updates:
+
+.. code-block:: python
+
+   from homodyne.optimization.nlsq.shear_weighting import (
+       ShearSensitivityWeighter,
+       ShearWeightingConfig,
+   )
+
+   # Create weighter with initial phi0 estimate
+   config = ShearWeightingConfig(
+       enable=True,
+       min_weight=0.3,
+       alpha=1.0,
+       update_frequency=1,  # Update every outer iteration
+       normalize=True,
+   )
+   weighter = ShearSensitivityWeighter(phi_angles, config, phi0_initial=0.0)
+
+   # Get initial weights
+   weights = weighter.get_weights()
+   print(f"Initial weights: {weights}")
+
+   # During optimization, update phi0 as it converges
+   for outer_iter in range(max_iterations):
+       # ... optimization step ...
+
+       if outer_iter % config.update_frequency == 0:
+           weighter.update_phi0(current_phi0_estimate)
+           weights = weighter.get_weights()  # Weights recomputed
+
+   # Get diagnostics
+   diagnostics = weighter.get_diagnostics()
+   print(f"Weight range: [{diagnostics['weight_min']:.3f}, {diagnostics['weight_max']:.3f}]")
+
+Implementation
+~~~~~~~~~~~~~~
+
+.. code-block:: python
+
+   from homodyne.optimization.nlsq.shear_weighting import (
+       ShearSensitivityWeighter,
+       ShearWeightingConfig,
+       create_shear_weighting,
+   )
+
+   # High-level factory function (recommended)
+   phi_angles = np.array([0.0, 0.5, 1.0, 1.5, 2.0, 2.5])  # radians
+   weighter = create_shear_weighting(
+       phi_angles=phi_angles,
+       phi0=0.0,
+       config={
+           'enable': True,
+           'min_weight': 0.3,
+           'alpha': 1.0,
+       }
+   )
+
+   if weighter is not None:
+       weights = weighter.get_weights()
+       print(f"n_weights: {len(weights)}")
+       print(f"Weight range: [{min(weights):.3f}, {max(weights):.3f}]")
+
 Configuration Reference
 -----------------------
 
@@ -637,6 +809,14 @@ Complete YAML configuration for the Anti-Degeneracy Defense System:
            ratio_threshold: 0.01       # |∇_physical|/|∇_per_angle| threshold
            consecutive_triggers: 5     # Must trigger N times
            response: "hierarchical"    # "warn", "hierarchical", "reset", "abort"
+
+         # Layer 5: Shear-Sensitivity Weighting (v2.9.1+)
+         shear_weighting:
+           enable: true              # Enable angle-dependent loss weighting
+           min_weight: 0.3           # Minimum weight for perpendicular angles
+           alpha: 1.0                # Shear sensitivity exponent (1 = linear)
+           update_frequency: 1       # Update weights every N outer iterations
+           normalize: true           # Normalize weights so mean = 1.0
 
 Configuration Options Summary
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -717,6 +897,29 @@ Configuration Options Summary
    * - ``gradient_monitoring.response``
      - "hierarchical"
      - Response action on collapse
+
+.. list-table:: Layer 5 Configuration
+   :header-rows: 1
+   :widths: 25 15 60
+
+   * - Option
+     - Default
+     - Description
+   * - ``shear_weighting.enable``
+     - true
+     - Enable shear-sensitivity weighting
+   * - ``shear_weighting.min_weight``
+     - 0.3
+     - Minimum weight for perpendicular angles
+   * - ``shear_weighting.alpha``
+     - 1.0
+     - Sensitivity exponent (1.0 = linear)
+   * - ``shear_weighting.update_frequency``
+     - 1
+     - Update weights every N outer iterations
+   * - ``shear_weighting.normalize``
+     - true
+     - Normalize weights so mean = 1.0
 
 Usage Tutorial
 --------------
@@ -912,6 +1115,14 @@ Gradient Monitoring
 ~~~~~~~~~~~~~~~~~~~
 
 .. automodule:: homodyne.optimization.nlsq.gradient_monitor
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+Shear-Sensitivity Weighting
+~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. automodule:: homodyne.optimization.nlsq.shear_weighting
    :members:
    :undoc-members:
    :show-inheritance:

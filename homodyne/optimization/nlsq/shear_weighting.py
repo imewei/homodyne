@@ -27,7 +27,7 @@ Use angle-dependent loss weighting:
 
 where w(phi) emphasizes shear-sensitive angles:
 
-    w(phi) = w_min + (1 - w_min) * |cos(phi0_current - phi)|^alpha
+    w(phi) = w_min + (1 - w_min) * abs(cos(phi0_current - phi))^alpha
 
 This converts gradient cancellation into a weighted sum where shear-sensitive
 angles (parallel/antiparallel to flow) contribute more than perpendicular
