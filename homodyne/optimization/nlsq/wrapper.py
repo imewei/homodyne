@@ -4739,7 +4739,11 @@ class NLSQWrapper:
             enable_hierarchical = True
 
         hierarchical_optimizer = None
-        if enable_hierarchical and per_angle_scaling and is_laminar_flow:
+        # Skip hierarchical optimization in constant scaling mode:
+        # - Constant mode already prevents per-angle absorption (2 DoF vs 46)
+        # - HierarchicalOptimizer expects n_per_angle = 2*n_phi or n_coeffs (Fourier)
+        # - Using hierarchical with constant mode causes index mismatch error
+        if enable_hierarchical and per_angle_scaling and is_laminar_flow and not use_constant:
             # n_physical defined unconditionally above
             hier_config = HierarchicalConfig(
                 enable=True,
@@ -4768,6 +4772,13 @@ class NLSQWrapper:
                     "  Shear weighting: WILL BE APPLIED via hierarchical loss function"
                 )
             logger.info("=" * 60)
+        elif use_constant and enable_hierarchical and per_angle_scaling and is_laminar_flow:
+            # Log that hierarchical is skipped due to constant scaling mode
+            logger.info("=" * 60)
+            logger.info("ANTI-DEGENERACY DEFENSE: Layer 2 - Hierarchical Optimization")
+            logger.info("  Skipped: constant scaling mode already prevents per-angle absorption")
+            logger.info("  Reason: Only 2 per-angle DoF (vs 46), no need for hierarchical alternation")
+            logger.info("=" * 60)
 
         # Layer 3: Adaptive Relative Regularization Configuration
         # Replaces/enhances the basic group variance regularization with CV-based approach
@@ -4781,15 +4792,22 @@ class NLSQWrapper:
 
         adaptive_regularizer = None
         if per_angle_scaling and is_laminar_flow:
-            # Compute Fourier-aware group indices
-            # When Fourier mode is active, per-angle params are Fourier coefficients
-            # not n_phi independent values
-            if (
+            # Compute mode-aware group indices
+            # Group indices depend on per-angle mode: constant, fourier, or independent
+            if use_constant:
+                # Constant mode: only 2 per-angle params (1 contrast + 1 offset)
+                # Group indices: [(0, 1), (1, 2)]
+                mode_group_indices = [(0, 1), (1, 2)]
+                logger.debug(
+                    f"Constant-mode regularization groups: {mode_group_indices} "
+                    f"(1 contrast + 1 offset)"
+                )
+            elif (
                 fourier_reparameterizer is not None
                 and fourier_reparameterizer.use_fourier
             ):
                 n_coeffs_per_param = fourier_reparameterizer.n_coeffs_per_param
-                fourier_group_indices = [
+                mode_group_indices = [
                     (0, n_coeffs_per_param),  # contrast Fourier coefficients
                     (
                         n_coeffs_per_param,
@@ -4797,11 +4815,11 @@ class NLSQWrapper:
                     ),  # offset Fourier coefficients
                 ]
                 logger.debug(
-                    f"Fourier-aware regularization groups: {fourier_group_indices} "
+                    f"Fourier-aware regularization groups: {mode_group_indices} "
                     f"(n_coeffs_per_param={n_coeffs_per_param})"
                 )
             else:
-                fourier_group_indices = (
+                mode_group_indices = (
                     None  # Use default: [(0, n_phi), (n_phi, 2*n_phi)]
                 )
                 logger.debug(
@@ -4817,7 +4835,7 @@ class NLSQWrapper:
                 target_cv=target_cv,
                 target_contribution=target_contribution,
                 max_cv=max_cv,
-                group_indices=fourier_group_indices,
+                group_indices=mode_group_indices,
             )
             adaptive_regularizer = AdaptiveRegularizer(reg_config, n_phi)
             logger.info("=" * 60)
@@ -4838,13 +4856,17 @@ class NLSQWrapper:
         gradient_monitor_enabled = gradient_monitoring_config.get("enable", True)
         gradient_monitor = None
         if gradient_monitor_enabled and per_angle_scaling and is_laminar_flow:
-            # Compute Fourier-aware parameter count
-            # When Fourier mode is active, per-angle params are Fourier coefficients
-            n_per_angle = (
-                2 * n_phi
-                if fourier_reparameterizer is None
-                else fourier_reparameterizer.n_coeffs
-            )
+            # Compute mode-aware parameter count
+            # n_per_angle depends on per-angle mode: constant, fourier, or independent
+            if use_constant:
+                # Constant mode: only 2 per-angle params (1 contrast + 1 offset)
+                n_per_angle = 2
+            elif fourier_reparameterizer is not None:
+                # Fourier mode: n_coeffs Fourier coefficients
+                n_per_angle = fourier_reparameterizer.n_coeffs
+            else:
+                # Independent mode: 2 * n_phi per-angle params
+                n_per_angle = 2 * n_phi
             # n_physical defined unconditionally above
             # Use numpy arrays for indices (JAX compatibility)
             per_angle_indices = np.arange(n_per_angle, dtype=np.intp)
