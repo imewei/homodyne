@@ -121,6 +121,26 @@ _fallback_stats = {
 _meshgrid_cache: dict[tuple, tuple] = {}
 _MESHGRID_CACHE_MAX_SIZE = 16  # Limit cache size to prevent memory bloat
 
+# Performance Optimization (Spec 006 - FR-010, T040-T042): Cache statistics
+_cache_stats: dict[str, int] = {
+    "hits": 0,
+    "misses": 0,
+    "evictions": 0,
+    "skipped_large": 0,
+    "skipped_traced": 0,
+}
+
+
+# Define exception types for array hash key computation
+# JAX raises ConcretizationTypeError when accessing traced values inside JIT
+if JAX_AVAILABLE:
+    _ARRAY_HASH_EXCEPTIONS: tuple[type[Exception], ...] = (
+        TypeError,
+        jax.errors.ConcretizationTypeError,
+    )
+else:
+    _ARRAY_HASH_EXCEPTIONS: tuple[type[Exception], ...] = (TypeError,)
+
 
 def _get_array_hash_key(arr: "jnp.ndarray") -> tuple | None:
     """Create a hashable key from array properties.
@@ -135,7 +155,7 @@ def _get_array_hash_key(arr: "jnp.ndarray") -> tuple | None:
             return (1, float(arr), float(arr), str(arr.dtype))
         n = len(arr)
         return (n, float(arr[0]), float(arr[-1]), str(arr.dtype))
-    except (TypeError, jax.errors.ConcretizationTypeError) if JAX_AVAILABLE else TypeError:
+    except _ARRAY_HASH_EXCEPTIONS:
         # Inside JIT tracing - can't access concrete values
         return None
 
@@ -149,6 +169,9 @@ def get_cached_meshgrid(t1: "jnp.ndarray", t2: "jnp.ndarray") -> tuple:
     When called inside a JIT context (traced arrays), caching is skipped and
     meshgrid is created directly (the JIT will handle caching via tracing).
 
+    Performance Optimization (Spec 006 - FR-010, T041):
+    Increments hit/miss counters for cache monitoring.
+
     Args:
         t1: First time array (1D)
         t2: Second time array (1D)
@@ -156,7 +179,7 @@ def get_cached_meshgrid(t1: "jnp.ndarray", t2: "jnp.ndarray") -> tuple:
     Returns:
         Tuple of (t1_grid, t2_grid) with indexing="ij"
     """
-    global _meshgrid_cache
+    global _meshgrid_cache, _cache_stats
 
     # Only cache 1D arrays that need meshgrid expansion
     if t1.ndim != 1 or t2.ndim != 1:
@@ -167,10 +190,12 @@ def get_cached_meshgrid(t1: "jnp.ndarray", t2: "jnp.ndarray") -> tuple:
     try:
         n1 = len(t1)
         if n1 > 2000:
+            _cache_stats["skipped_large"] += 1  # T041: Track skipped large arrays
             return t1, t2
     except (TypeError, Exception):
         # Inside JIT tracing - check using shape instead
         if t1.shape[0] > 2000:
+            _cache_stats["skipped_large"] += 1
             return t1, t2
 
     # Try to create cache key - may fail inside JIT context
@@ -179,15 +204,18 @@ def get_cached_meshgrid(t1: "jnp.ndarray", t2: "jnp.ndarray") -> tuple:
 
     # If inside JIT context, skip caching and create meshgrid directly
     if t1_key is None or t2_key is None:
+        _cache_stats["skipped_traced"] += 1  # T041: Track JIT-traced skips
         t1_grid, t2_grid = jnp.meshgrid(t1, t2, indexing="ij")
         return t1_grid, t2_grid
 
     key = (t1_key, t2_key)
 
     if key in _meshgrid_cache:
+        _cache_stats["hits"] += 1  # T041: Increment hit counter
         return _meshgrid_cache[key]
 
     # Create meshgrid and cache it
+    _cache_stats["misses"] += 1  # T041: Increment miss counter
     t1_grid, t2_grid = jnp.meshgrid(t1, t2, indexing="ij")
 
     # Evict oldest entries if cache is full (simple FIFO)
@@ -195,6 +223,7 @@ def get_cached_meshgrid(t1: "jnp.ndarray", t2: "jnp.ndarray") -> tuple:
         # Remove first (oldest) entry
         first_key = next(iter(_meshgrid_cache))
         del _meshgrid_cache[first_key]
+        _cache_stats["evictions"] += 1  # T041: Track evictions
 
     _meshgrid_cache[key] = (t1_grid, t2_grid)
     return t1_grid, t2_grid
@@ -207,6 +236,50 @@ def clear_meshgrid_cache() -> None:
     """
     global _meshgrid_cache
     _meshgrid_cache.clear()
+
+
+# Performance Optimization (Spec 006 - FR-010, T042): Cache stats utility
+def get_cache_stats() -> dict[str, int | float]:
+    """Get meshgrid cache statistics.
+
+    Performance Optimization (Spec 006 - FR-010, T042):
+    Returns cache hit/miss statistics for monitoring and optimization.
+
+    Returns:
+        Dictionary with cache statistics:
+        - hits: Number of cache hits
+        - misses: Number of cache misses
+        - evictions: Number of cache evictions
+        - skipped_large: Arrays too large for caching
+        - skipped_traced: Skipped due to JIT tracing
+        - hit_rate: Cache hit rate (hits / total lookups)
+        - cache_size: Current number of cached entries
+    """
+    total_lookups = _cache_stats["hits"] + _cache_stats["misses"]
+    hit_rate = _cache_stats["hits"] / total_lookups if total_lookups > 0 else 0.0
+
+    return {
+        **_cache_stats,
+        "hit_rate": hit_rate,
+        "cache_size": len(_meshgrid_cache),
+        "max_cache_size": _MESHGRID_CACHE_MAX_SIZE,
+    }
+
+
+def reset_cache_stats() -> None:
+    """Reset cache statistics counters.
+
+    Performance Optimization (Spec 006 - FR-010):
+    Call before benchmarking to get clean statistics.
+    """
+    global _cache_stats
+    _cache_stats = {
+        "hits": 0,
+        "misses": 0,
+        "evictions": 0,
+        "skipped_large": 0,
+        "skipped_traced": 0,
+    }
 
 # Global flags for availability checking
 jax_available = JAX_AVAILABLE
