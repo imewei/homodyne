@@ -238,9 +238,13 @@ class TestPrepareParameterData:
 class TestComputeNLSQFits:
     """Test theoretical fit generation with least squares scaling."""
 
-    @patch("homodyne.optimization.nlsq.fit_computation.compute_g2_scaled")
-    def test_compute_nlsq_fits_sequential(self, mock_compute_g2):
-        """Test sequential per-angle computation with mocked compute_g2_scaled."""
+    def test_compute_nlsq_fits_sequential(self):
+        """Test theoretical fit computation produces correct output structure.
+
+        Note: Previously used mock to verify call count, but vectorized
+        implementation (Spec 006 - FR-007) uses vmap for batch processing,
+        changing call patterns. Now tests output behavior instead.
+        """
         from homodyne.optimization.nlsq.fit_computation import compute_theoretical_fits
 
         # Create mock result and data
@@ -248,14 +252,8 @@ class TestComputeNLSQFits:
         data = create_mock_data_dict(n_angles=3, n_t1=10, n_t2=10)
         metadata = {"L": 2000000.0, "dt": 0.1, "q": 0.0123}
 
-        # Mock compute_g2_scaled to return predictable output
-        mock_compute_g2.return_value = jnp.ones((10, 10)) * 1.5
-
         # Compute fits
         fits_dict = compute_theoretical_fits(result, data, metadata)
-
-        # Verify compute_g2_scaled was called twice per angle (raw + solver surface)
-        assert mock_compute_g2.call_count == 6
 
         # Verify output structure
         assert "c2_theoretical_raw" in fits_dict
@@ -264,6 +262,13 @@ class TestComputeNLSQFits:
         assert "per_angle_scaling" in fits_dict
         assert "per_angle_scaling_solver" in fits_dict
         assert "residuals" in fits_dict
+
+        # Verify output shapes
+        assert fits_dict["c2_theoretical_raw"].shape == (3, 10, 10)
+        assert fits_dict["c2_theoretical_scaled"].shape == (3, 10, 10)
+        assert fits_dict["c2_solver_scaled"].shape == (3, 10, 10)
+        assert fits_dict["per_angle_scaling"].shape == (3, 2)
+        assert fits_dict["per_angle_scaling_solver"].shape == (3, 2)
 
     def test_compute_nlsq_fits_shape_validation(self):
         """Test that output shapes match experimental data."""

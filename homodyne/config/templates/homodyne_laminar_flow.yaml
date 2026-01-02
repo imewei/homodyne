@@ -549,7 +549,7 @@ optimization:
                                                 # Recommended for most cases
       warmup_iterations: 200                    # L-BFGS warmup iterations before switch check
       max_warmup_iterations: 500                # Maximum L-BFGS iterations (force switch to GN)
-      warmup_learning_rate: 0.001               # L-BFGS line search scale
+      warmup_learning_rate: 0.01               # L-BFGS line search scale
       gauss_newton_max_iterations: 100          # Maximum Gauss-Newton iterations in Phase 2
       gauss_newton_tol: 1.0e-8                  # Convergence tolerance for Gauss-Newton
       chunk_size: 10000                         # Points per chunk for streaming J^T J
