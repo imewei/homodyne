@@ -219,7 +219,7 @@ def test_compute_diagnostics_perfect_coverage_balanced(balanced_data):
     """Test that balanced data achieves perfect coverage in all chunks."""
     phi, t1, t2, g2 = balanced_data
 
-    phi_stratified, _, _, _, _ = create_angle_stratified_data(
+    phi_stratified, _, _, _, chunk_sizes = create_angle_stratified_data(
         phi, t1, t2, g2, target_chunk_size=250
     )
 
@@ -229,6 +229,7 @@ def test_compute_diagnostics_perfect_coverage_balanced(balanced_data):
         execution_time_ms=10.0,
         use_index_based=False,
         target_chunk_size=250,
+        chunk_sizes=chunk_sizes,  # Use actual chunk boundaries from stratification
     )
 
     # With balanced data, all chunks should have all 3 angles (except possibly last chunk)

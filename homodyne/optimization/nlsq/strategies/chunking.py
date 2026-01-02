@@ -696,7 +696,7 @@ def create_angle_stratified_data(
 
     logger.info(
         f"Stratifying {n_points:,} points across {stats.n_angles} angles "
-        f"(imbalance ratio: {stats.imbalance_ratio:.2f}) using Cyclic Stratification"
+        f"(imbalance ratio: {stats.imbalance_ratio:.2f}) using Interleaved Stratification"
     )
 
     # Group data by angle
@@ -711,65 +711,63 @@ def create_angle_stratified_data(
             "size": int(np.sum(mask)),
         }
 
-    # Calculate points per angle per chunk
-    points_per_angle_per_chunk = max(1, target_chunk_size // stats.n_angles)
+    # Calculate number of chunks based on total points (no expansion)
+    n_chunks = max(1, int(np.ceil(n_points / target_chunk_size)))
+
     logger.debug(
         f"Target chunk size: {target_chunk_size:,}, "
-        f"points per angle per chunk: {points_per_angle_per_chunk:,}"
+        f"Number of chunks: {n_chunks}"
     )
 
-    # Calculate total chunks needed to cover the LARGEST angle group
-    # This ensures we process all data, even from the most populous angle
-    max_angle_size = max(group["size"] for group in angle_groups.values())
-    n_chunks = int(np.ceil(max_angle_size / points_per_angle_per_chunk))
-
-    # Calculate effective expanded dataset size
-    effective_total_points = n_chunks * points_per_angle_per_chunk * stats.n_angles
-    expansion_factor = effective_total_points / n_points
+    # For each angle, calculate how many points go to each chunk
+    # Using round-robin distribution to spread points evenly
+    angle_chunk_allocations = {}
+    for angle in stats.unique_angles:
+        group_size = angle_groups[angle]["size"]
+        base_per_chunk = group_size // n_chunks
+        remainder = group_size % n_chunks
+        # Earlier chunks get one extra point if there's remainder
+        allocations = [base_per_chunk + (1 if i < remainder else 0) for i in range(n_chunks)]
+        angle_chunk_allocations[angle] = allocations
 
     logger.info(
-        f"Cyclic Stratification Plan:\n"
-        f"  Chunks: {n_chunks} (determined by largest angle with {max_angle_size:,} points)\n"
-        f"  Points per chunk: {points_per_angle_per_chunk * stats.n_angles:,}\n"
-        f"  Effective total points: {effective_total_points:,} (Expansion: {expansion_factor:.2f}x)"
+        f"Interleaved Stratification Plan:\n"
+        f"  Chunks: {n_chunks}\n"
+        f"  Total points: {n_points:,} (no expansion)"
     )
 
-    if expansion_factor > 2.0:
-        logger.warning(
-            f"High data expansion detected ({expansion_factor:.2f}x). "
-            f"Minority angles will be significantly oversampled."
-        )
-
-    # Build stratified chunks
+    # Build stratified chunks by interleaving angle groups
     stratified_chunks = []
+    angle_offsets = {angle: 0 for angle in stats.unique_angles}  # Track position in each angle
 
     for chunk_idx in range(n_chunks):
         chunk_parts = {"phi": [], "t1": [], "t2": [], "g2_exp": []}
 
         for angle in stats.unique_angles:
             group = angle_groups[angle]
-            start = chunk_idx * points_per_angle_per_chunk
-            count = points_per_angle_per_chunk
-            
-            # Cyclic slicing: wrap around if we exceed group size
-            indices = np.arange(start, start + count) % group["size"]
-            
-            chunk_parts["phi"].append(group["phi"][indices])
-            chunk_parts["t1"].append(group["t1"][indices])
-            chunk_parts["t2"].append(group["t2"][indices])
-            chunk_parts["g2_exp"].append(group["g2_exp"][indices])
+            start = angle_offsets[angle]
+            count = angle_chunk_allocations[angle][chunk_idx]
+            end = start + count
+
+            if count > 0:
+                chunk_parts["phi"].append(group["phi"][start:end])
+                chunk_parts["t1"].append(group["t1"][start:end])
+                chunk_parts["t2"].append(group["t2"][start:end])
+                chunk_parts["g2_exp"].append(group["g2_exp"][start:end])
+                angle_offsets[angle] = end
 
         # Concatenate all angles for this chunk
-        chunk_size = sum(len(arr) for arr in chunk_parts["phi"])
-        stratified_chunks.append(
-            {
-                "phi": np.concatenate(chunk_parts["phi"]),
-                "t1": np.concatenate(chunk_parts["t1"]),
-                "t2": np.concatenate(chunk_parts["t2"]),
-                "g2_exp": np.concatenate(chunk_parts["g2_exp"]),
-                "size": chunk_size,
-            }
-        )
+        if any(len(arr) > 0 for arr in chunk_parts["phi"]):
+            chunk_size = sum(len(arr) for arr in chunk_parts["phi"])
+            stratified_chunks.append(
+                {
+                    "phi": np.concatenate(chunk_parts["phi"]),
+                    "t1": np.concatenate(chunk_parts["t1"]),
+                    "t2": np.concatenate(chunk_parts["t2"]),
+                    "g2_exp": np.concatenate(chunk_parts["g2_exp"]),
+                    "size": chunk_size,
+                }
+            )
 
     # Flatten back to single arrays
     phi_stratified = np.concatenate([chunk["phi"] for chunk in stratified_chunks])
@@ -798,16 +796,18 @@ def create_angle_stratified_indices(
     phi: jnp.ndarray | np.ndarray,
     target_chunk_size: int = 100_000,
 ) -> np.ndarray:
-    """Create index array for zero-copy angle-stratified data access using Cyclic Stratification.
+    """Create index array for zero-copy angle-stratified data access using Interleaved Stratification.
 
     This function implements index-based stratification, reducing memory overhead
     from 2x (full copy) to ~1% (index array only).
 
-    CRITICAL FIX (Jan 2026): Cyclic Stratification
-    ----------------------------------------------
-    Uses cyclic indexing (modulo arithmetic) to reuse data from smaller angle groups,
-    ensuring ALL chunks are balanced and contain sufficient data for every angle.
-    This fixes rank deficiency issues with highly imbalanced datasets.
+    Interleaved Stratification
+    --------------------------
+    Distributes data from each angle group across chunks using round-robin allocation.
+    Each angle's data is split proportionally across chunks, ensuring:
+    - No data expansion (output size = input size)
+    - No duplicates
+    - All angles represented in each chunk (for balanced data)
 
     Parameters
     ----------
@@ -819,7 +819,7 @@ def create_angle_stratified_indices(
     Returns
     -------
     indices : np.ndarray
-        Index array specifying stratified ordering, shape (n_stratified_points,)
+        Index array specifying stratified ordering, shape (n_points,)
         Use: data_stratified = data_original[indices]
 
     """
@@ -838,7 +838,7 @@ def create_angle_stratified_indices(
 
     logger.info(
         f"Creating stratified indices for {n_points:,} points across {stats.n_angles} angles "
-        f"(imbalance ratio: {stats.imbalance_ratio:.2f}) using Cyclic Stratification"
+        f"(imbalance ratio: {stats.imbalance_ratio:.2f}) using Interleaved Stratification"
     )
 
     # Group indices by angle
@@ -847,56 +847,52 @@ def create_angle_stratified_indices(
         mask = phi_np == angle
         angle_index_groups[angle] = np.where(mask)[0]
 
-    # Calculate points per angle per chunk
-    points_per_angle_per_chunk = max(1, target_chunk_size // stats.n_angles)
-    
-    # Calculate total chunks based on LARGEST angle group
-    group_sizes = [len(indices) for indices in angle_index_groups.values()]
-    max_angle_size = max(group_sizes)
-    n_chunks = int(np.ceil(max_angle_size / points_per_angle_per_chunk))
+    # Calculate number of chunks based on total points (no expansion)
+    n_chunks = max(1, int(np.ceil(n_points / target_chunk_size)))
 
     logger.debug(
         f"Target chunk size: {target_chunk_size:,}, "
-        f"points per angle per chunk: {points_per_angle_per_chunk:,}\n"
-        f"Total chunks: {n_chunks} (based on max angle size: {max_angle_size:,})"
+        f"Number of chunks: {n_chunks}"
     )
+
+    # For each angle, calculate how many points go to each chunk
+    # Using round-robin distribution to spread points evenly
+    angle_chunk_allocations = {}
+    for angle in stats.unique_angles:
+        group_size = len(angle_index_groups[angle])
+        base_per_chunk = group_size // n_chunks
+        remainder = group_size % n_chunks
+        # Earlier chunks get one extra point if there's remainder
+        allocations = [base_per_chunk + (1 if i < remainder else 0) for i in range(n_chunks)]
+        angle_chunk_allocations[angle] = allocations
 
     # Build stratified index array by interleaving angle groups
     stratified_indices = []
+    angle_offsets = {angle: 0 for angle in stats.unique_angles}  # Track position in each angle
 
     for chunk_idx in range(n_chunks):
         chunk_indices = []
 
         for angle in stats.unique_angles:
             indices_for_angle = angle_index_groups[angle]
-            group_size = len(indices_for_angle)
-            
-            start = chunk_idx * points_per_angle_per_chunk
-            count = points_per_angle_per_chunk
-            
-            # Cyclic indexing: wrap around using modulo arithmetic
-            # To avoid creating massive arange arrays for modulo, we can just slice intelligently
-            # But a simple arange % size is vectorizable and fast enough for indices
-            if group_size > 0:
-                raw_indices = np.arange(start, start + count) % group_size
-                chunk_indices.append(indices_for_angle[raw_indices])
-            else:
-                 # Should not happen if stats.n_angles is correct, but safe guard
-                 logger.warning(f"No data for angle {angle} despite being in stats!")
+            start = angle_offsets[angle]
+            count = angle_chunk_allocations[angle][chunk_idx]
+            end = start + count
+
+            if count > 0:
+                chunk_indices.append(indices_for_angle[start:end])
+                angle_offsets[angle] = end
 
         # Concatenate all angle indices for this chunk
-        stratified_indices.append(np.concatenate(chunk_indices))
+        if chunk_indices:
+            stratified_indices.append(np.concatenate(chunk_indices))
 
     # Flatten to single index array
     final_indices = np.concatenate(stratified_indices)
 
-    # Verify correctness and log data usage
-    n_used = len(final_indices)
-    expansion_factor = n_used / n_points if n_points > 0 else 0
-
     logger.info(
         f"Stratification complete: {n_chunks} chunks created, "
-        f"using {n_used:,} / {n_points:,} indices (Expansion: {expansion_factor:.2f}x)"
+        f"{len(final_indices):,} indices (no expansion)"
     )
 
     return final_indices
