@@ -364,23 +364,23 @@ Performance Characteristics
 Implementation Details
 ^^^^^^^^^^^^^^^^^^^^^^
 
-The streaming optimizer uses NLSQ's ``StreamingOptimizer`` class:
+The streaming optimizer uses NLSQ's ``AdaptiveHybridStreamingOptimizer`` class:
 
 .. code-block:: python
 
-   from nlsq import StreamingConfig, StreamingOptimizer
+   from nlsq import AdaptiveHybridStreamingOptimizer, HybridStreamingConfig
 
-   config = StreamingConfig(
-       batch_size=10000,
-       max_epochs=50,
-       learning_rate=0.001,
-       use_adam=True,
-       gradient_clip=1.0,
-       warmup_steps=100,
-       enable_fault_tolerance=True,
+   config = HybridStreamingConfig(
+       chunk_size=50000,
+       warmup_iterations=100,
+       max_warmup_iterations=500,
+       gauss_newton_max_iterations=50,
+       gauss_newton_tol=1e-8,
+       normalize=True,
+       normalization_strategy="bounds",
    )
 
-   optimizer = StreamingOptimizer(config)
+   optimizer = AdaptiveHybridStreamingOptimizer(config)
    result = optimizer.fit(
        data_source=(x_data, y_data),
        func=model_fn,
@@ -390,11 +390,11 @@ The streaming optimizer uses NLSQ's ``StreamingOptimizer`` class:
 
 Key features:
 
-- **Mini-batch processing**: Data is processed in configurable batches
-- **L-BFGS optimizer**: Second-order approximation for fast convergence
-- **Gradient clipping**: Prevents exploding gradients
-- **Fault tolerance**: Retries failed batches with different random seeds
-- **Progress tracking**: Logs epoch progress and convergence metrics
+- **4-phase hybrid optimization**: L-BFGS warmup + Gauss-Newton refinement
+- **Parameter normalization**: Equalizes gradient magnitudes across multi-scale parameters
+- **Exact J^T J accumulation**: Proper covariance estimation in streaming mode
+- **Chunk-based processing**: Memory-efficient for unlimited dataset sizes
+- **Progress tracking**: Logs phase progress and convergence metrics
 
 CMC: Consensus Monte Carlo
 ---------------------------

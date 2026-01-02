@@ -299,19 +299,19 @@ class NLSQCheckpointError(NLSQOptimizationError):
     Examples
     --------
     >>> try:
-    ...     config = StreamingConfig(resume_from_checkpoint=True)
-    ...     optimizer = StreamingOptimizer(config)
+    ...     config = HybridStreamingConfig(enable_checkpoints=True)
+    ...     optimizer = AdaptiveHybridStreamingOptimizer(config)
     ...     result = optimizer.fit(data, model, p0)
     ... except NLSQCheckpointError as e:
     ...     if e.operation == 'load':
     ...         # Start fresh if checkpoint is corrupted
-    ...         config = StreamingConfig(resume_from_checkpoint=False)
-    ...         optimizer = StreamingOptimizer(config)
+    ...         config = HybridStreamingConfig(enable_checkpoints=False)
+    ...         optimizer = AdaptiveHybridStreamingOptimizer(config)
     ...         result = optimizer.fit(data, model, p0)
     ...     elif e.operation == 'save':
     ...         # Continue without checkpoints
-    ...         config = StreamingConfig(enable_checkpoints=False)
-    ...         optimizer = StreamingOptimizer(config)
+    ...         config = HybridStreamingConfig(enable_checkpoints=False)
+    ...         optimizer = AdaptiveHybridStreamingOptimizer(config)
     ...         result = optimizer.fit(data, model, p0)
     """
 

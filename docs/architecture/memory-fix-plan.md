@@ -2,6 +2,10 @@
 
 **Status: IMPLEMENTED (Option 1 - Streaming Optimizer)**
 
+> **Note (Jan 2026)**: This is a historical planning document. The original
+> `StreamingOptimizer` referenced here was removed in NLSQ 0.4.0 and replaced
+> with `AdaptiveHybridStreamingOptimizer`. See CLAUDE.md for current usage.
+
 ---
 
 ## Executive Summary

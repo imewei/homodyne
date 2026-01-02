@@ -89,8 +89,8 @@ class ExperimentalDataConfig(TypedDict, total=False):
 class StreamingConfig(TypedDict, total=False):
     """Streaming optimization configuration.
 
-    Configuration for NLSQ StreamingOptimizer with checkpoint management
-    and fault tolerance for unlimited dataset sizes.
+    Configuration for NLSQ AdaptiveHybridStreamingOptimizer with checkpoint
+    management and fault tolerance for unlimited dataset sizes.
 
     Attributes
     ----------
