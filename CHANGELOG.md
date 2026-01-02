@@ -13,6 +13,115 @@ ______________________________________________________________________
 
 ______________________________________________________________________
 
+## [2.10.0] - 2026-01-02
+
+### Anti-Degeneracy Defense System - Layer 5
+
+Added **shear-sensitivity weighting** (Layer 5) to complete the 5-layer defense against
+structural degeneracy in laminar_flow mode.
+
+#### Layer 5: Shear-Sensitivity Weighting
+
+**Problem**: The shear term gradient `∂L/∂γ̇₀ ∝ Σ cos(φ₀-φ)` suffers from 94.6%
+cancellation when summing across 23 angles spanning 360° (11 positive, 12 negative
+cos contributions).
+
+**Solution**: Weight residuals by `|cos(φ₀-φ)|` to prevent gradient cancellation:
+- Angles perpendicular to flow (cos≈0) contribute less to loss
+- Angles parallel to flow (|cos|≈1) contribute more
+- Preserves gradient signal for shear parameters
+
+**Configuration:**
+```yaml
+optimization:
+  nlsq:
+    anti_degeneracy:
+      shear_weighting:
+        enable: true              # Enable angle-dependent loss weighting
+        min_weight: 0.3           # Minimum weight for perpendicular angles
+        alpha: 1.0                # Shear sensitivity exponent
+        update_frequency: 1       # Update weights every N outer iterations
+        normalize: true           # Normalize weights so mean = 1.0
+```
+
+**New File:** `homodyne/optimization/nlsq/shear_weighting.py`
+
+#### Updated 5-Layer Defense System
+
+| Layer | Solution | Effect |
+|-------|----------|--------|
+| 1 | Fourier Reparameterization | Reduces 2×n_phi per-angle params to 10 Fourier coefficients |
+| 2 | Hierarchical Optimization | Alternates physical/per-angle stages |
+| 3 | Adaptive CV Regularization | Auto-tunes λ to contribute ~10% to loss |
+| 4 | Gradient Collapse Monitor | Runtime detection with automatic response |
+| **5** | **Shear-Sensitivity Weighting** | **Weights residuals by \|cos(φ₀-φ)\|** |
+
+### Constant Scaling Mode
+
+Added constant (global) scaling mode as alternative to per-angle scaling for datasets
+where per-angle parameters are not needed.
+
+**Features:**
+- Auto-selection in anti-degeneracy controller based on phi angle count
+- Parameter transformation in wrapper for seamless integration
+- Config option: `per_angle_mode: "constant"` or `"auto"`
+
+### Performance Optimizations
+
+- **perf(core)**: Meshgrid cache hit/miss statistics for monitoring
+- **perf(core)**: Parallelize Richardson gradient computation
+- **perf(data)**: Batch diagonal correction with pre-allocation
+- **perf(nlsq)**: Vectorize computation and pre-allocate buffers
+
+### Refactoring
+
+#### 4-Phase Codebase Modernization
+
+- **Phase 1**: Legacy modernization quick wins
+- **Phase 2**: Complexity reduction with validator extraction
+- **Phase 3**: Wrapper decomposition - extract memory and parameter utilities
+- **Phase 4**: Configuration consolidation - improve module exports
+
+#### Streaming Optimizer Migration
+
+- Migrated from legacy `StreamingOptimizer` to `AdaptiveHybridStreamingOptimizer`
+- Replaced cyclic stratification with interleaved stratification for better angle coverage
+
+#### L-BFGS Terminology Transition
+
+- Renamed all "Adam warmup" references to "L-BFGS warmup" to reflect actual algorithm
+- Updated config templates and documentation
+
+### Added
+
+- **feat(nlsq)**: `ParameterIndexMapper` for correct Fourier coefficient indexing
+- **feat(nlsq)**: `watch_parameters` option in `GradientCollapseMonitor`
+- **feat(nlsq)**: Residual weighting support for anti-degeneracy Layer 5
+- **feat(config)**: `shear_weighting` section in laminar flow templates
+
+### Fixed
+
+- **fix(nlsq)**: Fourier coefficient indexing and user bounds propagation
+- **fix(nlsq)**: Use `jnp.mean` instead of `np.mean` in hierarchical loss function
+- **fix(nlsq)**: JAX-compatible regularization for hybrid streaming
+- **fix(nlsq)**: Require consecutive triggers for watched parameter gradient warnings
+- **fix(nlsq)**: Use numpy arrays for indices to support JAX array indexing
+- **fix(nlsq)**: Define `phi_unique` before shear weighting initialization
+
+### Testing
+
+- **test(nlsq)**: Anti-degeneracy integration tests
+- **test(nlsq)**: Phase result and TRF dataclass tests for NLSQ 0.4.x compatibility
+- **test(perf)**: Relax thresholds and suppress numpyro warnings
+
+### Documentation
+
+- Simplified anti-degeneracy templates for v2.10.0
+- Layer 5 shear-sensitivity weighting documentation
+- Updated StreamingOptimizer references to hybrid
+
+______________________________________________________________________
+
 ## [2.9.0] - 2025-12-31
 
 ### Anti-Degeneracy Defense System
