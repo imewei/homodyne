@@ -89,9 +89,9 @@ except ImportError:
         return x
 
 
-# V2 system integration
+# V2 system integration - import types from types.py to avoid circular imports
 try:
-    from homodyne.data.optimization import DatasetInfo, DatasetOptimizer
+    from homodyne.data.types import DatasetInfo
     from homodyne.utils.logging import get_logger, log_calls, log_performance
 
     HAS_V2_LOGGING = True
@@ -109,8 +109,10 @@ except ImportError:
     def log_calls(*args, **kwargs):
         return lambda f: f
 
-    DatasetOptimizer = None
     DatasetInfo = None
+
+# Import DatasetOptimizer lazily to avoid circular imports
+DatasetOptimizer = None  # Will be imported when needed
 
 logger = get_logger(__name__)
 

@@ -11,12 +11,18 @@ import functools
 import inspect
 import logging
 import time
-from collections.abc import Mapping
+from collections.abc import Callable, Generator, Mapping
 from contextlib import contextmanager
 from datetime import datetime
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
-from typing import Any
+from typing import Any, TypeVar
+
+# Type variables for decorators
+F = TypeVar("F", bound=Callable[..., Any])
+
+# Type alias for logger types
+LoggerType = logging.Logger | logging.LoggerAdapter[logging.Logger]
 
 DEFAULT_FORMAT_DETAILED = "%(asctime)s | %(levelname)-8s | %(name)s | %(message)s"
 DEFAULT_FORMAT_SIMPLE = "%(levelname)-8s | %(message)s"
@@ -80,8 +86,11 @@ class MinimalLogger:
     """Configurable logger manager for the homodyne package."""
 
     _instance: MinimalLogger | None = None
+    _initialized: bool
+    _configured: bool
+    _root_logger_name: str
 
-    def __new__(cls):
+    def __new__(cls) -> MinimalLogger:
         if cls._instance is None:
             cls._instance = super().__new__(cls)
             cls._instance._initialized = False
@@ -306,14 +315,13 @@ def get_logger(
     name: str | None = None,
     *,
     context: Mapping[str, Any] | None = None,
-) -> logging.Logger:
+) -> logging.Logger | logging.LoggerAdapter[logging.Logger]:
     """Get a logger instance with automatic naming and optional context."""
     if name is None:
         frame = inspect.currentframe()
         try:
-            caller_frame = frame.f_back
-            if caller_frame:
-                name = caller_frame.f_globals.get("__name__", "unknown")
+            if frame is not None and frame.f_back is not None:
+                name = frame.f_back.f_globals.get("__name__", "unknown")
         finally:
             del frame
 
@@ -323,17 +331,19 @@ def get_logger(
     return base_logger
 
 
-def with_context(logger: logging.Logger, **context: Any) -> logging.LoggerAdapter:
+def with_context(
+    logger: logging.Logger, **context: Any
+) -> logging.LoggerAdapter[logging.Logger]:
     """Attach contextual prefix to an existing logger."""
     return _ContextAdapter(logger, {k: v for k, v in context.items() if v is not None})
 
 
 def log_calls(
-    logger: logging.Logger | None = None,
+    logger: LoggerType | None = None,
     level: int = logging.DEBUG,
     include_args: bool = False,
     include_result: bool = False,
-):
+) -> Callable[[F], F]:
     """Decorator to log function calls.
 
     Args:
@@ -342,50 +352,52 @@ def log_calls(
         include_args: Whether to log function arguments.
         include_result: Whether to log function return value.
     """
+    resolved_logger: LoggerType | None = logger
 
-    def decorator(func):
-        nonlocal logger
-        if logger is None:
-            logger = get_logger(func.__module__)
+    def decorator(func: F) -> F:
+        nonlocal resolved_logger
+        if resolved_logger is None:
+            resolved_logger = get_logger(func.__module__)  # type: ignore[attr-defined]
 
         @functools.wraps(func)
-        def wrapper(*args, **kwargs):
-            func_name = f"{func.__module__}.{func.__qualname__}"
+        def wrapper(*args: Any, **kwargs: Any) -> Any:
+            func_name = f"{func.__module__}.{func.__qualname__}"  # type: ignore[attr-defined]
+            assert resolved_logger is not None  # For type narrowing
 
             # Log function entry
             if include_args:
                 args_str = ", ".join([repr(arg) for arg in args])
                 kwargs_str = ", ".join([f"{k}={repr(v)}" for k, v in kwargs.items()])
                 all_args = ", ".join(filter(None, [args_str, kwargs_str]))
-                logger.log(level, f"Calling {func_name}({all_args})")
+                resolved_logger.log(level, f"Calling {func_name}({all_args})")
             else:
-                logger.log(level, f"Calling {func_name}")
+                resolved_logger.log(level, f"Calling {func_name}")
 
             try:
                 result = func(*args, **kwargs)
 
                 # Log function exit
                 if include_result:
-                    logger.log(level, f"Completed {func_name} -> {repr(result)}")
+                    resolved_logger.log(level, f"Completed {func_name} -> {repr(result)}")
                 else:
-                    logger.log(level, f"Completed {func_name}")
+                    resolved_logger.log(level, f"Completed {func_name}")
 
                 return result
 
             except Exception as e:
-                logger.log(logging.ERROR, f"Exception in {func_name}: {e}")
+                resolved_logger.log(logging.ERROR, f"Exception in {func_name}: {e}")
                 raise
 
-        return wrapper
+        return wrapper  # type: ignore[return-value]
 
     return decorator
 
 
 def log_performance(
-    logger: logging.Logger | None = None,
+    logger: LoggerType | None = None,
     level: int = logging.INFO,
     threshold: float = 0.1,
-):
+) -> Callable[[F], F]:
     """Decorator to log function performance.
 
     Args:
@@ -393,23 +405,25 @@ def log_performance(
         level: Logging level to use.
         threshold: Minimum duration (seconds) to log.
     """
+    resolved_logger: LoggerType | None = logger
 
-    def decorator(func):
-        nonlocal logger
-        if logger is None:
-            logger = get_logger(func.__module__)
+    def decorator(func: F) -> F:
+        nonlocal resolved_logger
+        if resolved_logger is None:
+            resolved_logger = get_logger(func.__module__)  # type: ignore[attr-defined]
 
         @functools.wraps(func)
-        def wrapper(*args, **kwargs):
+        def wrapper(*args: Any, **kwargs: Any) -> Any:
             start_time = time.perf_counter()
-            func_name = f"{func.__module__}.{func.__qualname__}"
+            func_name = f"{func.__module__}.{func.__qualname__}"  # type: ignore[attr-defined]
+            assert resolved_logger is not None  # For type narrowing
 
             try:
                 result = func(*args, **kwargs)
                 duration = time.perf_counter() - start_time
 
                 if duration >= threshold:
-                    logger.log(
+                    resolved_logger.log(
                         level,
                         f"Performance: {func_name} completed in {duration:.3f}s",
                     )
@@ -418,13 +432,13 @@ def log_performance(
 
             except Exception as e:
                 duration = time.perf_counter() - start_time
-                logger.log(
+                resolved_logger.log(
                     logging.ERROR,
                     f"Performance: {func_name} failed after {duration:.3f}s: {e}",
                 )
                 raise
 
-        return wrapper
+        return wrapper  # type: ignore[return-value]
 
     return decorator
 
@@ -434,7 +448,7 @@ def log_operation(
     operation_name: str,
     logger: logging.Logger | None = None,
     level: int = logging.INFO,
-):
+) -> Generator[logging.Logger | logging.LoggerAdapter[logging.Logger], None, None]:
     """Context manager for logging operations.
 
     Args:
@@ -442,19 +456,20 @@ def log_operation(
         logger: Logger to use. If None, creates one for caller's module.
         level: Logging level to use.
     """
-    if logger is None:
-        logger = get_logger()
+    resolved_logger = get_logger() if logger is None else logger
 
-    logger.log(level, f"Starting operation: {operation_name}")
+    resolved_logger.log(level, f"Starting operation: {operation_name}")
     start_time = time.perf_counter()
 
     try:
-        yield logger
+        yield resolved_logger
         duration = time.perf_counter() - start_time
-        logger.log(level, f"Completed operation: {operation_name} in {duration:.3f}s")
+        resolved_logger.log(
+            level, f"Completed operation: {operation_name} in {duration:.3f}s"
+        )
     except Exception as e:
         duration = time.perf_counter() - start_time
-        logger.log(
+        resolved_logger.log(
             logging.ERROR,
             f"Failed operation: {operation_name} after {duration:.3f}s: {e}",
         )

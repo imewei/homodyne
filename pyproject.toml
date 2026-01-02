@@ -57,30 +57,27 @@ requires-python = ">=3.12"
 # ============================================================================
 dependencies = [
     # Core scientific computing
-    "numpy>=2.0",
-    "scipy>=1.16",
-    # JAX ecosystem
-    "jax>=0.8.0",
-    "jaxlib>=0.8.0",
+    "numpy>=2.0,<3.0",
+    "scipy>=1.13,<2.0",
+    # JAX ecosystem (CPU-only, pin to 0.8.x for stability)
+    "jax>=0.8.0,<0.9.0",
+    "jaxlib>=0.8.0,<0.9.0",
     "nlsq>=0.4.1",
     # Bayesian inference
     "numpyro>=0.19.0",
     "blackjax>=1.3",
-    "arviz-base",
-    "arviz-stats",
-    "arviz-plots",
-    "arviz",
+    "arviz>=0.20",
     # Data handling
-    "h5py>=3.15",
+    "h5py>=3.10,<4.0",
     "pyyaml>=6.0.3",
     # System utilities
-    "psutil>=7.2",
+    "psutil>=6.0",
     "cloudpickle>=3.1",
     # Plotting
-    "matplotlib>=3.10",
+    "matplotlib>=3.9",
     # Fast visualization (includes numba as transitive dependency)
-    "datashader>=0.18.2",
-    "xarray>=2025.1",
+    "datashader>=0.16",
+    "xarray>=2024.1",
 ]
 
 [project.optional-dependencies]

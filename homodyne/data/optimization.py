@@ -16,11 +16,11 @@ Key Features:
 import time
 from collections import deque
 from collections.abc import Iterator
-from dataclasses import dataclass
 from typing import Any
 
 import numpy as np
 
+from homodyne.data.types import DatasetInfo, ProcessingStrategy
 from homodyne.utils.logging import get_logger, log_performance
 
 # JAX imports with fallback
@@ -41,32 +41,6 @@ except ImportError:
 
 
 logger = get_logger(__name__)
-
-
-@dataclass
-class DatasetInfo:
-    """Information about dataset characteristics for optimization."""
-
-    size: int
-    category: str  # "small", "medium", "large"
-    memory_usage_mb: float
-    recommended_chunk_size: int
-    recommended_batch_size: int
-    use_progressive_loading: bool
-    compression_ratio: float | None = None
-
-
-@dataclass
-class ProcessingStrategy:
-    """Processing strategy for different dataset sizes."""
-
-    chunk_size: int
-    batch_size: int
-    memory_limit_mb: float
-    use_caching: bool
-    use_compression: bool
-    parallel_workers: int
-    jax_config: dict[str, Any]
 
 
 class DatasetOptimizer:

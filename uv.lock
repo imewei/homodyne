@@ -132,53 +132,6 @@ wheels = [
 ]
 
 [[package]]
-name = "arviz-base"
-version = "0.7.0"
-source = { registry = "https://pypi.org/simple" }
-dependencies = [
-    { name = "numpy" },
-    { name = "typing-extensions" },
-    { name = "xarray" },
-]
-sdist = { url = "https://files.pythonhosted.org/packages/d6/0b/b99cd50213748c866432402249edf0b0c618ec5d14f95c157e6de56fb7bc/arviz_base-0.7.0.tar.gz", hash = "sha256:d800c3c26171297b1022b3defa0cd0aab64a6cd0c28257fbcce3ca13dd7358cd", size = 1381567, upload-time = "2025-11-11T08:32:04.695Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/d7/64/2812bb89a9bf0eead1965f7e7883ba2f194be1aef36bed0405fe8f240094/arviz_base-0.7.0-py3-none-any.whl", hash = "sha256:10fd2198709eee1b562e128e6d8dd814e24af1b7e6b385a3daba903dadac53f7", size = 1404134, upload-time = "2025-11-11T08:32:02.472Z" },
-]
-
-[[package]]
-name = "arviz-plots"
-version = "0.7.0"
-source = { registry = "https://pypi.org/simple" }
-dependencies = [
-    { name = "arviz-base" },
-    { name = "arviz-stats", extra = ["xarray"] },
-]
-sdist = { url = "https://files.pythonhosted.org/packages/3f/7c/e181100796c068bafec78ea211243c2c1a10c1d68eb89d53267aaed69422/arviz_plots-0.7.0.tar.gz", hash = "sha256:d6b2cb5b35acc4fe231942e961095b647cc2bcc5b9a4bcbfe0841b03beaf5b15", size = 122460, upload-time = "2025-11-11T12:20:32.313Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/16/af/a6f4a911ae1a5715981dc935d960f55074a2159df0aad13b52ba495aa856/arviz_plots-0.7.0-py3-none-any.whl", hash = "sha256:c5a4d8fd5fa11c54fa91d21df76e8cd657eebc12ad718931f3e766b9b0b00309", size = 196417, upload-time = "2025-11-11T12:20:31.085Z" },
-]
-
-[[package]]
-name = "arviz-stats"
-version = "0.7.0"
-source = { registry = "https://pypi.org/simple" }
-dependencies = [
-    { name = "numpy" },
-    { name = "scipy" },
-]
-sdist = { url = "https://files.pythonhosted.org/packages/3f/1d/f86f7b02621f920bce13ba9882cb5ee733acefc7553b3bae0f04dfb325d9/arviz_stats-0.7.0.tar.gz", hash = "sha256:c04d2b888fc2ecf44bdaca3f950f62834d51ddcc97472f9aeec7c4808e598032", size = 121397, upload-time = "2025-11-11T09:10:11.303Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/34/97/59f31690c561b70f1e493375f5bd774bffd1597245b10d1a62024b7f12e3/arviz_stats-0.7.0-py3-none-any.whl", hash = "sha256:d61d3fe0f00d3a92cdad01ff1389edd32b7f128a7830ce2a668de26d32f9e786", size = 148951, upload-time = "2025-11-11T09:10:09.555Z" },
-]
-
-[package.optional-dependencies]
-xarray = [
-    { name = "arviz-base" },
-    { name = "xarray" },
-    { name = "xarray-einstats" },
-]
-
-[[package]]
 name = "babel"
 version = "2.17.0"
 source = { registry = "https://pypi.org/simple" }
@@ -697,9 +650,6 @@ name = "homodyne"
 source = { editable = "." }
 dependencies = [
     { name = "arviz" },
-    { name = "arviz-base" },
-    { name = "arviz-plots" },
-    { name = "arviz-stats" },
     { name = "blackjax" },
     { name = "cloudpickle" },
     { name = "datashader" },
@@ -750,37 +700,34 @@ docs = [
 
 [package.metadata]
 requires-dist = [
-    { name = "arviz" },
-    { name = "arviz-base" },
-    { name = "arviz-plots" },
-    { name = "arviz-stats" },
+    { name = "arviz", specifier = ">=0.20" },
     { name = "blackjax", specifier = ">=1.3" },
     { name = "cloudpickle", specifier = ">=3.1" },
-    { name = "datashader", specifier = ">=0.18.2" },
-    { name = "h5py", specifier = ">=3.15" },
+    { name = "datashader", specifier = ">=0.16" },
+    { name = "h5py", specifier = ">=3.10,<4.0" },
     { name = "homodyne", extras = ["dev", "docs"], marker = "extra == 'all'" },
-    { name = "jax", specifier = ">=0.8.0" },
-    { name = "jaxlib", specifier = ">=0.8.0" },
-    { name = "matplotlib", specifier = ">=3.10" },
+    { name = "jax", specifier = ">=0.8.0,<0.9.0" },
+    { name = "jaxlib", specifier = ">=0.8.0,<0.9.0" },
+    { name = "matplotlib", specifier = ">=3.9" },
     { name = "mypy", marker = "extra == 'dev'", specifier = ">=1.19" },
     { name = "myst-parser", marker = "extra == 'docs'", specifier = ">=4.0.1" },
     { name = "nlsq", editable = "../NLSQ" },
-    { name = "numpy", specifier = ">=2.0" },
+    { name = "numpy", specifier = ">=2.0,<3.0" },
     { name = "numpyro", specifier = ">=0.19.0" },
     { name = "pre-commit", marker = "extra == 'dev'", specifier = ">=4.5" },
-    { name = "psutil", specifier = ">=7.2" },
+    { name = "psutil", specifier = ">=6.0" },
     { name = "pytest", marker = "extra == 'dev'", specifier = ">=9.0" },
     { name = "pytest-cov", marker = "extra == 'dev'", specifier = ">=7.0" },
     { name = "pytest-xdist", marker = "extra == 'dev'", specifier = ">=3.8" },
     { name = "pyyaml", specifier = ">=6.0.3" },
     { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.14.10" },
-    { name = "scipy", specifier = ">=1.16" },
+    { name = "scipy", specifier = ">=1.13,<2.0" },
     { name = "sphinx", marker = "extra == 'docs'", specifier = ">=8.2" },
     { name = "sphinx-autodoc-typehints", marker = "extra == 'docs'", specifier = ">=3.5" },
     { name = "sphinx-copybutton", marker = "extra == 'docs'", specifier = ">=0.5.2" },
     { name = "sphinx-rtd-theme", marker = "extra == 'docs'", specifier = ">=3.0.2" },
     { name = "tqdm", marker = "extra == 'dev'", specifier = ">=4.67" },
-    { name = "xarray", specifier = ">=2025.1" },
+    { name = "xarray", specifier = ">=2024.1" },
 ]
 provides-extras = ["dev", "docs", "all"]
 

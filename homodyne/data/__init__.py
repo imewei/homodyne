@@ -133,10 +133,12 @@ except ImportError:
     HAS_PREPROCESSING = False
 
 try:
-    from homodyne.data.optimization import (  # noqa: F401
+    from homodyne.data.types import (  # noqa: F401
         DatasetInfo,
-        DatasetOptimizer,
         ProcessingStrategy,
+    )
+    from homodyne.data.optimization import (  # noqa: F401
+        DatasetOptimizer,
         create_dataset_optimizer,
         optimize_for_method,
     )

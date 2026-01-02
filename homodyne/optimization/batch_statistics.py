@@ -7,6 +7,9 @@ statistics, success rates, and error distributions during streaming optimization
 from collections import defaultdict, deque
 from typing import Any
 
+# Type alias for batch record
+BatchRecord = dict[str, Any]
+
 
 class BatchStatistics:
     """Circular buffer for tracking batch-level statistics.
@@ -49,11 +52,11 @@ class BatchStatistics:
         max_size : int, optional
             Maximum number of batches to keep in circular buffer, by default 100
         """
-        self.buffer = deque(maxlen=max_size)
+        self.buffer: deque[BatchRecord] = deque(maxlen=max_size)
         self.total_batches = 0
         self.total_successes = 0
         self.total_failures = 0
-        self.error_counts = defaultdict(int)
+        self.error_counts: defaultdict[str, int] = defaultdict(int)
 
     def record_batch(
         self,
@@ -126,7 +129,7 @@ class BatchStatistics:
         if not successful_batches:
             return float("inf")
 
-        total_loss = sum(b["loss"] for b in successful_batches)
+        total_loss: float = sum(float(b["loss"]) for b in successful_batches)
         return total_loss / len(successful_batches)
 
     def get_average_iterations(self) -> float:
@@ -140,8 +143,8 @@ class BatchStatistics:
         if not self.buffer:
             return 0.0
 
-        total_iterations = sum(b["iterations"] for b in self.buffer)
-        return total_iterations / len(self.buffer)
+        total_iterations: int = sum(int(b["iterations"]) for b in self.buffer)
+        return float(total_iterations) / len(self.buffer)
 
     def get_statistics(self) -> dict[str, Any]:
         """Return comprehensive statistics dictionary.
