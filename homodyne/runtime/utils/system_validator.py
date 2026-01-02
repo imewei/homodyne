@@ -714,29 +714,30 @@ alias hc-iso >/dev/null 2>&1 && echo "shortcut_alias_works" || echo "shortcut_al
                 warnings.append(f"NLSQ core functions not available: {e}")
                 remediation.append("pip install --upgrade nlsq>=0.1.0")
 
-            # Test 3: StreamingOptimizer availability (v0.1.5+ feature)
+            # Test 3: AdaptiveHybridStreamingOptimizer availability (v0.3.2+ feature)
+            # Note: The old StreamingOptimizer was removed in NLSQ 0.4.0
             streaming_available = False
             try:
-                from nlsq.streaming import (  # noqa: F401 - Import test
-                    StreamingOptimizer,
+                from nlsq import (  # noqa: F401 - Import test
+                    AdaptiveHybridStreamingOptimizer,
                 )
 
-                details["streaming_optimizer"] = "available"
+                details["hybrid_streaming_optimizer"] = "available"
                 streaming_available = True
             except ImportError:
-                details["streaming_optimizer"] = "not available"
+                details["hybrid_streaming_optimizer"] = "not available"
                 # Only warn if version is recent enough to expect it
                 if "nlsq_version" in details:
                     try:
                         version = parse_version(details["nlsq_version"])
-                        if version >= parse_version("0.1.5"):
+                        if version >= parse_version("0.3.2"):
                             warnings.append(
-                                "StreamingOptimizer not available despite recent "
-                                "NLSQ version",
+                                "AdaptiveHybridStreamingOptimizer not available despite "
+                                "NLSQ >= 0.3.2",
                             )
                     except Exception as exc:
                         logger.debug(
-                            "Version parsing for streaming optimizer failed: %s", exc
+                            "Version parsing for hybrid streaming optimizer failed: %s", exc
                         )
 
             # Test 4: Homodyne NLSQ integration
@@ -781,7 +782,7 @@ alias hc-iso >/dev/null 2>&1 && echo "shortcut_alias_works" || echo "shortcut_al
             # Build message
             message = f"NLSQ {details.get('nlsq_version', 'unknown')}"
             if streaming_available:
-                message += " with StreamingOptimizer"
+                message += " with AdaptiveHybridStreamingOptimizer"
             if homodyne_integration_ok:
                 message += ", homodyne integration OK"
 

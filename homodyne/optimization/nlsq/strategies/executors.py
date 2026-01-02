@@ -20,15 +20,16 @@ if TYPE_CHECKING:
 # Import NLSQ functions
 from nlsq import curve_fit, curve_fit_large
 
-# Try importing StreamingOptimizer (available in NLSQ >= 0.1.5)
+# Try importing AdaptiveHybridStreamingOptimizer (available in NLSQ >= 0.3.2)
+# The old StreamingOptimizer was removed in NLSQ 0.4.0
 try:
-    from nlsq import StreamingConfig, StreamingOptimizer
+    from nlsq import AdaptiveHybridStreamingOptimizer, HybridStreamingConfig
 
-    STREAMING_AVAILABLE = True
+    STREAMING_AVAILABLE = True  # For backwards compatibility
 except ImportError:
     STREAMING_AVAILABLE = False
-    StreamingOptimizer = None
-    StreamingConfig = None
+    AdaptiveHybridStreamingOptimizer = None
+    HybridStreamingConfig = None
 
 
 @dataclass
@@ -260,15 +261,19 @@ class LargeDatasetExecutor(OptimizationExecutor):
 class StreamingExecutor(OptimizationExecutor):
     """Streaming optimization for unlimited dataset sizes.
 
-    Uses NLSQ's StreamingOptimizer for datasets that are too large
+    Uses NLSQ's AdaptiveHybridStreamingOptimizer for datasets that are too large
     to fit in memory. Supports checkpointing and recovery.
+
+    .. note:: The old StreamingOptimizer was removed in NLSQ 0.4.0.
+        This executor now uses AdaptiveHybridStreamingOptimizer which provides
+        better convergence and parameter estimation.
     """
 
     def __init__(self, checkpoint_config: dict[str, Any] | None = None):
         """Initialize streaming executor.
 
         Args:
-            checkpoint_config: Configuration for checkpointing
+            checkpoint_config: Configuration for checkpointing and hybrid streaming
         """
         self.checkpoint_config = checkpoint_config or {}
 
@@ -291,22 +296,26 @@ class StreamingExecutor(OptimizationExecutor):
         x_scale_value: float | np.ndarray | str,
         logger: Any,
     ) -> ExecutionResult:
-        """Execute streaming optimization."""
+        """Execute streaming optimization using AdaptiveHybridStreamingOptimizer."""
         if not STREAMING_AVAILABLE:
             raise RuntimeError(
-                "StreamingOptimizer not available. Upgrade NLSQ to >= 0.1.5"
+                "AdaptiveHybridStreamingOptimizer not available. Upgrade NLSQ to >= 0.3.2"
             )
 
-        logger.info("Using NLSQ StreamingOptimizer for unlimited dataset size...")
+        logger.info("Using NLSQ AdaptiveHybridStreamingOptimizer for large dataset...")
 
-        # Configure streaming
-        config = StreamingConfig(
-            chunk_size=self.checkpoint_config.get("chunk_size", 100000),
-            checkpoint_interval=self.checkpoint_config.get("checkpoint_interval", 10),
-            checkpoint_dir=self.checkpoint_config.get("checkpoint_dir", None),
+        # Configure hybrid streaming
+        config = HybridStreamingConfig(
+            chunk_size=self.checkpoint_config.get("chunk_size", 50000),
+            warmup_iterations=self.checkpoint_config.get("warmup_iterations", 100),
+            max_warmup_iterations=self.checkpoint_config.get("max_warmup_iterations", 500),
+            gauss_newton_max_iterations=self.checkpoint_config.get("gauss_newton_max_iterations", 50),
+            gauss_newton_tol=self.checkpoint_config.get("gauss_newton_tol", 1e-8),
+            normalize=self.checkpoint_config.get("normalize", True),
+            normalization_strategy=self.checkpoint_config.get("normalization_strategy", "bounds"),
         )
 
-        optimizer = StreamingOptimizer(config)
+        optimizer = AdaptiveHybridStreamingOptimizer(config)
 
         try:
             result = optimizer.fit(
@@ -315,25 +324,28 @@ class StreamingExecutor(OptimizationExecutor):
                 ydata,
                 p0=initial_params,
                 bounds=bounds,
-                loss=loss_name,
             )
 
             info = {
-                "success": True,
-                "strategy": "streaming",
-                "chunks_processed": getattr(result, "chunks_processed", 0),
+                "success": result.get("success", True),
+                "strategy": "hybrid_streaming",
+                "iterations": result.get("nit", 0),
+                "streaming_diagnostics": result.get("streaming_diagnostics", {}),
             }
 
+            popt = np.asarray(result["x"])
+            pcov = result.get("pcov", np.zeros((len(popt), len(popt))))
+
             return ExecutionResult(
-                popt=np.asarray(result.x),
-                pcov=getattr(result, "pcov", np.zeros((len(result.x), len(result.x)))),
+                popt=popt,
+                pcov=np.asarray(pcov),
                 info=info,
                 recovery_actions=[],
-                convergence_status="converged",
+                convergence_status="converged" if info["success"] else "partial",
             )
 
         except Exception as e:
-            logger.error(f"Streaming optimization failed: {e}")
+            logger.error(f"Hybrid streaming optimization failed: {e}")
             raise
 
 

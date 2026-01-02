@@ -51,23 +51,16 @@ import numpy as np
 # Reference: https://nlsq.readthedocs.io/en/latest/guides/advanced_features.html
 from nlsq import LeastSquares, curve_fit, curve_fit_large
 
-# Try importing StreamingOptimizer (available in NLSQ >= 0.1.5)
-try:
-    from nlsq import StreamingConfig, StreamingOptimizer
-
-    STREAMING_AVAILABLE = True
-except ImportError:
-    STREAMING_AVAILABLE = False
-    StreamingOptimizer = None
-    StreamingConfig = None
-
 # Try importing AdaptiveHybridStreamingOptimizer (available in NLSQ >= 0.3.2)
+# This is the preferred streaming optimizer - the old StreamingOptimizer was removed in NLSQ 0.4.0
 # Fixes: 1) Shear-term weak gradients, 2) Slow convergence, 3) Crude covariance
 try:
     from nlsq import AdaptiveHybridStreamingOptimizer, HybridStreamingConfig
 
+    STREAMING_AVAILABLE = True  # For backwards compatibility
     HYBRID_STREAMING_AVAILABLE = True
 except ImportError:
+    STREAMING_AVAILABLE = False
     HYBRID_STREAMING_AVAILABLE = False
     AdaptiveHybridStreamingOptimizer = None
     HybridStreamingConfig = None
@@ -1511,7 +1504,9 @@ class NLSQWrapper:
             n_chunks_estimate = max(1, n_total_points // target_chunk_size)
 
             # Check if streaming mode should be used based on memory
-            if not use_streaming_mode and STREAMING_AVAILABLE:
+            # Note: Check both STREAMING_AVAILABLE and HYBRID_STREAMING_AVAILABLE
+            # because hybrid streaming may be available even when basic streaming isn't
+            if not use_streaming_mode and (STREAMING_AVAILABLE or HYBRID_STREAMING_AVAILABLE):
                 should_stream, estimated_gb, reason = self._should_use_streaming(
                     n_points=n_total_points,
                     n_params=len(validated_params),
@@ -1531,9 +1526,12 @@ class NLSQWrapper:
 
             # Use streaming optimizer if needed
             if use_streaming_mode:
-                # Prefer AdaptiveHybridStreamingOptimizer when available and enabled
+                # Prefer AdaptiveHybridStreamingOptimizer when available
                 # It fixes shear-term gradients, convergence, and covariance issues
-                use_hybrid = use_hybrid_streaming and HYBRID_STREAMING_AVAILABLE
+                # Use hybrid if: (1) explicitly enabled, OR (2) basic streaming unavailable
+                use_hybrid = HYBRID_STREAMING_AVAILABLE and (
+                    use_hybrid_streaming or not STREAMING_AVAILABLE
+                )
 
                 if use_hybrid:
                     logger.info("=" * 80)
@@ -1606,77 +1604,18 @@ class NLSQWrapper:
                     except Exception as e:
                         logger.warning(
                             f"Hybrid streaming optimization failed: {e}\n"
-                            f"Falling back to basic streaming optimizer..."
-                        )
-                        # Fall through to basic streaming optimizer
-
-                if not STREAMING_AVAILABLE:
-                    logger.error(
-                        "Streaming mode requested but StreamingOptimizer not available. "
-                        "Falling back to stratified least-squares."
-                    )
-                else:
-                    try:
-                        popt, pcov, info = self._fit_with_streaming_optimizer(
-                            stratified_data=stratified_data,
-                            per_angle_scaling=per_angle_scaling,
-                            physical_param_names=physical_param_names,
-                            initial_params=validated_params,
-                            bounds=nlsq_bounds,
-                            logger=logger,
-                            streaming_config=streaming_config,
-                        )
-
-                        # Compute final residuals for result creation
-                        chunked_data = self._create_stratified_chunks(
-                            stratified_data, target_chunk_size
-                        )
-                        residual_fn = create_stratified_residual_function(
-                            stratified_data=chunked_data,
-                            per_angle_scaling=per_angle_scaling,
-                            physical_param_names=physical_param_names,
-                            logger=logger,
-                            validate=False,
-                        )
-                        final_residuals = residual_fn(popt)
-                        n_data = len(final_residuals)
-
-                        # Get execution time
-                        execution_time = time.time() - start_time
-
-                        # Create result
-                        result = self._create_fit_result(
-                            popt=popt,
-                            pcov=pcov,
-                            residuals=final_residuals,
-                            n_data=n_data,
-                            iterations=info.get("nit", 0),
-                            execution_time=execution_time,
-                            convergence_status=(
-                                "converged" if info.get("success", True) else "failed"
-                            ),
-                            recovery_actions=["streaming_optimizer_method"],
-                            streaming_diagnostics=info.get("streaming_diagnostics"),
-                            stratification_diagnostics=stratification_diagnostics,
-                            diagnostics_payload=None,
-                        )
-
-                        logger.info("=" * 80)
-                        logger.info("STREAMING OPTIMIZATION COMPLETE")
-                        logger.info(
-                            f"Final χ²: {result.chi_squared:.4e}, "
-                            f"Reduced χ²: {result.reduced_chi_squared:.4f}"
-                        )
-                        logger.info("=" * 80)
-
-                        return result
-
-                    except Exception as e:
-                        logger.error(
-                            f"Streaming optimization failed: {e}\n"
                             f"Falling back to stratified least-squares..."
                         )
                         # Fall through to stratified least-squares
+
+                if not STREAMING_AVAILABLE:
+                    # AdaptiveHybridStreamingOptimizer not available (NLSQ < 0.3.2)
+                    logger.error(
+                        "Streaming mode requested but AdaptiveHybridStreamingOptimizer "
+                        "not available. Upgrade NLSQ to >= 0.3.2. "
+                        "Falling back to stratified least-squares."
+                    )
+                    # Fall through to stratified least-squares
 
             # Call stratified least_squares optimization
             try:
@@ -2091,36 +2030,26 @@ class NLSQWrapper:
                 )
 
                 # Special handling for STREAMING strategy
+                # Note: Old StreamingOptimizer removed in NLSQ 0.4.0
+                # Use AdaptiveHybridStreamingOptimizer instead
                 if (
                     current_strategy == OptimizationStrategy.STREAMING
                     and STREAMING_AVAILABLE
                 ):
                     logger.info(
-                        "Using NLSQ StreamingOptimizer for unlimited dataset size..."
+                        "Using NLSQ AdaptiveHybridStreamingOptimizer for large datasets..."
                     )
 
-                    # Extract checkpoint configuration from config
-                    checkpoint_config = None
-                    if hasattr(config, "get_config_dict"):
-                        config_dict = config.get_config_dict()
-                        checkpoint_config = config_dict.get("optimization", {}).get(
-                            "streaming", {}
-                        )
-                    elif isinstance(config, dict):
-                        checkpoint_config = config.get("optimization", {}).get(
-                            "streaming", {}
-                        )
-
-                    popt, pcov, info = self._fit_with_streaming_optimizer(
+                    popt, pcov, info = self._fit_with_hybrid_streaming_optimizer(
                         residual_fn=residual_fn,
                         xdata=xdata,
                         ydata=ydata,
                         initial_params=validated_params,
                         bounds=nlsq_bounds,
                         logger=logger,
-                        checkpoint_config=checkpoint_config,
+                        nlsq_config=config,
                     )
-                    # StreamingOptimizer handles recovery internally
+                    # Hybrid streaming handles recovery internally
                     recovery_actions = info.get("recovery_actions", [])
                     convergence_status = (
                         "converged" if info.get("success", True) else "partial"
@@ -4166,292 +4095,25 @@ class NLSQWrapper:
         logger: Any,
         checkpoint_config: dict | None = None,
     ) -> tuple[np.ndarray, np.ndarray, dict]:
-        """Fit using NLSQ StreamingOptimizer for unlimited dataset sizes.
+        """Fit using streaming optimizer for large datasets.
 
-        This method uses NLSQ's StreamingOptimizer with integrated:
-        - Numerical validation at 3 critical points
-        - Adaptive retry strategies
-        - Best parameter tracking
-        - Batch statistics
-        - Checkpoint save/resume (optional)
-
-        Parameters
-        ----------
-        residual_fn : callable
-            Residual function
-        xdata : np.ndarray
-            Independent variable data
-        ydata : np.ndarray
-            Dependent variable data
-        initial_params : np.ndarray
-            Initial parameter guess
-        bounds : tuple of np.ndarray or None
-            Parameter bounds (lower, upper)
-        logger : logging.Logger
-            Logger instance
-        checkpoint_config : dict, optional
-            Checkpoint configuration with keys:
-            - enable_checkpoints: bool (default: False)
-            - checkpoint_dir: str (default: "./checkpoints")
-            - checkpoint_frequency: int (default: 10)
-            - resume_from_checkpoint: bool (default: True)
-            - keep_last_checkpoints: int (default: 3)
-
-        Returns
-        -------
-        popt : np.ndarray
-            Optimized parameters (best found)
-        pcov : np.ndarray
-            Covariance matrix
-        info : dict
-            Optimization information including batch_statistics
+        .. deprecated:: 2.9.1
+            The old non-stratified StreamingOptimizer was removed in NLSQ 0.4.0.
+            Use the stratified optimization path with per-angle scaling instead,
+            which automatically uses AdaptiveHybridStreamingOptimizer for large datasets.
 
         Raises
         ------
         RuntimeError
-            If StreamingOptimizer is not available in NLSQ version
-        NLSQOptimizationError
-            If optimization fails after all recovery attempts
+            Always - this code path is no longer supported
         """
-        if not STREAMING_AVAILABLE:
-            raise RuntimeError(
-                "StreamingOptimizer not available. "
-                "Please upgrade NLSQ to version >= 0.1.5: pip install --upgrade nlsq"
-            )
-
-        logger.info(
-            "Initializing NLSQ StreamingOptimizer for unlimited dataset size..."
+        raise RuntimeError(
+            "Non-stratified StreamingOptimizer was removed in NLSQ 0.4.0. "
+            "Use the stratified optimization path with per_angle_scaling=True, "
+            "which automatically switches to AdaptiveHybridStreamingOptimizer "
+            "for memory-constrained datasets. "
+            "See CLAUDE.md section 'NLSQ Adaptive Hybrid Streaming Mode' for details."
         )
-
-        # Compute initial cost for optimization success tracking
-        initial_residuals = residual_fn(xdata, *initial_params)
-        initial_cost = np.sum(initial_residuals**2)
-
-        # Parse checkpoint configuration
-        checkpoint_config = checkpoint_config or {}
-        enable_checkpoints = checkpoint_config.get("enable_checkpoints", False)
-        checkpoint_dir = checkpoint_config.get("checkpoint_dir", "./checkpoints")
-        checkpoint_frequency = checkpoint_config.get("checkpoint_frequency", 10)
-        resume_from_checkpoint = checkpoint_config.get("resume_from_checkpoint", True)
-        keep_last_n = checkpoint_config.get("keep_last_checkpoints", 3)
-
-        # Initialize CheckpointManager if enabled
-        checkpoint_manager = None
-        if enable_checkpoints:
-            from pathlib import Path
-
-            checkpoint_manager = CheckpointManager(
-                checkpoint_dir=Path(checkpoint_dir),
-                checkpoint_frequency=checkpoint_frequency,
-                keep_last_n=keep_last_n,
-                enable_compression=True,
-            )
-            logger.info(f"Checkpoint management enabled: {checkpoint_dir}")
-
-        # Check for existing checkpoint and resume if available
-        start_from_checkpoint = False
-        checkpoint_data = None
-        if checkpoint_manager and resume_from_checkpoint:
-            latest_checkpoint = checkpoint_manager.find_latest_checkpoint()
-            if latest_checkpoint:
-                logger.info(f"Found existing checkpoint: {latest_checkpoint}")
-                try:
-                    checkpoint_data = checkpoint_manager.load_checkpoint(
-                        latest_checkpoint
-                    )
-                    initial_params = checkpoint_data["parameters"]
-                    logger.info(
-                        f"Resuming from batch {checkpoint_data['batch_idx']} "
-                        f"(loss: {checkpoint_data['loss']:.6e})"
-                    )
-                    start_from_checkpoint = True
-                except NLSQCheckpointError as e:
-                    logger.warning(
-                        f"Failed to load checkpoint: {e}. Starting from scratch."
-                    )
-                    checkpoint_data = None
-
-        # Task 5.2: Use build_streaming_config() from DatasetSizeStrategy for optimal configuration
-        # This provides intelligent batch sizing based on available memory and parameter count
-        n_data = len(ydata)
-        n_parameters = len(initial_params)
-
-        # Get checkpoint configuration for strategy selector
-        checkpoint_strategy_config = (
-            {
-                "checkpoint_dir": checkpoint_dir if enable_checkpoints else None,
-                "checkpoint_frequency": (
-                    checkpoint_frequency if enable_checkpoints else 0
-                ),
-                "enable_checkpoints": enable_checkpoints,
-            }
-            if enable_checkpoints
-            else None
-        )
-
-        # Build optimal streaming configuration using strategy selector
-        from homodyne.optimization.nlsq.strategies.selection import DatasetSizeStrategy
-
-        strategy_selector = DatasetSizeStrategy()
-        streaming_config_dict = strategy_selector.build_streaming_config(
-            n_points=n_data,
-            n_parameters=n_parameters,
-            checkpoint_config=checkpoint_strategy_config,
-        )
-
-        logger.info(
-            f"Streaming configuration: batch_size={streaming_config_dict['batch_size']:,}, "
-            f"max_epochs={streaming_config_dict.get('max_epochs', 10)}"
-        )
-
-        # Create StreamingConfig for NLSQ
-        # Note: NLSQ's StreamingOptimizer handles optimizer state checkpointing internally
-        # Homodyne's CheckpointManager handles homodyne-specific state separately
-        nlsq_checkpoint_dir = None
-        if enable_checkpoints:
-            # NLSQ uses separate checkpoint directory for optimizer state
-            from pathlib import Path
-
-            nlsq_checkpoint_dir = str(Path(checkpoint_dir) / "nlsq_optimizer_state")
-
-        config = StreamingConfig(
-            batch_size=streaming_config_dict["batch_size"],
-            max_epochs=streaming_config_dict.get("max_epochs", 10),
-            enable_fault_tolerance=streaming_config_dict.get(
-                "enable_fault_tolerance", True
-            ),
-            validate_numerics=streaming_config_dict.get(
-                "validate_numerics", self.enable_numerical_validation
-            ),
-            min_success_rate=streaming_config_dict.get("min_success_rate", 0.5),
-            max_retries_per_batch=streaming_config_dict.get(
-                "max_retries_per_batch", self.max_retries
-            ),
-            checkpoint_dir=nlsq_checkpoint_dir,  # NLSQ's optimizer checkpoints
-            checkpoint_frequency=checkpoint_frequency if enable_checkpoints else 0,
-            resume_from_checkpoint=start_from_checkpoint,
-        )
-
-        # Initialize StreamingOptimizer
-        optimizer = StreamingOptimizer(config=config)
-
-        # Reset best parameter tracking
-        self.best_params = None
-        self.best_loss = float("inf")
-        self.best_batch_idx = -1
-
-        # Define enhanced progress callback with checkpoint saving
-        def progress_callback(
-            batch_idx: int,
-            total_batches: int,
-            current_loss: float,
-            current_params: np.ndarray | None = None,
-        ):
-            logger.info(
-                f"Batch {batch_idx + 1}/{total_batches} | Loss: {current_loss:.6e}"
-            )
-
-            # Update best parameters
-            self._update_best_parameters(
-                params=current_params,
-                loss=current_loss,
-                batch_idx=batch_idx,
-                logger=logger,
-            )
-
-            # Save checkpoint if enabled and at checkpoint frequency
-            if checkpoint_manager and batch_idx % checkpoint_frequency == 0:
-                try:
-                    # Get current parameters (use best if current not available)
-                    params_to_save = (
-                        current_params
-                        if current_params is not None
-                        else self.best_params
-                    )
-                    if params_to_save is None:
-                        params_to_save = initial_params  # Fallback to initial
-
-                    # Prepare metadata
-                    metadata = {
-                        "batch_statistics": self.batch_statistics.get_statistics(),
-                        "best_loss": self.best_loss,
-                        "best_batch_idx": self.best_batch_idx,
-                        "total_batches": total_batches,
-                    }
-
-                    # Save homodyne-specific checkpoint
-                    checkpoint_path = checkpoint_manager.save_checkpoint(
-                        batch_idx=batch_idx,
-                        parameters=params_to_save,
-                        optimizer_state={"loss": current_loss},  # Minimal state
-                        loss=current_loss,
-                        metadata=metadata,
-                    )
-                    logger.info(f"Saved checkpoint: {checkpoint_path.name}")
-
-                    # Periodic cleanup (every 10 checkpoint intervals)
-                    if batch_idx % (checkpoint_frequency * 10) == 0:
-                        deleted = checkpoint_manager.cleanup_old_checkpoints()
-                        if deleted:
-                            logger.info(f"Cleaned up {len(deleted)} old checkpoints")
-
-                except Exception as e:
-                    logger.warning(f"Failed to save checkpoint: {e}")
-
-        try:
-            # Prepare data as tuple for StreamingOptimizer
-            data_source = (xdata, ydata)
-
-            # Call StreamingOptimizer.fit()
-            logger.info("Starting streaming optimization...")
-            result = optimizer.fit(
-                data_source=data_source,
-                func=residual_fn,
-                p0=initial_params,
-                bounds=bounds,
-                callback=progress_callback,
-                verbose=2,
-            )
-
-            # Use unified result handler to normalize output
-            popt, pcov, info = self._handle_nlsq_result(
-                result, OptimizationStrategy.STREAMING
-            )
-
-            # Add batch statistics to info
-            batch_stats = self.batch_statistics.get_statistics()
-            info["batch_statistics"] = batch_stats
-
-            # Add initial cost to info for success tracking
-            info["initial_cost"] = initial_cost
-
-            # Add checkpoint information to info
-            if checkpoint_manager:
-                info["checkpoint_enabled"] = True
-                info["checkpoint_dir"] = str(checkpoint_manager.checkpoint_dir)
-                info["resumed_from_checkpoint"] = start_from_checkpoint
-                if checkpoint_data:
-                    info["resume_batch_idx"] = checkpoint_data["batch_idx"]
-                    info["resume_loss"] = checkpoint_data["loss"]
-
-            logger.info(
-                f"Streaming optimization complete. "
-                f"Success rate: {batch_stats['success_rate']:.1%}, "
-                f"Best loss: {self.best_loss:.6e}"
-            )
-
-            return popt, pcov, info
-
-        except Exception as e:
-            logger.error(f"StreamingOptimizer failed: {e}")
-            # Re-raise as NLSQ exception
-            if isinstance(e, NLSQOptimizationError):
-                raise
-            else:
-                raise NLSQOptimizationError(
-                    f"StreamingOptimizer failed: {str(e)}",
-                    error_context={"original_error": type(e).__name__},
-                ) from e
 
     def _fit_with_hybrid_streaming_optimizer(
         self,
@@ -5168,10 +4830,10 @@ class NLSQWrapper:
     ) -> tuple[np.ndarray, np.ndarray, dict]:
         """Fit using NLSQ streaming optimizer for memory-constrained large datasets.
 
-        This method uses mini-batch gradient descent instead of full Jacobian
-        computation, enabling fitting of datasets that don't fit in memory.
-        Memory usage is bounded by batch size (~50KB per batch) rather than
-        dataset size (30+ GB for 23M points).
+        .. deprecated:: 2.9.1
+            The old StreamingOptimizer was removed in NLSQ 0.4.0.
+            This method now delegates to _fit_with_stratified_hybrid_streaming
+            which uses AdaptiveHybridStreamingOptimizer.
 
         Args:
             stratified_data: StratifiedData object with flat stratified arrays
@@ -5180,572 +4842,41 @@ class NLSQWrapper:
             initial_params: Initial parameter guess
             bounds: Parameter bounds (lower, upper) tuple
             logger: Logger instance
-            streaming_config: Optional config dict with keys:
-                - batch_size: Points per batch (default: 10000)
-                - max_epochs: Maximum epochs (default: 50)
-                - learning_rate: Learning rate (default: 0.001)
-                - convergence_tol: Convergence tolerance (default: 1e-6)
+            streaming_config: Optional config dict (converted to hybrid_config)
 
         Returns:
             (popt, pcov, info) tuple
 
         Raises:
-            RuntimeError: If StreamingOptimizer is not available in NLSQ
+            RuntimeError: If AdaptiveHybridStreamingOptimizer is not available
         """
-        import time
-
-        if not STREAMING_AVAILABLE:
-            raise RuntimeError(
-                "StreamingOptimizer not available. "
-                "Please upgrade NLSQ to version >= 0.1.5"
-            )
-
-        logger.info("=" * 80)
-        logger.info("STREAMING OPTIMIZATION MODE")
-        logger.info("Using NLSQ StreamingOptimizer for memory-bounded optimization")
-        logger.info("=" * 80)
-
-        start_time = time.perf_counter()
-
-        # Extract streaming configuration
-        config = streaming_config or {}
-        batch_size = config.get("batch_size", 10_000)
-        max_epochs = config.get("max_epochs", 50)
-        learning_rate = config.get("learning_rate", 0.001)
-        convergence_tol = config.get("convergence_tol", 1e-6)
-
-        logger.info("Streaming config:")
-        logger.info(f"  Batch size: {batch_size:,}")
-        logger.info(f"  Max epochs: {max_epochs}")
-        logger.info(f"  Learning rate: {learning_rate}")
-        logger.info(f"  Convergence tolerance: {convergence_tol}")
-
-        # Extract global metadata
-        if hasattr(stratified_data, "chunks") and len(stratified_data.chunks) > 0:
-            first_chunk = stratified_data.chunks[0]
-            q = first_chunk.q
-            L = first_chunk.L
-            dt = first_chunk.dt
-        else:
-            q = stratified_data.q
-            L = stratified_data.L
-            dt = stratified_data.dt
-
-        logger.debug(f"Global metadata: q={q}, L={L}, dt={dt}")
-
-        # Extract unique values for theory computation
-        all_phi = []
-        all_t1 = []
-        all_t2 = []
-        if hasattr(stratified_data, "chunks"):
-            for chunk in stratified_data.chunks:
-                all_phi.extend(chunk.phi.tolist())
-                all_t1.extend(chunk.t1.tolist())
-                all_t2.extend(chunk.t2.tolist())
-        else:
-            all_phi = stratified_data.phi_flat.tolist()
-            all_t1 = stratified_data.t1_flat.tolist()
-            all_t2 = stratified_data.t2_flat.tolist()
-
-        phi_unique = np.array(sorted(set(all_phi)))
-        t1_unique = np.array(sorted(set(all_t1)))
-        t2_unique = np.array(sorted(set(all_t2)))
-        n_phi = len(phi_unique)
-
+        # Delegate to hybrid streaming optimizer (old StreamingOptimizer removed in NLSQ 0.4.0)
         logger.info(
-            f"Unique values: {n_phi} phi, {len(t1_unique)} t1, {len(t2_unique)} t2"
+            "Note: StreamingOptimizer was removed in NLSQ 0.4.0. "
+            "Using AdaptiveHybridStreamingOptimizer instead."
         )
 
-        # Convert unique arrays to JAX for JIT compilation
-        phi_unique_jax = jnp.asarray(phi_unique)
-        t1_unique_jax = jnp.asarray(t1_unique)
-        # Note: t2_unique uses same time grid as t1, so we only need t1_unique_jax
+        # Convert streaming_config to hybrid_config format
+        hybrid_config = None
+        if streaming_config:
+            hybrid_config = {
+                "chunk_size": streaming_config.get("batch_size", 50000),
+                "warmup_iterations": streaming_config.get("max_epochs", 100),
+                "gauss_newton_tol": streaming_config.get("convergence_tol", 1e-8),
+                "warmup_learning_rate": streaming_config.get("learning_rate", 0.001),
+            }
 
-        # Import physics utilities for point-wise computation
-        from homodyne.core.physics_utils import (
-            PI,
-            calculate_diffusion_coefficient,
-            calculate_shear_rate,
-            safe_exp,
-            safe_sinc,
-            trapezoid_cumsum,
-        )
-
-        # Pre-compute physics factors (once, not per batch)
-        wavevector_q_squared_half_dt = 0.5 * (q**2) * dt
-        sinc_prefactor = 0.5 / PI * q * L * dt
-
-        def create_streaming_model_fn_pointwise(
-            n_phi: int,
-            per_angle_scaling: bool,
-            phi_unique: jnp.ndarray,
-            t1_unique: jnp.ndarray,
-            q_sq_half_dt: float,
-            sinc_pref: float,
-            is_laminar_flow: bool,
-        ):
-            """Create efficient point-wise model function for streaming optimization.
-
-            CRITICAL FIX: Instead of computing the full (n_phi, n_t1, n_t2) grid
-            for each batch and indexing into it, this computes g2 ONLY for the
-            specific (phi, t1, t2) points in the batch.
-
-            Performance improvement: O(batch_size) vs O(n_phi * n_t1 * n_t2)
-            For 23M point dataset: ~2300x faster per batch
-            """
-
-            # Create separate JIT functions for laminar vs static modes
-            # (JAX JIT doesn't allow Python if-statements on traced values)
-            if is_laminar_flow:
-
-                @jax.jit
-                def model_fn(x_batch: jnp.ndarray, *params_tuple) -> jnp.ndarray:
-                    """Compute g2 for laminar flow mode (with shear)."""
-                    params_all = jnp.array(params_tuple)
-
-                    # Extract indices
-                    phi_idx = x_batch[:, 0].astype(jnp.int32)
-                    t1_idx = x_batch[:, 1].astype(jnp.int32)
-                    t2_idx = x_batch[:, 2].astype(jnp.int32)
-
-                    # Extract scaling and physical parameters (per-angle scaling)
-                    contrast_all = params_all[:n_phi]
-                    offset_all = params_all[n_phi : 2 * n_phi]
-                    physical_params = params_all[2 * n_phi :]
-
-                    # Extract physical parameters
-                    D0 = physical_params[0]
-                    alpha = physical_params[1]
-                    D_offset = physical_params[2]
-                    gamma_dot_0 = physical_params[3]
-                    beta = physical_params[4]
-                    gamma_dot_offset = physical_params[5]
-                    phi0 = physical_params[6]
-
-                    # =====================================================
-                    # DIFFUSION
-                    # =====================================================
-                    D_t = calculate_diffusion_coefficient(
-                        t1_unique, D0, alpha, D_offset
-                    )
-                    D_cumsum = trapezoid_cumsum(D_t)
-                    # CRITICAL FIX: Use smooth abs for gradient stability
-                    # jnp.abs() has undefined gradient at x=0 (when t1_idx == t2_idx)
-                    # sqrt(x² + ε) ≈ |x| but is differentiable everywhere
-                    D_diff = D_cumsum[t1_idx] - D_cumsum[t2_idx]
-                    D_integral_batch = jnp.sqrt(D_diff**2 + 1e-20)
-
-                    log_g1_diff = -q_sq_half_dt * D_integral_batch
-                    log_g1_diff_bounded = jnp.clip(log_g1_diff, -700.0, 0.0)
-                    g1_diffusion = safe_exp(log_g1_diff_bounded)
-
-                    # =====================================================
-                    # SHEAR
-                    # =====================================================
-                    gamma_t = calculate_shear_rate(
-                        t1_unique, gamma_dot_0, beta, gamma_dot_offset
-                    )
-                    gamma_cumsum = trapezoid_cumsum(gamma_t)
-                    # CRITICAL FIX: Use smooth abs for gradient stability
-                    gamma_diff = gamma_cumsum[t1_idx] - gamma_cumsum[t2_idx]
-                    gamma_integral_batch = jnp.sqrt(gamma_diff**2 + 1e-20)
-
-                    phi_batch = phi_unique[phi_idx]
-                    angle_diff = jnp.deg2rad(phi0 - phi_batch)
-                    cos_term = jnp.cos(angle_diff)
-                    phase = sinc_pref * cos_term * gamma_integral_batch
-
-                    sinc_val = safe_sinc(phase)
-                    g1_shear = sinc_val**2
-
-                    # =====================================================
-                    # COMBINE
-                    # =====================================================
-                    g1_total = g1_diffusion * g1_shear
-                    g1_bounded = jnp.clip(g1_total, 1e-10, 2.0)
-
-                    # =====================================================
-                    # SCALING
-                    # =====================================================
-                    contrast_batch = contrast_all[phi_idx]
-                    offset_batch = offset_all[phi_idx]
-                    g2_theory = offset_batch + contrast_batch * g1_bounded**2
-                    g2_bounded = jnp.clip(g2_theory, 0.5, 2.5)
-
-                    return g2_bounded
-
-            else:
-                # Static mode (diffusion only)
-                @jax.jit
-                def model_fn(x_batch: jnp.ndarray, *params_tuple) -> jnp.ndarray:
-                    """Compute g2 for static mode (diffusion only)."""
-                    params_all = jnp.array(params_tuple)
-
-                    # Extract indices
-                    phi_idx = x_batch[:, 0].astype(jnp.int32)
-                    t1_idx = x_batch[:, 1].astype(jnp.int32)
-                    t2_idx = x_batch[:, 2].astype(jnp.int32)
-
-                    # Extract scaling and physical parameters
-                    if per_angle_scaling:
-                        contrast_all = params_all[:n_phi]
-                        offset_all = params_all[n_phi : 2 * n_phi]
-                        physical_params = params_all[2 * n_phi :]
-                    else:
-                        contrast_all = jnp.array([params_all[0]])
-                        offset_all = jnp.array([params_all[1]])
-                        physical_params = params_all[2:]
-
-                    D0 = physical_params[0]
-                    alpha = physical_params[1]
-                    D_offset = physical_params[2]
-
-                    # =====================================================
-                    # DIFFUSION ONLY
-                    # =====================================================
-                    D_t = calculate_diffusion_coefficient(
-                        t1_unique, D0, alpha, D_offset
-                    )
-                    D_cumsum = trapezoid_cumsum(D_t)
-                    # CRITICAL FIX: Use smooth abs for gradient stability
-                    # jnp.abs() has undefined gradient at x=0 (when t1_idx == t2_idx)
-                    D_diff = D_cumsum[t1_idx] - D_cumsum[t2_idx]
-                    D_integral_batch = jnp.sqrt(D_diff**2 + 1e-20)
-
-                    log_g1_diff = -q_sq_half_dt * D_integral_batch
-                    log_g1_diff_bounded = jnp.clip(log_g1_diff, -700.0, 0.0)
-                    g1_diffusion = safe_exp(log_g1_diff_bounded)
-
-                    g1_bounded = jnp.clip(g1_diffusion, 1e-10, 2.0)
-
-                    # =====================================================
-                    # SCALING
-                    # =====================================================
-                    if per_angle_scaling:
-                        contrast_batch = contrast_all[phi_idx]
-                        offset_batch = offset_all[phi_idx]
-                    else:
-                        contrast_batch = contrast_all[0]
-                        offset_batch = offset_all[0]
-
-                    g2_theory = offset_batch + contrast_batch * g1_bounded**2
-                    g2_bounded = jnp.clip(g2_theory, 0.5, 2.5)
-
-                    return g2_bounded
-
-            return model_fn
-
-        # Determine if laminar flow mode (7 physical params) or static (3 params)
-        # With per-angle scaling: total = n_phi (contrast) + n_phi (offset) + n_physical
-        # Laminar: 2*n_phi + 7, Static: 2*n_phi + 3
-        n_physical_params = len(initial_params) - (
-            2 * n_phi if per_angle_scaling else 2
-        )
-        is_laminar_flow = n_physical_params >= 7
-        logger.info(
-            f"Mode: {'laminar_flow' if is_laminar_flow else 'static'} "
-            f"({n_physical_params} physical parameters)"
-        )
-
-        # Create the efficient point-wise model function
-        model_fn_raw = create_streaming_model_fn_pointwise(
-            n_phi=n_phi,
+        return self._fit_with_stratified_hybrid_streaming(
+            stratified_data=stratified_data,
             per_angle_scaling=per_angle_scaling,
-            phi_unique=phi_unique_jax,
-            t1_unique=t1_unique_jax,
-            q_sq_half_dt=wavevector_q_squared_half_dt,
-            sinc_pref=sinc_prefactor,
-            is_laminar_flow=is_laminar_flow,
+            physical_param_names=physical_param_names,
+            initial_params=initial_params,
+            bounds=bounds,
+            logger=logger,
+            hybrid_config=hybrid_config,
         )
 
-        # =====================================================
-        # PARAMETER NORMALIZATION FOR GRADIENT BALANCING
-        # =====================================================
-        # Problem: Parameters have vastly different scales (D0~10^4, gamma_dot_t0~10^-3)
-        # This causes weak gradients for small-scale parameters in L-BFGS optimizer.
-        #
-        # Solution: Normalize parameters to [0,1] using bounds
-        # - p_norm = (p - lower) / (upper - lower)
-        # - Gradients scale by (upper - lower) via chain rule
-        # - All parameters have comparable gradient magnitudes
-        #
-        # Reference: nlsq3 vs nlsq divergence analysis (Dec 2025)
-
-        use_normalization = bounds is not None
-        if use_normalization:
-            lower_bounds, upper_bounds = bounds
-            lower_jax = jnp.asarray(lower_bounds)
-            upper_jax = jnp.asarray(upper_bounds)
-            scale_jax = upper_jax - lower_jax
-
-            # Prevent division by zero for fixed parameters
-            scale_jax = jnp.where(scale_jax < 1e-10, 1.0, scale_jax)
-
-            logger.info("Parameter normalization ENABLED for streaming optimizer")
-            logger.info(
-                f"  Parameter scales range: {float(scale_jax.min()):.2e} to {float(scale_jax.max()):.2e}"
-            )
-
-            @jax.jit
-            def denormalize_params(p_norm: jnp.ndarray) -> jnp.ndarray:
-                """Transform normalized [0,1] params to real space."""
-                return p_norm * scale_jax + lower_jax
-
-            @jax.jit
-            def normalize_params(p_real: jnp.ndarray) -> jnp.ndarray:
-                """Transform real params to normalized [0,1] space."""
-                return (p_real - lower_jax) / scale_jax
-
-            def model_fn_normalized(
-                x_batch: jnp.ndarray, *params_norm_tuple
-            ) -> jnp.ndarray:
-                """Model function operating in normalized parameter space."""
-                params_norm = jnp.array(params_norm_tuple)
-                params_real = denormalize_params(params_norm)
-                return model_fn_raw(x_batch, *tuple(params_real))
-
-            # JIT compile the normalized model
-            model_fn = jax.jit(model_fn_normalized)
-
-            # Normalize initial parameters
-            initial_params_normalized = np.asarray(
-                normalize_params(jnp.asarray(initial_params))
-            )
-            logger.info(
-                f"  Initial params normalized: min={initial_params_normalized.min():.4f}, max={initial_params_normalized.max():.4f}"
-            )
-
-            # Set normalized bounds [0, 1]
-            normalized_bounds = (
-                np.zeros(len(initial_params)),
-                np.ones(len(initial_params)),
-            )
-        else:
-            model_fn = model_fn_raw
-            initial_params_normalized = initial_params
-            normalized_bounds = None
-            logger.warning("Parameter normalization DISABLED (no bounds provided)")
-
-        # =====================================================
-        # VECTORIZED DATA PREPARATION (no Python for-loop)
-        # =====================================================
-        logger.info("Preparing streaming data (vectorized)...")
-        prep_start = time.perf_counter()
-
-        if hasattr(stratified_data, "chunks"):
-            # Concatenate all chunk data
-            all_phi = np.concatenate([chunk.phi for chunk in stratified_data.chunks])
-            all_t1 = np.concatenate([chunk.t1 for chunk in stratified_data.chunks])
-            all_t2 = np.concatenate([chunk.t2 for chunk in stratified_data.chunks])
-            y_data = np.concatenate([chunk.g2 for chunk in stratified_data.chunks])
-        else:
-            all_phi = stratified_data.phi_flat
-            all_t1 = stratified_data.t1_flat
-            all_t2 = stratified_data.t2_flat
-            y_data = stratified_data.g2_flat
-
-        # Vectorized index conversion using searchsorted
-        # Note: Both t1 and t2 represent time values on the same grid,
-        # so we use t1_unique for both to ensure correct indexing into D_cumsum
-        #
-        # CRITICAL FIX: np.searchsorted returns indices in [0, len(array)], so when a
-        # value equals or exceeds the max value, it returns len(array) which is OUT OF
-        # BOUNDS. This causes undefined gradients (NaN/Inf) when indexing into D_cumsum
-        # and gamma_cumsum arrays in the model function.
-        # Solution: Clip indices to valid range [0, len(array)-1]
-        phi_idx_arr = np.clip(
-            np.searchsorted(phi_unique, all_phi), 0, len(phi_unique) - 1
-        )
-        t1_idx_arr = np.clip(np.searchsorted(t1_unique, all_t1), 0, len(t1_unique) - 1)
-        t2_idx_arr = np.clip(
-            np.searchsorted(t1_unique, all_t2), 0, len(t1_unique) - 1
-        )  # Use t1_unique, not t2_unique!
-
-        # Stack into x_data array
-        x_data = np.column_stack([phi_idx_arr, t1_idx_arr, t2_idx_arr]).astype(
-            np.float64
-        )
-        y_data = np.asarray(y_data, dtype=np.float64)
-
-        prep_time = time.perf_counter() - prep_start
-        logger.info(f"Data preparation completed in {prep_time:.2f}s")
-
-        n_total = len(y_data)
-        logger.info(f"Streaming data prepared: {n_total:,} points")
-        logger.info(f"  x_data shape: {x_data.shape}")
-        logger.info(f"  y_data shape: {y_data.shape}")
-        logger.info(
-            f"  Memory: x={x_data.nbytes / 1e6:.1f} MB, y={y_data.nbytes / 1e6:.1f} MB"
-        )
-
-        # Create streaming optimizer config
-        stream_config = StreamingConfig(
-            batch_size=batch_size,
-            max_epochs=max_epochs,
-            learning_rate=learning_rate,
-            convergence_tol=convergence_tol,
-            use_adam=True,
-            gradient_clip=1.0,
-            warmup_steps=100,
-            enable_fault_tolerance=True,
-            validate_numerics=True,
-            min_success_rate=0.5,
-            max_retries_per_batch=2,
-            checkpoint_frequency=1000,
-            enable_checkpoints=False,  # Disable for now to avoid file I/O
-        )
-
-        # Create optimizer and run
-        optimizer = StreamingOptimizer(stream_config)
-
-        batches_per_epoch = max(1, n_total // batch_size)
-        logger.info("Starting streaming optimization...")
-        logger.info(f"  Initial parameters: {len(initial_params)} parameters")
-        logger.info(f"  Bounds: {'provided' if bounds is not None else 'None'}")
-        logger.info(f"  Batches per epoch: {batches_per_epoch:,}")
-
-        # =====================================================
-        # PROGRESS CALLBACK: Log epoch progress
-        # =====================================================
-        progress_state = {
-            "epoch_start_time": time.perf_counter(),
-            "last_epoch": -1,
-            "epoch_losses": [],
-            "best_loss_so_far": float("inf"),
-        }
-
-        def progress_callback(iteration: int, params: np.ndarray, loss: float) -> bool:
-            """Log progress at the end of each epoch."""
-            current_epoch = (iteration - 1) // batches_per_epoch
-
-            # Track loss for current epoch
-            progress_state["epoch_losses"].append(loss)
-
-            # Update best loss
-            if loss < progress_state["best_loss_so_far"]:
-                progress_state["best_loss_so_far"] = loss
-
-            # Log at end of each epoch (or every N batches for very large epochs)
-            log_interval = min(batches_per_epoch, 500)  # Log at least every 500 batches
-            if (
-                iteration % log_interval == 0
-                or current_epoch > progress_state["last_epoch"]
-            ):
-                elapsed = time.perf_counter() - progress_state["epoch_start_time"]
-
-                if current_epoch > progress_state["last_epoch"]:
-                    # New epoch started
-                    if progress_state["epoch_losses"]:
-                        avg_loss = np.mean(progress_state["epoch_losses"])
-                        logger.info(
-                            f"Epoch {current_epoch + 1}/{max_epochs} | "
-                            f"Avg Loss: {avg_loss:.6e} | "
-                            f"Best: {progress_state['best_loss_so_far']:.6e} | "
-                            f"Time: {elapsed:.1f}s"
-                        )
-                    progress_state["last_epoch"] = current_epoch
-                    progress_state["epoch_losses"] = []
-                    progress_state["epoch_start_time"] = time.perf_counter()
-                else:
-                    # Progress within epoch
-                    batch_in_epoch = (iteration - 1) % batches_per_epoch + 1
-                    pct = 100.0 * batch_in_epoch / batches_per_epoch
-                    logger.info(
-                        f"  Epoch {current_epoch + 1} | "
-                        f"Batch {batch_in_epoch}/{batches_per_epoch} ({pct:.0f}%) | "
-                        f"Loss: {loss:.6e}"
-                    )
-
-            return True  # Continue optimization
-
-        # Use normalized parameters and bounds if normalization is enabled
-        if use_normalization:
-            fit_p0 = initial_params_normalized
-            fit_bounds = normalized_bounds
-        else:
-            fit_p0 = initial_params
-            fit_bounds = bounds
-
-        result = optimizer.fit(
-            data_source=(x_data, y_data),
-            func=model_fn,
-            p0=fit_p0,
-            bounds=fit_bounds,
-            callback=progress_callback,
-            verbose=0,  # Use our custom callback for logging
-        )
-
-        optimization_time = time.perf_counter() - start_time
-
-        logger.info("=" * 80)
-        logger.info("STREAMING OPTIMIZATION COMPLETE")
-        logger.info(f"  Success: {result.get('success', False)}")
-        logger.info(f"  Best loss: {result.get('best_loss', float('inf')):.6e}")
-        logger.info(f"  Final epoch: {result.get('final_epoch', 0)}")
-        logger.info(f"  Optimization time: {optimization_time:.2f}s")
-        logger.info("=" * 80)
-
-        # Extract results and denormalize if needed
-        popt_raw = np.asarray(result["x"])
-
-        if use_normalization:
-            # Denormalize parameters back to real space
-            popt = np.asarray(denormalize_params(jnp.asarray(popt_raw)))
-            logger.info("  Parameters denormalized from [0,1] to real space")
-        else:
-            popt = popt_raw
-
-        # Enforce bounds on final parameters (safety check)
-        if bounds is not None:
-            lower_bounds, upper_bounds = bounds
-            popt = np.clip(popt, lower_bounds, upper_bounds)
-
-        # Estimate covariance (streaming doesn't provide it directly)
-        # Use diagonal approximation scaled by parameter ranges
-        diag = result.get("streaming_diagnostics", {})
-        if use_normalization and bounds is not None:
-            # Scale-aware covariance: uncertainty proportional to parameter range
-            # This provides more meaningful relative uncertainties
-            lower_bounds, upper_bounds = bounds
-            param_scales = np.asarray(upper_bounds) - np.asarray(lower_bounds)
-            param_scales = np.where(param_scales < 1e-10, 1.0, param_scales)
-
-            if diag and "aggregate_stats" in diag:
-                grad_norm = diag["aggregate_stats"].get("mean_grad_norm", 1.0)
-                # Covariance diagonal scales with parameter range squared
-                # (variance has units of parameter^2)
-                base_var = 1.0 / max(grad_norm, 1e-10)
-                pcov = np.diag((param_scales**2) * base_var)
-            else:
-                # Fallback: use 1% of parameter range as std dev
-                pcov = np.diag((param_scales * 0.01) ** 2)
-            logger.info("  Covariance estimated using parameter scale information")
-        elif diag and "aggregate_stats" in diag:
-            grad_norm = diag["aggregate_stats"].get("mean_grad_norm", 1.0)
-            # Rough covariance estimate: inverse of gradient magnitude
-            pcov = np.eye(len(popt)) * (1.0 / max(grad_norm, 1e-10))
-        else:
-            # Fallback: identity covariance (unknown uncertainty)
-            pcov = np.eye(len(popt))
-            logger.warning("Covariance not available from streaming, using identity")
-
-        # Build info dict
-        info = {
-            "success": result.get("success", False),
-            "message": result.get("message", "Streaming optimization completed"),
-            "nfev": result.get("streaming_diagnostics", {}).get(
-                "total_batches_attempted", 0
-            )
-            * batch_size,
-            "nit": result.get("final_epoch", 0),
-            "best_loss": result.get("best_loss", float("inf")),
-            "optimization_time": optimization_time,
-            "method": "streaming_optimizer",
-            "streaming_diagnostics": result.get("streaming_diagnostics", {}),
-            "parameter_normalization": use_normalization,
-        }
-
-        return popt, pcov, info
+    # NOTE: Dead streaming optimizer code removed (NLSQ 0.4.0+ removed StreamingOptimizer)
 
     def _fit_with_stratified_hybrid_streaming(
         self,
