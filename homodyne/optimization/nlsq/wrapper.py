@@ -4701,7 +4701,43 @@ class NLSQWrapper:
             logger.info("=" * 60)
 
         # Layer 2: Hierarchical Optimization Configuration
+        # =====================================================================
+        # CRITICAL FIX (Jan 2026): Auto-enable hierarchical when shear_weighting
+        # is enabled. Shear weighting is ONLY applied inside hierarchical
+        # optimizer's loss function. Without hierarchical, the gradient
+        # cancellation for gamma_dot_t0 is NOT prevented!
+        #
+        # Root cause: The shear gradient ∂L/∂γ̇₀ ∝ Σ cos(φ₀-φ) cancels when
+        # summing over angles spanning 360° (e.g., 23 angles → 94.6% cancellation).
+        # Shear weighting emphasizes shear-sensitive angles to prevent this.
+        # =====================================================================
+        shear_weighting_config_early = ad_config.get("shear_weighting", {})
+        shear_weighting_will_be_enabled = (
+            shear_weighting_config_early.get("enable", True)
+            and is_laminar_flow
+            and n_phi > 3
+        )
+
         enable_hierarchical = hierarchical_config.get("enable", True)
+
+        # Override: shear weighting requires hierarchical optimization to function
+        if shear_weighting_will_be_enabled and not enable_hierarchical:
+            logger.warning("=" * 60)
+            logger.warning(
+                "ANTI-DEGENERACY: Shear weighting enabled but hierarchical disabled!"
+            )
+            logger.warning(
+                "  Auto-enabling hierarchical optimization to apply shear weights."
+            )
+            logger.warning(
+                "  Without this, gradient cancellation will collapse gamma_dot_t0."
+            )
+            logger.warning(
+                "  See: docs/analysis/nlsq-divergence-root-cause-20260101.md"
+            )
+            logger.warning("=" * 60)
+            enable_hierarchical = True
+
         hierarchical_optimizer = None
         if enable_hierarchical and per_angle_scaling and is_laminar_flow:
             # n_physical defined unconditionally above
@@ -4727,6 +4763,10 @@ class NLSQWrapper:
             logger.info(f"  Enabled: {enable_hierarchical}")
             logger.info(f"  Max outer iterations: {hier_config.max_outer_iterations}")
             logger.info(f"  Outer tolerance: {hier_config.outer_tolerance}")
+            if shear_weighting_will_be_enabled:
+                logger.info(
+                    "  Shear weighting: WILL BE APPLIED via hierarchical loss function"
+                )
             logger.info("=" * 60)
 
         # Layer 3: Adaptive Relative Regularization Configuration

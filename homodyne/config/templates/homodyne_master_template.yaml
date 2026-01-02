@@ -588,15 +588,17 @@ optimization:
       # group_variance_indices: null
 
     # ---------------------------------------------------------------------------
-    # ANTI-DEGENERACY DEFENSE SYSTEM (v2.10.0) - SIMPLIFIED
+    # ANTI-DEGENERACY DEFENSE SYSTEM (v2.10.0)
     # ---------------------------------------------------------------------------
-    # Prevents per-angle parameter absorption in laminar_flow mode.
+    # Prevents gradient cancellation and per-angle parameter absorption in
+    # laminar_flow mode.
     #
-    # SIMPLIFIED ARCHITECTURE:
-    # With per_angle_mode="auto" and n_phi >= constant_scaling_threshold:
-    #   → Uses CONSTANT SCALING: 2×n_phi per-angle params → just 2 params
-    #   → All complex defense layers (Fourier, hierarchical, regularization)
-    #     are BYPASSED because constant mode eliminates structural degeneracy
+    # CRITICAL: hierarchical.enable MUST be true for shear_weighting to work!
+    # Shear weighting is ONLY applied inside hierarchical optimizer's loss function.
+    # See: docs/analysis/nlsq-divergence-root-cause-20260102.md
+    #
+    # The code will auto-enable hierarchical if shear_weighting is enabled,
+    # but it's best practice to explicitly enable both.
     #
     # When to use each mode:
     #   - "auto" (default): constant if n_phi >= 3, else individual
@@ -612,20 +614,20 @@ optimization:
       per_angle_mode: "auto"          # "individual" | "constant" | "fourier" | "auto"
       constant_scaling_threshold: 3   # Use constant mode when n_phi >= this
 
-      # Legacy layers below - ONLY active when per_angle_mode="fourier" or "individual"
-      # With "auto" or "constant" mode, these are bypassed automatically
+      # Fourier reparameterization (legacy, rarely needed)
       fourier:
         order: 2
         min_phi_for_fourier: 6
         regularize_high_order: false
 
+      # REQUIRED for shear_weighting to work
       hierarchical:
-        enable: false                 # Disabled - constant mode handles degeneracy
+        enable: true                  # REQUIRED for shear weighting to work
         max_outer_iterations: 5
         outer_tolerance: 1.0e-6
 
       regularization:
-        enable: false                 # Disabled - constant mode handles degeneracy
+        enable: false                 # Optional - can help with per-angle absorption
         mode: "relative"
         lambda: 1.0
         target_cv: 0.10
@@ -634,11 +636,11 @@ optimization:
         enable: true              # Lightweight diagnostic
         ratio_threshold: 0.01     # Trigger if |∇_physical|/|∇_scaling| < 0.01
         consecutive_triggers: 5   # Must trigger 5× before warning
-        response: "warn"          # Just log warning, don't intervene
+        response: "hierarchical"  # Trigger hierarchical mode on gradient collapse
 
       # Layer 5: Shear-Sensitivity Weighting (v2.9.1+)
       # Weights residuals by |cos(φ₀-φ)| to prevent gradient cancellation
-      # Computed in Homodyne, passed to NLSQ as generic residual weights
+      # CRITICAL: Requires hierarchical.enable: true to function!
       # Only active for laminar_flow mode with multiple phi angles
       shear_weighting:
         enable: true              # Enable for laminar_flow with n_phi > 3
