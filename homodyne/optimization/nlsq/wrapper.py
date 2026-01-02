@@ -5406,6 +5406,22 @@ class NLSQWrapper:
             logger.info(f"    Lambda: {group_variance_lambda}")
             logger.info(f"    Indices: {group_variance_indices}")
 
+        # Prepare residual weighting for NLSQ optimizer (Layer 5 of Anti-Degeneracy)
+        # Homodyne computes shear-sensitivity weights and passes them to NLSQ
+        # as generic residual weights - NLSQ doesn't need to know about XPCS physics
+        enable_residual_weighting = shear_weighter is not None
+        residual_weights_list = None
+        if enable_residual_weighting:
+            # Compute shear-sensitivity weights in homodyne, pass to NLSQ as generic weights
+            residual_weights_list = shear_weighter.get_weights().tolist()
+            logger.info("  Residual Weighting (Shear-Sensitivity):")
+            logger.info(f"    Enabled: {enable_residual_weighting}")
+            logger.info(f"    n_weights: {len(residual_weights_list)}")
+            logger.info(
+                f"    Weight range: [{min(residual_weights_list):.3f}, "
+                f"{max(residual_weights_list):.3f}]"
+            )
+
         # Create HybridStreamingConfig with 4-layer defense
         optimizer_config = HybridStreamingConfig(
             normalize=normalize,
@@ -5439,6 +5455,11 @@ class NLSQWrapper:
             enable_group_variance_regularization=enable_group_variance_regularization,
             group_variance_lambda=group_variance_lambda,
             group_variance_indices=group_variance_indices,
+            # Residual Weighting (NLSQ 0.4.x)
+            # Homodyne computes shear-sensitivity weights and passes them as generic
+            # residual weights - NLSQ just does weighted least squares
+            enable_residual_weighting=enable_residual_weighting,
+            residual_weights=residual_weights_list,
             verbose=config_dict.get("verbose", 1),
             log_frequency=config_dict.get("log_frequency", 1),
         )
