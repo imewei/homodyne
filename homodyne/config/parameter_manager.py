@@ -24,16 +24,24 @@ from homodyne.config.types import (
 from homodyne.core.physics import ValidationResult, validate_parameters_detailed
 from homodyne.utils.logging import get_logger
 
+# Import physics validators for constraint checking
+try:
+    from homodyne.config.physics_validators import (
+        ConstraintSeverity,
+        validate_all_parameters,
+    )
+    HAS_PHYSICS_VALIDATORS = True
+except ImportError:
+    HAS_PHYSICS_VALIDATORS = False
+
+    # Fallback severity class if module not available
+    class ConstraintSeverity:
+        """Severity levels for physics constraint violations."""
+        ERROR = "error"
+        WARNING = "warning"
+        INFO = "info"
+
 logger = get_logger(__name__)
-
-
-# Physical constraint validation severity levels
-class ConstraintSeverity:
-    """Severity levels for physics constraint violations."""
-
-    ERROR = "error"  # Physically impossible
-    WARNING = "warning"  # Unusual but possible
-    INFO = "info"  # Noteworthy but acceptable
 
 
 class ParameterManager:
@@ -196,6 +204,9 @@ class ParameterManager:
         Checks for physically impossible or unusual parameter values based on
         theoretical understanding of XPCS and soft matter dynamics.
 
+        Uses registry-driven validation from physics_validators module for
+        reduced cyclomatic complexity and improved maintainability.
+
         Parameters
         ----------
         params : dict[str, float]
@@ -226,160 +237,15 @@ class ParameterManager:
         - Subdiffusion (α < 0): Höfling & Franosch, Rep. Prog. Phys. 76, 046602 (2013)
         - XPCS theory: He et al., PNAS 121, e2401162121 (2024)
         """
-        violations = []
-        severity_priority = {"error": 3, "warning": 2, "info": 1}
-        min_priority = severity_priority.get(severity_level, 2)
-
-        def add_violation(param: str, value: float, message: str, severity: str):
-            """Add violation if it meets severity threshold."""
-            if severity_priority[severity] >= min_priority:
-                violations.append(f"{param} = {value:.3e}: {message} [{severity}]")
-
-        # Validate diffusion parameters
-        if "D0" in params:
-            D0 = params["D0"]
-            if D0 <= 0:
-                add_violation(
-                    "D0",
-                    D0,
-                    "non-positive diffusion coefficient (physically impossible)",
-                    ConstraintSeverity.ERROR,
-                )
-            elif D0 > 1e7:
-                add_violation(
-                    "D0",
-                    D0,
-                    "extremely large diffusion coefficient (check units: nm²/s expected)",
-                    ConstraintSeverity.WARNING,
-                )
-
-        if "alpha" in params:
-            alpha = params["alpha"]
-            if alpha < -1.5:
-                add_violation(
-                    "alpha",
-                    alpha,
-                    "very strongly subdiffusive (α < -1.5 extremely rare)",
-                    ConstraintSeverity.WARNING,
-                )
-            elif alpha > 1.0:
-                add_violation(
-                    "alpha",
-                    alpha,
-                    "strongly superdiffusive (α > 1 rare, ballistic/active systems only)",
-                    ConstraintSeverity.WARNING,
-                )
-            elif -0.1 < alpha < 0.1:
-                add_violation(
-                    "alpha",
-                    alpha,
-                    "near-normal diffusion (α ≈ 0, standard Brownian motion)",
-                    ConstraintSeverity.INFO,
-                )
-
-        if "D_offset" in params:
-            D_offset = params["D_offset"]
-            if D_offset < 0:
-                add_violation(
-                    "D_offset",
-                    D_offset,
-                    "negative offset (check if this is intended)",
-                    ConstraintSeverity.WARNING,
-                )
-
-        # Validate shear flow parameters
-        if "gamma_dot_t0" in params:
-            gamma_dot = params["gamma_dot_t0"]
-            if gamma_dot < 0:
-                add_violation(
-                    "gamma_dot_t0",
-                    gamma_dot,
-                    "negative shear rate (physically impossible, use positive value)",
-                    ConstraintSeverity.ERROR,
-                )
-            elif gamma_dot > 1.0:
-                add_violation(
-                    "gamma_dot_t0",
-                    gamma_dot,
-                    "very high shear rate (check units: s⁻¹ expected)",
-                    ConstraintSeverity.WARNING,
-                )
-            elif gamma_dot < 1e-6:
-                add_violation(
-                    "gamma_dot_t0",
-                    gamma_dot,
-                    "very low shear rate (approaching quasi-static limit)",
-                    ConstraintSeverity.INFO,
-                )
-
-        if "beta" in params:
-            beta = params["beta"]
-            if beta < -2.0 or beta > 2.0:
-                add_violation(
-                    "beta",
-                    beta,
-                    "time exponent outside typical range [-2, 2]",
-                    ConstraintSeverity.WARNING,
-                )
-
-        if "gamma_dot_t_offset" in params:
-            offset = params["gamma_dot_t_offset"]
-            if offset < 0:
-                add_violation(
-                    "gamma_dot_t_offset",
-                    offset,
-                    "negative shear rate offset (check if intended)",
-                    ConstraintSeverity.WARNING,
-                )
-
-        if "phi0" in params:
-            phi0 = params["phi0"]
-            if abs(phi0) > np.pi:
-                add_violation(
-                    "phi0",
-                    phi0,
-                    f"flow angle outside [-π, π] (will wrap to {np.arctan2(np.sin(phi0), np.cos(phi0)):.3f})",
-                    ConstraintSeverity.INFO,
-                )
-
-        # Validate scaling parameters
-        if "contrast" in params:
-            contrast = params["contrast"]
-            if contrast <= 0 or contrast > 1.0:
-                add_violation(
-                    "contrast",
-                    contrast,
-                    "contrast outside physical range (0, 1]",
-                    ConstraintSeverity.ERROR,
-                )
-            elif contrast < 0.1:
-                add_violation(
-                    "contrast",
-                    contrast,
-                    "very low contrast (check signal quality)",
-                    ConstraintSeverity.WARNING,
-                )
-
-        if "offset" in params:
-            offset = params["offset"]
-            if offset <= 0:
-                add_violation(
-                    "offset",
-                    offset,
-                    "non-positive baseline (physically impossible)",
-                    ConstraintSeverity.ERROR,
-                )
-
-        # Cross-parameter constraints
-        if "D0" in params and "alpha" in params and "D_offset" in params:
-            # Check if offset dominates (indicates possible overfitting)
-            if params["D_offset"] > 0.5 * params["D0"]:
-                add_violation(
-                    "D_offset",
-                    params["D_offset"],
-                    f"offset is {params['D_offset'] / params['D0']:.1%} of D0 (may indicate overfitting)",
-                    ConstraintSeverity.INFO,
-                )
+        if HAS_PHYSICS_VALIDATORS:
+            # Use registry-driven validation (reduced complexity)
+            physics_violations = validate_all_parameters(params, severity_level)
+            violations = [v.format() for v in physics_violations]
+        else:
+            # Fallback to inline validation
+            violations = self._validate_physical_constraints_fallback(
+                params, severity_level
+            )
 
         # Create validation result
         is_valid = len(violations) == 0
@@ -394,6 +260,78 @@ class ParameterManager:
             parameters_checked=len(params),
             message=message,
         )
+
+    def _validate_physical_constraints_fallback(
+        self,
+        params: dict[str, float],
+        severity_level: str = "warning",
+    ) -> list[str]:
+        """Fallback validation when physics_validators module not available."""
+        violations: list[str] = []
+        severity_priority = {"error": 3, "warning": 2, "info": 1}
+        min_priority = severity_priority.get(severity_level, 2)
+
+        def add_violation(param: str, value: float, message: str, severity: str):
+            if severity_priority.get(severity, 0) >= min_priority:
+                violations.append(f"{param} = {value:.3e}: {message} [{severity}]")
+
+        # Diffusion parameters
+        if "D0" in params:
+            D0 = params["D0"]
+            if D0 <= 0:
+                add_violation("D0", D0, "non-positive diffusion coefficient", "error")
+            elif D0 > 1e7:
+                add_violation("D0", D0, "extremely large diffusion coefficient", "warning")
+
+        if "alpha" in params:
+            alpha = params["alpha"]
+            if alpha < -1.5:
+                add_violation("alpha", alpha, "very strongly subdiffusive", "warning")
+            elif alpha > 1.0:
+                add_violation("alpha", alpha, "strongly superdiffusive", "warning")
+            elif -0.1 < alpha < 0.1:
+                add_violation("alpha", alpha, "near-normal diffusion", "info")
+
+        if "D_offset" in params and params["D_offset"] < 0:
+            add_violation("D_offset", params["D_offset"], "negative offset", "warning")
+
+        # Shear flow parameters
+        if "gamma_dot_t0" in params:
+            gamma_dot = params["gamma_dot_t0"]
+            if gamma_dot < 0:
+                add_violation("gamma_dot_t0", gamma_dot, "negative shear rate", "error")
+            elif gamma_dot > 1.0:
+                add_violation("gamma_dot_t0", gamma_dot, "very high shear rate", "warning")
+            elif 0 < gamma_dot < 1e-6:
+                add_violation("gamma_dot_t0", gamma_dot, "very low shear rate", "info")
+
+        if "beta" in params and (params["beta"] < -2.0 or params["beta"] > 2.0):
+            add_violation("beta", params["beta"], "time exponent outside range", "warning")
+
+        if "gamma_dot_t_offset" in params and params["gamma_dot_t_offset"] < 0:
+            add_violation("gamma_dot_t_offset", params["gamma_dot_t_offset"], "negative offset", "warning")
+
+        if "phi0" in params and abs(params["phi0"]) > np.pi:
+            add_violation("phi0", params["phi0"], "flow angle outside [-π, π]", "info")
+
+        # Scaling parameters
+        if "contrast" in params:
+            c = params["contrast"]
+            if c <= 0 or c > 1.0:
+                add_violation("contrast", c, "contrast outside (0, 1]", "error")
+            elif c < 0.1:
+                add_violation("contrast", c, "very low contrast", "warning")
+
+        if "offset" in params and params["offset"] <= 0:
+            add_violation("offset", params["offset"], "non-positive baseline", "error")
+
+        # Cross-parameter constraints
+        if all(k in params for k in ["D0", "alpha", "D_offset"]):
+            if params["D0"] > 0 and params["D_offset"] > 0.5 * params["D0"]:
+                ratio = params["D_offset"] / params["D0"]
+                add_violation("D_offset", params["D_offset"], f"offset is {ratio:.1%} of D0", "info")
+
+        return violations
 
     def get_parameter_bounds(
         self,

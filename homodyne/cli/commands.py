@@ -964,6 +964,166 @@ def _apply_angle_filtering_for_optimization(
     return filtered_data
 
 
+def _prepare_cmc_config(args, config: "ConfigManager") -> dict[str, Any]:
+    """Prepare CMC configuration with CLI overrides applied.
+
+    Extracts CMC config from ConfigManager and applies CLI argument overrides
+    for num_shards and backend.
+
+    Args:
+        args: Parsed CLI arguments
+        config: Configuration manager
+
+    Returns:
+        CMC configuration dictionary with CLI overrides applied
+    """
+    cmc_config = config.get_cmc_config()
+
+    # Normalize backend config to dict form for mutation
+    backend_cfg = cmc_config.get("backend", {})
+    if isinstance(backend_cfg, str):
+        backend_cfg = {"name": backend_cfg}
+    elif backend_cfg is None:
+        backend_cfg = {}
+    cmc_config["backend"] = backend_cfg
+
+    # Apply CLI overrides
+    if args.cmc_num_shards is not None:
+        logger.info(f"Overriding CMC num_shards from CLI: {args.cmc_num_shards}")
+        cmc_config.setdefault("sharding", {})["num_shards"] = args.cmc_num_shards
+
+    if args.cmc_backend is not None:
+        logger.info(f"Overriding CMC backend from CLI: {args.cmc_backend}")
+        backend_cfg["name"] = args.cmc_backend
+
+    # Auto-select multiprocessing for multiple shards with auto/jax backend
+    num_shards_override = cmc_config.get("sharding", {}).get("num_shards", "auto")
+    try:
+        num_shards_int = int(num_shards_override)
+    except (TypeError, ValueError):
+        num_shards_int = None
+
+    backend_name_current = backend_cfg.get("name", "auto")
+    if num_shards_int and num_shards_int > 1 and backend_name_current in ("auto", "jax"):
+        logger.warning(
+            "Multiple shards requested but backend is 'auto/jax'; defaulting to multiprocessing. "
+            "Use --cmc-backend to override explicitly."
+        )
+        backend_cfg["name"] = "multiprocessing"
+
+    return cmc_config
+
+
+def _pool_mcmc_data(filtered_data: dict[str, Any]) -> dict[str, Any]:
+    """Pool and flatten 3D correlation data for MCMC.
+
+    MCMC expects 1D pooled/flattened data with matching array lengths.
+    This function transforms 3D c2_exp (n_phi, n_t, n_t) into 1D arrays
+    and creates corresponding t1, t2, phi arrays of the same length.
+
+    Args:
+        filtered_data: Dictionary with c2_exp (3D), t1, t2, and phi_angles_list
+
+    Returns:
+        Dictionary with pooled data:
+        - mcmc_data: flattened c2 data (n_phi * n_t * n_t,)
+        - t1_pooled: tiled t1 values (n_phi * n_t * n_t,)
+        - t2_pooled: tiled t2 values (n_phi * n_t * n_t,)
+        - phi_pooled: repeated phi values (n_phi * n_t * n_t,)
+        - n_phi, n_t, n_total: dimension info
+    """
+    c2_3d = filtered_data["c2_exp"]  # Shape: (n_phi, n_t, n_t)
+    t1_raw = filtered_data.get("t1")
+    t2_raw = filtered_data.get("t2")
+    phi_angles = filtered_data.get("phi_angles_list")
+
+    n_phi = c2_3d.shape[0]
+    n_t = c2_3d.shape[1]
+    n_total = n_phi * n_t * n_t
+
+    # Flatten correlation data
+    mcmc_data = c2_3d.ravel()
+
+    # Handle both 1D and 2D time arrays
+    if t1_raw.ndim == 1 and t2_raw.ndim == 1:
+        t1_2d, t2_2d = np.meshgrid(t1_raw, t2_raw, indexing="ij")
+        logger.debug(f"Created 2D meshgrids from 1D arrays: t1={t1_raw.shape} → {t1_2d.shape}")
+    elif t1_raw.ndim == 2 and t2_raw.ndim == 2:
+        t1_2d = t1_raw
+        t2_2d = t2_raw
+        logger.debug(f"Using existing 2D meshgrids: t1={t1_2d.shape}, t2={t2_2d.shape}")
+    else:
+        raise ValueError(
+            f"Inconsistent t1/t2 dimensions: t1.ndim={t1_raw.ndim}, t2.ndim={t2_raw.ndim}. "
+            f"Expected both 1D or both 2D."
+        )
+
+    # Tile time arrays for each phi angle
+    t1_pooled = np.tile(t1_2d.ravel(), n_phi)
+    t2_pooled = np.tile(t2_2d.ravel(), n_phi)
+    phi_pooled = np.repeat(phi_angles, n_t * n_t)
+
+    # Verify all arrays have matching lengths
+    for name, arr in [("mcmc_data", mcmc_data), ("t1", t1_pooled), ("t2", t2_pooled), ("phi", phi_pooled)]:
+        if arr.shape[0] != n_total:
+            raise ValueError(f"Data pooling failed: {name}={arr.shape[0]}, expected={n_total}")
+
+    logger.debug(f"Pooled MCMC data: {n_phi} angles × {n_t}×{n_t} = {n_total:,} data points")
+
+    return {
+        "mcmc_data": mcmc_data,
+        "t1_pooled": t1_pooled,
+        "t2_pooled": t2_pooled,
+        "phi_pooled": phi_pooled,
+        "n_phi": n_phi,
+        "n_t": n_t,
+        "n_total": n_total,
+    }
+
+
+def _run_nlsq_optimization(
+    filtered_data: dict[str, Any],
+    config: "ConfigManager",
+    args,
+) -> Any:
+    """Run NLSQ optimization (single-start or multi-start).
+
+    Args:
+        filtered_data: Preprocessed experimental data
+        config: Configuration manager
+        args: CLI arguments
+
+    Returns:
+        Optimization result
+    """
+    nlsq_config = config.config.get("optimization", {}).get("nlsq", {})
+    multi_start_config = nlsq_config.get("multi_start", {})
+    use_multistart = multi_start_config.get("enable", False)
+
+    if use_multistart:
+        logger.info("=" * 80)
+        logger.info("MULTI-START OPTIMIZATION ENABLED")
+        logger.info(f"  n_starts: {multi_start_config.get('n_starts', 10)}")
+        logger.info(f"  strategy: {multi_start_config.get('sampling_strategy', 'latin_hypercube')}")
+        logger.info("=" * 80)
+
+        multistart_result = fit_nlsq_multistart(filtered_data, config)
+        result = multistart_result.to_optimization_result()
+
+        logger.info("=" * 80)
+        logger.info("MULTI-START OPTIMIZATION COMPLETE")
+        logger.info(f"  Strategy used: {multistart_result.strategy_used}")
+        logger.info(f"  Best χ²: {multistart_result.best.chi_squared:.4g}")
+        logger.info(f"  Unique basins: {multistart_result.n_unique_basins}")
+        if multistart_result.degeneracy_detected:
+            logger.warning("  ⚠ Parameter degeneracy detected!")
+        logger.info("=" * 80)
+    else:
+        result = fit_nlsq_jax(filtered_data, config)
+
+    return result
+
+
 def _run_optimization(args, config: ConfigManager, data: dict[str, Any]) -> Any:
     """Run the specified optimization method."""
     method = args.method
@@ -993,81 +1153,11 @@ def _run_optimization(args, config: ConfigManager, data: dict[str, Any]) -> Any:
 
     try:
         if method == "nlsq":
-            # Check if multi-start is enabled (v2.6.0+)
-            nlsq_config = config.config.get("optimization", {}).get("nlsq", {})
-            multi_start_config = nlsq_config.get("multi_start", {})
-            use_multistart = multi_start_config.get("enable", False)
-
-            if use_multistart:
-                # Run multi-start NLSQ optimization
-                logger.info("=" * 80)
-                logger.info("MULTI-START OPTIMIZATION ENABLED")
-                logger.info(f"  n_starts: {multi_start_config.get('n_starts', 10)}")
-                logger.info(f"  strategy: {multi_start_config.get('sampling_strategy', 'latin_hypercube')}")
-                logger.info("=" * 80)
-                multistart_result = fit_nlsq_multistart(filtered_data, config)
-                # Convert to OptimizationResult for compatibility with downstream code
-                result = multistart_result.to_optimization_result()
-                logger.info("=" * 80)
-                logger.info("MULTI-START OPTIMIZATION COMPLETE")
-                logger.info(f"  Strategy used: {multistart_result.strategy_used}")
-                logger.info(f"  Best χ²: {multistart_result.best.chi_squared:.4g}")
-                logger.info(f"  Unique basins: {multistart_result.n_unique_basins}")
-                if multistart_result.degeneracy_detected:
-                    logger.warning("  ⚠ Parameter degeneracy detected!")
-                logger.info("=" * 80)
-            else:
-                # Run single-start NLSQ optimization (CPU-only in v2.3.0+)
-                result = fit_nlsq_jax(filtered_data, config)
+            result = _run_nlsq_optimization(filtered_data, config, args)
         elif method == "cmc":
-            # Consensus Monte Carlo
-            # Get CMC configuration from config file
-            cmc_config = config.get_cmc_config()
-            # Normalize backend config to dict form for mutation
-            backend_cfg = cmc_config.get("backend", {})
-            if isinstance(backend_cfg, str):
-                backend_cfg = {"name": backend_cfg}
-            elif backend_cfg is None:
-                backend_cfg = {}
-            cmc_config["backend"] = backend_cfg
-
-            # Apply CLI overrides to CMC configuration
-            if args.cmc_num_shards is not None:
-                logger.info(
-                    f"Overriding CMC num_shards from CLI: {args.cmc_num_shards}",
-                )
-                cmc_config.setdefault("sharding", {})["num_shards"] = (
-                    args.cmc_num_shards
-                )
-
-            if args.cmc_backend is not None:
-                logger.info(f"Overriding CMC backend from CLI: {args.cmc_backend}")
-                backend_cfg["name"] = args.cmc_backend
-
-            # If user requested multiple shards but backend is auto/jax, default to multiprocessing
-            num_shards_override = cmc_config.get("sharding", {}).get(
-                "num_shards", "auto"
-            )
-            try:
-                num_shards_int = int(num_shards_override)
-            except (TypeError, ValueError):
-                num_shards_int = None
-
-            backend_name_current = backend_cfg.get("name", "auto")
-            if (
-                num_shards_int
-                and num_shards_int > 1
-                and backend_name_current
-                in (
-                    "auto",
-                    "jax",
-                )
-            ):
-                logger.warning(
-                    "Multiple shards requested but backend is 'auto/jax'; defaulting to multiprocessing. "
-                    "Use --cmc-backend to override explicitly."
-                )
-                backend_cfg["name"] = "multiprocessing"
+            # Consensus Monte Carlo - use helper for config preparation
+            cmc_config = _prepare_cmc_config(args, config)
+            backend_cfg = cmc_config["backend"]
 
             # Log CMC configuration being used
             logger.info(f"Method: {method.upper()} (Consensus Monte Carlo)")
@@ -1095,101 +1185,14 @@ def _run_optimization(args, config: ConfigManager, data: dict[str, Any]) -> Any:
                 f"backend={backend_display}",
             )
 
-            # =========================================================================
-            # MCMC DATA POOLING (CRITICAL FIX)
-            # =========================================================================
-            # MCMC expects 1D pooled/flattened data with matching array lengths
-            # Problem: c2_exp is 3D (n_phi, n_t, n_t), but t1/t2 are 2D meshgrids
-            # Solution: Flatten all arrays and tile/repeat to match pooled data length
-
-            # Extract raw data from filtered_data
-            c2_3d = filtered_data["c2_exp"]  # Shape: (n_phi, n_t, n_t)
-            t1_raw = filtered_data.get("t1")  # Could be 1D (n_t,) or 2D (n_t, n_t)
-            t2_raw = filtered_data.get("t2")  # Could be 1D (n_t,) or 2D (n_t, n_t)
-            phi_angles = filtered_data.get("phi_angles_list")  # Shape: (n_phi,)
-
-            # Get dimensions
-            n_phi = c2_3d.shape[0]
-            n_t = c2_3d.shape[1]
-            n_total = n_phi * n_t * n_t
-
-            # Pool/flatten correlation data: (n_phi, n_t, n_t) → (n_phi * n_t * n_t,)
-            mcmc_data = c2_3d.ravel()  # Flattens to 1D
-
-            # Handle both 1D and 2D time arrays
-            # If t1/t2 are 1D, create 2D meshgrids; if already 2D, use as-is
-            if t1_raw.ndim == 1 and t2_raw.ndim == 1:
-                # Create 2D meshgrids from 1D arrays
-                # NOTE: meshgrid returns (X, Y) where X varies along axis 0 with indexing="ij"
-                # BUG FIX (Dec 2025): Variables were swapped! t1_2d should get first return value.
-                t1_2d, t2_2d = np.meshgrid(t1_raw, t2_raw, indexing="ij")
-                logger.debug(
-                    f"Created 2D meshgrids from 1D arrays: t1={t1_raw.shape} → {t1_2d.shape}"
-                )
-                # DEBUG: Log sample values to verify meshgrid is correct
-                logger.info(
-                    f"[CMC DEBUG] Meshgrid verification:\n"
-                    f"  t1_raw[:3]={t1_raw[:3] if len(t1_raw) >= 3 else t1_raw}\n"
-                    f"  t2_raw[:3]={t2_raw[:3] if len(t2_raw) >= 3 else t2_raw}\n"
-                    f"  t1_2d[0,:3]={t1_2d[0, :3] if t1_2d.shape[1] >= 3 else t1_2d[0, :]}\n"
-                    f"  t1_2d[:3,0]={t1_2d[:3, 0] if t1_2d.shape[0] >= 3 else t1_2d[:, 0]}\n"
-                    f"  t2_2d[0,:3]={t2_2d[0, :3] if t2_2d.shape[1] >= 3 else t2_2d[0, :]}\n"
-                    f"  t2_2d[:3,0]={t2_2d[:3, 0] if t2_2d.shape[0] >= 3 else t2_2d[:, 0]}"
-                )
-            elif t1_raw.ndim == 2 and t2_raw.ndim == 2:
-                # Already 2D meshgrids
-                t1_2d = t1_raw
-                t2_2d = t2_raw
-                logger.debug(
-                    f"Using existing 2D meshgrids: t1={t1_2d.shape}, t2={t2_2d.shape}"
-                )
-            else:
-                raise ValueError(
-                    f"Inconsistent t1/t2 dimensions: t1.ndim={t1_raw.ndim}, t2.ndim={t2_raw.ndim}. "
-                    f"Expected both 1D or both 2D."
-                )
-
-            # Create corresponding t1, t2, phi arrays of same length
-            # Tile the 2D meshgrid for each phi angle
-            t1_pooled = np.tile(t1_2d.ravel(), n_phi)  # (n_t*n_t,) repeated n_phi times
-            t2_pooled = np.tile(t2_2d.ravel(), n_phi)
-
-            # DEBUG: Log pooled data sample
-            logger.info(
-                f"[CMC DEBUG] Pooled time arrays:\n"
-                f"  t1_pooled[:10]={t1_pooled[:10]}\n"
-                f"  t2_pooled[:10]={t2_pooled[:10]}\n"
-                f"  Sample |t1-t2| values: {np.abs(t1_pooled[:10] - t2_pooled[:10])}"
-            )
-            phi_pooled = np.repeat(
-                phi_angles, n_t * n_t
-            )  # Each phi repeated n_t*n_t times
-
-            # Verify all arrays have matching lengths (CRITICAL for MCMC)
-            if mcmc_data.shape[0] != n_total:
-                raise ValueError(
-                    f"Data pooling failed: mcmc_data={mcmc_data.shape[0]}, expected={n_total}"
-                )
-            if t1_pooled.shape[0] != n_total:
-                raise ValueError(
-                    f"Data pooling failed: t1={t1_pooled.shape[0]}, expected={n_total}"
-                )
-            if t2_pooled.shape[0] != n_total:
-                raise ValueError(
-                    f"Data pooling failed: t2={t2_pooled.shape[0]}, expected={n_total}"
-                )
-            if phi_pooled.shape[0] != n_total:
-                raise ValueError(
-                    f"Data pooling failed: phi={phi_pooled.shape[0]}, expected={n_total}"
-                )
-
-            logger.debug(
-                f"Pooled MCMC data: {n_phi} angles × {n_t}×{n_t} = {n_total:,} data points"
-            )
-            logger.debug(
-                f"Array shapes: data={mcmc_data.shape}, t1={t1_pooled.shape}, "
-                f"t2={t2_pooled.shape}, phi={phi_pooled.shape}"
-            )
+            # Pool MCMC data (flatten 3D → 1D with matching t1/t2/phi arrays)
+            pooled = _pool_mcmc_data(filtered_data)
+            mcmc_data = pooled["mcmc_data"]
+            t1_pooled = pooled["t1_pooled"]
+            t2_pooled = pooled["t2_pooled"]
+            phi_pooled = pooled["phi_pooled"]
+            n_phi = pooled["n_phi"]
+            n_t = pooled["n_t"]
 
             # ✅ v2.1.0 BREAKING CHANGE: Removed automatic NLSQ/SVI initialization
             # Manual workflow required: Run NLSQ separately, copy results to YAML, then run MCMC

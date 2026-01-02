@@ -35,15 +35,31 @@ except ImportError:
 # V2 logging integration
 try:
     from homodyne.utils.logging import get_logger
+    from homodyne.data.validators import (
+        validate_file_path,
+        validate_frame_range,
+        validate_positive_value,
+        validate_numeric_range,
+        validate_enum_value,
+    )
 
     HAS_V2_LOGGING = True
+    HAS_VALIDATORS = True
 except ImportError:
     import logging
 
     HAS_V2_LOGGING = False
+    HAS_VALIDATORS = False
 
     def get_logger(name):
         return logging.getLogger(name)
+
+    # Fallback stubs when validators module not available
+    validate_file_path = None
+    validate_frame_range = None
+    validate_positive_value = None
+    validate_numeric_range = None
+    validate_enum_value = None
 
 
 logger = get_logger(__name__)
@@ -300,114 +316,189 @@ def validate_config_schema(
 
 
 def _validate_parameter_values(config: dict[str, Any]) -> list[str]:
-    """Validate specific parameter value constraints."""
-    errors = []
+    """Validate specific parameter value constraints.
 
-    # Validate experimental_data parameters
+    Delegates to focused validator functions from validators module for
+    reduced cyclomatic complexity and improved testability.
+    """
+    errors: list[str] = []
+
+    # Extract config sections
     exp_data = config.get("experimental_data", {})
+    analyzer = config.get("analyzer_parameters", {})
+    data_filtering = config.get("data_filtering", {})
+    v2_features = config.get("v2_features", {})
 
-    # Check file paths
+    if HAS_VALIDATORS:
+        # Use modern validators (reduced complexity path)
+        errors.extend(
+            validate_file_path(
+                exp_data.get("data_folder_path"),
+                exp_data.get("data_file_name"),
+            )
+        )
+
+        errors.extend(
+            validate_frame_range(
+                analyzer.get("start_frame"),
+                analyzer.get("end_frame"),
+            )
+        )
+
+        errors.extend(validate_positive_value(analyzer.get("dt"), "dt"))
+
+        # Data filtering validation (only when enabled)
+        if data_filtering.get("enabled", False):
+            errors.extend(
+                validate_numeric_range(
+                    data_filtering.get("q_range"),
+                    "q_range",
+                    require_positive=True,
+                )
+            )
+            errors.extend(
+                validate_numeric_range(
+                    data_filtering.get("phi_range"),
+                    "phi_range",
+                    value_bounds=(-360, 360),
+                )
+            )
+            errors.extend(
+                validate_positive_value(
+                    data_filtering.get("quality_threshold"),
+                    "quality_threshold",
+                )
+            )
+            errors.extend(
+                validate_enum_value(
+                    data_filtering.get("combine_criteria"),
+                    "combine_criteria",
+                    ["AND", "OR"],
+                    default="AND",
+                )
+            )
+            errors.extend(
+                validate_enum_value(
+                    data_filtering.get("validation_level"),
+                    "data_filtering.validation_level",
+                    ["basic", "strict"],
+                    default="basic",
+                )
+            )
+
+        # v2_features validation
+        errors.extend(
+            validate_enum_value(
+                v2_features.get("output_format"),
+                "output_format",
+                ["numpy", "jax", "auto"],
+                default="auto",
+            )
+        )
+        errors.extend(
+            validate_enum_value(
+                v2_features.get("validation_level"),
+                "validation_level",
+                ["none", "basic", "full"],
+                default="basic",
+            )
+        )
+        errors.extend(
+            validate_enum_value(
+                v2_features.get("cache_strategy"),
+                "cache_strategy",
+                ["none", "simple", "intelligent"],
+                default="intelligent",
+            )
+        )
+    else:
+        # Fallback: inline validation for environments without validators module
+        errors.extend(_validate_parameter_values_fallback(config))
+
+    return errors
+
+
+def _validate_parameter_values_fallback(config: dict[str, Any]) -> list[str]:
+    """Fallback validation when validators module is not available."""
+    errors: list[str] = []
+
+    exp_data = config.get("experimental_data", {})
+    analyzer = config.get("analyzer_parameters", {})
+    data_filtering = config.get("data_filtering", {})
+    v2_features = config.get("v2_features", {})
+
+    # File path validation
     data_folder = exp_data.get("data_folder_path", "")
     if data_folder and not os.path.exists(data_folder):
         errors.append(f"Data folder does not exist: {data_folder}")
-
     data_file = exp_data.get("data_file_name", "")
     if data_folder and data_file:
         full_path = os.path.join(data_folder, data_file)
         if not os.path.exists(full_path):
             errors.append(f"Data file does not exist: {full_path}")
 
-    # Validate analyzer_parameters
-    analyzer = config.get("analyzer_parameters", {})
-
+    # Frame range validation
     start_frame = analyzer.get("start_frame")
     end_frame = analyzer.get("end_frame")
     if start_frame is not None and end_frame is not None:
         if start_frame >= end_frame:
             errors.append(
-                f"start_frame ({start_frame}) must be less than end_frame ({end_frame})",
+                f"start_frame ({start_frame}) must be less than end_frame ({end_frame})"
             )
         if start_frame < 1:
             errors.append(f"start_frame ({start_frame}) must be >= 1")
 
+    # dt validation
     dt = analyzer.get("dt")
     if dt is not None and dt <= 0:
         errors.append(f"dt ({dt}) must be positive")
 
-    # Validate data_filtering parameters
-    data_filtering = config.get("data_filtering", {})
+    # Data filtering validation
     if data_filtering.get("enabled", False):
-        # Validate q_range
         q_range = data_filtering.get("q_range", {})
         if q_range:
-            q_min = q_range.get("min")
-            q_max = q_range.get("max")
+            q_min, q_max = q_range.get("min"), q_range.get("max")
             if q_min is not None and q_min <= 0:
                 errors.append(f"q_range.min ({q_min}) must be positive")
             if q_max is not None and q_max <= 0:
                 errors.append(f"q_range.max ({q_max}) must be positive")
             if q_min is not None and q_max is not None and q_min >= q_max:
-                errors.append(
-                    f"q_range.min ({q_min}) must be less than q_range.max ({q_max})",
-                )
+                errors.append(f"q_range.min ({q_min}) must be less than q_range.max ({q_max})")
 
-        # Validate phi_range
         phi_range = data_filtering.get("phi_range", {})
         if phi_range:
-            phi_min = phi_range.get("min")
-            phi_max = phi_range.get("max")
+            phi_min, phi_max = phi_range.get("min"), phi_range.get("max")
             if phi_min is not None and phi_max is not None and phi_min >= phi_max:
-                errors.append(
-                    f"phi_range.min ({phi_min}) must be less than phi_range.max ({phi_max})",
-                )
+                errors.append(f"phi_range.min ({phi_min}) must be less than phi_range.max ({phi_max})")
             if phi_min is not None and not (-360 <= phi_min <= 360):
-                errors.append(
-                    f"phi_range.min ({phi_min}) should be in range [-360, 360]",
-                )
+                errors.append(f"phi_range.min ({phi_min}) should be in range [-360, 360]")
             if phi_max is not None and not (-360 <= phi_max <= 360):
-                errors.append(
-                    f"phi_range.max ({phi_max}) should be in range [-360, 360]",
-                )
+                errors.append(f"phi_range.max ({phi_max}) should be in range [-360, 360]")
 
-        # Validate quality_threshold
         quality_threshold = data_filtering.get("quality_threshold")
         if quality_threshold is not None and quality_threshold <= 0:
             errors.append(f"quality_threshold ({quality_threshold}) must be positive")
 
-        # Validate combine_criteria
         combine_criteria = data_filtering.get("combine_criteria", "AND")
         if combine_criteria not in ["AND", "OR"]:
-            errors.append(
-                f"combine_criteria must be one of: AND, OR (got: {combine_criteria})",
-            )
+            errors.append(f"combine_criteria must be one of: AND, OR (got: {combine_criteria})")
 
-        # Validate validation_level
         validation_level = data_filtering.get("validation_level", "basic")
         if validation_level not in ["basic", "strict"]:
-            errors.append(
-                f"data_filtering.validation_level must be one of: basic, strict (got: {validation_level})",
-            )
+            errors.append(f"data_filtering.validation_level must be one of: basic, strict (got: {validation_level})")
 
-    # Validate v2_features parameters
-    v2_features = config.get("v2_features", {})
-
+    # v2_features validation
     output_format = v2_features.get("output_format", "auto")
     if output_format not in ["numpy", "jax", "auto"]:
-        errors.append(
-            f"output_format must be one of: numpy, jax, auto (got: {output_format})",
-        )
+        errors.append(f"output_format must be one of: numpy, jax, auto (got: {output_format})")
 
     validation_level = v2_features.get("validation_level", "basic")
     if validation_level not in ["none", "basic", "full"]:
-        errors.append(
-            f"validation_level must be one of: none, basic, full (got: {validation_level})",
-        )
+        errors.append(f"validation_level must be one of: none, basic, full (got: {validation_level})")
 
     cache_strategy = v2_features.get("cache_strategy", "intelligent")
     if cache_strategy not in ["none", "simple", "intelligent"]:
-        errors.append(
-            f"cache_strategy must be one of: none, simple, intelligent (got: {cache_strategy})",
-        )
+        errors.append(f"cache_strategy must be one of: none, simple, intelligent (got: {cache_strategy})")
 
     return errors
 

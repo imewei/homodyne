@@ -213,6 +213,7 @@ def estimate_stratification_memory(
     n_points: int,
     n_features: int = 4,
     use_index_based: bool = False,
+    estimated_expansion: float = 1.0,  # New parameter for Cyclic Stratification
 ) -> dict[str, Any]:
     """Estimate memory requirements for stratification ONLY.
 
@@ -228,37 +229,25 @@ def estimate_stratification_memory(
         Number of data features (phi, t1, t2, g2_exp), default: 4
     use_index_based : bool, optional
         If True, use index-based stratification (zero-copy), default: False
+    estimated_expansion : float, optional
+        Estimated data expansion factor due to Cyclic Stratification (default: 1.0).
+        For imbalanced data, this can be > 1.0 (e.g., 2.0 for 2:1 imbalance).
 
     Returns
     -------
     dict
         Memory statistics with keys:
         - original_memory_mb: Original data memory usage
-        - stratified_memory_mb: Memory for stratified copy
+        - stratified_memory_mb: Memory for stratified copy (including expansion)
         - peak_memory_mb: Peak memory during stratification
         - index_memory_mb: Memory for index arrays (if use_index_based)
         - is_safe: Whether memory usage is safe (<70% of available)
 
-    Examples
-    --------
-    >>> # Estimate for 3M points
-    >>> mem = estimate_stratification_memory(3_000_000)
-    >>> print(f"Peak memory: {mem['peak_memory_mb']:.1f} MB")
-    Peak memory: 192.0 MB
-    >>> print(f"Safe: {mem['is_safe']}")
-    Safe: True
-
     Notes
     -----
     Memory usage:
-    - Full copy: 2x original data (peak during reorganization)
-    - Index-based: ~1% of original (only stores indices)
-
-    IMPORTANT: This does NOT include:
-    - Jacobian matrix (n_points × n_params × 8 bytes)
-    - JAX JIT compilation overhead (~1.5-2× data)
-    - Optimizer internal state (Hessian, gradients)
-    - For complete estimate, see estimate_nlsq_optimization_memory()
+    - Full copy: original + (original * expansion) (peak)
+    - Index-based: original + index_array (peak)
     """
     bytes_per_float = 8  # float64
 
@@ -266,17 +255,24 @@ def estimate_stratification_memory(
     original_bytes = n_points * n_features * bytes_per_float
     original_mb = original_bytes / (1024**2)
 
+    # Stratified data size (potentially expanded)
+    stratified_points = int(n_points * estimated_expansion)
+    stratified_bytes = stratified_points * n_features * bytes_per_float
+    stratified_mb = stratified_bytes / (1024**2)
+
     if use_index_based:
-        # Index arrays: one index per point
+        # Index arrays: one index per stratified point
         bytes_per_int = 8  # int64
-        index_bytes = n_points * bytes_per_int
+        index_bytes = stratified_points * bytes_per_int
         index_mb = index_bytes / (1024**2)
         peak_mb = original_mb + index_mb
-        stratified_mb = 0  # No copy needed
+        # For index based, the output "stratified_memory_mb" is virtually 0 
+        # (just the index), but effectively we are accessing stratified_points of data
+        stratified_mb = 0 
     else:
         # Full copy approach
-        stratified_mb = original_mb
-        peak_mb = original_mb + stratified_mb  # 2x during reorganization
+        index_mb = 0
+        peak_mb = original_mb + stratified_mb  # Original + copy
 
     # Check against available memory
     try:
@@ -289,7 +285,7 @@ def estimate_stratification_memory(
         is_safe = True  # Assume safe if we can't check
 
     logger.debug(
-        f"Stratification memory estimate: "
+        f"Stratification memory estimate (expansion {estimated_expansion:.1f}x): "
         f"original={original_mb:.1f} MB, "
         f"peak={peak_mb:.1f} MB, "
         f"safe={is_safe}"
@@ -299,7 +295,7 @@ def estimate_stratification_memory(
         "original_memory_mb": original_mb,
         "stratified_memory_mb": stratified_mb,
         "peak_memory_mb": peak_mb,
-        "index_memory_mb": index_mb if use_index_based else 0,
+        "index_memory_mb": index_mb,
         "is_safe": is_safe,
     }
 
@@ -637,10 +633,23 @@ def create_angle_stratified_data(
     g2_exp: jnp.ndarray,
     target_chunk_size: int = 100_000,
 ) -> tuple[jnp.ndarray, jnp.ndarray, jnp.ndarray, jnp.ndarray, list[int]]:
-    """Ensure each chunk contains every phi angle.
+    """Ensure each chunk contains every phi angle using Cyclic Stratification.
 
     Reorders data so NLSQ chunking keeps balanced angle coverage and maintains
     valid gradients for per-angle parameters.
+
+    CRITICAL FIX (Jan 2026): Cyclic Stratification
+    ----------------------------------------------
+    Previously, stratification stopped when the smallest angle was exhausted,
+    dumping all remaining data into a single massive, unbalanced chunk. This
+    caused rank-deficient Jacobians (zero gradients for missing angles) and
+    memory spikes.
+
+    New Logic:
+    1. Determine number of chunks based on failure mode: ensuring ALL data is used regardless of balance.
+    2. Iterate through chunks, pulling data from EACH angle.
+    3. If an angle runs out of data, recycled data from the beginning (Cyclic).
+    4. Result: Consistent chunk sizes, all angles present in all chunks.
 
     Parameters
     ----------
@@ -668,7 +677,6 @@ def create_angle_stratified_data(
         Stratified g2 values
     chunk_sizes : list[int]
         Size of each stratified chunk (CRITICAL for correct re-chunking)
-
     """
     n_points = len(phi)
 
@@ -684,12 +692,11 @@ def create_angle_stratified_data(
     # Single angle: no stratification needed
     if stats.n_angles == 1:
         logger.info("Single phi angle detected, no stratification needed")
-        # Return with chunk_sizes=None (no chunking needed for single angle)
         return phi, t1, t2, g2_exp, None
 
     logger.info(
         f"Stratifying {n_points:,} points across {stats.n_angles} angles "
-        f"(imbalance ratio: {stats.imbalance_ratio:.2f})"
+        f"(imbalance ratio: {stats.imbalance_ratio:.2f}) using Cyclic Stratification"
     )
 
     # Group data by angle
@@ -705,51 +712,54 @@ def create_angle_stratified_data(
         }
 
     # Calculate points per angle per chunk
-    points_per_angle_per_chunk = target_chunk_size // stats.n_angles
+    points_per_angle_per_chunk = max(1, target_chunk_size // stats.n_angles)
     logger.debug(
         f"Target chunk size: {target_chunk_size:,}, "
         f"points per angle per chunk: {points_per_angle_per_chunk:,}"
     )
 
-    # Calculate maximum safe chunks (limited by smallest angle)
-    # This ensures ALL chunks contain ALL angles (critical for per-angle parameters)
-    min_angle_size = min(group["size"] for group in angle_groups.values())
-    max_safe_chunks = min_angle_size // points_per_angle_per_chunk
+    # Calculate total chunks needed to cover the LARGEST angle group
+    # This ensures we process all data, even from the most populous angle
+    max_angle_size = max(group["size"] for group in angle_groups.values())
+    n_chunks = int(np.ceil(max_angle_size / points_per_angle_per_chunk))
 
-    # Log data usage statistics
-    expected_total_used = max_safe_chunks * target_chunk_size
-    usage_pct = (expected_total_used / n_points) * 100 if n_points > 0 else 0
+    # Calculate effective expanded dataset size
+    effective_total_points = n_chunks * points_per_angle_per_chunk * stats.n_angles
+    expansion_factor = effective_total_points / n_points
 
     logger.info(
-        f"Creating {max_safe_chunks} complete chunks "
-        f"(limited by smallest angle with {min_angle_size:,} points)"
-    )
-    logger.debug(
-        f"Expected data usage: {expected_total_used:,} / {n_points:,} points ({usage_pct:.1f}%)"
+        f"Cyclic Stratification Plan:\n"
+        f"  Chunks: {n_chunks} (determined by largest angle with {max_angle_size:,} points)\n"
+        f"  Points per chunk: {points_per_angle_per_chunk * stats.n_angles:,}\n"
+        f"  Effective total points: {effective_total_points:,} (Expansion: {expansion_factor:.2f}x)"
     )
 
-    # Build stratified arrays by interleaving angle groups
+    if expansion_factor > 2.0:
+        logger.warning(
+            f"High data expansion detected ({expansion_factor:.2f}x). "
+            f"Minority angles will be significantly oversampled."
+        )
+
+    # Build stratified chunks
     stratified_chunks = []
 
-    # Create complete chunks
-    for chunk_idx in range(max_safe_chunks):
+    for chunk_idx in range(n_chunks):
         chunk_parts = {"phi": [], "t1": [], "t2": [], "g2_exp": []}
 
         for angle in stats.unique_angles:
             group = angle_groups[angle]
             start = chunk_idx * points_per_angle_per_chunk
-            end = start + points_per_angle_per_chunk
-
-            # All angles guaranteed to have data at this chunk index
-            # (verified by max_safe_chunks calculation)
-
-            chunk_parts["phi"].append(group["phi"][start:end])
-            chunk_parts["t1"].append(group["t1"][start:end])
-            chunk_parts["t2"].append(group["t2"][start:end])
-            chunk_parts["g2_exp"].append(group["g2_exp"][start:end])
+            count = points_per_angle_per_chunk
+            
+            # Cyclic slicing: wrap around if we exceed group size
+            indices = np.arange(start, start + count) % group["size"]
+            
+            chunk_parts["phi"].append(group["phi"][indices])
+            chunk_parts["t1"].append(group["t1"][indices])
+            chunk_parts["t2"].append(group["t2"][indices])
+            chunk_parts["g2_exp"].append(group["g2_exp"][indices])
 
         # Concatenate all angles for this chunk
-        # All chunks guaranteed to have data (max_safe_chunks ensures this)
         chunk_size = sum(len(arr) for arr in chunk_parts["phi"])
         stratified_chunks.append(
             {
@@ -760,43 +770,6 @@ def create_angle_stratified_data(
                 "size": chunk_size,
             }
         )
-        logger.debug(
-            f"Chunk {chunk_idx}: {chunk_size:,} points, {stats.n_angles} angles"
-        )
-
-    # Create final partial chunk with remaining data (if any)
-    # This ensures ALL data points are used, not discarded
-    remaining_parts = {"phi": [], "t1": [], "t2": [], "g2_exp": []}
-    has_remaining = False
-
-    for angle in stats.unique_angles:
-        group = angle_groups[angle]
-        start = max_safe_chunks * points_per_angle_per_chunk
-
-        if start < group["size"]:
-            # This angle has remaining data
-            remaining_parts["phi"].append(group["phi"][start:])
-            remaining_parts["t1"].append(group["t1"][start:])
-            remaining_parts["t2"].append(group["t2"][start:])
-            remaining_parts["g2_exp"].append(group["g2_exp"][start:])
-            has_remaining = True
-
-    # Add final partial chunk if there's remaining data from any angle
-    if has_remaining:
-        chunk_size = sum(len(arr) for arr in remaining_parts["phi"])
-        stratified_chunks.append(
-            {
-                "phi": np.concatenate(remaining_parts["phi"]),
-                "t1": np.concatenate(remaining_parts["t1"]),
-                "t2": np.concatenate(remaining_parts["t2"]),
-                "g2_exp": np.concatenate(remaining_parts["g2_exp"]),
-                "size": chunk_size,
-            }
-        )
-        logger.debug(
-            f"Chunk {max_safe_chunks} (partial): {chunk_size:,} points, "
-            f"{len([p for p in remaining_parts['phi'] if len(p) > 0])} angles"
-        )
 
     # Flatten back to single arrays
     phi_stratified = np.concatenate([chunk["phi"] for chunk in stratified_chunks])
@@ -804,26 +777,12 @@ def create_angle_stratified_data(
     t2_stratified = np.concatenate([chunk["t2"] for chunk in stratified_chunks])
     g2_stratified = np.concatenate([chunk["g2_exp"] for chunk in stratified_chunks])
 
-    # CRITICAL FIX (Nov 10, 2025): Store chunk sizes for correct re-chunking
-    # When re-chunking the flattened data later (in _create_stratified_chunks),
-    # we MUST respect the original chunk boundaries to preserve angle completeness.
-    # Each chunk has exactly points_per_angle_per_chunk × n_angles points.
-    # Bug: Naive sequential slicing at 100k boundaries cuts across chunk boundaries,
-    # causing some chunks to miss angles (e.g., chunk 229 missing angle -174.197464).
+    # Store chunk sizes for correct re-chunking
     chunk_sizes = [chunk["size"] for chunk in stratified_chunks]
 
-    # Verify chunk structure and log data usage
-    n_used = len(phi_stratified)
-    actual_usage_pct = (n_used / n_points) * 100 if n_points > 0 else 0
-
     logger.info(
-        f"Stratification complete: {len(stratified_chunks)} chunks created, "
-        f"using {n_used:,} / {n_points:,} points ({actual_usage_pct:.1f}%)"
+        f"Stratification complete: {len(stratified_chunks)} balanced chunks created."
     )
-
-    # Ensure we didn't somehow create more data than we had
-    if n_used > n_points:
-        raise ValueError(f"Data expansion during stratification: {n_used} > {n_points}")
 
     # Convert back to JAX arrays and return with chunk boundary information
     return (
@@ -831,7 +790,7 @@ def create_angle_stratified_data(
         jnp.array(t1_stratified),
         jnp.array(t2_stratified),
         jnp.array(g2_stratified),
-        chunk_sizes,  # NEW: Original chunk sizes to preserve boundaries
+        chunk_sizes,
     )
 
 
@@ -839,36 +798,16 @@ def create_angle_stratified_indices(
     phi: jnp.ndarray | np.ndarray,
     target_chunk_size: int = 100_000,
 ) -> np.ndarray:
-    """Create index array for zero-copy angle-stratified data access.
+    """Create index array for zero-copy angle-stratified data access using Cyclic Stratification.
 
     This function implements index-based stratification, reducing memory overhead
-    from 2x (full copy) to ~1% (index array only). Instead of physically copying
-    and reorganizing data, it creates an index array that specifies the new ordering.
+    from 2x (full copy) to ~1% (index array only).
 
-    Memory Comparison:
-    ------------------
-    Full copy approach (create_angle_stratified_data):
-      - 3M points × 4 arrays × 8 bytes = 96 MB original
-      - 96 MB stratified copy → 192 MB peak (2x)
-
-    Index-based approach (this function):
-      - 3M points × 4 arrays × 8 bytes = 96 MB original
-      - 3M indices × 8 bytes = 24 MB index → 120 MB peak (1.25x)
-      - Memory savings: 72 MB (37.5% reduction)
-
-    Algorithm
-    ---------
-    1. Group data indices by phi angle
-    2. Calculate points per angle per chunk
-    3. Interleave angle groups into chunks using indices
-    4. Return concatenated index array
-
-    Usage with original data:
-      indices = create_angle_stratified_indices(phi)
-      phi_stratified = phi[indices]
-      t1_stratified = t1[indices]
-      t2_stratified = t2[indices]
-      g2_stratified = g2[indices]
+    CRITICAL FIX (Jan 2026): Cyclic Stratification
+    ----------------------------------------------
+    Uses cyclic indexing (modulo arithmetic) to reuse data from smaller angle groups,
+    ensuring ALL chunks are balanced and contain sufficient data for every angle.
+    This fixes rank deficiency issues with highly imbalanced datasets.
 
     Parameters
     ----------
@@ -880,41 +819,9 @@ def create_angle_stratified_indices(
     Returns
     -------
     indices : np.ndarray
-        Index array specifying stratified ordering, shape (n_points,)
+        Index array specifying stratified ordering, shape (n_stratified_points,)
         Use: data_stratified = data_original[indices]
 
-    Examples
-    --------
-    >>> # Small example: 9 points, 3 angles
-    >>> phi = np.array([0, 0, 0, 45, 45, 45, 90, 90, 90])
-    >>> indices = create_angle_stratified_indices(phi, target_chunk_size=6)
-    >>> phi_stratified = phi[indices]
-    >>> # Stratified order interleaves angles
-
-    >>> # Real dataset: 3M points
-    >>> phi, t1, t2, g2 = load_large_dataset()
-    >>> indices = create_angle_stratified_indices(phi)
-    >>> # Apply indexing to all arrays
-    >>> phi_s = phi[indices]
-    >>> t1_s = t1[indices]
-    >>> t2_s = t2[indices]
-    >>> g2_s = g2[indices]
-
-    Notes
-    -----
-    Advantages over full copy:
-    - 37.5% memory reduction (3M points example)
-    - Faster: O(n) instead of O(n) + copy overhead
-    - Original data preserved (can reuse)
-
-    Limitations:
-    - Index array must fit in memory
-    - Repeated indexing slower than contiguous access
-    - Not compatible with all JAX operations (may trigger copies)
-
-    Performance:
-    - Time: ~50-100ms for 3M points (vs ~150ms full copy)
-    - Memory: ~24MB index (vs ~96MB copy)
     """
     n_points = len(phi)
 
@@ -931,7 +838,7 @@ def create_angle_stratified_indices(
 
     logger.info(
         f"Creating stratified indices for {n_points:,} points across {stats.n_angles} angles "
-        f"(imbalance ratio: {stats.imbalance_ratio:.2f})"
+        f"(imbalance ratio: {stats.imbalance_ratio:.2f}) using Cyclic Stratification"
     )
 
     # Group indices by angle
@@ -941,70 +848,56 @@ def create_angle_stratified_indices(
         angle_index_groups[angle] = np.where(mask)[0]
 
     # Calculate points per angle per chunk
-    points_per_angle_per_chunk = target_chunk_size // stats.n_angles
+    points_per_angle_per_chunk = max(1, target_chunk_size // stats.n_angles)
+    
+    # Calculate total chunks based on LARGEST angle group
+    group_sizes = [len(indices) for indices in angle_index_groups.values()]
+    max_angle_size = max(group_sizes)
+    n_chunks = int(np.ceil(max_angle_size / points_per_angle_per_chunk))
+
     logger.debug(
         f"Target chunk size: {target_chunk_size:,}, "
-        f"points per angle per chunk: {points_per_angle_per_chunk:,}"
-    )
-
-    # Calculate maximum safe chunks (limited by smallest angle)
-    # This ensures ALL chunks contain ALL angles (critical for per-angle parameters)
-    min_angle_size = min(len(indices) for indices in angle_index_groups.values())
-    max_safe_chunks = min_angle_size // points_per_angle_per_chunk
-
-    # Log data usage statistics
-    expected_total_used = max_safe_chunks * target_chunk_size
-    usage_pct = (expected_total_used / n_points) * 100 if n_points > 0 else 0
-
-    logger.info(
-        f"Creating {max_safe_chunks} complete chunks "
-        f"(limited by smallest angle with {min_angle_size:,} points)"
-    )
-    logger.debug(
-        f"Expected data usage: {expected_total_used:,} / {n_points:,} points ({usage_pct:.1f}%)"
+        f"points per angle per chunk: {points_per_angle_per_chunk:,}\n"
+        f"Total chunks: {n_chunks} (based on max angle size: {max_angle_size:,})"
     )
 
     # Build stratified index array by interleaving angle groups
     stratified_indices = []
 
-    for chunk_idx in range(max_safe_chunks):
+    for chunk_idx in range(n_chunks):
         chunk_indices = []
 
         for angle in stats.unique_angles:
             indices_for_angle = angle_index_groups[angle]
+            group_size = len(indices_for_angle)
+            
             start = chunk_idx * points_per_angle_per_chunk
-            end = start + points_per_angle_per_chunk
-
-            # All angles guaranteed to have data at this chunk index
-            # (verified by max_safe_chunks calculation)
-            chunk_indices.append(indices_for_angle[start:end])
+            count = points_per_angle_per_chunk
+            
+            # Cyclic indexing: wrap around using modulo arithmetic
+            # To avoid creating massive arange arrays for modulo, we can just slice intelligently
+            # But a simple arange % size is vectorizable and fast enough for indices
+            if group_size > 0:
+                raw_indices = np.arange(start, start + count) % group_size
+                chunk_indices.append(indices_for_angle[raw_indices])
+            else:
+                 # Should not happen if stats.n_angles is correct, but safe guard
+                 logger.warning(f"No data for angle {angle} despite being in stats!")
 
         # Concatenate all angle indices for this chunk
-        # All chunks guaranteed to have data (max_safe_chunks ensures this)
-        chunk_size = sum(len(arr) for arr in chunk_indices)
         stratified_indices.append(np.concatenate(chunk_indices))
-        logger.debug(
-            f"Chunk {chunk_idx}: {chunk_size:,} points, {stats.n_angles} angles"
-        )
 
     # Flatten to single index array
     final_indices = np.concatenate(stratified_indices)
 
     # Verify correctness and log data usage
     n_used = len(final_indices)
-    actual_usage_pct = (n_used / n_points) * 100 if n_points > 0 else 0
+    expansion_factor = n_used / n_points if n_points > 0 else 0
 
     logger.info(
-        f"Stratification complete: {max_safe_chunks} chunks created, "
-        f"using {n_used:,} / {n_points:,} indices ({actual_usage_pct:.1f}%)"
+        f"Stratification complete: {n_chunks} chunks created, "
+        f"using {n_used:,} / {n_points:,} indices (Expansion: {expansion_factor:.2f}x)"
     )
-
-    # Ensure we didn't somehow create more indices than we had points
-    if n_used > n_points:
-        raise ValueError(f"Index array too large: {n_used} > {n_points}")
-    # Ensure no duplicate indices
-    if len(np.unique(final_indices)) != n_used:
-        raise ValueError("Duplicate indices detected")
 
     return final_indices
 
