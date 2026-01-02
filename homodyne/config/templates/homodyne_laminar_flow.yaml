@@ -659,6 +659,16 @@ optimization:
         consecutive_triggers: 5   # Must trigger 5× before warning
         response: "warn"          # Just log warning, don't intervene
 
+      # Layer 5: Shear-Sensitivity Weighting (v2.9.1+)
+      # Weights residuals by |cos(φ₀-φ)| to prevent gradient cancellation
+      # Computed in Homodyne, passed to NLSQ as generic residual weights
+      shear_weighting:
+        enable: true              # Enable for laminar_flow with n_phi > 3
+        alpha: 1.0                # Sensitivity exponent (1.0 = linear)
+        min_weight: 0.3           # Minimum weight for perpendicular angles
+        update_frequency: 50      # Update weights every N L-BFGS iterations
+        normalize: true           # Normalize weights so mean = 1.0
+
   # ---------------------------------------------------------------------------
   # STRATIFICATION - Angle-Stratified Chunking
   # ---------------------------------------------------------------------------
