@@ -9,7 +9,6 @@ Feature: 001-fix-nlsq-anti-degeneracy
 from __future__ import annotations
 
 from dataclasses import dataclass
-from unittest.mock import MagicMock
 
 import numpy as np
 import pytest

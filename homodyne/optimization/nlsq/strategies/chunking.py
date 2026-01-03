@@ -266,9 +266,9 @@ def estimate_stratification_memory(
         index_bytes = stratified_points * bytes_per_int
         index_mb = index_bytes / (1024**2)
         peak_mb = original_mb + index_mb
-        # For index based, the output "stratified_memory_mb" is virtually 0 
+        # For index based, the output "stratified_memory_mb" is virtually 0
         # (just the index), but effectively we are accessing stratified_points of data
-        stratified_mb = 0 
+        stratified_mb = 0
     else:
         # Full copy approach
         index_mb = 0
@@ -715,8 +715,7 @@ def create_angle_stratified_data(
     n_chunks = max(1, int(np.ceil(n_points / target_chunk_size)))
 
     logger.debug(
-        f"Target chunk size: {target_chunk_size:,}, "
-        f"Number of chunks: {n_chunks}"
+        f"Target chunk size: {target_chunk_size:,}, Number of chunks: {n_chunks}"
     )
 
     # For each angle, calculate how many points go to each chunk
@@ -727,7 +726,9 @@ def create_angle_stratified_data(
         base_per_chunk = group_size // n_chunks
         remainder = group_size % n_chunks
         # Earlier chunks get one extra point if there's remainder
-        allocations = [base_per_chunk + (1 if i < remainder else 0) for i in range(n_chunks)]
+        allocations = [
+            base_per_chunk + (1 if i < remainder else 0) for i in range(n_chunks)
+        ]
         angle_chunk_allocations[angle] = allocations
 
     logger.info(
@@ -738,7 +739,9 @@ def create_angle_stratified_data(
 
     # Build stratified chunks by interleaving angle groups
     stratified_chunks = []
-    angle_offsets = {angle: 0 for angle in stats.unique_angles}  # Track position in each angle
+    angle_offsets = dict.fromkeys(
+        stats.unique_angles, 0
+    )  # Track position in each angle
 
     for chunk_idx in range(n_chunks):
         chunk_parts = {"phi": [], "t1": [], "t2": [], "g2_exp": []}
@@ -851,8 +854,7 @@ def create_angle_stratified_indices(
     n_chunks = max(1, int(np.ceil(n_points / target_chunk_size)))
 
     logger.debug(
-        f"Target chunk size: {target_chunk_size:,}, "
-        f"Number of chunks: {n_chunks}"
+        f"Target chunk size: {target_chunk_size:,}, Number of chunks: {n_chunks}"
     )
 
     # For each angle, calculate how many points go to each chunk
@@ -863,12 +865,16 @@ def create_angle_stratified_indices(
         base_per_chunk = group_size // n_chunks
         remainder = group_size % n_chunks
         # Earlier chunks get one extra point if there's remainder
-        allocations = [base_per_chunk + (1 if i < remainder else 0) for i in range(n_chunks)]
+        allocations = [
+            base_per_chunk + (1 if i < remainder else 0) for i in range(n_chunks)
+        ]
         angle_chunk_allocations[angle] = allocations
 
     # Build stratified index array by interleaving angle groups
     stratified_indices = []
-    angle_offsets = {angle: 0 for angle in stats.unique_angles}  # Track position in each angle
+    angle_offsets = dict.fromkeys(
+        stats.unique_angles, 0
+    )  # Track position in each angle
 
     for chunk_idx in range(n_chunks):
         chunk_indices = []

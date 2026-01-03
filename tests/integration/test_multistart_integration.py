@@ -19,8 +19,8 @@ from homodyne.optimization.nlsq.multistart import (
     MultiStartConfig,
     MultiStartResult,
     SingleStartResult,
-    run_multistart_nlsq,
     _get_dataset_size,
+    run_multistart_nlsq,
 )
 
 # =============================================================================
@@ -539,8 +539,8 @@ class TestRegressionFixes:
         custom_starts[0] to ensure user's initial guess is included.
         """
         from homodyne.optimization.nlsq.multistart import (
-            include_custom_starts,
             generate_lhs_starts,
+            include_custom_starts,
         )
 
         # Generate 5 LHS starts
@@ -549,10 +549,14 @@ class TestRegressionFixes:
 
         # Add custom start (simulating user's initial parameters)
         custom_start = np.array([5.0, 5.0, 5.0])
-        combined = include_custom_starts(lhs_starts, [custom_start.tolist()], simple_bounds)
+        combined = include_custom_starts(
+            lhs_starts, [custom_start.tolist()], simple_bounds
+        )
 
         # Should have n_starts + 1 starts
-        assert len(combined) == n_starts + 1, f"Expected {n_starts + 1}, got {len(combined)}"
+        assert len(combined) == n_starts + 1, (
+            f"Expected {n_starts + 1}, got {len(combined)}"
+        )
 
         # First start should be the custom start
         np.testing.assert_allclose(combined[0], custom_start)
@@ -593,4 +597,6 @@ class TestRegressionFixes:
         assert "D_offset" in params, "Should have D_offset"
         assert abs(params["D0"] - 19253.67) < 1e-6, f"D0 wrong: {params['D0']}"
         assert abs(params["alpha"] - (-1.064)) < 1e-6, f"alpha wrong: {params['alpha']}"
-        assert abs(params["D_offset"] - 879.66) < 1e-6, f"D_offset wrong: {params['D_offset']}"
+        assert abs(params["D_offset"] - 879.66) < 1e-6, (
+            f"D_offset wrong: {params['D_offset']}"
+        )

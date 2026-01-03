@@ -33,6 +33,11 @@ from unittest.mock import MagicMock, Mock, patch
 import numpy as np
 import pytest
 
+# Suppress deprecation warnings for DatasetSizeStrategy used internally by NLSQWrapper
+pytestmark = pytest.mark.filterwarnings(
+    "ignore:DatasetSizeStrategy is deprecated:DeprecationWarning"
+)
+
 
 # =============================================================================
 # TestStreamingMemoryEstimation - 6 tests
@@ -962,16 +967,14 @@ class TestAdaptiveMemoryThreshold:
         # Clear env var to ensure default is used
         import os
 
-        from homodyne.optimization.nlsq.wrapper import (
-            _DEFAULT_MEMORY_FRACTION,
-            get_adaptive_memory_threshold,
-        )
+        from homodyne.optimization.nlsq import DEFAULT_MEMORY_FRACTION
+        from homodyne.optimization.nlsq.memory import get_adaptive_memory_threshold
 
         env_backup = os.environ.pop("NLSQ_MEMORY_FRACTION", None)
 
         try:
             _, info = get_adaptive_memory_threshold()
-            assert info["memory_fraction"] == _DEFAULT_MEMORY_FRACTION
+            assert info["memory_fraction"] == DEFAULT_MEMORY_FRACTION
             assert info["source"] == "default"
         finally:
             if env_backup is not None:
@@ -1107,10 +1110,8 @@ class TestAdaptiveMemoryThreshold:
         import os
         import warnings
 
-        from homodyne.optimization.nlsq.wrapper import (
-            _DEFAULT_MEMORY_FRACTION,
-            get_adaptive_memory_threshold,
-        )
+        from homodyne.optimization.nlsq import DEFAULT_MEMORY_FRACTION
+        from homodyne.optimization.nlsq.memory import get_adaptive_memory_threshold
 
         env_backup = os.environ.get("NLSQ_MEMORY_FRACTION")
 
@@ -1122,7 +1123,7 @@ class TestAdaptiveMemoryThreshold:
                 _, info = get_adaptive_memory_threshold()
 
                 # Should fall back to default
-                assert info["memory_fraction"] == _DEFAULT_MEMORY_FRACTION
+                assert info["memory_fraction"] == DEFAULT_MEMORY_FRACTION
                 # Should warn about invalid value
                 assert len(w) >= 1
                 assert any("invalid" in str(warning.message).lower() for warning in w)
@@ -1262,9 +1263,8 @@ class TestNLSQPhaseResultStructures:
     def test_warmup_result_fields(self):
         """TC-PHASE-002: WarmupResult has expected fields."""
         try:
-            from nlsq.streaming.phases import WarmupResult
-
             import jax.numpy as jnp
+            from nlsq.streaming.phases import WarmupResult
 
             # Create a WarmupResult instance
             result = WarmupResult(
@@ -1293,9 +1293,8 @@ class TestNLSQPhaseResultStructures:
     def test_warmup_result_immutable(self):
         """TC-PHASE-003: WarmupResult is immutable (frozen dataclass)."""
         try:
-            from nlsq.streaming.phases import WarmupResult
-
             import jax.numpy as jnp
+            from nlsq.streaming.phases import WarmupResult
 
             result = WarmupResult(
                 params=jnp.array([1.0]),
@@ -1323,9 +1322,8 @@ class TestNLSQPhaseResultStructures:
     def test_gn_result_fields(self):
         """TC-PHASE-005: GNResult has expected fields."""
         try:
-            from nlsq.streaming.phases import GNResult
-
             import jax.numpy as jnp
+            from nlsq.streaming.phases import GNResult
 
             # Create a GNResult instance
             result = GNResult(
@@ -1357,9 +1355,8 @@ class TestNLSQPhaseResultStructures:
     def test_gn_result_optional_fields(self):
         """TC-PHASE-006: GNResult jacobian and cov are optional."""
         try:
-            from nlsq.streaming.phases import GNResult
-
             import jax.numpy as jnp
+            from nlsq.streaming.phases import GNResult
 
             # Create GNResult without optional fields
             result = GNResult(
@@ -1387,9 +1384,8 @@ class TestNLSQPhaseResultStructures:
     def test_phase_orchestrator_result_fields(self):
         """TC-PHASE-008: PhaseOrchestratorResult has expected fields."""
         try:
-            from nlsq.streaming.phases import PhaseOrchestratorResult
-
             import jax.numpy as jnp
+            from nlsq.streaming.phases import PhaseOrchestratorResult
 
             result = PhaseOrchestratorResult(
                 params=jnp.array([1.0, 2.0]),
@@ -1429,9 +1425,8 @@ class TestNLSQPhaseResultStructures:
     def test_checkpoint_state_fields(self):
         """TC-PHASE-010: CheckpointState has expected fields."""
         try:
-            from nlsq.streaming.phases import CheckpointState
-
             import jax.numpy as jnp
+            from nlsq.streaming.phases import CheckpointState
 
             state = CheckpointState(
                 current_phase=1,
@@ -1616,9 +1611,8 @@ class TestNLSQTRFDataclasses:
     def test_step_context_creation(self):
         """TC-TRF-007: StepContext can be created with required fields."""
         try:
-            from nlsq.core.trf import StepContext
-
             import jax.numpy as jnp
+            from nlsq.core.trf import StepContext
 
             ctx = StepContext(
                 x=jnp.array([1.0, 2.0, 3.0]),
@@ -1644,9 +1638,8 @@ class TestNLSQTRFDataclasses:
     def test_step_context_mutable(self):
         """TC-TRF-008: StepContext is mutable (not frozen)."""
         try:
-            from nlsq.core.trf import StepContext
-
             import jax.numpy as jnp
+            from nlsq.core.trf import StepContext
 
             ctx = StepContext(
                 x=jnp.array([1.0]),
@@ -1681,9 +1674,8 @@ class TestNLSQTRFDataclasses:
     def test_bounds_context_from_bounds_factory(self):
         """TC-TRF-010: BoundsContext.from_bounds factory method works."""
         try:
-            from nlsq.core.trf import BoundsContext
-
             import jax.numpy as jnp
+            from nlsq.core.trf import BoundsContext
 
             lb = jnp.array([0.0, -1.0, 0.5])
             ub = jnp.array([10.0, 1.0, 2.0])
@@ -1708,9 +1700,8 @@ class TestNLSQTRFDataclasses:
     def test_fallback_context_default_values(self):
         """TC-TRF-012: FallbackContext has correct default values."""
         try:
-            from nlsq.core.trf import FallbackContext
-
             import jax.numpy as jnp
+            from nlsq.core.trf import FallbackContext
 
             ctx = FallbackContext(original_dtype=jnp.float32)
 

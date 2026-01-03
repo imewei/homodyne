@@ -101,6 +101,44 @@ class OptimizationResult:
             return f"Optimization failed: {self.convergence_status}"
 
 
+# =============================================================================
+# T010: FallbackInfo dataclass for adapter-to-wrapper fallback tracking
+# =============================================================================
+@dataclass
+class FallbackInfo:
+    """Tracks fallback from NLSQAdapter to NLSQWrapper.
+
+    Included in OptimizationResult.device_info when fallback occurs.
+
+    Attributes:
+        fallback_occurred: True if fallback was triggered
+        adapter_used: "NLSQAdapter" or "NLSQWrapper"
+        adapter_error: Error message if adapter failed (None if succeeded)
+        wrapper_error: Error message if wrapper also failed (None otherwise)
+
+    States:
+        | adapter_used | fallback_occurred | adapter_error | Meaning              |
+        |--------------|-------------------|---------------|----------------------|
+        | NLSQAdapter  | False             | None          | Adapter succeeded    |
+        | NLSQWrapper  | True              | "..."         | Fallback succeeded   |
+        | NLSQWrapper  | True              | "..."         | Both failed          |
+    """
+
+    fallback_occurred: bool
+    adapter_used: str  # "NLSQAdapter" or "NLSQWrapper"
+    adapter_error: str | None = None
+    wrapper_error: str | None = None
+
+    def to_dict(self) -> dict[str, Any]:
+        """Convert to dict for inclusion in device_info."""
+        return {
+            "fallback_occurred": self.fallback_occurred,
+            "adapter_used": self.adapter_used,
+            "adapter_error": self.adapter_error,
+            "wrapper_error": self.wrapper_error,
+        }
+
+
 @dataclass
 class UseSequentialOptimization:
     """Marker indicating sequential per-angle optimization should be used.

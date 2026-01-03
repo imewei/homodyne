@@ -314,21 +314,15 @@ class FourierReparameterizer:
         offset = np.asarray(offset, dtype=np.float64)
 
         if contrast.ndim != 1:
-            raise ValueError(
-                f"contrast must be 1D array, got shape {contrast.shape}"
-            )
+            raise ValueError(f"contrast must be 1D array, got shape {contrast.shape}")
         if offset.ndim != 1:
-            raise ValueError(
-                f"offset must be 1D array, got shape {offset.shape}"
-            )
+            raise ValueError(f"offset must be 1D array, got shape {offset.shape}")
         if len(contrast) != self.n_phi:
             raise ValueError(
                 f"Expected {self.n_phi} contrast values, got {len(contrast)}"
             )
         if len(offset) != self.n_phi:
-            raise ValueError(
-                f"Expected {self.n_phi} offset values, got {len(offset)}"
-            )
+            raise ValueError(f"Expected {self.n_phi} offset values, got {len(offset)}")
 
         if not self.use_fourier:
             # Independent mode: just concatenate

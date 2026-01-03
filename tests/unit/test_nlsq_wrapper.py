@@ -29,6 +29,11 @@ from unittest.mock import Mock, patch
 import numpy as np
 import pytest
 
+# Suppress deprecation warnings for DatasetSizeStrategy used internally by NLSQWrapper
+pytestmark = pytest.mark.filterwarnings(
+    "ignore:DatasetSizeStrategy is deprecated:DeprecationWarning"
+)
+
 
 @pytest.fixture
 def mock_config():
@@ -807,8 +812,13 @@ class TestParameterBoundsDetection:
 
         n_phi = 23
         physical_param_names = [
-            "D0", "alpha", "D_offset",
-            "gamma_dot_t0", "beta", "gamma_dot_t_offset", "phi0"
+            "D0",
+            "alpha",
+            "D_offset",
+            "gamma_dot_t0",
+            "beta",
+            "gamma_dot_t_offset",
+            "phi0",
         ]
 
         # Expected indices
@@ -904,14 +914,21 @@ class TestConsistentPerAngleInit:
 
     def test_consistent_init_returns_correct_shape(self):
         """TC-INIT-001: Function returns arrays with correct shape."""
-        from homodyne.optimization.nlsq.wrapper import _compute_consistent_per_angle_init
+        from homodyne.optimization.nlsq.wrapper import (
+            _compute_consistent_per_angle_init,
+        )
 
         n_phi = 10
         stratified_data = self._create_mock_stratified_data(n_phi=n_phi)
         physical_params = np.array([1000.0, 0.5, 0.0, 0.002, 0.3, 0.0, 45.0])
         physical_param_names = [
-            "D0", "alpha", "D_offset",
-            "gamma_dot_t0", "beta", "gamma_dot_t_offset", "phi0"
+            "D0",
+            "alpha",
+            "D_offset",
+            "gamma_dot_t0",
+            "beta",
+            "gamma_dot_t_offset",
+            "phi0",
         ]
 
         contrast, offset = _compute_consistent_per_angle_init(
@@ -923,13 +940,20 @@ class TestConsistentPerAngleInit:
 
     def test_consistent_init_values_within_bounds(self):
         """TC-INIT-002: Returned values should be within reasonable physical bounds."""
-        from homodyne.optimization.nlsq.wrapper import _compute_consistent_per_angle_init
+        from homodyne.optimization.nlsq.wrapper import (
+            _compute_consistent_per_angle_init,
+        )
 
         stratified_data = self._create_mock_stratified_data(n_phi=23)
         physical_params = np.array([1000.0, 0.5, 0.0, 0.002, 0.3, 0.0, 45.0])
         physical_param_names = [
-            "D0", "alpha", "D_offset",
-            "gamma_dot_t0", "beta", "gamma_dot_t_offset", "phi0"
+            "D0",
+            "alpha",
+            "D_offset",
+            "gamma_dot_t0",
+            "beta",
+            "gamma_dot_t_offset",
+            "phi0",
         ]
 
         contrast, offset = _compute_consistent_per_angle_init(
@@ -951,24 +975,33 @@ class TestConsistentPerAngleInit:
         causes g2 to vary with phi. The per-angle initialization must capture this
         variation to prevent the optimizer from absorbing the shear signal.
         """
-        from homodyne.optimization.nlsq.wrapper import _compute_consistent_per_angle_init
+        from homodyne.optimization.nlsq.wrapper import (
+            _compute_consistent_per_angle_init,
+        )
 
         # Create data with significant shear contribution
         stratified_data = self._create_mock_stratified_data(n_phi=23, n_t=30)
 
         # Physical params with meaningful shear rate
-        physical_params = np.array([
-            1000.0,   # D0
-            0.5,      # alpha
-            0.0,      # D_offset
-            0.002,    # gamma_dot_t0 - nonzero shear rate
-            0.3,      # beta
-            0.0,      # gamma_dot_t_offset
-            45.0      # phi0
-        ])
+        physical_params = np.array(
+            [
+                1000.0,  # D0
+                0.5,  # alpha
+                0.0,  # D_offset
+                0.002,  # gamma_dot_t0 - nonzero shear rate
+                0.3,  # beta
+                0.0,  # gamma_dot_t_offset
+                45.0,  # phi0
+            ]
+        )
         physical_param_names = [
-            "D0", "alpha", "D_offset",
-            "gamma_dot_t0", "beta", "gamma_dot_t_offset", "phi0"
+            "D0",
+            "alpha",
+            "D_offset",
+            "gamma_dot_t0",
+            "beta",
+            "gamma_dot_t_offset",
+            "phi0",
         ]
 
         contrast, offset = _compute_consistent_per_angle_init(
@@ -989,7 +1022,9 @@ class TestConsistentPerAngleInit:
 
     def test_consistent_init_static_mode(self):
         """TC-INIT-004: Static mode should also work (no shear parameters)."""
-        from homodyne.optimization.nlsq.wrapper import _compute_consistent_per_angle_init
+        from homodyne.optimization.nlsq.wrapper import (
+            _compute_consistent_per_angle_init,
+        )
 
         stratified_data = self._create_mock_stratified_data(n_phi=10)
 
@@ -1009,8 +1044,10 @@ class TestConsistentPerAngleInit:
 
     def test_consistent_init_uses_defaults_on_failure(self):
         """TC-INIT-005: Should fall back to defaults if fitting fails."""
-        from homodyne.optimization.nlsq.wrapper import _compute_consistent_per_angle_init
-        from unittest.mock import Mock
+
+        from homodyne.optimization.nlsq.wrapper import (
+            _compute_consistent_per_angle_init,
+        )
 
         # Create minimal data that may cause fitting to fail
         class BadStratifiedData:
@@ -1028,8 +1065,13 @@ class TestConsistentPerAngleInit:
         stratified_data = BadStratifiedData()
         physical_params = np.array([1000.0, 0.5, 0.0, 0.002, 0.3, 0.0, 45.0])
         physical_param_names = [
-            "D0", "alpha", "D_offset",
-            "gamma_dot_t0", "beta", "gamma_dot_t_offset", "phi0"
+            "D0",
+            "alpha",
+            "D_offset",
+            "gamma_dot_t0",
+            "beta",
+            "gamma_dot_t_offset",
+            "phi0",
         ]
 
         default_contrast = 0.5
@@ -1049,15 +1091,22 @@ class TestConsistentPerAngleInit:
 
     def test_consistent_init_zero_shear_rate(self):
         """TC-INIT-006: Zero shear rate should behave like static mode."""
-        from homodyne.optimization.nlsq.wrapper import _compute_consistent_per_angle_init
+        from homodyne.optimization.nlsq.wrapper import (
+            _compute_consistent_per_angle_init,
+        )
 
         stratified_data = self._create_mock_stratified_data(n_phi=10)
 
         # Laminar flow params but with gamma_dot_t0 = 0
         physical_params = np.array([1000.0, 0.5, 0.0, 0.0, 0.3, 0.0, 45.0])
         physical_param_names = [
-            "D0", "alpha", "D_offset",
-            "gamma_dot_t0", "beta", "gamma_dot_t_offset", "phi0"
+            "D0",
+            "alpha",
+            "D_offset",
+            "gamma_dot_t0",
+            "beta",
+            "gamma_dot_t_offset",
+            "phi0",
         ]
 
         contrast, offset = _compute_consistent_per_angle_init(
@@ -1086,7 +1135,7 @@ class TestConsistentPerAngleInit:
         # Cases that should trigger consistent init
         assert 23 > n_phi_threshold  # 23 angles: should trigger
         assert 10 > n_phi_threshold  # 10 angles: should trigger
-        assert 4 > n_phi_threshold   # 4 angles: should trigger
+        assert 4 > n_phi_threshold  # 4 angles: should trigger
 
         # Cases that should NOT trigger consistent init
         assert not (3 > n_phi_threshold)  # 3 angles: should NOT trigger

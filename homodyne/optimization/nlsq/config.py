@@ -109,6 +109,11 @@ class NLSQConfig:
         Maximum recovery attempts per strategy. Default: 3.
     """
 
+    # NLSQ Workflow Settings (v2.11.0+)
+    # Controls NLSQ's WorkflowSelector for automatic strategy selection
+    workflow: str = "auto"  # "auto", "standard", "chunked", "streaming"
+    goal: str = "quality"  # "fast", "robust", "quality", "memory_efficient"
+
     # Loss function settings
     loss: str = "soft_l1"
     trust_region_scale: float = 1.0
@@ -276,6 +281,9 @@ class NLSQConfig:
         gradient_monitoring = anti_degeneracy.get("gradient_monitoring", {})
 
         config = cls(
+            # NLSQ Workflow Settings (v2.11.0+)
+            workflow=config_dict.get("workflow", "auto"),
+            goal=config_dict.get("goal", "quality"),
             # Loss function
             loss=config_dict.get("loss", "soft_l1"),
             trust_region_scale=float(config_dict.get("trust_region_scale", 1.0)),
@@ -700,6 +708,9 @@ class NLSQConfig:
             Configuration as dictionary.
         """
         return {
+            # NLSQ Workflow Settings (v2.11.0+)
+            "workflow": self.workflow,
+            "goal": self.goal,
             "loss": self.loss,
             "trust_region_scale": self.trust_region_scale,
             "max_iterations": self.max_iterations,
@@ -795,3 +806,59 @@ class NLSQConfig:
                 },
             },
         }
+
+    def to_workflow_kwargs(self) -> dict[str, Any]:
+        """Convert workflow settings to kwargs for NLSQ's CurveFit.
+
+        Maps NLSQConfig workflow/goal settings to NLSQ v0.4+ API parameters.
+
+        Returns
+        -------
+        dict
+            Kwargs for CurveFit or WorkflowSelector.
+
+        Notes
+        -----
+        For NLSQ v0.4+, these kwargs can be passed to:
+        - nlsq.CurveFit.curve_fit()
+        - nlsq.fit()
+        - nlsq.WorkflowSelector.select_workflow()
+
+        Example
+        -------
+        >>> config = NLSQConfig.from_dict(yaml_config)
+        >>> kwargs = config.to_workflow_kwargs()
+        >>> result = fitter.curve_fit(f, xdata, ydata, **kwargs)
+        """
+        kwargs: dict[str, Any] = {}
+
+        # Map workflow setting
+        if self.workflow != "auto":
+            # Map homodyne workflow names to NLSQ tier names
+            workflow_map = {
+                "standard": "STANDARD",
+                "chunked": "CHUNKED",
+                "streaming": "STREAMING",
+            }
+            kwargs["workflow_tier"] = workflow_map.get(self.workflow, self.workflow)
+
+        # Map goal setting
+        if self.goal != "quality":  # quality is default
+            goal_map = {
+                "fast": "FAST",
+                "robust": "ROBUST",
+                "quality": "QUALITY",
+                "memory_efficient": "MEMORY_EFFICIENT",
+            }
+            kwargs["optimization_goal"] = goal_map.get(self.goal, self.goal)
+
+        # Add convergence settings
+        kwargs["ftol"] = self.ftol
+        kwargs["gtol"] = self.gtol
+        kwargs["xtol"] = self.xtol
+        kwargs["max_nfev"] = self.max_iterations
+
+        # Add loss setting
+        kwargs["loss"] = self.loss
+
+        return kwargs

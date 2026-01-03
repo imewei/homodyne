@@ -13,12 +13,26 @@ Usage:
     >>> from homodyne.optimization.nlsq.memory import get_adaptive_memory_threshold
     >>> threshold_gb, info = get_adaptive_memory_threshold()
     >>> print(f"Threshold: {threshold_gb:.1f} GB")
+
+.. deprecated:: 2.11.0
+    These functions are deprecated. NLSQ's WorkflowSelector (v0.4+) handles
+    memory-based workflow selection automatically. Use
+    :class:`nlsq.caching.MemoryManager` for direct memory management.
 """
 
 import logging
 import os
 import warnings
 from typing import Any
+
+# Check if NLSQ MemoryManager is available (v0.4+)
+try:
+    from nlsq.caching import get_memory_manager as _nlsq_get_memory_manager
+
+    _NLSQ_MEMORY_MANAGER_AVAILABLE = True
+except ImportError:
+    _nlsq_get_memory_manager = None
+    _NLSQ_MEMORY_MANAGER_AVAILABLE = False
 
 # Module-level logger
 logger = logging.getLogger(__name__)
@@ -203,8 +217,7 @@ def get_adaptive_memory_threshold(
     info["detection_method"] = "fallback"
 
     logger.warning(
-        f"Memory detection failed. "
-        f"Using fallback threshold: {FALLBACK_THRESHOLD_GB} GB"
+        f"Memory detection failed. Using fallback threshold: {FALLBACK_THRESHOLD_GB} GB"
     )
 
     return FALLBACK_THRESHOLD_GB, info
@@ -251,6 +264,11 @@ def should_use_streaming(
 ) -> tuple[bool, dict[str, Any]]:
     """Determine if streaming mode should be used based on memory requirements.
 
+    .. deprecated:: 2.11.0
+        This function is deprecated. NLSQ's WorkflowSelector (v0.4+) handles
+        memory-based workflow selection automatically via
+        :class:`nlsq.core.workflow.WorkflowSelector`.
+
     Parameters
     ----------
     n_points : int
@@ -269,6 +287,13 @@ def should_use_streaming(
     info : dict
         Diagnostic information including estimated memory and threshold
     """
+    warnings.warn(
+        "should_use_streaming is deprecated since v2.11.0. "
+        "NLSQ's WorkflowSelector handles this automatically in v0.4+.",
+        DeprecationWarning,
+        stacklevel=2,
+    )
+
     # Get threshold
     if threshold_gb is None:
         threshold_gb, threshold_info = get_adaptive_memory_threshold(memory_fraction)

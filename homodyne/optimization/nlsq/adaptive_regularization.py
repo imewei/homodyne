@@ -92,7 +92,9 @@ class AdaptiveRegularizationConfig:
             ),
             lambda_base=safe_float(config_dict.get("lambda"), 1.0),
             target_cv=safe_float(config_dict.get("target_cv"), 0.10),
-            target_contribution=safe_float(config_dict.get("target_contribution"), 0.10),
+            target_contribution=safe_float(
+                config_dict.get("target_contribution"), 0.10
+            ),
             auto_tune_lambda=bool(config_dict.get("auto_tune_lambda", True)),
             max_cv=safe_float(config_dict.get("max_cv"), 0.20),
             group_indices=config_dict.get("group_indices"),
@@ -371,9 +373,7 @@ class AdaptiveRegularizer:
 
                         # Handle sign of mean
                         if mean_val >= 0:
-                            d_cv = (d_std * mean_val - std_val * d_mean) / (
-                                mean_val**2
-                            )
+                            d_cv = (d_std * mean_val - std_val * d_mean) / (mean_val**2)
                         else:
                             d_cv = (d_std * (-mean_val) - std_val * (-d_mean)) / (
                                 mean_val**2

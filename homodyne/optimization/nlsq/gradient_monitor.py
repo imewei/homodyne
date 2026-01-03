@@ -75,8 +75,12 @@ class GradientMonitorConfig:
     # For laminar_flow: index 2*n_phi + 3 is gamma_dot_t0
     watch_parameters: list[int] | None = None
     watch_threshold: float = 1e-8  # Gradient magnitude below this triggers warning
-    watch_consecutive_triggers: int = 3  # Must trigger N consecutive times (like ratio-based)
-    watch_min_iteration: int = 5  # Skip checks before this iteration (warmup grace period)
+    watch_consecutive_triggers: int = (
+        3  # Must trigger N consecutive times (like ratio-based)
+    )
+    watch_min_iteration: int = (
+        5  # Skip checks before this iteration (warmup grace period)
+    )
 
     @classmethod
     def from_dict(cls, config_dict: dict) -> GradientMonitorConfig:

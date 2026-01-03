@@ -15,21 +15,21 @@ from dataclasses import dataclass
 import numpy as np
 import pytest
 
-from homodyne.optimization.nlsq.fourier_reparam import (
-    FourierReparamConfig,
-    FourierReparameterizer,
-)
 from homodyne.optimization.nlsq.adaptive_regularization import (
     AdaptiveRegularizationConfig,
     AdaptiveRegularizer,
 )
+from homodyne.optimization.nlsq.fourier_reparam import (
+    FourierReparamConfig,
+    FourierReparameterizer,
+)
 from homodyne.optimization.nlsq.gradient_monitor import (
-    GradientMonitorConfig,
     GradientCollapseMonitor,
+    GradientMonitorConfig,
 )
 from homodyne.optimization.nlsq.shear_weighting import (
-    ShearWeightingConfig,
     ShearSensitivityWeighting,
+    ShearWeightingConfig,
 )
 
 
@@ -57,7 +57,9 @@ class TestLaminarFlow23PhiNocrash:
         Then the optimizer completes without errors.
         """
         n_phi = 23
-        n_physical = 7  # D0, alpha, D_offset, gamma_dot_t0, beta, gamma_dot_offset, phi0
+        n_physical = (
+            7  # D0, alpha, D_offset, gamma_dot_t0, beta, gamma_dot_offset, phi0
+        )
 
         # Create phi angles
         phi_angles = np.linspace(0, 2 * np.pi, n_phi, endpoint=False)
@@ -73,7 +75,9 @@ class TestLaminarFlow23PhiNocrash:
         per_angle_contrast = np.ones(n_phi) + 0.1 * np.random.randn(n_phi)
         per_angle_offset = np.ones(n_phi) * 0.5 + 0.05 * np.random.randn(n_phi)
 
-        fourier_coeffs = fourier.per_angle_to_fourier(per_angle_contrast, per_angle_offset)
+        fourier_coeffs = fourier.per_angle_to_fourier(
+            per_angle_contrast, per_angle_offset
+        )
 
         # Verify Fourier coefficients are produced
         assert len(fourier_coeffs) > 0
@@ -96,11 +100,15 @@ class TestLaminarFlow23PhiNocrash:
         reg = AdaptiveRegularizer(reg_config, n_phi=n_phi)
 
         # Create mock parameters (Fourier coeffs interpreted as per-angle for testing)
-        all_params = np.concatenate([
-            per_angle_contrast,
-            per_angle_offset,
-            np.array([1000.0, 0.5, 10.0, 0.002, 0.3, 0.0001, 0.0]),  # physical params
-        ])
+        all_params = np.concatenate(
+            [
+                per_angle_contrast,
+                per_angle_offset,
+                np.array(
+                    [1000.0, 0.5, 10.0, 0.002, 0.3, 0.0001, 0.0]
+                ),  # physical params
+            ]
+        )
 
         # Verify regularization doesn't crash
         reg_term = reg.compute_regularization(all_params, mse=0.04, n_points=1000)
@@ -394,7 +402,9 @@ class TestBackwardCompatibility3Phi:
         per_angle_contrast = np.array([1.0, 1.1, 0.9])
         per_angle_offset = np.array([0.5, 0.6, 0.4])
 
-        fourier_coeffs = fourier.per_angle_to_fourier(per_angle_contrast, per_angle_offset)
+        fourier_coeffs = fourier.per_angle_to_fourier(
+            per_angle_contrast, per_angle_offset
+        )
         contrast_out, offset_out = fourier.fourier_to_per_angle(fourier_coeffs)
 
         # Reconstruction quality depends on mode

@@ -120,6 +120,56 @@ class MultiStartConfig:
             degeneracy_threshold=nlsq_config.multi_start_degeneracy_threshold,
         )
 
+    def to_nlsq_global_config(self) -> Any:
+        """Convert to NLSQ's GlobalOptimizationConfig.
+
+        Returns
+        -------
+        GlobalOptimizationConfig
+            NLSQ global optimization configuration.
+
+        Raises
+        ------
+        ImportError
+            If NLSQ GlobalOptimizationConfig is not available.
+
+        Notes
+        -----
+        Maps homodyne's multi-start configuration to NLSQ's GlobalOptimizationConfig:
+        - sampling_strategy -> sampler (lhs, sobol, halton)
+        - use_screening -> elimination_rounds (0 if disabled)
+        - screen_keep_fraction -> elimination_fraction (inverted)
+        """
+        try:
+            from nlsq.global_optimization import GlobalOptimizationConfig
+        except ImportError as e:
+            raise ImportError(
+                "NLSQ GlobalOptimizationConfig not available. "
+                "Please install NLSQ >= 0.4.0: pip install nlsq>=0.4.0"
+            ) from e
+
+        # Map sampling strategy to NLSQ sampler
+        sampler_map = {
+            "latin_hypercube": "lhs",
+            "lhs": "lhs",
+            "sobol": "sobol",
+            "halton": "halton",
+            "random": "lhs",  # Fallback random to LHS
+        }
+        sampler = sampler_map.get(self.sampling_strategy, "lhs")
+
+        # Map screening to elimination rounds
+        # screen_keep_fraction=0.5 means 50% kept = 50% eliminated
+        elimination_fraction = 1.0 - self.screen_keep_fraction
+        elimination_rounds = 3 if self.use_screening else 0
+
+        return GlobalOptimizationConfig(
+            n_starts=self.n_starts,
+            sampler=sampler,
+            elimination_rounds=elimination_rounds,
+            elimination_fraction=elimination_fraction,
+        )
+
 
 # =============================================================================
 # Result Dataclasses
@@ -604,7 +654,9 @@ def screen_starts(
             with ThreadPoolExecutor(max_workers=n_workers) as executor:
                 costs = np.array(list(executor.map(cost_func, starts)))
         except Exception as e:
-            logger.warning(f"Parallel screening failed, falling back to sequential: {e}")
+            logger.warning(
+                f"Parallel screening failed, falling back to sequential: {e}"
+            )
             costs = np.array([cost_func(start) for start in starts])
     else:
         costs = np.array([cost_func(start) for start in starts])

@@ -96,7 +96,7 @@ except ImportError:
     HAS_PARAMETER_MANAGER = False
     ParameterManager = None
 
-# NLSQWrapper import for new implementation
+# NLSQWrapper import for legacy implementation
 try:
     from homodyne.optimization.nlsq.wrapper import NLSQWrapper, OptimizationResult
 
@@ -105,6 +105,20 @@ except ImportError:
     HAS_NLSQ_WRAPPER = False
     NLSQWrapper = None
     OptimizationResult = None
+
+# NLSQAdapter import for new CurveFit-based implementation (v2.11.0+)
+try:
+    from homodyne.optimization.nlsq.adapter import (
+        AdapterConfig,
+        NLSQAdapter,
+        is_adapter_available,
+    )
+
+    HAS_NLSQ_ADAPTER = is_adapter_available()
+except ImportError:
+    HAS_NLSQ_ADAPTER = False
+    NLSQAdapter = None
+    AdapterConfig = None
 
 # Multi-start optimization import (v2.6.0)
 try:
@@ -161,11 +175,15 @@ def fit_nlsq_jax(
     config: ConfigManager,
     initial_params: dict[str, float] | None = None,
     per_angle_scaling: bool = True,  # REQUIRED: per-angle is physically correct
+    use_adapter: bool = False,  # Experimental: use NLSQAdapter (CurveFit) instead of NLSQWrapper
 ) -> OptimizationResult:
-    """NLSQ trust-region nonlinear least squares optimization with per-angle scaling (NEW IMPLEMENTATION).
+    """NLSQ trust-region nonlinear least squares optimization with per-angle scaling.
 
-    Wrapper around NLSQWrapper that provides the public API.
-    Uses the NLSQ package (github.com/imewei/NLSQ) for trust-region optimization.
+    Uses NLSQ package (github.com/imewei/NLSQ) for trust-region optimization.
+
+    v2.11.0+: Experimental NLSQAdapter with CurveFit class available for
+    improved JIT caching and automatic workflow selection. Set use_adapter=True
+    to enable (default is False, uses NLSQWrapper).
 
     Primary optimization method implementing the scaled optimization process:
     c₂(φ,t₁,t₂) = 1 + contrast × [c₁(φ,t₁,t₂)]²
@@ -203,6 +221,10 @@ def fit_nlsq_jax(
         MUST be True. Per-angle contrast/offset parameters are physically correct as each
         scattering angle has different optical properties and detector responses.
         Legacy scalar mode (False) is no longer supported (removed Nov 2025).
+    use_adapter : bool, default=False
+        EXPERIMENTAL (v2.11.0+): If True, use NLSQAdapter with NLSQ's CurveFit
+        class for improved JIT caching and automatic workflow selection.
+        If False (default), use the stable NLSQWrapper implementation.
 
     Returns
     -------
@@ -216,12 +238,21 @@ def fit_nlsq_jax(
     ValueError
         If data validation fails
     """
+    # Determine which backend to use
+    _use_adapter = use_adapter and HAS_NLSQ_ADAPTER
 
-    if not HAS_NLSQ_WRAPPER:
-        raise ImportError(
-            "NLSQWrapper is required for NLSQ optimization. "
-            "Ensure homodyne.optimization.nlsq_wrapper is available.",
-        )
+    if _use_adapter:
+        logger.debug("Using NLSQAdapter (CurveFit class) for optimization")
+    else:
+        if use_adapter and not HAS_NLSQ_ADAPTER:
+            logger.warning(
+                "NLSQAdapter requested but not available, falling back to NLSQWrapper"
+            )
+        if not HAS_NLSQ_WRAPPER:
+            raise ImportError(
+                "NLSQWrapper is required for NLSQ optimization. "
+                "Ensure homodyne.optimization.nlsq_wrapper is available.",
+            )
 
     logger.info("=" * 60)
     logger.info("NLSQ OPTIMIZATION")
@@ -421,24 +452,110 @@ def fit_nlsq_jax(
         _ensure_positive_sigma(data)
 
     diagnostics_enabled = _is_nlsq_diagnostics_enabled(config)
-
-    # Create wrapper and run optimization
-    # Note: enable_recovery=True provides automatic error recovery for production use
-    wrapper = NLSQWrapper(enable_large_dataset=True, enable_recovery=True)
-
     shear_transform_cfg = _extract_shear_transform_config(config)
 
-    result = wrapper.fit(
-        data=data,
-        config=config,
-        initial_params=x0,
-        bounds=bounds,
-        analysis_mode=analysis_mode,
-        per_angle_scaling=per_angle_scaling,
-        diagnostics_enabled=diagnostics_enabled,
-        shear_transforms=shear_transform_cfg,
-        per_angle_scaling_initial=per_angle_scaling_initial,
-    )
+    # ==========================================================================
+    # T021-T024: Fallback mechanism from NLSQAdapter to NLSQWrapper
+    # ==========================================================================
+    adapter_error: Exception | None = None
+    fallback_occurred = False
+
+    # Create optimizer and run optimization
+    if _use_adapter:
+        # T021: Try NLSQAdapter first with CurveFit class (v2.11.0+)
+        try:
+            adapter_config = AdapterConfig(
+                enable_cache=True,
+                enable_jit=True,
+                enable_recovery=True,
+                enable_stability=True,
+                goal="quality",  # XPCS requires precision
+            )
+            adapter = NLSQAdapter(config=adapter_config)
+            logger.debug("Attempting optimization with NLSQAdapter")
+
+            result = adapter.fit(
+                data=data,
+                config=config,
+                initial_params=x0,
+                bounds=bounds,
+                analysis_mode=analysis_mode,
+                per_angle_scaling=per_angle_scaling,
+                diagnostics_enabled=diagnostics_enabled,
+                shear_transforms=shear_transform_cfg,
+                per_angle_scaling_initial=per_angle_scaling_initial,
+            )
+
+            # T023: Add fallback_occurred to device_info (adapter succeeded)
+            result.device_info["fallback_occurred"] = False
+            result.device_info["fallback_reason"] = None
+            logger.info("NLSQAdapter optimization succeeded")
+
+        except Exception as e:
+            # T022: Log WARNING when fallback occurs
+            adapter_error = e
+            logger.warning("NLSQAdapter failed, falling back to NLSQWrapper: %s", e)
+            fallback_occurred = True
+            # Fall through to wrapper below
+
+    # Use NLSQWrapper if: (1) use_adapter=False, or (2) adapter failed
+    if not _use_adapter or fallback_occurred:
+        try:
+            # Use legacy NLSQWrapper
+            # Note: enable_recovery=True provides automatic error recovery
+            wrapper = NLSQWrapper(enable_large_dataset=True, enable_recovery=True)
+            logger.debug("Attempting optimization with NLSQWrapper")
+
+            result = wrapper.fit(
+                data=data,
+                config=config,
+                initial_params=x0,
+                bounds=bounds,
+                analysis_mode=analysis_mode,
+                per_angle_scaling=per_angle_scaling,
+                diagnostics_enabled=diagnostics_enabled,
+                shear_transforms=shear_transform_cfg,
+                per_angle_scaling_initial=per_angle_scaling_initial,
+            )
+
+            # T023: Add fallback info to device_info
+            result.device_info["adapter"] = "NLSQWrapper"
+            result.device_info["fallback_occurred"] = fallback_occurred
+            result.device_info["fallback_reason"] = (
+                str(adapter_error) if adapter_error else None
+            )
+            if fallback_occurred:
+                logger.info("NLSQWrapper fallback optimization succeeded")
+            else:
+                logger.info("NLSQWrapper optimization succeeded")
+
+        except Exception as wrapper_error:
+            # T024: Both adapter and wrapper failed - return failed result
+            logger.error(
+                "Both NLSQAdapter and NLSQWrapper failed: adapter=%s, wrapper=%s",
+                adapter_error,
+                wrapper_error,
+            )
+            n_params = len(x0)
+            result = OptimizationResult(
+                parameters=np.asarray(x0),
+                uncertainties=np.zeros(n_params),
+                covariance=np.eye(n_params),
+                chi_squared=float("inf"),
+                reduced_chi_squared=float("inf"),
+                convergence_status="failed",
+                iterations=0,
+                execution_time=0.0,
+                device_info={
+                    "device": "cpu",
+                    "adapter": "NLSQWrapper",
+                    "fallback_occurred": fallback_occurred,
+                    "fallback_reason": str(adapter_error) if adapter_error else None,
+                    "wrapper_error": str(wrapper_error),
+                },
+                recovery_actions=[],
+                quality_flag="poor",
+            )
 
     # Log optimization results
     logger.info("=" * 60)
@@ -461,14 +578,6 @@ def fit_nlsq_jax(
         # Legacy: n_params = 2 + n_physical
         if per_angle_scaling and n_params > (2 + n_physical):
             n_angles = (n_params - n_physical) // 2
-            # Build proper parameter labels
-            from homodyne.optimization.nlsq.results import build_parameter_labels
-
-            param_labels = build_parameter_labels(
-                per_angle_scaling=True,
-                n_phi=n_angles,
-                physical_param_names=physical_param_names,
-            )
 
             # Log summary with physical parameters first (most important)
             logger.info(f"Fitted parameters (per-angle scaling: {n_angles} angles):")
@@ -476,7 +585,9 @@ def fit_nlsq_jax(
             physical_start_idx = 2 * n_angles
 
             # Check uncertainty array size matches parameter array size
-            unc_array = result.uncertainties if hasattr(result, "uncertainties") else None
+            unc_array = (
+                result.uncertainties if hasattr(result, "uncertainties") else None
+            )
             unc_size = len(unc_array) if unc_array is not None else 0
             if unc_array is not None and unc_size != n_params:
                 logger.warning(
@@ -709,7 +820,7 @@ def _load_initial_params_from_config(
 
 
 def _estimate_contrast_offset_from_data(
-    data: dict[str, Any],
+    data: Any,
 ) -> tuple[float, float]:
     """Estimate contrast and offset from experimental g2 data.
 
@@ -717,8 +828,8 @@ def _estimate_contrast_offset_from_data(
 
     Parameters
     ----------
-    data : dict
-        Experimental data with 'g2' or 'c2_exp' key containing correlation data
+    data : dict or object
+        Experimental data with 'g2' or 'c2_exp' key/attribute containing correlation data
 
     Returns
     -------
@@ -729,9 +840,15 @@ def _estimate_contrast_offset_from_data(
     """
     # Extract g2 data (try multiple possible key names)
     # Note: Cannot use `or` operator with numpy arrays as it evaluates truth value
-    g2 = data.get("g2")
-    if g2 is None:
-        g2 = data.get("c2_exp")
+    # Support both dict-like and object-like data access
+    if isinstance(data, dict):
+        g2 = data.get("g2")
+        if g2 is None:
+            g2 = data.get("c2_exp")
+    else:
+        g2 = getattr(data, "g2", None)
+        if g2 is None:
+            g2 = getattr(data, "c2_exp", None)
 
     if g2 is None:
         logger.warning(

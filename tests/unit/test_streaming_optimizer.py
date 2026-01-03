@@ -23,6 +23,11 @@ import pytest
 from homodyne.optimization.exceptions import NLSQConvergenceError, NLSQNumericalError
 from homodyne.optimization.nlsq.wrapper import OptimizationStrategy
 
+# Suppress deprecation warnings for DatasetSizeStrategy tests
+pytestmark = pytest.mark.filterwarnings(
+    "ignore:DatasetSizeStrategy is deprecated:DeprecationWarning"
+)
+
 
 class TestStreamingOptimizerLargeDatasets:
     """Test StreamingOptimizer with large datasets >100M points."""

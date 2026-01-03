@@ -9,17 +9,32 @@ dataset size and available memory. It automatically chooses between:
 
 The strategy selection is based on NLSQ best practices:
 https://nlsq.readthedocs.io/en/latest/guides/large_datasets.html
+
+.. deprecated:: 2.11.0
+    This module is deprecated. Use :class:`nlsq.core.workflow.WorkflowSelector`
+    directly for automatic workflow selection in NLSQ v0.4+.
 """
 
 from __future__ import annotations
 
 import logging
+import warnings
 from enum import Enum
 from typing import Any
 
 import psutil
 
 logger = logging.getLogger(__name__)
+
+# Check if NLSQ WorkflowSelector is available (v0.4+)
+try:
+    from nlsq.core.workflow import WorkflowSelector, WorkflowTier
+
+    _NLSQ_WORKFLOW_AVAILABLE = True
+except ImportError:
+    WorkflowSelector = None  # type: ignore[assignment, misc]
+    WorkflowTier = None  # type: ignore[assignment, misc]
+    _NLSQ_WORKFLOW_AVAILABLE = False
 
 
 class OptimizationStrategy(Enum):
@@ -96,6 +111,10 @@ class DatasetSizeStrategy:
     def __init__(self, config: dict[str, Any] | None = None):
         """Initialize strategy selector.
 
+        .. deprecated:: 2.11.0
+            Use :class:`nlsq.core.workflow.WorkflowSelector` directly for
+            automatic workflow selection in NLSQ v0.4+.
+
         Parameters
         ----------
         config : dict, optional
@@ -104,10 +123,21 @@ class DatasetSizeStrategy:
             - memory_limit_gb: Custom memory limit
             - enable_progress: Enable/disable progress bars
         """
+        warnings.warn(
+            "DatasetSizeStrategy is deprecated since v2.11.0. "
+            "Use nlsq.core.workflow.WorkflowSelector for automatic "
+            "workflow selection in NLSQ v0.4+.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+
         self.config = config or {}
         self._override = self.config.get("strategy_override")
         self._memory_limit_gb = self.config.get("memory_limit_gb")
         self._enable_progress = self.config.get("enable_progress", True)
+
+        # Initialize NLSQ WorkflowSelector if available for internal use
+        self._nlsq_selector = WorkflowSelector() if _NLSQ_WORKFLOW_AVAILABLE else None
 
         if self._override:
             logger.info(f"Strategy override enabled: {self._override}")

@@ -296,8 +296,10 @@ class TestShearWeightingPhysics:
         n = len(offsets)
         for i in range(n // 2):
             np.testing.assert_allclose(
-                weights[i], weights[n - 1 - i], rtol=1e-10,
-                err_msg=f"Weights not symmetric for offset {offsets[i]}"
+                weights[i],
+                weights[n - 1 - i],
+                rtol=1e-10,
+                err_msg=f"Weights not symmetric for offset {offsets[i]}",
             )
 
     def test_extreme_angles_get_minimum_weight(self):

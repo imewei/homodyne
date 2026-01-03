@@ -308,11 +308,17 @@ class StreamingExecutor(OptimizationExecutor):
         config = HybridStreamingConfig(
             chunk_size=self.checkpoint_config.get("chunk_size", 50000),
             warmup_iterations=self.checkpoint_config.get("warmup_iterations", 100),
-            max_warmup_iterations=self.checkpoint_config.get("max_warmup_iterations", 500),
-            gauss_newton_max_iterations=self.checkpoint_config.get("gauss_newton_max_iterations", 50),
+            max_warmup_iterations=self.checkpoint_config.get(
+                "max_warmup_iterations", 500
+            ),
+            gauss_newton_max_iterations=self.checkpoint_config.get(
+                "gauss_newton_max_iterations", 50
+            ),
             gauss_newton_tol=self.checkpoint_config.get("gauss_newton_tol", 1e-8),
             normalize=self.checkpoint_config.get("normalize", True),
-            normalization_strategy=self.checkpoint_config.get("normalization_strategy", "bounds"),
+            normalization_strategy=self.checkpoint_config.get(
+                "normalization_strategy", "bounds"
+            ),
         )
 
         optimizer = AdaptiveHybridStreamingOptimizer(config)

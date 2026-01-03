@@ -5,6 +5,9 @@ Tests cover:
 - Memory-based adjustments
 - Configuration overrides
 - Edge cases and error handling
+
+Note: DatasetSizeStrategy is deprecated since v2.11.0 but tests remain to
+verify backward compatibility until removal.
 """
 
 import pytest
@@ -13,6 +16,11 @@ from homodyne.optimization.nlsq.strategies.selection import (
     DatasetSizeStrategy,
     OptimizationStrategy,
     estimate_memory_requirements,
+)
+
+# Suppress deprecation warnings for DatasetSizeStrategy tests
+pytestmark = pytest.mark.filterwarnings(
+    "ignore:DatasetSizeStrategy is deprecated:DeprecationWarning"
 )
 
 

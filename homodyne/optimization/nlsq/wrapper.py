@@ -1,5 +1,39 @@
 """NLSQ Wrapper for Homodyne Optimization.
 
+Role and When to Use (v2.11.0+)
+-------------------------------
+
+**NLSQWrapper** (this module) is the **stable fallback adapter** for:
+- Complex optimizations requiring full anti-degeneracy integration
+- laminar_flow mode with many phi angles (> 6)
+- Large datasets (> 100M points) requiring streaming/chunking strategies
+- Custom transforms or advanced recovery mechanisms
+- Production stability where reliability is critical
+
+Use **NLSQAdapter** instead for:
+- Standard optimizations (static_isotropic mode)
+- Small to medium datasets (< 10M points)
+- Multi-start optimization (model caching provides 3-5× speedup)
+- Performance-critical workflows requiring JIT compilation
+
+**Key Differences:**
+
+| Feature                | NLSQWrapper | NLSQAdapter |
+|------------------------|-------------|-------------|
+| Model caching          | ✗ None      | ✓ Built-in  |
+| JIT compilation        | ✓ Manual    | ✓ Auto      |
+| Workflow auto-select   | ✓ Custom    | ✓ Via NLSQ  |
+| Anti-degeneracy layers | ✓ Full      | ✓ Via fit() |
+| Recovery system        | 3-attempt   | NLSQ native |
+| Streaming support      | Full custom | Via NLSQ    |
+
+**Decision Guide:**
+
+1. If you need robust streaming for 100M+ points: Use NLSQWrapper
+2. If you need full anti-degeneracy control: Use NLSQWrapper
+3. If you need maximum speed for multi-start optimization: Use NLSQAdapter
+4. Default recommendation: NLSQAdapter with automatic fallback to NLSQWrapper
+
 This module provides an adapter layer between homodyne's optimization API
 and the NLSQ package's trust-region nonlinear least squares interface.
 
@@ -16,6 +50,7 @@ Key Features:
 - CPU-optimized execution through JAX
 - Progress logging and convergence diagnostics
 - Scientifically validated (7/7 validation tests passed, T036-T041)
+- Serves as fallback when NLSQAdapter fails
 
 Per-Angle Scaling Fix (v2.2):
 - Fixes silent optimization failures with per-angle parameters on large datasets
@@ -66,12 +101,9 @@ except ImportError:
     HybridStreamingConfig = None
 
 import logging
-import os
-import warnings
 
 from homodyne.optimization.batch_statistics import BatchStatistics
-from homodyne.optimization.checkpoint_manager import CheckpointManager
-from homodyne.optimization.exceptions import NLSQCheckpointError, NLSQOptimizationError
+from homodyne.optimization.exceptions import NLSQOptimizationError
 from homodyne.optimization.nlsq.strategies.chunking import (
     StratificationDiagnostics,
     analyze_angle_distribution,
@@ -111,11 +143,6 @@ from homodyne.optimization.nlsq.transforms import (
     wrap_model_function_with_transforms,
     wrap_stratified_function_with_transforms,
 )
-from homodyne.optimization.nlsq.progress import (
-    ProgressConfig,
-    create_progress_callback,
-    create_streaming_progress_callback,
-)
 from homodyne.optimization.numerical_validation import NumericalValidator
 from homodyne.optimization.recovery_strategies import RecoveryStrategyApplicator
 
@@ -139,15 +166,11 @@ from homodyne.optimization.nlsq.hierarchical import (
 from homodyne.optimization.nlsq.shear_weighting import (
     ShearSensitivityWeighting,
     ShearWeightingConfig,
-    create_shear_weighting,
 )
 
 # Memory management utilities (extracted to memory.py for reduced complexity)
 from homodyne.optimization.nlsq.memory import (
     get_adaptive_memory_threshold,
-    detect_total_system_memory as _detect_total_system_memory,
-    DEFAULT_MEMORY_FRACTION as _DEFAULT_MEMORY_FRACTION,
-    FALLBACK_THRESHOLD_GB as _FALLBACK_THRESHOLD_GB,
 )
 
 # Parameter utilities (extracted to parameter_utils.py for reduced complexity)
@@ -1008,7 +1031,6 @@ class NLSQWrapper:
 
             # Extract target chunk size from config
             target_chunk_size = 100_000  # Default
-            streaming_config = None
             hybrid_streaming_config = None
             use_streaming_mode = False
             use_hybrid_streaming = False
@@ -1026,7 +1048,6 @@ class NLSQWrapper:
 
                 # Extract streaming configuration
                 nlsq_config = config.config.get("optimization", {}).get("nlsq", {})
-                streaming_config = nlsq_config.get("streaming", {})
                 hybrid_streaming_config = nlsq_config.get("hybrid_streaming", {})
 
                 # Support for explicit memory_threshold_gb (backwards compatible)
@@ -1068,7 +1089,9 @@ class NLSQWrapper:
             # Check if streaming mode should be used based on memory
             # Note: Check both STREAMING_AVAILABLE and HYBRID_STREAMING_AVAILABLE
             # because hybrid streaming may be available even when basic streaming isn't
-            if not use_streaming_mode and (STREAMING_AVAILABLE or HYBRID_STREAMING_AVAILABLE):
+            if not use_streaming_mode and (
+                STREAMING_AVAILABLE or HYBRID_STREAMING_AVAILABLE
+            ):
                 should_stream, estimated_gb, reason = self._should_use_streaming(
                     n_points=n_total_points,
                     n_params=len(validated_params),
@@ -4743,7 +4766,12 @@ class NLSQWrapper:
         # - Constant mode already prevents per-angle absorption (2 DoF vs 46)
         # - HierarchicalOptimizer expects n_per_angle = 2*n_phi or n_coeffs (Fourier)
         # - Using hierarchical with constant mode causes index mismatch error
-        if enable_hierarchical and per_angle_scaling and is_laminar_flow and not use_constant:
+        if (
+            enable_hierarchical
+            and per_angle_scaling
+            and is_laminar_flow
+            and not use_constant
+        ):
             # n_physical defined unconditionally above
             hier_config = HierarchicalConfig(
                 enable=True,
@@ -4772,12 +4800,21 @@ class NLSQWrapper:
                     "  Shear weighting: WILL BE APPLIED via hierarchical loss function"
                 )
             logger.info("=" * 60)
-        elif use_constant and enable_hierarchical and per_angle_scaling and is_laminar_flow:
+        elif (
+            use_constant
+            and enable_hierarchical
+            and per_angle_scaling
+            and is_laminar_flow
+        ):
             # Log that hierarchical is skipped due to constant scaling mode
             logger.info("=" * 60)
             logger.info("ANTI-DEGENERACY DEFENSE: Layer 2 - Hierarchical Optimization")
-            logger.info("  Skipped: constant scaling mode already prevents per-angle absorption")
-            logger.info("  Reason: Only 2 per-angle DoF (vs 46), no need for hierarchical alternation")
+            logger.info(
+                "  Skipped: constant scaling mode already prevents per-angle absorption"
+            )
+            logger.info(
+                "  Reason: Only 2 per-angle DoF (vs 46), no need for hierarchical alternation"
+            )
             logger.info("=" * 60)
 
         # Layer 3: Adaptive Relative Regularization Configuration
@@ -4819,9 +4856,7 @@ class NLSQWrapper:
                     f"(n_coeffs_per_param={n_coeffs_per_param})"
                 )
             else:
-                mode_group_indices = (
-                    None  # Use default: [(0, n_phi), (n_phi, 2*n_phi)]
-                )
+                mode_group_indices = None  # Use default: [(0, n_phi), (n_phi, 2*n_phi)]
                 logger.debug(
                     f"Using default regularization groups (Fourier mode not active): "
                     f"fourier_reparameterizer={fourier_reparameterizer is not None}, "
@@ -5295,8 +5330,7 @@ class NLSQWrapper:
             and ad_config.get("enable", True)
         )
 
-        # Track original params for diagnostics
-        original_initial_params = initial_params.copy()
+        # Track params for fitting
         fit_initial_params = initial_params.copy()
         fit_bounds = bounds
 

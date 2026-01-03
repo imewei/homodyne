@@ -119,7 +119,7 @@ _fallback_stats = {
 # Key: (t1_hash, t2_hash) where hash = (len, first_val, last_val)
 # Value: (t1_grid, t2_grid) JAX arrays
 _meshgrid_cache: dict[tuple, tuple] = {}
-_MESHGRID_CACHE_MAX_SIZE = 16  # Limit cache size to prevent memory bloat
+_MESHGRID_CACHE_MAX_SIZE = 64  # Increased for 23-angle datasets (v2.11.0+)
 
 # Performance Optimization (Spec 006 - FR-010, T040-T042): Cache statistics
 _cache_stats: dict[str, int] = {
@@ -280,6 +280,7 @@ def reset_cache_stats() -> None:
         "skipped_large": 0,
         "skipped_traced": 0,
     }
+
 
 # Global flags for availability checking
 jax_available = JAX_AVAILABLE

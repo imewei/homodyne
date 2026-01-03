@@ -55,6 +55,11 @@ from homodyne.optimization.nlsq.wrapper import (
 )
 from tests.factories.synthetic_data import generate_static_mode_dataset
 
+# Suppress deprecation warnings for DatasetSizeStrategy used internally by NLSQWrapper
+pytestmark = pytest.mark.filterwarnings(
+    "ignore:DatasetSizeStrategy is deprecated:DeprecationWarning"
+)
+
 # =============================================================================
 # Public API Tests (from test_nlsq_public_api.py)
 # =============================================================================
@@ -1228,7 +1233,11 @@ class TestNLSQOptimization:
                     )
 
     def test_nlsq_error_handling(self, test_config):
-        """Test NLSQ error handling with invalid data."""
+        """Test NLSQ error handling with invalid data.
+
+        Since v2.11.0, fit_nlsq_jax uses the fallback mechanism (US3) which
+        catches exceptions and returns a failed result instead of raising.
+        """
         # Test with missing data fields
         incomplete_data = {
             "t1": np.array([[0, 1], [1, 0]]),
@@ -1236,8 +1245,10 @@ class TestNLSQOptimization:
             # Missing required fields
         }
 
-        with pytest.raises((KeyError, ValueError, AttributeError)):
-            fit_nlsq_jax(incomplete_data, test_config)
+        # With fallback mechanism, errors are caught and returned as FAILED result
+        result = fit_nlsq_jax(incomplete_data, test_config)
+        # Check convergence_status (OptimizationResult) or chi_squared indicates failure
+        assert result.convergence_status == "failed" or np.isinf(result.chi_squared)
 
         # Test with completely invalid data (negative sigma values)
         invalid_data = {
@@ -2260,6 +2271,207 @@ class TestNLSQAPIIntegration:
         assert "Maximum iterations" in info["message"]
         # Identity pcov created when missing
         np.testing.assert_array_equal(pcov, np.eye(2))
+
+
+# =============================================================================
+# Adapter-to-Wrapper Fallback Tests (T025-T028)
+# =============================================================================
+
+
+@pytest.mark.unit
+class TestAdapterToWrapperFallback:
+    """Tests for NLSQAdapter to NLSQWrapper fallback mechanism (T025-T028)."""
+
+    def test_successful_fallback_when_adapter_fails(self):
+        """T025: Fallback succeeds when adapter fails.
+
+        Scenario: NLSQAdapter.fit() raises exception → NLSQWrapper.fit() succeeds
+        Expected: Result has fallback_occurred=True, adapter="NLSQWrapper"
+        """
+        from tests.factories.synthetic_data import generate_static_mode_dataset
+
+        # Generate minimal synthetic data
+        synthetic_data = generate_static_mode_dataset(
+            D0=1000.0,
+            alpha=0.5,
+            D_offset=10.0,
+            noise_level=0.01,
+            n_phi=3,
+            n_t1=10,
+            n_t2=10,
+        )
+
+        class MockConfig:
+            def __init__(self):
+                self.config = {
+                    "analysis_mode": "static",
+                    "optimization": {"nlsq": {}},
+                }
+
+        # Mock NLSQAdapter to fail
+        with patch("homodyne.optimization.nlsq.core.NLSQAdapter") as mock_adapter_class:
+            mock_adapter_instance = Mock()
+            mock_adapter_instance.fit.side_effect = RuntimeError(
+                "Simulated adapter failure"
+            )
+            mock_adapter_class.return_value = mock_adapter_instance
+
+            # Enable adapter availability
+            with patch("homodyne.optimization.nlsq.core.HAS_NLSQ_ADAPTER", True):
+                result = fit_nlsq_jax(
+                    data=synthetic_data,
+                    config=MockConfig(),
+                    use_adapter=True,
+                )
+
+        # Verify fallback occurred
+        assert result.device_info.get("fallback_occurred") is True
+        assert result.device_info.get("adapter") == "NLSQWrapper"
+        assert "Simulated adapter failure" in str(
+            result.device_info.get("fallback_reason", "")
+        )
+
+    def test_no_fallback_when_adapter_succeeds(self):
+        """T026: No fallback when adapter succeeds.
+
+        Scenario: NLSQAdapter.fit() succeeds
+        Expected: Result has fallback_occurred=False, adapter="NLSQAdapter"
+        """
+        from tests.factories.synthetic_data import generate_static_mode_dataset
+
+        synthetic_data = generate_static_mode_dataset(
+            D0=1000.0,
+            alpha=0.5,
+            D_offset=10.0,
+            noise_level=0.01,
+            n_phi=3,
+            n_t1=10,
+            n_t2=10,
+        )
+
+        class MockConfig:
+            def __init__(self):
+                self.config = {
+                    "analysis_mode": "static",
+                    "optimization": {"nlsq": {}},
+                }
+
+        # Mock NLSQAdapter to succeed
+        mock_result = OptimizationResult(
+            parameters=np.array([0.5, 0.5, 0.5, 1.0, 1.0, 1.0, 1000.0, 0.5, 10.0]),
+            uncertainties=np.zeros(9),
+            covariance=np.eye(9),
+            chi_squared=0.01,
+            reduced_chi_squared=0.01,
+            convergence_status="converged",
+            iterations=10,
+            execution_time=1.0,
+            device_info={"device": "cpu", "adapter": "NLSQAdapter"},
+        )
+
+        with patch("homodyne.optimization.nlsq.core.NLSQAdapter") as mock_adapter_class:
+            mock_adapter_instance = Mock()
+            mock_adapter_instance.fit.return_value = mock_result
+            mock_adapter_class.return_value = mock_adapter_instance
+
+            with patch("homodyne.optimization.nlsq.core.HAS_NLSQ_ADAPTER", True):
+                result = fit_nlsq_jax(
+                    data=synthetic_data,
+                    config=MockConfig(),
+                    use_adapter=True,
+                )
+
+        # Verify no fallback
+        assert result.device_info.get("fallback_occurred") is False
+        assert result.device_info.get("adapter") == "NLSQAdapter"
+
+    def test_both_adapter_and_wrapper_fail(self):
+        """T027: Return failed result when both adapter and wrapper fail.
+
+        Scenario: NLSQAdapter.fit() fails → NLSQWrapper.fit() also fails
+        Expected: Result has convergence_status="failed", both errors recorded
+        """
+        from tests.factories.synthetic_data import generate_static_mode_dataset
+
+        synthetic_data = generate_static_mode_dataset(
+            D0=1000.0,
+            alpha=0.5,
+            D_offset=10.0,
+            noise_level=0.01,
+            n_phi=3,
+            n_t1=10,
+            n_t2=10,
+        )
+
+        class MockConfig:
+            def __init__(self):
+                self.config = {
+                    "analysis_mode": "static",
+                    "optimization": {"nlsq": {}},
+                }
+
+        # Mock both adapter and wrapper to fail
+        with patch("homodyne.optimization.nlsq.core.NLSQAdapter") as mock_adapter_class:
+            mock_adapter_instance = Mock()
+            mock_adapter_instance.fit.side_effect = RuntimeError("Adapter error")
+            mock_adapter_class.return_value = mock_adapter_instance
+
+            with patch(
+                "homodyne.optimization.nlsq.core.NLSQWrapper"
+            ) as mock_wrapper_class:
+                mock_wrapper_instance = Mock()
+                mock_wrapper_instance.fit.side_effect = RuntimeError("Wrapper error")
+                mock_wrapper_class.return_value = mock_wrapper_instance
+
+                with patch("homodyne.optimization.nlsq.core.HAS_NLSQ_ADAPTER", True):
+                    result = fit_nlsq_jax(
+                        data=synthetic_data,
+                        config=MockConfig(),
+                        use_adapter=True,
+                    )
+
+        # Verify both failed
+        assert result.convergence_status == "failed"
+        assert result.device_info.get("fallback_occurred") is True
+        assert "Adapter error" in str(result.device_info.get("fallback_reason", ""))
+        assert "Wrapper error" in str(result.device_info.get("wrapper_error", ""))
+
+    def test_use_adapter_false_skips_adapter(self):
+        """T028: use_adapter=False skips adapter entirely.
+
+        Scenario: use_adapter=False
+        Expected: NLSQAdapter is never called, NLSQWrapper is used directly
+        """
+        from tests.factories.synthetic_data import generate_static_mode_dataset
+
+        synthetic_data = generate_static_mode_dataset(
+            D0=1000.0,
+            alpha=0.5,
+            D_offset=10.0,
+            noise_level=0.01,
+            n_phi=3,
+            n_t1=10,
+            n_t2=10,
+        )
+
+        class MockConfig:
+            def __init__(self):
+                self.config = {
+                    "analysis_mode": "static",
+                    "optimization": {"nlsq": {}},
+                }
+
+        # Run with use_adapter=False - should use wrapper directly
+        result = fit_nlsq_jax(
+            data=synthetic_data,
+            config=MockConfig(),
+            use_adapter=False,
+        )
+
+        # Verify wrapper was used, no fallback
+        assert result.device_info.get("adapter") == "NLSQWrapper"
+        assert result.device_info.get("fallback_occurred") is False
+        assert result.device_info.get("fallback_reason") is None
 
 
 if __name__ == "__main__":

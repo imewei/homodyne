@@ -233,7 +233,7 @@ def estimate_per_angle_scaling(
 
         # Find lag thresholds
         lag_threshold_high = np.percentile(delta_t_angle, 80)  # 0.80 quantile
-        lag_threshold_low = np.percentile(delta_t_angle, 20)   # 0.20 quantile
+        lag_threshold_low = np.percentile(delta_t_angle, 20)  # 0.20 quantile
 
         # OFFSET: from large-lag region
         large_lag_mask = delta_t_angle >= lag_threshold_high

@@ -34,14 +34,14 @@ except ImportError:
 
 # V2 logging integration
 try:
-    from homodyne.utils.logging import get_logger
     from homodyne.data.validators import (
+        validate_enum_value,
         validate_file_path,
         validate_frame_range,
-        validate_positive_value,
         validate_numeric_range,
-        validate_enum_value,
+        validate_positive_value,
     )
+    from homodyne.utils.logging import get_logger
 
     HAS_V2_LOGGING = True
     HAS_VALIDATORS = True
@@ -463,17 +463,25 @@ def _validate_parameter_values_fallback(config: dict[str, Any]) -> list[str]:
             if q_max is not None and q_max <= 0:
                 errors.append(f"q_range.max ({q_max}) must be positive")
             if q_min is not None and q_max is not None and q_min >= q_max:
-                errors.append(f"q_range.min ({q_min}) must be less than q_range.max ({q_max})")
+                errors.append(
+                    f"q_range.min ({q_min}) must be less than q_range.max ({q_max})"
+                )
 
         phi_range = data_filtering.get("phi_range", {})
         if phi_range:
             phi_min, phi_max = phi_range.get("min"), phi_range.get("max")
             if phi_min is not None and phi_max is not None and phi_min >= phi_max:
-                errors.append(f"phi_range.min ({phi_min}) must be less than phi_range.max ({phi_max})")
+                errors.append(
+                    f"phi_range.min ({phi_min}) must be less than phi_range.max ({phi_max})"
+                )
             if phi_min is not None and not (-360 <= phi_min <= 360):
-                errors.append(f"phi_range.min ({phi_min}) should be in range [-360, 360]")
+                errors.append(
+                    f"phi_range.min ({phi_min}) should be in range [-360, 360]"
+                )
             if phi_max is not None and not (-360 <= phi_max <= 360):
-                errors.append(f"phi_range.max ({phi_max}) should be in range [-360, 360]")
+                errors.append(
+                    f"phi_range.max ({phi_max}) should be in range [-360, 360]"
+                )
 
         quality_threshold = data_filtering.get("quality_threshold")
         if quality_threshold is not None and quality_threshold <= 0:
@@ -481,24 +489,34 @@ def _validate_parameter_values_fallback(config: dict[str, Any]) -> list[str]:
 
         combine_criteria = data_filtering.get("combine_criteria", "AND")
         if combine_criteria not in ["AND", "OR"]:
-            errors.append(f"combine_criteria must be one of: AND, OR (got: {combine_criteria})")
+            errors.append(
+                f"combine_criteria must be one of: AND, OR (got: {combine_criteria})"
+            )
 
         validation_level = data_filtering.get("validation_level", "basic")
         if validation_level not in ["basic", "strict"]:
-            errors.append(f"data_filtering.validation_level must be one of: basic, strict (got: {validation_level})")
+            errors.append(
+                f"data_filtering.validation_level must be one of: basic, strict (got: {validation_level})"
+            )
 
     # v2_features validation
     output_format = v2_features.get("output_format", "auto")
     if output_format not in ["numpy", "jax", "auto"]:
-        errors.append(f"output_format must be one of: numpy, jax, auto (got: {output_format})")
+        errors.append(
+            f"output_format must be one of: numpy, jax, auto (got: {output_format})"
+        )
 
     validation_level = v2_features.get("validation_level", "basic")
     if validation_level not in ["none", "basic", "full"]:
-        errors.append(f"validation_level must be one of: none, basic, full (got: {validation_level})")
+        errors.append(
+            f"validation_level must be one of: none, basic, full (got: {validation_level})"
+        )
 
     cache_strategy = v2_features.get("cache_strategy", "intelligent")
     if cache_strategy not in ["none", "simple", "intelligent"]:
-        errors.append(f"cache_strategy must be one of: none, simple, intelligent (got: {cache_strategy})")
+        errors.append(
+            f"cache_strategy must be one of: none, simple, intelligent (got: {cache_strategy})"
+        )
 
     return errors
 

@@ -760,10 +760,9 @@ class XPCSDataLoader:
 
             # Check if quality-based filtering is enabled (requires loading all matrices)
             filtering_config = self.config.get("data_filtering", {})
-            quality_filtering_enabled = (
-                filtering_config.get("enabled", False)
-                and filtering_config.get("quality_filtering", {}).get("enabled", False)
-            )
+            quality_filtering_enabled = filtering_config.get(
+                "enabled", False
+            ) and filtering_config.get("quality_filtering", {}).get("enabled", False)
 
             # Select optimal q-vector first (doesn't require matrices)
             logger.debug("Selecting optimal q-vector for caching")
@@ -820,7 +819,9 @@ class XPCSDataLoader:
                     final_indices = q_matching_indices
 
                 # Extract matrices for final indices
-                selected_c2_matrices = [c2_matrices_for_filtering[i] for i in final_indices]
+                selected_c2_matrices = [
+                    c2_matrices_for_filtering[i] for i in final_indices
+                ]
             else:
                 # OPTIMIZATION: No quality filtering - selective HDF5 reads
                 # Only load the matrices we actually need (up to 98% I/O reduction)
@@ -846,7 +847,7 @@ class XPCSDataLoader:
                 # Selective load: only read the matrices we need
                 logger.info(
                     f"Selective HDF5 read: loading {len(final_indices)} of {len(c2_keys)} matrices "
-                    f"({len(final_indices)/len(c2_keys)*100:.1f}% I/O)"
+                    f"({len(final_indices) / len(c2_keys) * 100:.1f}% I/O)"
                 )
                 selected_c2_matrices = []
                 for idx in final_indices:

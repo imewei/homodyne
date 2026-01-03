@@ -253,9 +253,7 @@ class BenchmarkingMixin:
                         g2_result.shape if hasattr(g2_result, "shape") else "scalar"
                     ),
                     "gradient_shape": (
-                        grad_result.shape
-                        if grad_result is not None
-                        else "not_computed"
+                        grad_result.shape if grad_result is not None else "not_computed"
                     ),
                 }
 

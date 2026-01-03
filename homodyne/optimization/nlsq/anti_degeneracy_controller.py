@@ -629,3 +629,108 @@ class AntiDegeneracyController:
         """Reset the gradient collapse monitor state."""
         if self.monitor:
             self.monitor.reset()
+
+    def create_nlsq_callbacks(self) -> dict[str, Any]:
+        """Create callbacks for NLSQ's CurveFit integration.
+
+        This method creates callbacks that can be passed to NLSQ's CurveFit
+        or AdaptiveHybridStreamingOptimizer to enable anti-degeneracy defenses.
+
+        Returns
+        -------
+        dict
+            Dictionary of callbacks compatible with NLSQ:
+            - 'loss_augmentation': Callable for regularization loss
+            - 'iteration_callback': Callable for gradient monitoring
+            - 'group_variance_indices': Indices for group variance regularization
+
+        Notes
+        -----
+        For NLSQ v0.4+, callbacks can be passed to CurveFit.curve_fit() or
+        injected into HybridStreamingConfig.
+
+        Example
+        -------
+        >>> controller = AntiDegeneracyController.from_config(config, n_phi, phi_angles, n_physical)
+        >>> callbacks = controller.create_nlsq_callbacks()
+        >>> result = fitter.curve_fit(f, xdata, ydata, **callbacks)
+        """
+        if not self.is_enabled:
+            return {}
+
+        callbacks: dict[str, Any] = {}
+
+        # Group variance indices for NLSQ's internal regularization
+        group_indices = self.get_group_variance_indices()
+        if group_indices:
+            callbacks["group_variance_indices"] = group_indices
+
+        # Regularization lambda value from adaptive regularizer
+        if self.regularizer:
+            callbacks["group_variance_lambda"] = self.regularizer.lambda_value
+
+        # Loss augmentation callback for Layer 3 (Adaptive Regularization)
+        if self.regularizer:
+
+            def loss_augmentation(params: np.ndarray, residuals: np.ndarray) -> float:
+                """Add regularization penalty to loss."""
+                return float(self.regularizer.compute_regularization(params))
+
+            callbacks["loss_augmentation"] = loss_augmentation
+
+        # Iteration callback for Layer 4 (Gradient Monitoring)
+        if self.monitor:
+
+            def iteration_callback(
+                iteration: int,
+                params: np.ndarray,
+                cost: float,
+                gradient: np.ndarray | None = None,
+            ) -> None:
+                """Monitor gradients for collapse detection."""
+                if gradient is not None:
+                    self.monitor.check_gradient(gradient, iteration)
+
+            callbacks["iteration_callback"] = iteration_callback
+
+        logger.debug(f"Created NLSQ callbacks: {list(callbacks.keys())}")
+        return callbacks
+
+    def create_hybrid_streaming_config_kwargs(self) -> dict[str, Any]:
+        """Create kwargs for NLSQ's HybridStreamingConfig.
+
+        Returns kwargs that can be used to configure NLSQ's
+        AdaptiveHybridStreamingOptimizer with anti-degeneracy features.
+
+        Returns
+        -------
+        dict
+            Configuration kwargs for HybridStreamingConfig:
+            - 'enable_group_variance_regularization': bool
+            - 'group_variance_lambda': float
+            - 'group_variance_indices': list[tuple[int, int]]
+
+        Notes
+        -----
+        For NLSQ v0.4+, pass these to HybridStreamingConfig constructor.
+
+        Example
+        -------
+        >>> controller = AntiDegeneracyController.from_config(...)
+        >>> kwargs = controller.create_hybrid_streaming_config_kwargs()
+        >>> config = HybridStreamingConfig(**kwargs)
+        """
+        if not self.is_enabled:
+            return {}
+
+        kwargs: dict[str, Any] = {}
+
+        # Group variance regularization
+        group_indices = self.get_group_variance_indices()
+        if group_indices and self.regularizer:
+            kwargs["enable_group_variance_regularization"] = True
+            kwargs["group_variance_lambda"] = self.regularizer.lambda_value
+            kwargs["group_variance_indices"] = group_indices
+
+        logger.debug(f"Created HybridStreamingConfig kwargs: {list(kwargs.keys())}")
+        return kwargs

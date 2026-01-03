@@ -13,6 +13,11 @@ import pytest
 
 from homodyne.optimization.nlsq.wrapper import NLSQWrapper
 
+# Suppress deprecation warnings for DatasetSizeStrategy used internally by NLSQWrapper
+pytestmark = pytest.mark.filterwarnings(
+    "ignore:DatasetSizeStrategy is deprecated:DeprecationWarning"
+)
+
 
 class TestResidualFunctionCreation:
     """Test residual function creation (T012)."""

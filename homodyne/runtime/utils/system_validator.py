@@ -737,7 +737,8 @@ alias hc-iso >/dev/null 2>&1 && echo "shortcut_alias_works" || echo "shortcut_al
                             )
                     except Exception as exc:
                         logger.debug(
-                            "Version parsing for hybrid streaming optimizer failed: %s", exc
+                            "Version parsing for hybrid streaming optimizer failed: %s",
+                            exc,
                         )
 
             # Test 4: Homodyne NLSQ integration

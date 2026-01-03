@@ -1,14 +1,60 @@
-# Homodyne 2.9: CPU-Optimized JAX-First XPCS Analysis
+# Homodyne 2.11: CPU-Optimized JAX-First XPCS Analysis
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Python](https://img.shields.io/badge/Python-3.12%2B-blue)](https://www.python.org/)
-[![Version](https://img.shields.io/badge/Version-2.9.0-green.svg)](#)
+[![Version](https://img.shields.io/badge/Version-2.11.0-green.svg)](#)
 [![Documentation](https://img.shields.io/badge/docs-sphinx-blue.svg)](https://homodyne.readthedocs.io)
 [![ReadTheDocs](https://readthedocs.org/projects/homodyne/badge/?version=latest)](https://homodyne.readthedocs.io/en/latest/)
 [![GitHub Actions](https://github.com/imewei/homodyne/actions/workflows/docs.yml/badge.svg)](https://github.com/imewei/homodyne/actions/workflows/docs.yml)
 [![DOI](https://zenodo.org/badge/DOI/10.1073/pnas.2401162121.svg)](https://doi.org/10.1073/pnas.2401162121)
 
-## ⚠️ **BREAKING CHANGES: v2.9.x**
+## 🚀 **What's New in v2.11.0**
+
+### NLSQAdapter with Model Caching & Performance Optimization
+
+**3-5× speedup for multi-start optimization** through intelligent model caching.
+
+**Key Features:**
+
+- **Model Caching**: Avoid redundant model creation during multi-start optimization
+- **LRU Eviction**: 64-entry cache with automatic eviction of oldest entries
+- **Automatic Fallback**: NLSQAdapter → NLSQWrapper on failure
+- **Meshgrid Cache**: Increased from 16 to 64 entries for 23-angle datasets
+- **Cache Monitoring**: `get_cache_stats()` and `clear_model_cache()` utilities
+
+**Quick Usage:**
+
+```python
+from homodyne.optimization.nlsq import fit_nlsq_jax, get_cache_stats
+
+# v2.11.0+: use_adapter=True is the new default
+result = fit_nlsq_jax(data, config)
+
+# Check cache performance
+stats = get_cache_stats()
+print(f"Cache hit rate: {stats['hits'] / (stats['hits'] + stats['misses']):.1%}")
+```
+
+**Configuration:**
+
+```python
+from homodyne.optimization.nlsq import AdapterConfig, NLSQAdapter
+
+config = AdapterConfig(
+    enable_cache=True,      # Model caching (default: True)
+    enable_jit=True,        # JIT compilation flag (default: True)
+    enable_recovery=True,   # NLSQ recovery system
+    goal="quality",         # Optimization goal
+)
+
+adapter = NLSQAdapter(config)
+```
+
+See [NLSQAdapter Documentation](docs/api-reference/optimization.rst#nlsq-adapter) for details.
+
+---
+
+## ⚠️ **Previous Breaking Changes**
 
 ### v2.9.0 - Anti-Degeneracy Defense System
 

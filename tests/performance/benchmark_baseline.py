@@ -322,7 +322,9 @@ def benchmark_optimization_memory(data: dict, config: dict) -> dict[str, Any]:
     }
 
 
-def measure_time(func, *args, n_runs: int = 5, warmup: int = 1, **kwargs) -> TimingResult:
+def measure_time(
+    func, *args, n_runs: int = 5, warmup: int = 1, **kwargs
+) -> TimingResult:
     """Measure execution time of a function.
 
     Parameters
@@ -555,7 +557,9 @@ def create_benchmark_config(mode: str = "laminar_flow") -> dict[str, Any]:
 # ============================================================================
 
 
-def benchmark_residual_evaluation(data: dict, config: dict, n_runs: int = 10) -> TimingResult:
+def benchmark_residual_evaluation(
+    data: dict, config: dict, n_runs: int = 10
+) -> TimingResult:
     """Benchmark residual function evaluation.
 
     This measures the time to compute residuals for a single parameter vector,
@@ -677,7 +681,9 @@ def benchmark_residual_evaluation(data: dict, config: dict, n_runs: int = 10) ->
     return result
 
 
-def benchmark_full_fit(data: dict, config: dict, n_runs: int = 3) -> tuple[TimingResult, dict]:
+def benchmark_full_fit(
+    data: dict, config: dict, n_runs: int = 3
+) -> tuple[TimingResult, dict]:
     """Benchmark full NLSQ fit.
 
     Returns timing and the fit result for parameter validation.
@@ -782,7 +788,11 @@ def benchmark_vectorization_opportunity(data: dict) -> dict[str, float]:
     seq_timing = measure_time(compute_sequential, n_runs=5, warmup=2)
     vec_timing = measure_time(compute_vectorized, n_runs=5, warmup=2)
 
-    speedup = seq_timing.mean_time_s / vec_timing.mean_time_s if vec_timing.mean_time_s > 0 else 0
+    speedup = (
+        seq_timing.mean_time_s / vec_timing.mean_time_s
+        if vec_timing.mean_time_s > 0
+        else 0
+    )
 
     return {
         "sequential_time_s": seq_timing.mean_time_s,
@@ -873,7 +883,9 @@ def run_baseline_benchmarks(
     if "error" not in diag_memory:
         logger.info(f"Sequential delta: {diag_memory['sequential_delta_mb']:.1f} MB")
         logger.info(f"Batch delta: {diag_memory['batch_delta_mb']:.1f} MB")
-        logger.info(f"Memory reduction: {diag_memory['memory_reduction_fraction'] * 100:.1f}%")
+        logger.info(
+            f"Memory reduction: {diag_memory['memory_reduction_fraction'] * 100:.1f}%"
+        )
         logger.info(f"Target met (30%): {diag_memory['target_met']}")
     else:
         logger.warning(f"Diagonal memory benchmark skipped: {diag_memory['error']}")
@@ -895,7 +907,9 @@ def run_baseline_benchmarks(
 
     # Compute per-iteration time
     n_iterations = fit_result.get("n_iterations", 1)
-    per_iteration_time = fit_timing.mean_time_s / n_iterations if n_iterations > 0 else 0
+    per_iteration_time = (
+        fit_timing.mean_time_s / n_iterations if n_iterations > 0 else 0
+    )
 
     # Determine param count
     n_params = 2 * n_phi + (7 if mode == "laminar_flow" else 3)
@@ -933,9 +947,15 @@ def run_baseline_benchmarks(
     logger.info(f"Residual eval time: {results.residual_eval_time_s * 1000:.2f} ms")
     logger.info(f"Peak memory: {results.peak_memory_mb:.1f} MB")
     logger.info("\nOptimization Targets (from spec):")
-    logger.info(f"  Total speedup target: {results.target_speedup_total}x (50% reduction)")
-    logger.info(f"  Per-iteration target: {results.target_speedup_residual}x (15-20% reduction)")
-    logger.info(f"  Memory reduction target: {(1 - results.target_memory_reduction) * 100:.0f}%")
+    logger.info(
+        f"  Total speedup target: {results.target_speedup_total}x (50% reduction)"
+    )
+    logger.info(
+        f"  Per-iteration target: {results.target_speedup_residual}x (15-20% reduction)"
+    )
+    logger.info(
+        f"  Memory reduction target: {(1 - results.target_memory_reduction) * 100:.0f}%"
+    )
     logger.info("=" * 70)
 
     return results
@@ -965,7 +985,9 @@ def load_baseline(path: Path | None = None) -> BaselineResults | None:
     return BaselineResults.from_dict(dict(data))
 
 
-def compare_with_baseline(current: BaselineResults, baseline: BaselineResults) -> dict[str, Any]:
+def compare_with_baseline(
+    current: BaselineResults, baseline: BaselineResults
+) -> dict[str, Any]:
     """Compare current results with baseline.
 
     Parameters
@@ -982,19 +1004,20 @@ def compare_with_baseline(current: BaselineResults, baseline: BaselineResults) -
     """
     comparison = {
         "total_speedup": baseline.total_fit_time_s / current.total_fit_time_s,
-        "residual_speedup": baseline.residual_eval_time_s / current.residual_eval_time_s,
-        "per_iteration_speedup": baseline.per_iteration_time_s / current.per_iteration_time_s,
+        "residual_speedup": baseline.residual_eval_time_s
+        / current.residual_eval_time_s,
+        "per_iteration_speedup": baseline.per_iteration_time_s
+        / current.per_iteration_time_s,
         "memory_ratio": current.peak_memory_mb / baseline.peak_memory_mb,
         "targets": {
-            "total_speedup_met": (
-                baseline.total_fit_time_s / current.total_fit_time_s
-            ) >= baseline.target_speedup_total,
+            "total_speedup_met": (baseline.total_fit_time_s / current.total_fit_time_s)
+            >= baseline.target_speedup_total,
             "residual_speedup_met": (
                 baseline.residual_eval_time_s / current.residual_eval_time_s
-            ) >= baseline.target_speedup_residual,
-            "memory_reduction_met": (
-                current.peak_memory_mb / baseline.peak_memory_mb
-            ) <= baseline.target_memory_reduction,
+            )
+            >= baseline.target_speedup_residual,
+            "memory_reduction_met": (current.peak_memory_mb / baseline.peak_memory_mb)
+            <= baseline.target_memory_reduction,
         },
     }
 
@@ -1010,7 +1033,9 @@ def compare_with_baseline(current: BaselineResults, baseline: BaselineResults) -
             comparison["parameters_match"] = True
         except AssertionError:
             comparison["parameters_match"] = False
-            comparison["param_diff"] = np.abs(current.fitted_params - baseline.fitted_params)
+            comparison["param_diff"] = np.abs(
+                current.fitted_params - baseline.fitted_params
+            )
 
     return comparison
 

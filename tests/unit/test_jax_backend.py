@@ -2118,3 +2118,125 @@ class TestNLSQPerformance:
         # Results should be valid
         assert jnp.all(jnp.isfinite(g1)), "g1 contains NaN/Inf with small dt"
         assert jnp.all((g1 >= 0.0) & (g1 <= 1.0)), "g1 values outside [0, 1]"
+
+
+# =============================================================================
+# T040: Meshgrid Cache Tests (US6 - 23-angle datasets)
+# =============================================================================
+@pytest.mark.unit
+@pytest.mark.requires_jax
+class TestMeshgridCache:
+    """Tests for meshgrid cache with 23-angle dataset support (T040)."""
+
+    def test_cache_max_size_is_64(self):
+        """T040: Verify meshgrid cache can hold 23 unique angles."""
+        from homodyne.core.jax_backend import _MESHGRID_CACHE_MAX_SIZE
+
+        # 23 angles need at least 23 cache entries
+        assert _MESHGRID_CACHE_MAX_SIZE >= 23
+        # Cache size was increased from 16 to 64 in v2.11.0
+        assert _MESHGRID_CACHE_MAX_SIZE == 64
+
+    def test_23_angle_dataset_fits_in_cache(self):
+        """T040: Verify 23-angle dataset time grids all fit in cache."""
+        from homodyne.core.jax_backend import (
+            clear_meshgrid_cache,
+            get_cache_stats,
+            get_cached_meshgrid,
+            reset_cache_stats,
+        )
+
+        # Setup
+        clear_meshgrid_cache()
+        reset_cache_stats()
+
+        # Simulate 23 unique phi angles with same time grid
+        # In practice, each phi may have slightly different t1/t2 due to data selection
+        n_angles = 23
+        n_time = 100
+
+        for i in range(n_angles):
+            # Slightly different time arrays per angle (simulates real data)
+            t1 = jnp.linspace(0.1 + i * 0.001, 1.0, n_time)
+            t2 = jnp.linspace(0.1 + i * 0.001, 1.0, n_time)
+            get_cached_meshgrid(t1, t2)
+
+        stats = get_cache_stats()
+
+        # All 23 should fit without eviction (cache size = 64)
+        assert stats["evictions"] == 0, f"Evictions occurred: {stats['evictions']}"
+        assert stats["cache_size"] == n_angles, (
+            f"Expected {n_angles}, got {stats['cache_size']}"
+        )
+
+        # Cleanup
+        clear_meshgrid_cache()
+
+    def test_cache_hit_rate_with_repeated_access(self):
+        """T040: Verify high hit rate with repeated meshgrid access."""
+        from homodyne.core.jax_backend import (
+            clear_meshgrid_cache,
+            get_cache_stats,
+            get_cached_meshgrid,
+            reset_cache_stats,
+        )
+
+        # Setup
+        clear_meshgrid_cache()
+        reset_cache_stats()
+
+        # Create 10 unique time grids
+        n_grids = 10
+        n_time = 50
+        time_arrays = [
+            jnp.linspace(0.1 + i * 0.01, 1.0, n_time) for i in range(n_grids)
+        ]
+
+        # Access each grid once (all misses)
+        for t in time_arrays:
+            get_cached_meshgrid(t, t)
+
+        # Access each grid again (all hits)
+        for t in time_arrays:
+            get_cached_meshgrid(t, t)
+
+        stats = get_cache_stats()
+
+        # 10 misses (first access), 10 hits (second access)
+        assert stats["misses"] == n_grids
+        assert stats["hits"] == n_grids
+        assert stats["hit_rate"] == 0.5  # 10/(10+10)
+
+        # Cleanup
+        clear_meshgrid_cache()
+
+    def test_cache_eviction_when_full(self):
+        """T040: Verify FIFO eviction when cache exceeds capacity."""
+        from homodyne.core.jax_backend import (
+            _MESHGRID_CACHE_MAX_SIZE,
+            clear_meshgrid_cache,
+            get_cache_stats,
+            get_cached_meshgrid,
+            reset_cache_stats,
+        )
+
+        # Setup
+        clear_meshgrid_cache()
+        reset_cache_stats()
+
+        # Fill cache beyond capacity
+        n_grids = _MESHGRID_CACHE_MAX_SIZE + 10
+        n_time = 30
+
+        for i in range(n_grids):
+            t = jnp.linspace(0.1 + i * 0.01, 1.0, n_time)
+            get_cached_meshgrid(t, t)
+
+        stats = get_cache_stats()
+
+        # Should have 64 entries (max) and 10 evictions
+        assert stats["cache_size"] == _MESHGRID_CACHE_MAX_SIZE
+        assert stats["evictions"] == 10
+
+        # Cleanup
+        clear_meshgrid_cache()

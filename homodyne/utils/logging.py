@@ -378,7 +378,9 @@ def log_calls(
 
                 # Log function exit
                 if include_result:
-                    resolved_logger.log(level, f"Completed {func_name} -> {repr(result)}")
+                    resolved_logger.log(
+                        level, f"Completed {func_name} -> {repr(result)}"
+                    )
                 else:
                     resolved_logger.log(level, f"Completed {func_name}")
 

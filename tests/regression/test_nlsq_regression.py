@@ -27,6 +27,11 @@ from homodyne.optimization.nlsq.strategies.selection import (
 from homodyne.optimization.nlsq.wrapper import NLSQWrapper, OptimizationResult
 from tests.factories.large_dataset_factory import LargeDatasetFactory
 
+# Suppress deprecation warnings for DatasetSizeStrategy tests
+pytestmark = pytest.mark.filterwarnings(
+    "ignore:DatasetSizeStrategy is deprecated:DeprecationWarning"
+)
+
 # ============================================================================
 # Reference Results (Known-Good Values)
 # ============================================================================

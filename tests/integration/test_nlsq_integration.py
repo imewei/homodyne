@@ -79,6 +79,11 @@ from tests.factories.optimization_factory import (
     create_mock_optimization_result,
 )
 
+# Suppress deprecation warnings for DatasetSizeStrategy tests
+pytestmark = pytest.mark.filterwarnings(
+    "ignore:DatasetSizeStrategy is deprecated:DeprecationWarning"
+)
+
 # ==============================================================================
 # End-to-end Workflows (from test_nlsq_end_to_end.py)
 # ==============================================================================
@@ -1868,9 +1873,7 @@ class TestNLSQWithAngleFiltering:
         assert found_filtering_msg, "Should log '3 angles selected from 9 total angles'"
 
         # Assert - NLSQ was attempted (log shows "NLSQ OPTIMIZATION")
-        found_nlsq_start = any(
-            "NLSQ OPTIMIZATION" in msg for msg in log_messages
-        )
+        found_nlsq_start = any("NLSQ OPTIMIZATION" in msg for msg in log_messages)
         assert found_nlsq_start, "NLSQ optimization should have been attempted"
 
         # Assert - Data was prepared (log shows "Data prepared: X points")
@@ -1936,9 +1939,7 @@ class TestNLSQWithAngleFiltering:
 
         # Assert - NLSQ was attempted
         log_messages = [rec.message for rec in caplog.records]
-        found_nlsq_start = any(
-            "NLSQ OPTIMIZATION" in msg for msg in log_messages
-        )
+        found_nlsq_start = any("NLSQ OPTIMIZATION" in msg for msg in log_messages)
         assert found_nlsq_start, "NLSQ optimization should have been attempted"
 
     def test_nlsq_dataset_size_reduction_verified(self):

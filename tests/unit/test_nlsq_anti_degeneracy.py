@@ -14,29 +14,27 @@ Test IDs: T050-T059
 import numpy as np
 import pytest
 
+from homodyne.optimization.nlsq.adaptive_regularization import (
+    AdaptiveRegularizationConfig,
+    AdaptiveRegularizer,
+)
+from homodyne.optimization.nlsq.anti_degeneracy_controller import (
+    AntiDegeneracyConfig,
+    AntiDegeneracyController,
+)
 from homodyne.optimization.nlsq.fourier_reparam import (
     FourierReparamConfig,
     FourierReparameterizer,
+)
+from homodyne.optimization.nlsq.gradient_monitor import (
+    GradientCollapseMonitor,
+    GradientMonitorConfig,
 )
 from homodyne.optimization.nlsq.hierarchical import (
     HierarchicalConfig,
     HierarchicalOptimizer,
     HierarchicalResult,
 )
-from homodyne.optimization.nlsq.adaptive_regularization import (
-    AdaptiveRegularizationConfig,
-    AdaptiveRegularizer,
-)
-from homodyne.optimization.nlsq.gradient_monitor import (
-    GradientMonitorConfig,
-    GradientCollapseMonitor,
-    CollapseEvent,
-)
-from homodyne.optimization.nlsq.anti_degeneracy_controller import (
-    AntiDegeneracyConfig,
-    AntiDegeneracyController,
-)
-
 
 # =============================================================================
 # Layer 1: Fourier Reparameterization Tests

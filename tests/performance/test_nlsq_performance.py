@@ -27,6 +27,11 @@ from homodyne.optimization.checkpoint_manager import CheckpointManager
 from homodyne.optimization.nlsq.wrapper import NLSQWrapper
 from tests.factories.large_dataset_factory import LargeDatasetFactory
 
+# Suppress deprecation warnings for DatasetSizeStrategy used internally by NLSQWrapper
+pytestmark = pytest.mark.filterwarnings(
+    "ignore:DatasetSizeStrategy is deprecated:DeprecationWarning"
+)
+
 # ============================================================================
 # Helper Functions
 # ============================================================================

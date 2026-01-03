@@ -41,10 +41,26 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+# Import CMC backend (element-wise computations)
+from homodyne.core.physics_cmc import (
+    compute_g1_diffusion as compute_g1_diffusion_cmc,
+)
+from homodyne.core.physics_cmc import (
+    compute_g1_total as compute_g1_cmc,
+)
+
+# Import NLSQ backend (meshgrid computations)
+from homodyne.core.physics_nlsq import (
+    compute_g2_scaled as compute_g2_nlsq,
+)
+from homodyne.core.physics_nlsq import (
+    compute_g2_scaled_with_factors as compute_g2_nlsq_with_factors,
+)
+
 # Import from physics_utils (shared base)
 from homodyne.core.physics_utils import (
-    PI,
     EPS,
+    PI,
     apply_diagonal_correction,
     calculate_diffusion_coefficient,
     calculate_shear_rate,
@@ -56,20 +72,8 @@ from homodyne.core.physics_utils import (
     trapezoid_cumsum,
 )
 
-# Import NLSQ backend (meshgrid computations)
-from homodyne.core.physics_nlsq import (
-    compute_g2_scaled as compute_g2_nlsq,
-    compute_g2_scaled_with_factors as compute_g2_nlsq_with_factors,
-)
-
-# Import CMC backend (element-wise computations)
-from homodyne.core.physics_cmc import (
-    compute_g1_diffusion as compute_g1_diffusion_cmc,
-    compute_g1_total as compute_g1_cmc,
-)
-
 if TYPE_CHECKING:
-    import jax.numpy as jnp
+    pass
 
 
 def get_available_backends() -> dict[str, bool]:
@@ -100,6 +104,7 @@ def get_available_backends() -> dict[str, bool]:
     # Check JAX availability
     try:
         import jax
+
         backends["jax"] = True
     except ImportError:
         pass
@@ -107,6 +112,7 @@ def get_available_backends() -> dict[str, bool]:
     # Check NLSQ backend
     try:
         from homodyne.core.physics_nlsq import compute_g2_scaled
+
         backends["nlsq"] = True
     except ImportError:
         pass
@@ -114,6 +120,7 @@ def get_available_backends() -> dict[str, bool]:
     # Check CMC backend
     try:
         from homodyne.core.physics_cmc import compute_g1_total
+
         backends["cmc"] = True
     except ImportError:
         pass
@@ -121,6 +128,7 @@ def get_available_backends() -> dict[str, bool]:
     # Check utilities
     try:
         from homodyne.core.physics_utils import safe_sinc
+
         backends["utils"] = True
     except ImportError:
         pass

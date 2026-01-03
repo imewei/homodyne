@@ -65,8 +65,8 @@ Core Module
    :undoc-members:
    :show-inheritance:
 
-Wrapper
-~~~~~~~
+Wrapper (Legacy)
+~~~~~~~~~~~~~~~~
 
 High-level interface with automatic strategy selection.
 
@@ -82,6 +82,119 @@ Key Features
 - Memory-aware chunking for large datasets
 - JIT-compiled residual functions
 - Stratified sampling for per-angle scaling
+
+.. _nlsq-adapter:
+
+NLSQAdapter (v2.11.0+)
+~~~~~~~~~~~~~~~~~~~~~~
+
+Modern adapter for NLSQ v0.4+ CurveFit class with model caching and JIT support.
+This is the **recommended** path for new optimizations.
+
+.. automodule:: homodyne.optimization.nlsq.adapter
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+Key Classes
+^^^^^^^^^^^
+
+.. autosummary::
+   :nosignatures:
+
+   homodyne.optimization.nlsq.adapter.NLSQAdapter
+   homodyne.optimization.nlsq.adapter.AdapterConfig
+   homodyne.optimization.nlsq.adapter.ModelCacheKey
+   homodyne.optimization.nlsq.adapter.CachedModel
+
+Key Features (v2.11.0)
+^^^^^^^^^^^^^^^^^^^^^^
+
+**Model Caching (3-5× Multi-Start Speedup)**:
+
+- Cached model instances avoid redundant model creation
+- LRU eviction with 64-entry cache limit
+- Cache hit/miss statistics for monitoring
+
+**JIT Compilation Flag**:
+
+- Signals intent for JIT optimization
+- Underlying CombinedModel uses JAX internally
+- Graceful fallback if JAX unavailable
+
+**Automatic Fallback**:
+
+- NLSQAdapter failures automatically retry with NLSQWrapper
+- Logged warnings include original error for debugging
+- Fallback metadata in ``device_info``
+
+Configuration
+^^^^^^^^^^^^^
+
+.. code-block:: python
+
+   from homodyne.optimization.nlsq import AdapterConfig, NLSQAdapter
+
+   config = AdapterConfig(
+       enable_cache=True,      # Model caching (default: True)
+       enable_jit=True,        # JIT compilation (default: True)
+       enable_recovery=True,   # NLSQ recovery system
+       goal="quality",         # Optimization goal
+   )
+
+   adapter = NLSQAdapter(config)
+   result = adapter.fit(data, config, initial_params, bounds, analysis_mode)
+
+Cache Management
+^^^^^^^^^^^^^^^^
+
+.. code-block:: python
+
+   from homodyne.optimization.nlsq import get_cache_stats, clear_model_cache
+
+   # View cache statistics
+   stats = get_cache_stats()
+   print(f"Hits: {stats['hits']}, Misses: {stats['misses']}")
+
+   # Clear cache (useful for testing)
+   n_cleared = clear_model_cache()
+
+When to Use Which Adapter
+^^^^^^^^^^^^^^^^^^^^^^^^^
+
+.. list-table::
+   :header-rows: 1
+   :widths: 20 40 40
+
+   * - Adapter
+     - Use Case
+     - Advantages
+   * - **NLSQAdapter**
+     - Multi-start optimization, repeated fits
+     - Model caching, modern API
+   * - **NLSQWrapper**
+     - Complex workflows, anti-degeneracy
+     - Full feature set, streaming support
+
+Memory Management (v2.11.0)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Utilities for adaptive memory thresholds and streaming decisions.
+
+.. automodule:: homodyne.optimization.nlsq.memory
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+Parameter Utilities (v2.11.0)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Helper functions for parameter handling and per-angle initialization.
+
+.. automodule:: homodyne.optimization.nlsq.parameter_utils
+   :members:
+   :undoc-members:
+   :show-inheritance:
 
 Results
 ~~~~~~~

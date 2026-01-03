@@ -196,7 +196,7 @@ class ShearSensitivityWeighting:
         # Apply exponent and scale
         # w(phi) = w_min + (1 - w_min) * |cos(phi0 - phi)|^alpha
         weights = self.config.min_weight + (1.0 - self.config.min_weight) * (
-            cos_factor ** self.config.alpha
+            cos_factor**self.config.alpha
         )
 
         # Normalize if enabled (preserves total loss scale)
@@ -269,9 +269,7 @@ class ShearSensitivityWeighting:
         """
         return self._weights_jax
 
-    def apply_weights_to_loss(
-        self, residuals: Array, phi_indices: Array
-    ) -> Array:
+    def apply_weights_to_loss(self, residuals: Array, phi_indices: Array) -> Array:
         """Apply angle weights to residuals for loss computation.
 
         Computes weighted mean squared error:
@@ -301,9 +299,7 @@ class ShearSensitivityWeighting:
 
         return weighted_loss
 
-    def compute_weighted_mse(
-        self, residuals: Array, phi_indices: Array
-    ) -> Array:
+    def compute_weighted_mse(self, residuals: Array, phi_indices: Array) -> Array:
         """Compute weighted MSE (for gradient computation).
 
         Parameters

@@ -449,7 +449,9 @@ def _adaptive_gradient(
     if not complex_step_success:
         method_used = DifferentiationMethod.RICHARDSON
 
-        def compute_richardson_adaptive(i: int) -> tuple[int, float, float, float, int, str | None]:
+        def compute_richardson_adaptive(
+            i: int,
+        ) -> tuple[int, float, float, float, int, str | None]:
             """Compute Richardson for adaptive gradient (thread-safe)."""
             try:
                 deriv, error_est = _richardson_extrapolation(
@@ -459,7 +461,14 @@ def _adaptive_gradient(
                     h_optimal[i],
                     config.richardson_terms,
                 )
-                return i, deriv, error_est, h_optimal[i], 2 * config.richardson_terms, None
+                return (
+                    i,
+                    deriv,
+                    error_est,
+                    h_optimal[i],
+                    2 * config.richardson_terms,
+                    None,
+                )
             except Exception as e:
                 deriv = _central_difference_single(func, x, i, h_optimal[i])
                 warning = f"Richardson extrapolation failed for param {i}: {e}"
@@ -468,7 +477,9 @@ def _adaptive_gradient(
         if config.use_parallel and n_params > 1:
             n_workers = min(config.n_workers, n_params)
             with ThreadPoolExecutor(max_workers=n_workers) as executor:
-                results = list(executor.map(compute_richardson_adaptive, range(n_params)))
+                results = list(
+                    executor.map(compute_richardson_adaptive, range(n_params))
+                )
 
             for i, deriv, error_est, step_h, func_calls, warning in results:
                 gradient[i] = deriv
@@ -479,7 +490,9 @@ def _adaptive_gradient(
                     warnings_list.append(warning)
         else:
             for i in range(n_params):
-                _, deriv, error_est, step_h, func_calls, warning = compute_richardson_adaptive(i)
+                _, deriv, error_est, step_h, func_calls, warning = (
+                    compute_richardson_adaptive(i)
+                )
                 gradient[i] = deriv
                 error_estimates[i] = error_est
                 step_sizes[i] = step_h
@@ -734,7 +747,12 @@ def _richardson_gradient(
         except Exception as e:
             # Fallback to central differences
             deriv = _central_difference_single(func, x, i, h[i])
-            return i, deriv, np.inf, f"Richardson extrapolation failed for parameter {i}: {e}"
+            return (
+                i,
+                deriv,
+                np.inf,
+                f"Richardson extrapolation failed for parameter {i}: {e}",
+            )
 
     # FR-009: Parallel execution with ThreadPoolExecutor
     if config.use_parallel and n_params > 1:

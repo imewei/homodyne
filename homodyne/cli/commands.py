@@ -1004,7 +1004,11 @@ def _prepare_cmc_config(args, config: "ConfigManager") -> dict[str, Any]:
         num_shards_int = None
 
     backend_name_current = backend_cfg.get("name", "auto")
-    if num_shards_int and num_shards_int > 1 and backend_name_current in ("auto", "jax"):
+    if (
+        num_shards_int
+        and num_shards_int > 1
+        and backend_name_current in ("auto", "jax")
+    ):
         logger.warning(
             "Multiple shards requested but backend is 'auto/jax'; defaulting to multiprocessing. "
             "Use --cmc-backend to override explicitly."
@@ -1047,7 +1051,9 @@ def _pool_mcmc_data(filtered_data: dict[str, Any]) -> dict[str, Any]:
     # Handle both 1D and 2D time arrays
     if t1_raw.ndim == 1 and t2_raw.ndim == 1:
         t1_2d, t2_2d = np.meshgrid(t1_raw, t2_raw, indexing="ij")
-        logger.debug(f"Created 2D meshgrids from 1D arrays: t1={t1_raw.shape} → {t1_2d.shape}")
+        logger.debug(
+            f"Created 2D meshgrids from 1D arrays: t1={t1_raw.shape} → {t1_2d.shape}"
+        )
     elif t1_raw.ndim == 2 and t2_raw.ndim == 2:
         t1_2d = t1_raw
         t2_2d = t2_raw
@@ -1064,11 +1070,20 @@ def _pool_mcmc_data(filtered_data: dict[str, Any]) -> dict[str, Any]:
     phi_pooled = np.repeat(phi_angles, n_t * n_t)
 
     # Verify all arrays have matching lengths
-    for name, arr in [("mcmc_data", mcmc_data), ("t1", t1_pooled), ("t2", t2_pooled), ("phi", phi_pooled)]:
+    for name, arr in [
+        ("mcmc_data", mcmc_data),
+        ("t1", t1_pooled),
+        ("t2", t2_pooled),
+        ("phi", phi_pooled),
+    ]:
         if arr.shape[0] != n_total:
-            raise ValueError(f"Data pooling failed: {name}={arr.shape[0]}, expected={n_total}")
+            raise ValueError(
+                f"Data pooling failed: {name}={arr.shape[0]}, expected={n_total}"
+            )
 
-    logger.debug(f"Pooled MCMC data: {n_phi} angles × {n_t}×{n_t} = {n_total:,} data points")
+    logger.debug(
+        f"Pooled MCMC data: {n_phi} angles × {n_t}×{n_t} = {n_total:,} data points"
+    )
 
     return {
         "mcmc_data": mcmc_data,
@@ -1104,7 +1119,9 @@ def _run_nlsq_optimization(
         logger.info("=" * 80)
         logger.info("MULTI-START OPTIMIZATION ENABLED")
         logger.info(f"  n_starts: {multi_start_config.get('n_starts', 10)}")
-        logger.info(f"  strategy: {multi_start_config.get('sampling_strategy', 'latin_hypercube')}")
+        logger.info(
+            f"  strategy: {multi_start_config.get('sampling_strategy', 'latin_hypercube')}"
+        )
         logger.info("=" * 80)
 
         multistart_result = fit_nlsq_multistart(filtered_data, config)

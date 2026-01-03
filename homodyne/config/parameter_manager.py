@@ -30,6 +30,7 @@ try:
         ConstraintSeverity,
         validate_all_parameters,
     )
+
     HAS_PHYSICS_VALIDATORS = True
 except ImportError:
     HAS_PHYSICS_VALIDATORS = False
@@ -37,9 +38,11 @@ except ImportError:
     # Fallback severity class if module not available
     class ConstraintSeverity:
         """Severity levels for physics constraint violations."""
+
         ERROR = "error"
         WARNING = "warning"
         INFO = "info"
+
 
 logger = get_logger(__name__)
 
@@ -281,7 +284,9 @@ class ParameterManager:
             if D0 <= 0:
                 add_violation("D0", D0, "non-positive diffusion coefficient", "error")
             elif D0 > 1e7:
-                add_violation("D0", D0, "extremely large diffusion coefficient", "warning")
+                add_violation(
+                    "D0", D0, "extremely large diffusion coefficient", "warning"
+                )
 
         if "alpha" in params:
             alpha = params["alpha"]
@@ -301,15 +306,24 @@ class ParameterManager:
             if gamma_dot < 0:
                 add_violation("gamma_dot_t0", gamma_dot, "negative shear rate", "error")
             elif gamma_dot > 1.0:
-                add_violation("gamma_dot_t0", gamma_dot, "very high shear rate", "warning")
+                add_violation(
+                    "gamma_dot_t0", gamma_dot, "very high shear rate", "warning"
+                )
             elif 0 < gamma_dot < 1e-6:
                 add_violation("gamma_dot_t0", gamma_dot, "very low shear rate", "info")
 
         if "beta" in params and (params["beta"] < -2.0 or params["beta"] > 2.0):
-            add_violation("beta", params["beta"], "time exponent outside range", "warning")
+            add_violation(
+                "beta", params["beta"], "time exponent outside range", "warning"
+            )
 
         if "gamma_dot_t_offset" in params and params["gamma_dot_t_offset"] < 0:
-            add_violation("gamma_dot_t_offset", params["gamma_dot_t_offset"], "negative offset", "warning")
+            add_violation(
+                "gamma_dot_t_offset",
+                params["gamma_dot_t_offset"],
+                "negative offset",
+                "warning",
+            )
 
         if "phi0" in params and abs(params["phi0"]) > np.pi:
             add_violation("phi0", params["phi0"], "flow angle outside [-π, π]", "info")
@@ -329,7 +343,12 @@ class ParameterManager:
         if all(k in params for k in ["D0", "alpha", "D_offset"]):
             if params["D0"] > 0 and params["D_offset"] > 0.5 * params["D0"]:
                 ratio = params["D_offset"] / params["D0"]
-                add_violation("D_offset", params["D_offset"], f"offset is {ratio:.1%} of D0", "info")
+                add_violation(
+                    "D_offset",
+                    params["D_offset"],
+                    f"offset is {ratio:.1%} of D0",
+                    "info",
+                )
 
         return violations
 

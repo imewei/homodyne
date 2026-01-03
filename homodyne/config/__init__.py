@@ -27,10 +27,10 @@ from homodyne.config.parameter_space import ParameterSpace, PriorDistribution
 
 # Physics validators (v2.7+)
 from homodyne.config.physics_validators import (
+    PHYSICS_CONSTRAINTS,
     ConstraintRule,
     ConstraintSeverity,
     PhysicsViolation,
-    PHYSICS_CONSTRAINTS,
     validate_all_parameters,
     validate_cross_parameter_constraints,
     validate_single_parameter,

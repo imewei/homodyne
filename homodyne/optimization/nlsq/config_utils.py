@@ -46,9 +46,7 @@ def safe_float(value, default: float) -> float:
     try:
         return float(value)
     except (ValueError, TypeError):
-        logger.warning(
-            f"Could not convert {value!r} to float, using default {default}"
-        )
+        logger.warning(f"Could not convert {value!r} to float, using default {default}")
         return default
 
 
@@ -81,9 +79,7 @@ def safe_int(value, default: int) -> int:
     try:
         return int(value)
     except (ValueError, TypeError):
-        logger.warning(
-            f"Could not convert {value!r} to int, using default {default}"
-        )
+        logger.warning(f"Could not convert {value!r} to int, using default {default}")
         return default
 
 
@@ -117,7 +113,5 @@ def safe_bool(value, default: bool) -> bool:
     try:
         return bool(value)
     except (ValueError, TypeError):
-        logger.warning(
-            f"Could not convert {value!r} to bool, using default {default}"
-        )
+        logger.warning(f"Could not convert {value!r} to bool, using default {default}")
         return default
