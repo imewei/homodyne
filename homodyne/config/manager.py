@@ -738,7 +738,7 @@ class ConfigManager:
                 "resume_from_checkpoint": True,
             },
             "combination": {
-                "method": "weighted_gaussian",
+                "method": "consensus_mc",
                 "validate_results": True,
                 "min_success_rate": 0.90,
             },

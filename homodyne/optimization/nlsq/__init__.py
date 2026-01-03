@@ -182,7 +182,6 @@ from homodyne.optimization.nlsq.memory import (
     detect_total_system_memory,
     estimate_peak_memory_gb,
     get_adaptive_memory_threshold,
-    should_use_streaming,
 )
 
 # Multi-start optimization (v2.6.0)
@@ -252,11 +251,8 @@ from homodyne.optimization.nlsq.strategies.residual import (
 from homodyne.optimization.nlsq.strategies.residual_jit import (
     StratifiedResidualFunctionJIT,
 )
-from homodyne.optimization.nlsq.strategies.selection import (
-    DatasetSizeStrategy,
-    OptimizationStrategy,
-    estimate_memory_requirements,
-)
+# NOTE: DatasetSizeStrategy, OptimizationStrategy, estimate_memory_requirements
+# removed from public API in v2.12.0. Use NLSQ's WorkflowSelector instead.
 from homodyne.optimization.nlsq.strategies.sequential import (
     JAC_SAMPLE_SIZE,
     optimize_per_angle_sequential,
@@ -334,10 +330,6 @@ __all__ = [
     "get_or_create_model",
     "clear_model_cache",
     "get_cache_stats",
-    # Strategies
-    "DatasetSizeStrategy",
-    "OptimizationStrategy",
-    "estimate_memory_requirements",
     # Chunking
     "StratificationDiagnostics",
     "analyze_angle_distribution",
@@ -354,6 +346,8 @@ __all__ = [
     # Sequential
     "JAC_SAMPLE_SIZE",
     "optimize_per_angle_sequential",
+    # NOTE: DatasetSizeStrategy, OptimizationStrategy, estimate_memory_requirements
+    # removed from public API in v2.12.0. Use NLSQ's WorkflowSelector instead.
     # Data Preparation (new in Dec 2025)
     "PreparedData",
     "ExpandedParameters",
@@ -388,7 +382,6 @@ __all__ = [
     "detect_total_system_memory",
     "estimate_peak_memory_gb",
     "get_adaptive_memory_threshold",
-    "should_use_streaming",
     # Parameter utilities (extracted Jan 2026)
     "build_parameter_labels_utils",
     "classify_parameter_status_utils",

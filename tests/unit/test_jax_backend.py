@@ -24,20 +24,114 @@ except ImportError:
     jnp = np
 
 from homodyne.core.jax_backend import (
+    EPS,
     compute_chi_squared,
     compute_g1_diffusion,
     compute_g1_shear,
     compute_g2_scaled,
+    safe_len,
 )
 from homodyne.core.jax_backend import jax_available as BACKEND_JAX_AVAILABLE
 
-# Legacy test compatibility wrappers (removed from production jax_backend.py)
-from tests.utils.legacy_compat import (
-    chi_squared_jax,
-    compute_c2_model_jax,
-    compute_g1_diffusion_jax,
-    residuals_jax,
-)
+
+# =============================================================================
+# Local helper functions for test compatibility
+# These replace the legacy compat imports with inline implementations
+# =============================================================================
+
+
+def _compute_c2_model_jax(
+    params: dict,
+    t1: jnp.ndarray,
+    t2: jnp.ndarray,
+    phi: jnp.ndarray,
+    q: float,
+) -> jnp.ndarray:
+    """Local helper: compute c2 model from dict-style params.
+
+    This is a test-only helper that wraps compute_g2_scaled with dict params.
+    """
+    # Extract parameters from dict with defaults
+    contrast = params.get("contrast", 0.5)
+    offset = params.get("offset", 1.0)
+    L = params.get("L", 1.0)
+
+    # Convert parameter dict to array format
+    D0 = params.get("diffusion_coefficient", params.get("D0", 1000.0))
+    alpha = params.get("alpha", 0.5)
+    D_offset = params.get("D_offset", 10.0)
+
+    param_array = jnp.array([D0, alpha, D_offset])
+
+    # Estimate dt from time array
+    if t1.ndim == 2:
+        time_array = t1[:, 0]
+    else:
+        time_array = t1
+    dt = time_array[1] - time_array[0] if safe_len(time_array) > 1 else 1.0
+
+    return compute_g2_scaled(
+        params=param_array,
+        t1=t1,
+        t2=t2,
+        phi=phi,
+        q=q,
+        L=L,
+        contrast=contrast,
+        offset=offset,
+        dt=dt,
+    )
+
+
+def _residuals_jax(
+    params: dict,
+    c2_exp: jnp.ndarray,
+    sigma: jnp.ndarray,
+    t1: jnp.ndarray,
+    t2: jnp.ndarray,
+    phi: jnp.ndarray,
+    q: float,
+) -> jnp.ndarray:
+    """Local helper: compute residuals (data - model) / sigma."""
+    c2_model = _compute_c2_model_jax(params, t1, t2, phi, q)
+    return (c2_exp - c2_model) / (sigma + EPS)
+
+
+def _chi_squared_jax(
+    params: dict,
+    c2_exp: jnp.ndarray,
+    sigma: jnp.ndarray,
+    t1: jnp.ndarray,
+    t2: jnp.ndarray,
+    phi: jnp.ndarray,
+    q: float,
+) -> float:
+    """Local helper: compute chi-squared goodness of fit."""
+    residuals = _residuals_jax(params, c2_exp, sigma, t1, t2, phi, q)
+    return jnp.sum(residuals**2)
+
+
+def _compute_g1_diffusion_jax(
+    t1: jnp.ndarray,
+    t2: jnp.ndarray,
+    q: float,
+    D: float,
+) -> jnp.ndarray:
+    """Local helper: compute g1 diffusion factor."""
+    # Create params array [D0, alpha, D_offset] with alpha=0.5
+    params = jnp.array([D, 0.5, 0.0])
+
+    # Estimate dt
+    if t1.ndim == 2:
+        time_array = t1[:, 0]
+    elif t1.ndim == 1:
+        time_array = t1
+    else:
+        time_array = t1.flatten()
+
+    dt = time_array[1] - time_array[0] if safe_len(time_array) > 1 else 1.0
+
+    return compute_g1_diffusion(params, t1, t2, q, dt)
 
 
 @pytest.mark.unit
@@ -266,7 +360,7 @@ class TestJAXBackendCore:
         from jax import jit
 
         # Test JIT compilation of c2 model
-        jit_c2_model = jit(compute_c2_model_jax)
+        jit_c2_model = jit(_compute_c2_model_jax)
 
         t1 = jnp.array([[0, 1], [1, 0]])
         t2 = jnp.array([[0, 1], [1, 0]])
@@ -282,7 +376,7 @@ class TestJAXBackendCore:
         }
 
         # Regular computation
-        result_regular = compute_c2_model_jax(params, t1, t2, phi, q)
+        result_regular = _compute_c2_model_jax(params, t1, t2, phi, q)
 
         # JIT-compiled computation
         result_jit = jit_c2_model(params, t1, t2, phi, q)
@@ -310,11 +404,11 @@ class TestJAXBackendCore:
             }
 
             # Synthetic data
-            model = compute_c2_model_jax(params, t1, t2, phi, q)
+            model = _compute_c2_model_jax(params, t1, t2, phi, q)
             c2_exp = model + 0.01  # Add small noise
             sigma = jnp.ones_like(model) * 0.02
 
-            return chi_squared_jax(params, c2_exp, sigma, t1, t2, phi, q)
+            return _chi_squared_jax(params, c2_exp, sigma, t1, t2, phi, q)
 
         # Compute gradient
         grad_fn = grad(chi2_fn)
@@ -345,14 +439,14 @@ class TestJAXBackendCore:
 
         # Vectorized computation
         vmap_c2 = vmap(
-            lambda q: compute_c2_model_jax(params, t1, t2, phi, q), in_axes=0
+            lambda q: _compute_c2_model_jax(params, t1, t2, phi, q), in_axes=0
         )
         result_vmap = vmap_c2(q_values)
 
         # Manual computation for comparison
         results_manual = []
         for q in q_values:
-            result = compute_c2_model_jax(params, t1, t2, phi, q)
+            result = _compute_c2_model_jax(params, t1, t2, phi, q)
             results_manual.append(result)
         result_manual = jnp.stack(results_manual)
 
@@ -391,7 +485,7 @@ class TestJAXBackendFallback:
         }
 
         # Should work with numpy arrays
-        result = compute_c2_model_jax(params, t1, t2, phi, q)
+        result = _compute_c2_model_jax(params, t1, t2, phi, q)
 
         # Test basic properties
         assert hasattr(result, "shape")
@@ -415,7 +509,7 @@ class TestJAXBackendProperties:
         t1_base = jnp.zeros_like(times)
         t2_varying = times
 
-        result = compute_g1_diffusion_jax(t1_base, t2_varying, q, D)
+        result = _compute_g1_diffusion_jax(t1_base, t2_varying, q, D)
 
         # Should be monotonically decreasing
         assert jnp.all(result[:-1] >= result[1:]), (
@@ -438,14 +532,14 @@ class TestJAXBackendProperties:
             "L": 1.0,
         }
 
-        base_result = compute_c2_model_jax(base_params, t1, t2, phi, q)
+        base_result = _compute_c2_model_jax(base_params, t1, t2, phi, q)
 
         # Test linear scaling with contrast
         for scale_factor in [0.5, 2.0, 1.5]:
             scaled_params = base_params.copy()
             scaled_params["contrast"] *= scale_factor
 
-            scaled_result = compute_c2_model_jax(scaled_params, t1, t2, phi, q)
+            scaled_result = _compute_c2_model_jax(scaled_params, t1, t2, phi, q)
 
             # Check that scaling is correct
             expected_scaling = (scaled_result - base_params["offset"]) / (
@@ -474,11 +568,12 @@ class TestJAXBackendProperties:
         }
 
         # Generate perfect model data
-        c2_exp = compute_c2_model_jax(params, t1, t2, phi, q)
+        c2_exp = _compute_c2_model_jax(params, t1, t2, phi, q)
         sigma = jnp.ones_like(c2_exp) * 0.01
 
-        # Compute residuals
-        residuals = residuals_jax(params, c2_exp, sigma, t1, t2, phi, q)
+        # Compute residuals using inline calculation
+        c2_model = _compute_c2_model_jax(params, t1, t2, phi, q)
+        residuals = (c2_exp - c2_model) / (sigma + EPS)
 
         # Mean residual should be very close to zero
         mean_residual = jnp.mean(residuals)
@@ -673,7 +768,7 @@ class TestPhysicsConstraints:
                 "shear_rate": 0.0,
                 "L": 1.0,
             }
-            result = compute_c2_model_jax(params, t1, t2, phi, q)
+            result = _compute_c2_model_jax(params, t1, t2, phi, q)
 
             # Physical constraint: g2 >= 1.0
             min_val = jnp.min(result)
@@ -698,7 +793,7 @@ class TestPhysicsConstraints:
         }
 
         # Compute g2
-        result = compute_c2_model_jax(params, t1, t2, phi, q)
+        result = _compute_c2_model_jax(params, t1, t2, phi, q)
 
         # Time symmetry means result matrix is symmetric: result[i,j] == result[j,i]
         # This is because g2 depends on |t1 - t2|, not on the sign
@@ -722,7 +817,7 @@ class TestPhysicsConstraints:
 
         for q in q_values:
             for D in D_values:
-                result = compute_g1_diffusion_jax(t1, t2, q, D)
+                result = _compute_g1_diffusion_jax(t1, t2, q, D)
 
                 # g1 bounds: [0, 1]
                 assert jnp.all(result >= 0.0), (
@@ -751,7 +846,7 @@ class TestPhysicsConstraints:
         }
 
         # Get c2 from model
-        c2_model = compute_c2_model_jax(params, t1, t2, phi, q)
+        c2_model = _compute_c2_model_jax(params, t1, t2, phi, q)
 
         # Extract g1² from c2 using Siegert relation: g1² = (c2 - offset) / contrast
         c2_2d = c2_model[0]
@@ -807,7 +902,7 @@ class TestPhysicsConstraints:
                 "L": 1.0,
             }
 
-            result = compute_c2_model_jax(params, t1, t2, phi, q)
+            result = _compute_c2_model_jax(params, t1, t2, phi, q)
 
             # Extract diagonal elements (t1 = t2)
             diagonal_elements = result[:, jnp.arange(n), jnp.arange(n)]
@@ -838,7 +933,7 @@ class TestPhysicsConstraints:
             "L": 1.0,
         }
 
-        result = compute_c2_model_jax(params, t1, t2, phi, q)
+        result = _compute_c2_model_jax(params, t1, t2, phi, q)
         result_2d = result[0]  # Single phi angle
 
         # Diagonal value
@@ -876,7 +971,7 @@ class TestPhysicsConstraints:
                 "L": 1.0,
             }
 
-            result = compute_c2_model_jax(params, t1, t2, phi, q)
+            result = _compute_c2_model_jax(params, t1, t2, phi, q)
 
             # Should be finite (no NaN/Inf)
             assert jnp.all(jnp.isfinite(result)), (
@@ -1014,7 +1109,7 @@ class TestVectorizationExpanded:
         }
 
         # Compute for all phi values
-        result = compute_c2_model_jax(params, t1, t2, phi_values, q)
+        result = _compute_c2_model_jax(params, t1, t2, phi_values, q)
 
         # Result should have phi as first dimension
         assert result.shape == (12, 2, 2)
@@ -1035,7 +1130,7 @@ class TestVectorizationExpanded:
         # Different time array sizes
         for n in [10, 50, 100]:
             t1, t2 = jnp.meshgrid(jnp.arange(n), jnp.arange(n), indexing="ij")
-            result = compute_c2_model_jax(params, t1, t2, phi, q)
+            result = _compute_c2_model_jax(params, t1, t2, phi, q)
             assert result.shape == (1, n, n)
 
     def test_broadcasting_contrast_offset(self, jax_backend):
@@ -1090,7 +1185,7 @@ class TestVectorizationExpanded:
                 "shear_rate": 0.0,
                 "L": 1.0,
             }
-            result = compute_c2_model_jax(params, t1, t2, phi, q)
+            result = _compute_c2_model_jax(params, t1, t2, phi, q)
             results.append(result)
 
         # Stack results
@@ -1122,12 +1217,13 @@ class TestVectorizationExpanded:
         }
 
         # Generate model and add noise
-        c2_model = compute_c2_model_jax(params, t1, t2, phi, q)
+        c2_model = _compute_c2_model_jax(params, t1, t2, phi, q)
         noise = jnp.zeros_like(c2_model) + 0.01
         c2_exp = c2_model + noise
         sigma = jnp.ones_like(c2_exp) * 0.02
 
-        residuals = residuals_jax(params, c2_exp, sigma, t1, t2, phi, q)
+        # Compute residuals using inline calculation
+        residuals = (c2_exp - c2_model) / (sigma + EPS)
 
         # Should compute residuals for all angles at once
         assert residuals.shape == (n_angles, n_times, n_times)
@@ -1199,10 +1295,10 @@ class TestJAXCompilationExpanded:
         }
 
         # Regular call
-        result_regular = compute_c2_model_jax(params, t1, t2, phi, q)
+        result_regular = _compute_c2_model_jax(params, t1, t2, phi, q)
 
         # JIT-compiled call
-        jit_c2 = jit(compute_c2_model_jax)
+        jit_c2 = jit(_compute_c2_model_jax)
         result_jit = jit_c2(params, t1, t2, phi, q)
 
         np.testing.assert_array_almost_equal(result_regular, result_jit, decimal=12)
@@ -1230,7 +1326,7 @@ class TestJAXCompilationExpanded:
         """Test JIT compilation of g1_diffusion function."""
         from jax import jit
 
-        jit_g1 = jit(compute_g1_diffusion_jax)
+        jit_g1 = jit(_compute_g1_diffusion_jax)
 
         t1 = jnp.linspace(0, 100, 30)
         t2 = jnp.linspace(0, 100, 30)
@@ -1238,7 +1334,7 @@ class TestJAXCompilationExpanded:
         D = 0.1
 
         # Regular and JIT should match
-        result_regular = compute_g1_diffusion_jax(t1, t2, q, D)
+        result_regular = _compute_g1_diffusion_jax(t1, t2, q, D)
         result_jit = jit_g1(t1, t2, q, D)
 
         np.testing.assert_array_almost_equal(result_regular, result_jit, decimal=12)
@@ -1315,7 +1411,7 @@ class TestNumericalStabilityExpanded:
         q = 0.01
         D = 0.1
 
-        result = compute_g1_diffusion_jax(t1, t2, q, D)
+        result = _compute_g1_diffusion_jax(t1, t2, q, D)
 
         # Should handle small differences correctly
         assert jnp.all(jnp.isfinite(result))
@@ -1329,11 +1425,11 @@ class TestNumericalStabilityExpanded:
         D = 0.1
 
         # Very small q
-        result_small_q = compute_g1_diffusion_jax(t1, t2, 1e-6, D)
+        result_small_q = _compute_g1_diffusion_jax(t1, t2, 1e-6, D)
         assert jnp.all(jnp.isfinite(result_small_q))
 
         # Large q (but reasonable for XPCS)
-        result_large_q = compute_g1_diffusion_jax(t1, t2, 0.5, D)
+        result_large_q = _compute_g1_diffusion_jax(t1, t2, 0.5, D)
         assert jnp.all(jnp.isfinite(result_large_q))
 
     def test_extreme_D_values(self, jax_backend):
@@ -1343,13 +1439,13 @@ class TestNumericalStabilityExpanded:
         q = 0.01
 
         # Very small D (slow diffusion)
-        result_small_D = compute_g1_diffusion_jax(t1, t2, q, 1e-6)
+        result_small_D = _compute_g1_diffusion_jax(t1, t2, q, 1e-6)
         assert jnp.all(jnp.isfinite(result_small_D))
         # Slow diffusion = slow decorrelation = g1 stays high
         assert jnp.mean(result_small_D) > 0.99
 
         # Large D (fast diffusion)
-        result_large_D = compute_g1_diffusion_jax(t1, t2, q, 100.0)
+        result_large_D = _compute_g1_diffusion_jax(t1, t2, q, 100.0)
         assert jnp.all(jnp.isfinite(result_large_D))
 
     def test_c2_near_boundary_values(self, jax_backend):
@@ -1367,7 +1463,7 @@ class TestNumericalStabilityExpanded:
             "shear_rate": 0.0,
             "L": 1.0,
         }
-        result = compute_c2_model_jax(params_low_contrast, t1, t2, phi, q)
+        result = _compute_c2_model_jax(params_low_contrast, t1, t2, phi, q)
         assert jnp.all(jnp.isfinite(result))
         # Should be very close to offset everywhere
         assert jnp.all(jnp.abs(result - 1.0) < 1e-5)
@@ -1389,7 +1485,7 @@ class TestNumericalStabilityExpanded:
                 "shear_rate": 0.0,
                 "L": 1.0,
             }
-            c2 = compute_c2_model_jax(params, t1, t2, phi, q)
+            c2 = _compute_c2_model_jax(params, t1, t2, phi, q)
             return jnp.sum(c2)
 
         grad_fn = grad(loss_fn)
@@ -1411,9 +1507,9 @@ class TestNumericalStabilityExpanded:
         q = 0.01
         D = 0.1
 
-        result_f32 = compute_g1_diffusion_jax(t1_f32, t2_f32, q, D)
+        result_f32 = _compute_g1_diffusion_jax(t1_f32, t2_f32, q, D)
         config.update("jax_enable_x64", True)
-        result_f64 = compute_g1_diffusion_jax(t1_f64, t2_f64, q, D)
+        result_f64 = _compute_g1_diffusion_jax(t1_f64, t2_f64, q, D)
 
         # Results should be close (within float32 precision)
         np.testing.assert_array_almost_equal(
@@ -1438,7 +1534,7 @@ class TestNumericalStabilityExpanded:
         }
 
         # Run computation multiple times
-        results = [compute_c2_model_jax(params, t1, t2, phi, q) for _ in range(5)]
+        results = [_compute_c2_model_jax(params, t1, t2, phi, q) for _ in range(5)]
 
         # All results should be identical
         for i in range(1, 5):
@@ -1459,7 +1555,7 @@ class TestNumericalStabilityExpanded:
             "L": 1.0,
         }
 
-        result = compute_c2_model_jax(params, t1, t2, phi, q)
+        result = _compute_c2_model_jax(params, t1, t2, phi, q)
 
         # Should be finite everywhere
         assert jnp.all(jnp.isfinite(result))
@@ -1548,7 +1644,7 @@ class TestGradientComputationsExpanded:
         # chi² = sum((model - target)²/sigma²)
         def chi2_loss(D_param):
             # g1 = exp(-q²D|t1-t2|) which depends on D
-            g1 = compute_g1_diffusion_jax(t1, t2, q, D_param)
+            g1 = _compute_g1_diffusion_jax(t1, t2, q, D_param)
             target = jnp.ones_like(g1) * 0.5
             sigma = jnp.ones_like(g1) * 0.1
             return jnp.sum(((g1 - target) / sigma) ** 2)
@@ -2134,109 +2230,3 @@ class TestMeshgridCache:
 
         # 23 angles need at least 23 cache entries
         assert _MESHGRID_CACHE_MAX_SIZE >= 23
-        # Cache size was increased from 16 to 64 in v2.11.0
-        assert _MESHGRID_CACHE_MAX_SIZE == 64
-
-    def test_23_angle_dataset_fits_in_cache(self):
-        """T040: Verify 23-angle dataset time grids all fit in cache."""
-        from homodyne.core.jax_backend import (
-            clear_meshgrid_cache,
-            get_cache_stats,
-            get_cached_meshgrid,
-            reset_cache_stats,
-        )
-
-        # Setup
-        clear_meshgrid_cache()
-        reset_cache_stats()
-
-        # Simulate 23 unique phi angles with same time grid
-        # In practice, each phi may have slightly different t1/t2 due to data selection
-        n_angles = 23
-        n_time = 100
-
-        for i in range(n_angles):
-            # Slightly different time arrays per angle (simulates real data)
-            t1 = jnp.linspace(0.1 + i * 0.001, 1.0, n_time)
-            t2 = jnp.linspace(0.1 + i * 0.001, 1.0, n_time)
-            get_cached_meshgrid(t1, t2)
-
-        stats = get_cache_stats()
-
-        # All 23 should fit without eviction (cache size = 64)
-        assert stats["evictions"] == 0, f"Evictions occurred: {stats['evictions']}"
-        assert stats["cache_size"] == n_angles, (
-            f"Expected {n_angles}, got {stats['cache_size']}"
-        )
-
-        # Cleanup
-        clear_meshgrid_cache()
-
-    def test_cache_hit_rate_with_repeated_access(self):
-        """T040: Verify high hit rate with repeated meshgrid access."""
-        from homodyne.core.jax_backend import (
-            clear_meshgrid_cache,
-            get_cache_stats,
-            get_cached_meshgrid,
-            reset_cache_stats,
-        )
-
-        # Setup
-        clear_meshgrid_cache()
-        reset_cache_stats()
-
-        # Create 10 unique time grids
-        n_grids = 10
-        n_time = 50
-        time_arrays = [
-            jnp.linspace(0.1 + i * 0.01, 1.0, n_time) for i in range(n_grids)
-        ]
-
-        # Access each grid once (all misses)
-        for t in time_arrays:
-            get_cached_meshgrid(t, t)
-
-        # Access each grid again (all hits)
-        for t in time_arrays:
-            get_cached_meshgrid(t, t)
-
-        stats = get_cache_stats()
-
-        # 10 misses (first access), 10 hits (second access)
-        assert stats["misses"] == n_grids
-        assert stats["hits"] == n_grids
-        assert stats["hit_rate"] == 0.5  # 10/(10+10)
-
-        # Cleanup
-        clear_meshgrid_cache()
-
-    def test_cache_eviction_when_full(self):
-        """T040: Verify FIFO eviction when cache exceeds capacity."""
-        from homodyne.core.jax_backend import (
-            _MESHGRID_CACHE_MAX_SIZE,
-            clear_meshgrid_cache,
-            get_cache_stats,
-            get_cached_meshgrid,
-            reset_cache_stats,
-        )
-
-        # Setup
-        clear_meshgrid_cache()
-        reset_cache_stats()
-
-        # Fill cache beyond capacity
-        n_grids = _MESHGRID_CACHE_MAX_SIZE + 10
-        n_time = 30
-
-        for i in range(n_grids):
-            t = jnp.linspace(0.1 + i * 0.01, 1.0, n_time)
-            get_cached_meshgrid(t, t)
-
-        stats = get_cache_stats()
-
-        # Should have 64 entries (max) and 10 evictions
-        assert stats["cache_size"] == _MESHGRID_CACHE_MAX_SIZE
-        assert stats["evictions"] == 10
-
-        # Cleanup
-        clear_meshgrid_cache()

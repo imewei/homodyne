@@ -45,7 +45,7 @@ class TestComputationalBenchmarks:
 
     def test_g1_diffusion_benchmark(self, jax_backend, benchmark_config):
         """Benchmark g1 diffusion computation across different sizes."""
-        from tests.utils.legacy_compat import compute_g1_diffusion_jax
+        from homodyne.core.jax_backend import compute_g1_diffusion
 
         # Test different matrix sizes
         sizes = [50, 100, 200, 300]
@@ -55,17 +55,21 @@ class TestComputationalBenchmarks:
             t1, t2 = jnp.meshgrid(jnp.arange(size), jnp.arange(size), indexing="ij")
             q = 0.01
             D = 0.1
+            # Create params array [D0, alpha, D_offset]
+            params = jnp.array([D, 0.5, 0.0])
+            # Estimate dt from time array
+            dt = 1.0
 
             # Warmup
             for _ in range(3):
-                result = compute_g1_diffusion_jax(t1, t2, q, D)
+                result = compute_g1_diffusion(params, t1, t2, q, dt)
                 result.block_until_ready()
 
             # Benchmark
             times = []
             for _ in range(benchmark_config["min_rounds"]):
                 start = time.perf_counter()
-                result = compute_g1_diffusion_jax(t1, t2, q, D)
+                result = compute_g1_diffusion(params, t1, t2, q, dt)
                 result.block_until_ready()
                 elapsed = time.perf_counter() - start
                 times.append(elapsed)
@@ -102,7 +106,7 @@ class TestComputationalBenchmarks:
 
     def test_c2_model_benchmark(self, jax_backend, benchmark_config):
         """Benchmark complete c2 model computation."""
-        from tests.utils.legacy_compat import compute_c2_model_jax
+        from homodyne.core.jax_backend import compute_g2_scaled
 
         # Realistic dataset sizes
         test_cases = [
@@ -122,25 +126,24 @@ class TestComputationalBenchmarks:
             )
             phi = jnp.linspace(0, 2 * jnp.pi, n_angles)
 
-            params = {
-                "offset": 1.0,
-                "contrast": 0.4,
-                "diffusion_coefficient": 0.1,
-                "shear_rate": 0.0,
-                "L": 1.0,
-            }
+            # Create params array [D0, alpha, D_offset]
+            param_array = jnp.array([0.1, 0.5, 0.0])  # diffusion_coefficient=0.1
+            contrast = 0.4
+            offset = 1.0
+            L = 1.0
             q = 0.01
+            dt = 1.0
 
             # Warmup
             for _ in range(2):
-                result = compute_c2_model_jax(params, t1, t2, phi, q)
+                result = compute_g2_scaled(param_array, t1, t2, phi, q, L, contrast, offset, dt)
                 result.block_until_ready()
 
             # Benchmark
             times = []
             for _ in range(benchmark_config["min_rounds"]):
                 start = time.perf_counter()
-                result = compute_c2_model_jax(params, t1, t2, phi, q)
+                result = compute_g2_scaled(param_array, t1, t2, phi, q, L, contrast, offset, dt)
                 result.block_until_ready()
                 elapsed = time.perf_counter() - start
                 times.append(elapsed)
@@ -224,7 +227,7 @@ class TestComputationalBenchmarks:
     @pytest.mark.skipif(not HAS_PSUTIL, reason="psutil not available")
     def test_memory_usage_benchmark(self, jax_backend):
         """Benchmark memory usage for different dataset sizes."""
-        from tests.utils.legacy_compat import compute_c2_model_jax
+        from homodyne.core.jax_backend import compute_g2_scaled
 
         # Monitor memory usage
         process = psutil.Process()
@@ -240,19 +243,19 @@ class TestComputationalBenchmarks:
             t1, t2 = jnp.meshgrid(jnp.arange(size), jnp.arange(size), indexing="ij")
             phi = jnp.linspace(0, 2 * jnp.pi, 36)
 
-            params = {
-                "offset": 1.0,
-                "contrast": 0.4,
-                "diffusion_coefficient": 0.1,
-                "shear_rate": 0.0,
-                "L": 1.0,
-            }
+            # Create params array [D0, alpha, D_offset]
+            param_array = jnp.array([0.1, 0.5, 0.0])  # diffusion_coefficient=0.1
+            contrast = 0.4
+            offset = 1.0
+            L = 1.0
+            q = 0.01
+            dt = 1.0
 
             # Measure memory before computation
             before_memory = process.memory_info().rss / (1024 * 1024)
 
             # Perform computation
-            result = compute_c2_model_jax(params, t1, t2, phi, 0.01)
+            result = compute_g2_scaled(param_array, t1, t2, phi, q, L, contrast, offset, dt)
             result.block_until_ready()
 
             # Measure memory after computation
@@ -348,18 +351,21 @@ class TestScalingBenchmarks:
         """Test JAX compilation overhead vs execution time."""
         from jax import jit
 
-        from tests.utils.legacy_compat import compute_g1_diffusion_jax
+        from homodyne.core.jax_backend import compute_g1_diffusion
 
         size = 100
         t1, t2 = jnp.meshgrid(jnp.arange(size), jnp.arange(size), indexing="ij")
         q = 0.01
         D = 0.1
+        # Create params array [D0, alpha, D_offset]
+        params = jnp.array([D, 0.5, 0.0])
+        dt = 1.0
 
         # Test compilation time
-        jit_fn = jit(compute_g1_diffusion_jax)
+        jit_fn = jit(lambda p, t1, t2: compute_g1_diffusion(p, t1, t2, q, dt))
 
         start = time.perf_counter()
-        result = jit_fn(t1, t2, q, D)  # First call triggers compilation
+        result = jit_fn(params, t1, t2)  # First call triggers compilation
         result.block_until_ready()
         compilation_time = time.perf_counter() - start
 
@@ -367,7 +373,7 @@ class TestScalingBenchmarks:
         execution_times = []
         for _ in range(10):
             start = time.perf_counter()
-            result = jit_fn(t1, t2, q, D)
+            result = jit_fn(params, t1, t2)
             result.block_until_ready()
             elapsed = time.perf_counter() - start
             execution_times.append(elapsed)
@@ -393,20 +399,19 @@ class TestScalingBenchmarks:
         """Test performance scaling with vectorization."""
         from jax import vmap
 
-        from tests.utils.legacy_compat import compute_c2_model_jax
+        from homodyne.core.jax_backend import compute_g2_scaled
 
         # Base computation
         t1 = jnp.array([[0, 1, 2], [1, 0, 1], [2, 1, 0]])
         t2 = jnp.array([[0, 1, 2], [1, 0, 1], [2, 1, 0]])
         phi = jnp.array([0.0, jnp.pi / 2, jnp.pi])
 
-        params = {
-            "offset": 1.0,
-            "contrast": 0.4,
-            "diffusion_coefficient": 0.1,
-            "shear_rate": 0.0,
-            "L": 1.0,
-        }
+        # Create params array [D0, alpha, D_offset]
+        param_array = jnp.array([0.1, 0.5, 0.0])  # diffusion_coefficient=0.1
+        contrast = 0.4
+        offset = 1.0
+        L = 1.0
+        dt = 1.0
 
         # Test different numbers of q-values
         q_counts = [1, 5, 10, 20]
@@ -416,7 +421,7 @@ class TestScalingBenchmarks:
             q_values = jnp.linspace(0.005, 0.02, n_q)
 
             # Vectorized computation
-            vmap_fn = vmap(lambda q: compute_c2_model_jax(params, t1, t2, phi, q))
+            vmap_fn = vmap(lambda q: compute_g2_scaled(param_array, t1, t2, phi, q, L, contrast, offset, dt))
 
             # Warmup
             result_vmap = vmap_fn(q_values)
@@ -436,7 +441,7 @@ class TestScalingBenchmarks:
             for _ in range(5):
                 start = time.perf_counter()
                 for q in q_values:
-                    result_seq = compute_c2_model_jax(params, t1, t2, phi, q)
+                    result_seq = compute_g2_scaled(param_array, t1, t2, phi, q, L, contrast, offset, dt)
                     result_seq.block_until_ready()
                 elapsed = time.perf_counter() - start
                 times_sequential.append(elapsed)
@@ -456,7 +461,7 @@ class TestScalingBenchmarks:
 
     def test_memory_scaling_behavior(self, jax_backend):
         """Test memory scaling with dataset size."""
-        from tests.utils.legacy_compat import compute_c2_model_jax
+        from homodyne.core.jax_backend import compute_g2_scaled
 
         # Test different sizes
         sizes = [20, 40, 60]
@@ -467,13 +472,13 @@ class TestScalingBenchmarks:
             t1, t2 = jnp.meshgrid(jnp.arange(size), jnp.arange(size), indexing="ij")
             phi = jnp.linspace(0, 2 * jnp.pi, 24)
 
-            params = {
-                "offset": 1.0,
-                "contrast": 0.4,
-                "diffusion_coefficient": 0.1,
-                "shear_rate": 0.0,
-                "L": 1.0,
-            }
+            # Create params array [D0, alpha, D_offset]
+            param_array = jnp.array([0.1, 0.5, 0.0])  # diffusion_coefficient=0.1
+            contrast = 0.4
+            offset = 1.0
+            L = 1.0
+            q = 0.01
+            dt = 1.0
 
             # Estimate memory usage (rough)
             expected_arrays = [
@@ -483,7 +488,7 @@ class TestScalingBenchmarks:
             ]
 
             # Compute result
-            result = compute_c2_model_jax(params, t1, t2, phi, 0.01)
+            result = compute_g2_scaled(param_array, t1, t2, phi, q, L, contrast, offset, dt)
 
             # Estimate total memory
             total_elements = sum(arr.size for arr in expected_arrays) + result.size
@@ -523,7 +528,7 @@ class TestRegressionBenchmarks:
 
     def test_baseline_performance_regression(self, jax_backend, synthetic_xpcs_data):
         """Test against baseline performance expectations."""
-        from tests.utils.legacy_compat import compute_c2_model_jax
+        from homodyne.core.jax_backend import compute_g2_scaled
 
         # Standard test case
         data = synthetic_xpcs_data
@@ -532,23 +537,27 @@ class TestRegressionBenchmarks:
         phi = data["phi_angles_list"]
         q = data["wavevector_q_list"][0]
 
-        params = {
-            "offset": 1.0,
-            "contrast": 0.4,
-            "diffusion_coefficient": 0.1,
-            "shear_rate": 0.0,
-            "L": 1.0,
-        }
+        # Create params array [D0, alpha, D_offset]
+        param_array = jnp.array([0.1, 0.5, 0.0])  # diffusion_coefficient=0.1
+        contrast = 0.4
+        offset = 1.0
+        L = 1.0
+        # Estimate dt from time array
+        if t1.ndim == 2:
+            time_array = t1[:, 0]
+        else:
+            time_array = t1
+        dt = float(time_array[1] - time_array[0]) if len(time_array) > 1 else 1.0
 
         # Warmup
-        result = compute_c2_model_jax(params, t1, t2, phi, q)
+        result = compute_g2_scaled(param_array, t1, t2, phi, q, L, contrast, offset, dt)
         result.block_until_ready()
 
         # Benchmark
         times = []
         for _ in range(5):
             start = time.perf_counter()
-            result = compute_c2_model_jax(params, t1, t2, phi, q)
+            result = compute_g2_scaled(param_array, t1, t2, phi, q, L, contrast, offset, dt)
             result.block_until_ready()
             elapsed = time.perf_counter() - start
             times.append(elapsed)
@@ -801,14 +810,18 @@ class TestAdditionalBenchmarks:
 
     def test_jax_jit_compilation_time(self, jax_backend):
         """Test JIT compilation time: first vs subsequent calls."""
-        from tests.utils.legacy_compat import compute_g1_diffusion_jax
+        from homodyne.core.jax_backend import compute_g1_diffusion
 
         t1, t2 = jnp.meshgrid(jnp.arange(50), jnp.arange(50), indexing="ij")
-        q, D = 0.01, 1000.0
+        q = 0.01
+        D = 1000.0
+        # Create params array [D0, alpha, D_offset]
+        params = jnp.array([D, 0.5, 0.0])
+        dt = 1.0
 
         # First call (includes compilation)
         start = time.perf_counter()
-        result = compute_g1_diffusion_jax(t1, t2, q, D)
+        result = compute_g1_diffusion(params, t1, t2, q, dt)
         result.block_until_ready()
         first_call_time = time.perf_counter() - start
 
@@ -816,7 +829,7 @@ class TestAdditionalBenchmarks:
         subsequent_times = []
         for _ in range(5):
             start = time.perf_counter()
-            result = compute_g1_diffusion_jax(t1, t2, q, D)
+            result = compute_g1_diffusion(params, t1, t2, q, dt)
             result.block_until_ready()
             subsequent_times.append(time.perf_counter() - start)
 
@@ -876,7 +889,7 @@ class TestAdditionalBenchmarks:
 
     def test_overall_pipeline_timing(self, jax_backend, synthetic_xpcs_data):
         """Test end-to-end workflow timing."""
-        from tests.utils.legacy_compat import compute_c2_model_jax
+        from homodyne.core.jax_backend import compute_g2_scaled
 
         data = synthetic_xpcs_data
         t1 = data["t1"]
@@ -884,13 +897,17 @@ class TestAdditionalBenchmarks:
         phi = data["phi_angles_list"]
         q = data["wavevector_q_list"][0]
 
-        params = {
-            "offset": 1.0,
-            "contrast": 0.4,
-            "diffusion_coefficient": 0.1,
-            "shear_rate": 0.0,
-            "L": 1.0,
-        }
+        # Create params array [D0, alpha, D_offset]
+        param_array = jnp.array([0.1, 0.5, 0.0])  # diffusion_coefficient=0.1
+        contrast = 0.4
+        offset = 1.0
+        L = 1.0
+        # Estimate dt from time array
+        if t1.ndim == 2:
+            time_array = t1[:, 0]
+        else:
+            time_array = t1
+        dt = float(time_array[1] - time_array[0]) if len(time_array) > 1 else 1.0
 
         # Full pipeline timing
         pipeline_times = []
@@ -898,7 +915,7 @@ class TestAdditionalBenchmarks:
             start = time.perf_counter()
 
             # Step 1: Model computation
-            model = compute_c2_model_jax(params, t1, t2, phi, q)
+            model = compute_g2_scaled(param_array, t1, t2, phi, q, L, contrast, offset, dt)
             model.block_until_ready()
 
             # Step 2: Residual computation

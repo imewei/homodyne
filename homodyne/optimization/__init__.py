@@ -28,26 +28,25 @@ from homodyne.optimization import nlsq
 
 # Handle NLSQ imports with intelligent fallback
 try:
-    from homodyne.optimization.nlsq import (  # Strategies; Chunking; Residual; Sequential
-        DatasetSizeStrategy,
+    from homodyne.optimization.nlsq import (  # Chunking; Residual; Sequential
         MultiStartConfig,
         MultiStartResult,
         NLSQResult,
         NLSQWrapper,
         OptimizationResult,
-        OptimizationStrategy,
         StratificationDiagnostics,
         StratifiedResidualFunction,
         StratifiedResidualFunctionJIT,
         create_angle_stratified_data,
         create_angle_stratified_indices,
         create_stratified_residual_function,
-        estimate_memory_requirements,
         fit_nlsq_jax,
         fit_nlsq_multistart,
         optimize_per_angle_sequential,
         should_use_stratification,
     )
+    # NOTE: DatasetSizeStrategy, OptimizationStrategy, estimate_memory_requirements
+    # removed from public API in v2.12.0. Use NLSQ's WorkflowSelector instead.
 
     NLSQ_AVAILABLE = True
 except ImportError as e:
@@ -59,9 +58,6 @@ except ImportError as e:
     NLSQResult = None
     NLSQWrapper = None
     OptimizationResult = None
-    DatasetSizeStrategy = None
-    OptimizationStrategy = None
-    estimate_memory_requirements = None
     StratificationDiagnostics = None
     create_angle_stratified_data = None
     create_angle_stratified_indices = None
@@ -135,9 +131,6 @@ __all__ = [
     # NLSQ components
     "NLSQWrapper",
     "OptimizationResult",
-    "DatasetSizeStrategy",
-    "OptimizationStrategy",
-    "estimate_memory_requirements",
     "StratificationDiagnostics",
     "create_angle_stratified_data",
     "create_angle_stratified_indices",
@@ -146,6 +139,8 @@ __all__ = [
     "StratifiedResidualFunctionJIT",
     "create_stratified_residual_function",
     "optimize_per_angle_sequential",
+    # NOTE: DatasetSizeStrategy, OptimizationStrategy, estimate_memory_requirements
+    # removed from public API in v2.12.0. Use NLSQ's WorkflowSelector instead.
     # Status information
     "OPTIMIZATION_STATUS",
     "NLSQ_AVAILABLE",

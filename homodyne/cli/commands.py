@@ -254,60 +254,6 @@ def _configure_device(args) -> dict[str, Any]:
     return device_config
 
 
-def _check_deprecated_config(config: "ConfigManager") -> None:
-    """Check for deprecated configuration sections and warn user.
-
-    Warns about:
-    - performance.subsampling (removed in v3.0)
-    - optimization_performance.time_subsampling (deprecated in v2.1)
-
-    Parameters
-    ----------
-    config : ConfigManager
-        Configuration object to check
-    """
-    warnings_issued = []
-
-    # Check for deprecated performance.subsampling
-    if "performance" in config.config:
-        perf = config.config["performance"]
-        if "subsampling" in perf:
-            warnings_issued.append(
-                "⚠️  DEPRECATED CONFIG: 'performance.subsampling'\n"
-                "   This section is no longer used (removed in v3.0).\n"
-                "   NLSQ now handles large datasets automatically.\n"
-                "   Please remove this section from your configuration file."
-            )
-
-    # Check for old optimization_performance path
-    if "optimization_performance" in config.config:
-        old_perf = config.config["optimization_performance"]
-        if "time_subsampling" in old_perf:
-            warnings_issued.append(
-                "⚠️  DEPRECATED CONFIG: 'optimization_performance.time_subsampling'\n"
-                "   This path was deprecated in v2.1 and removed in v3.0.\n"
-                "   Please remove this section from your configuration file."
-            )
-
-    # Issue all warnings at once for visibility
-    if warnings_issued:
-        logger.warning(
-            "\n" + "=" * 70 + "\n"
-            "DEPRECATED CONFIGURATION DETECTED\n"
-            + "=" * 70
-            + "\n"
-            + "\n\n".join(warnings_issued)
-            + "\n"
-            + "=" * 70
-            + "\n"
-            "Migration: NLSQ v3.0+ uses native large dataset handling.\n"
-            "Simply remove the deprecated sections - no replacement needed.\n"
-            "See: https://nlsq.readthedocs.io/en/latest/guides/large_datasets.html\n"
-            + "="
-            * 70
-        )
-
-
 def _load_configuration(args) -> ConfigManager:
     """Load configuration from file or create default."""
     logger.info(f"Loading configuration from: {args.config}")
@@ -324,9 +270,6 @@ def _load_configuration(args) -> ConfigManager:
 
         # Apply CLI overrides
         _apply_cli_overrides(config, args)
-
-        # Check for deprecated configuration sections
-        _check_deprecated_config(config)
 
         return config
 

@@ -226,7 +226,7 @@ class CMCConfig:
             max_r_hat=validation.get("max_per_shard_rhat", 1.1),
             min_ess=validation.get("min_per_shard_ess", 100.0),
             # Combination
-            combination_method=combination.get("method", "weighted_gaussian"),
+            combination_method=combination.get("method", "consensus_mc"),
             min_success_rate=combination.get("min_success_rate", 0.90),
             run_id=config_dict.get("run_id"),
             # Timeout

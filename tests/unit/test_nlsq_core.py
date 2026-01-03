@@ -1169,11 +1169,19 @@ class TestNLSQOptimization:
             "L": 1.0,
         }
         q = 0.01
+        dt = 0.1  # Time step in seconds
+        L = true_params["L"]
+        contrast = true_params["contrast"]
+        offset = true_params["offset"]
 
-        # Generate perfect synthetic data
-        from tests.utils.legacy_compat import compute_c2_model_jax
+        # Generate perfect synthetic data using modern API
+        from homodyne.core.jax_backend import compute_g2_scaled
 
-        c2_true = compute_c2_model_jax(true_params, t1, t2, phi, q)
+        # Convert dict params to array format: [D0, alpha, D_offset]
+        D0 = true_params["diffusion_coefficient"]
+        param_array = jnp.array([D0, 0.5, 0.0])  # alpha=0.5, D_offset=0
+
+        c2_true = compute_g2_scaled(param_array, t1, t2, phi, q, L, contrast, offset, dt)
 
         # Add minimal noise
         np.random.seed(42)
@@ -1187,7 +1195,7 @@ class TestNLSQOptimization:
             "c2_exp": c2_exp,
             "wavevector_q_list": np.array([q]),
             "sigma": np.ones_like(c2_exp) * 0.001,
-            "dt": 0.1,  # Time step in seconds (required for physics calculations)
+            "dt": dt,  # Time step in seconds (required for physics calculations)
         }
 
         # Run optimization
@@ -1289,11 +1297,19 @@ class TestNLSQOptimization:
             "L": 1.0,
         }
         q = 0.015
+        dt = 0.1  # Time step in seconds
+        L = params_with_shear["L"]
+        contrast = params_with_shear["contrast"]
+        offset = params_with_shear["offset"]
 
-        # Generate synthetic data with shear
-        from tests.utils.legacy_compat import compute_c2_model_jax
+        # Generate synthetic data with shear using modern API
+        from homodyne.core.jax_backend import compute_g2_scaled
 
-        c2_true = compute_c2_model_jax(params_with_shear, t1, t2, phi, q)
+        # Convert dict params to array format: [D0, alpha, D_offset]
+        D0 = params_with_shear["diffusion_coefficient"]
+        param_array = jnp.array([D0, 0.5, 0.0])  # alpha=0.5, D_offset=0
+
+        c2_true = compute_g2_scaled(param_array, t1, t2, phi, q, L, contrast, offset, dt)
 
         # Add noise
         np.random.seed(123)
@@ -1307,7 +1323,7 @@ class TestNLSQOptimization:
             "c2_exp": c2_exp,
             "wavevector_q_list": np.array([q]),
             "sigma": np.ones_like(c2_exp) * 0.01,
-            "dt": 0.1,  # Time step in seconds (required for physics calculations)
+            "dt": dt,  # Time step in seconds (required for physics calculations)
         }
 
         # Update config for shear analysis
@@ -1336,8 +1352,8 @@ class TestNLSQOptimization:
         # Multiple q-values
         q_values = np.array([0.008, 0.012, 0.016])
 
-        # Generate data for each q
-        from tests.utils.legacy_compat import compute_c2_model_jax
+        # Generate data for each q using modern API
+        from homodyne.core.jax_backend import compute_g2_scaled
 
         true_params = {
             "offset": 1.0,
@@ -1346,10 +1362,18 @@ class TestNLSQOptimization:
             "shear_rate": 0.0,
             "L": 1.0,
         }
+        dt = 0.1  # Time step in seconds
+        L = true_params["L"]
+        contrast = true_params["contrast"]
+        offset = true_params["offset"]
+
+        # Convert dict params to array format: [D0, alpha, D_offset]
+        D0 = true_params["diffusion_coefficient"]
+        param_array = jnp.array([D0, 0.5, 0.0])  # alpha=0.5, D_offset=0
 
         c2_exp_list = []
         for q in q_values:
-            c2_q = compute_c2_model_jax(true_params, t1, t2, phi, q)
+            c2_q = compute_g2_scaled(param_array, t1, t2, phi, q, L, contrast, offset, dt)
             # Add different noise levels for each q
             noise = 0.005 * np.random.randn(*c2_q.shape)
             c2_exp_list.append(c2_q + noise)

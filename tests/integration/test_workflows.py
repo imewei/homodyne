@@ -3,7 +3,7 @@ Integration Tests for Scientific Workflows
 ==========================================
 
 End-to-end integration tests for complete homodyne analysis workflows:
-- Data loading → Processing → Optimization → Results
+- Data loading -> Processing -> Optimization -> Results
 - Configuration system integration
 - Multi-format data handling
 - Cross-module compatibility
@@ -219,7 +219,7 @@ class TestCrossplatformCompatibility:
     def test_numerical_precision_consistency(self):
         """Test numerical precision consistency across platforms."""
         try:
-            from tests.utils.legacy_compat import compute_g1_diffusion_jax
+            from homodyne.core.jax_backend import compute_g1_diffusion
         except ImportError:
             pytest.skip("JAX backend not available")
 
@@ -232,7 +232,7 @@ class TestCrossplatformCompatibility:
         q = 0.01
         D = 0.1
 
-        result = compute_g1_diffusion_jax(t1, t2, q, D)
+        result = compute_g1_diffusion(t1, t2, q, D)
 
         # Test specific expected values (should be consistent across platforms)
         diagonal = jnp.diag(result)

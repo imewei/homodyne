@@ -256,77 +256,6 @@ def estimate_peak_memory_gb(
     return peak_bytes / (1024**3)
 
 
-def should_use_streaming(
-    n_points: int,
-    n_params: int,
-    threshold_gb: float | None = None,
-    memory_fraction: float | None = None,
-) -> tuple[bool, dict[str, Any]]:
-    """Determine if streaming mode should be used based on memory requirements.
-
-    .. deprecated:: 2.11.0
-        This function is deprecated. NLSQ's WorkflowSelector (v0.4+) handles
-        memory-based workflow selection automatically via
-        :class:`nlsq.core.workflow.WorkflowSelector`.
-
-    Parameters
-    ----------
-    n_points : int
-        Number of data points
-    n_params : int
-        Number of parameters
-    threshold_gb : float | None, optional
-        Explicit memory threshold in GB. If None, auto-detect.
-    memory_fraction : float | None, optional
-        Fraction of system memory for threshold (if threshold_gb not set)
-
-    Returns
-    -------
-    use_streaming : bool
-        True if streaming mode should be used
-    info : dict
-        Diagnostic information including estimated memory and threshold
-    """
-    warnings.warn(
-        "should_use_streaming is deprecated since v2.11.0. "
-        "NLSQ's WorkflowSelector handles this automatically in v0.4+.",
-        DeprecationWarning,
-        stacklevel=2,
-    )
-
-    # Get threshold
-    if threshold_gb is None:
-        threshold_gb, threshold_info = get_adaptive_memory_threshold(memory_fraction)
-    else:
-        threshold_info = {"source": "explicit", "memory_fraction": None}
-
-    # Estimate memory
-    estimated_gb = estimate_peak_memory_gb(n_points, n_params)
-
-    info = {
-        "estimated_memory_gb": estimated_gb,
-        "threshold_gb": threshold_gb,
-        "n_points": n_points,
-        "n_params": n_params,
-        **threshold_info,
-    }
-
-    use_streaming = estimated_gb > threshold_gb
-
-    if use_streaming:
-        logger.info(
-            f"Streaming mode recommended: estimated {estimated_gb:.1f} GB > "
-            f"threshold {threshold_gb:.1f} GB"
-        )
-    else:
-        logger.debug(
-            f"Full Jacobian mode OK: estimated {estimated_gb:.1f} GB < "
-            f"threshold {threshold_gb:.1f} GB"
-        )
-
-    return use_streaming, info
-
-
 __all__ = [
     "DEFAULT_MEMORY_FRACTION",
     "MEMORY_FRACTION_ENV_VAR",
@@ -334,5 +263,4 @@ __all__ = [
     "detect_total_system_memory",
     "get_adaptive_memory_threshold",
     "estimate_peak_memory_gb",
-    "should_use_streaming",
 ]

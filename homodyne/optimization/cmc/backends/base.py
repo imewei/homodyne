@@ -6,6 +6,7 @@ and provides a factory function for selecting backends.
 
 from __future__ import annotations
 
+import warnings
 from abc import ABC, abstractmethod
 from collections.abc import Callable
 from typing import TYPE_CHECKING, Any
@@ -292,6 +293,12 @@ def _combine_shard_chunk(
             combined_samples[name] = new_samples
 
     elif method == "simple_average":
+        warnings.warn(
+            "combination_method='simple_average' is deprecated since v2.12.0 "
+            "and will be removed in v3.0. Use 'consensus_mc' instead.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
         # Legacy: Simple element-wise average across shards (deprecated)
         combined_samples = {}
         for name in param_names:
@@ -299,6 +306,12 @@ def _combine_shard_chunk(
             combined_samples[name] = np.mean(all_shard_samples, axis=0)
 
     else:  # weighted_gaussian (legacy default)
+        warnings.warn(
+            "combination_method='weighted_gaussian' is deprecated since v2.12.0 "
+            "and will be removed in v3.0. Use 'consensus_mc' instead.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
         # Legacy: Element-wise weighted averaging (deprecated)
         # WARNING: This is mathematically incorrect but kept for backward compatibility
         combined_samples = {}

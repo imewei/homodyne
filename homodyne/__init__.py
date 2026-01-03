@@ -38,6 +38,19 @@ Authors: Wei Chen, Hongrui He (Argonne National Laboratory)
 import logging
 import os
 import sys
+import warnings
+
+# ============================================================================
+# Third-Party Deprecation Warning Filters (MUST be set before imports)
+# ============================================================================
+# NumPyro 0.19.0 uses deprecated JAX 0.8.2+ internals (xla_pmap_p)
+# Filter before any imports that might trigger NumPyro loading
+# See: https://github.com/pyro-ppl/numpyro/releases (awaiting upstream fix)
+warnings.filterwarnings(
+    "ignore",
+    message="jax.interpreters.pxla.xla_pmap_p is deprecated",
+    category=DeprecationWarning,
+)
 
 # ============================================================================
 # JAX CPU Device Configuration (MUST be set before JAX import)

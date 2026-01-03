@@ -9,7 +9,29 @@ ______________________________________________________________________
 
 ## [Unreleased]
 
-*No unreleased changes*
+### Removed
+
+- `should_use_streaming()` function from `homodyne.optimization.nlsq.memory`
+  - Use NLSQ's `WorkflowSelector` (automatic in v0.4+)
+- `DatasetSizeStrategy` class from public API
+  - Use NLSQ's `WorkflowSelector` (automatic in v0.4+)
+- `OptimizationStrategy` enum from public API
+- `estimate_memory_requirements()` function from public API
+- Deprecated config path warnings for `performance.subsampling`
+- Legacy test compatibility layer (`tests/utils/legacy_compat.py`)
+- Test file `tests/unit/test_nlsq_streaming.py` (1,884 lines)
+
+### Changed
+
+- **BREAKING**: CMC default combination method changed from `weighted_gaussian` to `consensus_mc`
+  - `weighted_gaussian` was mathematically incorrect
+  - Add `combination_method: weighted_gaussian` to config to preserve old behavior (deprecated)
+
+### Deprecated
+
+- CMC combination methods `weighted_gaussian` and `simple_average`
+  - Will be removed in v3.0
+  - Use `consensus_mc` (now default)
 
 ______________________________________________________________________
 

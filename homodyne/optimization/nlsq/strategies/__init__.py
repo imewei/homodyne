@@ -1,12 +1,14 @@
 """NLSQ Optimization Strategies Subpackage.
 
 This subpackage contains strategy implementations for NLSQ optimization:
-- selection.py: Dataset size-based strategy selection
 - chunking.py: Angle-stratified chunking for large datasets
 - residual.py: Stratified residual function for per-angle optimization
 - residual_jit.py: JIT-compiled version of stratified residual
 - sequential.py: Sequential per-angle optimization
 - executors.py: Strategy pattern executors for optimization algorithms
+
+NOTE: selection.py (DatasetSizeStrategy, OptimizationStrategy, estimate_memory_requirements)
+removed in v2.12.0. Use NLSQ's WorkflowSelector instead.
 """
 
 from homodyne.optimization.nlsq.strategies.chunking import (
@@ -34,21 +36,12 @@ from homodyne.optimization.nlsq.strategies.residual import (
 from homodyne.optimization.nlsq.strategies.residual_jit import (
     StratifiedResidualFunctionJIT,
 )
-from homodyne.optimization.nlsq.strategies.selection import (
-    DatasetSizeStrategy,
-    OptimizationStrategy,
-    estimate_memory_requirements,
-)
 from homodyne.optimization.nlsq.strategies.sequential import (
     JAC_SAMPLE_SIZE,
     optimize_per_angle_sequential,
 )
 
 __all__ = [
-    # Selection
-    "DatasetSizeStrategy",
-    "OptimizationStrategy",
-    "estimate_memory_requirements",
     # Chunking
     "StratificationDiagnostics",
     "analyze_angle_distribution",
@@ -72,4 +65,6 @@ __all__ = [
     "LargeDatasetExecutor",
     "StreamingExecutor",
     "get_executor",
+    # NOTE: DatasetSizeStrategy, OptimizationStrategy, estimate_memory_requirements
+    # removed in v2.12.0. Use NLSQ's WorkflowSelector instead.
 ]
