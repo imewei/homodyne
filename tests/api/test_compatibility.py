@@ -267,13 +267,19 @@ class TestErrorHandling:
     """Test error handling consistency."""
 
     def test_optimization_error_handling(self, test_config):
-        """Test optimization error handling."""
+        """Test optimization error handling.
+
+        Note: fit_nlsq_jax (v2.11.0+) uses mixed error handling:
+        - Early validation errors (invalid shapes) raise exceptions
+        - Later failures (adapter/wrapper errors) use graceful degradation
+          returning result with success=False and chi_squared=inf
+        """
         try:
             from homodyne.optimization.nlsq import fit_nlsq_jax
         except ImportError:
             pytest.skip("Optimization module not available")
 
-        # Invalid data should raise appropriate errors
+        # Invalid data should either raise or return failed result
         invalid_data_cases = [
             {},  # Empty dict
             {"t1": None},  # None values
@@ -281,8 +287,14 @@ class TestErrorHandling:
         ]
 
         for invalid_data in invalid_data_cases:
-            with pytest.raises((KeyError, ValueError, TypeError, AttributeError)):
-                fit_nlsq_jax(invalid_data, test_config)
+            try:
+                result = fit_nlsq_jax(invalid_data, test_config)
+                # If no exception, should be a failed result (graceful degradation)
+                assert result.success is False, "Invalid data should result in failed optimization"
+                assert result.chi_squared == float("inf"), "Failed optimization should have inf chi_squared"
+            except (KeyError, ValueError, TypeError, AttributeError):
+                # Early validation errors still raise exceptions
+                pass  # Expected behavior for some invalid inputs
 
     def test_data_loader_error_handling(self):
         """Test data loader error handling."""
