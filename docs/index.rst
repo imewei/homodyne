@@ -11,7 +11,7 @@ Homodyne Documentation
 
    c_2(\phi, t_1, t_2) = 1 + \text{contrast} \times [c_1(\phi, t_1, t_2)]^2
 
-**Version:** 2.11.0 | **Python:** 3.12+ | **JAX:** 0.8.0 (CPU-only)
+**Version:** 2.14.0 | **Python:** 3.12+ | **JAX:** 0.8.0 (CPU-only)
 
 Homodyne is a CPU-optimized X-ray Photon Correlation Spectroscopy (XPCS) analysis framework
 built on JAX. It implements state-of-the-art algorithms for analyzing time-dependent dynamics
@@ -44,7 +44,10 @@ This documentation provides everything you need to:
 - :doc:`user-guide/cli` - Command-line interface reference
 - :doc:`research/theoretical_framework` - Mathematical foundations
 - :doc:`research/anti_degeneracy_defense` - Anti-degeneracy system for laminar flow (v2.9.0+)
-- :ref:`nlsq-adapter` - NLSQAdapter with model caching (NEW in v2.11.0)
+- :ref:`nlsq-adapter` - NLSQAdapter with model caching (v2.11.0+)
+- :ref:`nlsq-adapter-base` - NLSQAdapterBase shared functionality (NEW in v2.14.0)
+- :ref:`nlsq-anti-degeneracy-layer` - Anti-degeneracy layer interface (NEW in v2.14.0)
+- :ref:`nlsq-validation` - Input/result validation utilities (NEW in v2.14.0)
 - :doc:`configuration/options` - Complete configuration reference
 
 ---

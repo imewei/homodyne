@@ -1346,15 +1346,219 @@ Configuration dataclasses and utilities for NLSQ optimization.
    :undoc-members:
    :show-inheritance:
 
-Configuration Utilities
-^^^^^^^^^^^^^^^^^^^^^^^
+Key Classes
+^^^^^^^^^^^
 
-Shared configuration extraction utilities used across NLSQ components.
+.. autosummary::
+   :nosignatures:
+
+   homodyne.optimization.nlsq.config.NLSQConfig
+   homodyne.optimization.nlsq.config.safe_float
+   homodyne.optimization.nlsq.config.safe_int
+   homodyne.optimization.nlsq.config.safe_bool
+
+Configuration Entry Point (v2.14.0)
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Use ``NLSQConfig.from_yaml()`` as the single entry point for loading NLSQ configuration:
+
+.. code-block:: python
+
+   from homodyne.optimization.nlsq.config import NLSQConfig
+
+   # Load configuration from YAML file
+   config = NLSQConfig.from_yaml("config.yaml")
+
+   # Access configuration values
+   print(f"Tolerance: {config.tolerance}")
+   print(f"Max iterations: {config.max_iterations}")
+
+Configuration Utilities (Deprecated)
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+.. deprecated:: 2.14.0
+   Use ``homodyne.optimization.nlsq.config`` instead. The ``safe_float``, ``safe_int``,
+   and ``safe_bool`` utilities have been moved to ``config.py``.
 
 .. automodule:: homodyne.optimization.nlsq.config_utils
    :members:
    :undoc-members:
    :show-inheritance:
+
+.. _nlsq-adapter-base:
+
+NLSQAdapterBase (v2.14.0)
+~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Abstract base class providing shared functionality for NLSQAdapter and NLSQWrapper.
+This enables code reuse and consistent interfaces across both adapter implementations.
+
+.. automodule:: homodyne.optimization.nlsq.adapter_base
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+Key Classes
+^^^^^^^^^^^
+
+.. autosummary::
+   :nosignatures:
+
+   homodyne.optimization.nlsq.adapter_base.NLSQAdapterBase
+
+Shared Methods
+^^^^^^^^^^^^^^
+
+The ``NLSQAdapterBase`` provides these common methods:
+
+- ``_prepare_data()``: Flatten and validate input data
+- ``_validate_input()``: Input validation with shape and type checking
+- ``_build_result()``: Construct optimization result objects
+- ``_handle_error()``: Error handling with recovery actions
+- ``_setup_bounds()``: Bounds configuration and validation
+- ``_compute_covariance()``: Covariance matrix computation from Jacobian
+
+.. _nlsq-anti-degeneracy-layer:
+
+Anti-Degeneracy Layer Interface (v2.14.0)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Abstract layer interface for the anti-degeneracy defense system. Enables independent
+testing and modular composition of defense layers.
+
+.. automodule:: homodyne.optimization.nlsq.anti_degeneracy_layer
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+Key Classes
+^^^^^^^^^^^
+
+.. autosummary::
+   :nosignatures:
+
+   homodyne.optimization.nlsq.anti_degeneracy_layer.OptimizationState
+   homodyne.optimization.nlsq.anti_degeneracy_layer.AntiDegeneracyLayer
+   homodyne.optimization.nlsq.anti_degeneracy_layer.FourierReparamLayer
+   homodyne.optimization.nlsq.anti_degeneracy_layer.HierarchicalLayer
+   homodyne.optimization.nlsq.anti_degeneracy_layer.AdaptiveRegularizationLayer
+   homodyne.optimization.nlsq.anti_degeneracy_layer.GradientMonitorLayer
+   homodyne.optimization.nlsq.anti_degeneracy_layer.ShearWeightingLayer
+   homodyne.optimization.nlsq.anti_degeneracy_layer.AntiDegeneracyChain
+
+OptimizationState Dataclass
+^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+The ``OptimizationState`` dataclass encapsulates the complete optimization state
+passed between layers:
+
+.. code-block:: python
+
+   from homodyne.optimization.nlsq.anti_degeneracy_layer import OptimizationState
+   import numpy as np
+
+   state = OptimizationState(
+       params=np.array([1000.0, 0.8, 100.0]),
+       residuals=np.array([0.01, -0.02, 0.015]),
+       iteration=42,
+       chi_squared=0.0015,
+       gradient=np.array([0.1, -0.05, 0.02]),
+       jacobian=None,
+       metadata={"layer_name": "FourierReparamLayer"}
+   )
+
+Layer Chain Execution
+^^^^^^^^^^^^^^^^^^^^^
+
+The ``AntiDegeneracyChain`` orchestrates layer execution:
+
+.. code-block:: python
+
+   from homodyne.optimization.nlsq.anti_degeneracy_layer import (
+       AntiDegeneracyChain,
+       FourierReparamLayer,
+       HierarchicalLayer,
+       OptimizationState
+   )
+
+   # Create chain with selected layers
+   chain = AntiDegeneracyChain([
+       FourierReparamLayer(config),
+       HierarchicalLayer(config),
+   ])
+
+   # Execute chain
+   final_state = chain.execute(initial_state)
+
+.. _nlsq-validation:
+
+Input and Result Validation (v2.14.0)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Validation utilities extracted from wrapper.py for independent testing and reuse.
+
+Input Validator
+^^^^^^^^^^^^^^^
+
+.. automodule:: homodyne.optimization.nlsq.validation.input_validator
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+Key Functions
+"""""""""""""
+
+.. autosummary::
+   :nosignatures:
+
+   homodyne.optimization.nlsq.validation.input_validator.InputValidator
+   homodyne.optimization.nlsq.validation.input_validator.validate_array_dimensions
+   homodyne.optimization.nlsq.validation.input_validator.validate_no_nan_inf
+   homodyne.optimization.nlsq.validation.input_validator.validate_bounds_consistency
+   homodyne.optimization.nlsq.validation.input_validator.validate_initial_params
+
+Result Validator
+^^^^^^^^^^^^^^^^
+
+.. automodule:: homodyne.optimization.nlsq.validation.result_validator
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+Key Functions
+"""""""""""""
+
+.. autosummary::
+   :nosignatures:
+
+   homodyne.optimization.nlsq.validation.result_validator.ResultValidator
+   homodyne.optimization.nlsq.validation.result_validator.validate_optimized_params
+   homodyne.optimization.nlsq.validation.result_validator.validate_covariance
+   homodyne.optimization.nlsq.validation.result_validator.validate_result_consistency
+
+Usage Example
+^^^^^^^^^^^^^
+
+.. code-block:: python
+
+   from homodyne.optimization.nlsq.validation import InputValidator, ResultValidator
+   import numpy as np
+
+   # Input validation
+   validator = InputValidator(strict_mode=True)
+   xdata = np.random.rand(1000, 3)
+   ydata = np.random.rand(1000)
+   initial = np.array([1000.0, 0.8, 100.0])
+   bounds = (np.array([100, 0, 0]), np.array([10000, 2, 1000]))
+
+   is_valid = validator.validate_all(xdata, ydata, initial, bounds)
+
+   # Result validation
+   result_validator = ResultValidator(strict_mode=False)
+   optimized = np.array([1234.5, 0.85, 150.0])
+   covariance = np.eye(3) * 0.01
+
+   is_valid = result_validator.validate_all(optimized, covariance, bounds)
 
 Supporting Modules
 ------------------

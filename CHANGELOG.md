@@ -13,6 +13,97 @@ ______________________________________________________________________
 
 ______________________________________________________________________
 
+## [2.14.0] - 2026-01-06
+
+### NLSQ Module Optimization - Architecture Refactoring and Config Consolidation
+
+Major refactoring release implementing the NLSQ Module Optimization specification (001-nlsq-optimization).
+Improves code organization, reduces duplication, and streamlines configuration.
+
+#### Added
+
+**Architecture (Phase 5 - User Story 3)**:
+
+- `homodyne/optimization/nlsq/adapter_base.py` - Abstract base class `NLSQAdapterBase` providing shared functionality:
+  - `_prepare_data()`: Data flattening and validation
+  - `_validate_input()`: Input shape and type validation
+  - `_build_result()`: Result object construction
+  - `_handle_error()`: Error handling with recovery
+  - `_setup_bounds()`: Bounds configuration
+  - `_compute_covariance()`: Covariance from Jacobian
+
+- `homodyne/optimization/nlsq/anti_degeneracy_layer.py` - Layer interface for anti-degeneracy defense:
+  - `OptimizationState` dataclass for state passing between layers
+  - `AntiDegeneracyLayer` ABC for layer implementations
+  - `FourierReparamLayer`, `HierarchicalLayer`, `AdaptiveRegularizationLayer`
+  - `GradientMonitorLayer`, `ShearWeightingLayer`
+  - `AntiDegeneracyChain` executor for layer composition
+
+- `homodyne/optimization/nlsq/validation/` - Extracted validation utilities:
+  - `InputValidator` class with `validate_all()` method
+  - `ResultValidator` class with result validation
+  - Standalone functions: `validate_array_dimensions`, `validate_no_nan_inf`, `validate_bounds_consistency`
+
+**Configuration (Phase 6 - User Story 4)**:
+
+- `NLSQConfig.from_yaml()` - Single entry point for YAML configuration loading
+- `safe_float()`, `safe_int()`, `safe_bool()` utilities in `config.py`
+- Deprecation warnings for `config_utils.py` module (v2.14.0)
+
+**Performance (Phase 3 - User Story 1)**:
+
+- JIT-compiled shear weight computation with underflow protection
+- LRU meshgrid cache with proper eviction (64-entry limit)
+- Static shape annotations for JIT compilation optimization
+- CPU thread configuration for HPC environments
+
+**Memory (Phase 4 - User Story 2)**:
+
+- Buffer donation for residual JIT functions
+- Vectorized model computation with `compute_g1_batch()` using vmap
+- Index-based stratification for memory efficiency
+- QR-based J^T J fallback for ill-conditioned matrices
+- Explicit rcond for Fourier lstsq calls
+
+**Tests**:
+
+- `tests/unit/test_adapter_base.py` - NLSQAdapterBase unit tests
+- `tests/unit/test_anti_degeneracy_layer.py` - Layer interface tests
+- `tests/unit/test_chunking.py` - Index-based chunking tests
+- `tests/unit/test_residual_jit.py` - Buffer donation tests
+- `tests/performance/test_nlsq_memory.py` - Memory usage tests
+
+**Documentation**:
+
+- Updated `docs/api-reference/optimization.rst` with new modules
+- Added Quick Links in `docs/index.rst` for new features
+- GitHub Actions workflow for documentation CI/CD
+
+#### Changed
+
+- `homodyne/optimization/nlsq/adapter.py` - Now inherits from `NLSQAdapterBase`
+- `homodyne/optimization/nlsq/wrapper.py` - Now inherits from `NLSQAdapterBase`
+- `homodyne/optimization/nlsq/__init__.py` - Added exports for new modules
+- `homodyne/core/jax_backend.py` - LRU cache eviction with `OrderedDict`
+- `homodyne/core/models.py` - Added `compute_g1_batch()` vectorized method
+- `homodyne/optimization/nlsq/shear_weighting.py` - JIT-compiled `_compute_weights_jax()`
+- `homodyne/optimization/nlsq/fit_computation.py` - Static shape annotations
+- `homodyne/device/cpu.py` - CPU threading configuration
+
+#### Deprecated
+
+- `homodyne.optimization.nlsq.config_utils` module - Use `homodyne.optimization.nlsq.config` instead
+  - `safe_float()`, `safe_int()`, `safe_bool()` moved to `config.py`
+  - Module import now raises `DeprecationWarning`
+
+#### Documentation
+
+- Version updated to 2.14.0 in `docs/conf.py`, `docs/index.rst`, `README.md`
+- API reference expanded with new module documentation
+- Added usage examples for `OptimizationState`, `AntiDegeneracyChain`, validators
+
+______________________________________________________________________
+
 ## [2.13.0] - 2026-01-05
 
 ### Deprecation Removal - Unified Memory-Based Strategy Selection

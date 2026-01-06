@@ -12,8 +12,8 @@ sys.path.insert(0, str(Path("..").resolve()))
 project = "Homodyne"
 copyright = "2025, Wei Chen, Hongrui He - Argonne National Laboratory"
 author = "Wei Chen, Hongrui He"
-release = "2.9.0"
-version = "2.9.0"
+release = "2.14.0"
+version = "2.14.0"
 
 # Project metadata
 project_description = (

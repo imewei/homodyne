@@ -1,12 +1,49 @@
-# Homodyne 2.11: CPU-Optimized JAX-First XPCS Analysis
+# Homodyne 2.14: CPU-Optimized JAX-First XPCS Analysis
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Python](https://img.shields.io/badge/Python-3.12%2B-blue)](https://www.python.org/)
-[![Version](https://img.shields.io/badge/Version-2.11.0-green.svg)](#)
+[![Version](https://img.shields.io/badge/Version-2.14.0-green.svg)](#)
 [![Documentation](https://img.shields.io/badge/docs-sphinx-blue.svg)](https://homodyne.readthedocs.io)
 [![ReadTheDocs](https://readthedocs.org/projects/homodyne/badge/?version=latest)](https://homodyne.readthedocs.io/en/latest/)
 [![GitHub Actions](https://github.com/imewei/homodyne/actions/workflows/docs.yml/badge.svg)](https://github.com/imewei/homodyne/actions/workflows/docs.yml)
 [![DOI](https://zenodo.org/badge/DOI/10.1073/pnas.2401162121.svg)](https://doi.org/10.1073/pnas.2401162121)
+
+## 🚀 **What's New in v2.14.0**
+
+### Architecture Refactoring and Config Consolidation
+
+**Improved code organization** and **streamlined configuration** for better maintainability.
+
+**Key Features:**
+
+- **NLSQAdapterBase**: Abstract base class providing shared functionality for NLSQAdapter and NLSQWrapper
+- **Anti-Degeneracy Layer Interface**: `OptimizationState` dataclass and `AntiDegeneracyLayer` ABC for independent layer testing
+- **Validation Utilities**: Extracted `InputValidator` and `ResultValidator` for reusable validation
+- **Config Consolidation**: `NLSQConfig.from_yaml()` as single entry point for configuration
+- **Safe Type Utilities**: `safe_float`, `safe_int`, `safe_bool` in config.py with deprecation warnings for config_utils.py
+
+**Quick Usage:**
+
+```python
+from homodyne.optimization.nlsq.config import NLSQConfig
+
+# Single entry point for YAML config
+config = NLSQConfig.from_yaml("config.yaml")
+
+# Access typed configuration
+print(f"Tolerance: {config.tolerance}")
+print(f"Max iterations: {config.max_iterations}")
+```
+
+**New Modules:**
+
+- `homodyne.optimization.nlsq.adapter_base` - Abstract base class
+- `homodyne.optimization.nlsq.anti_degeneracy_layer` - Layer interface
+- `homodyne.optimization.nlsq.validation` - Input/result validators
+
+See [API Reference](docs/api-reference/optimization.rst#nlsq-adapter-base) for details.
+
+---
 
 ## 🚀 **What's New in v2.11.0**
 
