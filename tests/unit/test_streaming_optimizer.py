@@ -21,28 +21,24 @@ import numpy as np
 import pytest
 
 from homodyne.optimization.exceptions import NLSQConvergenceError, NLSQNumericalError
-from homodyne.optimization.nlsq.wrapper import OptimizationStrategy
-
-# Suppress deprecation warnings for DatasetSizeStrategy tests
-pytestmark = pytest.mark.filterwarnings(
-    "ignore:DatasetSizeStrategy is deprecated:DeprecationWarning"
-)
+from homodyne.optimization.nlsq.memory import NLSQStrategy, select_nlsq_strategy
 
 
 class TestStreamingOptimizerLargeDatasets:
     """Test StreamingOptimizer with large datasets >100M points."""
 
     def test_streaming_strategy_selected_for_large_dataset(self):
-        """Test that STREAMING strategy is auto-selected for >100M points."""
-        from homodyne.optimization.nlsq.strategies.selection import DatasetSizeStrategy
-
-        n_points = 150_000_000  # 150M points
+        """Test that streaming strategy is auto-selected for very large datasets."""
+        # Use 10 billion points to ensure index array exceeds any reasonable memory threshold
+        # Index array = 10B * 8 bytes = 80 GB (exceeds most system memory thresholds)
+        n_points = 10_000_000_000  # 10B points
         n_parameters = 9  # laminar_flow
 
-        selector = DatasetSizeStrategy()
-        strategy = selector.select_strategy(n_points, n_parameters, check_memory=True)
+        decision = select_nlsq_strategy(n_points, n_parameters)
 
-        assert strategy == OptimizationStrategy.STREAMING
+        # Extreme datasets should use HYBRID_STREAMING (index array > threshold)
+        assert decision.strategy == NLSQStrategy.HYBRID_STREAMING
+        assert decision.index_memory_gb > decision.threshold_gb
 
     def test_memory_efficient_processing_large_dataset(self):
         """Test that large datasets don't load entirely into memory."""

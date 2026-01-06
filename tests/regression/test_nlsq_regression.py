@@ -20,17 +20,12 @@ Date: 2025-10-22
 import numpy as np
 import pytest
 
-from homodyne.optimization.nlsq.strategies.selection import (
-    DatasetSizeStrategy,
-    OptimizationStrategy,
+from homodyne.optimization.nlsq.memory import (
+    NLSQStrategy,
+    select_nlsq_strategy,
 )
 from homodyne.optimization.nlsq.wrapper import NLSQWrapper, OptimizationResult
 from tests.factories.large_dataset_factory import LargeDatasetFactory
-
-# Suppress deprecation warnings for DatasetSizeStrategy tests
-pytestmark = pytest.mark.filterwarnings(
-    "ignore:DatasetSizeStrategy is deprecated:DeprecationWarning"
-)
 
 # ============================================================================
 # Reference Results (Known-Good Values)
@@ -416,15 +411,24 @@ class TestBackwardCompatibility:
         for field in required_fields:
             assert hasattr(result, field), f"Missing field: {field}"
 
-    def test_strategy_selection_unchanged(self):
-        """Test strategy selection logic is unchanged."""
-        selector = DatasetSizeStrategy()
+    def test_strategy_selection_memory_based(self):
+        """Test unified memory-based strategy selection (v2.13.0+)."""
+        # Standard test params
+        n_params = 53  # Typical laminar_flow params
 
-        # Test thresholds
-        assert selector.select_strategy(999_999) == OptimizationStrategy.STANDARD
-        assert selector.select_strategy(1_000_000) == OptimizationStrategy.LARGE
-        assert selector.select_strategy(10_000_000) == OptimizationStrategy.CHUNKED
-        assert selector.select_strategy(100_000_000) == OptimizationStrategy.STREAMING
+        # Test memory-based thresholds
+        # Small dataset: fits in memory -> STANDARD
+        small = select_nlsq_strategy(100_000, n_params)
+        assert small.strategy == NLSQStrategy.STANDARD
+
+        # Large dataset: peak memory > threshold -> OUT_OF_CORE
+        large = select_nlsq_strategy(100_000_000, n_params)
+        assert large.strategy in (NLSQStrategy.OUT_OF_CORE, NLSQStrategy.HYBRID_STREAMING)
+
+        # Extreme dataset: index array > threshold -> HYBRID_STREAMING
+        # Index array = n_points * 8 bytes
+        extreme = select_nlsq_strategy(10_000_000_000, n_params)
+        assert extreme.strategy == NLSQStrategy.HYBRID_STREAMING
 
 
 # ============================================================================

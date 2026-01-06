@@ -29,12 +29,6 @@ from unittest.mock import Mock, patch
 import numpy as np
 import pytest
 
-# Suppress deprecation warnings for DatasetSizeStrategy used internally by NLSQWrapper
-pytestmark = pytest.mark.filterwarnings(
-    "ignore:DatasetSizeStrategy is deprecated:DeprecationWarning"
-)
-
-
 @pytest.fixture
 def mock_config():
     """Create mock configuration for NLSQWrapper.fit()."""

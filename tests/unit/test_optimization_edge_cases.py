@@ -59,12 +59,6 @@ except ImportError:
 
     JAX_AVAILABLE = False
 
-# Suppress deprecation warnings for DatasetSizeStrategy used internally by NLSQWrapper
-pytestmark = pytest.mark.filterwarnings(
-    "ignore:DatasetSizeStrategy is deprecated:DeprecationWarning"
-)
-
-
 # =============================================================================
 # NLSQ PARAMETER HANDLING EDGE CASES
 # =============================================================================

@@ -55,12 +55,12 @@ from homodyne.optimization.batch_statistics import BatchStatistics
 from homodyne.optimization.checkpoint_manager import CheckpointManager
 from homodyne.optimization.exceptions import NLSQNumericalError
 from homodyne.optimization.nlsq import fit_nlsq_jax
+from homodyne.optimization.nlsq.memory import NLSQStrategy, select_nlsq_strategy
 from homodyne.optimization.nlsq.strategies.chunking import (
     analyze_angle_distribution,
     create_angle_stratified_data,
     should_use_stratification,
 )
-from homodyne.optimization.nlsq.strategies.selection import DatasetSizeStrategy
 from homodyne.optimization.nlsq.wrapper import (
     NLSQWrapper,
     OptimizationResult,
@@ -77,11 +77,6 @@ from tests.factories.optimization_factory import (
     create_mock_config_manager,
     create_mock_data_dict,
     create_mock_optimization_result,
-)
-
-# Suppress deprecation warnings for DatasetSizeStrategy tests
-pytestmark = pytest.mark.filterwarnings(
-    "ignore:DatasetSizeStrategy is deprecated:DeprecationWarning"
 )
 
 # ==============================================================================
@@ -173,42 +168,46 @@ class TestFullPipeline:
         assert initial_params.shape == (5,)
 
     def test_chunked_pipeline_large_dataset(self):
-        """Test full pipeline with CHUNKED strategy (10M - 100M points)."""
+        """Test full pipeline with memory-based strategy (10M - 100M points)."""
         factory = LargeDatasetFactory(seed=42)
 
         # Generate 10M dataset (metadata only for speed)
         data, metadata = factory.create_10m_dataset(allocate_data=False)
         assert metadata.strategy_expected == "CHUNKED"
 
-        # Strategy selector
-        selector = DatasetSizeStrategy()
-        strategy = selector.select_strategy(metadata.n_points)
+        # Memory-based strategy selection (v2.13.0+)
+        n_params = 53  # Typical laminar_flow
+        decision = select_nlsq_strategy(metadata.n_points, n_params)
 
-        assert strategy == OptimizationStrategy.CHUNKED
+        # Strategy depends on system memory vs estimated peak
+        # On systems with sufficient RAM, STANDARD is correct
+        # On memory-constrained systems, OUT_OF_CORE or HYBRID_STREAMING
+        assert decision.strategy in (
+            NLSQStrategy.STANDARD,
+            NLSQStrategy.OUT_OF_CORE,
+            NLSQStrategy.HYBRID_STREAMING,
+        )
+        assert decision.peak_memory_gb > 0
+        assert decision.threshold_gb > 0
 
     def test_streaming_pipeline_xlarge_dataset(self):
-        """Test full pipeline with STREAMING strategy (> 100M points)."""
+        """Test full pipeline with streaming strategy (> 100M points)."""
         factory = LargeDatasetFactory(seed=42)
 
         # Generate 100M dataset (metadata only)
         data, metadata = factory.create_100m_dataset(allocate_data=False)
         assert metadata.strategy_expected == "STREAMING"
 
-        # Strategy selector
-        selector = DatasetSizeStrategy()
-        strategy = selector.select_strategy(metadata.n_points)
+        # Memory-based strategy selection (v2.13.0+)
+        n_params = 53  # Typical laminar_flow
+        decision = select_nlsq_strategy(metadata.n_points, n_params)
 
-        assert strategy == OptimizationStrategy.STREAMING
-
-        # Streaming config
-        streaming_config = selector.build_streaming_config(
-            n_points=metadata.n_points,
-            n_parameters=5,
+        # Very large datasets should use streaming strategies
+        assert decision.strategy in (
+            NLSQStrategy.OUT_OF_CORE,
+            NLSQStrategy.HYBRID_STREAMING,
         )
-
-        assert "batch_size" in streaming_config
-        assert "checkpoint_dir" in streaming_config
-        assert streaming_config["enable_fault_tolerance"]
+        assert decision.peak_memory_gb > decision.threshold_gb
 
 
 # ============================================================================
@@ -1192,52 +1191,51 @@ def test_stratification_config_validation():
 
 
 def test_strategy_selection_with_large_dataset():
-    """Test NLSQ strategy selection with large dataset requiring chunking."""
-    selector = DatasetSizeStrategy()
-
-    # Large dataset (>1M points) → should select LARGE, CHUNKED, or STREAMING
-    # Thresholds: <1M→STANDARD, 1M-10M→LARGE, 10M-100M→CHUNKED, >100M→STREAMING
-    n_points = 3_000_000  # 3M points falls in LARGE range (1M-10M)
+    """Test NLSQ memory-based strategy selection with large dataset."""
+    # Large dataset (>1M points)
+    n_points = 3_000_000  # 3M points
     n_parameters = 9  # laminar_flow with per-angle scaling
 
-    strategy = selector.select_strategy(n_points, n_parameters)
+    decision = select_nlsq_strategy(n_points, n_parameters)
 
-    # Should select LARGE (1M-10M), CHUNKED (10M-100M), or STREAMING (>100M)
-    # 3M points → LARGE strategy is correct
-    assert strategy in [
-        OptimizationStrategy.LARGE,
-        OptimizationStrategy.CHUNKED,
-        OptimizationStrategy.STREAMING,
+    # Strategy depends on memory threshold vs estimated peak memory
+    # With typical 32GB RAM, 3M points should fit in memory → STANDARD
+    # With smaller RAM or many params, may need streaming
+    assert decision.strategy in [
+        NLSQStrategy.STANDARD,
+        NLSQStrategy.OUT_OF_CORE,
+        NLSQStrategy.HYBRID_STREAMING,
     ]
+    assert decision.peak_memory_gb > 0
+    assert decision.threshold_gb > 0
 
 
 def test_strategy_selection_with_small_dataset():
-    """Test NLSQ strategy selection with small dataset (no chunking needed)."""
-    selector = DatasetSizeStrategy()
-
+    """Test NLSQ memory-based strategy selection with small dataset."""
     # Small dataset (<100k points) → should select STANDARD
     n_points = 50_000
     n_parameters = 5
 
-    strategy = selector.select_strategy(n_points, n_parameters)
+    decision = select_nlsq_strategy(n_points, n_parameters)
 
-    # Should select STANDARD (no chunking)
-    assert strategy == OptimizationStrategy.STANDARD
+    # Small datasets should always use STANDARD (fits in memory)
+    assert decision.strategy == NLSQStrategy.STANDARD
+    assert decision.peak_memory_gb < decision.threshold_gb
 
 
 def test_stratification_decision_integrates_with_strategy():
-    """Test stratification decision considers NLSQ strategy selection."""
+    """Test stratification decision with memory-based strategy selection."""
     # Large dataset with per-angle scaling
-    n_points = 2_000_000  # 2M points falls in LARGE range (1M-10M)
+    n_points = 2_000_000  # 2M points
     per_angle_scaling = True
 
-    # Strategy selector suggests LARGE/CHUNKED/STREAMING for >1M points
-    selector = DatasetSizeStrategy()
-    strategy = selector.select_strategy(n_points, n_parameters=9)
-    assert strategy in [
-        OptimizationStrategy.LARGE,
-        OptimizationStrategy.CHUNKED,
-        OptimizationStrategy.STREAMING,
+    # Memory-based strategy selection (v2.13.0+)
+    decision = select_nlsq_strategy(n_points, n_params=9)
+    # Decision depends on system memory
+    assert decision.strategy in [
+        NLSQStrategy.STANDARD,
+        NLSQStrategy.OUT_OF_CORE,
+        NLSQStrategy.HYBRID_STREAMING,
     ]
 
     # Stratification should activate for per-angle + large dataset
@@ -1360,15 +1358,14 @@ def test_integration_stratification_with_strategy_selector():
         "g2_exp": np.random.uniform(1.0, 1.5, n_points),
     }
 
-    # Strategy selection
-    selector = DatasetSizeStrategy()
-    strategy = selector.select_strategy(n_points, n_parameters)
+    # Memory-based strategy selection (v2.13.0+)
+    decision = select_nlsq_strategy(n_points, n_parameters)
 
-    # Should select LARGE (1M-10M), CHUNKED (10M-100M), or STREAMING (>100M)
-    assert strategy in [
-        OptimizationStrategy.LARGE,
-        OptimizationStrategy.CHUNKED,
-        OptimizationStrategy.STREAMING,
+    # Strategy depends on system memory vs estimated peak memory
+    assert decision.strategy in [
+        NLSQStrategy.STANDARD,
+        NLSQStrategy.OUT_OF_CORE,
+        NLSQStrategy.HYBRID_STREAMING,
     ]
 
     # Stratification decision
@@ -1405,12 +1402,11 @@ def test_integration_workflow_without_stratification():
     t1.copy()
     np.random.uniform(1.0, 1.5, n_points)
 
-    # Strategy selection
-    selector = DatasetSizeStrategy()
-    strategy = selector.select_strategy(n_points, n_parameters=5)
+    # Memory-based strategy selection (v2.13.0+)
+    decision = select_nlsq_strategy(n_points, n_params=5)
 
-    # Should select STANDARD (no chunking)
-    assert strategy == OptimizationStrategy.STANDARD
+    # Small datasets should use STANDARD (fits in memory)
+    assert decision.strategy == NLSQStrategy.STANDARD
 
     # Stratification decision
     stats = analyze_angle_distribution(phi)

@@ -55,11 +55,6 @@ from homodyne.optimization.nlsq.wrapper import (
 )
 from tests.factories.synthetic_data import generate_static_mode_dataset
 
-# Suppress deprecation warnings for DatasetSizeStrategy used internally by NLSQWrapper
-pytestmark = pytest.mark.filterwarnings(
-    "ignore:DatasetSizeStrategy is deprecated:DeprecationWarning"
-)
-
 # =============================================================================
 # Public API Tests (from test_nlsq_public_api.py)
 # =============================================================================
