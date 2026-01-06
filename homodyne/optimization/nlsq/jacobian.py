@@ -59,7 +59,25 @@ def compute_jacobian_stats(
         # Use jacrev (VJP-based) instead of jacfwd for m >> n efficiency
         jac = jax.jacrev(residual_vector)(params_jnp)
         jac_np = np.asarray(jac)
-        jtj = jac_np.T @ jac_np * scaling_factor
+
+        # Performance Optimization (Spec 001 - FR-010, T048): Check condition number
+        # to determine optimal J^T J computation method.
+        # For ill-conditioned Jacobians (cond > 1e6), use QR-based computation.
+        try:
+            cond_number = np.linalg.cond(jac_np)
+        except np.linalg.LinAlgError:
+            cond_number = np.inf
+
+        if cond_number > 1e6:
+            # Performance Optimization (Spec 001 - FR-010, T049): QR-based J^T J
+            # For ill-conditioned Jacobians, J^T J = R^T R is more numerically stable.
+            # QR decomposition: J = Q @ R where Q is orthogonal, R is upper triangular.
+            Q, R = np.linalg.qr(jac_np)
+            jtj = R.T @ R * scaling_factor
+        else:
+            # Standard computation for well-conditioned Jacobians
+            jtj = jac_np.T @ jac_np * scaling_factor
+
         col_norms = np.linalg.norm(jac_np, axis=0) * np.sqrt(scaling_factor)
         return jtj, col_norms
     except Exception:

@@ -103,6 +103,7 @@ except ImportError:
 import logging
 
 from homodyne.optimization.batch_statistics import BatchStatistics
+from homodyne.optimization.nlsq.adapter_base import NLSQAdapterBase
 from homodyne.optimization.exceptions import NLSQOptimizationError
 from homodyne.optimization.nlsq.strategies.chunking import (
     StratificationDiagnostics,
@@ -529,7 +530,7 @@ class UseSequentialOptimization:
     reason: str
 
 
-class NLSQWrapper:
+class NLSQWrapper(NLSQAdapterBase):
     """Adapter class for NLSQ package integration with homodyne optimization.
 
     This class translates between homodyne's optimization API and the NLSQ

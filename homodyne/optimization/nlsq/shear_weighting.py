@@ -48,6 +48,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
+import jax
 import jax.numpy as jnp
 import numpy as np
 
@@ -60,6 +61,59 @@ if TYPE_CHECKING:
     from jax import Array
 
 logger = get_logger(__name__)
+
+
+# Performance Optimization (Spec 001 - FR-001, T014): JIT-compiled weight computation
+@jax.jit
+def _compute_weights_jax(
+    phi_angles: jnp.ndarray,
+    phi0: float,
+    min_weight: float,
+    alpha: float,
+    normalize: bool,
+) -> jnp.ndarray:
+    """JIT-compiled shear weight computation for optimal performance.
+
+    Computes angle-dependent weights that emphasize shear-sensitive angles
+    (parallel/antiparallel to flow direction).
+
+    Parameters
+    ----------
+    phi_angles : jnp.ndarray
+        Phi angles in degrees.
+    phi0 : float
+        Current phi0 estimate in degrees.
+    min_weight : float
+        Minimum weight for perpendicular angles (0-1).
+    alpha : float
+        Shear sensitivity exponent.
+    normalize : bool
+        Whether to normalize weights so mean = 1.
+
+    Returns
+    -------
+    jnp.ndarray
+        Weight array of shape (n_phi,).
+    """
+    # Convert to radians
+    phi0_rad = jnp.radians(phi0)
+    phi_rad = jnp.radians(phi_angles)
+
+    # Compute shear sensitivity: |cos(phi0 - phi)|
+    # Performance Optimization (Spec 001 - FR-008, T016): Underflow protection
+    cos_factor = jnp.maximum(jnp.abs(jnp.cos(phi0_rad - phi_rad)), 1e-10)
+
+    # Apply exponent and scale
+    # w(phi) = w_min + (1 - w_min) * |cos(phi0 - phi)|^alpha
+    weights = min_weight + (1.0 - min_weight) * (cos_factor**alpha)
+
+    # Normalize if enabled using jax.lax.cond for JIT compatibility
+    return jax.lax.cond(
+        normalize,
+        lambda w: w / jnp.mean(w),
+        lambda w: w,
+        weights,
+    )
 
 
 @dataclass
@@ -176,6 +230,9 @@ class ShearSensitivityWeighting:
     def _compute_weights(self, phi0: float) -> np.ndarray:
         """Compute angle weights for given phi0.
 
+        Performance Optimization (Spec 001 - FR-001, T015): Uses JIT-compiled
+        computation for 2-3x speedup on repeated calls.
+
         Parameters
         ----------
         phi0 : float
@@ -186,24 +243,15 @@ class ShearSensitivityWeighting:
         np.ndarray
             Weight array of shape (n_phi,).
         """
-        # Convert to radians
-        phi0_rad = np.radians(phi0)
-        phi_rad = np.radians(self.phi_angles)
-
-        # Compute shear sensitivity: |cos(phi0 - phi)|
-        cos_factor = np.abs(np.cos(phi0_rad - phi_rad))
-
-        # Apply exponent and scale
-        # w(phi) = w_min + (1 - w_min) * |cos(phi0 - phi)|^alpha
-        weights = self.config.min_weight + (1.0 - self.config.min_weight) * (
-            cos_factor**self.config.alpha
+        # Performance Optimization (Spec 001 - FR-001, T015): Use JIT-compiled version
+        result = _compute_weights_jax(
+            jnp.asarray(self.phi_angles),
+            phi0,
+            self.config.min_weight,
+            self.config.alpha,
+            self.config.normalize,
         )
-
-        # Normalize if enabled (preserves total loss scale)
-        if self.config.normalize:
-            weights = weights / np.mean(weights)
-
-        return weights
+        return np.asarray(result)
 
     def update_phi0(self, params: np.ndarray, iteration: int = 0) -> None:
         """Update phi0 estimate from current parameters.

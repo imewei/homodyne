@@ -160,10 +160,16 @@ class FourierReparameterizer:
             # Precompute Fourier basis matrix for efficiency
             self._basis_matrix = self._compute_basis_matrix()
 
+            # Performance Optimization (Spec 001 - FR-009, T046): Compute explicit rcond
+            # based on matrix dimensions and machine precision, rather than letting numpy
+            # use its default which may be overly conservative or vary between versions.
+            # rcond = max(m, n) * eps is the standard recommendation.
+            self._rcond = max(self.n_phi, self.n_coeffs_per_param) * np.finfo(np.float64).eps
+
             logger.info(
                 f"Fourier reparameterization enabled: "
                 f"{self.n_coeffs} coefficients for {self.n_phi} angles "
-                f"(order={config.fourier_order})"
+                f"(order={config.fourier_order}, rcond={self._rcond:.2e})"
             )
         else:
             # Independent mode: n_phi per parameter
@@ -330,11 +336,12 @@ class FourierReparameterizer:
 
         # Least squares: B @ coeffs = values
         # coeffs = (B^T B)^{-1} B^T values = lstsq solution
+        # Performance Optimization (Spec 001 - FR-009, T047): Use precomputed rcond
         contrast_coeffs, residuals_c, rank_c, s_c = np.linalg.lstsq(
-            self._basis_matrix, contrast, rcond=None
+            self._basis_matrix, contrast, rcond=self._rcond
         )
         offset_coeffs, residuals_o, rank_o, s_o = np.linalg.lstsq(
-            self._basis_matrix, offset, rcond=None
+            self._basis_matrix, offset, rcond=self._rcond
         )
 
         # Log fit quality if there are residuals
@@ -509,8 +516,9 @@ class FourierReparameterizer:
             return per_angle_values.copy()
 
         # Least squares fit
+        # Performance Optimization (Spec 001 - FR-009, T047): Use precomputed rcond
         coeffs, _, _, _ = np.linalg.lstsq(
-            self._basis_matrix, per_angle_values, rcond=None
+            self._basis_matrix, per_angle_values, rcond=self._rcond
         )
         return coeffs
 

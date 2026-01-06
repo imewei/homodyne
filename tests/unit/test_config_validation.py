@@ -455,3 +455,148 @@ class TestComplexIntegrationEdgeCases:
         initial_params = config_mgr.get_initial_parameters()
         # Midpoint with infinity might be inf or clamped
         assert isinstance(initial_params["D0"], (int, float, type(np.nan)))
+
+
+# =============================================================================
+# Phase 6: Config Consolidation Tests (T091-T092)
+# =============================================================================
+
+
+class TestNLSQConfigSingleEntry:
+    """Tests for T091: Single config entry point via NLSQConfig.from_yaml()."""
+
+    def test_from_yaml_single_entry(self, tmp_path):
+        """Test that NLSQConfig.from_yaml() is the single entry point."""
+        from homodyne.optimization.nlsq.config import NLSQConfig
+
+        # Create a minimal YAML config file
+        # Note: from_dict uses "tolerance" key for ftol (backward compatibility)
+        yaml_content = """
+optimization:
+  nlsq:
+    loss: soft_l1
+    max_iterations: 500
+    tolerance: 1e-6
+"""
+        config_file = tmp_path / "test_config.yaml"
+        config_file.write_text(yaml_content)
+
+        # Load config via from_yaml
+        config = NLSQConfig.from_yaml(str(config_file))
+
+        assert config.loss == "soft_l1"
+        assert config.max_iterations == 500
+        assert config.ftol == 1e-6
+
+    def test_from_yaml_with_nested_sections(self, tmp_path):
+        """Test from_yaml handles nested config sections."""
+        from homodyne.optimization.nlsq.config import NLSQConfig
+
+        yaml_content = """
+optimization:
+  nlsq:
+    loss: huber
+    streaming:
+      enable: true
+      chunk_size: 100000
+    anti_degeneracy:
+      hierarchical:
+        enable: true
+        max_outer_iterations: 10
+"""
+        config_file = tmp_path / "test_nested.yaml"
+        config_file.write_text(yaml_content)
+
+        config = NLSQConfig.from_yaml(str(config_file))
+
+        assert config.loss == "huber"
+        assert config.enable_streaming is True
+        assert config.streaming_chunk_size == 100000
+        assert config.enable_hierarchical is True
+        assert config.hierarchical_max_outer_iterations == 10
+
+    def test_from_yaml_missing_file_raises(self):
+        """Test that from_yaml raises FileNotFoundError for missing file."""
+        from homodyne.optimization.nlsq.config import NLSQConfig
+
+        with pytest.raises(FileNotFoundError):
+            NLSQConfig.from_yaml("/nonexistent/path/config.yaml")
+
+
+class TestNLSQConfigValidation:
+    """Tests for T092: Config validation."""
+
+    def test_config_validation_valid_values(self):
+        """Test validation passes for valid config values."""
+        from homodyne.optimization.nlsq.config import NLSQConfig
+
+        config = NLSQConfig(
+            loss="soft_l1",
+            max_iterations=1000,
+            ftol=1e-8,
+            enable_streaming=True,
+        )
+
+        # validate() returns list of errors
+        errors = config.validate()
+        assert errors == []
+        assert config.is_valid()
+
+    def test_config_validation_invalid_loss(self):
+        """Test validation catches invalid loss function."""
+        from homodyne.optimization.nlsq.config import NLSQConfig
+
+        config = NLSQConfig(loss="invalid_loss")
+
+        errors = config.validate()
+        assert len(errors) > 0
+        assert any("loss" in err for err in errors)
+
+    def test_config_validation_negative_iterations(self):
+        """Test validation catches negative max_iterations."""
+        from homodyne.optimization.nlsq.config import NLSQConfig
+
+        config = NLSQConfig(max_iterations=-1)
+
+        errors = config.validate()
+        assert len(errors) > 0
+        assert any("max_iterations" in err for err in errors)
+
+    def test_config_validation_negative_tolerance(self):
+        """Test validation catches negative tolerance values."""
+        from homodyne.optimization.nlsq.config import NLSQConfig
+
+        config = NLSQConfig(ftol=-1e-8)
+
+        errors = config.validate()
+        assert len(errors) > 0
+        assert any("ftol" in err for err in errors)
+
+    def test_safe_float_conversion(self):
+        """Test safe_float handles various input types."""
+        from homodyne.optimization.nlsq.config import safe_float
+
+        assert safe_float("3.14", 0.0) == 3.14
+        assert safe_float(None, 1.0) == 1.0
+        assert safe_float("invalid", 2.5) == 2.5
+        assert safe_float(42, 0.0) == 42.0
+
+    def test_safe_int_conversion(self):
+        """Test safe_int handles various input types."""
+        from homodyne.optimization.nlsq.config import safe_int
+
+        assert safe_int("42", 0) == 42
+        assert safe_int(None, 10) == 10
+        assert safe_int("invalid", 5) == 5
+        assert safe_int(3.7, 0) == 3
+
+    def test_safe_bool_conversion(self):
+        """Test safe_bool handles various input types."""
+        from homodyne.optimization.nlsq.config import safe_bool
+
+        assert safe_bool("true", False) is True
+        assert safe_bool("false", True) is False
+        assert safe_bool("1", False) is True
+        assert safe_bool("0", True) is False
+        assert safe_bool(None, True) is True
+        assert safe_bool(True, False) is True

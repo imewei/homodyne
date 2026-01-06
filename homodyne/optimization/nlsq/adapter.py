@@ -72,6 +72,7 @@ from typing import Any
 
 import numpy as np
 
+from homodyne.optimization.nlsq.adapter_base import NLSQAdapterBase
 from homodyne.optimization.nlsq.results import OptimizationResult
 
 # Import NLSQ components with graceful fallback
@@ -323,41 +324,48 @@ def get_or_create_model(
                 params_array[2:] if len(params_array) > 2 else default_phys
             )
 
-        # Compute g2 for each point
+        # Compute g2 for each point using vectorized computation
         # xdata columns: [t1, t2, phi_idx or phi_value]
-        g2_pred = np.zeros(len(xdata))
+        # Performance Optimization (Spec 001 - FR-006, T042): Use batched vmap
+        # computation instead of Python loop for better performance.
 
-        for i in range(len(xdata)):
-            t1_val = xdata[i, 0]
-            t2_val = xdata[i, 1]
-            phi_val = xdata[i, 2]
+        import jax.numpy as jnp
 
-            # Find phi index
-            phi_idx = np.argmin(np.abs(phi_unique - phi_val))
+        # Extract time and phi arrays from xdata
+        t1_batch = jnp.array(xdata[:, 0])
+        t2_batch = jnp.array(xdata[:, 1])
+        phi_batch_raw = xdata[:, 2]
 
-            # Compute g1 (correlation function)
-            # Using the model's compute method
-            g1 = model.compute_g1(
-                physical_params,
-                np.array([t1_val]),
-                np.array([t2_val]),
-                np.array([phi_unique[phi_idx]]),
-                q_val,
-                1.0,  # Default L (stator-rotor gap), will be scaled by params
-            )
+        # Map phi values to indices and get canonical phi values
+        phi_indices = np.array([
+            np.argmin(np.abs(phi_unique - phi_val))
+            for phi_val in phi_batch_raw
+        ])
+        phi_batch = jnp.array(phi_unique[phi_indices])
 
-            # Convert JAX array element to scalar for numpy assignment
-            g1_arr = np.asarray(g1)
-            g1_val = float(g1_arr.flat[0])
+        # Use batched g1 computation via vmap
+        g1_batch = model.compute_g1_batch(
+            jnp.array(physical_params),
+            t1_batch,
+            t2_batch,
+            phi_batch,
+            q_val,
+            1.0,  # Default L (stator-rotor gap), will be scaled by params
+        )
 
-            # Compute g2 = offset + contrast * g1^2
-            g2_pred[i] = offset_vals[phi_idx] + contrast_vals[phi_idx] * g1_val**2
+        # Convert to numpy and compute g2 = offset + contrast * g1^2
+        g1_vals = np.asarray(g1_batch)
+
+        # Get per-point contrast and offset based on phi indices
+        contrast_per_point = contrast_vals[phi_indices]
+        offset_per_point = offset_vals[phi_indices]
+
+        g2_pred = offset_per_point + contrast_per_point * g1_vals**2
 
         return g2_pred
 
-    # JIT compilation: The model_func uses NumPy operations and Python loops
-    # which are not directly compatible with JAX JIT tracing.
-    # The underlying CombinedModel.compute_g1() may use JAX internally.
+    # JIT compilation: The model_func now uses JAX vmap for vectorized computation
+    # (FR-006, T042). The underlying CombinedModel.compute_g1_batch() uses JAX vmap.
     # We track jit_applied=False here; actual JIT is applied by NLSQ if configured.
     jit_applied = False
     if enable_jit:
@@ -448,7 +456,7 @@ class AdapterConfig:
     workflow: str = "auto"
 
 
-class NLSQAdapter:
+class NLSQAdapter(NLSQAdapterBase):
     """Adapter for NLSQ package using CurveFit class.
 
     Uses NLSQ's CurveFit for JIT caching and WorkflowSelector

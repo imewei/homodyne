@@ -9,13 +9,17 @@ Key Improvements over original StratifiedResidualFunction:
 - Pads chunks to uniform size for static shapes (JIT-compatible)
 - Fully JIT-compiled for maximum performance
 - Maintains angle stratification guarantee
+- Buffer donation for memory efficiency (FR-003)
 
 Author: Homodyne Development Team
 Date: 2025-11-13
-Version: 2.4.0
+Version: 2.4.0 (updated with buffer donation in 2.14.0)
 """
 
+from __future__ import annotations
+
 import logging
+from functools import partial
 
 import jax
 import jax.numpy as jnp
@@ -101,10 +105,17 @@ class StratifiedResidualFunctionJIT:
             f"padding overhead: {(1 - self.n_real_points / (self.n_chunks * self.max_chunk_size)) * 100:.2f}%"
         )
 
-        # JIT-compile the main residual computation
-        self.logger.info("JIT-compiling residual function...")
-        self._residual_fn_jit = jax.jit(self._compute_all_residuals)
-        self.logger.info("✓ JIT compilation setup complete")
+        # JIT-compile the main residual computation with buffer donation
+        # Performance Optimization (Spec 001 - FR-003, T038): Buffer donation allows
+        # JAX to reuse input buffers for output, reducing peak memory by avoiding
+        # the need to allocate new buffers for intermediate results.
+        # donate_argnums=(0,) tells JAX the params array can be reused after the call.
+        self.logger.info("JIT-compiling residual function with buffer donation...")
+        self._residual_fn_jit = jax.jit(
+            self._compute_all_residuals,
+            donate_argnums=(0,),  # FR-003: Donate params buffer to reduce memory
+        )
+        self.logger.info("✓ JIT compilation setup complete (buffer donation enabled)")
 
     def _extract_global_metadata(self) -> tuple[float, float, float | None]:
         """Extract q, L, dt from chunks (should be same for all chunks)."""

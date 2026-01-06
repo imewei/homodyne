@@ -2230,3 +2230,157 @@ class TestMeshgridCache:
 
         # 23 angles need at least 23 cache entries
         assert _MESHGRID_CACHE_MAX_SIZE >= 23
+
+    def test_lru_eviction(self):
+        """T010: Verify LRU eviction evicts least recently used entry.
+
+        Performance Optimization (Spec 001 - FR-002, T010): Test that the
+        meshgrid cache uses LRU eviction instead of FIFO.
+        """
+        from homodyne.core.jax_backend import (
+            _MESHGRID_CACHE_MAX_SIZE,
+            clear_meshgrid_cache,
+            get_cache_stats,
+            get_cached_meshgrid,
+            reset_cache_stats,
+        )
+
+        # Clear cache and reset stats to start fresh
+        clear_meshgrid_cache()
+        reset_cache_stats()
+
+        # Fill cache to max capacity with unique time arrays
+        time_arrays = []
+        for i in range(_MESHGRID_CACHE_MAX_SIZE):
+            t1 = jnp.linspace(0, 1 + i * 0.01, 10)  # Unique arrays
+            t2 = jnp.linspace(0, 2 + i * 0.01, 10)
+            time_arrays.append((t1, t2))
+            get_cached_meshgrid(t1, t2)
+
+        # Access the first entry to make it "recently used"
+        t1_first, t2_first = time_arrays[0]
+        get_cached_meshgrid(t1_first, t2_first)  # This should be a cache hit
+
+        # Add a new entry - this should evict the SECOND entry (LRU), not first
+        t1_new = jnp.linspace(0, 100, 10)
+        t2_new = jnp.linspace(0, 200, 10)
+        get_cached_meshgrid(t1_new, t2_new)
+
+        # First entry should still be in cache (was recently accessed)
+        stats_before = get_cache_stats()
+        get_cached_meshgrid(t1_first, t2_first)
+        stats_after = get_cache_stats()
+
+        # Should be a cache hit (first entry wasn't evicted)
+        assert stats_after["hits"] > stats_before["hits"], (
+            "LRU eviction failed: first entry was evicted despite recent access"
+        )
+
+        # Clean up
+        clear_meshgrid_cache()
+
+    def test_lru_cache_hit_rate_multistart(self):
+        """T011: Verify cache hit rate > 80% for 23-angle multi-start.
+
+        Performance Optimization (Spec 001 - FR-002, T011): Test that the
+        meshgrid cache achieves high hit rate during multi-start optimization
+        with 23 angles (SC-004).
+        """
+        from homodyne.core.jax_backend import (
+            get_cached_meshgrid,
+            clear_meshgrid_cache,
+            get_cache_stats,
+            reset_cache_stats,
+        )
+
+        # Clear cache and reset stats
+        clear_meshgrid_cache()
+        reset_cache_stats()
+
+        # Simulate 23-angle dataset with unique time grids per angle
+        n_angles = 23
+        n_starts = 10  # Multi-start with 10 starting points
+
+        # Create unique time arrays for each angle (simulating real data)
+        angle_time_grids = []
+        for i in range(n_angles):
+            t1 = jnp.linspace(0, 1 + i * 0.001, 50)
+            t2 = jnp.linspace(0, 2 + i * 0.001, 50)
+            angle_time_grids.append((t1, t2))
+
+        # First pass: populate cache (all misses)
+        for t1, t2 in angle_time_grids:
+            get_cached_meshgrid(t1, t2)
+
+        # Simulate multi-start: access same grids repeatedly
+        for start_idx in range(n_starts):
+            for t1, t2 in angle_time_grids:
+                get_cached_meshgrid(t1, t2)
+
+        stats = get_cache_stats()
+
+        # Total accesses: n_angles * (1 + n_starts) = 23 * 11 = 253
+        # First pass: 23 misses
+        # Subsequent passes: 23 * 10 = 230 hits
+        # Expected hit rate: 230 / 253 = 90.9%
+        expected_min_hit_rate = 0.80  # SC-004: > 80%
+
+        hit_rate = stats["hit_rate"]
+        assert hit_rate >= expected_min_hit_rate, (
+            f"Cache hit rate {hit_rate:.1%} below threshold {expected_min_hit_rate:.0%}"
+        )
+
+        # Clean up
+        clear_meshgrid_cache()
+
+    def test_cache_bounds_change(self):
+        """T031: Test cache behavior when parameter bounds change.
+
+        Performance Optimization (Spec 001 - FR-002, T031): Verify that meshgrid
+        cache handles changing time grids (which could result from different
+        parameter bounds) without returning stale data.
+        """
+        from homodyne.core.jax_backend import (
+            clear_meshgrid_cache,
+            get_cached_meshgrid,
+            get_cache_stats,
+            reset_cache_stats,
+        )
+
+        # Clear cache
+        clear_meshgrid_cache()
+        reset_cache_stats()
+
+        # Original time grids (from initial bounds)
+        t1_v1 = jnp.linspace(0, 1, 20)
+        t2_v1 = jnp.linspace(0, 2, 20)
+
+        # Get first meshgrid
+        mesh1_v1 = get_cached_meshgrid(t1_v1, t2_v1)
+
+        # Verify cache hit on same data
+        mesh1_v1_again = get_cached_meshgrid(t1_v1, t2_v1)
+        stats = get_cache_stats()
+        assert stats["hits"] == 1, "Should have 1 cache hit"
+
+        # Simulate bounds change: different time grids
+        t1_v2 = jnp.linspace(0, 1.5, 20)  # Different range
+        t2_v2 = jnp.linspace(0, 2.5, 20)
+
+        # This should be a cache MISS (different grids)
+        mesh1_v2 = get_cached_meshgrid(t1_v2, t2_v2)
+        stats = get_cache_stats()
+        assert stats["misses"] == 2, "Should have 2 misses (initial + new bounds)"
+
+        # Verify the meshgrids are actually different
+        assert not jnp.allclose(mesh1_v1[0], mesh1_v2[0]), (
+            "Meshgrids should be different for different time grids"
+        )
+
+        # Original grids should still be in cache (LRU keeps them)
+        mesh1_v1_check = get_cached_meshgrid(t1_v1, t2_v1)
+        stats = get_cache_stats()
+        assert stats["hits"] == 2, "Original grids should still be cached"
+
+        # Clean up
+        clear_meshgrid_cache()

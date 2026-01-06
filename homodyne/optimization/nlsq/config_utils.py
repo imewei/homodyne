@@ -1,5 +1,9 @@
 """Shared configuration utilities for NLSQ optimization.
 
+.. deprecated:: 2.14.0
+    This module is deprecated. Use ``homodyne.optimization.nlsq.config`` instead:
+    - safe_float, safe_int, safe_bool are now in config.py
+
 This module provides reusable helper functions for safe type conversion
 in configuration classes, eliminating duplication across:
 - gradient_monitor.py
@@ -12,9 +16,19 @@ Part of Architecture Refactoring v2.9.1.
 
 from __future__ import annotations
 
+import warnings
+
 from homodyne.utils.logging import get_logger
 
 logger = get_logger(__name__)
+
+# Issue deprecation warning on module import
+warnings.warn(
+    "homodyne.optimization.nlsq.config_utils is deprecated since v2.14.0. "
+    "Use homodyne.optimization.nlsq.config (safe_float, safe_int, safe_bool) instead.",
+    DeprecationWarning,
+    stacklevel=2,
+)
 
 
 def safe_float(value, default: float) -> float:

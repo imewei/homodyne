@@ -137,6 +137,15 @@ except ImportError:
     SingleStartResult = None
     run_multistart_nlsq = None
 
+# CPU threading configuration (FR-005, T026)
+try:
+    from homodyne.device.cpu import configure_cpu_threading
+
+    HAS_CPU_CONFIG = True
+except ImportError:
+    HAS_CPU_CONFIG = False
+    configure_cpu_threading = None
+
 # Export NLSQ availability for tests and external code
 NLSQ_AVAILABLE = HAS_NLSQ_WRAPPER and JAX_AVAILABLE
 
@@ -257,6 +266,16 @@ def fit_nlsq_jax(
     logger.info("=" * 60)
     logger.info("NLSQ OPTIMIZATION")
     logger.info("=" * 60)
+
+    # Performance Optimization (Spec 001 - FR-005, T026): Configure CPU threading for HPC
+    if HAS_CPU_CONFIG:
+        try:
+            cpu_config = configure_cpu_threading()
+            logger.debug(
+                f"CPU threading configured: {cpu_config.get('threads_configured', 'auto')} threads"
+            )
+        except Exception as e:
+            logger.debug(f"CPU threading configuration skipped: {e}")
 
     # Determine analysis mode
     analysis_mode = _get_analysis_mode(config)

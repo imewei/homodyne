@@ -80,6 +80,7 @@ except ImportError:
             )
 
 
+from collections import OrderedDict
 from collections.abc import Callable
 from functools import wraps
 
@@ -118,7 +119,8 @@ _fallback_stats = {
 # Meshgrid cache for repeated computations with same time arrays
 # Key: (t1_hash, t2_hash) where hash = (len, first_val, last_val)
 # Value: (t1_grid, t2_grid) JAX arrays
-_meshgrid_cache: dict[tuple, tuple] = {}
+# Performance Optimization (Spec 001 - FR-002): LRU eviction for better cache utilization
+_meshgrid_cache: OrderedDict[tuple, tuple] = OrderedDict()
 _MESHGRID_CACHE_MAX_SIZE = 64  # Increased for 23-angle datasets (v2.11.0+)
 
 # Performance Optimization (Spec 006 - FR-010, T040-T042): Cache statistics
@@ -211,6 +213,8 @@ def get_cached_meshgrid(t1: "jnp.ndarray", t2: "jnp.ndarray") -> tuple:
     key = (t1_key, t2_key)
 
     if key in _meshgrid_cache:
+        # Performance Optimization (Spec 001 - FR-002, T019): LRU - mark as recently used
+        _meshgrid_cache.move_to_end(key)
         _cache_stats["hits"] += 1  # T041: Increment hit counter
         return _meshgrid_cache[key]
 
@@ -218,11 +222,10 @@ def get_cached_meshgrid(t1: "jnp.ndarray", t2: "jnp.ndarray") -> tuple:
     _cache_stats["misses"] += 1  # T041: Increment miss counter
     t1_grid, t2_grid = jnp.meshgrid(t1, t2, indexing="ij")
 
-    # Evict oldest entries if cache is full (simple FIFO)
+    # Performance Optimization (Spec 001 - FR-002, T020): LRU eviction
     if len(_meshgrid_cache) >= _MESHGRID_CACHE_MAX_SIZE:
-        # Remove first (oldest) entry
-        first_key = next(iter(_meshgrid_cache))
-        del _meshgrid_cache[first_key]
+        # Remove least recently used entry (first in OrderedDict)
+        _meshgrid_cache.popitem(last=False)
         _cache_stats["evictions"] += 1  # T041: Track evictions
 
     _meshgrid_cache[key] = (t1_grid, t2_grid)

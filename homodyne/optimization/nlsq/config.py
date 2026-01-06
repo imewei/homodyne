@@ -4,16 +4,132 @@ This module provides the NLSQConfig dataclass for parsing and validating
 NLSQ-specific configuration settings from the YAML config file.
 
 Part of Phase 3 architecture refactoring to reduce wrapper.py complexity.
+
+Config Consolidation (v2.14.0, FR-014):
+- Single entry point: NLSQConfig.from_yaml() or NLSQConfig.from_dict()
+- Safe type conversion utilities: safe_float, safe_int, safe_bool
+- Full validation via validate() method
 """
 
 from __future__ import annotations
 
+import warnings
 from dataclasses import dataclass, field
 from typing import Any
 
 from homodyne.utils.logging import get_logger
 
 logger = get_logger(__name__)
+
+
+# =============================================================================
+# Safe Type Conversion Utilities (T094-T096)
+# Consolidated from config_utils.py
+# =============================================================================
+
+
+def safe_float(value: Any, default: float) -> float:
+    """Convert value to float safely, returning default on failure.
+
+    Parameters
+    ----------
+    value : Any
+        Value to convert to float.
+    default : float
+        Default value to return if conversion fails.
+
+    Returns
+    -------
+    float
+        Converted float value or default.
+
+    Examples
+    --------
+    >>> safe_float("3.14", 0.0)
+    3.14
+    >>> safe_float(None, 1.0)
+    1.0
+    >>> safe_float("invalid", 2.5)
+    2.5
+    """
+    if value is None:
+        return default
+    try:
+        return float(value)
+    except (ValueError, TypeError):
+        logger.warning(f"Could not convert {value!r} to float, using default {default}")
+        return default
+
+
+def safe_int(value: Any, default: int) -> int:
+    """Convert value to int safely, returning default on failure.
+
+    Parameters
+    ----------
+    value : Any
+        Value to convert to int.
+    default : int
+        Default value to return if conversion fails.
+
+    Returns
+    -------
+    int
+        Converted int value or default.
+
+    Examples
+    --------
+    >>> safe_int("42", 0)
+    42
+    >>> safe_int(None, 10)
+    10
+    >>> safe_int("invalid", 5)
+    5
+    """
+    if value is None:
+        return default
+    try:
+        return int(value)
+    except (ValueError, TypeError):
+        logger.warning(f"Could not convert {value!r} to int, using default {default}")
+        return default
+
+
+def safe_bool(value: Any, default: bool) -> bool:
+    """Convert value to bool safely, returning default on failure.
+
+    Handles string values like "true", "false", "1", "0".
+
+    Parameters
+    ----------
+    value : Any
+        Value to convert to bool.
+    default : bool
+        Default value to return if conversion fails.
+
+    Returns
+    -------
+    bool
+        Converted bool value or default.
+    """
+    if value is None:
+        return default
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, str):
+        lower = value.lower()
+        if lower in ("true", "1", "yes", "on"):
+            return True
+        if lower in ("false", "0", "no", "off"):
+            return False
+    try:
+        return bool(value)
+    except (ValueError, TypeError):
+        logger.warning(f"Could not convert {value!r} to bool, using default {default}")
+        return default
+
+
+# Valid loss functions for NLSQ
+VALID_LOSS_FUNCTIONS = {"linear", "soft_l1", "huber", "cauchy", "arctan"}
 
 
 @dataclass
@@ -444,6 +560,61 @@ class NLSQConfig:
                 logger.warning(f"NLSQ config validation: {error}")
 
         return config
+
+    @classmethod
+    def from_yaml(cls, yaml_path: str) -> NLSQConfig:
+        """Create NLSQConfig from YAML configuration file (T099).
+
+        This is the recommended single entry point for loading NLSQ configuration.
+        It reads the YAML file, extracts the optimization.nlsq section, and
+        creates a validated NLSQConfig object.
+
+        Parameters
+        ----------
+        yaml_path : str
+            Path to YAML configuration file.
+
+        Returns
+        -------
+        NLSQConfig
+            Validated configuration object.
+
+        Raises
+        ------
+        FileNotFoundError
+            If the YAML file does not exist.
+        ValueError
+            If the YAML file is invalid or missing required sections.
+
+        Examples
+        --------
+        >>> config = NLSQConfig.from_yaml("homodyne_config.yaml")
+        >>> print(config.loss)
+        soft_l1
+        """
+        import yaml
+        from pathlib import Path
+
+        path = Path(yaml_path)
+        if not path.exists():
+            raise FileNotFoundError(f"Configuration file not found: {yaml_path}")
+
+        with open(path) as f:
+            full_config = yaml.safe_load(f)
+
+        if full_config is None:
+            full_config = {}
+
+        # Extract optimization.nlsq section
+        optimization = full_config.get("optimization", {})
+        nlsq_config = optimization.get("nlsq", {})
+
+        if not nlsq_config:
+            logger.warning(
+                f"No optimization.nlsq section found in {yaml_path}, using defaults"
+            )
+
+        return cls.from_dict(nlsq_config)
 
     def validate(self) -> list[str]:
         """Validate configuration values.

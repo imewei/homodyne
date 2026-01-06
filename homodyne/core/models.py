@@ -352,9 +352,21 @@ class CombinedModel(
             )
             try:
                 result = compute_g1_total(params, t1, t2, phi, q, L, dt)
-                logger.debug(
-                    f"CombinedModel.compute_g1: compute_g1_total completed, result.shape={result.shape}, min={jnp.min(result):.6e}, max={jnp.max(result):.6e}",
-                )
+                # Note: Skip debug logging of result values when traced by JAX
+                # (jax.vmap/jit creates BatchTracer objects that can't be formatted)
+                if logger.isEnabledFor(10):  # DEBUG level
+                    try:
+                        # Only log if we can actually compute the values
+                        min_val = float(jnp.min(result))
+                        max_val = float(jnp.max(result))
+                        logger.debug(
+                            f"CombinedModel.compute_g1: compute_g1_total completed, result.shape={result.shape}, min={min_val:.6e}, max={max_val:.6e}",
+                        )
+                    except (TypeError, ValueError):
+                        # Likely a JAX tracer object during tracing
+                        logger.debug(
+                            f"CombinedModel.compute_g1: compute_g1_total completed, result.shape={result.shape}",
+                        )
                 return result
             except Exception as e:
                 logger.error(
@@ -362,6 +374,66 @@ class CombinedModel(
                 )
                 logger.error("CombinedModel.compute_g1: traceback:", exc_info=True)
                 raise
+
+    def compute_g1_batch(
+        self,
+        params: jnp.ndarray,
+        t1_batch: jnp.ndarray,
+        t2_batch: jnp.ndarray,
+        phi_batch: jnp.ndarray,
+        q: float,
+        L: float,
+        dt: float = None,
+    ) -> jnp.ndarray:
+        """Compute g1 for a batch of points using vmap.
+
+        Performance Optimization (Spec 001 - FR-006, T041): Vectorized computation
+        using jax.vmap for batched point-wise g1 calculation, replacing Python loops.
+
+        Parameters
+        ----------
+        params : jnp.ndarray
+            Physical parameters array
+        t1_batch : jnp.ndarray
+            Batch of t1 values, shape (n_points,)
+        t2_batch : jnp.ndarray
+            Batch of t2 values, shape (n_points,)
+        phi_batch : jnp.ndarray
+            Batch of phi values, shape (n_points,)
+        q : float
+            Scattering wave vector magnitude [Å⁻¹]
+        L : float
+            Sample-detector distance (stator_rotor_gap) [Å]
+        dt : float, optional
+            Time step from configuration [s]
+
+        Returns
+        -------
+        jnp.ndarray
+            Batch of g1 values, shape (n_points,)
+        """
+        import jax
+
+        # Define single-point g1 computation
+        def compute_g1_single(t1_val, t2_val, phi_val):
+            g1 = self.compute_g1(
+                params,
+                jnp.array([t1_val]),
+                jnp.array([t2_val]),
+                jnp.array([phi_val]),
+                q,
+                L,
+                dt,
+            )
+            return g1.flatten()[0]
+
+        # Vectorize over batch dimension
+        compute_g1_vmap = jax.vmap(
+            compute_g1_single,
+            in_axes=(0, 0, 0),
+        )
+
+        return compute_g1_vmap(t1_batch, t2_batch, phi_batch)
 
     @log_calls(include_args=False)
     def compute_g2(

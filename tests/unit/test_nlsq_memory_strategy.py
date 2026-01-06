@@ -548,3 +548,116 @@ class TestEdgeCases:
         """Test with single parameter optimization."""
         decision = select_nlsq_strategy(n_points=1_000_000, n_params=1)
         assert decision.strategy == NLSQStrategy.STANDARD
+
+
+# =============================================================================
+# TestAutoStreamingMode: Auto-streaming mode switch (T036, FR-007)
+# =============================================================================
+class TestAutoStreamingMode:
+    """Tests for automatic streaming mode switch (T036).
+
+    The optimizer should automatically switch to streaming mode when
+    memory constraints require it, without user configuration.
+    """
+
+    def test_auto_streaming_mode(self):
+        """T036: Verify automatic switch to streaming mode based on memory.
+
+        Performance Optimization (Spec 001 - FR-007, T036): The optimizer
+        should automatically detect when streaming mode is needed based on
+        memory estimates vs available system memory.
+        """
+        # Small dataset - should use STANDARD
+        small_decision = select_nlsq_strategy(n_points=100_000, n_params=10)
+        assert small_decision.strategy == NLSQStrategy.STANDARD
+
+        # Large dataset - should switch to OUT_OF_CORE or HYBRID_STREAMING
+        large_decision = select_nlsq_strategy(n_points=500_000_000, n_params=53)
+        assert large_decision.strategy in (
+            NLSQStrategy.OUT_OF_CORE,
+            NLSQStrategy.HYBRID_STREAMING,
+        )
+
+    def test_auto_streaming_threshold_sensitivity(self):
+        """Test that streaming mode triggers at appropriate threshold."""
+        from unittest.mock import patch
+
+        # Mock a low threshold to test switching behavior
+        with patch(
+            "homodyne.optimization.nlsq.memory.get_adaptive_memory_threshold"
+        ) as mock_threshold:
+            # Set 5 GB threshold
+            mock_threshold.return_value = (5.0, {"memory_fraction": 0.75})
+
+            # Calculate points needed to exceed 5 GB
+            # peak_gb = n_points * n_params * 8 * 3 / 1024^3
+            # 5 = n_points * 53 * 24 / 1024^3
+            # n_points = 5 * 1024^3 / (53 * 24) ≈ 4.2M
+            decision = select_nlsq_strategy(n_points=5_000_000, n_params=53)
+
+            # Should trigger non-STANDARD strategy
+            assert decision.strategy != NLSQStrategy.STANDARD
+
+    def test_auto_streaming_preserves_correctness(self):
+        """Test that streaming mode produces correct strategy decision."""
+        # The decision should contain valid information regardless of strategy
+        decisions = [
+            select_nlsq_strategy(n_points=100_000, n_params=10),
+            select_nlsq_strategy(n_points=10_000_000, n_params=53),
+            select_nlsq_strategy(n_points=100_000_000, n_params=100),
+        ]
+
+        for decision in decisions:
+            # All decisions should have valid fields
+            assert decision.strategy in NLSQStrategy
+            assert decision.threshold_gb > 0
+            assert decision.index_memory_gb >= 0
+            assert decision.peak_memory_gb >= 0
+            assert len(decision.reason) > 0
+
+    def test_streaming_mode_deterministic(self):
+        """Test that strategy selection is deterministic."""
+        # Same inputs should produce same outputs
+        n_points = 10_000_000
+        n_params = 53
+
+        decisions = [
+            select_nlsq_strategy(n_points, n_params)
+            for _ in range(5)
+        ]
+
+        # All decisions should be identical
+        first = decisions[0]
+        for decision in decisions[1:]:
+            assert decision.strategy == first.strategy
+            assert decision.threshold_gb == first.threshold_gb
+            assert decision.peak_memory_gb == first.peak_memory_gb
+
+    def test_memory_fraction_affects_streaming_trigger(self):
+        """Test that memory_fraction parameter affects when streaming triggers."""
+        n_points = 20_000_000
+        n_params = 53
+
+        # High fraction - more memory available, less likely to stream
+        high_fraction = select_nlsq_strategy(
+            n_points, n_params, memory_fraction=0.9
+        )
+
+        # Low fraction - less memory available, more likely to stream
+        low_fraction = select_nlsq_strategy(
+            n_points, n_params, memory_fraction=0.3
+        )
+
+        # Lower fraction should have lower threshold
+        assert low_fraction.threshold_gb < high_fraction.threshold_gb
+
+        # If strategies differ, low fraction should be more restrictive
+        if high_fraction.strategy == NLSQStrategy.STANDARD:
+            # Low fraction might still be STANDARD or stricter
+            pass  # Both valid
+        elif high_fraction.strategy == NLSQStrategy.OUT_OF_CORE:
+            # Low fraction should be same or stricter
+            assert low_fraction.strategy in (
+                NLSQStrategy.OUT_OF_CORE,
+                NLSQStrategy.HYBRID_STREAMING,
+            )

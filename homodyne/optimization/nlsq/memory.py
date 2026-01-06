@@ -344,6 +344,11 @@ def select_nlsq_strategy(
 
     # Decision tree (check index FIRST - extreme case)
     if index_memory_gb > threshold_gb:
+        # Performance Optimization (Spec 001 - T051): Log auto-streaming mode activation
+        logger.info(
+            f"Auto-switching to HYBRID_STREAMING: index array ({index_memory_gb:.2f} GB) "
+            f"exceeds threshold ({threshold_gb:.2f} GB)"
+        )
         return StrategyDecision(
             strategy=NLSQStrategy.HYBRID_STREAMING,
             threshold_gb=threshold_gb,
@@ -356,6 +361,11 @@ def select_nlsq_strategy(
         )
 
     if peak_memory_gb > threshold_gb:
+        # Performance Optimization (Spec 001 - T051): Log auto-streaming mode activation
+        logger.info(
+            f"Auto-switching to OUT_OF_CORE: peak memory ({peak_memory_gb:.2f} GB) "
+            f"exceeds threshold ({threshold_gb:.2f} GB)"
+        )
         return StrategyDecision(
             strategy=NLSQStrategy.OUT_OF_CORE,
             threshold_gb=threshold_gb,

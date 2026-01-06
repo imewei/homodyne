@@ -326,6 +326,33 @@ def _configure_jax_cpu(
     return jax_config
 
 
+def configure_cpu_threading(num_threads: int | None = None) -> dict[str, any]:
+    """Configure CPU threading for NLSQ optimization.
+
+    Performance Optimization (Spec 001 - FR-005, T024): Simplified threading
+    configuration for NLSQ initialization. Calls configure_cpu_hpc() with
+    sensible defaults for optimization workloads.
+
+    Parameters
+    ----------
+    num_threads : int, optional
+        Number of threads to use. If None, auto-detects optimal count
+        based on physical cores.
+
+    Returns
+    -------
+    dict
+        Configuration summary including thread count and XLA settings.
+    """
+    return configure_cpu_hpc(
+        num_threads=num_threads,
+        enable_hyperthreading=False,  # Physical cores only for HPC
+        numa_policy="auto",
+        memory_optimization="standard",
+        enable_onednn=False,  # Disabled by default for XPCS workloads
+    )
+
+
 def get_optimal_batch_size(
     data_size: int,
     available_memory_gb: float | None = None,

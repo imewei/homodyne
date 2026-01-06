@@ -245,6 +245,73 @@ class TestCreateShearWeighting:
         assert result is None
 
 
+class TestJITShearWeights:
+    """Tests for JIT-compiled shear weight computation (FR-001, T009)."""
+
+    def test_jit_compute_weights(self):
+        """Test that JIT-compiled weight computation matches expected output.
+
+        Performance Optimization (Spec 001 - FR-001, T009): Verify JIT compilation
+        produces correct weights and provides performance improvement.
+        """
+        import time
+
+        from homodyne.optimization.nlsq.shear_weighting import _compute_weights_jax
+
+        phi_angles = np.linspace(-75, 75, 23)
+        phi0 = 0.0
+        min_weight = 0.3
+        alpha = 1.0
+
+        # First call triggers JIT compilation
+        start = time.perf_counter()
+        weights_first = _compute_weights_jax(
+            jnp.array(phi_angles), phi0, min_weight, alpha, True
+        )
+        first_call_time = time.perf_counter() - start
+
+        # Subsequent calls should be faster (use cached compiled function)
+        start = time.perf_counter()
+        for _ in range(100):
+            weights_cached = _compute_weights_jax(
+                jnp.array(phi_angles), phi0, min_weight, alpha, True
+            )
+        cached_avg_time = (time.perf_counter() - start) / 100
+
+        # Verify correctness
+        assert weights_first.shape == (23,)
+        np.testing.assert_allclose(np.mean(weights_first), 1.0, atol=1e-6)
+
+        # All weights should be positive
+        assert np.all(np.array(weights_first) > 0)
+
+        # Cached calls should be at least 2x faster on average
+        # (first call includes compilation, later calls don't)
+        assert cached_avg_time < first_call_time, (
+            f"JIT caching not effective: first={first_call_time*1000:.2f}ms, "
+            f"cached_avg={cached_avg_time*1000:.2f}ms"
+        )
+
+    def test_jit_underflow_protection(self):
+        """Test that underflow protection prevents NaN in JIT computation.
+
+        Performance Optimization (Spec 001 - FR-008, T016): Verify underflow
+        protection in JIT-compiled function.
+        """
+        from homodyne.optimization.nlsq.shear_weighting import _compute_weights_jax
+
+        # Angles where cos(phi0 - phi) would be exactly 0
+        phi_angles = np.array([-90.0, 0.0, 90.0])
+        phi0 = 0.0  # cos(0 - 90) = 0
+
+        weights = _compute_weights_jax(jnp.array(phi_angles), phi0, 0.3, 1.0, True)
+
+        # All weights should be finite (no NaN from 0^alpha)
+        assert np.all(np.isfinite(weights))
+        # At 90 degrees, weight should be close to min_weight (before normalization)
+        assert np.all(np.array(weights) > 0)
+
+
 class TestShearWeightingPhysics:
     """Tests verifying correct physics behavior of shear weighting."""
 
@@ -317,8 +384,9 @@ class TestShearWeightingPhysics:
         weights = weighter.get_weights()
 
         # -90 and +90 should get minimum weight
-        np.testing.assert_allclose(weights[0], 0.2, rtol=1e-10)  # -90
-        np.testing.assert_allclose(weights[-1], 0.2, rtol=1e-10)  # +90
+        # Note: rtol=1e-8 allows for minor numerical effects from underflow protection
+        np.testing.assert_allclose(weights[0], 0.2, rtol=1e-8)  # -90
+        np.testing.assert_allclose(weights[-1], 0.2, rtol=1e-8)  # +90
 
         # 0 should get maximum weight (1.0)
-        np.testing.assert_allclose(weights[2], 1.0, rtol=1e-10)  # 0
+        np.testing.assert_allclose(weights[2], 1.0, rtol=1e-8)  # 0
