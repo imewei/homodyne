@@ -18,7 +18,6 @@ Structure:
 - multistart.py: Multi-start optimization with LHS (v2.6.0)
 - anti_degeneracy_adapter.py: NLSQ integration for anti-degeneracy (v2.11.0+)
 - strategies/: Optimization strategy modules
-  - selection.py: DatasetSizeStrategy and OptimizationStrategy
   - chunking.py: Angle-stratified chunking for large datasets
   - residual.py: StratifiedResidualFunction for per-angle optimization
   - residual_jit.py: JIT-compiled stratified residual function
@@ -179,9 +178,12 @@ from homodyne.optimization.nlsq.fit_computation import (
 from homodyne.optimization.nlsq.memory import (
     DEFAULT_MEMORY_FRACTION,
     FALLBACK_THRESHOLD_GB,
+    NLSQStrategy,
+    StrategyDecision,
     detect_total_system_memory,
     estimate_peak_memory_gb,
     get_adaptive_memory_threshold,
+    select_nlsq_strategy,
 )
 
 # Multi-start optimization (v2.6.0)
@@ -376,12 +378,15 @@ __all__ = [
     "LargeDatasetExecutor",
     "StreamingExecutor",
     "get_executor",
-    # Memory management (extracted Jan 2026)
+    # Memory management and unified strategy selection (Jan 2026)
     "DEFAULT_MEMORY_FRACTION",
     "FALLBACK_THRESHOLD_GB",
+    "NLSQStrategy",
+    "StrategyDecision",
     "detect_total_system_memory",
     "estimate_peak_memory_gb",
     "get_adaptive_memory_threshold",
+    "select_nlsq_strategy",
     # Parameter utilities (extracted Jan 2026)
     "build_parameter_labels_utils",
     "classify_parameter_status_utils",

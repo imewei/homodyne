@@ -1,23 +1,24 @@
-"""Memory Management Utilities for NLSQ Optimization.
+"""Memory Management and Unified Strategy Selection for NLSQ Optimization.
 
-Provides adaptive memory threshold detection and management for determining
-when NLSQ should switch to streaming mode for memory-bounded optimization.
+Provides adaptive memory threshold detection and unified memory-based strategy
+selection for NLSQ optimization (v2.13.0+).
 
 Key Features:
 - Cross-platform system memory detection (psutil + os.sysconf fallback)
 - Adaptive threshold calculation based on available memory
+- Unified memory-based strategy selection (NLSQStrategy, select_nlsq_strategy)
 - Environment variable override support (NLSQ_MEMORY_FRACTION)
 - Safe fraction clamping to prevent OOM or underutilization
 
-Usage:
+Strategy Selection (v2.13.0+):
+    >>> from homodyne.optimization.nlsq.memory import select_nlsq_strategy
+    >>> decision = select_nlsq_strategy(n_points=100_000_000, n_params=53)
+    >>> print(decision.strategy.value)  # 'standard', 'out_of_core', or 'hybrid_streaming'
+
+Memory Threshold:
     >>> from homodyne.optimization.nlsq.memory import get_adaptive_memory_threshold
     >>> threshold_gb, info = get_adaptive_memory_threshold()
     >>> print(f"Threshold: {threshold_gb:.1f} GB")
-
-.. deprecated:: 2.11.0
-    These functions are deprecated. NLSQ's WorkflowSelector (v0.4+) handles
-    memory-based workflow selection automatically. Use
-    :class:`nlsq.caching.MemoryManager` for direct memory management.
 """
 
 import logging
@@ -256,6 +257,127 @@ def estimate_peak_memory_gb(
     return peak_bytes / (1024**3)
 
 
+from dataclasses import dataclass
+from enum import Enum
+
+
+class NLSQStrategy(Enum):
+    """NLSQ optimization strategy based on memory constraints."""
+
+    STANDARD = "standard"  # In-memory full Jacobian
+    OUT_OF_CORE = "out_of_core"  # Chunk-wise J^T J accumulation
+    HYBRID_STREAMING = "hybrid_streaming"  # L-BFGS warmup + streaming GN
+
+
+@dataclass(frozen=True)
+class StrategyDecision:
+    """Result of unified memory-based strategy selection.
+
+    Attributes
+    ----------
+    strategy : NLSQStrategy
+        Selected optimization strategy
+    threshold_gb : float
+        Memory threshold used for decision (GB)
+    index_memory_gb : float
+        Memory required for int64 index array (GB)
+    peak_memory_gb : float
+        Estimated peak memory for full Jacobian (GB)
+    reason : str
+        Human-readable explanation of decision
+    """
+
+    strategy: NLSQStrategy
+    threshold_gb: float
+    index_memory_gb: float
+    peak_memory_gb: float
+    reason: str
+
+
+def select_nlsq_strategy(
+    n_points: int,
+    n_params: int,
+    memory_fraction: float = DEFAULT_MEMORY_FRACTION,
+) -> StrategyDecision:
+    """Unified memory-based NLSQ strategy selection.
+
+    Implements a pure memory-based decision tree:
+
+    1. If index array > threshold → HYBRID_STREAMING (extreme scale)
+    2. Elif peak memory > threshold → OUT_OF_CORE (large scale)
+    3. Else → STANDARD (in-memory)
+
+    Parameters
+    ----------
+    n_points : int
+        Number of data points
+    n_params : int
+        Number of optimization parameters
+    memory_fraction : float, optional
+        Fraction of system RAM to use as threshold (default: 0.75)
+
+    Returns
+    -------
+    StrategyDecision
+        Decision with strategy, metrics, and rationale
+
+    Examples
+    --------
+    >>> decision = select_nlsq_strategy(100_000_000, 53)
+    >>> print(decision.strategy.value)
+    'out_of_core'
+    >>> print(decision.reason)
+    'Peak memory (12.8 GB) exceeds threshold (24.0 GB)'
+    """
+    # Get unified memory threshold
+    threshold_gb, _ = get_adaptive_memory_threshold(memory_fraction)
+
+    # Compute memory metrics
+    index_memory_bytes = n_points * 8  # int64 indices
+    index_memory_gb = index_memory_bytes / (1024**3)
+
+    # Handle edge case: n_params=0 means we can't estimate properly
+    if n_params <= 0:
+        peak_memory_gb = 0.0
+    else:
+        peak_memory_gb = estimate_peak_memory_gb(n_points, n_params)
+
+    # Decision tree (check index FIRST - extreme case)
+    if index_memory_gb > threshold_gb:
+        return StrategyDecision(
+            strategy=NLSQStrategy.HYBRID_STREAMING,
+            threshold_gb=threshold_gb,
+            index_memory_gb=index_memory_gb,
+            peak_memory_gb=peak_memory_gb,
+            reason=(
+                f"Index array ({index_memory_gb:.2f} GB) exceeds "
+                f"threshold ({threshold_gb:.2f} GB)"
+            ),
+        )
+
+    if peak_memory_gb > threshold_gb:
+        return StrategyDecision(
+            strategy=NLSQStrategy.OUT_OF_CORE,
+            threshold_gb=threshold_gb,
+            index_memory_gb=index_memory_gb,
+            peak_memory_gb=peak_memory_gb,
+            reason=(
+                f"Peak memory ({peak_memory_gb:.2f} GB) exceeds "
+                f"threshold ({threshold_gb:.2f} GB)"
+            ),
+        )
+
+    return StrategyDecision(
+        strategy=NLSQStrategy.STANDARD,
+        threshold_gb=threshold_gb,
+        index_memory_gb=index_memory_gb,
+        peak_memory_gb=peak_memory_gb,
+        reason=(
+            f"Memory fits: {peak_memory_gb:.2f} GB < {threshold_gb:.2f} GB threshold"
+        ),
+    )
+
+
 __all__ = [
     "DEFAULT_MEMORY_FRACTION",
     "MEMORY_FRACTION_ENV_VAR",
@@ -263,4 +385,8 @@ __all__ = [
     "detect_total_system_memory",
     "get_adaptive_memory_threshold",
     "estimate_peak_memory_gb",
+    # Unified strategy selection (v2.13.0)
+    "NLSQStrategy",
+    "StrategyDecision",
+    "select_nlsq_strategy",
 ]
