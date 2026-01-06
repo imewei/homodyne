@@ -118,7 +118,7 @@ homodyne-cleanup = "homodyne.uninstall_scripts:main"
 
 [tool.setuptools_scm]
 write_to = "homodyne/_version.py"
-version_scheme = "post-release"
+version_scheme = "python-simplified-semver"
 local_scheme = "dirty-tag"
 
 [tool.setuptools.packages.find]
