@@ -798,7 +798,7 @@ def create_angle_stratified_data(
 def create_angle_stratified_indices(
     phi: jnp.ndarray | np.ndarray,
     target_chunk_size: int = 100_000,
-) -> np.ndarray:
+) -> tuple[np.ndarray, list[int]]:
     """Create index array for zero-copy angle-stratified data access using Interleaved Stratification.
 
     This function implements index-based stratification, reducing memory overhead
@@ -824,6 +824,8 @@ def create_angle_stratified_indices(
     indices : np.ndarray
         Index array specifying stratified ordering, shape (n_points,)
         Use: data_stratified = data_original[indices]
+    chunk_sizes : list[int]
+        Size of each stratified chunk (CRITICAL for correct re-chunking)
 
     """
     n_points = len(phi)
@@ -901,7 +903,48 @@ def create_angle_stratified_indices(
         f"{len(final_indices):,} indices (no expansion)"
     )
 
-    return final_indices
+    # Calculate actual chunk sizes from the stratified_indices list
+    chunk_sizes = [len(chunk) for chunk in stratified_indices]
+
+    return final_indices, chunk_sizes
+
+
+@dataclass
+class StratifiedIndexIterator:
+    """Iterator that yields index chunks for stratified data access.
+
+    This iterator allows processing strictly stratified chunks one by one
+    without materializing the full index array or data chunks in memory.
+    """
+    indices: np.ndarray
+    chunk_sizes: list[int]
+
+    def __iter__(self):
+        start = 0
+        for size in self.chunk_sizes:
+            end = start + size
+            yield self.indices[start:end]
+            start = end
+
+    def __len__(self):
+        return len(self.chunk_sizes)
+
+
+def get_stratified_chunk_iterator(
+    phi: jnp.ndarray | np.ndarray,
+    target_chunk_size: int = 100_000,
+) -> StratifiedIndexIterator:
+    """Create an iterator yielding stratified index chunks.
+
+    Args:
+        phi: Array of phi angles
+        target_chunk_size: Desired chunk size
+
+    Returns:
+        StratifiedIndexIterator yielding index chunks
+    """
+    indices, chunk_sizes = create_angle_stratified_indices(phi, target_chunk_size)
+    return StratifiedIndexIterator(indices, chunk_sizes)
 
 
 def should_use_stratification(

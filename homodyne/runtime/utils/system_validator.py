@@ -752,10 +752,11 @@ alias hc-iso >/dev/null 2>&1 && echo "shortcut_alias_works" || echo "shortcut_al
                 warnings.append(f"Homodyne NLSQWrapper not available: {e}")
                 homodyne_integration_ok = False
 
-            # Test 5: Strategy selection logic
+            # Test 5: Unified memory-based strategy selection (v2.13.0+)
             try:
-                from homodyne.optimization.nlsq.strategies.selection import (  # noqa: F401
-                    DatasetSizeStrategy,
+                from homodyne.optimization.nlsq.memory import (  # noqa: F401
+                    NLSQStrategy,
+                    select_nlsq_strategy,
                 )
 
                 details["strategy_selection"] = "available"
