@@ -9,29 +9,138 @@ ______________________________________________________________________
 
 ## [Unreleased]
 
-### Removed
+*No unreleased changes*
 
-- `should_use_streaming()` function from `homodyne.optimization.nlsq.memory`
-  - Use NLSQ's `WorkflowSelector` (automatic in v0.4+)
-- `DatasetSizeStrategy` class from public API
-  - Use NLSQ's `WorkflowSelector` (automatic in v0.4+)
-- `OptimizationStrategy` enum from public API
-- `estimate_memory_requirements()` function from public API
-- Deprecated config path warnings for `performance.subsampling`
-- Legacy test compatibility layer (`tests/utils/legacy_compat.py`)
-- Test file `tests/unit/test_nlsq_streaming.py` (1,884 lines)
+______________________________________________________________________
 
-### Changed
+## [2.13.0] - 2026-01-05
+
+### Deprecation Removal - Unified Memory-Based Strategy Selection
+
+Removed deprecated `DatasetSizeStrategy` class and replaced with unified memory-based
+strategy selection API. The new API uses adaptive memory thresholds instead of fixed
+dataset size thresholds.
+
+#### Removed
+
+- `homodyne/optimization/nlsq/strategies/selection.py` - Entire module removed
+  - `DatasetSizeStrategy` class
+  - `OptimizationStrategy` enum (moved to `wrapper.py` as internal)
+  - `estimate_memory_requirements()` function
+
+#### Added
+
+New unified strategy selection API in `homodyne.optimization.nlsq.memory`:
+
+```python
+from homodyne.optimization.nlsq.memory import (
+    NLSQStrategy,           # Enum: STANDARD, OUT_OF_CORE, HYBRID_STREAMING
+    StrategyDecision,       # Dataclass with strategy, threshold_gb, peak_memory_gb, reason
+    select_nlsq_strategy,   # Unified strategy selection function
+)
+
+# Usage
+decision = select_nlsq_strategy(n_points=100_000_000, n_params=53)
+print(decision.strategy.value)  # 'standard', 'out_of_core', or 'hybrid_streaming'
+print(decision.reason)          # Human-readable explanation
+```
+
+**Strategy Decision Tree:**
+1. If index array (n_points × 8 bytes) > 75% RAM → `HYBRID_STREAMING`
+2. Elif peak memory (Jacobian + autodiff) > 75% RAM → `OUT_OF_CORE`
+3. Else → `STANDARD`
+
+#### Changed
+
+- `homodyne/optimization/nlsq/memory.py` - Updated docstring, now primary strategy selection module
+- `homodyne/optimization/nlsq/wrapper.py` - Added local `OptimizationStrategy` enum and `_get_strategy_info()` helper
+- `homodyne/optimization/nlsq/__init__.py` - Added exports for `NLSQStrategy`, `StrategyDecision`, `select_nlsq_strategy`
+- `homodyne/runtime/utils/system_validator.py` - Updated to use new memory-based strategy selection
+
+#### Tests Updated
+
+- `tests/regression/test_nlsq_regression.py` - Replaced `DatasetSizeStrategy` with `select_nlsq_strategy`
+- `tests/unit/test_streaming_optimizer.py` - Updated strategy tests
+- `tests/integration/test_nlsq_integration.py` - Updated all strategy selection tests
+- Removed obsolete `filterwarnings` for `DatasetSizeStrategy` deprecation from:
+  - `tests/unit/test_nlsq_core.py`
+  - `tests/unit/test_nlsq_wrapper.py`
+  - `tests/unit/test_optimization_edge_cases.py`
+  - `tests/unit/test_residual_function.py`
+  - `tests/performance/test_wrapper_overhead.py`
+  - `tests/performance/test_nlsq_performance.py`
+
+______________________________________________________________________
+
+## [2.12.0] - 2026-01-04
+
+### Deprecated Code Cleanup and CMC Defaults Update
+
+Major cleanup release removing deprecated code and updating CMC (Consensus Monte Carlo)
+default settings.
+
+#### Removed
+
+- Deprecated `StreamingOptimizer` legacy compatibility code
+- Deprecated `should_use_streaming()` function references
+- Legacy test files for deprecated streaming functionality
+- Unused config path warnings for `performance.subsampling`
+
+#### Changed
 
 - **BREAKING**: CMC default combination method changed from `weighted_gaussian` to `consensus_mc`
-  - `weighted_gaussian` was mathematically incorrect
+  - `weighted_gaussian` was mathematically incorrect for posterior combination
   - Add `combination_method: weighted_gaussian` to config to preserve old behavior (deprecated)
+- Updated config defaults for anti-degeneracy system
 
-### Deprecated
+#### Deprecated
 
 - CMC combination methods `weighted_gaussian` and `simple_average`
   - Will be removed in v3.0
   - Use `consensus_mc` (now default)
+
+______________________________________________________________________
+
+## [2.11.0] - 2026-01-03
+
+### NLSQAdapter with Model Caching and CurveFit Integration
+
+Added `NLSQAdapter` as the recommended interface for NLSQ optimization, featuring
+model caching for significant performance improvements in multi-start optimization.
+
+#### Added
+
+- **NLSQAdapter**: New adapter class using NLSQ's `CurveFit` class
+  - Model caching: 3-5× speedup for multi-start optimization (avoids rebuilding models)
+  - JIT compilation caching: 2-3× speedup from compiled model reuse
+  - Automatic fallback to `NLSQWrapper` on failure
+  - Simplified API with `AdapterConfig` dataclass
+
+```python
+from homodyne.optimization.nlsq import NLSQAdapter, AdapterConfig
+
+config = AdapterConfig(
+    use_jit=True,
+    cache_models=True,
+    fallback_to_wrapper=True,
+)
+adapter = NLSQAdapter(config)
+result = adapter.fit(data, params)
+```
+
+- **Model caching utilities**:
+  - `get_or_create_model()` - Get cached model or create new one
+  - `clear_model_cache()` - Clear model cache
+  - `get_cache_stats()` - Get cache hit/miss statistics
+
+#### Fixed
+
+- **fix(nlsq)**: Handle constant scaling mode in anti-degeneracy layers
+- **fix(nlsq)**: Auto-enable hierarchical optimizer when shear weighting is configured
+
+#### Testing
+
+- Updated error handling tests for graceful degradation behavior
 
 ______________________________________________________________________
 
