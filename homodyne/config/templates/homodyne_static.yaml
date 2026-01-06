@@ -7,8 +7,8 @@
 # Use for: Equilibrium systems, pure diffusion, anomalous diffusion
 # Parameter count: 3 physical + 2 × N_angles scaling = 3 + 2N total
 #
-# VERSION: 2.10.0
-# UPDATED: 2026-01-01
+# VERSION: 2.14.0
+# UPDATED: 2026-01-06
 # ==============================================================================
 
 # ==============================================================================
@@ -16,7 +16,7 @@
 # ==============================================================================
 # Template metadata describing analysis configuration
 metadata:
-  config_version: "2.10.0" # Configuration file format version
+  config_version: "2.14.0" # Configuration file format version
   description: "Static diffusion analysis - 3-parameter model"
   analysis_mode: "static" # Static diffusion mode
   parameter_count: 3 # D₀, α, D_offset
@@ -72,8 +72,6 @@ analyzer_parameters:
 # ==============================================================================
 # Analysis mode-specific settings and model description
 analysis_settings:
-  static_mode: true # Static diffusion (no flow)
-
   # Model description for documentation
   model_description:
     type: "static_diffusion" # Static diffusion model
@@ -331,12 +329,22 @@ optimization:
   # ---------------------------------------------------------------------------
   # Fast, deterministic optimization using Levenberg-Marquardt algorithm
   # CPU-optimized with JAX 0.8.0, JIT-compiled for performance
-  # Automatic strategy selection based on dataset size:
+  #
+  # UNIFIED MEMORY-BASED STRATEGY SELECTION (v2.14.0):
+  # Automatic strategy selection based on dataset size AND available memory.
   #   < 1M points     → STANDARD (curve_fit)
   #   1M-10M points   → LARGE (curve_fit_large)
   #   10M-100M points → CHUNKED (curve_fit_large with progress)
   #   > 100M points   → STREAMING (unlimited data with checkpointing)
+  #
+  # Memory-based override: If estimated memory > threshold, switches to
+  # streaming mode. Configure via memory_fraction (adaptive) or
+  # memory_threshold_gb (explicit).
   nlsq:
+    # Memory-based strategy selection (v2.14.0)
+    memory_fraction: 0.75 # Adaptive: use 75% of available RAM as threshold
+    # memory_threshold_gb: 48.0 # Explicit threshold (uncomment to override)
+
     max_iterations: 100 # Maximum optimization iterations
     tolerance: 1e-8 # Convergence tolerance
     trust_region_scale: 1.0 # Trust region scaling factor (0.1-10.0)
@@ -504,7 +512,7 @@ optimization:
       max_warmup_step_size: 0.1                 # Max step (fraction of normalized range)
 
     # ---------------------------------------------------------------------------
-    # ANTI-DEGENERACY DEFENSE SYSTEM (v2.10.0) - SIMPLIFIED
+    # ANTI-DEGENERACY DEFENSE SYSTEM (v2.9.0+) - SIMPLIFIED
     # ---------------------------------------------------------------------------
     # NOTE: This system is designed for laminar_flow mode where shear parameters
     # can collapse due to per-angle parameter absorption. For static mode with

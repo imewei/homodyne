@@ -18,8 +18,8 @@
 #   - homodyne_static.yaml: 3-parameter equilibrium diffusion
 #   - homodyne_laminar_flow.yaml: 7-parameter shear flow
 #
-# VERSION: 2.10.0
-# UPDATED: 2026-01-01
+# VERSION: 2.14.0
+# UPDATED: 2026-01-06
 # ==============================================================================
 
 # ==============================================================================
@@ -28,7 +28,7 @@
 # Template metadata for documentation and validation.
 # The config_version must match the homodyne package version.
 metadata:
-  config_version: "2.10.0"  # Configuration schema version (must match package)
+  config_version: "2.14.0"  # Configuration schema version (must match package)
   description: "Master template - comprehensive reference with all configuration options"
   analysis_mode: "laminar_flow"  # Default mode; set in analysis_mode section below
 
@@ -108,9 +108,6 @@ analyzer_parameters:
 # ==============================================================================
 # Mode-specific settings and model description.
 analysis_settings:
-  # Boolean form of analysis_mode (deprecated but still supported)
-  static_mode: false  # true → static, false → laminar_flow
-
   # Model documentation
   model_description:
     type: "nonequilibrium_laminar_flow"  # "static_diffusion" | "nonequilibrium_laminar_flow"
@@ -424,13 +421,35 @@ optimization:
   # Fast, deterministic point estimation using Levenberg-Marquardt.
   # CPU-optimized with JAX JIT compilation.
   #
-  # AUTOMATIC STRATEGY SELECTION (by dataset size):
+  # ---------------------------------------------------------------------------
+  # UNIFIED MEMORY-BASED STRATEGY SELECTION (v2.14.0)
+  # ---------------------------------------------------------------------------
+  # Automatic strategy selection based on dataset size AND available memory.
+  # Uses select_nlsq_strategy() for unified decision-making.
+  #
+  # STRATEGY SELECTION (by dataset size):
   #   < 1M points      → STANDARD (curve_fit)
   #   1M-10M points    → LARGE (curve_fit_large)
   #   10M-100M points  → CHUNKED (with progress bar)
   #   > 100M points    → STREAMING (checkpoint/resume)
   #
+  # MEMORY-BASED OVERRIDE:
+  #   If estimated memory > threshold, switches to streaming mode regardless
+  #   of dataset size. Estimate: Jacobian (n_points × n_params × 8 bytes) + 3×
+  #   autodiff intermediates.
+  #
+  # Configuration options:
+  #   memory_fraction: 0.75        # Use 75% of system RAM as threshold (adaptive)
+  #   memory_threshold_gb: 48.0    # OR explicit threshold in GB (overrides fraction)
+  #
+  # Environment variable override: NLSQ_MEMORY_FRACTION (0.1-0.9)
+  #
   nlsq:
+    # Memory-based strategy selection (v2.14.0)
+    # Uncomment ONE of the following options:
+    memory_fraction: 0.75           # Adaptive: use 75% of available RAM
+    # memory_threshold_gb: 48.0     # Explicit: switch to streaming above 48 GB
+
     max_iterations: 100    # Increase to 200-300 if convergence slow
     tolerance: 1e-8        # Loosen to 1e-6 for quick exploratory fits
     trust_region_scale: 1.0
@@ -575,20 +594,8 @@ optimization:
       enable_step_clipping: true                # Enable step clipping
       max_warmup_step_size: 0.1                 # Max step (fraction of normalized range)
 
-      # -------------------------------------------------------------------------
-      # GROUP VARIANCE REGULARIZATION (NLSQ 0.3.8) - DEPRECATED
-      # -------------------------------------------------------------------------
-      # NOTE: This section is DEPRECATED in favor of the new anti_degeneracy
-      # system below. Group variance regularization is now part of Layer 3
-      # (Adaptive CV-based Regularization) in the 4-layer defense system.
-      #
-      # Legacy settings preserved for backward compatibility:
-      enable_group_variance_regularization: false  # Use anti_degeneracy instead
-      group_variance_lambda: 0.01                  # Legacy value
-      # group_variance_indices: null
-
     # ---------------------------------------------------------------------------
-    # ANTI-DEGENERACY DEFENSE SYSTEM (v2.10.0)
+    # ANTI-DEGENERACY DEFENSE SYSTEM (v2.9.0+)
     # ---------------------------------------------------------------------------
     # Prevents gradient cancellation and per-angle parameter absorption in
     # laminar_flow mode.
