@@ -213,27 +213,27 @@ class TestPeakMemoryEstimation:
         """Jacobian overhead should multiply the base estimate."""
         mem_default = estimate_peak_memory_gb(n_points=1_000_000, n_params=10)
         mem_higher = estimate_peak_memory_gb(
-            n_points=1_000_000, n_params=10, jacobian_overhead=6.0
+            n_points=1_000_000, n_params=10, jacobian_overhead=13.0
         )
 
-        # Default is 3.0, so 6.0 should double the estimate
+        # Default is 6.5, so 13.0 should double the estimate
         np.testing.assert_allclose(mem_higher / mem_default, 2.0, rtol=1e-10)
 
     @pytest.mark.parametrize(
         "n_points,n_params,expected_gb",
         [
-            # Jacobian: n_points * n_params * 8 bytes * 3.0 overhead
-            (1_000_000, 10, 0.0223517),  # 1M * 10 * 8 * 3 / 1e9 ≈ 0.024 GB
-            (10_000_000, 53, 11.8464),    # 10M * 53 * 8 * 3 / 1e9 ≈ 12.7 GB
-            (100_000_000, 53, 118.464),   # 100M * 53 * 8 * 3 / 1e9 ≈ 127 GB
+            # Jacobian: n_points * n_params * 8 bytes * 6.5 overhead
+            (1_000_000, 10, 0.04843),     # 1M * 10 * 8 * 6.5 / 1024^3 ≈ 0.048 GB
+            (10_000_000, 53, 25.6673),    # 10M * 53 * 8 * 6.5 / 1024^3 ≈ 25.7 GB
+            (100_000_000, 53, 256.673),   # 100M * 53 * 8 * 6.5 / 1024^3 ≈ 257 GB
         ],
     )
     def test_numerical_correctness(self, n_points, n_params, expected_gb):
         """Verify memory estimation formula against analytical calculation."""
         result = estimate_peak_memory_gb(n_points, n_params)
 
-        # Expected: n_points * n_params * 8 * 3.0 / (1024^3)
-        analytical = (n_points * n_params * 8 * 3.0) / (1024**3)
+        # Expected: n_points * n_params * 8 * 6.5 / (1024^3)
+        analytical = (n_points * n_params * 8 * 6.5) / (1024**3)
 
         np.testing.assert_allclose(result, analytical, rtol=1e-10)
 
@@ -410,7 +410,7 @@ class TestNumericalCorrectness:
         n_points = 10_000_000
         n_params = 53
         bytes_per_elem = 8  # float64
-        overhead = 3.0  # default
+        overhead = 6.5  # default (updated from 3.0 in Jan 2026)
 
         expected_bytes = n_points * n_params * bytes_per_elem * overhead
         expected_gb = expected_bytes / (1024**3)
