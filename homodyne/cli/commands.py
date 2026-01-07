@@ -1885,12 +1885,36 @@ def _prepare_parameter_data(
             f"phi0={param_dict.get('phi0', {}).get('value', 'N/A')}"
         )
 
+    elif n_params_actual == n_params_expected_legacy:
+        # Legacy scalar scaling format (used when optimization fails before expansion)
+        # This can happen when multi-start optimization fails - the result contains
+        # the unexpanded input parameters
+        logger.warning(
+            f"Legacy format detected: {n_params_actual} parameters (expected {n_params_expected_per_angle} for per-angle). "
+            f"This typically indicates a failed optimization."
+        )
+
+        # For laminar_flow legacy format: [contrast, offset, D0, alpha, D_offset,
+        #                                  gamma_dot_t0, beta, gamma_dot_t_offset, phi0]
+        # For static legacy format: [contrast, offset, D0, alpha, D_offset]
+        param_dict = {}
+        for i, name in enumerate(param_names):
+            param_dict[name] = {
+                "value": float(result.parameters[i]),
+                "uncertainty": (
+                    float(result.uncertainties[i])
+                    if result.uncertainties is not None and i < len(result.uncertainties)
+                    else None
+                ),
+            }
+
+        logger.debug(f"Extracted legacy parameters: {list(param_dict.keys())}")
+
     else:
-        # Unexpected parameter count - should not happen in v2.4.0+
+        # Unexpected parameter count
         raise ValueError(
             f"Unexpected parameter count: got {n_params_actual}, expected {n_params_expected_per_angle} "
-            f"for per-angle scaling with {n_angles} angles. "
-            f"(Legacy scalar scaling with {n_params_expected_legacy} params is no longer supported in v2.4.0+)"
+            f"for per-angle scaling with {n_angles} angles, or {n_params_expected_legacy} for legacy format."
         )
 
     return param_dict

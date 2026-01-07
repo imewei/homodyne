@@ -959,7 +959,6 @@ class NLSQWrapper(NLSQAdapterBase):
                     "decision": strategy_decision.reason,
                 },
                 recovery_actions=["out_of_core_delegation"],
-                message=info.get("message", "Out-of-Core optimization finished"),
                 quality_flag="good",
             )
 
@@ -1191,6 +1190,95 @@ class NLSQWrapper(NLSQAdapterBase):
                 f"✓ Parameter validation passed: {len(validated_params)} parameters"
             )
 
+            # Step: Re-run unified strategy selection with actual parameter count (v2.14.0)
+            # The initial strategy selection (line ~888) may have had n_params=0 if initial_params
+            # was None at that point. Now that we have the actual expanded parameter count,
+            # re-run the decision to ensure correct routing to OUT_OF_CORE when needed.
+            n_total_points = len(stratified_data.g2_flat)
+            actual_n_params = len(validated_params)
+            strategy_recheck = select_nlsq_strategy(n_total_points, actual_n_params)
+
+            logger.info(
+                f"Strategy re-check (with {actual_n_params} params): "
+                f"{strategy_recheck.strategy.value} ({strategy_recheck.reason})"
+            )
+
+            # Route to OUT_OF_CORE if peak memory exceeds threshold
+            if strategy_recheck.strategy == NLSQStrategy.OUT_OF_CORE:
+                logger.info("=" * 80)
+                logger.info("OUT-OF-CORE ACCUMULATION MODE (Re-check)")
+                logger.info(
+                    f"Peak memory ({strategy_recheck.peak_memory_gb:.1f} GB) exceeds "
+                    f"threshold ({strategy_recheck.threshold_gb:.1f} GB)"
+                )
+                logger.info("Using chunk-wise J^T J accumulation for memory efficiency")
+                logger.info("=" * 80)
+
+                # Default to False (User requirement: Never subsample data)
+                use_fast_mode = self.fast_mode or (
+                    config.config.get("optimization", {}).get("fast_chi2_mode", False)
+                    if config is not None and hasattr(config, "config")
+                    else False
+                )
+
+                popt, pcov, info = self._fit_with_out_of_core_accumulation(
+                    stratified_data=stratified_data,
+                    data=data,
+                    per_angle_scaling=per_angle_scaling,
+                    physical_param_names=physical_param_names,
+                    initial_params=validated_params,
+                    bounds=nlsq_bounds,
+                    logger=logger,
+                    config=config,
+                    fast_chi2_mode=use_fast_mode,
+                )
+
+                execution_time = time.time() - start_time
+                uncertainties = (
+                    np.sqrt(np.diag(pcov))
+                    if pcov.shape[0] == len(popt)
+                    else np.zeros_like(popt)
+                )
+                reduced_chi2 = info.get("chi_squared", 0.0) / max(
+                    1, n_total_points - len(popt)
+                )
+
+                return OptimizationResult(
+                    parameters=popt,
+                    uncertainties=uncertainties,
+                    covariance=pcov,
+                    chi_squared=info.get("chi_squared", 0.0),
+                    reduced_chi_squared=reduced_chi2,
+                    convergence_status=info.get("convergence_status", "unknown"),
+                    iterations=info.get("iterations", 0),
+                    execution_time=execution_time,
+                    device_info={
+                        "device": "cpu_accumulated",
+                        "strategy": "out_of_core",
+                        "fast_mode": use_fast_mode,
+                        "decision": strategy_recheck.reason,
+                    },
+                    recovery_actions=["out_of_core_recheck_delegation"],
+                    quality_flag="good",
+                )
+
+            # Route to HYBRID_STREAMING if index array exceeds threshold (extreme scale)
+            if strategy_recheck.strategy == NLSQStrategy.HYBRID_STREAMING:
+                if not HYBRID_STREAMING_AVAILABLE:
+                    logger.critical(
+                        "AdaptiveHybridStreamingOptimizer required for extreme-scale "
+                        f"dataset ({n_total_points:,} points) but not available."
+                    )
+                    raise MemoryError(
+                        f"Dataset too large for RAM (index={strategy_recheck.index_memory_gb:.1f} GB > "
+                        f"threshold={strategy_recheck.threshold_gb:.1f} GB) and Streaming unavailable."
+                    )
+                logger.warning(
+                    f"Extreme-scale dataset: {strategy_recheck.reason}. "
+                    "Proceeding with Adaptive Hybrid Streaming."
+                )
+                # Fall through to streaming path below (use_streaming_mode will be set)
+
             # Extract target chunk size from config
             target_chunk_size = 100_000  # Default
             hybrid_streaming_config = None
@@ -1239,37 +1327,30 @@ class NLSQWrapper(NLSQAdapterBase):
             if hybrid_streaming_config is not None:
                 use_hybrid_streaming = hybrid_streaming_config.get("enable", False)
 
-            # Check for forced streaming mode
+            # Check for forced streaming mode from config
+            # Also set from strategy_recheck if it returned HYBRID_STREAMING
             if config is not None and hasattr(config, "config"):
                 nlsq_config = config.config.get("optimization", {}).get("nlsq", {})
                 use_streaming_mode = nlsq_config.get("use_streaming", False)
 
-            # Calculate number of chunks for memory estimation
-            n_total_points = len(stratified_data.g2_flat)
-            n_chunks_estimate = max(1, n_total_points // target_chunk_size)
-
-            # Check if streaming mode should be used based on memory
-            # Note: Check both STREAMING_AVAILABLE and HYBRID_STREAMING_AVAILABLE
-            # because hybrid streaming may be available even when basic streaming isn't
-            if not use_streaming_mode and (
-                STREAMING_AVAILABLE or HYBRID_STREAMING_AVAILABLE
-            ):
-                should_stream, estimated_gb, reason = self._should_use_streaming(
-                    n_points=n_total_points,
-                    n_params=len(validated_params),
-                    n_chunks=n_chunks_estimate,
-                    memory_threshold_gb=memory_threshold_gb,
+            # Set streaming mode if strategy_recheck returned HYBRID_STREAMING (extreme scale)
+            # This unified decision replaces the legacy _should_use_streaming() check
+            if strategy_recheck.strategy == NLSQStrategy.HYBRID_STREAMING:
+                logger.info("=" * 80)
+                logger.info("HYBRID STREAMING MODE (Strategy Re-check)")
+                logger.info(
+                    f"Index array ({strategy_recheck.index_memory_gb:.1f} GB) exceeds "
+                    f"threshold ({strategy_recheck.threshold_gb:.1f} GB)"
                 )
+                logger.info("=" * 80)
+                use_streaming_mode = True
 
-                if should_stream:
-                    logger.warning("=" * 80)
-                    logger.warning("MEMORY-CONSTRAINED OPTIMIZATION DETECTED")
-                    logger.warning(f"  {reason}")
-                    logger.warning("  Switching to streaming optimizer mode")
-                    logger.warning("=" * 80)
-                    use_streaming_mode = True
-                else:
-                    logger.info(f"Memory check: {reason}")
+            # Log strategy decision for STANDARD (in-memory) path
+            if not use_streaming_mode:
+                logger.info(
+                    f"Memory check: {strategy_recheck.reason}. "
+                    "Proceeding with in-memory stratified least-squares."
+                )
 
             # Use streaming optimizer if needed
             if use_streaming_mode:
