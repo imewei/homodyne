@@ -298,7 +298,7 @@ def test_compute_diagnostics_index_based_memory(balanced_data):
     """Test memory metrics for index-based stratification."""
     phi, t1, t2, g2 = balanced_data
 
-    indices = create_angle_stratified_indices(phi, target_chunk_size=250)
+    indices, _ = create_angle_stratified_indices(phi, target_chunk_size=250)
     phi_stratified = phi[indices]
 
     diagnostics = compute_stratification_diagnostics(
@@ -556,7 +556,7 @@ def test_diagnostics_end_to_end_index_based(balanced_data):
     phi, t1, t2, g2 = balanced_data
 
     # Stratify using index-based
-    indices = create_angle_stratified_indices(phi, target_chunk_size=250)
+    indices, _ = create_angle_stratified_indices(phi, target_chunk_size=250)
     phi_stratified = phi[indices]
 
     # Compute diagnostics
@@ -595,7 +595,7 @@ def test_diagnostics_comparison_full_vs_index(balanced_data):
     )
 
     # Index-based
-    indices = create_angle_stratified_indices(phi, target_chunk_size=target_chunk_size)
+    indices, _ = create_angle_stratified_indices(phi, target_chunk_size=target_chunk_size)
     phi_index = phi[indices]
     diag_index = compute_stratification_diagnostics(
         phi_original=phi,

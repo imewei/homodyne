@@ -839,7 +839,7 @@ def create_angle_stratified_indices(
     # Single angle: return identity index (no stratification)
     if stats.n_angles == 1:
         logger.info("Single phi angle detected, no stratification needed")
-        return np.arange(n_points)
+        return np.arange(n_points), [n_points]  # Single chunk with all points
 
     logger.info(
         f"Creating stratified indices for {n_points:,} points across {stats.n_angles} angles "

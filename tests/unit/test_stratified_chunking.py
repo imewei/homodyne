@@ -542,7 +542,7 @@ def test_index_based_returns_correct_length(balanced_data):
     """Test that index array has correct length."""
     phi, t1, t2, g2_exp = balanced_data
 
-    indices = create_angle_stratified_indices(phi, target_chunk_size=75)
+    indices, _ = create_angle_stratified_indices(phi, target_chunk_size=75)
 
     # Index array should have same length as input
     assert len(indices) == len(phi)
@@ -552,7 +552,7 @@ def test_index_based_no_duplicates(balanced_data):
     """Test that index array contains no duplicates."""
     phi, t1, t2, g2_exp = balanced_data
 
-    indices = create_angle_stratified_indices(phi, target_chunk_size=75)
+    indices, _ = create_angle_stratified_indices(phi, target_chunk_size=75)
 
     # All indices should be unique
     assert len(np.unique(indices)) == len(indices)
@@ -562,7 +562,7 @@ def test_index_based_all_indices_valid(balanced_data):
     """Test that all indices are valid (in range)."""
     phi, t1, t2, g2_exp = balanced_data
 
-    indices = create_angle_stratified_indices(phi, target_chunk_size=75)
+    indices, _ = create_angle_stratified_indices(phi, target_chunk_size=75)
 
     # All indices should be in [0, len(phi))
     assert np.all(indices >= 0)
@@ -573,7 +573,7 @@ def test_index_based_preserves_data_when_applied(balanced_data):
     """Test that applying indices preserves all data."""
     phi, t1, t2, g2_exp = balanced_data
 
-    indices = create_angle_stratified_indices(phi, target_chunk_size=75)
+    indices, _ = create_angle_stratified_indices(phi, target_chunk_size=75)
 
     # Apply indices
     phi_stratified = phi[indices]
@@ -597,7 +597,7 @@ def test_index_based_equivalent_to_full_copy(balanced_data):
     )
 
     # Index-based approach
-    indices = create_angle_stratified_indices(phi, target_chunk_size=target_chunk_size)
+    indices, _ = create_angle_stratified_indices(phi, target_chunk_size=target_chunk_size)
     phi_index = phi[indices]
     t1_index = t1[indices]
     t2_index = t2[indices]
@@ -617,7 +617,7 @@ def test_index_based_single_angle_identity(balanced_data):
     # Use only first angle
     phi_single = phi[:100]  # All same angle
 
-    indices = create_angle_stratified_indices(phi_single, target_chunk_size=75)
+    indices, _ = create_angle_stratified_indices(phi_single, target_chunk_size=75)
 
     # Should return identity index [0, 1, 2, ..., 99]
     expected = np.arange(len(phi_single))
@@ -649,7 +649,7 @@ def test_index_based_large_dataset():
 
     phi = np.repeat(np.linspace(0, 180, n_angles), points_per_angle)
 
-    indices = create_angle_stratified_indices(phi, target_chunk_size=10_000)
+    indices, _ = create_angle_stratified_indices(phi, target_chunk_size=10_000)
 
     # Basic validity checks
     assert len(indices) == n_points
