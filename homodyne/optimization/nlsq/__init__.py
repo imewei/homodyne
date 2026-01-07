@@ -46,24 +46,14 @@ except ImportError:
     curve_fit = None  # type: ignore[assignment]
     NLSQ_CURVEFIT_AVAILABLE = False
 
-# Workflow selection (NLSQ v0.4+)
-try:
-    from nlsq.core.workflow import (
-        DatasetSizeTier as NLSQDatasetSizeTier,
-    )
-    from nlsq.core.workflow import (
-        OptimizationGoal,
-        WorkflowSelector,
-        WorkflowTier,
-    )
-
-    NLSQ_WORKFLOW_AVAILABLE = True
-except ImportError:
-    WorkflowSelector = None  # type: ignore[assignment, misc]
-    WorkflowTier = None  # type: ignore[assignment, misc]
-    OptimizationGoal = None  # type: ignore[assignment, misc]
-    NLSQDatasetSizeTier = None  # type: ignore[assignment, misc]
-    NLSQ_WORKFLOW_AVAILABLE = False
+# Workflow selection (REMOVED in NLSQ v0.6.0)
+# WorkflowSelector, WorkflowTier, OptimizationGoal were deprecated and removed.
+# Use homodyne's select_nlsq_strategy() from memory.py instead.
+WorkflowSelector = None  # type: ignore[assignment, misc]
+WorkflowTier = None  # type: ignore[assignment, misc]
+OptimizationGoal = None  # type: ignore[assignment, misc]
+NLSQDatasetSizeTier = None  # type: ignore[assignment, misc]
+NLSQ_WORKFLOW_AVAILABLE = False  # Deprecated in NLSQ v0.6.0
 
 # Global optimization (NLSQ v0.4+)
 try:
@@ -279,7 +269,8 @@ __all__ = [
     "CurveFit",
     "curve_fit",
     "NLSQ_CURVEFIT_AVAILABLE",
-    # Workflow selection
+    # Workflow selection (DEPRECATED in NLSQ v0.6.0 - all are None)
+    # Use homodyne's select_nlsq_strategy() from memory.py instead
     "WorkflowSelector",
     "WorkflowTier",
     "OptimizationGoal",

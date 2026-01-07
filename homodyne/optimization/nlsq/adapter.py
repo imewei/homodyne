@@ -84,15 +84,13 @@ except ImportError:
     CurveFit = None  # type: ignore[assignment, misc]
     NLSQ_CURVEFIT_AVAILABLE = False
 
-try:
-    from nlsq.core.workflow import OptimizationGoal, WorkflowSelector, WorkflowTier
 
-    NLSQ_WORKFLOW_AVAILABLE = True
-except ImportError:
-    WorkflowSelector = None  # type: ignore[assignment, misc]
-    WorkflowTier = None  # type: ignore[assignment, misc]
-    OptimizationGoal = None  # type: ignore[assignment, misc]
-    NLSQ_WORKFLOW_AVAILABLE = False
+# Workflow selection (REMOVED in NLSQ v0.6.0)
+# Use homodyne's select_nlsq_strategy() from memory.py instead
+WorkflowSelector = None  # type: ignore[assignment, misc]
+WorkflowTier = None  # type: ignore[assignment, misc]
+OptimizationGoal = None  # type: ignore[assignment, misc]
+NLSQ_WORKFLOW_AVAILABLE = False  # Deprecated
 
 try:
     from nlsq.streaming import HybridStreamingConfig

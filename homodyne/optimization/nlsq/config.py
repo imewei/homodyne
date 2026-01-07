@@ -225,8 +225,8 @@ class NLSQConfig:
         Maximum recovery attempts per strategy. Default: 3.
     """
 
-    # NLSQ Workflow Settings (v2.11.0+)
-    # Controls NLSQ's WorkflowSelector for automatic strategy selection
+    # NLSQ Workflow Settings (DEPRECATED in v0.6.0)
+    # Use homodyne's select_nlsq_strategy() from memory.py instead
     workflow: str = "auto"  # "auto", "standard", "chunked", "streaming"
     goal: str = "quality"  # "fast", "robust", "quality", "memory_efficient"
 
@@ -993,7 +993,7 @@ class NLSQConfig:
         For NLSQ v0.4+, these kwargs can be passed to:
         - nlsq.CurveFit.curve_fit()
         - nlsq.fit()
-        - nlsq.WorkflowSelector.select_workflow()
+        - homodyne's select_nlsq_strategy() (recommended replacement)
 
         Example
         -------
