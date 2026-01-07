@@ -12,8 +12,15 @@ sys.path.insert(0, str(Path("..").resolve()))
 project = "Homodyne"
 copyright = "2025, Wei Chen, Hongrui He - Argonne National Laboratory"
 author = "Wei Chen, Hongrui He"
-release = "2.14.0"
-version = "2.14.0"
+
+# Get version dynamically from package (matching the test expectation)
+try:
+    from homodyne import __version__ as _pkg_version
+    # Extract base version (before any .post or +dirty suffixes)
+    version = _pkg_version.split(".post")[0].split("+")[0]
+except ImportError:
+    version = "2.14.0"  # Fallback for builds without package installed
+release = version
 
 # Project metadata
 project_description = (
