@@ -192,47 +192,155 @@ For Fourier order ``K=2``:
 Parameter Count Reduction
 ~~~~~~~~~~~~~~~~~~~~~~~~~
 
+The ``per_angle_mode`` setting controls how per-angle parameters are handled:
+
+.. list-table:: per_angle_mode Options
+   :header-rows: 1
+   :widths: 20 80
+
+   * - Mode
+     - Description
+   * - ``individual``
+     - Each angle has independent contrast and offset (2 × n_phi params)
+   * - ``fourier``
+     - Contrast/offset expressed as Fourier series (2 × (2K+1) params)
+   * - ``constant``
+     - All angles share one contrast and one offset (2 params)
+   * - ``auto``
+     - Auto-selects based on n_phi and thresholds
+
 .. list-table:: Parameter Count Comparison
    :header-rows: 1
-   :widths: 15 25 25 20 15
+   :widths: 12 18 18 18 18 16
 
    * - n_phi
-     - Independent Mode
-     - Fourier (order=2)
+     - Individual
+     - Fourier (K=2)
+     - Constant
      - Reduction
-     - Mode Used
+     - Auto Mode
    * - 2
      - 4
      - 4*
-     - 0%
-     - Independent
+     - 2
+     - 50%
+     - Individual
    * - 3
      - 6
      - 6*
-     - 0%
-     - Independent
+     - 2
+     - 67%
+     - Constant†
    * - 6
      - 12
      - 10
-     - 17%
-     - Auto-select
+     - 2
+     - 83%
+     - Constant†
    * - 10
      - 20
      - 10
-     - 50%
-     - Fourier
+     - 2
+     - 90%
+     - Constant†
    * - 23
      - 46
      - 10
-     - 78%
-     - Fourier
+     - 2
+     - **96%**
+     - Constant†
    * - 100
      - 200
      - 10
-     - 95%
-     - Fourier
+     - 2
+     - **99%**
+     - Constant†
 
-Note: For n_phi ≤ 2×(order+1), independent mode is used (Fourier would be under-constrained).
+| \* For n_phi ≤ 2×(order+1), Fourier mode provides no reduction
+| † With ``constant_scaling_threshold: 3`` (default), constant mode is auto-selected when n_phi ≥ 3
+
+Constant Mode (v2.14.0+)
+~~~~~~~~~~~~~~~~~~~~~~~~
+
+**Constant mode** provides the most aggressive parameter reduction by assuming all
+angles share identical contrast and offset values:
+
+.. math::
+
+   \text{contrast}(\phi) = c_{\text{const}} \quad \forall \phi
+
+   \text{offset}(\phi) = o_{\text{const}} \quad \forall \phi
+
+**Parameter Transformation**:
+
+.. code-block:: text
+
+   CONSTANT MODE TRANSFORMATION
+   ============================
+
+   Input:  per-angle params [c₀, c₁, ..., c₂₂, o₀, o₁, ..., o₂₂]
+           (46 values for 23 angles)
+                      │
+                      ▼
+   Contract: [mean(contrast), mean(offset)]
+             (2 values)
+                      │
+                      ▼
+   Optimize: [contrast, offset, D₀, α, D_offset, γ̇₀, β, γ̇_offset, φ₀]
+             (9 params total for laminar_flow)
+                      │
+                      ▼
+   Expand:   [c, c, ..., c, o, o, ..., o] + physical
+             (53 values for backward compatibility)
+
+**When to Use Constant Mode**:
+
+- Detector response is uniform across angles
+- Per-angle variation is primarily noise, not physics
+- Multi-start optimization with many angles (parameter count reduction critical)
+- Quick exploratory fits where per-angle detail is not important
+
+**When NOT to Use Constant Mode**:
+
+- Significant physical per-angle variation exists (sample asymmetry)
+- High-precision per-angle contrast/offset needed for downstream analysis
+- Fourier mode's smooth angular variation better matches experimental reality
+
+**Configuration**:
+
+.. code-block:: yaml
+
+   optimization:
+     nlsq:
+       anti_degeneracy:
+         enable: true
+         per_angle_mode: "auto"          # or "constant" to force
+         constant_scaling_threshold: 3   # Use constant when n_phi >= 3
+
+**Impact on Multi-Start Optimization**:
+
+Constant mode makes multi-start optimization tractable for many-angle datasets:
+
+.. list-table:: Multi-Start Tractability (23-angle laminar_flow)
+   :header-rows: 1
+   :widths: 25 20 25 30
+
+   * - Mode
+     - n_params
+     - Min n_starts
+     - Recommended n_starts
+   * - individual
+     - 53
+     - 53
+     - 100-150 (expensive)
+   * - fourier
+     - 17
+     - 17
+     - 20-40 (moderate)
+   * - **constant**
+     - **9**
+     - **9**
+     - **10-20 (tractable)**
 
 Why This Works
 ~~~~~~~~~~~~~~
@@ -778,13 +886,14 @@ Complete YAML configuration for the Anti-Degeneracy Defense System:
      nlsq:
        # ... existing settings ...
 
-       # Anti-Degeneracy Defense System (v2.9.0)
+       # Anti-Degeneracy Defense System (v2.9.0+)
        anti_degeneracy:
 
-         # Layer 1: Fourier Reparameterization
-         per_angle_mode: "auto"        # "independent", "fourier", "auto"
-         fourier_order: 2              # Number of Fourier harmonics
-         fourier_auto_threshold: 6     # Use Fourier when n_phi > threshold
+         # Layer 1: Per-Angle Mode Selection
+         per_angle_mode: "auto"            # "individual", "fourier", "constant", "auto"
+         constant_scaling_threshold: 3     # Use constant when n_phi >= threshold
+         fourier_order: 2                  # Number of Fourier harmonics (if fourier mode)
+         fourier_auto_threshold: 6         # Use Fourier when n_phi > threshold (if not constant)
 
          # Layer 2: Hierarchical Optimization
          hierarchical:
@@ -830,13 +939,16 @@ Configuration Options Summary
      - Description
    * - ``per_angle_mode``
      - "auto"
-     - Mode selection: "independent", "fourier", or "auto"
+     - Mode selection: "individual", "fourier", "constant", or "auto"
+   * - ``constant_scaling_threshold``
+     - 3
+     - Use constant mode when n_phi >= threshold (auto mode only)
    * - ``fourier_order``
      - 2
      - Number of Fourier harmonics (K)
    * - ``fourier_auto_threshold``
      - 6
-     - Use Fourier when n_phi > threshold
+     - Use Fourier when n_phi > threshold (if constant not selected)
 
 .. list-table:: Layer 2 Configuration
    :header-rows: 1

@@ -366,6 +366,135 @@ Key Features
 - **Parallel Execution**: Uses ProcessPoolExecutor for multi-core parallelism
 - **Basin Clustering**: Identifies unique local minima in parameter space
 - **Degeneracy Detection**: Warns when multiple solutions have similar chi-squared
+- **FULL Strategy Only**: No subsampling per project requirements (numerical precision priority)
+
+Determining n_starts
+^^^^^^^^^^^^^^^^^^^^
+
+The number of starting points (``n_starts``) significantly impacts both optimization
+quality and computational cost. This section provides guidance for selecting appropriate
+values.
+
+**Minimum Requirements**
+
+For Latin Hypercube Sampling to provide adequate parameter space coverage,
+``n_starts`` should be at least equal to the number of parameters:
+
+.. list-table:: Minimum n_starts by Analysis Mode
+   :header-rows: 1
+   :widths: 30 40 30
+
+   * - Analysis Mode
+     - Parameters
+     - Minimum n_starts
+   * - static_isotropic
+     - 5 (contrast, offset, D₀, α, D_offset)
+     - 5
+   * - laminar_flow
+     - 9 (+ γ̇₀, β, γ̇_offset, φ₀)
+     - 9
+   * - laminar_flow + per-angle (individual)
+     - 2×n_phi + 7
+     - 2×n_phi + 7
+   * - laminar_flow + per-angle (constant)
+     - 2 + 7 = 9
+     - 9
+
+**Impact of Anti-Degeneracy per_angle_mode**
+
+The ``per_angle_mode`` setting dramatically affects parameter count and thus n_starts:
+
+.. list-table:: Parameter Count by per_angle_mode (23-angle laminar_flow)
+   :header-rows: 1
+   :widths: 20 25 25 30
+
+   * - Mode
+     - Per-Angle Params
+     - Total Params
+     - Recommended n_starts
+   * - individual
+     - 2 × 23 = 46
+     - 53
+     - 100-150
+   * - fourier (order=2)
+     - 2 × 5 = 10
+     - 17
+     - 20-40
+   * - **constant**
+     - 2
+     - **9**
+     - **10-20**
+
+**Constant mode** (``per_angle_mode: "constant"``) assumes all angles share the same
+contrast and offset, reducing parameter count from 53 to 9. This makes multi-start
+optimization tractable for many-angle datasets.
+
+**Recommended Settings by Use Case**
+
+.. list-table:: n_starts Recommendations
+   :header-rows: 1
+   :widths: 25 20 55
+
+   * - Use Case
+     - n_starts Formula
+     - Description
+   * - Quick exploration
+     - 10
+     - Default, fast baseline
+   * - Standard analysis
+     - 2 × n_params
+     - Good coverage of parameter space
+   * - Degeneracy detection
+     - 3 × n_params
+     - Better basin discovery
+   * - Publication quality
+     - 5 × n_params
+     - Thorough exploration
+
+**Screening Considerations**
+
+When ``use_screening: true`` (default), only a fraction of starting points proceed
+to full optimization:
+
+- With ``screen_keep_fraction: 0.5`` (default):
+  - 20 starts → 10 full optimizations
+  - 100 starts → 50 full optimizations
+
+Increase ``n_starts`` accordingly to achieve desired effective sample size.
+
+**Computational Cost**
+
+- Execution time scales linearly with effective n_starts
+- For datasets ≥ 500K points: sequential execution (no parallelism benefit)
+- Each fit runs the full optimization pipeline
+
+**Example Configuration**
+
+.. code-block:: yaml
+
+   optimization:
+     nlsq:
+       # Use constant mode to reduce parameters (53 → 9)
+       anti_degeneracy:
+         enable: true
+         per_angle_mode: "constant"
+         constant_scaling_threshold: 3
+
+       multi_start:
+         enable: true
+         n_starts: 20              # ~2× for 9 params
+         use_screening: true
+         screen_keep_fraction: 0.5 # 10 full fits
+         seed: 42
+
+**Validation Warning**
+
+The code validates ``n_starts`` and warns if inadequate:
+
+.. code-block:: text
+
+   WARNING: n_starts (5) < n_params (9): LHS coverage may be inadequate.
+   Consider n_starts >= 9.
 
 CLI Integration
 ^^^^^^^^^^^^^^^
