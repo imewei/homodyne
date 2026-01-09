@@ -14,10 +14,11 @@ Key Features:
 Based on homodyne_v1_reference/homodyne/analysis/core.py lines 3677-3724
 """
 
-import logging
 from typing import Any
 
 import numpy as np
+
+from homodyne.utils.logging import get_logger
 
 # JAX integration with fallback
 try:
@@ -29,7 +30,7 @@ except ImportError:
 
     HAS_JAX = False
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 class PhiAngleFilter:

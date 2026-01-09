@@ -8,7 +8,6 @@ Extracted from cli/commands.py as part of refactoring (Dec 2025).
 
 from __future__ import annotations
 
-import logging
 from functools import partial
 from typing import Any
 
@@ -17,8 +16,9 @@ import jax.numpy as jnp
 import numpy as np
 
 from homodyne.core.jax_backend import compute_g2_scaled
+from homodyne.utils.logging import get_logger
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 # Performance Optimization (Spec 001 - FR-004, T021-T022): Static shape annotations

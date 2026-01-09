@@ -51,6 +51,7 @@ def save_nlsq_json_files(
     param_file = output_dir / "parameters.json"
     with open(param_file, "w") as f:
         json.dump(param_dict, f, indent=2)
+    # T056: Log file path and write completion
     logger.debug(f"Saved parameters to {param_file}")
 
     # Save analysis_results_nlsq.json
@@ -65,7 +66,15 @@ def save_nlsq_json_files(
         json.dump(convergence_dict, f, indent=2)
     logger.debug(f"Saved convergence metrics to {convergence_file}")
 
-    logger.info("Saved 3 JSON files (parameters, analysis results, convergence)")
+    # T058a: Log file sizes after write completion
+    total_size_kb = (
+        param_file.stat().st_size
+        + analysis_file.stat().st_size
+        + convergence_file.stat().st_size
+    ) / 1024
+    logger.info(
+        f"Saved 3 JSON files to {output_dir} (total: {total_size_kb:.1f} KB)"
+    )
 
 
 def save_nlsq_npz_file(
@@ -141,4 +150,6 @@ def save_nlsq_npz_file(
         q=np.array([q]),  # Wrap scalar in array
     )
 
-    logger.info(f"Saved NPZ file with 10 arrays to {npz_file}")
+    # T058a: Log file path and file size after write completion
+    file_size_mb = npz_file.stat().st_size / (1024 * 1024)
+    logger.info(f"Saved NPZ file with 10 arrays to {npz_file} ({file_size_mb:.2f} MB)")

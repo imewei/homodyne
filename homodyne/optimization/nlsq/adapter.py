@@ -64,7 +64,6 @@ References:
 
 from __future__ import annotations
 
-import logging
 import time
 from collections.abc import Callable
 from dataclasses import dataclass, field
@@ -74,6 +73,7 @@ import numpy as np
 
 from homodyne.optimization.nlsq.adapter_base import NLSQAdapterBase
 from homodyne.optimization.nlsq.results import OptimizationResult
+from homodyne.utils.logging import get_logger
 
 # Import NLSQ components with graceful fallback
 try:
@@ -100,7 +100,7 @@ except ImportError:
     HybridStreamingConfig = None  # type: ignore[assignment, misc]
     NLSQ_STREAMING_AVAILABLE = False
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 # =============================================================================

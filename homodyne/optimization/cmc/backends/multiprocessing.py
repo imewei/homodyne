@@ -22,7 +22,7 @@ import numpy as np
 from tqdm import tqdm
 
 from homodyne.optimization.cmc.backends.base import CMCBackend, combine_shard_samples
-from homodyne.utils.logging import get_logger, with_context
+from homodyne.utils.logging import get_logger, log_exception, with_context
 
 if TYPE_CHECKING:
     from homodyne.config.parameter_space import ParameterSpace
@@ -205,7 +205,12 @@ def _run_shard_worker(
         __name__,
         context={"run": config_dict.get("run_id"), "shard": shard_idx},
     )
-    worker_logger.debug("Starting shard worker")
+    # T044: Log shard start with data range and point count
+    n_points = len(shard_data["data"])
+    worker_logger.info(
+        f"Shard {shard_idx} starting: {n_points:,} points, "
+        f"n_phi={n_phi}, mode={analysis_mode}"
+    )
 
     # Reconstruct objects from dicts
     config = CMCConfig.from_dict(config_dict)
@@ -290,10 +295,20 @@ def _run_shard_worker(
         )
 
         duration = time.perf_counter() - start_time
-        worker_logger.info(
-            f"Shard {shard_idx} finished in {duration:.2f}s with "
-            f"{samples.n_samples} samples per chain"
+        # T045: Log shard completion with elapsed time, acceptance rate, divergence count
+        divergence_str = (
+            f", divergences: {stats.num_divergent}"
+            if stats.num_divergent > 0
+            else ""
         )
+        worker_logger.info(
+            f"Shard {shard_idx} completed in {duration:.2f}s: "
+            f"{samples.n_samples} samples/chain × {samples.n_chains} chains{divergence_str}"
+        )
+        if stats.num_divergent > 0:
+            worker_logger.warning(
+                f"Shard {shard_idx} had {stats.num_divergent} divergent transitions"
+            )
 
         # Serialize for return
         result = {
@@ -322,7 +337,6 @@ def _run_shard_worker(
 
     except Exception as e:
         duration = time.perf_counter() - start_time
-        worker_logger.error(f"Shard {shard_idx} failed after {duration:.2f}s: {e}")
         # Classify error type for diagnostics
         error_str = str(e).lower()
         if "nan" in error_str or "inf" in error_str or "singular" in error_str:
@@ -331,6 +345,19 @@ def _run_shard_worker(
             error_category = "convergence"
         else:
             error_category = "sampling"
+
+        # T028: Log exception with structured context for debugging
+        log_exception(
+            worker_logger,
+            e,
+            context={
+                "shard_idx": shard_idx,
+                "duration_s": round(duration, 2),
+                "error_category": error_category,
+                "n_points": data.n_points if hasattr(data, "n_points") else "unknown",
+            },
+        )
+
         result = {
             "type": "result",
             "success": False,

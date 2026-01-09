@@ -52,7 +52,7 @@ from homodyne.optimization.nlsq.shear_weighting import (
     ShearSensitivityWeighting,
     ShearWeightingConfig,
 )
-from homodyne.utils.logging import get_logger
+from homodyne.utils.logging import get_logger, log_exception
 
 logger = get_logger(__name__)
 

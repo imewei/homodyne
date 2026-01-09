@@ -28,8 +28,13 @@ from typing import TYPE_CHECKING, Literal
 
 import numpy as np
 
+from homodyne.utils.logging import get_logger
+
 if TYPE_CHECKING:
     pass
+
+# T055: Module-level logger for parameter registry
+logger = get_logger(__name__)
 
 AnalysisMode = Literal["static", "static_isotropic", "laminar_flow"]
 
@@ -360,6 +365,8 @@ class ParameterRegistry:
     ) -> tuple[list[float], list[float]]:
         """Get bounds for all parameters.
 
+        T055: Logs parameter bounds at DEBUG level.
+
         Parameters
         ----------
         analysis_mode : str
@@ -383,6 +390,16 @@ class ParameterRegistry:
             lower.append(lb)
             upper.append(ub)
 
+        # T055: Log parameter bounds at DEBUG level
+        logger.debug(
+            f"Parameter bounds for {analysis_mode} mode ({len(names)} params):"
+        )
+        # Log physical parameters (not per-angle scaling) for clarity
+        physical_params = self.get_param_names(analysis_mode)
+        for name in physical_params:
+            lb, ub = self.get_bounds(name)
+            logger.debug(f"  {name}: [{lb:.4g}, {ub:.4g}]")
+
         return lower, upper
 
     def get_defaults(
@@ -392,6 +409,8 @@ class ParameterRegistry:
         include_scaling: bool = True,
     ) -> list[float]:
         """Get default values for all parameters.
+
+        T055: Logs parameter initial values at DEBUG level.
 
         Parameters
         ----------
@@ -408,7 +427,18 @@ class ParameterRegistry:
             Default values in parameter order
         """
         names = self.get_all_param_names(analysis_mode, n_angles, include_scaling)
-        return [self.get_param_info(name).default for name in names]
+        defaults = [self.get_param_info(name).default for name in names]
+
+        # T055: Log initial values at DEBUG level
+        logger.debug(
+            f"Default initial values for {analysis_mode} mode ({len(names)} params):"
+        )
+        physical_params = self.get_param_names(analysis_mode)
+        for name in physical_params:
+            info = self.get_param_info(name)
+            logger.debug(f"  {name}: {info.default:.4g}")
+
+        return defaults
 
     def get_num_params(
         self,

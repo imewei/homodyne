@@ -10,9 +10,12 @@ from __future__ import annotations
 import functools
 import inspect
 import logging
+import threading
 import time
+import traceback
 from collections.abc import Callable, Generator, Mapping
 from contextlib import contextmanager
+from dataclasses import dataclass, field
 from datetime import datetime
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
@@ -82,18 +85,394 @@ class _ContextAdapter(logging.LoggerAdapter):
         return msg, kwargs
 
 
+@dataclass
+class LogConfiguration:
+    """Programmatic logging configuration.
+
+    Alternative to configure_logging() for programmatic control over
+    logging settings.
+
+    Attributes:
+        console_level: Console log level (default "INFO").
+        console_format: Console format ("simple" or "detailed").
+        console_colors: Enable ANSI colors in console (default False).
+        file_enabled: Enable file logging (default True).
+        file_path: Log file path (None = auto-generate).
+        file_level: File log level (default "DEBUG").
+        file_format: File format ("simple" or "detailed").
+        file_rotation_mb: Max file size before rotation (default 10).
+        file_backup_count: Number of backup files to keep (default 5).
+        module_overrides: Per-module log level overrides.
+
+    Example:
+        >>> config = LogConfiguration.from_cli_args(verbose=True, log_file="analysis.log")
+        >>> config.apply()
+
+        >>> config = LogConfiguration(
+        ...     console_level="INFO",
+        ...     file_level="DEBUG",
+        ...     module_overrides={"jax": "WARNING", "homodyne.optimization": "DEBUG"}
+        ... )
+        >>> config.apply()
+    """
+
+    console_level: str = "INFO"
+    console_format: str = "simple"
+    console_colors: bool = False
+    file_enabled: bool = True
+    file_path: str | Path | None = None
+    file_level: str = "DEBUG"
+    file_format: str = "detailed"
+    file_rotation_mb: int = 10
+    file_backup_count: int = 5
+    module_overrides: dict[str, str] = field(default_factory=dict)
+
+    def apply(self) -> Path | None:
+        """Apply this configuration to the logging system.
+
+        Returns:
+            Path to log file if file logging is enabled, None otherwise.
+        """
+        # Suppress external library logging by default
+        default_suppressions = {
+            "jax": "WARNING",
+            "numpy": "WARNING",
+            "numba": "WARNING",
+            "h5py": "WARNING",
+        }
+
+        # Merge default suppressions with user overrides (user overrides win)
+        merged_overrides = {**default_suppressions, **self.module_overrides}
+
+        # Determine file path
+        file_path = None
+        if self.file_enabled:
+            if self.file_path is not None:
+                file_path = Path(self.file_path)
+            else:
+                # Auto-generate timestamped log file
+                timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+                file_path = Path(f"homodyne_{timestamp}.log")
+
+        return _logger_manager.configure(
+            level="DEBUG",  # Root level should be lowest to allow filtering
+            console_level=self.console_level,
+            console_format=self.console_format,
+            console_colors=self.console_colors,
+            file_path=file_path,
+            file_level=self.file_level if self.file_enabled else False,
+            max_size_mb=self.file_rotation_mb,
+            backup_count=self.file_backup_count,
+            module_levels=merged_overrides,
+            force=True,
+        )
+
+    @classmethod
+    def from_dict(cls, config: dict[str, Any]) -> LogConfiguration:
+        """Create configuration from dictionary.
+
+        Args:
+            config: Dictionary with configuration values.
+
+        Returns:
+            LogConfiguration instance.
+        """
+        return cls(
+            console_level=config.get("console_level", "INFO"),
+            console_format=config.get("console_format", "simple"),
+            console_colors=config.get("console_colors", False),
+            file_enabled=config.get("file_enabled", True),
+            file_path=config.get("file_path"),
+            file_level=config.get("file_level", "DEBUG"),
+            file_format=config.get("file_format", "detailed"),
+            file_rotation_mb=config.get("file_rotation_mb", 10),
+            file_backup_count=config.get("file_backup_count", 5),
+            module_overrides=config.get("module_overrides", {}),
+        )
+
+    @classmethod
+    def from_cli_args(
+        cls,
+        verbose: bool = False,
+        quiet: bool = False,
+        log_file: str | None = None,
+    ) -> LogConfiguration:
+        """Create configuration from CLI flags.
+
+        Args:
+            verbose: Enable DEBUG level console logging.
+            quiet: Enable ERROR-only console logging.
+            log_file: Path to log file (None = auto-generate if file logging enabled).
+
+        Returns:
+            LogConfiguration instance.
+        """
+        # Determine console level from flags
+        if quiet:
+            console_level = "ERROR"
+        elif verbose:
+            console_level = "DEBUG"
+        else:
+            console_level = "INFO"
+
+        return cls(
+            console_level=console_level,
+            console_format="detailed" if verbose else "simple",
+            console_colors=False,
+            file_enabled=True,
+            file_path=log_file,
+            file_level="DEBUG",
+            file_format="detailed",
+        )
+
+
+@dataclass
+class _PhaseRecord:
+    """Internal record for phase timing."""
+
+    name: str
+    start_time: float | None = None
+    end_time: float | None = None
+    memory_peak_gb: float | None = None
+
+    @property
+    def duration(self) -> float | None:
+        if self.start_time is None or self.end_time is None:
+            return None
+        return self.end_time - self.start_time
+
+
+class AnalysisSummaryLogger:
+    """Structured logging for analysis completion summaries.
+
+    Tracks phase timings, metrics, output files, and convergence status
+    for logging a structured summary at analysis completion.
+
+    Example:
+        >>> summary = AnalysisSummaryLogger(run_id="analysis_001", analysis_mode="laminar_flow")
+        >>> summary.start_phase("loading")
+        >>> data = load_data(config)
+        >>> summary.end_phase("loading", memory_peak_gb=2.1)
+        >>> summary.record_metric("chi_squared", result.chi_squared)
+        >>> summary.set_convergence_status("converged")
+        >>> summary.log_summary(logger)
+    """
+
+    def __init__(self, run_id: str, analysis_mode: str) -> None:
+        """Initialize summary logger for an analysis run.
+
+        Args:
+            run_id: Unique identifier for this analysis run.
+            analysis_mode: Analysis mode (e.g., "static_isotropic", "laminar_flow").
+        """
+        self.run_id = run_id
+        self.analysis_mode = analysis_mode
+        self._phases: dict[str, _PhaseRecord] = {}
+        self._metrics: dict[str, float] = {}
+        self._output_files: list[Path] = []
+        self._convergence_status: str | None = None
+        self._start_time = time.perf_counter()
+        self._warning_count = 0
+        self._error_count = 0
+        # T054: Configuration summary for logging
+        self._config_summary: dict[str, Any] = {}
+
+    def start_phase(self, name: str) -> None:
+        """Mark phase start for timing.
+
+        Args:
+            name: Phase name (e.g., "loading", "optimization").
+        """
+        self._phases[name] = _PhaseRecord(name=name, start_time=time.perf_counter())
+
+    def end_phase(self, name: str, memory_peak_gb: float | None = None) -> None:
+        """Mark phase completion.
+
+        Args:
+            name: Phase name that was started.
+            memory_peak_gb: Optional peak memory usage during phase.
+        """
+        if name in self._phases:
+            self._phases[name].end_time = time.perf_counter()
+            self._phases[name].memory_peak_gb = memory_peak_gb
+
+    def record_metric(self, name: str, value: float) -> None:
+        """Record a named metric (e.g., chi_squared).
+
+        Args:
+            name: Metric name.
+            value: Metric value.
+        """
+        self._metrics[name] = value
+
+    def add_output_file(self, path: Path | str) -> None:
+        """Record an output file path.
+
+        Args:
+            path: Path to output file.
+        """
+        self._output_files.append(Path(path))
+
+    def set_convergence_status(self, status: str) -> None:
+        """Set final convergence status.
+
+        Args:
+            status: Convergence status (e.g., "converged", "max_iter", "failed").
+        """
+        self._convergence_status = status
+
+    def increment_warning_count(self) -> None:
+        """Increment warning counter."""
+        self._warning_count += 1
+
+    def increment_error_count(self) -> None:
+        """Increment error counter."""
+        self._error_count += 1
+
+    def set_config_summary(
+        self,
+        optimizer: str | None = None,
+        n_params: int | None = None,
+        n_data_points: int | None = None,
+        n_phi_angles: int | None = None,
+        data_file: str | None = None,
+        **kwargs: Any,
+    ) -> None:
+        """T054: Set configuration summary for logging.
+
+        Args:
+            optimizer: Optimizer used (e.g., "nlsq", "cmc").
+            n_params: Number of parameters being optimized.
+            n_data_points: Total number of data points.
+            n_phi_angles: Number of phi angles.
+            data_file: Path to data file.
+            **kwargs: Additional key-value pairs to include.
+        """
+        if optimizer is not None:
+            self._config_summary["optimizer"] = optimizer
+        if n_params is not None:
+            self._config_summary["n_params"] = n_params
+        if n_data_points is not None:
+            self._config_summary["n_data_points"] = n_data_points
+        if n_phi_angles is not None:
+            self._config_summary["n_phi_angles"] = n_phi_angles
+        if data_file is not None:
+            self._config_summary["data_file"] = data_file
+        # Add any additional kwargs
+        self._config_summary.update(kwargs)
+
+    def log_summary(self, logger: logging.Logger | logging.LoggerAdapter) -> None:
+        """Log the complete analysis summary.
+
+        Args:
+            logger: Logger to use for output.
+        """
+        total_runtime = time.perf_counter() - self._start_time
+
+        # Build summary message
+        lines = [
+            "=" * 60,
+            "ANALYSIS SUMMARY",
+            "=" * 60,
+            f"Run ID: {self.run_id}",
+            f"Mode: {self.analysis_mode}",
+            f"Status: {self._convergence_status or 'unknown'}",
+            f"Total runtime: {total_runtime:.2f}s",
+        ]
+
+        # T054: Add configuration summary
+        if self._config_summary:
+            lines.append("")
+            lines.append("Configuration:")
+            for key, value in self._config_summary.items():
+                if isinstance(value, int) and value > 1000:
+                    lines.append(f"  {key}: {value:,}")
+                else:
+                    lines.append(f"  {key}: {value}")
+
+        # Add phase timings
+        if self._phases:
+            lines.append("")
+            lines.append("Phase Timings:")
+            for name, record in self._phases.items():
+                duration = record.duration
+                if duration is not None:
+                    mem_str = (
+                        f" (peak: {record.memory_peak_gb:.1f} GB)"
+                        if record.memory_peak_gb is not None
+                        else ""
+                    )
+                    lines.append(f"  {name}: {duration:.2f}s{mem_str}")
+
+        # Add metrics
+        if self._metrics:
+            lines.append("")
+            lines.append("Metrics:")
+            for name, value in self._metrics.items():
+                lines.append(f"  {name}: {value:.6g}")
+
+        # Add output files
+        if self._output_files:
+            lines.append("")
+            lines.append("Output files:")
+            for path in self._output_files:
+                lines.append(f"  {path}")
+
+        # Add warning/error counts
+        if self._warning_count > 0 or self._error_count > 0:
+            lines.append("")
+            lines.append(f"Warnings: {self._warning_count}, Errors: {self._error_count}")
+
+        lines.append("=" * 60)
+
+        logger.info("\n".join(lines))
+
+    def as_dict(self) -> dict[str, Any]:
+        """Export summary as dictionary for JSON serialization.
+
+        Returns:
+            Dictionary with all summary data.
+        """
+        total_runtime = time.perf_counter() - self._start_time
+
+        phases_dict = {}
+        for name, record in self._phases.items():
+            phases_dict[name] = {
+                "duration_s": record.duration,
+                "memory_peak_gb": record.memory_peak_gb,
+            }
+
+        return {
+            "run_id": self.run_id,
+            "analysis_mode": self.analysis_mode,
+            "convergence_status": self._convergence_status,
+            "total_runtime_s": total_runtime,
+            "config_summary": self._config_summary,  # T054
+            "phases": phases_dict,
+            "metrics": self._metrics,
+            "output_files": [str(p) for p in self._output_files],
+            "warning_count": self._warning_count,
+            "error_count": self._error_count,
+        }
+
+
 class MinimalLogger:
-    """Configurable logger manager for the homodyne package."""
+    """Configurable logger manager for the homodyne package.
+
+    Thread-safe singleton for managing homodyne logging configuration.
+    """
 
     _instance: MinimalLogger | None = None
     _initialized: bool
     _configured: bool
     _root_logger_name: str
+    _lock: threading.Lock
 
     def __new__(cls) -> MinimalLogger:
         if cls._instance is None:
             cls._instance = super().__new__(cls)
             cls._instance._initialized = False
+            cls._instance._lock = threading.Lock()
         return cls._instance
 
     def __init__(self) -> None:
@@ -140,8 +519,38 @@ class MinimalLogger:
     ) -> Path | None:
         """Configure homodyne logging.
 
+        Thread-safe configuration of the logging system.
         Returns the file path if a file handler is created.
         """
+        with self._lock:
+            return self._configure_impl(
+                level=level,
+                console_level=console_level,
+                console_format=console_format,
+                console_colors=console_colors,
+                file_path=file_path,
+                file_level=file_level,
+                max_size_mb=max_size_mb,
+                backup_count=backup_count,
+                module_levels=module_levels,
+                force=force,
+            )
+
+    def _configure_impl(
+        self,
+        level: str | int = "INFO",
+        *,
+        console_level: str | int | None = None,
+        console_format: str = "detailed",
+        console_colors: bool = False,
+        file_path: str | Path | None = None,
+        file_level: str | int | None = None,
+        max_size_mb: int = 10,
+        backup_count: int = 5,
+        module_levels: Mapping[str, str | int] | None = None,
+        force: bool = False,
+    ) -> Path | None:
+        """Internal implementation of configure (called under lock)."""
         root_logger = logging.getLogger(self._root_logger_name)
 
         if force:
@@ -201,7 +610,21 @@ class MinimalLogger:
             )
             root_logger.addHandler(file_handler)
 
-        # Module-specific overrides
+        # Default suppression for external libraries (FR-005)
+        # These are applied first, then user overrides can override them
+        default_suppressions = {
+            "jax": "WARNING",
+            "numpy": "WARNING",
+            "numba": "WARNING",
+            "h5py": "WARNING",
+        }
+        for lib_name, lib_level in default_suppressions.items():
+            lib_logger = logging.getLogger(lib_name)
+            # Only set if not already configured by user
+            if lib_logger.level == logging.NOTSET:
+                lib_logger.setLevel(_resolve_level(lib_level) or logging.WARNING)
+
+        # Module-specific overrides (user overrides win over defaults)
         if module_levels:
             for module_name, module_level in module_levels.items():
                 logging.getLogger(module_name).setLevel(
@@ -332,10 +755,207 @@ def get_logger(
 
 
 def with_context(
-    logger: logging.Logger, **context: Any
+    logger: logging.Logger | logging.LoggerAdapter[logging.Logger],
+    **context: Any,
 ) -> logging.LoggerAdapter[logging.Logger]:
-    """Attach contextual prefix to an existing logger."""
-    return _ContextAdapter(logger, {k: v for k, v in context.items() if v is not None})
+    """Create a contextual logger with key-value prefixes.
+
+    Context is formatted as [key=value][key2=value2] message.
+    Nested calls merge contexts (inner overrides outer on key conflicts).
+    Thread-safe for use in multiprocessing.
+
+    Args:
+        logger: Base logger or existing contextual adapter to wrap.
+        **context: Key-value pairs to include as prefix.
+
+    Returns:
+        A logger adapter that prefixes all messages with context.
+
+    Example:
+        >>> logger = get_logger(__name__)
+        >>> ctx_logger = with_context(logger, run_id="abc123", mode="laminar_flow")
+        >>> ctx_logger.info("Starting analysis")
+        # Output: [run_id=abc123 mode=laminar_flow] Starting analysis
+
+        >>> # Nested context
+        >>> shard_logger = with_context(ctx_logger, shard=5)
+        >>> shard_logger.info("Processing shard")
+        # Output: [run_id=abc123 mode=laminar_flow shard=5] Processing shard
+    """
+    # Filter out None values from new context
+    new_context = {k: v for k, v in context.items() if v is not None}
+
+    # If wrapping an existing _ContextAdapter, merge contexts (inner overrides outer)
+    if isinstance(logger, _ContextAdapter):
+        merged_context = dict(logger.extra) if logger.extra else {}
+        merged_context.update(new_context)
+        # Get the underlying logger to avoid nested adapters
+        base_logger = logger.logger
+        return _ContextAdapter(base_logger, merged_context)
+
+    # If wrapping a LoggerAdapter (not our _ContextAdapter), extract base logger
+    if isinstance(logger, logging.LoggerAdapter):
+        base_logger = logger.logger
+        return _ContextAdapter(base_logger, new_context)
+
+    # Wrapping a plain Logger
+    return _ContextAdapter(logger, new_context)
+
+
+@dataclass
+class PhaseContext:
+    """Context object returned by log_phase() with timing and memory info."""
+
+    name: str
+    duration: float = 0.0
+    memory_peak_gb: float | None = None
+    memory_delta_gb: float | None = None
+
+
+def _get_memory_gb() -> float | None:
+    """Get current process memory usage in GB, or None if unavailable."""
+    try:
+        import resource
+
+        # Get max resident set size (in KB on Linux, bytes on macOS)
+        rusage = resource.getrusage(resource.RUSAGE_SELF)
+        # maxrss is in KB on Linux, bytes on macOS
+        import sys
+
+        if sys.platform == "darwin":
+            return rusage.ru_maxrss / (1024**3)  # bytes to GB
+        return rusage.ru_maxrss / (1024**2)  # KB to GB
+    except (ImportError, AttributeError):
+        return None
+
+
+@contextmanager
+def log_phase(
+    name: str,
+    logger: logging.Logger | None = None,
+    level: int = logging.INFO,
+    track_memory: bool = False,
+    threshold_s: float = 0.0,
+) -> Generator[PhaseContext, None, None]:
+    """Context manager for phase-level timing with optional memory tracking.
+
+    Args:
+        name: Phase name for logging.
+        logger: Logger to use. If None, uses module logger.
+        level: Log level for phase messages.
+        track_memory: Track memory usage during phase.
+        threshold_s: Only log if duration > threshold (0 = always log).
+
+    Yields:
+        PhaseContext with name, duration, memory_peak_gb, memory_delta_gb.
+        Duration and memory values are populated after the context exits.
+
+    Example:
+        >>> with log_phase("optimization", track_memory=True) as phase:
+        ...     result = run_optimization(data)
+        >>> print(f"Took {phase.duration:.1f}s")
+        # Logs: Phase 'optimization' completed in 45.3s (peak memory: 12.4 GB)
+    """
+    resolved_logger = get_logger() if logger is None else logger
+    context = PhaseContext(name=name)
+
+    # Track initial memory if requested
+    memory_start: float | None = None
+    if track_memory:
+        memory_start = _get_memory_gb()
+
+    # Log phase start (only if no threshold or threshold is 0)
+    if threshold_s <= 0:
+        resolved_logger.log(level, f"Phase '{name}' started")
+
+    start_time = time.perf_counter()
+
+    try:
+        yield context
+    finally:
+        # Calculate duration
+        context.duration = time.perf_counter() - start_time
+
+        # Track memory if requested
+        if track_memory:
+            memory_end = _get_memory_gb()
+            if memory_end is not None:
+                context.memory_peak_gb = memory_end
+                if memory_start is not None:
+                    context.memory_delta_gb = memory_end - memory_start
+
+        # Log phase completion if duration exceeds threshold
+        if context.duration >= threshold_s:
+            msg_parts = [f"Phase '{name}' completed in {context.duration:.2f}s"]
+            if context.memory_peak_gb is not None:
+                msg_parts.append(f"(peak memory: {context.memory_peak_gb:.1f} GB)")
+            resolved_logger.log(level, " ".join(msg_parts))
+
+
+def log_exception(
+    logger: logging.Logger | logging.LoggerAdapter[logging.Logger],
+    exc: BaseException,
+    context: dict[str, Any] | None = None,
+    level: int = logging.ERROR,
+    include_traceback: bool = True,
+) -> None:
+    """Log an exception with full context for debugging.
+
+    Extracts module, function, and line number from exception traceback.
+    Formats context as key-value pairs in the message.
+
+    Args:
+        logger: Logger to use.
+        exc: Exception to log.
+        context: Additional context (e.g., parameter values).
+        level: Log level (default ERROR).
+        include_traceback: Include full traceback (default True).
+
+    Example:
+        >>> try:
+        ...     result = compute_jacobian(params)
+        ... except ValueError as e:
+        ...     log_exception(logger, e, context={
+        ...         "iteration": 45,
+        ...         "params": params.tolist()[:5]
+        ...     })
+        ...     raise
+        # Logs:
+        # ERROR | homodyne.optimization.nlsq.core | Exception in compute_jacobian:
+        # ValueError: invalid value
+        # Context: iteration=45, params=[1.2e-11, 0.85, ...]
+        # Traceback (most recent call last):
+        #   ...
+    """
+    # Extract location info from traceback
+    tb = exc.__traceback__
+    location_info = ""
+    if tb is not None:
+        # Walk to the innermost frame where the exception occurred
+        while tb.tb_next is not None:
+            tb = tb.tb_next
+        frame = tb.tb_frame
+        func_name = frame.f_code.co_name
+        line_no = tb.tb_lineno
+        module_name = frame.f_globals.get("__name__", "unknown")
+        location_info = f" in {module_name}.{func_name}:{line_no}"
+
+    # Build the message
+    exc_type = type(exc).__name__
+    exc_msg = str(exc)
+    msg_parts = [f"Exception{location_info}: {exc_type}: {exc_msg}"]
+
+    # Add context if provided
+    if context:
+        context_str = ", ".join(f"{k}={v!r}" for k, v in context.items())
+        msg_parts.append(f"Context: {context_str}")
+
+    # Add traceback if requested
+    if include_traceback:
+        tb_str = "".join(traceback.format_exception(type(exc), exc, exc.__traceback__))
+        msg_parts.append(f"Traceback:\n{tb_str}")
+
+    logger.log(level, "\n".join(msg_parts))
 
 
 def log_calls(

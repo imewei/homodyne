@@ -152,9 +152,13 @@ class ConfigManager:
     def _get_default_config(self) -> dict[str, Any]:
         """Get default configuration structure.
 
+        T052: Logs default value application at DEBUG level.
+
         Returns minimal configuration that supports basic analysis modes.
         CPU-only execution (GPU support removed in v2.3.0).
         """
+        # T052: Log default value application
+        logger.debug("Applying default configuration values (fallback)")
         return {
             "metadata": {
                 "config_version": "2.9.0",
@@ -716,11 +720,15 @@ class ConfigManager:
     def _get_default_cmc_config(self) -> dict[str, Any]:
         """Get default CMC configuration.
 
+        T052: Logs default value application at DEBUG level.
+
         Returns
         -------
         dict
             Default CMC configuration with sensible defaults
         """
+        # T052: Log default value application
+        logger.debug("Applying default CMC configuration values")
         return {
             "enable": "auto",
             "min_points_for_cmc": 500000,
@@ -946,6 +954,10 @@ class ConfigManager:
 
         Checks for required sections and valid values.
         Can be disabled by setting HOMODYNE_VALIDATE_CONFIG=false environment variable.
+
+        T051: Logs key configuration values at INFO level.
+        T052: Logs default value applications at DEBUG level.
+        T053: Logs unusual settings as warnings.
         """
         if not self.config:
             logger.warning("Configuration is empty")
@@ -965,7 +977,95 @@ class ConfigManager:
                 f"Unknown analysis_mode: '{mode}'. Valid modes: {valid_modes}",
             )
 
+        # T051: Log key configuration values at INFO level
+        self._log_key_config_values()
+
+        # T053: Log unusual but valid settings with warnings
+        self._log_unusual_settings()
+
         logger.debug("Configuration validation completed")
+
+    def _log_key_config_values(self) -> None:
+        """T051: Log key configuration values at INFO level.
+
+        Logs analysis mode, dataset info, and optimizer selection.
+        """
+        if not self.config:
+            return
+
+        # Analysis mode
+        mode = self.config.get("analysis_mode", "unknown")
+        logger.info(f"Analysis mode: {mode}")
+
+        # Dataset info
+        exp_data = self.config.get("experimental_data", {})
+        file_path = exp_data.get("file_path")
+        if file_path:
+            logger.info(f"Data file: {file_path}")
+
+        # Optimizer selection
+        optimization = self.config.get("optimization", {})
+        method = optimization.get("method", "nlsq")
+        logger.info(f"Optimizer: {method}")
+
+        # Log dataset size estimate if available
+        nlsq_config = optimization.get("nlsq", {})
+        memory_fraction = nlsq_config.get("memory_fraction")
+        if memory_fraction:
+            logger.debug(f"Memory fraction: {memory_fraction}")
+
+    def _log_unusual_settings(self) -> None:
+        """T053: Log unusual but valid settings with impact warnings.
+
+        Warns about settings that may have unexpected effects.
+        """
+        if not self.config:
+            return
+
+        optimization = self.config.get("optimization", {})
+
+        # Warn about very high iteration limits
+        nlsq_config = optimization.get("nlsq", {}) or optimization.get("lsq", {})
+        max_iter = nlsq_config.get("max_iterations", 10000)
+        if max_iter > 50000:
+            logger.warning(
+                f"High max_iterations ({max_iter}) may cause long runtimes. "
+                f"Consider 10000-20000 for most analyses."
+            )
+
+        # Warn about very loose tolerance
+        tolerance = nlsq_config.get("tolerance", 1e-8)
+        if tolerance > 1e-4:
+            logger.warning(
+                f"Loose tolerance ({tolerance}) may produce imprecise results. "
+                f"Consider 1e-8 or tighter for production."
+            )
+
+        # Warn about very tight tolerance
+        if tolerance < 1e-14:
+            logger.warning(
+                f"Very tight tolerance ({tolerance}) may cause convergence issues. "
+                f"Machine precision limits apply."
+            )
+
+        # Warn about force_stratified_ls with large datasets
+        force_stratified = nlsq_config.get("force_stratified_ls", False)
+        if force_stratified:
+            logger.warning(
+                "force_stratified_ls=True enabled. "
+                "This uses full Jacobian (high memory) - ensure sufficient RAM."
+            )
+
+        # Warn about disabled anti-degeneracy for laminar_flow
+        mode = self.config.get("analysis_mode", "static")
+        anti_deg = nlsq_config.get("anti_degeneracy", {})
+        if mode == "laminar_flow":
+            hierarchical = anti_deg.get("hierarchical", {})
+            if hierarchical.get("enable") is False:
+                logger.warning(
+                    "hierarchical.enable=False for laminar_flow may cause "
+                    "gradient cancellation issues with many phi angles."
+                )
 
     def _normalize_schema(self) -> None:
         """Normalize configuration schema for backward compatibility.

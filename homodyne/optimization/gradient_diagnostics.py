@@ -42,14 +42,15 @@ Date: 2025-11-13
 Version: 1.0.0
 """
 
-import logging
 from typing import Any
 
 import jax
 import jax.numpy as jnp
 import numpy as np
 
-logger = logging.getLogger(__name__)
+from homodyne.utils.logging import get_logger
+
+logger = get_logger(__name__)
 
 
 def _create_residual_function(

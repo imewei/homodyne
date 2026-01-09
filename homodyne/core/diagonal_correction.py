@@ -31,10 +31,11 @@ Version: 2.14.2
 
 from __future__ import annotations
 
-import logging
 from typing import TYPE_CHECKING, Any, Literal, Union
 
 import numpy as np
+
+from homodyne.utils.logging import get_logger
 
 if TYPE_CHECKING:
     from numpy.typing import ArrayLike, NDArray
@@ -59,7 +60,7 @@ try:
 except ImportError:
     HAS_SCIPY = False
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 # Type aliases
 Backend = Literal["numpy", "jax", "auto"]

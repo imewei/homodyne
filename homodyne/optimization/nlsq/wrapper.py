@@ -102,6 +102,8 @@ except ImportError:
 
 import logging
 
+from homodyne.utils.logging import get_logger, log_exception
+
 from homodyne.optimization.batch_statistics import BatchStatistics
 from homodyne.optimization.nlsq.adapter_base import NLSQAdapterBase
 from homodyne.optimization.exceptions import NLSQOptimizationError
@@ -232,7 +234,7 @@ from homodyne.optimization.nlsq.parameter_utils import (
 )
 
 # Module-level logger
-_memory_logger = logging.getLogger(__name__)
+_memory_logger = get_logger(__name__)
 
 
 def _extract_n_points(data: Any) -> int:
@@ -684,9 +686,7 @@ class NLSQWrapper(NLSQAdapterBase):
             - Missing info dicts are replaced with empty dicts for consistency
             - All outputs are converted to numpy arrays for type consistency
         """
-        import logging
-
-        logger = logging.getLogger(__name__)
+        logger = get_logger(__name__)
 
         # Case 1: Dict (from StreamingOptimizer)
         if isinstance(result, dict):
@@ -837,12 +837,11 @@ class NLSQWrapper(NLSQAdapterBase):
         Raises:
             ValueError: If bounds are invalid (lower >= upper) or if per_angle_scaling=False
         """
-        import logging
         import time
 
         # nlsq imported at module level (line 36) for automatic x64 configuration
 
-        logger = logging.getLogger(__name__)
+        logger = get_logger(__name__)
 
         # BREAKING CHANGE (Nov 2025): Validate per-angle scaling is enabled
         # Legacy scalar contrast/offset mode is not physically meaningful
@@ -2446,6 +2445,20 @@ class NLSQWrapper(NLSQAdapterBase):
                 return popt, pcov, info, recovery_actions, convergence_status
 
             except Exception as e:
+                # T026: Log exception with parameter context for debugging
+                log_exception(
+                    logger,
+                    e,
+                    context={
+                        "attempt": attempt + 1,
+                        "max_retries": max_retries,
+                        "strategy": strategy.value,
+                        "n_params": len(current_params),
+                        "params_summary": f"[{current_params[0]:.4g}, ..., {current_params[-1]:.4g}]",
+                    },
+                    level=logging.WARNING,
+                )
+
                 # Diagnose error and determine recovery strategy
                 diagnostic = self._diagnose_error(
                     error=e,
@@ -2477,11 +2490,20 @@ class NLSQWrapper(NLSQAdapterBase):
                 if attempt < max_retries - 1:
                     # Apply recovery strategy
                     recovery_actions.append(recovery_strategy["action"])
+                    params_before = current_params.copy()
 
                     logger.info(f"Applying recovery: {recovery_strategy['action']}")
 
                     # Update parameters for next attempt
                     current_params = recovery_strategy["new_params"]
+
+                    # T029: Log recovery with before/after parameter values
+                    logger.info(
+                        f"Recovery parameter adjustment:\n"
+                        f"  Before: [{params_before[0]:.4g}, ..., {params_before[-1]:.4g}]\n"
+                        f"  After:  [{current_params[0]:.4g}, ..., {current_params[-1]:.4g}]\n"
+                        f"  Max change: {np.max(np.abs(current_params - params_before)):.4g}"
+                    )
 
                     # Note: We don't modify bounds during recovery for safety
                 else:
@@ -3658,9 +3680,7 @@ class NLSQWrapper(NLSQAdapterBase):
         # Warn if any parameters were clipped
         if not np.allclose(params, clipped_params):
             clipped_indices = np.where(~np.isclose(params, clipped_params))[0]
-            import logging
-
-            logger = logging.getLogger(__name__)
+            logger = get_logger(__name__)
             logger.warning(
                 f"Initial parameters clipped to bounds at indices {clipped_indices}",
             )

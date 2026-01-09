@@ -54,7 +54,13 @@ from homodyne.io.nlsq_writers import (  # noqa: E402
 from homodyne.optimization.nlsq.fit_computation import (  # noqa: E402
     compute_theoretical_fits,
 )
-from homodyne.utils.logging import configure_logging, get_logger  # noqa: E402
+from homodyne.utils.logging import (  # noqa: E402
+    AnalysisSummaryLogger,
+    configure_logging,
+    get_logger,
+    log_exception,
+    log_phase,
+)
 from homodyne.viz.experimental_plots import (  # noqa: E402
     plot_experimental_data as _viz_plot_experimental_data,
 )
@@ -130,7 +136,10 @@ def dispatch_command(args) -> dict[str, Any]:
     """
     run_id = getattr(args, "run_id", None) or datetime.now().strftime("%Y%m%d_%H%M%S")
     args.run_id = run_id
-    logger.info(f"Dispatching homodyne analysis command (run_id={run_id})")
+    logger.info(f"[CLI] Dispatching homodyne analysis command (run_id={run_id})")
+
+    # Log resolved command-line arguments at DEBUG level (T023)
+    logger.debug(f"[CLI] Resolved arguments: {vars(args)}")
 
     # Validate arguments
     if not validate_args(args):
@@ -142,27 +151,39 @@ def dispatch_command(args) -> dict[str, Any]:
             "error": "Core modules not available. Please check installation.",
         }
 
+    # Initialize analysis summary logger (T024)
+    analysis_mode = "laminar_flow" if getattr(args, "laminar_flow", False) else "static"
+    if getattr(args, "static_mode", False):
+        analysis_mode = "static_isotropic"
+    summary = AnalysisSummaryLogger(run_id=run_id, analysis_mode=analysis_mode)
+
     try:
         # Create output directory
         args.output_dir.mkdir(parents=True, exist_ok=True)
 
-        # Load configuration (needed for logging settings)
-        config = _load_configuration(args)
+        # Phase 1: Load configuration (T019)
+        summary.start_phase("config_loading")
+        with log_phase("config_loading"):
+            config = _load_configuration(args)
 
-        # Configure logging using config + CLI verbosity flags
-        config_dict = config.get_config() if hasattr(config, "get_config") else config
-        logging_cfg = (
-            config_dict.get("logging", {}) if isinstance(config_dict, dict) else {}
-        )
-        log_file = configure_logging(
-            logging_cfg,
-            verbose=getattr(args, "verbose", False),
-            quiet=getattr(args, "quiet", False),
-            output_dir=args.output_dir,
-            run_id=run_id,
-        )
-        if log_file:
-            logger.info(f"Log file created: {log_file}")
+            # Configure logging using config + CLI verbosity flags
+            config_dict = (
+                config.get_config() if hasattr(config, "get_config") else config
+            )
+            logging_cfg = (
+                config_dict.get("logging", {}) if isinstance(config_dict, dict) else {}
+            )
+            log_file = configure_logging(
+                logging_cfg,
+                verbose=getattr(args, "verbose", False),
+                quiet=getattr(args, "quiet", False),
+                output_dir=args.output_dir,
+                run_id=run_id,
+            )
+            if log_file:
+                logger.info(f"[CLI] Log file created: {log_file}")
+                summary.add_output_file(log_file)
+        summary.end_phase("config_loading")
 
         # Configure device (CPU/GPU)
         device_config = _configure_device(args)
@@ -175,7 +196,7 @@ def dispatch_command(args) -> dict[str, Any]:
         # Simulated data plotting doesn't need experimental data or optimization
         if plot_sim and not plot_exp and not save_plots:
             logger.info(
-                "Plotting simulated data only (skipping data loading and optimization)",
+                "[CLI] Plotting simulated data only (skipping data loading and optimization)",
             )
             # Skip data loading for pure simulated data mode
             # Extract config dictionary from ConfigManager
@@ -183,7 +204,8 @@ def dispatch_command(args) -> dict[str, Any]:
                 config.get_config() if hasattr(config, "get_config") else config
             )
             _handle_plotting(args, None, {}, config_dict)
-            logger.info("Analysis completed successfully")
+            summary.set_convergence_status("skipped_simulated_only")
+            summary.log_summary(logger)
             return {
                 "success": True,
                 "result": None,
@@ -191,49 +213,76 @@ def dispatch_command(args) -> dict[str, Any]:
                 "output_dir": str(args.output_dir),
             }
 
-        # Load data (needed for experimental plots and optimization)
-        data = _load_data(args, config)
+        # Phase 2: Load data (T020)
+        summary.start_phase("data_loading")
+        with log_phase("data_loading", track_memory=True) as data_phase:
+            data = _load_data(args, config)
+        summary.end_phase("data_loading", memory_peak_gb=data_phase.memory_peak_gb)
 
         # Plot experimental data only (no optimization needed)
         plot_only = plot_exp and not save_plots and not plot_sim
 
         if plot_only:
             # Skip optimization, just plot experimental data
-            logger.info("Plotting experimental data only (skipping optimization)")
+            logger.info("[CLI] Plotting experimental data only (skipping optimization)")
             result = None
+            summary.set_convergence_status("skipped_plot_only")
         else:
-            # Run optimization
-            result = _run_optimization(args, config, data)
+            # Phase 3: Run optimization (T021)
+            summary.start_phase("optimization")
+            with log_phase("optimization", track_memory=True) as opt_phase:
+                result = _run_optimization(args, config, data)
+            summary.end_phase("optimization", memory_peak_gb=opt_phase.memory_peak_gb)
 
-            # Save results (with data and config for NLSQ comprehensive saving)
-            _save_results(args, result, device_config, data, config)
+            # Record optimization metrics
+            if result is not None:
+                if hasattr(result, "chi_squared"):
+                    summary.record_metric("chi_squared", float(result.chi_squared))
+                if hasattr(result, "n_iterations"):
+                    summary.record_metric("n_iterations", float(result.n_iterations))
+                if hasattr(result, "converged"):
+                    summary.set_convergence_status(
+                        "converged" if result.converged else "not_converged"
+                    )
+
+            # Phase 4: Save results (T022)
+            summary.start_phase("result_saving")
+            with log_phase("result_saving"):
+                _save_results(args, result, device_config, data, config)
+            summary.end_phase("result_saving")
 
         # Handle plotting options
         # Extract config dictionary from ConfigManager
         config_dict = config.get_config() if hasattr(config, "get_config") else config
         _handle_plotting(args, result, data, config_dict)
 
-        logger.info("Analysis completed successfully")
+        logger.info("[CLI] Analysis completed successfully")
+
+        # Log analysis summary (T024)
+        summary.log_summary(logger)
 
         # Summary message
         if log_file:
-            logger.info(f"Analysis log saved to: {log_file}")
+            logger.info(f"[CLI] Analysis log saved to: {log_file}")
         else:
             log_dir = args.output_dir / "logs"
             log_files = list(log_dir.glob("homodyne_analysis_*.log"))
             if log_files:
-                logger.info(f"Analysis log saved to: {log_files[-1]}")
+                logger.info(f"[CLI] Analysis log saved to: {log_files[-1]}")
 
         return {
             "success": True,
             "result": result,
             "device_config": device_config,
             "output_dir": str(args.output_dir),
+            "summary": summary.as_dict(),
         }
 
     except Exception as e:
-        logger.error(f"Command execution failed: {e}")
-        logger.debug("Full traceback:", exc_info=True)
+        # Use structured exception logging
+        log_exception(logger, e, context={"run_id": run_id, "phase": "dispatch"})
+        summary.set_convergence_status("failed")
+        summary.increment_error_count()
         return {"success": False, "error": str(e)}
 
 
@@ -2366,7 +2415,11 @@ def save_mcmc_results(
 
         if save_dict:  # Only save if we have data
             np.savez_compressed(samples_file, **save_dict)
-            logger.debug(f"Saved posterior samples to {samples_file}")
+            # T058b: Log file size after write completion
+            samples_size_mb = samples_file.stat().st_size / (1024 * 1024)
+            logger.debug(
+                f"Saved posterior samples to {samples_file} ({samples_size_mb:.2f} MB)"
+            )
     except Exception as e:
         logger.warning(f"Failed to save samples.npz: {e}")
         logger.debug("Samples saving error:", exc_info=True)
@@ -2454,6 +2507,12 @@ def save_mcmc_results(
         logger.warning(f"Heatmap plot generation failed (data files still saved): {e}")
         logger.debug("Plot error details:", exc_info=True)
 
+    # T057: Calculate and log total file sizes
+    json_files = list(method_dir.glob("*.json"))
+    npz_files = list(method_dir.glob("*.npz"))
+    total_json_kb = sum(f.stat().st_size for f in json_files) / 1024
+    total_npz_mb = sum(f.stat().st_size for f in npz_files) / (1024 * 1024)
+
     logger.info(f"✓ {method_name.upper()} results saved successfully to {method_dir}")
     if (
         method_name == "cmc"
@@ -2461,11 +2520,15 @@ def save_mcmc_results(
         and result.per_shard_diagnostics
     ):
         logger.info(
-            "  - 4 JSON files (parameters, analysis results, diagnostics, shard diagnostics)"
+            f"  - 4 JSON files (parameters, analysis results, diagnostics, shard diagnostics) "
+            f"({total_json_kb:.1f} KB total)"
         )
     else:
-        logger.info("  - 3 JSON files (parameters, analysis results, diagnostics)")
-    logger.info("  - 1 NPZ file (posterior samples)")
+        logger.info(
+            f"  - 3 JSON files (parameters, analysis results, diagnostics) "
+            f"({total_json_kb:.1f} KB total)"
+        )
+    logger.info(f"  - {len(npz_files)} NPZ file(s) (posterior samples) ({total_npz_mb:.2f} MB)")
 
 
 def _create_mcmc_parameters_dict(result: Any) -> dict:

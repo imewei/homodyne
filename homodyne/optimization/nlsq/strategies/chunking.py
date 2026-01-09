@@ -39,14 +39,15 @@ Issue: Per-angle scaling + NLSQ chunking incompatibility
 
 from __future__ import annotations
 
-import logging
 from dataclasses import dataclass
 from typing import Any
 
 import jax.numpy as jnp
 import numpy as np
 
-logger = logging.getLogger(__name__)
+from homodyne.utils.logging import get_logger, log_phase
+
+logger = get_logger(__name__)
 
 
 @dataclass
@@ -678,6 +679,9 @@ def create_angle_stratified_data(
     chunk_sizes : list[int]
         Size of each stratified chunk (CRITICAL for correct re-chunking)
     """
+    import time as _time
+
+    _start_time = _time.perf_counter()
     n_points = len(phi)
 
     # Convert to numpy for manipulation (JAX arrays are immutable)
@@ -781,8 +785,11 @@ def create_angle_stratified_data(
     # Store chunk sizes for correct re-chunking
     chunk_sizes = [chunk["size"] for chunk in stratified_chunks]
 
+    # T039: Log chunking operation timing
+    _duration = _time.perf_counter() - _start_time
     logger.info(
-        f"Stratification complete: {len(stratified_chunks)} balanced chunks created."
+        f"Stratification complete: {len(stratified_chunks)} balanced chunks created "
+        f"in {_duration:.3f}s ({n_points / _duration / 1e6:.2f}M pts/s)"
     )
 
     # Convert back to JAX arrays and return with chunk boundary information

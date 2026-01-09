@@ -57,6 +57,7 @@ import numpy as np
 
 from homodyne.core.physics_nlsq import compute_g2_scaled
 from homodyne.core.physics_utils import apply_diagonal_correction
+from homodyne.utils.logging import get_logger, log_phase
 
 
 class StratifiedResidualFunction:
@@ -107,7 +108,7 @@ class StratifiedResidualFunction:
         self._sigma_jax = jnp.asarray(sigma_array)
         self.per_angle_scaling = per_angle_scaling
         self.physical_param_names = physical_param_names
-        self.logger = logger or logging.getLogger(__name__)
+        self.logger = logger or get_logger(__name__)
 
         if not self.chunks:
             raise ValueError("stratified_data.chunks is empty")
@@ -286,8 +287,12 @@ class StratifiedResidualFunction:
         This method sets up JIT-compiled versions of the residual computation
         to maximize performance during optimization.
         """
-        self.compute_chunk_jit = jax.jit(self._compute_chunk_residuals_raw)
-        self.logger.debug("JAX functions JIT-compiled successfully")
+        # T034: Add log_phase for JIT compilation timing
+        with log_phase("jax_jit_compilation", logger=self.logger, track_memory=True) as phase:
+            self.compute_chunk_jit = jax.jit(self._compute_chunk_residuals_raw)
+        self.logger.debug(
+            f"JAX functions JIT-compiled successfully in {phase.duration:.3f}s"
+        )
 
     def _preconvert_chunk_arrays(self):
         """

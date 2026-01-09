@@ -9,10 +9,11 @@ Addresses CVSS 7.5 path traversal vulnerability (VUL-001).
 
 from __future__ import annotations
 
-import logging
 from pathlib import Path
 
-logger = logging.getLogger(__name__)
+from homodyne.utils.logging import get_logger
+
+logger = get_logger(__name__)
 
 
 class PathValidationError(ValueError):

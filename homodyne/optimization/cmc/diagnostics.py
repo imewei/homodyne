@@ -198,9 +198,12 @@ def check_convergence(
     )
     if max_r_hat_value > max_rhat:
         bad_params = [k for k, v in r_hat.items() if v > max_rhat]
-        warnings.append(
+        # T046: Log R-hat warnings for poor convergence
+        warning_msg = (
             f"R-hat > {max_rhat} for parameters: {bad_params} (max={max_r_hat_value:.3f})"
         )
+        logger.warning(warning_msg)
+        warnings.append(warning_msg)
 
     # Check ESS
     min_ess_value = min(

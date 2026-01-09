@@ -8,14 +8,23 @@ Extracted from wrapper.py as part of refactoring (Dec 2025).
 
 from __future__ import annotations
 
+import time
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
 import numpy as np
 
+from homodyne.utils.logging import get_logger
+
 if TYPE_CHECKING:
     from collections.abc import Callable
+
+# Module-level logger for threshold warnings
+_module_logger = get_logger(__name__)
+
+# T040: Configurable threshold for slow operations (default 10s per FR-020)
+SLOW_OPERATION_THRESHOLD_S = 10.0
 
 # Import NLSQ functions
 from nlsq import curve_fit, curve_fit_large
@@ -128,6 +137,7 @@ class StandardExecutor(OptimizationExecutor):
     ) -> ExecutionResult:
         """Execute standard curve_fit optimization."""
         logger.debug("Using standard curve_fit")
+        _start_time = time.perf_counter()
 
         # Use parameter magnitude-based scaling for numerical stability
         if isinstance(x_scale_value, (int, float)) or (
@@ -155,7 +165,15 @@ class StandardExecutor(OptimizationExecutor):
                 stability="auto",  # Enable memory management and stability
             )
 
-            info = {"success": True, "strategy": "standard"}
+            _duration = time.perf_counter() - _start_time
+            # T040: Log operations exceeding threshold at DEBUG level
+            if _duration > SLOW_OPERATION_THRESHOLD_S:
+                logger.debug(
+                    f"[SLOW_OP] standard curve_fit took {_duration:.2f}s "
+                    f"(threshold: {SLOW_OPERATION_THRESHOLD_S}s)"
+                )
+
+            info = {"success": True, "strategy": "standard", "duration_s": _duration}
             return ExecutionResult(
                 popt=np.asarray(popt),
                 pcov=np.asarray(pcov),

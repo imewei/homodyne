@@ -38,7 +38,11 @@ logging.getLogger("jax._src.compiler").setLevel(logging.ERROR)
 
 from homodyne.cli.args_parser import create_parser  # noqa: E402
 from homodyne.cli.commands import dispatch_command  # noqa: E402
-from homodyne.utils.logging import get_logger  # noqa: E402
+from homodyne.utils.logging import (  # noqa: E402
+    LogConfiguration,
+    get_logger,
+    log_exception,
+)
 
 logger = get_logger(__name__)
 
@@ -47,17 +51,24 @@ def main() -> None:
     """Main CLI entry point.
 
     Processes command-line arguments and dispatches to appropriate command handler.
+    Uses LogConfiguration.from_cli_args() for --verbose/-v and --quiet/-q flags.
+    Creates timestamped log file per analysis run.
     """
     try:
         # Parse arguments
         parser = create_parser()
         args = parser.parse_args()
 
-        # Configure logging level
-        if hasattr(args, "verbose") and args.verbose:
-            import logging
-
-            logging.getLogger("homodyne").setLevel(logging.DEBUG)
+        # Configure logging using LogConfiguration (T017, T018)
+        # This handles --verbose, --quiet, and creates timestamped log files
+        log_config = LogConfiguration.from_cli_args(
+            verbose=getattr(args, "verbose", False),
+            quiet=getattr(args, "quiet", False),
+            log_file=None,  # Auto-generate timestamped log file
+        )
+        log_file = log_config.apply()
+        if log_file:
+            logger.debug(f"Log file created: {log_file}")
 
         # Log startup
         logger.info("Starting homodyne analysis...")
@@ -83,8 +94,8 @@ def main() -> None:
         logger.info("Analysis interrupted by user")
         sys.exit(130)
     except Exception as e:
-        logger.error(f"Unexpected error: {e}")
-        logger.debug("Full traceback:", exc_info=True)
+        # Use structured exception logging (T003)
+        log_exception(logger, e, context={"command": "main"})
         sys.exit(1)
 
 

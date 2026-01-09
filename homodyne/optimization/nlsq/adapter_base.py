@@ -7,13 +7,14 @@ Created as part of architecture refactoring (T059-T061).
 
 from __future__ import annotations
 
-import logging
 from abc import ABC, abstractmethod
 from typing import Any
 
 import numpy as np
 
-logger = logging.getLogger(__name__)
+from homodyne.utils.logging import get_logger
+
+logger = get_logger(__name__)
 
 
 class NLSQAdapterBase(ABC):

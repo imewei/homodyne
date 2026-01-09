@@ -18,7 +18,6 @@ Version: 2.4.0 (updated with buffer donation in 2.14.0)
 
 from __future__ import annotations
 
-import logging
 from functools import partial
 
 import jax
@@ -27,6 +26,7 @@ import numpy as np
 
 from homodyne.core.physics_nlsq import compute_g2_scaled
 from homodyne.core.physics_utils import apply_diagonal_correction
+from homodyne.utils.logging import get_logger, log_phase
 
 
 class StratifiedResidualFunctionJIT:
@@ -68,7 +68,7 @@ class StratifiedResidualFunctionJIT:
             physical_param_names: List of physical parameter names
             logger: Optional logger for diagnostics
         """
-        self.logger = logger or logging.getLogger(__name__)
+        self.logger = logger or get_logger(__name__)
         self.chunks = stratified_data.chunks
         self.per_angle_scaling = per_angle_scaling
         self.physical_param_names = physical_param_names
@@ -111,11 +111,18 @@ class StratifiedResidualFunctionJIT:
         # the need to allocate new buffers for intermediate results.
         # donate_argnums=(0,) tells JAX the params array can be reused after the call.
         self.logger.info("JIT-compiling residual function with buffer donation...")
-        self._residual_fn_jit = jax.jit(
-            self._compute_all_residuals,
-            donate_argnums=(0,),  # FR-003: Donate params buffer to reduce memory
+        # T035: Add log_phase for JIT compilation timing with memory tracking
+        with log_phase(
+            "jit_residual_compilation", logger=self.logger, track_memory=True
+        ) as phase:
+            self._residual_fn_jit = jax.jit(
+                self._compute_all_residuals,
+                donate_argnums=(0,),  # FR-003: Donate params buffer to reduce memory
+            )
+        self.logger.info(
+            f"✓ JIT compilation setup complete in {phase.duration:.3f}s "
+            f"(buffer donation enabled)"
         )
-        self.logger.info("✓ JIT compilation setup complete (buffer donation enabled)")
 
     def _extract_global_metadata(self) -> tuple[float, float, float | None]:
         """Extract q, L, dt from chunks (should be same for all chunks)."""

@@ -68,12 +68,13 @@ except ImportError:
 
 # V2 system integration
 try:
-    from homodyne.utils.logging import get_logger, log_calls, log_performance
+    from homodyne.utils.logging import get_logger, log_calls, log_performance, log_phase
 
     HAS_V2_LOGGING = True
 except ImportError:
     # Fallback to standard logging if v2 logging not available
     import logging
+    from contextlib import contextmanager
 
     HAS_V2_LOGGING = False
 
@@ -91,6 +92,11 @@ except ImportError:
             return func
 
         return decorator
+
+    @contextmanager
+    def log_phase(name, **kwargs):
+        """Fallback log_phase for environments without v2 logging."""
+        yield type("PhaseContext", (), {"duration": 0.0, "memory_peak_gb": None})()
 
 
 # Physics validation integration
@@ -702,18 +708,28 @@ class XPCSDataLoader:
     @log_performance(threshold=1.0)
     def _load_from_hdf(self, hdf_path: str) -> dict[str, Any]:
         """Load and process data from HDF5 file."""
-        # Detect format
-        logger.debug("Starting HDF5 format detection")
-        format_type = self._detect_format(hdf_path)
-        logger.info(f"Detected format: {format_type}")
+        # T037: Add log_phase for data loading with memory tracking
+        with log_phase("hdf5_data_loading", logger=logger, track_memory=True) as phase:
+            # Detect format
+            logger.debug("Starting HDF5 format detection")
+            format_type = self._detect_format(hdf_path)
+            logger.info(f"Detected format: {format_type}")
 
-        # Load based on format
-        if format_type == "aps_old":
-            return self._load_aps_old_format(hdf_path)
-        elif format_type == "aps_u":
-            return self._load_aps_u_format(hdf_path)
-        else:
-            raise XPCSDataFormatError(f"Unsupported format: {format_type}")
+            # Load based on format
+            if format_type == "aps_old":
+                data = self._load_aps_old_format(hdf_path)
+            elif format_type == "aps_u":
+                data = self._load_aps_u_format(hdf_path)
+            else:
+                raise XPCSDataFormatError(f"Unsupported format: {format_type}")
+
+        logger.info(
+            f"HDF5 loading completed in {phase.duration:.2f}s, "
+            f"peak memory: {phase.memory_peak_gb:.2f} GB"
+            if phase.memory_peak_gb
+            else f"HDF5 loading completed in {phase.duration:.2f}s"
+        )
+        return data
 
     @log_performance(threshold=0.1)
     def _detect_format(self, hdf_path: str) -> str:

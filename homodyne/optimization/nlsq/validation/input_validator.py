@@ -1,16 +1,18 @@
 """Input validation for NLSQ optimization (T079).
 
 Extracted from wrapper.py as part of architecture refactoring.
+Enhanced with structured logging for T027.
 """
 
 from __future__ import annotations
 
-import logging
 from typing import Any
 
 import numpy as np
 
-logger = logging.getLogger(__name__)
+from homodyne.utils.logging import get_logger
+
+logger = get_logger(__name__)
 
 
 class InputValidator:
@@ -128,8 +130,13 @@ def validate_array_dimensions(xdata: np.ndarray, ydata: np.ndarray) -> bool:
     return True
 
 
-def validate_no_nan_inf(arr: np.ndarray, name: str) -> bool:
-    """Validate that array contains no NaN or Inf values.
+def validate_no_nan_inf(
+    arr: np.ndarray,
+    name: str,
+    iteration: int | None = None,
+    context: dict[str, Any] | None = None,
+) -> bool:
+    """Validate that array contains no NaN or Inf values (T027).
 
     Parameters
     ----------
@@ -137,6 +144,10 @@ def validate_no_nan_inf(arr: np.ndarray, name: str) -> bool:
         Array to validate
     name : str
         Name for logging
+    iteration : int, optional
+        Current iteration number for context
+    context : dict, optional
+        Additional context for logging
 
     Returns
     -------
@@ -144,9 +155,27 @@ def validate_no_nan_inf(arr: np.ndarray, name: str) -> bool:
         True if array contains only finite values
     """
     if not np.all(np.isfinite(arr)):
-        nan_count = np.sum(np.isnan(arr))
-        inf_count = np.sum(np.isinf(arr))
-        logger.warning(f"{name} contains {nan_count} NaN and {inf_count} Inf values")
+        nan_count = int(np.sum(np.isnan(arr)))
+        inf_count = int(np.sum(np.isinf(arr)))
+
+        # Find indices of problematic values for debugging
+        nan_indices = np.where(np.isnan(arr))[0][:10]  # First 10 NaN indices
+        inf_indices = np.where(np.isinf(arr))[0][:10]  # First 10 Inf indices
+
+        # T027: Enhanced logging with context
+        context_str = ""
+        if iteration is not None:
+            context_str += f" [iteration={iteration}]"
+        if context:
+            context_str += f" [context={context}]"
+
+        logger.warning(
+            f"{name} contains numerical issues{context_str}:\n"
+            f"  NaN count: {nan_count}, first indices: {nan_indices.tolist()}\n"
+            f"  Inf count: {inf_count}, first indices: {inf_indices.tolist()}\n"
+            f"  Array shape: {arr.shape}, dtype: {arr.dtype}\n"
+            f"  Array range: [{np.nanmin(arr):.4g}, {np.nanmax(arr):.4g}]"
+        )
         return False
     return True
 

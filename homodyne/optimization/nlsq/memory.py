@@ -21,10 +21,11 @@ Memory Threshold:
     >>> print(f"Threshold: {threshold_gb:.1f} GB")
 """
 
-import logging
 import os
 import warnings
 from typing import Any
+
+from homodyne.utils.logging import get_logger, log_phase
 
 # Check if NLSQ MemoryManager is available (v0.4+)
 try:
@@ -36,7 +37,7 @@ except ImportError:
     _NLSQ_MEMORY_MANAGER_AVAILABLE = False
 
 # Module-level logger
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 # Default memory fraction and environment variable name
 DEFAULT_MEMORY_FRACTION = 0.75
@@ -335,18 +336,27 @@ def select_nlsq_strategy(
     >>> print(decision.reason)
     'Peak memory (12.8 GB) exceeds threshold (24.0 GB)'
     """
-    # Get unified memory threshold
-    threshold_gb, _ = get_adaptive_memory_threshold(memory_fraction)
+    # T038: Add timing for memory strategy selection
+    with log_phase("memory_strategy_selection", logger=logger) as phase:
+        # Get unified memory threshold
+        threshold_gb, _ = get_adaptive_memory_threshold(memory_fraction)
 
-    # Compute memory metrics
-    index_memory_bytes = n_points * 8  # int64 indices
-    index_memory_gb = index_memory_bytes / (1024**3)
+        # Compute memory metrics
+        index_memory_bytes = n_points * 8  # int64 indices
+        index_memory_gb = index_memory_bytes / (1024**3)
 
-    # Handle edge case: n_params=0 means we can't estimate properly
-    if n_params <= 0:
-        peak_memory_gb = 0.0
-    else:
-        peak_memory_gb = estimate_peak_memory_gb(n_points, n_params)
+        # Handle edge case: n_params=0 means we can't estimate properly
+        if n_params <= 0:
+            peak_memory_gb = 0.0
+        else:
+            peak_memory_gb = estimate_peak_memory_gb(n_points, n_params)
+
+    logger.debug(
+        f"Memory strategy analysis completed in {phase.duration * 1000:.1f}ms: "
+        f"n_points={n_points:,}, n_params={n_params}, "
+        f"index={index_memory_gb:.2f} GB, peak={peak_memory_gb:.2f} GB, "
+        f"threshold={threshold_gb:.2f} GB"
+    )
 
     # Decision tree (check index FIRST - extreme case)
     if index_memory_gb > threshold_gb:

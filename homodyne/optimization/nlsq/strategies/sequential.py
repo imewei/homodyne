@@ -15,7 +15,6 @@ Version: 2.2.0
 Date: 2025-11-06
 """
 
-import logging
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from typing import Any
@@ -23,7 +22,9 @@ from typing import Any
 import numpy as np
 from scipy.optimize._numdiff import approx_derivative
 
-logger = logging.getLogger(__name__)
+from homodyne.utils.logging import get_logger
+
+logger = get_logger(__name__)
 
 
 def _coerce_mapping_to_array(

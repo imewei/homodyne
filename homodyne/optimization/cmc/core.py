@@ -671,6 +671,11 @@ def fit_mcmc_jax(
                 f"suggested={suggested_timeout}s (cap={config.per_shard_timeout}s)"
             )
 
+        # T047: Log shard progress start
+        run_logger.info(
+            f"Starting CMC sampling: {len(shards)} shards, "
+            f"{config.num_chains} chains, {config.num_warmup}+{config.num_samples} samples"
+        )
         mcmc_samples = backend.run(
             model=xpcs_model_scaled,
             model_kwargs=model_kwargs,
@@ -681,6 +686,7 @@ def fit_mcmc_jax(
             analysis_mode=analysis_mode,
             progress_bar=progress_bar,
         )
+        run_logger.info(f"CMC sampling completed: all {len(shards)} shards finished")
         stats_warmup = 0.0  # Not tracked for parallel
         stats_total = time.perf_counter() - start_time
     else:

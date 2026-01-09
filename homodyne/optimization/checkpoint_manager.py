@@ -24,6 +24,10 @@ import numpy as np
 
 from homodyne._version import __version__
 from homodyne.optimization.exceptions import NLSQCheckpointError
+from homodyne.utils.logging import get_logger
+
+# T059: Module-level logger for checkpoint management
+logger = get_logger(__name__)
 
 
 class CheckpointManager:
@@ -94,6 +98,12 @@ class CheckpointManager:
 
         # Create checkpoint directory if it doesn't exist
         self.checkpoint_dir.mkdir(parents=True, exist_ok=True)
+
+        # T059: Log checkpoint manager initialization
+        logger.debug(
+            f"CheckpointManager initialized: dir={self.checkpoint_dir}, "
+            f"frequency={checkpoint_frequency}, keep_last={keep_last_n}"
+        )
 
     def save_checkpoint(
         self,
@@ -190,11 +200,16 @@ class CheckpointManager:
 
             elapsed = time.time() - start_time
 
+            # T059: Log checkpoint save completion
+            file_size_kb = checkpoint_path.stat().st_size / 1024
+            logger.info(
+                f"Checkpoint saved: batch={batch_idx}, loss={loss:.6g}, "
+                f"file={checkpoint_path.name} ({file_size_kb:.1f} KB), "
+                f"time={elapsed:.2f}s"
+            )
+
             # Check if save time exceeds target
             if elapsed > 2.0:
-                import logging
-
-                logger = logging.getLogger(__name__)
                 logger.warning(
                     f"Checkpoint save took {elapsed:.2f}s (target: < 2s). "
                     f"Consider disabling compression or reducing checkpoint frequency."
@@ -294,6 +309,12 @@ class CheckpointManager:
                     for key in metadata_group.keys():
                         metadata[key] = metadata_group[key][:]
 
+                # T059: Log checkpoint load completion
+                logger.info(
+                    f"Checkpoint loaded: batch={batch_idx}, loss={loss:.6g}, "
+                    f"version={version}, file={checkpoint_path.name}"
+                )
+
                 return {
                     "batch_idx": int(batch_idx),
                     "parameters": parameters,
@@ -344,8 +365,13 @@ class CheckpointManager:
         # Find first valid checkpoint
         for checkpoint_path in checkpoint_files:
             if self.validate_checkpoint(checkpoint_path):
+                # T060: Log recovery point found
+                logger.info(
+                    f"Found valid recovery checkpoint: {checkpoint_path.name}"
+                )
                 return checkpoint_path
 
+        logger.debug("No valid checkpoint found for recovery")
         return None
 
     def cleanup_old_checkpoints(self) -> list[Path]:
@@ -388,10 +414,14 @@ class CheckpointManager:
                 deleted.append(checkpoint_path)
             except OSError:
                 # Log warning but continue
-                import logging
-
-                logger = logging.getLogger(__name__)
                 logger.warning(f"Failed to delete checkpoint: {checkpoint_path}")
+
+        # T059: Log cleanup results
+        if deleted:
+            logger.debug(
+                f"Checkpoint cleanup: deleted {len(deleted)} old checkpoints, "
+                f"kept {self.keep_last_n}"
+            )
 
         return deleted
 

@@ -10,7 +10,6 @@ Key features:
 - Parallel processing support for multi-angle plots
 """
 
-import logging
 from pathlib import Path
 
 import datashader as ds
@@ -19,7 +18,9 @@ import numpy as np
 import xarray as xr
 from PIL import Image
 
-logger = logging.getLogger(__name__)
+from homodyne.utils.logging import get_logger
+
+logger = get_logger(__name__)
 
 
 class DatashaderRenderer:

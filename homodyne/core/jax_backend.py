@@ -285,6 +285,21 @@ def reset_cache_stats() -> None:
     }
 
 
+def log_cache_stats() -> None:
+    """T065: Log meshgrid cache statistics at DEBUG level.
+
+    Call this periodically during long optimization runs to monitor
+    cache effectiveness. High hit rates (>80%) indicate good cache
+    utilization.
+    """
+    stats = get_cache_stats()
+    logger.debug(
+        f"Meshgrid cache stats: hits={stats['hits']}, misses={stats['misses']}, "
+        f"hit_rate={stats['hit_rate']:.1%}, size={stats['cache_size']}/{stats['max_cache_size']}, "
+        f"evictions={stats['evictions']}"
+    )
+
+
 # Global flags for availability checking
 jax_available = JAX_AVAILABLE
 numpy_gradients_available = NUMPY_GRADIENTS_AVAILABLE if not JAX_AVAILABLE else False

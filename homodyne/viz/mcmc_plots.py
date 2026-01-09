@@ -29,16 +29,16 @@ Examples:
     >>> plot_cmc_summary_dashboard(result_cmc, save_path='cmc_summary.png')
 """
 
-import logging
 from pathlib import Path
 
 import matplotlib.pyplot as plt
 import numpy as np
 from matplotlib.figure import Figure
 
+from homodyne.utils.logging import get_logger
 from homodyne.utils.path_validation import PathValidationError, validate_plot_save_path
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 # Type alias for MCMCResult (v3.0 uses CMCResult, aliased as MCMCResult for compatibility)
 try:

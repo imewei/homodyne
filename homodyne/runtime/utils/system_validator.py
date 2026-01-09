@@ -10,7 +10,6 @@ Version: 2.3.0 (CPU-only architecture, GPU validation removed)
 """
 
 import json
-import logging
 import os
 import shutil
 import subprocess  # nosec B404
@@ -20,7 +19,9 @@ from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any
 
-logger = logging.getLogger(__name__)
+from homodyne.utils.logging import get_logger
+
+logger = get_logger(__name__)
 
 
 @dataclass

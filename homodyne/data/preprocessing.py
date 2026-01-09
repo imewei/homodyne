@@ -86,11 +86,12 @@ except ImportError:
 
 # V2 logging integration
 try:
-    from homodyne.utils.logging import get_logger, log_calls, log_performance
+    from homodyne.utils.logging import get_logger, log_calls, log_performance, log_phase
 
     HAS_V2_LOGGING = True
 except ImportError:
     import logging
+    from contextlib import contextmanager
 
     HAS_V2_LOGGING = False
 
@@ -108,6 +109,11 @@ except ImportError:
             return func
 
         return decorator
+
+    @contextmanager
+    def log_phase(name, **kwargs):
+        """Fallback log_phase for environments without v2 logging."""
+        yield type("PhaseContext", (), {"duration": 0.0, "memory_peak_gb": None})()
 
 
 # Diagonal correction from unified module
@@ -390,14 +396,20 @@ class PreprocessingPipeline:
                         f"Processing stage {i + 1}/{len(self.enabled_stages)}: {stage.value}",
                     )
 
-                time.time()
-
                 try:
-                    processed_data, transform_record = self._execute_stage(
-                        stage,
-                        processed_data,
-                    )
+                    # T036: Add log_phase to preprocessing stages
+                    with log_phase(
+                        f"preprocess_{stage.value}",
+                        logger=logger,
+                        track_memory=True,
+                    ) as phase:
+                        processed_data, transform_record = self._execute_stage(
+                            stage,
+                            processed_data,
+                        )
                     stage_results[stage] = True
+                    transform_record["duration_s"] = phase.duration
+                    transform_record["memory_peak_gb"] = phase.memory_peak_gb
                     provenance.transformations.append(transform_record)
 
                 except Exception as e:
