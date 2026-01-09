@@ -213,6 +213,7 @@ def prepare_mcmc_data(
     t1: np.ndarray,
     t2: np.ndarray,
     phi: np.ndarray,
+    filter_diagonal: bool = True,
 ) -> PreparedData:
     """Prepare and validate data for MCMC sampling.
 
@@ -226,6 +227,11 @@ def prepare_mcmc_data(
         Pooled time coordinates t2, shape (n_total,).
     phi : np.ndarray
         Pooled phi angles, shape (n_total,).
+    filter_diagonal : bool, default=True
+        If True, exclude diagonal points (t1 == t2) from the dataset.
+        Diagonal points represent autocorrelation peaks that are corrected
+        at load time but should not contribute to the likelihood.
+        Added in v2.14.2 for consistency with NLSQ diagonal handling.
 
     Returns
     -------
@@ -245,6 +251,31 @@ def prepare_mcmc_data(
 
     # Validate
     validate_pooled_data(data, t1, t2, phi)
+
+    # v2.14.2+: Filter out diagonal points (t1 == t2)
+    # Diagonal points have autocorrelation peaks that are corrected at load time,
+    # but the corrected values are interpolated estimates. Excluding them from
+    # the likelihood avoids biasing the fit with synthetic data.
+    # This is consistent with NLSQ strategies that mask/filter diagonal residuals.
+    if filter_diagonal:
+        n_before = len(data)
+        non_diagonal_mask = t1 != t2
+        data = data[non_diagonal_mask]
+        t1 = t1[non_diagonal_mask]
+        t2 = t2[non_diagonal_mask]
+        phi = phi[non_diagonal_mask]
+        n_filtered = n_before - len(data)
+        if n_filtered > 0:
+            logger.info(
+                f"Filtered {n_filtered:,} diagonal points (t1==t2), "
+                f"{len(data):,} points remaining"
+            )
+        if len(data) == 0:
+            raise ValueError(
+                f"All {n_before:,} data points were diagonal (t1==t2). "
+                "No off-diagonal points remain after filtering. "
+                "Check data preparation or use filter_diagonal=False."
+            )
 
     # Extract phi info
     phi_unique, phi_indices = extract_phi_info(phi)

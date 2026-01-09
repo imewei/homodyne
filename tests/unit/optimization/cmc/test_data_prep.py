@@ -1,4 +1,7 @@
-"""Tests for CMC data preparation module."""
+"""Tests for CMC data preparation module.
+
+Updated: 2026-01-08 (v2.14.2 - Diagonal filtering support)
+"""
 
 import numpy as np
 import pytest
@@ -200,3 +203,143 @@ class TestPrepareMCMCData:
         # Each phi should map to correct unique value
         for i in range(n):
             assert prepared.phi_unique[prepared.phi_indices[i]] == phi[i]
+
+
+class TestDiagonalFiltering:
+    """Tests for diagonal filtering in prepare_mcmc_data (v2.14.2+).
+
+    The unified diagonal handling ensures CMC excludes diagonal points (t1==t2)
+    from the MCMC likelihood, consistent with NLSQ diagonal masking.
+    """
+
+    def test_filter_diagonal_default_true(self):
+        """Test that diagonal filtering is enabled by default."""
+        n = 100
+        # Create mixed data: 20 diagonal, 80 off-diagonal
+        t1 = np.concatenate([np.arange(20), np.arange(80)])
+        t2 = np.concatenate([np.arange(20), np.arange(80) + 1])  # +1 for off-diagonal
+        data = np.random.randn(n) + 1.0
+        phi = np.zeros(n)
+
+        # With filter_diagonal=True (default), diagonal points should be removed
+        prepared = prepare_mcmc_data(data, t1, t2, phi)
+
+        # 20 diagonal points should be removed, 80 remain
+        assert prepared.n_total == 80
+
+    def test_filter_diagonal_all_diagonal_raises_error(self):
+        """Test that filtering all diagonal points raises appropriate error."""
+        n = 100
+        # Create data with ALL diagonal points
+        t1 = np.arange(n, dtype=float)
+        t2 = np.arange(n, dtype=float)  # All diagonal
+        data = np.random.randn(n) + 1.0
+        phi = np.zeros(n)
+
+        # Filtering all points should raise a clear error
+        with pytest.raises(ValueError, match="All.*diagonal|No off-diagonal"):
+            prepare_mcmc_data(data, t1, t2, phi, filter_diagonal=True)
+
+    def test_filter_diagonal_removes_diagonal_points(self):
+        """Test that diagonal points are removed."""
+        n = 100
+        # Create mixed data: 20 diagonal, 80 off-diagonal
+        t1 = np.concatenate([np.arange(20), np.arange(80)])
+        t2 = np.concatenate([np.arange(20), np.arange(80) + 1])  # +1 for off-diagonal
+        data = np.random.randn(n) + 1.0
+        phi = np.zeros(n)
+
+        prepared = prepare_mcmc_data(data, t1, t2, phi, filter_diagonal=True)
+
+        # 20 diagonal points should be removed, 80 remain
+        assert prepared.n_total == 80
+
+    def test_filter_diagonal_false_preserves_all(self):
+        """Test that filter_diagonal=False preserves diagonal points."""
+        n = 100
+        # Create mixed data: 20 diagonal, 80 off-diagonal
+        t1 = np.concatenate([np.arange(20), np.arange(80)])
+        t2 = np.concatenate([np.arange(20), np.arange(80) + 1])
+        data = np.random.randn(n) + 1.0
+        phi = np.zeros(n)
+
+        prepared = prepare_mcmc_data(data, t1, t2, phi, filter_diagonal=False)
+
+        # All points should be preserved
+        assert prepared.n_total == n
+
+    def test_filter_diagonal_updates_phi_indices(self):
+        """Test that phi indices are correctly recomputed after filtering."""
+        n = 100
+        # Create data with multiple phi angles
+        # First 20 points: diagonal (will be removed)
+        # Next 80 points: off-diagonal with varied phi
+        t1 = np.concatenate([np.arange(20), np.arange(80)])
+        t2 = np.concatenate([np.arange(20), np.arange(80) + 1])
+        phi = np.concatenate([np.zeros(20), np.repeat([0.0, 30.0, 60.0, 90.0], 20)])
+        data = np.random.randn(n) + 1.0
+
+        prepared = prepare_mcmc_data(data, t1, t2, phi, filter_diagonal=True)
+
+        # Should have 80 points remaining
+        assert prepared.n_total == 80
+        # Should still have 4 unique phi angles
+        assert prepared.n_phi == 4
+        # Each remaining phi should map correctly
+        for i in range(prepared.n_total):
+            assert prepared.phi_unique[prepared.phi_indices[i]] == prepared.phi[i]
+
+    def test_filter_diagonal_no_diagonal_points(self):
+        """Test filtering when there are no diagonal points."""
+        n = 100
+        # Create data with no diagonal points (t1 != t2)
+        t1 = np.arange(n, dtype=float)
+        t2 = np.arange(n, dtype=float) + 1  # All off-diagonal
+        data = np.random.randn(n) + 1.0
+        phi = np.zeros(n)
+
+        prepared = prepare_mcmc_data(data, t1, t2, phi, filter_diagonal=True)
+
+        # No points should be removed
+        assert prepared.n_total == n
+
+    def test_filter_diagonal_realistic_xpcs_data(self):
+        """Test diagonal filtering with realistic XPCS-like data structure."""
+        # Simulate typical XPCS data: n_phi angles, n_t time points
+        n_phi = 5
+        n_t = 20
+        n_total = n_phi * n_t * n_t  # Full grid
+
+        # Create full grid data
+        phi_vals = np.array([0.0, 30.0, 60.0, 90.0, 120.0])
+        t_vals = np.arange(n_t, dtype=float)
+
+        # Create pooled data
+        phi_list = []
+        t1_list = []
+        t2_list = []
+        for phi_idx in range(n_phi):
+            for i in range(n_t):
+                for j in range(n_t):
+                    phi_list.append(phi_vals[phi_idx])
+                    t1_list.append(t_vals[i])
+                    t2_list.append(t_vals[j])
+
+        phi = np.array(phi_list)
+        t1 = np.array(t1_list)
+        t2 = np.array(t2_list)
+        data = np.random.randn(n_total) * 0.1 + 1.0
+
+        # Count expected diagonal points
+        n_diagonal_per_angle = n_t  # One diagonal point per time index
+        n_diagonal_total = n_phi * n_diagonal_per_angle
+
+        prepared = prepare_mcmc_data(data, t1, t2, phi, filter_diagonal=True)
+
+        # Expected points remaining
+        expected_remaining = n_total - n_diagonal_total
+        assert prepared.n_total == expected_remaining
+        assert prepared.n_phi == n_phi
+
+        # Verify no diagonal points remain
+        assert np.all(prepared.t1 != prepared.t2)
