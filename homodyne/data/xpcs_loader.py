@@ -103,6 +103,15 @@ except ImportError:
     PhysicsConstants = None
     validate_experimental_setup = None
 
+# Diagonal correction from unified module
+try:
+    from homodyne.core.diagonal_correction import apply_diagonal_correction_batch
+
+    HAS_DIAGONAL_CORRECTION = True
+except ImportError:
+    HAS_DIAGONAL_CORRECTION = False
+    apply_diagonal_correction_batch = None
+
 # Performance engine integration
 try:
     from homodyne.data.memory_manager import AdvancedMemoryManager
@@ -610,9 +619,13 @@ class XPCSDataLoader:
         data = self._convert_arrays_to_target_format(data)
 
         # Apply mandatory diagonal correction (post-load for consistent behavior)
-        # Performance Optimization (Spec 006 - FR-006, FR-006a): Use batch correction
+        # Uses unified diagonal_correction module (v2.14.2+)
         logger.debug("Applying mandatory diagonal correction to correlation matrices")
-        data["c2_exp"] = self._correct_diagonal_batch(data["c2_exp"])
+        if HAS_DIAGONAL_CORRECTION:
+            data["c2_exp"] = apply_diagonal_correction_batch(data["c2_exp"])
+        else:
+            # Fallback to local implementation if unified module not available
+            data["c2_exp"] = self._correct_diagonal_batch(data["c2_exp"])
 
         # Final quality control validation
         if quality_controller:
@@ -1062,6 +1075,10 @@ class XPCSDataLoader:
     def _correct_diagonal(self, c2_mat: NDArray) -> NDArray:
         """Apply diagonal correction to correlation matrix.
 
+        .. deprecated:: 2.16.0
+            Use :func:`homodyne.core.diagonal_correction.apply_diagonal_correction`
+            instead. This method is kept for backward compatibility only.
+
         Based on pyXPCSViewer's correct_diagonal_c2 function.
         Handles both JAX and NumPy arrays.
         """
@@ -1097,6 +1114,10 @@ class XPCSDataLoader:
     # Performance Optimization (Spec 006 - FR-006, FR-006a): Batch diagonal correction
     def _correct_diagonal_batch(self, c2_matrices: NDArray) -> NDArray:
         """Apply diagonal correction to all matrices in batch.
+
+        .. deprecated:: 2.16.0
+            Use :func:`homodyne.core.diagonal_correction.apply_diagonal_correction_batch`
+            instead. This method is kept for backward compatibility only.
 
         Performance Optimization (Spec 006 - FR-006):
         Pre-allocates output array and uses direct assignment instead of
