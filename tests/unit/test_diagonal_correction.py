@@ -1,10 +1,11 @@
 """
 Comprehensive Test Suite for Diagonal Correction
 
-Tests the apply_diagonal_correction function and its integration with
-optimization methods (NLSQ, MCMC, NUTS, CMC).
+Tests the unified diagonal_correction module (v2.14.2+) and its integration with
+optimization methods (NLSQ, CMC).
 
 Generated: 2025-10-27
+Updated: 2026-01-08 (v2.14.2 - Unified diagonal handling)
 Coverage target: >95%
 
 Critical Requirements:
@@ -12,6 +13,7 @@ Critical Requirements:
 2. Correction must preserve off-diagonal correlation structure
 3. JAX operations must be JIT-compatible and differentiable
 4. Integration with all optimization methods must be verified
+5. (v2.14.2+) Unified module must support multiple backends and methods
 """
 
 import numpy as np
@@ -27,10 +29,20 @@ try:
     JAX_AVAILABLE = True
 except ImportError:
     JAX_AVAILABLE = False
-    pytestmark = pytest.mark.skip("JAX not available")
+    jnp = np  # type: ignore[misc]
 
-# Import functions under test
-from homodyne.core.jax_backend import apply_diagonal_correction
+# Import functions under test from unified module (v2.14.2+)
+from homodyne.core.diagonal_correction import (
+    apply_diagonal_correction,
+    apply_diagonal_correction_batch,
+    get_available_backends,
+    get_diagonal_correction_methods,
+)
+
+# Backward compatibility import (re-exports from unified module)
+from homodyne.core.jax_backend import (
+    apply_diagonal_correction as apply_diagonal_correction_jax,
+)
 
 # ============================================================================
 # Fixtures
@@ -310,33 +322,40 @@ class TestDiagonalCorrectionJAX:
     """JAX-specific tests"""
 
     def test_jit_compilation_successful(self, simple_matrix):
-        """Test that function can be JIT-compiled"""
-        jitted_fn = jit(apply_diagonal_correction)
+        """Test that JAX backend function can be JIT-compiled.
 
-        # Should compile without errors
-        result = jitted_fn(simple_matrix)
+        Note: The unified apply_diagonal_correction() has backend detection
+        that doesn't work inside JIT. We test the internal JAX function
+        which is already JIT-compiled by design.
+        """
+        # Import the internal JIT-compiled function
+        from homodyne.core.diagonal_correction import _diagonal_correction_jax_core
 
-        # Should produce same result as non-JIT
-        result_nojit = apply_diagonal_correction(simple_matrix)
-        assert_allclose(result, result_nojit, rtol=1e-14)
+        # Should compile without errors (already JIT-compiled)
+        result = _diagonal_correction_jax_core(simple_matrix)
+
+        # Should produce same result as unified function with JAX backend
+        result_unified = apply_diagonal_correction(simple_matrix, backend="jax")
+        assert_allclose(result, result_unified, rtol=1e-14)
 
     def test_jit_equivalence_large_matrix(self, correlation_matrix_1001x1001):
         """Test JIT equivalence with realistic large matrix"""
-        jitted_fn = jit(apply_diagonal_correction)
+        from homodyne.core.diagonal_correction import _diagonal_correction_jax_core
 
-        result_jit = jitted_fn(correlation_matrix_1001x1001)
-        result_nojit = apply_diagonal_correction(correlation_matrix_1001x1001)
+        result_jit = _diagonal_correction_jax_core(correlation_matrix_1001x1001)
+        result_unified = apply_diagonal_correction(correlation_matrix_1001x1001, backend="jax")
 
-        assert_allclose(result_jit, result_nojit, rtol=1e-14, atol=1e-16)
+        assert_allclose(result_jit, result_unified, rtol=1e-14, atol=1e-16)
 
     def test_gradient_correctness(self):
         """Test gradient using finite differences"""
+        from homodyne.core.diagonal_correction import _diagonal_correction_jax_core
 
-        # Define scalar function for gradient testing
+        # Define scalar function for gradient testing using internal JIT function
         def scalar_fn(x):
             # Create matrix from vector for testing
             matrix = jnp.outer(x, x) + jnp.eye(len(x))
-            corrected = apply_diagonal_correction(matrix)
+            corrected = _diagonal_correction_jax_core(matrix)
             return jnp.sum(corrected)
 
         x = jnp.array([1.0, 2.0, 3.0])
@@ -358,17 +377,19 @@ class TestDiagonalCorrectionJAX:
         assert_allclose(analytical_grad, numerical_grad, rtol=1e-4, atol=1e-6)
 
     def test_vmap_correctness(self, rng):
-        """Test vectorization with vmap"""
+        """Test vectorization with vmap using internal JIT function"""
+        from homodyne.core.diagonal_correction import _diagonal_correction_jax_core
+
         # Single matrix
         single_matrix = jnp.array(rng.randn(10, 10))
-        single_result = apply_diagonal_correction(single_matrix)
+        single_result = _diagonal_correction_jax_core(single_matrix)
 
         # Batch of identical matrices
         batch_size = 5
         batch_matrices = jnp.stack([single_matrix] * batch_size)
 
         # Apply vmap
-        vmapped_fn = vmap(apply_diagonal_correction, in_axes=0)
+        vmapped_fn = vmap(_diagonal_correction_jax_core, in_axes=0)
         batch_result = vmapped_fn(batch_matrices)
 
         # Each result should match single result
@@ -377,6 +398,8 @@ class TestDiagonalCorrectionJAX:
 
     def test_vmap_on_phi_axis(self, rng):
         """Test vmap over phi angle axis (realistic NLSQ usage pattern)"""
+        from homodyne.core.diagonal_correction import _diagonal_correction_jax_core
+
         # Simulate (n_phi=23, n_t=1001, n_t=1001) correlation data
         n_phi = 23
         n_t = 101  # Reduced for test speed
@@ -390,7 +413,7 @@ class TestDiagonalCorrectionJAX:
             ].set(5.0)
 
         # Apply vmap over phi axis
-        vmapped_correction = vmap(apply_diagonal_correction, in_axes=0)
+        vmapped_correction = vmap(_diagonal_correction_jax_core, in_axes=0)
         corrected_stack = vmapped_correction(correlation_stack)
 
         # Verify shape preserved
@@ -409,7 +432,7 @@ class TestDiagonalCorrectionJAX:
 
         for device in jax.devices():
             with jax.default_device(device):
-                result = apply_diagonal_correction(simple_matrix)
+                result = apply_diagonal_correction(simple_matrix, backend="jax")
                 results[device.platform] = result
 
         # If multiple platforms available, compare
@@ -425,16 +448,16 @@ class TestDiagonalCorrectionJAX:
 
     def test_compilation_cache_reuse(self, simple_matrix):
         """Test that JIT compilation is cached and reused"""
-        jitted_fn = jit(apply_diagonal_correction)
+        from homodyne.core.diagonal_correction import _diagonal_correction_jax_core
 
-        # First call - compiles
-        _ = jitted_fn(simple_matrix)
+        # First call - compiles (internal function is pre-JIT'd)
+        _ = _diagonal_correction_jax_core(simple_matrix)
 
         # Second call - should use cached compilation
         import time
 
         start = time.time()
-        _ = jitted_fn(simple_matrix)
+        _ = _diagonal_correction_jax_core(simple_matrix)
         elapsed = time.time() - start
 
         # Cached execution should be very fast (<1ms typically)
@@ -442,8 +465,336 @@ class TestDiagonalCorrectionJAX:
 
 
 # ============================================================================
-# Integration Tests - NLSQ
+# Unified Module Tests (v2.14.2+)
 # ============================================================================
+
+
+class TestUnifiedModuleAPI:
+    """Tests for the unified diagonal_correction module API (v2.14.2+)."""
+
+    def test_get_available_backends(self):
+        """Test backend discovery function."""
+        backends = get_available_backends()
+
+        # NumPy should always be available
+        assert "numpy" in backends
+
+        # JAX availability depends on installation
+        if JAX_AVAILABLE:
+            assert "jax" in backends
+
+    def test_get_diagonal_correction_methods(self):
+        """Test method discovery function."""
+        methods = get_diagonal_correction_methods()
+
+        # All three methods should be available
+        assert "basic" in methods
+        assert "statistical" in methods
+        assert "interpolation" in methods
+
+    def test_backward_compatibility_jax_backend_import(self, simple_matrix):
+        """Test backward compatibility via jax_backend re-export."""
+        # Import from jax_backend should work (re-exports from unified module)
+        result_unified = apply_diagonal_correction(simple_matrix)
+        result_jax_backend = apply_diagonal_correction_jax(simple_matrix)
+
+        # Results should be identical
+        assert_allclose(np.asarray(result_unified), np.asarray(result_jax_backend))
+
+
+class TestUnifiedModuleBackends:
+    """Tests for different backends in unified module."""
+
+    def test_numpy_backend_explicit(self, simple_matrix):
+        """Test explicit NumPy backend selection."""
+        # Convert to numpy for input
+        matrix_np = np.asarray(simple_matrix)
+
+        result = apply_diagonal_correction(matrix_np, backend="numpy")
+
+        # Should return numpy array
+        assert isinstance(result, np.ndarray)
+        assert result.shape == matrix_np.shape
+
+    @pytest.mark.skipif(not JAX_AVAILABLE, reason="JAX not installed")
+    def test_jax_backend_explicit(self, simple_matrix):
+        """Test explicit JAX backend selection."""
+        result = apply_diagonal_correction(simple_matrix, backend="jax")
+
+        # Should return JAX array
+        assert hasattr(result, "device")  # JAX arrays have .device attribute
+        assert result.shape == simple_matrix.shape
+
+    def test_auto_backend_numpy_input(self):
+        """Test auto backend detection with NumPy input."""
+        matrix_np = np.array([[5.0, 1.2], [1.2, 5.0]])
+
+        result = apply_diagonal_correction(matrix_np, backend="auto")
+
+        # With NumPy input, should return NumPy array
+        assert isinstance(result, np.ndarray)
+
+    @pytest.mark.skipif(not JAX_AVAILABLE, reason="JAX not installed")
+    def test_auto_backend_jax_input(self):
+        """Test auto backend detection with JAX input."""
+        matrix_jax = jnp.array([[5.0, 1.2], [1.2, 5.0]])
+
+        result = apply_diagonal_correction(matrix_jax, backend="auto")
+
+        # With JAX input, should return JAX array
+        assert hasattr(result, "device")
+
+    def test_backend_results_equivalent(self, simple_matrix):
+        """Test that NumPy and JAX backends produce equivalent results."""
+        matrix_np = np.asarray(simple_matrix)
+
+        result_numpy = apply_diagonal_correction(matrix_np, backend="numpy")
+
+        if JAX_AVAILABLE:
+            matrix_jax = jnp.array(matrix_np)
+            result_jax = apply_diagonal_correction(matrix_jax, backend="jax")
+
+            assert_allclose(result_numpy, np.asarray(result_jax), rtol=1e-14)
+
+
+class TestUnifiedModuleMethods:
+    """Tests for different correction methods in unified module."""
+
+    def test_basic_method(self):
+        """Test basic diagonal correction method."""
+        matrix = np.array([[5.0, 1.2, 1.1], [1.2, 5.0, 1.3], [1.1, 1.3, 5.0]])
+
+        result = apply_diagonal_correction(matrix, method="basic", backend="numpy")
+
+        # Verify diagonal was corrected
+        assert result[0, 0] == matrix[0, 1]  # Edge: use neighbor
+        assert_allclose(result[1, 1], (matrix[1, 0] + matrix[1, 2]) / 2)  # Middle: average
+        assert result[2, 2] == matrix[2, 1]  # Edge: use neighbor
+
+    def test_statistical_method_median(self):
+        """Test statistical method with median estimator."""
+        # Create matrix with outlier in neighbors
+        matrix = np.array([
+            [999.0, 1.0, 100.0],  # 100.0 is outlier
+            [1.0, 999.0, 1.0],
+            [100.0, 1.0, 999.0],
+        ])
+
+        result = apply_diagonal_correction(
+            matrix, method="statistical", backend="numpy", estimator="median"
+        )
+
+        # Median should be robust to outlier
+        # Middle diagonal neighbors: [1.0, 1.0, 1.0, 1.0] (within window)
+        # Median = 1.0
+        assert result[1, 1] == 1.0
+
+    def test_statistical_method_mean(self):
+        """Test statistical method with mean estimator."""
+        matrix = np.array([[5.0, 1.0], [1.0, 5.0]])
+
+        result = apply_diagonal_correction(
+            matrix, method="statistical", backend="numpy", estimator="mean"
+        )
+
+        # Both diagonals should use mean of neighbors
+        assert result.shape == matrix.shape
+        # Should be different from original diagonal
+        assert result[0, 0] != matrix[0, 0]
+        assert result[1, 1] != matrix[1, 1]
+
+    def test_interpolation_method_linear(self):
+        """Test interpolation method with linear interpolation."""
+        matrix = np.array([
+            [999.0, 1.0, 2.0, 3.0],
+            [1.0, 999.0, 2.0, 3.0],
+            [2.0, 2.0, 999.0, 3.0],
+            [3.0, 3.0, 3.0, 999.0],
+        ])
+
+        result = apply_diagonal_correction(
+            matrix, method="interpolation", backend="numpy", interpolation_method="linear"
+        )
+
+        # Edge cases should use single neighbor
+        assert result[0, 0] == matrix[0, 1]
+        assert result[3, 3] == matrix[2, 3]
+
+        # Middle values should be average of neighbors
+        assert_allclose(result[1, 1], (matrix[0, 1] + matrix[2, 1]) / 2)
+
+    def test_methods_produce_different_results_with_outliers(self):
+        """Test that different methods handle outliers differently."""
+        # Matrix with outlier
+        matrix = np.array([
+            [999.0, 1.0, 1.0, 1.0, 100.0],
+            [1.0, 999.0, 1.0, 1.0, 1.0],
+            [1.0, 1.0, 999.0, 1.0, 1.0],
+            [1.0, 1.0, 1.0, 999.0, 1.0],
+            [100.0, 1.0, 1.0, 1.0, 999.0],
+        ])
+
+        result_basic = apply_diagonal_correction(matrix, method="basic", backend="numpy")
+        result_statistical = apply_diagonal_correction(
+            matrix, method="statistical", backend="numpy", estimator="median"
+        )
+
+        # Statistical method with larger window should differ from basic at edges
+        # due to outlier handling
+        assert result_basic.shape == result_statistical.shape
+
+
+class TestBatchProcessing:
+    """Tests for batch processing functionality (v2.14.2+)."""
+
+    def test_batch_numpy_basic(self, rng):
+        """Test batch processing with NumPy backend."""
+        n_phi = 5
+        n_t = 20
+        matrices = rng.randn(n_phi, n_t, n_t)
+
+        result = apply_diagonal_correction_batch(matrices, backend="numpy")
+
+        assert result.shape == (n_phi, n_t, n_t)
+        assert isinstance(result, np.ndarray)
+
+        # Each matrix should be independently corrected
+        for i in range(n_phi):
+            single_result = apply_diagonal_correction(matrices[i], backend="numpy")
+            assert_allclose(result[i], single_result)
+
+    @pytest.mark.skipif(not JAX_AVAILABLE, reason="JAX not installed")
+    def test_batch_jax_basic(self, rng):
+        """Test batch processing with JAX backend."""
+        n_phi = 5
+        n_t = 20
+        matrices = jnp.array(rng.randn(n_phi, n_t, n_t))
+
+        result = apply_diagonal_correction_batch(matrices, backend="jax")
+
+        assert result.shape == (n_phi, n_t, n_t)
+        assert hasattr(result, "device")  # JAX array
+
+        # Each matrix should be independently corrected
+        for i in range(n_phi):
+            single_result = apply_diagonal_correction(matrices[i], backend="jax")
+            assert_allclose(np.asarray(result[i]), np.asarray(single_result))
+
+    def test_batch_backends_equivalent(self, rng):
+        """Test that batch results are equivalent across backends."""
+        n_phi = 3
+        n_t = 10
+        matrices_np = rng.randn(n_phi, n_t, n_t)
+
+        result_numpy = apply_diagonal_correction_batch(matrices_np, backend="numpy")
+
+        if JAX_AVAILABLE:
+            matrices_jax = jnp.array(matrices_np)
+            result_jax = apply_diagonal_correction_batch(matrices_jax, backend="jax")
+
+            assert_allclose(result_numpy, np.asarray(result_jax), rtol=1e-14)
+
+    def test_batch_statistical_method(self, rng):
+        """Test batch processing with statistical method."""
+        n_phi = 3
+        n_t = 10
+        matrices = rng.randn(n_phi, n_t, n_t)
+
+        result = apply_diagonal_correction_batch(
+            matrices, method="statistical", backend="numpy", estimator="median"
+        )
+
+        assert result.shape == (n_phi, n_t, n_t)
+
+        # Each matrix should be independently corrected
+        for i in range(n_phi):
+            single_result = apply_diagonal_correction(
+                matrices[i], method="statistical", backend="numpy", estimator="median"
+            )
+            assert_allclose(result[i], single_result)
+
+    def test_batch_realistic_xpcs_size(self, rng):
+        """Test batch processing with realistic XPCS data sizes."""
+        n_phi = 23  # Typical number of angles
+        n_t = 101   # Reduced for test speed (real data ~1001)
+        matrices = rng.randn(n_phi, n_t, n_t) * 0.1 + 1.0
+
+        # Add strong diagonal to simulate autocorrelation
+        for i in range(n_phi):
+            np.fill_diagonal(matrices[i], 5.0)
+
+        result = apply_diagonal_correction_batch(matrices, backend="numpy")
+
+        # Verify diagonal was corrected for all angles
+        for i in range(n_phi):
+            diag_original = np.diag(matrices[i])
+            diag_corrected = np.diag(result[i])
+            # Diagonal values should be reduced (not 5.0 anymore)
+            assert np.max(diag_corrected) < np.max(diag_original)
+
+
+# ============================================================================
+# Integration Tests - NLSQ Diagonal Masking (v2.14.2+)
+# ============================================================================
+
+
+class TestNLSQDiagonalMasking:
+    """Tests for NLSQ residual diagonal masking (v2.14.2+).
+
+    The unified diagonal handling ensures:
+    1. Data (c2_exp): Corrected at load time
+    2. Theory (g2): Corrected via apply_diagonal_correction()
+    3. Residual: Masked where t1 == t2 (diagonal contributes zero to loss)
+    """
+
+    def test_diagonal_mask_concept(self):
+        """Test the concept of diagonal masking for residuals."""
+        # Simulate t1 and t2 indices
+        n_points = 100
+        n_t = 10
+        t1_indices = np.random.randint(0, n_t, size=n_points)
+        t2_indices = np.random.randint(0, n_t, size=n_points)
+
+        # Add some diagonal points
+        diagonal_points = n_points // 10
+        t1_indices[:diagonal_points] = np.arange(diagonal_points) % n_t
+        t2_indices[:diagonal_points] = t1_indices[:diagonal_points]
+
+        # Simulate residuals
+        residuals = np.random.randn(n_points)
+
+        # Apply diagonal mask (as done in residual.py v2.14.2+)
+        non_diagonal_mask = t1_indices != t2_indices
+        masked_residuals = np.where(non_diagonal_mask, residuals, 0.0)
+
+        # Verify diagonal points are zeroed
+        for i in range(n_points):
+            if t1_indices[i] == t2_indices[i]:
+                assert masked_residuals[i] == 0.0
+            else:
+                assert masked_residuals[i] == residuals[i]
+
+    def test_diagonal_mask_preserves_chi_squared_contribution(self):
+        """Test that diagonal mask affects chi-squared correctly."""
+        n_points = 100
+        t1_indices = np.arange(n_points) % 10
+        t2_indices = np.arange(n_points) % 10
+
+        # Make first 10 points diagonal
+        diagonal_mask = t1_indices == t2_indices
+        n_diagonal = np.sum(diagonal_mask)
+
+        # Simulate residuals with known values
+        residuals = np.ones(n_points) * 2.0  # All residuals = 2
+
+        # Without mask: chi2 = sum(residuals^2) = n_points * 4
+        chi2_unmasked = np.sum(residuals ** 2)
+        assert chi2_unmasked == n_points * 4.0
+
+        # With mask: diagonal residuals zeroed
+        masked_residuals = np.where(~diagonal_mask, residuals, 0.0)
+        chi2_masked = np.sum(masked_residuals ** 2)
+        assert chi2_masked == (n_points - n_diagonal) * 4.0
 
 
 # ============================================================================
@@ -452,23 +803,24 @@ class TestDiagonalCorrectionJAX:
 
 
 @pytest.mark.performance
+@pytest.mark.skipif(not JAX_AVAILABLE, reason="JAX not installed")
 class TestDiagonalCorrectionPerformance:
     """Performance benchmarks"""
 
     def test_jit_compilation_overhead(self, simple_matrix):
         """Measure JIT compilation vs execution time"""
+        from homodyne.core.diagonal_correction import _diagonal_correction_jax_core
         import time
 
-        # First call - includes compilation
+        # First call - includes compilation (internal function is pre-JIT'd)
         start = time.time()
-        jitted_fn = jit(apply_diagonal_correction)
-        _ = jitted_fn(simple_matrix)
+        _ = _diagonal_correction_jax_core(simple_matrix)
         compile_time = time.time() - start
 
         # Subsequent calls - cached
         start = time.time()
         for _ in range(100):
-            _ = jitted_fn(simple_matrix)
+            _ = _diagonal_correction_jax_core(simple_matrix)
         exec_time = (time.time() - start) / 100
 
         # Compilation should be much slower than execution

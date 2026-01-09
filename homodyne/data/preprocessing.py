@@ -110,6 +110,16 @@ except ImportError:
         return decorator
 
 
+# Diagonal correction from unified module
+try:
+    from homodyne.core.diagonal_correction import apply_diagonal_correction
+
+    HAS_DIAGONAL_CORRECTION = True
+except ImportError:
+    HAS_DIAGONAL_CORRECTION = False
+    apply_diagonal_correction = None
+
+
 logger = get_logger(__name__)
 
 
@@ -510,6 +520,9 @@ class PreprocessingPipeline:
     ) -> dict[str, Any]:
         """Enhanced diagonal correction with multiple statistical methods.
 
+        Uses unified diagonal_correction module (v2.14.2+) with fallback
+        to local implementations for backward compatibility.
+
         Goes beyond basic diagonal correction to provide statistical methods
         for improving correlation matrix quality.
         """
@@ -518,43 +531,56 @@ class PreprocessingPipeline:
 
         logger.debug(f"Applying enhanced diagonal correction: {method}")
 
-        if method == "basic":
-            # Use existing basic diagonal correction
-            corrected_data = data.copy()
-            for i in range(len(c2_exp)):
-                corrected_data["c2_exp"][i] = self._basic_diagonal_correction(c2_exp[i])
+        corrected_data = data.copy()
 
-        elif method == "statistical":
-            # Statistical diagonal correction using neighboring values
-            corrected_data = data.copy()
+        # Use unified module if available
+        if HAS_DIAGONAL_CORRECTION and apply_diagonal_correction is not None:
             for i in range(len(c2_exp)):
-                corrected_data["c2_exp"][i] = self._statistical_diagonal_correction(
+                corrected_data["c2_exp"][i] = apply_diagonal_correction(
                     c2_exp[i],
-                    config,
+                    method=method,
+                    backend="numpy",
+                    **config,
                 )
-
-        elif method == "interpolation":
-            # Interpolation-based correction
-            corrected_data = data.copy()
-            for i in range(len(c2_exp)):
-                corrected_data["c2_exp"][i] = self._interpolation_diagonal_correction(
-                    c2_exp[i],
-                    config,
-                )
-
         else:
-            logger.warning(
-                f"Unknown diagonal correction method: {method}, using statistical",
-            )
-            return self._correct_diagonal_enhanced(
-                data,
-                {**config, "method": "statistical"},
-            )
+            # Fallback to local implementations
+            if method == "basic":
+                for i in range(len(c2_exp)):
+                    corrected_data["c2_exp"][i] = self._basic_diagonal_correction(
+                        c2_exp[i]
+                    )
+            elif method == "statistical":
+                for i in range(len(c2_exp)):
+                    corrected_data["c2_exp"][i] = self._statistical_diagonal_correction(
+                        c2_exp[i],
+                        config,
+                    )
+            elif method == "interpolation":
+                for i in range(len(c2_exp)):
+                    corrected_data["c2_exp"][i] = (
+                        self._interpolation_diagonal_correction(
+                            c2_exp[i],
+                            config,
+                        )
+                    )
+            else:
+                logger.warning(
+                    f"Unknown diagonal correction method: {method}, using statistical",
+                )
+                return self._correct_diagonal_enhanced(
+                    data,
+                    {**config, "method": "statistical"},
+                )
 
         return corrected_data
 
     def _basic_diagonal_correction(self, c2_mat: np.ndarray) -> np.ndarray:
-        """Basic diagonal correction as implemented in xpcs_loader.py."""
+        """Basic diagonal correction as implemented in xpcs_loader.py.
+
+        .. deprecated:: 2.16.0
+            Use :func:`homodyne.core.diagonal_correction.apply_diagonal_correction`
+            with method="basic" instead.
+        """
         size = c2_mat.shape[0]
         side_band = c2_mat[(np.arange(size - 1), np.arange(1, size))]
         diag_val = np.zeros(size)
@@ -571,7 +597,12 @@ class PreprocessingPipeline:
         c2_mat: np.ndarray,
         config: dict[str, Any],
     ) -> np.ndarray:
-        """Statistical diagonal correction using robust estimators."""
+        """Statistical diagonal correction using robust estimators.
+
+        .. deprecated:: 2.16.0
+            Use :func:`homodyne.core.diagonal_correction.apply_diagonal_correction`
+            with method="statistical" instead.
+        """
         c2_corrected = c2_mat.copy()
         size = c2_mat.shape[0]
 
@@ -621,7 +652,12 @@ class PreprocessingPipeline:
         c2_mat: np.ndarray,
         config: dict[str, Any],
     ) -> np.ndarray:
-        """Interpolation-based diagonal correction."""
+        """Interpolation-based diagonal correction.
+
+        .. deprecated:: 2.16.0
+            Use :func:`homodyne.core.diagonal_correction.apply_diagonal_correction`
+            with method="interpolation" instead.
+        """
         c2_corrected = c2_mat.copy()
         size = c2_mat.shape[0]
 

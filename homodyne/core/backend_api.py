@@ -62,6 +62,7 @@ from homodyne.core.physics_utils import (
     EPS,
     PI,
     apply_diagonal_correction,
+    apply_diagonal_correction_batch,
     calculate_diffusion_coefficient,
     calculate_shear_rate,
     calculate_shear_rate_cmc,
@@ -183,6 +184,7 @@ __all__ = [
     "create_time_integral_matrix",
     "trapezoid_cumsum",
     "apply_diagonal_correction",
+    "apply_diagonal_correction_batch",
     # NLSQ backend (meshgrid)
     "compute_g2_nlsq",
     "compute_g2_nlsq_with_factors",
