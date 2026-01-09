@@ -348,8 +348,10 @@ class StratifiedResidualFunctionJIT:
         EPS = 1e-10
         residuals_raw = (g2_obs_chunk - g2_theory_chunk) / (sigma_chunk + EPS)
 
-        # Mask out padded values (set to zero)
-        residuals_masked = jnp.where(mask_chunk, residuals_raw, 0.0)
+        # v2.14.2+: Mask out both padded values AND diagonal values (t1 == t2)
+        # Diagonal points are autocorrelation artifacts, not physics
+        non_diagonal = t1_indices != t2_indices
+        residuals_masked = jnp.where(mask_chunk & non_diagonal, residuals_raw, 0.0)
 
         return residuals_masked
 

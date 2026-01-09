@@ -1,13 +1,14 @@
-"""Anti-Degeneracy Controller - Orchestrator for 4-Layer Defense System.
+"""Anti-Degeneracy Controller - Orchestrator for 5-Layer Defense System.
 
 This module provides a clean interface for initializing and coordinating
-the 4-layer anti-degeneracy defense system for NLSQ optimization.
+the 5-layer anti-degeneracy defense system for NLSQ optimization.
 
 The controller encapsulates:
-- Layer 1: Fourier Reparameterization
+- Layer 1: Fourier/Constant Reparameterization
 - Layer 2: Hierarchical Optimization
 - Layer 3: Adaptive CV-based Regularization
 - Layer 4: Gradient Collapse Monitoring
+- Layer 5: Shear-Sensitivity Weighting
 
 Usage::
 
@@ -47,6 +48,10 @@ from homodyne.optimization.nlsq.hierarchical import (
     HierarchicalOptimizer,
 )
 from homodyne.optimization.nlsq.parameter_index_mapper import ParameterIndexMapper
+from homodyne.optimization.nlsq.shear_weighting import (
+    ShearSensitivityWeighting,
+    ShearWeightingConfig,
+)
 from homodyne.utils.logging import get_logger
 
 logger = get_logger(__name__)
@@ -111,6 +116,12 @@ class AntiDegeneracyConfig:
     gradient_ratio_threshold: float = 0.01
     gradient_consecutive_triggers: int = 5
     gradient_response_mode: str = "hierarchical"
+    # Layer 5: Shear-Sensitivity Weighting
+    shear_weighting_enable: bool = True
+    shear_weighting_min_weight: float = 0.3
+    shear_weighting_alpha: float = 1.0
+    shear_weighting_update_frequency: int = 1
+    shear_weighting_normalize: bool = True
 
     @classmethod
     def from_dict(cls, config_dict: dict[str, Any]) -> AntiDegeneracyConfig:
@@ -139,6 +150,7 @@ class AntiDegeneracyConfig:
         hierarchical = config_dict.get("hierarchical", {})
         regularization = config_dict.get("regularization", {})
         gradient_monitoring = config_dict.get("gradient_monitoring", {})
+        shear_weighting = config_dict.get("shear_weighting", {})
 
         return cls(
             enable=config_dict.get("enable", True),
@@ -177,12 +189,20 @@ class AntiDegeneracyConfig:
                 "consecutive_triggers", 5
             ),
             gradient_response_mode=gradient_monitoring.get("response", "hierarchical"),
+            # Shear weighting
+            shear_weighting_enable=shear_weighting.get("enable", True),
+            shear_weighting_min_weight=float(shear_weighting.get("min_weight", 0.3)),
+            shear_weighting_alpha=float(shear_weighting.get("alpha", 1.0)),
+            shear_weighting_update_frequency=int(
+                shear_weighting.get("update_frequency", 1)
+            ),
+            shear_weighting_normalize=shear_weighting.get("normalize", True),
         )
 
 
 @dataclass
 class AntiDegeneracyController:
-    """Orchestrator for the 4-Layer Anti-Degeneracy Defense System.
+    """Orchestrator for the 5-Layer Anti-Degeneracy Defense System.
 
     This controller provides a clean interface for initializing and
     coordinating all anti-degeneracy components.
@@ -205,8 +225,10 @@ class AntiDegeneracyController:
         Layer 3: Adaptive regularization component.
     monitor : GradientCollapseMonitor | None
         Layer 4: Gradient collapse monitoring component.
+    shear_weighter : ShearSensitivityWeighting | None
+        Layer 5: Shear-sensitivity weighting component.
     per_angle_mode_actual : str
-        Actual mode used ("fourier" or "independent").
+        Actual mode used ("constant", "fourier", or "independent").
     """
 
     config: AntiDegeneracyConfig
@@ -217,6 +239,7 @@ class AntiDegeneracyController:
     hierarchical: HierarchicalOptimizer | None = None
     regularizer: AdaptiveRegularizer | None = None
     monitor: GradientCollapseMonitor | None = None
+    shear_weighter: ShearSensitivityWeighting | None = None  # Layer 5
     mapper: ParameterIndexMapper | None = None  # T018: Centralized index mapping
     per_angle_mode_actual: str = "independent"
     _is_initialized: bool = field(default=False, repr=False)
@@ -415,6 +438,30 @@ class AntiDegeneracyController:
             logger.info(f"  Response mode: {config.gradient_response_mode}")
             logger.info("=" * 60)
 
+        # Layer 5: Shear-Sensitivity Weighting
+        if config.shear_weighting_enable and self.n_phi > 3:
+            sw_config = ShearWeightingConfig(
+                enable=True,
+                min_weight=config.shear_weighting_min_weight,
+                alpha=config.shear_weighting_alpha,
+                update_frequency=config.shear_weighting_update_frequency,
+                initial_phi0=0.0,  # Will be updated from initial params
+                normalize=config.shear_weighting_normalize,
+            )
+            self.shear_weighter = ShearSensitivityWeighting(
+                phi_angles=self.phi_angles,
+                n_physical=self.n_physical,
+                phi0_index=6,  # phi0 is last of 7 physical params
+                config=sw_config,
+            )
+            logger.info("=" * 60)
+            logger.info("ANTI-DEGENERACY: Layer 5 - Shear-Sensitivity Weighting")
+            logger.info("  Enabled: True")
+            logger.info(f"  n_phi: {self.n_phi}")
+            logger.info(f"  min_weight: {config.shear_weighting_min_weight:.2f}")
+            logger.info(f"  alpha: {config.shear_weighting_alpha:.1f}")
+            logger.info("=" * 60)
+
         self._is_initialized = True
 
     @property
@@ -436,6 +483,11 @@ class AntiDegeneracyController:
     def use_hierarchical(self) -> bool:
         """Check if hierarchical optimization is active."""
         return self.hierarchical is not None
+
+    @property
+    def use_shear_weighting(self) -> bool:
+        """Check if shear-sensitivity weighting is active."""
+        return self.shear_weighter is not None
 
     @property
     def n_per_angle_params(self) -> int:
@@ -594,14 +646,15 @@ class AntiDegeneracyController:
         Returns
         -------
         dict
-            Nested diagnostics from all 4 layers.
+            Nested diagnostics from all 5 layers.
         """
         diag: dict[str, Any] = {
-            "version": "2.9.1",
+            "version": "2.14.0",
             "enabled": self.is_enabled,
             "per_angle_mode": self.per_angle_mode_actual,
             "use_constant": self.use_constant,
             "use_fourier": self.use_fourier,
+            "use_shear_weighting": self.use_shear_weighting,
             "n_phi": self.n_phi,
             "n_physical": self.n_physical,
             "n_per_angle_params": self.n_per_angle_params,
@@ -623,12 +676,38 @@ class AntiDegeneracyController:
         if self.monitor:
             diag["gradient_monitor"] = self.monitor.get_diagnostics()
 
+        if self.shear_weighter:
+            diag["shear_weighting"] = self.shear_weighter.get_diagnostics()
+
         return diag
 
     def reset_monitor(self) -> None:
         """Reset the gradient collapse monitor state."""
         if self.monitor:
             self.monitor.reset()
+
+    def get_shear_weights(self) -> np.ndarray | None:
+        """Get shear-sensitivity weights for residuals.
+
+        Returns
+        -------
+        np.ndarray | None
+            Array of weights (one per phi angle), or None if not enabled.
+        """
+        if self.shear_weighter is None:
+            return None
+        return self.shear_weighter.get_weights()
+
+    def update_shear_phi0(self, phi0: float) -> None:
+        """Update the phi0 value in shear weighter.
+
+        Parameters
+        ----------
+        phi0 : float
+            New phi0 value in radians.
+        """
+        if self.shear_weighter is not None:
+            self.shear_weighter.update_phi0(phi0)
 
     def create_nlsq_callbacks(self) -> dict[str, Any]:
         """Create callbacks for NLSQ's CurveFit integration.
@@ -731,6 +810,11 @@ class AntiDegeneracyController:
             kwargs["enable_group_variance_regularization"] = True
             kwargs["group_variance_lambda"] = self.regularizer.lambda_value
             kwargs["group_variance_indices"] = group_indices
+
+        # Shear-sensitivity weighting
+        if self.shear_weighter is not None:
+            kwargs["enable_residual_weighting"] = True
+            kwargs["residual_weights"] = self.shear_weighter.get_weights().tolist()
 
         logger.debug(f"Created HybridStreamingConfig kwargs: {list(kwargs.keys())}")
         return kwargs

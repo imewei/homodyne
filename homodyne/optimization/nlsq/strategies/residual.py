@@ -189,6 +189,8 @@ class StratifiedResidualFunction:
         # This ensures flat indexing calculations use correct dimensions
         self.chunk_metadata = []
         self._precomputed_flat_indices = []
+        self._precomputed_t1_indices = []  # v2.14.2+: for diagonal masking
+        self._precomputed_t2_indices = []  # v2.14.2+: for diagonal masking
 
         for chunk in self.chunks:
             metadata = {
@@ -199,7 +201,8 @@ class StratifiedResidualFunction:
             self.chunk_metadata.append(metadata)
 
             # Pre-compute flat indices for this chunk (FR-001 optimization)
-            flat_indices = self._compute_flat_indices(
+            # v2.14.2+: Also returns t1/t2 indices for diagonal masking
+            flat_indices, t1_indices, t2_indices = self._compute_flat_indices(
                 phi=chunk.phi,
                 t1=chunk.t1,
                 t2=chunk.t2,
@@ -208,6 +211,8 @@ class StratifiedResidualFunction:
                 t2_unique=global_t2_unique,
             )
             self._precomputed_flat_indices.append(flat_indices)
+            self._precomputed_t1_indices.append(t1_indices)
+            self._precomputed_t2_indices.append(t2_indices)
 
         self.logger.debug(
             f"Pre-computed flat indices for {len(self._precomputed_flat_indices)} chunks"
@@ -221,12 +226,14 @@ class StratifiedResidualFunction:
         phi_unique: jnp.ndarray,
         t1_unique: jnp.ndarray,
         t2_unique: jnp.ndarray,
-    ) -> jnp.ndarray:
+    ) -> tuple[jnp.ndarray, jnp.ndarray, jnp.ndarray]:
         """
         Compute flat indices for mapping chunk points to global grid positions.
 
         This helper method computes the 1D flat indices that map each point
         in a chunk to its position in the flattened 3D grid (phi × t1 × t2).
+
+        Also returns t1_indices and t2_indices for diagonal masking (v2.14.2+).
 
         Performance Note (Spec 006 - FR-001):
         This method is called once during __init__ to pre-compute indices,
@@ -250,8 +257,10 @@ class StratifiedResidualFunction:
 
         Returns
         -------
-        jnp.ndarray
-            Flat indices for this chunk's points into the global grid
+        tuple[jnp.ndarray, jnp.ndarray, jnp.ndarray]
+            - flat_indices: Flat indices for this chunk's points into the global grid
+            - t1_indices: t1 indices for diagonal masking
+            - t2_indices: t2 indices for diagonal masking
         """
         # Convert to JAX arrays for searchsorted
         phi_jax = jnp.asarray(phi)
@@ -268,7 +277,7 @@ class StratifiedResidualFunction:
         n_t2 = len(t2_unique)
         flat_indices = phi_indices * (n_t1 * n_t2) + t1_indices * n_t2 + t2_indices
 
-        return flat_indices
+        return flat_indices, t1_indices, t2_indices
 
     def _setup_jax_functions(self):
         """
@@ -321,6 +330,8 @@ class StratifiedResidualFunction:
         Attributes Created:
             g2_all: Concatenated g2 observations from all chunks
             flat_indices_all: Concatenated pre-computed flat indices
+            t1_indices_all: Concatenated t1 indices for diagonal masking (v2.14.2+)
+            t2_indices_all: Concatenated t2 indices for diagonal masking (v2.14.2+)
             chunk_boundaries: Array of boundary indices [0, len(chunk0), len(chunk0)+len(chunk1), ...]
             _chunk_q: q value (same for all chunks)
             _chunk_L: L value (same for all chunks)
@@ -332,6 +343,10 @@ class StratifiedResidualFunction:
 
         # Concatenate pre-computed flat indices
         self.flat_indices_all = jnp.concatenate(self._precomputed_flat_indices, axis=0)
+
+        # v2.14.2+: Concatenate t1/t2 indices for diagonal masking
+        self.t1_indices_all = jnp.concatenate(self._precomputed_t1_indices, axis=0)
+        self.t2_indices_all = jnp.concatenate(self._precomputed_t2_indices, axis=0)
 
         # Compute chunk boundaries for index lookup
         chunk_sizes = [len(chunk_jax["g2"]) for chunk_jax in self.chunks_jax]
@@ -365,6 +380,8 @@ class StratifiedResidualFunction:
         t1_unique: jnp.ndarray,
         t2_unique: jnp.ndarray,
         flat_indices: jnp.ndarray,
+        t1_indices: jnp.ndarray,
+        t2_indices: jnp.ndarray,
         q: float,
         L: float,
         dt: float | None,
@@ -391,6 +408,8 @@ class StratifiedResidualFunction:
             t1_unique: Pre-computed unique t1 values (avoid jnp.unique in JIT)
             t2_unique: Pre-computed unique t2 values (avoid jnp.unique in JIT)
             flat_indices: Pre-computed flat indices for this chunk (FR-001 optimization)
+            t1_indices: Pre-computed t1 indices for diagonal masking (v2.14.2+)
+            t2_indices: Pre-computed t2 indices for diagonal masking (v2.14.2+)
             q: Wave vector magnitude (1/Å)
             L: Sample-to-detector distance (mm)
             dt: Time step (seconds), optional
@@ -473,6 +492,10 @@ class StratifiedResidualFunction:
         # Compute weighted residuals
         EPS = 1e-10
         residuals = (g2_obs - g2_theory_chunk) / (sigma_chunk + EPS)
+
+        # v2.14.2+: Mask diagonal points (t1 == t2) to zero
+        # Diagonal points are autocorrelation artifacts, not physics
+        residuals = jnp.where(t1_indices != t2_indices, residuals, 0.0)
 
         return residuals
 
@@ -582,6 +605,12 @@ class StratifiedResidualFunction:
         EPS = 1e-10
         residuals = (self.g2_all - g2_theory_all) / (sigma_all + EPS)
 
+        # v2.14.2+: Mask diagonal points (t1 == t2) to zero
+        # Diagonal points are autocorrelation artifacts, not physics
+        residuals = jnp.where(
+            self.t1_indices_all != self.t2_indices_all, residuals, 0.0
+        )
+
         return residuals
 
     def _call_jax_chunked(self, params: jnp.ndarray) -> jnp.ndarray:
@@ -599,6 +628,8 @@ class StratifiedResidualFunction:
         for i, chunk_jax in enumerate(self.chunks_jax):
             metadata = self.chunk_metadata[i]
             flat_indices = self._precomputed_flat_indices[i]
+            t1_indices = self._precomputed_t1_indices[i]
+            t2_indices = self._precomputed_t2_indices[i]
 
             # Use pre-converted JAX arrays and pre-computed indices
             chunk_residuals = self.compute_chunk_jit(
@@ -609,6 +640,8 @@ class StratifiedResidualFunction:
                 t1_unique=metadata["t1_unique"],
                 t2_unique=metadata["t2_unique"],
                 flat_indices=flat_indices,
+                t1_indices=t1_indices,
+                t2_indices=t2_indices,
                 q=chunk_jax["q"],
                 L=chunk_jax["L"],
                 dt=chunk_jax["dt"],

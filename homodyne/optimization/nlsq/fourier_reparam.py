@@ -243,6 +243,34 @@ class FourierReparameterizer:
 
         return B
 
+    def get_basis_matrix(self) -> np.ndarray | None:
+        """Get the Fourier basis matrix for covariance transformation.
+
+        Returns
+        -------
+        np.ndarray or None
+            Basis matrix of shape (n_phi, n_coeffs_per_param) if in Fourier mode,
+            None if in independent mode. The basis matrix B satisfies:
+            per_angle_values = B @ fourier_coeffs
+
+        Notes
+        -----
+        Used for transforming covariance from Fourier space to per-angle space:
+        pcov_per_angle = B @ pcov_fourier @ B.T
+        """
+        return self._basis_matrix
+
+    @property
+    def order(self) -> int:
+        """Get the Fourier order (number of harmonics).
+
+        Returns
+        -------
+        int
+            Fourier order from config.
+        """
+        return self.config.fourier_order
+
     def fourier_to_per_angle(
         self, fourier_coeffs: np.ndarray
     ) -> tuple[np.ndarray, np.ndarray]:

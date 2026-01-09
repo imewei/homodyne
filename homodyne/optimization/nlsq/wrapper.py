@@ -122,6 +122,9 @@ from homodyne.optimization.nlsq.strategies.residual import (
 from homodyne.optimization.nlsq.strategies.residual_jit import (
     StratifiedResidualFunctionJIT,
 )
+from homodyne.optimization.nlsq.anti_degeneracy_controller import (
+    AntiDegeneracyController,
+)
 # Local OptimizationStrategy enum (selection.py removed in v2.13.0)
 # This is kept for backward compatibility with fallback chain logic
 from enum import Enum as _Enum
@@ -921,6 +924,12 @@ class NLSQWrapper(NLSQAdapterBase):
                 "optimization", {}
             ).get("fast_chi2_mode", False)
 
+            # Extract anti-degeneracy config (will warn that it's not supported for out-of-core)
+            ooc_anti_degeneracy_config = None
+            if config is not None and hasattr(config, "config"):
+                ooc_nlsq_config = config.config.get("optimization", {}).get("nlsq", {})
+                ooc_anti_degeneracy_config = ooc_nlsq_config.get("anti_degeneracy", {})
+
             popt, pcov, info = self._fit_with_out_of_core_accumulation(
                 stratified_data=None,
                 data=data,
@@ -931,6 +940,7 @@ class NLSQWrapper(NLSQAdapterBase):
                 logger=logger,
                 config=config,
                 fast_chi2_mode=use_fast_mode,
+                anti_degeneracy_config=ooc_anti_degeneracy_config,
             )
 
             execution_time = time.time() - start_time
@@ -1221,6 +1231,12 @@ class NLSQWrapper(NLSQAdapterBase):
                     else False
                 )
 
+                # Extract anti-degeneracy config (will warn that it's not supported for out-of-core)
+                recheck_anti_degeneracy_config = None
+                if config is not None and hasattr(config, "config"):
+                    recheck_nlsq_config = config.config.get("optimization", {}).get("nlsq", {})
+                    recheck_anti_degeneracy_config = recheck_nlsq_config.get("anti_degeneracy", {})
+
                 popt, pcov, info = self._fit_with_out_of_core_accumulation(
                     stratified_data=stratified_data,
                     data=data,
@@ -1231,6 +1247,7 @@ class NLSQWrapper(NLSQAdapterBase):
                     logger=logger,
                     config=config,
                     fast_chi2_mode=use_fast_mode,
+                    anti_degeneracy_config=recheck_anti_degeneracy_config,
                 )
 
                 execution_time = time.time() - start_time
@@ -1445,6 +1462,18 @@ class NLSQWrapper(NLSQAdapterBase):
                     )
                     # Fall through to stratified least-squares
 
+            # Extract anti-degeneracy config for defense system v2.14.0
+            # (Now applies to stratified LS, not just hybrid streaming)
+            anti_degeneracy_config = None
+            if config is not None and hasattr(config, "config"):
+                nlsq_config_ad = config.config.get("optimization", {}).get("nlsq", {})
+                anti_degeneracy_config = nlsq_config_ad.get("anti_degeneracy", {})
+                if anti_degeneracy_config:
+                    logger.info(
+                        f"Anti-Degeneracy config loaded: per_angle_mode="
+                        f"{anti_degeneracy_config.get('per_angle_mode', 'auto')}"
+                    )
+
             # Call stratified least_squares optimization
             try:
                 popt, pcov, info = self._fit_with_stratified_least_squares(
@@ -1455,6 +1484,7 @@ class NLSQWrapper(NLSQAdapterBase):
                     bounds=nlsq_bounds,
                     logger=logger,
                     target_chunk_size=target_chunk_size,
+                    anti_degeneracy_config=anti_degeneracy_config,
                 )
 
                 # Compute final residuals for result creation
@@ -4278,6 +4308,7 @@ class NLSQWrapper(NLSQAdapterBase):
         bounds: tuple[np.ndarray, np.ndarray] | None,
         logger: Any,
         target_chunk_size: int = 100_000,
+        anti_degeneracy_config: dict | None = None,
     ) -> tuple[np.ndarray, np.ndarray, dict]:
         """Fit using NLSQ's least_squares() with stratified residual function.
 
@@ -4297,6 +4328,7 @@ class NLSQWrapper(NLSQAdapterBase):
         - Compatible with per-angle scaling parameters
         - CPU-optimized execution
         - Trust-region reflective (TRF) algorithm
+        - Anti-Degeneracy Defense System (v2.14.0+)
 
         Args:
             stratified_data: StratifiedData object with flat stratified arrays
@@ -4306,6 +4338,7 @@ class NLSQWrapper(NLSQAdapterBase):
             bounds: Parameter bounds (lower, upper) tuple
             logger: Logger instance
             target_chunk_size: Target size for each chunk (default: 100k points)
+            anti_degeneracy_config: Optional config dict for Anti-Degeneracy Defense System
 
         Returns:
             (popt, pcov, info) tuple:
@@ -4327,6 +4360,82 @@ class NLSQWrapper(NLSQAdapterBase):
         logger.info("STRATIFIED LEAST-SQUARES OPTIMIZATION")
         logger.info("Using NLSQ's least_squares() with angle-stratified chunks")
         logger.info("=" * 80)
+
+        # =====================================================================
+        # Anti-Degeneracy Defense System (v2.14.0+)
+        # =====================================================================
+        is_laminar_flow = "gamma_dot_t0" in physical_param_names
+        n_phi = len(np.unique(stratified_data.phi_flat))
+        n_physical = len(physical_param_names)
+
+        # Initialize anti-degeneracy controller
+        ad_controller = None
+        if anti_degeneracy_config is not None and per_angle_scaling and is_laminar_flow:
+            phi_unique_rad = np.deg2rad(np.array(sorted(set(stratified_data.phi_flat))))
+            ad_controller = AntiDegeneracyController.from_config(
+                config_dict=anti_degeneracy_config,
+                n_phi=n_phi,
+                phi_angles=phi_unique_rad,
+                n_physical=n_physical,
+                per_angle_scaling=per_angle_scaling,
+                is_laminar_flow=is_laminar_flow,
+            )
+
+            if ad_controller.is_enabled:
+                logger.info("=" * 60)
+                logger.info("ANTI-DEGENERACY DEFENSE: Enabled for Stratified LS")
+                logger.info(f"  per_angle_mode: {ad_controller.per_angle_mode_actual}")
+                logger.info(f"  use_constant: {ad_controller.use_constant}")
+                logger.info(f"  use_fourier: {ad_controller.use_fourier}")
+                logger.info(f"  use_shear_weighting: {ad_controller.use_shear_weighting}")
+                logger.info("=" * 60)
+
+                # Transform initial parameters for constant/fourier mode
+                if ad_controller.use_constant:
+                    logger.info(
+                        f"Transforming parameters: constant mode ({len(initial_params)} -> "
+                        f"{2 + n_physical})"
+                    )
+                    initial_params = ad_controller.transform_params_to_constant(initial_params)
+                    if bounds is not None:
+                        # Transform bounds for constant mode
+                        lower, upper = bounds
+                        lower_const = np.concatenate([
+                            [np.mean(lower[:n_phi])],  # contrast lower
+                            [np.mean(lower[n_phi:2*n_phi])],  # offset lower
+                            lower[2*n_phi:],  # physical lower
+                        ])
+                        upper_const = np.concatenate([
+                            [np.mean(upper[:n_phi])],  # contrast upper
+                            [np.mean(upper[n_phi:2*n_phi])],  # offset upper
+                            upper[2*n_phi:],  # physical upper
+                        ])
+                        bounds = (lower_const, upper_const)
+                        logger.debug(f"Transformed bounds to constant mode: {bounds[0].shape}")
+
+                elif ad_controller.use_fourier:
+                    logger.info(
+                        f"Transforming parameters: Fourier mode ({len(initial_params)} -> "
+                        f"{ad_controller.n_per_angle_params + n_physical})"
+                    )
+                    initial_params, _ = ad_controller.transform_params_to_fourier(initial_params)
+                    if bounds is not None:
+                        # Transform bounds for Fourier mode
+                        lower, upper = bounds
+                        n_coeffs = ad_controller.fourier.n_coeffs_per_param
+                        # Use the mean of bounds for Fourier coefficients
+                        lower_fourier = np.concatenate([
+                            np.full(n_coeffs, np.mean(lower[:n_phi])),  # contrast coeffs
+                            np.full(n_coeffs, np.mean(lower[n_phi:2*n_phi])),  # offset coeffs
+                            lower[2*n_phi:],  # physical lower
+                        ])
+                        upper_fourier = np.concatenate([
+                            np.full(n_coeffs, np.mean(upper[:n_phi])),  # contrast coeffs
+                            np.full(n_coeffs, np.mean(upper[n_phi:2*n_phi])),  # offset coeffs
+                            upper[2*n_phi:],  # physical upper
+                        ])
+                        bounds = (lower_fourier, upper_fourier)
+                        logger.debug(f"Transformed bounds to Fourier mode: {bounds[0].shape}")
 
         # Convert stratified flat arrays into chunks
         logger.info(
@@ -4605,6 +4714,81 @@ class NLSQWrapper(NLSQAdapterBase):
                 "  - Problem with gradient computation"
             )
 
+        # =====================================================================
+        # Anti-Degeneracy: Inverse Transformation (v2.14.0+)
+        # =====================================================================
+        # If constant or Fourier mode was used, expand back to per-angle params
+        anti_degeneracy_info = {}
+        if ad_controller is not None and ad_controller.is_enabled:
+            if ad_controller.use_constant:
+                logger.info(
+                    f"Expanding parameters from constant mode ({len(popt)} -> "
+                    f"{2 * n_phi + n_physical})"
+                )
+                popt_expanded = ad_controller.transform_params_from_constant(popt)
+
+                # Transform covariance matrix (expand diagonal)
+                # For constant mode: each per-angle param gets same variance as the constant
+                pcov_expanded = np.zeros((len(popt_expanded), len(popt_expanded)))
+                # Contrast variance: duplicate for all angles
+                pcov_expanded[:n_phi, :n_phi] = np.eye(n_phi) * pcov[0, 0]
+                # Offset variance: duplicate for all angles
+                pcov_expanded[n_phi:2*n_phi, n_phi:2*n_phi] = np.eye(n_phi) * pcov[1, 1]
+                # Physical params covariance
+                pcov_expanded[2*n_phi:, 2*n_phi:] = pcov[2:, 2:]
+                # Cross-terms (physical with constant) - approximate
+                pcov_expanded[2*n_phi:, :n_phi] = np.tile(pcov[2:, 0:1], (1, n_phi))
+                pcov_expanded[:n_phi, 2*n_phi:] = np.tile(pcov[0:1, 2:], (n_phi, 1))
+                pcov_expanded[2*n_phi:, n_phi:2*n_phi] = np.tile(pcov[2:, 1:2], (1, n_phi))
+                pcov_expanded[n_phi:2*n_phi, 2*n_phi:] = np.tile(pcov[1:2, 2:], (n_phi, 1))
+
+                popt = popt_expanded
+                pcov = pcov_expanded
+                logger.info(f"Expanded to {len(popt)} per-angle parameters")
+                anti_degeneracy_info["mode"] = "constant"
+                anti_degeneracy_info["original_n_params"] = 2 + n_physical
+                anti_degeneracy_info["expanded_n_params"] = len(popt)
+
+            elif ad_controller.use_fourier:
+                logger.info(
+                    f"Expanding parameters from Fourier mode ({len(popt)} -> "
+                    f"{2 * n_phi + n_physical})"
+                )
+                popt_expanded = ad_controller.transform_params_from_fourier(popt)
+
+                # Transform covariance matrix (Jacobian-based propagation)
+                # For Fourier mode: use chain rule with Fourier basis
+                # pcov_expanded = B @ pcov_fourier @ B.T where B is the Fourier basis
+                n_coeffs = ad_controller.fourier.n_coeffs_per_param
+                B_contrast = ad_controller.fourier.get_basis_matrix()  # (n_phi, n_coeffs)
+                B_offset = ad_controller.fourier.get_basis_matrix()
+
+                pcov_expanded = np.zeros((len(popt_expanded), len(popt_expanded)))
+                # Contrast block
+                pcov_contrast = pcov[:n_coeffs, :n_coeffs]
+                pcov_expanded[:n_phi, :n_phi] = B_contrast @ pcov_contrast @ B_contrast.T
+                # Offset block
+                pcov_offset = pcov[n_coeffs:2*n_coeffs, n_coeffs:2*n_coeffs]
+                pcov_expanded[n_phi:2*n_phi, n_phi:2*n_phi] = B_offset @ pcov_offset @ B_offset.T
+                # Physical params covariance (unchanged)
+                pcov_expanded[2*n_phi:, 2*n_phi:] = pcov[2*n_coeffs:, 2*n_coeffs:]
+                # Cross-terms: approximate propagation
+                pcov_expanded[2*n_phi:, :n_phi] = pcov[2*n_coeffs:, :n_coeffs] @ B_contrast.T
+                pcov_expanded[:n_phi, 2*n_phi:] = B_contrast @ pcov[:n_coeffs, 2*n_coeffs:]
+                pcov_expanded[2*n_phi:, n_phi:2*n_phi] = pcov[2*n_coeffs:, n_coeffs:2*n_coeffs] @ B_offset.T
+                pcov_expanded[n_phi:2*n_phi, 2*n_phi:] = B_offset @ pcov[n_coeffs:2*n_coeffs, 2*n_coeffs:]
+
+                popt = popt_expanded
+                pcov = pcov_expanded
+                logger.info(f"Expanded to {len(popt)} per-angle parameters")
+                anti_degeneracy_info["mode"] = "fourier"
+                anti_degeneracy_info["fourier_order"] = ad_controller.fourier.order
+                anti_degeneracy_info["original_n_params"] = 2 * n_coeffs + n_physical
+                anti_degeneracy_info["expanded_n_params"] = len(popt)
+
+            # Add diagnostics to info
+            anti_degeneracy_info["controller_diagnostics"] = ad_controller.get_diagnostics()
+
         # Prepare info dict
         info = {
             "success": success,
@@ -4617,6 +4801,8 @@ class NLSQWrapper(NLSQAdapterBase):
             "optimization_time": optimization_time,
             "method": "stratified_least_squares",
         }
+        if anti_degeneracy_info:
+            info["anti_degeneracy"] = anti_degeneracy_info
 
         # Check for shear collapse in laminar_flow mode
         is_laminar_flow = "gamma_dot_t0" in physical_param_names
@@ -4711,7 +4897,7 @@ class NLSQWrapper(NLSQAdapterBase):
     def _fit_with_out_of_core_accumulation(
         self,
         stratified_data: Any,
-        data: Any, # Original data for metadata
+        data: Any,  # Original data for metadata
         per_angle_scaling: bool,
         physical_param_names: list[str],
         initial_params: np.ndarray,
@@ -4719,21 +4905,27 @@ class NLSQWrapper(NLSQAdapterBase):
         logger: Any,
         config: Any,
         fast_chi2_mode: bool = False,
+        anti_degeneracy_config: dict | None = None,
     ) -> tuple[np.ndarray, np.ndarray, dict]:
         """Fit using Out-of-Core Global Accumulation for massive datasets.
 
         This strategy virtually chunks the dataset using Index-Based Stratification,
         accumulates the full Hessian and Gradient (J^T J, J^T r) by iterating
         over chunks, and takes a global Levenberg-Marquardt step.
-        
+
         Guarantees identical convergence to standard NLSQ but with minimal memory.
+
+        Note (v2.14.1+):
+            This method now uses FULL homodyne physics via compute_g2_scaled(),
+            identical to stratified least-squares. Anti-Degeneracy Defense System
+            support is planned for a future release.
         """
         import time
         import jax
         import jax.numpy as jnp
-        
+
         start_time = time.perf_counter()
-        logger.info("Initializing Out-of-Core Global Stratified Optimization...")
+        logger.info("Initializing Out-of-Core Global Stratified Optimization (Full Physics)...")
         
         # 1. Setup Chunking
         # Use StratifiedIndices if available (Zero-Copy)
@@ -4789,190 +4981,196 @@ class NLSQWrapper(NLSQAdapterBase):
         # 2. Setup Optimization State
         params_curr = jnp.array(initial_params)
         n_iter = 0
-        
+
         cfg_dict = config.config if hasattr(config, "config") else (config if isinstance(config, dict) else {})
+
+        # Extract physics constants from data (v2.14.1+: Full homodyne physics)
+        q_val = float(data.q)
+        L_val = float(data.L)
+        dt_val = float(getattr(data, "dt", cfg_dict.get("dt", 0.001)))
+
+        # Extract global unique time arrays for meshgrid construction
+        t_unique_global = jnp.sort(jnp.unique(jnp.concatenate([t1_flat, t2_flat])))
+        n_phi = len(phi_unique)
+        n_t = len(t_unique_global)
+
+        logger.info(
+            f"Full Physics Setup: n_phi={n_phi}, n_t={n_t}, "
+            f"q={q_val:.4e}, L={L_val:.4e}, dt={dt_val:.4e}"
+        )
         max_iter = cfg_dict.get("optimization", {}).get("max_iterations", 50)
         
         tol = 1e-4
         lm_lambda = 0.01 # Initial damping
         
-        # JIT-compiled Chunk Kernel
-        # JIT-compiled Chunk Kernel
-        @jax.jit
-        def compute_chunk_accumulators(p, phi_c, t1_c, t2_c, g2_c, q, L, dt, sigma, phi_unique, per_angle_scaling):
-            # Parameter Unpacking
-            # Note: per_angle_scaling is boolean, but for JIT we might need it to be static or passed as int
-            # or rely on python-side dispatch if we re-jit (which is expensive inside loop?).
-            # Better: pass n_angles as static or arg, and infer from p shape?
-            # Or assume logic based on shapes.
-            
-            n_phi = len(phi_unique)
-            # We use jax.lax.cond or simple branching if p size allows
-            
-            # Since JIT prefers static shapes, we can check p size:
-            # If len(p) == 2 + n_phys: Simple
-            # If len(p) == 2*n_phi + n_phys: Per-angle
-            
-            # However, simpler to handle unpacking via helper or assume structure based on provided arg
-            # Let's use simple indexing logic
-            
-            # Map phi to indices for per-angle parameters
-            # indices will be used if per_angle_scaling is True
-            # We clip indices to be safe
-            angle_indices = jnp.clip(jnp.searchsorted(phi_unique, phi_c), 0, n_phi - 1)
-            
-            # Extract parameters
-            # We use a functional approach to avoid branching issues if possible
-            # But p size varies.
-            
-            # Let's assume we handle parameter extraction BEFORE this kernel? 
-            # No, J comes from p.
-            
-            # Dynamic unpacking:
-            # If per_angle_scaling is True (passed as arg, ideally static):
-            # But python bool passed to JIT arg becomes concrete? 
-            # Yes if we mark it static.
-            pass # Replacement continues below
-            
-        # Actual implementation
-        # We need per_angle_scaling to be static_argnum ideally.
-        # But method signature is fixed? No, local function.
-        
-        # We define the residual function then differentiate it.
-        
-        def residual_model_fn(params_arg):
-             # Unpack params
-             # Calculate derived parameters (Contrast, Offset, Decay)
-             # Logic depends on per_angle_scaling (captured check?)
-             
-             # Case 1: Per-Angle
-             if per_angle_scaling:
-                 contrasts = params_arg[:n_angles]
-                 offsets = params_arg[n_angles:2*n_angles]
-                 phys = params_arg[2*n_angles:]
-                 
-                 # Map to chunks
-                 c = contrasts[jnp.searchsorted(phi_unique, phi_c)]
-                 o = offsets[jnp.searchsorted(phi_unique, phi_c)]
-             else:
-                 c = params_arg[0]
-                 o = params_arg[1]
-                 phys = params_arg[2:]
-             
-             # Physical Model (Static Isotropic / Simple Exponential)
-             # g2 = offset + contrast * exp(-2*dt/tau)
-             # dt = |t1 - t2|
-             tau = phys[0] # Assume tau is first physical param 
-             # (TODO: Generalize for laminar flow? For hotfix, simple exp is safe bet for OOM user?)
-             # User mentioned "Adaptive Hybrid" failed local minima.
-             # They likely have standard data.
-             # Ideally we use `compute_g2_scaled` elementwise if we could.
-             
-             # Re-implementing element-wise `compute_g2_scaled`:
-             delta_t = jnp.abs(t1_c - t2_c)
-             
-             # Gamma = 1/tau. g1 = exp(-Gamma * delta_t)
-             # But physics_nlsq usually takes 'params'.
-             # For 'static_isotropic', physical params are [tau] or [D0]?
-             # analysis_mode determines it.
-             # wrapper.py `_get_physical_param_names` -> ["tau"] or ["D0"]?
-             # If "tau", then exp(-dt/tau).
-             # If "D0", then Gamma = D0 * q^2.
-             
-             # To be GENERIC, we should probably stick to `compute_g2_scaled` but modify inputs?
-             # No, `compute_g2_scaled` enforces meshgrid.
-             
-             # I will implement 'static_isotropic' (tau based) as it's most common.
-             # If physical_param_names has "tau", usage is clear.
-             # If "D0", convert.
-             
-             # Hack: We use the first physical param as 'characteristic timescale'.
-             val = phys[0] 
-             
-             # Check if we need q
-             # If param is D0, raw tau = 1/(D0 * q^2).
-             # But let's assume `val` is simply the decay parameter for now.
-             # Or better: check standard wrapper behavior. 
-             # Standard wrapper usually fits 'tau' directly if mode is static_isotropic?
-             # No, homodyne physics usually uses D0?
-             # Let's check `_get_physical_param_names` output in wrapper or logs.
-             # The logs didn't show it.
-             
-             # I'll implement exponential decay `exp(-x/val)` where x=delta_t. 
-             # If user passes D0, optimization might converge to 1/(D0*q^2). 
-             # This is functionally equivalent for fitting.
-             
-             g1 = jnp.exp(-delta_t / val)
-             g2_theo = o + c * (g1 ** 2)
-             
-             # Residual
-             w = 1.0 / sigma if sigma > 0 else 1.0
-             res = (g2_theo - g2_c) * w
-             
-             # Mask diagonal
-             mask = (t1_c != t2_c)
-             return jnp.where(mask, res, 0.0)
+        # ====================================================================
+        # JIT-compiled Chunk Kernel with FULL HOMODYNE PHYSICS (v2.14.1+)
+        # ====================================================================
+        # This kernel uses the same physics as stratified LS via compute_g2_scaled()
+        # Pattern: Build theory grid on unique times, extract chunk values via indexing
 
-        # Make per_angle_scaling captured or passed
-        # We redefine compute_chunk_accumulators to use this residual_fn
-        
         @jax.jit
-        def compute_chunk_accumulators(p, phi_c, t1_c, t2_c, g2_c, sigma, phi_u):
-             # We assume p structure matches per_angle_scaling flag captured from closure
-             
-             def r_fn(curr_p):
-                 # Unpack logic replicated here or helper
-                 if per_angle_scaling:
-                     n = len(phi_u)
-                     c = curr_p[:n][jnp.searchsorted(phi_u, phi_c)]
-                     o = curr_p[n:2*n][jnp.searchsorted(phi_u, phi_c)]
-                     phys = curr_p[2*n:]
-                 else:
-                     c = curr_p[0]
-                     o = curr_p[1]
-                     phys = curr_p[2:]
-                 
-                 # Physics: Simple Exponential
-                 # Note: This limits validity to simple relaxation!
-                 # Ideally we'd call the proper kernel element-wise.
-                 tau = phys[0] # Assumed
-                 delta_t = jnp.abs(t1_c - t2_c)
-                 g2_calc = o + c * jnp.exp(-2.0 * delta_t / tau)
-                 
-                 w = 1.0 / sigma
-                 res = (g2_calc - g2_c) * w
-                 return jnp.where(t1_c != t2_c, res, 0.0)
+        def compute_chunk_accumulators(p, phi_c, t1_c, t2_c, g2_c, sigma):
+            """Compute J^T J, J^T r, and chi2 for a chunk using FULL homodyne physics."""
 
-             J = jax.jacfwd(r_fn)(p)
-             r = r_fn(p)
-             r = r_fn(p)
-             return J.T @ J, J.T @ r, jnp.sum(r**2)
+            def r_fn(curr_p):
+                # Unpack parameters (same pattern as stratified LS)
+                if per_angle_scaling:
+                    contrast_arr = curr_p[:n_phi]
+                    offset_arr = curr_p[n_phi : 2 * n_phi]
+                    physical_params = curr_p[2 * n_phi :]
+                else:
+                    contrast_scalar = curr_p[0]
+                    offset_scalar = curr_p[1]
+                    physical_params = curr_p[2:]
+
+                # === FULL PHYSICS: Vectorize over angles ===
+                # Same pattern as StratifiedResidualFunctionJIT in residual_jit.py
+                if per_angle_scaling:
+                    # vmap over angles with per-angle contrast/offset
+                    compute_g2_vmap = jax.vmap(
+                        lambda phi_val, c_val, o_val: jnp.squeeze(
+                            compute_g2_scaled(
+                                params=physical_params,
+                                t1=t_unique_global,
+                                t2=t_unique_global,
+                                phi=phi_val,
+                                q=q_val,
+                                L=L_val,
+                                contrast=c_val,
+                                offset=o_val,
+                                dt=dt_val,
+                            )
+                        ),
+                        in_axes=(0, 0, 0),
+                    )
+                    g2_theory_grid = compute_g2_vmap(phi_unique, contrast_arr, offset_arr)
+                else:
+                    # vmap over angles with single contrast/offset
+                    compute_g2_vmap = jax.vmap(
+                        lambda phi_val: jnp.squeeze(
+                            compute_g2_scaled(
+                                params=physical_params,
+                                t1=t_unique_global,
+                                t2=t_unique_global,
+                                phi=phi_val,
+                                q=q_val,
+                                L=L_val,
+                                contrast=contrast_scalar,
+                                offset=offset_scalar,
+                                dt=dt_val,
+                            )
+                        ),
+                        in_axes=0,
+                    )
+                    g2_theory_grid = compute_g2_vmap(phi_unique)
+
+                # Apply diagonal correction (same as stratified LS)
+                apply_diagonal_vmap = jax.vmap(apply_diagonal_correction, in_axes=0)
+                g2_theory_grid = apply_diagonal_vmap(g2_theory_grid)
+
+                # === FLAT INDEXING: Extract chunk values from grid ===
+                g2_theory_flat = g2_theory_grid.flatten()
+
+                # Find indices in the unique arrays
+                phi_indices = jnp.searchsorted(phi_unique, phi_c)
+                t1_indices = jnp.searchsorted(t_unique_global, t1_c)
+                t2_indices = jnp.searchsorted(t_unique_global, t2_c)
+
+                # Compute flat indices (C-order: phi varies slowest)
+                flat_indices = (
+                    phi_indices * (n_t * n_t) +
+                    t1_indices * n_t +
+                    t2_indices
+                )
+
+                # Extract theory values for this chunk
+                g2_theory_chunk = g2_theory_flat[flat_indices]
+
+                # Weighted residuals with diagonal mask
+                w = 1.0 / sigma
+                res = (g2_c - g2_theory_chunk) * w
+                return jnp.where(t1_c != t2_c, res, 0.0)
+
+            # Compute Jacobian and residuals
+            J = jax.jacfwd(r_fn)(p)
+            r = r_fn(p)
+
+            return J.T @ J, J.T @ r, jnp.sum(r ** 2)
         
-        # JIT-compiled Chi2-only Kernel (for acceptance check)
+        # JIT-compiled Chi2-only Kernel with FULL HOMODYNE PHYSICS (v2.14.1+)
         @jax.jit
-        def compute_chunk_chi2(p, phi_c, t1_c, t2_c, g2_c, sigma, phi_u):
-             # Simplified residual calc without AD overhead
-             n = len(phi_u)
-             # Unpack logic (replicated)
-             if per_angle_scaling:
-                 contrasts = p[:n]
-                 offsets = p[n:2*n]
-                 phys = p[2*n:]
-                 c = contrasts[jnp.searchsorted(phi_u, phi_c)]
-                 o = offsets[jnp.searchsorted(phi_u, phi_c)]
-             else:
-                 c = p[0]
-                 o = p[1]
-                 phys = p[2:]
-             
-             tau = phys[0]
-             delta_t = jnp.abs(t1_c - t2_c)
-             g2_calc = o + c * jnp.exp(-2.0 * delta_t / tau)
-             w = 1.0 / sigma
-             res = (g2_calc - g2_c) * w
-             # Mask diagonal
-             res = jnp.where(t1_c != t2_c, res, 0.0)
-             return jnp.sum(res**2)
+        def compute_chunk_chi2(p, phi_c, t1_c, t2_c, g2_c, sigma):
+            """Compute chi2 for a chunk using FULL homodyne physics (no Jacobian)."""
+            # Unpack parameters
+            if per_angle_scaling:
+                contrast_arr = p[:n_phi]
+                offset_arr = p[n_phi : 2 * n_phi]
+                physical_params = p[2 * n_phi :]
+            else:
+                contrast_scalar = p[0]
+                offset_scalar = p[1]
+                physical_params = p[2:]
+
+            # === FULL PHYSICS: Vectorize over angles ===
+            if per_angle_scaling:
+                compute_g2_vmap = jax.vmap(
+                    lambda phi_val, c_val, o_val: jnp.squeeze(
+                        compute_g2_scaled(
+                            params=physical_params,
+                            t1=t_unique_global,
+                            t2=t_unique_global,
+                            phi=phi_val,
+                            q=q_val,
+                            L=L_val,
+                            contrast=c_val,
+                            offset=o_val,
+                            dt=dt_val,
+                        )
+                    ),
+                    in_axes=(0, 0, 0),
+                )
+                g2_theory_grid = compute_g2_vmap(phi_unique, contrast_arr, offset_arr)
+            else:
+                compute_g2_vmap = jax.vmap(
+                    lambda phi_val: jnp.squeeze(
+                        compute_g2_scaled(
+                            params=physical_params,
+                            t1=t_unique_global,
+                            t2=t_unique_global,
+                            phi=phi_val,
+                            q=q_val,
+                            L=L_val,
+                            contrast=contrast_scalar,
+                            offset=offset_scalar,
+                            dt=dt_val,
+                        )
+                    ),
+                    in_axes=0,
+                )
+                g2_theory_grid = compute_g2_vmap(phi_unique)
+
+            # Apply diagonal correction
+            apply_diagonal_vmap = jax.vmap(apply_diagonal_correction, in_axes=0)
+            g2_theory_grid = apply_diagonal_vmap(g2_theory_grid)
+
+            # === FLAT INDEXING: Extract chunk values ===
+            g2_theory_flat = g2_theory_grid.flatten()
+            phi_indices = jnp.searchsorted(phi_unique, phi_c)
+            t1_indices = jnp.searchsorted(t_unique_global, t1_c)
+            t2_indices = jnp.searchsorted(t_unique_global, t2_c)
+            flat_indices = (
+                phi_indices * (n_t * n_t) +
+                t1_indices * n_t +
+                t2_indices
+            )
+            g2_theory_chunk = g2_theory_flat[flat_indices]
+
+            # Compute chi-squared with diagonal mask
+            w = 1.0 / sigma
+            res = (g2_c - g2_theory_chunk) * w
+            res = jnp.where(t1_c != t2_c, res, 0.0)
+            return jnp.sum(res ** 2)
 
         def evaluate_total_chi2(params_eval):
             total_c2 = 0.0
@@ -4994,7 +5192,7 @@ class NLSQWrapper(NLSQAdapterBase):
                 t1_c = t1_flat[ind_c]
                 t2_c = t2_flat[ind_c]
                 g2_c = g2_flat[ind_c]
-                c2_chunk = compute_chunk_chi2(params_eval, p_c, t1_c, t2_c, g2_c, sigma_val, phi_unique)
+                c2_chunk = compute_chunk_chi2(params_eval, p_c, t1_c, t2_c, g2_c, sigma_val)
                 total_c2 += c2_chunk
                 eval_count += 1
             
@@ -5006,12 +5204,9 @@ class NLSQWrapper(NLSQAdapterBase):
                 return total_c2 * scale
             return 0.0
 
-        # Physics constants
-        q_val = float(data.q)
-        L_val = float(data.L)
-        dt_val = getattr(data, "dt", None)
-        sigma_val = 1.0 # Placeholder for scalar sigma
-        
+        # Sigma placeholder (physics constants already extracted above)
+        sigma_val = 1.0
+
         # Optimization Loop
         logger.info(f"Starting Out-of-Core Loop (Max iter: {max_iter})...")
         import time
@@ -5032,17 +5227,14 @@ class NLSQWrapper(NLSQAdapterBase):
                 t2_c = t2_flat[indices_chunk]
                 g2_c = g2_flat[indices_chunk]
                 
-                # Compute and Accumulate
+                # Compute and Accumulate (using FULL homodyne physics v2.14.1+)
                 JtJ, Jtr, chi2 = compute_chunk_accumulators(
-                    params_curr, phi_c, t1_c, t2_c, g2_c, 
-                    sigma_val, phi_unique
+                    params_curr, phi_c, t1_c, t2_c, g2_c, sigma_val
                 )
-                
+
                 total_JtJ += JtJ
                 total_Jtr += Jtr
                 total_chi2 += chi2
-                count += len(indices_chunk)
-            
                 count += len(indices_chunk)
             
             # Robust Levenberg-Marquardt Step Loop
@@ -5972,9 +6164,34 @@ class NLSQWrapper(NLSQAdapterBase):
         )
         y_data = np.asarray(y_data, dtype=np.float64)
 
+        # =====================================================================
+        # Diagonal Handling (v2.14.2+)
+        # =====================================================================
+        # Hybrid streaming uses point-wise theory computation (no 2D grid), so
+        # apply_diagonal_correction() cannot be applied to theory.
+        #
+        # Instead, diagonal points are FILTERED OUT from the data entirely:
+        # - Data: Already has diagonal correction applied at load time
+        # - Theory: Never computes diagonal values (filtered points excluded)
+        # - Residual: Diagonal points excluded from loss (equivalent to mask=0)
+        #
+        # This is architecturally equivalent to correction + masking used in
+        # Stratified LS and Out-of-Core methods. The result is the same:
+        # diagonal points contribute ZERO to the optimization objective.
+        # =====================================================================
+        n_points_before = len(y_data)
+        non_diagonal_mask = t1_idx_arr != t2_idx_arr
+        x_data = x_data[non_diagonal_mask]
+        y_data = y_data[non_diagonal_mask]
+        n_diagonal_removed = n_points_before - len(y_data)
+
         prep_time = time.perf_counter() - prep_start
         logger.info(f"Data preparation completed in {prep_time:.2f}s")
         logger.info(f"  Dataset size: {len(y_data):,} points")
+        logger.info(
+            f"  Diagonal points removed: {n_diagonal_removed:,} "
+            f"({100*n_diagonal_removed/n_points_before:.1f}%)"
+        )
 
         # NOTE (Dec 2025): Data is already pre-shuffled at stratification stage
         # in _apply_stratification_if_needed(). No additional shuffle needed here.
