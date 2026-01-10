@@ -17,14 +17,12 @@ Use **NLSQWrapper** instead for:
 
 **Key Differences:**
 
-| Feature                | NLSQAdapter | NLSQWrapper |
-|------------------------|-------------|-------------|
-| Model caching          | ✓ Built-in  | ✗ None      |
-| JIT compilation        | ✓ Auto      | ✓ Manual    |
-| Workflow auto-select   | ✓ Via NLSQ  | ✓ Custom    |
-| Anti-degeneracy layers | ✓ Via fit() | ✓ Full      |
-| Recovery system        | NLSQ native | 3-attempt   |
-| Streaming support      | Via NLSQ    | Full custom |
+* Model caching: NLSQAdapter=Built-in, NLSQWrapper=None
+* JIT compilation: NLSQAdapter=Auto, NLSQWrapper=Manual
+* Workflow auto-select: NLSQAdapter=Via NLSQ, NLSQWrapper=Custom
+* Anti-degeneracy layers: NLSQAdapter=Via fit(), NLSQWrapper=Full
+* Recovery system: NLSQAdapter=NLSQ native, NLSQWrapper=3-attempt
+* Streaming support: NLSQAdapter=Via NLSQ, NLSQWrapper=Full custom
 
 **Decision Guide:**
 

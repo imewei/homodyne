@@ -117,11 +117,10 @@ class FallbackInfo:
         wrapper_error: Error message if wrapper also failed (None otherwise)
 
     States:
-        | adapter_used | fallback_occurred | adapter_error | Meaning              |
-        |--------------|-------------------|---------------|----------------------|
-        | NLSQAdapter  | False             | None          | Adapter succeeded    |
-        | NLSQWrapper  | True              | "..."         | Fallback succeeded   |
-        | NLSQWrapper  | True              | "..."         | Both failed          |
+
+    * NLSQAdapter + fallback_occurred=False + adapter_error=None: Adapter succeeded
+    * NLSQWrapper + fallback_occurred=True + adapter_error="...": Fallback succeeded
+    * NLSQWrapper + fallback_occurred=True + adapter_error="..." + wrapper_error="...": Both failed
     """
 
     fallback_occurred: bool

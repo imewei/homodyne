@@ -360,7 +360,7 @@ class GradientMonitorLayer(AntiDegeneracyLayer):
 class ShearWeightingLayer(AntiDegeneracyLayer):
     """Layer 5: Shear-sensitivity weighting wrapper.
 
-    Wraps shear weighting to weight residuals by |cos(phi_0 - phi)|
+    Wraps shear weighting to weight residuals by abs(cos(phi_0 - phi))
     to prevent gradient cancellation.
     """
 
