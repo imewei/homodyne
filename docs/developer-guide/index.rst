@@ -10,7 +10,6 @@ development setup, code quality standards, testing practices, and contribution w
 
    contributing
    testing
-   ../architecture/memory-fix-plan
 
 Quick Links
 -----------

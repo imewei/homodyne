@@ -261,14 +261,6 @@ The NLSQ module implements multiple optimization strategies for different datase
    :undoc-members:
    :show-inheritance:
 
-Strategy Selection
-^^^^^^^^^^^^^^^^^^
-
-.. automodule:: homodyne.optimization.nlsq.strategies.selection
-   :members:
-   :undoc-members:
-   :show-inheritance:
-
 Chunking Strategy
 ^^^^^^^^^^^^^^^^^
 
@@ -1429,7 +1421,7 @@ Key Classes
 Shear-Sensitivity Weighting (Layer 5)
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-Weights residuals by |cos(φ₀-φ)| to prevent gradient cancellation. Computed in
+Weights residuals by \|cos(φ₀-φ)\| to prevent gradient cancellation. Computed in
 Homodyne and passed to NLSQ as generic residual weights.
 
 .. automodule:: homodyne.optimization.nlsq.shear_weighting
