@@ -52,50 +52,50 @@ requires-python = ">=3.12"
 #
 # Requirements:
 #   - Python 3.12+ (tested with 3.12.x and 3.13.x)
-#   - JAX 0.8.0 (CPU-only, exact version)
+#   - JAX 0.8.2+ (CPU-only)
 #   - Multi-core CPU recommended (14+ cores for best performance)
 # ============================================================================
 dependencies = [
     # Core scientific computing
-    "numpy>=2.0,<3.0",
-    "scipy>=1.13,<2.0",
+    "numpy>=2.3,<3.0",
+    "scipy>=1.16,<2.0",
     # JAX ecosystem (CPU-only, pin to 0.8.x for stability)
-    "jax>=0.8.0,<0.9.0",
-    "jaxlib>=0.8.0,<0.9.0",
-    "nlsq>=0.6.0",
+    "jax>=0.8.2,<0.9.0",
+    "jaxlib>=0.8.2,<0.9.0",
+    "nlsq>=0.6.2",
     # Bayesian inference
     "numpyro>=0.19.0",
     "blackjax>=1.3",
-    "arviz>=0.20",
+    "arviz>=0.23",
     # Data handling
-    "h5py>=3.10,<4.0",
+    "h5py>=3.15,<4.0",
     "pyyaml>=6.0.3",
     # System utilities
-    "psutil>=6.0",
+    "psutil>=7.2",
     "cloudpickle>=3.1",
     # Plotting
-    "matplotlib>=3.9",
+    "matplotlib>=3.10",
     # Fast visualization (includes numba as transitive dependency)
-    "datashader>=0.16",
-    "xarray>=2024.1",
+    "datashader>=0.18",
+    "xarray>=2025.1",
 ]
 
 [project.optional-dependencies]
 dev = [
-    "pytest>=9.0",
+    "pytest>=9.0.2",
     "pytest-cov>=7.0",
     "pytest-xdist>=3.8",
-    "ruff>=0.14.10",
-    "mypy>=1.19",
-    "pre-commit>=4.5",
-    "tqdm>=4.67",
+    "ruff>=0.14.11",
+    "mypy>=1.19.1",
+    "pre-commit>=4.5.1",
+    "tqdm>=4.67.1",
 ]
 
 docs = [
-    "sphinx>=8.2",
-    "sphinx-rtd-theme>=3.0.2",
+    "sphinx>=8.2.3",
+    "furo>=2025.12.19",
     "myst-parser>=4.0.1",
-    "sphinx-autodoc-typehints>=3.5",
+    "sphinx-autodoc-typehints>=3.5.2",
     "sphinx-copybutton>=0.5.2",
 ]
 
