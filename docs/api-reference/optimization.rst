@@ -495,6 +495,138 @@ CLI Integration
 
    homodyne --config config.yaml --method nlsq --multi-start
 
+.. _nlsq-cmaes-optimizer:
+
+CMA-ES Global Optimization (v2.15.0)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+CMA-ES (Covariance Matrix Adaptation Evolution Strategy) provides robust global
+optimization for multi-scale parameter estimation problems. It excels when
+parameter scales differ by several orders of magnitude, such as in laminar_flow
+mode (D₀ ~ 10⁴ vs γ̇₀ ~ 10⁻³).
+
+.. automodule:: homodyne.optimization.nlsq.cmaes_wrapper
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+Key Classes
+^^^^^^^^^^^
+
+.. autosummary::
+   :nosignatures:
+
+   homodyne.optimization.nlsq.cmaes_wrapper.CMAESWrapper
+   homodyne.optimization.nlsq.cmaes_wrapper.CMAESWrapperConfig
+   homodyne.optimization.nlsq.cmaes_wrapper.CMAESResult
+
+When to Use CMA-ES
+^^^^^^^^^^^^^^^^^^
+
+CMA-ES is recommended when:
+
+- **Multi-scale parameters**: Scale ratio > 1000 (e.g., D₀/γ̇₀ > 10⁶)
+- **Complex loss landscapes**: Multiple local minima, saddle points
+- **Poor initial guess**: CMA-ES explores globally, not just locally
+- **laminar_flow mode**: 7 physical parameters with vastly different scales
+
+The ``CMAESWrapper.should_use_cmaes()`` method automatically detects multi-scale
+problems by computing the scale ratio from parameter bounds.
+
+Two-Phase Architecture
+^^^^^^^^^^^^^^^^^^^^^^
+
+.. code-block:: text
+
+   Phase 1: CMA-ES Global Search
+   ├─ Population-based evolutionary optimization
+   ├─ Covariance matrix adapts to parameter scales
+   ├─ BIPOP restart strategy (alternating large/small populations)
+   └─ Memory batching: population_batch_size, data_chunk_size
+
+   Phase 2: NLSQ TRF Refinement (if refine_with_nlsq=True)
+   ├─ Uses NLSQ curve_fit with workflow="auto"
+   ├─ Memory-aware: auto-selects standard/chunked/streaming
+   ├─ Tighter tolerances (ftol=1e-10 vs CMA-ES 1e-8)
+   └─ Provides proper covariance matrix via Jacobian
+
+Configuration
+^^^^^^^^^^^^^
+
+CMA-ES can be configured via YAML:
+
+.. code-block:: yaml
+
+   optimization:
+     nlsq:
+       cmaes:
+         enable: true                      # Enable CMA-ES global optimization
+         preset: "cmaes"                   # "cmaes-fast" (50), "cmaes" (100), "cmaes-global" (200)
+         max_generations: 100              # Maximum CMA-ES generations
+         sigma: 0.5                        # Initial step size (fraction of bounds)
+         tol_fun: 1.0e-8                   # Function tolerance
+         tol_x: 1.0e-8                     # Parameter tolerance
+         restart_strategy: "bipop"         # "none" or "bipop"
+         max_restarts: 9                   # Maximum BIPOP restarts
+         population_batch_size: null       # null = auto, or explicit batch size
+         data_chunk_size: null             # null = auto, or explicit chunk size
+         refine_with_nlsq: true            # Refine with NLSQ TRF after CMA-ES
+         auto_select: true                 # Auto-select CMA-ES vs multi-start
+         scale_threshold: 1000.0           # Scale ratio threshold
+
+         # NLSQ TRF Refinement Settings
+         refinement_workflow: "auto"       # "auto", "standard", "streaming"
+         refinement_ftol: 1.0e-10          # Tighter for local refinement
+         refinement_xtol: 1.0e-10
+         refinement_gtol: 1.0e-10
+         refinement_max_nfev: 500          # Bounded iterations
+         refinement_loss: "linear"         # "linear", "soft_l1", "huber"
+
+Usage Example
+^^^^^^^^^^^^^
+
+.. code-block:: python
+
+   from homodyne.optimization.nlsq.cmaes_wrapper import CMAESWrapper, CMAESWrapperConfig
+
+   # Create wrapper with custom config
+   wrapper = CMAESWrapper(CMAESWrapperConfig(
+       preset="cmaes",
+       refine_with_nlsq=True,
+       refinement_ftol=1e-10,
+   ))
+
+   # Check if CMA-ES is appropriate for this problem
+   if wrapper.should_use_cmaes(bounds, scale_threshold=1000):
+       result = wrapper.fit(model_func, xdata, ydata, p0, bounds)
+       print(f"Chi²: {result.chi_squared:.4e}")
+       print(f"Refined: {result.nlsq_refined}")
+       print(f"Improvement: {result.diagnostics.get('chi_squared_improvement', 0):.2%}")
+
+CMA-ES vs Multi-Start vs Local
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+.. list-table::
+   :header-rows: 1
+   :widths: 20 30 25 25
+
+   * - Method
+     - Best For
+     - Convergence
+     - Memory
+   * - **CMA-ES**
+     - Multi-scale (ratio > 1000)
+     - Global (covariance)
+     - Bounded
+   * - **Multi-start**
+     - Multiple local minima
+     - Local from N starts
+     - N × single fit
+   * - **Local (TRF)**
+     - Good initial guess
+     - Local (quadratic)
+     - Jacobian-based
+
 .. _nlsq-streaming-optimizer:
 
 Streaming Optimizer for Large Datasets

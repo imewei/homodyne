@@ -2,23 +2,25 @@
 
 Complete documentation of the NLSQ (Nonlinear Least Squares) fitting system in homodyne.
 
-**Version:** 2.14.0
+**Version:** 2.15.0
 **Last Updated:** January 2026
 
 ## Table of Contents
 
 1. [High-Level Architecture](#high-level-architecture)
 2. [Setup Phase](#1-setup-phase)
-3. [Adapter Selection](#2-adapter-selection)
-4. [Memory & Strategy Selection](#3-memory--strategy-selection)
-5. [Stratification Decision](#4-stratification-decision)
-6. [Residual Function Setup](#5-residual-function-setup)
-7. [Anti-Degeneracy Defense System](#6-anti-degeneracy-defense-system)
-8. [Strategy Execution](#7-strategy-execution)
-9. [Error Recovery](#8-error-recovery)
-10. [Result Building](#9-result-building)
-11. [Quick Reference Tables](#quick-reference-tables)
-12. [Key Files Reference](#key-files-reference)
+3. [Global Optimization Selection](#2-global-optimization-selection)
+4. [CMA-ES Global Optimization](#3-cma-es-global-optimization)
+5. [Adapter Selection](#4-adapter-selection)
+6. [Memory & Strategy Selection](#5-memory--strategy-selection)
+7. [Stratification Decision](#6-stratification-decision)
+8. [Residual Function Setup](#7-residual-function-setup)
+9. [Anti-Degeneracy Defense System](#8-anti-degeneracy-defense-system)
+10. [Strategy Execution](#9-strategy-execution)
+11. [Error Recovery](#10-error-recovery)
+12. [Result Building](#11-result-building)
+13. [Quick Reference Tables](#quick-reference-tables)
+14. [Key Files Reference](#key-files-reference)
 
 ---
 
@@ -28,27 +30,43 @@ Complete documentation of the NLSQ (Nonlinear Least Squares) fitting system in h
 ┌─────────────────────────────────────────────────────────────────────────────────┐
 │                              USER ENTRY POINTS                                   │
 │                                                                                  │
-│   fit_nlsq_jax(data, config)                fit_nlsq_multistart(data, config)   │
-│         (core.py)                                 (multistart.py)                │
-│              │                                          │                        │
-│              │                               Latin Hypercube Sampling            │
-│              │                               N starting points (default 10)      │
-│              │                                          │                        │
-│              └────────────────────┬─────────────────────┘                        │
-│                                   ▼                                              │
+│   fit_nlsq_jax(data, config)     fit_nlsq_multistart()     fit_with_cmaes()     │
+│         (core.py)                  (multistart.py)         (cmaes_wrapper.py)   │
+│              │                           │                        │              │
+│              │                  Latin Hypercube             CMA-ES Global        │
+│              │                  N starting points           Optimization         │
+│              │                           │                        │              │
+│              └───────────────────────────┴────────────────────────┘              │
+│                                          │                                       │
 └─────────────────────────────────────────────────────────────────────────────────┘
-                                    │
-════════════════════════════════════╪══════════════════════════════════════════════
-                                    ▼
+                                           │
+═══════════════════════════════════════════╪═══════════════════════════════════════
+                                           ▼
 ┌─────────────────────────────────────────────────────────────────────────────────┐
 │                            1. SETUP PHASE                                        │
 │                               (core.py)                                          │
 └─────────────────────────────────────────────────────────────────────────────────┘
-                                    │
-════════════════════════════════════╪══════════════════════════════════════════════
-                                    ▼
+                                           │
+═══════════════════════════════════════════╪═══════════════════════════════════════
+                                           ▼
 ┌─────────────────────────────────────────────────────────────────────────────────┐
-│                      2. ADAPTER SELECTION (T021-T024)                            │
+│                    2. GLOBAL OPTIMIZATION SELECTION                              │
+│                                                                                  │
+│        enable_cmaes=True? ────YES───▶ CMA-ES Global Search + NLSQ Refinement    │
+│              │                              (cmaes_wrapper.py)                   │
+│             NO                                                                   │
+│              │                                                                   │
+│        enable_multi_start=True? ─YES─▶ Multi-Start Latin Hypercube              │
+│              │                              (multistart.py)                      │
+│             NO                                                                   │
+│              ▼                                                                   │
+│        Local Optimization (continue to Adapter Selection)                        │
+└─────────────────────────────────────────────────────────────────────────────────┘
+                                           │
+═══════════════════════════════════════════╪═══════════════════════════════════════
+                                           ▼
+┌─────────────────────────────────────────────────────────────────────────────────┐
+│                      3. ADAPTER SELECTION (T021-T024)                            │
 │                                                                                  │
 │                    NLSQAdapter ◄──────────► NLSQWrapper                          │
 │                   (with fallback)         (stable fallback)                      │
@@ -57,7 +75,7 @@ Complete documentation of the NLSQ (Nonlinear Least Squares) fitting system in h
 ════════════════════════════════════╪══════════════════════════════════════════════
                                     ▼
 ┌─────────────────────────────────────────────────────────────────────────────────┐
-│                     3. MEMORY & STRATEGY SELECTION                               │
+│                     4. MEMORY & STRATEGY SELECTION                               │
 │                             (memory.py)                                          │
 │                                                                                  │
 │              STANDARD ◄────► OUT_OF_CORE ◄────► HYBRID_STREAMING                 │
@@ -66,7 +84,7 @@ Complete documentation of the NLSQ (Nonlinear Least Squares) fitting system in h
 ════════════════════════════════════╪══════════════════════════════════════════════
                                     ▼
 ┌─────────────────────────────────────────────────────────────────────────────────┐
-│                      4. STRATIFICATION DECISION                                  │
+│                      5. STRATIFICATION DECISION                                  │
 │                       (strategies/chunking.py)                                   │
 │                                                                                  │
 │                    Angle-Stratified Chunking (if needed)                         │
@@ -75,7 +93,7 @@ Complete documentation of the NLSQ (Nonlinear Least Squares) fitting system in h
 ════════════════════════════════════╪══════════════════════════════════════════════
                                     ▼
 ┌─────────────────────────────────────────────────────────────────────────────────┐
-│                       5. RESIDUAL FUNCTION SETUP                                 │
+│                       6. RESIDUAL FUNCTION SETUP                                 │
 │                                                                                  │
 │         StratifiedResidualFunction ◄────► StratifiedResidualFunctionJIT          │
 └─────────────────────────────────────────────────────────────────────────────────┘
@@ -83,7 +101,7 @@ Complete documentation of the NLSQ (Nonlinear Least Squares) fitting system in h
 ════════════════════════════════════╪══════════════════════════════════════════════
                                     ▼
 ┌─────────────────────────────────────────────────────────────────────────────────┐
-│               6. ANTI-DEGENERACY DEFENSE SYSTEM (laminar_flow only)              │
+│               7. ANTI-DEGENERACY DEFENSE SYSTEM (laminar_flow only)              │
 │                                                                                  │
 │     Layer 1: Fourier Reparameterization                                          │
 │     Layer 2: Hierarchical Optimization                                           │
@@ -95,7 +113,7 @@ Complete documentation of the NLSQ (Nonlinear Least Squares) fitting system in h
 ════════════════════════════════════╪══════════════════════════════════════════════
                                     ▼
 ┌─────────────────────────────────────────────────────────────────────────────────┐
-│                         7. STRATEGY EXECUTION                                    │
+│                         8. STRATEGY EXECUTION                                    │
 │                        (strategies/executors.py)                                 │
 │                                                                                  │
 │     StandardExecutor │ LargeDatasetExecutor │ StreamingExecutor                  │
@@ -104,7 +122,7 @@ Complete documentation of the NLSQ (Nonlinear Least Squares) fitting system in h
 ════════════════════════════════════╪══════════════════════════════════════════════
                                     ▼
 ┌─────────────────────────────────────────────────────────────────────────────────┐
-│                          8. ERROR RECOVERY                                       │
+│                          9. ERROR RECOVERY                                       │
 │                            (wrapper.py)                                          │
 │                                                                                  │
 │                    3-Attempt Recovery with Perturbation                          │
@@ -113,7 +131,7 @@ Complete documentation of the NLSQ (Nonlinear Least Squares) fitting system in h
 ════════════════════════════════════╪══════════════════════════════════════════════
                                     ▼
 ┌─────────────────────────────────────────────────────────────────────────────────┐
-│                          9. RESULT BUILDING                                      │
+│                          10. RESULT BUILDING                                     │
 │                          (result_builder.py)                                     │
 │                                                                                  │
 │                         OptimizationResult                                       │
@@ -166,7 +184,189 @@ Complete documentation of the NLSQ (Nonlinear Least Squares) fitting system in h
 
 ---
 
-## 2. Adapter Selection
+## 2. Global Optimization Selection
+
+**File:** `core.py`
+
+### Decision Flow
+
+```
+┌───────────────────────────────────────────────────────────────────────────┐
+│ Global Optimization Selection                                              │
+│                                                                            │
+│   NLSQConfig fields control optimization strategy:                         │
+│                                                                            │
+│   enable_cmaes = True?                                                     │
+│       │                                                                    │
+│      YES ──▶ Check scale ratio via CMAESWrapper.should_use_cmaes()        │
+│       │         │                                                          │
+│       │         ├─ scale_ratio > threshold (1000) ──▶ CMA-ES Global       │
+│       │         │                                                          │
+│       │         └─ scale_ratio ≤ threshold ──▶ Fall back to multi-start   │
+│       │                                                                    │
+│      NO                                                                    │
+│       │                                                                    │
+│   enable_multi_start = True?                                               │
+│       │                                                                    │
+│      YES ──▶ Multi-start with Latin Hypercube Sampling                    │
+│       │                                                                    │
+│      NO ──▶ Local Optimization (Adapter Selection)                        │
+└───────────────────────────────────────────────────────────────────────────┘
+```
+
+### Scale Ratio Computation
+
+```python
+# CMAESWrapper.compute_scale_ratio()
+scale_ratio = max(param_ranges) / min(param_ranges)
+
+# Example: laminar_flow mode
+D₀ bounds:    [100, 50000]     → range = 49,900
+γ̇₀ bounds:   [1e-6, 0.01]     → range = 0.00999
+scale_ratio = 49,900 / 0.00999 ≈ 5 × 10⁶   ──▶ CMA-ES recommended
+```
+
+### Global Optimization Comparison
+
+| Method | Best For | Convergence | Memory |
+|--------|----------|-------------|--------|
+| **CMA-ES** | Multi-scale problems (ratio > 1000), complex landscapes | Global (covariance adaptation) | Bounded |
+| **Multi-start** | Multiple local minima, degeneracy detection | Local from N starting points | N × single fit |
+| **Local (TRF)** | Well-behaved problems, good initial guess | Local (quadratic) | Jacobian-based |
+
+---
+
+## 3. CMA-ES Global Optimization
+
+**File:** `cmaes_wrapper.py`
+
+### When to Use CMA-ES
+
+CMA-ES (Covariance Matrix Adaptation Evolution Strategy) excels when:
+- **Multi-scale parameters**: D₀ ~ 10⁴ vs γ̇₀ ~ 10⁻³ (scale ratio > 10⁶)
+- **Complex loss landscapes**: Multiple local minima, saddle points
+- **Poor initial guess**: CMA-ES explores globally, not just locally
+- **laminar_flow mode**: 7 physical params with vastly different scales
+
+### Architecture
+
+```
+┌─────────────────────────────────────────────────────────────────────────────────┐
+│                        CMA-ES GLOBAL OPTIMIZATION                                │
+│                          (cmaes_wrapper.py)                                      │
+╠═════════════════════════════════════════════════════════════════════════════════╣
+│                                                                                  │
+│   ┌─────────────────────────────────────────────────────────────────────────┐   │
+│   │ PHASE 1: CMA-ES GLOBAL SEARCH                                            │   │
+│   │          (NLSQ CMAESOptimizer with evosax backend)                       │   │
+│   │                                                                          │   │
+│   │   • Population-based evolutionary optimization                           │   │
+│   │   • Covariance matrix adapts to parameter scales                         │   │
+│   │   • BIPOP restart strategy (alternating large/small populations)         │   │
+│   │   • Memory batching: population_batch_size, data_chunk_size              │   │
+│   │                                                                          │   │
+│   │   Presets:                                                               │   │
+│   │     cmaes-fast:   50 generations (quick exploration)                     │   │
+│   │     cmaes:       100 generations (balanced, default)                     │   │
+│   │     cmaes-global: 200 generations (thorough search)                      │   │
+│   │                                                                          │   │
+│   │   Config: preset, max_generations, sigma, tol_fun, tol_x                 │   │
+│   │           restart_strategy="bipop", max_restarts=9                       │   │
+│   └─────────────────────────────────────────────────────────────────────────┘   │
+│                                      │                                           │
+│                                      ▼                                           │
+│   ┌─────────────────────────────────────────────────────────────────────────┐   │
+│   │ PHASE 2: NLSQ TRF REFINEMENT (if refine_with_nlsq=True)                  │   │
+│   │          (explicit refinement via _run_nlsq_refinement)                  │   │
+│   │                                                                          │   │
+│   │   • Uses NLSQ curve_fit with workflow="auto"                             │   │
+│   │   • Memory-aware: auto-selects standard/chunked/streaming                │   │
+│   │   • Tighter tolerances than CMA-ES (ftol=1e-10 vs 1e-8)                  │   │
+│   │   • Provides proper covariance matrix via Jacobian                       │   │
+│   │                                                                          │   │
+│   │   Config: refinement_workflow="auto"                                     │   │
+│   │           refinement_ftol=1e-10, refinement_xtol=1e-10                   │   │
+│   │           refinement_gtol=1e-10, refinement_max_nfev=500                 │   │
+│   │           refinement_loss="linear"                                       │   │
+│   └─────────────────────────────────────────────────────────────────────────┘   │
+│                                      │                                           │
+│                                      ▼                                           │
+│   ┌─────────────────────────────────────────────────────────────────────────┐   │
+│   │ RESULT: CMAESResult                                                      │   │
+│   │                                                                          │   │
+│   │   • parameters: optimized values                                         │   │
+│   │   • covariance: from NLSQ refinement (proper uncertainties)              │   │
+│   │   • chi_squared: final fit quality                                       │   │
+│   │   • diagnostics: generations, evaluations, restarts, improvement %       │   │
+│   │   • nlsq_refined: True if refinement succeeded                           │   │
+│   └─────────────────────────────────────────────────────────────────────────┘   │
+└─────────────────────────────────────────────────────────────────────────────────┘
+```
+
+### CMA-ES vs NLSQ Internal Refinement
+
+| Aspect | NLSQ Internal | Homodyne Explicit |
+|--------|---------------|-------------------|
+| `workflow` | `"auto"` | `"auto"` (configurable) |
+| `ftol` | ~1.49e-8 (default) | **1e-10** (tighter) |
+| `xtol` | ~1.49e-8 (default) | **1e-10** (tighter) |
+| `gtol` | ~1.49e-8 (default) | **1e-10** (tighter) |
+| `max_nfev` | Unbounded | **500** (bounded) |
+| Configurability | None | Full YAML config |
+
+### Configuration
+
+```yaml
+optimization:
+  nlsq:
+    cmaes:
+      enable: true                      # Enable CMA-ES global optimization
+      preset: "cmaes"                   # "cmaes-fast", "cmaes", "cmaes-global"
+      max_generations: 100              # Maximum CMA-ES generations
+      sigma: 0.5                        # Initial step size (fraction of bounds)
+      tol_fun: 1.0e-8                   # Function tolerance
+      tol_x: 1.0e-8                     # Parameter tolerance
+      restart_strategy: "bipop"         # "none" or "bipop"
+      max_restarts: 9                   # Maximum BIPOP restarts
+      population_batch_size: null       # null = auto, or explicit batch size
+      data_chunk_size: null             # null = auto, or explicit chunk size
+      refine_with_nlsq: true            # Refine with NLSQ TRF after CMA-ES
+      auto_select: true                 # Auto-select CMA-ES vs multi-start
+      scale_threshold: 1000.0           # Scale ratio threshold for auto-selection
+      memory_limit_gb: 8.0              # Memory limit for auto-configuration
+
+      # NLSQ TRF Refinement Settings
+      refinement_workflow: "auto"       # "auto", "standard", "streaming"
+      refinement_ftol: 1.0e-10          # Tighter for local refinement
+      refinement_xtol: 1.0e-10
+      refinement_gtol: 1.0e-10
+      refinement_max_nfev: 500          # Bounded iterations
+      refinement_loss: "linear"         # "linear", "soft_l1", "huber"
+```
+
+### Usage Example
+
+```python
+from homodyne.optimization.nlsq.cmaes_wrapper import CMAESWrapper, CMAESWrapperConfig
+
+# Create wrapper with custom config
+wrapper = CMAESWrapper(CMAESWrapperConfig(
+    preset="cmaes",
+    refine_with_nlsq=True,
+    refinement_ftol=1e-10,
+))
+
+# Check if CMA-ES is appropriate for this problem
+if wrapper.should_use_cmaes(bounds, scale_threshold=1000):
+    result = wrapper.fit(model_func, xdata, ydata, p0, bounds)
+    print(f"Chi²: {result.chi_squared:.4e}")
+    print(f"Refined: {result.nlsq_refined}")
+    print(f"Improvement: {result.diagnostics.get('chi_squared_improvement', 0):.2%}")
+```
+
+---
+
+## 4. Adapter Selection
 
 **Decision Point:** T021-T024
 
@@ -225,7 +425,7 @@ Complete documentation of the NLSQ (Nonlinear Least Squares) fitting system in h
 
 ---
 
-## 3. Memory & Strategy Selection
+## 5. Memory & Strategy Selection
 
 **File:** `memory.py`
 
@@ -291,7 +491,7 @@ NLSQStrategy Enum → Executor Mapping:
 
 ---
 
-## 4. Stratification Decision
+## 6. Stratification Decision
 
 **File:** `strategies/chunking.py`
 
@@ -351,7 +551,7 @@ Example (3 angles, 1.2M points, target 100k chunks):
 
 ---
 
-## 5. Residual Function Setup
+## 7. Residual Function Setup
 
 ### Comparison
 
@@ -393,7 +593,7 @@ Per-angle parameter handling:
 
 ---
 
-## 6. Anti-Degeneracy Defense System
+## 8. Anti-Degeneracy Defense System
 
 **Activation Conditions (ALL must be true):**
 - `analysis_mode = laminar_flow`
@@ -513,7 +713,7 @@ Config: enable=true, min_weight=0.3, alpha=1.0, normalize=true
 
 ---
 
-## 7. Strategy Execution
+## 9. Strategy Execution
 
 **File:** `strategies/executors.py`
 
@@ -641,7 +841,7 @@ Config: enable=true, min_weight=0.3, alpha=1.0, normalize=true
 
 ---
 
-## 8. Error Recovery
+## 10. Error Recovery
 
 **File:** `wrapper.py`
 
@@ -675,7 +875,7 @@ Config: enable=true, min_weight=0.3, alpha=1.0, normalize=true
 
 ---
 
-## 9. Result Building
+## 11. Result Building
 
 **File:** `result_builder.py`
 
@@ -752,6 +952,8 @@ class OptimizationResult:
 | File | Purpose |
 |------|---------|
 | `core.py` | Entry points: `fit_nlsq_jax()`, `fit_nlsq_multistart()` |
+| `cmaes_wrapper.py` | CMA-ES global optimization: `CMAESWrapper`, `fit_with_cmaes()` |
+| `config.py` | `NLSQConfig` with CMA-ES and refinement settings |
 | `memory.py` | `select_nlsq_strategy()`, memory estimation (6.5× factor) |
 | `adapter.py` | NLSQAdapter with model caching |
 | `wrapper.py` | NLSQWrapper with full feature set + 3-attempt recovery |
