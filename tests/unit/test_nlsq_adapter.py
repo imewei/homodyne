@@ -572,7 +572,12 @@ class TestAdapterConfig:
         assert config.workflow == "auto"
 
     def test_adapter_config_custom_values(self):
-        """AdapterConfig should accept custom values."""
+        """AdapterConfig should accept custom values.
+
+        Note: NLSQ 0.6.3+ simplified workflows to 3 presets: "auto", "auto_global", "hpc"
+        The old presets ("streaming", "standard", etc.) were removed from NLSQ.
+        Homodyne uses 'auto' internally and handles memory strategy via select_nlsq_strategy().
+        """
         from homodyne.optimization.nlsq.adapter import AdapterConfig
 
         config = AdapterConfig(
@@ -580,14 +585,14 @@ class TestAdapterConfig:
             enable_jit=False,
             enable_recovery=False,
             goal="fast",
-            workflow="streaming",
+            workflow="auto",  # Use valid NLSQ 0.6.3+ workflow name
         )
 
         assert config.enable_cache is False
         assert config.enable_jit is False
         assert config.enable_recovery is False
         assert config.goal == "fast"
-        assert config.workflow == "streaming"
+        assert config.workflow == "auto"
 
 
 # =============================================================================

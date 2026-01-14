@@ -26,14 +26,18 @@ Structure:
 
 NLSQ Integration (v2.11.0+):
 - Uses NLSQ's CurveFit class for JIT compilation caching
-- Leverages WorkflowSelector for automatic strategy selection
+- Uses homodyne's select_nlsq_strategy() for memory-aware strategy selection
 - Integrates with MultiStartOrchestrator for global optimization
 - Anti-degeneracy layers remain in homodyne (physics-specific)
+
+Note: Homodyne uses NLSQ's curve_fit() directly, not the fit() unified API.
+Memory strategy selection is handled by homodyne's own select_nlsq_strategy()
+function rather than NLSQ's MemoryBudgetSelector.
 """
 
 # =============================================================================
-# NLSQ Package Imports (v0.4+)
-# These provide the new unified API with CurveFit class and WorkflowSelector
+# NLSQ Package Imports (v0.6.4+)
+# Core curve fitting API with CurveFit class for JIT caching
 # =============================================================================
 
 # Core NLSQ imports (always available)
@@ -46,14 +50,24 @@ except ImportError:
     curve_fit = None  # type: ignore[assignment]
     NLSQ_CURVEFIT_AVAILABLE = False
 
-# Workflow selection (REMOVED in NLSQ v0.6.0)
-# WorkflowSelector, WorkflowTier, OptimizationGoal were deprecated and removed.
-# Use homodyne's select_nlsq_strategy() from memory.py instead.
-WorkflowSelector = None  # type: ignore[assignment, misc]
-WorkflowTier = None  # type: ignore[assignment, misc]
-OptimizationGoal = None  # type: ignore[assignment, misc]
-NLSQDatasetSizeTier = None  # type: ignore[assignment, misc]
-NLSQ_WORKFLOW_AVAILABLE = False  # Deprecated in NLSQ v0.6.0
+# NLSQ 0.6.3+ Workflow System Changes:
+# - WorkflowSelector was removed in NLSQ v0.6.0
+# - NLSQ now uses 3-preset workflows: "auto", "auto_global", "hpc"
+# - Homodyne uses its own select_nlsq_strategy() for memory-aware selection
+# - OptimizationGoal still exists in NLSQ 0.6.4 (nlsq.core.workflow)
+WorkflowSelector = None  # type: ignore[assignment, misc]  # Removed in NLSQ v0.6.0
+WorkflowTier = None  # type: ignore[assignment, misc]  # Removed in NLSQ v0.6.0
+NLSQDatasetSizeTier = None  # type: ignore[assignment, misc]  # Removed in NLSQ v0.6.0
+NLSQ_WORKFLOW_AVAILABLE = False  # WorkflowSelector removed in NLSQ v0.6.0
+
+# OptimizationGoal is still available in NLSQ 0.6.4 (FAST, ROBUST, QUALITY, etc.)
+try:
+    from nlsq.core.workflow import OptimizationGoal
+
+    NLSQ_GOAL_AVAILABLE = True
+except ImportError:
+    OptimizationGoal = None  # type: ignore[assignment, misc]
+    NLSQ_GOAL_AVAILABLE = False
 
 # Global optimization (NLSQ v0.4+)
 try:
@@ -269,13 +283,16 @@ __all__ = [
     "CurveFit",
     "curve_fit",
     "NLSQ_CURVEFIT_AVAILABLE",
-    # Workflow selection (DEPRECATED in NLSQ v0.6.0 - all are None)
+    # Workflow selection (DEPRECATED in NLSQ v0.6.0)
+    # WorkflowSelector, WorkflowTier, NLSQDatasetSizeTier were removed
     # Use homodyne's select_nlsq_strategy() from memory.py instead
-    "WorkflowSelector",
-    "WorkflowTier",
-    "OptimizationGoal",
-    "NLSQDatasetSizeTier",
-    "NLSQ_WORKFLOW_AVAILABLE",
+    "WorkflowSelector",  # None - removed in NLSQ v0.6.0
+    "WorkflowTier",  # None - removed in NLSQ v0.6.0
+    "NLSQDatasetSizeTier",  # None - removed in NLSQ v0.6.0
+    "NLSQ_WORKFLOW_AVAILABLE",  # False - WorkflowSelector removed
+    # OptimizationGoal (still available in NLSQ 0.6.4)
+    "OptimizationGoal",  # FAST, ROBUST, GLOBAL, MEMORY_EFFICIENT, QUALITY
+    "NLSQ_GOAL_AVAILABLE",
     # Global optimization
     "GlobalOptimizationConfig",
     "MultiStartOrchestrator",

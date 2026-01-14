@@ -225,10 +225,12 @@ class NLSQConfig:
         Maximum recovery attempts per strategy. Default: 3.
     """
 
-    # NLSQ Workflow Settings (DEPRECATED in v0.6.0)
-    # Use homodyne's select_nlsq_strategy() from memory.py instead
-    workflow: str = "auto"  # "auto", "standard", "chunked", "streaming"
-    goal: str = "quality"  # "fast", "robust", "quality", "memory_efficient"
+    # NLSQ Workflow Settings
+    # Note: NLSQ 0.6.3+ uses 3 workflows: "auto", "auto_global", "hpc"
+    # Homodyne uses its own select_nlsq_strategy() for memory-aware selection
+    # These settings are for internal homodyne configuration, not passed to NLSQ
+    workflow: str = "auto"  # Internal: "auto" (let homodyne decide strategy)
+    goal: str = "quality"  # NLSQ OptimizationGoal: "fast", "robust", "quality", "memory_efficient"
 
     # Loss function settings
     loss: str = "soft_l1"
@@ -979,21 +981,26 @@ class NLSQConfig:
         }
 
     def to_workflow_kwargs(self) -> dict[str, Any]:
-        """Convert workflow settings to kwargs for NLSQ's CurveFit.
+        """Convert settings to kwargs for NLSQ's curve_fit().
 
-        Maps NLSQConfig workflow/goal settings to NLSQ v0.4+ API parameters.
+        Maps NLSQConfig settings to NLSQ 0.6.4+ curve_fit() parameters.
+        Note: Homodyne uses curve_fit() directly, not the fit() unified API.
 
         Returns
         -------
         dict
-            Kwargs for CurveFit or WorkflowSelector.
+            Kwargs for curve_fit() (ftol, gtol, xtol, max_nfev, loss).
 
         Notes
         -----
-        For NLSQ v0.4+, these kwargs can be passed to:
-        - nlsq.CurveFit.curve_fit()
-        - nlsq.fit()
-        - homodyne's select_nlsq_strategy() (recommended replacement)
+        NLSQ 0.6.3+ Changes:
+        - Simplified to 3 workflows: "auto", "auto_global", "hpc"
+        - Old presets ("streaming", "standard") were removed
+        - WorkflowSelector was removed; use MemoryBudgetSelector instead
+        - Homodyne uses its own select_nlsq_strategy() for memory selection
+
+        The 'goal' parameter can be passed to NLSQ's fit() API but homodyne
+        uses curve_fit() directly, so goal is handled internally.
 
         Example
         -------
@@ -1003,27 +1010,17 @@ class NLSQConfig:
         """
         kwargs: dict[str, Any] = {}
 
-        # Map workflow setting
-        if self.workflow != "auto":
-            # Map homodyne workflow names to NLSQ tier names
-            workflow_map = {
-                "standard": "STANDARD",
-                "chunked": "CHUNKED",
-                "streaming": "STREAMING",
-            }
-            kwargs["workflow_tier"] = workflow_map.get(self.workflow, self.workflow)
+        # Note: workflow is handled internally by homodyne's select_nlsq_strategy()
+        # We don't pass workflow to NLSQ's curve_fit() since homodyne manages
+        # memory strategy selection independently
 
-        # Map goal setting
-        if self.goal != "quality":  # quality is default
-            goal_map = {
-                "fast": "FAST",
-                "robust": "ROBUST",
-                "quality": "QUALITY",
-                "memory_efficient": "MEMORY_EFFICIENT",
-            }
-            kwargs["optimization_goal"] = goal_map.get(self.goal, self.goal)
+        # Goal can be passed to NLSQ's fit() API (OptimizationGoal enum)
+        # For curve_fit(), goal affects tolerance selection internally
+        if self.goal != "quality":
+            # Map to NLSQ's OptimizationGoal enum names (if using fit() API)
+            kwargs["goal"] = self.goal  # NLSQ accepts string: "fast", "robust", etc.
 
-        # Add convergence settings
+        # Add convergence settings (directly supported by curve_fit)
         kwargs["ftol"] = self.ftol
         kwargs["gtol"] = self.gtol
         kwargs["xtol"] = self.xtol

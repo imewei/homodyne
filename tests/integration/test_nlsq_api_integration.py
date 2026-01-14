@@ -236,11 +236,16 @@ class TestToWorkflowKwargsValid:
         assert set(kwargs.keys()).issubset(valid_keys)
 
     def test_to_workflow_kwargs_preserves_values(self):
-        """Verify values are correctly copied."""
+        """Verify values are correctly copied.
+
+        Note: NLSQ 0.6.3+ removed old workflow presets ("streaming", "standard", etc.)
+        Homodyne uses 'auto' workflow and handles memory strategy internally via
+        select_nlsq_strategy(). The workflow value is NOT passed to NLSQ.
+        """
         from homodyne.optimization.nlsq.config import NLSQConfig
 
         config = NLSQConfig(
-            workflow="streaming",
+            workflow="auto",  # Internal homodyne setting (not passed to NLSQ)
             goal="fast",
             loss="linear",
             ftol=1e-6,
@@ -253,9 +258,8 @@ class TestToWorkflowKwargsValid:
 
         kwargs = config.to_workflow_kwargs()
 
-        # Verify values are preserved
-        if "workflow" in kwargs:
-            assert kwargs["workflow"] == "streaming"
+        # Note: workflow is NOT included in kwargs (handled internally by homodyne)
+        # Goal is included only if not "quality" (the default)
         if "goal" in kwargs:
             assert kwargs["goal"] == "fast"
         if "loss" in kwargs:

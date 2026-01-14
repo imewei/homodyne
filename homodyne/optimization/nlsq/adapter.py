@@ -500,10 +500,9 @@ class NLSQAdapter(NLSQAdapterBase):
             enable_stability=self.config.enable_stability,
         )
 
-        # Initialize WorkflowSelector if available
-        self._workflow_selector = (
-            WorkflowSelector() if NLSQ_WORKFLOW_AVAILABLE else None
-        )
+        # Note: WorkflowSelector was removed in NLSQ v0.6.0
+        # Homodyne uses its own select_nlsq_strategy() for memory-aware selection
+        # NLSQ_WORKFLOW_AVAILABLE is always False
 
         logger.debug(
             "NLSQAdapter initialized: cache=%s, recovery=%s, stability=%s, goal=%s",
@@ -557,40 +556,33 @@ class NLSQAdapter(NLSQAdapterBase):
     ) -> dict[str, Any]:
         """Select workflow configuration based on dataset size.
 
+        This method determines the memory strategy for optimization.
+        Since homodyne uses curve_fit() directly (not NLSQ's fit() unified API),
+        these are internal homodyne strategy names, not NLSQ workflow presets.
+
+        Note: NLSQ 0.6.3+ simplified workflows to 3 presets: "auto", "auto_global", "hpc"
+        The old presets ("streaming", "standard", etc.) were removed from NLSQ.
+        Homodyne maintains its own strategy selection via select_nlsq_strategy().
+
         Args:
             n_points: Number of data points
             n_params: Number of parameters
 
         Returns:
-            Dict with workflow configuration for CurveFit
+            Dict with internal strategy info (not passed to NLSQ)
         """
-        if not NLSQ_WORKFLOW_AVAILABLE or self._workflow_selector is None:
-            # Fallback to simple heuristics
-            if n_points > 10_000_000:
-                return {"workflow": "streaming"}
-            elif n_points > 1_000_000:
-                return {"workflow": "chunked"}
-            else:
-                return {"workflow": "standard"}
-
-        # Use NLSQ's WorkflowSelector
-        workflow_config = self._workflow_selector.select(
-            n_points=n_points,
-            n_params=n_params,
-        )
-
-        # Determine workflow type from returned config
-        # LDMemoryConfig, HybridStreamingConfig, or GlobalOptimizationConfig
-        workflow_type = "standard"
-        if hasattr(workflow_config, "use_streaming") and workflow_config.use_streaming:
-            workflow_type = "streaming"
-        elif hasattr(workflow_config, "streaming_batch_size"):
-            # HybridStreamingConfig or LDMemoryConfig with streaming
-            workflow_type = "chunked"
+        # Use homodyne's strategy selection (NLSQ_WORKFLOW_AVAILABLE is always False
+        # since WorkflowSelector was removed in NLSQ v0.6.0)
+        # These are homodyne-internal strategy names for logging/diagnostics
+        if n_points > 10_000_000:
+            strategy = "hybrid_streaming"  # Maps to NLSQ's streaming mode
+        elif n_points > 1_000_000:
+            strategy = "chunked"  # Maps to NLSQ's chunked mode
+        else:
+            strategy = "in_memory"  # Maps to NLSQ's standard curve_fit
 
         return {
-            "workflow": workflow_type,
-            "config": workflow_config,
+            "strategy": strategy,  # Internal homodyne strategy name
             "goal": self.config.goal,
         }
 
