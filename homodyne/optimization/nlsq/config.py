@@ -13,7 +13,6 @@ Config Consolidation (v2.14.0, FR-014):
 
 from __future__ import annotations
 
-import warnings
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -364,6 +363,36 @@ class NLSQConfig:
         "hierarchical"  # "warn", "hierarchical", "reset", "abort"
     )
 
+    # === CMA-ES Global Optimization (NLSQ v0.6.4+) ===
+    # Covariance Matrix Adaptation Evolution Strategy for global optimization
+    # Particularly beneficial for laminar_flow mode with vastly different parameter scales
+    # (e.g., D₀ ~ 1e4 vs γ̇₀ ~ 1e-3, scale ratio > 1e7)
+    #
+    # Requires evosax backend for JAX-accelerated evolution strategies
+    enable_cmaes: bool = False  # Default OFF - user opt-in (use multi-start by default)
+    cmaes_preset: str = "cmaes"  # "cmaes-fast" (50 gen), "cmaes" (100 gen), "cmaes-global" (200 gen)
+    cmaes_max_generations: int = 100  # Maximum CMA-ES generations
+    cmaes_sigma: float = 0.5  # Initial step size (fraction of search range)
+    cmaes_tol_fun: float = 1e-8  # Function value tolerance for convergence
+    cmaes_tol_x: float = 1e-8  # Parameter tolerance for convergence
+    cmaes_restart_strategy: str = "bipop"  # "none" or "bipop" (alternating populations)
+    cmaes_max_restarts: int = 9  # Maximum BIPOP restarts
+    cmaes_population_batch_size: int | None = None  # Memory batching (None = auto)
+    cmaes_data_chunk_size: int | None = None  # Data streaming (None = auto)
+    cmaes_refine_with_nlsq: bool = True  # Refine CMA-ES solution with NLSQ TRF
+    cmaes_auto_select: bool = True  # Auto-select CMA-ES vs multi-start based on scale ratio
+    cmaes_scale_threshold: float = 1000.0  # Scale ratio threshold for auto-selection
+    cmaes_memory_limit_gb: float = 8.0  # Memory limit for auto-configuration
+    #
+    # Post-CMA-ES NLSQ TRF Refinement (similar to "auto_global" workflow)
+    # Uses NLSQ Trust Region Reflective for local refinement with proper covariance estimation
+    cmaes_refinement_workflow: str = "auto"  # "auto" (recommended), "standard", "streaming"
+    cmaes_refinement_ftol: float = 1e-10  # Tighter tolerance for local refinement
+    cmaes_refinement_xtol: float = 1e-10
+    cmaes_refinement_gtol: float = 1e-10
+    cmaes_refinement_max_nfev: int = 500  # Max function evaluations for refinement
+    cmaes_refinement_loss: str = "linear"  # Loss function: "linear", "soft_l1", "huber"
+
     # Computed fields
     _validation_errors: list[str] = field(default_factory=list, repr=False)
 
@@ -397,6 +426,9 @@ class NLSQConfig:
         hierarchical = anti_degeneracy.get("hierarchical", {})
         regularization = anti_degeneracy.get("regularization", {})
         gradient_monitoring = anti_degeneracy.get("gradient_monitoring", {})
+
+        # Extract CMA-ES global optimization settings (v2.15.0 / NLSQ 0.6.4+)
+        cmaes = config_dict.get("cmaes", {})
 
         config = cls(
             # NLSQ Workflow Settings (v2.11.0+)
@@ -553,6 +585,28 @@ class NLSQConfig:
             gradient_collapse_response=gradient_monitoring.get(
                 "response", "hierarchical"
             ),
+            # CMA-ES Global Optimization (v2.15.0 / NLSQ 0.6.4+)
+            enable_cmaes=cmaes.get("enable", False),
+            cmaes_preset=cmaes.get("preset", "cmaes"),
+            cmaes_max_generations=cmaes.get("max_generations", 100),
+            cmaes_sigma=float(cmaes.get("sigma", 0.5)),
+            cmaes_tol_fun=float(cmaes.get("tol_fun", 1e-8)),
+            cmaes_tol_x=float(cmaes.get("tol_x", 1e-8)),
+            cmaes_restart_strategy=cmaes.get("restart_strategy", "bipop"),
+            cmaes_max_restarts=cmaes.get("max_restarts", 9),
+            cmaes_population_batch_size=cmaes.get("population_batch_size"),
+            cmaes_data_chunk_size=cmaes.get("data_chunk_size"),
+            cmaes_refine_with_nlsq=cmaes.get("refine_with_nlsq", True),
+            cmaes_auto_select=cmaes.get("auto_select", True),
+            cmaes_scale_threshold=float(cmaes.get("scale_threshold", 1000.0)),
+            cmaes_memory_limit_gb=float(cmaes.get("memory_limit_gb", 8.0)),
+            # Post-CMA-ES NLSQ TRF refinement settings
+            cmaes_refinement_workflow=cmaes.get("refinement_workflow", "auto"),
+            cmaes_refinement_ftol=float(cmaes.get("refinement_ftol", 1e-10)),
+            cmaes_refinement_xtol=float(cmaes.get("refinement_xtol", 1e-10)),
+            cmaes_refinement_gtol=float(cmaes.get("refinement_gtol", 1e-10)),
+            cmaes_refinement_max_nfev=cmaes.get("refinement_max_nfev", 500),
+            cmaes_refinement_loss=cmaes.get("refinement_loss", "linear"),
         )
 
         # Validate and log any issues
@@ -594,8 +648,9 @@ class NLSQConfig:
         >>> print(config.loss)
         soft_l1
         """
-        import yaml
         from pathlib import Path
+
+        import yaml
 
         path = Path(yaml_path)
         if not path.exists():
@@ -859,6 +914,95 @@ class NLSQConfig:
                 f"got: {self.gradient_collapse_response}"
             )
 
+        # CMA-ES Global Optimization validation (v2.15.0 / NLSQ 0.6.4+)
+        valid_cmaes_presets = ["cmaes-fast", "cmaes", "cmaes-global"]
+        if self.cmaes_preset not in valid_cmaes_presets:
+            errors.append(
+                f"cmaes_preset must be one of {valid_cmaes_presets}, "
+                f"got: {self.cmaes_preset}"
+            )
+        if self.cmaes_max_generations <= 0:
+            errors.append(
+                f"cmaes_max_generations must be positive, "
+                f"got: {self.cmaes_max_generations}"
+            )
+        if not 0 < self.cmaes_sigma <= 1:
+            errors.append(
+                f"cmaes_sigma must be in (0, 1], got: {self.cmaes_sigma}"
+            )
+        if self.cmaes_tol_fun <= 0:
+            errors.append(
+                f"cmaes_tol_fun must be positive, got: {self.cmaes_tol_fun}"
+            )
+        if self.cmaes_tol_x <= 0:
+            errors.append(
+                f"cmaes_tol_x must be positive, got: {self.cmaes_tol_x}"
+            )
+        valid_restart_strategies = ["none", "bipop"]
+        if self.cmaes_restart_strategy not in valid_restart_strategies:
+            errors.append(
+                f"cmaes_restart_strategy must be one of {valid_restart_strategies}, "
+                f"got: {self.cmaes_restart_strategy}"
+            )
+        if self.cmaes_max_restarts < 0:
+            errors.append(
+                f"cmaes_max_restarts must be non-negative, "
+                f"got: {self.cmaes_max_restarts}"
+            )
+        if self.cmaes_population_batch_size is not None and self.cmaes_population_batch_size <= 0:
+            errors.append(
+                f"cmaes_population_batch_size must be positive or None, "
+                f"got: {self.cmaes_population_batch_size}"
+            )
+        if self.cmaes_data_chunk_size is not None and self.cmaes_data_chunk_size <= 0:
+            errors.append(
+                f"cmaes_data_chunk_size must be positive or None, "
+                f"got: {self.cmaes_data_chunk_size}"
+            )
+        if self.cmaes_scale_threshold <= 0:
+            errors.append(
+                f"cmaes_scale_threshold must be positive, "
+                f"got: {self.cmaes_scale_threshold}"
+            )
+        if self.cmaes_memory_limit_gb <= 0:
+            errors.append(
+                f"cmaes_memory_limit_gb must be positive, "
+                f"got: {self.cmaes_memory_limit_gb}"
+            )
+        # CMA-ES refinement validation
+        valid_refinement_workflows = ["auto", "standard", "streaming"]
+        if self.cmaes_refinement_workflow not in valid_refinement_workflows:
+            errors.append(
+                f"cmaes_refinement_workflow must be one of {valid_refinement_workflows}, "
+                f"got: {self.cmaes_refinement_workflow}"
+            )
+        if self.cmaes_refinement_ftol <= 0:
+            errors.append(
+                f"cmaes_refinement_ftol must be positive, "
+                f"got: {self.cmaes_refinement_ftol}"
+            )
+        if self.cmaes_refinement_xtol <= 0:
+            errors.append(
+                f"cmaes_refinement_xtol must be positive, "
+                f"got: {self.cmaes_refinement_xtol}"
+            )
+        if self.cmaes_refinement_gtol <= 0:
+            errors.append(
+                f"cmaes_refinement_gtol must be positive, "
+                f"got: {self.cmaes_refinement_gtol}"
+            )
+        if self.cmaes_refinement_max_nfev <= 0:
+            errors.append(
+                f"cmaes_refinement_max_nfev must be positive, "
+                f"got: {self.cmaes_refinement_max_nfev}"
+            )
+        valid_refinement_losses = ["linear", "soft_l1", "huber", "cauchy", "arctan"]
+        if self.cmaes_refinement_loss not in valid_refinement_losses:
+            errors.append(
+                f"cmaes_refinement_loss must be one of {valid_refinement_losses}, "
+                f"got: {self.cmaes_refinement_loss}"
+            )
+
         self._validation_errors = errors
         return errors
 
@@ -977,6 +1121,30 @@ class NLSQConfig:
                     "consecutive_triggers": self.gradient_consecutive_triggers,
                     "response": self.gradient_collapse_response,
                 },
+            },
+            # CMA-ES Global Optimization (v2.15.0 / NLSQ 0.6.4+)
+            "cmaes": {
+                "enable": self.enable_cmaes,
+                "preset": self.cmaes_preset,
+                "max_generations": self.cmaes_max_generations,
+                "sigma": self.cmaes_sigma,
+                "tol_fun": self.cmaes_tol_fun,
+                "tol_x": self.cmaes_tol_x,
+                "restart_strategy": self.cmaes_restart_strategy,
+                "max_restarts": self.cmaes_max_restarts,
+                "population_batch_size": self.cmaes_population_batch_size,
+                "data_chunk_size": self.cmaes_data_chunk_size,
+                "refine_with_nlsq": self.cmaes_refine_with_nlsq,
+                "auto_select": self.cmaes_auto_select,
+                "scale_threshold": self.cmaes_scale_threshold,
+                "memory_limit_gb": self.cmaes_memory_limit_gb,
+                # Post-CMA-ES NLSQ TRF refinement settings
+                "refinement_workflow": self.cmaes_refinement_workflow,
+                "refinement_ftol": self.cmaes_refinement_ftol,
+                "refinement_xtol": self.cmaes_refinement_xtol,
+                "refinement_gtol": self.cmaes_refinement_gtol,
+                "refinement_max_nfev": self.cmaes_refinement_max_nfev,
+                "refinement_loss": self.cmaes_refinement_loss,
             },
         }
 

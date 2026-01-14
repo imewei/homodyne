@@ -137,6 +137,24 @@ except ImportError:
     SingleStartResult = None
     run_multistart_nlsq = None
 
+# CMA-ES global optimization import (v2.15.0 / NLSQ 0.6.4+)
+try:
+    from homodyne.optimization.nlsq.cmaes_wrapper import (
+        CMAES_AVAILABLE,
+        CMAESResult,
+        CMAESWrapper,
+        CMAESWrapperConfig,
+        fit_with_cmaes,
+    )
+
+    HAS_CMAES = CMAES_AVAILABLE
+except ImportError:
+    HAS_CMAES = False
+    CMAESWrapper = None
+    CMAESWrapperConfig = None
+    CMAESResult = None
+    fit_with_cmaes = None
+
 # CPU threading configuration (FR-005, T026)
 try:
     from homodyne.device.cpu import configure_cpu_threading
@@ -1494,3 +1512,334 @@ def fit_nlsq_multistart(
     )
 
     return result
+
+
+@log_performance(threshold=1.0)
+def fit_nlsq_cmaes(
+    data: dict[str, Any],
+    config: ConfigManager,
+    initial_params: dict[str, float] | None = None,
+    per_angle_scaling: bool = True,
+) -> OptimizationResult:
+    """CMA-ES global optimization for multi-scale parameter problems.
+
+    Uses NLSQ's CMAESOptimizer with evosax backend for global optimization.
+    Particularly beneficial for laminar_flow mode where parameters have
+    vastly different scales (e.g., D₀ ~ 1e4 vs γ̇₀ ~ 1e-3, scale ratio > 1e7).
+
+    Features:
+    - Covariance Matrix Adaptation for multi-scale parameters
+    - BIPOP restart strategy for robust convergence
+    - Memory batching/streaming for large datasets
+    - Optional L-M refinement of CMA-ES solution
+
+    Parameters
+    ----------
+    data : dict[str, Any]
+        XPCS experimental data (same format as fit_nlsq_jax).
+    config : ConfigManager
+        Configuration manager with optimization.nlsq.cmaes settings.
+    initial_params : dict[str, float], optional
+        Initial parameter guess. Used as CMA-ES starting point.
+    per_angle_scaling : bool
+        Whether to use per-angle contrast/offset scaling. Default: True.
+
+    Returns
+    -------
+    OptimizationResult
+        Optimization result with parameters, uncertainties, and diagnostics.
+
+    Raises
+    ------
+    ImportError
+        If CMA-ES is not available (requires NLSQ 0.6.4+ with evosax).
+    ValueError
+        If CMA-ES is not enabled in configuration.
+
+    Examples
+    --------
+    >>> config = ConfigManager("config.yaml")
+    >>> # Ensure cmaes.enable: true in config
+    >>> result = fit_nlsq_cmaes(data, config)
+    >>> print(f"Chi²: {result.chi_squared:.4e}")
+    >>> print(f"Method: {result.device_info['method']}")
+    """
+    import time
+
+    if not HAS_CMAES:
+        raise ImportError(
+            "CMA-ES requires NLSQ 0.6.4+ with evosax backend. "
+            "Install with: pip install nlsq[evosax]"
+        )
+
+    # Extract CMA-ES config
+    nlsq_dict = config.config.get("optimization", {}).get("nlsq", {})
+    cmaes_dict = nlsq_dict.get("cmaes", {})
+
+    if not cmaes_dict.get("enable", False):
+        raise ValueError(
+            "CMA-ES optimization is not enabled. "
+            "Set optimization.nlsq.cmaes.enable: true in config."
+        )
+
+    from homodyne.optimization.nlsq.config import NLSQConfig
+
+    nlsq_config = NLSQConfig.from_dict(nlsq_dict)
+
+    # Validate data
+    _validate_data(data)
+
+    # Get analysis mode and parameter setup
+    analysis_mode = _get_analysis_mode(config)
+    param_space = ParameterSpace() if HAS_CORE_MODULES else None
+
+    logger.info("=" * 60)
+    logger.info("CMA-ES GLOBAL OPTIMIZATION")
+    logger.info("=" * 60)
+    logger.info(f"Analysis mode: {analysis_mode}")
+    logger.info(f"Preset: {nlsq_config.cmaes_preset}")
+
+    # Set up initial parameters
+    if initial_params is None:
+        initial_params, _ = _load_initial_params_from_config(
+            config, analysis_mode, data
+        )
+        if initial_params is None:
+            initial_params = _get_default_initial_params(analysis_mode)
+            logger.info("Using default initial parameters")
+        else:
+            logger.info("Using initial parameters from configuration")
+
+    # Convert initial params to array
+    x0 = _params_to_array(initial_params, analysis_mode)
+
+    # Get bounds
+    if HAS_PARAMETER_MANAGER:
+        param_manager = ParameterManager(config.config, analysis_mode=analysis_mode)
+        bounds_list = param_manager.get_parameter_bounds()
+        bounds_dict = {b["name"]: (b["min"], b["max"]) for b in bounds_list}
+    else:
+        bounds_dict = _get_parameter_bounds(analysis_mode, param_space)
+
+    lower_bounds, upper_bounds = _bounds_to_arrays(bounds_dict, analysis_mode)
+    bounds = (lower_bounds, upper_bounds)
+
+    # Create CMA-ES wrapper config
+    cmaes_config = CMAESWrapperConfig.from_nlsq_config(nlsq_config)
+
+    # Create CMA-ES wrapper and check if we should use it
+    wrapper = CMAESWrapper(cmaes_config)
+
+    if nlsq_config.cmaes_auto_select:
+        if not wrapper.should_use_cmaes(bounds, nlsq_config.cmaes_scale_threshold):
+            logger.info(
+                f"Scale ratio < {nlsq_config.cmaes_scale_threshold}, "
+                "falling back to standard NLSQ optimization"
+            )
+            # Fall back to fit_nlsq_jax
+            return fit_nlsq_jax(
+                data=data,
+                config=config,
+                initial_params=initial_params,
+                per_angle_scaling=per_angle_scaling,
+            )
+
+    # Prepare data arrays for CMA-ES
+    # Need to build model function and flatten data
+    start_time = time.time()
+
+    try:
+        # Use adapter's model building infrastructure
+        from homodyne.optimization.nlsq.adapter import get_or_create_model
+
+        # Prepare phi angles
+        phi_key = "phi_angles_list" if "phi_angles_list" in data else "phi"
+        phi_angles = np.asarray(data[phi_key])
+        n_phi = len(phi_angles)
+
+        # Get q value
+        if "wavevector_q_list" in data:
+            q = float(np.asarray(data["wavevector_q_list"])[0])
+        else:
+            q = float(data.get("q", 0.01))
+
+        # Get model and function
+        model, model_func, cache_hit = get_or_create_model(
+            analysis_mode=analysis_mode,
+            phi_angles=phi_angles,
+            q=q,
+            per_angle_scaling=per_angle_scaling,
+            enable_jit=True,
+        )
+
+        logger.debug(f"Model cache {'hit' if cache_hit else 'miss'}")
+
+        # Prepare data arrays
+        t1_key = "t1"
+        t2_key = "t2"
+        g2_key = "c2_exp" if "c2_exp" in data else "g2"
+
+        t1 = np.asarray(data[t1_key])
+        t2 = np.asarray(data[t2_key])
+        g2 = np.asarray(data[g2_key])
+
+        # Handle 2D meshgrids
+        if t1.ndim == 2:
+            t1 = t1[:, 0]
+        if t2.ndim == 2:
+            t2 = t2[0, :]
+
+        # Get sigma (uncertainty)
+        if "sigma" in data:
+            sigma = np.asarray(data["sigma"])
+        else:
+            sigma = 0.01 * np.ones_like(g2)
+
+        # Flatten data for CMA-ES
+        # Flatten g2 and sigma
+        ydata = g2.flatten()
+        sigma_flat = sigma.flatten()
+
+        n_data = len(ydata)
+        logger.info(f"Data points: {n_data:,}")
+
+        # Expand per-angle parameters for initial guess
+        n_physical = len(_get_physical_param_names(analysis_mode))
+        if per_angle_scaling:
+            # Expand scalar contrast/offset to per-angle
+            if len(x0) == 2 + n_physical:
+                contrast_val = x0[0]
+                offset_val = x0[1]
+                physical_params = x0[2:]
+                x0 = np.concatenate([
+                    np.full(n_phi, contrast_val),
+                    np.full(n_phi, offset_val),
+                    physical_params,
+                ])
+                # Expand bounds too
+                lower_bounds = np.concatenate([
+                    np.full(n_phi, lower_bounds[0]),
+                    np.full(n_phi, lower_bounds[1]),
+                    lower_bounds[2:],
+                ])
+                upper_bounds = np.concatenate([
+                    np.full(n_phi, upper_bounds[0]),
+                    np.full(n_phi, upper_bounds[1]),
+                    upper_bounds[2:],
+                ])
+                bounds = (lower_bounds, upper_bounds)
+
+        # Create wrapped model function for CMA-ES
+        # model_func expects: model_func(t1, t2, *params) for single phi
+        # Need to create fitness function that evaluates full residuals
+        t1_mesh, t2_mesh = np.meshgrid(t1, t2, indexing="ij")
+
+        def model_for_cmaes(xdata_unused: np.ndarray, *params) -> np.ndarray:
+            """Model function wrapper for CMA-ES."""
+            params_array = np.asarray(params)
+
+            # Extract per-angle and physical params
+            if per_angle_scaling:
+                contrasts = params_array[:n_phi]
+                offsets = params_array[n_phi : 2 * n_phi]
+                physical = params_array[2 * n_phi :]
+            else:
+                contrasts = np.full(n_phi, params_array[0])
+                offsets = np.full(n_phi, params_array[1])
+                physical = params_array[2:]
+
+            # Compute g2 for all angles
+            g2_model = []
+            for i_phi in range(n_phi):
+                # Build full params for this phi
+                phi_params = np.concatenate([[contrasts[i_phi], offsets[i_phi]], physical])
+                g2_phi = model_func(t1_mesh.flatten(), t2_mesh.flatten(), *phi_params)
+                g2_model.append(g2_phi)
+
+            return np.concatenate(g2_model)
+
+        # Create xdata placeholder (model_for_cmaes ignores it)
+        xdata = np.zeros((n_data, 1))
+
+        # Run CMA-ES optimization
+        cmaes_result = wrapper.fit(
+            model_func=model_for_cmaes,
+            xdata=xdata,
+            ydata=ydata,
+            p0=x0,
+            bounds=bounds,
+            sigma=sigma_flat,
+        )
+
+        execution_time = time.time() - start_time
+
+        # Convert CMAESResult to OptimizationResult
+        n_params = len(cmaes_result.parameters)
+        dof = max(1, n_data - n_params)
+
+        result = OptimizationResult(
+            parameters=cmaes_result.parameters,
+            uncertainties=(
+                np.sqrt(np.diag(cmaes_result.covariance))
+                if cmaes_result.covariance is not None
+                else np.zeros(n_params)
+            ),
+            covariance=(
+                cmaes_result.covariance
+                if cmaes_result.covariance is not None
+                else np.eye(n_params)
+            ),
+            chi_squared=cmaes_result.chi_squared,
+            reduced_chi_squared=cmaes_result.chi_squared / dof,
+            convergence_status="converged" if cmaes_result.success else "failed",
+            iterations=cmaes_result.diagnostics.get("generations", 0),
+            execution_time=execution_time,
+            device_info={
+                "device": "cpu",
+                "method": "cmaes",
+                "adapter": "CMAESWrapper",
+                "preset": cmaes_config.preset,
+                "nlsq_refined": cmaes_result.nlsq_refined,
+                "restarts": cmaes_result.diagnostics.get("restarts", 0),
+                "evaluations": cmaes_result.diagnostics.get("evaluations", 0),
+            },
+            recovery_actions=[],
+            quality_flag="good" if cmaes_result.success else "poor",
+        )
+
+        logger.info("=" * 60)
+        logger.info("CMA-ES OPTIMIZATION COMPLETE")
+        logger.info("=" * 60)
+        logger.info(f"Status: {'SUCCESS' if result.success else 'FAILED'}")
+        logger.info(f"Generations: {result.iterations}")
+        logger.info(f"Execution time: {execution_time:.3f}s")
+        logger.info(f"χ² = {result.chi_squared:.6e}")
+        logger.info(f"Reduced χ² = {result.reduced_chi_squared:.6f}")
+        logger.info(f"L-M refined: {cmaes_result.nlsq_refined}")
+
+        return result
+
+    except Exception as e:
+        execution_time = time.time() - start_time
+        logger.error(f"CMA-ES optimization failed: {e}")
+
+        # Return failed result
+        n_params = len(x0)
+        return OptimizationResult(
+            parameters=np.asarray(x0),
+            uncertainties=np.zeros(n_params),
+            covariance=np.eye(n_params),
+            chi_squared=float("inf"),
+            reduced_chi_squared=float("inf"),
+            convergence_status="failed",
+            iterations=0,
+            execution_time=execution_time,
+            device_info={
+                "device": "cpu",
+                "method": "cmaes",
+                "adapter": "CMAESWrapper",
+                "error": str(e),
+            },
+            recovery_actions=[],
+            quality_flag="poor",
+        )

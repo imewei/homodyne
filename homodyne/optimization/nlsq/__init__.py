@@ -82,6 +82,35 @@ except ImportError:
     MultiStartOrchestrator = None  # type: ignore[assignment, misc]
     NLSQ_GLOBAL_OPT_AVAILABLE = False
 
+# CMA-ES Global Optimization (NLSQ v0.6.3+)
+# Requires evosax for JAX-accelerated evolution strategies
+try:
+    from nlsq.global_optimization import (
+        CMAES_PRESETS,
+        CMAESConfig,
+        CMAESDiagnostics,
+        CMAESOptimizer,
+        MethodSelector,
+        auto_configure_cmaes_memory,
+        compute_default_popsize,
+        estimate_cmaes_memory_gb,
+        is_evosax_available,
+    )
+
+    # Check if evosax is actually installed
+    NLSQ_CMAES_AVAILABLE = is_evosax_available()
+except ImportError:
+    CMAES_PRESETS = None  # type: ignore[assignment, misc]
+    CMAESConfig = None  # type: ignore[assignment, misc]
+    CMAESDiagnostics = None  # type: ignore[assignment, misc]
+    CMAESOptimizer = None  # type: ignore[assignment, misc]
+    MethodSelector = None  # type: ignore[assignment, misc]
+    auto_configure_cmaes_memory = None  # type: ignore[assignment]
+    compute_default_popsize = None  # type: ignore[assignment]
+    estimate_cmaes_memory_gb = None  # type: ignore[assignment]
+    is_evosax_available = None  # type: ignore[assignment]
+    NLSQ_CMAES_AVAILABLE = False
+
 # Stability and recovery (NLSQ v0.4+)
 try:
     from nlsq.stability import (
@@ -156,8 +185,18 @@ from homodyne.optimization.nlsq.core import (
     NLSQ_AVAILABLE,
     NLSQResult,
     _get_param_names,
+    fit_nlsq_cmaes,
     fit_nlsq_jax,
     fit_nlsq_multistart,
+)
+
+# CMA-ES global optimization wrapper (v2.15.0 / NLSQ 0.6.4+)
+from homodyne.optimization.nlsq.cmaes_wrapper import (
+    CMAES_AVAILABLE as NLSQ_CMAES_AVAILABLE,
+    CMAESResult,
+    CMAESWrapper,
+    CMAESWrapperConfig,
+    fit_with_cmaes,
 )
 
 # New refactored modules (Dec 2025)
@@ -293,10 +332,21 @@ __all__ = [
     # OptimizationGoal (still available in NLSQ 0.6.4)
     "OptimizationGoal",  # FAST, ROBUST, GLOBAL, MEMORY_EFFICIENT, QUALITY
     "NLSQ_GOAL_AVAILABLE",
-    # Global optimization
+    # Global optimization (Multi-Start)
     "GlobalOptimizationConfig",
     "MultiStartOrchestrator",
     "NLSQ_GLOBAL_OPT_AVAILABLE",
+    # CMA-ES Global Optimization (NLSQ 0.6.3+)
+    "CMAES_PRESETS",
+    "CMAESConfig",
+    "CMAESDiagnostics",
+    "CMAESOptimizer",
+    "MethodSelector",
+    "auto_configure_cmaes_memory",
+    "compute_default_popsize",
+    "estimate_cmaes_memory_gb",
+    "is_evosax_available",
+    "NLSQ_CMAES_AVAILABLE",
     # Stability and recovery
     "NumericalStabilityGuard",
     "NLSQOptimizationRecovery",
@@ -315,6 +365,11 @@ __all__ = [
     # Homodyne Core
     "fit_nlsq_jax",
     "fit_nlsq_multistart",
+    "fit_nlsq_cmaes",
+    "fit_with_cmaes",
+    "CMAESWrapper",
+    "CMAESWrapperConfig",
+    "CMAESResult",
     "NLSQResult",
     "JAX_AVAILABLE",
     "NLSQ_AVAILABLE",
