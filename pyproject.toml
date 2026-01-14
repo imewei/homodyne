@@ -62,6 +62,8 @@ dependencies = [
     # JAX ecosystem (CPU-only, pin to 0.8.x for stability)
     "jax>=0.8.2,<0.9.0",
     "jaxlib>=0.8.2,<0.9.0",
+    "jaxopt>=0.8.3",
+    "interpax>=0.3.5",
     "nlsq>=0.6.2",
     # Bayesian inference
     "numpyro>=0.19.0",

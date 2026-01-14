@@ -48,15 +48,30 @@ from __future__ import annotations
 import time
 from collections.abc import Callable
 from dataclasses import dataclass, field
+from typing import NamedTuple
 
+import jax.numpy as jnp
 import numpy as np
-from scipy import optimize
+from jaxopt import LBFGSB
 
 from homodyne.optimization.nlsq.config_utils import safe_float, safe_int
 from homodyne.optimization.nlsq.fourier_reparam import FourierReparameterizer
 from homodyne.utils.logging import get_logger, log_exception
 
 logger = get_logger(__name__)
+
+
+class _OptimizeResult(NamedTuple):
+    """Compatibility result object for jaxopt.LBFGSB.
+
+    Mimics scipy.optimize.OptimizeResult interface for seamless integration.
+    """
+
+    x: np.ndarray
+    fun: float
+    nit: int
+    success: bool
+    message: str = ""
 
 
 @dataclass
@@ -517,12 +532,14 @@ class HierarchicalOptimizer:
         current_params: np.ndarray,
         bounds: tuple[np.ndarray, np.ndarray],
         outer_iter: int,
-    ) -> optimize.OptimizeResult:
+    ) -> _OptimizeResult:
         """Stage 1: Optimize physical parameters with per-angle frozen.
 
         Performance Optimization (Spec 006 - FR-002):
         Uses pre-allocated buffer and in-place updates to avoid np.concatenate
         allocations on every loss/gradient call.
+
+        Uses jaxopt.LBFGSB for JAX-native bounded L-BFGS optimization.
 
         Parameters
         ----------
@@ -539,7 +556,7 @@ class HierarchicalOptimizer:
 
         Returns
         -------
-        scipy.optimize.OptimizeResult
+        _OptimizeResult
             Optimization result with x containing full parameter vector.
         """
         frozen_per_angle = current_params[self.per_angle_indices].copy()
@@ -550,30 +567,59 @@ class HierarchicalOptimizer:
         if grad_fn is not None:
             physical_grad = self._create_physical_grad(frozen_per_angle, grad_fn)
 
-        # Extract physical bounds
-        physical_lower = bounds[0][self.physical_indices]
-        physical_upper = bounds[1][self.physical_indices]
-        physical_bounds = list(zip(physical_lower, physical_upper, strict=True))
+        # Extract physical bounds for jaxopt (lower, upper) tuple format
+        physical_lower = jnp.asarray(bounds[0][self.physical_indices])
+        physical_upper = jnp.asarray(bounds[1][self.physical_indices])
+        physical_bounds = (physical_lower, physical_upper)
+
+        # Create loss function with optional gradient for jaxopt
+        if physical_grad is not None:
+            # jaxopt expects (value, grad) when value_and_grad=True
+            def value_and_grad_fn(x: jnp.ndarray) -> tuple[float, jnp.ndarray]:
+                return physical_loss(np.asarray(x)), jnp.asarray(
+                    physical_grad(np.asarray(x))
+                )
+
+            solver = LBFGSB(
+                fun=value_and_grad_fn,
+                value_and_grad=True,
+                maxiter=self.config.physical_max_iterations,
+                tol=self.config.physical_ftol,
+                jit=False,  # Disable JIT for NumPy compatibility
+            )
+        else:
+            # Let jaxopt compute gradients via autodiff
+            def jax_loss_fn(x: jnp.ndarray) -> float:
+                return physical_loss(np.asarray(x))
+
+            solver = LBFGSB(
+                fun=jax_loss_fn,
+                maxiter=self.config.physical_max_iterations,
+                tol=self.config.physical_ftol,
+                jit=False,
+            )
 
         # Run L-BFGS-B on physical params only
-        result = optimize.minimize(
-            physical_loss,
-            current_params[self.physical_indices],
-            method="L-BFGS-B",
-            jac=physical_grad,
-            bounds=physical_bounds,
-            options={
-                "maxiter": self.config.physical_max_iterations,
-                "ftol": self.config.physical_ftol,
-            },
-        )
+        x0 = jnp.asarray(current_params[self.physical_indices])
+        result = solver.run(x0, bounds=physical_bounds)
+
+        # Convert jaxopt result to compatible format
+        optimized_params = np.asarray(result.params)
+        final_loss = float(result.state.value)
+        n_iterations = int(result.state.iter_num)
+        converged = result.state.error < self.config.physical_ftol
 
         # Update full params
         full_result_x = current_params.copy()
-        full_result_x[self.physical_indices] = result.x
-        result.x = full_result_x
+        full_result_x[self.physical_indices] = optimized_params
 
-        return result
+        return _OptimizeResult(
+            x=full_result_x,
+            fun=final_loss,
+            nit=n_iterations,
+            success=converged,
+            message="Converged" if converged else "Max iterations reached",
+        )
 
     def _fit_per_angle_stage(
         self,
@@ -582,12 +628,14 @@ class HierarchicalOptimizer:
         current_params: np.ndarray,
         bounds: tuple[np.ndarray, np.ndarray],
         outer_iter: int,
-    ) -> optimize.OptimizeResult:
+    ) -> _OptimizeResult:
         """Stage 2: Optimize per-angle parameters with physical frozen.
 
         Performance Optimization (Spec 006 - FR-002):
         Uses pre-allocated buffer and in-place updates to avoid np.concatenate
         allocations on every loss/gradient call.
+
+        Uses jaxopt.LBFGSB for JAX-native bounded L-BFGS optimization.
 
         Parameters
         ----------
@@ -604,7 +652,7 @@ class HierarchicalOptimizer:
 
         Returns
         -------
-        scipy.optimize.OptimizeResult
+        _OptimizeResult
             Optimization result with x containing full parameter vector.
         """
         frozen_physical = current_params[self.physical_indices].copy()
@@ -615,30 +663,59 @@ class HierarchicalOptimizer:
         if grad_fn is not None:
             per_angle_grad = self._create_per_angle_grad(frozen_physical, grad_fn)
 
-        # Extract per-angle bounds
-        per_angle_lower = bounds[0][self.per_angle_indices]
-        per_angle_upper = bounds[1][self.per_angle_indices]
-        per_angle_bounds = list(zip(per_angle_lower, per_angle_upper, strict=True))
+        # Extract per-angle bounds for jaxopt (lower, upper) tuple format
+        per_angle_lower = jnp.asarray(bounds[0][self.per_angle_indices])
+        per_angle_upper = jnp.asarray(bounds[1][self.per_angle_indices])
+        per_angle_bounds = (per_angle_lower, per_angle_upper)
+
+        # Create loss function with optional gradient for jaxopt
+        if per_angle_grad is not None:
+            # jaxopt expects (value, grad) when value_and_grad=True
+            def value_and_grad_fn(x: jnp.ndarray) -> tuple[float, jnp.ndarray]:
+                return per_angle_loss(np.asarray(x)), jnp.asarray(
+                    per_angle_grad(np.asarray(x))
+                )
+
+            solver = LBFGSB(
+                fun=value_and_grad_fn,
+                value_and_grad=True,
+                maxiter=self.config.per_angle_max_iterations,
+                tol=self.config.per_angle_ftol,
+                jit=False,  # Disable JIT for NumPy compatibility
+            )
+        else:
+            # Let jaxopt compute gradients via autodiff
+            def jax_loss_fn(x: jnp.ndarray) -> float:
+                return per_angle_loss(np.asarray(x))
+
+            solver = LBFGSB(
+                fun=jax_loss_fn,
+                maxiter=self.config.per_angle_max_iterations,
+                tol=self.config.per_angle_ftol,
+                jit=False,
+            )
 
         # Run L-BFGS-B on per-angle params only
-        result = optimize.minimize(
-            per_angle_loss,
-            current_params[self.per_angle_indices],
-            method="L-BFGS-B",
-            jac=per_angle_grad,
-            bounds=per_angle_bounds,
-            options={
-                "maxiter": self.config.per_angle_max_iterations,
-                "ftol": self.config.per_angle_ftol,
-            },
-        )
+        x0 = jnp.asarray(current_params[self.per_angle_indices])
+        result = solver.run(x0, bounds=per_angle_bounds)
+
+        # Convert jaxopt result to compatible format
+        optimized_params = np.asarray(result.params)
+        final_loss = float(result.state.value)
+        n_iterations = int(result.state.iter_num)
+        converged = result.state.error < self.config.per_angle_ftol
 
         # Update full params
         full_result_x = current_params.copy()
-        full_result_x[self.per_angle_indices] = result.x
-        result.x = full_result_x
+        full_result_x[self.per_angle_indices] = optimized_params
 
-        return result
+        return _OptimizeResult(
+            x=full_result_x,
+            fun=final_loss,
+            nit=n_iterations,
+            success=converged,
+            message="Converged" if converged else "Max iterations reached",
+        )
 
     def get_diagnostics(self) -> dict:
         """Get optimizer diagnostics.

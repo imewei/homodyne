@@ -11,20 +11,68 @@ Use Cases:
 - Memory-constrained environments
 
 Author: Homodyne Development Team
-Version: 2.2.0
-Date: 2025-11-06
+Version: 2.3.0
+Date: 2026-01-14
 """
 
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from typing import Any
 
+import jax
+import jax.numpy as jnp
 import numpy as np
-from scipy.optimize._numdiff import approx_derivative
+from nlsq import LeastSquares
 
 from homodyne.utils.logging import get_logger
 
 logger = get_logger(__name__)
+
+# Global NLSQ LeastSquares instance for reuse
+_nlsq_engine: LeastSquares | None = None
+
+
+def _get_nlsq_engine() -> LeastSquares:
+    """Get or create global NLSQ LeastSquares engine."""
+    global _nlsq_engine
+    if _nlsq_engine is None:
+        _nlsq_engine = LeastSquares(enable_stability=True)
+    return _nlsq_engine
+
+
+def _jax_jacobian(
+    func: Callable[[np.ndarray], np.ndarray],
+    params: np.ndarray,
+) -> np.ndarray:
+    """Compute Jacobian using JAX autodiff.
+
+    Uses forward-mode autodiff (jacfwd) which is efficient for
+    functions with more outputs than inputs (typical in least squares).
+
+    Parameters
+    ----------
+    func : callable
+        Function to differentiate: f(params) -> residuals
+    params : np.ndarray
+        Point at which to evaluate Jacobian
+
+    Returns
+    -------
+    np.ndarray
+        Jacobian matrix of shape (n_residuals, n_params)
+    """
+    # Convert to JAX array
+    params_jax = jnp.asarray(params)
+
+    # Wrap function for JAX compatibility
+    def jax_func(p: jnp.ndarray) -> jnp.ndarray:
+        return jnp.asarray(func(np.asarray(p)))
+
+    # Compute Jacobian using forward-mode autodiff
+    jac_fn = jax.jacfwd(jax_func)
+    jac = jac_fn(params_jax)
+
+    return np.asarray(jac)
 
 
 def _coerce_mapping_to_array(
@@ -91,7 +139,7 @@ def _normalize_least_squares_kwargs(
     n_params: int,
     parameter_names: Sequence[str] | None,
 ) -> dict[str, Any]:
-    """Normalize SciPy least_squares kwargs to numeric-friendly forms."""
+    """Normalize NLSQ least_squares kwargs to numeric-friendly forms."""
 
     if not optimizer_kwargs:
         return {}
@@ -114,7 +162,7 @@ def _normalize_least_squares_kwargs(
                 )
         except (TypeError, ValueError) as exc:
             logger.warning(
-                "Dropping non-numeric x_scale due to %s; reverting to SciPy default",
+                "Dropping non-numeric x_scale due to %s; reverting to default",
                 exc,
             )
             normalized.pop("x_scale", None)
@@ -142,7 +190,7 @@ def _normalize_least_squares_kwargs(
                     )
         except (TypeError, ValueError) as exc:
             logger.warning(
-                "Dropping non-numeric %s due to %s; reverting to SciPy default",
+                "Dropping non-numeric %s due to %s; reverting to default",
                 scalar_key,
                 exc,
             )
@@ -155,7 +203,7 @@ def _normalize_least_squares_kwargs(
             normalized[tol_key] = float(normalized[tol_key])
         except (TypeError, ValueError) as exc:
             logger.warning(
-                "Dropping non-numeric %s due to %s; reverting to SciPy default",
+                "Dropping non-numeric %s due to %s; reverting to default",
                 tol_key,
                 exc,
             )
@@ -166,7 +214,7 @@ def _normalize_least_squares_kwargs(
             normalized["max_nfev"] = int(normalized["max_nfev"])
         except (TypeError, ValueError) as exc:
             logger.warning(
-                "Dropping non-numeric max_nfev due to %s; reverting to SciPy default",
+                "Dropping non-numeric max_nfev due to %s; reverting to default",
                 exc,
             )
             normalized.pop("max_nfev", None)
@@ -286,11 +334,11 @@ def _select_jacobian_sample(subset: AngleSubset, sample_size: int) -> dict[str, 
 
 
 def _estimate_initial_jacobian_norms(
-    residual_func: callable,
+    residual_func: Callable,
     params: np.ndarray,
     sample: dict[str, Any],
 ) -> np.ndarray | None:
-    """Estimate column norms at the starting point via finite differences."""
+    """Estimate column norms at the starting point via JAX autodiff."""
 
     if sample["phi"].size == 0:
         return None
@@ -299,7 +347,7 @@ def _estimate_initial_jacobian_norms(
         return residual_func(p, sample["phi"], sample["t1"], sample["t2"], sample["g2"])
 
     try:
-        jac = approx_derivative(sample_residual_vector, params, method="2-point")
+        jac = _jax_jacobian(sample_residual_vector, params)
         norms = np.linalg.norm(jac, axis=0) * sample.get("scale", 1.0)
         return norms
     except Exception as exc:  # pragma: no cover - purely diagnostic
@@ -312,7 +360,7 @@ def _compute_final_jacobian_norms(
     sample: dict[str, Any],
     total_rows: int,
 ) -> np.ndarray | None:
-    """Compute column norms from SciPy's final Jacobian, using subsampling."""
+    """Compute column norms from NLSQ's final Jacobian, using subsampling."""
 
     if jacobian is None:
         return None
@@ -423,7 +471,7 @@ def split_data_by_angle(
 
 def optimize_single_angle(
     subset: AngleSubset,
-    residual_func: callable,
+    residual_func: Callable,
     initial_params: np.ndarray,
     bounds: tuple[np.ndarray, np.ndarray],
     **optimizer_kwargs,
@@ -441,7 +489,7 @@ def optimize_single_angle(
     bounds : tuple of np.ndarray
         (lower_bounds, upper_bounds) for parameters
     **optimizer_kwargs
-        Additional arguments passed to optimizer
+        Additional arguments passed to NLSQ optimizer
 
     Returns
     -------
@@ -458,17 +506,14 @@ def optimize_single_angle(
 
     Notes
     -----
-    Uses scipy.optimize.least_squares as the optimizer since we're
-    optimizing per-angle (no chunking issues).
+    Uses NLSQ LeastSquares for JAX-accelerated optimization.
     """
-    from scipy.optimize import least_squares
-
     logger.debug(
         f"Optimizing angle {subset.phi_angle:.2f}° ({subset.n_points:,} points)"
     )
 
     try:
-        # Sanitize dtypes for SciPy: enforce float64 arrays
+        # Sanitize dtypes: enforce float64 arrays
         initial_params = np.asarray(initial_params, dtype=np.float64)
         lower_bounds, upper_bounds = bounds
         lower_bounds = np.asarray(lower_bounds, dtype=np.float64)
@@ -514,33 +559,42 @@ def optimize_single_angle(
             residual_func, initial_params, jac_sample
         )
 
-        # Define residual function for this angle
-        def residuals(params):
-            return residual_func(
-                params, subset.phi, subset.t1, subset.t2, subset.g2_exp
+        # Define residual function for this angle (JAX-compatible)
+        def residuals(params: np.ndarray) -> np.ndarray:
+            return jnp.asarray(
+                residual_func(params, subset.phi, subset.t1, subset.t2, subset.g2_exp)
             )
 
-        # Run optimization
-        result = least_squares(
-            residuals,
-            initial_params,
+        # Get NLSQ engine and run optimization
+        engine = _get_nlsq_engine()
+        result = engine.least_squares(
+            fun=residuals,
+            x0=initial_params,
             bounds=(lower_bounds, upper_bounds),
+            method="trf",
             **optimizer_kwargs,
         )
 
+        # Extract Jacobian for diagnostics (NLSQ returns 'jac' key)
+        jac = result.get("jac")
         final_jacobian_norms = _compute_final_jacobian_norms(
-            getattr(result, "jac", None), jac_sample, subset.n_points
+            jac, jac_sample, subset.n_points
         )
 
         # Compute covariance if possible
         try:
             # Covariance from Jacobian
-            J = result.jac
-            cov = (
-                np.linalg.inv(J.T @ J)
-                * (result.fun @ result.fun)
-                / (len(result.fun) - len(initial_params))
-            )
+            if jac is not None:
+                residual_values = result.get("fun", residuals(result["x"]))
+                n_residuals = len(residual_values)
+                n_params = len(initial_params)
+                cov = (
+                    np.linalg.inv(jac.T @ jac)
+                    * (residual_values @ residual_values)
+                    / (n_residuals - n_params)
+                )
+            else:
+                raise ValueError("No Jacobian available")
         except (np.linalg.LinAlgError, ValueError):
             # Fallback to identity if singular
             logger.warning(
@@ -548,13 +602,19 @@ def optimize_single_angle(
             )
             cov = np.eye(len(initial_params))
 
+        # NLSQ result has different key names
+        success = result.get("success", False)
+        cost = result.get("cost", np.inf)
+        n_iterations = result.get("nfev", 0)
+        message = result.get("message", "")
+
         return {
-            "parameters": result.x,
+            "parameters": np.asarray(result["x"]),
             "covariance": cov,
-            "cost": result.cost,
-            "success": result.success,
-            "n_iterations": result.nfev,
-            "message": result.message,
+            "cost": float(cost),
+            "success": bool(success),
+            "n_iterations": int(n_iterations),
+            "message": str(message),
             "n_points": subset.n_points,
             "phi_angle": subset.phi_angle,
             "jac_initial_norms": initial_jacobian_norms,
@@ -707,7 +767,7 @@ def optimize_per_angle_sequential(
     parameter_names : Sequence[str], optional
         Parameter ordering used to align per-parameter kwargs (e.g., x_scale)
     **optimizer_kwargs
-        Additional arguments passed to scipy.optimize.least_squares
+        Additional arguments passed to NLSQ LeastSquares.least_squares
 
     Returns
     -------
