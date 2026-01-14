@@ -1,819 +1,561 @@
 # ==============================================================================
 # HOMODYNE STATIC DIFFUSION CONFIGURATION TEMPLATE
 # ==============================================================================
-# Comprehensive production-ready template for static diffusion analysis.
+# Production-ready template for static (equilibrium) diffusion analysis.
 # 3-parameter model: D(t) = D₀·t^α + D_offset
 #
-# Use for: Equilibrium systems, pure diffusion, anomalous diffusion
+# Use for: Equilibrium systems, pure diffusion, anomalous diffusion, aging
 # Parameter count: 3 physical + 2 × N_angles scaling = 3 + 2N total
 #
-# VERSION: 2.14.0
-# UPDATED: 2026-01-06
+# For comprehensive documentation of all parameters, see:
+#   homodyne_master_template.yaml
+#
+# VERSION: 2.15.0
+# UPDATED: 2026-01-14
 # ==============================================================================
 
 # ==============================================================================
-# METADATA (Required)
+# METADATA
 # ==============================================================================
-# Template metadata describing analysis configuration
 metadata:
-  config_version: "2.14.0" # Configuration file format version
+  config_version: "2.15.0"
   description: "Static diffusion analysis - 3-parameter model"
-  analysis_mode: "static" # Static diffusion mode
-  parameter_count: 3 # D₀, α, D_offset
+  analysis_mode: "static"
+  parameter_count: 3
 
-  # Physics model description
-  physics_model: "D(t) = D₀·t^α + D_offset" # No shear effects (equilibrium)
+  # Physics model (no shear)
+  physics_model: "D(t) = D₀·t^α + D_offset"
 
-  # Integration and correction methods
-  # NLSQ element-wise integration now matches CMC physics exactly
-  # Uses cumulative trapezoidal integration with searchsorted-based time grid lookup
-  # Eliminates up to 3.4% C₂ error in dynamic transitions between methods
-  integration_method: "discrete_numerical" # Discrete numerical integration for stability
-  diagonal_correction: "mandatory" # Diagonal correction for consistency
-  nlsq_cmc_physics_match: true # NLSQ and CMC use identical integration
+  # Numerical methods
+  integration_method: "discrete_numerical"
+  diagonal_correction: "mandatory"
+  nlsq_cmc_physics_match: true
 
   # Template classification
-  recommended_use: "Equilibrium XPCS systems with pure diffusion and anomalous diffusion"
-  template_type: "production_ready" # Production-ready template
-  complexity: "comprehensive" # All features documented
+  template_type: "production_ready"
+  complexity: "focused"
 
-  # Optional: Generation metadata (filled by homodyne-config)
-  generated_at: null # ISO timestamp when config generated
-  generated_by: null # Tool used to generate config
-
-# ==============================================================================
-# ANALYSIS MODE (Required)
-# ==============================================================================
-# Primary analysis mode selection
-analysis_mode: "static" # Static diffusion (equilibrium)
+  # Auto-filled by CLI
+  generated_at: null
+  generated_by: null
 
 # ==============================================================================
-# ANALYZER PARAMETERS (Required)
+# ANALYSIS MODE
 # ==============================================================================
-# Core physical and instrumental parameters for analysis
+analysis_mode: "static"
+
+# ==============================================================================
+# ANALYZER PARAMETERS
+# ==============================================================================
 analyzer_parameters:
-  # Time resolution
-  dt: 0.1 # Time step between correlation measurements [seconds]
+  dt: 0.001                           # Time step [seconds]
+  start_frame: 1                      # Starting frame (1-indexed)
+  end_frame: 2000                     # Ending frame (inclusive)
 
-  # Frame range for analysis
-  start_frame: 1000 # Starting frame number (1-indexed)
-  end_frame: 2000 # Ending frame number (inclusive)
-
-  # Scattering parameters
   scattering:
-    wavevector_q: 0.0054 # Wave vector magnitude [Å⁻¹] - sample dependent
+    wavevector_q: 0.0054              # Wave vector [Å⁻¹]
 
-  # Geometry parameters (instrumental setup)
   geometry:
-    stator_rotor_gap: 2000000 # Gap between stator and rotor [Å] (200 microns = 2000000 Å)
+    stator_rotor_gap: 2000000         # Gap [Å] (not used in static, kept for compatibility)
 
 # ==============================================================================
-# ANALYSIS SETTINGS (Required)
+# ANALYSIS SETTINGS
 # ==============================================================================
-# Analysis mode-specific settings and model description
 analysis_settings:
-  # Model description for documentation
   model_description:
-    type: "static_diffusion" # Static diffusion model
-    parameters: 3 # D₀, α, D_offset
-    physics: "Equilibrium anomalous diffusion with time-dependent coefficient"
+    type: "static_diffusion"
+    parameters: 3
+    physics: "Equilibrium anomalous diffusion; C2 diagonal correction enforced"
 
 # ==============================================================================
-# EXPERIMENTAL DATA (Required)
+# EXPERIMENTAL DATA
 # ==============================================================================
-# Paths to experimental data files and caching configuration
 experimental_data:
-  # Primary data file (HDF5 format)
-  file_path: "./data/sample/experiment.hdf" # Preferred: Direct path to HDF5 file
+  file_path: "./data/sample/experiment.hdf"
 
-  # Legacy format (data_folder_path + data_file_name)
-  data_folder_path: "./data/sample/" # Folder containing data file
-  data_file_name: "experiment.hdf" # HDF5 data file name
+  # Legacy composite path
+  data_folder_path: "./data/sample/"
+  data_file_name: "experiment.hdf"
 
-  # Phi angles configuration
-  phi_angles_path: "./data/sample/" # Folder containing phi angles list
-  phi_angles_file: "phi_angles_list.txt" # Text file with phi angles (one per line)
+  # Phi angles
+  phi_angles_path: "./data/sample/"
+  phi_angles_file: "phi_angles_list.txt"
 
-  # Caching for performance (saves processed C2 data)
-  cache_file_path: "./data/sample/" # Cache directory
+  # Caching
+  cache_file_path: "./data/sample/"
   cache_filename_template: "cached_c2_static_q{wavevector_q:.4f}_frames_{start_frame}_{end_frame}.npz"
-  cache_compression: true # Enable compression for cache files
+  cache_compression: true
 
-  # Data format specifications
-  data_type: "float64" # Data type for arrays
-  file_format: "HDF5" # File format (currently only HDF5 supported)
-  exchange_key: "exchange" # HDF5 group key for exchange data
+  # Format
+  data_type: "float64"
+  file_format: "HDF5"
+  exchange_key: "exchange"
 
 # ==============================================================================
 # PHI ANGLE FILTERING
 # ==============================================================================
-# Advanced phi angle filtering for optimal scattering analysis
-# For static diffusion: typically use angles parallel (0°) and antiparallel (180°)
-# to detect anisotropic effects or verify isotropic behavior
+# For static diffusion: 0° and 180° detect anisotropy; all angles for isotropic
 phi_filtering:
-  enabled: true # Enable angle filtering to reduce parameter count
+  enabled: true
 
-  # Target angle ranges (all angles normalized to [-180°, 180°])
-  # Angles are checked with wrap-aware logic (e.g., [170°, -170°] works correctly)
   target_ranges:
-    # Range 1: Near 0° (parallel to potential anisotropy axis)
-    - min_angle: -10.0 # Minimum angle [degrees]
-      max_angle: 10.0 # Maximum angle [degrees]
+    - min_angle: -10.0
+      max_angle: 10.0
       description: "Parallel to primary axis"
-
-    # Range 2: Near 180° (antiparallel to anisotropy axis)
     - min_angle: 170.0
-      max_angle: -170.0 # Wraps correctly: 170° to -170° = [170°, 190°]
-      description: "Antiparallel to primary axis"
-
-    # Optional: Perpendicular angles for comprehensive anisotropic analysis
-    # Uncomment if your system shows perpendicular anisotropic effects
+      max_angle: -170.0                # Wrap-aware: 170° to -170°
+      description: "Antiparallel"
+    # Optional for anisotropic analysis:
     # - min_angle: 85.0
     #   max_angle: 95.0
-    #   description: "Perpendicular axis 1"
-    # - min_angle: -95.0
-    #   max_angle: -85.0
-    #   description: "Perpendicular axis 2"
+    #   description: "Perpendicular"
 
-  # Fallback behavior
-  fallback_to_all_angles: true # Use all angles if no angles match target ranges
+  fallback_to_all_angles: true
+  algorithm: "range_based"
+  tolerance: 3.0
 
-  # Filtering algorithm
-  algorithm: "range_based" # Algorithm type (currently only range_based)
-  tolerance: 3.0 # Angular tolerance [degrees] for range matching
-
-  # Quality control for angle selection
   quality_control:
-    min_angles_required: 1 # Minimum number of angles required for analysis
-    max_angle_spread: 36.0 # Maximum spread within a single range [degrees]
-    validate_coverage: true # Validate that angles adequately cover target ranges
-    require_orthogonal_angles: false # Not required for static (use true for anisotropic analysis)
+    min_angles_required: 1
+    max_angle_spread: 36.0
+    validate_coverage: true
+    require_orthogonal_angles: false  # Not required for static
 
 # ==============================================================================
-# INITIAL PARAMETERS (Required)
+# INITIAL PARAMETERS
 # ==============================================================================
-# Starting parameter values for optimization
-#
-# PARAMETER COUNT (Static):
-# -------------------------
-# **PER-ANGLE SCALING MANDATORY**:
-#   - Legacy scalar contrast/offset mode REMOVED
-#   - Each scattering angle has unique optical/detector properties
-#   - Passing per_angle_scaling=False will raise ValueError
-#
-# Physical parameters: 3 [D₀, α, D_offset]
-# Per-angle scaling: 2 × N_angles [contrast, offset]
-# Total: 3 + 2N (e.g., 3 angles → 9 parameters)
-#
+# Total = 3 physical + 2 × N_angles (per-angle contrast + offset)
+# Example: 3 angles → 9 parameters
 initial_parameters:
-  # Parameter names to optimize (3 parameters for static mode)
   parameter_names:
-    - D0 # Diffusion coefficient prefactor
-    - alpha # Anomalous diffusion exponent
-    - D_offset # Baseline diffusion
+    - D0                              # Diffusion prefactor [Å²/s]
+    - alpha                           # Anomalous exponent
+    - D_offset                        # Baseline diffusion [Å²/s]
 
-  # Optional: Initial values (if not provided, uses mid-point of bounds)
-  values: null # List of 3 floats matching parameter_names order
+  # Initial values: null = mid-bounds, or list of 3 floats
+  values: null
   # Example: [1000.0, -1.2, 0.0]
 
-  # Per-angle scaling initialization (mandatory)
-  # IMPORTANT: Initialize from NLSQ results or estimate from data to prevent MCMC convergence failures
-  # For NLSQ→MCMC workflow: Run NLSQ first, copy contrast/offset from results
-  # For data estimation: contrast ≈ (C2_max - C2_min), offset ≈ C2_min
+  # Per-angle scaling (one value per filtered angle)
   per_angle_scaling:
-    contrast: null # List of N floats (one per angle)
-    offset: null # List of N floats (one per angle)
-    # Example for 3 angles: contrast: [0.05, 0.06, 0.05], offset: [1.0, 0.99, 1.01]
-    # Example for 1 angle:  contrast: [0.06], offset: [0.99]
-    # Typical ranges: contrast [0.01-0.2], offset [0.9-1.1] for XPCS data
+    contrast: null                    # e.g., [0.05, 0.06] for 2 angles
+    offset: null                      # e.g., [1.0, 0.99] for 2 angles
 
-  # Optional: Units for documentation
-  units: # Parameter units (for reference)
-    - "Å²/s" # D0
-    - "dimensionless" # alpha
-    - "Å²/s" # D_offset
+  units:
+    - "Å²/s"
+    - "dimensionless"
+    - "Å²/s"
 
-  # Optional: Optimize only a subset of parameters (rest held at initial values)
-  active_parameters: null # List of parameter names to actively optimize
-  # Example: ["D0", "alpha"]  # Fix D_offset
+  # Optional: Optimize subset of parameters
+  active_parameters: null             # e.g., ["D0", "alpha"]
 
-  # Optional: Fix specific parameters at given values
-  fixed_parameters: null # Dict mapping parameter names to fixed values
-  # Example: {"D_offset": 0.0}  # Assume no offset
+  # Optional: Fix parameters at specific values
+  fixed_parameters: null              # e.g., {"D_offset": 0.0}
 
 # ==============================================================================
-# PARAMETER SPACE (Required)
+# PARAMETER SPACE
 # ==============================================================================
-# Parameter bounds and constraints for static diffusion model
-#
-# DEFAULT BOUNDS (from homodyne.core.fitting.ParameterSpace):
-# -----------------------------------------------------------
-# | Parameter | Default Bounds      | Notes                              |
-# |-----------|---------------------|------------------------------------|
-# | contrast  | (0.0, 1.0)          | Physical: visibility/coherence     |
-# | offset    | (0.5, 1.5)          | Baseline around 1.0 ± 50%          |
-# | D0        | (1.0, 1,000,000)    | Diffusion coefficient              |
-# | alpha     | (-2.0, 2.0)         | Tighter for numerical stability    |
-# | D_offset  | (-100,000, 100,000) | Diffusion baseline correction      |
-#
-# Values below can override defaults. If omitted, defaults are used.
-#
 parameter_space:
-  model: "static" # Static diffusion mode
+  model: "static"
 
   bounds:
-    # -------------------------------------------------------------------------
-    # SCALING PARAMETERS (per-angle; defaults: contrast (0,1), offset (0.5,1.5))
-    # -------------------------------------------------------------------------
+    # Scaling parameters
     - name: contrast
-      min: 0.0      # Physical minimum (no negative contrast)
-      max: 1.0      # Physical maximum (fully coherent) - CANNOT exceed 1.0
+      min: 0.0
+      max: 1.0
       type: TruncatedNormal
-      # DEFAULT BOUNDS: (0.0, 1.0) - Physical range for visibility/coherence
-      # Typical XPCS values for static: 0.01-0.1 (lower than flow systems)
 
     - name: offset
-      min: 0.5      # Baseline should be near 1.0
-      max: 1.5      # Allow some variation
+      min: 0.5
+      max: 1.5
       type: TruncatedNormal
-      # DEFAULT BOUNDS: (0.5, 1.5) - Baseline around 1.0 ± 50%
-      # Typical XPCS values: 0.9-1.1
 
-    # -------------------------------------------------------------------------
-    # DIFFUSION PARAMETERS (3 parameters for static mode)
-    # -------------------------------------------------------------------------
+    # Diffusion parameters
     - name: D0
-      min: 100.0 # Minimum diffusion coefficient [Å²/s]
-      max: 1e5 # Maximum diffusion coefficient [Å²/s]
-      type: TruncatedNormal # Bound type for priors
-      prior_mu: 1000.0 # Prior mean (for Bayesian methods)
-      prior_sigma: 1000.0 # Prior std dev (for Bayesian methods)
+      min: 100.0
+      max: 100000.0
+      type: TruncatedNormal
+      prior_mu: 1000.0
+      prior_sigma: 1000.0
       unit: "Å²/s"
-      # DEFAULT BOUNDS: (1.0, 1,000,000) - Wide range for diverse systems
-      # Physical meaning: Controls magnitude of diffusion in D(t) = D₀·t^α + D_offset
-      # Typical range: 100-10000 for colloidal systems
 
     - name: alpha
-      min: -2.0 # ✅ FIXED: Physically realistic minimum (was -10.0)
-      max: 2.0 # ✅ FIXED: Physically realistic maximum (was 10.0)
-      type: TruncatedNormal # ✅ FIXED: Changed from Normal to enforce bounds
-      prior_mu: -1.2 # Prior mean
-      prior_sigma: 0.3 # Prior std dev
+      min: -2.0
+      max: 2.0
+      type: TruncatedNormal
+      prior_mu: -1.2                  # Subdiffusion common in equilibrium
+      prior_sigma: 0.3
       unit: "dimensionless"
-      # DEFAULT BOUNDS: (-2.0, 2.0) - Tighter for numerical stability
-      # Physical meaning: Anomalous diffusion exponent
-      # 0 = normal diffusion, <0 = subdiffusion, >0 = superdiffusion
-      # ✅ Bounds tightened: [-10,10] caused numerical underflow (alpha=-4.96 → theory≈0)
-      # Typical range: -2 to 2 for equilibrium systems
 
     - name: D_offset
-      min: -100000.0 # Minimum baseline diffusion [Å²/s]
-      max: 100000.0 # Maximum baseline diffusion [Å²/s]
-      type: TruncatedNormal # ✅ FIXED: Changed from Normal to enforce bounds
-      prior_mu: 0.0 # Prior mean
-      prior_sigma: 150.0 # Prior std dev
+      min: -100000.0
+      max: 100000.0
+      type: TruncatedNormal
+      prior_mu: 0.0
+      prior_sigma: 150.0
       unit: "Å²/s"
-      # DEFAULT BOUNDS: (-100,000, 100,000) - Allows negative for arrested systems
-      # Physical meaning: Constant diffusion contribution (can be negative)
-      # Typical range: -100 to 100 for most systems
 
-  # Optional: Prior distributions for Bayesian methods
-  # priors: null # Set to null if using default priors
-  #
-  # DATA-DRIVEN PRIORS (Best Practice):
-  # ------------------------------------------
-  # For improved MCMC convergence, estimate priors from data:
-  #
-  # Step 1: Compute data statistics
-  #   p05 = np.percentile(c2_data, 5)   # e.g., 1.03
-  #   p95 = np.percentile(c2_data, 95)  # e.g., 1.30
-  #   mean = np.mean(c2_data)           # e.g., 1.13
-  #
-  # Step 2: Derive contrast prior (signal amplitude)
-  #   contrast_mu = p95 - p05           # e.g., 0.27
-  #   contrast_sigma = 0.15             # moderate uncertainty
-  #
-  # Step 3: Derive offset prior (baseline)
-  #   offset_mu = p05 - contrast_mu/2   # or use 1.0 for normalized data
-  #   offset_sigma = 0.15               # moderate uncertainty
-  #
-  # Example data-driven priors (uncomment to use):
+  # Data-driven priors for MCMC (optional)
   priors:
     contrast:
       dist_type: TruncatedNormal
-      mu: 0.06                          # Data-driven: (p95 - p05) - static typically has lower contrast
-      sigma: 0.05                       # Moderate uncertainty
-      min_val: 0.0                      # Physical lower bound
-      max_val: 0.5                      # Physical upper bound (static systems have lower contrast)
-      # Physical meaning: Per-angle contrast in c2_fitted = offset + contrast × c2_theory
+      mu: 0.06                        # Static typically has lower contrast
+      sigma: 0.05
+      min_val: 0.0
+      max_val: 0.5
 
     offset:
       dist_type: TruncatedNormal
-      mu: 1.0                           # Data-driven: baseline C2 value
-      sigma: 0.1                        # Moderate uncertainty
-      min_val: 0.8                      # Physical lower bound
-      max_val: 1.2                      # Physical upper bound
-      # Physical meaning: Per-angle offset in c2_fitted = offset + contrast × c2_theory
+      mu: 1.0
+      sigma: 0.1
+      min_val: 0.8
+      max_val: 1.2
 
 # ==============================================================================
-# OPTIMIZATION METHODS
+# OPTIMIZATION
 # ==============================================================================
-# Optimization method selection and configuration
 optimization:
-  method:
-    "nlsq" # Options: "nlsq" | "mcmc"
-    # Note: MCMC uses CMC-only architecture with per-shard NUTS sampling
+  method: "nlsq"
 
-  # ---------------------------------------------------------------------------
-  # NLSQ - Trust-Region Nonlinear Least Squares (Primary Method)
-  # ---------------------------------------------------------------------------
-  # Fast, deterministic optimization using Levenberg-Marquardt algorithm
-  # CPU-optimized with JAX 0.8.0, JIT-compiled for performance
-  #
-  # UNIFIED MEMORY-BASED STRATEGY SELECTION (v2.14.0):
-  # Automatic strategy selection based on dataset size AND available memory.
-  #   < 1M points     → STANDARD (curve_fit)
-  #   1M-10M points   → LARGE (curve_fit_large)
-  #   10M-100M points → CHUNKED (curve_fit_large with progress)
-  #   > 100M points   → STREAMING (unlimited data with checkpointing)
-  #
-  # Memory-based override: If estimated memory > threshold, switches to
-  # streaming mode. Configure via memory_fraction (adaptive) or
-  # memory_threshold_gb (explicit).
+  # ===========================================================================
+  # NLSQ - Trust-Region Nonlinear Least Squares
+  # ===========================================================================
   nlsq:
-    # Memory-based strategy selection (v2.14.0)
-    memory_fraction: 0.75 # Adaptive: use 75% of available RAM as threshold
-    # memory_threshold_gb: 48.0 # Explicit threshold (uncomment to override)
+    # Memory configuration
+    memory_fraction: 0.75             # Use 75% of available RAM
+    # memory_threshold_gb: 48.0       # OR: explicit threshold
 
-    max_iterations: 100 # Maximum optimization iterations
-    tolerance: 1e-8 # Convergence tolerance
-    trust_region_scale: 1.0 # Trust region scaling factor (0.1-10.0)
-    verbose: false # Print iteration details
+    # Convergence settings
+    max_iterations: 100
+    tolerance: 1.0e-8                 # Function tolerance (ftol)
+    xtol: 1.0e-8                      # Parameter tolerance
+    gtol: 1.0e-8                      # Gradient tolerance
+    trust_region_scale: 1.0
+    verbose: false
 
-    # ROBUST LOSS FUNCTION SELECTION
-    # --------------------------------
-    # Controls how outliers affect the fit. All loss functions are JAX JIT-compiled.
-    #
-    # Available options:
-    #   "linear"  - Standard least squares: ρ(z) = z
-    #               No outlier protection; fastest; optimal for clean data
-    #
-    #   "huber"   - Huber loss: ρ(z) = z if z ≤ 1, else 2√z - 1
-    #               Quadratic for small residuals, linear for large
-    #               Good balance between efficiency and robustness
-    #
-    #   "soft_l1" - Soft L1 loss: ρ(z) = 2(√(1+z) - 1)
-    #               Smooth approximation to L1 norm
-    #               More robust than Huber; preserves differentiability
-    #               RECOMMENDED DEFAULT for XPCS data
-    #
-    #   "cauchy"  - Cauchy/Lorentzian: ρ(z) = ln(1 + z)
-    #               Extremely robust; handles heavy-tailed errors
-    #               May converge slowly; use cautiously
-    #
-    #   "arctan"  - Arctangent: ρ(z) = arctan(z)
-    #               Bounded loss; very robust to extreme outliers
-    #               May converge slowly; use cautiously
-    #
-    # LOSS FUNCTION SELECTION FOR XPCS:
-    # ----------------------------------
-    # | Data Quality              | Recommended Loss |
-    # |---------------------------|------------------|
-    # | Clean, well-characterized | "linear"         |
-    # | Typical XPCS data         | "soft_l1"        |
-    # | Few outliers/artifacts    | "huber"          |
-    # | Many outliers             | "soft_l1"        |
-    # | Severe contamination      | "cauchy"         |
-    # | Unknown quality           | "soft_l1"        |
-    #
-    # XPCS-specific considerations:
-    #   - Detector artifacts, cosmic rays, dead pixels → use "soft_l1"
-    #   - High-quality synchrotron data → "linear" or "huber"
-    #   - If convergence issues with "cauchy"/"arctan" → fall back to "soft_l1"
-    #
-    loss: "soft_l1"
+    # Loss function
+    loss: "soft_l1"                   # Recommended for XPCS data
 
-    # Parameter-Specific Scaling (Optional for Static Mode)
-    # ------------------------------------------------------
-    # Less critical than laminar flow, but can help if alpha has large gradients
-    # Use gradient diagnostics if optimization shows signs of premature convergence:
-    #   python scripts/diagnose_gradients.py --results-dir ./homodyne_results/nlsq
-    x_scale_map: null # Per-parameter scaling (null = uniform scaling)
-    # Example if gradient diagnostics shows imbalance:
-    # x_scale_map:
-    #   D0: 1.0
-    #   alpha: 0.01                            # If alpha gradient is 100× larger
-    #   D_offset: 1.0
+    # Parameter scaling (less critical for static - similar parameter scales)
+    x_scale_map: null
 
-    # -------------------------------------------------------------------------
-    # PROGRESS BAR AND LOGGING
-    # -------------------------------------------------------------------------
-    # Controls progress bar display and logging verbosity during optimization.
-    # Provides real-time feedback on optimization progress.
+    # Progress
     progress:
-      enable: true       # Show tqdm progress bar during fitting
-      verbose: 1         # Verbosity level: 0=quiet, 1=normal (milestones), 2=detailed
-      log_interval: 10   # Log every N iterations (for verbose >= 2)
+      enable: true
+      verbose: 1
+      log_interval: 10
 
-    # ---------------------------------------------------------------------------
-    # MULTI-START OPTIMIZATION
-    # ---------------------------------------------------------------------------
-    # Explores parameter space from multiple starting points using Latin
-    # Hypercube Sampling to find global optimum and detect parameter degeneracy.
-    # See multistart_example.yaml for detailed configuration options.
-    #
-    # Strategy Selection (automatic based on dataset size):
-    # - < 1M points:    FULL strategy (N complete fits in parallel)
-    # - 1M - 100M:      SUBSAMPLE strategy (multi-start on 500K subsample)
-    # - > 100M points:  PHASE1 strategy (parallel L-BFGS warmup, single GN)
-    multi_start:
-      enable: false                     # Default OFF - user opt-in
-      n_starts: 10                      # Number of LHS starting points
-      seed: 42                          # Random seed for reproducibility
-      sampling_strategy: "latin_hypercube"  # or "random"
-      n_workers: 0                      # 0 = auto (min of n_starts, cpu_count)
-      use_screening: true               # Pre-filter by initial cost
-      screen_keep_fraction: 0.5         # Keep top 50%
-      subsample_size: 500000            # Subsample size for 1M-100M datasets
-      warmup_only_threshold: 100000000  # 100M: switch to Phase 1 strategy
-      refine_top_k: 3                   # Polish top 3 solutions
-      refinement_ftol: 1.0e-12          # Tighter tolerance for refinement
-      degeneracy_threshold: 0.1         # Flag if chi² within 10%
+    # Diagnostics
+    diagnostics:
+      enabled: false
+      sample_size: 2048
+      check_gradients: true
+      log_jacobian_norms: false
 
-    # ---------------------------------------------------------------------------
-    # HYBRID STREAMING - Four-Phase Adaptive Optimizer
-    # ---------------------------------------------------------------------------
-    # Fixes three issues with large datasets:
-    # 1. Parameter gradient imbalance - via bounds-based normalization
-    # 2. Slow convergence - via L-BFGS warmup + Gauss-Newton refinement
-    # 3. Crude covariance - via exact J^T J accumulation + covariance transform
-    #
-    # For static mode, gradient imbalance is less severe than laminar_flow,
-    # but hybrid streaming still provides faster convergence for large datasets.
-    #
-    # Use for: Datasets > 10M points
-    # Memory: Bounded at ~2 GB regardless of dataset size
+    # -------------------------------------------------------------------------
+    # HYBRID STREAMING (>10M points)
+    # -------------------------------------------------------------------------
     hybrid_streaming:
-      enable: true                              # Use hybrid optimizer for large datasets
-      normalize: true                           # Enable parameter normalization
-      normalization_strategy: "auto"            # Options: "auto" | "bounds" | "p0" | "none"
-                                                # "auto" selects best strategy based on bounds/p0
-      warmup_iterations: 200                    # L-BFGS warmup iterations before switch check
-      max_warmup_iterations: 500                # Maximum L-BFGS iterations (force switch to GN)
-      warmup_learning_rate: 0.01               # L-BFGS line search scale
-      gauss_newton_max_iterations: 100          # Maximum Gauss-Newton iterations
-      gauss_newton_tol: 1.0e-8                  # Convergence tolerance
-      chunk_size: 10000                         # Points per chunk for streaming
-      trust_region_initial: 1.0                 # Initial trust region size
-      regularization_factor: 1.0e-10            # Tikhonov regularization
-      enable_checkpoints: true                  # Enable checkpoint save/resume
-      checkpoint_frequency: 100                 # Checkpoint every N iterations
-      validate_numerics: true                   # Numerical validation (NaN/Inf)
-      verbose: 1                                # Verbosity: 0=silent, 1=progress, 2=debug
-      log_frequency: 1                          # Log every N iterations (Phase 2 progress)
+      enable: true
+      normalize: true
+      normalization_strategy: "auto"
+      warmup_iterations: 200
+      max_warmup_iterations: 500
+      warmup_learning_rate: 0.001
+      gauss_newton_max_iterations: 100
+      gauss_newton_tol: 1.0e-8
+      chunk_size: 10000
+      trust_region_initial: 1.0
+      regularization_factor: 1.0e-10
+      enable_checkpoints: true
+      checkpoint_frequency: 100
+      validate_numerics: true
+      verbose: 1
+      log_frequency: 1
 
-      # -------------------------------------------------------------------------
-      # 4-LAYER DEFENSE STRATEGY (NLSQ 0.3.6)
-      # -------------------------------------------------------------------------
-      # Prevents L-BFGS warmup from diverging when starting from good parameters.
-      # All layers are ENABLED BY DEFAULT - no configuration needed for most cases.
-      #
-      # Problem: L-BFGS warmup can overshoot good initial parameters due to
-      # aggressive step sizes from approximate Hessian information.
-      #
-      # Solution: 4 complementary defense layers that protect good starting points
-      # while preserving L-BFGS exploration benefits for poor starting points.
-      #
-      # Layer 1: Warm Start Detection
-      # - Skips L-BFGS warmup entirely if initial loss is already low
-      # - Threshold: loss/variance < warm_start_threshold
-      enable_warm_start_detection: true         # Enable warm start detection
-      warm_start_threshold: 0.01                # Skip warmup if loss/variance < this
-      #
-      # Layer 2: Adaptive Learning Rate
-      # - Scales learning rate based on initial loss quality
-      # - Good starts (rel_loss < 0.1): use warmup_lr_refinement
-      # - Moderate starts (rel_loss < 1.0): use warmup_lr_careful
-      # - Poor starts: use warmup_learning_rate (full exploration)
-      enable_adaptive_warmup_lr: true           # Enable adaptive LR
-      warmup_lr_refinement: 1.0e-6              # LR for refinement mode (good starts)
-      warmup_lr_careful: 1.0e-5                 # LR for careful mode (moderate starts)
-      #
-      # Layer 3: Cost-Increase Guard
-      # - Aborts L-BFGS warmup if loss increases too much from initial
-      # - Reverts to best parameters found during warmup
-      enable_cost_guard: true                   # Enable cost guard
-      cost_increase_tolerance: 0.05             # Abort if loss increases >5%
-      #
-      # Layer 4: Step Clipping
-      # - Limits maximum parameter change per L-BFGS iteration
-      # - Prevents catastrophic jumps to wrong basins
-      enable_step_clipping: true                # Enable step clipping
-      max_warmup_step_size: 0.1                 # Max step (fraction of normalized range)
+      # 4-Layer Defense Strategy
+      enable_warm_start_detection: true
+      warm_start_threshold: 0.01
+      enable_adaptive_warmup_lr: true
+      warmup_lr_refinement: 1.0e-6
+      warmup_lr_careful: 1.0e-5
+      enable_cost_guard: true
+      cost_increase_tolerance: 0.05
+      enable_step_clipping: true
+      max_warmup_step_size: 0.1
 
-    # ---------------------------------------------------------------------------
-    # ANTI-DEGENERACY DEFENSE SYSTEM (v2.9.0+) - SIMPLIFIED
-    # ---------------------------------------------------------------------------
-    # NOTE: This system is designed for laminar_flow mode where shear parameters
-    # can collapse due to per-angle parameter absorption. For static mode with
-    # only 3 physical parameters, this is generally NOT NEEDED and is disabled
-    # by default.
-    #
-    # Enable only if you observe parameter collapse in static mode with many
-    # angles (n_phi > 10) where contrast/offset absorb all signal.
-    #
-    # See: docs/specs/anti-degeneracy-defense-v2.9.0.md
+    # -------------------------------------------------------------------------
+    # ANTI-DEGENERACY (Minimal for Static Mode)
+    # -------------------------------------------------------------------------
+    # Static mode has only 3 physical parameters with similar scales.
+    # Anti-degeneracy system is designed for laminar_flow gradient cancellation.
+    # Disabled by default; enable only if parameter collapse observed.
     anti_degeneracy:
-      enable: false                   # Disabled for static mode by default
-      per_angle_mode: "individual"    # "individual" | "constant" | "fourier" | "auto"
-      constant_scaling_threshold: 3   # Use constant mode when n_phi >= this
-
-      # Legacy layers - all disabled for static mode
-      fourier:
-        order: 2
-        min_phi_for_fourier: 6
-        regularize_high_order: false
-
-      hierarchical:
-        enable: false
-        max_outer_iterations: 5
-        outer_tolerance: 1.0e-6
-
-      regularization:
-        enable: false
-        mode: "absolute"
-        lambda: 0.01
-        target_cv: 0.10
+      enable: false                   # Not needed for static mode
+      per_angle_mode: "individual"
+      constant_scaling_threshold: 3
 
       gradient_monitoring:
-        enable: true              # Lightweight diagnostic
-        ratio_threshold: 0.01     # Trigger if |∇_physical|/|∇_scaling| < 0.01
-        consecutive_triggers: 5   # Must trigger 5× before warning
-        response: "warn"          # Just log warning, don't intervene
+        enable: true                  # Lightweight diagnostic only
+        ratio_threshold: 0.01
+        consecutive_triggers: 5
+        response: "warn"              # Just warn, don't intervene
 
-  # ---------------------------------------------------------------------------
-  # STRATIFICATION - Angle-Stratified Chunking
-  # ---------------------------------------------------------------------------
-  # Fixes per-angle parameter compatibility with NLSQ chunking for large datasets
-  # Automatically reorganizes data to ensure all chunks contain all phi angles
-  # Prevents silent optimization failures (0 iterations, zero gradients)
+    # -------------------------------------------------------------------------
+    # MULTI-START OPTIMIZATION
+    # -------------------------------------------------------------------------
+    # FULL strategy only (no subsampling per project requirements)
+    multi_start:
+      enable: false
+      n_starts: 10
+      seed: 42
+      sampling_strategy: "latin_hypercube"
+      n_workers: 0
+      use_screening: true
+      screen_keep_fraction: 0.5
+      refine_top_k: 3
+      refinement_ftol: 1.0e-12
+      degeneracy_threshold: 0.1
+
+    # -------------------------------------------------------------------------
+    # CMA-ES GLOBAL OPTIMIZATION
+    # -------------------------------------------------------------------------
+    # Usually overkill for static mode (similar parameter scales).
+    # Consider multi-start instead.
+    cmaes:
+      enable: false
+      preset: "cmaes"
+      max_generations: 100
+      sigma: 0.5
+      tol_fun: 1.0e-8
+      tol_x: 1.0e-8
+      restart_strategy: "bipop"
+      max_restarts: 9
+      population_batch_size: null
+      data_chunk_size: null
+      memory_limit_gb: 8.0
+      auto_select: false              # Disabled for static (similar scales)
+      scale_threshold: 1000.0
+
+      # Post-CMA-ES refinement
+      refine_with_nlsq: true
+      refinement_workflow: "auto"
+      refinement_ftol: 1.0e-10
+      refinement_xtol: 1.0e-10
+      refinement_gtol: 1.0e-10
+      refinement_max_nfev: 500
+      refinement_loss: "linear"
+
+  # ===========================================================================
+  # STREAMING (>100M points)
+  # ===========================================================================
+  streaming:
+    enable_checkpoints: true
+    checkpoint_dir: "./checkpoints"
+    checkpoint_frequency: 10
+    resume_from_checkpoint: true
+    keep_last_checkpoints: 3
+    enable_fault_tolerance: true
+    max_retries_per_batch: 2
+    min_success_rate: 0.5
+    batch_size: null
+    adaptive_batching: true
+
+  # ===========================================================================
+  # STRATIFICATION
+  # ===========================================================================
   stratification:
-    enabled:
-      "auto" # Options: "auto" | true | false
-      # "auto" activates when: per_angle_scaling=True AND n_points>=100k
-    target_chunk_size:
-      100000 # Target size for stratified chunks [points]
-      # Should match NLSQ's internal chunk size
-    max_imbalance_ratio:
-      5.0 # Maximum angle imbalance ratio before fallback
-      # Fallback to sequential if max_count/min_count > threshold
-    force_sequential_fallback:
-      false # Force sequential per-angle optimization
-      # Useful for highly imbalanced angle distributions
-    check_memory_safety:
-      true # Check available memory before stratification
-      # Warns if peak memory > 70% of available
-    use_index_based:
-      false # Use zero-copy index-based stratification
-      # Reduces memory overhead from 2x to ~1%
-      # Recommended for very large datasets (>10M points)
-    collect_diagnostics:
-      false # Collect detailed stratification diagnostics
-      # Performance metrics, chunk balance, angle coverage
-      # Minimal overhead (~0.01s)
-    log_diagnostics:
-      false # Log diagnostic report to console
-      # Requires collect_diagnostics=true
-      # Useful for troubleshooting and validation
+    enabled: "auto"
+    target_chunk_size: 100000
+    max_imbalance_ratio: 5.0
+    force_sequential_fallback: false
+    check_memory_safety: true
+    use_index_based: false
+    collect_diagnostics: false
+    log_diagnostics: false
 
-  # Performance Impact:
-  # - Time overhead: <1% (0.15s for 3M points)
-  # - Memory overhead: 2x peak (temporary) or ~1% (index-based)
-  # - Diagnostics overhead: <0.1% (0.01s for 3M points)
-  # - Fixes: Silent failures with per-angle scaling on large datasets
-
-  # ---------------------------------------------------------------------------
-  # SEQUENTIAL - Sequential Per-Angle Optimization
-  # ---------------------------------------------------------------------------
-  # Fallback strategy when stratification cannot be applied
-  # Optimizes each phi angle independently and combines results
-  # Used when: angle imbalance > threshold OR force_sequential_fallback=true
+  # ===========================================================================
+  # SEQUENTIAL FALLBACK
+  # ===========================================================================
   sequential:
-    min_success_rate:
-      0.5 # Minimum fraction of angles that must converge
-      # Optimization fails if fewer angles converge
-    weighting:
-      "inverse_variance" # Result combination method
-      # Options: "inverse_variance" | "uniform" | "n_points"
-      # "inverse_variance" provides optimal statistical weighting
+    min_success_rate: 0.5
+    weighting: "inverse_variance"
 
-  # Usage Notes:
-  # - Automatically activated when: imbalance_ratio > max_imbalance_ratio
-  # - Can be forced via: optimization.stratification.force_sequential_fallback=true
-  # - Uses scipy.optimize.least_squares per angle (CPU only)
-  # - Combines results using weighted averaging
+  # ===========================================================================
+  # RECOVERY
+  # ===========================================================================
+  recovery:
+    enable: true
+    max_attempts: 3
+    lr_decay: 0.5
+    lambda_growth: 2.0
+    trust_decay: 0.5
+    log_retries: true
 
-  # ---------------------------------------------------------------------------
-  # MCMC - Base MCMC Sampler Configuration
-  # ---------------------------------------------------------------------------
-  # Base configuration for NumPyro/BlackJAX NUTS sampler.
-  # Used by CMC shards; can be overridden in cmc.per_shard_mcmc.
+  # ===========================================================================
+  # MCMC - Base Configuration
+  # ===========================================================================
   mcmc:
-    backend: "numpyro"           # "numpyro" | "blackjax"
-    num_warmup: 1000             # Increase if divergences persist
-    num_samples: 3000            # Lower for diagnostics, raise for publication
-    num_chains: 4                # ≥2 for R-hat calculation
+    backend: "numpyro"
+    num_warmup: 1000                  # More warmup OK for 3 params
+    num_samples: 3000
+    num_chains: 4
     progress_bar: true
-    target_accept_prob: 0.90     # NUTS target acceptance
+    target_accept_prob: 0.90
     max_tree_depth: 12
-    dense_mass_matrix: true      # Full covariance adaptation
+    dense_mass_matrix: true
 
-    # Per-phi initialization (rarely needed)
     initial_values:
-      phi: {}                    # {angle_deg: {contrast: X, offset: Y}}
+      phi: {}
       percentile_fallback:
         contrast_low_pct: 5
         contrast_high_pct: 95
         offset_pct: 50
 
-  # ---------------------------------------------------------------------------
-  # CMC - Consensus Monte Carlo (Only MCMC Path)
-  # ---------------------------------------------------------------------------
-  # Parallelizes MCMC across data shards using per-shard NUTS sampling.
-  # Combines subposteriors via Consensus Monte Carlo (precision-weighted means).
+  # ===========================================================================
+  # CMC - Consensus Monte Carlo
+  # ===========================================================================
   cmc:
-    enable: "auto"               # true | false | "auto"
-    min_points_for_cmc: 500000   # Threshold for auto-enable
-    backend: "jax"               # "jax" | "numpy"
+    enable: "auto"
+    min_points_for_cmc: 500000        # Higher threshold for simpler model
+    run_id: null
+    backend: "jax"
 
-    # Backend configuration for parallel execution
     backend_config:
-      name: "auto"               # "auto" | "multiprocessing" | "pjit" | "pbs" | "slurm"; legacy "jax" maps to "multiprocessing"
+      name: "auto"
       enable_checkpoints: true
-      checkpoint_frequency: 1    # Save every N shards
+      checkpoint_frequency: 1
       checkpoint_dir: "./cmc_checkpoints"
       keep_last_checkpoints: 3
       resume_from_checkpoint: true
 
-    # Data sharding
     sharding:
-      strategy: "stratified"     # "stratified" (angle-aware) | "random" | "contiguous"
-      num_shards: "auto"         # "auto" uses n_phi for stratified
-      max_points_per_shard: "auto"  # "auto" resolves to 100000 for static mode.
-      seed_base: 0               # Shard seed = seed_base + shard_id
+      strategy: "stratified"
+      num_shards: "auto"
+      max_points_per_shard: "auto"    # 100k for static (10x larger than laminar)
+      seed_base: 0
 
-    # Per-shard timeout settings
-    per_shard_timeout: 7200      # 2 hours per shard (static mode converges faster)
-    heartbeat_timeout: 600       # 10 minutes - terminate unresponsive workers
+    per_shard_timeout: 7200           # 2 hours (static converges faster)
+    heartbeat_timeout: 600
 
-    # Subposterior combination
     combination:
-      method: "consensus_mc"     # "consensus_mc" (recommended) | "weighted_gaussian" | "simple_average"
+      method: "consensus_mc"
       validate_results: true
-      min_success_rate: 0.90     # Require 90% shard convergence (static mode has simpler posteriors)
-      min_success_rate_warning: 0.80  # Warn if success rate below this threshold
+      min_success_rate: 0.90          # Higher for simpler model
+      min_success_rate_warning: 0.80
 
-    # Per-shard MCMC (overrides base mcmc settings for shards). No
-    # subsampling is performed; each shard uses all assigned points.
     per_shard_mcmc:
       num_warmup: 500
       num_samples: 1500
       num_chains: 2
       target_accept_prob: 0.85
 
-    # Convergence validation
     validation:
-      strict_mode: true          # Fail if thresholds not met
-      min_per_shard_ess: 100.0   # Effective sample size threshold
-      max_per_shard_rhat: 1.1    # R-hat threshold
-      max_between_shard_kl: 2.0  # KL divergence between shards
+      strict_mode: true               # Strict OK for simpler model
+      min_per_shard_ess: 100.0
+      max_per_shard_rhat: 1.1
+      max_between_shard_kl: 2.0
       min_success_rate: 0.90
 
 # ==============================================================================
 # NOISE ESTIMATION (Optional)
 # ==============================================================================
-# Automatic noise level estimation using hybrid NumPyro approach
-# Estimates per-angle or global noise variance to improve fit quality
 noise_estimation:
-  enabled: false # Enable automatic noise estimation
-  model: "per_angle" # Options: "per_angle" | "global"
+  enabled: false
+  model: "per_angle"
 
-  # Adam optimization settings for noise parameter estimation
   adam_config:
-    learning_rate: 0.01 # Adam learning rate
-    max_epochs: 500 # Maximum optimization epochs
-    convergence_threshold: 1e-6 # Convergence threshold for loss
-    early_stopping: true # Enable early stopping for efficiency
+    learning_rate: 0.01
+    max_epochs: 500
+    convergence_threshold: 1.0e-6
+    early_stopping: true
 
-  # Posterior sampling for uncertainty quantification
-  posterior_samples: 1200 # Number of posterior samples for noise uncertainty
+  posterior_samples: 1200
 
-  # Quality control for noise estimation
   validation:
-    check_convergence: true # Verify optimization convergence
-    reasonable_range: [1e-4, 1.0] # Expected noise range (bounds for sanity check)
-    warn_outliers: true # Warn about unusual noise estimates
+    check_convergence: true
+    reasonable_range: [1.0e-4, 1.0]
+    warn_outliers: true
 
-  # Per-angle model settings
   per_angle:
-    min_angles_required: 2 # Minimum angles needed for per-angle estimation
-    validate_coverage: true # Ensure proper angle coverage
+    min_angles_required: 2
+    validate_coverage: true
 
 # ==============================================================================
-# PERFORMANCE OPTIMIZATION
+# PERFORMANCE
 # ==============================================================================
-# Performance and memory management settings
 performance:
-  # Strategy override (null = automatic selection based on dataset size)
-  strategy_override: null # Options: null | "standard" | "large" | "chunked" | "streaming"
+  strategy_override: null
+  memory_limit_gb: null
+  enable_progress: true
 
-  # Memory management
-  memory_limit_gb: null # Custom memory limit in GB (null = auto-detect)
-  enable_progress: true # Show progress bars during optimization
-
-  # Memory optimization settings
   memory_optimization:
-    enabled: true # Enable memory optimization
-    max_memory_usage_gb: 6.0 # Maximum memory usage [GB]
-    chunk_size: 8000 # Data chunk size for processing
-    enable_caching: true # Enable intelligent caching
-    cache_strategy: "adaptive" # Options: "adaptive" | "aggressive" | "conservative"
+    enabled: true
+    max_memory_usage_gb: 6.0
+    chunk_size: 8000
+    enable_caching: true
+    cache_strategy: "adaptive"
 
-  # Computation settings
   computation:
-    enable_jit: true # Enable JAX JIT compilation
-    cpu_threads: "auto" # Number of CPU threads (int or "auto")
-    vectorization_level: "high" # Options: "low" | "medium" | "high"
-    # Note: GPU support removed
+    enable_jit: true
+    cpu_threads: "auto"
+    vectorization_level: "high"
 
 # ==============================================================================
 # LOGGING
 # ==============================================================================
-# Logging configuration for analysis monitoring
 logging:
-  enabled: true # Enable logging
-  level: "INFO" # Options: "DEBUG" | "INFO" | "WARNING" | "ERROR"
+  enabled: true
+  level: "INFO"
 
-  # Console logging
   console:
-    enabled: true # Log to console
-    level: "INFO" # Console log level
-    format: "detailed" # Options: "simple" | "detailed"
-    colors: true # Enable colored output
-    show_progress: true # Show progress indicators
+    enabled: true
+    level: "INFO"
+    format: "detailed"
+    colors: true
+    show_progress: true
 
-  # File logging
   file:
-    enabled: false # Log to file
-    level: "DEBUG" # File log level
-    path: "./logs/" # Log directory
-    filename: "homodyne_static_analysis.log" # Log file name
-    max_size_mb: 10 # Maximum log file size before rotation
-    backup_count: 5 # Number of backup log files to keep
+    enabled: false
+    level: "DEBUG"
+    path: "./logs/"
+    filename: "homodyne_static.log"
+    max_size_mb: 10
+    backup_count: 5
 
-  # Module-specific logging levels
   modules:
     "homodyne.data.phi_filtering": "INFO"
     "homodyne.data.xpcs_loader": "INFO"
     "homodyne.optimization.nlsq_wrapper": "INFO"
-    "jax._src": "WARNING" # Suppress JAX internal messages
+    "jax._src": "WARNING"
 
 # ==============================================================================
 # QUALITY CONTROL (Optional)
 # ==============================================================================
-# Advanced quality control for data validation and analysis monitoring
 quality_control:
-  enabled: false # Enable quality control checks
+  enabled: false
 
-  # Angle-specific quality checks
   angle_quality:
-    validate_angle_coverage: true # Validate angle coverage adequacy
-    min_angles_per_range: 1 # Minimum angles required per target range
-    check_angle_distribution: true # Check angle distribution uniformity
+    validate_angle_coverage: true
+    min_angles_per_range: 1
+    check_angle_distribution: true
 
-  # Multi-angle data validation
   multi_angle_validation:
-    check_correlation_consistency: true # Check correlation consistency across angles
-    validate_angle_dependencies: true # Validate physical angle dependencies
-    detect_anomalous_angles: true # Detect and warn about anomalous angles
+    check_correlation_consistency: true
+    validate_angle_dependencies: true
+    detect_anomalous_angles: true
 
 # ==============================================================================
-# VISUALIZATION (Optional)
+# PLOTTING
 # ==============================================================================
-# Plot generation and output configuration
 plotting:
-  save_plots: true # Save plots to output directory
-  show_plots: false # Display plots interactively
-  format: "png" # Options: "png" | "pdf" | "svg"
-  dpi: 300 # Resolution [dots per inch]
-  style: "publication" # Plot style (matplotlib style name)
+  save_plots: true
+  show_plots: false
+  format: "png"
+  dpi: 300
+  style: "publication"
 
-  # Rendering mode selection (hybrid plotting system)
-  # Controls speed vs quality tradeoff for C2 heatmap plots
-  preview_mode:
-    false # false = publication quality (matplotlib, slower)
-    # true = fast preview (Datashader, 5-10x faster)
-  fit_surface: "solver" # Options: "solver" | "posthoc"
+  preview_mode: false
+  fit_surface: "solver"
 
   color_scale:
     mode: "legacy"
@@ -823,164 +565,89 @@ plotting:
     fixed_min: 1.0
     fixed_max: 1.5
 
-  # Datashader configuration (used when preview_mode: true)
   datashader:
-    canvas_width: 1200 # Rendering resolution in pixels
-    canvas_height: 1200 # Higher values = more detail, larger files
-    # Note: CPU-only rendering
+    canvas_width: 1200
+    canvas_height: 1200
 
-  # Matplotlib configuration (used when preview_mode: false)
   matplotlib:
-    interpolation: "bilinear" # Options: "none" | "bilinear" | "bicubic"
-    use_tight_layout: true # Use tight layout for plots
+    interpolation: "bilinear"
+    use_tight_layout: true
     savefig_kwargs:
       bbox_inches: "tight"
       pad_inches: 0.1
 
-  # Plot types to generate
-  correlation_function: true # C1(t) and C2(t1,t2) plots
-  fit_quality: true # Residuals and fit quality plots
-  parameter_distributions: true # Parameter posterior distributions (MCMC only)
-  residual_analysis: true # Residual analysis plots
-
-  # Angle-specific plots
-  angle_coverage: true # Show which angles were used
-  angle_correlation: true # Correlation quality vs angle
+  correlation_function: true
+  fit_quality: true
+  parameter_distributions: true
+  residual_analysis: true
+  angle_coverage: true
+  angle_correlation: true
 
 # ==============================================================================
 # OUTPUT
 # ==============================================================================
-# Output file configuration
 output:
-  directory: "./results" # Base output directory
-  base_directory: "./homodyne_results/" # Alternative: more descriptive directory name
+  directory: "./results"
+  base_directory: "./homodyne_results/"
 
-  # Output formats
   formats:
-    hdf5: true # Save results in HDF5 format
-    json: true # Save results in JSON format
-    csv: true # Save results in CSV format (tables only)
+    hdf5: true
+    json: true
+    csv: true
 
-  # Output organization
-  create_subdirs: true # Create method-specific subdirectories (nlsq/, mcmc/, cmc/)
-  timestamp_dirs: false # Add timestamp to directory names
-
-  # Compression
-  compress_hdf5: true # Enable HDF5 compression (saves disk space)
-  compression_level: 6 # HDF5 compression level (0-9, higher = more compression)
+  create_subdirs: true
+  timestamp_dirs: false
+  compress_hdf5: true
+  compression_level: 6
 
 # ==============================================================================
 # VALIDATION (Optional)
 # ==============================================================================
-# Configuration validation settings
 validation:
-  strict_mode: false # Fail on validation warnings
-  check_file_existence: true # Verify data files exist before analysis
-  validate_parameter_ranges: true # Check parameters are within reasonable physics bounds
-  check_mode_compatibility: true # Verify configuration matches selected analysis mode
+  strict_mode: false
+  check_file_existence: true
+  validate_parameter_ranges: true
+  check_mode_compatibility: true
 
-  # Angle validation
   angle_validation:
-    require_multiple_angles: false # Not required for static (can analyze single angle)
-    min_angle_count: 1 # Minimum number of angles required
-    validate_angle_ranges: true # Validate angle ranges are physically meaningful
-
+    require_multiple_angles: false
+    min_angle_count: 1
+    validate_angle_ranges: true
 
 # ==============================================================================
-# STATIC DIFFUSION - USAGE NOTES
+# STATIC DIFFUSION - QUICK REFERENCE
 # ==============================================================================
 #
-# QUICK START (Workflow):
-# ----------------------------------------
-# Step 1 - NLSQ optimization:
-#   1. Update experimental_data paths to your HDF5 file
-#   2. Adjust phi_filtering target_ranges based on your system
-#   3. Run: homodyne --config this_file.yaml --method nlsq
-#   4. Note best-fit parameters from output
-#
-# Step 2 - MCMC initialization:
-#   5. Manually copy NLSQ best-fit results from output
-#   6. Update initial_parameters.values in this file with NLSQ results
-#   7. Example: values: [1234.5, 0.567, 12.34]  # 3 parameters for static
-#   8. Run: homodyne --config this_file.yaml --method mcmc
-#   9. CMC-only architecture with per-shard NUTS sampling
-#
-# STATIC DIFFUSION PHYSICS:
-# -------------------------
-# Model: D(t) = D₀·t^α + D_offset
-#
-# Parameters:
-#   D₀: Diffusion coefficient prefactor (magnitude)
-#   α: Anomalous diffusion exponent (0=normal, <0=sub, >0=super)
-#   D_offset: Baseline/constant diffusion contribution
-#
-# Typical values:
-#   D₀: 100-10000 Å²/s for colloidal systems
-#   α: -2 to 2 for equilibrium systems
-#   D_offset: Usually small (-100 to 100 Å²/s)
+# WORKFLOW:
+# ---------
+# 1. Update experimental_data paths
+# 2. Adjust phi_filtering (0°/180° for anisotropy, all angles for isotropic)
+# 3. Run NLSQ: homodyne --config this_file.yaml --method nlsq
+# 4. Copy NLSQ results to initial_parameters.values
+# 5. Run MCMC: homodyne --config this_file.yaml --method mcmc
 #
 # PARAMETER COUNTING:
 # -------------------
-# Total = 3 physical + 2 × N_angles scaling
-# Example with 3 filtered angles: 3 + 2×3 = 9 parameters
-#   Physical: [D₀, α, D_offset]
-#   Scaling: [contrast₁, offset₁, contrast₂, offset₂, contrast₃, offset₃]
+# Total = 3 physical + 2 × N_angles
+# Example: 3 angles → 9 parameters
 #
-# ANGLE FILTERING FOR STATIC:
-# ----------------------------
-# Recommended ranges:
-#   - 0° (parallel): Detect primary anisotropy axis
-#   - 180° (antiparallel): Verify symmetric behavior
-#   - Optional 90° (perpendicular): Full anisotropic characterization
+# PHYSICAL INTERPRETATION:
+# ------------------------
+# D₀: Diffusion magnitude (100-10000 Å²/s)
+# α: Anomalous exponent (0=normal, <0=subdiffusion, >0=superdiffusion)
+# D_offset: Baseline diffusion (-100 to 100 Å²/s, can be negative for jammed)
 #
-# Use fallback_to_all_angles: true if anisotropy direction unknown
-#
-# OPTIMIZATION METHOD SELECTION:
-# ----------------------------------------
-# NLSQ (Recommended first):
-#   - Fast: ~seconds to minutes
-#   - CPU-optimized with JAX 0.8.0 JIT compilation
-#   - Deterministic point estimates
-#   - Good for exploration and initial fit
-#
-# MCMC (For publication with uncertainty quantification):
-#   - Slower: ~minutes to hours (faster than laminar_flow for 3 params)
-#   - Full posterior distributions with credible intervals
-#   - CMC-only architecture: per-shard NUTS sampling with
-#     Consensus Monte Carlo (precision-weighted) combination of subposteriors
-#   - Convergence diagnostics (R-hat, ESS, divergences)
-#   - Manual workflow: Run NLSQ → copy results → update YAML → run MCMC
-#
-# Streaming (Automatic for >100M points):
-#   - Constant memory footprint
-#   - Checkpoint/resume capability
-#
-# DATASET SIZE HANDLING:
-# ----------------------
-# NLSQ automatic strategy selection:
-#   < 1M points     → STANDARD
-#   1M-10M points   → LARGE
-#   10M-100M points → CHUNKED
-#   > 100M points   → STREAMING
-#
-# PLATFORM SUPPORT:
-# ---------------------------
-# CPU-only: Linux, macOS, Windows (full support, multi-core optimized)
-# GPU support removed
-# HPC-ready: Optimized for 14+ core CPUs, tested on 36-128 core nodes
-#
-# Installation:
-#   pip install homodyne  # Automatically installs CPU-only JAX 0.8.0
-#
-# Requirements:
-#   - Python 3.12+
-#   - JAX==0.8.0 and jaxlib==0.8.0 (exact match required, CPU-only)
-#   - For GPU: Stay on older homodyne versions
+# STATIC vs LAMINAR_FLOW:
+# -----------------------
+# - Anti-degeneracy disabled (no shear gradient cancellation)
+# - CMA-ES auto_select disabled (similar parameter scales)
+# - Larger CMC shards (100k vs 20k - simpler posteriors)
+# - Higher CMC success threshold (0.90 vs 0.80)
+# - Strict validation mode OK
 #
 # VALIDATION:
 # -----------
 # homodyne-config --validate this_file.yaml
-# python -m homodyne.runtime.utils.system_validator --quick
 #
 # ==============================================================================
 # END OF STATIC DIFFUSION TEMPLATE
