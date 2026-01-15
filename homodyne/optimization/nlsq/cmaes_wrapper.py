@@ -32,12 +32,40 @@ from typing import TYPE_CHECKING, Any
 
 import numpy as np
 
-from homodyne.utils.logging import get_logger
+from homodyne.utils.logging import get_logger, log_exception, log_phase
 
 if TYPE_CHECKING:
     from homodyne.optimization.nlsq.config import NLSQConfig
 
 logger = get_logger(__name__)
+
+
+def _format_bounds_summary(bounds: tuple[np.ndarray, np.ndarray]) -> str:
+    """Format bounds summary for logging.
+
+    Parameters
+    ----------
+    bounds : tuple[np.ndarray, np.ndarray]
+        Lower and upper bounds as (lower, upper) arrays.
+
+    Returns
+    -------
+    str
+        Human-readable bounds summary.
+    """
+    lower, upper = bounds
+    ranges = upper - lower
+    n_params = len(lower)
+
+    # Find min/max ranges for summary
+    valid_ranges = ranges[ranges > 0]
+    if len(valid_ranges) == 0:
+        return f"{n_params} params (no valid ranges)"
+
+    min_range = np.min(valid_ranges)
+    max_range = np.max(valid_ranges)
+
+    return f"{n_params} params, range=[{min_range:.2e}, {max_range:.2e}]"
 
 
 def _is_cmaes_available() -> bool:
@@ -350,16 +378,28 @@ class CMAESWrapper:
         - γ̇₀ ~ 1e-3 (shear rate)
         """
         if not self.is_available:
-            logger.debug("CMA-ES not available (evosax not installed)")
+            logger.info(
+                "[CMA-ES] Method unavailable: evosax not installed. "
+                "Install with: pip install nlsq[evosax]"
+            )
             return False
 
         scale_ratio = self.compute_scale_ratio(bounds)
         should_use = scale_ratio >= scale_threshold
+        bounds_summary = _format_bounds_summary(bounds)
 
-        logger.debug(
-            f"Scale ratio: {scale_ratio:.2e}, threshold: {scale_threshold:.2e}, "
-            f"use_cmaes: {should_use}"
-        )
+        if should_use:
+            # Log at INFO when CMA-ES is selected - this is an important decision
+            logger.info(
+                f"[CMA-ES] Auto-selected: scale_ratio={scale_ratio:.2e} "
+                f"(threshold={scale_threshold:.2e}), {bounds_summary}"
+            )
+        else:
+            # Log at DEBUG when not selected - less important
+            logger.debug(
+                f"[CMA-ES] Not selected: scale_ratio={scale_ratio:.2e} "
+                f"< threshold={scale_threshold:.2e}"
+            )
 
         return should_use
 
@@ -399,35 +439,37 @@ class CMAESWrapper:
         """
         from nlsq import curve_fit
 
+        n_data = len(ydata)
         logger.info(
-            f"[CMA-ES] Starting NLSQ TRF refinement: "
-            f"workflow={self.config.refinement_workflow}, "
-            f"ftol={self.config.refinement_ftol:.2e}"
+            f"[CMA-ES] Refinement starting: workflow={self.config.refinement_workflow}, "
+            f"n_data={n_data:,}, ftol={self.config.refinement_ftol:.1e}, "
+            f"max_nfev={self.config.refinement_max_nfev}"
         )
 
         try:
-            # Build refinement kwargs for NLSQ curve_fit
-            # Note: NLSQ curve_fit uses 'workflow' instead of full scipy interface
-            refinement_kwargs: dict[str, Any] = {
-                "ftol": self.config.refinement_ftol,
-                "xtol": self.config.refinement_xtol,
-                "gtol": self.config.refinement_gtol,
-                "max_nfev": self.config.refinement_max_nfev,
-                "loss": self.config.refinement_loss,
-            }
+            with log_phase("CMA-ES refinement", logger, track_memory=True) as phase:
+                # Build refinement kwargs for NLSQ curve_fit
+                # Note: NLSQ curve_fit uses 'workflow' instead of full scipy interface
+                refinement_kwargs: dict[str, Any] = {
+                    "ftol": self.config.refinement_ftol,
+                    "xtol": self.config.refinement_xtol,
+                    "gtol": self.config.refinement_gtol,
+                    "max_nfev": self.config.refinement_max_nfev,
+                    "loss": self.config.refinement_loss,
+                }
 
-            # Run NLSQ curve_fit with workflow="auto" for memory-aware selection
-            # NLSQ returns (popt, pcov), not scipy's 5-tuple with full_output
-            popt, pcov = curve_fit(
-                f=model_func,
-                xdata=xdata,
-                ydata=ydata,
-                p0=p0,
-                sigma=sigma,
-                bounds=bounds,
-                workflow=self.config.refinement_workflow,
-                **refinement_kwargs,
-            )
+                # Run NLSQ curve_fit with workflow="auto" for memory-aware selection
+                # NLSQ returns (popt, pcov), not scipy's 5-tuple with full_output
+                popt, pcov = curve_fit(
+                    f=model_func,
+                    xdata=xdata,
+                    ydata=ydata,
+                    p0=p0,
+                    sigma=sigma,
+                    bounds=bounds,
+                    workflow=self.config.refinement_workflow,
+                    **refinement_kwargs,
+                )
 
             # Compute refined chi-squared
             pred = model_func(xdata, *popt)
@@ -437,7 +479,8 @@ class CMAESWrapper:
             chi_squared = float(np.sum(residuals**2))
 
             logger.info(
-                f"[CMA-ES] NLSQ refinement completed: chi²={chi_squared:.4e}"
+                f"[CMA-ES] Refinement completed: chi²={chi_squared:.4e}, "
+                f"time={phase.duration:.1f}s"
             )
 
             return {
@@ -448,10 +491,21 @@ class CMAESWrapper:
                 "mesg": "NLSQ TRF refinement converged",
                 "ier": 1,  # Success
                 "success": True,
+                "duration_s": phase.duration,
             }
 
         except Exception as e:
-            logger.warning(f"[CMA-ES] NLSQ refinement failed: {e}")
+            log_exception(
+                logger,
+                e,
+                context={
+                    "phase": "NLSQ refinement",
+                    "workflow": self.config.refinement_workflow,
+                    "n_data": n_data,
+                },
+                level=30,  # WARNING
+                include_traceback=False,  # Keep it concise
+            )
             # Return original parameters on refinement failure
             return {
                 "popt": p0,
@@ -502,15 +556,32 @@ class CMAESWrapper:
                 available_memory_gb=self.config.memory_limit_gb,
             )
 
+            # Calculate estimated memory usage for logging
+            # Each individual evaluation: n_data * 8 bytes (float64)
+            est_memory_mb = (pop_batch * n_data * 8) / (1024 * 1024) if pop_batch else 0
+
             logger.info(
-                f"[CMA-ES] Auto-configured memory: "
-                f"population_batch={pop_batch}, data_chunk={data_chunk}"
+                f"[CMA-ES] Memory configured: population_batch={pop_batch}, "
+                f"data_chunk={data_chunk:,}, popsize={popsize}, "
+                f"limit={self.config.memory_limit_gb:.1f}GB, "
+                f"est_batch_memory={est_memory_mb:.0f}MB"
             )
 
             return pop_batch, data_chunk
 
         except Exception as e:
-            logger.warning(f"Memory auto-configuration failed: {e}")
+            log_exception(
+                logger,
+                e,
+                context={
+                    "phase": "memory auto-configuration",
+                    "n_data": n_data,
+                    "n_params": n_params,
+                    "memory_limit_gb": self.config.memory_limit_gb,
+                },
+                level=30,  # WARNING
+                include_traceback=False,
+            )
             return None, None
 
     def fit(
@@ -561,6 +632,18 @@ class CMAESWrapper:
 
         n_params = len(p0)
         n_data = len(ydata)
+        scale_ratio = self.compute_scale_ratio(bounds)
+        bounds_summary = _format_bounds_summary(bounds)
+
+        # Log comprehensive configuration summary
+        logger.info(
+            f"[CMA-ES] Optimization starting: n_params={n_params}, "
+            f"n_data={n_data:,}, preset={self.config.preset}"
+        )
+        logger.info(
+            f"[CMA-ES] Problem characteristics: scale_ratio={scale_ratio:.2e}, "
+            f"{bounds_summary}"
+        )
 
         # Configure memory batching
         pop_batch, data_chunk = self._configure_memory(n_data, n_params)
@@ -574,12 +657,17 @@ class CMAESWrapper:
         if data_chunk is not None:
             cmaes_config.data_chunk_size = data_chunk
 
+        # Log algorithm configuration
         logger.info(
-            f"[CMA-ES] Starting optimization: "
-            f"n_params={n_params}, n_data={n_data}, "
-            f"preset={self.config.preset}, "
-            f"max_generations={cmaes_config.max_generations}"
+            f"[CMA-ES] Algorithm settings: max_generations={cmaes_config.max_generations}, "
+            f"popsize={cmaes_config.popsize}, sigma={self.config.sigma:.2f}, "
+            f"restart={self.config.restart_strategy}"
         )
+        if self.config.refine_with_nlsq:
+            logger.info(
+                f"[CMA-ES] Post-refinement enabled: workflow={self.config.refinement_workflow}, "
+                f"ftol={self.config.refinement_ftol:.1e}"
+            )
 
         # Create optimizer with config
         optimizer = CMAESOptimizer(config=cmaes_config)
@@ -587,14 +675,19 @@ class CMAESWrapper:
         # Run CMA-ES global search (NLSQ internal refinement is disabled)
         # - CMA-ES global search with covariance adaptation
         # - Optional BIPOP restarts (configured via cmaes_config.restart_strategy)
-        result = optimizer.fit(
-            f=model_func,
-            xdata=xdata,
-            ydata=ydata,
-            p0=p0,
-            bounds=bounds,
-            sigma=sigma,
-        )
+        logger.info("[CMA-ES] Global search phase starting...")
+
+        with log_phase(
+            "CMA-ES global search", logger, track_memory=True
+        ) as search_phase:
+            result = optimizer.fit(
+                f=model_func,
+                xdata=xdata,
+                ydata=ydata,
+                p0=p0,
+                bounds=bounds,
+                sigma=sigma,
+            )
 
         # Extract CMA-ES results
         cmaes_params = np.asarray(result.get("popt", p0))
@@ -603,12 +696,20 @@ class CMAESWrapper:
             cmaes_covariance = np.asarray(cmaes_covariance)
 
         # Build CMA-ES diagnostics
+        generations = result.get("cmaes_generations", 0)
+        evaluations = result.get("cmaes_evaluations", 0)
+        restarts = result.get("cmaes_restarts", 0)
+        convergence_reason = result.get("message", "unknown")
+
         diagnostics = {
-            "generations": result.get("cmaes_generations", 0),
-            "evaluations": result.get("cmaes_evaluations", 0),
-            "restarts": result.get("cmaes_restarts", 0),
-            "convergence_reason": result.get("message", "unknown"),
+            "generations": generations,
+            "evaluations": evaluations,
+            "restarts": restarts,
+            "convergence_reason": convergence_reason,
+            "global_search_time_s": search_phase.duration,
         }
+        if search_phase.memory_peak_gb is not None:
+            diagnostics["global_search_memory_gb"] = search_phase.memory_peak_gb
 
         # Compute CMA-ES chi-squared
         pred = model_func(xdata, *cmaes_params)
@@ -617,11 +718,18 @@ class CMAESWrapper:
             residuals = residuals / sigma
         cmaes_chi_squared = float(np.sum(residuals**2))
 
+        # Calculate evaluations per second for performance insight
+        evals_per_sec = (
+            evaluations / search_phase.duration if search_phase.duration > 0 else 0
+        )
+
         logger.info(
-            f"[CMA-ES] Global search completed: "
-            f"chi²={cmaes_chi_squared:.4e}, "
-            f"generations={diagnostics['generations']}, "
-            f"restarts={diagnostics['restarts']}"
+            f"[CMA-ES] Global search completed: chi²={cmaes_chi_squared:.4e}, "
+            f"generations={generations}, restarts={restarts}"
+        )
+        logger.info(
+            f"[CMA-ES] Performance: {evaluations:,} evals in {search_phase.duration:.1f}s "
+            f"({evals_per_sec:.0f} evals/s), reason={convergence_reason}"
         )
 
         # Run explicit NLSQ TRF refinement if enabled
@@ -649,20 +757,25 @@ class CMAESWrapper:
                 diagnostics["refinement_message"] = refinement_result["mesg"]
                 diagnostics["cmaes_chi_squared"] = cmaes_chi_squared
                 diagnostics["refined_chi_squared"] = best_chi_squared
-                diagnostics["chi_squared_improvement"] = (
-                    cmaes_chi_squared - best_chi_squared
-                ) / cmaes_chi_squared
+
+                # Calculate improvement percentage
+                improvement = (cmaes_chi_squared - best_chi_squared) / cmaes_chi_squared
+                diagnostics["chi_squared_improvement"] = improvement
+
+                # Add refinement timing if available
+                if "duration_s" in refinement_result:
+                    diagnostics["refinement_time_s"] = refinement_result["duration_s"]
 
                 logger.info(
                     f"[CMA-ES] Refinement improved chi²: "
                     f"{cmaes_chi_squared:.4e} → {best_chi_squared:.4e} "
-                    f"({diagnostics['chi_squared_improvement']:.2%} improvement)"
+                    f"({improvement:.2%} improvement)"
                 )
             else:
                 # Refinement failed, use CMA-ES result
                 logger.warning(
-                    f"[CMA-ES] Refinement failed, using CMA-ES result: "
-                    f"{refinement_result['mesg']}"
+                    f"[CMA-ES] Refinement failed, using CMA-ES result. "
+                    f"Reason: {refinement_result['mesg']}"
                 )
                 best_params = cmaes_params
                 best_covariance = cmaes_covariance
@@ -676,6 +789,22 @@ class CMAESWrapper:
             best_covariance = cmaes_covariance
             best_chi_squared = cmaes_chi_squared
             nlsq_refined = False
+            logger.debug(
+                "[CMA-ES] Post-refinement disabled, using global search result"
+            )
+
+        # Calculate total time
+        total_time = search_phase.duration
+        if nlsq_refined and "refinement_time_s" in diagnostics:
+            total_time += diagnostics["refinement_time_s"]
+        diagnostics["total_time_s"] = total_time
+
+        # Log final summary
+        refined_str = " (refined)" if nlsq_refined else ""
+        logger.info(
+            f"[CMA-ES] Optimization completed{refined_str}: "
+            f"chi²={best_chi_squared:.4e}, total_time={total_time:.1f}s"
+        )
 
         return CMAESResult(
             parameters=best_params,
@@ -685,7 +814,7 @@ class CMAESWrapper:
             diagnostics=diagnostics,
             method_used="cmaes",
             nlsq_refined=nlsq_refined,
-            message=f"CMA-ES converged: {diagnostics['convergence_reason']}",
+            message=f"CMA-ES converged: {convergence_reason}",
         )
 
 

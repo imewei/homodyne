@@ -421,7 +421,9 @@ class AnalysisSummaryLogger:
         # Add warning/error counts
         if self._warning_count > 0 or self._error_count > 0:
             lines.append("")
-            lines.append(f"Warnings: {self._warning_count}, Errors: {self._error_count}")
+            lines.append(
+                f"Warnings: {self._warning_count}, Errors: {self._error_count}"
+            )
 
         lines.append("=" * 60)
 
@@ -832,7 +834,7 @@ def _get_memory_gb() -> float | None:
 @contextmanager
 def log_phase(
     name: str,
-    logger: logging.Logger | None = None,
+    logger: LoggerType | None = None,
     level: int = logging.INFO,
     track_memory: bool = False,
     threshold_s: float = 0.0,
@@ -1068,9 +1070,9 @@ def log_performance(
 @contextmanager
 def log_operation(
     operation_name: str,
-    logger: logging.Logger | None = None,
+    logger: LoggerType | None = None,
     level: int = logging.INFO,
-) -> Generator[logging.Logger | logging.LoggerAdapter[logging.Logger], None, None]:
+) -> Generator[LoggerType, None, None]:
     """Context manager for logging operations.
 
     Args:
