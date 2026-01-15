@@ -203,6 +203,7 @@ def fit_nlsq_jax(
     initial_params: dict[str, float] | None = None,
     per_angle_scaling: bool = True,  # REQUIRED: per-angle is physically correct
     use_adapter: bool = False,  # Experimental: use NLSQAdapter (CurveFit) instead of NLSQWrapper
+    _skip_global_selection: bool = False,  # Internal: skip global opt check (for fallback)
 ) -> OptimizationResult:
     """NLSQ trust-region nonlinear least squares optimization with per-angle scaling.
 
@@ -253,6 +254,19 @@ def fit_nlsq_jax(
         class for improved JIT caching and automatic workflow selection.
         If False (default), use the stable NLSQWrapper implementation.
 
+    Notes
+    -----
+    **Global Optimization Selection (v2.15.0+):**
+    This function serves as the unified entry point for NLSQ optimization.
+    When called, it first checks for global optimization methods:
+
+    1. If ``cmaes.enable: true`` → delegates to ``fit_nlsq_cmaes()``
+    2. If ``multi_start.enable: true`` → delegates to ``fit_nlsq_multistart()``
+    3. Otherwise → runs local trust-region optimization
+
+    The CMA-ES function will fall back to multi-start (if enabled) when the
+    scale ratio is below the threshold, implementing the full fallback chain.
+
     Returns
     -------
     OptimizationResult
@@ -284,6 +298,40 @@ def fit_nlsq_jax(
     logger.info("=" * 60)
     logger.info("NLSQ OPTIMIZATION")
     logger.info("=" * 60)
+
+    # ==========================================================================
+    # Global Optimization Selection (v2.15.0+)
+    # Priority: CMA-ES > Multi-Start > Local Optimization
+    # ==========================================================================
+    if not _skip_global_selection:
+        # Handle both ConfigManager objects and plain dicts
+        config_dict = config.config if hasattr(config, "config") else config
+        nlsq_dict = config_dict.get("optimization", {}).get("nlsq", {})
+
+        # CMA-ES has highest priority (for multi-scale problems)
+        cmaes_dict = nlsq_dict.get("cmaes", {})
+        if cmaes_dict.get("enable", False):
+            logger.info("CMA-ES enabled, delegating to fit_nlsq_cmaes")
+            return fit_nlsq_cmaes(
+                data=data,
+                config=config,
+                initial_params=initial_params,
+                per_angle_scaling=per_angle_scaling,
+            )
+
+        # Multi-start is second priority
+        multi_start_dict = nlsq_dict.get("multi_start", {})
+        if multi_start_dict.get("enable", False):
+            logger.info("Multi-start enabled, delegating to fit_nlsq_multistart")
+            result = fit_nlsq_multistart(
+                data=data,
+                config=config,
+                initial_params=initial_params,
+                per_angle_scaling=per_angle_scaling,
+            )
+            return result.to_optimization_result()
+
+        logger.debug("No global optimization enabled, using local optimization")
 
     # Performance Optimization (Spec 001 - FR-005, T026): Configure CPU threading for HPC
     if HAS_CPU_CONFIG:
@@ -1632,17 +1680,34 @@ def fit_nlsq_cmaes(
 
     if nlsq_config.cmaes_auto_select:
         if not wrapper.should_use_cmaes(bounds, nlsq_config.cmaes_scale_threshold):
-            logger.info(
-                f"Scale ratio < {nlsq_config.cmaes_scale_threshold}, "
-                "falling back to standard NLSQ optimization"
-            )
-            # Fall back to fit_nlsq_jax
-            return fit_nlsq_jax(
-                data=data,
-                config=config,
-                initial_params=initial_params,
-                per_angle_scaling=per_angle_scaling,
-            )
+            # Scale ratio too low for CMA-ES, check fallback options
+            # Fall back to multi-start if enabled, otherwise local optimization
+            multi_start_dict = nlsq_dict.get("multi_start", {})
+            if multi_start_dict.get("enable", False):
+                logger.info(
+                    f"[CMA-ES] Scale ratio < {nlsq_config.cmaes_scale_threshold}, "
+                    "falling back to multi-start optimization"
+                )
+                result = fit_nlsq_multistart(
+                    data=data,
+                    config=config,
+                    initial_params=initial_params,
+                    per_angle_scaling=per_angle_scaling,
+                )
+                return result.to_optimization_result()
+            else:
+                logger.info(
+                    f"[CMA-ES] Scale ratio < {nlsq_config.cmaes_scale_threshold}, "
+                    "falling back to local NLSQ optimization"
+                )
+                # Use _skip_global_selection=True to avoid infinite loop
+                return fit_nlsq_jax(
+                    data=data,
+                    config=config,
+                    initial_params=initial_params,
+                    per_angle_scaling=per_angle_scaling,
+                    _skip_global_selection=True,
+                )
 
     # Prepare data arrays for CMA-ES
     # Need to build model function and flatten data
@@ -1711,22 +1776,28 @@ def fit_nlsq_cmaes(
                 contrast_val = x0[0]
                 offset_val = x0[1]
                 physical_params = x0[2:]
-                x0 = np.concatenate([
-                    np.full(n_phi, contrast_val),
-                    np.full(n_phi, offset_val),
-                    physical_params,
-                ])
+                x0 = np.concatenate(
+                    [
+                        np.full(n_phi, contrast_val),
+                        np.full(n_phi, offset_val),
+                        physical_params,
+                    ]
+                )
                 # Expand bounds too
-                lower_bounds = np.concatenate([
-                    np.full(n_phi, lower_bounds[0]),
-                    np.full(n_phi, lower_bounds[1]),
-                    lower_bounds[2:],
-                ])
-                upper_bounds = np.concatenate([
-                    np.full(n_phi, upper_bounds[0]),
-                    np.full(n_phi, upper_bounds[1]),
-                    upper_bounds[2:],
-                ])
+                lower_bounds = np.concatenate(
+                    [
+                        np.full(n_phi, lower_bounds[0]),
+                        np.full(n_phi, lower_bounds[1]),
+                        lower_bounds[2:],
+                    ]
+                )
+                upper_bounds = np.concatenate(
+                    [
+                        np.full(n_phi, upper_bounds[0]),
+                        np.full(n_phi, upper_bounds[1]),
+                        upper_bounds[2:],
+                    ]
+                )
                 bounds = (lower_bounds, upper_bounds)
 
         # Create wrapped model function for CMA-ES
@@ -1752,7 +1823,9 @@ def fit_nlsq_cmaes(
             g2_model = []
             for i_phi in range(n_phi):
                 # Build full params for this phi
-                phi_params = np.concatenate([[contrasts[i_phi], offsets[i_phi]], physical])
+                phi_params = np.concatenate(
+                    [[contrasts[i_phi], offsets[i_phi]], physical]
+                )
                 g2_phi = model_func(t1_mesh.flatten(), t2_mesh.flatten(), *phi_params)
                 g2_model.append(g2_phi)
 
