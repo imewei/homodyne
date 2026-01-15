@@ -303,9 +303,10 @@ optimization:
     # -------------------------------------------------------------------------
     # MULTI-START OPTIMIZATION
     # -------------------------------------------------------------------------
-    # FULL strategy only (no subsampling per project requirements)
+    # For static mode, multi-start OR standard NLSQ is usually sufficient
+    # (parameters have similar scales, no need for CMA-ES global search)
     multi_start:
-      enable: false
+      enable: false                   # Enable for uncertain initial guesses
       n_starts: 10
       seed: 42
       sampling_strategy: "latin_hypercube"

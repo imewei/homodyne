@@ -18,8 +18,8 @@
 #   - homodyne_static.yaml: 3-parameter equilibrium diffusion
 #   - homodyne_laminar_flow.yaml: 7-parameter shear flow
 #
-# VERSION: 2.15.0
-# UPDATED: 2026-01-14
+# VERSION: 2.16.0
+# UPDATED: 2026-01-15
 # ==============================================================================
 
 # ==============================================================================
@@ -28,7 +28,7 @@
 # Template metadata for documentation and validation.
 # The config_version should match the homodyne package version.
 metadata:
-  config_version: "2.15.0"
+  config_version: "2.16.0"
   description: "Master template - comprehensive reference with all configuration options"
   analysis_mode: "laminar_flow"
 
@@ -698,6 +698,10 @@ optimization:
     # Explores parameter space from multiple starting points using Latin
     # Hypercube Sampling (LHS) to find global optimum and detect degeneracy.
     #
+    # NOTE: DISABLED when CMA-ES is enabled - CMA-ES provides better global
+    # optimization through population-based search with covariance adaptation.
+    # Enable multi_start only when NOT using CMA-ES.
+    #
     # STRATEGY: FULL only (no subsampling per project requirements)
     # Numerical precision and reproducibility take priority over speed.
     #
@@ -706,7 +710,7 @@ optimization:
     #   ≥ 500K points: Sequential (avoid serialization overhead)
     #
     multi_start:
-      enable: false                 # Default OFF - user opt-in
+      enable: false                 # DISABLED when CMA-ES is enabled
       n_starts: 10                  # Number of LHS starting points
                                     # CONSTRAINT: > 0
       seed: 42                      # Random seed for reproducibility
@@ -762,12 +766,12 @@ optimization:
       preset: "cmaes-global"
 
       # CMA-ES global search settings
-      max_generations: 200          # Maximum CMA-ES generations
+      max_generations: 300          # Maximum CMA-ES generations
                                     # CONSTRAINT: > 0
-      sigma: 0.3                    # Initial step size (fraction of range)
+      sigma: 0.5                    # Initial step size (fraction of range)
                                     # CONSTRAINT: (0, 1]
-      popsize: 30                   # Population size (default ~4+3*ln(n_params))
-                                    # 30 recommended for 13-param space
+      popsize: 40                   # Population size (default ~4+3*ln(n_params))
+                                    # 40 recommended for 13-param laminar_flow
       tol_fun: 1.0e-8               # Function value tolerance
                                     # CONSTRAINT: > 0
       tol_x: 1.0e-8                 # Parameter tolerance
@@ -776,7 +780,7 @@ optimization:
       # Restart strategy
       restart_strategy: "bipop"     # "none" | "bipop"
                                     # bipop: alternates large/small populations
-      max_restarts: 15              # Maximum BIPOP restarts
+      max_restarts: 20              # Maximum BIPOP restarts
                                     # CONSTRAINT: >= 0
 
       # Memory management (null = auto-configure)

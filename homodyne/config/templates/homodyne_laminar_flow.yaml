@@ -387,9 +387,9 @@ optimization:
     # -------------------------------------------------------------------------
     # MULTI-START OPTIMIZATION
     # -------------------------------------------------------------------------
-    # FULL strategy only (no subsampling per project requirements)
+    # DISABLED when CMA-ES is enabled - they serve the same purpose (global search)
     multi_start:
-      enable: false
+      enable: false                   # OFF when using CMA-ES (redundant)
       n_starts: 10
       seed: 42
       sampling_strategy: "latin_hypercube"
@@ -403,19 +403,19 @@ optimization:
     # -------------------------------------------------------------------------
     # CMA-ES GLOBAL OPTIMIZATION (NLSQ 0.6.4+)
     # -------------------------------------------------------------------------
-    # Ideal for laminar_flow with multi-scale parameters
+    # RECOMMENDED for laminar_flow with multi-scale parameters
     # (D₀ ~ 1e4 vs γ̇₀ ~ 1e-3, scale ratio > 1e7)
     # Requires: pip install nlsq[evosax]
     cmaes:
-      enable: false
-      preset: "cmaes-global"          # "cmaes-fast" (50) | "cmaes" (100) | "cmaes-global" (200)
-      max_generations: 200            # 200 for 13-param space
-      sigma: 0.3                      # Smaller initial step for refined search
-      popsize: 30                     # Larger population for 13-param (default 11)
+      enable: true                    # RECOMMENDED for laminar_flow
+      preset: "cmaes-global"          # "cmaes-fast" (50) | "cmaes" (100) | "cmaes-global" (200+)
+      max_generations: 300            # 300 for 13-param space convergence
+      sigma: 0.5                      # Broader initial search, refined by CMA-ES
+      popsize: 40                     # Larger population for 13-param (default ~11)
       tol_fun: 1.0e-8
       tol_x: 1.0e-8
       restart_strategy: "bipop"
-      max_restarts: 15                # More restarts to escape local minima
+      max_restarts: 20                # More restarts to escape local minima
       population_batch_size: null
       data_chunk_size: null
       memory_limit_gb: 8.0
