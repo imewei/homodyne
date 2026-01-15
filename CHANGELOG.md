@@ -13,6 +13,164 @@ ______________________________________________________________________
 
 ______________________________________________________________________
 
+## [2.16.0] - 2026-01-15
+
+### CMA-ES Configuration Enhancements and Visualization Fixes
+
+Minor release with CMA-ES configuration improvements and visualization bug fixes.
+
+#### Added
+
+- **feat(nlsq)**: Add `cmaes_popsize` configuration field to `NLSQConfig`
+  - Previously, configured `popsize` value in YAML was ignored (always computed default)
+  - New field wires through `CMAESWrapperConfig` to override auto-computed value
+  - Validation ensures popsize is positive or None (auto)
+
+#### Fixed
+
+- **fix(viz)**: Use combined data range for adaptive color scaling in C2 heatmaps
+  - Block artifacts appeared when fit data had narrower range than experimental data
+  - Now computes adaptive color scale from BOTH exp AND fit data
+  - Changed `adaptive` default from `False` to `True` in `plot_c2_comparison_fast()`
+
+- **fix(cli)**: Correct analysis mode display in `AnalysisSummaryLogger`
+  - Previously showed hardcoded mode instead of actual config value
+
+- **fix(tests)**: Resolve 6 failing unit tests related to CMA-ES JIT tracing
+
+- **fix(nlsq)**: Make model functions JAX-traceable for CMA-ES JIT compilation
+
+#### Changed
+
+- **chore(templates)**: Update CMA-ES defaults for better convergence
+  - `max_generations`: 200 → 300
+  - `sigma`: 0.3 → 0.5
+  - `popsize`: 30 → 40
+  - `max_restarts`: 15 → 20
+  - Added comments noting multi-start is redundant when CMA-ES is enabled
+
+______________________________________________________________________
+
+## [2.15.0] - 2026-01-10
+
+### CMA-ES Global Optimization Integration
+
+Major feature release adding CMA-ES (Covariance Matrix Adaptation Evolution Strategy) for
+robust global optimization of multi-scale parameter spaces.
+
+#### Added
+
+**CMA-ES Global Optimization:**
+
+- **feat(nlsq)**: Add CMA-ES global optimization wrapper (`cmaes_wrapper.py`)
+  - Population-based evolution with BIPOP restart strategy
+  - Automatic scale detection via `MethodSelector`
+  - Memory batching for large datasets (100M+ points)
+  - Two-phase architecture: CMA-ES global search → NLSQ TRF refinement
+
+- **feat(nlsq)**: Integrate CMA-ES into config and core optimization flow
+  - New config fields: `enable_cmaes`, `cmaes_preset`, `cmaes_max_generations`, etc.
+  - Auto-selection when scale ratio > threshold (D₀/γ̇₀ > 1000)
+  - Presets: "cmaes-fast" (50 gen), "cmaes" (100), "cmaes-global" (200)
+
+- **feat(nlsq)**: Add bounds-based parameter normalization for CMA-ES
+  - Maps parameters to [0,1] space for equal-scale optimization
+  - Proper covariance transformation via Jacobian
+  - Improves convergence for laminar_flow mode (scale ratio > 1e6)
+
+- **feat(nlsq)**: Add post-optimization fit quality validation
+  - Checks: reduced χ² threshold, CMA-ES convergence, parameters at bounds
+  - Quality report saved in `convergence_metrics.json`
+  - Configurable thresholds via `quality_*` config fields
+
+- **feat(nlsq)**: Integrate global optimization selection into `fit_nlsq_jax()`
+  - Unified entry point delegates to CMA-ES or multi-start based on config
+  - Availability checks before delegation
+
+**Enhanced Logging System (001-enhance-logging-system):**
+
+- **feat(logging)**: Implement structured logging with rotation
+  - `get_logger()`, `with_context()`, `log_phase()`, `log_exception()` APIs
+  - `LogConfiguration` for CLI integration
+  - Timestamped log files with configurable rotation (10 MB, 5 backups)
+
+**Documentation:**
+
+- **docs(nlsq)**: Document CMA-ES global optimization in CLAUDE.md
+- **docs(architecture)**: Add NLSQ and CMC fitting flow documentation
+- **docs**: Switch to Furo theme with CSS variables
+
+#### Changed
+
+- **refactor(nlsq)**: Replace scipy.optimize with JAX-native stack
+  - Uses jaxopt.LBFGSB for bounded L-BFGS in hierarchical optimization
+  - JAX autodiff replaces scipy's approx_derivative
+
+- **refactor(nlsq)**: Enhance CMA-ES logging with phase timing and structured messages
+
+- **refactor(nlsq)**: Update integration for NLSQ 0.6.4 compatibility
+  - Removed deprecated WorkflowSelector, WorkflowTier APIs
+  - Uses homodyne's own `select_nlsq_strategy()` for memory-based selection
+
+- **chore(config)**: Update templates with CMA-ES settings
+
+- **chore(deps)**: Add evosax and update dependencies for CMA-ES support
+
+- **build(pre-commit)**: Update ruff to v0.14.11
+
+- **build(deps)**: Update dependencies and add furo documentation theme
+
+#### Fixed
+
+- **fix(cli)**: Use `fit_nlsq_jax` as unified entry point for global optimization
+
+- **fix(nlsq)**: Prevent infinite recursion in multistart single fit worker
+
+- **fix(nlsq)**: Add availability checks before global optimization delegation
+
+- **fix(nlsq)**: Make CMA-ES model function JAX-traceable
+
+- **fix(cli)**: Handle constant scaling format in result saving
+
+- **fix(stratification)**: Return tuple from `create_angle_stratified_indices()`
+
+- **fix(memory)**: Increase Jacobian overhead factor from 3.0× to 6.5× for accurate
+  large dataset memory estimation
+
+#### Performance
+
+- **perf(jax)**: Improve meshgrid cache and data loader efficiency
+
+#### Configuration
+
+**New CMA-ES Configuration:**
+
+```yaml
+optimization:
+  nlsq:
+    cmaes:
+      enable: false                 # Enable CMA-ES global optimization
+      preset: "cmaes-global"        # "cmaes-fast" | "cmaes" | "cmaes-global"
+      max_generations: 200
+      sigma: 0.3
+      popsize: 30
+      tol_fun: 1.0e-8
+      tol_x: 1.0e-8
+      restart_strategy: "bipop"
+      max_restarts: 15
+      auto_select: true             # Auto-select based on scale ratio
+      scale_threshold: 1000.0
+      refine_with_nlsq: true        # Post-CMA-ES TRF refinement
+```
+
+**When to Use CMA-ES:**
+
+- laminar_flow mode with vastly different parameter scales (D₀ ~ 1e4 vs γ̇₀ ~ 1e-3)
+- When multi-start local optimization finds inconsistent minima
+- Scale ratio > 1000 (auto-detected when `auto_select: true`)
+
+______________________________________________________________________
+
 ## [2.14.0] - 2026-01-06
 
 ### NLSQ Module Optimization - Architecture Refactoring and Config Consolidation
