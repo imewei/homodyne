@@ -164,6 +164,17 @@ except ImportError:
     HAS_CPU_CONFIG = False
     configure_cpu_threading = None
 
+# Anti-degeneracy controller import (v2.16.1+)
+try:
+    from homodyne.optimization.nlsq.anti_degeneracy_controller import (
+        AntiDegeneracyController,
+    )
+
+    HAS_ANTI_DEGENERACY = True
+except ImportError:
+    HAS_ANTI_DEGENERACY = False
+    AntiDegeneracyController = None
+
 # Export NLSQ availability for tests and external code
 NLSQ_AVAILABLE = HAS_NLSQ_WRAPPER and JAX_AVAILABLE
 
@@ -1782,10 +1793,47 @@ def fit_nlsq_cmaes(
         n_data = len(ydata)
         logger.info(f"Data points: {n_data:,}")
 
-        # Expand per-angle parameters for initial guess
+        # Number of physical parameters
         n_physical = len(_get_physical_param_names(analysis_mode))
-        if per_angle_scaling:
-            # Expand scalar contrast/offset to per-angle
+
+        # ==========================================================================
+        # ANTI-DEGENERACY INTEGRATION (v2.16.1+)
+        # ==========================================================================
+        # For laminar_flow mode with per-angle scaling, the parameter space can be
+        # degenerate: per-angle contrast/offset can absorb shear signals. Use constant
+        # mode to reduce parameter space from 13 to 9, preventing structural degeneracy.
+        # ==========================================================================
+        use_constant_mode = False
+        ad_controller = None
+        is_laminar_flow = analysis_mode == "laminar_flow"
+
+        if HAS_ANTI_DEGENERACY and per_angle_scaling and is_laminar_flow:
+            # Load anti-degeneracy config
+            anti_degeneracy_config = nlsq_dict.get("anti_degeneracy", {})
+
+            if anti_degeneracy_config:
+                phi_unique_rad = np.deg2rad(phi_angles)
+                ad_controller = AntiDegeneracyController.from_config(
+                    config_dict=anti_degeneracy_config,
+                    n_phi=n_phi,
+                    phi_angles=phi_unique_rad,
+                    n_physical=n_physical,
+                    per_angle_scaling=per_angle_scaling,
+                    is_laminar_flow=is_laminar_flow,
+                )
+
+                if ad_controller.is_enabled and ad_controller.use_constant:
+                    use_constant_mode = True
+                    logger.info("=" * 60)
+                    logger.info("ANTI-DEGENERACY: Enabled for CMA-ES (Constant Mode)")
+                    logger.info(f"  Parameter reduction: {2*n_phi + n_physical} -> {2 + n_physical}")
+                    logger.info("  Single contrast/offset shared across all angles")
+                    logger.info("  This prevents per-angle params from absorbing shear signal")
+                    logger.info("=" * 60)
+
+        # Handle parameter expansion based on anti-degeneracy mode
+        if per_angle_scaling and not use_constant_mode:
+            # Standard behavior: expand to per-angle parameters (13 params for n_phi=3)
             if len(x0) == 2 + n_physical:
                 contrast_val = x0[0]
                 offset_val = x0[1]
@@ -1813,6 +1861,13 @@ def fit_nlsq_cmaes(
                     ]
                 )
                 bounds = (lower_bounds, upper_bounds)
+            effective_per_angle_scaling = True
+        else:
+            # Constant mode: keep 9 parameters (1 contrast + 1 offset + 7 physical)
+            # No expansion needed - x0 and bounds stay at 9 params
+            effective_per_angle_scaling = False
+            if use_constant_mode:
+                logger.info(f"CMA-ES using constant mode: {len(x0)} parameters")
 
         # Create wrapped model function for CMA-ES
         # IMPORTANT: This function must be JAX-traceable for CMA-ES JIT compilation
@@ -1856,15 +1911,22 @@ def fit_nlsq_cmaes(
 
             Uses pure JAX operations to allow JIT compilation by NLSQ's CMAESOptimizer.
             Element-wise mode is triggered automatically when len(t1) > 2000.
+
+            Note: Uses effective_per_angle_scaling which respects anti-degeneracy
+            constant mode. When constant mode is enabled, this function receives
+            9 params (1 contrast + 1 offset + 7 physical) instead of 13.
             """
             params_array = jnp.asarray(params)
 
             # Extract per-angle and physical params using JAX operations
-            if per_angle_scaling:
+            # CRITICAL: Use effective_per_angle_scaling which respects anti-degeneracy
+            # constant mode. When use_constant_mode=True, we have 9 params not 13.
+            if effective_per_angle_scaling:
                 contrasts = params_array[:n_phi]
                 offsets = params_array[n_phi : 2 * n_phi]
                 physical = params_array[2 * n_phi :]
             else:
+                # Constant mode: broadcast single contrast/offset to all angles
                 contrasts = jnp.full(n_phi, params_array[0])
                 offsets = jnp.full(n_phi, params_array[1])
                 physical = params_array[2:]
@@ -1906,20 +1968,91 @@ def fit_nlsq_cmaes(
 
         execution_time = time.time() - start_time
 
+        # ==========================================================================
+        # EXPAND CONSTANT MODE RESULTS (v2.16.1+)
+        # ==========================================================================
+        # If constant mode was used, expand 9 params back to 13 for consistency
+        # with per_angle_scaling=True expectations from caller.
+        # ==========================================================================
+        final_params = np.asarray(cmaes_result.parameters)
+        final_covariance = cmaes_result.covariance
+
+        if use_constant_mode and per_angle_scaling:
+            # Expand constant mode (9 params) to per-angle (13 params)
+            # Structure: [contrast, offset, *physical] -> [c0,c1,c2, o0,o1,o2, *physical]
+            contrast_const = final_params[0]
+            offset_const = final_params[1]
+            physical_params = final_params[2:]
+
+            final_params = np.concatenate([
+                np.full(n_phi, contrast_const),  # Replicate contrast
+                np.full(n_phi, offset_const),    # Replicate offset
+                physical_params,                  # Keep physical params as-is
+            ])
+
+            logger.info(
+                f"Expanding constant mode results: {len(cmaes_result.parameters)} -> "
+                f"{len(final_params)} parameters"
+            )
+
+            # Expand covariance matrix if available
+            if final_covariance is not None:
+                # For per-angle params, assign constant mode variance to all angles
+                # and set cross-covariance to same value (perfectly correlated)
+                n_const = 2 + n_physical
+                n_expanded = 2 * n_phi + n_physical
+                expanded_cov = np.zeros((n_expanded, n_expanded))
+
+                # Map: param[0] -> [0:n_phi], param[1] -> [n_phi:2*n_phi], param[2:] -> [2*n_phi:]
+                # Physical params covariance
+                expanded_cov[2*n_phi:, 2*n_phi:] = final_covariance[2:, 2:]
+
+                # Contrast variance (replicated to all angles)
+                contrast_var = final_covariance[0, 0]
+                for i in range(n_phi):
+                    for j in range(n_phi):
+                        expanded_cov[i, j] = contrast_var
+
+                # Offset variance (replicated to all angles)
+                offset_var = final_covariance[1, 1]
+                for i in range(n_phi, 2*n_phi):
+                    for j in range(n_phi, 2*n_phi):
+                        expanded_cov[i, j] = offset_var
+
+                # Cross-covariance: contrast-physical, offset-physical
+                for i in range(n_phi):
+                    for k in range(n_physical):
+                        expanded_cov[i, 2*n_phi + k] = final_covariance[0, 2 + k]
+                        expanded_cov[2*n_phi + k, i] = final_covariance[2 + k, 0]
+
+                for i in range(n_phi, 2*n_phi):
+                    for k in range(n_physical):
+                        expanded_cov[i, 2*n_phi + k] = final_covariance[1, 2 + k]
+                        expanded_cov[2*n_phi + k, i] = final_covariance[2 + k, 1]
+
+                # Contrast-offset cross-covariance
+                contrast_offset_cov = final_covariance[0, 1]
+                for i in range(n_phi):
+                    for j in range(n_phi, 2*n_phi):
+                        expanded_cov[i, j] = contrast_offset_cov
+                        expanded_cov[j, i] = contrast_offset_cov
+
+                final_covariance = expanded_cov
+
         # Convert CMAESResult to OptimizationResult
-        n_params = len(cmaes_result.parameters)
+        n_params = len(final_params)
         dof = max(1, n_data - n_params)
 
         result = OptimizationResult(
-            parameters=cmaes_result.parameters,
+            parameters=final_params,
             uncertainties=(
-                np.sqrt(np.diag(cmaes_result.covariance))
-                if cmaes_result.covariance is not None
+                np.sqrt(np.diag(final_covariance))
+                if final_covariance is not None
                 else np.zeros(n_params)
             ),
             covariance=(
-                cmaes_result.covariance
-                if cmaes_result.covariance is not None
+                final_covariance
+                if final_covariance is not None
                 else np.eye(n_params)
             ),
             chi_squared=cmaes_result.chi_squared,
@@ -1935,6 +2068,9 @@ def fit_nlsq_cmaes(
                 "nlsq_refined": cmaes_result.nlsq_refined,
                 "restarts": cmaes_result.diagnostics.get("restarts", 0),
                 "evaluations": cmaes_result.diagnostics.get("evaluations", 0),
+                "anti_degeneracy_constant_mode": use_constant_mode,
+                "cmaes_params": len(cmaes_result.parameters),
+                "final_params": n_params,
             },
             recovery_actions=[],
             quality_flag="good" if cmaes_result.success else "poor",
@@ -1949,6 +2085,8 @@ def fit_nlsq_cmaes(
         logger.info(f"χ² = {result.chi_squared:.6e}")
         logger.info(f"Reduced χ² = {result.reduced_chi_squared:.6f}")
         logger.info(f"L-M refined: {cmaes_result.nlsq_refined}")
+        if use_constant_mode:
+            logger.info(f"Anti-degeneracy: constant mode ({len(cmaes_result.parameters)} -> {n_params} params)")
 
         return result
 
