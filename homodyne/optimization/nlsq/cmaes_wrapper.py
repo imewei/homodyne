@@ -68,6 +68,143 @@ def _format_bounds_summary(bounds: tuple[np.ndarray, np.ndarray]) -> str:
     return f"{n_params} params, range=[{min_range:.2e}, {max_range:.2e}]"
 
 
+# =============================================================================
+# Parameter Normalization Utilities (v2.16.0)
+# =============================================================================
+# These functions implement bounds-based normalization to improve CMA-ES
+# convergence for multi-scale problems (e.g., D₀ ~ 1e4 vs γ̇₀ ~ 1e-3).
+
+
+def _compute_normalization_factors(
+    bounds: tuple[np.ndarray, np.ndarray],
+    epsilon: float = 1e-12,
+) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """Compute normalization factors for bounds-based normalization.
+
+    Normalization: x_norm = (x - lower) / (upper - lower)
+
+    Parameters
+    ----------
+    bounds : tuple[np.ndarray, np.ndarray]
+        Lower and upper bounds as (lower, upper) arrays.
+    epsilon : float
+        Small value to prevent division by zero for fixed parameters.
+
+    Returns
+    -------
+    tuple[np.ndarray, np.ndarray, np.ndarray]
+        (scale, offset, range) where:
+        - scale = 1 / (upper - lower + epsilon) for safe division
+        - offset = lower (subtracted before scaling)
+        - range = upper - lower (for covariance adjustment)
+    """
+    lower, upper = bounds
+    param_range = upper - lower
+
+    # Prevent division by zero for fixed parameters (where upper == lower)
+    safe_range = np.where(param_range > epsilon, param_range, 1.0)
+    scale = 1.0 / safe_range
+
+    return scale, lower, param_range
+
+
+def _normalize_params(
+    params: np.ndarray,
+    scale: np.ndarray,
+    offset: np.ndarray,
+) -> np.ndarray:
+    """Normalize parameters from physical space to [0, 1] space.
+
+    Parameters
+    ----------
+    params : np.ndarray
+        Parameters in physical space.
+    scale : np.ndarray
+        Scale factors (1 / range).
+    offset : np.ndarray
+        Offset values (lower bounds).
+
+    Returns
+    -------
+    np.ndarray
+        Parameters normalized to [0, 1] space.
+    """
+    return (params - offset) * scale
+
+
+def _denormalize_params(
+    params_norm: np.ndarray,
+    scale: np.ndarray,
+    offset: np.ndarray,
+) -> np.ndarray:
+    """Denormalize parameters from [0, 1] space back to physical space.
+
+    Parameters
+    ----------
+    params_norm : np.ndarray
+        Parameters in normalized [0, 1] space.
+    scale : np.ndarray
+        Scale factors (1 / range).
+    offset : np.ndarray
+        Offset values (lower bounds).
+
+    Returns
+    -------
+    np.ndarray
+        Parameters in physical space.
+    """
+    return params_norm / scale + offset
+
+
+def _normalize_bounds(
+    bounds: tuple[np.ndarray, np.ndarray],
+) -> tuple[np.ndarray, np.ndarray]:
+    """Normalize bounds to [0, 1] space.
+
+    Parameters
+    ----------
+    bounds : tuple[np.ndarray, np.ndarray]
+        Physical bounds as (lower, upper) arrays.
+
+    Returns
+    -------
+    tuple[np.ndarray, np.ndarray]
+        Normalized bounds (zeros, ones).
+    """
+    n_params = len(bounds[0])
+    return (np.zeros(n_params), np.ones(n_params))
+
+
+def _adjust_covariance_for_normalization(
+    covariance: np.ndarray | None,
+    param_range: np.ndarray,
+) -> np.ndarray | None:
+    """Transform covariance from normalized to physical space.
+
+    Uses Jacobian scaling: Cov_phys = J @ Cov_norm @ J.T
+    where J is diagonal with elements = param_range.
+
+    Parameters
+    ----------
+    covariance : np.ndarray | None
+        Covariance matrix in normalized space.
+    param_range : np.ndarray
+        Parameter ranges (upper - lower bounds).
+
+    Returns
+    -------
+    np.ndarray | None
+        Covariance matrix in physical space, or None if input is None.
+    """
+    if covariance is None:
+        return None
+
+    # Jacobian is diagonal with elements = param_range
+    # Cov_phys[i,j] = range_i * Cov_norm[i,j] * range_j
+    jacobian_outer = np.outer(param_range, param_range)
+    return covariance * jacobian_outer
+
+
 def _is_cmaes_available() -> bool:
     """Check if CMA-ES is available via NLSQ."""
     try:
@@ -147,6 +284,11 @@ class CMAESWrapperConfig:
     refinement_max_nfev: int = 500  # Refinement shouldn't need many iterations
     refinement_loss: str = "linear"  # Linear loss for final refinement
 
+    # Parameter normalization (v2.16.0)
+    # Normalizes parameters to [0,1] based on bounds for better scale handling
+    normalize: bool = True  # Enable bounds-based normalization
+    normalization_epsilon: float = 1e-12  # Prevent division by zero
+
     @classmethod
     def from_nlsq_config(cls, config: NLSQConfig) -> CMAESWrapperConfig:
         """Create CMAESWrapperConfig from NLSQConfig.
@@ -182,6 +324,9 @@ class CMAESWrapperConfig:
             refinement_gtol=config.cmaes_refinement_gtol,
             refinement_max_nfev=config.cmaes_refinement_max_nfev,
             refinement_loss=config.cmaes_refinement_loss,
+            # Parameter normalization (v2.16.0)
+            normalize=config.cmaes_normalize,
+            normalization_epsilon=config.cmaes_normalization_epsilon,
         )
 
     def to_cmaes_config(self, n_params: int) -> Any:
@@ -675,6 +820,43 @@ class CMAESWrapper:
         # Create optimizer with config
         optimizer = CMAESOptimizer(config=cmaes_config)
 
+        # Set up parameter normalization if enabled (v2.16.0)
+        # Normalizes parameters to [0, 1] space for better CMA-ES covariance adaptation
+        norm_state: dict[str, Any] | None = None
+        if self.config.normalize:
+            norm_scale, norm_offset, param_range = _compute_normalization_factors(
+                bounds, self.config.normalization_epsilon
+            )
+            norm_state = {
+                "scale": norm_scale,
+                "offset": norm_offset,
+                "range": param_range,
+            }
+
+            # Normalize initial parameters and bounds
+            fit_p0 = _normalize_params(p0, norm_scale, norm_offset)
+            fit_bounds = _normalize_bounds(bounds)
+
+            # Wrap model function to denormalize params before evaluation
+            original_model_func = model_func
+
+            def normalized_model_func(xdata: np.ndarray, *params_norm: float) -> np.ndarray:
+                params_phys = _denormalize_params(
+                    np.array(params_norm), norm_scale, norm_offset
+                )
+                return original_model_func(xdata, *params_phys)
+
+            fit_model_func = normalized_model_func
+
+            logger.info(
+                f"[CMA-ES] Parameter normalization enabled: "
+                f"range=[{np.min(param_range):.2e}, {np.max(param_range):.2e}]"
+            )
+        else:
+            fit_p0 = p0
+            fit_bounds = bounds
+            fit_model_func = model_func
+
         # Run CMA-ES global search (NLSQ internal refinement is disabled)
         # - CMA-ES global search with covariance adaptation
         # - Optional BIPOP restarts (configured via cmaes_config.restart_strategy)
@@ -684,19 +866,29 @@ class CMAESWrapper:
             "CMA-ES global search", logger, track_memory=True
         ) as search_phase:
             result = optimizer.fit(
-                f=model_func,
+                f=fit_model_func,
                 xdata=xdata,
                 ydata=ydata,
-                p0=p0,
-                bounds=bounds,
+                p0=fit_p0,
+                bounds=fit_bounds,
                 sigma=sigma,
             )
 
         # Extract CMA-ES results
-        cmaes_params = np.asarray(result.get("popt", p0))
+        cmaes_params = np.asarray(result.get("popt", fit_p0))
         cmaes_covariance = result.get("pcov", None)
         if cmaes_covariance is not None:
             cmaes_covariance = np.asarray(cmaes_covariance)
+
+        # Denormalize results if normalization was applied (v2.16.0)
+        if norm_state is not None:
+            cmaes_params = _denormalize_params(
+                cmaes_params, norm_state["scale"], norm_state["offset"]
+            )
+            cmaes_covariance = _adjust_covariance_for_normalization(
+                cmaes_covariance, norm_state["range"]
+            )
+            logger.debug("[CMA-ES] Parameters denormalized from [0,1] to physical space")
 
         # Build CMA-ES diagnostics
         # NLSQ 0.6.4+ stores diagnostics under 'cmaes_diagnostics' dict
@@ -718,6 +910,7 @@ class CMAESWrapper:
             "restarts": restarts,
             "convergence_reason": convergence_reason,
             "global_search_time_s": search_phase.duration,
+            "normalization_enabled": norm_state is not None,
         }
         if search_phase.memory_peak_gb is not None:
             diagnostics["global_search_memory_gb"] = search_phase.memory_peak_gb
