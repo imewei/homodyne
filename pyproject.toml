@@ -58,13 +58,14 @@ requires-python = ">=3.12"
 dependencies = [
     # Core scientific computing
     "numpy>=2.3,<3.0",
-    "scipy>=1.16,<2.0",
+    "scipy>=1.17,<2.0",
     # JAX ecosystem (CPU-only, pin to 0.8.x for stability)
     "jax>=0.8.2,<0.9.0",
     "jaxlib>=0.8.2,<0.9.0",
     "jaxopt>=0.8.3",
-    "interpax>=0.3.5",
-    "nlsq>=0.6.2",
+    "interpax>=0.3.12",
+    "nlsq>=0.6.4",
+    "evosax>=0.2.0",
     # Bayesian inference
     "numpyro>=0.19.0",
     "blackjax>=1.3",
@@ -79,7 +80,7 @@ dependencies = [
     "matplotlib>=3.10",
     # Fast visualization (includes numba as transitive dependency)
     "datashader>=0.18",
-    "xarray>=2025.1",
+    "xarray>=2025.12",
 ]
 
 [project.optional-dependencies]
@@ -136,7 +137,7 @@ homodyne = [
 
 [tool.ruff]
 line-length = 88
-target-version = "py312"
+target-version = "py313"
 
 [tool.ruff.lint]
 select = [
@@ -162,7 +163,7 @@ exclude_dirs = ["tests", "docs", "build", "dist"]
 skips = ["B101", "B110", "B403", "B404", "B603"]
 
 [tool.mypy]
-python_version = "3.12"
+python_version = "3.13"
 warn_return_any = true
 warn_unused_configs = true
 disallow_untyped_defs = true
@@ -180,6 +181,7 @@ strict_equality = true
 module = [
     "jax.*",
     "nlsq.*",
+    "evosax.*",
     "numpyro.*",
     "blackjax.*",
     "arviz.*",
