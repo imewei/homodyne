@@ -4,6 +4,11 @@ This subpackage contains validation logic extracted from wrapper.py
 as part of architecture refactoring (FR-011).
 """
 
+from homodyne.optimization.nlsq.validation.fit_quality import (
+    FitQualityConfig,
+    FitQualityReport,
+    validate_fit_quality,
+)
 from homodyne.optimization.nlsq.validation.input_validator import (
     InputValidator,
     validate_array_dimensions,
@@ -30,4 +35,8 @@ __all__ = [
     "validate_covariance",
     "validate_optimized_params",
     "validate_result_consistency",
+    # Fit quality validation (v2.16.0)
+    "FitQualityConfig",
+    "FitQualityReport",
+    "validate_fit_quality",
 ]

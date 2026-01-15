@@ -392,6 +392,21 @@ class NLSQConfig:
     cmaes_refinement_gtol: float = 1e-10
     cmaes_refinement_max_nfev: int = 500  # Max function evaluations for refinement
     cmaes_refinement_loss: str = "linear"  # Loss function: "linear", "soft_l1", "huber"
+    #
+    # CMA-ES Parameter Normalization (v2.16.0)
+    # Normalizes parameters to [0,1] based on bounds for better scale handling
+    cmaes_normalize: bool = True  # Enable bounds-based normalization (recommended)
+    cmaes_normalization_epsilon: float = 1e-12  # Prevent division by zero
+
+    # === Fit Quality Validation (v2.16.0) ===
+    # Post-optimization quality checks with configurable thresholds
+    # Logs warnings for potential issues but does not raise exceptions
+    enable_quality_validation: bool = True  # Enable post-fit quality checks
+    quality_reduced_chi_squared_threshold: float = 10.0  # Warn if χ²_red > threshold
+    quality_warn_on_max_restarts: bool = True  # Warn if CMA-ES didn't converge
+    quality_warn_on_bounds_hit: bool = True  # Warn if physical params at bounds
+    quality_warn_on_convergence_failure: bool = True  # Warn if optimization failed
+    quality_bounds_tolerance: float = 1e-9  # Tolerance for "at bounds" detection
 
     # Computed fields
     _validation_errors: list[str] = field(default_factory=list, repr=False)
@@ -429,6 +444,9 @@ class NLSQConfig:
 
         # Extract CMA-ES global optimization settings (v2.15.0 / NLSQ 0.6.4+)
         cmaes = config_dict.get("cmaes", {})
+
+        # Extract fit quality validation settings (v2.16.0)
+        quality_validation = config_dict.get("quality_validation", {})
 
         config = cls(
             # NLSQ Workflow Settings (v2.11.0+)
@@ -607,6 +625,28 @@ class NLSQConfig:
             cmaes_refinement_gtol=float(cmaes.get("refinement_gtol", 1e-10)),
             cmaes_refinement_max_nfev=cmaes.get("refinement_max_nfev", 500),
             cmaes_refinement_loss=cmaes.get("refinement_loss", "linear"),
+            # CMA-ES Parameter Normalization (v2.16.0)
+            cmaes_normalize=cmaes.get("normalize", True),
+            cmaes_normalization_epsilon=float(
+                cmaes.get("normalization_epsilon", 1e-12)
+            ),
+            # Fit Quality Validation (v2.16.0)
+            enable_quality_validation=quality_validation.get("enable", True),
+            quality_reduced_chi_squared_threshold=float(
+                quality_validation.get("reduced_chi_squared_threshold", 10.0)
+            ),
+            quality_warn_on_max_restarts=quality_validation.get(
+                "warn_on_max_restarts", True
+            ),
+            quality_warn_on_bounds_hit=quality_validation.get(
+                "warn_on_bounds_hit", True
+            ),
+            quality_warn_on_convergence_failure=quality_validation.get(
+                "warn_on_convergence_failure", True
+            ),
+            quality_bounds_tolerance=float(
+                quality_validation.get("bounds_tolerance", 1e-9)
+            ),
         )
 
         # Validate and log any issues
