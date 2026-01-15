@@ -1370,6 +1370,7 @@ class _SingleFitWorker:
                 config=config,
                 initial_params=params_dict,
                 per_angle_scaling=self.per_angle_scaling,
+                _skip_global_selection=True,  # Prevent recursion from multistart
             )
 
             return SingleStartResult(
