@@ -372,6 +372,7 @@ class NLSQConfig:
     enable_cmaes: bool = False  # Default OFF - user opt-in (use multi-start by default)
     cmaes_preset: str = "cmaes"  # "cmaes-fast" (50 gen), "cmaes" (100 gen), "cmaes-global" (200 gen)
     cmaes_max_generations: int = 100  # Maximum CMA-ES generations
+    cmaes_popsize: int | None = None  # Population size (None = auto from 4+3*ln(n))
     cmaes_sigma: float = 0.5  # Initial step size (fraction of search range)
     cmaes_tol_fun: float = 1e-8  # Function value tolerance for convergence
     cmaes_tol_x: float = 1e-8  # Parameter tolerance for convergence
@@ -607,6 +608,7 @@ class NLSQConfig:
             enable_cmaes=cmaes.get("enable", False),
             cmaes_preset=cmaes.get("preset", "cmaes"),
             cmaes_max_generations=cmaes.get("max_generations", 100),
+            cmaes_popsize=cmaes.get("popsize"),  # None = auto
             cmaes_sigma=float(cmaes.get("sigma", 0.5)),
             cmaes_tol_fun=float(cmaes.get("tol_fun", 1e-8)),
             cmaes_tol_x=float(cmaes.get("tol_x", 1e-8)),
@@ -966,6 +968,11 @@ class NLSQConfig:
                 f"cmaes_max_generations must be positive, "
                 f"got: {self.cmaes_max_generations}"
             )
+        if self.cmaes_popsize is not None and self.cmaes_popsize <= 0:
+            errors.append(
+                f"cmaes_popsize must be positive or None, "
+                f"got: {self.cmaes_popsize}"
+            )
         if not 0 < self.cmaes_sigma <= 1:
             errors.append(
                 f"cmaes_sigma must be in (0, 1], got: {self.cmaes_sigma}"
@@ -1167,6 +1174,7 @@ class NLSQConfig:
                 "enable": self.enable_cmaes,
                 "preset": self.cmaes_preset,
                 "max_generations": self.cmaes_max_generations,
+                "popsize": self.cmaes_popsize,
                 "sigma": self.cmaes_sigma,
                 "tol_fun": self.cmaes_tol_fun,
                 "tol_x": self.cmaes_tol_x,

@@ -265,6 +265,7 @@ class CMAESWrapperConfig:
     # CMA-ES global search settings
     preset: str = "cmaes"
     max_generations: int = 100
+    popsize: int | None = None  # None = auto from 4+3*ln(n)
     sigma: float = 0.5
     tol_fun: float = 1e-8
     tol_x: float = 1e-8
@@ -307,6 +308,7 @@ class CMAESWrapperConfig:
             # CMA-ES global search settings
             preset=config.cmaes_preset,
             max_generations=config.cmaes_max_generations,
+            popsize=config.cmaes_popsize,
             sigma=config.cmaes_sigma,
             tol_fun=config.cmaes_tol_fun,
             tol_x=config.cmaes_tol_x,
@@ -355,8 +357,11 @@ class CMAESWrapperConfig:
 
         from nlsq.global_optimization import CMAESConfig, compute_default_popsize
 
-        # Compute population size if not specified
-        popsize = compute_default_popsize(n_params)
+        # Use configured popsize if specified, otherwise compute default
+        if self.popsize is not None:
+            popsize = self.popsize
+        else:
+            popsize = compute_default_popsize(n_params)
 
         # Map preset to max_generations if using preset
         preset_generations = {
@@ -694,7 +699,11 @@ class CMAESWrapper:
                 compute_default_popsize,
             )
 
-            popsize = compute_default_popsize(n_params)
+            # Use configured popsize if specified, otherwise compute default
+            if self.config.popsize is not None:
+                popsize = self.config.popsize
+            else:
+                popsize = compute_default_popsize(n_params)
             pop_batch, data_chunk = auto_configure_cmaes_memory(
                 n_data=n_data,
                 popsize=popsize,
