@@ -104,7 +104,7 @@ try:
     from homodyne.config.manager import ConfigManager
     from homodyne.data.xpcs_loader import XPCSDataLoader
     from homodyne.device import configure_optimal_device
-    from homodyne.optimization import fit_mcmc_jax, fit_nlsq_jax, fit_nlsq_multistart
+    from homodyne.optimization import fit_mcmc_jax, fit_nlsq_jax
 
     HAS_CORE_MODULES = True
     HAS_XPCS_LOADER = True
@@ -1093,7 +1093,13 @@ def _run_nlsq_optimization(
     config: "ConfigManager",
     args,
 ) -> Any:
-    """Run NLSQ optimization (single-start or multi-start).
+    """Run NLSQ optimization via unified entry point.
+
+    This function always calls fit_nlsq_jax, which handles global optimization
+    selection internally with the following priority:
+      1. CMA-ES (if enabled and available) - for multi-scale problems
+      2. Multi-start (if enabled) - for exploring parameter space
+      3. Local optimization - standard trust-region method
 
     Args:
         filtered_data: Preprocessed experimental data
@@ -1103,32 +1109,9 @@ def _run_nlsq_optimization(
     Returns:
         Optimization result
     """
-    nlsq_config = config.config.get("optimization", {}).get("nlsq", {})
-    multi_start_config = nlsq_config.get("multi_start", {})
-    use_multistart = multi_start_config.get("enable", False)
-
-    if use_multistart:
-        logger.info("=" * 80)
-        logger.info("MULTI-START OPTIMIZATION ENABLED")
-        logger.info(f"  n_starts: {multi_start_config.get('n_starts', 10)}")
-        logger.info(
-            f"  strategy: {multi_start_config.get('sampling_strategy', 'latin_hypercube')}"
-        )
-        logger.info("=" * 80)
-
-        multistart_result = fit_nlsq_multistart(filtered_data, config)
-        result = multistart_result.to_optimization_result()
-
-        logger.info("=" * 80)
-        logger.info("MULTI-START OPTIMIZATION COMPLETE")
-        logger.info(f"  Strategy used: {multistart_result.strategy_used}")
-        logger.info(f"  Best χ²: {multistart_result.best.chi_squared:.4g}")
-        logger.info(f"  Unique basins: {multistart_result.n_unique_basins}")
-        if multistart_result.degeneracy_detected:
-            logger.warning("  ⚠ Parameter degeneracy detected!")
-        logger.info("=" * 80)
-    else:
-        result = fit_nlsq_jax(filtered_data, config)
+    # Always use fit_nlsq_jax as the unified entry point
+    # It handles global optimization selection: CMA-ES → Multi-start → Local
+    result = fit_nlsq_jax(filtered_data, config)
 
     return result
 
