@@ -311,25 +311,38 @@ def fit_nlsq_jax(
         # CMA-ES has highest priority (for multi-scale problems)
         cmaes_dict = nlsq_dict.get("cmaes", {})
         if cmaes_dict.get("enable", False):
-            logger.info("CMA-ES enabled, delegating to fit_nlsq_cmaes")
-            return fit_nlsq_cmaes(
-                data=data,
-                config=config,
-                initial_params=initial_params,
-                per_angle_scaling=per_angle_scaling,
-            )
+            if HAS_CMAES:
+                logger.info("CMA-ES enabled, delegating to fit_nlsq_cmaes")
+                return fit_nlsq_cmaes(
+                    data=data,
+                    config=config,
+                    initial_params=initial_params,
+                    per_angle_scaling=per_angle_scaling,
+                )
+            else:
+                logger.warning(
+                    "[CMA-ES] Enabled in config but not available (evosax not installed). "
+                    "Install with: pip install nlsq[evosax]. "
+                    "Falling back to multi-start or local optimization."
+                )
 
         # Multi-start is second priority
         multi_start_dict = nlsq_dict.get("multi_start", {})
         if multi_start_dict.get("enable", False):
-            logger.info("Multi-start enabled, delegating to fit_nlsq_multistart")
-            result = fit_nlsq_multistart(
-                data=data,
-                config=config,
-                initial_params=initial_params,
-                per_angle_scaling=per_angle_scaling,
-            )
-            return result.to_optimization_result()
+            if HAS_MULTISTART:
+                logger.info("Multi-start enabled, delegating to fit_nlsq_multistart")
+                result = fit_nlsq_multistart(
+                    data=data,
+                    config=config,
+                    initial_params=initial_params,
+                    per_angle_scaling=per_angle_scaling,
+                )
+                return result.to_optimization_result()
+            else:
+                logger.warning(
+                    "[Multi-Start] Enabled in config but not available. "
+                    "Falling back to local optimization."
+                )
 
         logger.debug("No global optimization enabled, using local optimization")
 
@@ -1681,9 +1694,9 @@ def fit_nlsq_cmaes(
     if nlsq_config.cmaes_auto_select:
         if not wrapper.should_use_cmaes(bounds, nlsq_config.cmaes_scale_threshold):
             # Scale ratio too low for CMA-ES, check fallback options
-            # Fall back to multi-start if enabled, otherwise local optimization
+            # Fall back to multi-start if enabled and available, otherwise local optimization
             multi_start_dict = nlsq_dict.get("multi_start", {})
-            if multi_start_dict.get("enable", False):
+            if multi_start_dict.get("enable", False) and HAS_MULTISTART:
                 logger.info(
                     f"[CMA-ES] Scale ratio < {nlsq_config.cmaes_scale_threshold}, "
                     "falling back to multi-start optimization"
