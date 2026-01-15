@@ -175,7 +175,10 @@ def test_autodoc_mock_imports_allowed():
 
 
 def test_sphinx_rtd_theme_configuration():
-    """Test that sphinx_rtd_theme is properly configured."""
+    """Test that the HTML theme is properly configured.
+
+    Note: Project uses furo theme (not sphinx_rtd_theme) as of v2.14.0.
+    """
     docs_path = Path(__file__).parent.parent.parent / "docs"
     conf_path = docs_path / "conf.py"
 
@@ -188,26 +191,23 @@ def test_sphinx_rtd_theme_configuration():
         conf = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(conf)
 
-        # Check theme is set
-        assert conf.html_theme == "sphinx_rtd_theme", "Theme should be sphinx_rtd_theme"
+        # Check theme is set (furo theme is used)
+        assert conf.html_theme == "furo", "Theme should be furo"
 
         # Check theme options
         assert hasattr(conf, "html_theme_options"), "html_theme_options not configured"
         theme_opts = conf.html_theme_options
 
-        # Verify required theme options
-        assert theme_opts.get("navigation_depth") == 3, "navigation_depth should be 3"
-        assert theme_opts.get("sticky_navigation") is True, (
-            "sticky_navigation should be True"
+        # Verify furo theme options
+        assert theme_opts.get("navigation_with_keys") is True, (
+            "navigation_with_keys should be True"
         )
-        assert theme_opts.get("collapse_navigation") is True, (
-            "collapse_navigation should be True"
+        assert "source_repository" in theme_opts, "source_repository should be set"
+        assert theme_opts.get("source_branch") == "main", (
+            "source_branch should be 'main'"
         )
-        assert theme_opts.get("style_nav_header_background") == "#2980b9", (
-            "Argonne branding color should be #2980b9"
-        )
-        assert theme_opts.get("prev_next_buttons_location") == "bottom", (
-            "prev_next_buttons_location should be 'bottom'"
+        assert theme_opts.get("source_directory") == "docs/", (
+            "source_directory should be 'docs/'"
         )
 
         # Check sourcelink is disabled

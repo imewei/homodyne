@@ -69,10 +69,12 @@ def test_suggested_timeout_clamps_and_scales():
 
 @pytest.mark.unit
 def test_laminar_flow_smoke_run_completes_quickly():
-    # Tiny synthetic dataset (single phi angle, element-wise paired times)
-    t = np.linspace(0.1, 0.5, 12)
-    data = 1.0 + 0.01 * np.random.randn(len(t))
-    phi = np.zeros_like(t)
+    # Tiny synthetic dataset (single phi angle, off-diagonal time pairs)
+    # Note: t1 != t2 required since CMC filters diagonal points (t1==t2)
+    t1 = np.linspace(0.1, 0.5, 12)
+    t2 = t1 + 0.05  # Off-diagonal: t2 > t1
+    data = 1.0 + 0.01 * np.random.randn(len(t1))
+    phi = np.zeros_like(t1)
 
     cmc_cfg = {
         "enable": True,
@@ -88,8 +90,8 @@ def test_laminar_flow_smoke_run_completes_quickly():
 
     result = fit_mcmc_jax(
         data=data,
-        t1=t,
-        t2=t,
+        t1=t1,
+        t2=t2,
         phi=phi,
         q=0.005,
         L=2e6,

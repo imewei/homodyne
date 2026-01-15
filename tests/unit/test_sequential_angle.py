@@ -14,6 +14,7 @@ Test Categories:
 
 import logging
 
+import jax.numpy as jnp
 import numpy as np
 import pytest
 
@@ -75,12 +76,16 @@ def imbalanced_dataset():
 
 @pytest.fixture
 def simple_residual_function():
-    """Create a simple residual function for testing."""
+    """Create a simple residual function for testing.
+
+    Uses JAX numpy for JIT-traceable operations required by NLSQ.
+    """
 
     def residual_func(params, phi_vals, t1_vals, t2_vals, g2_vals):
         """Simple exponential decay model: g2 = 1 + contrast * exp(-t1 * decay_rate)."""
         contrast, decay_rate = params
-        g2_model = 1.0 + contrast * np.exp(-t1_vals * decay_rate)
+        # Use jnp.exp for JAX-traceable function (required for NLSQ JIT compilation)
+        g2_model = 1.0 + contrast * jnp.exp(-t1_vals * decay_rate)
         return g2_vals - g2_model
 
     return residual_func
@@ -490,9 +495,12 @@ def test_optimize_per_angle_sequential_partial_convergence():
     g2 = np.ones(300) * 1.5  # Add some structure
 
     def simple_residual(params, phi, t1, t2, g2):
-        """Simple residual that should converge."""
+        """Simple residual that should converge.
+
+        Uses jnp.exp for JAX-traceable function (required for NLSQ JIT compilation).
+        """
         contrast, decay = params
-        model = 1.0 + contrast * np.exp(-decay * t1)
+        model = 1.0 + contrast * jnp.exp(-decay * t1)
         return g2 - model
 
     initial_params = np.array([0.5, 1.0])
