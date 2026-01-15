@@ -757,15 +757,17 @@ optimization:
 
       # Presets (shorthand for common configurations)
       #   "cmaes-fast": 50 generations (quick exploration)
-      #   "cmaes": 100 generations (balanced - RECOMMENDED)
-      #   "cmaes-global": 200 generations (thorough global search)
-      preset: "cmaes"
+      #   "cmaes": 100 generations (balanced)
+      #   "cmaes-global": 200 generations (thorough global search - RECOMMENDED)
+      preset: "cmaes-global"
 
       # CMA-ES global search settings
-      max_generations: 100          # Maximum CMA-ES generations
+      max_generations: 200          # Maximum CMA-ES generations
                                     # CONSTRAINT: > 0
-      sigma: 0.5                    # Initial step size (fraction of range)
+      sigma: 0.3                    # Initial step size (fraction of range)
                                     # CONSTRAINT: (0, 1]
+      popsize: 30                   # Population size (default ~4+3*ln(n_params))
+                                    # 30 recommended for 13-param space
       tol_fun: 1.0e-8               # Function value tolerance
                                     # CONSTRAINT: > 0
       tol_x: 1.0e-8                 # Parameter tolerance
@@ -774,7 +776,7 @@ optimization:
       # Restart strategy
       restart_strategy: "bipop"     # "none" | "bipop"
                                     # bipop: alternates large/small populations
-      max_restarts: 9               # Maximum BIPOP restarts
+      max_restarts: 15              # Maximum BIPOP restarts
                                     # CONSTRAINT: >= 0
 
       # Memory management (null = auto-configure)

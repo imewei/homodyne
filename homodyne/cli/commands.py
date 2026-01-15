@@ -54,6 +54,10 @@ from homodyne.io.nlsq_writers import (  # noqa: E402
 from homodyne.optimization.nlsq.fit_computation import (  # noqa: E402
     compute_theoretical_fits,
 )
+from homodyne.optimization.nlsq.validation.fit_quality import (  # noqa: E402
+    FitQualityConfig,
+    validate_fit_quality,
+)
 from homodyne.utils.logging import (  # noqa: E402
     AnalysisSummaryLogger,
     configure_logging,
@@ -152,10 +156,11 @@ def dispatch_command(args) -> dict[str, Any]:
         }
 
     # Initialize analysis summary logger (T024)
-    analysis_mode = "laminar_flow" if getattr(args, "laminar_flow", False) else "static"
+    # Use CLI args for initial mode, will be updated from config after loading
+    cli_mode = "laminar_flow" if getattr(args, "laminar_flow", False) else "static"
     if getattr(args, "static_mode", False):
-        analysis_mode = "static_isotropic"
-    summary = AnalysisSummaryLogger(run_id=run_id, analysis_mode=analysis_mode)
+        cli_mode = "static_isotropic"
+    summary = AnalysisSummaryLogger(run_id=run_id, analysis_mode=cli_mode)
 
     try:
         # Create output directory
@@ -184,6 +189,19 @@ def dispatch_command(args) -> dict[str, Any]:
                 logger.info(f"[CLI] Log file created: {log_file}")
                 summary.add_output_file(log_file)
         summary.end_phase("config_loading")
+
+        # Update analysis mode from loaded config (T055 - fix mode mismatch bug)
+        # Config file may specify analysis_mode, and CLI overrides are already applied
+        # in _load_configuration via _apply_cli_overrides()
+        config_dict = config.get_config() if hasattr(config, "get_config") else config
+        if isinstance(config_dict, dict):
+            config_analysis_mode = config_dict.get("analysis_mode", cli_mode)
+            if config_analysis_mode != summary.analysis_mode:
+                logger.debug(
+                    f"[CLI] Updated analysis_mode from '{summary.analysis_mode}' "
+                    f"to '{config_analysis_mode}' (from config)"
+                )
+                summary.analysis_mode = config_analysis_mode
 
         # Configure device (CPU/GPU)
         device_config = _configure_device(args)
@@ -2153,6 +2171,58 @@ def save_nlsq_results(
         "quality_flag": result.quality_flag,
         "device_info": result.device_info,
     }
+
+    # Step 5.5: Validate fit quality (T056)
+    # Get parameter labels for bounds checking
+    param_labels = getattr(result, "param_labels", None)
+    if param_labels is None:
+        # Construct param labels from analysis mode
+        if analysis_mode == "laminar_flow":
+            physical_labels = list(LAMINAR_FLOW_PARAM_NAMES)
+        else:
+            physical_labels = list(STATIC_PARAM_NAMES)
+        # Add per-angle scaling labels
+        scaling_labels = []
+        for i in range(n_angles):
+            scaling_labels.append(f"contrast[{i}]")
+        for i in range(n_angles):
+            scaling_labels.append(f"offset[{i}]")
+        param_labels = scaling_labels + physical_labels
+
+    # Get bounds from config if available
+    bounds = None
+    try:
+        if hasattr(config, "get_parameter_bounds"):
+            bounds_dict = config.get_parameter_bounds(param_labels)
+            if bounds_dict:
+                lower = np.array([bounds_dict[name]["min"] for name in param_labels])
+                upper = np.array([bounds_dict[name]["max"] for name in param_labels])
+                bounds = (lower, upper)
+    except Exception as e:
+        logger.debug(f"Could not get bounds for quality validation: {e}")
+
+    # Create quality config from nlsq settings
+    nlsq_config = config.config.get("optimization", {}).get("nlsq", {})
+    quality_config = FitQualityConfig(
+        enable=nlsq_config.get("enable_quality_validation", True),
+        reduced_chi_squared_threshold=nlsq_config.get(
+            "quality_reduced_chi_squared_threshold", 10.0
+        ),
+        warn_on_max_restarts=nlsq_config.get("quality_warn_on_max_restarts", True),
+        warn_on_bounds_hit=nlsq_config.get("quality_warn_on_bounds_hit", True),
+        warn_on_convergence_failure=nlsq_config.get(
+            "quality_warn_on_convergence_failure", True
+        ),
+        bounds_tolerance=nlsq_config.get("quality_bounds_tolerance", 1e-9),
+    )
+
+    # Run validation
+    quality_report = validate_fit_quality(
+        result, bounds=bounds, config=quality_config, param_labels=param_labels
+    )
+
+    # Add quality report to convergence dict
+    convergence_dict.update(quality_report.to_dict())
 
     # Step 6: Save JSON files
     logger.info("Saving JSON files (parameters, analysis, convergence)")

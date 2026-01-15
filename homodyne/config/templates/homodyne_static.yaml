@@ -322,14 +322,15 @@ optimization:
     # Usually overkill for static mode (similar parameter scales).
     # Consider multi-start instead.
     cmaes:
-      enable: false
-      preset: "cmaes"
-      max_generations: 100
-      sigma: 0.5
+      enable: false                     # Static mode typically doesn't need CMA-ES
+      preset: "cmaes-global"            # 200 generations for better global convergence
+      max_generations: 200              # Increased from 100
+      sigma: 0.3                        # Smaller initial step for refined search
+      popsize: 30                       # Larger population for robust optimization
       tol_fun: 1.0e-8
       tol_x: 1.0e-8
       restart_strategy: "bipop"
-      max_restarts: 9
+      max_restarts: 15                  # More restarts to escape local minima
       population_batch_size: null
       data_chunk_size: null
       memory_limit_gb: 8.0
