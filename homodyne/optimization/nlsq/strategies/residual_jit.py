@@ -357,7 +357,10 @@ class StratifiedResidualFunctionJIT:
 
         # v2.14.2+: Mask out both padded values AND diagonal values (t1 == t2)
         # Diagonal points are autocorrelation artifacts, not physics
-        non_diagonal = t1_indices != t2_indices
+        # CRITICAL FIX (2026-01-15): Compare actual time VALUES, not indices.
+        # t1_indices and t2_indices reference DIFFERENT arrays (t1_unique vs t2_unique),
+        # so comparing indices is wrong. Must compare the actual t1_chunk and t2_chunk values.
+        non_diagonal = t1_chunk != t2_chunk
         residuals_masked = jnp.where(mask_chunk & non_diagonal, residuals_raw, 0.0)
 
         return residuals_masked

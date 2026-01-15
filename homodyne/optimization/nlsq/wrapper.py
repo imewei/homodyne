@@ -4468,10 +4468,23 @@ class NLSQWrapper(NLSQAdapterBase):
         start_time = time.perf_counter()
 
         # Create JIT-compatible stratified residual function
+        # CRITICAL FIX (2026-01-15): When constant mode is enabled, the parameters
+        # are transformed to [contrast_mean, offset_mean, *physical] format.
+        # The residual function must be created with per_angle_scaling=False to
+        # correctly interpret this parameter format. The per_angle_scaling=False
+        # branch in _compute_single_chunk_residuals expects [contrast, offset, *physical]
+        # which matches the constant mode format exactly.
+        effective_per_angle_scaling = per_angle_scaling
+        if ad_controller is not None and ad_controller.use_constant:
+            effective_per_angle_scaling = False
+            logger.info(
+                "Constant mode enabled: using per_angle_scaling=False for residual function"
+            )
+
         logger.info("Creating JIT-compatible stratified residual function...")
         residual_fn = StratifiedResidualFunctionJIT(
             stratified_data=chunked_data,  # Use chunked_data with .chunks attribute
-            per_angle_scaling=per_angle_scaling,
+            per_angle_scaling=effective_per_angle_scaling,
             physical_param_names=physical_param_names,
             logger=logger,
         )
@@ -4528,11 +4541,18 @@ class NLSQWrapper(NLSQAdapterBase):
                 logger.error("")
                 logger.error("Diagnostic information:")
                 logger.error(f"  Initial parameters count: {len(initial_params)}")
+                if effective_per_angle_scaling:
+                    expected_count = len(physical_param_names) + 2 * residual_fn.n_phi
+                    logger.error(
+                        f"  Expected for per-angle scaling: {len(physical_param_names)} physical + 2*{residual_fn.n_phi} scaling = {expected_count}"
+                    )
+                else:
+                    expected_count = len(physical_param_names) + 2
+                    logger.error(
+                        f"  Expected for constant scaling: {len(physical_param_names)} physical + 2 scaling = {expected_count}"
+                    )
                 logger.error(
-                    f"  Expected for per-angle scaling: {len(physical_param_names)} physical + 2*{residual_fn.n_phi} scaling = {len(physical_param_names) + 2 * residual_fn.n_phi}"
-                )
-                logger.error(
-                    f"  Residual function expects: per_angle_scaling={per_angle_scaling}, n_phi={residual_fn.n_phi}"
+                    f"  Residual function expects: per_angle_scaling={effective_per_angle_scaling}, n_phi={residual_fn.n_phi}"
                 )
                 logger.error("=" * 80)
                 raise ValueError(
