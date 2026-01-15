@@ -838,12 +838,19 @@ class CMAESWrapper:
             fit_bounds = _normalize_bounds(bounds)
 
             # Wrap model function to denormalize params before evaluation
+            # IMPORTANT: Use JAX operations to preserve tracers during JIT compilation
             original_model_func = model_func
+            import jax.numpy as jnp
+
+            # Pre-convert normalization factors to JAX arrays (captured in closure)
+            norm_scale_jax = jnp.array(norm_scale)
+            norm_offset_jax = jnp.array(norm_offset)
 
             def normalized_model_func(xdata: np.ndarray, *params_norm: float) -> np.ndarray:
-                params_phys = _denormalize_params(
-                    np.array(params_norm), norm_scale, norm_offset
-                )
+                # Use jnp.stack to preserve JAX tracers during JIT tracing
+                params_norm_jax = jnp.stack(params_norm)
+                # Denormalize: x = x_norm / scale + offset = x_norm * range + lower
+                params_phys = params_norm_jax / norm_scale_jax + norm_offset_jax
                 return original_model_func(xdata, *params_phys)
 
             fit_model_func = normalized_model_func

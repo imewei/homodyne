@@ -290,34 +290,44 @@ def get_or_create_model(
 
     # Create model function compatible with NLSQ curve_fit
     # This closure captures model configuration
+    # IMPORTANT: This function must be JAX-traceable for CMA-ES JIT compilation
+    import jax.numpy as jnp
+
+    # Pre-convert phi_unique to JAX array for use in closure
+    phi_unique_jax = jnp.array(phi_unique)
+
     def model_func(xdata: np.ndarray, *params) -> np.ndarray:
         """Model function compatible with NLSQ curve_fit.
 
+        This function is designed to be JAX-traceable for CMA-ES JIT compilation.
+        All operations use JAX primitives to preserve tracers during tracing.
+
         Args:
             xdata: Independent variables [n_points, 3] with columns [t1, t2, phi]
-            *params: Parameter values
+            *params: Parameter values (may be JAX tracers during JIT)
 
         Returns:
             Predicted g2 values [n_points]
         """
-        params_array = np.array(params)
-        n_params = len(params_array)
+        # Use jnp.stack to preserve JAX tracers during JIT tracing
+        params_array = jnp.stack(params)
+        n_params_val = len(params)  # Use Python len on tuple, not traced array
 
         # Extract per-angle scaling parameters if present
         n_physical = 3 if model_mode == "static" else 7
-        if per_angle_scaling and n_params > n_physical + 2 * n_phi:
+        if per_angle_scaling and n_params_val > n_physical + 2 * n_phi:
             contrast_vals = params_array[:n_phi]
             offset_vals = params_array[n_phi : 2 * n_phi]
             physical_params = params_array[2 * n_phi :]
         else:
             # Legacy scalar mode (for backward compatibility)
-            c0 = params_array[0] if len(params_array) > 0 else 0.5
-            o0 = params_array[1] if len(params_array) > 1 else 1.0
-            contrast_vals = np.full(n_phi, c0)
-            offset_vals = np.full(n_phi, o0)
-            default_phys = np.array([1000.0, 0.5, 10.0])
+            c0 = params_array[0] if n_params_val > 0 else 0.5
+            o0 = params_array[1] if n_params_val > 1 else 1.0
+            contrast_vals = jnp.full(n_phi, c0)
+            offset_vals = jnp.full(n_phi, o0)
+            default_phys = jnp.array([1000.0, 0.5, 10.0])
             physical_params = (
-                params_array[2:] if len(params_array) > 2 else default_phys
+                params_array[2:] if n_params_val > 2 else default_phys
             )
 
         # Compute g2 for each point using vectorized computation
@@ -325,23 +335,21 @@ def get_or_create_model(
         # Performance Optimization (Spec 001 - FR-006, T042): Use batched vmap
         # computation instead of Python loop for better performance.
 
-        import jax.numpy as jnp
-
-        # Extract time and phi arrays from xdata
+        # Extract time and phi arrays from xdata (xdata is always concrete numpy)
         t1_batch = jnp.array(xdata[:, 0])
         t2_batch = jnp.array(xdata[:, 1])
-        phi_batch_raw = xdata[:, 2]
+        phi_batch_raw = jnp.array(xdata[:, 2])
 
-        # Map phi values to indices and get canonical phi values
-        phi_indices = np.array([
-            np.argmin(np.abs(phi_unique - phi_val))
-            for phi_val in phi_batch_raw
-        ])
-        phi_batch = jnp.array(phi_unique[phi_indices])
+        # Map phi values to indices using vectorized JAX operations
+        # Compute |phi_batch_raw - phi_unique| for all combinations, then argmin
+        # Shape: (n_points, n_phi) -> argmin along axis=1 -> (n_points,)
+        phi_diffs = jnp.abs(phi_batch_raw[:, None] - phi_unique_jax[None, :])
+        phi_indices = jnp.argmin(phi_diffs, axis=1)
+        phi_batch = phi_unique_jax[phi_indices]
 
         # Use batched g1 computation via vmap
         g1_batch = model.compute_g1_batch(
-            jnp.array(physical_params),
+            physical_params,  # Already a JAX array
             t1_batch,
             t2_batch,
             phi_batch,
@@ -349,14 +357,12 @@ def get_or_create_model(
             1.0,  # Default L (stator-rotor gap), will be scaled by params
         )
 
-        # Convert to numpy and compute g2 = offset + contrast * g1^2
-        g1_vals = np.asarray(g1_batch)
-
+        # Compute g2 = offset + contrast * g1^2 (all JAX operations)
         # Get per-point contrast and offset based on phi indices
         contrast_per_point = contrast_vals[phi_indices]
         offset_per_point = offset_vals[phi_indices]
 
-        g2_pred = offset_per_point + contrast_per_point * g1_vals**2
+        g2_pred = offset_per_point + contrast_per_point * g1_batch**2
 
         return g2_pred
 
