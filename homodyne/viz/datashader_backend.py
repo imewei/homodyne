@@ -347,7 +347,7 @@ def plot_c2_comparison_fast(
     *,
     vmin: float | None = None,
     vmax: float | None = None,
-    adaptive: bool = False,
+    adaptive: bool = True,
     percentile_min: float = 1.0,
     percentile_max: float = 99.0,
 ) -> None:
@@ -376,6 +376,14 @@ def plot_c2_comparison_fast(
         Scattering angle in degrees
     width, height : int, default=800
         Individual panel size in pixels
+    vmin, vmax : float, optional
+        Explicit color scale limits. If None, computed adaptively.
+    adaptive : bool, default=True
+        Use adaptive (percentile-based) color scaling from combined
+        experimental AND fit data ranges. This prevents block artifacts
+        when fit data has a narrower range than experimental data.
+    percentile_min, percentile_max : float, default=1.0, 99.0
+        Percentiles for adaptive color scale computation.
 
     Examples
     --------
@@ -396,12 +404,20 @@ def plot_c2_comparison_fast(
 
     vmin_shared = vmin
     vmax_shared = vmax
-    if adaptive and c2_exp.size > 0:
+    if adaptive and c2_exp.size > 0 and c2_fit.size > 0:
+        # Compute combined range from BOTH experimental AND fit data
+        # This ensures both panels have proper color representation
+        # and avoids block artifacts from narrow fit ranges
         if vmin_shared is None:
-            vmin_shared = float(np.percentile(c2_exp, percentile_min))
+            vmin_exp = float(np.percentile(c2_exp, percentile_min))
+            vmin_fit = float(np.percentile(c2_fit, percentile_min))
+            vmin_shared = min(vmin_exp, vmin_fit)
         if vmax_shared is None:
-            vmax_shared = float(np.percentile(c2_exp, percentile_max))
+            vmax_exp = float(np.percentile(c2_exp, percentile_max))
+            vmax_fit = float(np.percentile(c2_fit, percentile_max))
+            vmax_shared = max(vmax_exp, vmax_fit)
 
+    # Fallback only if adaptive scaling couldn't compute values (empty data)
     vmin_shared = 1.0 if vmin_shared is None else vmin_shared
     vmax_shared = 1.5 if vmax_shared is None else vmax_shared
 
