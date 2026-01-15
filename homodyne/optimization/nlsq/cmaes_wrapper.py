@@ -560,9 +560,12 @@ class CMAESWrapper:
             # Each individual evaluation: n_data * 8 bytes (float64)
             est_memory_mb = (pop_batch * n_data * 8) / (1024 * 1024) if pop_batch else 0
 
+            # Format data_chunk safely (may be None if auto-configured)
+            data_chunk_str = f"{data_chunk:,}" if data_chunk is not None else "auto"
+
             logger.info(
                 f"[CMA-ES] Memory configured: population_batch={pop_batch}, "
-                f"data_chunk={data_chunk:,}, popsize={popsize}, "
+                f"data_chunk={data_chunk_str}, popsize={popsize}, "
                 f"limit={self.config.memory_limit_gb:.1f}GB, "
                 f"est_batch_memory={est_memory_mb:.0f}MB"
             )
@@ -696,10 +699,18 @@ class CMAESWrapper:
             cmaes_covariance = np.asarray(cmaes_covariance)
 
         # Build CMA-ES diagnostics
-        generations = result.get("cmaes_generations", 0)
-        evaluations = result.get("cmaes_evaluations", 0)
-        restarts = result.get("cmaes_restarts", 0)
-        convergence_reason = result.get("message", "unknown")
+        # NLSQ 0.6.4+ stores diagnostics under 'cmaes_diagnostics' dict
+        cmaes_diag = result.get("cmaes_diagnostics", {})
+        generations = cmaes_diag.get("total_generations", 0)
+        restarts = cmaes_diag.get("total_restarts", 0)
+        convergence_reason = cmaes_diag.get("convergence_reason", "unknown")
+
+        # Calculate evaluations from restart history (each generation evaluates popsize candidates)
+        restart_history = cmaes_diag.get("restart_history", [])
+        evaluations = sum(
+            r.get("generations", 0) * r.get("popsize", 0)
+            for r in restart_history
+        ) if restart_history else generations * cmaes_config.popsize
 
         diagnostics = {
             "generations": generations,

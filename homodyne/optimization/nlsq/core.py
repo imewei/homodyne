@@ -1815,38 +1815,84 @@ def fit_nlsq_cmaes(
                 bounds = (lower_bounds, upper_bounds)
 
         # Create wrapped model function for CMA-ES
-        # model_func expects: model_func(t1, t2, *params) for single phi
-        # Need to create fitness function that evaluates full residuals
+        # IMPORTANT: This function must be JAX-traceable for CMA-ES JIT compilation
+        # Use JAX operations throughout to avoid TracerArrayConversionError
         t1_mesh, t2_mesh = np.meshgrid(t1, t2, indexing="ij")
 
-        def model_for_cmaes(xdata_unused: np.ndarray, *params) -> np.ndarray:
-            """Model function wrapper for CMA-ES."""
-            params_array = np.asarray(params)
+        # Pre-compute data arrays as JAX arrays for efficiency
+        n_time_points = t1_mesh.size
+        t1_flat = jnp.array(t1_mesh.flatten())
+        t2_flat = jnp.array(t2_mesh.flatten())
 
-            # Extract per-angle and physical params
+        # Build phi indices: each time grid repeats for all phi angles
+        # phi_indices[k] gives which phi angle point k belongs to
+        phi_indices = jnp.repeat(jnp.arange(n_phi), n_time_points)
+
+        # Build phi values for each point
+        phi_values = jnp.array(phi_angles)[phi_indices]
+
+        # Tile time arrays for all phi angles
+        t1_all = jnp.tile(t1_flat, n_phi)
+        t2_all = jnp.tile(t2_flat, n_phi)
+
+        # Get dt and L from config if available
+        config_dict = config.config if hasattr(config, "config") else config
+        dt_val = config_dict.get("analyzer_parameters", {}).get("dt", 0.1)
+
+        # Get L from config (stator_rotor_gap or default 200 µm)
+        analyzer_params = config_dict.get("analyzer_parameters", {})
+        geometry = analyzer_params.get("geometry", {})
+        L_val = float(geometry.get("stator_rotor_gap", 2000000.0))
+
+        # Pre-compute physics factors (outside the traced function for efficiency)
+        wavevector_q_squared_half_dt = 0.5 * (q**2) * dt_val
+        sinc_prefactor = 0.5 / np.pi * q * L_val * dt_val
+
+        # Import the core JAX computation function that supports element-wise mode
+        from homodyne.core.jax_backend import _compute_g1_total_core
+
+        def model_for_cmaes(xdata_unused: jnp.ndarray, *params) -> jnp.ndarray:
+            """JAX-traceable model function wrapper for CMA-ES.
+
+            Uses pure JAX operations to allow JIT compilation by NLSQ's CMAESOptimizer.
+            Element-wise mode is triggered automatically when len(t1) > 2000.
+            """
+            params_array = jnp.asarray(params)
+
+            # Extract per-angle and physical params using JAX operations
             if per_angle_scaling:
                 contrasts = params_array[:n_phi]
                 offsets = params_array[n_phi : 2 * n_phi]
                 physical = params_array[2 * n_phi :]
             else:
-                contrasts = np.full(n_phi, params_array[0])
-                offsets = np.full(n_phi, params_array[1])
+                contrasts = jnp.full(n_phi, params_array[0])
+                offsets = jnp.full(n_phi, params_array[1])
                 physical = params_array[2:]
 
-            # Compute g2 for all angles
-            g2_model = []
-            for i_phi in range(n_phi):
-                # Build full params for this phi
-                phi_params = np.concatenate(
-                    [[contrasts[i_phi], offsets[i_phi]], physical]
-                )
-                g2_phi = model_func(t1_mesh.flatten(), t2_mesh.flatten(), *phi_params)
-                g2_model.append(g2_phi)
+            # Map per-angle contrast/offset to each data point
+            contrast_per_point = contrasts[phi_indices]
+            offset_per_point = offsets[phi_indices]
 
-            return np.concatenate(g2_model)
+            # Use element-wise g1 computation (triggered when len > 2000)
+            # This is a pure JAX function that can be JIT-traced
+            g1_all = _compute_g1_total_core(
+                physical,
+                t1_all,
+                t2_all,
+                phi_values,
+                wavevector_q_squared_half_dt,
+                sinc_prefactor,
+                dt_val,
+            )
+
+            # Compute g2 = offset + contrast * g1^2
+            g2_all = offset_per_point + contrast_per_point * g1_all**2
+
+            return g2_all
 
         # Create xdata placeholder (model_for_cmaes ignores it)
-        xdata = np.zeros((n_data, 1))
+        # Use 1D array to match NLSQ curve_fit's expected shape for refinement
+        xdata = np.zeros(n_data)
 
         # Run CMA-ES optimization
         cmaes_result = wrapper.fit(
