@@ -9,6 +9,7 @@ during the September 2025 refactoring while maintaining compatibility with
 the new architecture.
 """
 
+import re
 from typing import Any
 
 import numpy as np
@@ -196,6 +197,27 @@ class ParameterManager:
                 self._default_bounds[param_name] = bound_dict
 
         logger.debug(f"Loaded bounds from config for {len(config_bounds)} parameters")
+
+    def _extract_base_param_name(self, name: str) -> str | None:
+        """Extract base parameter name from indexed parameter names.
+
+        Handles per-angle parameter names like 'contrast[0]', 'offset[15]'.
+
+        Parameters
+        ----------
+        name : str
+            Parameter name, possibly indexed like 'contrast[0]'.
+
+        Returns
+        -------
+        str or None
+            Base parameter name ('contrast', 'offset') or None if not a pattern match.
+        """
+        # Match patterns like contrast[N], offset[N] where N is a non-negative integer
+        match = re.match(r"^(contrast|offset)\[\d+\]$", name)
+        if match:
+            return match.group(1)
+        return None
 
     def validate_physical_constraints(
         self,
@@ -403,21 +425,29 @@ class ParameterManager:
         # Get bounds for each parameter
         bounds_list = []
         for name in mapped_names:
+            # Check direct match first
             if name in self._default_bounds:
                 bounds_list.append(self._default_bounds[name].copy())
             else:
-                # Fallback for unknown parameters
-                logger.warning(
-                    f"Unknown parameter '{name}', using default bounds [0.0, 1.0]",
-                )
-                bounds_list.append(
-                    {
-                        "min": 0.0,
-                        "max": 1.0,
-                        "name": name,
-                        "type": "Normal",
-                    },
-                )
+                # Handle per-angle parameter names like contrast[0], offset[1], etc.
+                base_name = self._extract_base_param_name(name)
+                if base_name and base_name in self._default_bounds:
+                    bound_copy = self._default_bounds[base_name].copy()
+                    bound_copy["name"] = name  # Keep the indexed name
+                    bounds_list.append(bound_copy)
+                else:
+                    # Fallback for truly unknown parameters
+                    logger.warning(
+                        f"Unknown parameter '{name}', using default bounds [0.0, 1.0]",
+                    )
+                    bounds_list.append(
+                        {
+                            "min": 0.0,
+                            "max": 1.0,
+                            "name": name,
+                            "type": "Normal",
+                        },
+                    )
 
         # Cache the result
         if self._cache_enabled:

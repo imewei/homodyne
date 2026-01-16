@@ -258,9 +258,19 @@ def dispatch_command(args) -> dict[str, Any]:
                     summary.record_metric("chi_squared", float(result.chi_squared))
                 if hasattr(result, "n_iterations"):
                     summary.record_metric("n_iterations", float(result.n_iterations))
-                if hasattr(result, "converged"):
+                # Handle convergence status from different result types
+                if hasattr(result, "convergence_status"):
+                    # NLSQ result - use convergence_status directly
+                    summary.set_convergence_status(result.convergence_status)
+                elif hasattr(result, "converged"):
+                    # CMC result - use converged boolean
                     summary.set_convergence_status(
                         "converged" if result.converged else "not_converged"
+                    )
+                elif hasattr(result, "success"):
+                    # Fallback to success property
+                    summary.set_convergence_status(
+                        "converged" if result.success else "failed"
                     )
 
             # Phase 4: Save results (T022)
@@ -2193,10 +2203,11 @@ def save_nlsq_results(
     bounds = None
     try:
         if hasattr(config, "get_parameter_bounds"):
-            bounds_dict = config.get_parameter_bounds(param_labels)
-            if bounds_dict:
-                lower = np.array([bounds_dict[name]["min"] for name in param_labels])
-                upper = np.array([bounds_dict[name]["max"] for name in param_labels])
+            bounds_list = config.get_parameter_bounds(param_labels)
+            if bounds_list:
+                # bounds_list is a list of dicts with 'min', 'max' keys
+                lower = np.array([b["min"] for b in bounds_list])
+                upper = np.array([b["max"] for b in bounds_list])
                 bounds = (lower, upper)
     except Exception as e:
         logger.debug(f"Could not get bounds for quality validation: {e}")
