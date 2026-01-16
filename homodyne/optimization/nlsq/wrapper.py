@@ -3178,10 +3178,8 @@ class NLSQWrapper(NLSQAdapterBase):
                 logger.debug(f"Sequential bounds dtype logging failed: {exc}")
 
         # Create residual function using physics kernels (local shim)
-        from homodyne.core.physics_nlsq import (
-            apply_diagonal_correction,
-            compute_g2_scaled,
-        )
+        from homodyne.core.diagonal_correction import apply_diagonal_correction
+        from homodyne.core.physics_nlsq import compute_g2_scaled
 
         phi_unique_all = np.unique(np.round(phi_flat, decimals=6))
         t1_unique_all = np.unique(np.asarray(t1))

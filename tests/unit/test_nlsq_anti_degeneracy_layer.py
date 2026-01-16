@@ -193,16 +193,16 @@ class TestFourierReparamLayer:
         assert result.metadata.get("fourier_enabled", False) is False
 
     def test_enables_fourier_for_sufficient_n_phi(self):
-        """Layer enables Fourier for n_phi >= 3 when FourierReparameterization available."""
+        """Layer enables Fourier for n_phi >= 3 when FourierReparameterizer available."""
         from homodyne.optimization.nlsq.anti_degeneracy_layer import (
             FourierReparamLayer,
             OptimizationState,
         )
 
-        # Check if FourierReparameterization is available
+        # Check if FourierReparameterizer is available
         try:
             from homodyne.optimization.nlsq.fourier_reparam import (
-                FourierReparameterization,
+                FourierReparameterizer,
             )
             fourier_available = True
         except ImportError:

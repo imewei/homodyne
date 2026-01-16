@@ -19,7 +19,7 @@ Performance Features:
 - Memory-efficient handling of large correlation matrices
 """
 
-from homodyne.core.fitting import FitResult, ScaledFittingEngine
+from homodyne.core.fitting import FitResult, ParameterSpace, ScaledFittingEngine
 from homodyne.core.homodyne_model import HomodyneModel
 from homodyne.core.jax_backend import (
     compute_g1_diffusion,
@@ -69,6 +69,7 @@ __all__ = [
     # Fitting engine
     "ScaledFittingEngine",
     "FitResult",
+    "ParameterSpace",
     # Physics utilities
     "PhysicsConstants",
     "validate_parameters",

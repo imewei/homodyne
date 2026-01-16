@@ -1022,7 +1022,7 @@ alias hc-iso >/dev/null 2>&1 && echo "shortcut_alias_works" || echo "shortcut_al
 
             # Test 3: Phi filtering import
             try:
-                from homodyne.data.phi_filtering import (
+                from homodyne.data.angle_filtering import (
                     normalize_angle_to_symmetric_range,
                 )
 
@@ -1049,7 +1049,7 @@ alias hc-iso >/dev/null 2>&1 && echo "shortcut_alias_works" || echo "shortcut_al
             # Test 4: Memory manager import
             try:
                 from homodyne.data.memory_manager import (  # noqa: F401
-                    estimate_memory_usage,
+                    AdvancedMemoryManager,
                 )
 
                 details["memory_manager"] = "available"
@@ -1059,7 +1059,7 @@ alias hc-iso >/dev/null 2>&1 && echo "shortcut_alias_works" || echo "shortcut_al
 
             # Test 5: Data preprocessing import
             try:
-                from homodyne.data.preprocessing import preprocess_data  # noqa: F401
+                from homodyne.data.preprocessing import preprocess_xpcs_data  # noqa: F401
 
                 details["preprocessing"] = "available"
             except ImportError as e:

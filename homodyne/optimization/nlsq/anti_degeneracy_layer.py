@@ -95,7 +95,7 @@ class AntiDegeneracyLayer(ABC):
 class FourierReparamLayer(AntiDegeneracyLayer):
     """Layer 1: Fourier reparameterization wrapper.
 
-    Wraps FourierReparameterization to reduce per-angle parameter count
+    Wraps FourierReparameterizer to reduce per-angle parameter count
     through Fourier basis expansion.
     """
 
@@ -108,10 +108,12 @@ class FourierReparamLayer(AntiDegeneracyLayer):
             Configuration with keys:
             - 'fourier_order': Fourier expansion order
             - 'n_phi': Number of phi angles
+            - 'phi_angles': Array of phi angles in radians (optional)
         """
         self._config = config
         self._fourier_order = config.get("fourier_order", 2)
         self._n_phi = config.get("n_phi", 0)
+        self._phi_angles = config.get("phi_angles", None)
         self._reparameterizer = None
 
     @property
@@ -138,13 +140,29 @@ class FourierReparamLayer(AntiDegeneracyLayer):
 
         try:
             from homodyne.optimization.nlsq.fourier_reparam import (
-                FourierReparameterization,
+                FourierReparamConfig,
+                FourierReparameterizer,
             )
 
             if self._reparameterizer is None:
-                self._reparameterizer = FourierReparameterization(
-                    n_phi=self._n_phi,
+                # Get phi_angles from config, state metadata, or generate default
+                phi_angles = self._phi_angles
+                if phi_angles is None:
+                    phi_angles = state.metadata.get("phi_angles")
+                if phi_angles is None:
+                    # Generate evenly spaced angles as fallback
+                    import numpy as np
+                    phi_angles = np.linspace(-np.pi, np.pi, self._n_phi, endpoint=False)
+
+                # Create Fourier config
+                fourier_config = FourierReparamConfig(
+                    mode="fourier",
                     fourier_order=self._fourier_order,
+                )
+
+                self._reparameterizer = FourierReparameterizer(
+                    phi_angles=phi_angles,
+                    config=fourier_config,
                 )
 
             # Apply transformation if applicable
@@ -158,7 +176,7 @@ class FourierReparamLayer(AntiDegeneracyLayer):
             )
 
         except ImportError:
-            logger.warning(f"{self.name}: FourierReparameterization not available")
+            logger.warning(f"{self.name}: FourierReparameterizer not available")
 
         return state
 
