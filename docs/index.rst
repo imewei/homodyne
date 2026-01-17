@@ -46,9 +46,8 @@ This documentation provides everything you need to:
 - :doc:`research/anti_degeneracy_defense` - Anti-degeneracy system for laminar flow (v2.9.0+)
 - :ref:`nlsq-adapter` - NLSQAdapter with model caching (v2.11.0+)
 - :ref:`nlsq-adapter-base` - NLSQAdapterBase shared functionality (v2.14.0+)
-- :ref:`nlsq-anti-degeneracy-layer` - Anti-degeneracy layer interface (v2.14.0+)
 - :ref:`nlsq-validation` - Input/result validation utilities (v2.14.0+)
-- :doc:`research/anti_degeneracy_defense` - Quantile-based per-angle scaling (NEW in v2.17.0)
+- :doc:`research/anti_degeneracy_defense` - Quantile-based per-angle scaling (v2.17.0)
 - :doc:`configuration/options` - Complete configuration reference
 
 ---

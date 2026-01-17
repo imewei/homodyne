@@ -189,25 +189,124 @@ For Fourier order ``K=2``:
 - Offset: 5 coefficients [o₀, o₁, t₁, o₂, t₂]
 - **Total: 10 Fourier coefficients vs 2×n_phi independent parameters**
 
-Parameter Count Reduction
-~~~~~~~~~~~~~~~~~~~~~~~~~
+Per-Angle Mode Selection Guide
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-The ``per_angle_mode`` setting controls how per-angle parameters are handled:
+The ``per_angle_mode`` setting controls how per-angle parameters (contrast/offset) are handled.
+This is the **most important configuration choice** for laminar flow fitting with many angles.
 
 .. list-table:: per_angle_mode Options
    :header-rows: 1
-   :widths: 20 80
+   :widths: 15 85
 
    * - Mode
      - Description
    * - ``constant``
-     - **DEFAULT (v2.17.0+)** Per-angle scaling fixed from quantile estimation (0 optimized per-angle params)
+     - **DEFAULT (v2.17.0+)** Per-angle scaling computed from quantile estimation and **FIXED** during optimization. Only 7 physical parameters are optimized. Most robust against degeneracy.
    * - ``individual``
-     - Each angle has independent contrast and offset (2 × n_phi params)
+     - Each angle has independent contrast and offset (2 × n_phi optimized params). Full flexibility but high degeneracy risk for n_phi > 6.
    * - ``fourier``
-     - Contrast/offset expressed as Fourier series (2 × (2K+1) params)
+     - Contrast/offset expressed as truncated Fourier series (2 × (2K+1) optimized params). Enforces smooth angular variation, reduces degeneracy risk.
    * - ``auto``
-     - Auto-selects between ``fourier`` (n_phi > threshold) and ``individual``
+     - Auto-selects between ``fourier`` (n_phi > threshold) and ``individual``. Does **NOT** select ``constant`` mode.
+
+.. note::
+
+   **v2.17.0 Change**: The default ``per_angle_mode`` is now ``"constant"``, which provides the
+   most robust parameter estimation. Previous versions defaulted to ``"auto"``.
+
+Mode Comparison
+^^^^^^^^^^^^^^^
+
+.. list-table:: per_angle_mode Comparison
+   :header-rows: 1
+   :widths: 16 14 14 14 14 14 14
+
+   * - Aspect
+     - constant
+     - individual
+     - fourier
+     - auto
+     - Recommendation
+     - Notes
+   * - **Optimized Params**
+     - 7
+     - 2N + 7
+     - 10-17 + 7
+     - Varies
+     - constant
+     - Lower = faster, more robust
+   * - **Degeneracy Risk**
+     - None
+     - High (N > 6)
+     - Medium
+     - Medium
+     - constant
+     - None = cannot absorb shear signal
+   * - **Flexibility**
+     - Low
+     - Maximum
+     - Medium
+     - Varies
+     - depends
+     - High flex = can fit noise
+   * - **Speed**
+     - Fastest
+     - Slowest
+     - Medium
+     - Varies
+     - constant
+     - Fewer params = faster convergence
+   * - **Angular Variation**
+     - Fixed from data
+     - Fully flexible
+     - Smooth only
+     - Varies
+     - depends
+     - Physical basis matters
+
+Decision Flowchart
+^^^^^^^^^^^^^^^^^^
+
+Use this flowchart to select the appropriate ``per_angle_mode``:
+
+.. code-block:: text
+
+                        ┌─────────────────────────┐
+                        │ Start: laminar_flow     │
+                        │ mode with N phi angles  │
+                        └───────────┬─────────────┘
+                                    │
+                        ┌───────────▼───────────┐
+                        │ Is experimental setup │
+                        │ reasonably uniform    │
+                        │ across angles?        │
+                        └───────────┬───────────┘
+                                    │
+              ┌─────────────────────┴─────────────────────┐
+              │ YES                                       │ NO
+              ▼                                           ▼
+    ┌─────────────────────┐               ┌───────────────────────────┐
+    │ Use "constant"      │               │ Do angles have known      │
+    │ (DEFAULT, v2.17.0+) │               │ smooth optical variation? │
+    │                     │               │ (sample asymmetry, etc.)  │
+    │ • Most robust       │               └─────────────┬─────────────┘
+    │ • 7 params only     │                             │
+    │ • Fastest           │               ┌─────────────┴─────────────┐
+    └─────────────────────┘               │ YES (smooth)              │ NO (random)
+                                          ▼                           ▼
+                              ┌─────────────────────┐   ┌─────────────────────┐
+                              │ Use "fourier"       │   │ Use "individual"    │
+                              │                     │   │                     │
+                              │ • Smooth variation  │   │ • Full flexibility  │
+                              │ • N > 6 recommended │   │ • N ≤ 3 only        │
+                              │ • 17 params (K=2)   │   │ • Needs Layer 2-5   │
+                              └─────────────────────┘   └─────────────────────┘
+
+Parameter Count Reduction
+^^^^^^^^^^^^^^^^^^^^^^^^^
+
+The different modes provide varying degrees of parameter reduction:
 
 .. list-table:: Parameter Count Comparison
    :header-rows: 1
@@ -494,6 +593,62 @@ to per-angle space. The Jacobian of the transformation is used:
    \Sigma_{\text{per-angle}} = J \times \Sigma_{\text{Fourier}} \times J^T
 
 where :math:`J = \frac{\partial (\text{per-angle})}{\partial (\text{Fourier})}`.
+
+ParameterIndexMapper Reference
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+The ``ParameterIndexMapper`` class provides consistent parameter index calculations
+across all modes. This is the **single source of truth** for parameter group boundaries.
+
+.. code-block:: python
+
+   from homodyne.optimization.nlsq.parameter_index_mapper import ParameterIndexMapper
+
+   # Constant mode (23 phi angles, 7 physical params)
+   mapper = ParameterIndexMapper(n_phi=23, n_physical=7, use_constant=True)
+   print(mapper.mode_name)           # "constant"
+   print(mapper.n_per_angle_total)   # 2 (single contrast + offset, shared)
+   print(mapper.total_params)        # 9 (2 + 7)
+   print(mapper.get_group_indices()) # [(0, 1), (1, 2)]
+
+   # Individual mode (23 phi angles, 7 physical params)
+   mapper = ParameterIndexMapper(n_phi=23, n_physical=7, use_constant=False)
+   print(mapper.mode_name)           # "individual"
+   print(mapper.n_per_angle_total)   # 46 (23 contrasts + 23 offsets)
+   print(mapper.total_params)        # 53 (46 + 7)
+   print(mapper.get_group_indices()) # [(0, 23), (23, 46)]
+
+   # Fourier mode (23 phi angles, order=2, 7 physical params)
+   mapper = ParameterIndexMapper(n_phi=23, n_physical=7, fourier=fourier_obj)
+   print(mapper.mode_name)           # "fourier"
+   print(mapper.n_per_angle_total)   # 10 (5 contrast + 5 offset coeffs)
+   print(mapper.total_params)        # 17 (10 + 7)
+   print(mapper.get_group_indices()) # [(0, 5), (5, 10)]
+
+.. list-table:: ParameterIndexMapper by Mode (n_phi=23, n_physical=7)
+   :header-rows: 1
+   :widths: 18 14 18 30 20
+
+   * - Mode
+     - n_per_group
+     - n_per_angle_total
+     - get_group_indices()
+     - total_params
+   * - ``constant``
+     - 1
+     - 2
+     - [(0, 1), (1, 2)]
+     - 9
+   * - ``individual``
+     - 23
+     - 46
+     - [(0, 23), (23, 46)]
+     - 53
+   * - ``fourier`` (K=2)
+     - 5
+     - 10
+     - [(0, 5), (5, 10)]
+     - 17
 
 Layer 2: Hierarchical Optimization
 ----------------------------------
@@ -1356,6 +1511,14 @@ Shear-Sensitivity Weighting
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. automodule:: homodyne.optimization.nlsq.shear_weighting
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+Parameter Index Mapper
+~~~~~~~~~~~~~~~~~~~~~~
+
+.. automodule:: homodyne.optimization.nlsq.parameter_index_mapper
    :members:
    :undoc-members:
    :show-inheritance:
