@@ -11,7 +11,7 @@ Homodyne Documentation
 
    c_2(\phi, t_1, t_2) = 1 + \text{contrast} \times [c_1(\phi, t_1, t_2)]^2
 
-**Version:** 2.14.0 | **Python:** 3.12+ | **JAX:** 0.8.0 (CPU-only)
+**Version:** 2.17.0 | **Python:** 3.12+ | **JAX:** 0.8.0 (CPU-only)
 
 Homodyne is a CPU-optimized X-ray Photon Correlation Spectroscopy (XPCS) analysis framework
 built on JAX. It implements state-of-the-art algorithms for analyzing time-dependent dynamics
@@ -45,9 +45,10 @@ This documentation provides everything you need to:
 - :doc:`research/theoretical_framework` - Mathematical foundations
 - :doc:`research/anti_degeneracy_defense` - Anti-degeneracy system for laminar flow (v2.9.0+)
 - :ref:`nlsq-adapter` - NLSQAdapter with model caching (v2.11.0+)
-- :ref:`nlsq-adapter-base` - NLSQAdapterBase shared functionality (NEW in v2.14.0)
-- :ref:`nlsq-anti-degeneracy-layer` - Anti-degeneracy layer interface (NEW in v2.14.0)
-- :ref:`nlsq-validation` - Input/result validation utilities (NEW in v2.14.0)
+- :ref:`nlsq-adapter-base` - NLSQAdapterBase shared functionality (v2.14.0+)
+- :ref:`nlsq-anti-degeneracy-layer` - Anti-degeneracy layer interface (v2.14.0+)
+- :ref:`nlsq-validation` - Input/result validation utilities (v2.14.0+)
+- :doc:`research/anti_degeneracy_defense` - Quantile-based per-angle scaling (NEW in v2.17.0)
 - :doc:`configuration/options` - Complete configuration reference
 
 ---
@@ -66,7 +67,7 @@ This documentation provides everything you need to:
 
 - Check the :doc:`user-guide/cli` for command-line usage
 - See :doc:`user-guide/examples` for real-world workflows
-- Visit the `GitHub repository <https://github.com/apc-llc/homodyne>`_ for issues and discussions
+- Visit the `GitHub repository <https://github.com/imewei/homodyne>`_ for issues and discussions
 - Review the `He et al. PNAS 2024 <https://doi.org/10.1073/pnas.2401162121>`_ paper for theoretical background
 
 ---

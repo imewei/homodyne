@@ -13,6 +13,38 @@ ______________________________________________________________________
 
 ______________________________________________________________________
 
+## [2.17.0] - 2026-01-16
+
+### Quantile-Based Per-Angle Scaling
+
+Minor release with improved per-angle parameter initialization for robust NLSQ optimization.
+
+#### Added
+
+- **feat(nlsq)**: Implement quantile-based per-angle scaling
+  - Per-angle contrast/offset computed using robust quantile statistics
+  - Improves initialization for laminar_flow mode with many phi angles
+  - Reduces sensitivity to outliers in experimental data
+
+- **feat(nlsq)**: Integrate anti-degeneracy constant mode into CMA-ES
+  - Constant (global) scaling mode now works with CMA-ES global optimization
+  - Automatic mode selection based on phi angle count
+
+#### Fixed
+
+- **fix(imports)**: Resolve broken internal module imports
+  - Fixed circular import issues in optimization submodules
+
+- **fix(config)**: Handle per-angle parameter names in bounds lookup
+  - Correctly resolves bounds for `contrast_0`, `offset_0`, etc.
+  - Prevents KeyError when using per-angle scaling with custom bounds
+
+- **fix(nlsq)**: Resolve constant mode parameter mismatch and diagonal masking
+  - Fixed parameter count mismatch when using constant scaling mode
+  - Corrected diagonal masking for proper residual computation
+
+______________________________________________________________________
+
 ## [2.16.0] - 2026-01-15
 
 ### CMA-ES Configuration Enhancements and Visualization Fixes

@@ -1,12 +1,53 @@
-# Homodyne 2.14: CPU-Optimized JAX-First XPCS Analysis
+# Homodyne 2.17: CPU-Optimized JAX-First XPCS Analysis
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Python](https://img.shields.io/badge/Python-3.12%2B-blue)](https://www.python.org/)
-[![Version](https://img.shields.io/badge/Version-2.14.0-green.svg)](#)
+[![Version](https://img.shields.io/badge/Version-2.17.0-green.svg)](#)
 [![Documentation](https://img.shields.io/badge/docs-sphinx-blue.svg)](https://homodyne.readthedocs.io)
 [![ReadTheDocs](https://readthedocs.org/projects/homodyne/badge/?version=latest)](https://homodyne.readthedocs.io/en/latest/)
 [![GitHub Actions](https://github.com/imewei/homodyne/actions/workflows/docs.yml/badge.svg)](https://github.com/imewei/homodyne/actions/workflows/docs.yml)
 [![DOI](https://zenodo.org/badge/DOI/10.1073/pnas.2401162121.svg)](https://doi.org/10.1073/pnas.2401162121)
+
+## 🚀 **What's New in v2.17.0**
+
+### Quantile-Based Per-Angle Scaling
+
+**Improved parameter initialization** for robust NLSQ optimization in laminar flow mode.
+
+**Key Features:**
+
+- **Quantile-based initialization**: Per-angle contrast/offset computed using robust quantile statistics
+- **Constant mode integration**: Anti-degeneracy constant mode now fully integrated with CMA-ES
+- **Parameter bounds fix**: Proper handling of per-angle parameter names in bounds lookup
+- **Import fixes**: Resolved broken internal module imports
+
+**Configuration:**
+
+```yaml
+optimization:
+  nlsq:
+    anti_degeneracy:
+      per_angle_mode: "constant"  # Use constant (global) scaling mode
+      # Or "auto" for automatic selection based on phi count
+```
+
+See [Anti-Degeneracy Defense Documentation](docs/research/anti_degeneracy_defense.rst) for details.
+
+---
+
+## 🚀 **What's New in v2.16.0**
+
+### CMA-ES Configuration Enhancements and Visualization Fixes
+
+**Key Features:**
+
+- **CMA-ES popsize configuration**: `cmaes_popsize` field now wires through to override auto-computed value
+- **Adaptive color scaling**: Combined data range for C2 heatmaps eliminates block artifacts
+- **Analysis mode fix**: `AnalysisSummaryLogger` now correctly shows configured analysis mode
+
+See [CHANGELOG](CHANGELOG.md#2160---2026-01-15) for complete details.
+
+---
 
 ## 🚀 **What's New in v2.14.0**
 
