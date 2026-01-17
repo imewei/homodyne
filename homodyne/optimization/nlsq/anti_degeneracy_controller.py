@@ -355,8 +355,9 @@ class AntiDegeneracyController:
             logger.info("ANTI-DEGENERACY: Layer 1 - Constant Scaling Mode")
             logger.info(f"  Mode: {self.per_angle_mode_actual}")
             logger.info(f"  n_phi: {self.n_phi}")
-            logger.info(f"  Parameter reduction: {2 * self.n_phi} -> 2")
-            logger.info("  Single contrast and offset shared across all angles")
+            logger.info(f"  Scaling parameters: {2 * self.n_phi} (fixed from quantiles, not optimized)")
+            logger.info(f"  N={self.n_phi} contrast and N={self.n_phi} offset values computed from raw data")
+            logger.info("  Only physical parameters are optimized")
             logger.info("=" * 60)
 
         # T022: Create ParameterIndexMapper with correct use_constant flag
