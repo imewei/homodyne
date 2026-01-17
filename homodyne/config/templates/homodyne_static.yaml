@@ -10,15 +10,15 @@
 # For comprehensive documentation of all parameters, see:
 #   homodyne_master_template.yaml
 #
-# VERSION: 2.15.0
-# UPDATED: 2026-01-14
+# VERSION: 2.17.0
+# UPDATED: 2026-01-16
 # ==============================================================================
 
 # ==============================================================================
 # METADATA
 # ==============================================================================
 metadata:
-  config_version: "2.15.0"
+  config_version: "2.17.0"
   description: "Static diffusion analysis - 3-parameter model"
   analysis_mode: "static"
   parameter_count: 3
@@ -136,9 +136,11 @@ initial_parameters:
   # Example: [1000.0, -1.2, 0.0]
 
   # Per-angle scaling (one value per filtered angle)
+  # v2.17.0+: Quantile-based initialization computes robust initial values
+  # from experimental data using quantile statistics when null
   per_angle_scaling:
-    contrast: null                    # e.g., [0.05, 0.06] for 2 angles
-    offset: null                      # e.g., [1.0, 0.99] for 2 angles
+    contrast: null                    # null = quantile-based init, or [0.05, 0.06] for 2 angles
+    offset: null                      # null = quantile-based init, or [1.0, 0.99] for 2 angles
 
   units:
     - "Å²/s"

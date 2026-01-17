@@ -18,8 +18,8 @@
 #   - homodyne_static.yaml: 3-parameter equilibrium diffusion
 #   - homodyne_laminar_flow.yaml: 7-parameter shear flow
 #
-# VERSION: 2.16.0
-# UPDATED: 2026-01-15
+# VERSION: 2.17.0
+# UPDATED: 2026-01-16
 # ==============================================================================
 
 # ==============================================================================
@@ -28,7 +28,7 @@
 # Template metadata for documentation and validation.
 # The config_version should match the homodyne package version.
 metadata:
-  config_version: "2.16.0"
+  config_version: "2.17.0"
   description: "Master template - comprehensive reference with all configuration options"
   analysis_mode: "laminar_flow"
 
@@ -230,10 +230,12 @@ initial_parameters:
   values: null
 
   # Per-angle scaling initialization (one value per filtered angle)
+  # v2.17.0+: When null, uses quantile-based initialization to compute robust
+  # initial values from experimental data using quantile statistics
   # Estimate from data: contrast ≈ (C2_max - C2_min), offset ≈ C2_min
   per_angle_scaling:
-    contrast: null  # e.g., [0.05, 0.06, 0.05] for 3 angles
-    offset: null    # e.g., [1.0, 0.99, 1.01] for 3 angles
+    contrast: null  # null = quantile-based init, or [0.05, 0.06, 0.05] for 3 angles
+    offset: null    # null = quantile-based init, or [1.0, 0.99, 1.01] for 3 angles
 
   # Units for documentation (not used by optimizer)
   units:
@@ -625,11 +627,13 @@ optimization:
     anti_degeneracy:
       enable: true                  # Master enable
 
-      # Per-angle parameter mode
-      #   "auto": constant if n_phi >= threshold, else individual
-      #   "constant": Single contrast/offset shared across all angles (RECOMMENDED)
+      # Per-angle parameter mode (v2.17.0+)
+      #   "auto": Uses constant mode when n_phi >= threshold (RECOMMENDED)
+      #           Prevents per-angle parameter absorption in multi-angle datasets
+      #   "constant": Single contrast/offset shared across all angles
+      #               Best for preventing structural degeneracy
       #   "fourier": Fourier basis for smooth angle variation (legacy)
-      #   "individual": Independent per-angle params (prone to absorption)
+      #   "individual": Independent per-angle params (prone to absorption, use with caution)
       per_angle_mode: "auto"
       constant_scaling_threshold: 3 # Use constant when n_phi >= this
                                     # CONSTRAINT: >= 1
