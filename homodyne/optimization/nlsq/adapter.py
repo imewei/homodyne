@@ -303,11 +303,18 @@ def get_or_create_model(
         All operations use JAX primitives to preserve tracers during tracing.
 
         Args:
-            xdata: Independent variables [n_points, 3] with columns [t1, t2, phi]
+            xdata: Independent variables [n_points, 3] with columns [t1, t2, phi_idx]
+                   where phi_idx is the PRECOMPUTED phi angle index (v2.17.0+)
             *params: Parameter values (may be JAX tracers during JIT)
 
         Returns:
             Predicted g2 values [n_points]
+
+        Note:
+            As of v2.17.0, xdata[:, 2] contains precomputed phi indices (integers
+            stored as float64) to avoid expensive argmin/gather operations inside
+            the JIT-compiled function. This eliminates XLA slow_operation_alarm
+            warnings for large datasets (23M+ points).
         """
         # Use jnp.stack to preserve JAX tracers during JIT tracing
         params_array = jnp.stack(params)
@@ -331,20 +338,20 @@ def get_or_create_model(
             )
 
         # Compute g2 for each point using vectorized computation
-        # xdata columns: [t1, t2, phi_idx or phi_value]
+        # xdata columns: [t1, t2, phi_idx] where phi_idx is precomputed (v2.17.0+)
         # Performance Optimization (Spec 001 - FR-006, T042): Use batched vmap
         # computation instead of Python loop for better performance.
 
-        # Extract time and phi arrays from xdata (xdata is always concrete numpy)
+        # Extract time arrays from xdata (xdata is always concrete numpy)
         t1_batch = jnp.array(xdata[:, 0])
         t2_batch = jnp.array(xdata[:, 1])
-        phi_batch_raw = jnp.array(xdata[:, 2])
 
-        # Map phi values to indices using vectorized JAX operations
-        # Compute |phi_batch_raw - phi_unique| for all combinations, then argmin
-        # Shape: (n_points, n_phi) -> argmin along axis=1 -> (n_points,)
-        phi_diffs = jnp.abs(phi_batch_raw[:, None] - phi_unique_jax[None, :])
-        phi_indices = jnp.argmin(phi_diffs, axis=1)
+        # phi_idx is precomputed in _flatten_xpcs_data (v2.17.0+)
+        # This avoids expensive argmin/gather inside JIT that causes XLA
+        # slow_operation_alarm for large datasets
+        phi_indices = jnp.array(xdata[:, 2]).astype(jnp.int32)
+
+        # Look up phi values from precomputed indices (simple indexing, no gather)
         phi_batch = phi_unique_jax[phi_indices]
 
         # Use batched g1 computation via vmap
@@ -745,9 +752,14 @@ class NLSQAdapter(NLSQAdapterBase):
 
         Returns:
             Tuple of (xdata, ydata, n_phi) where:
-                - xdata: Flattened independent variables [t1, t2, phi]
+                - xdata: Flattened independent variables [t1, t2, phi_idx]
+                         where phi_idx is the precomputed phi angle index
                 - ydata: Flattened g2 observations
                 - n_phi: Number of unique phi angles
+
+        Note:
+            As of v2.17.0, phi_idx is precomputed here to avoid expensive
+            gather operations inside JIT-compiled functions (XLA slow_operation_alarm).
         """
         # Get time coordinates (works with both dict and object)
         t1 = self._get_attr(data, "t1")
@@ -773,7 +785,8 @@ class NLSQAdapter(NLSQAdapterBase):
         if phi is None:
             raise ValueError("Data must contain 'phi' or 'phi_angles_list'")
 
-        n_phi = len(np.unique(phi))
+        phi_unique = np.unique(phi)
+        n_phi = len(phi_unique)
 
         # Get g2 observations
         g2 = self._get_attr(data, "g2")
@@ -786,7 +799,7 @@ class NLSQAdapter(NLSQAdapterBase):
         if g2.ndim > 1:
             g2 = g2.ravel()
 
-        # Build xdata array [t1, t2, phi]
+        # Build xdata array [t1, t2, phi_idx]
         # Broadcast phi if needed
         if len(phi) != len(t1):
             # phi needs to be broadcast across time points
@@ -795,7 +808,15 @@ class NLSQAdapter(NLSQAdapterBase):
         else:
             phi_broadcast = phi
 
-        xdata = np.column_stack([t1, t2, phi_broadcast])
+        # Precompute phi indices to avoid expensive argmin inside JIT (v2.17.0)
+        # This prevents XLA slow_operation_alarm from gather operations
+        # during constant folding of large arrays (23M+ points)
+        phi_indices = np.argmin(
+            np.abs(phi_broadcast[:, np.newaxis] - phi_unique[np.newaxis, :]),
+            axis=1,
+        ).astype(np.float64)  # Use float for consistent xdata dtype
+
+        xdata = np.column_stack([t1, t2, phi_indices])
 
         return xdata, g2, n_phi
 
