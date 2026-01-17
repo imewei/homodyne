@@ -1909,6 +1909,27 @@ Recovery Strategies
    :undoc-members:
    :show-inheritance:
 
+Batch Statistics
+~~~~~~~~~~~~~~~~
+
+Batch-level statistics tracking for streaming optimization.
+
+.. automodule:: homodyne.optimization.batch_statistics
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+Numerical Validation
+~~~~~~~~~~~~~~~~~~~~
+
+Validation functions to detect numerical issues (NaN, Inf, bounds violations)
+at critical points during optimization.
+
+.. automodule:: homodyne.optimization.numerical_validation
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
 Usage Examples
 --------------
 

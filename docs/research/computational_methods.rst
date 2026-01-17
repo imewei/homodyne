@@ -190,6 +190,14 @@ NLSQ Trust-Region Optimization
 The primary optimization method uses non-linear least squares with trust-region
 algorithms, specifically Levenberg-Marquardt.
 
+.. note::
+
+   **Anti-Degeneracy Defense (v2.17.0+)**: For laminar flow fitting with many phi
+   angles (N >= 3), the optimizer uses a 5-layer defense system to prevent shear
+   parameter collapse. The default ``per_angle_mode: "auto"`` selects constant mode,
+   which optimizes 9 parameters (7 physical + 2 averaged scaling) instead of
+   2N + 7 parameters. See :doc:`anti_degeneracy_defense` for details.
+
 Algorithm Description
 ~~~~~~~~~~~~~~~~~~~~~
 

@@ -490,6 +490,58 @@ Fallback strategy for per-angle optimization:
 - "uniform": Equal weight
 - "n_points": Weight by number of points per angle
 
+Anti-Degeneracy Configuration (v2.17.0)
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Anti-degeneracy defense for laminar flow fitting with many phi angles:
+
+.. code-block:: yaml
+
+    anti_degeneracy:
+      # Layer 1: Per-Angle Mode Selection
+      per_angle_mode: "auto"            # DEFAULT: selects constant (N>=3) or individual (N<3)
+      constant_scaling_threshold: 3     # Threshold for auto mode
+      fourier_order: 2                  # Harmonics for fourier mode
+      fourier_auto_threshold: 6         # Legacy threshold
+
+      # Layer 2: Hierarchical Optimization
+      hierarchical:
+        enable: true                    # Enable alternating optimization
+        max_outer_iterations: 5         # Max alternations
+        outer_tolerance: 1.0e-6         # Convergence tolerance
+
+      # Layer 3: Adaptive Regularization
+      regularization:
+        mode: "relative"                # "absolute", "relative", "auto"
+        lambda: 1.0                     # Regularization strength
+        target_cv: 0.10                 # Target coefficient of variation
+
+      # Layer 4: Gradient Monitoring
+      gradient_monitoring:
+        enable: true                    # Monitor gradient collapse
+        ratio_threshold: 0.01           # Collapse threshold
+        response: "hierarchical"        # Response action
+
+      # Layer 5: Shear Weighting
+      shear_weighting:
+        enable: true                    # Weight by shear sensitivity
+        min_weight: 0.3                 # Minimum weight
+        alpha: 1.0                      # Sensitivity exponent
+
+**per_angle_mode**: How per-angle scaling is handled (most important setting)
+
+- "auto": Auto-selects constant (N>=3) or individual (N<3) - DEFAULT
+- "constant": 9-parameter optimization (2 averaged scaling + 7 physical)
+- "individual": Full per-angle flexibility (2N + 7 parameters)
+- "fourier": Fourier reparameterization (17 parameters for K=2)
+
+**constant_scaling_threshold**: Threshold for auto mode selection
+
+- Default: 3 (use constant mode for 3+ phi angles)
+
+See :doc:`/research/anti_degeneracy_defense` for detailed documentation of the
+5-layer defense system.
+
 MCMC Configuration
 ^^^^^^^^^^^^^^^^^^
 

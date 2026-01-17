@@ -334,6 +334,47 @@ Configuration Format
     preprocessing:
       enabled: false
 
+Configuration Validators
+~~~~~~~~~~~~~~~~~~~~~~~~
+
+Focused validator functions for configuration parameter validation.
+
+.. automodule:: homodyne.data.validators
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+Filtering Utilities
+-------------------
+
+Advanced filtering utilities supporting q-range, quality-based, and frame-based filtering.
+
+.. automodule:: homodyne.data.filtering_utils
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+Data Types
+----------
+
+Shared dataclasses and type definitions for the data module.
+
+.. automodule:: homodyne.data.types
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+Performance Engine
+------------------
+
+High-performance data processing engine for handling massive XPCS datasets (>1GB)
+with memory-mapped I/O, intelligent chunking, and multi-level caching.
+
+.. automodule:: homodyne.data.performance_engine
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
 Exceptions
 ----------
 

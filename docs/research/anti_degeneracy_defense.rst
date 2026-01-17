@@ -38,35 +38,42 @@ The Anti-Degeneracy Defense System provides a five-layer solution:
      - Status
      - Effectiveness
    * - 1
-     - Fourier Reparameterization
+     - Constant/Individual Mode Selection
      - Structural Degeneracy
-     - NEW
+     - ENHANCED (v2.17.0)
      - **High**
    * - 2
      - Hierarchical Optimization
      - Gradient Cancellation
-     - NEW
+     - Local NLSQ only
      - **High**
    * - 3
      - Adaptive CV Regularization
      - Ineffective λ
-     - ENHANCED
+     - Local NLSQ only
      - Medium
    * - 4
      - Gradient Collapse Detection
      - Runtime Monitoring
-     - NEW
+     - Local NLSQ only
      - Medium
    * - 5
      - Shear-Sensitivity Weighting
      - Gradient Cancellation
-     - NEW (v2.9.1)
+     - Local NLSQ only
      - **High**
    * - —
      - Data Shuffling
      - Sequential Bias
      - EXISTING
      - Medium
+
+.. note::
+
+   **v2.17.0 Cross-Path Uniformity**: Layer 1 (Constant/Individual Mode) now applies
+   uniformly across all optimization paths: local NLSQ, multi-start, and CMA-ES.
+   Layers 2-5 are specific to local NLSQ where gradient-based optimizations benefit
+   from hierarchical alternation, regularization, and gradient monitoring.
 
 Theoretical Background
 ----------------------
@@ -201,19 +208,20 @@ This is the **most important configuration choice** for laminar flow fitting wit
 
    * - Mode
      - Description
-   * - ``constant``
-     - **DEFAULT (v2.17.0+)** Per-angle scaling computed from quantile estimation and **FIXED** during optimization. Only 7 physical parameters are optimized. Most robust against degeneracy.
-   * - ``individual``
-     - Each angle has independent contrast and offset (2 × n_phi optimized params). Full flexibility but high degeneracy risk for n_phi > 6.
-   * - ``fourier``
-     - Contrast/offset expressed as truncated Fourier series (2 × (2K+1) optimized params). Enforces smooth angular variation, reduces degeneracy risk.
    * - ``auto``
-     - Auto-selects between ``fourier`` (n_phi > threshold) and ``individual``. Does **NOT** select ``constant`` mode.
+     - **DEFAULT (v2.17.0+)** Auto-selects between ``individual`` (n_phi < constant_scaling_threshold) and ``constant`` (n_phi >= constant_scaling_threshold). Default threshold is 3.
+   * - ``constant``
+     - Per-angle scaling computed from quantile estimation, **averaged** to single values, and optimized as 9 parameters (7 physical + 2 averaged scaling). Most robust against degeneracy.
+   * - ``individual``
+     - Each angle has independent contrast and offset (2 × n_phi + 7 optimized params). Full flexibility but high degeneracy risk for n_phi > 6.
+   * - ``fourier``
+     - Contrast/offset expressed as truncated Fourier series (2 × (2K+1) + 7 optimized params). Enforces smooth angular variation, reduces degeneracy risk.
 
 .. note::
 
-   **v2.17.0 Change**: The default ``per_angle_mode`` is now ``"constant"``, which provides the
-   most robust parameter estimation. Previous versions defaulted to ``"auto"``.
+   **v2.17.0 Change**: The default ``per_angle_mode`` is now ``"auto"``, which selects
+   ``constant`` mode for datasets with 3+ phi angles. The ``constant`` mode optimizes
+   9 parameters (7 physical + 2 averaged scaling) for maximum robustness.
 
 Mode Comparison
 ^^^^^^^^^^^^^^^
@@ -223,45 +231,45 @@ Mode Comparison
    :widths: 16 14 14 14 14 14 14
 
    * - Aspect
+     - auto
      - constant
      - individual
      - fourier
-     - auto
      - Recommendation
      - Notes
    * - **Optimized Params**
-     - 7
+     - 9 or varies
+     - 9
      - 2N + 7
      - 10-17 + 7
-     - Varies
-     - constant
+     - auto/constant
      - Lower = faster, more robust
    * - **Degeneracy Risk**
-     - None
+     - Low
+     - Low
      - High (N > 6)
      - Medium
-     - Medium
-     - constant
-     - None = cannot absorb shear signal
+     - auto/constant
+     - Low = cannot easily absorb shear signal
    * - **Flexibility**
+     - Adaptive
      - Low
      - Maximum
      - Medium
-     - Varies
      - depends
      - High flex = can fit noise
    * - **Speed**
+     - Fast
      - Fastest
      - Slowest
      - Medium
-     - Varies
      - constant
      - Fewer params = faster convergence
    * - **Angular Variation**
-     - Fixed from data
+     - Adaptive
+     - Uniform (averaged)
      - Fully flexible
      - Smooth only
-     - Varies
      - depends
      - Physical basis matters
 
@@ -278,37 +286,42 @@ Use this flowchart to select the appropriate ``per_angle_mode``:
                         └───────────┬─────────────┘
                                     │
                         ┌───────────▼───────────┐
-                        │ Is experimental setup │
-                        │ reasonably uniform    │
-                        │ across angles?        │
+                        │ Use "auto" (DEFAULT)  │
+                        │ N >= 3 → constant     │
+                        │ N < 3  → individual   │
                         └───────────┬───────────┘
                                     │
               ┌─────────────────────┴─────────────────────┐
-              │ YES                                       │ NO
+              │ Need explicit control?                    │
               ▼                                           ▼
     ┌─────────────────────┐               ┌───────────────────────────┐
-    │ Use "constant"      │               │ Do angles have known      │
-    │ (DEFAULT, v2.17.0+) │               │ smooth optical variation? │
-    │                     │               │ (sample asymmetry, etc.)  │
-    │ • Most robust       │               └─────────────┬─────────────┘
-    │ • 7 params only     │                             │
-    │ • Fastest           │               ┌─────────────┴─────────────┐
-    └─────────────────────┘               │ YES (smooth)              │ NO (random)
-                                          ▼                           ▼
+    │ NO: Use "auto"      │               │ YES: Choose explicit mode │
+    │ (RECOMMENDED)       │               │                           │
+    │                     │               └─────────────┬─────────────┘
+    │ • Adaptive to N     │                             │
+    │ • 9 params for N≥3  │               ┌─────────────┴─────────────┐
+    │ • Most robust       │               │                           │
+    └─────────────────────┘               ▼                           ▼
                               ┌─────────────────────┐   ┌─────────────────────┐
-                              │ Use "fourier"       │   │ Use "individual"    │
-                              │                     │   │                     │
-                              │ • Smooth variation  │   │ • Full flexibility  │
-                              │ • N > 6 recommended │   │ • N ≤ 3 only        │
-                              │ • 17 params (K=2)   │   │ • Needs Layer 2-5   │
-                              └─────────────────────┘   └─────────────────────┘
+                              │ Smooth angular      │   │ Full flexibility    │
+                              │ variation expected? │   │ needed? (N ≤ 3)     │
+                              │ (sample asymmetry)  │   │                     │
+                              └─────────┬───────────┘   └─────────┬───────────┘
+                                        │                         │
+                              ┌─────────▼─────────────┐ ┌─────────▼───────────┐
+                              │ Use "fourier"         │ │ Use "individual"    │
+                              │                       │ │                     │
+                              │ • Smooth variation    │ │ • Full flexibility  │
+                              │ • N > 6 recommended   │ │ • N ≤ 3 only        │
+                              │ • 17 params (K=2)     │ │ • High degeneracy   │
+                              └───────────────────────┘ └─────────────────────┘
 
 Parameter Count Reduction
 ^^^^^^^^^^^^^^^^^^^^^^^^^
 
 The different modes provide varying degrees of parameter reduction:
 
-.. list-table:: Parameter Count Comparison
+.. list-table:: Parameter Count Comparison (laminar_flow, 7 physical params)
    :header-rows: 1
    :widths: 12 18 18 18 18 16
 
@@ -316,54 +329,54 @@ The different modes provide varying degrees of parameter reduction:
      - Individual
      - Fourier (K=2)
      - Constant
-     - Reduction
-     - Default Mode
+     - Auto Selection
+     - Total Params
    * - 2
-     - 4
-     - 4*
-     - 0†
-     - 100%
-     - Constant
+     - 4 + 7 = 11
+     - 4 + 7 = 11*
+     - 2 + 7 = 9
+     - individual (N<3)
+     - 11
    * - 3
-     - 6
-     - 6*
-     - 0†
-     - 100%
-     - Constant
+     - 6 + 7 = 13
+     - 6 + 7 = 13*
+     - 2 + 7 = 9
+     - constant (N>=3)
+     - 9
    * - 6
-     - 12
-     - 10
-     - 0†
-     - 100%
-     - Constant
+     - 12 + 7 = 19
+     - 10 + 7 = 17
+     - 2 + 7 = 9
+     - constant
+     - 9
    * - 10
-     - 20
-     - 10
-     - 0†
-     - 100%
-     - Constant
+     - 20 + 7 = 27
+     - 10 + 7 = 17
+     - 2 + 7 = 9
+     - constant
+     - 9
    * - 23
-     - 46
-     - 10
-     - 0†
-     - **100%**
-     - Constant
+     - 46 + 7 = 53
+     - 10 + 7 = 17
+     - 2 + 7 = 9
+     - constant
+     - **9**
    * - 100
-     - 200
-     - 10
-     - 0†
-     - **100%**
-     - Constant
+     - 200 + 7 = 207
+     - 10 + 7 = 17
+     - 2 + 7 = 9
+     - constant
+     - **9**
 
-| \* For n_phi ≤ 2×(order+1), Fourier mode provides no reduction
-| † Constant mode uses quantile-based fixed scaling: per-angle params are computed once and not optimized
+| \* For n_phi <= 2×(order+1), Fourier mode provides no reduction over individual
+| Constant mode: 2 averaged scaling params (contrast + offset) are optimized along with 7 physical
 
 Constant Mode with Quantile-Based Estimation (v2.17.0+)
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-**Constant mode** is now the **default** (v2.17.0+) and provides the most aggressive
-parameter reduction. Instead of optimizing per-angle contrast/offset, they are
-**estimated once from data quantiles** and treated as fixed during optimization.
+**Constant mode** is selected by default via ``per_angle_mode: "auto"`` when n_phi >= 3.
+It provides robust parameter estimation by computing per-angle scaling from data quantiles,
+**averaging** them to single values, and optimizing only 9 parameters (7 physical + 2 averaged).
 
 **Physics Foundation**:
 
@@ -404,6 +417,10 @@ For each phi angle independently:
    offset = clip(offset, offset_bounds)
    contrast = clip(contrast, contrast_bounds)
 
+   Step 5: AVERAGE across all phi angles (v2.17.0+)
+   avg_contrast = mean(contrast_per_angle)
+   avg_offset = mean(offset_per_angle)
+
 **Why Quantiles Instead of Min/Max**:
 
 1. **Outlier Robustness**: Quantiles ignore extreme values from noise spikes
@@ -432,25 +449,33 @@ For each phi angle independently:
      - 0.90
      - 90th percentile for robust ceiling
 
-**Parameter Reduction**:
+**9-Parameter Optimization (v2.17.0+)**:
 
 .. code-block:: text
 
-   CONSTANT MODE FIXED SCALING (v2.17.0)
-   =====================================
+   CONSTANT MODE 9-PARAMETER OPTIMIZATION (v2.17.0)
+   =================================================
 
    Before optimization:
-       Compute per-angle scaling from data quantiles
-       fixed_contrast[n_phi] ← quantile estimation
-       fixed_offset[n_phi]   ← quantile estimation
+       1. Compute per-angle scaling from data quantiles
+          contrast_per_angle[n_phi] ← quantile estimation
+          offset_per_angle[n_phi]   ← quantile estimation
+
+       2. AVERAGE to get initial estimates
+          avg_contrast = mean(contrast_per_angle)
+          avg_offset = mean(offset_per_angle)
 
    During optimization:
-       Parameter vector: [D₀, α, D_offset, γ̇₀, β, γ̇_offset, φ₀]
-                         (7 params only for laminar_flow)
+       Parameter vector: [avg_contrast, avg_offset, D₀, α, D_offset, γ̇₀, β, γ̇_offset, φ₀]
+                         (9 params: 2 averaged scaling + 7 physical)
+
+       Model evaluation:
+          contrast = broadcast(avg_contrast, n_phi)  # Same for all angles
+          offset = broadcast(avg_offset, n_phi)      # Same for all angles
 
    After optimization:
-       Expand for output: [fixed_contrast..., fixed_offset..., physical_opt]
-                          (53 values for backward compatibility)
+       Expand for output: [contrast..., offset..., physical_opt]
+                          (2*n_phi + 7 values for backward compatibility)
 
 **When to Use Constant Mode** (Default):
 
@@ -477,11 +502,11 @@ For each phi angle independently:
          # per_angle_mode: "fourier"     # Use "fourier" for smooth angular variation
          # per_angle_mode: "individual"  # Use "individual" for full flexibility
 
-**Impact on Multi-Start Optimization**:
+**Impact on Multi-Start and Global Optimization**:
 
-Constant mode makes multi-start optimization tractable for many-angle datasets:
+Constant mode makes multi-start and CMA-ES optimization tractable for many-angle datasets:
 
-.. list-table:: Multi-Start Tractability (23-angle laminar_flow)
+.. list-table:: Multi-Start/CMA-ES Tractability (23-angle laminar_flow)
    :header-rows: 1
    :widths: 25 20 25 30
 
@@ -497,19 +522,25 @@ Constant mode makes multi-start optimization tractable for many-angle datasets:
      - 17
      - 17
      - 20-40 (moderate)
-   * - **constant (default)**
-     - **7**
-     - **7**
+   * - **constant (via auto)**
+     - **9**
+     - **9**
      - **10-15 (tractable)**
+
+.. note::
+
+   **Uniform Anti-Degeneracy (v2.17.0+)**: Both local NLSQ and global optimization
+   (CMA-ES, multi-start) now use the same 9-parameter constant mode. This ensures
+   consistent behavior across all optimization paths.
 
 Why Constant Mode Works Best (v2.17.0)
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-1. **Maximum Parameter Reduction**: Only 7 physical parameters are optimized.
-   Per-angle scaling is fixed from data, eliminating all 46 per-angle parameters.
+1. **Significant Parameter Reduction**: Only 9 parameters (7 physical + 2 averaged scaling)
+   are optimized instead of 53 (23×2 per-angle + 7 physical) for a 23-angle dataset.
 
-2. **No Degeneracy Risk**: Since per-angle parameters are not optimized,
-   they cannot absorb physical signals that belong to shear parameters.
+2. **Low Degeneracy Risk**: With only 2 averaged scaling parameters (shared across all angles),
+   they cannot absorb angle-dependent shear signals that vary with φ.
 
 3. **Data-Driven Initialization**: Quantile-based estimation uses actual
    experimental data, not arbitrary defaults, for contrast/offset values.
@@ -517,8 +548,8 @@ Why Constant Mode Works Best (v2.17.0)
 4. **Robust to Noise**: Quantile-based estimation is more robust to outliers
    than least-squares or min/max approaches.
 
-5. **Consistent Across Paths**: Both stratified LS and hybrid streaming
-   use the same quantile-based estimation (v2.17.0+).
+5. **Uniform Across Paths**: Both local NLSQ, multi-start, and CMA-ES global optimization
+   use the same 9-parameter constant mode (v2.17.0+).
 
 Why Fourier Mode is Still Useful
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -1106,6 +1137,72 @@ Implementation
        print(f"n_weights: {len(weights)}")
        print(f"Weight range: [{min(weights):.3f}, {max(weights):.3f}]")
 
+Cross-Path Uniformity (v2.17.0)
+-------------------------------
+
+The Anti-Degeneracy System applies across three optimization paths with different
+layer coverage:
+
+.. list-table:: Layer Coverage by Optimization Path
+   :header-rows: 1
+   :widths: 30 14 14 14 14 14
+
+   * - Optimization Path
+     - Layer 1
+     - Layer 2
+     - Layer 3
+     - Layer 4
+     - Layer 5
+   * - **Local NLSQ** (NLSQWrapper)
+     - ✅
+     - ✅
+     - ✅
+     - ✅
+     - ✅
+   * - **Multi-Start** (fit_nlsq_multistart)
+     - ✅
+     - ✅
+     - ✅
+     - ✅
+     - ✅
+   * - **CMA-ES** (fit_nlsq_cmaes)
+     - ✅
+     - —
+     - —
+     - —
+     - —
+
+**Why Layers 2-5 Are Local NLSQ Only**:
+
+CMA-ES is a population-based evolutionary strategy that operates fundamentally
+differently from gradient-based local optimization:
+
+- **Layer 2 (Hierarchical)**: Designed for alternating physical/per-angle optimization
+  stages. CMA-ES already evolves all parameters simultaneously via population.
+
+- **Layer 3 (Adaptive Regularization)**: Adds variance penalty to gradient-based loss.
+  CMA-ES uses fitness ranking, not gradient-based updates.
+
+- **Layer 4 (Gradient Monitor)**: Monitors gradient magnitude ratios. CMA-ES doesn't
+  compute gradients—it uses evolutionary selection.
+
+- **Layer 5 (Shear Weighting)**: Weights residuals by |cos(φ₀-φ)|. Could be added to
+  CMA-ES fitness evaluation but not currently implemented.
+
+**Layer 1 Is Sufficient for CMA-ES**:
+
+Layer 1 (Constant Mode) addresses the primary degeneracy issue by:
+
+1. Reducing 46 per-angle parameters to 2 averaged parameters
+2. Eliminating the ability for per-angle params to absorb physical signals
+3. Making the 9-parameter space tractable for population-based search
+
+**Multi-Start Inherits All Layers**:
+
+Multi-start optimization calls ``fit_nlsq_jax()`` for each starting point, which
+routes through NLSQWrapper. Therefore, multi-start inherits all 5 layers from the
+local NLSQ path.
+
 Configuration Reference
 -----------------------
 
@@ -1124,12 +1221,13 @@ Complete YAML configuration for the Anti-Degeneracy Defense System:
        anti_degeneracy:
 
          # Layer 1: Per-Angle Mode Selection (v2.17.0 defaults)
-         per_angle_mode: "constant"        # DEFAULT: fixed per-angle from quantiles
-         # per_angle_mode: "auto"          # Auto-selects fourier/individual
-         # per_angle_mode: "fourier"       # Fourier reparameterization
-         # per_angle_mode: "individual"    # Independent per-angle params
+         per_angle_mode: "auto"            # DEFAULT: selects constant (N>=3) or individual (N<3)
+         # per_angle_mode: "constant"      # Explicit: 9-param optimization (2 averaged + 7 physical)
+         # per_angle_mode: "fourier"       # Explicit: Fourier reparameterization
+         # per_angle_mode: "individual"    # Explicit: Independent per-angle params
+         constant_scaling_threshold: 3    # Threshold for auto mode: N >= 3 → constant
          fourier_order: 2                  # Number of Fourier harmonics (if fourier mode)
-         fourier_auto_threshold: 6         # Use Fourier when n_phi > threshold (auto mode)
+         fourier_auto_threshold: 6         # Legacy: only used if auto selected fourier
 
          # Layer 2: Hierarchical Optimization
          hierarchical:
@@ -1174,14 +1272,17 @@ Configuration Options Summary
      - Default
      - Description
    * - ``per_angle_mode``
-     - "constant"
-     - **DEFAULT CHANGED v2.17.0**: "constant", "fourier", "individual", or "auto"
+     - "auto"
+     - **DEFAULT CHANGED v2.17.0**: "auto" selects constant (N>=3) or individual (N<3). Options: "auto", "constant", "fourier", "individual"
+   * - ``constant_scaling_threshold``
+     - 3
+     - Threshold for auto mode: N >= threshold selects constant mode
    * - ``fourier_order``
      - 2
      - Number of Fourier harmonics (K) for fourier mode
    * - ``fourier_auto_threshold``
      - 6
-     - Use Fourier when n_phi > threshold (auto mode only)
+     - Legacy: only used if auto mode selected fourier (pre-v2.17.0 behavior)
 
 .. list-table:: Layer 2 Configuration
    :header-rows: 1
@@ -1401,28 +1502,27 @@ From v2.16.x to v2.17.0
 
 **Default Behavior Changes**:
 
-1. ``per_angle_mode`` default: "auto" → "constant" (quantile-based fixed scaling)
-2. "auto" mode logic changed: now only selects between "fourier" and "individual"
-3. Quantile-based estimation used in both stratified LS and hybrid streaming paths
+1. ``per_angle_mode`` default is now ``"auto"`` (selects constant or individual based on n_phi)
+2. ``"auto"`` mode logic changed: selects ``constant`` (N >= 3) or ``individual`` (N < 3)
+3. ``constant`` mode now optimizes **9 parameters** (7 physical + 2 averaged scaling)
+4. Uniform anti-degeneracy across local NLSQ, multi-start, and CMA-ES paths
 
 **What This Means for Your Fits**:
 
-- Per-angle contrast/offset are now computed from data quantiles and **not optimized**
-- Only 7 physical parameters are optimized (for laminar_flow)
-- Most fits should converge faster with more robust shear parameter estimation
+- Per-angle contrast/offset are computed from data quantiles, **averaged**, then optimized
+- Total of 9 parameters for laminar_flow with n_phi >= 3 (vs 53 previously)
+- Both local and global optimization use the same 9-parameter constant mode
 
-**To Preserve v2.16.x Behavior** (if needed):
+**To Use Full Per-Angle Flexibility** (if needed):
 
 .. code-block:: yaml
 
    optimization:
      nlsq:
        anti_degeneracy:
-         per_angle_mode: "auto"       # v2.16.x: auto selected constant >= threshold
-         # OR
-         per_angle_mode: "individual" # Full per-angle optimization
+         per_angle_mode: "individual"  # Full per-angle optimization (53 params for 23 angles)
 
-**To Switch to Fourier Mode** (smooth angular variation):
+**To Use Fourier Mode** (smooth angular variation):
 
 .. code-block:: yaml
 
@@ -1430,7 +1530,7 @@ From v2.16.x to v2.17.0
      nlsq:
        anti_degeneracy:
          per_angle_mode: "fourier"
-         fourier_order: 2
+         fourier_order: 2              # 17 params for 23 angles
 
 From v2.8.x to v2.9.0
 ~~~~~~~~~~~~~~~~~~~~~
