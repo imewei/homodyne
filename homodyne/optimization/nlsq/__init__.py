@@ -271,18 +271,8 @@ from homodyne.optimization.nlsq.results import (
     FunctionEvaluationCounter,
     OptimizationResult,
 )
-# Architecture refactoring (v2.14.0): NLSQAdapterBase and AntiDegeneracyLayer
+# Architecture refactoring (v2.14.0): NLSQAdapterBase
 from homodyne.optimization.nlsq.adapter_base import NLSQAdapterBase
-from homodyne.optimization.nlsq.anti_degeneracy_layer import (
-    AdaptiveRegularizationLayer,
-    AntiDegeneracyChain,
-    AntiDegeneracyLayer,
-    FourierReparamLayer,
-    GradientMonitorLayer,
-    HierarchicalLayer,
-    OptimizationState,
-    ShearWeightingLayer,
-)
 from homodyne.optimization.nlsq.strategies.chunking import (
     StratificationDiagnostics,
     analyze_angle_distribution,
@@ -470,12 +460,4 @@ __all__ = [
     "sample_xdata",
     # Architecture refactoring (v2.14.0)
     "NLSQAdapterBase",
-    "OptimizationState",
-    "AntiDegeneracyLayer",
-    "FourierReparamLayer",
-    "HierarchicalLayer",
-    "AdaptiveRegularizationLayer",
-    "GradientMonitorLayer",
-    "ShearWeightingLayer",
-    "AntiDegeneracyChain",
 ]

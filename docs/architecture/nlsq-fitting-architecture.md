@@ -962,7 +962,6 @@ class OptimizationResult:
 | `strategies/residual_jit.py` | `StratifiedResidualFunctionJIT` (JIT-compiled) |
 | `strategies/executors.py` | StandardExecutor, LargeDatasetExecutor, StreamingExecutor |
 | `anti_degeneracy_controller.py` | 5-layer defense orchestration |
-| `anti_degeneracy_layer.py` | Abstract layer interface |
 | `fourier_reparam.py` | Layer 1: Fourier parameter compression |
 | `hierarchical.py` | Layer 2: Alternating physical/per-angle stages |
 | `adaptive_regularization.py` | Layer 3: CV-based regularization |

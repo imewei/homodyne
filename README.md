@@ -58,7 +58,6 @@ See [CHANGELOG](CHANGELOG.md#2160---2026-01-15) for complete details.
 **Key Features:**
 
 - **NLSQAdapterBase**: Abstract base class providing shared functionality for NLSQAdapter and NLSQWrapper
-- **Anti-Degeneracy Layer Interface**: `OptimizationState` dataclass and `AntiDegeneracyLayer` ABC for independent layer testing
 - **Validation Utilities**: Extracted `InputValidator` and `ResultValidator` for reusable validation
 - **Config Consolidation**: `NLSQConfig.from_yaml()` as single entry point for configuration
 - **Safe Type Utilities**: `safe_float`, `safe_int`, `safe_bool` in config.py with deprecation warnings for config_utils.py
@@ -79,7 +78,6 @@ print(f"Max iterations: {config.max_iterations}")
 **New Modules:**
 
 - `homodyne.optimization.nlsq.adapter_base` - Abstract base class
-- `homodyne.optimization.nlsq.anti_degeneracy_layer` - Layer interface
 - `homodyne.optimization.nlsq.validation` - Input/result validators
 
 See [API Reference](docs/api-reference/optimization.rst#nlsq-adapter-base) for details.

@@ -43,6 +43,15 @@ Minor release with improved per-angle parameter initialization for robust NLSQ o
   - Fixed parameter count mismatch when using constant scaling mode
   - Corrected diagonal masking for proper residual computation
 
+#### Removed
+
+- **refactor(nlsq)**: Remove unused anti-degeneracy layer interface
+  - Removed `homodyne/optimization/nlsq/anti_degeneracy_layer.py` (507 lines of dead code)
+  - Removed abstract classes: `AntiDegeneracyLayer`, `AntiDegeneracyChain`, `OptimizationState`
+  - Removed layer implementations: `FourierReparamLayer`, `HierarchicalLayer`, etc.
+  - Production code uses concrete implementations in `wrapper.py` and `core.py` directly
+  - Removed associated test files: `test_anti_degeneracy_layer.py`, `test_nlsq_anti_degeneracy_layer.py`
+
 ______________________________________________________________________
 
 ## [2.16.0] - 2026-01-15
