@@ -40,62 +40,66 @@ class TestAntiDegeneracyControllerAutoSelection:
     """Tests for auto-selection logic (T024-T025).
 
     v2.17.0: Updated tests to reflect new auto mode behavior.
-    Auto mode now only selects between "fourier" and "individual".
-    "constant" mode must be explicitly set and is the new default.
+    Auto mode now selects between "individual" (N < 3) and "constant" (N >= 3).
+    Default per_angle_mode is "auto".
     """
 
-    def test_auto_selects_fourier_when_n_phi_gt_threshold(self):
-        """v2.17.0: Test auto mode selects fourier when n_phi > fourier threshold."""
+    def test_auto_selects_constant_when_n_phi_gte_threshold(self):
+        """v2.17.0: Test auto mode selects constant when n_phi >= constant threshold."""
         config = AntiDegeneracyConfig(
             per_angle_mode="auto",
-            fourier_auto_threshold=6,
+            constant_scaling_threshold=3,
         )
         controller = AntiDegeneracyController(
             config=config,
-            n_phi=10,  # > 6
+            n_phi=10,  # >= 3
             n_physical=7,
             phi_angles=np.linspace(0, np.pi, 10),
         )
         controller._initialize_components()
 
-        assert controller.per_angle_mode_actual == "fourier"
-        assert controller.use_constant is False
-        assert controller.use_fourier is True
+        assert controller.per_angle_mode_actual == "constant"
+        assert controller.use_constant is True
+        assert controller.use_fourier is False
+        # Constant mode: 9 total params (7 physical + 2 averaged scaling)
+        assert controller.n_per_angle_params == 2
 
-    def test_auto_selects_individual_when_n_phi_lte_threshold(self):
-        """v2.17.0: Test auto mode selects individual when n_phi <= fourier threshold."""
+    def test_auto_selects_individual_when_n_phi_lt_threshold(self):
+        """v2.17.0: Test auto mode selects individual when n_phi < constant threshold."""
         config = AntiDegeneracyConfig(
             per_angle_mode="auto",
-            fourier_auto_threshold=6,
+            constant_scaling_threshold=3,
         )
         controller = AntiDegeneracyController(
             config=config,
-            n_phi=5,  # <= 6
+            n_phi=2,  # < 3
             n_physical=7,
-            phi_angles=np.linspace(0, np.pi, 5),
+            phi_angles=np.linspace(0, np.pi, 2),
         )
         controller._initialize_components()
 
         assert controller.per_angle_mode_actual == "individual"
         assert controller.use_constant is False
         assert controller.use_fourier is False
+        # Individual mode: 7 physical + 2*2 per-angle = 11 total params
+        assert controller.n_per_angle_params == 4  # 2 * n_phi
 
-    def test_auto_selects_individual_at_threshold_boundary(self):
-        """v2.17.0: Test auto mode selects individual when n_phi == threshold exactly."""
+    def test_auto_selects_constant_at_threshold_boundary(self):
+        """v2.17.0: Test auto mode selects constant when n_phi == threshold exactly."""
         config = AntiDegeneracyConfig(
             per_angle_mode="auto",
-            fourier_auto_threshold=6,
+            constant_scaling_threshold=3,
         )
         controller = AntiDegeneracyController(
             config=config,
-            n_phi=6,  # == 6
+            n_phi=3,  # == 3 (boundary)
             n_physical=7,
-            phi_angles=np.linspace(0, np.pi, 6),
+            phi_angles=np.linspace(0, np.pi, 3),
         )
         controller._initialize_components()
 
-        assert controller.per_angle_mode_actual == "individual"
-        assert controller.use_constant is False
+        assert controller.per_angle_mode_actual == "constant"
+        assert controller.use_constant is True
         assert controller.use_fourier is False
 
     def test_n_per_angle_params_constant_mode(self):

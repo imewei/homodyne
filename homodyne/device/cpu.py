@@ -279,14 +279,11 @@ def _configure_jax_cpu(
         jax_config["traceback_filtering"] = "off"
 
         # Build XLA flags based on CPU capabilities and user preferences
+        # NOTE: The constant_folding pass is disabled in homodyne/__init__.py
+        # BEFORE JAX import to prevent slow_operation_alarm for large datasets.
+        # Additional CPU-specific flags are set here.
         xla_flags = [
             "--xla_cpu_multi_thread_eigen=true",
-            # Limit constant folding to avoid slow compilation for large datasets (v2.17.0)
-            # This prevents XLA slow_operation_alarm warnings when ydata (23M+ points)
-            # is captured as a constant during CMA-ES JIT compilation. The warning
-            # "Constant folding an instruction is taking > 1s" is informational,
-            # but reducing the threshold improves compilation experience.
-            "--xla_cpu_enable_mlir_constant_folding=false",
         ]
 
         # Add AVX-512 optimizations if supported

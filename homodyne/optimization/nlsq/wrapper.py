@@ -5616,34 +5616,37 @@ class NLSQWrapper(NLSQAdapterBase):
         gradient_monitoring_config = ad_config.get("gradient_monitoring", {})
 
         # Layer 1: Fourier Reparameterization / Constant Scaling Configuration
-        # v2.17.0: Default changed from "auto" to "constant"
-        per_angle_mode = ad_config.get("per_angle_mode", "constant")
+        # v2.17.0: Default changed from "constant" to "auto"
+        per_angle_mode = ad_config.get("per_angle_mode", "auto")
         fourier_order = ad_config.get("fourier_order", 2)
-        fourier_auto_threshold = ad_config.get("fourier_auto_threshold", 6)
+        constant_scaling_threshold = ad_config.get("constant_scaling_threshold", 3)
 
         # Determine actual per-angle mode
-        # v2.17.0: Auto mode now only chooses between "fourier" and "individual"
-        # "constant" mode is now the default and must be explicitly changed
+        # v2.17.0: Auto mode chooses between individual (N < 3) and constant (N >= 3)
         if per_angle_mode == "auto":
-            if n_phi > fourier_auto_threshold:
-                # Use Fourier when n_phi > fourier threshold
-                per_angle_mode_actual = "fourier"
+            if n_phi >= constant_scaling_threshold:
+                # Use constant mode when at or above threshold (N >= 3 by default)
+                # Constant mode: computes N quantile estimates, averages to 1 contrast + 1 offset
+                # Optimizes 9 parameters: 7 physical + 2 averaged scaling
+                per_angle_mode_actual = "constant"
                 logger.info("=" * 60)
-                logger.info("ANTI-DEGENERACY DEFENSE: Auto-selected 'fourier' mode")
+                logger.info("ANTI-DEGENERACY DEFENSE: Auto-selected 'constant' mode")
                 logger.info(
-                    f"  Reason: n_phi ({n_phi}) > "
-                    f"fourier_auto_threshold ({fourier_auto_threshold})"
+                    f"  Reason: n_phi ({n_phi}) >= "
+                    f"constant_scaling_threshold ({constant_scaling_threshold})"
                 )
+                logger.info("  Parameters: 7 physical + 2 averaged (contrast, offset) = 9 total")
                 logger.info("=" * 60)
             else:
-                # Use individual per-angle parameters for few angles
+                # Use individual per-angle parameters for few angles (N < 3)
                 per_angle_mode_actual = "individual"
                 logger.info("=" * 60)
                 logger.info("ANTI-DEGENERACY DEFENSE: Auto-selected 'individual' mode")
                 logger.info(
-                    f"  Reason: n_phi ({n_phi}) <= "
-                    f"fourier_auto_threshold ({fourier_auto_threshold})"
+                    f"  Reason: n_phi ({n_phi}) < "
+                    f"constant_scaling_threshold ({constant_scaling_threshold})"
                 )
+                logger.info(f"  Parameters: 7 physical + {2 * n_phi} per-angle = {7 + 2 * n_phi} total")
                 logger.info("=" * 60)
         else:
             # Explicit mode (constant, fourier, or individual)

@@ -98,7 +98,7 @@ class AntiDegeneracyConfig:
     """
 
     enable: bool = True
-    per_angle_mode: str = "constant"
+    per_angle_mode: str = "auto"
     fourier_order: int = 2
     fourier_auto_threshold: int = 6
     constant_scaling_threshold: int = 3
@@ -154,7 +154,7 @@ class AntiDegeneracyConfig:
 
         return cls(
             enable=config_dict.get("enable", True),
-            per_angle_mode=config_dict.get("per_angle_mode", "constant"),
+            per_angle_mode=config_dict.get("per_angle_mode", "auto"),
             fourier_order=config_dict.get("fourier_order", 2),
             fourier_auto_threshold=config_dict.get("fourier_auto_threshold", 6),
             constant_scaling_threshold=config_dict.get("constant_scaling_threshold", 3),
@@ -299,28 +299,32 @@ class AntiDegeneracyController:
         config = self.config
 
         # T018-T020: Determine actual per-angle mode with auto-selection logic
-        # Auto mode chooses between fourier and individual based on n_phi threshold
-        # Constant mode must be explicitly selected (it's the default)
+        # Auto mode chooses between individual (N < 3) and constant (N >= 3)
+        # v2.17.0: Changed from fourier/individual to constant/individual selection
         if config.per_angle_mode == "auto":
-            if self.n_phi > config.fourier_auto_threshold:
-                # Use Fourier when above Fourier threshold
-                self.per_angle_mode_actual = "fourier"
+            if self.n_phi >= config.constant_scaling_threshold:
+                # Use constant mode when at or above threshold (N >= 3 by default)
+                # Constant mode: computes N quantile estimates, averages to 1 contrast + 1 offset
+                # Optimizes 9 parameters: 7 physical + 2 averaged scaling
+                self.per_angle_mode_actual = "constant"
                 logger.info("=" * 60)
-                logger.info("ANTI-DEGENERACY: Auto-selected 'fourier' mode")
+                logger.info("ANTI-DEGENERACY: Auto-selected 'constant' mode")
                 logger.info(
-                    f"  Reason: n_phi ({self.n_phi}) > "
-                    f"fourier_auto_threshold ({config.fourier_auto_threshold})"
+                    f"  Reason: n_phi ({self.n_phi}) >= "
+                    f"constant_scaling_threshold ({config.constant_scaling_threshold})"
                 )
+                logger.info("  Parameters: 7 physical + 2 averaged (contrast, offset) = 9 total")
                 logger.info("=" * 60)
             else:
-                # Use individual per-angle parameters for few angles
+                # Use individual per-angle parameters for few angles (N < 3)
                 self.per_angle_mode_actual = "individual"
                 logger.info("=" * 60)
                 logger.info("ANTI-DEGENERACY: Auto-selected 'individual' mode")
                 logger.info(
-                    f"  Reason: n_phi ({self.n_phi}) <= "
-                    f"fourier_auto_threshold ({config.fourier_auto_threshold})"
+                    f"  Reason: n_phi ({self.n_phi}) < "
+                    f"constant_scaling_threshold ({config.constant_scaling_threshold})"
                 )
+                logger.info(f"  Parameters: 7 physical + {2 * self.n_phi} per-angle = {7 + 2 * self.n_phi} total")
                 logger.info("=" * 60)
         else:
             # Explicit mode (constant, fourier, or individual)
@@ -350,14 +354,14 @@ class AntiDegeneracyController:
             )
             logger.info("=" * 60)
         elif self.per_angle_mode_actual == "constant":
-            # T020: Log constant mode selection
+            # T020: Log constant mode selection (v2.17.0 updated)
             logger.info("=" * 60)
             logger.info("ANTI-DEGENERACY: Layer 1 - Constant Scaling Mode")
             logger.info(f"  Mode: {self.per_angle_mode_actual}")
             logger.info(f"  n_phi: {self.n_phi}")
-            logger.info(f"  Scaling parameters: {2 * self.n_phi} (fixed from quantiles, not optimized)")
-            logger.info(f"  N={self.n_phi} contrast and N={self.n_phi} offset values computed from raw data")
-            logger.info("  Only physical parameters are optimized")
+            logger.info(f"  Quantile estimation: N={self.n_phi} contrast + N={self.n_phi} offset values")
+            logger.info("  Averaged to: 1 contrast + 1 offset for optimization")
+            logger.info(f"  Total parameters: 7 physical + 2 averaged scaling = 9")
             logger.info("=" * 60)
 
         # T022: Create ParameterIndexMapper with correct use_constant flag
@@ -733,12 +737,13 @@ class AntiDegeneracyController:
         """Compute and store fixed per-angle contrast/offset from quantiles.
 
         This method uses physics-informed quantile analysis to estimate
-        contrast and offset for each phi angle independently, then stores
-        them as fixed values for use during optimization.
+        contrast and offset for each phi angle independently.
 
-        In "constant" mode, these quantile-derived per-angle estimates are
-        treated as fixed parameters (not optimized), reducing the parameter
-        space from 2*n_phi + n_physical to just n_physical.
+        In "constant" mode (v2.17.0+):
+        1. Computes N contrast + N offset values from quantile estimation
+        2. These are averaged to 1 contrast + 1 offset for optimization
+        3. Optimizer works with 9 parameters: 7 physical + 2 averaged scaling
+        4. The individual per-angle estimates are stored for diagnostics
 
         Parameters
         ----------

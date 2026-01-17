@@ -890,11 +890,12 @@ class TestAntiDegeneracyConfig:
     def test_default_values(self):
         """T057a: Test default config values.
 
-        v2.17.0: Default per_angle_mode changed from "auto" to "constant".
+        v2.17.0: Default per_angle_mode changed to "auto".
+        Auto mode selects between "individual" (N < 3) and "constant" (N >= 3).
         """
         config = AntiDegeneracyConfig()
         assert config.enable is True
-        assert config.per_angle_mode == "constant"  # v2.17.0: Changed from "auto"
+        assert config.per_angle_mode == "auto"  # v2.17.0: Default is "auto"
         assert config.fourier_order == 2
         assert config.hierarchical_enable is True
 
@@ -930,18 +931,15 @@ class TestAntiDegeneracyController:
 
     @pytest.fixture
     def controller_23angle(self):
-        """Create controller for 23-angle laminar flow using Fourier mode.
+        """Create controller for 23-angle laminar flow using explicit Fourier mode.
 
-        Note: We set constant_scaling_threshold=100 to force Fourier mode selection
-        for this test, since the default constant_scaling_threshold=3 would otherwise
-        select constant mode first.
+        v2.17.0: Auto mode no longer selects Fourier. To use Fourier mode,
+        set per_angle_mode="fourier" explicitly.
         """
         config_dict = {
             "enable": True,
-            "per_angle_mode": "auto",
+            "per_angle_mode": "fourier",  # v2.17.0: Explicit Fourier mode
             "fourier_order": 2,
-            "fourier_auto_threshold": 6,
-            "constant_scaling_threshold": 100,  # Disable constant mode for this test
             "hierarchical": {"enable": True},
             "regularization": {"mode": "relative"},
             "gradient_monitoring": {"enable": True},
@@ -960,16 +958,14 @@ class TestAntiDegeneracyController:
     def controller_5angle(self):
         """Create controller for 5-angle (below Fourier threshold) using independent mode.
 
-        Note: We set constant_scaling_threshold=100 to force independent mode selection
-        for this test, since the default constant_scaling_threshold=3 would otherwise
-        select constant mode first.
+        v2.17.0: Auto mode selects between individual (N < 3) and constant (N >= 3).
+        For 5 angles, auto mode selects constant mode. To test individual mode,
+        we set n_phi < 3 or use explicit per_angle_mode="individual".
         """
         config_dict = {
             "enable": True,
-            "per_angle_mode": "auto",
+            "per_angle_mode": "individual",  # v2.17.0: Explicit individual mode
             "fourier_order": 2,
-            "fourier_auto_threshold": 6,
-            "constant_scaling_threshold": 100,  # Disable constant mode for this test
             "hierarchical": {"enable": True},
             "regularization": {"mode": "relative"},
             "gradient_monitoring": {"enable": True},
@@ -987,16 +983,16 @@ class TestAntiDegeneracyController:
     def test_controller_enabled_for_23angle(self, controller_23angle):
         """T057c: Controller is enabled for 23-angle laminar flow."""
         assert controller_23angle.is_enabled
-        assert controller_23angle.use_fourier  # Auto selects Fourier for n_phi > 6
+        assert controller_23angle.use_fourier  # Explicit Fourier mode
         assert controller_23angle.use_hierarchical
 
-    def test_auto_selects_fourier_for_23angle(self, controller_23angle):
-        """T057d: Auto mode selects Fourier for n_phi > threshold."""
+    def test_explicit_fourier_mode_for_23angle(self, controller_23angle):
+        """T057d: Explicit Fourier mode works for n_phi > threshold."""
         assert controller_23angle.per_angle_mode_actual == "fourier"
         assert controller_23angle.n_per_angle_params == 10  # 2 * 5 coeffs
 
-    def test_auto_selects_independent_for_5angle(self, controller_5angle):
-        """T057e: Auto mode selects individual for n_phi < threshold."""
+    def test_explicit_individual_mode_for_5angle(self, controller_5angle):
+        """T057e: Explicit individual mode works for 5 angles."""
         assert controller_5angle.per_angle_mode_actual == "individual"
         assert not controller_5angle.use_fourier
         assert controller_5angle.n_per_angle_params == 10  # 2 * 5 direct params

@@ -63,23 +63,43 @@ warnings.filterwarnings(
 _xla_flags_before = os.environ.get("XLA_FLAGS", "NOT SET")
 print(f"[DEBUG __init__.py] XLA_FLAGS BEFORE: {_xla_flags_before}", file=sys.stderr)
 
+# Default XLA flags for homodyne:
+# - xla_force_host_platform_device_count=4: Enable parallel MCMC chains
+# - xla_disable_hlo_passes=constant_folding: Prevent slow compilation warnings
+#   for large datasets (23M+ points) where data arrays are captured in JIT
+#   closures (e.g., CMA-ES fitness functions). This avoids XLA's
+#   slow_operation_alarm (> 1s) during gather operations on large constants.
+#   Performance impact: minimal (< 5ms difference per call). (v2.17.0+)
+_DEFAULT_XLA_FLAGS = [
+    "--xla_force_host_platform_device_count=4",
+    "--xla_disable_hlo_passes=constant_folding",
+]
+
 if "XLA_FLAGS" not in os.environ:
-    # No existing XLA_FLAGS, set default
-    os.environ["XLA_FLAGS"] = "--xla_force_host_platform_device_count=4"
+    # No existing XLA_FLAGS, set defaults
+    os.environ["XLA_FLAGS"] = " ".join(_DEFAULT_XLA_FLAGS)
     print(
         "[DEBUG __init__.py] XLA_FLAGS was NOT SET, setting to default", file=sys.stderr
     )
-elif "xla_force_host_platform_device_count" not in os.environ["XLA_FLAGS"]:
-    # XLA_FLAGS exists but doesn't specify device count, append it
-    os.environ["XLA_FLAGS"] += " --xla_force_host_platform_device_count=4"
-    print(
-        "[DEBUG __init__.py] XLA_FLAGS exists, appending device count", file=sys.stderr
-    )
 else:
-    print(
-        "[DEBUG __init__.py] XLA_FLAGS already has device count, respecting user setting",
-        file=sys.stderr,
-    )
+    # XLA_FLAGS exists, append missing flags
+    existing = os.environ["XLA_FLAGS"]
+    flags_to_add = []
+    for flag in _DEFAULT_XLA_FLAGS:
+        flag_name = flag.split("=")[0]
+        if flag_name not in existing:
+            flags_to_add.append(flag)
+    if flags_to_add:
+        os.environ["XLA_FLAGS"] += " " + " ".join(flags_to_add)
+        print(
+            f"[DEBUG __init__.py] XLA_FLAGS exists, appending: {flags_to_add}",
+            file=sys.stderr,
+        )
+    else:
+        print(
+            "[DEBUG __init__.py] XLA_FLAGS already has all required flags",
+            file=sys.stderr,
+        )
 
 # DEBUG: Print XLA_FLAGS state AFTER modification
 _xla_flags_after = os.environ.get("XLA_FLAGS", "NOT SET")

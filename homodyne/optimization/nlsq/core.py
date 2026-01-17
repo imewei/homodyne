@@ -1829,10 +1829,9 @@ def fit_nlsq_cmaes(
                     use_constant_mode = True
                     logger.info("=" * 60)
                     logger.info("ANTI-DEGENERACY: Enabled for CMA-ES (Constant Mode)")
-                    logger.info(f"  Parameter reduction: {2*n_phi + n_physical} -> {n_physical}")
-                    logger.info(f"  N={n_phi} contrast and N={n_phi} offset values computed from quantiles")
-                    logger.info("  These per-angle scaling values are FIXED during optimization")
-                    logger.info("  Only 7 physical parameters will be optimized")
+                    logger.info(f"  Quantile estimation: N={n_phi} contrast + N={n_phi} offset values")
+                    logger.info("  Averaged to: 1 contrast + 1 offset for optimization")
+                    logger.info(f"  Total parameters: 7 physical + 2 averaged scaling = 9")
                     logger.info("=" * 60)
 
         # Handle parameter expansion based on anti-degeneracy mode
@@ -1867,14 +1866,15 @@ def fit_nlsq_cmaes(
                 bounds = (lower_bounds, upper_bounds)
             effective_per_angle_scaling = True
         elif use_constant_mode:
-            # CONSTANT MODE (v2.17.0+): Compute fixed per-angle scaling from quantiles
-            # and reduce to 7 physical parameters only
+            # CONSTANT MODE (v2.17.0+): Compute per-angle scaling from quantiles,
+            # average to get initial estimates, and optimize 9 parameters
+            # (7 physical + 2 averaged scaling)
             from homodyne.optimization.nlsq.parameter_utils import (
                 compute_quantile_per_angle_scaling,
             )
 
             logger.info("=" * 60)
-            logger.info("CONSTANT MODE: Computing fixed per-angle scaling from quantiles")
+            logger.info("CONSTANT MODE: Computing per-angle scaling from quantiles")
             logger.info("=" * 60)
 
             # Create stratified data structure for quantile computation
@@ -1915,7 +1915,7 @@ def fit_nlsq_cmaes(
             contrast_bounds = (float(lower_bounds[0]), float(upper_bounds[0]))
             offset_bounds = (float(lower_bounds[1]), float(upper_bounds[1]))
 
-            # Compute fixed per-angle scaling from quantiles
+            # Compute per-angle scaling from quantiles
             fixed_contrast_per_angle, fixed_offset_per_angle = compute_quantile_per_angle_scaling(
                 stratified_data=stratified_for_quantile,
                 contrast_bounds=contrast_bounds,
@@ -1923,36 +1923,54 @@ def fit_nlsq_cmaes(
                 logger=logger,
             )
 
+            # AVERAGE the per-angle values to get initial estimates for 2 scaling params
+            avg_contrast = float(np.mean(fixed_contrast_per_angle))
+            avg_offset = float(np.mean(fixed_offset_per_angle))
+
             logger.info(
-                f"Fixed per-angle scaling computed:\n"
-                f"  Contrast: mean={np.mean(fixed_contrast_per_angle):.4f}, "
+                f"Per-angle scaling computed and averaged:\n"
+                f"  Contrast: per-angle mean={avg_contrast:.4f}, "
                 f"range=[{np.min(fixed_contrast_per_angle):.4f}, {np.max(fixed_contrast_per_angle):.4f}]\n"
-                f"  Offset: mean={np.mean(fixed_offset_per_angle):.4f}, "
+                f"  Offset: per-angle mean={avg_offset:.4f}, "
                 f"range=[{np.min(fixed_offset_per_angle):.4f}, {np.max(fixed_offset_per_angle):.4f}]"
             )
 
-            # Reduce x0 to physical parameters only (7 params)
-            # Original format: [contrast, offset, D0, alpha, D_offset, gamma_dot_t0, beta, gamma_dot_t_offset, phi0]
-            # New format: [D0, alpha, D_offset, gamma_dot_t0, beta, gamma_dot_t_offset, phi0]
+            # Build 9-parameter initial guess: [contrast_avg, offset_avg, *physical]
             if len(x0) == 2 + n_physical:
-                x0 = x0[2:]  # Remove contrast and offset
-                logger.info(f"Reduced initial parameters to physical only: {len(x0)} params")
+                # Already in [contrast, offset, physical] format
+                physical_params = x0[2:]
+                x0 = np.concatenate([[avg_contrast], [avg_offset], physical_params])
+                logger.info(f"Using averaged quantile estimates for scaling: contrast={avg_contrast:.4f}, offset={avg_offset:.4f}")
             elif len(x0) == 2 * n_phi + n_physical:
-                x0 = x0[2 * n_phi:]  # Remove per-angle contrast and offset
-                logger.info(f"Reduced initial parameters from per-angle to physical only: {len(x0)} params")
+                # Per-angle format: reduce to [contrast_avg, offset_avg, physical]
+                physical_params = x0[2 * n_phi:]
+                x0 = np.concatenate([[avg_contrast], [avg_offset], physical_params])
+                logger.info(f"Reduced per-angle to averaged: {len(x0)} params")
+            elif len(x0) == n_physical:
+                # Physical only: prepend averaged scaling
+                x0 = np.concatenate([[avg_contrast], [avg_offset], x0])
+                logger.info(f"Prepended averaged scaling: {len(x0)} params")
 
-            # Reduce bounds to physical parameters only
+            # Update bounds for 9-parameter format: [contrast, offset, *physical]
             if len(lower_bounds) == 2 + n_physical:
-                lower_bounds = lower_bounds[2:]
-                upper_bounds = upper_bounds[2:]
+                # Already correct format
+                pass
             elif len(lower_bounds) == 2 * n_phi + n_physical:
-                lower_bounds = lower_bounds[2 * n_phi:]
-                upper_bounds = upper_bounds[2 * n_phi:]
+                # Per-angle format: reduce to single scaling bounds
+                lower_bounds = np.concatenate([
+                    [lower_bounds[0]],  # Single contrast bound
+                    [lower_bounds[n_phi]],  # Single offset bound
+                    lower_bounds[2 * n_phi:],  # Physical bounds
+                ])
+                upper_bounds = np.concatenate([
+                    [upper_bounds[0]],
+                    [upper_bounds[n_phi]],
+                    upper_bounds[2 * n_phi:],
+                ])
             bounds = (lower_bounds, upper_bounds)
-            logger.info(f"Reduced bounds to physical only: {len(bounds[0])} params")
+            logger.info(f"CMA-ES using constant mode: {len(x0)} parameters (9 = 7 physical + 2 averaged)")
 
             effective_per_angle_scaling = False
-            logger.info(f"CMA-ES using constant mode: {len(x0)} physical parameters (fixed scaling)")
         else:
             effective_per_angle_scaling = False
 
@@ -1993,13 +2011,9 @@ def fit_nlsq_cmaes(
         # Import the core JAX computation function that supports element-wise mode
         from homodyne.core.jax_backend import _compute_g1_total_core
 
-        # Convert fixed per-angle scaling to JAX arrays if using constant mode
-        if use_constant_mode and fixed_contrast_per_angle is not None:
-            fixed_contrast_jax = jnp.asarray(fixed_contrast_per_angle)
-            fixed_offset_jax = jnp.asarray(fixed_offset_per_angle)
-        else:
-            fixed_contrast_jax = None
-            fixed_offset_jax = None
+        # Note: In constant mode (v2.17.0+), we optimize 9 parameters:
+        # [contrast_avg, offset_avg, *physical] where the single contrast/offset
+        # are broadcast to all angles during model evaluation.
 
         def model_for_cmaes(xdata_unused: jnp.ndarray, *params) -> jnp.ndarray:
             """JAX-traceable model function wrapper for CMA-ES.
@@ -2007,27 +2021,27 @@ def fit_nlsq_cmaes(
             Uses pure JAX operations to allow JIT compilation by NLSQ's CMAESOptimizer.
             Element-wise mode is triggered automatically when len(t1) > 2000.
 
-            Note: In constant mode (v2.17.0+), this function receives only 7 physical
-            parameters. The per-angle contrast/offset values are fixed (computed from
-            quantiles) and not optimized.
+            In constant mode (v2.17.0+), this function receives 9 parameters:
+            [contrast, offset, *physical]. The single contrast/offset values are
+            broadcast to all angles.
             """
             params_array = jnp.asarray(params)
 
             # Extract per-angle scaling and physical params using JAX operations
             # Three modes:
             # 1. effective_per_angle_scaling=True: params = [contrast(n_phi), offset(n_phi), physical]
-            # 2. use_constant_mode=True: params = [physical only], scaling from fixed_contrast/offset_jax
+            # 2. use_constant_mode=True: params = [contrast, offset, physical] (9 params, broadcast to all angles)
             # 3. Neither: params = [contrast, offset, physical], broadcast to all angles
             if effective_per_angle_scaling:
                 contrasts = params_array[:n_phi]
                 offsets = params_array[n_phi : 2 * n_phi]
                 physical = params_array[2 * n_phi :]
-            elif use_constant_mode and fixed_contrast_jax is not None:
-                # CONSTANT MODE (v2.17.0+): Use fixed per-angle scaling from quantiles
-                # params contains ONLY physical parameters (7 params)
-                contrasts = fixed_contrast_jax
-                offsets = fixed_offset_jax
-                physical = params_array  # All params are physical
+            elif use_constant_mode:
+                # CONSTANT MODE (v2.17.0+): 9 parameters [contrast, offset, *physical]
+                # Broadcast single contrast/offset to all angles
+                contrasts = jnp.full(n_phi, params_array[0])
+                offsets = jnp.full(n_phi, params_array[1])
+                physical = params_array[2:]
             else:
                 # Fallback: broadcast single contrast/offset to all angles
                 contrasts = jnp.full(n_phi, params_array[0])
@@ -2074,44 +2088,86 @@ def fit_nlsq_cmaes(
         # ==========================================================================
         # EXPAND CONSTANT MODE RESULTS (v2.17.0+)
         # ==========================================================================
-        # If constant mode was used, expand 7 physical params back to 2*n_phi + 7
-        # for consistency with per_angle_scaling=True expectations from caller.
-        # The per-angle contrast/offset are the fixed values from quantile estimation.
+        # If constant mode was used, expand 9 params [contrast, offset, *physical]
+        # back to 2*n_phi + 7 for consistency with per_angle_scaling=True expectations.
+        # The single contrast/offset are broadcast to all angles.
         # ==========================================================================
         final_params = np.asarray(cmaes_result.parameters)
         final_covariance = cmaes_result.covariance
 
-        if use_constant_mode and per_angle_scaling and fixed_contrast_per_angle is not None:
-            # Expand constant mode (7 physical params) to per-angle format
-            # Structure: [physical] -> [c0,...,c_n, o0,...,o_n, *physical]
-            # Use the fixed per-angle scaling values from quantile estimation
-            physical_params = final_params  # All 7 params are physical
+        if use_constant_mode and per_angle_scaling:
+            # Expand constant mode (9 params) to per-angle format
+            # Structure: [contrast, offset, *physical] -> [c0,...,c_n, o0,...,o_n, *physical]
+            # Broadcast the single contrast/offset to all angles
+            contrast_val = final_params[0]
+            offset_val = final_params[1]
+            physical_params = final_params[2:]
 
             final_params = np.concatenate([
-                fixed_contrast_per_angle,  # N per-angle contrasts from quantiles
-                fixed_offset_per_angle,    # N per-angle offsets from quantiles
-                physical_params,           # 7 physical params as optimized
+                np.full(n_phi, contrast_val),  # Broadcast contrast to all angles
+                np.full(n_phi, offset_val),    # Broadcast offset to all angles
+                physical_params,               # 7 physical params as optimized
             ])
 
             logger.info(
                 f"Expanding constant mode results: {len(cmaes_result.parameters)} -> "
-                f"{len(final_params)} parameters (using fixed per-angle scaling)"
+                f"{len(final_params)} parameters (broadcast contrast={contrast_val:.4f}, offset={offset_val:.4f})"
             )
 
             # Expand covariance matrix if available
-            # Physical params have covariance from optimization
-            # Per-angle scaling params have zero covariance (they were fixed)
+            # The covariance for single contrast/offset must be broadcast to per-angle
             if final_covariance is not None:
+                n_original = len(cmaes_result.parameters)
                 n_expanded = 2 * n_phi + n_physical
                 expanded_cov = np.zeros((n_expanded, n_expanded))
 
-                # Physical params covariance: copy from optimization result
-                # Physical params are at indices [2*n_phi:] in expanded format
-                expanded_cov[2*n_phi:, 2*n_phi:] = final_covariance
+                # Original layout: [contrast, offset, physical(7)]
+                # Expanded layout: [contrast(n_phi), offset(n_phi), physical(7)]
 
-                # Per-angle scaling params have zero variance (fixed, not optimized)
-                # They're at indices [0:n_phi] for contrast and [n_phi:2*n_phi] for offset
-                # Already initialized to zero, no action needed
+                # Variance of single contrast -> all contrast angles share same variance
+                contrast_var = final_covariance[0, 0]
+                for i in range(n_phi):
+                    expanded_cov[i, i] = contrast_var
+                    # Covariance between contrast angles (same source parameter)
+                    for j in range(n_phi):
+                        if i != j:
+                            expanded_cov[i, j] = contrast_var  # Perfectly correlated
+
+                # Variance of single offset -> all offset angles share same variance
+                offset_var = final_covariance[1, 1]
+                for i in range(n_phi):
+                    idx = n_phi + i
+                    expanded_cov[idx, idx] = offset_var
+                    for j in range(n_phi):
+                        if i != j:
+                            expanded_cov[idx, n_phi + j] = offset_var  # Perfectly correlated
+
+                # Covariance between contrast and offset
+                contrast_offset_cov = final_covariance[0, 1]
+                for i in range(n_phi):
+                    for j in range(n_phi):
+                        expanded_cov[i, n_phi + j] = contrast_offset_cov
+                        expanded_cov[n_phi + j, i] = contrast_offset_cov
+
+                # Physical params covariance: copy from optimization result
+                # Original indices [2:9] -> expanded indices [2*n_phi:]
+                for i in range(n_physical):
+                    for j in range(n_physical):
+                        expanded_cov[2*n_phi + i, 2*n_phi + j] = final_covariance[2 + i, 2 + j]
+
+                # Cross-covariance: contrast/offset with physical params
+                for i in range(n_physical):
+                    # Contrast-physical covariance
+                    contrast_phys_cov = final_covariance[0, 2 + i]
+                    for k in range(n_phi):
+                        expanded_cov[k, 2*n_phi + i] = contrast_phys_cov
+                        expanded_cov[2*n_phi + i, k] = contrast_phys_cov
+
+                    # Offset-physical covariance
+                    offset_phys_cov = final_covariance[1, 2 + i]
+                    for k in range(n_phi):
+                        expanded_cov[n_phi + k, 2*n_phi + i] = offset_phys_cov
+                        expanded_cov[2*n_phi + i, n_phi + k] = offset_phys_cov
 
                 final_covariance = expanded_cov
 
