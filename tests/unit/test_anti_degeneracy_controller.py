@@ -37,55 +37,60 @@ class TestAntiDegeneracyConfigConstantScaling:
 
 
 class TestAntiDegeneracyControllerAutoSelection:
-    """Tests for auto-selection logic (T024-T025)."""
+    """Tests for auto-selection logic (T024-T025).
 
-    def test_auto_selects_constant_when_n_phi_gte_threshold(self):
-        """T024: Test auto mode selects constant when n_phi >= threshold."""
+    v2.17.0: Updated tests to reflect new auto mode behavior.
+    Auto mode now only selects between "fourier" and "individual".
+    "constant" mode must be explicitly set and is the new default.
+    """
+
+    def test_auto_selects_fourier_when_n_phi_gt_threshold(self):
+        """v2.17.0: Test auto mode selects fourier when n_phi > fourier threshold."""
         config = AntiDegeneracyConfig(
             per_angle_mode="auto",
-            constant_scaling_threshold=3,
+            fourier_auto_threshold=6,
         )
         controller = AntiDegeneracyController(
             config=config,
-            n_phi=5,  # >= 3
+            n_phi=10,  # > 6
+            n_physical=7,
+            phi_angles=np.linspace(0, np.pi, 10),
+        )
+        controller._initialize_components()
+
+        assert controller.per_angle_mode_actual == "fourier"
+        assert controller.use_constant is False
+        assert controller.use_fourier is True
+
+    def test_auto_selects_individual_when_n_phi_lte_threshold(self):
+        """v2.17.0: Test auto mode selects individual when n_phi <= fourier threshold."""
+        config = AntiDegeneracyConfig(
+            per_angle_mode="auto",
+            fourier_auto_threshold=6,
+        )
+        controller = AntiDegeneracyController(
+            config=config,
+            n_phi=5,  # <= 6
             n_physical=7,
             phi_angles=np.linspace(0, np.pi, 5),
         )
         controller._initialize_components()
 
-        assert controller.per_angle_mode_actual == "constant"
-        assert controller.use_constant is True
+        assert controller.per_angle_mode_actual == "individual"
+        assert controller.use_constant is False
         assert controller.use_fourier is False
 
-    def test_auto_selects_constant_at_threshold_boundary(self):
-        """Test auto mode selects constant when n_phi == threshold exactly."""
+    def test_auto_selects_individual_at_threshold_boundary(self):
+        """v2.17.0: Test auto mode selects individual when n_phi == threshold exactly."""
         config = AntiDegeneracyConfig(
             per_angle_mode="auto",
-            constant_scaling_threshold=3,
+            fourier_auto_threshold=6,
         )
         controller = AntiDegeneracyController(
             config=config,
-            n_phi=3,  # == 3
+            n_phi=6,  # == 6
             n_physical=7,
-            phi_angles=np.linspace(0, np.pi, 3),
-        )
-        controller._initialize_components()
-
-        assert controller.per_angle_mode_actual == "constant"
-        assert controller.use_constant is True
-
-    def test_auto_selects_individual_below_threshold(self):
-        """Test auto mode selects individual when n_phi < threshold."""
-        config = AntiDegeneracyConfig(
-            per_angle_mode="auto",
-            constant_scaling_threshold=5,
-            fourier_auto_threshold=10,  # High threshold to avoid Fourier
-        )
-        controller = AntiDegeneracyController(
-            config=config,
-            n_phi=3,  # < 5
-            n_physical=7,
-            phi_angles=np.linspace(0, np.pi, 3),
+            phi_angles=np.linspace(0, np.pi, 6),
         )
         controller._initialize_components()
 
@@ -94,10 +99,10 @@ class TestAntiDegeneracyControllerAutoSelection:
         assert controller.use_fourier is False
 
     def test_n_per_angle_params_constant_mode(self):
-        """T025: Test n_per_angle_params is 2 in constant mode."""
+        """T025: Test n_per_angle_params is 2 in constant mode (explicit)."""
+        # v2.17.0: Constant mode must be explicitly set
         config = AntiDegeneracyConfig(
-            per_angle_mode="auto",
-            constant_scaling_threshold=3,
+            per_angle_mode="constant",  # Explicit, not auto
         )
         controller = AntiDegeneracyController(
             config=config,
@@ -111,13 +116,16 @@ class TestAntiDegeneracyControllerAutoSelection:
 
 
 class TestAntiDegeneracyControllerMapperIntegration:
-    """Tests for ParameterIndexMapper integration in constant mode (T026)."""
+    """Tests for ParameterIndexMapper integration in constant mode (T026).
+
+    v2.17.0: Updated to use explicit per_angle_mode="constant".
+    """
 
     def test_mapper_uses_constant_mode(self):
         """T026: Test mapper is initialized with use_constant=True."""
+        # v2.17.0: Use explicit constant mode
         config = AntiDegeneracyConfig(
-            per_angle_mode="auto",
-            constant_scaling_threshold=3,
+            per_angle_mode="constant",
         )
         controller = AntiDegeneracyController(
             config=config,
@@ -133,9 +141,9 @@ class TestAntiDegeneracyControllerMapperIntegration:
 
     def test_mapper_indices_constant_mode(self):
         """Test mapper provides correct indices in constant mode."""
+        # v2.17.0: Use explicit constant mode
         config = AntiDegeneracyConfig(
-            per_angle_mode="auto",
-            constant_scaling_threshold=3,
+            per_angle_mode="constant",
         )
         controller = AntiDegeneracyController(
             config=config,
@@ -153,13 +161,16 @@ class TestAntiDegeneracyControllerMapperIntegration:
 
 
 class TestAntiDegeneracyControllerTransformMethods:
-    """Tests for parameter transformation methods (T027-T028)."""
+    """Tests for parameter transformation methods (T027-T028).
+
+    v2.17.0: Updated to use explicit per_angle_mode="constant".
+    """
 
     def setup_method(self):
         """Set up controller in constant mode."""
+        # v2.17.0: Use explicit constant mode
         config = AntiDegeneracyConfig(
-            per_angle_mode="auto",
-            constant_scaling_threshold=3,
+            per_angle_mode="constant",
         )
         self.controller = AntiDegeneracyController(
             config=config,
@@ -254,13 +265,16 @@ class TestAntiDegeneracyControllerTransformMethods:
 
 
 class TestAntiDegeneracyControllerDiagnostics:
-    """Tests for diagnostics output with constant mode."""
+    """Tests for diagnostics output with constant mode.
+
+    v2.17.0: Updated to use explicit per_angle_mode="constant".
+    """
 
     def test_diagnostics_includes_constant_mode_info(self):
         """Test diagnostics include use_constant and mode info."""
+        # v2.17.0: Use explicit constant mode
         config = AntiDegeneracyConfig(
-            per_angle_mode="auto",
-            constant_scaling_threshold=3,
+            per_angle_mode="constant",
         )
         controller = AntiDegeneracyController(
             config=config,
@@ -279,9 +293,9 @@ class TestAntiDegeneracyControllerDiagnostics:
 
     def test_mapper_diagnostics_in_constant_mode(self):
         """Test mapper diagnostics reflect constant mode."""
+        # v2.17.0: Use explicit constant mode
         config = AntiDegeneracyConfig(
-            per_angle_mode="auto",
-            constant_scaling_threshold=3,
+            per_angle_mode="constant",
         )
         controller = AntiDegeneracyController(
             config=config,

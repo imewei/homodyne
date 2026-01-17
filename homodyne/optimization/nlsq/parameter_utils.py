@@ -206,13 +206,11 @@ def compute_consistent_per_angle_init(
     # Extract data by angle
     if hasattr(stratified_data, "chunks"):
         phi_unique = np.array(
-            sorted(
-                set(
-                    phi
-                    for chunk in stratified_data.chunks
-                    for phi in chunk.phi.tolist()
-                )
-            )
+            sorted({
+                phi
+                for chunk in stratified_data.chunks
+                for phi in chunk.phi.tolist()
+            })
         )
         n_phi = len(phi_unique)
         # Get metadata from first chunk
@@ -221,9 +219,7 @@ def compute_consistent_per_angle_init(
         L = first_chunk.L
         dt = first_chunk.dt
         t1_unique = np.array(
-            sorted(
-                set(t for chunk in stratified_data.chunks for t in chunk.t1.tolist())
-            )
+            sorted({t for chunk in stratified_data.chunks for t in chunk.t1.tolist()})
         )
     else:
         phi_unique = np.unique(stratified_data.phi_flat)
@@ -345,10 +341,186 @@ def compute_consistent_per_angle_init(
     return contrast_per_angle, offset_per_angle
 
 
+def compute_quantile_per_angle_scaling(
+    stratified_data: Any,
+    contrast_bounds: tuple[float, float] = (0.0, 1.0),
+    offset_bounds: tuple[float, float] = (0.5, 1.5),
+    lag_floor_quantile: float = 0.80,
+    lag_ceiling_quantile: float = 0.20,
+    value_quantile_low: float = 0.10,
+    value_quantile_high: float = 0.90,
+    logger: Any = None,
+) -> tuple[np.ndarray, np.ndarray]:
+    """Estimate per-angle contrast/offset from quantiles of c2_experimental values.
+
+    This function uses physics-informed quantile analysis to estimate contrast and
+    offset for each phi angle independently. Unlike least-squares fitting, this
+    approach does not require a model and directly extracts scaling from the data.
+
+    Physics basis:
+        C2 = contrast × g1² + offset
+
+        - At large time lags, g1² → 0, so C2 → offset (the "floor")
+        - At small time lags, g1² ≈ 1, so C2 ≈ contrast + offset (the "ceiling")
+
+    Parameters
+    ----------
+    stratified_data : StratifiedData
+        Data containing per-angle g2_flat, phi_flat, t1_flat, t2_flat arrays.
+    contrast_bounds : tuple[float, float]
+        Valid bounds for contrast parameter.
+    offset_bounds : tuple[float, float]
+        Valid bounds for offset parameter.
+    lag_floor_quantile : float
+        Quantile threshold for "large lag" region (default: 0.80 = top 20% of lags).
+    lag_ceiling_quantile : float
+        Quantile threshold for "small lag" region (default: 0.20 = bottom 20% of lags).
+    value_quantile_low : float
+        Quantile for robust floor estimation (default: 0.10).
+    value_quantile_high : float
+        Quantile for robust ceiling estimation (default: 0.90).
+    logger : logging.Logger, optional
+        Logger for diagnostic messages.
+
+    Returns
+    -------
+    contrast_per_angle : np.ndarray
+        Per-angle contrast values from quantile estimation.
+    offset_per_angle : np.ndarray
+        Per-angle offset values from quantile estimation.
+
+    Notes
+    -----
+    The estimation is robust to outliers by using quantiles instead of min/max.
+    The lag-based segmentation ensures we sample from appropriate regions of
+    the correlation decay curve.
+
+    This function is designed for the "constant" mode in anti-degeneracy defense,
+    where per-angle contrast/offset are estimated once and treated as fixed
+    parameters during optimization.
+    """
+    from homodyne.utils.logging import get_logger as _get_logger
+
+    if logger is None:
+        logger = _get_logger(__name__)
+
+    # Extract data from stratified_data
+    if hasattr(stratified_data, "chunks"):
+        # ChunkedData format
+        phi_unique = np.array(
+            sorted({
+                phi
+                for chunk in stratified_data.chunks
+                for phi in chunk.phi.tolist()
+            })
+        )
+        n_phi = len(phi_unique)
+
+        # Collect all data into flat arrays
+        g2_list = []
+        t1_list = []
+        t2_list = []
+        phi_list = []
+        for chunk in stratified_data.chunks:
+            g2_list.extend(chunk.g2.tolist())
+            t1_list.extend(chunk.t1.tolist())
+            t2_list.extend(chunk.t2.tolist())
+            phi_list.extend(chunk.phi.tolist())
+        g2_flat = np.array(g2_list)
+        t1_flat = np.array(t1_list)
+        t2_flat = np.array(t2_list)
+        phi_flat = np.array(phi_list)
+    else:
+        # StratifiedData format with flat arrays
+        phi_unique = np.unique(stratified_data.phi_flat)
+        n_phi = len(phi_unique)
+        g2_flat = stratified_data.g2_flat
+        t1_flat = stratified_data.t1_flat
+        t2_flat = stratified_data.t2_flat
+        phi_flat = stratified_data.phi_flat
+
+    # Pre-compute time lags (vectorized)
+    delta_t = np.abs(t1_flat - t2_flat)
+
+    # Pre-compute midpoint defaults
+    contrast_mid = (contrast_bounds[0] + contrast_bounds[1]) / 2.0
+    offset_mid = (offset_bounds[0] + offset_bounds[1]) / 2.0
+
+    # Initialize output arrays with defaults
+    contrast_per_angle = np.full(n_phi, contrast_mid)
+    offset_per_angle = np.full(n_phi, offset_mid)
+
+    # Process each angle
+    for i, phi in enumerate(phi_unique):
+        # Get mask for this angle
+        mask = np.isclose(phi_flat, phi, atol=0.1)
+        n_points = np.sum(mask)
+
+        if n_points < 100:
+            logger.debug(
+                f"Angle {i} (phi={phi:.1f}°): insufficient data ({n_points} points), "
+                f"using midpoint defaults"
+            )
+            continue
+
+        # Extract data for this angle
+        c2_angle = g2_flat[mask]
+        delta_t_angle = delta_t[mask]
+
+        # Find lag thresholds for this angle
+        lag_threshold_high = np.percentile(delta_t_angle, lag_floor_quantile * 100)
+        lag_threshold_low = np.percentile(delta_t_angle, lag_ceiling_quantile * 100)
+
+        # OFFSET estimation: From large-lag region where g1² ≈ 0
+        large_lag_mask = delta_t_angle >= lag_threshold_high
+        if np.sum(large_lag_mask) >= 10:
+            c2_floor_region = c2_angle[large_lag_mask]
+            offset_est = np.percentile(c2_floor_region, value_quantile_low * 100)
+        else:
+            # Fallback: use overall low quantile
+            offset_est = np.percentile(c2_angle, value_quantile_low * 100)
+
+        # Clip offset to bounds
+        offset_est = float(np.clip(offset_est, offset_bounds[0], offset_bounds[1]))
+
+        # CONTRAST estimation: From small-lag region where g1² ≈ 1
+        small_lag_mask = delta_t_angle <= lag_threshold_low
+        if np.sum(small_lag_mask) >= 10:
+            c2_ceiling_region = c2_angle[small_lag_mask]
+            c2_ceiling = np.percentile(c2_ceiling_region, value_quantile_high * 100)
+        else:
+            # Fallback: use overall high quantile
+            c2_ceiling = np.percentile(c2_angle, value_quantile_high * 100)
+
+        # contrast ≈ c2_ceiling - offset
+        contrast_est = c2_ceiling - offset_est
+
+        # Clip contrast to bounds
+        contrast_est = float(np.clip(contrast_est, contrast_bounds[0], contrast_bounds[1]))
+
+        contrast_per_angle[i] = contrast_est
+        offset_per_angle[i] = offset_est
+
+        logger.debug(
+            f"Angle {i} (phi={phi:.1f}°): quantile estimation "
+            f"contrast={contrast_est:.4f}, offset={offset_est:.4f} "
+            f"from {n_points:,} points"
+        )
+
+    logger.info(
+        f"Quantile-based per-angle estimation complete:\n"
+        f"  Contrast range: [{contrast_per_angle.min():.4f}, {contrast_per_angle.max():.4f}]\n"
+        f"  Offset range: [{offset_per_angle.min():.4f}, {offset_per_angle.max():.4f}]"
+    )
+
+    return contrast_per_angle, offset_per_angle
+
+
 __all__ = [
     "build_parameter_labels",
     "classify_parameter_status",
     "sample_xdata",
     "compute_jacobian_stats",
     "compute_consistent_per_angle_init",
+    "compute_quantile_per_angle_scaling",
 ]

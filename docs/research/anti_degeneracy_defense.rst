@@ -1,10 +1,10 @@
-Anti-Degeneracy Defense System (v2.9.0)
+Anti-Degeneracy Defense System (v2.17.0)
 ========================================
 
 This section provides comprehensive documentation for the Anti-Degeneracy Defense System
-introduced in Homodyne v2.9.0. The system addresses fundamental optimization challenges
-in laminar flow XPCS analysis where structural degeneracy and gradient cancellation
-prevent accurate parameter estimation.
+introduced in Homodyne v2.9.0 and enhanced in v2.17.0 with quantile-based per-angle scaling.
+The system addresses fundamental optimization challenges in laminar flow XPCS analysis
+where structural degeneracy and gradient cancellation prevent accurate parameter estimation.
 
 .. contents:: Contents
    :local:
@@ -200,14 +200,14 @@ The ``per_angle_mode`` setting controls how per-angle parameters are handled:
 
    * - Mode
      - Description
+   * - ``constant``
+     - **DEFAULT (v2.17.0+)** Per-angle scaling fixed from quantile estimation (0 optimized per-angle params)
    * - ``individual``
      - Each angle has independent contrast and offset (2 × n_phi params)
    * - ``fourier``
      - Contrast/offset expressed as Fourier series (2 × (2K+1) params)
-   * - ``constant``
-     - All angles share one contrast and one offset (2 params)
    * - ``auto``
-     - Auto-selects based on n_phi and thresholds
+     - Auto-selects between ``fourier`` (n_phi > threshold) and ``individual``
 
 .. list-table:: Parameter Count Comparison
    :header-rows: 1
@@ -218,93 +218,152 @@ The ``per_angle_mode`` setting controls how per-angle parameters are handled:
      - Fourier (K=2)
      - Constant
      - Reduction
-     - Auto Mode
+     - Default Mode
    * - 2
      - 4
      - 4*
-     - 2
-     - 50%
-     - Individual
+     - 0†
+     - 100%
+     - Constant
    * - 3
      - 6
      - 6*
-     - 2
-     - 67%
-     - Constant†
+     - 0†
+     - 100%
+     - Constant
    * - 6
      - 12
      - 10
-     - 2
-     - 83%
-     - Constant†
+     - 0†
+     - 100%
+     - Constant
    * - 10
      - 20
      - 10
-     - 2
-     - 90%
-     - Constant†
+     - 0†
+     - 100%
+     - Constant
    * - 23
      - 46
      - 10
-     - 2
-     - **96%**
-     - Constant†
+     - 0†
+     - **100%**
+     - Constant
    * - 100
      - 200
      - 10
-     - 2
-     - **99%**
-     - Constant†
+     - 0†
+     - **100%**
+     - Constant
 
 | \* For n_phi ≤ 2×(order+1), Fourier mode provides no reduction
-| † With ``constant_scaling_threshold: 3`` (default), constant mode is auto-selected when n_phi ≥ 3
+| † Constant mode uses quantile-based fixed scaling: per-angle params are computed once and not optimized
 
-Constant Mode (v2.14.0+)
-~~~~~~~~~~~~~~~~~~~~~~~~
+Constant Mode with Quantile-Based Estimation (v2.17.0+)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-**Constant mode** provides the most aggressive parameter reduction by assuming all
-angles share identical contrast and offset values:
+**Constant mode** is now the **default** (v2.17.0+) and provides the most aggressive
+parameter reduction. Instead of optimizing per-angle contrast/offset, they are
+**estimated once from data quantiles** and treated as fixed during optimization.
+
+**Physics Foundation**:
+
+The Siegert relation connects intensity autocorrelation (C2) to field autocorrelation (g1):
 
 .. math::
 
-   \text{contrast}(\phi) = c_{\text{const}} \quad \forall \phi
+   C_2 = \text{contrast} \times g_1^2 + \text{offset}
 
-   \text{offset}(\phi) = o_{\text{const}} \quad \forall \phi
+The key insight is that g1 decays with time lag:
 
-**Parameter Transformation**:
+- At **small time lags** (Δt → 0): g1² ≈ 1, so C2 ≈ contrast + offset (the "ceiling")
+- At **large time lags** (Δt → ∞): g1² → 0, so C2 → offset (the "floor")
+
+**Quantile-Based Estimation Algorithm**:
+
+For each phi angle independently:
 
 .. code-block:: text
 
-   CONSTANT MODE TRANSFORMATION
-   ============================
+   Step 1: Partition data by time lag
+   ┌──────────────────────────────────────────────────────────────┐
+   │ Time Lag Distribution for Angle φᵢ                          │
+   │                                                              │
+   │    ▼ Small lags (bottom 20%)    ▼ Large lags (top 20%)      │
+   │ ├─────────────────────────────────────────────────────────┤ │
+   │ └──── Used for ceiling ────┘       └──── Used for floor ───┘│
+   └──────────────────────────────────────────────────────────────┘
 
-   Input:  per-angle params [c₀, c₁, ..., c₂₂, o₀, o₁, ..., o₂₂]
-           (46 values for 23 angles)
-                      │
-                      ▼
-   Contract: [mean(contrast), mean(offset)]
-             (2 values)
-                      │
-                      ▼
-   Optimize: [contrast, offset, D₀, α, D_offset, γ̇₀, β, γ̇_offset, φ₀]
-             (9 params total for laminar_flow)
-                      │
-                      ▼
-   Expand:   [c, c, ..., c, o, o, ..., o] + physical
-             (53 values for backward compatibility)
+   Step 2: Estimate OFFSET (from large-lag region where g1² → 0)
+   offset = 10th percentile of C2 values at large lags
 
-**When to Use Constant Mode**:
+   Step 3: Estimate CONTRAST (from small-lag region where g1² ≈ 1)
+   ceiling = 90th percentile of C2 values at small lags
+   contrast = ceiling - offset
 
-- Detector response is uniform across angles
-- Per-angle variation is primarily noise, not physics
-- Multi-start optimization with many angles (parameter count reduction critical)
-- Quick exploratory fits where per-angle detail is not important
+   Step 4: Apply bounds clipping
+   offset = clip(offset, offset_bounds)
+   contrast = clip(contrast, contrast_bounds)
 
-**When NOT to Use Constant Mode**:
+**Why Quantiles Instead of Min/Max**:
 
-- Significant physical per-angle variation exists (sample asymmetry)
-- High-precision per-angle contrast/offset needed for downstream analysis
-- Fourier mode's smooth angular variation better matches experimental reality
+1. **Outlier Robustness**: Quantiles ignore extreme values from noise spikes
+2. **Noise Tolerance**: Less sensitive to measurement noise
+3. **Systematic Error Handling**: Avoids contamination from partially decayed points
+
+**Default Quantile Parameters**:
+
+.. list-table::
+   :header-rows: 1
+   :widths: 30 15 55
+
+   * - Parameter
+     - Default
+     - Description
+   * - ``lag_floor_quantile``
+     - 0.80
+     - Top 20% of lags for floor estimation
+   * - ``lag_ceiling_quantile``
+     - 0.20
+     - Bottom 20% of lags for ceiling estimation
+   * - ``value_quantile_low``
+     - 0.10
+     - 10th percentile for robust floor
+   * - ``value_quantile_high``
+     - 0.90
+     - 90th percentile for robust ceiling
+
+**Parameter Reduction**:
+
+.. code-block:: text
+
+   CONSTANT MODE FIXED SCALING (v2.17.0)
+   =====================================
+
+   Before optimization:
+       Compute per-angle scaling from data quantiles
+       fixed_contrast[n_phi] ← quantile estimation
+       fixed_offset[n_phi]   ← quantile estimation
+
+   During optimization:
+       Parameter vector: [D₀, α, D_offset, γ̇₀, β, γ̇_offset, φ₀]
+                         (7 params only for laminar_flow)
+
+   After optimization:
+       Expand for output: [fixed_contrast..., fixed_offset..., physical_opt]
+                          (53 values for backward compatibility)
+
+**When to Use Constant Mode** (Default):
+
+- Most XPCS datasets where detector response is reasonably uniform
+- Large datasets (>1M points) where parameter reduction improves convergence
+- Multi-start optimization with many angles (tractable parameter count)
+- When per-angle variation is primarily noise, not physics
+
+**When to Switch to Other Modes**:
+
+- Use ``fourier`` if smooth angular variation is physically expected (sample asymmetry)
+- Use ``individual`` for very small n_phi (≤ 3) or when full flexibility is needed
 
 **Configuration**:
 
@@ -314,8 +373,10 @@ angles share identical contrast and offset values:
      nlsq:
        anti_degeneracy:
          enable: true
-         per_angle_mode: "auto"          # or "constant" to force
-         constant_scaling_threshold: 3   # Use constant when n_phi >= 3
+         per_angle_mode: "constant"      # Default in v2.17.0+
+         # per_angle_mode: "auto"        # Use "auto" to select fourier/individual
+         # per_angle_mode: "fourier"     # Use "fourier" for smooth angular variation
+         # per_angle_mode: "individual"  # Use "individual" for full flexibility
 
 **Impact on Multi-Start Optimization**:
 
@@ -337,13 +398,31 @@ Constant mode makes multi-start optimization tractable for many-angle datasets:
      - 17
      - 17
      - 20-40 (moderate)
-   * - **constant**
-     - **9**
-     - **9**
-     - **10-20 (tractable)**
+   * - **constant (default)**
+     - **7**
+     - **7**
+     - **10-15 (tractable)**
 
-Why This Works
-~~~~~~~~~~~~~~
+Why Constant Mode Works Best (v2.17.0)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+1. **Maximum Parameter Reduction**: Only 7 physical parameters are optimized.
+   Per-angle scaling is fixed from data, eliminating all 46 per-angle parameters.
+
+2. **No Degeneracy Risk**: Since per-angle parameters are not optimized,
+   they cannot absorb physical signals that belong to shear parameters.
+
+3. **Data-Driven Initialization**: Quantile-based estimation uses actual
+   experimental data, not arbitrary defaults, for contrast/offset values.
+
+4. **Robust to Noise**: Quantile-based estimation is more robust to outliers
+   than least-squares or min/max approaches.
+
+5. **Consistent Across Paths**: Both stratified LS and hybrid streaming
+   use the same quantile-based estimation (v2.17.0+).
+
+Why Fourier Mode is Still Useful
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 1. **Reduced Degrees of Freedom**: 10 Fourier coefficients cannot absorb
    arbitrary angle-dependent signals that would require 46 free parameters.
@@ -886,14 +965,16 @@ Complete YAML configuration for the Anti-Degeneracy Defense System:
      nlsq:
        # ... existing settings ...
 
-       # Anti-Degeneracy Defense System (v2.9.0+)
+       # Anti-Degeneracy Defense System (v2.17.0+)
        anti_degeneracy:
 
-         # Layer 1: Per-Angle Mode Selection
-         per_angle_mode: "auto"            # "individual", "fourier", "constant", "auto"
-         constant_scaling_threshold: 3     # Use constant when n_phi >= threshold
+         # Layer 1: Per-Angle Mode Selection (v2.17.0 defaults)
+         per_angle_mode: "constant"        # DEFAULT: fixed per-angle from quantiles
+         # per_angle_mode: "auto"          # Auto-selects fourier/individual
+         # per_angle_mode: "fourier"       # Fourier reparameterization
+         # per_angle_mode: "individual"    # Independent per-angle params
          fourier_order: 2                  # Number of Fourier harmonics (if fourier mode)
-         fourier_auto_threshold: 6         # Use Fourier when n_phi > threshold (if not constant)
+         fourier_auto_threshold: 6         # Use Fourier when n_phi > threshold (auto mode)
 
          # Layer 2: Hierarchical Optimization
          hierarchical:
@@ -930,7 +1011,7 @@ Complete YAML configuration for the Anti-Degeneracy Defense System:
 Configuration Options Summary
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-.. list-table:: Layer 1 Configuration
+.. list-table:: Layer 1 Configuration (v2.17.0)
    :header-rows: 1
    :widths: 25 15 60
 
@@ -938,17 +1019,14 @@ Configuration Options Summary
      - Default
      - Description
    * - ``per_angle_mode``
-     - "auto"
-     - Mode selection: "individual", "fourier", "constant", or "auto"
-   * - ``constant_scaling_threshold``
-     - 3
-     - Use constant mode when n_phi >= threshold (auto mode only)
+     - "constant"
+     - **DEFAULT CHANGED v2.17.0**: "constant", "fourier", "individual", or "auto"
    * - ``fourier_order``
      - 2
-     - Number of Fourier harmonics (K)
+     - Number of Fourier harmonics (K) for fourier mode
    * - ``fourier_auto_threshold``
      - 6
-     - Use Fourier when n_phi > threshold (if constant not selected)
+     - Use Fourier when n_phi > threshold (auto mode only)
 
 .. list-table:: Layer 2 Configuration
    :header-rows: 1
@@ -1163,6 +1241,42 @@ The anti-degeneracy system can be disabled for:
 Migration Guide
 ---------------
 
+From v2.16.x to v2.17.0
+~~~~~~~~~~~~~~~~~~~~~~~
+
+**Default Behavior Changes**:
+
+1. ``per_angle_mode`` default: "auto" → "constant" (quantile-based fixed scaling)
+2. "auto" mode logic changed: now only selects between "fourier" and "individual"
+3. Quantile-based estimation used in both stratified LS and hybrid streaming paths
+
+**What This Means for Your Fits**:
+
+- Per-angle contrast/offset are now computed from data quantiles and **not optimized**
+- Only 7 physical parameters are optimized (for laminar_flow)
+- Most fits should converge faster with more robust shear parameter estimation
+
+**To Preserve v2.16.x Behavior** (if needed):
+
+.. code-block:: yaml
+
+   optimization:
+     nlsq:
+       anti_degeneracy:
+         per_angle_mode: "auto"       # v2.16.x: auto selected constant >= threshold
+         # OR
+         per_angle_mode: "individual" # Full per-angle optimization
+
+**To Switch to Fourier Mode** (smooth angular variation):
+
+.. code-block:: yaml
+
+   optimization:
+     nlsq:
+       anti_degeneracy:
+         per_angle_mode: "fourier"
+         fourier_order: 2
+
 From v2.8.x to v2.9.0
 ~~~~~~~~~~~~~~~~~~~~~
 
@@ -1190,14 +1304,21 @@ From v2.8.x to v2.9.0
 
 **Recommended Migration Path**:
 
-1. Start with v2.9.0 defaults (most robust)
-2. If fitting is slow, try ``per_angle_mode: "independent"`` with
-   ``hierarchical: true``
-3. Monitor diagnostics for gradient collapse warnings
-4. Adjust regularization strength if per-angle CV exceeds 20%
+1. Start with v2.17.0 defaults (most robust)
+2. If per-angle variation is physically important, try ``per_angle_mode: "fourier"``
+3. Only use ``per_angle_mode: "individual"`` for n_phi ≤ 3 or special cases
+4. Monitor diagnostics for convergence and parameter recovery
 
 API Reference
 -------------
+
+Parameter Utilities (v2.17.0)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. automodule:: homodyne.optimization.nlsq.parameter_utils
+   :members: compute_quantile_per_angle_scaling, compute_consistent_per_angle_init
+   :undoc-members:
+   :show-inheritance:
 
 Fourier Reparameterization
 ~~~~~~~~~~~~~~~~~~~~~~~~~~

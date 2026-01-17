@@ -99,8 +99,11 @@ See :doc:`analysis_modes` for detailed parameter descriptions and usage.
 Version Information
 -------------------
 
-This documentation covers Homodyne v2.9.x with the following key features:
+This documentation covers Homodyne v2.17.x with the following key features:
 
+* **v2.17.0**: Quantile-based per-angle scaling (constant mode now default, auto mode simplified)
+* **v2.16.0**: CMA-ES parameter normalization, fit quality validation
+* **v2.15.0**: CMA-ES global optimization, enhanced logging system
 * **v2.9.0**: Anti-Degeneracy Defense System (Fourier reparameterization, hierarchical optimization, adaptive regularization, gradient monitoring)
 * **v2.7.2**: Group Variance Regularization for per-angle parameter absorption
 * **v2.7.1**: Per-Angle Initialization Fix

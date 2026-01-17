@@ -18,7 +18,7 @@ Version: 2.4.0 (updated with buffer donation in 2.14.0)
 
 from __future__ import annotations
 
-from functools import partial
+import logging
 
 import jax
 import jax.numpy as jnp
@@ -58,6 +58,8 @@ class StratifiedResidualFunctionJIT:
         per_angle_scaling: bool,
         physical_param_names: list[str],
         logger: logging.Logger | None = None,
+        fixed_contrast_per_angle: np.ndarray | None = None,
+        fixed_offset_per_angle: np.ndarray | None = None,
     ):
         """
         Initialize JIT-compatible stratified residual function.
@@ -67,11 +69,30 @@ class StratifiedResidualFunctionJIT:
             per_angle_scaling: Whether per-angle scaling parameters are used
             physical_param_names: List of physical parameter names
             logger: Optional logger for diagnostics
+            fixed_contrast_per_angle: Fixed per-angle contrast values (for constant mode).
+                When provided, contrast is NOT included in the parameter vector.
+            fixed_offset_per_angle: Fixed per-angle offset values (for constant mode).
+                When provided, offset is NOT included in the parameter vector.
         """
         self.logger = logger or get_logger(__name__)
         self.chunks = stratified_data.chunks
         self.per_angle_scaling = per_angle_scaling
         self.physical_param_names = physical_param_names
+
+        # Fixed per-angle scaling for constant mode (v2.17.0+)
+        # When both are provided, params contains ONLY physical parameters
+        self.fixed_contrast_per_angle = None
+        self.fixed_offset_per_angle = None
+        self.use_fixed_scaling = False
+
+        if fixed_contrast_per_angle is not None and fixed_offset_per_angle is not None:
+            self.fixed_contrast_per_angle = jnp.asarray(fixed_contrast_per_angle)
+            self.fixed_offset_per_angle = jnp.asarray(fixed_offset_per_angle)
+            self.use_fixed_scaling = True
+            self.logger.info(
+                "CONSTANT MODE: Using fixed per-angle scaling from quantiles. "
+                "Parameter vector contains ONLY physical parameters."
+            )
 
         if not self.chunks:
             raise ValueError("stratified_data.chunks is empty")
@@ -264,13 +285,26 @@ class StratifiedResidualFunctionJIT:
             t2_chunk: T2 values for this chunk (max_chunk_size,)
             g2_obs_chunk: Observed g2 for this chunk (max_chunk_size,)
             mask_chunk: Mask for real vs padded data (max_chunk_size,)
-            params_all: All parameters [scaling_params, physical_params]
+            params_all: All parameters [scaling_params, physical_params] or just [physical_params]
+                when use_fixed_scaling=True
 
         Returns:
             Masked residuals (max_chunk_size,) - padded values are zeros
         """
         # Extract scaling and physical parameters
-        if self.per_angle_scaling:
+        # Three modes:
+        # 1. use_fixed_scaling=True: params_all = [physical_params only]
+        #    contrast/offset come from self.fixed_contrast_per_angle/self.fixed_offset_per_angle
+        # 2. per_angle_scaling=True: params_all = [contrast(n_phi), offset(n_phi), physical]
+        # 3. per_angle_scaling=False: params_all = [contrast, offset, physical]
+
+        if self.use_fixed_scaling:
+            # CONSTANT MODE: Fixed per-angle scaling from quantiles
+            # params_all contains ONLY physical parameters
+            contrast = self.fixed_contrast_per_angle
+            offset = self.fixed_offset_per_angle
+            physical_params = params_all  # All params are physical
+        elif self.per_angle_scaling:
             contrast = params_all[: self.n_phi]
             offset = params_all[self.n_phi : 2 * self.n_phi]
             physical_params = params_all[2 * self.n_phi :]
@@ -280,7 +314,7 @@ class StratifiedResidualFunctionJIT:
             physical_params = params_all[2:]
 
         # Compute theoretical g2 using vectorized computation
-        if self.per_angle_scaling:
+        if self.use_fixed_scaling or self.per_angle_scaling:
             # Vectorize over phi with corresponding contrast/offset
             compute_g2_vmap = jax.vmap(
                 lambda phi_val, contrast_val, offset_val: jnp.squeeze(

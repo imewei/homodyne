@@ -888,10 +888,13 @@ class TestAntiDegeneracyConfig:
     """Test AntiDegeneracyConfig dataclass."""
 
     def test_default_values(self):
-        """T057a: Test default config values."""
+        """T057a: Test default config values.
+
+        v2.17.0: Default per_angle_mode changed from "auto" to "constant".
+        """
         config = AntiDegeneracyConfig()
         assert config.enable is True
-        assert config.per_angle_mode == "auto"
+        assert config.per_angle_mode == "constant"  # v2.17.0: Changed from "auto"
         assert config.fourier_order == 2
         assert config.hierarchical_enable is True
 
@@ -1063,9 +1066,10 @@ class TestAntiDegeneracyController:
         """T057k: Controller provides comprehensive diagnostics."""
         diag = controller_23angle.get_diagnostics()
 
-        assert diag["version"] == "2.14.0"
+        assert diag["version"] == "2.17.0"
         assert diag["enabled"] is True
         assert diag["per_angle_mode"] == "fourier"
+        assert "has_fixed_per_angle_scaling" in diag
         assert "fourier" in diag
         assert "hierarchical" in diag
         assert "regularization" in diag

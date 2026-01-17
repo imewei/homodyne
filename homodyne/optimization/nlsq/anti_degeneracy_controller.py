@@ -52,7 +52,7 @@ from homodyne.optimization.nlsq.shear_weighting import (
     ShearSensitivityWeighting,
     ShearWeightingConfig,
 )
-from homodyne.utils.logging import get_logger, log_exception
+from homodyne.utils.logging import get_logger
 
 logger = get_logger(__name__)
 
@@ -98,7 +98,7 @@ class AntiDegeneracyConfig:
     """
 
     enable: bool = True
-    per_angle_mode: str = "auto"
+    per_angle_mode: str = "constant"
     fourier_order: int = 2
     fourier_auto_threshold: int = 6
     constant_scaling_threshold: int = 3
@@ -154,7 +154,7 @@ class AntiDegeneracyConfig:
 
         return cls(
             enable=config_dict.get("enable", True),
-            per_angle_mode=config_dict.get("per_angle_mode", "auto"),
+            per_angle_mode=config_dict.get("per_angle_mode", "constant"),
             fourier_order=config_dict.get("fourier_order", 2),
             fourier_auto_threshold=config_dict.get("fourier_auto_threshold", 6),
             constant_scaling_threshold=config_dict.get("constant_scaling_threshold", 3),
@@ -242,6 +242,9 @@ class AntiDegeneracyController:
     shear_weighter: ShearSensitivityWeighting | None = None  # Layer 5
     mapper: ParameterIndexMapper | None = None  # T018: Centralized index mapping
     per_angle_mode_actual: str = "independent"
+    # Fixed per-angle quantile estimates for constant mode (v2.17.0+)
+    _fixed_contrast_per_angle: np.ndarray | None = field(default=None, repr=False)
+    _fixed_offset_per_angle: np.ndarray | None = field(default=None, repr=False)
     _is_initialized: bool = field(default=False, repr=False)
 
     @classmethod
@@ -296,30 +299,31 @@ class AntiDegeneracyController:
         config = self.config
 
         # T018-T020: Determine actual per-angle mode with auto-selection logic
-        # Priority: constant < individual < fourier (based on n_phi thresholds)
+        # Auto mode chooses between fourier and individual based on n_phi threshold
+        # Constant mode must be explicitly selected (it's the default)
         if config.per_angle_mode == "auto":
-            if self.n_phi >= config.constant_scaling_threshold:
-                # T019: Use constant scaling when n_phi >= constant_scaling_threshold
-                # This provides the simplest model with minimal per-angle parameters
-                self.per_angle_mode_actual = "constant"
-                logger.info("=" * 60)
-                logger.info("ANTI-DEGENERACY: Auto-selected 'constant' scaling mode")
-                logger.info(
-                    f"  Reason: n_phi ({self.n_phi}) >= "
-                    f"constant_scaling_threshold ({config.constant_scaling_threshold})"
-                )
-                logger.info(
-                    "  Parameter reduction: 2*n_phi -> 2 (one contrast, one offset)"
-                )
-                logger.info("=" * 60)
-            elif self.n_phi > config.fourier_auto_threshold:
-                # Use Fourier when above Fourier threshold but below constant threshold
+            if self.n_phi > config.fourier_auto_threshold:
+                # Use Fourier when above Fourier threshold
                 self.per_angle_mode_actual = "fourier"
+                logger.info("=" * 60)
+                logger.info("ANTI-DEGENERACY: Auto-selected 'fourier' mode")
+                logger.info(
+                    f"  Reason: n_phi ({self.n_phi}) > "
+                    f"fourier_auto_threshold ({config.fourier_auto_threshold})"
+                )
+                logger.info("=" * 60)
             else:
                 # Use individual per-angle parameters for few angles
                 self.per_angle_mode_actual = "individual"
+                logger.info("=" * 60)
+                logger.info("ANTI-DEGENERACY: Auto-selected 'individual' mode")
+                logger.info(
+                    f"  Reason: n_phi ({self.n_phi}) <= "
+                    f"fourier_auto_threshold ({config.fourier_auto_threshold})"
+                )
+                logger.info("=" * 60)
         else:
-            # T020: Explicit mode - log the user's choice
+            # Explicit mode (constant, fourier, or individual)
             self.per_angle_mode_actual = config.per_angle_mode
             logger.debug(
                 f"ANTI-DEGENERACY: Using explicit per_angle_mode: "
@@ -649,7 +653,7 @@ class AntiDegeneracyController:
             Nested diagnostics from all 5 layers.
         """
         diag: dict[str, Any] = {
-            "version": "2.14.0",
+            "version": "2.17.0",
             "enabled": self.is_enabled,
             "per_angle_mode": self.per_angle_mode_actual,
             "use_constant": self.use_constant,
@@ -658,7 +662,17 @@ class AntiDegeneracyController:
             "n_phi": self.n_phi,
             "n_physical": self.n_physical,
             "n_per_angle_params": self.n_per_angle_params,
+            "has_fixed_per_angle_scaling": self.has_fixed_per_angle_scaling(),
         }
+
+        # Add fixed per-angle scaling info if available
+        if self.has_fixed_per_angle_scaling():
+            diag["fixed_per_angle_scaling"] = {
+                "contrast_mean": float(np.mean(self._fixed_contrast_per_angle)),
+                "contrast_std": float(np.std(self._fixed_contrast_per_angle)),
+                "offset_mean": float(np.mean(self._fixed_offset_per_angle)),
+                "offset_std": float(np.std(self._fixed_offset_per_angle)),
+            }
 
         # Add mapper diagnostics
         if self.mapper:
@@ -708,6 +722,100 @@ class AntiDegeneracyController:
         """
         if self.shear_weighter is not None:
             self.shear_weighter.update_phi0(phi0)
+
+    def compute_fixed_per_angle_scaling(
+        self,
+        stratified_data: Any,
+        contrast_bounds: tuple[float, float] = (0.0, 1.0),
+        offset_bounds: tuple[float, float] = (0.5, 1.5),
+    ) -> None:
+        """Compute and store fixed per-angle contrast/offset from quantiles.
+
+        This method uses physics-informed quantile analysis to estimate
+        contrast and offset for each phi angle independently, then stores
+        them as fixed values for use during optimization.
+
+        In "constant" mode, these quantile-derived per-angle estimates are
+        treated as fixed parameters (not optimized), reducing the parameter
+        space from 2*n_phi + n_physical to just n_physical.
+
+        Parameters
+        ----------
+        stratified_data : StratifiedData
+            Data containing per-angle g2_flat, phi_flat, t1_flat, t2_flat arrays.
+        contrast_bounds : tuple[float, float]
+            Valid bounds for contrast parameter.
+        offset_bounds : tuple[float, float]
+            Valid bounds for offset parameter.
+
+        Notes
+        -----
+        This method should be called before optimization when using
+        per_angle_mode="constant". The estimates can be retrieved using
+        get_fixed_per_angle_scaling().
+
+        Unlike least-squares estimation, this approach:
+        1. Does not require a model (purely data-driven)
+        2. Uses physics-informed quantile analysis
+        3. Is robust to outliers
+        """
+        from homodyne.optimization.nlsq.parameter_utils import (
+            compute_quantile_per_angle_scaling,
+        )
+
+        if not self.use_constant:
+            logger.warning(
+                "compute_fixed_per_angle_scaling called but not in constant mode; "
+                "estimates will be stored but may not be used"
+            )
+
+        logger.info("=" * 60)
+        logger.info("CONSTANT MODE: Computing fixed per-angle scaling from quantiles")
+        logger.info("=" * 60)
+
+        contrast_per_angle, offset_per_angle = compute_quantile_per_angle_scaling(
+            stratified_data=stratified_data,
+            contrast_bounds=contrast_bounds,
+            offset_bounds=offset_bounds,
+            logger=logger,
+        )
+
+        self._fixed_contrast_per_angle = contrast_per_angle
+        self._fixed_offset_per_angle = offset_per_angle
+
+        logger.info(
+            f"Fixed per-angle scaling stored:\n"
+            f"  n_phi: {self.n_phi}\n"
+            f"  Contrast: mean={np.mean(contrast_per_angle):.4f}, "
+            f"std={np.std(contrast_per_angle):.4f}\n"
+            f"  Offset: mean={np.mean(offset_per_angle):.4f}, "
+            f"std={np.std(offset_per_angle):.4f}"
+        )
+
+    def get_fixed_per_angle_scaling(self) -> tuple[np.ndarray, np.ndarray] | None:
+        """Get the fixed per-angle contrast/offset estimates.
+
+        Returns
+        -------
+        tuple[np.ndarray, np.ndarray] | None
+            (contrast_per_angle, offset_per_angle) if computed, None otherwise.
+        """
+        if self._fixed_contrast_per_angle is None or self._fixed_offset_per_angle is None:
+            return None
+        return self._fixed_contrast_per_angle, self._fixed_offset_per_angle
+
+    def has_fixed_per_angle_scaling(self) -> bool:
+        """Check if fixed per-angle scaling has been computed.
+
+        Returns
+        -------
+        bool
+            True if fixed scaling is available.
+        """
+        return (
+            self._fixed_contrast_per_angle is not None
+            and self._fixed_offset_per_angle is not None
+        )
 
     def create_nlsq_callbacks(self) -> dict[str, Any]:
         """Create callbacks for NLSQ's CurveFit integration.
