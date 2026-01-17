@@ -307,6 +307,47 @@ The module provides bidirectional name mapping:
 - Handles per-angle parameter naming: ``contrast_i``, ``offset_i``
 - Validates parameter name consistency
 
+Physics Validators
+------------------
+
+Physics-based parameter validation using theoretical constraints.
+
+.. automodule:: homodyne.config.physics_validators
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+Key Classes
+~~~~~~~~~~~
+
+.. autosummary::
+   :nosignatures:
+
+   homodyne.config.physics_validators.ConstraintSeverity
+   homodyne.config.physics_validators.PhysicsViolation
+   homodyne.config.physics_validators.validate_single_parameter
+   homodyne.config.physics_validators.validate_cross_parameter_constraints
+   homodyne.config.physics_validators.validate_all_parameters
+
+Validation Example
+~~~~~~~~~~~~~~~~~~
+
+.. code-block:: python
+
+   from homodyne.config.physics_validators import (
+       validate_single_parameter,
+       validate_cross_parameter_constraints,
+   )
+
+   # Validate individual parameter
+   violations = validate_single_parameter("alpha", 2.5)
+   for v in violations:
+       print(f"{v.severity}: {v.message}")
+
+   # Validate cross-parameter constraints
+   params = {"D0": 1000, "alpha": 0.5, "D_offset": 500}
+   violations = validate_cross_parameter_constraints(params)
+
 Configuration Templates
 -----------------------
 

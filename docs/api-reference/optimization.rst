@@ -196,6 +196,81 @@ Helper functions for parameter handling and per-angle initialization.
    :undoc-members:
    :show-inheritance:
 
+Parameter Index Mapper (v2.17.0)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Single source of truth for parameter indices across all anti-degeneracy modes.
+
+.. automodule:: homodyne.optimization.nlsq.parameter_index_mapper
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+Key Classes
+^^^^^^^^^^^
+
+.. autosummary::
+   :nosignatures:
+
+   homodyne.optimization.nlsq.parameter_index_mapper.ParameterIndexMapper
+
+Usage Example
+^^^^^^^^^^^^^
+
+.. code-block:: python
+
+   from homodyne.optimization.nlsq.parameter_index_mapper import ParameterIndexMapper
+
+   # Constant mode (23 phi angles, 7 physical params)
+   mapper = ParameterIndexMapper(n_phi=23, n_physical=7, use_constant=True)
+   print(mapper.mode_name)           # "constant"
+   print(mapper.n_per_angle_total)   # 2 (single contrast + offset, shared)
+   print(mapper.total_params)        # 9 (2 + 7)
+
+   # Fourier mode (order=2)
+   mapper = ParameterIndexMapper(n_phi=23, n_physical=7, use_fourier=True, fourier_order=2)
+   print(mapper.mode_name)           # "fourier"
+   print(mapper.n_per_angle_total)   # 10 (5 contrast + 5 offset coefficients)
+   print(mapper.total_params)        # 17 (10 + 7)
+
+Jacobian Utilities
+~~~~~~~~~~~~~~~~~~
+
+Jacobian computation utilities for convergence diagnostics.
+
+.. automodule:: homodyne.optimization.nlsq.jacobian
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+Progress Tracking
+~~~~~~~~~~~~~~~~~
+
+Progress bar and logging callbacks for NLSQ optimization.
+
+.. automodule:: homodyne.optimization.nlsq.progress
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+Key Classes
+^^^^^^^^^^^
+
+.. autosummary::
+   :nosignatures:
+
+   homodyne.optimization.nlsq.progress.ProgressConfig
+
+Parameter Transforms
+~~~~~~~~~~~~~~~~~~~~
+
+Parameter transformation utilities and name normalization.
+
+.. automodule:: homodyne.optimization.nlsq.transforms
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
 Results
 ~~~~~~~
 
@@ -276,6 +351,32 @@ Residual Functions
    :members:
    :undoc-members:
    :show-inheritance:
+
+JIT-Compiled Residual Functions
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+JIT-compatible stratified residual function using padded vmap for full JIT compilation.
+
+.. automodule:: homodyne.optimization.nlsq.strategies.residual_jit
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+Key Classes
+"""""""""""
+
+.. autosummary::
+   :nosignatures:
+
+   homodyne.optimization.nlsq.strategies.residual_jit.StratifiedResidualFunctionJIT
+
+Key Features (v2.4.0)
+"""""""""""""""""""""
+
+- **Static shapes**: Pads chunks to uniform size for JIT compatibility
+- **vmap vectorization**: Parallel chunk processing without Python loops
+- **Angle stratification**: Maintains all angles in each chunk
+- **Buffer donation (v2.14.0)**: Memory-efficient with ``donate_argnums``
 
 Sequential Optimization
 ^^^^^^^^^^^^^^^^^^^^^^^
@@ -1718,6 +1819,34 @@ Key Functions
    homodyne.optimization.nlsq.validation.result_validator.validate_optimized_params
    homodyne.optimization.nlsq.validation.result_validator.validate_covariance
    homodyne.optimization.nlsq.validation.result_validator.validate_result_consistency
+
+Fit Quality Validator (v2.16.0)
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Post-optimization quality checks with configurable thresholds.
+
+.. automodule:: homodyne.optimization.nlsq.validation.fit_quality
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+Key Classes
+"""""""""""
+
+.. autosummary::
+   :nosignatures:
+
+   homodyne.optimization.nlsq.validation.fit_quality.FitQualityConfig
+   homodyne.optimization.nlsq.validation.fit_quality.FitQualityReport
+   homodyne.optimization.nlsq.validation.fit_quality.validate_fit_quality
+
+Quality Checks
+""""""""""""""
+
+1. **Reduced χ² threshold**: Warns if χ²_reduced > threshold (default 10.0)
+2. **CMA-ES convergence**: Warns if CMA-ES reached max_restarts without converging
+3. **Physical parameters at bounds**: Warns if D₀, α, γ̇₀, etc. hit their bounds
+4. **Convergence status**: Warns if optimization failed or hit max iterations
 
 Usage Example
 ^^^^^^^^^^^^^

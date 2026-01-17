@@ -222,6 +222,92 @@ The core module includes specialized physics implementations for different optim
 
 These modules share common functions via ``physics_utils.py`` to ensure consistent behavior across backends.
 
+NLSQ Physics Backend
+~~~~~~~~~~~~~~~~~~~~
+
+Meshgrid physics computations for NLSQ optimization.
+
+.. automodule:: homodyne.core.physics_nlsq
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+Key Design Principles
+^^^^^^^^^^^^^^^^^^^^^
+
+- Meshgrid computations for 2D correlation matrices
+- Direct JIT-compiled functions only
+- Completely independent from CMC physics
+
+CMC Physics Backend
+~~~~~~~~~~~~~~~~~~~
+
+Element-wise physics computations for Consensus Monte Carlo.
+
+.. automodule:: homodyne.core.physics_cmc
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+Key Design Principles
+^^^^^^^^^^^^^^^^^^^^^
+
+- Element-wise computations for paired (t1[i], t2[i]) arrays
+- Prevents NumPyro NUTS from compiling unused meshgrid branches
+- Eliminates memory allocation issues during CMC MCMC
+
+NumPy Gradients (Fallback)
+~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+NumPy-based numerical differentiation for JAX-free operation.
+
+.. automodule:: homodyne.core.numpy_gradients
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+Key Features
+^^^^^^^^^^^^
+
+- Multi-method finite differences: Forward, backward, central, complex-step
+- Adaptive step size selection with Richardson extrapolation
+- Drop-in replacement for JAX ``grad()`` and ``hessian()`` functions
+- Memory-aware chunking for large parameter spaces
+
+Diagonal Correction
+~~~~~~~~~~~~~~~~~~~
+
+Unified diagonal correction for two-time correlation matrices.
+
+.. automodule:: homodyne.core.diagonal_correction
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+Key Functions
+^^^^^^^^^^^^^
+
+.. autosummary::
+   :nosignatures:
+
+   homodyne.core.diagonal_correction.apply_diagonal_correction
+   homodyne.core.diagonal_correction.apply_diagonal_correction_batch
+
+Usage Example
+^^^^^^^^^^^^^
+
+.. code-block:: python
+
+   from homodyne.core.diagonal_correction import apply_diagonal_correction
+
+   # Single matrix (auto-detect backend)
+   c2_corrected = apply_diagonal_correction(c2_matrix)
+
+   # Force specific method and backend
+   c2_corrected = apply_diagonal_correction(
+       c2_matrix, method="statistical", backend="numpy"
+   )
+
 See Also
 --------
 
