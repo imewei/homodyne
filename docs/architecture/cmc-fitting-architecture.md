@@ -2,7 +2,7 @@
 
 Complete documentation of the CMC (Consensus Monte Carlo) fitting system in homodyne.
 
-**Version:** 2.14.0
+**Version:** 2.18.0
 **Last Updated:** January 2026
 
 ## Table of Contents
@@ -273,12 +273,48 @@ def fit_mcmc_jax(
 
 **File:** `model.py`
 
-### Two Model Variants
+### Three Model Variants (v2.18.0)
 
-| Model | Purpose |
-|-------|---------|
-| `xpcs_model()` | Original model with standard parameterization |
-| `xpcs_model_scaled()` | Gradient-balanced model with z-space sampling (recommended) |
+| Model | Purpose | Per-Angle Mode |
+|-------|---------|----------------|
+| `xpcs_model()` | Original model with standard parameterization | Legacy |
+| `xpcs_model_scaled()` | Gradient-balanced model with z-space sampling | individual |
+| `xpcs_model_constant()` | Fixed per-angle scaling (not sampled) | auto/constant |
+
+### Per-Angle Mode Selection (v2.18.0)
+
+```
+┌───────────────────────────────────────────────────────────────────────────┐
+│ Per-Angle Mode Decision (get_effective_per_angle_mode)                    │
+│                                                                           │
+│   per_angle_mode = "auto" (default)?                                      │
+│        │                                                                  │
+│        ├─ YES: Check n_phi >= constant_scaling_threshold (default: 3)    │
+│        │       ├─ n_phi >= 3: Use CONSTANT → xpcs_model_constant()       │
+│        │       │   • Quantile estimation → AVERAGE → broadcast           │
+│        │       │   • 8 sampled params (7 physical + 1 sigma)             │
+│        │       │                                                         │
+│        │       └─ n_phi < 3: Use INDIVIDUAL → xpcs_model_scaled()        │
+│        │           • Sample per-angle contrast/offset                    │
+│        │           • 8 + 2×n_phi sampled params                          │
+│        │                                                                  │
+│        └─ NO: Check explicit mode                                        │
+│             ├─ "constant": Use xpcs_model_constant()                     │
+│             │   • Quantile estimation → use directly (not averaged)      │
+│             │   • 8 sampled params (7 physical + 1 sigma)                │
+│             │                                                            │
+│             └─ "individual": Use xpcs_model_scaled()                     │
+│                 • Sample per-angle contrast/offset                       │
+│                 • 8 + 2×n_phi sampled params                             │
+└───────────────────────────────────────────────────────────────────────────┘
+```
+
+**Key Distinction: Auto vs Constant Mode**
+
+| Mode | Quantile Estimation | Fixed Values Used |
+|------|---------------------|-------------------|
+| `auto` (n_phi ≥ 3) | Estimate 23 per-angle → **AVERAGE** → single value | Same value for all angles (NLSQ parity) |
+| `constant` | Estimate 23 per-angle → use **DIRECTLY** | Different value per angle |
 
 ### xpcs_model_scaled() Structure
 
@@ -301,6 +337,55 @@ def fit_mcmc_jax(
 │  4. NOISE PARAMETER (FOURTH)                                               │
 │     sigma ~ HalfNormal(scale=noise_scale × 3.0)                            │
 └───────────────────────────────────────────────────────────────────────────┘
+```
+
+### xpcs_model_constant() Structure (v2.18.0)
+
+The constant model takes **fixed** contrast/offset arrays instead of sampling them:
+
+```
+┌───────────────────────────────────────────────────────────────────────────┐
+│ xpcs_model_constant() - Fixed Per-Angle Scaling                           │
+│                                                                           │
+│  REQUIRED INPUTS (not sampled):                                          │
+│    fixed_contrast: jnp.ndarray (n_phi,) - Pre-computed contrast values   │
+│    fixed_offset:   jnp.ndarray (n_phi,) - Pre-computed offset values     │
+│                                                                           │
+│  SAMPLING ORDER (8 parameters total):                                    │
+│                                                                           │
+│  1. PHYSICAL PARAMETERS (FIRST)                                          │
+│     Static:       D0, alpha, D_offset                                    │
+│     Laminar flow: + gamma_dot_t0, beta, gamma_dot_t_offset, phi0         │
+│                                                                           │
+│  2. NOISE PARAMETER (SECOND)                                             │
+│     sigma ~ HalfNormal(scale=noise_scale × 3.0)                          │
+│                                                                           │
+│  NO per-angle contrast/offset sampling - they are FIXED from quantiles   │
+└───────────────────────────────────────────────────────────────────────────┘
+```
+
+**Quantile-Based Scaling Estimation (core.py)**:
+
+```python
+from homodyne.core.scaling_utils import estimate_per_angle_scaling
+
+# Estimate per-angle contrast/offset from raw C2 data
+estimates = estimate_per_angle_scaling(
+    c2_data, t1, t2, phi_indices, n_phi,
+    contrast_bounds, offset_bounds
+)
+# Returns: {"contrast_0": 0.4, "offset_0": 0.95, ...}
+
+# For AUTO mode: average the estimates
+if config.per_angle_mode == "auto":
+    contrast_avg = np.mean([estimates[f"contrast_{i}"] for i in range(n_phi)])
+    offset_avg = np.mean([estimates[f"offset_{i}"] for i in range(n_phi)])
+    fixed_contrast = np.full(n_phi, contrast_avg)  # Same for all angles
+    fixed_offset = np.full(n_phi, offset_avg)
+else:
+    # CONSTANT mode: use per-angle estimates directly
+    fixed_contrast = np.array([estimates[f"contrast_{i}"] for i in range(n_phi)])
+    fixed_offset = np.array([estimates[f"offset_{i}"] for i in range(n_phi)])
 ```
 
 ### Physics Computation

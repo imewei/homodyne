@@ -1276,6 +1276,111 @@ NumPyro model definition for MCMC sampling.
    :undoc-members:
    :show-inheritance:
 
+.. _cmc-per-angle-modes:
+
+CMC Per-Angle Modes (v2.18.0)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+CMC supports three per-angle modes that control how contrast/offset parameters are handled
+during MCMC sampling. This matches the NLSQ anti-degeneracy system for consistent behavior
+across optimization backends.
+
+.. list-table:: CMC Per-Angle Mode Comparison
+   :header-rows: 1
+   :widths: 15 25 20 40
+
+   * - Mode
+     - Sampled Params
+     - Per-Angle Handling
+     - Use Case
+   * - ``auto`` (default)
+     - 8 (7 physical + σ)
+     - Quantile → average → broadcast
+     - Default for n_phi ≥ 3 (NLSQ parity)
+   * - ``constant``
+     - 8 (7 physical + σ)
+     - Quantile → use directly (fixed)
+     - Different fixed value per angle
+   * - ``individual``
+     - 8 + 2×n_phi
+     - All sampled independently
+     - Full flexibility (n_phi < 3)
+
+**Auto Mode (Default)**:
+
+When ``per_angle_mode: "auto"`` and n_phi ≥ 3 (configurable via ``constant_scaling_threshold``):
+
+1. Estimates per-angle contrast/offset from data using quantile analysis
+2. **Averages** the per-angle estimates to single values
+3. **Broadcasts** the averaged values to all angles (same fixed value for all)
+4. Only samples 8 parameters: 7 physical + 1 sigma
+
+This provides NLSQ parity—CMC ``auto`` mode matches NLSQ ``constant`` mode behavior.
+
+**Constant Mode**:
+
+When ``per_angle_mode: "constant"``:
+
+1. Estimates per-angle contrast/offset from data using quantile analysis
+2. Uses the per-angle estimates **directly** (different fixed value per angle)
+3. Only samples 8 parameters: 7 physical + 1 sigma
+
+Both ``auto`` (n_phi ≥ 3) and ``constant`` modes use fixed scaling arrays passed to the
+model function, reducing degeneracy risk by not sampling per-angle parameters.
+
+**Individual Mode**:
+
+When ``per_angle_mode: "individual"`` or ``auto`` with n_phi < 3:
+
+1. Samples contrast and offset for each phi angle independently
+2. Total sampled parameters: 8 + 2×n_phi
+3. Full flexibility but higher degeneracy risk for large n_phi
+
+**Model Selection**:
+
+.. code-block:: python
+
+   from homodyne.optimization.cmc.model import get_xpcs_model
+
+   # Get appropriate model function
+   model = get_xpcs_model("constant")  # Returns xpcs_model_constant
+   model = get_xpcs_model("individual")  # Returns xpcs_model_scaled
+   model = get_xpcs_model()  # Default: xpcs_model_scaled
+
+**Configuration**:
+
+.. code-block:: yaml
+
+   optimization:
+     cmc:
+       per_angle_mode: "auto"           # "auto", "constant", "individual"
+       constant_scaling_threshold: 3    # Threshold for auto mode
+
+Key Functions
+^^^^^^^^^^^^^
+
+.. autosummary::
+   :nosignatures:
+
+   homodyne.optimization.cmc.model.xpcs_model_constant
+   homodyne.optimization.cmc.model.xpcs_model_scaled
+   homodyne.optimization.cmc.model.get_xpcs_model
+   homodyne.optimization.cmc.model.get_model_param_count
+   homodyne.optimization.cmc.priors.get_param_names_in_order
+   homodyne.optimization.cmc.priors.build_init_values_dict
+   homodyne.optimization.cmc.config.CMCConfig.get_effective_per_angle_mode
+
+Shared Scaling Utilities
+^^^^^^^^^^^^^^^^^^^^^^^^
+
+CMC uses shared utilities from ``homodyne.core.scaling_utils`` for quantile-based
+contrast/offset estimation:
+
+.. automodule:: homodyne.core.scaling_utils
+   :members: estimate_contrast_offset_from_quantiles, estimate_per_angle_scaling, compute_averaged_scaling
+   :undoc-members:
+   :show-inheritance:
+
 Priors
 ~~~~~~
 
