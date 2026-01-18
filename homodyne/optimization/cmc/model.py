@@ -4,9 +4,14 @@ This module defines the probabilistic model for Bayesian inference
 of XPCS parameters using NumPyro.
 
 CRITICAL: Parameter sampling order must match:
-1. Per-angle contrast: contrast_0, contrast_1, ...
-2. Per-angle offset: offset_0, offset_1, ...
+1. Per-angle contrast: contrast_0, contrast_1, ... (individual mode only)
+2. Per-angle offset: offset_0, offset_1, ... (individual mode only)
 3. Physical parameters: D0, alpha, D_offset, [gamma_dot_t0, ...]
+
+Per-Angle Modes (v2.18.0+):
+- "individual": Independent contrast + offset per angle (2*n_phi + n_physical + 1 params)
+- "constant": Fixed per-angle contrast/offset from quantile estimation (n_physical + 1 params)
+- "auto": Selects based on n_phi threshold (constant if n_phi >= 3, else individual)
 """
 
 from __future__ import annotations
@@ -211,7 +216,9 @@ def validate_model_output(
     return True
 
 
-def get_model_param_count(n_phi: int, analysis_mode: str) -> int:
+def get_model_param_count(
+    n_phi: int, analysis_mode: str, per_angle_mode: str = "individual"
+) -> int:
     """Get total number of sampled parameters.
 
     Parameters
@@ -220,14 +227,24 @@ def get_model_param_count(n_phi: int, analysis_mode: str) -> int:
         Number of phi angles.
     analysis_mode : str
         Analysis mode.
+    per_angle_mode : str
+        Per-angle scaling mode: "individual" or "constant".
 
     Returns
     -------
     int
         Total number of parameters (including sigma).
+
+    Notes
+    -----
+    - individual mode: 2*n_phi (contrast + offset) + physical + sigma
+    - constant mode: 0 per-angle (fixed from quantiles) + physical + sigma
     """
-    # Per-angle parameters
-    n_params = n_phi * 2  # contrast + offset
+    # Per-angle parameters depend on mode
+    if per_angle_mode == "constant":
+        n_params = 0  # No per-angle params sampled (fixed from quantile estimation)
+    else:
+        n_params = n_phi * 2  # contrast_0..n + offset_0..n
 
     # Physical parameters
     if analysis_mode == "laminar_flow":
@@ -371,3 +388,167 @@ def xpcs_model_scaled(
     sigma = numpyro.sample("sigma", dist.HalfNormal(scale=sigma_scale))
 
     numpyro.sample("obs", dist.Normal(c2_theory, sigma), obs=data)
+
+
+def xpcs_model_constant(
+    data: jnp.ndarray,
+    t1: jnp.ndarray,
+    t2: jnp.ndarray,
+    phi_unique: jnp.ndarray,
+    phi_indices: jnp.ndarray,
+    q: float,
+    L: float,
+    dt: float,
+    analysis_mode: str,
+    parameter_space: ParameterSpace,
+    n_phi: int,
+    time_grid: jnp.ndarray | None = None,
+    noise_scale: float = 0.1,
+    fixed_contrast: jnp.ndarray | None = None,
+    fixed_offset: jnp.ndarray | None = None,
+) -> None:
+    """NumPyro model with FIXED per-angle scaling (anti-degeneracy constant mode).
+
+    This model uses FIXED per-angle contrast/offset values estimated from
+    quantile analysis of the raw data. These values are NOT sampled, reducing
+    the parameter space to only physical parameters + sigma.
+
+    This matches NLSQ's anti-degeneracy constant mode and prevents parameter
+    absorption degeneracy where per-angle params absorb physical signals.
+
+    Parameter count comparison (laminar_flow, n_phi=23):
+    - individual mode: 54 params (46 per-angle + 7 physical + 1 sigma)
+    - constant mode: 8 params (7 physical + 1 sigma)
+
+    Parameters
+    ----------
+    data : jnp.ndarray
+        Observed C2 correlation data, shape (n_total,).
+    t1, t2 : jnp.ndarray
+        Time coordinates, shape (n_total,).
+    phi_unique : jnp.ndarray
+        Unique phi angles, shape (n_phi,).
+    phi_indices : jnp.ndarray
+        Index into per-angle arrays for each point, shape (n_total,).
+    q : float
+        Wavevector magnitude.
+    L : float
+        Stator-rotor gap length (nm).
+    dt : float
+        Time step.
+    analysis_mode : str
+        Analysis mode: "static" or "laminar_flow".
+    parameter_space : ParameterSpace
+        Parameter space with bounds and priors.
+    n_phi : int
+        Number of unique phi angles.
+    noise_scale : float
+        Initial estimate of observation noise.
+    fixed_contrast : jnp.ndarray, optional
+        Fixed per-angle contrast values, shape (n_phi,).
+        Estimated from quantile analysis. Required for constant mode.
+    fixed_offset : jnp.ndarray, optional
+        Fixed per-angle offset values, shape (n_phi,).
+        Estimated from quantile analysis. Required for constant mode.
+    """
+    # =========================================================================
+    # 0. Validate fixed scaling arrays
+    # =========================================================================
+    if fixed_contrast is None or fixed_offset is None:
+        raise ValueError(
+            "xpcs_model_constant requires fixed_contrast and fixed_offset arrays. "
+            "These should be estimated from quantile analysis before calling."
+        )
+
+    # Use fixed per-angle values (NOT sampled)
+    contrast_arr = fixed_contrast
+    offset_arr = fixed_offset
+
+    # =========================================================================
+    # 1. Compute scaling factors for PHYSICAL parameters only
+    # =========================================================================
+    scalings = compute_scaling_factors(parameter_space, n_phi, analysis_mode)
+
+    # =========================================================================
+    # 2. Sample PHYSICAL parameters in z-space
+    # =========================================================================
+    D0 = sample_scaled_parameter("D0", scalings["D0"])
+    alpha = sample_scaled_parameter("alpha", scalings["alpha"])
+    D_offset = sample_scaled_parameter("D_offset", scalings["D_offset"])
+
+    if analysis_mode == "laminar_flow":
+        gamma_dot_t0 = sample_scaled_parameter("gamma_dot_t0", scalings["gamma_dot_t0"])
+        beta = sample_scaled_parameter("beta", scalings["beta"])
+        gamma_dot_t_offset = sample_scaled_parameter(
+            "gamma_dot_t_offset", scalings["gamma_dot_t_offset"]
+        )
+        phi0 = sample_scaled_parameter("phi0", scalings["phi0"])
+
+        params = jnp.array(
+            [D0, alpha, D_offset, gamma_dot_t0, beta, gamma_dot_t_offset, phi0]
+        )
+    else:
+        params = jnp.array([D0, alpha, D_offset])
+
+    # =========================================================================
+    # 3. Compute theoretical g1 using EXACT same physics as NLSQ
+    # =========================================================================
+    g1_all_phi = compute_g1_total(
+        params, t1, t2, phi_unique, q, L, dt, time_grid=time_grid
+    )
+
+    point_idx = jnp.arange(phi_indices.shape[0], dtype=phi_indices.dtype)
+    g1_per_point = g1_all_phi[phi_indices, point_idx]
+
+    # =========================================================================
+    # 4. Apply FIXED per-angle scaling to get C2
+    # =========================================================================
+    contrast_per_point = contrast_arr[phi_indices]
+    offset_per_point = offset_arr[phi_indices]
+    c2_theory_raw = contrast_per_point * g1_per_point**2 + offset_per_point
+
+    # Numerical stability safeguard
+    c2_theory = jnp.where(
+        jnp.isfinite(c2_theory_raw),
+        c2_theory_raw,
+        jnp.ones_like(c2_theory_raw),
+    )
+
+    n_nan = jnp.sum(~jnp.isfinite(c2_theory_raw))
+    numpyro.deterministic("n_numerical_issues", n_nan)
+
+    # =========================================================================
+    # 5. Likelihood with noise model
+    # =========================================================================
+    sigma_scale = noise_scale * 3.0
+    sigma = numpyro.sample("sigma", dist.HalfNormal(scale=sigma_scale))
+
+    numpyro.sample("obs", dist.Normal(c2_theory, sigma), obs=data)
+
+
+def get_xpcs_model(per_angle_mode: str = "individual"):
+    """Get the appropriate NumPyro model function for the given per-angle mode.
+
+    Parameters
+    ----------
+    per_angle_mode : str
+        Per-angle scaling mode: "individual" or "constant".
+
+    Returns
+    -------
+    callable
+        NumPyro model function (xpcs_model_scaled or xpcs_model_constant).
+
+    Notes
+    -----
+    - individual: Uses xpcs_model_scaled which samples per-angle contrast/offset
+    - constant: Uses xpcs_model_constant which requires fixed_contrast/fixed_offset
+      arrays to be passed (estimated from quantile analysis)
+    """
+    if per_angle_mode == "constant":
+        logger.info("CMC: Using constant mode model (fixed per-angle scaling)")
+        return xpcs_model_constant
+    else:
+        # Default: individual mode
+        logger.info("CMC: Using individual mode model (sampled per-angle scaling)")
+        return xpcs_model_scaled

@@ -531,12 +531,15 @@ def build_init_values_dict(
     t1: np.ndarray | None = None,
     t2: np.ndarray | None = None,
     phi_indices: np.ndarray | None = None,
+    per_angle_mode: str = "individual",
 ) -> dict[str, float]:
     """Build complete initial values dictionary in sampling order.
 
     CRITICAL: Parameter order must match NumPyro model sampling order:
-    1. contrast_0, contrast_1, ..., contrast_{n_phi-1}
-    2. offset_0, offset_1, ..., offset_{n_phi-1}
+    1. contrast_0, contrast_1, ..., contrast_{n_phi-1} (individual mode)
+       OR contrast_avg (constant mode)
+    2. offset_0, offset_1, ..., offset_{n_phi-1} (individual mode)
+       OR offset_avg (constant mode)
     3. Physical parameters in canonical order
 
     Parameters
@@ -558,6 +561,8 @@ def build_init_values_dict(
         Optional time coordinates (required if c2_data provided).
     phi_indices : np.ndarray | None
         Optional phi angle indices for per-angle estimation.
+    per_angle_mode : str
+        Per-angle scaling mode: "individual" or "constant".
 
     Returns
     -------
@@ -589,6 +594,11 @@ def build_init_values_dict(
     """
     init_dict: dict[str, float] = {}
     clipped_params: list[str] = []
+
+    # Determine physical params early (needed for logging in constant mode)
+    physical_params = (
+        LAMINAR_PARAMS if analysis_mode == "laminar_flow" else STATIC_PARAMS
+    )
 
     # Check if we should use data-driven estimation for contrast/offset
     # Only use if:
@@ -632,56 +642,67 @@ def build_init_values_dict(
             f"(n_phi={n_phi}, n_data={len(c2_data):,})"
         )
 
-    # 1. Per-angle contrast parameters (FIRST)
-    for i in range(n_phi):
-        param_name = f"contrast_{i}"
-
-        # Priority: initial_values > data_estimates > midpoint fallback
-        if initial_values is not None and param_name in initial_values:
-            raw_value = float(initial_values[param_name])
-        elif initial_values is not None and "contrast" in initial_values:
-            raw_value = float(initial_values["contrast"])
-        elif param_name in data_estimates:
-            raw_value = data_estimates[param_name]
-        else:
-            # Midpoint fallback
-            bounds = parameter_space.get_bounds("contrast")
-            raw_value = (bounds[0] + bounds[1]) / 2.0
-
-        validated_value, was_clipped = validate_initial_value_bounds(
-            param_name, raw_value, parameter_space
+    # =========================================================================
+    # Handle per_angle_mode: "constant" vs "individual"
+    # =========================================================================
+    if per_angle_mode == "constant":
+        # CONSTANT MODE: No per-angle params are sampled - they're fixed from
+        # quantile estimation and passed directly to the model.
+        # Only physical parameters need initialization.
+        logger.info(
+            f"Constant mode: contrast/offset are FIXED (not sampled). "
+            f"Only initializing {len(physical_params)} physical parameters."
         )
-        init_dict[param_name] = validated_value
-        if was_clipped:
-            clipped_params.append(param_name)
 
-    # 2. Per-angle offset parameters (SECOND)
-    for i in range(n_phi):
-        param_name = f"offset_{i}"
+    else:
+        # INDIVIDUAL MODE: Sample per-angle contrast_i and offset_i
+        # 1. Per-angle contrast parameters (FIRST)
+        for i in range(n_phi):
+            param_name = f"contrast_{i}"
 
-        # Priority: initial_values > data_estimates > midpoint fallback
-        if initial_values is not None and param_name in initial_values:
-            raw_value = float(initial_values[param_name])
-        elif initial_values is not None and "offset" in initial_values:
-            raw_value = float(initial_values["offset"])
-        elif param_name in data_estimates:
-            raw_value = data_estimates[param_name]
-        else:
-            # Midpoint fallback
-            bounds = parameter_space.get_bounds("offset")
-            raw_value = (bounds[0] + bounds[1]) / 2.0
+            # Priority: initial_values > data_estimates > midpoint fallback
+            if initial_values is not None and param_name in initial_values:
+                raw_value = float(initial_values[param_name])
+            elif initial_values is not None and "contrast" in initial_values:
+                raw_value = float(initial_values["contrast"])
+            elif param_name in data_estimates:
+                raw_value = data_estimates[param_name]
+            else:
+                # Midpoint fallback
+                bounds = parameter_space.get_bounds("contrast")
+                raw_value = (bounds[0] + bounds[1]) / 2.0
 
-        validated_value, was_clipped = validate_initial_value_bounds(
-            param_name, raw_value, parameter_space
-        )
-        init_dict[param_name] = validated_value
-        if was_clipped:
-            clipped_params.append(param_name)
+            validated_value, was_clipped = validate_initial_value_bounds(
+                param_name, raw_value, parameter_space
+            )
+            init_dict[param_name] = validated_value
+            if was_clipped:
+                clipped_params.append(param_name)
+
+        # 2. Per-angle offset parameters (SECOND)
+        for i in range(n_phi):
+            param_name = f"offset_{i}"
+
+            # Priority: initial_values > data_estimates > midpoint fallback
+            if initial_values is not None and param_name in initial_values:
+                raw_value = float(initial_values[param_name])
+            elif initial_values is not None and "offset" in initial_values:
+                raw_value = float(initial_values["offset"])
+            elif param_name in data_estimates:
+                raw_value = data_estimates[param_name]
+            else:
+                # Midpoint fallback
+                bounds = parameter_space.get_bounds("offset")
+                raw_value = (bounds[0] + bounds[1]) / 2.0
+
+            validated_value, was_clipped = validate_initial_value_bounds(
+                param_name, raw_value, parameter_space
+            )
+            init_dict[param_name] = validated_value
+            if was_clipped:
+                clipped_params.append(param_name)
 
     # 3. Physical parameters (THIRD, in canonical order)
-    physical_params = (
-        LAMINAR_PARAMS if analysis_mode == "laminar_flow" else STATIC_PARAMS
-    )
     for param_name in physical_params:
         raw_value = get_init_value(param_name, initial_values, parameter_space)
         validated_value, was_clipped = validate_initial_value_bounds(
@@ -703,13 +724,15 @@ def build_init_values_dict(
 
     # Defensive validation: ensure dict keys match expected order
     # This catches parameter ordering bugs that could cause subtle issues
-    expected_names = get_param_names_in_order(n_phi, analysis_mode)
+    expected_names = get_param_names_in_order(n_phi, analysis_mode, per_angle_mode)
     validate_init_values_order(init_dict, expected_names)
 
     return init_dict
 
 
-def get_param_names_in_order(n_phi: int, analysis_mode: str) -> list[str]:
+def get_param_names_in_order(
+    n_phi: int, analysis_mode: str, per_angle_mode: str = "individual"
+) -> list[str]:
     """Get parameter names in NumPyro sampling order.
 
     CRITICAL: This order must match the model sampling order exactly.
@@ -720,21 +743,31 @@ def get_param_names_in_order(n_phi: int, analysis_mode: str) -> list[str]:
         Number of phi angles.
     analysis_mode : str
         Analysis mode ("static" or "laminar_flow").
+    per_angle_mode : str
+        Per-angle scaling mode: "individual" or "constant".
 
     Returns
     -------
     list[str]
         Parameter names in sampling order.
+
+    Notes
+    -----
+    - individual mode: Samples per-angle contrast/offset (2*n_phi params)
+    - constant mode: NO contrast/offset sampled (fixed from quantile estimation)
     """
     names: list[str] = []
 
-    # 1. Per-angle contrast
-    for i in range(n_phi):
-        names.append(f"contrast_{i}")
+    # For constant mode, contrast/offset are FIXED (not sampled)
+    # Only individual mode samples per-angle parameters
+    if per_angle_mode != "constant":
+        # 1. Per-angle contrast
+        for i in range(n_phi):
+            names.append(f"contrast_{i}")
 
-    # 2. Per-angle offset
-    for i in range(n_phi):
-        names.append(f"offset_{i}")
+        # 2. Per-angle offset
+        for i in range(n_phi):
+            names.append(f"offset_{i}")
 
     # 3. Physical parameters
     if analysis_mode == "laminar_flow":

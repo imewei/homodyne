@@ -14,6 +14,7 @@ from typing import TYPE_CHECKING, Any
 import jax.numpy as jnp
 import numpy as np
 
+from homodyne.core.scaling_utils import estimate_per_angle_scaling
 from homodyne.optimization.cmc.backends import select_backend
 from homodyne.optimization.cmc.config import CMCConfig
 from homodyne.optimization.cmc.data_prep import (
@@ -24,7 +25,7 @@ from homodyne.optimization.cmc.data_prep import (
 from homodyne.optimization.cmc.diagnostics import (
     summarize_diagnostics,
 )
-from homodyne.optimization.cmc.model import xpcs_model_scaled
+from homodyne.optimization.cmc.model import get_xpcs_model
 from homodyne.optimization.cmc.priors import get_param_names_in_order
 from homodyne.optimization.cmc.results import CMCResult
 from homodyne.optimization.cmc.sampler import run_nuts_sampling
@@ -437,6 +438,83 @@ def fit_mcmc_jax(
     # =========================================================================
     prepared = prepare_mcmc_data(data, t1, t2, phi)
 
+    # =========================================================================
+    # 2b. Determine per-angle mode and select appropriate model (v2.18.0+)
+    # =========================================================================
+    effective_per_angle_mode = config.get_effective_per_angle_mode(prepared.n_phi)
+    xpcs_model = get_xpcs_model(effective_per_angle_mode)
+    run_logger.info(
+        f"CMC per-angle mode: {config.per_angle_mode} → {effective_per_angle_mode} "
+        f"(n_phi={prepared.n_phi}, threshold={config.constant_scaling_threshold})"
+    )
+
+    # =========================================================================
+    # 2c. Estimate fixed per-angle scaling for constant mode (v2.18.0+)
+    # =========================================================================
+    fixed_contrast: jnp.ndarray | None = None
+    fixed_offset: jnp.ndarray | None = None
+
+    if effective_per_angle_mode == "constant":
+        # Get contrast/offset bounds from parameter_space
+        contrast_bounds = parameter_space.get_bounds("contrast")
+        offset_bounds = parameter_space.get_bounds("offset")
+
+        # Estimate per-angle contrast/offset from quantile analysis
+        run_logger.info(
+            "Estimating per-angle scaling from data quantiles..."
+        )
+        scaling_estimates = estimate_per_angle_scaling(
+            c2_data=prepared.data,
+            t1=prepared.t1,
+            t2=prepared.t2,
+            phi_indices=prepared.phi_indices,
+            n_phi=prepared.n_phi,
+            contrast_bounds=contrast_bounds,
+            offset_bounds=offset_bounds,
+            log=run_logger,
+        )
+
+        # Build per-angle arrays from estimates
+        contrast_per_angle = np.array(
+            [scaling_estimates[f"contrast_{i}"] for i in range(prepared.n_phi)]
+        )
+        offset_per_angle = np.array(
+            [scaling_estimates[f"offset_{i}"] for i in range(prepared.n_phi)]
+        )
+
+        # Determine whether to average (auto mode) or use per-angle (constant mode)
+        # This ensures NLSQ parity: auto mode uses single averaged value
+        if config.per_angle_mode == "auto":
+            # AUTO mode: Average the per-angle estimates → single value broadcast
+            contrast_avg = float(np.mean(contrast_per_angle))
+            offset_avg = float(np.mean(offset_per_angle))
+
+            fixed_contrast_np = np.full(prepared.n_phi, contrast_avg)
+            fixed_offset_np = np.full(prepared.n_phi, offset_avg)
+
+            run_logger.info(
+                f"AUTO mode: Averaged per-angle scaling (NLSQ parity):\n"
+                f"  contrast_avg: {contrast_avg:.4f} (from {prepared.n_phi} angles)\n"
+                f"  offset_avg: {offset_avg:.4f} (from {prepared.n_phi} angles)\n"
+                f"  Per-angle contrast range: [{contrast_per_angle.min():.4f}, {contrast_per_angle.max():.4f}]\n"
+                f"  Per-angle offset range: [{offset_per_angle.min():.4f}, {offset_per_angle.max():.4f}]"
+            )
+        else:
+            # CONSTANT mode: Use per-angle estimates directly (different value per angle)
+            fixed_contrast_np = contrast_per_angle
+            fixed_offset_np = offset_per_angle
+
+            run_logger.info(
+                f"CONSTANT mode: Using per-angle scaling directly:\n"
+                f"  contrast: mean={fixed_contrast_np.mean():.4f}, "
+                f"range=[{fixed_contrast_np.min():.4f}, {fixed_contrast_np.max():.4f}]\n"
+                f"  offset: mean={fixed_offset_np.mean():.4f}, "
+                f"range=[{fixed_offset_np.min():.4f}, {fixed_offset_np.max():.4f}]"
+            )
+
+        fixed_contrast = jnp.array(fixed_contrast_np)
+        fixed_offset = jnp.array(fixed_offset_np)
+
     # Log initial values if provided
     if initial_values:
         run_logger.info(
@@ -621,6 +699,11 @@ def fit_mcmc_jax(
         "noise_scale": prepared.noise_scale,
     }
 
+    # Add fixed scaling arrays for constant mode (v2.18.0+)
+    if effective_per_angle_mode == "constant" and fixed_contrast is not None:
+        model_kwargs["fixed_contrast"] = fixed_contrast
+        model_kwargs["fixed_offset"] = fixed_offset
+
     # DEBUG: Log model_kwargs for diagnosis
     run_logger.info(
         f"[CMC DEBUG] model_kwargs: q={q:.6g}, L={L:.6g}, dt={dt_used:.6g}, "
@@ -676,7 +759,7 @@ def fit_mcmc_jax(
             f"{config.num_chains} chains, {config.num_warmup}+{config.num_samples} samples"
         )
         mcmc_samples = backend.run(
-            model=xpcs_model_scaled,
+            model=xpcs_model,
             model_kwargs=model_kwargs,
             config=config,
             shards=shards,
@@ -691,7 +774,7 @@ def fit_mcmc_jax(
     else:
         # Single-shard: run directly
         mcmc_samples, stats = run_nuts_sampling(
-            model=xpcs_model_scaled,
+            model=xpcs_model,
             model_kwargs=model_kwargs,
             config=config,
             initial_values=initial_values,

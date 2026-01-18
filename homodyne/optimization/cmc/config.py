@@ -83,11 +83,31 @@ class CMCConfig:
         Minimum fraction of shards that must succeed.
     run_id : str | None
         Optional identifier used for structured logging across shards.
+    per_angle_mode : str
+        Per-angle scaling mode for anti-degeneracy defense (v2.18.0+):
+
+        - ``"auto"``: Auto-selects based on n_phi threshold (recommended).
+          When n_phi >= threshold: Estimates per-angle values, AVERAGES them,
+          broadcasts single value to all angles (matches NLSQ behavior).
+          When n_phi < threshold: Uses individual mode.
+        - ``"constant"``: Per-angle contrast/offset from quantile estimation,
+          used DIRECTLY (different fixed value per angle, NOT averaged).
+          Reduces to 8 params (7 physical + 1 sigma).
+        - ``"individual"``: Independent contrast + offset per angle, all sampled.
+          May suffer from parameter absorption degeneracy with many angles.
+
+    constant_scaling_threshold : int
+        n_phi threshold for auto mode to use constant scaling.
+        When n_phi >= threshold, uses constant mode. Default: 3.
     """
 
     # Enable settings
     enable: bool | str = "auto"
     min_points_for_cmc: int = 500000
+
+    # Anti-degeneracy: Per-angle scaling mode (v2.18.0+)
+    per_angle_mode: str = "auto"
+    constant_scaling_threshold: int = 3
 
     # Sharding
     sharding_strategy: str = "stratified"
@@ -209,6 +229,9 @@ class CMCConfig:
             # Enable settings
             enable=config_dict.get("enable", "auto"),
             min_points_for_cmc=config_dict.get("min_points_for_cmc", 500000),
+            # Anti-degeneracy: Per-angle scaling mode (v2.18.0+)
+            per_angle_mode=config_dict.get("per_angle_mode", "auto"),
+            constant_scaling_threshold=config_dict.get("constant_scaling_threshold", 3),
             # Sharding
             sharding_strategy=sharding.get("strategy", "stratified"),
             num_shards=num_shards_val,
@@ -269,6 +292,24 @@ class CMCConfig:
         if not isinstance(self.min_points_for_cmc, int) or self.min_points_for_cmc < 0:
             errors.append(
                 f"min_points_for_cmc must be non-negative int, got: {self.min_points_for_cmc}"
+            )
+
+        # Validate per_angle_mode (v2.18.0+)
+        valid_per_angle_modes = ["auto", "constant", "individual"]
+        if self.per_angle_mode not in valid_per_angle_modes:
+            errors.append(
+                f"per_angle_mode must be one of {valid_per_angle_modes}, "
+                f"got: {self.per_angle_mode}"
+            )
+
+        # Validate constant_scaling_threshold
+        if (
+            not isinstance(self.constant_scaling_threshold, int)
+            or self.constant_scaling_threshold < 1
+        ):
+            errors.append(
+                f"constant_scaling_threshold must be positive int, "
+                f"got: {self.constant_scaling_threshold}"
             )
 
         # Validate sharding_strategy
@@ -435,6 +476,42 @@ class CMCConfig:
 
         return max(1, n_points // max_per_shard)
 
+    def get_effective_per_angle_mode(self, n_phi: int) -> str:
+        """Determine effective per-angle mode based on configuration and data.
+
+        Parameters
+        ----------
+        n_phi : int
+            Number of phi angles in the dataset.
+
+        Returns
+        -------
+        str
+            Effective mode: "constant" or "individual".
+
+        Notes
+        -----
+        Auto mode logic matches NLSQ anti-degeneracy system:
+        - n_phi >= constant_scaling_threshold → "constant"
+        - n_phi < constant_scaling_threshold → "individual"
+        """
+        if self.per_angle_mode == "auto":
+            if n_phi >= self.constant_scaling_threshold:
+                effective = "constant"
+                logger.info(
+                    f"CMC anti-degeneracy: Auto-selected 'constant' mode "
+                    f"(n_phi={n_phi} >= threshold={self.constant_scaling_threshold})"
+                )
+            else:
+                effective = "individual"
+                logger.info(
+                    f"CMC anti-degeneracy: Auto-selected 'individual' mode "
+                    f"(n_phi={n_phi} < threshold={self.constant_scaling_threshold})"
+                )
+            return effective
+        else:
+            return self.per_angle_mode
+
     def to_dict(self) -> dict[str, Any]:
         """Convert configuration to dictionary.
 
@@ -446,6 +523,8 @@ class CMCConfig:
         return {
             "enable": self.enable,
             "min_points_for_cmc": self.min_points_for_cmc,
+            "per_angle_mode": self.per_angle_mode,
+            "constant_scaling_threshold": self.constant_scaling_threshold,
             "run_id": self.run_id,
             "sharding": {
                 "strategy": self.sharding_strategy,
