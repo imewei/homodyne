@@ -13,6 +13,54 @@ ______________________________________________________________________
 
 ______________________________________________________________________
 
+## [2.18.0] - 2026-01-18
+
+### CMC Per-Angle Scaling Modes
+
+Minor release adding per-angle scaling mode support to CMC (Consensus Monte Carlo), ensuring
+parity with NLSQ's anti-degeneracy system for consistent dimensionality reduction.
+
+#### Added
+
+- **feat(cmc)**: Implement per-angle scaling modes for CMC anti-degeneracy
+  - `auto` mode (default): Single averaged contrast/offset SAMPLED (10 params)
+  - `constant` mode: Per-angle contrast/offset from quantile estimation, FIXED (8 params)
+  - `individual` mode: Per-angle contrast/offset SAMPLED (54 params)
+  - Configuration via `per_angle_mode` and `constant_scaling_threshold` fields
+
+- **feat(core)**: Add shared scaling utilities (`homodyne/core/scaling_utils.py`)
+  - Quantile-based per-angle contrast/offset estimation
+  - Shared between NLSQ and CMC backends
+
+- **feat(cmc)**: Add `xpcs_model_constant()` with fixed_contrast/fixed_offset arrays
+  - Factory function `get_xpcs_model()` for mode-based model selection
+  - Updated `get_param_names_in_order()` and `build_init_values_dict()` for mode support
+
+#### Changed
+
+- **refactor(nlsq)**: Distinguish auto_averaged from fixed_constant modes
+  - Unified per-angle mode semantics across NLSQ and CMC backends
+  - `auto` mode estimates per-angle values → AVERAGES → broadcasts, OPTIMIZED
+  - `constant` mode uses estimated per-angle values DIRECTLY, NOT optimized
+
+- **docs(cmc)**: Document per-angle mode configuration and architecture
+
+- **docs(config)**: Update templates for v2.18.0 per-angle modes
+
+#### Fixed
+
+- **fix(cmc)**: Resolve linting errors and add security annotations
+
+- **fix**: Add type annotations and remove unnecessary f-strings
+
+- **docs**: Fix 19 Sphinx build warnings
+
+#### Testing
+
+- **test(cmc)**: Add per-angle mode unit tests (24 tests in `tests/unit/optimization/cmc/test_per_angle_modes.py`)
+
+______________________________________________________________________
+
 ## [2.17.0] - 2026-01-16
 
 ### Quantile-Based Per-Angle Scaling
