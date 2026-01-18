@@ -54,7 +54,7 @@ import jax.numpy as jnp
 import numpy as np
 from jaxopt import LBFGSB
 
-from homodyne.optimization.nlsq.config_utils import safe_float, safe_int
+from homodyne.optimization.nlsq.config import safe_float, safe_int
 from homodyne.optimization.nlsq.fourier_reparam import FourierReparameterizer
 from homodyne.utils.logging import get_logger, log_exception
 

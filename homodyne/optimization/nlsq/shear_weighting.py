@@ -52,7 +52,7 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 
-from homodyne.optimization.nlsq.config_utils import safe_float
+from homodyne.optimization.nlsq.config import safe_float
 from homodyne.utils.logging import get_logger
 
 if TYPE_CHECKING:
