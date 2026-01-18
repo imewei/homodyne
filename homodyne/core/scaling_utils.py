@@ -47,7 +47,7 @@ def estimate_contrast_offset_from_quantiles(
     c2_data : np.ndarray
         C2 correlation values (1D array).
     delta_t : np.ndarray
-        Time lag values |t1 - t2| (same shape as c2_data).
+        Time lag values ``abs(t1 - t2)`` (same shape as c2_data).
     contrast_bounds : tuple[float, float]
         Valid bounds for contrast parameter.
     offset_bounds : tuple[float, float]

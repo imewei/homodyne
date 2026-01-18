@@ -536,11 +536,12 @@ def build_init_values_dict(
     """Build complete initial values dictionary in sampling order.
 
     CRITICAL: Parameter order must match NumPyro model sampling order:
+
     1. contrast_0, contrast_1, ..., contrast_{n_phi-1} (individual mode)
-       OR contrast_avg (constant mode)
+       OR contrast_avg (constant mode).
     2. offset_0, offset_1, ..., offset_{n_phi-1} (individual mode)
-       OR offset_avg (constant mode)
-    3. Physical parameters in canonical order
+       OR offset_avg (constant mode).
+    3. Physical parameters in canonical order.
 
     Parameters
     ----------

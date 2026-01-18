@@ -674,12 +674,13 @@ def get_xpcs_model(per_angle_mode: str = "individual"):
     Notes
     -----
     Mode semantics (same as NLSQ):
+
     - individual: Uses xpcs_model_scaled which samples per-angle contrast/offset
-      (n_phi*2 + 7 physical + 1 sigma params for laminar_flow)
+      (n_phi*2 + 7 physical + 1 sigma params for laminar_flow).
     - auto: Uses xpcs_model_averaged which samples SINGLE averaged contrast/offset
-      (2 averaged + 7 physical + 1 sigma = 10 params for laminar_flow)
+      (2 averaged + 7 physical + 1 sigma = 10 params for laminar_flow).
     - constant: Uses xpcs_model_constant which requires fixed_contrast/fixed_offset
-      arrays (NOT sampled, 7 physical + 1 sigma = 8 params for laminar_flow)
+      arrays (NOT sampled, 7 physical + 1 sigma = 8 params for laminar_flow).
     """
     if per_angle_mode == "auto":
         logger.info("CMC: Using auto mode model (sampled averaged scaling, 10 params)")

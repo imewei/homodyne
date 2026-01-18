@@ -492,10 +492,11 @@ class CMCConfig:
         Notes
         -----
         Mode semantics (same as NLSQ):
-        - auto: Sample single averaged contrast/offset (10 params for laminar_flow)
-          Only activated when n_phi >= threshold (many angles)
-        - constant: Use FIXED per-angle values from quantile estimation (8 params)
-        - individual: Sample per-angle contrast/offset (n_phi*2 + 7 + 1 params)
+
+        - auto: Sample single averaged contrast/offset (10 params for laminar_flow).
+          Only activated when n_phi >= threshold (many angles).
+        - constant: Use FIXED per-angle values from quantile estimation (8 params).
+        - individual: Sample per-angle contrast/offset (n_phi*2 + 7 + 1 params).
         """
         if self.per_angle_mode == "auto":
             if n_phi >= self.constant_scaling_threshold:

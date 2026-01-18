@@ -232,8 +232,7 @@ Meshgrid physics computations for NLSQ optimization.
    :undoc-members:
    :show-inheritance:
 
-Key Design Principles
-^^^^^^^^^^^^^^^^^^^^^
+**Key Design Principles:**
 
 - Meshgrid computations for 2D correlation matrices
 - Direct JIT-compiled functions only
@@ -249,8 +248,7 @@ Element-wise physics computations for Consensus Monte Carlo.
    :undoc-members:
    :show-inheritance:
 
-Key Design Principles
-^^^^^^^^^^^^^^^^^^^^^
+**Key Design Principles:**
 
 - Element-wise computations for paired (t1[i], t2[i]) arrays
 - Prevents NumPyro NUTS from compiling unused meshgrid branches
@@ -266,8 +264,7 @@ NumPy-based numerical differentiation for JAX-free operation.
    :undoc-members:
    :show-inheritance:
 
-Key Features
-^^^^^^^^^^^^
+**Key Features:**
 
 - Multi-method finite differences: Forward, backward, central, complex-step
 - Adaptive step size selection with Richardson extrapolation
@@ -284,8 +281,7 @@ Unified diagonal correction for two-time correlation matrices.
    :undoc-members:
    :show-inheritance:
 
-Key Functions
-^^^^^^^^^^^^^
+**Key Functions:**
 
 .. autosummary::
    :nosignatures:
@@ -293,8 +289,7 @@ Key Functions
    homodyne.core.diagonal_correction.apply_diagonal_correction
    homodyne.core.diagonal_correction.apply_diagonal_correction_batch
 
-Usage Example
-^^^^^^^^^^^^^
+**Usage Example:**
 
 .. code-block:: python
 

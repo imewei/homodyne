@@ -1186,7 +1186,7 @@ differently from gradient-based local optimization:
 - **Layer 4 (Gradient Monitor)**: Monitors gradient magnitude ratios. CMA-ES doesn't
   compute gradients—it uses evolutionary selection.
 
-- **Layer 5 (Shear Weighting)**: Weights residuals by |cos(φ₀-φ)|. Could be added to
+- **Layer 5 (Shear Weighting)**: Weights residuals by ``abs(cos(φ₀-φ))``. Could be added to
   CMA-ES fitness evaluation but not currently implemented.
 
 **Layer 1 Is Sufficient for CMA-ES**:

@@ -97,12 +97,16 @@ def apply_diagonal_correction(
             - "numpy": Force NumPy operations
             - "jax": Force JAX operations (JIT-compiled)
         **config: Method-specific configuration options.
+
             For "statistical":
-                - window_size (int): Window size for neighbor collection. Default: 3
-                - estimator (str): "mean", "median", or "trimmed_mean". Default: "median"
-                - trim_fraction (float): Trim fraction for trimmed_mean. Default: 0.2
+
+            - window_size (int): Window size for neighbor collection. Default: 3
+            - estimator (str): "mean", "median", or "trimmed_mean". Default: "median"
+            - trim_fraction (float): Trim fraction for trimmed_mean. Default: 0.2
+
             For "interpolation":
-                - interpolation_method (str): "linear" or "cubic". Default: "linear"
+
+            - interpolation_method (str): "linear" or "cubic". Default: "linear"
 
     Returns:
         Corrected correlation matrix with same shape and backend as input.

@@ -311,30 +311,28 @@ def compute_g1_total(
     **CRITICAL (Nov 2025): phi Parameter Requirements**
 
     This function expects phi to contain UNIQUE scattering angles only.
-    When calling from MCMC backends, the caller MUST pre-compute unique values:
+    When calling from MCMC backends, the caller MUST pre-compute unique values::
 
-    ```python
-    # CORRECT: Pre-compute unique phi before calling
-    phi_unique = np.unique(np.asarray(phi))
-    g1 = compute_g1_total(params, t1, t2, phi_unique, q, L, dt)
+        # CORRECT: Pre-compute unique phi before calling
+        phi_unique = np.unique(np.asarray(phi))
+        g1 = compute_g1_total(params, t1, t2, phi_unique, q, L, dt)
 
-    # INCORRECT: Passing replicated phi array causes memory explosion
-    # phi_replicated = [0, 0, 0, ..., 90, 90, 90, ...]  # 300K elements
-    # g1 = compute_g1_total(..., phi_replicated, ...)  # BAD: Will call jnp.unique() during JIT
-    ```
+        # INCORRECT: Passing replicated phi array causes memory explosion
+        # phi_replicated = [0, 0, 0, ..., 90, 90, 90, ...]  # 300K elements
+        # g1 = compute_g1_total(..., phi_replicated, ...)  # BAD
 
     **Why Pre-computation is Required:**
 
     - CMC pooled data replicates phi for each time point (e.g., 3 angles × 100K points = 300K array)
-    - Computing unique values inside this function with `jnp.unique()` causes JAX concretization errors
+    - Computing unique values inside this function with ``jnp.unique()`` causes JAX concretization errors
       when called from NumPyro's JIT-traced MCMC model
-    - Pre-computing unique values in non-JIT context (e.g., in `mcmc.py:_run_standard_nuts()`)
+    - Pre-computing unique values in non-JIT context (e.g., in ``mcmc.py:_run_standard_nuts()``)
       avoids this issue and reduces memory from 80GB to 2.4MB
 
     **Backward Compatibility:**
 
     For non-MCMC use cases where phi is already unique or contains few duplicates,
-    this function will still work correctly. The internal `jnp.unique()` call has been
+    this function will still work correctly. The internal ``jnp.unique()`` call has been
     removed as of Nov 2025, so callers must ensure phi contains unique values.
 
     Args:
