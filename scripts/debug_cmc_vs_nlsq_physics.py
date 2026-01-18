@@ -334,7 +334,7 @@ def main():
             extent=[0, t[-1], 0, t[-1]],
             cmap="RdBu_r",
         )
-        axes[2, i].set_title(f"Difference (NLSQ - CMC)")
+        axes[2, i].set_title("Difference (NLSQ - CMC)")
         axes[2, i].set_xlabel("t2 (s)")
         axes[2, i].set_ylabel("t1 (s)")
         plt.colorbar(im2, ax=axes[2, i])

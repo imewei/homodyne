@@ -342,7 +342,7 @@ def print_results(result: dict):
 
 
 def main():
-    print(f"NLSQ Regression Test Harness")
+    print("NLSQ Regression Test Harness")
     print(f"Python: {sys.version}")
     print(f"NLSQ Version: {nlsq_version}")
 

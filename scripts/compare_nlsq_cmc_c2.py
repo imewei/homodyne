@@ -149,7 +149,7 @@ def main():
 
     # Extract parameters
     params = nlsq["params"]
-    print(f"\nNLSQ Parameters:")
+    print("\nNLSQ Parameters:")
     print(f"  D0 = {params['D0']['value']:.4f}")
     print(f"  alpha = {params['alpha']['value']:.4f}")
     print(f"  D_offset = {params['D_offset']['value']:.4f}")
@@ -178,14 +178,14 @@ def main():
     per_angle_scaling = nlsq["per_angle_scaling"]
     c2_nlsq = nlsq["c2_theoretical"]
 
-    print(f"\nData shape:")
+    print("\nData shape:")
     print(f"  n_times = {len(t)}")
     print(f"  phi_angles = {phi_angles}")
     print(f"  q = {q}")
     print(f"  dt = {args.dt}")
     print(f"  L = {args.L}")
 
-    print(f"\nPer-angle scaling:")
+    print("\nPer-angle scaling:")
     for i, phi in enumerate(phi_angles):
         print(
             f"  phi={phi:7.3f}°: contrast={per_angle_scaling[i,0]:.6f}, "
@@ -227,13 +227,13 @@ def main():
     diff = c2_nlsq_sub - c2_cmc
     rel_diff = np.abs(diff) / np.maximum(np.abs(c2_nlsq_sub), 1e-10)
 
-    print(f"\nGlobal Statistics:")
+    print("\nGlobal Statistics:")
     print(f"  NLSQ C2 range: [{c2_nlsq_sub.min():.6g}, {c2_nlsq_sub.max():.6g}]")
     print(f"  CMC C2 range:  [{c2_cmc.min():.6g}, {c2_cmc.max():.6g}]")
     print(f"  Absolute diff: min={diff.min():.6g}, max={diff.max():.6g}")
     print(f"  Relative diff: mean={rel_diff.mean():.2%}, max={rel_diff.max():.2%}")
 
-    print(f"\nPer-angle Statistics:")
+    print("\nPer-angle Statistics:")
     for i, phi in enumerate(phi_angles):
         diff_i = c2_nlsq_sub[i] - c2_cmc[i]
         rel_i = np.abs(diff_i) / np.maximum(np.abs(c2_nlsq_sub[i]), 1e-10)
@@ -273,7 +273,7 @@ def main():
         im2 = axes[2, i].imshow(
             diff[i], origin="lower", extent=t_extent, cmap="RdBu_r"
         )
-        axes[2, i].set_title(f"Diff (NLSQ - CMC)")
+        axes[2, i].set_title("Diff (NLSQ - CMC)")
         axes[2, i].set_xlabel("t2 (s)")
         axes[2, i].set_ylabel("t1 (s)")
         plt.colorbar(im2, ax=axes[2, i])

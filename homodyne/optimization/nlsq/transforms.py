@@ -396,11 +396,12 @@ def wrap_model_function_with_transforms(
     if not callable(model_fn):
         return model_fn
 
-    def wrapped_model(xdata: np.ndarray, *solver_params):
+    def wrapped_model(xdata: np.ndarray, *solver_params: float) -> np.ndarray:
         physical = apply_inverse_shear_transforms_to_vector(
             np.asarray(solver_params), state
         )
-        return model_fn(xdata, *physical)
+        result: np.ndarray = model_fn(xdata, *physical)
+        return result
 
     # Preserve helpful attributes for downstream logging/diagnostics
     for attr in ["n_phi", "n_angles", "per_angle_scaling"]:
@@ -437,9 +438,10 @@ def wrap_stratified_function_with_transforms(
 
         def __call__(self, params: np.ndarray) -> np.ndarray:
             physical = apply_inverse_shear_transforms_to_vector(params, self._state)
-            return self._base_fn(physical)
+            result: np.ndarray = self._base_fn(physical)
+            return result
 
-        def __getattr__(self, item):
+        def __getattr__(self, item: str) -> Any:
             return getattr(self._base_fn, item)
 
     return _TransformedStratified(residual_fn, state)
