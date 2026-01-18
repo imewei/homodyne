@@ -487,29 +487,34 @@ class CMCConfig:
         Returns
         -------
         str
-            Effective mode: "constant" or "individual".
+            Effective mode: "auto", "constant", or "individual".
 
         Notes
         -----
-        Auto mode logic matches NLSQ anti-degeneracy system:
-        - n_phi >= constant_scaling_threshold → "constant"
-        - n_phi < constant_scaling_threshold → "individual"
+        Mode semantics (same as NLSQ):
+        - auto: Sample single averaged contrast/offset (10 params for laminar_flow)
+          Only activated when n_phi >= threshold (many angles)
+        - constant: Use FIXED per-angle values from quantile estimation (8 params)
+        - individual: Sample per-angle contrast/offset (n_phi*2 + 7 + 1 params)
         """
         if self.per_angle_mode == "auto":
             if n_phi >= self.constant_scaling_threshold:
-                effective = "constant"
+                # Return "auto" - this uses the xpcs_model_averaged which samples
+                # single averaged contrast/offset (10 params for laminar_flow)
                 logger.info(
-                    f"CMC anti-degeneracy: Auto-selected 'constant' mode "
+                    f"CMC anti-degeneracy: Using 'auto' mode (sampled averaged scaling) "
                     f"(n_phi={n_phi} >= threshold={self.constant_scaling_threshold})"
                 )
+                return "auto"
             else:
-                effective = "individual"
+                # Few angles - use individual per-angle sampling
                 logger.info(
                     f"CMC anti-degeneracy: Auto-selected 'individual' mode "
                     f"(n_phi={n_phi} < threshold={self.constant_scaling_threshold})"
                 )
-            return effective
+                return "individual"
         else:
+            # Explicit mode (constant or individual)
             return self.per_angle_mode
 
     def to_dict(self) -> dict[str, Any]:

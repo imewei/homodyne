@@ -643,7 +643,7 @@ def build_init_values_dict(
         )
 
     # =========================================================================
-    # Handle per_angle_mode: "constant" vs "individual"
+    # Handle per_angle_mode: "constant", "auto", or "individual"
     # =========================================================================
     if per_angle_mode == "constant":
         # CONSTANT MODE: No per-angle params are sampled - they're fixed from
@@ -652,6 +652,55 @@ def build_init_values_dict(
         logger.info(
             f"Constant mode: contrast/offset are FIXED (not sampled). "
             f"Only initializing {len(physical_params)} physical parameters."
+        )
+
+    elif per_angle_mode == "auto":
+        # AUTO MODE: Sample single averaged contrast/offset (2 params)
+        # The model (xpcs_model_averaged) samples "contrast" and "offset" directly
+
+        # 1. Initialize averaged contrast
+        if initial_values is not None and "contrast" in initial_values:
+            raw_contrast = float(initial_values["contrast"])
+        elif data_estimates:
+            # Use mean of per-angle estimates
+            contrast_values = [
+                data_estimates.get(f"contrast_{i}", 0.5) for i in range(n_phi)
+            ]
+            raw_contrast = float(np.mean(contrast_values))
+        else:
+            bounds = parameter_space.get_bounds("contrast")
+            raw_contrast = (bounds[0] + bounds[1]) / 2.0
+
+        validated_contrast, was_clipped = validate_initial_value_bounds(
+            "contrast", raw_contrast, parameter_space
+        )
+        init_dict["contrast"] = validated_contrast
+        if was_clipped:
+            clipped_params.append("contrast")
+
+        # 2. Initialize averaged offset
+        if initial_values is not None and "offset" in initial_values:
+            raw_offset = float(initial_values["offset"])
+        elif data_estimates:
+            # Use mean of per-angle estimates
+            offset_values = [
+                data_estimates.get(f"offset_{i}", 1.0) for i in range(n_phi)
+            ]
+            raw_offset = float(np.mean(offset_values))
+        else:
+            bounds = parameter_space.get_bounds("offset")
+            raw_offset = (bounds[0] + bounds[1]) / 2.0
+
+        validated_offset, was_clipped = validate_initial_value_bounds(
+            "offset", raw_offset, parameter_space
+        )
+        init_dict["offset"] = validated_offset
+        if was_clipped:
+            clipped_params.append("offset")
+
+        logger.info(
+            f"Auto mode: initializing SAMPLED averaged contrast={validated_contrast:.4f}, "
+            f"offset={validated_offset:.4f}"
         )
 
     else:
@@ -744,7 +793,7 @@ def get_param_names_in_order(
     analysis_mode : str
         Analysis mode ("static" or "laminar_flow").
     per_angle_mode : str
-        Per-angle scaling mode: "individual" or "constant".
+        Per-angle scaling mode: "individual", "auto", or "constant".
 
     Returns
     -------
@@ -753,14 +802,20 @@ def get_param_names_in_order(
 
     Notes
     -----
+    Mode semantics (same as NLSQ):
     - individual mode: Samples per-angle contrast/offset (2*n_phi params)
+    - auto mode: Samples single averaged contrast/offset (2 params)
     - constant mode: NO contrast/offset sampled (fixed from quantile estimation)
     """
     names: list[str] = []
 
-    # For constant mode, contrast/offset are FIXED (not sampled)
-    # Only individual mode samples per-angle parameters
-    if per_angle_mode != "constant":
+    # Scaling parameters depend on mode
+    if per_angle_mode == "auto":
+        # Auto mode: sample single averaged contrast/offset (2 params)
+        names.append("contrast")
+        names.append("offset")
+    elif per_angle_mode == "individual":
+        # Individual mode: sample per-angle contrast/offset (2*n_phi params)
         # 1. Per-angle contrast
         for i in range(n_phi):
             names.append(f"contrast_{i}")
@@ -768,6 +823,7 @@ def get_param_names_in_order(
         # 2. Per-angle offset
         for i in range(n_phi):
             names.append(f"offset_{i}")
+    # constant mode: no contrast/offset sampled (fixed)
 
     # 3. Physical parameters
     if analysis_mode == "laminar_flow":

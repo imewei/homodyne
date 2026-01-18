@@ -451,17 +451,25 @@ def fit_mcmc_jax(
     # =========================================================================
     # 2c. Estimate fixed per-angle scaling for constant mode (v2.18.0+)
     # =========================================================================
+    # Mode semantics:
+    # - "auto": xpcs_model_averaged SAMPLES single averaged contrast/offset (10 params)
+    #           No fixed arrays needed - the model samples them
+    # - "constant": xpcs_model_constant uses FIXED per-angle arrays (8 params)
+    #           Requires fixed_contrast/fixed_offset arrays from quantile estimation
+    # - "individual": xpcs_model_scaled SAMPLES per-angle contrast/offset
+    #           No fixed arrays needed - the model samples them
     fixed_contrast: jnp.ndarray | None = None
     fixed_offset: jnp.ndarray | None = None
 
     if effective_per_angle_mode == "constant":
+        # CONSTANT mode: Use FIXED per-angle values from quantile estimation
         # Get contrast/offset bounds from parameter_space
         contrast_bounds = parameter_space.get_bounds("contrast")
         offset_bounds = parameter_space.get_bounds("offset")
 
         # Estimate per-angle contrast/offset from quantile analysis
         run_logger.info(
-            "Estimating per-angle scaling from data quantiles..."
+            "CONSTANT mode: Estimating FIXED per-angle scaling from data quantiles..."
         )
         scaling_estimates = estimate_per_angle_scaling(
             c2_data=prepared.data,
@@ -474,7 +482,7 @@ def fit_mcmc_jax(
             log=run_logger,
         )
 
-        # Build per-angle arrays from estimates
+        # Build per-angle arrays from estimates - use directly (different value per angle)
         contrast_per_angle = np.array(
             [scaling_estimates[f"contrast_{i}"] for i in range(prepared.n_phi)]
         )
@@ -482,38 +490,31 @@ def fit_mcmc_jax(
             [scaling_estimates[f"offset_{i}"] for i in range(prepared.n_phi)]
         )
 
-        # Determine whether to average (auto mode) or use per-angle (constant mode)
-        # This ensures NLSQ parity: auto mode uses single averaged value
-        if config.per_angle_mode == "auto":
-            # AUTO mode: Average the per-angle estimates → single value broadcast
-            contrast_avg = float(np.mean(contrast_per_angle))
-            offset_avg = float(np.mean(offset_per_angle))
+        fixed_contrast = jnp.array(contrast_per_angle)
+        fixed_offset = jnp.array(offset_per_angle)
 
-            fixed_contrast_np = np.full(prepared.n_phi, contrast_avg)
-            fixed_offset_np = np.full(prepared.n_phi, offset_avg)
-
-            run_logger.info(
-                f"AUTO mode: Averaged per-angle scaling (NLSQ parity):\n"
-                f"  contrast_avg: {contrast_avg:.4f} (from {prepared.n_phi} angles)\n"
-                f"  offset_avg: {offset_avg:.4f} (from {prepared.n_phi} angles)\n"
-                f"  Per-angle contrast range: [{contrast_per_angle.min():.4f}, {contrast_per_angle.max():.4f}]\n"
-                f"  Per-angle offset range: [{offset_per_angle.min():.4f}, {offset_per_angle.max():.4f}]"
-            )
-        else:
-            # CONSTANT mode: Use per-angle estimates directly (different value per angle)
-            fixed_contrast_np = contrast_per_angle
-            fixed_offset_np = offset_per_angle
-
-            run_logger.info(
-                f"CONSTANT mode: Using per-angle scaling directly:\n"
-                f"  contrast: mean={fixed_contrast_np.mean():.4f}, "
-                f"range=[{fixed_contrast_np.min():.4f}, {fixed_contrast_np.max():.4f}]\n"
-                f"  offset: mean={fixed_offset_np.mean():.4f}, "
-                f"range=[{fixed_offset_np.min():.4f}, {fixed_offset_np.max():.4f}]"
-            )
-
-        fixed_contrast = jnp.array(fixed_contrast_np)
-        fixed_offset = jnp.array(fixed_offset_np)
+        run_logger.info(
+            f"CONSTANT mode: Using FIXED per-angle scaling (NOT sampled):\n"
+            f"  contrast: mean={contrast_per_angle.mean():.4f}, "
+            f"range=[{contrast_per_angle.min():.4f}, {contrast_per_angle.max():.4f}]\n"
+            f"  offset: mean={offset_per_angle.mean():.4f}, "
+            f"range=[{offset_per_angle.min():.4f}, {offset_per_angle.max():.4f}]\n"
+            f"  Parameters: 7 physical + 1 sigma = 8 total (scaling fixed)"
+        )
+    elif effective_per_angle_mode == "auto":
+        # AUTO mode: xpcs_model_averaged will SAMPLE single averaged contrast/offset
+        # No fixed arrays needed - log the expected behavior
+        run_logger.info(
+            "AUTO mode: Will SAMPLE averaged contrast/offset (NLSQ parity):\n"
+            "  Parameters: 2 averaged scaling + 7 physical + 1 sigma = 10 total"
+        )
+    else:
+        # INDIVIDUAL mode: xpcs_model_scaled will SAMPLE per-angle contrast/offset
+        run_logger.info(
+            f"INDIVIDUAL mode: Will SAMPLE per-angle contrast/offset:\n"
+            f"  Parameters: {prepared.n_phi * 2} per-angle + 7 physical + 1 sigma = "
+            f"{prepared.n_phi * 2 + 8} total"
+        )
 
     # Log initial values if provided
     if initial_values:

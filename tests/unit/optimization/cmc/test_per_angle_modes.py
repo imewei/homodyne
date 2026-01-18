@@ -1,11 +1,13 @@
 """Tests for CMC per-angle mode support (v2.18.0+).
 
 This module tests the anti-degeneracy per-angle mode implementation in CMC,
-which allows choosing between 'constant' and 'individual' modes to match
+which allows choosing between 'auto', 'constant', and 'individual' modes to match
 NLSQ's anti-degeneracy system.
 
-Constant mode: Fixed per-angle contrast/offset from quantile estimation (NOT sampled)
-Individual mode: Sampled per-angle contrast/offset (legacy)
+Mode semantics (same as NLSQ):
+- auto: SAMPLES single averaged contrast/offset (10 params for laminar_flow)
+- constant: FIXED per-angle contrast/offset from quantile estimation (8 params)
+- individual: SAMPLES per-angle contrast/offset (54 params for n_phi=23, laminar_flow)
 """
 
 import numpy as np
@@ -15,6 +17,7 @@ from homodyne.optimization.cmc.config import CMCConfig
 from homodyne.optimization.cmc.model import (
     get_model_param_count,
     get_xpcs_model,
+    xpcs_model_averaged,
     xpcs_model_constant,
     xpcs_model_scaled,
 )
@@ -43,14 +46,18 @@ class TestCMCConfigPerAngleMode:
         assert config.per_angle_mode == "constant"
         assert config.constant_scaling_threshold == 5
 
-    def test_get_effective_mode_auto_constant(self):
-        """Test auto mode selects constant when n_phi >= threshold."""
+    def test_get_effective_mode_auto_large_nphi(self):
+        """Test auto mode returns 'auto' when n_phi >= threshold.
+
+        When n_phi >= threshold, auto mode activates the xpcs_model_averaged
+        which SAMPLES single averaged contrast/offset (10 params for laminar_flow).
+        """
         config = CMCConfig(per_angle_mode="auto", constant_scaling_threshold=3)
 
-        # n_phi >= 3 should use constant
-        assert config.get_effective_per_angle_mode(3) == "constant"
-        assert config.get_effective_per_angle_mode(5) == "constant"
-        assert config.get_effective_per_angle_mode(23) == "constant"
+        # n_phi >= 3 should use auto (sampled averaged scaling)
+        assert config.get_effective_per_angle_mode(3) == "auto"
+        assert config.get_effective_per_angle_mode(5) == "auto"
+        assert config.get_effective_per_angle_mode(23) == "auto"
 
     def test_get_effective_mode_auto_individual(self):
         """Test auto mode selects individual when n_phi < threshold."""
@@ -100,6 +107,15 @@ class TestModelSelection:
         """Test get_xpcs_model returns constant model for constant mode."""
         model = get_xpcs_model("constant")
         assert model == xpcs_model_constant
+
+    def test_get_xpcs_model_auto(self):
+        """Test get_xpcs_model returns averaged model for auto mode.
+
+        Auto mode uses xpcs_model_averaged which SAMPLES single averaged
+        contrast/offset (10 params for laminar_flow).
+        """
+        model = get_xpcs_model("auto")
+        assert model == xpcs_model_averaged
 
     def test_get_xpcs_model_default_is_individual(self):
         """Test get_xpcs_model defaults to individual mode."""
@@ -154,6 +170,36 @@ class TestParamCountByMode:
         reduction = (individual_count - constant_count) / individual_count
         assert reduction > 0.85
 
+    def test_auto_mode_param_count_static(self):
+        """Test auto mode parameter count for static analysis.
+
+        Auto mode: 2 averaged params (contrast, offset) + physical + sigma
+        Static: 2 + 3 + 1 = 6
+        """
+        assert get_model_param_count(1, "static", "auto") == 6
+        assert get_model_param_count(3, "static", "auto") == 6
+        assert get_model_param_count(23, "static", "auto") == 6
+
+    def test_auto_mode_param_count_laminar(self):
+        """Test auto mode parameter count for laminar_flow analysis.
+
+        Auto mode: 2 averaged params (contrast, offset) + physical + sigma
+        Laminar: 2 + 7 + 1 = 10
+        """
+        assert get_model_param_count(1, "laminar_flow", "auto") == 10
+        assert get_model_param_count(3, "laminar_flow", "auto") == 10
+        assert get_model_param_count(23, "laminar_flow", "auto") == 10
+
+    def test_auto_mode_reduction(self):
+        """Test auto mode reduces parameter count vs individual."""
+        # For n_phi=23 laminar_flow:
+        individual_count = get_model_param_count(23, "laminar_flow", "individual")
+        auto_count = get_model_param_count(23, "laminar_flow", "auto")
+
+        # Should be 54 vs 10 = 81% reduction
+        reduction = (individual_count - auto_count) / individual_count
+        assert reduction > 0.80
+
 
 class TestParamNamesInOrder:
     """Tests for parameter name ordering with different modes."""
@@ -199,6 +245,31 @@ class TestParamNamesInOrder:
         """
         names = get_param_names_in_order(23, "laminar_flow", "constant")
         expected = [
+            "D0", "alpha", "D_offset",
+            "gamma_dot_t0", "beta", "gamma_dot_t_offset", "phi0",
+        ]
+        assert names == expected
+
+    def test_auto_mode_names_static(self):
+        """Test parameter names for auto mode static analysis.
+
+        Auto mode: Single averaged contrast/offset (SAMPLED).
+        """
+        names = get_param_names_in_order(10, "static", "auto")
+        expected = [
+            "contrast", "offset",
+            "D0", "alpha", "D_offset",
+        ]
+        assert names == expected
+
+    def test_auto_mode_names_laminar(self):
+        """Test parameter names for auto mode laminar_flow analysis.
+
+        Auto mode: Single averaged contrast/offset (SAMPLED).
+        """
+        names = get_param_names_in_order(23, "laminar_flow", "auto")
+        expected = [
+            "contrast", "offset",
             "D0", "alpha", "D_offset",
             "gamma_dot_t0", "beta", "gamma_dot_t_offset", "phi0",
         ]
