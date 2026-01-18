@@ -334,7 +334,7 @@ class TestAntiDegeneracyControllerFixedScaling:
 
         assert "has_fixed_per_angle_scaling" in diagnostics
         assert diagnostics["has_fixed_per_angle_scaling"] is False
-        assert diagnostics["version"] == "2.17.0"
+        assert diagnostics["version"] == "2.18.0"
 
 
 if __name__ == "__main__":

@@ -7261,7 +7261,7 @@ class NLSQWrapper(NLSQAdapterBase):
         # Add anti-degeneracy defense diagnostics
         shear_weighter = anti_degeneracy_components.get("shear_weighter")
         info["anti_degeneracy"] = {
-            "version": "2.17.0",
+            "version": "2.18.0",
             "per_angle_mode": anti_degeneracy_components["per_angle_mode"],
             "use_constant": anti_degeneracy_components.get("use_constant", False),
             "use_fixed_scaling": use_fixed_scaling,

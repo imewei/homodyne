@@ -120,9 +120,9 @@ logging.getLogger("jax._src.compiler").setLevel(logging.ERROR)
 
 # Version handling
 try:
-    from homodyne._version import version as __version__
+    from homodyne._version import __version__
 except ImportError:
-    __version__ = "2.9.0"
+    __version__ = "2.18.0"
 
 # Core imports with graceful fallback
 # These are re-exported for public API

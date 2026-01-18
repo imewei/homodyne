@@ -161,7 +161,7 @@ class ConfigManager:
         logger.debug("Applying default configuration values (fallback)")
         return {
             "metadata": {
-                "config_version": "2.9.0",
+                "config_version": "2.18.0",
                 "description": "Default minimal configuration (CPU-only)",
             },
             "analysis_mode": "static",
