@@ -274,7 +274,6 @@ def _log_runtime_comparison(
         return
 
     accuracy = actual_time / estimated_time * 100
-    diff = actual_time - estimated_time
 
     if accuracy < 50:
         status = "much faster than estimated"

@@ -400,13 +400,13 @@ def _extract_step_sizes(adapt_states: list[Any]) -> list[float]:
             try:
                 step_sizes.append(float(adapt_state.step_size))
                 continue
-            except Exception:
+            except Exception:  # noqa: S110 - Fallback for adapt_state variants
                 pass
 
         if isinstance(adapt_state, dict) and "step_size" in adapt_state:
             try:
                 step_sizes.append(float(adapt_state["step_size"]))
-            except Exception:
+            except Exception:  # noqa: S110 - Fallback for adapt_state variants
                 pass
 
     return step_sizes
@@ -792,7 +792,7 @@ def run_nuts_sampling(
             ss = ss[np.isfinite(ss)]
             if ss.size:
                 step_size = float(np.median(ss))
-        except Exception:
+        except Exception:  # noqa: S110 - Fallback for step_size extraction
             pass
 
     inv_mass = None
@@ -918,7 +918,7 @@ def run_nuts_sampling(
                     f"({issue_rate:.1%} of evaluations). "
                     "This may indicate parameter combinations causing overflow in physics model."
                 )
-        except Exception:
+        except Exception:  # noqa: S110 - Fallback for step_size extraction
             pass
 
     # Estimate warmup vs sampling time (rough estimate)

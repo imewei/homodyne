@@ -133,7 +133,7 @@ def _run_shard_worker_with_queue(
     )
     try:
         result_queue.put_nowait(result)
-    except Exception:
+    except Exception:  # noqa: S110 - Best-effort queue put, parent handles failures
         # If the queue is already full or closed, drop the result; the parent
         # loop will have marked the shard as failed. This is a best-effort send.
         pass
@@ -274,7 +274,7 @@ def _run_shard_worker(
             if result_queue is not None:
                 try:
                     result_queue.put_nowait(payload)
-                except Exception:
+                except Exception:  # noqa: S110 - Best-effort heartbeat
                     pass
 
     hb_thread = threading.Thread(target=_heartbeat_loop, daemon=True)
@@ -297,9 +297,7 @@ def _run_shard_worker(
         duration = time.perf_counter() - start_time
         # T045: Log shard completion with elapsed time, acceptance rate, divergence count
         divergence_str = (
-            f", divergences: {stats.num_divergent}"
-            if stats.num_divergent > 0
-            else ""
+            f", divergences: {stats.num_divergent}" if stats.num_divergent > 0 else ""
         )
         worker_logger.info(
             f"Shard {shard_idx} completed in {duration:.2f}s: "
@@ -331,7 +329,7 @@ def _run_shard_worker(
         if result_queue is not None:
             try:
                 result_queue.put_nowait(result)
-            except Exception:
+            except Exception:  # noqa: S110 - Best-effort queue put
                 pass
         return result
 
@@ -354,7 +352,7 @@ def _run_shard_worker(
                 "shard_idx": shard_idx,
                 "duration_s": round(duration, 2),
                 "error_category": error_category,
-                "n_points": data.n_points if hasattr(data, "n_points") else "unknown",
+                "n_points": n_points,
             },
         )
 
@@ -369,7 +367,7 @@ def _run_shard_worker(
         if result_queue is not None:
             try:
                 result_queue.put_nowait(result)
-            except Exception:
+            except Exception:  # noqa: S110 - Best-effort queue put
                 pass
         return result
     finally:
@@ -893,7 +891,6 @@ class MultiprocessingBackend(CMCBackend):
                     means = [
                         float(np.mean(s.samples[param])) for s in successful_samples
                     ]
-                    stds = [float(np.std(s.samples[param])) for s in successful_samples]
                     run_logger.info(
                         f"  {param}: shard_means=[{np.min(means):.4g}, {np.max(means):.4g}], "
                         f"range={np.max(means) - np.min(means):.4g}, "

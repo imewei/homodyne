@@ -103,7 +103,7 @@ class PBSBackend(CMCBackend):
             qstat_path = shutil.which("qstat")
             if not qstat_path:
                 raise FileNotFoundError("qstat not found")
-            subprocess.run(  # nosec B603
+            subprocess.run(  # noqa: S603 - qstat_path from shutil.which is trusted
                 [qstat_path, "--version"],
                 capture_output=True,
                 timeout=10,
@@ -139,7 +139,7 @@ class PBSBackend(CMCBackend):
             qsub_path = shutil.which("qsub")
             if not qsub_path:
                 return False
-            result = subprocess.run(  # nosec B603
+            result = subprocess.run(  # noqa: S603 - qsub_path from shutil.which is trusted
                 [qsub_path],
                 capture_output=True,
                 timeout=5,
@@ -324,7 +324,7 @@ class PBSBackend(CMCBackend):
 
         # Submit job
         qsub_path = shutil.which("qsub") or "qsub"
-        result = subprocess.run(  # nosec B603
+        result = subprocess.run(  # noqa: S603 - qsub_path from shutil.which is trusted
             [qsub_path, str(script_file)],
             capture_output=True,
             text=True,
@@ -381,7 +381,7 @@ class PBSBackend(CMCBackend):
         """
         try:
             qstat_path = shutil.which("qstat") or "qstat"
-            result = subprocess.run(  # nosec B603
+            result = subprocess.run(  # noqa: S603 - qsub_path from shutil.which is trusted
                 [qstat_path, "-f", job_id],
                 capture_output=True,
                 text=True,
