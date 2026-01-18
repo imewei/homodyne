@@ -45,7 +45,7 @@ class TestAntiDegeneracyControllerAutoSelection:
     """
 
     def test_auto_selects_constant_when_n_phi_gte_threshold(self):
-        """v2.17.0: Test auto mode selects constant when n_phi >= constant threshold."""
+        """v2.18.0: Test auto mode selects auto_averaged when n_phi >= constant threshold."""
         config = AntiDegeneracyConfig(
             per_angle_mode="auto",
             constant_scaling_threshold=3,
@@ -58,10 +58,13 @@ class TestAntiDegeneracyControllerAutoSelection:
         )
         controller._initialize_components()
 
-        assert controller.per_angle_mode_actual == "constant"
-        assert controller.use_constant is True
+        # v2.18.0: auto mode now sets "auto_averaged" not "constant"
+        assert controller.per_angle_mode_actual == "auto_averaged"
+        assert controller.use_constant is True  # Both modes use constant-style mapping
+        assert controller.use_averaged_scaling is True  # Averaged scaling is OPTIMIZED
+        assert controller.use_fixed_scaling is False  # NOT fixed
         assert controller.use_fourier is False
-        # Constant mode: 9 total params (7 physical + 2 averaged scaling)
+        # Auto averaged mode: 9 total params (7 physical + 2 averaged scaling)
         assert controller.n_per_angle_params == 2
 
     def test_auto_selects_individual_when_n_phi_lt_threshold(self):
@@ -85,7 +88,7 @@ class TestAntiDegeneracyControllerAutoSelection:
         assert controller.n_per_angle_params == 4  # 2 * n_phi
 
     def test_auto_selects_constant_at_threshold_boundary(self):
-        """v2.17.0: Test auto mode selects constant when n_phi == threshold exactly."""
+        """v2.18.0: Test auto mode selects auto_averaged when n_phi == threshold exactly."""
         config = AntiDegeneracyConfig(
             per_angle_mode="auto",
             constant_scaling_threshold=3,
@@ -98,13 +101,17 @@ class TestAntiDegeneracyControllerAutoSelection:
         )
         controller._initialize_components()
 
-        assert controller.per_angle_mode_actual == "constant"
+        # v2.18.0: auto mode now sets "auto_averaged" not "constant"
+        assert controller.per_angle_mode_actual == "auto_averaged"
         assert controller.use_constant is True
+        assert controller.use_averaged_scaling is True
         assert controller.use_fourier is False
 
     def test_n_per_angle_params_constant_mode(self):
-        """T025: Test n_per_angle_params is 2 in constant mode (explicit)."""
-        # v2.17.0: Constant mode must be explicitly set
+        """T025: Test n_per_angle_params is 0 in fixed_constant mode (explicit).
+
+        v2.18.0: Explicit constant mode now uses fixed_constant with 0 per-angle params.
+        """
         config = AntiDegeneracyConfig(
             per_angle_mode="constant",  # Explicit, not auto
         )
@@ -116,18 +123,21 @@ class TestAntiDegeneracyControllerAutoSelection:
         )
         controller._initialize_components()
 
-        assert controller.n_per_angle_params == 2
+        # v2.18.0: fixed_constant mode has 0 per-angle params (all fixed)
+        assert controller.per_angle_mode_actual == "fixed_constant"
+        assert controller.use_fixed_scaling is True
+        assert controller.n_per_angle_params == 0
 
 
 class TestAntiDegeneracyControllerMapperIntegration:
     """Tests for ParameterIndexMapper integration in constant mode (T026).
 
-    v2.17.0: Updated to use explicit per_angle_mode="constant".
+    v2.18.0: Updated to use explicit per_angle_mode="constant" which now means fixed_constant.
     """
 
     def test_mapper_uses_constant_mode(self):
-        """T026: Test mapper is initialized with use_constant=True."""
-        # v2.17.0: Use explicit constant mode
+        """T026: Test mapper is initialized with use_constant=True for fixed_constant mode."""
+        # v2.18.0: Use explicit constant mode (now becomes fixed_constant)
         config = AntiDegeneracyConfig(
             per_angle_mode="constant",
         )
@@ -141,6 +151,7 @@ class TestAntiDegeneracyControllerMapperIntegration:
 
         assert controller.mapper is not None
         assert controller.mapper.use_constant is True
+        # v2.18.0: mode_name for mapper should still be "constant" (mapper doesn't know about fixed/averaged distinction)
         assert controller.mapper.mode_name == "constant"
 
     def test_mapper_indices_constant_mode(self):
@@ -275,8 +286,11 @@ class TestAntiDegeneracyControllerDiagnostics:
     """
 
     def test_diagnostics_includes_constant_mode_info(self):
-        """Test diagnostics include use_constant and mode info."""
-        # v2.17.0: Use explicit constant mode
+        """Test diagnostics include use_constant and mode info.
+
+        v2.18.0: Explicit constant mode now becomes fixed_constant with 0 per-angle params.
+        """
+        # v2.18.0: Use explicit constant mode (becomes fixed_constant)
         config = AntiDegeneracyConfig(
             per_angle_mode="constant",
         )
@@ -292,8 +306,12 @@ class TestAntiDegeneracyControllerDiagnostics:
 
         assert diag["use_constant"] is True
         assert diag["use_fourier"] is False
-        assert diag["per_angle_mode"] == "constant"
-        assert diag["n_per_angle_params"] == 2
+        # v2.18.0: Explicit constant becomes fixed_constant
+        assert diag["per_angle_mode"] == "constant"  # Config value (not actual)
+        assert diag["per_angle_mode_actual"] == "fixed_constant"
+        assert diag["use_fixed_scaling"] is True
+        assert diag["use_averaged_scaling"] is False
+        assert diag["n_per_angle_params"] == 0  # Fixed, not optimized
 
     def test_mapper_diagnostics_in_constant_mode(self):
         """Test mapper diagnostics reflect constant mode."""
@@ -321,7 +339,10 @@ class TestAntiDegeneracyControllerExplicitMode:
     """Tests for explicit per_angle_mode='constant' (User Story 2 prep)."""
 
     def test_explicit_constant_mode_works(self):
-        """Test explicit per_angle_mode='constant' activates constant mode."""
+        """Test explicit per_angle_mode='constant' activates fixed_constant mode.
+
+        v2.18.0: Explicit constant mode now becomes fixed_constant (7 params, FIXED scaling).
+        """
         config = AntiDegeneracyConfig(per_angle_mode="constant")
         controller = AntiDegeneracyController(
             config=config,
@@ -331,8 +352,12 @@ class TestAntiDegeneracyControllerExplicitMode:
         )
         controller._initialize_components()
 
-        assert controller.per_angle_mode_actual == "constant"
+        # v2.18.0: Explicit constant becomes fixed_constant
+        assert controller.per_angle_mode_actual == "fixed_constant"
         assert controller.use_constant is True
+        assert controller.use_fixed_scaling is True
+        assert controller.use_averaged_scaling is False
+        assert controller.n_per_angle_params == 0  # Fixed, not optimized
 
     def test_explicit_individual_mode_works(self):
         """Test explicit per_angle_mode='individual' avoids constant mode."""

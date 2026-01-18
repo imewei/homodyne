@@ -1062,7 +1062,7 @@ class TestAntiDegeneracyController:
         """T057k: Controller provides comprehensive diagnostics."""
         diag = controller_23angle.get_diagnostics()
 
-        assert diag["version"] == "2.17.0"
+        assert diag["version"] == "2.18.0"
         assert diag["enabled"] is True
         assert diag["per_angle_mode"] == "fourier"
         assert "has_fixed_per_angle_scaling" in diag

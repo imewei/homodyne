@@ -299,21 +299,24 @@ class AntiDegeneracyController:
         config = self.config
 
         # T018-T020: Determine actual per-angle mode with auto-selection logic
-        # Auto mode chooses between individual (N < 3) and constant (N >= 3)
-        # v2.17.0: Changed from fourier/individual to constant/individual selection
+        # v2.18.0: Distinct semantics for auto vs explicit constant:
+        #   - auto (n_phi >= threshold): "auto_averaged" → 9 params, OPTIMIZED averaged scaling
+        #   - constant (explicit): "fixed_constant" → 7 params, FIXED per-angle scaling
+        #   - individual: per-angle scaling OPTIMIZED
         if config.per_angle_mode == "auto":
             if self.n_phi >= config.constant_scaling_threshold:
-                # Use constant mode when at or above threshold (N >= 3 by default)
-                # Constant mode: computes N quantile estimates, averages to 1 contrast + 1 offset
-                # Optimizes 9 parameters: 7 physical + 2 averaged scaling
-                self.per_angle_mode_actual = "constant"
+                # AUTO mode with large n_phi: optimize averaged scaling (9 params)
+                # Computes N quantile estimates, averages to 1 contrast + 1 offset
+                # These 2 averaged values ARE OPTIMIZED along with 7 physical params
+                self.per_angle_mode_actual = "auto_averaged"
                 logger.info("=" * 60)
-                logger.info("ANTI-DEGENERACY: Auto-selected 'constant' mode")
+                logger.info("ANTI-DEGENERACY: Auto-selected 'auto_averaged' mode")
                 logger.info(
                     f"  Reason: n_phi ({self.n_phi}) >= "
                     f"constant_scaling_threshold ({config.constant_scaling_threshold})"
                 )
-                logger.info("  Parameters: 7 physical + 2 averaged (contrast, offset) = 9 total")
+                logger.info("  Behavior: Quantile estimates → AVERAGED → OPTIMIZED")
+                logger.info("  Parameters: 7 physical + 2 averaged scaling = 9 total")
                 logger.info("=" * 60)
             else:
                 # Use individual per-angle parameters for few angles (N < 3)
@@ -326,8 +329,19 @@ class AntiDegeneracyController:
                 )
                 logger.info(f"  Parameters: 7 physical + {2 * self.n_phi} per-angle = {7 + 2 * self.n_phi} total")
                 logger.info("=" * 60)
+        elif config.per_angle_mode == "constant":
+            # EXPLICIT constant mode: FIXED per-angle scaling (7 params)
+            # Computes N quantile estimates, uses per-angle values DIRECTLY (NOT averaged)
+            # Only 7 physical params are optimized; scaling is FIXED
+            self.per_angle_mode_actual = "fixed_constant"
+            logger.info("=" * 60)
+            logger.info("ANTI-DEGENERACY: Using explicit 'constant' mode → fixed_constant")
+            logger.info(f"  n_phi: {self.n_phi}")
+            logger.info("  Behavior: Quantile estimates → per-angle values FIXED (NOT optimized)")
+            logger.info("  Parameters: 7 physical only (scaling FIXED from quantiles)")
+            logger.info("=" * 60)
         else:
-            # Explicit mode (constant, fourier, or individual)
+            # Other explicit modes (fourier or individual)
             self.per_angle_mode_actual = config.per_angle_mode
             logger.debug(
                 f"ANTI-DEGENERACY: Using explicit per_angle_mode: "
@@ -335,7 +349,8 @@ class AntiDegeneracyController:
             )
 
         # T021: Determine use_constant flag for mapper
-        use_constant = self.per_angle_mode_actual == "constant"
+        # Both auto_averaged and fixed_constant use constant-style mapping
+        use_constant = self.per_angle_mode_actual in ("auto_averaged", "fixed_constant")
 
         # Layer 1: Fourier Reparameterization (only if fourier mode)
         if self.per_angle_mode_actual == "fourier":
@@ -353,16 +368,7 @@ class AntiDegeneracyController:
                 f"  Parameter reduction: {2 * self.n_phi} -> {self.fourier.n_coeffs}"
             )
             logger.info("=" * 60)
-        elif self.per_angle_mode_actual == "constant":
-            # T020: Log constant mode selection (v2.17.0 updated)
-            logger.info("=" * 60)
-            logger.info("ANTI-DEGENERACY: Layer 1 - Constant Scaling Mode")
-            logger.info(f"  Mode: {self.per_angle_mode_actual}")
-            logger.info(f"  n_phi: {self.n_phi}")
-            logger.info(f"  Quantile estimation: N={self.n_phi} contrast + N={self.n_phi} offset values")
-            logger.info("  Averaged to: 1 contrast + 1 offset for optimization")
-            logger.info(f"  Total parameters: 7 physical + 2 averaged scaling = 9")
-            logger.info("=" * 60)
+        # Note: auto_averaged and fixed_constant logging already done in mode selection above
 
         # T022: Create ParameterIndexMapper with correct use_constant flag
         # This provides centralized, consistent index mapping for all subsequent layers
@@ -485,8 +491,37 @@ class AntiDegeneracyController:
 
     @property
     def use_constant(self) -> bool:
-        """Check if constant scaling mode is active."""
-        return self.per_angle_mode_actual == "constant"
+        """Check if constant scaling mode is active (either auto_averaged or fixed_constant).
+
+        Both modes use constant-style parameter mapping (9 params for auto_averaged,
+        7 params for fixed_constant), as opposed to individual mode (7 + 2*n_phi params).
+        """
+        return self.per_angle_mode_actual in ("auto_averaged", "fixed_constant")
+
+    @property
+    def use_fixed_scaling(self) -> bool:
+        """Check if using FIXED per-angle scaling (7 params, not optimized).
+
+        Returns True only for explicit constant mode ("fixed_constant"), where:
+        - Per-angle contrast/offset are FIXED from quantile estimation
+        - Only 7 physical parameters are optimized
+        - Scaling is NOT part of the optimization
+
+        This is DIFFERENT from auto_averaged mode, where:
+        - Averaged contrast/offset ARE optimized (9 params total)
+        """
+        return self.per_angle_mode_actual == "fixed_constant"
+
+    @property
+    def use_averaged_scaling(self) -> bool:
+        """Check if using OPTIMIZED averaged scaling (9 params).
+
+        Returns True only for auto mode with n_phi >= threshold ("auto_averaged"), where:
+        - N per-angle quantile estimates are averaged to 1 contrast + 1 offset
+        - These 2 averaged values ARE OPTIMIZED along with 7 physical params
+        - Total: 9 parameters
+        """
+        return self.per_angle_mode_actual == "auto_averaged"
 
     @property
     def use_hierarchical(self) -> bool:
@@ -500,9 +535,18 @@ class AntiDegeneracyController:
 
     @property
     def n_per_angle_params(self) -> int:
-        """Get the number of per-angle parameters (constant, Fourier, or direct)."""
-        if self.use_constant:
-            return 2  # One contrast, one offset
+        """Get the number of per-angle parameters (optimized scaling params).
+
+        Returns:
+        - fixed_constant: 0 (scaling is FIXED, not optimized)
+        - auto_averaged: 2 (one contrast, one offset - OPTIMIZED)
+        - fourier: n_coeffs (Fourier coefficients - OPTIMIZED)
+        - individual: 2*n_phi (per-angle contrast + offset - OPTIMIZED)
+        """
+        if self.use_fixed_scaling:
+            return 0  # Scaling is FIXED, not part of optimization
+        if self.use_averaged_scaling:
+            return 2  # One contrast, one offset (optimized)
         if self.fourier:
             return self.fourier.n_coeffs
         return 2 * self.n_phi
@@ -658,15 +702,19 @@ class AntiDegeneracyController:
             Nested diagnostics from all 5 layers.
         """
         diag: dict[str, Any] = {
-            "version": "2.17.0",
+            "version": "2.18.0",
             "enabled": self.is_enabled,
-            "per_angle_mode": self.per_angle_mode_actual,
+            "per_angle_mode": self.config.per_angle_mode,  # Config value
+            "per_angle_mode_actual": self.per_angle_mode_actual,  # Resolved actual mode
             "use_constant": self.use_constant,
+            "use_fixed_scaling": self.use_fixed_scaling,
+            "use_averaged_scaling": self.use_averaged_scaling,
             "use_fourier": self.use_fourier,
             "use_shear_weighting": self.use_shear_weighting,
             "n_phi": self.n_phi,
             "n_physical": self.n_physical,
             "n_per_angle_params": self.n_per_angle_params,
+            "n_total_params": self.n_physical + self.n_per_angle_params,
             "has_fixed_per_angle_scaling": self.has_fixed_per_angle_scaling(),
         }
 

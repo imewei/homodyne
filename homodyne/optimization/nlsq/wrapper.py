@@ -5616,25 +5616,29 @@ class NLSQWrapper(NLSQAdapterBase):
         gradient_monitoring_config = ad_config.get("gradient_monitoring", {})
 
         # Layer 1: Fourier Reparameterization / Constant Scaling Configuration
-        # v2.17.0: Default changed from "constant" to "auto"
+        # v2.18.0: Distinct semantics for auto vs explicit constant mode
         per_angle_mode = ad_config.get("per_angle_mode", "auto")
         fourier_order = ad_config.get("fourier_order", 2)
         constant_scaling_threshold = ad_config.get("constant_scaling_threshold", 3)
 
         # Determine actual per-angle mode
-        # v2.17.0: Auto mode chooses between individual (N < 3) and constant (N >= 3)
+        # v2.18.0: Distinct semantics:
+        #   - auto (n_phi >= threshold): "auto_averaged" → 9 params, OPTIMIZED averaged scaling
+        #   - constant (explicit): "fixed_constant" → 7 params, FIXED per-angle scaling
+        #   - individual: per-angle scaling OPTIMIZED
         if per_angle_mode == "auto":
             if n_phi >= constant_scaling_threshold:
-                # Use constant mode when at or above threshold (N >= 3 by default)
-                # Constant mode: computes N quantile estimates, averages to 1 contrast + 1 offset
-                # Optimizes 9 parameters: 7 physical + 2 averaged scaling
-                per_angle_mode_actual = "constant"
+                # AUTO mode with large n_phi: optimize averaged scaling (9 params)
+                # Computes N quantile estimates, averages to 1 contrast + 1 offset
+                # These 2 averaged values ARE OPTIMIZED along with 7 physical params
+                per_angle_mode_actual = "auto_averaged"
                 logger.info("=" * 60)
-                logger.info("ANTI-DEGENERACY DEFENSE: Auto-selected 'constant' mode")
+                logger.info("ANTI-DEGENERACY DEFENSE: Auto-selected 'auto_averaged' mode")
                 logger.info(
                     f"  Reason: n_phi ({n_phi}) >= "
                     f"constant_scaling_threshold ({constant_scaling_threshold})"
                 )
+                logger.info("  Behavior: Quantile estimates → AVERAGED → OPTIMIZED")
                 logger.info("  Parameters: 7 physical + 2 averaged (contrast, offset) = 9 total")
                 logger.info("=" * 60)
             else:
@@ -5648,15 +5652,31 @@ class NLSQWrapper(NLSQAdapterBase):
                 )
                 logger.info(f"  Parameters: 7 physical + {2 * n_phi} per-angle = {7 + 2 * n_phi} total")
                 logger.info("=" * 60)
+        elif per_angle_mode == "constant":
+            # EXPLICIT constant mode: FIXED per-angle scaling (7 params)
+            # Computes N quantile estimates, uses per-angle values DIRECTLY (NOT averaged)
+            # Only 7 physical params are optimized; scaling is FIXED
+            per_angle_mode_actual = "fixed_constant"
+            logger.info("=" * 60)
+            logger.info("ANTI-DEGENERACY DEFENSE: Explicit 'constant' mode → fixed_constant")
+            logger.info(f"  n_phi: {n_phi}")
+            logger.info("  Behavior: Quantile estimates → per-angle values FIXED (NOT optimized)")
+            logger.info("  Parameters: 7 physical only (scaling FIXED from quantiles)")
+            logger.info("=" * 60)
         else:
-            # Explicit mode (constant, fourier, or individual)
+            # Other explicit modes (fourier or individual)
             per_angle_mode_actual = per_angle_mode
             logger.debug(
                 f"ANTI-DEGENERACY: Using explicit per_angle_mode: {per_angle_mode_actual}"
             )
 
-        # T031: Determine use_constant flag
-        use_constant = per_angle_mode_actual == "constant"
+        # T031: Determine mode flags
+        # use_constant: True for both auto_averaged and fixed_constant (constant-style mapping)
+        # use_fixed_scaling: True only for fixed_constant (scaling NOT optimized)
+        # use_averaged_scaling: True only for auto_averaged (scaling optimized)
+        use_constant = per_angle_mode_actual in ("auto_averaged", "fixed_constant")
+        use_averaged_scaling = per_angle_mode_actual == "auto_averaged"
+        # use_fixed_scaling will be set True after quantile estimation for fixed_constant mode
 
         # Initialize Fourier reparameterizer if using fourier mode
         fourier_reparameterizer = None
@@ -5702,37 +5722,52 @@ class NLSQWrapper(NLSQAdapterBase):
             )
             logger.info("=" * 60)
         elif (
-            per_angle_mode_actual == "constant"
+            per_angle_mode_actual == "fixed_constant"
             and per_angle_scaling
             and is_laminar_flow
         ):
-            # T031: Log constant mode initialization (when explicitly selected)
+            # fixed_constant mode: per-angle scaling is FIXED, not optimized
             logger.info("=" * 60)
-            logger.info("ANTI-DEGENERACY DEFENSE: Layer 1 - Constant Scaling Mode (v2.17.0)")
+            logger.info("ANTI-DEGENERACY DEFENSE: Layer 1 - Fixed Constant Mode (v2.18.0)")
             logger.info(f"  Mode: {per_angle_mode_actual}")
             logger.info(f"  n_phi: {n_phi}")
-            logger.info(f"  Method: Quantile-based fixed per-angle scaling")
+            logger.info("  Method: Quantile-based per-angle scaling (FIXED, not optimized)")
             logger.info("  Per-angle contrast/offset will be estimated from c2 data quantiles")
             logger.info("  These values are FIXED (not optimized) during fitting")
             logger.info(f"  Parameter reduction: {2 * n_phi} -> 0 (physical only)")
             logger.info("=" * 60)
+        elif (
+            per_angle_mode_actual == "auto_averaged"
+            and per_angle_scaling
+            and is_laminar_flow
+        ):
+            # auto_averaged mode: averaged scaling is OPTIMIZED (9 params)
+            logger.info("=" * 60)
+            logger.info("ANTI-DEGENERACY DEFENSE: Layer 1 - Auto Averaged Mode (v2.18.0)")
+            logger.info(f"  Mode: {per_angle_mode_actual}")
+            logger.info(f"  n_phi: {n_phi}")
+            logger.info("  Method: Quantile estimates → averaged → OPTIMIZED")
+            logger.info("  Initial values: averaged from per-angle quantile estimates")
+            logger.info(f"  Parameter reduction: {2 * n_phi} -> 2 (averaged contrast + offset)")
+            logger.info("=" * 60)
 
         # =====================================================================
-        # CONSTANT MODE (v2.17.0): Quantile-Based Fixed Per-Angle Scaling
+        # CONSTANT/AUTO_AVERAGED MODES (v2.18.0): Quantile-Based Scaling
         # =====================================================================
-        # Compute fixed per-angle contrast/offset from c2 data quantiles.
-        # These are NOT optimized - they are treated as fixed known values.
-        # The model function will use these arrays directly instead of
-        # extracting contrast/offset from the parameter vector.
+        # - fixed_constant: per-angle values are FIXED (not optimized), 7 params
+        # - auto_averaged: averaged values are OPTIMIZED as initial values, 9 params
         # =====================================================================
         use_fixed_scaling = False
         fixed_contrast_per_angle: np.ndarray | None = None
         fixed_offset_per_angle: np.ndarray | None = None
         fixed_contrast_jax: jnp.ndarray | None = None
         fixed_offset_jax: jnp.ndarray | None = None
+        # For auto_averaged mode: averaged values to use as initial optimization values
+        averaged_contrast_init: float | None = None
+        averaged_offset_init: float | None = None
 
         if use_constant and per_angle_scaling and is_laminar_flow:
-            logger.info("Computing quantile-based fixed per-angle scaling...")
+            logger.info("Computing quantile-based per-angle scaling estimates...")
             try:
                 # Extract bounds for clipping
                 contrast_bounds = (0.0, 1.0)  # Default
@@ -5754,22 +5789,35 @@ class NLSQWrapper(NLSQAdapterBase):
                 )
 
                 if fixed_contrast_per_angle is not None and fixed_offset_per_angle is not None:
-                    use_fixed_scaling = True
-                    # Convert to JAX arrays for use in model function
-                    fixed_contrast_jax = jnp.asarray(fixed_contrast_per_angle)
-                    fixed_offset_jax = jnp.asarray(fixed_offset_per_angle)
+                    if per_angle_mode_actual == "fixed_constant":
+                        # fixed_constant: Use per-angle values DIRECTLY as FIXED
+                        use_fixed_scaling = True
+                        fixed_contrast_jax = jnp.asarray(fixed_contrast_per_angle)
+                        fixed_offset_jax = jnp.asarray(fixed_offset_per_angle)
 
-                    logger.info("Quantile-based fixed per-angle scaling computed successfully:")
-                    logger.info(
-                        f"  Contrast: mean={np.mean(fixed_contrast_per_angle):.4f}, "
-                        f"range=[{np.min(fixed_contrast_per_angle):.4f}, "
-                        f"{np.max(fixed_contrast_per_angle):.4f}]"
-                    )
-                    logger.info(
-                        f"  Offset: mean={np.mean(fixed_offset_per_angle):.4f}, "
-                        f"range=[{np.min(fixed_offset_per_angle):.4f}, "
-                        f"{np.max(fixed_offset_per_angle):.4f}]"
-                    )
+                        logger.info("Fixed per-angle scaling computed (FIXED, not optimized):")
+                        logger.info(
+                            f"  Contrast: mean={np.mean(fixed_contrast_per_angle):.4f}, "
+                            f"range=[{np.min(fixed_contrast_per_angle):.4f}, "
+                            f"{np.max(fixed_contrast_per_angle):.4f}]"
+                        )
+                        logger.info(
+                            f"  Offset: mean={np.mean(fixed_offset_per_angle):.4f}, "
+                            f"range=[{np.min(fixed_offset_per_angle):.4f}, "
+                            f"{np.max(fixed_offset_per_angle):.4f}]"
+                        )
+                    elif per_angle_mode_actual == "auto_averaged":
+                        # auto_averaged: AVERAGE per-angle values → use as INITIAL for optimization
+                        averaged_contrast_init = float(np.mean(fixed_contrast_per_angle))
+                        averaged_offset_init = float(np.mean(fixed_offset_per_angle))
+
+                        logger.info("Averaged scaling computed (initial values for optimization):")
+                        logger.info(f"  Averaged contrast: {averaged_contrast_init:.4f}")
+                        logger.info(f"  Averaged offset: {averaged_offset_init:.4f}")
+                        logger.info("  These will be OPTIMIZED along with 7 physical params (9 total)")
+
+                        # Do NOT set use_fixed_scaling = True for auto_averaged
+                        # The averaged values are just initial guesses for optimization
                 else:
                     logger.warning(
                         "Failed to compute quantile-based scaling, "
@@ -5889,13 +5937,18 @@ class NLSQWrapper(NLSQAdapterBase):
         adaptive_regularizer = None
         if per_angle_scaling and is_laminar_flow:
             # Compute mode-aware group indices
-            # Group indices depend on per-angle mode: constant, fourier, or independent
-            if use_constant:
-                # Constant mode: only 2 per-angle params (1 contrast + 1 offset)
-                # Group indices: [(0, 1), (1, 2)]
+            # Group indices depend on per-angle mode: fixed_constant, auto_averaged, fourier, or individual
+            if use_fixed_scaling:
+                # fixed_constant: No scaling params to regularize (7 physical only)
+                mode_group_indices = []
+                logger.debug(
+                    "Fixed-constant mode: No per-angle regularization (scaling is fixed)"
+                )
+            elif use_averaged_scaling:
+                # auto_averaged: 2 per-angle params (1 contrast + 1 offset) to regularize
                 mode_group_indices = [(0, 1), (1, 2)]
                 logger.debug(
-                    f"Constant-mode regularization groups: {mode_group_indices} "
+                    f"Auto-averaged regularization groups: {mode_group_indices} "
                     f"(1 contrast + 1 offset)"
                 )
             elif (
@@ -5951,9 +6004,12 @@ class NLSQWrapper(NLSQAdapterBase):
         gradient_monitor = None
         if gradient_monitor_enabled and per_angle_scaling and is_laminar_flow:
             # Compute mode-aware parameter count
-            # n_per_angle depends on per-angle mode: constant, fourier, or independent
-            if use_constant:
-                # Constant mode: only 2 per-angle params (1 contrast + 1 offset)
+            # n_per_angle depends on per-angle mode: fixed_constant, auto_averaged, fourier, or individual
+            if use_fixed_scaling:
+                # fixed_constant: 0 per-angle params (scaling is fixed)
+                n_per_angle = 0
+            elif use_averaged_scaling:
+                # auto_averaged: 2 per-angle params (1 contrast + 1 offset)
                 n_per_angle = 2
             elif fourier_reparameterizer is not None:
                 # Fourier mode: n_coeffs Fourier coefficients
@@ -6465,10 +6521,10 @@ class NLSQWrapper(NLSQAdapterBase):
                 fit_bounds = (lower_bounds[2 * n_phi:], upper_bounds[2 * n_phi:])
                 logger.info(f"  Bounds reduced to physical only: {len(fit_bounds[0])} params")
             logger.info("=" * 60)
-        elif use_constant:
+        elif use_averaged_scaling:
             logger.info("=" * 60)
-            logger.info("ANTI-DEGENERACY EXECUTION: Constant Scaling Mode")
-            # Transform per-angle params to single values (means)
+            logger.info("ANTI-DEGENERACY EXECUTION: Auto Averaged Scaling Mode")
+            # Transform per-angle params to single values (means) for optimization
             per_angle_params = initial_params[: 2 * n_phi]
             physical_params = initial_params[2 * n_phi :]
 
@@ -6476,9 +6532,15 @@ class NLSQWrapper(NLSQAdapterBase):
             contrast_per_angle = per_angle_params[:n_phi]
             offset_per_angle = per_angle_params[n_phi : 2 * n_phi]
 
-            # Take means to get constant values
-            contrast_mean = np.mean(contrast_per_angle)
-            offset_mean = np.mean(offset_per_angle)
+            # Use quantile-based averaged values if computed, else take means
+            if averaged_contrast_init is not None and averaged_offset_init is not None:
+                contrast_mean = averaged_contrast_init
+                offset_mean = averaged_offset_init
+                logger.info("  Using quantile-based averaged initial values (OPTIMIZED)")
+            else:
+                contrast_mean = np.mean(contrast_per_angle)
+                offset_mean = np.mean(offset_per_angle)
+                logger.info("  Using parameter-based averaged initial values (OPTIMIZED)")
 
             # New parameter layout: [contrast_const, offset_const, physical_params]
             fit_initial_params = np.concatenate(
@@ -6988,11 +7050,11 @@ class NLSQWrapper(NLSQAdapterBase):
 
             logger.info("=" * 60)
 
-        # T046-T049: Constant mode inverse transformation
-        # Expand constant parameters back to per-angle format for backward compatibility
-        elif use_constant:
+        # T046-T049: Auto averaged mode inverse transformation
+        # Expand averaged parameters back to per-angle format for backward compatibility
+        elif use_averaged_scaling:
             logger.info("=" * 60)
-            logger.info("ANTI-DEGENERACY EXECUTION: Inverse Constant Transform")
+            logger.info("ANTI-DEGENERACY EXECUTION: Inverse Auto Averaged Transform")
             # Layout: [contrast_const, offset_const, physical_params]
             contrast_const = popt[0]
             offset_const = popt[1]
@@ -7217,7 +7279,7 @@ class NLSQWrapper(NLSQAdapterBase):
             }
         # T048: Add constant mode diagnostics
         if use_fixed_scaling:
-            # v2.17.0: Fixed scaling mode - per-angle values are fixed, not optimized
+            # v2.18.0: Fixed scaling mode - per-angle values are fixed, not optimized
             info["anti_degeneracy"]["fixed_scaling"] = {
                 "param_reduction": f"{2 * n_phi} -> 0 (physical only)",
                 "method": "quantile_estimation",
@@ -7232,9 +7294,12 @@ class NLSQWrapper(NLSQAdapterBase):
                     float(np.max(fixed_offset_per_angle)),
                 ],
             }
-        elif use_constant:
-            info["anti_degeneracy"]["constant"] = {
-                "param_reduction": f"{2 * n_phi} -> 2",
+        elif use_averaged_scaling:
+            # v2.18.0: Auto averaged mode - averaged values are OPTIMIZED
+            info["anti_degeneracy"]["auto_averaged"] = {
+                "param_reduction": f"{2 * n_phi} -> 2 (averaged scaling)",
+                "method": "quantile_estimation_averaged",
+                # After inverse transform, popt[0] is first contrast (uniform)
                 "contrast_optimized": float(popt[0]) if len(popt) > 0 else None,
                 "offset_optimized": float(popt[n_phi]) if len(popt) > n_phi else None,
             }

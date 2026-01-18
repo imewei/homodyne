@@ -1797,14 +1797,20 @@ def fit_nlsq_cmaes(
         n_physical = len(_get_physical_param_names(analysis_mode))
 
         # ==========================================================================
-        # ANTI-DEGENERACY INTEGRATION (v2.17.0+)
+        # ANTI-DEGENERACY INTEGRATION (v2.18.0+)
         # ==========================================================================
         # For laminar_flow mode with per-angle scaling, the parameter space can be
-        # degenerate: per-angle contrast/offset can absorb shear signals. Use constant
-        # mode to compute fixed per-angle scaling from quantiles (N contrast + N offset)
-        # and optimize only 7 physical parameters.
+        # degenerate: per-angle contrast/offset can absorb shear signals.
+        #
+        # Two modes:
+        # - auto_averaged: Compute N quantile estimates, AVERAGE to 1 contrast + 1 offset,
+        #                  OPTIMIZE these 2 along with 7 physical = 9 params
+        # - fixed_constant: Compute N quantile estimates, use per-angle values DIRECTLY
+        #                   as FIXED scaling, OPTIMIZE only 7 physical params
         # ==========================================================================
         use_constant_mode = False
+        use_fixed_scaling = False
+        use_averaged_scaling = False
         ad_controller = None
         is_laminar_flow = analysis_mode == "laminar_flow"
         fixed_contrast_per_angle = None
@@ -1827,12 +1833,24 @@ def fit_nlsq_cmaes(
 
                 if ad_controller.is_enabled and ad_controller.use_constant:
                     use_constant_mode = True
-                    logger.info("=" * 60)
-                    logger.info("ANTI-DEGENERACY: Enabled for CMA-ES (Constant Mode)")
-                    logger.info(f"  Quantile estimation: N={n_phi} contrast + N={n_phi} offset values")
-                    logger.info("  Averaged to: 1 contrast + 1 offset for optimization")
-                    logger.info(f"  Total parameters: 7 physical + 2 averaged scaling = 9")
-                    logger.info("=" * 60)
+                    # v2.18.0: Distinguish between fixed_constant and auto_averaged
+                    use_fixed_scaling = ad_controller.use_fixed_scaling
+                    use_averaged_scaling = ad_controller.use_averaged_scaling
+
+                    if use_fixed_scaling:
+                        logger.info("=" * 60)
+                        logger.info("ANTI-DEGENERACY: Enabled for CMA-ES (Fixed Constant Mode)")
+                        logger.info(f"  Quantile estimation: N={n_phi} contrast + N={n_phi} offset values")
+                        logger.info("  Per-angle values: FIXED (not optimized)")
+                        logger.info("  Total parameters: 7 physical only")
+                        logger.info("=" * 60)
+                    else:
+                        logger.info("=" * 60)
+                        logger.info("ANTI-DEGENERACY: Enabled for CMA-ES (Auto Averaged Mode)")
+                        logger.info(f"  Quantile estimation: N={n_phi} contrast + N={n_phi} offset values")
+                        logger.info("  Averaged to: 1 contrast + 1 offset (OPTIMIZED)")
+                        logger.info("  Total parameters: 7 physical + 2 averaged scaling = 9")
+                        logger.info("=" * 60)
 
         # Handle parameter expansion based on anti-degeneracy mode
         if per_angle_scaling and not use_constant_mode:
@@ -1866,9 +1884,9 @@ def fit_nlsq_cmaes(
                 bounds = (lower_bounds, upper_bounds)
             effective_per_angle_scaling = True
         elif use_constant_mode:
-            # CONSTANT MODE (v2.17.0+): Compute per-angle scaling from quantiles,
-            # average to get initial estimates, and optimize 9 parameters
-            # (7 physical + 2 averaged scaling)
+            # CONSTANT MODE (v2.18.0+): Compute per-angle scaling from quantiles
+            # - use_fixed_scaling: per-angle values FIXED, optimize 7 physical only
+            # - use_averaged_scaling: average to 2 values, optimize 9 params
             from homodyne.optimization.nlsq.parameter_utils import (
                 compute_quantile_per_angle_scaling,
             )
@@ -1923,52 +1941,86 @@ def fit_nlsq_cmaes(
                 logger=logger,
             )
 
-            # AVERAGE the per-angle values to get initial estimates for 2 scaling params
-            avg_contrast = float(np.mean(fixed_contrast_per_angle))
-            avg_offset = float(np.mean(fixed_offset_per_angle))
-
             logger.info(
-                f"Per-angle scaling computed and averaged:\n"
-                f"  Contrast: per-angle mean={avg_contrast:.4f}, "
+                f"Per-angle scaling computed:\n"
+                f"  Contrast: mean={np.mean(fixed_contrast_per_angle):.4f}, "
                 f"range=[{np.min(fixed_contrast_per_angle):.4f}, {np.max(fixed_contrast_per_angle):.4f}]\n"
-                f"  Offset: per-angle mean={avg_offset:.4f}, "
+                f"  Offset: mean={np.mean(fixed_offset_per_angle):.4f}, "
                 f"range=[{np.min(fixed_offset_per_angle):.4f}, {np.max(fixed_offset_per_angle):.4f}]"
             )
 
-            # Build 9-parameter initial guess: [contrast_avg, offset_avg, *physical]
-            if len(x0) == 2 + n_physical:
-                # Already in [contrast, offset, physical] format
-                physical_params = x0[2:]
-                x0 = np.concatenate([[avg_contrast], [avg_offset], physical_params])
-                logger.info(f"Using averaged quantile estimates for scaling: contrast={avg_contrast:.4f}, offset={avg_offset:.4f}")
-            elif len(x0) == 2 * n_phi + n_physical:
-                # Per-angle format: reduce to [contrast_avg, offset_avg, physical]
-                physical_params = x0[2 * n_phi:]
-                x0 = np.concatenate([[avg_contrast], [avg_offset], physical_params])
-                logger.info(f"Reduced per-angle to averaged: {len(x0)} params")
-            elif len(x0) == n_physical:
-                # Physical only: prepend averaged scaling
-                x0 = np.concatenate([[avg_contrast], [avg_offset], x0])
-                logger.info(f"Prepended averaged scaling: {len(x0)} params")
+            if use_fixed_scaling:
+                # FIXED CONSTANT MODE: Use per-angle values DIRECTLY as FIXED
+                # Optimize only 7 physical parameters
+                logger.info("Fixed constant mode: per-angle scaling will be FIXED")
 
-            # Update bounds for 9-parameter format: [contrast, offset, *physical]
-            if len(lower_bounds) == 2 + n_physical:
-                # Already correct format
-                pass
-            elif len(lower_bounds) == 2 * n_phi + n_physical:
-                # Per-angle format: reduce to single scaling bounds
-                lower_bounds = np.concatenate([
-                    [lower_bounds[0]],  # Single contrast bound
-                    [lower_bounds[n_phi]],  # Single offset bound
-                    lower_bounds[2 * n_phi:],  # Physical bounds
-                ])
-                upper_bounds = np.concatenate([
-                    [upper_bounds[0]],
-                    [upper_bounds[n_phi]],
-                    upper_bounds[2 * n_phi:],
-                ])
-            bounds = (lower_bounds, upper_bounds)
-            logger.info(f"CMA-ES using constant mode: {len(x0)} parameters (9 = 7 physical + 2 averaged)")
+                # Extract physical parameters only from x0
+                if len(x0) == 2 + n_physical:
+                    # [contrast, offset, physical] format - extract physical only
+                    physical_params = x0[2:]
+                    x0 = physical_params.copy()
+                    logger.info(f"Reduced to physical params only: {len(x0)} params")
+                elif len(x0) == 2 * n_phi + n_physical:
+                    # Per-angle format - extract physical only
+                    physical_params = x0[2 * n_phi:]
+                    x0 = physical_params.copy()
+                    logger.info(f"Reduced per-angle to physical only: {len(x0)} params")
+                elif len(x0) == n_physical:
+                    # Already physical only
+                    logger.info(f"Already physical params only: {len(x0)} params")
+
+                # Update bounds for 7-parameter format: [*physical]
+                if len(lower_bounds) == 2 + n_physical:
+                    lower_bounds = lower_bounds[2:]
+                    upper_bounds = upper_bounds[2:]
+                elif len(lower_bounds) == 2 * n_phi + n_physical:
+                    lower_bounds = lower_bounds[2 * n_phi:]
+                    upper_bounds = upper_bounds[2 * n_phi:]
+
+                bounds = (lower_bounds, upper_bounds)
+                logger.info(f"CMA-ES using fixed constant mode: {len(x0)} parameters (7 physical only)")
+
+            else:
+                # AUTO AVERAGED MODE: Average to 2 values, optimize 9 params
+                avg_contrast = float(np.mean(fixed_contrast_per_angle))
+                avg_offset = float(np.mean(fixed_offset_per_angle))
+
+                logger.info(f"Auto averaged mode: scaling averaged to contrast={avg_contrast:.4f}, offset={avg_offset:.4f}")
+
+                # Build 9-parameter initial guess: [contrast_avg, offset_avg, *physical]
+                if len(x0) == 2 + n_physical:
+                    # Already in [contrast, offset, physical] format
+                    physical_params = x0[2:]
+                    x0 = np.concatenate([[avg_contrast], [avg_offset], physical_params])
+                    logger.info(f"Using averaged quantile estimates for scaling: contrast={avg_contrast:.4f}, offset={avg_offset:.4f}")
+                elif len(x0) == 2 * n_phi + n_physical:
+                    # Per-angle format: reduce to [contrast_avg, offset_avg, physical]
+                    physical_params = x0[2 * n_phi:]
+                    x0 = np.concatenate([[avg_contrast], [avg_offset], physical_params])
+                    logger.info(f"Reduced per-angle to averaged: {len(x0)} params")
+                elif len(x0) == n_physical:
+                    # Physical only: prepend averaged scaling
+                    x0 = np.concatenate([[avg_contrast], [avg_offset], x0])
+                    logger.info(f"Prepended averaged scaling: {len(x0)} params")
+
+                # Update bounds for 9-parameter format: [contrast, offset, *physical]
+                if len(lower_bounds) == 2 + n_physical:
+                    # Already correct format
+                    pass
+                elif len(lower_bounds) == 2 * n_phi + n_physical:
+                    # Per-angle format: reduce to single scaling bounds
+                    lower_bounds = np.concatenate([
+                        [lower_bounds[0]],  # Single contrast bound
+                        [lower_bounds[n_phi]],  # Single offset bound
+                        lower_bounds[2 * n_phi:],  # Physical bounds
+                    ])
+                    upper_bounds = np.concatenate([
+                        [upper_bounds[0]],
+                        [upper_bounds[n_phi]],
+                        upper_bounds[2 * n_phi:],
+                    ])
+                bounds = (lower_bounds, upper_bounds)
+                logger.info(f"CMA-ES using auto averaged mode: {len(x0)} parameters (9 = 7 physical + 2 averaged)")
 
             effective_per_angle_scaling = False
         else:
@@ -2011,9 +2063,16 @@ def fit_nlsq_cmaes(
         # Import the core JAX computation function that supports element-wise mode
         from homodyne.core.jax_backend import _compute_g1_total_core
 
-        # Note: In constant mode (v2.17.0+), we optimize 9 parameters:
-        # [contrast_avg, offset_avg, *physical] where the single contrast/offset
-        # are broadcast to all angles during model evaluation.
+        # Note: In constant mode (v2.18.0+), we have two sub-modes:
+        # - auto_averaged: 9 parameters [contrast_avg, offset_avg, *physical]
+        # - fixed_constant: 7 parameters [*physical] (scaling from pre-computed arrays)
+
+        # Convert fixed per-angle scaling to JAX arrays if using fixed scaling
+        fixed_contrast_jax = None
+        fixed_offset_jax = None
+        if use_fixed_scaling and fixed_contrast_per_angle is not None:
+            fixed_contrast_jax = jnp.asarray(fixed_contrast_per_angle)
+            fixed_offset_jax = jnp.asarray(fixed_offset_per_angle)
 
         def model_for_cmaes(xdata_unused: jnp.ndarray, *params) -> jnp.ndarray:
             """JAX-traceable model function wrapper for CMA-ES.
@@ -2021,23 +2080,30 @@ def fit_nlsq_cmaes(
             Uses pure JAX operations to allow JIT compilation by NLSQ's CMAESOptimizer.
             Element-wise mode is triggered automatically when len(t1) > 2000.
 
-            In constant mode (v2.17.0+), this function receives 9 parameters:
-            [contrast, offset, *physical]. The single contrast/offset values are
-            broadcast to all angles.
+            In constant mode (v2.18.0+):
+            - auto_averaged: 9 parameters [contrast, offset, *physical]
+            - fixed_constant: 7 parameters [*physical] (scaling from fixed arrays)
             """
             params_array = jnp.asarray(params)
 
             # Extract per-angle scaling and physical params using JAX operations
-            # Three modes:
+            # Four modes:
             # 1. effective_per_angle_scaling=True: params = [contrast(n_phi), offset(n_phi), physical]
-            # 2. use_constant_mode=True: params = [contrast, offset, physical] (9 params, broadcast to all angles)
-            # 3. Neither: params = [contrast, offset, physical], broadcast to all angles
+            # 2. use_fixed_scaling=True: params = [physical] (7 params, scaling from fixed arrays)
+            # 3. use_averaged_scaling=True: params = [contrast, offset, physical] (9 params, broadcast)
+            # 4. Neither: params = [contrast, offset, physical], broadcast to all angles
             if effective_per_angle_scaling:
                 contrasts = params_array[:n_phi]
                 offsets = params_array[n_phi : 2 * n_phi]
                 physical = params_array[2 * n_phi :]
-            elif use_constant_mode:
-                # CONSTANT MODE (v2.17.0+): 9 parameters [contrast, offset, *physical]
+            elif use_fixed_scaling:
+                # FIXED CONSTANT MODE (v2.18.0+): 7 physical params only
+                # Use pre-computed fixed per-angle scaling arrays
+                contrasts = fixed_contrast_jax
+                offsets = fixed_offset_jax
+                physical = params_array  # All params are physical
+            elif use_averaged_scaling:
+                # AUTO AVERAGED MODE (v2.18.0+): 9 parameters [contrast, offset, *physical]
                 # Broadcast single contrast/offset to all angles
                 contrasts = jnp.full(n_phi, params_array[0])
                 offsets = jnp.full(n_phi, params_array[1])
