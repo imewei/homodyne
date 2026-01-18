@@ -18,8 +18,8 @@
 #   - homodyne_static.yaml: 3-parameter equilibrium diffusion
 #   - homodyne_laminar_flow.yaml: 7-parameter shear flow
 #
-# VERSION: 2.17.0
-# UPDATED: 2026-01-16
+# VERSION: 2.18.0
+# UPDATED: 2026-01-18
 # ==============================================================================
 
 # ==============================================================================
@@ -28,7 +28,7 @@
 # Template metadata for documentation and validation.
 # The config_version should match the homodyne package version.
 metadata:
-  config_version: "2.17.0"
+  config_version: "2.18.0"
   description: "Master template - comprehensive reference with all configuration options"
   analysis_mode: "laminar_flow"
 
@@ -627,13 +627,35 @@ optimization:
     anti_degeneracy:
       enable: true                  # Master enable
 
-      # Per-angle parameter mode (v2.17.0+)
-      #   "auto": Uses constant mode when n_phi >= threshold (RECOMMENDED)
-      #           Prevents per-angle parameter absorption in multi-angle datasets
-      #   "constant": Single contrast/offset shared across all angles
-      #               Best for preventing structural degeneracy
-      #   "fourier": Fourier basis for smooth angle variation (legacy)
-      #   "individual": Independent per-angle params (prone to absorption, use with caution)
+      # -----------------------------------------------------------------------
+      # PER-ANGLE SCALING MODE (v2.18.0+)
+      # -----------------------------------------------------------------------
+      # Controls dimensionality reduction for per-angle contrast/offset.
+      # Same logic as CMC per-angle mode (except NLSQ also has "fourier").
+      #
+      # MODES:
+      #   "auto" (RECOMMENDED): Auto-selects based on n_phi threshold.
+      #     When n_phi >= threshold: Estimates per-angle values from quantile
+      #     analysis, AVERAGES them to single value, broadcasts to all angles.
+      #     Results in 9-param optimization (7 physical + 2 averaged scaling).
+      #
+      #   "constant": Per-angle values from quantile estimation, used DIRECTLY.
+      #     Different fixed value per angle (NOT averaged, NOT optimized).
+      #     Results in physical-only optimization (7 params).
+      #
+      #   "fourier": Fourier basis for smooth angle variation (NLSQ only).
+      #     Configured via fourier.order and fourier.min_phi_for_fourier.
+      #
+      #   "individual": Independent per-angle params, optimized during fitting.
+      #     Prone to absorption with many angles. Use with caution.
+      #     Results in 7 + 2*N_phi parameters for laminar_flow.
+      #
+      # PARAMETER COUNT (laminar_flow, n_phi=23):
+      #   - auto (n_phi >= 3): 9 params (7 physical + 2 averaged scaling)
+      #   - constant:          7 params (physical only, scaling fixed)
+      #   - fourier:          17 params (7 physical + 10 Fourier coeffs, order=2)
+      #   - individual:       53 params (7 physical + 46 per-angle scaling)
+      #
       per_angle_mode: "auto"
       constant_scaling_threshold: 3 # Use constant when n_phi >= this
                                     # CONSTRAINT: >= 1
@@ -922,6 +944,37 @@ optimization:
     enable: "auto"                  # true | false | "auto"
     min_points_for_cmc: 500000      # Threshold for auto-enable
     run_id: null                    # Optional run tag
+
+    # -------------------------------------------------------------------------
+    # ANTI-DEGENERACY: PER-ANGLE SCALING MODE (v2.18.0+)
+    # -------------------------------------------------------------------------
+    # Controls how per-angle contrast/offset are handled to prevent parameter
+    # absorption degeneracy.
+    # Same logic as NLSQ per-angle mode (except CMC does not have "fourier").
+    #
+    # MODES:
+    #   "auto" (RECOMMENDED): Auto-selects based on n_phi threshold.
+    #     When n_phi >= threshold: Estimates per-angle values from quantile
+    #     analysis, AVERAGES them to single value, broadcasts to all angles.
+    #     Reduces to 8 params (7 physical + 1 sigma).
+    #
+    #   "constant": Per-angle values from quantile estimation, used DIRECTLY.
+    #     Different fixed value per angle (NOT averaged, NOT sampled).
+    #     Reduces to 8 params (7 physical + 1 sigma).
+    #
+    #   "individual": Independent contrast + offset per angle, all sampled.
+    #     May suffer from parameter absorption degeneracy with many angles.
+    #     Use only when per-angle variation should be inferred from data.
+    #
+    # PARAMETER REDUCTION (laminar_flow, n_phi=23):
+    #   - auto (n_phi >= 3): 8 params (7 physical + 1 sigma)
+    #   - constant:          8 params (7 physical + 1 sigma)
+    #   - individual:       54 params (7 physical + 46 scaling + 1 sigma)
+    #   - Reduction:        85%
+    #
+    per_angle_mode: "auto"
+    constant_scaling_threshold: 3   # Use constant when n_phi >= this
+                                    # CONSTRAINT: >= 1
 
     # Computational backend
     backend: "jax"                  # "jax" | "numpy"

@@ -10,15 +10,15 @@
 # For comprehensive documentation of all parameters, see:
 #   homodyne_master_template.yaml
 #
-# VERSION: 2.17.0
-# UPDATED: 2026-01-16
+# VERSION: 2.18.0
+# UPDATED: 2026-01-18
 # ==============================================================================
 
 # ==============================================================================
 # METADATA
 # ==============================================================================
 metadata:
-  config_version: "2.17.0"
+  config_version: "2.18.0"
   description: "Static diffusion analysis - 3-parameter model"
   analysis_mode: "static"
   parameter_count: 3
@@ -293,7 +293,17 @@ optimization:
     # Disabled by default; enable only if parameter collapse observed.
     anti_degeneracy:
       enable: false                   # Not needed for static mode
-      per_angle_mode: "individual"
+      # Per-angle mode selection (v2.18.0+):
+      # Static mode has only 3 physical parameters with similar scales.
+      # Anti-degeneracy is less critical but available if needed.
+      # Same logic as CMC per-angle mode (except NLSQ also has "fourier").
+      #
+      #   "auto": Uses constant when n_phi >= threshold
+      #   "constant": Per-angle values from quantile estimation, used directly
+      #   "fourier": Fourier basis (NLSQ only)
+      #   "individual": Independent per-angle params, optimized
+      #
+      per_angle_mode: "auto"
       constant_scaling_threshold: 3
 
       gradient_monitoring:
@@ -423,6 +433,21 @@ optimization:
     min_points_for_cmc: 500000        # Higher threshold for simpler model
     run_id: null
     backend: "jax"
+
+    # Anti-degeneracy: Per-angle scaling mode (v2.18.0+)
+    # Less critical for static mode (no shear gradient cancellation).
+    # Same logic as NLSQ per-angle mode (except CMC does not have "fourier").
+    #
+    #   "auto": Auto-selects based on n_phi threshold.
+    #     When n_phi >= threshold: Estimates per-angle, AVERAGES, broadcasts.
+    #
+    #   "constant": Per-angle values from quantile estimation, used DIRECTLY.
+    #     Different fixed value per angle (NOT averaged).
+    #
+    #   "individual": Per-angle contrast/offset sampled.
+    #
+    per_angle_mode: "auto"
+    constant_scaling_threshold: 3     # Use constant when n_phi >= this
 
     backend_config:
       name: "auto"

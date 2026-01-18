@@ -12,15 +12,15 @@
 # For comprehensive documentation of all parameters, see:
 #   homodyne_master_template.yaml
 #
-# VERSION: 2.17.0
-# UPDATED: 2026-01-16
+# VERSION: 2.18.0
+# UPDATED: 2026-01-18
 # ==============================================================================
 
 # ==============================================================================
 # METADATA
 # ==============================================================================
 metadata:
-  config_version: "2.17.0"
+  config_version: "2.18.0"
   description: "Laminar flow analysis - 7-parameter model"
   analysis_mode: "laminar_flow"
   parameter_count: 7
@@ -346,11 +346,26 @@ optimization:
     # CRITICAL: hierarchical.enable MUST be true for shear_weighting to work!
     anti_degeneracy:
       enable: true
-      # Per-angle mode selection (v2.17.0+):
-      #   "auto": Uses constant mode when n_phi >= threshold (RECOMMENDED)
-      #   "constant": Single contrast/offset shared across all angles
-      #   "fourier": Fourier basis for smooth angle variation (legacy)
-      #   "individual": Independent per-angle params (prone to absorption)
+      # Per-angle mode selection (v2.18.0+):
+      # Controls dimensionality reduction for per-angle contrast/offset.
+      # Same logic as CMC per-angle mode (except NLSQ also has "fourier").
+      #
+      #   "auto" (RECOMMENDED): Auto-selects based on n_phi threshold.
+      #     When n_phi >= threshold: Estimates per-angle values from quantile
+      #     analysis, AVERAGES them to single value, broadcasts to all angles.
+      #     Results in 9-param optimization (7 physical + 2 averaged scaling).
+      #
+      #   "constant": Per-angle values from quantile estimation, used DIRECTLY.
+      #     Different fixed value per angle (NOT averaged, NOT optimized).
+      #     Results in physical-only optimization (7 params).
+      #
+      #   "fourier": Fourier basis for smooth angle variation (NLSQ only).
+      #     Configured via fourier.order and fourier.min_phi_for_fourier.
+      #
+      #   "individual": Independent per-angle params, optimized during fitting.
+      #     Prone to absorption with many angles. Use with caution.
+      #     Results in 7 + 2*N_phi parameters.
+      #
       per_angle_mode: "auto"
       constant_scaling_threshold: 3   # Use constant when n_phi >= this
 
@@ -512,6 +527,25 @@ optimization:
     min_points_for_cmc: 100000        # Lower for 7-parameter model
     run_id: null
     backend: "jax"
+
+    # Anti-degeneracy: Per-angle scaling mode (v2.18.0+)
+    # Controls how per-angle contrast/offset are handled in CMC.
+    # Same logic as NLSQ per-angle mode (except CMC does not have "fourier").
+    #
+    #   "auto" (RECOMMENDED): Auto-selects based on n_phi threshold.
+    #     When n_phi >= threshold: Estimates per-angle values from quantile
+    #     analysis, AVERAGES them to single value, broadcasts to all angles.
+    #     Reduces to 8 params (7 physical + 1 sigma).
+    #
+    #   "constant": Per-angle values from quantile estimation, used DIRECTLY.
+    #     Different fixed value per angle (NOT averaged, NOT sampled).
+    #     Reduces to 8 params (7 physical + 1 sigma).
+    #
+    #   "individual": Independent contrast + offset per angle, all sampled.
+    #     May cause parameter absorption degeneracy with many angles.
+    #
+    per_angle_mode: "auto"
+    constant_scaling_threshold: 3     # Use constant when n_phi >= this
 
     backend_config:
       name: "auto"
