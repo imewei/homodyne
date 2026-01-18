@@ -1,12 +1,46 @@
-# Homodyne 2.17: CPU-Optimized JAX-First XPCS Analysis
+# Homodyne 2.18: CPU-Optimized JAX-First XPCS Analysis
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Python](https://img.shields.io/badge/Python-3.12%2B-blue)](https://www.python.org/)
-[![Version](https://img.shields.io/badge/Version-2.17.0-green.svg)](#)
+[![Version](https://img.shields.io/badge/Version-2.18.0-green.svg)](#)
 [![Documentation](https://img.shields.io/badge/docs-sphinx-blue.svg)](https://homodyne.readthedocs.io)
 [![ReadTheDocs](https://readthedocs.org/projects/homodyne/badge/?version=latest)](https://homodyne.readthedocs.io/en/latest/)
 [![GitHub Actions](https://github.com/imewei/homodyne/actions/workflows/docs.yml/badge.svg)](https://github.com/imewei/homodyne/actions/workflows/docs.yml)
 [![DOI](https://zenodo.org/badge/DOI/10.1073/pnas.2401162121.svg)](https://doi.org/10.1073/pnas.2401162121)
+
+## 🚀 **What's New in v2.18.0**
+
+### CMC Per-Angle Mode Parity with NLSQ
+
+**Unified anti-degeneracy system** across NLSQ and CMC optimization backends.
+
+**Key Features:**
+
+- **CMC per-angle modes**: `auto`, `constant`, and `individual` modes matching NLSQ anti-degeneracy
+- **85% parameter reduction**: For n_phi=23 laminar_flow (54 → 8 or 10 params)
+- **Shared scaling utilities**: New `homodyne.core.scaling_utils` module for unified quantile-based estimation
+- **NLSQ mode refinement**: `auto` → `auto_averaged` (9 params) vs explicit `constant` → `fixed_constant` (7 params)
+
+**Mode Semantics:**
+
+| Mode | CMC Params (laminar_flow) | Scaling Handling |
+|------|---------------------------|------------------|
+| `auto` (n_phi ≥ 3) | 10 (2 averaged + 7 physical + σ) | Sampled single contrast/offset |
+| `constant` | 8 (7 physical + σ) | Fixed per-angle from quantiles |
+| `individual` | 54 (46 per-angle + 7 physical + σ) | Sampled per-angle |
+
+**Configuration:**
+
+```yaml
+optimization:
+  cmc:
+    per_angle_mode: "auto"           # "auto", "constant", "individual"
+    constant_scaling_threshold: 3    # Auto uses constant when n_phi >= threshold
+```
+
+See [CMC Per-Angle Modes Documentation](docs/api-reference/optimization.rst#cmc-per-angle-modes) for details.
+
+---
 
 ## 🚀 **What's New in v2.17.0**
 
