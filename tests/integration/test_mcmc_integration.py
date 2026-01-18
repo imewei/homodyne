@@ -1595,7 +1595,9 @@ def simple_static_data():
     Uses known parameters to verify MCMC can recover them using
     physics-informed priors alone (no initialization).
 
-    Note: Uses small num_samples (<15) to force NUTS selection for fast tests.
+    Note: Uses small grid to force NUTS selection for fast tests.
+    Creates 2D correlation data with off-diagonal points (t1 != t2)
+    required by MCMC data preparation.
     """
     # True parameters
     true_D0 = 1000.0
@@ -1604,11 +1606,15 @@ def simple_static_data():
     true_contrast = 0.5
     true_offset = 1.0
 
-    # Time arrays (small dataset for fast tests)
-    # Use 10 points to ensure num_samples < 15 → NUTS (not CMC)
-    n_points = 10
-    t1 = np.linspace(0.1, 5.0, n_points)
-    t2 = t1.copy()
+    # Time arrays - create 2D grid for proper correlation data
+    # Use small grid (5x5 = 25 points) for fast tests
+    n_t = 5
+    t1_1d = np.linspace(0.1, 5.0, n_t)
+    t2_1d = np.linspace(0.1, 5.0, n_t)
+    t1_grid, t2_grid = np.meshgrid(t1_1d, t2_1d, indexing="ij")
+    t1 = t1_grid.ravel()  # Flatten to 1D array
+    t2 = t2_grid.ravel()  # Different values - creates off-diagonal points
+    n_points = len(t1)  # 25 points total
     phi = np.zeros(n_points)  # Static mode doesn't use phi
 
     # Physical parameters
@@ -1617,7 +1623,6 @@ def simple_static_data():
 
     # Generate synthetic g2 data with noise
     # g1 = exp(-D0 * q^2 * (t1^alpha + t2^alpha) - D_offset * q^2 * (t1 + t2))
-    t1[1] - t1[0]
     D_total = true_D0 * (t1**true_alpha + t2**true_alpha) + true_D_offset * (t1 + t2)
     g1 = np.exp(-D_total * q**2)
     c2_theory = 1.0 + g1**2
@@ -1753,10 +1758,14 @@ def test_auto_retry_on_poor_convergence():
     If it fails intermittently, it's working correctly (detecting poor convergence).
     """
     # Create challenging dataset (high noise)
-    # 12 points - uses CMC framework with NUTS per-shard in v3.0
-    n_points = 12
-    t1 = np.linspace(0.1, 2.0, n_points)
-    t2 = t1.copy()
+    # Create 2D grid for proper correlation data with off-diagonal points
+    n_t = 4  # 4x4 = 16 points total (after diagonal filtering, ~12 remain)
+    t1_1d = np.linspace(0.1, 2.0, n_t)
+    t2_1d = np.linspace(0.1, 2.0, n_t)
+    t1_grid, t2_grid = np.meshgrid(t1_1d, t2_1d, indexing="ij")
+    t1 = t1_grid.ravel()
+    t2 = t2_grid.ravel()
+    n_points = len(t1)
     phi = np.zeros(n_points)
     q = 0.01
     L = 2000000.0
@@ -1852,9 +1861,14 @@ def test_no_automatic_nlsq_initialization():
     # This test is more of a code inspection verification
     # We verify by running MCMC and checking it completes without NLSQ
 
-    n_points = 12
-    t1 = np.linspace(0.1, 2.0, n_points)
-    t2 = t1.copy()
+    # Create 2D grid for proper correlation data with off-diagonal points
+    n_t = 4  # 4x4 = 16 points
+    t1_1d = np.linspace(0.1, 2.0, n_t)
+    t2_1d = np.linspace(0.1, 2.0, n_t)
+    t1_grid, t2_grid = np.meshgrid(t1_1d, t2_1d, indexing="ij")
+    t1 = t1_grid.ravel()
+    t2 = t2_grid.ravel()
+    n_points = len(t1)
     phi = np.zeros(n_points)
     q = 0.01
     L = 2000000.0
@@ -1907,10 +1921,14 @@ def test_enhanced_retry_logging(caplog):
     caplog.set_level(logging.WARNING)
 
     # Create challenging dataset with high noise
-    # 12 points - uses CMC framework with NUTS per-shard in v3.0
-    n_points = 12
-    t1 = np.linspace(0.1, 1.0, n_points)
-    t2 = t1.copy()
+    # Create 2D grid for proper correlation data with off-diagonal points
+    n_t = 4  # 4x4 = 16 points
+    t1_1d = np.linspace(0.1, 1.0, n_t)
+    t2_1d = np.linspace(0.1, 1.0, n_t)
+    t1_grid, t2_grid = np.meshgrid(t1_1d, t2_1d, indexing="ij")
+    t1 = t1_grid.ravel()
+    t2 = t2_grid.ravel()
+    n_points = len(t1)
     phi = np.zeros(n_points)
     q = 0.01
     L = 2000000.0
