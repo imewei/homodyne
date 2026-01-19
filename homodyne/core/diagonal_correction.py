@@ -48,17 +48,21 @@ try:
 
     HAS_JAX = True
 except ImportError:
+    from typing import Callable, TypeVar
+
     HAS_JAX = False
     jnp = np  # type: ignore[misc]
 
-    def jit(f):  # type: ignore[misc]  # noqa: E731
+    _F = TypeVar("_F", bound=Callable[..., object])
+
+    def jit(f: _F) -> _F:  # type: ignore[no-redef]  # noqa: E731
         """No-op decorator when JAX is unavailable."""
         return f
 
-    vmap = None  # type: ignore[misc]
+    vmap = None  # type: ignore[assignment]
 
 try:
-    from scipy import stats
+    from scipy import stats  # type: ignore[import-untyped]
 
     HAS_SCIPY = True
 except ImportError:
@@ -268,22 +272,24 @@ if HAS_JAX:
     def _diagonal_correction_jax(c2_mat: ArrayLike) -> jnp.ndarray:
         """JAX implementation wrapper (handles type conversion)."""
         c2_jax = jnp.asarray(c2_mat)
-        return _diagonal_correction_jax_core(c2_jax)
+        result: jnp.ndarray = _diagonal_correction_jax_core(c2_jax)
+        return result
 
     def _diagonal_correction_batch_jax(c2_matrices: ArrayLike) -> jnp.ndarray:
         """Batch JAX implementation using vmap."""
         c2_jax = jnp.asarray(c2_matrices)
         # vmap over first axis (n_phi)
         vmapped_correction = vmap(_diagonal_correction_jax_core, in_axes=0)
-        return vmapped_correction(c2_jax)
+        result: jnp.ndarray = vmapped_correction(c2_jax)
+        return result
 
 else:
     # Fallback stubs when JAX is not available
-    def _diagonal_correction_jax(c2_mat: ArrayLike) -> np.ndarray:
+    def _diagonal_correction_jax(c2_mat: ArrayLike) -> np.ndarray:  # type: ignore[misc]
         """Fallback to NumPy when JAX not available."""
         return _diagonal_correction_numpy(c2_mat, "basic", {})
 
-    def _diagonal_correction_batch_jax(c2_matrices: ArrayLike) -> np.ndarray:
+    def _diagonal_correction_batch_jax(c2_matrices: ArrayLike) -> np.ndarray:  # type: ignore[misc]
         """Fallback to NumPy when JAX not available."""
         return _diagonal_correction_batch_numpy(c2_matrices, "basic", {})
 
@@ -308,8 +314,8 @@ def _diagonal_correction_numpy(
         return _statistical_correction_numpy(c2_np, config)
     elif method == "interpolation":
         return _interpolation_correction_numpy(c2_np, config)
-    else:
-        logger.warning(f"Unknown method '{method}', using 'basic'")
+    else:  # Defensive fallback for unknown method
+        logger.warning(f"Unknown method '{method}', using 'basic'")  # type: ignore[unreachable]
         return _basic_correction_numpy(c2_np)
 
 
@@ -432,8 +438,8 @@ def _statistical_correction_numpy(
                 else:
                     # Fallback to median if scipy not available
                     c2_corrected[i, i] = np.median(neighbors_arr)
-            else:
-                logger.warning(f"Unknown estimator '{estimator}', using median")
+            else:  # Defensive fallback for unknown estimator
+                logger.warning(f"Unknown estimator '{estimator}', using median")  # type: ignore[unreachable]
                 c2_corrected[i, i] = np.median(neighbors_arr)
 
     return c2_corrected

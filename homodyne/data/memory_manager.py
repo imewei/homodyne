@@ -44,7 +44,7 @@ try:
     HAS_NUMPY = True
 except ImportError:
     HAS_NUMPY = False
-    np = None
+    np = None  # type: ignore[assignment]
 
 # JAX for GPU memory management
 try:
@@ -55,12 +55,12 @@ try:
     HAS_JAX = True
 except ImportError:
     HAS_JAX = False
-    jnp = np
+    jnp = np  # type: ignore[misc]
 
-    def device_put(x):
+    def device_put(x):  # type: ignore[no-untyped-def,misc]
         return x
 
-    def device_get(x):
+    def device_get(x):  # type: ignore[no-untyped-def]
         return x
 
 
@@ -74,13 +74,13 @@ except ImportError:
 
     HAS_V2_LOGGING = False
 
-    def get_logger(name):
+    def get_logger(name):  # type: ignore[no-untyped-def,misc]
         return logging.getLogger(name)
 
-    def log_performance(*args, **kwargs):
+    def log_performance(*args, **kwargs):  # type: ignore[no-untyped-def,misc]
         return lambda f: f
 
-    def log_calls(*args, **kwargs):
+    def log_calls(*args, **kwargs):  # type: ignore[no-untyped-def,misc]
         return lambda f: f
 
 
@@ -184,7 +184,7 @@ class MemoryPool:
 
         if self.buffers:
             self.hit_count += 1
-            return self.buffers.popleft()
+            return self.buffers.popleft()  # type: ignore[no-any-return]
         else:
             self.miss_count += 1
             if self.allocated_count < self.max_buffers:
@@ -501,10 +501,10 @@ class AdvancedMemoryManager:
         logger.info("Advanced memory manager initialized")
 
     @contextmanager
-    def managed_allocation(
+    def managed_allocation(  # type: ignore[no-untyped-def]
         self,
         size: int,
-        dtype: np.dtype = np.float64,
+        dtype: np.dtype = np.float64,  # type: ignore[assignment]
         pool_enabled: bool = True,
     ):
         """Context manager for managed memory allocation.
@@ -549,36 +549,41 @@ class AdvancedMemoryManager:
             while pool_size < size:
                 pool_size *= 2
 
-            pool_id = f"pool_{pool_size}"
+            pool_id_int = pool_size  # Use int as key
 
             # Get or create pool
-            if pool_id not in self._pools:
+            if pool_id_int not in self._pools:
                 max_buffers = max(
                     4,
                     min(32, int(1024 * 1024 * 1024 / (pool_size * 8))),
                 )  # ~1GB max per pool
-                self._pools[pool_id] = MemoryPool(
-                    pool_id=pool_id,
+                self._pools[pool_id_int] = MemoryPool(
+                    pool_id=f"pool_{pool_size}",
                     buffer_size=pool_size,
                     max_buffers=max_buffers,
                 )
 
-            pool = self._pools[pool_id]
+            pool = self._pools[pool_id_int]
             buffer = pool.get_buffer()
 
             if buffer is not None:
-                return buffer[:size], pool_id  # Return view of correct size
+                return buffer[:size], f"pool_{pool_size}"  # Return view of correct size
 
             return None, None
 
     def _return_to_pool(self, buffer: np.ndarray, pool_id: str) -> None:
         """Return buffer to memory pool."""
         with self._pools_lock:
-            if pool_id in self._pools:
-                pool = self._pools[pool_id]
-                # Get the underlying buffer (may be larger than the view)
-                base_buffer = buffer.base if buffer.base is not None else buffer
-                pool.return_buffer(base_buffer)
+            # Extract size from pool_id like "pool_1024"
+            try:
+                pool_size = int(pool_id.split("_")[1])
+                if pool_size in self._pools:
+                    pool = self._pools[pool_size]
+                    # Get the underlying buffer (may be larger than the view)
+                    base_buffer = buffer.base if buffer.base is not None else buffer
+                    pool.return_buffer(base_buffer)
+            except (ValueError, IndexError):
+                pass
 
     def _allocate_buffer(self, size: int, dtype: np.dtype) -> np.ndarray:
         """Allocate new memory buffer with tracking."""
@@ -674,8 +679,8 @@ class AdvancedMemoryManager:
             buffer = np.frombuffer(mm, dtype=dtype)
 
             # Store reference to keep mmap alive
-            buffer._homodyne_mmap = mm
-            buffer._homodyne_vm_file = vm_file
+            buffer._homodyne_mmap = mm  # type: ignore[attr-defined]
+            buffer._homodyne_vm_file = vm_file  # type: ignore[attr-defined]
 
             logger.info(
                 f"Allocated {total_bytes / (1024 * 1024):.1f}MB virtual memory buffer",
@@ -958,11 +963,11 @@ class AdvancedMemoryManager:
 
         logger.info("Advanced memory manager shutdown complete")
 
-    def __enter__(self):
+    def __enter__(self) -> "AdvancedMemoryManager":
         """Context manager entry."""
         return self
 
-    def __exit__(self, exc_type, exc_val, exc_tb):
+    def __exit__(self, exc_type, exc_val, exc_tb) -> None:  # type: ignore[no-untyped-def]
         """Context manager exit."""
         self.shutdown()
 

@@ -26,11 +26,13 @@ from typing import Any
 # Handle YAML dependency
 try:
     import yaml
+    from types import ModuleType
 
     HAS_YAML = True
+    yaml_module: ModuleType | None = yaml
 except ImportError:
     HAS_YAML = False
-    yaml = None
+    yaml_module = None
 
 # V2 logging integration
 try:
@@ -47,19 +49,20 @@ try:
     HAS_VALIDATORS = True
 except ImportError:
     import logging
+    from typing import Callable
 
     HAS_V2_LOGGING = False
     HAS_VALIDATORS = False
 
-    def get_logger(name):
+    def get_logger(name: str, **kwargs: Any) -> logging.Logger:  # type: ignore[misc]
         return logging.getLogger(name)
 
     # Fallback stubs when validators module not available
-    validate_file_path = None
-    validate_frame_range = None
-    validate_positive_value = None
-    validate_numeric_range = None
-    validate_enum_value = None
+    validate_file_path_func: Callable[..., list[str]] | None = None
+    validate_frame_range_func: Callable[..., list[str]] | None = None
+    validate_positive_value_func: Callable[..., list[str]] | None = None
+    validate_numeric_range_func: Callable[..., list[str]] | None = None
+    validate_enum_value_func: Callable[..., list[str]] | None = None
 
 
 logger = get_logger(__name__)
@@ -175,7 +178,7 @@ def load_yaml_config(config_path: str | Path) -> dict[str, Any]:
     Raises:
         XPCSConfigurationError: If YAML loading fails
     """
-    if not HAS_YAML:
+    if not HAS_YAML or yaml_module is None:
         raise XPCSConfigurationError("PyYAML required for YAML configuration files")
 
     config_path = Path(config_path)
@@ -185,15 +188,17 @@ def load_yaml_config(config_path: str | Path) -> dict[str, Any]:
 
     try:
         with open(config_path) as f:
-            config = yaml.safe_load(f)
+            config_data = yaml_module.safe_load(f)
 
-        if config is None:
+        if config_data is None:
             raise XPCSConfigurationError(f"Empty or invalid YAML file: {config_path}")
 
         logger.debug(f"Loaded YAML configuration from: {config_path}")
-        return config
+        # Type assertion to help mypy
+        assert isinstance(config_data, dict)
+        return config_data
 
-    except yaml.YAMLError as e:
+    except yaml_module.YAMLError as e:
         raise XPCSConfigurationError(
             f"Failed to parse YAML configuration {config_path}: {e}",
         ) from e
@@ -218,11 +223,13 @@ def load_json_config(config_path: str | Path) -> dict[str, Any]:
 
     try:
         with open(config_path) as f:
-            config = json.load(f)
+            config_data = json.load(f)
 
         logger.debug(f"Loaded JSON configuration from: {config_path}")
         logger.info("Consider migrating to YAML format for improved readability")
-        return config
+        # Type assertion to help mypy
+        assert isinstance(config_data, dict)
+        return config_data
 
     except json.JSONDecodeError as e:
         raise XPCSConfigurationError(
@@ -232,7 +239,7 @@ def load_json_config(config_path: str | Path) -> dict[str, Any]:
 
 def validate_config_schema(
     config: dict[str, Any],
-    schema: dict[str, Any] = None,
+    schema: dict[str, Any] | None = None,
 ) -> ConfigValidationResult:
     """Validate configuration against schema.
 
@@ -251,6 +258,9 @@ def validate_config_schema(
     missing_optional = []
 
     for section_name, section_schema in schema.items():
+        if not isinstance(section_schema, dict):
+            continue
+
         if section_name not in config:
             if section_schema.get("required"):
                 errors.append(f"Missing required configuration section: {section_name}")
@@ -263,7 +273,11 @@ def validate_config_schema(
         section_config = config[section_name]
 
         # Check required parameters
-        for param_name, param_type in section_schema.get("required", {}).items():
+        required_params = section_schema.get("required", {})
+        if not isinstance(required_params, dict):
+            continue
+
+        for param_name, param_type in required_params.items():
             if param_name not in section_config:
                 errors.append(
                     f"Missing required parameter: {section_name}.{param_name}",
@@ -285,7 +299,11 @@ def validate_config_schema(
                         )
 
         # Check optional parameters
-        for param_name, param_type in section_schema.get("optional", {}).items():
+        optional_params = section_schema.get("optional", {})
+        if not isinstance(optional_params, dict):
+            continue
+
+        for param_name, param_type in optional_params.items():
             if param_name not in section_config:
                 missing_optional.append(f"{section_name}.{param_name}")
             else:
@@ -547,7 +565,7 @@ def _validate_parameter_warnings(config: dict[str, Any]) -> list[str]:
 
 def apply_config_defaults(
     config: dict[str, Any],
-    schema: dict[str, Any] = None,
+    schema: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Apply default values to configuration.
 
@@ -564,11 +582,16 @@ def apply_config_defaults(
     config_with_defaults = config.copy()
 
     for section_name, section_schema in schema.items():
+        if not isinstance(section_schema, dict):
+            continue
+
         if section_name not in config_with_defaults:
             config_with_defaults[section_name] = {}
 
         section_config = config_with_defaults[section_name]
         defaults = section_schema.get("defaults", {})
+        if not isinstance(defaults, dict):
+            continue
 
         for param_name, default_value in defaults.items():
             if param_name not in section_config:
@@ -607,9 +630,11 @@ def migrate_json_to_yaml_config(
 
     # Add v2 features section if not present
     if "v2_features" not in yaml_config:
-        yaml_config["v2_features"] = XPCS_CONFIG_SCHEMA["v2_features"][
-            "defaults"
-        ].copy()
+        v2_features_schema = XPCS_CONFIG_SCHEMA["v2_features"]
+        if isinstance(v2_features_schema, dict) and "defaults" in v2_features_schema:
+            v2_defaults = v2_features_schema["defaults"]
+            if isinstance(v2_defaults, dict):
+                yaml_config["v2_features"] = v2_defaults.copy()
 
     # Apply defaults
     yaml_config = apply_config_defaults(yaml_config)
@@ -631,7 +656,7 @@ def save_yaml_config(config: dict[str, Any], output_path: str | Path) -> None:
     Raises:
         XPCSConfigurationError: If YAML saving fails
     """
-    if not HAS_YAML:
+    if not HAS_YAML or yaml_module is None:
         raise XPCSConfigurationError("PyYAML required to save YAML configuration files")
 
     output_path = Path(output_path)
@@ -641,7 +666,7 @@ def save_yaml_config(config: dict[str, Any], output_path: str | Path) -> None:
 
     try:
         with open(output_path, "w") as f:
-            yaml.dump(config, f, default_flow_style=False, indent=2, sort_keys=False)
+            yaml_module.dump(config, f, default_flow_style=False, indent=2, sort_keys=False)
 
         logger.info(f"Saved YAML configuration to: {output_path}")
 

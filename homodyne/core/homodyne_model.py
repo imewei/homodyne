@@ -267,7 +267,8 @@ class HomodyneModel:
             C2 correlation matrix, shape (n_time, n_time)
         """
         c2 = self.compute_c2(params, np.array([phi]), contrast, offset)
-        return c2[0]
+        result: np.ndarray = c2[0]
+        return result
 
     def plot_simulated_data(
         self,
@@ -335,7 +336,7 @@ class HomodyneModel:
             contrast=contrast,
             offset=offset,
             dt=self.dt,
-            physics_factors=self.physics_factors.to_dict(),
+            physics_factors=self.physics_factors.to_dict(),  # type: ignore[arg-type]
         )
         logger.info(f"Saved data to: {data_file}")
 
@@ -362,7 +363,7 @@ class HomodyneModel:
         output_dir: Path,
         contrast: float,
         offset: float,
-    ):
+    ) -> None:
         """Generate heatmap plots for C2 data."""
         try:
             import matplotlib.pyplot as plt
@@ -384,10 +385,10 @@ class HomodyneModel:
                 aspect="equal",
                 origin="lower",
                 extent=(
-                    self.time_array[0],
-                    self.time_array[-1],
-                    self.time_array[0],
-                    self.time_array[-1],
+                    float(self.time_array[0]),
+                    float(self.time_array[-1]),
+                    float(self.time_array[0]),
+                    float(self.time_array[-1]),
                 ),
                 cmap="jet",
                 vmin=1.0,
@@ -418,7 +419,7 @@ class HomodyneModel:
 
         logger.info(f"Generated {len(phi_angles)} heatmap plots")
 
-    def _extract_config(self, config: dict):
+    def _extract_config(self, config: dict) -> None:
         """Extract and validate configuration parameters."""
         try:
             analyzer_params = config["analyzer_parameters"]

@@ -568,9 +568,9 @@ alias hc-iso >/dev/null 2>&1 && echo "shortcut_alias_works" || echo "shortcut_al
                 self.test_environment_detection()
 
             platform = self.environment_info.get("platform", "Unknown")
-            warnings = []
-            remediation = []
-            details = {}
+            warnings: list[str] = []
+            remediation: list[str] = []
+            details: dict[str, Any] = {}
 
             # Test 1: JAX imports successfully
             details["jax_version"] = jax.__version__
@@ -606,7 +606,7 @@ alias hc-iso >/dev/null 2>&1 && echo "shortcut_alias_works" || echo "shortcut_al
             try:
 
                 @jax.jit
-                def test_fn(x):
+                def test_fn(x: Any) -> Any:
                     return x**2
 
                 result = test_fn(jnp.array([1.0, 2.0, 3.0]))
@@ -677,8 +677,8 @@ alias hc-iso >/dev/null 2>&1 && echo "shortcut_alias_works" || echo "shortcut_al
             import nlsq
 
             warnings = []
-            remediation = []
-            details = {}
+            remediation: list[str] = []
+            details: dict[str, Any] = {}
 
             # Test 1: NLSQ version check
             try:
@@ -834,8 +834,8 @@ alias hc-iso >/dev/null 2>&1 && echo "shortcut_alias_works" || echo "shortcut_al
 
         try:
             warnings = []
-            remediation = []
-            details = {}
+            remediation: list[str] = []
+            details: dict[str, Any] = {}
 
             # Test 1: ConfigManager import
             try:
@@ -972,8 +972,8 @@ alias hc-iso >/dev/null 2>&1 && echo "shortcut_alias_works" || echo "shortcut_al
 
         try:
             warnings = []
-            remediation = []
-            details = {}
+            remediation: list[str] = []
+            details: dict[str, Any] = {}
 
             # Test 1: h5py import and functionality
             try:
@@ -1030,7 +1030,7 @@ alias hc-iso >/dev/null 2>&1 && echo "shortcut_alias_works" || echo "shortcut_al
 
                 # Test angle normalization function
                 try:
-                    test_angle = normalize_angle_to_symmetric_range(270.0)
+                    test_angle = float(normalize_angle_to_symmetric_range(270.0))
                     if abs(test_angle - (-90.0)) < 1e-6:
                         details["phi_filtering_test"] = "success"
                     else:
@@ -1236,7 +1236,7 @@ alias hc-iso >/dev/null 2>&1 && echo "shortcut_alias_works" || echo "shortcut_al
         }
 
         total_weight = 0
-        earned_score = 0
+        earned_score = 0.0
 
         for result in self.results:
             weight = weights.get(result.name, 5)
@@ -1369,7 +1369,7 @@ alias hc-iso >/dev/null 2>&1 && echo "shortcut_alias_works" || echo "shortcut_al
         return "\n".join(report)
 
 
-def main():
+def main() -> None:
     """Main function for system validation CLI."""
     import argparse
 

@@ -23,12 +23,12 @@ import sys
 from pathlib import Path
 
 
-def is_linux():
+def is_linux() -> bool:
     """Check if running on Linux."""
     return platform.system() == "Linux"
 
 
-def detect_shell_type():
+def detect_shell_type() -> str:
     """Detect the current shell type."""
     shell = os.environ.get("SHELL", "")
     if "zsh" in shell:
@@ -41,7 +41,7 @@ def detect_shell_type():
         return "bash"  # Default fallback
 
 
-def is_virtual_environment():
+def is_virtual_environment() -> bool:
     """Check if running in a virtual environment."""
     return (
         hasattr(sys, "real_prefix")
@@ -52,7 +52,7 @@ def is_virtual_environment():
     )
 
 
-def is_conda_environment(venv_path):
+def is_conda_environment(venv_path: Path) -> bool:
     """Check if the environment is a conda/mamba environment."""
     # Check for conda directory structure
     conda_meta = venv_path / "conda-meta"
@@ -63,7 +63,7 @@ def is_conda_environment(venv_path):
     )
 
 
-def create_unified_zsh_completion(venv_path):
+def create_unified_zsh_completion(venv_path: Path) -> Path:
     """Create the unified zsh completion file."""
     zsh_dir = venv_path / "etc" / "zsh"
     zsh_dir.mkdir(parents=True, exist_ok=True)
@@ -116,7 +116,7 @@ fi"""
     return completion_file
 
 
-def integrate_with_venv_activate(venv_path):
+def integrate_with_venv_activate(venv_path: Path) -> list[Path]:
     """Integrate homodyne completion with virtual environment's activate scripts.
 
     This modifies the venv's own activate scripts (not user's global shell configs)
@@ -190,7 +190,7 @@ end
     return modified_scripts
 
 
-def create_xla_activation_scripts(venv_path):
+def create_xla_activation_scripts(venv_path: Path) -> list[Path]:
     """Create XLA_FLAGS activation scripts for bash/zsh and fish.
 
     Parameters
@@ -203,7 +203,7 @@ def create_xla_activation_scripts(venv_path):
     list[Path]
         List of created XLA activation script paths
     """
-    created_scripts = []
+    created_scripts: list[Path] = []
 
     try:
         # Find homodyne package to copy activation scripts
@@ -247,7 +247,7 @@ def create_xla_activation_scripts(venv_path):
     return created_scripts
 
 
-def integrate_xla_with_venv_activate(venv_path):
+def integrate_xla_with_venv_activate(venv_path: Path) -> list[Path]:
     """Integrate XLA_FLAGS configuration with virtual environment's activate scripts.
 
     Parameters
@@ -325,7 +325,7 @@ end
     return modified_scripts
 
 
-def configure_xla_mode(xla_mode=None):
+def configure_xla_mode(xla_mode: str | None = None) -> bool:
     """Configure XLA_FLAGS mode for the current environment.
 
     Parameters
@@ -368,7 +368,7 @@ def configure_xla_mode(xla_mode=None):
         return False
 
 
-def install_shell_completion(shell_type=None, force=False):
+def install_shell_completion(shell_type: str | None = None, force: bool = False) -> bool:
     """Install unified shell completion system.
 
     Integrates completion directly into the virtual environment's activate scripts.
@@ -466,7 +466,7 @@ fi
 # GPU acceleration removed in v2.3.0 - function removed for CPU-only architecture
 
 
-def install_macos_shell_completion():
+def install_macos_shell_completion() -> None:
     """Install shell completion for macOS."""
     import sys
     from pathlib import Path
@@ -486,7 +486,7 @@ def install_macos_shell_completion():
     pass
 
 
-def install_advanced_features():
+def install_advanced_features() -> bool:
     """Install advanced features: completion caching and system validation."""
     print("🚀 Installing Advanced Features...")
 
@@ -557,7 +557,7 @@ fi
         return False
 
 
-def interactive_setup():
+def interactive_setup() -> tuple[bool, list[str]]:
     """Interactive setup allowing user to choose what to install (CPU-only in v2.3.0)."""
     print("\n🔧 Homodyne Optional Setup (v2.3.0 - CPU-only)")
     print("Choose what to install (you can run this again later):")
@@ -634,7 +634,7 @@ def interactive_setup():
     return len([r for r in results if r.startswith("✅")]) > 0, results
 
 
-def show_installation_summary(interactive_results=None):
+def show_installation_summary(interactive_results: list[str] | None = None) -> None:
     """Show installation summary with available commands."""
     print("\n🚀 Quick Start Commands:")
     print("   homodyne --method nlsq --config config.yaml")
@@ -660,7 +660,7 @@ def show_installation_summary(interactive_results=None):
     print("   homodyne_help               # View all shortcuts")
 
 
-def main():
+def main() -> int:
     """Main post-installation routine with optional shell completion system."""
     args = parse_args()
 
@@ -756,7 +756,7 @@ def main():
     return 0 if success else 1
 
 
-def parse_args():
+def parse_args() -> argparse.Namespace:
     """Parse command line arguments."""
     parser = argparse.ArgumentParser(
         prog="homodyne-post-install",

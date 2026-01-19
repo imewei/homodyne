@@ -626,6 +626,12 @@ def build_init_values_dict(
     # Compute data-driven estimates if needed
     data_estimates: dict[str, float] = {}
     if use_data_estimation and (not has_contrast or not has_offset):
+        # Mypy doesn't infer non-None from use_data_estimation boolean
+        assert c2_data is not None
+        assert t1 is not None
+        assert t2 is not None
+        assert phi_indices is not None
+
         contrast_bounds = parameter_space.get_bounds("contrast")
         offset_bounds = parameter_space.get_bounds("offset")
 

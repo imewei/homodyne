@@ -304,31 +304,33 @@ class CMAESWrapperConfig:
         CMAESWrapperConfig
             CMA-ES wrapper configuration.
         """
+        # NLSQConfig might not have all fields if it's an older version or partial
+        # Use getattr with defaults where appropriate or access directly if we are sure
         return cls(
             # CMA-ES global search settings
-            preset=config.cmaes_preset,
-            max_generations=config.cmaes_max_generations,
-            popsize=config.cmaes_popsize,
-            sigma=config.cmaes_sigma,
-            tol_fun=config.cmaes_tol_fun,
-            tol_x=config.cmaes_tol_x,
-            restart_strategy=config.cmaes_restart_strategy,
-            max_restarts=config.cmaes_max_restarts,
-            population_batch_size=config.cmaes_population_batch_size,
-            data_chunk_size=config.cmaes_data_chunk_size,
-            auto_memory=config.cmaes_population_batch_size is None,
-            memory_limit_gb=config.cmaes_memory_limit_gb,
+            preset=getattr(config, "cmaes_preset", "cmaes"),
+            max_generations=getattr(config, "cmaes_max_generations", 100),
+            popsize=getattr(config, "cmaes_popsize", None),
+            sigma=getattr(config, "cmaes_sigma", 0.5),
+            tol_fun=getattr(config, "cmaes_tol_fun", 1e-8),
+            tol_x=getattr(config, "cmaes_tol_x", 1e-8),
+            restart_strategy=getattr(config, "cmaes_restart_strategy", "bipop"),
+            max_restarts=getattr(config, "cmaes_max_restarts", 9),
+            population_batch_size=getattr(config, "cmaes_population_batch_size", None),
+            data_chunk_size=getattr(config, "cmaes_data_chunk_size", None),
+            auto_memory=getattr(config, "cmaes_population_batch_size", None) is None,
+            memory_limit_gb=getattr(config, "cmaes_memory_limit_gb", 8.0),
             # NLSQ TRF refinement settings
-            refine_with_nlsq=config.cmaes_refine_with_nlsq,
-            refinement_workflow=config.cmaes_refinement_workflow,
-            refinement_ftol=config.cmaes_refinement_ftol,
-            refinement_xtol=config.cmaes_refinement_xtol,
-            refinement_gtol=config.cmaes_refinement_gtol,
-            refinement_max_nfev=config.cmaes_refinement_max_nfev,
-            refinement_loss=config.cmaes_refinement_loss,
+            refine_with_nlsq=getattr(config, "cmaes_refine_with_nlsq", True),
+            refinement_workflow=getattr(config, "cmaes_refinement_workflow", "auto"),
+            refinement_ftol=getattr(config, "cmaes_refinement_ftol", 1e-10),
+            refinement_xtol=getattr(config, "cmaes_refinement_xtol", 1e-10),
+            refinement_gtol=getattr(config, "cmaes_refinement_gtol", 1e-10),
+            refinement_max_nfev=getattr(config, "cmaes_refinement_max_nfev", 500),
+            refinement_loss=getattr(config, "cmaes_refinement_loss", "linear"),
             # Parameter normalization (v2.16.0)
-            normalize=config.cmaes_normalize,
-            normalization_epsilon=config.cmaes_normalization_epsilon,
+            normalize=getattr(config, "cmaes_normalize", True),
+            normalization_epsilon=getattr(config, "cmaes_normalization_epsilon", 1e-12),
         )
 
     def to_cmaes_config(self, n_params: int) -> Any:

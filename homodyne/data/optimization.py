@@ -13,15 +13,19 @@ Key Features:
 - Integration with NLSQ and CMC pipelines
 """
 
+from __future__ import annotations
+
 import time
 from collections import deque
 from collections.abc import Iterator
-from typing import Any
+from typing import Any, Callable, TypeVar
 
 import numpy as np
 
 from homodyne.data.types import DatasetInfo, ProcessingStrategy
 from homodyne.utils.logging import get_logger, log_performance
+
+_F = TypeVar("_F", bound=Callable[..., Any])
 
 # JAX imports with fallback
 try:
@@ -31,12 +35,12 @@ try:
     JAX_AVAILABLE = True
 except ImportError:
     JAX_AVAILABLE = False
-    jnp = np
+    jnp = np  # type: ignore[misc]
 
-    def jit(f):
+    def jit(f: _F) -> _F:  # type: ignore[no-redef]
         return f
 
-    def vmap(f, **kwargs):
+    def vmap(f: _F, **kwargs: Any) -> _F:  # type: ignore[misc]
         return f
 
 
@@ -56,7 +60,7 @@ class DatasetOptimizer:
         self,
         memory_limit_mb: float = 4096.0,
         enable_compression: bool = True,
-        max_workers: int = None,
+        max_workers: int | None = None,
     ):
         """Initialize dataset optimizer.
 
@@ -254,12 +258,12 @@ class DatasetOptimizer:
 
             # Convert to JAX arrays if available
             if JAX_AVAILABLE:
-                data_chunk = jnp.array(data_chunk)
+                data_chunk = jnp.array(data_chunk)  # type: ignore[assignment]
                 if sigma_chunk is not None:
-                    sigma_chunk = jnp.array(sigma_chunk)
-                t1_chunk = jnp.array(t1_chunk)
-                t2_chunk = jnp.array(t2_chunk)
-                phi_chunk = jnp.array(phi_chunk)
+                    sigma_chunk = jnp.array(sigma_chunk)  # type: ignore[assignment]
+                t1_chunk = jnp.array(t1_chunk)  # type: ignore[assignment]
+                t2_chunk = jnp.array(t2_chunk)  # type: ignore[assignment]
+                phi_chunk = jnp.array(phi_chunk)  # type: ignore[assignment]
 
             yield data_chunk, sigma_chunk, t1_chunk, t2_chunk, phi_chunk
 
@@ -271,7 +275,7 @@ class DatasetOptimizer:
         t1: np.ndarray,
         t2: np.ndarray,
         phi: np.ndarray,
-        **kwargs,
+        **kwargs: Any,
     ) -> dict[str, Any]:
         """Optimize data processing specifically for NLSQ.
 
@@ -322,7 +326,7 @@ class DatasetOptimizer:
         t1: np.ndarray,
         t2: np.ndarray,
         phi: np.ndarray,
-        **kwargs,
+        **kwargs: Any,
     ) -> dict[str, Any]:
         """Optimize data processing specifically for CMC (Consensus Monte Carlo).
 
@@ -431,7 +435,7 @@ class DatasetOptimizer:
 
 
 # Convenience functions for integration with existing codebase
-def create_dataset_optimizer(**kwargs) -> DatasetOptimizer:
+def create_dataset_optimizer(**kwargs: Any) -> DatasetOptimizer:
     """Create dataset optimizer with sensible defaults."""
     # Filter kwargs to only include valid parameters for DatasetOptimizer
     valid_params = {"memory_limit_mb", "enable_compression", "max_workers"}
@@ -446,7 +450,7 @@ def optimize_for_method(
     t2: np.ndarray,
     phi: np.ndarray,
     method: str = "nlsq",
-    **kwargs,
+    **kwargs: Any,
 ) -> dict[str, Any]:
     """One-shot optimization for specific method.
 
@@ -528,7 +532,7 @@ class AdvancedDatasetOptimizer:
         )
 
         # Performance tracking
-        self._optimization_history = deque(maxlen=100)
+        self._optimization_history: deque[dict[str, Any]] = deque(maxlen=100)
 
         logger.info(
             "Advanced dataset optimizer initialized with performance engine integration",
@@ -537,12 +541,12 @@ class AdvancedDatasetOptimizer:
     def _should_init_performance_engine(self) -> bool:
         """Check if performance engine should be automatically initialized."""
         advanced_features = self.config.get("advanced_features", {})
-        return advanced_features.get("auto_init_performance_engine", True)
+        return bool(advanced_features.get("auto_init_performance_engine", True))
 
     def _should_init_memory_manager(self) -> bool:
         """Check if memory manager should be automatically initialized."""
         advanced_features = self.config.get("advanced_features", {})
-        return advanced_features.get("auto_init_memory_manager", True)
+        return bool(advanced_features.get("auto_init_memory_manager", True))
 
     def _init_performance_engine(self) -> None:
         """Initialize performance engine with configuration."""
@@ -582,7 +586,7 @@ class AdvancedDatasetOptimizer:
         phi: np.ndarray,
         hdf_path: str | None = None,
         method: str = "nlsq",
-        **kwargs,
+        **kwargs: Any,
     ) -> dict[str, Any]:
         """Optimize processing for massive datasets with advanced features.
 
@@ -749,9 +753,9 @@ class AdvancedDatasetOptimizer:
 
     def _create_advanced_chunking_config(
         self,
-        dataset_info: "DatasetInfo",
+        dataset_info: DatasetInfo,
         method: str,
-        **kwargs,
+        **kwargs: Any,
     ) -> dict[str, Any]:
         """Create advanced chunking configuration beyond basic optimization."""
         chunking_config = {
@@ -782,7 +786,7 @@ class AdvancedDatasetOptimizer:
 
         # Add performance-based adaptations
         if len(self._optimization_history) > 5:
-            recent_performance = self._optimization_history[-5:]
+            recent_performance = list(self._optimization_history)[-5:]
             avg_time = sum(h["optimization_time"] for h in recent_performance) / len(
                 recent_performance,
             )
@@ -881,11 +885,11 @@ class AdvancedDatasetOptimizer:
 
         logger.info("Advanced dataset optimizer cleanup complete")
 
-    def __enter__(self):
+    def __enter__(self) -> AdvancedDatasetOptimizer:
         """Context manager entry."""
         return self
 
-    def __exit__(self, exc_type, exc_val, exc_tb):
+    def __exit__(self, exc_type: Any, exc_val: Any, exc_tb: Any) -> None:
         """Context manager exit."""
         self.cleanup()
 
@@ -893,7 +897,7 @@ class AdvancedDatasetOptimizer:
 # Enhanced convenience functions that use advanced optimization
 def create_advanced_dataset_optimizer(
     config: dict[str, Any] | None = None,
-    **kwargs,
+    **kwargs: Any,
 ) -> AdvancedDatasetOptimizer:
     """Create advanced dataset optimizer with performance engine integration."""
     return AdvancedDatasetOptimizer(config=config, **kwargs)
@@ -908,7 +912,7 @@ def optimize_for_method_advanced(
     method: str = "nlsq",
     hdf_path: str | None = None,
     config: dict[str, Any] | None = None,
-    **kwargs,
+    **kwargs: Any,
 ) -> dict[str, Any]:
     """Advanced one-shot optimization with performance engine integration.
 
@@ -929,7 +933,7 @@ def optimize_for_method_advanced(
         Advanced optimization configuration dictionary
     """
     with create_advanced_dataset_optimizer(config) as optimizer:
-        return optimizer.optimize_massive_dataset(
+        result = optimizer.optimize_massive_dataset(
             data,
             sigma,
             t1,
@@ -939,6 +943,7 @@ def optimize_for_method_advanced(
             method=method,
             **kwargs,
         )
+        return result
 
 
 # Import guard for new dependencies

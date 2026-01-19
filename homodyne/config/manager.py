@@ -15,11 +15,13 @@ from typing import Any
 # Handle YAML dependency
 try:
     import yaml
+    from types import ModuleType
 
     HAS_YAML = True
+    yaml_module: ModuleType | None = yaml
 except ImportError:
     HAS_YAML = False
-    yaml = None
+    yaml_module = None
 
 # Import minimal logging
 try:
@@ -28,10 +30,11 @@ try:
     HAS_LOGGING = True
 except ImportError:
     import logging
+    from typing import Any as _Any
 
     HAS_LOGGING = False
 
-    def get_logger(name):
+    def get_logger(name: str, **kwargs: _Any) -> logging.Logger:  # type: ignore[misc]
         return logging.getLogger(name)
 
 
@@ -105,16 +108,16 @@ class ConfigManager:
 
             # Use 8KB buffering for improved I/O performance on large config files
             with open(config_path, buffering=8192, encoding="utf-8") as f:
-                if file_extension in [".yaml", ".yml"] and HAS_YAML:
-                    self.config = yaml.safe_load(f)
+                if file_extension in [".yaml", ".yml"] and HAS_YAML and yaml_module:
+                    self.config = yaml_module.safe_load(f)
                 elif file_extension == ".json":
                     self.config = json.load(f)
-                elif HAS_YAML:
+                elif HAS_YAML and yaml_module:
                     # Try YAML first for unknown extensions
                     content = f.read()
                     try:
-                        self.config = yaml.safe_load(content)
-                    except yaml.YAMLError:
+                        self.config = yaml_module.safe_load(content)
+                    except yaml_module.YAMLError:
                         # Fallback to JSON
                         self.config = json.loads(content)
                 else:
@@ -209,6 +212,8 @@ class ConfigManager:
         Dict[str, Any]
             Current configuration dictionary
         """
+        if self.config is None:
+            return {}
         return self.config
 
     def update_config(self, key: str, value: Any) -> None:
@@ -221,6 +226,9 @@ class ConfigManager:
         value : Any
             New value to set
         """
+        if self.config is None:
+            self.config = {}
+
         keys = key.split(".")
         config_ref = self.config
 
@@ -247,9 +255,11 @@ class ConfigManager:
 
         optimization = self.config.get("optimization", {})
         angle_filtering = optimization.get("angle_filtering", {})
+        # Type assertion to help mypy
+        assert isinstance(angle_filtering, dict)
         return angle_filtering
 
-    def _get_parameter_manager(self):
+    def _get_parameter_manager(self) -> Any:
         """Get or create cached ParameterManager.
 
         This avoids creating a new ParameterManager on every config access,
@@ -304,7 +314,10 @@ class ConfigManager:
         -----
         This method uses a cached ParameterManager for ~14x speedup on repeated calls.
         """
-        return self._get_parameter_manager().get_parameter_bounds(parameter_names)
+        bounds = self._get_parameter_manager().get_parameter_bounds(parameter_names)
+        # Type assertion to help mypy
+        assert isinstance(bounds, list)
+        return bounds
 
     def get_active_parameters(self) -> list[str]:
         """Get list of active (physical) parameters from configuration (cached).
@@ -327,7 +340,10 @@ class ConfigManager:
         -----
         This method uses a cached ParameterManager for ~14x speedup on repeated calls.
         """
-        return self._get_parameter_manager().get_active_parameters()
+        params = self._get_parameter_manager().get_active_parameters()
+        # Type assertion to help mypy
+        assert isinstance(params, list)
+        return params
 
     def get_initial_parameters(
         self,
@@ -1089,7 +1105,7 @@ class ConfigManager:
         - "static_isotropic" → "static" (legacy alias)
         - "static_anisotropic" → "static" (legacy alias)
         """
-        if "analysis_mode" not in self.config:
+        if self.config is None or "analysis_mode" not in self.config:
             return
 
         mode = self.config["analysis_mode"]
@@ -1115,7 +1131,7 @@ class ConfigManager:
         Warns if config version doesn't match package version, which may
         indicate incompatible configuration schema.
         """
-        if "metadata" not in self.config:
+        if self.config is None or "metadata" not in self.config:
             return
 
         config_version = self.config["metadata"].get("config_version")
@@ -1155,7 +1171,7 @@ class ConfigManager:
         The normalization adds the missing format while preserving
         the original fields for backward compatibility.
         """
-        if "experimental_data" not in self.config:
+        if self.config is None or "experimental_data" not in self.config:
             return
 
         from pathlib import Path
@@ -1215,4 +1231,4 @@ def load_xpcs_config(config_path: str) -> dict[str, Any]:
         Configuration dictionary
     """
     manager = ConfigManager(config_path)
-    return manager.config
+    return manager.config if manager.config is not None else {}

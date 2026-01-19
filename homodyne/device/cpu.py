@@ -19,10 +19,13 @@ HPC Environment Support:
 - Intel Xeon and AMD EPYC processors
 """
 
+from __future__ import annotations
+
 import os
 import platform
 import shutil
 import subprocess  # nosec B404
+from typing import Any
 
 import psutil
 
@@ -38,10 +41,10 @@ try:
     JAX_AVAILABLE = True
 except ImportError:
     JAX_AVAILABLE = False
-    jax = None
+    jax = None  # type: ignore[assignment]
 
 
-def detect_cpu_info() -> dict[str, any]:
+def detect_cpu_info() -> dict[str, Any]:
     """Detect CPU architecture and capabilities for optimization.
 
     Returns
@@ -118,7 +121,7 @@ def configure_cpu_hpc(
     numa_policy: str = "auto",
     memory_optimization: str = "standard",
     enable_onednn: bool = False,
-) -> dict[str, any]:
+) -> dict[str, Any]:
     """Configure JAX and system for HPC CPU optimization.
 
     Optimizes thread allocation, memory usage, and computational efficiency
@@ -167,12 +170,15 @@ def configure_cpu_hpc(
     )
 
     # Configure environment variables for optimal performance
-    config_summary = _set_cpu_environment_variables(
+    env_vars = _set_cpu_environment_variables(
         num_threads,
         cpu_info,
         numa_policy,
         memory_optimization,
     )
+
+    # Build configuration summary with proper typing
+    config_summary: dict[str, Any] = dict(env_vars)
 
     # Configure JAX for CPU optimization
     if JAX_AVAILABLE:
@@ -200,7 +206,7 @@ def configure_cpu_hpc(
 
 def _set_cpu_environment_variables(
     num_threads: int,
-    cpu_info: dict,
+    cpu_info: dict[str, Any],
     numa_policy: str,
     memory_optimization: str,
 ) -> dict[str, str]:
@@ -243,9 +249,9 @@ def _set_cpu_environment_variables(
 
 def _configure_jax_cpu(
     num_threads: int,
-    cpu_info: dict,
+    cpu_info: dict[str, Any],
     enable_onednn: bool = False,
-) -> dict[str, any]:
+) -> dict[str, Any]:
     """Configure JAX for optimal CPU performance.
 
     Parameters
@@ -262,7 +268,7 @@ def _configure_jax_cpu(
     dict
         JAX configuration summary
     """
-    jax_config = {}
+    jax_config: dict[str, Any] = {}
 
     try:
         # Force CPU platform
@@ -331,7 +337,7 @@ def _configure_jax_cpu(
     return jax_config
 
 
-def configure_cpu_threading(num_threads: int | None = None) -> dict[str, any]:
+def configure_cpu_threading(num_threads: int | None = None) -> dict[str, Any]:
     """Configure CPU threading for NLSQ optimization.
 
     Performance Optimization (Spec 001 - FR-005, T024): Simplified threading
@@ -426,7 +432,7 @@ def benchmark_cpu_performance(
 
     import numpy as np
 
-    results = {"numpy_performance": [], "cpu_info": detect_cpu_info()}
+    results: dict[str, Any] = {"numpy_performance": [], "cpu_info": detect_cpu_info()}
 
     # NumPy benchmark
     for _i in range(num_iterations):
@@ -436,7 +442,7 @@ def benchmark_cpu_performance(
         x = np.random.randn(test_size, test_size)
         y = np.fft.fft2(x)
         z = np.abs(y) ** 2
-        result = np.sum(z)
+        _ = np.sum(z)
 
         end_time = time.perf_counter()
         results["numpy_performance"].append(end_time - start_time)
@@ -446,7 +452,7 @@ def benchmark_cpu_performance(
         results["jax_performance"] = []
 
         @jax.jit
-        def jax_computation(x):
+        def jax_computation(x: Any) -> Any:
             y = jnp.fft.fft2(x)
             z = jnp.abs(y) ** 2
             return jnp.sum(z)
@@ -458,8 +464,8 @@ def benchmark_cpu_performance(
         for _i in range(num_iterations):
             start_time = time.perf_counter()
 
-            x = jnp.array(np.random.randn(test_size, test_size))
-            result = jax_computation(x)
+            x_jax = jnp.array(np.random.randn(test_size, test_size))
+            result = jax_computation(x_jax)
             result.block_until_ready()  # Ensure computation completes
 
             end_time = time.perf_counter()

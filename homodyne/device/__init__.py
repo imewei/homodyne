@@ -19,7 +19,10 @@ Usage:
     config = configure_optimal_device()
 """
 
+from __future__ import annotations
+
 import logging
+from typing import Any
 
 # Suppress JAX backend warnings and messages (CPU-only in v2.3.0)
 # - TPU backend warnings (not available on standard systems)
@@ -52,7 +55,7 @@ except ImportError as e:
 
 def configure_optimal_device(
     cpu_threads: int | None = None,
-) -> dict[str, any]:
+) -> dict[str, Any]:
     """Automatically configure the optimal CPU device for homodyne analysis.
 
     Configures optimized CPU settings for HPC environments.
@@ -82,7 +85,7 @@ def configure_optimal_device(
     return _configure_cpu_optimal(config_result, cpu_threads)
 
 
-def _configure_cpu_optimal(config_result: dict, cpu_threads: int | None) -> dict:
+def _configure_cpu_optimal(config_result: dict[str, Any], cpu_threads: int | None) -> dict[str, Any]:
     """Configure optimal CPU settings."""
     logger.info("Configuring CPU optimization...")
 
@@ -149,7 +152,7 @@ def _configure_cpu_optimal(config_result: dict, cpu_threads: int | None) -> dict
     return config_result
 
 
-def get_device_status() -> dict[str, any]:
+def get_device_status() -> dict[str, Any]:
     """Get current device status and capabilities.
 
     Returns
@@ -157,7 +160,7 @@ def get_device_status() -> dict[str, any]:
     dict
         Comprehensive CPU device status information
     """
-    status = {
+    status: dict[str, Any] = {
         "timestamp": None,
         "cpu_info": {},
         "recommendations": [],
@@ -206,7 +209,7 @@ def get_device_status() -> dict[str, any]:
 
 def benchmark_device_performance(
     test_size: int = 5000,
-) -> dict[str, any]:
+) -> dict[str, Any]:
     """Benchmark CPU device performance for optimization planning.
 
     Parameters
@@ -221,7 +224,7 @@ def benchmark_device_performance(
     """
     logger.info(f"Benchmarking CPU performance (test_size={test_size})")
 
-    benchmark_results = {
+    benchmark_results: dict[str, Any] = {
         "device_type": "cpu",
         "test_size": test_size,
         "results": {},
@@ -250,19 +253,22 @@ def benchmark_device_performance(
 
 
 # Main exports
-__all__ = [
+_all_exports = [
     # Primary device configuration
     "configure_optimal_device",
     # Device information
     "get_device_status",
     "benchmark_device_performance",
-    # CPU-specific (if available)
-    "configure_cpu_hpc" if HAS_CPU_MODULE else None,
-    "detect_cpu_info" if HAS_CPU_MODULE else None,
-    "get_optimal_batch_size" if HAS_CPU_MODULE else None,
     # Status flags
     "HAS_CPU_MODULE",
 ]
 
-# Remove None values from __all__
-__all__ = [item for item in __all__ if item is not None]
+# Add CPU-specific exports if available
+if HAS_CPU_MODULE:
+    _all_exports.extend([
+        "configure_cpu_hpc",
+        "detect_cpu_info",
+        "get_optimal_batch_size",
+    ])
+
+__all__ = _all_exports

@@ -387,7 +387,7 @@ def get_default_parameters(model_type: str) -> np.ndarray:
     return defaults[model_type]
 
 
-def validate_experimental_setup(q: float, L: float, wavelength: float = None) -> bool:
+def validate_experimental_setup(q: float, L: float, wavelength: float | None = None) -> bool:
     """Validate experimental setup parameters for physical reasonableness.
 
     Args:
@@ -458,7 +458,7 @@ def get_parameter_info(model_type: str) -> dict[str, Any]:
     Returns:
         Dictionary with parameter names, bounds, defaults, and descriptions
     """
-    info = {
+    info: dict[str, dict[str, list[str]]] = {
         "diffusion": {
             "names": ["D0", "alpha", "D_offset"],
             "descriptions": [
@@ -522,7 +522,7 @@ def get_parameter_info(model_type: str) -> dict[str, Any]:
         raise ValueError(f"Unknown model type '{model_type}'")
 
     # Add common information
-    result = info[model_type].copy()
+    result: dict[str, Any] = info[model_type].copy()
     result.update(
         {
             "bounds": parameter_bounds()[model_type],

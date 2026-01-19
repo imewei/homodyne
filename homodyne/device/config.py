@@ -171,7 +171,7 @@ def detect_hardware() -> HardwareConfig:
         memory_gb = 32.0
 
     # Step 3: Detect cluster environment
-    cluster_type = None
+    cluster_type: Literal["pbs", "slurm", "standalone"] | None = None
     num_nodes = 1
 
     if "PBS_JOBID" in os.environ:
@@ -216,6 +216,7 @@ def detect_hardware() -> HardwareConfig:
         total_memory_gb = memory_gb  # Use previously detected value
 
     # Step 5: Recommend backend and calculate max parallel shards (CPU-only in v2.3.0+)
+    recommended_backend: str
     if cluster_type in ["pbs", "slurm"] and num_nodes > 1:
         # Multi-node cluster: Use PBS/Slurm backend
         recommended_backend = cluster_type

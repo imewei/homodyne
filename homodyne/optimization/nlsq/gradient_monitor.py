@@ -312,9 +312,9 @@ class GradientCollapseMonitor:
                 self.collapse_detected = True
                 event = CollapseEvent(
                     iteration=iteration,
-                    ratio=ratio,
-                    physical_grad_norm=physical_grad_norm,
-                    per_angle_grad_norm=per_angle_grad_norm,
+                    ratio=float(ratio),
+                    physical_grad_norm=float(physical_grad_norm),
+                    per_angle_grad_norm=float(per_angle_grad_norm),
                     response_mode=self.config.response_mode,
                 )
                 self.collapse_events.append(event)

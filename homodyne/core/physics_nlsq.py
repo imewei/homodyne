@@ -266,7 +266,7 @@ def _compute_g1_shear_meshgrid(
 
     # Compute sinc² values: [sinc(Φ)]² for all phi angles
     sinc_val = safe_sinc(phase)
-    sinc2_result = sinc_val**2
+    sinc2_result: jnp.ndarray = sinc_val**2
 
     return sinc2_result
 
@@ -450,7 +450,7 @@ def compute_g2_scaled(
     wavevector_q_squared_half_dt = 0.5 * (q**2) * dt_value
     sinc_prefactor = 0.5 / PI * q * L * dt_value
 
-    return _compute_g2_scaled_meshgrid(
+    result: jnp.ndarray = _compute_g2_scaled_meshgrid(
         params,
         t1,
         t2,
@@ -461,6 +461,7 @@ def compute_g2_scaled(
         offset,
         dt_value,
     )
+    return result
 
 
 @jit
@@ -499,8 +500,7 @@ def compute_g2_scaled_with_factors(
         Use with HomodyneModel for best results.
         For NLSQ backend, simply calls _compute_g2_scaled_meshgrid.
     """
-    # Directly call meshgrid implementation
-    return _compute_g2_scaled_meshgrid(
+    result: jnp.ndarray = _compute_g2_scaled_meshgrid(
         params,
         t1,
         t2,
@@ -511,3 +511,4 @@ def compute_g2_scaled_with_factors(
         offset,
         dt,
     )
+    return result

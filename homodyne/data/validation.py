@@ -31,6 +31,7 @@ Enhanced Features (v2.1):
 
 import hashlib
 import time
+import types
 from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any
@@ -44,7 +45,7 @@ try:
     HAS_JAX = True
 except ImportError:
     HAS_JAX = False
-    jnp = np
+    jnp = np  # type: ignore
 
 # V2 integration
 try:
@@ -53,7 +54,7 @@ try:
     HAS_PHYSICS = True
 except ImportError:
     HAS_PHYSICS = False
-    PhysicsConstants = None
+    PhysicsConstants = None  # type: ignore
 
 try:
     from homodyne.utils.logging import get_logger
@@ -64,7 +65,7 @@ except ImportError:
 
     HAS_V2_LOGGING = False
 
-    def get_logger(name):
+    def get_logger(name: str) -> logging.Logger:
         return logging.getLogger(name)
 
 
@@ -137,7 +138,7 @@ class DataQualityReport:
 
 def validate_xpcs_data(
     data: dict[str, Any],
-    config: dict[str, Any] = None,
+    config: dict[str, Any] | None = None,
     validation_level: str = "basic",
 ) -> DataQualityReport:
     """Comprehensive XPCS data validation.
@@ -639,7 +640,7 @@ _validation_cache: dict[str, IncrementalValidationCache] = {}
 
 def validate_xpcs_data_incremental(
     data: dict[str, Any],
-    config: dict[str, Any] = None,
+    config: dict[str, Any] | None = None,
     validation_level: str = "basic",
     previous_report: DataQualityReport | None = None,
     force_revalidate: bool = False,
@@ -702,7 +703,7 @@ def validate_data_component(
     data: dict[str, Any],
     component_name: str,
     validation_level: str = "basic",
-    config: dict[str, Any] = None,
+    config: dict[str, Any] | None = None,
 ) -> DataQualityReport:
     """Validate a specific component of XPCS data for selective validation.
 
@@ -812,7 +813,7 @@ def _validate_array_component(
     data: dict[str, Any],
     component_name: str,
     report: DataQualityReport,
-    config: dict[str, Any] = None,
+    config: dict[str, Any] | None = None,
 ) -> None:
     """Validate array components (q_list, phi_list)."""
     value = data[component_name]

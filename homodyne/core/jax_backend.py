@@ -34,7 +34,7 @@ try:
     JAX_AVAILABLE = True
 except ImportError:
     # Fallback to numpy when JAX is not available
-    import numpy as jnp
+    import numpy as jnp  # type: ignore[no-redef]
 
     JAX_AVAILABLE = False
 
@@ -47,21 +47,21 @@ except ImportError:
         NUMPY_GRADIENTS_AVAILABLE = False
 
     # Create fallback decorators
-    def jit(func):
+    def jit(func: Callable) -> Callable:  # type: ignore[no-redef,misc,unused-ignore]
         """No-op JIT decorator for NumPy fallback."""
         return func
 
-    def vmap(func, *args, **kwargs):
+    def vmap(func: Callable, *args: object, **kwargs: object) -> Callable:  # type: ignore[no-redef,misc,unused-ignore]
         """Simple vectorization fallback using Python loops."""
 
-        def vectorized_func(inputs, *vargs, **vkwargs):
+        def vectorized_func(inputs: object, *vargs: object, **vkwargs: object) -> object:
             if hasattr(inputs, "__iter__") and not isinstance(inputs, str):
                 return [func(inp, *vargs, **vkwargs) for inp in inputs]
             return func(inputs, *vargs, **vkwargs)
 
         return vectorized_func
 
-    def grad(func, argnums=0):
+    def grad(func: Callable, argnums: int = 0) -> Callable:  # type: ignore[no-redef,misc,unused-ignore]
         """Intelligent fallback gradient function with performance warnings."""
         if NUMPY_GRADIENTS_AVAILABLE:
             return _create_gradient_fallback(func, argnums)
@@ -70,7 +70,7 @@ except ImportError:
                 func.__name__ if hasattr(func, "__name__") else "function",
             )
 
-    def hessian(func, argnums=0):
+    def hessian(func: Callable, argnums: int = 0) -> Callable:  # type: ignore[no-redef,misc,unused-ignore]
         """Intelligent fallback Hessian function with performance warnings."""
         if NUMPY_GRADIENTS_AVAILABLE:
             return _create_hessian_fallback(func, argnums)
@@ -83,6 +83,7 @@ except ImportError:
 from collections import OrderedDict
 from collections.abc import Callable
 from functools import wraps
+from typing import Any, cast
 
 from homodyne.core.physics_utils import (
     EPS,
@@ -138,10 +139,10 @@ _cache_stats: dict[str, int] = {
 if JAX_AVAILABLE:
     _ARRAY_HASH_EXCEPTIONS: tuple[type[Exception], ...] = (
         TypeError,
-        jax.errors.ConcretizationTypeError,
+        jax.errors.ConcretizationTypeError,  # type: ignore[attr-defined,unused-ignore]
     )
 else:
-    _ARRAY_HASH_EXCEPTIONS: tuple[type[Exception], ...] = (TypeError,)
+    _ARRAY_HASH_EXCEPTIONS: tuple[type[Exception], ...] = (TypeError,)  # type: ignore[no-redef,unused-ignore]
 
 
 def _get_array_hash_key(arr: "jnp.ndarray") -> tuple | None:
@@ -325,7 +326,7 @@ def _create_gradient_fallback(func: Callable, argnums: int = 0) -> Callable:
     func_name = getattr(func, "__name__", "unknown")
 
     @wraps(func)
-    def fallback_gradient(*args, **kwargs):
+    def fallback_gradient(*args: object, **kwargs: object) -> object:
         _fallback_stats["gradient_calls"] += 1
 
         # Issue performance warning (once per function)
@@ -349,7 +350,7 @@ def _create_hessian_fallback(func: Callable, argnums: int = 0) -> Callable:
     func_name = getattr(func, "__name__", "unknown")
 
     @wraps(func)
-    def fallback_hessian(*args, **kwargs):
+    def fallback_hessian(*args: object, **kwargs: object) -> object:
         _fallback_stats["hessian_calls"] += 1
 
         # Issue performance warning (once per function)
@@ -371,7 +372,7 @@ def _create_hessian_fallback(func: Callable, argnums: int = 0) -> Callable:
 def _create_no_gradient_fallback(func_name: str) -> Callable:
     """Create informative gradient fallback when no numerical differentiation is available."""
 
-    def no_gradient_available(*args, **kwargs):
+    def no_gradient_available(*args: object, **kwargs: object) -> object:
         error_msg = (
             f"Gradient computation not available for {func_name}.\n"
             f"Install NumPy gradients support or JAX:\n"
@@ -388,7 +389,7 @@ def _create_no_gradient_fallback(func_name: str) -> Callable:
 def _create_no_hessian_fallback(func_name: str) -> Callable:
     """Create informative Hessian fallback when no numerical differentiation is available."""
 
-    def no_hessian_available(*args, **kwargs):
+    def no_hessian_available(*args: object, **kwargs: object) -> object:
         error_msg = (
             f"Hessian computation not available for {func_name}.\n"
             f"Install NumPy gradients support or JAX:\n"
@@ -726,7 +727,7 @@ def _compute_g1_shear_core(
         sinc_val = safe_sinc(phase)
         sinc2_result = sinc_val**2
 
-    return sinc2_result
+    return jnp.asarray(sinc2_result)
 
 
 @jit
@@ -811,7 +812,7 @@ def _compute_g1_total_core(
     epsilon = 1e-10
     g1_bounded = jnp.clip(g1_total, epsilon, 2.0)
 
-    return g1_bounded
+    return jnp.asarray(g1_bounded)
 
 
 @jit
@@ -890,7 +891,7 @@ def compute_g1_diffusion(
     t1: jnp.ndarray,
     t2: jnp.ndarray,
     q: float,
-    dt: float = None,
+    dt: float | None = None,
 ) -> jnp.ndarray:
     """Wrapper function that computes g1 diffusion using configuration dt.
 
@@ -917,12 +918,16 @@ def compute_g1_diffusion(
             time_array = t1[:, 0]
         else:
             time_array = t1
-        dt = time_array[1] - time_array[0] if safe_len(time_array) > 1 else 1.0
+        dt_value = float(time_array[1] - time_array[0]) if safe_len(time_array) > 1 else 1.0
+    else:
+        dt_value = dt
 
     # Compute the pre-computed factor using configuration dt
-    wavevector_q_squared_half_dt = 0.5 * (q**2) * dt
+    wavevector_q_squared_half_dt = 0.5 * (q**2) * dt_value
 
-    return _compute_g1_diffusion_core(params, t1, t2, wavevector_q_squared_half_dt, dt)
+    return jnp.asarray(
+        _compute_g1_diffusion_core(params, t1, t2, wavevector_q_squared_half_dt, dt_value)
+    )
 
 
 def compute_g1_shear(
@@ -964,7 +969,7 @@ def compute_g1_shear(
     # Compute the physics factor using configuration dt
     sinc_prefactor = 0.5 / PI * q * L * dt
 
-    return _compute_g1_shear_core(params, t1, t2, phi, sinc_prefactor, dt)
+    return jnp.asarray(_compute_g1_shear_core(params, t1, t2, phi, sinc_prefactor, dt))
 
 
 def compute_g1_total(
@@ -1010,14 +1015,16 @@ def compute_g1_total(
     wavevector_q_squared_half_dt = 0.5 * (q**2) * dt_value
     sinc_prefactor = 0.5 / PI * q * L * dt_value
 
-    return _compute_g1_total_core(
-        params,
-        t1,
-        t2,
-        phi,
-        wavevector_q_squared_half_dt,
-        sinc_prefactor,
-        dt_value,
+    return jnp.asarray(
+        _compute_g1_total_core(
+            params,
+            t1,
+            t2,
+            phi,
+            wavevector_q_squared_half_dt,
+            sinc_prefactor,
+            dt_value,
+        )
     )
 
 
@@ -1068,16 +1075,18 @@ def compute_g2_scaled(
     wavevector_q_squared_half_dt = 0.5 * (q**2) * dt_value
     sinc_prefactor = 0.5 / PI * q * L * dt_value
 
-    return _compute_g2_scaled_core(
-        params,
-        t1,
-        t2,
-        phi,
-        wavevector_q_squared_half_dt,
-        sinc_prefactor,
-        contrast,
-        offset,
-        dt,
+    return jnp.asarray(
+        _compute_g2_scaled_core(
+            params,
+            t1,
+            t2,
+            phi,
+            wavevector_q_squared_half_dt,
+            sinc_prefactor,
+            contrast,
+            offset,
+            dt,
+        )
     )
 
 
@@ -1134,16 +1143,18 @@ def compute_g2_scaled_with_factors(
             t2 = t2_grid
 
     # Call core computation with pre-computed factors
-    return _compute_g2_scaled_core(
-        params,
-        t1,
-        t2,
-        phi,
-        wavevector_q_squared_half_dt,
-        sinc_prefactor,
-        contrast,
-        offset,
-        dt,
+    return jnp.asarray(
+        _compute_g2_scaled_core(
+            params,
+            t1,
+            t2,
+            phi,
+            wavevector_q_squared_half_dt,
+            sinc_prefactor,
+            contrast,
+            offset,
+            dt,
+        )
     )
 
 
@@ -1160,7 +1171,7 @@ def compute_chi_squared(
     contrast: float,
     offset: float,
     dt: float,
-) -> float:
+) -> jnp.ndarray:
     """Compute chi-squared goodness of fit.
 
     χ² = Σᵢ [(data_i - theory_i) / σᵢ]²
@@ -1205,7 +1216,7 @@ def vectorized_g2_computation(
     L: float,
     contrast: float,
     offset: float,
-    dt: float = None,
+    dt: float | None = None,
 ) -> jnp.ndarray:
     """Vectorized g2 computation for multiple parameter sets.
 
@@ -1221,12 +1232,15 @@ def vectorized_g2_computation(
         offset: Baseline offset
         dt: Time step from configuration [seconds]. MUST be provided for correct physics.
     """
+    # Ensure dt is a float
+    dt_value = dt if dt is not None else 0.001
+
     if not JAX_AVAILABLE:
         logger.warning("JAX not available - using slower numpy fallback")
         # Simple loop fallback
         results = []
         for params in params_batch:
-            result = compute_g2_scaled(params, t1, t2, phi, q, L, contrast, offset, dt)
+            result = compute_g2_scaled(params, t1, t2, phi, q, L, contrast, offset, dt_value)
             results.append(result)
         return jnp.stack(results)
 
@@ -1235,7 +1249,7 @@ def vectorized_g2_computation(
         compute_g2_scaled,
         in_axes=(0, None, None, None, None, None, None, None, None),
     )
-    return vectorized_func(params_batch, t1, t2, phi, q, L, contrast, offset, dt)
+    return vectorized_func(params_batch, t1, t2, phi, q, L, contrast, offset, dt_value)
 
 
 @log_performance(threshold=0.05)
@@ -1250,7 +1264,7 @@ def batch_chi_squared(
     L: float,
     contrast: float,
     offset: float,
-    dt: float = None,
+    dt: float | None = None,
 ) -> jnp.ndarray:
     """Compute chi-squared for multiple parameter sets efficiently.
 
@@ -1266,6 +1280,9 @@ def batch_chi_squared(
         offset: Baseline offset
         dt: Time step from configuration [seconds]. MUST be provided for correct physics.
     """
+    # Ensure dt is a float
+    dt_value = dt if dt is not None else 0.001
+
     if not JAX_AVAILABLE:
         logger.warning("JAX not available - using slower numpy fallback")
         # Simple loop fallback
@@ -1282,7 +1299,7 @@ def batch_chi_squared(
                 L,
                 contrast,
                 offset,
-                dt,
+                dt_value,
             )
             results.append(result)
         return jnp.array(results)
@@ -1292,34 +1309,36 @@ def batch_chi_squared(
         compute_chi_squared,
         in_axes=(0, None, None, None, None, None, None, None, None, None, None),
     )
-    return vectorized_func(
-        params_batch,
-        data,
-        sigma,
-        t1,
-        t2,
-        phi,
-        q,
-        L,
-        contrast,
-        offset,
-        dt,
+    return jnp.asarray(
+        vectorized_func(
+            params_batch,
+            data,
+            sigma,
+            t1,
+            t2,
+            phi,
+            q,
+            L,
+            contrast,
+            offset,
+            dt_value,
+        )
     )
 
 
 # Utility functions for optimization
-def validate_backend() -> dict[str, bool | str | dict]:
+def validate_backend() -> dict[str, Any]:
     """Validate computational backends with comprehensive diagnostics."""
-    results = {
+    results: dict[str, Any] = {
         "jax_available": JAX_AVAILABLE,
         "numpy_gradients_available": numpy_gradients_available,
         "gradient_support": False,
         "hessian_support": False,
         "backend_type": "unknown",
         "performance_estimate": "unknown",
-        "recommendations": [],
+        "recommendations": cast(list[str], []),
         "fallback_stats": _fallback_stats.copy(),
-        "test_results": {},
+        "test_results": cast(dict[str, str], {}),
     }
 
     # Determine backend type and performance characteristics
@@ -1329,13 +1348,13 @@ def validate_backend() -> dict[str, bool | str | dict]:
     elif numpy_gradients_available:
         results["backend_type"] = "numpy_fallback"
         results["performance_estimate"] = "degraded (10-50x slower)"
-        results["recommendations"].append(
+        cast(list[str], results["recommendations"]).append(
             "Install JAX for optimal performance: pip install jax",
         )
     else:
         results["backend_type"] = "none"
         results["performance_estimate"] = "unavailable"
-        results["recommendations"].extend(
+        cast(list[str], results["recommendations"]).extend(
             [
                 "Install JAX for optimal performance: pip install jax",
                 "Or install scipy for basic functionality: pip install scipy",
@@ -1351,23 +1370,23 @@ def validate_backend() -> dict[str, bool | str | dict]:
 
         # Test forward computation
         compute_g1_diffusion(test_params, test_t1, test_t2, test_q)
-        results["test_results"]["forward_computation"] = "success"
+        cast(dict[str, str], results["test_results"])["forward_computation"] = "success"
 
         # Test gradient computation
         try:
             grad_func = grad(compute_g1_diffusion, argnums=0)
             grad_func(test_params, test_t1, test_t2, test_q)
             results["gradient_support"] = True
-            results["test_results"]["gradient_computation"] = "success"
+            cast(dict[str, str], results["test_results"])["gradient_computation"] = "success"
 
             if not JAX_AVAILABLE:
-                results["test_results"]["gradient_method"] = "numpy_fallback"
+                cast(dict[str, str], results["test_results"])["gradient_method"] = "numpy_fallback"
 
         except ImportError as e:
-            results["test_results"]["gradient_computation"] = f"failed: {str(e)}"
+            cast(dict[str, str], results["test_results"])["gradient_computation"] = f"failed: {str(e)}"
             logger.warning(f"Gradient computation not available: {e}")
         except Exception as e:
-            results["test_results"]["gradient_computation"] = f"error: {str(e)}"
+            cast(dict[str, str], results["test_results"])["gradient_computation"] = f"error: {str(e)}"
             logger.error(f"Gradient computation failed: {e}")
 
         # Test hessian computation
@@ -1375,48 +1394,48 @@ def validate_backend() -> dict[str, bool | str | dict]:
             hess_func = hessian(compute_g1_diffusion, argnums=0)
             hess_func(test_params, test_t1, test_t2, test_q)
             results["hessian_support"] = True
-            results["test_results"]["hessian_computation"] = "success"
+            cast(dict[str, str], results["test_results"])["hessian_computation"] = "success"
 
             if not JAX_AVAILABLE:
-                results["test_results"]["hessian_method"] = "numpy_fallback"
+                cast(dict[str, str], results["test_results"])["hessian_method"] = "numpy_fallback"
 
         except ImportError as e:
-            results["test_results"]["hessian_computation"] = f"failed: {str(e)}"
+            cast(dict[str, str], results["test_results"])["hessian_computation"] = f"failed: {str(e)}"
             logger.warning(f"Hessian computation not available: {e}")
         except Exception as e:
-            results["test_results"]["hessian_computation"] = f"error: {str(e)}"
+            cast(dict[str, str], results["test_results"])["hessian_computation"] = f"error: {str(e)}"
             logger.error(f"Hessian computation failed: {e}")
 
         logger.info(f"Backend validation completed: {results['backend_type']} mode")
 
     except Exception as e:
         logger.error(f"Basic computation test failed: {e}")
-        results["test_results"]["forward_computation"] = f"failed: {str(e)}"
+        cast(dict[str, str], results["test_results"])["forward_computation"] = f"failed: {str(e)}"
 
     return results
 
 
-def get_device_info() -> dict:
+def get_device_info() -> dict[str, Any]:
     """Get comprehensive device and backend information."""
     if not JAX_AVAILABLE:
-        fallback_info = {
+        fallback_info: dict[str, Any] = {
             "available": False,
-            "devices": [],
+            "devices": cast(list[str], []),
             "backend": "numpy_fallback" if numpy_gradients_available else "none",
             "fallback_active": True,
             "performance_impact": (
                 "10-50x slower" if numpy_gradients_available else "unavailable"
             ),
-            "recommendations": [],
+            "recommendations": cast(list[str], []),
         }
 
         if numpy_gradients_available:
-            fallback_info["recommendations"].append(
+            cast(list[str], fallback_info["recommendations"]).append(
                 "Install JAX for optimal performance: pip install jax",
             )
             fallback_info["fallback_stats"] = _fallback_stats.copy()
         else:
-            fallback_info["recommendations"].extend(
+            cast(list[str], fallback_info["recommendations"]).extend(
                 [
                     "Install JAX for optimal performance: pip install jax",
                     "Or install scipy for basic functionality: pip install scipy",
@@ -1447,7 +1466,7 @@ def get_device_info() -> dict:
         }
 
 
-def get_performance_summary() -> dict[str, str | int | dict]:
+def get_performance_summary() -> dict[str, Any]:
     """Get performance summary and recommendations."""
     return {
         "backend_type": (

@@ -1,55 +1,7 @@
-"""
-Stratified residual function for NLSQ optimization with per-angle scaling.
-
-This module provides a residual function that preserves angle-stratified chunk structure
-during NLSQ optimization, solving the double-chunking problem that occurs when using
-curve_fit_large() with per-angle scaling on large datasets.
-
-Key Features:
-
-- Maintains angle completeness across chunks (required for per-angle parameter gradients)
-- JAX JIT-compiled chunk computation for performance
-- Compatible with NLSQ's least_squares() function
-- Supports both CPU and GPU execution
-- Provides diagnostics for monitoring and validation
-
-Usage:
-
-.. code-block:: python
-
-    from nlsq import least_squares
-    from homodyne.optimization.nlsq.strategies.residual import StratifiedResidualFunction
-
-    # Create stratified data (each chunk contains all angles)
-    stratified_data = create_stratified_chunks(data, target_chunk_size=100000)
-
-    # Create residual function
-    residual_fn = StratifiedResidualFunction(
-        stratified_data=stratified_data,
-        model=model,
-        per_angle_scaling=True,
-        logger=logger
-    )
-
-    # Validate chunk structure
-    residual_fn.validate_chunk_structure()
-
-    # Use with NLSQ's least_squares()
-    result = least_squares(
-        fun=residual_fn,
-        x0=initial_params,
-        jac=None,  # JAX autodiff
-        bounds=(lower, upper),
-        method='trf'
-    )
-
-Author: Homodyne Development Team
-Date: 2025-11-06
-Version: 2.2.0
-"""
+from __future__ import annotations
 
 import logging
-from typing import Any
+from typing import Any, cast
 
 import jax
 import jax.numpy as jnp
@@ -146,7 +98,7 @@ class StratifiedResidualFunction:
             f"n_scaling_params={self.n_scaling_params}, n_physical_params={self.n_physical_params}"
         )
 
-    def _precompute_chunk_metadata(self):
+    def _precompute_chunk_metadata(self) -> None:
         """
         Pre-compute GLOBAL unique values from ALL chunks to avoid jnp.unique() in JIT.
 
@@ -280,7 +232,7 @@ class StratifiedResidualFunction:
 
         return flat_indices, t1_indices, t2_indices
 
-    def _setup_jax_functions(self):
+    def _setup_jax_functions(self) -> None:
         """
         Pre-compile JAX functions for performance.
 
@@ -296,7 +248,7 @@ class StratifiedResidualFunction:
             f"JAX functions JIT-compiled successfully in {phase.duration:.3f}s"
         )
 
-    def _preconvert_chunk_arrays(self):
+    def _preconvert_chunk_arrays(self) -> None:
         """
         Pre-convert chunk arrays to JAX arrays during initialization.
 
@@ -325,7 +277,7 @@ class StratifiedResidualFunction:
         # This enables jax.lax.scan instead of Python loops
         self._concatenate_chunk_data()
 
-    def _concatenate_chunk_data(self):
+    def _concatenate_chunk_data(self) -> None:
         """
         Concatenate all chunk data into single arrays for device-side iteration.
 
@@ -345,7 +297,7 @@ class StratifiedResidualFunction:
             _chunk_dt: dt value (same for all chunks)
         """
         # Concatenate g2 observations
-        g2_list = [chunk_jax["g2"] for chunk_jax in self.chunks_jax]
+        g2_list = [cast(jnp.ndarray, chunk_jax["g2"]) for chunk_jax in self.chunks_jax]
         self.g2_all = jnp.concatenate(g2_list, axis=0)
 
         # Concatenate pre-computed flat indices
@@ -356,16 +308,16 @@ class StratifiedResidualFunction:
         self.t2_indices_all = jnp.concatenate(self._precomputed_t2_indices, axis=0)
 
         # Compute chunk boundaries for index lookup
-        chunk_sizes = [len(chunk_jax["g2"]) for chunk_jax in self.chunks_jax]
+        chunk_sizes = [len(cast(jnp.ndarray, chunk_jax["g2"])) for chunk_jax in self.chunks_jax]
         boundaries = [0]
         for size in chunk_sizes:
             boundaries.append(boundaries[-1] + size)
         self.chunk_boundaries = jnp.array(boundaries, dtype=jnp.int32)
 
         # Store common chunk parameters (assumed same for all chunks)
-        self._chunk_q = self.chunks_jax[0]["q"]
-        self._chunk_L = self.chunks_jax[0]["L"]
-        self._chunk_dt = self.chunks_jax[0]["dt"]
+        self._chunk_q = cast(float, self.chunks_jax[0]["q"])
+        self._chunk_L = cast(float, self.chunks_jax[0]["L"])
+        self._chunk_dt = cast(float | None, self.chunks_jax[0]["dt"])
 
         # Store global unique arrays (same for all chunks, from first metadata)
         self._phi_unique = self.chunk_metadata[0]["phi_unique"]
@@ -438,10 +390,13 @@ class StratifiedResidualFunction:
             physical_params = params_all[2:]
 
         # Compute theoretical g2 using vectorized computation over phi angles
+        dt_value = dt if dt is not None else 0.001
         if self.per_angle_scaling:
             # Vectorize over phi with corresponding contrast/offset
-            compute_g2_vmap = jax.vmap(
-                lambda phi_val, contrast_val, offset_val: jnp.squeeze(
+            def compute_for_angle(
+                phi_val: float, contrast_val: float, offset_val: float
+            ) -> jnp.ndarray:
+                return jnp.squeeze(
                     compute_g2_scaled(
                         params=physical_params,
                         t1=t1_unique,
@@ -451,19 +406,19 @@ class StratifiedResidualFunction:
                         L=L,
                         contrast=contrast_val,
                         offset=offset_val,
-                        dt=dt,
+                        dt=dt_value,
                     ),
                     axis=0,
-                ),
-                in_axes=(0, 0, 0),
-            )
+                )
+
+            compute_g2_vmap = jax.vmap(compute_for_angle, in_axes=(0, 0, 0))
             g2_theory_grid = compute_g2_vmap(
                 phi_unique, contrast, offset
             )  # Shape: (n_phi, n_t1, n_t2)
         else:
             # Legacy: single contrast/offset for all angles
-            compute_g2_vmap = jax.vmap(
-                lambda phi_val: jnp.squeeze(
+            def compute_for_angle_scalar(phi_val: float) -> jnp.ndarray:
+                return jnp.squeeze(
                     compute_g2_scaled(
                         params=physical_params,
                         t1=t1_unique,
@@ -471,14 +426,14 @@ class StratifiedResidualFunction:
                         phi=phi_val,
                         q=q,
                         L=L,
-                        contrast=contrast,
-                        offset=offset,
-                        dt=dt,
+                        contrast=float(contrast),
+                        offset=float(offset),
+                        dt=dt_value,
                     ),
                     axis=0,
-                ),
-                in_axes=0,
-            )
+                )
+
+            compute_g2_vmap = jax.vmap(compute_for_angle_scalar, in_axes=0)
             g2_theory_grid = compute_g2_vmap(phi_unique)  # Shape: (n_phi, n_t1, n_t2)
 
         # Apply diagonal correction (matches experimental data preprocessing)
@@ -556,9 +511,12 @@ class StratifiedResidualFunction:
 
         # Compute theoretical g2 grid ONCE for all data
         # (Previously computed redundantly per-chunk)
+        dt_value = self._chunk_dt if self._chunk_dt is not None else 0.001
         if self.per_angle_scaling:
-            compute_g2_vmap = jax.vmap(
-                lambda phi_val, contrast_val, offset_val: jnp.squeeze(
+            def compute_for_angle(
+                phi_val: float, contrast_val: float, offset_val: float
+            ) -> jnp.ndarray:
+                return jnp.squeeze(
                     compute_g2_scaled(
                         params=physical_params,
                         t1=self._t1_unique,
@@ -568,16 +526,16 @@ class StratifiedResidualFunction:
                         L=self._chunk_L,
                         contrast=contrast_val,
                         offset=offset_val,
-                        dt=self._chunk_dt,
+                        dt=dt_value,
                     ),
                     axis=0,
-                ),
-                in_axes=(0, 0, 0),
-            )
+                )
+
+            compute_g2_vmap = jax.vmap(compute_for_angle, in_axes=(0, 0, 0))
             g2_theory_grid = compute_g2_vmap(self._phi_unique, contrast, offset)
         else:
-            compute_g2_vmap = jax.vmap(
-                lambda phi_val: jnp.squeeze(
+            def compute_for_angle_scalar(phi_val: float) -> jnp.ndarray:
+                return jnp.squeeze(
                     compute_g2_scaled(
                         params=physical_params,
                         t1=self._t1_unique,
@@ -585,14 +543,14 @@ class StratifiedResidualFunction:
                         phi=phi_val,
                         q=self._chunk_q,
                         L=self._chunk_L,
-                        contrast=contrast,
-                        offset=offset,
-                        dt=self._chunk_dt,
+                        contrast=float(contrast),
+                        offset=float(offset),
+                        dt=dt_value,
                     ),
                     axis=0,
-                ),
-                in_axes=0,
-            )
+                )
+
+            compute_g2_vmap = jax.vmap(compute_for_angle_scalar, in_axes=0)
             g2_theory_grid = compute_g2_vmap(self._phi_unique)
 
         # Apply diagonal correction (vectorized over phi angles)
@@ -755,7 +713,7 @@ class StratifiedResidualFunction:
 
         return diagnostics
 
-    def log_diagnostics(self):
+    def log_diagnostics(self) -> None:
         """Log diagnostic information for monitoring."""
         diag = self.get_diagnostics()
         self.logger.info(

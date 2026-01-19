@@ -169,7 +169,7 @@ def _compute_g1_shear_elementwise(
 
     # Compute sinc² values
     sinc_val = safe_sinc(phase)
-    g1_shear = sinc_val**2
+    g1_shear: jnp.ndarray = sinc_val**2
 
     return g1_shear  # Shape: (n_unique_phi, n_points)
 
@@ -237,7 +237,7 @@ def compute_g1_diffusion(
     t1: jnp.ndarray,
     t2: jnp.ndarray,
     q: float,
-    dt: float = None,
+    dt: float | None = None,
     time_grid: jnp.ndarray | None = None,
 ) -> jnp.ndarray:
     """Compute g1 diffusion for CMC element-wise paired arrays.
@@ -267,29 +267,32 @@ def compute_g1_diffusion(
             f"CMC physics expects paired arrays of same length, got len(t1)={len(t1)}, len(t2)={len(t2)}"
         )
 
+    dt_value: float
     if dt is None:
         # FALLBACK: Estimate from time array (NOT RECOMMENDED)
         time_array = t1
-        dt = time_array[1] - time_array[0] if safe_len(time_array) > 1 else 1.0
+        dt_value = float(time_array[1] - time_array[0]) if safe_len(time_array) > 1 else 1.0
+    else:
+        dt_value = dt
 
     # Build/infer time grid (prefer provided grid to avoid JIT shape issues)
     if time_grid is None:
         # Infer maximum time and construct grid from dt
         import numpy as np
 
-        dt_safe = float(dt) if dt is not None else 1.0
         max_time = float(np.max(np.concatenate([np.asarray(t1), np.asarray(t2)])))
-        n_time = int(round(max_time / dt_safe)) + 1
-        time_grid = jnp.linspace(0.0, dt_safe * (n_time - 1), n_time)
+        n_time = int(round(max_time / dt_value)) + 1
+        time_grid = jnp.linspace(0.0, dt_value * (n_time - 1), n_time)
     else:
         time_grid = jnp.asarray(time_grid)
 
     # Compute the pre-computed factor using configuration dt
-    wavevector_q_squared_half_dt = 0.5 * (q**2) * dt
+    wavevector_q_squared_half_dt = 0.5 * (q**2) * dt_value
 
-    return _compute_g1_diffusion_elementwise(
+    result: jnp.ndarray = _compute_g1_diffusion_elementwise(
         params, t1, t2, time_grid, wavevector_q_squared_half_dt
     )
+    return result
 
 
 def compute_g1_total(
@@ -430,7 +433,7 @@ def compute_g1_total(
         # But we can't check without calling unique(), so just trust the caller
         pass
 
-    return _compute_g1_total_elementwise(
+    result: jnp.ndarray = _compute_g1_total_elementwise(
         params,
         t1,
         t2,
@@ -439,3 +442,4 @@ def compute_g1_total(
         wavevector_q_squared_half_dt,
         sinc_prefactor,
     )
+    return result

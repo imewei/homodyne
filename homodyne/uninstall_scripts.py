@@ -29,7 +29,7 @@ import sys
 from pathlib import Path
 
 
-def is_virtual_environment():
+def is_virtual_environment() -> bool:
     """Check if running in a virtual environment."""
     return (
         hasattr(sys, "real_prefix")
@@ -40,7 +40,7 @@ def is_virtual_environment():
     )
 
 
-def cleanup_completion_files():
+def cleanup_completion_files() -> list[tuple[str, str]]:
     """Remove shell completion files from virtual environment."""
     venv_path = Path(sys.prefix)
     removed_files = []
@@ -76,7 +76,7 @@ def cleanup_completion_files():
     return removed_files
 
 
-def cleanup_gpu_files():
+def cleanup_gpu_files() -> list[tuple[str, str]]:
     """Remove GPU acceleration files from virtual environment."""
     venv_path = Path(sys.prefix)
     removed_files = []
@@ -97,7 +97,7 @@ def cleanup_gpu_files():
     return removed_files
 
 
-def cleanup_advanced_features():
+def cleanup_advanced_features() -> list[tuple[str, str]]:
     """Remove advanced features CLI commands and activation scripts."""
     venv_path = Path(sys.prefix)
     removed_files = []
@@ -121,7 +121,7 @@ def cleanup_advanced_features():
     return removed_files
 
 
-def cleanup_xla_config():
+def cleanup_xla_config() -> list[tuple[str, str]]:
     """Remove XLA configuration file from user's home directory."""
     removed_files = []
 
@@ -136,7 +136,7 @@ def cleanup_xla_config():
     return removed_files
 
 
-def cleanup_xla_activation_scripts():
+def cleanup_xla_activation_scripts() -> list[tuple[str, str]]:
     """Remove XLA activation scripts from virtual environment."""
     venv_path = Path(sys.prefix)
     removed_files = []
@@ -157,7 +157,7 @@ def cleanup_xla_activation_scripts():
     return removed_files
 
 
-def cleanup_old_system_files():
+def cleanup_old_system_files() -> list[tuple[str, str]]:
     """Remove old modular system files if they exist."""
     venv_path = Path(sys.prefix)
     removed_files = []
@@ -188,7 +188,7 @@ def cleanup_old_system_files():
     return removed_files
 
 
-def interactive_cleanup():
+def interactive_cleanup() -> list[tuple[str, str]]:
     """Interactive cleanup allowing user to choose what to remove."""
     try:
         print("\n🧹 Homodyne Interactive Cleanup")
@@ -271,7 +271,7 @@ def interactive_cleanup():
         return []
 
 
-def cleanup_all_files():
+def cleanup_all_files() -> bool:
     """Remove all homodyne files from virtual environment."""
     system = platform.system()
     is_venv = is_virtual_environment()
@@ -338,7 +338,7 @@ def cleanup_all_files():
         return False
 
 
-def show_dry_run():
+def show_dry_run() -> bool:
     """Show what would be removed without actually removing anything."""
     system = platform.system()
     is_venv = is_virtual_environment()
@@ -457,7 +457,7 @@ def show_dry_run():
     return True
 
 
-def main():
+def main() -> int:
     """Main cleanup routine for shell completion and GPU setup."""
     args = parse_args()
 
@@ -559,7 +559,7 @@ def main():
         return 1
 
 
-def parse_args():
+def parse_args() -> argparse.Namespace:
     """Parse command line arguments."""
     parser = argparse.ArgumentParser(
         prog="homodyne-cleanup",

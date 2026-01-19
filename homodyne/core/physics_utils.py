@@ -33,7 +33,7 @@ EPS = 1e-12  # Numerical stability epsilon
 # =============================================================================
 
 
-def safe_len(obj):
+def safe_len(obj: object) -> int:
     """JAX-safe length function that handles scalars, arrays, and JAX objects.
 
     Args:
@@ -49,7 +49,7 @@ def safe_len(obj):
             return 1
         else:
             # Array - return first dimension size
-            return obj.shape[0]
+            return int(obj.shape[0])
 
     # Handle objects with __len__ method (lists, tuples, etc.)
     if hasattr(obj, "__len__"):
@@ -167,7 +167,7 @@ def calculate_shear_rate(
 
     # Infer dt from time grid
     if safe_len(time_array) > 1:
-        dt = jnp.abs(time_array[1] - time_array[0])
+        dt: jnp.ndarray | float = jnp.abs(time_array[1] - time_array[0])
     else:
         dt = 1e-3  # Fallback for single time point
 
@@ -203,7 +203,7 @@ def calculate_shear_rate_cmc(
     """
     # Infer dt from time grid
     if safe_len(time_array) > 1:
-        dt = jnp.abs(time_array[1] - time_array[0])
+        dt: jnp.ndarray | float = jnp.abs(time_array[1] - time_array[0])
         # CRITICAL FIX: Ensure dt > 0 to prevent 0^(negative beta) = infinity
         # CMC element-wise data can have consecutive zeros: t[0]=0, t[1]=0 → dt=0
         # This causes NaN when beta < 0 in gamma_t = gamma_dot_0 * (time_safe**beta)

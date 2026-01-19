@@ -12,7 +12,7 @@ from __future__ import annotations
 
 import time
 from collections.abc import Callable
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Protocol
 
 from homodyne.core.jax_backend import (
     get_device_info,
@@ -27,9 +27,38 @@ from homodyne.core.jax_backend import (
 from homodyne.utils.logging import get_logger
 
 if TYPE_CHECKING:
-    pass
+    import numpy.typing as npt
 
 logger = get_logger(__name__)
+
+
+class _PhysicsModelProtocol(Protocol):
+    """Protocol defining the interface expected by mixins."""
+
+    name: str
+    analysis_mode: str
+    n_params: int
+    parameter_names: list[str]
+
+    def get_default_parameters(self) -> jnp.ndarray: ...
+    def get_parameter_bounds(self) -> tuple[jnp.ndarray, jnp.ndarray]: ...
+    def compute_g2(
+        self,
+        params: jnp.ndarray,
+        t1: jnp.ndarray,
+        t2: jnp.ndarray,
+        phi: jnp.ndarray,
+        q: float,
+        L: float,
+        contrast: float,
+        offset: float,
+        dt: float,
+    ) -> jnp.ndarray: ...
+    def supports_gradients(self) -> bool: ...
+    def get_gradient_function(self) -> Callable: ...
+    def get_best_gradient_method(self) -> str: ...
+    def get_gradient_capabilities(self) -> dict[str, Any]: ...
+    def get_optimization_recommendations(self) -> list[str]: ...
 
 
 class GradientCapabilityMixin:
@@ -165,7 +194,7 @@ class BenchmarkingMixin:
     """
 
     def benchmark_gradient_performance(
-        self,
+        self: _PhysicsModelProtocol,
         test_params: jnp.ndarray | None = None,
     ) -> dict[str, Any]:
         """Benchmark gradient computation performance across available methods."""
@@ -184,7 +213,7 @@ class BenchmarkingMixin:
         test_offset = 1.0
         test_dt = 0.001  # Required dt parameter
 
-        benchmark_results = {
+        benchmark_results: dict[str, Any] = {
             "test_conditions": {
                 "n_parameters": len(test_params),
                 "n_time_points": len(test_t1),
@@ -291,7 +320,7 @@ class BenchmarkingMixin:
         return benchmark_results
 
     def validate_gradient_accuracy(
-        self,
+        self: _PhysicsModelProtocol,
         test_params: jnp.ndarray | None = None,
         tolerance: float = 1e-6,
     ) -> dict[str, Any]:
@@ -310,7 +339,7 @@ class BenchmarkingMixin:
         test_contrast = 0.8
         test_offset = 1.0
 
-        validation_results = {
+        validation_results: dict[str, Any] = {
             "test_conditions": {
                 "parameters": test_params.tolist(),
                 "tolerance": tolerance,
@@ -400,10 +429,12 @@ class OptimizationRecommendationMixin:
     - get_best_gradient_method(): method
     """
 
-    def get_optimization_recommendations(self) -> list[str]:
+    def get_optimization_recommendations(
+        self: _PhysicsModelProtocol,
+    ) -> list[str]:
         """Get optimization recommendations based on available capabilities."""
         capabilities = self.get_gradient_capabilities()
-        recommendations = []
+        recommendations: list[str] = []
 
         if capabilities["jax_available"]:
             recommendations.append(
@@ -459,7 +490,7 @@ class OptimizationRecommendationMixin:
 
         return recommendations
 
-    def get_model_info(self) -> dict:
+    def get_model_info(self: _PhysicsModelProtocol) -> dict:
         """Get comprehensive model information with enhanced capabilities."""
         capabilities = self.get_gradient_capabilities()
 

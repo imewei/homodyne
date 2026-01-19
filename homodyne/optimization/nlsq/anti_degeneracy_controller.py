@@ -27,7 +27,7 @@ Author: Claude Code
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, Literal, cast
 
 import numpy as np
 
@@ -417,7 +417,7 @@ class AntiDegeneracyController:
         # This fixes the dimension mismatch when Fourier reparameterization is active
         reg_config = AdaptiveRegularizationConfig(
             enable=True,
-            mode=config.regularization_mode,
+            mode=cast(Literal["absolute", "relative", "auto"], config.regularization_mode),
             lambda_base=config.regularization_lambda,
             target_cv=config.regularization_target_cv,
             target_contribution=config.regularization_target_contribution,
@@ -445,7 +445,10 @@ class AntiDegeneracyController:
                 enable=True,
                 ratio_threshold=config.gradient_ratio_threshold,
                 consecutive_triggers=config.gradient_consecutive_triggers,
-                response_mode=config.gradient_response_mode,
+                response_mode=cast(
+                    Literal["warn", "hierarchical", "reset", "abort"],
+                    config.gradient_response_mode,
+                ),
             )
             self.monitor = GradientCollapseMonitor(
                 config=monitor_config,
@@ -577,6 +580,9 @@ class AntiDegeneracyController:
         if not self.use_fourier:
             return params, None
 
+        # Transform to Fourier - fourier must be initialized if use_fourier is True
+        assert self.fourier is not None, "Fourier reparameterizer must be initialized"
+
         # Split parameters
         contrast = params[: self.n_phi]
         offset = params[self.n_phi : 2 * self.n_phi]
@@ -603,6 +609,9 @@ class AntiDegeneracyController:
         """
         if not self.use_fourier:
             return fourier_params
+
+        # Access fourier attributes - fourier must be initialized if use_fourier is True
+        assert self.fourier is not None, "Fourier reparameterizer must be initialized"
 
         n_coeffs = self.fourier.n_coeffs_per_param
 
@@ -694,6 +703,7 @@ class AntiDegeneracyController:
             return self.mapper.get_group_indices()
 
         # Fallback for backward compatibility (should not reach here in normal use)
+        assert self.fourier is not None, "Fourier reparameterizer must be initialized"
         n_per_group = (
             self.fourier.n_coeffs_per_param if self.use_fourier else self.n_phi
         )
@@ -726,6 +736,11 @@ class AntiDegeneracyController:
 
         # Add fixed per-angle scaling info if available
         if self.has_fixed_per_angle_scaling():
+            # Ensure arrays are not None before computing statistics
+            assert (
+                self._fixed_contrast_per_angle is not None
+            ), "Fixed contrast must be set"
+            assert self._fixed_offset_per_angle is not None, "Fixed offset must be set"
             diag["fixed_per_angle_scaling"] = {
                 "contrast_mean": float(np.mean(self._fixed_contrast_per_angle)),
                 "contrast_std": float(np.std(self._fixed_contrast_per_angle)),
@@ -771,16 +786,18 @@ class AntiDegeneracyController:
             return None
         return self.shear_weighter.get_weights()
 
-    def update_shear_phi0(self, phi0: float) -> None:
+    def update_shear_phi0(self, params: np.ndarray, iteration: int = 0) -> None:
         """Update the phi0 value in shear weighter.
 
         Parameters
         ----------
-        phi0 : float
-            New phi0 value in radians.
+        params : np.ndarray
+            Current parameter vector.
+        iteration : int
+            Current iteration number.
         """
         if self.shear_weighter is not None:
-            self.shear_weighter.update_phi0(phi0)
+            self.shear_weighter.update_phi0(params, iteration)
 
     def compute_fixed_per_angle_scaling(
         self,
@@ -924,7 +941,11 @@ class AntiDegeneracyController:
 
             def loss_augmentation(params: np.ndarray, residuals: np.ndarray) -> float:
                 """Add regularization penalty to loss."""
-                return float(self.regularizer.compute_regularization(params))
+                # Compute MSE from residuals
+                mse = float(np.mean(residuals**2))
+                n_points = len(residuals)
+                assert self.regularizer is not None
+                return float(self.regularizer.compute_regularization(params, mse, n_points))
 
             callbacks["loss_augmentation"] = loss_augmentation
 
@@ -939,7 +960,8 @@ class AntiDegeneracyController:
             ) -> None:
                 """Monitor gradients for collapse detection."""
                 if gradient is not None:
-                    self.monitor.check_gradient(gradient, iteration)
+                    assert self.monitor is not None
+                    self.monitor.check(gradient, iteration, params, cost)
 
             callbacks["iteration_callback"] = iteration_callback
 

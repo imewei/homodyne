@@ -277,34 +277,37 @@ def get_package_info() -> dict:
     info["dependencies"] = dependencies
 
     # Generate recommendations
+    recommendations: list[str] = []
     if not dependencies["jax"]:
-        info["recommendations"].append("Install JAX for acceleration: pip install jax")
+        recommendations.append("Install JAX for acceleration: pip install jax")
 
     if not dependencies["nlsq"]:
-        info["recommendations"].append(
+        recommendations.append(
             "Install NLSQ for optimization: pip install nlsq",
         )
 
     if not dependencies["numpyro"] and not dependencies["blackjax"]:
-        info["recommendations"].append(
+        recommendations.append(
             "Install NumPyro or BlackJAX for MCMC: pip install numpyro blackjax",
         )
 
     if not dependencies["h5py"]:
-        info["recommendations"].append("Install h5py for HDF5 data: pip install h5py")
+        recommendations.append("Install h5py for HDF5 data: pip install h5py")
 
     # System recommendations (CPU-only in v2.3.0)
     if __features__["jax_acceleration"]:
-        info["recommendations"].append(
+        recommendations.append(
             "CPU acceleration configured - good performance expected",
         )
     else:
-        info["recommendations"].append("Install JAX for optimal performance")
+        recommendations.append("Install JAX for optimal performance")
+
+    info["recommendations"] = recommendations
 
     return info
 
 
-def _check_installation():
+def _check_installation() -> None:
     """Check installation status and provide helpful messages (CPU-only in v2.3.0)."""
     if not HAS_OPTIMIZATION:
         print(

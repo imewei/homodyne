@@ -18,6 +18,8 @@ from __future__ import annotations
 
 import warnings
 
+from typing import Any
+
 from homodyne.utils.logging import get_logger
 
 logger = get_logger(__name__)
@@ -31,7 +33,7 @@ warnings.warn(
 )
 
 
-def safe_float(value, default: float) -> float:
+def safe_float(value: Any, default: float) -> float:
     """Convert value to float safely, returning default on failure.
 
     Parameters
@@ -64,7 +66,7 @@ def safe_float(value, default: float) -> float:
         return default
 
 
-def safe_int(value, default: int) -> int:
+def safe_int(value: Any, default: int) -> int:
     """Convert value to int safely, returning default on failure.
 
     Parameters
@@ -97,7 +99,7 @@ def safe_int(value, default: int) -> int:
         return default
 
 
-def safe_bool(value, default: bool) -> bool:
+def safe_bool(value: Any, default: bool) -> bool:
     """Convert value to bool safely, returning default on failure.
 
     Handles string values like "true", "false", "1", "0".

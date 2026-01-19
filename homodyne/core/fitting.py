@@ -17,31 +17,44 @@ Key Features:
 - CPU-primary, GPU-optional architecture
 """
 
+from __future__ import annotations
+
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, Callable, TypeVar
 
 import numpy as np
+from numpy.typing import NDArray
 
 from homodyne.utils.logging import get_logger, log_performance
+
+# Type variable for generic functions
+F = TypeVar("F", bound=Callable[..., Any])
 
 # JAX imports with fallback
 try:
     import jax
     import jax.numpy as jnp
-    from jax import grad, jit, vmap
+    from jax import grad as jax_grad
+    from jax import jit as jax_jit
+    from jax import vmap as jax_vmap
 
     JAX_AVAILABLE = True
+    jit = jax_jit
+    vmap = jax_vmap
+    grad = jax_grad
 except ImportError:
     JAX_AVAILABLE = False
-    jnp = np
+    import types
 
-    def jit(f):
+    jnp: types.ModuleType = np  # type: ignore[no-redef]
+
+    def jit(f: F) -> F:  # type: ignore[misc]
         return f  # No-op decorator
 
-    def vmap(f, **kwargs):
+    def vmap(f: F, **kwargs: Any) -> F:  # type: ignore[misc]
         return f
 
-    def grad(f):
+    def grad(f: Callable[..., Any]) -> Callable[..., Any]:  # type: ignore[misc]
         return lambda x: np.zeros_like(x)
 
 
@@ -362,7 +375,7 @@ if JAX_AVAILABLE:
 
 else:
 
-    def solve_least_squares_jax(
+    def solve_least_squares_jax(  # type: ignore[misc]
         theory_batch: np.ndarray,
         exp_batch: np.ndarray,
     ) -> tuple[np.ndarray, np.ndarray]:
@@ -462,8 +475,10 @@ class UnifiedHomodyneEngine:
 
         # Convert to JAX arrays if available
         if JAX_AVAILABLE:
-            data_jax = jnp.array(data_batch)
-            theory_jax = jnp.array(theory_batch)
+            import jax.numpy as jnp_module
+
+            data_jax: Any = jnp_module.array(data_batch)
+            theory_jax: Any = jnp_module.array(theory_batch)
         else:
             data_jax = data_batch
             theory_jax = theory_batch
@@ -586,7 +601,7 @@ class UnifiedHomodyneEngine:
         phi: np.ndarray,
         q: float,
         L: float,
-    ):
+    ) -> None:
         """Validate fitting inputs."""
         if data.size == 0:
             raise ValueError("Data array is empty")
@@ -669,12 +684,12 @@ if JAX_AVAILABLE:
         condition_number = eigenvalues[-1] / (eigenvalues[0] + 1e-15)
 
         # Use appropriate solver based on conditioning
-        def cholesky_solve():
+        def cholesky_solve() -> Any:
             L = jnp.linalg.cholesky(gram_matrix_reg)
             z = jax.scipy.linalg.solve_triangular(L, design_T_target, lower=True)
             return jax.scipy.linalg.solve_triangular(L.T, z, lower=False)
 
-        def svd_solve():
+        def svd_solve() -> Any:
             return jnp.linalg.lstsq(design_matrix, target_vector, rcond=regularization)[
                 0
             ]
@@ -687,7 +702,7 @@ if JAX_AVAILABLE:
             None,
         )
 
-        return params
+        return params  # type: ignore[no-any-return]
 
     @jit
     def solve_least_squares_chunked_jax(
@@ -710,7 +725,10 @@ if JAX_AVAILABLE:
         """
 
         # Process chunks using scan for memory efficiency
-        def process_chunk(carry, chunk_data):
+        def process_chunk(
+            carry: tuple[Any, Any, Any, Any, int],
+            chunk_data: tuple[Any, Any],
+        ) -> tuple[tuple[Any, Any, Any, Any, int], None]:
             theory_chunk, exp_chunk = chunk_data
             sum_theory_sq, sum_theory, sum_exp, sum_theory_exp, n_data = carry
 
@@ -764,7 +782,7 @@ if JAX_AVAILABLE:
 
 else:
     # NumPy fallback versions
-    def solve_least_squares_general_jax(
+    def solve_least_squares_general_jax(  # type: ignore[misc]
         design_matrix: np.ndarray,
         target_vector: np.ndarray,
         regularization: float = 1e-10,
@@ -776,9 +794,9 @@ else:
             target_vector,
             rcond=regularization,
         )
-        return solution
+        return solution  # type: ignore[no-any-return]
 
-    def solve_least_squares_chunked_jax(
+    def solve_least_squares_chunked_jax(  # type: ignore[misc]
         theory_chunks: np.ndarray,
         exp_chunks: np.ndarray,
         chunk_indices: np.ndarray | None = None,
@@ -809,7 +827,7 @@ else:
             contrast = 1.0
             offset = 0.0
 
-        return contrast, offset
+        return np.array(contrast), np.array(offset)
 
 
 # Export main classes

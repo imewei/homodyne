@@ -85,9 +85,9 @@ except ImportError:
 
 # Workflow selection (REMOVED in NLSQ v0.6.0)
 # Use homodyne's select_nlsq_strategy() from memory.py instead
-WorkflowSelector = None  # type: ignore[assignment, misc]
-WorkflowTier = None  # type: ignore[assignment, misc]
-OptimizationGoal = None  # type: ignore[assignment, misc]
+WorkflowSelector = None
+WorkflowTier = None
+OptimizationGoal = None
 NLSQ_WORKFLOW_AVAILABLE = False  # Deprecated
 
 try:
@@ -296,7 +296,7 @@ def get_or_create_model(
     # Pre-convert phi_unique to JAX array for use in closure
     phi_unique_jax = jnp.array(phi_unique)
 
-    def model_func(xdata: np.ndarray, *params) -> np.ndarray:
+    def model_func(xdata: np.ndarray, *params: float) -> np.ndarray:
         """Model function compatible with NLSQ curve_fit.
 
         This function is designed to be JAX-traceable for CMA-ES JIT compilation.
@@ -369,7 +369,8 @@ def get_or_create_model(
 
         g2_pred = offset_per_point + contrast_per_point * g1_batch**2
 
-        return g2_pred
+        # Convert to numpy for compatibility with NLSQ
+        return np.asarray(g2_pred)
 
     # JIT compilation: The model_func now uses JAX vmap for vectorized computation
     # (FR-006, T042). The underlying CombinedModel.compute_g1_batch() uses JAX vmap.
@@ -558,7 +559,8 @@ class NLSQAdapter(NLSQAdapterBase):
         if not config_dict:
             return {}
 
-        return config_dict.get("optimization", {}).get("nlsq", {})
+        result: dict[str, Any] = config_dict.get("optimization", {}).get("nlsq", {})
+        return result
 
     def _select_workflow(
         self,
@@ -673,7 +675,7 @@ class NLSQAdapter(NLSQAdapterBase):
             # Store experimental parameters for closure
             q_val = float(q)
 
-            def model_func(xdata: np.ndarray, *params) -> np.ndarray:
+            def model_func(xdata: np.ndarray, *params: float) -> np.ndarray:
                 """Model function compatible with NLSQ curve_fit."""
                 params_array = np.array(params)
                 n_params = len(params_array)
@@ -706,12 +708,15 @@ class NLSQAdapter(NLSQAdapterBase):
                     # Find phi index
                     phi_idx = np.argmin(np.abs(phi_unique - phi_val))
 
-                    # Compute g1 using the model
+                    # Import jax.numpy for JAX array conversion
+                    import jax.numpy as jnp
+
+                    # Compute g1 using the model (model expects JAX arrays)
                     g1 = model.compute_g1(
-                        physical_params,
-                        np.array([t1_val]),
-                        np.array([t2_val]),
-                        np.array([phi_unique[phi_idx]]),
+                        jnp.array(physical_params),
+                        jnp.array([t1_val]),
+                        jnp.array([t2_val]),
+                        jnp.array([phi_unique[phi_idx]]),
                         q_val,
                         1.0,  # Default L (stator-rotor gap)
                     )
@@ -1027,9 +1032,11 @@ class NLSQAdapter(NLSQAdapterBase):
             if isinstance(result, tuple):
                 if len(result) == 2:
                     popt, pcov = result
-                    info = {}
-                else:
+                    info: dict[str, Any] = {}
+                elif len(result) == 3:
                     popt, pcov, info = result
+                else:
+                    raise TypeError(f"Unexpected tuple length: {len(result)}")
             elif hasattr(result, "popt"):
                 # CurveFitResult object
                 popt = result.popt
@@ -1065,7 +1072,7 @@ class NLSQAdapter(NLSQAdapterBase):
         execution_time = time.time() - start_time
 
         # Convert to OptimizationResult (T012, T017: pass cache metadata)
-        result = self._convert_nlsq_result(
+        opt_result = self._convert_nlsq_result(
             popt=np.asarray(popt),
             pcov=np.asarray(pcov) if pcov is not None else None,
             info=info if isinstance(info, dict) else {},
@@ -1077,13 +1084,13 @@ class NLSQAdapter(NLSQAdapterBase):
 
         logger.info(
             "NLSQAdapter.fit completed: chi²=%.6g, reduced_chi²=%.6g, status=%s, time=%.2fs",
-            result.chi_squared,
-            result.reduced_chi_squared,
-            result.convergence_status,
+            opt_result.chi_squared,
+            opt_result.reduced_chi_squared,
+            opt_result.convergence_status,
             execution_time,
         )
 
-        return result
+        return opt_result
 
     def is_available(self) -> bool:
         """Check if NLSQ CurveFit is available."""

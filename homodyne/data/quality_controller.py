@@ -48,7 +48,7 @@ try:
     HAS_NUMPY = True
 except ImportError:
     HAS_NUMPY = False
-    np = None
+    np = None  # type: ignore[assignment]
 
 # JAX integration with fallback
 try:
@@ -56,7 +56,7 @@ try:
 
     HAS_JAX = True
 except ImportError:
-    jnp = np
+    jnp = np  # type: ignore[misc]
     HAS_JAX = False
 
 # V2 system integration
@@ -69,11 +69,11 @@ except ImportError:
 
     HAS_V2_LOGGING = False
 
-    def get_logger(name):
+    def get_logger(name):  # type: ignore[no-untyped-def,misc]
         return logging.getLogger(name)
 
-    def log_performance(*args, **kwargs):
-        def decorator(func):
+    def log_performance(*args, **kwargs):  # type: ignore[no-untyped-def,misc]
+        def decorator(func):  # type: ignore[no-untyped-def]
             return func
 
         return decorator
@@ -91,9 +91,9 @@ try:
     HAS_VALIDATION = True
 except ImportError:
     HAS_VALIDATION = False
-    DataQualityReport = None
-    ValidationIssue = None
-    ValidationLevel = None
+    DataQualityReport = None  # type: ignore[assignment,misc]
+    ValidationIssue = None  # type: ignore[assignment,misc]
+    ValidationLevel = None  # type: ignore[assignment,misc]
 
 logger = get_logger(__name__)
 
@@ -457,7 +457,7 @@ class DataQualityController:
             return self.quality_config.enable_preprocessing_validation
         elif stage == QualityControlStage.FINAL_DATA:
             return self.quality_config.enable_final_validation
-        return True
+        return True  # type: ignore[unreachable]
 
     def _create_minimal_result(
         self,
@@ -472,12 +472,12 @@ class DataQualityController:
             data_shape_before=self._get_data_shape(data),
         )
 
-    def _get_data_shape(self, data: dict[str, Any]) -> tuple:
+    def _get_data_shape(self, data: dict[str, Any]) -> tuple[Any, ...]:
         """Get shape summary of data for tracking changes."""
         try:
             c2_exp = data.get("c2_exp", [])
             if hasattr(c2_exp, "shape"):
-                return c2_exp.shape
+                return c2_exp.shape  # type: ignore[no-any-return]
             elif isinstance(c2_exp, (list, tuple)) and len(c2_exp) > 0:
                 return (len(c2_exp), getattr(c2_exp[0], "shape", "unknown"))
             return ("unknown",)
@@ -1009,7 +1009,7 @@ class DataQualityController:
             f"Applying auto-repair with strategy: {self.quality_config.auto_repair}",
         )
         data_modified = False
-        repairs_applied = []
+        repairs_applied: list[str] = []
 
         try:
             # Repair NaN values
@@ -1397,7 +1397,7 @@ class DataQualityController:
         """
         logger.info("Generating comprehensive quality assessment report")
 
-        report = {
+        report: dict[str, Any] = {
             "metadata": {
                 "report_timestamp": time.time(),
                 "report_version": "1.0.0",
@@ -1419,9 +1419,10 @@ class DataQualityController:
         }
 
         # Stage-specific results
+        stage_results_dict: dict[str, Any] = {}
         for result in results:
             stage_name = result.stage.value
-            report["stage_results"][stage_name] = {
+            stage_results_dict[stage_name] = {
                 "summary": result.get_summary(),
                 "metrics": result.metrics.to_dict(),
                 "issues": [
@@ -1438,6 +1439,8 @@ class DataQualityController:
             }
 
             report["detailed_metrics"][stage_name] = result.metrics.to_dict()
+
+        report["stage_results"] = stage_results_dict
 
         # Save report if path provided
         if output_path and self.quality_config.export_detailed_reports:
@@ -1510,7 +1513,7 @@ class DataQualityController:
         scores = [result.metrics.overall_score for result in results]
         stages = [result.stage.value for result in results]
 
-        evolution_analysis = {
+        evolution_analysis: dict[str, Any] = {
             "score_progression": dict(zip(stages, scores, strict=False)),
             "quality_trend": "improving" if scores[-1] > scores[0] else "declining",
             "max_improvement": max(scores) - min(scores),
@@ -1518,10 +1521,10 @@ class DataQualityController:
         }
 
         # Identify quality bottlenecks
-        bottlenecks = []
+        bottlenecks_list: list[dict[str, Any]] = []
         for _i, result in enumerate(results):
             if result.metrics.overall_score < self.quality_config.pass_threshold:
-                bottlenecks.append(
+                bottlenecks_list.append(
                     {
                         "stage": result.stage.value,
                         "score": result.metrics.overall_score,
@@ -1529,7 +1532,7 @@ class DataQualityController:
                     },
                 )
 
-        evolution_analysis["bottlenecks"] = bottlenecks
+        evolution_analysis["bottlenecks"] = bottlenecks_list
 
         return evolution_analysis
 

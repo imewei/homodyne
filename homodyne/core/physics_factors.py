@@ -36,7 +36,7 @@ logger = get_logger(__name__)
 try:
     import jax.numpy as jnp
 except ImportError:
-    jnp = np  # Fallback to numpy
+    jnp = np  # type: ignore[misc]
 
 
 @dataclass(frozen=True)
@@ -99,7 +99,7 @@ class PhysicsFactors:
     wavevector_q_squared_half_dt: float
     sinc_prefactor: float
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         """Validate physics factors after initialization."""
         self._validate()
 
@@ -174,7 +174,7 @@ class PhysicsFactors:
 
         return instance
 
-    def _validate(self):
+    def _validate(self) -> None:
         """Validate physics factors for physical consistency.
 
         Checks:

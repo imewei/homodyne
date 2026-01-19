@@ -148,6 +148,7 @@ class FourierReparameterizer:
         self.phi_angles = np.asarray(phi_angles, dtype=np.float64)
         self.config = config
         self.n_phi = len(phi_angles)
+        self._basis_matrix: np.ndarray | None = None
 
         # Determine effective mode
         self.use_fourier = self._determine_mode()
@@ -368,10 +369,10 @@ class FourierReparameterizer:
         # coeffs = (B^T B)^{-1} B^T values = lstsq solution
         # Performance Optimization (Spec 001 - FR-009, T047): Use precomputed rcond
         contrast_coeffs, residuals_c, rank_c, s_c = np.linalg.lstsq(
-            self._basis_matrix, contrast, rcond=self._rcond
+            self._basis_matrix, contrast, rcond=float(self._rcond)
         )
         offset_coeffs, residuals_o, rank_o, s_o = np.linalg.lstsq(
-            self._basis_matrix, offset, rcond=self._rcond
+            self._basis_matrix, offset, rcond=float(self._rcond)
         )
 
         # Log fit quality if there are residuals

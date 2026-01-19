@@ -13,6 +13,8 @@ The theory engine handles:
 - Performance monitoring and optimization hints
 """
 
+from __future__ import annotations
+
 from typing import Any
 
 import numpy as np
@@ -57,7 +59,7 @@ class TheoryEngine:
 
         logger.info(f"Theory engine initialized for {analysis_mode}")
 
-    def _validate_backend(self):
+    def _validate_backend(self) -> None:
         """Validate that computational backend is available."""
         if not jax_available:
             logger.warning("JAX backend not available - computations will be slower")
@@ -71,8 +73,8 @@ class TheoryEngine:
         phi: np.ndarray,
         q: float,
         L: float,
-        dt: float = None,
-    ) -> np.ndarray:
+        dt: float | None = None,
+    ) -> Any:
         """Compute g1 correlation function.
 
         Args:
@@ -91,12 +93,18 @@ class TheoryEngine:
 
         # Convert to JAX arrays if needed
         if jax_available:
-            params = jnp.asarray(params)
-            t1 = jnp.asarray(t1)
-            t2 = jnp.asarray(t2)
-            phi = jnp.asarray(phi)
+            params_jax: Any = jnp.asarray(params)
+            t1_jax: Any = jnp.asarray(t1)
+            t2_jax: Any = jnp.asarray(t2)
+            phi_jax: Any = jnp.asarray(phi)
+        else:
+            params_jax = params
+            t1_jax = t1
+            t2_jax = t2
+            phi_jax = phi
 
-        return self.model.compute_g1(params, t1, t2, phi, q, L, dt)
+        dt_arg: Any = dt
+        return self.model.compute_g1(params_jax, t1_jax, t2_jax, phi_jax, q, L, dt_arg)
 
     @log_performance(threshold=0.01)
     def compute_g2(
@@ -109,7 +117,8 @@ class TheoryEngine:
         L: float,
         contrast: float,
         offset: float,
-    ) -> np.ndarray:
+        dt: float | None = None,
+    ) -> Any:
         """Compute g2 with scaled fitting: g₂ = offset + contrast × [g₁]²
 
         This is the core equation for homodyne analysis.
@@ -132,12 +141,18 @@ class TheoryEngine:
 
         # Convert to JAX arrays if needed
         if jax_available:
-            params = jnp.asarray(params)
-            t1 = jnp.asarray(t1)
-            t2 = jnp.asarray(t2)
-            phi = jnp.asarray(phi)
+            params_jax: Any = jnp.asarray(params)
+            t1_jax: Any = jnp.asarray(t1)
+            t2_jax: Any = jnp.asarray(t2)
+            phi_jax: Any = jnp.asarray(phi)
+        else:
+            params_jax = params
+            t1_jax = t1
+            t2_jax = t2
+            phi_jax = phi
 
-        return self.model.compute_g2(params, t1, t2, phi, q, L, contrast, offset)
+        dt_arg: Any = dt
+        return self.model.compute_g2(params_jax, t1_jax, t2_jax, phi_jax, q, L, contrast, offset, dt_arg)
 
     @log_performance(threshold=0.05)
     def compute_chi_squared(
@@ -175,20 +190,27 @@ class TheoryEngine:
 
         # Convert to JAX arrays if needed
         if jax_available:
-            params = jnp.asarray(params)
-            data = jnp.asarray(data)
-            sigma = jnp.asarray(sigma)
-            t1 = jnp.asarray(t1)
-            t2 = jnp.asarray(t2)
-            phi = jnp.asarray(phi)
+            params_jax: Any = jnp.asarray(params)
+            data_jax: Any = jnp.asarray(data)
+            sigma_jax: Any = jnp.asarray(sigma)
+            t1_jax: Any = jnp.asarray(t1)
+            t2_jax: Any = jnp.asarray(t2)
+            phi_jax: Any = jnp.asarray(phi)
+        else:
+            params_jax = params
+            data_jax = data
+            sigma_jax = sigma
+            t1_jax = t1
+            t2_jax = t2
+            phi_jax = phi
 
         return self.model.compute_chi_squared(
-            params,
-            data,
-            sigma,
-            t1,
-            t2,
-            phi,
+            params_jax,
+            data_jax,
+            sigma_jax,
+            t1_jax,
+            t2_jax,
+            phi_jax,
             q,
             L,
             contrast,
@@ -208,7 +230,7 @@ class TheoryEngine:
         L: float,
         contrast: float,
         offset: float,
-    ) -> np.ndarray:
+    ) -> Any:
         """Compute chi-squared for multiple parameter sets efficiently.
 
         Leverages JAX vectorization for optimal performance.
@@ -240,20 +262,20 @@ class TheoryEngine:
 
         # Convert to JAX arrays if needed
         if jax_available:
-            params_batch = jnp.asarray(params_batch)
-            data = jnp.asarray(data)
-            sigma = jnp.asarray(sigma)
-            t1 = jnp.asarray(t1)
-            t2 = jnp.asarray(t2)
-            phi = jnp.asarray(phi)
+            params_batch_jax: Any = jnp.asarray(params_batch)
+            data_jax: Any = jnp.asarray(data)
+            sigma_jax: Any = jnp.asarray(sigma)
+            t1_jax: Any = jnp.asarray(t1)
+            t2_jax: Any = jnp.asarray(t2)
+            phi_jax: Any = jnp.asarray(phi)
 
             return batch_chi_squared(
-                params_batch,
-                data,
-                sigma,
-                t1,
-                t2,
-                phi,
+                params_batch_jax,
+                data_jax,
+                sigma_jax,
+                t1_jax,
+                t2_jax,
+                phi_jax,
                 q,
                 L,
                 contrast,
@@ -334,7 +356,7 @@ class TheoryEngine:
         else:
             return "heavy"
 
-    def _validate_computation_inputs(self, params: np.ndarray, q: float, L: float):
+    def _validate_computation_inputs(self, params: np.ndarray, q: float, L: float) -> None:
         """Validate core computation inputs."""
         # Skip validation inside JIT compilation to avoid JAX tracer errors
         # These checks would fail with JAX traced values
@@ -343,7 +365,8 @@ class TheoryEngine:
             return
 
         # Parameter validation
-        if not self.model.validate_parameters(params):
+        params_any: Any = params
+        if not self.model.validate_parameters(params_any):
             logger.warning(
                 "Parameters outside recommended bounds - results may be unreliable",
             )
@@ -366,7 +389,7 @@ class TheoryEngine:
                 f"L = {L:.1f} Å outside typical range [1e5, 1e8] Å (10mm to 10m) - check experimental setup",
             )
 
-    def _validate_scaling_parameters(self, contrast: float, offset: float):
+    def _validate_scaling_parameters(self, contrast: float, offset: float) -> None:
         """Validate scaling parameters."""
         # Skip validation inside JIT compilation to avoid JAX tracer errors
         if jax_available:
@@ -385,7 +408,7 @@ class TheoryEngine:
         t1: np.ndarray,
         t2: np.ndarray,
         phi: np.ndarray,
-    ):
+    ) -> None:
         """Validate experimental data inputs."""
         # Skip validation inside JIT compilation to avoid JAX tracer errors
         if jax_available:
@@ -414,7 +437,7 @@ class TheoryEngine:
 
     def get_model_info(self) -> dict[str, Any]:
         """Get comprehensive model and engine information."""
-        info = self.model.get_model_info()
+        info = self.model.get_model_info()  # type: ignore[misc]
         info.update(
             {
                 "theory_engine_version": "2.0",
@@ -440,7 +463,8 @@ def compute_g2_theory(
     contrast: float,
     offset: float,
     analysis_mode: str = "laminar_flow",
-) -> np.ndarray:
+    dt: float | None = None,
+) -> Any:
     """Direct computation of g2 theory with minimal overhead.
 
     Convenience function for simple theory calculations.
@@ -453,12 +477,13 @@ def compute_g2_theory(
         L: Sample-detector distance
         contrast, offset: Scaling parameters
         analysis_mode: Analysis mode
+        dt: Time step (if None, will be estimated from t1)
 
     Returns:
         g2 correlation function
     """
     engine = TheoryEngine(analysis_mode)
-    return engine.compute_g2(params, t1, t2, phi, q, L, contrast, offset)
+    return engine.compute_g2(params, t1, t2, phi, q, L, contrast, offset, dt)
 
 
 def compute_chi2_theory(

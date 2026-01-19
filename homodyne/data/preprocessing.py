@@ -52,7 +52,7 @@ try:
     HAS_NUMPY = True
 except ImportError:
     HAS_NUMPY = False
-    np = None
+    np = None  # type: ignore[assignment]
 
 # JAX integration with fallback
 try:
@@ -65,15 +65,15 @@ except ImportError:
     HAS_JAX = False
     jax_available = False
 
-    def jit(func):
+    def jit(func):  # type: ignore[no-redef,no-untyped-def]
         return func
 
-    lax = None
+    lax = None  # type: ignore[assignment]
 
 # Scipy for advanced algorithms
 try:
-    from scipy import ndimage, signal, stats
-    from scipy.ndimage import gaussian_filter, median_filter
+    from scipy import ndimage, signal, stats  # type: ignore[import-untyped]
+    from scipy.ndimage import gaussian_filter, median_filter  # type: ignore[import-untyped]
 
     HAS_SCIPY = True
 except ImportError:
@@ -95,23 +95,23 @@ except ImportError:
 
     HAS_V2_LOGGING = False
 
-    def get_logger(name):
+    def get_logger(name):  # type: ignore[no-untyped-def,misc]
         return logging.getLogger(name)
 
-    def log_performance(*args, **kwargs):
-        def decorator(func):
+    def log_performance(*args, **kwargs):  # type: ignore[no-untyped-def,misc]
+        def decorator(func):  # type: ignore[no-untyped-def]
             return func
 
         return decorator
 
-    def log_calls(*args, **kwargs):
-        def decorator(func):
+    def log_calls(*args, **kwargs):  # type: ignore[no-untyped-def,misc]
+        def decorator(func):  # type: ignore[no-untyped-def]
             return func
 
         return decorator
 
     @contextmanager
-    def log_phase(name, **kwargs):
+    def log_phase(name, **kwargs):  # type: ignore[no-untyped-def,misc]
         """Fallback log_phase for environments without v2 logging."""
         yield type("PhaseContext", (), {"duration": 0.0, "memory_peak_gb": None})()
 
@@ -123,7 +123,7 @@ try:
     HAS_DIAGONAL_CORRECTION = True
 except ImportError:
     HAS_DIAGONAL_CORRECTION = False
-    apply_diagonal_correction = None
+    apply_diagonal_correction = None  # type: ignore[assignment]
 
 
 logger = get_logger(__name__)
@@ -408,8 +408,8 @@ class PreprocessingPipeline:
                             processed_data,
                         )
                     stage_results[stage] = True
-                    transform_record["duration_s"] = phase.duration
-                    transform_record["memory_peak_gb"] = phase.memory_peak_gb
+                    transform_record.duration = phase.duration
+                    transform_record.memory_usage = phase.memory_peak_gb
                     provenance.transformations.append(transform_record)
 
                 except Exception as e:
@@ -639,23 +639,26 @@ class PreprocessingPipeline:
                     neighbors.append(c2_mat[i, i + offset])
 
             if neighbors:
-                neighbors = np.array(neighbors)
+                if HAS_SCIPY:
+                    neighbors_arr = np.array(neighbors)
+                else:
+                    neighbors_arr = neighbors  # type: ignore[assignment]
 
                 # Apply statistical estimator
                 if estimator == "median":
-                    c2_corrected[i, i] = np.median(neighbors)
+                    c2_corrected[i, i] = np.median(neighbors_arr)
                 elif estimator == "mean":
-                    c2_corrected[i, i] = np.mean(neighbors)
+                    c2_corrected[i, i] = np.mean(neighbors_arr)
                 elif estimator == "trimmed_mean":
                     trim_fraction = config.get("trim_fraction", 0.2)
                     if HAS_SCIPY:
-                        c2_corrected[i, i] = stats.trim_mean(neighbors, trim_fraction)
+                        c2_corrected[i, i] = stats.trim_mean(neighbors_arr, trim_fraction)
                     else:
                         # Fallback to median
-                        c2_corrected[i, i] = np.median(neighbors)
+                        c2_corrected[i, i] = np.median(neighbors_arr)
                 else:
                     logger.warning(f"Unknown estimator: {estimator}, using median")
-                    c2_corrected[i, i] = np.median(neighbors)
+                    c2_corrected[i, i] = np.median(neighbors_arr)
 
         return c2_corrected
 

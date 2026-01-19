@@ -8,7 +8,7 @@ Created as part of architecture refactoring (T059-T061).
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from typing import Any
+from typing import Any, cast
 
 import numpy as np
 
@@ -356,7 +356,7 @@ class NLSQAdapterBase(ABC):
             # Covariance matrix
             covariance = jtj_inv * s2
 
-            return covariance
+            return cast(np.ndarray, covariance)
 
         except (np.linalg.LinAlgError, ValueError) as e:
             logger.warning(f"Covariance computation failed: {e}")

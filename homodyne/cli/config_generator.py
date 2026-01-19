@@ -20,7 +20,7 @@ from typing import Any
 import yaml
 
 try:
-    from ruamel.yaml import YAML
+    from ruamel.yaml import YAML  # type: ignore[import-not-found]
 
     HAS_RUAMEL = True
 except ImportError:
@@ -192,7 +192,7 @@ def generate_config(
 
     # Load config for return value (without modifying file)
     with open(template_path) as f:
-        config = yaml.safe_load(f)
+        config: dict[str, Any] = yaml.safe_load(f)
 
     print(f"✓ Generated {mode} configuration: {output_path}")
     print(f"  Template: {template_path.name}")
@@ -277,13 +277,16 @@ def interactive_builder() -> dict[str, Any]:
             # Still load and return config for reference
             template_path = get_template_path(mode)
             with open(template_path) as f:
-                return yaml.safe_load(f)
+                result: dict[str, Any] = yaml.safe_load(f)
+                return result
 
     # Get template
     template_path = get_template_path(mode)
 
     # Save configuration with comment preservation
     output_path.parent.mkdir(parents=True, exist_ok=True)
+
+    result_config: dict[str, Any]
 
     if HAS_RUAMEL:
         # Use ruamel.yaml to preserve comments while modifying values
@@ -305,6 +308,10 @@ def interactive_builder() -> dict[str, Any]:
 
         with open(output_path, "w") as f:
             yaml_handler.dump(config, f)
+
+        # Load for return value with proper type
+        with open(output_path) as f:
+            result_config = yaml.safe_load(f)
     else:
         # Fallback: use text replacement to preserve comments
         with open(template_path) as f:
@@ -331,7 +338,7 @@ def interactive_builder() -> dict[str, Any]:
 
         # Load config for return value
         with open(template_path) as f:
-            config = yaml.safe_load(f)
+            result_config = yaml.safe_load(f)
 
     print()
     print("=" * 70)
@@ -352,7 +359,7 @@ def interactive_builder() -> dict[str, Any]:
     print()
     print("Note: All template comments and instructions are preserved.")
 
-    return config
+    return result_config
 
 
 def validate_config(config_path: Path) -> bool:
@@ -381,6 +388,10 @@ def validate_config(config_path: Path) -> bool:
         config_mgr = ConfigManager(str(config_path))
         config = config_mgr.config
 
+        if config is None:
+            print("✗ Configuration is empty or failed to load")
+            return False
+
         print("✓ Configuration loaded successfully")
         print()
 
@@ -390,8 +401,9 @@ def validate_config(config_path: Path) -> bool:
         print(f"  Mode:         {config.get('analysis_mode', 'unknown')}")
 
         # Data file
-        if "experimental_data" in config:
-            data_file = config["experimental_data"].get("file_path", "not specified")
+        experimental_data = config.get("experimental_data")
+        if experimental_data is not None:
+            data_file = experimental_data.get("file_path", "not specified")
             print(f"  Data file:    {data_file}")
 
             # Check if data file exists
@@ -402,14 +414,16 @@ def validate_config(config_path: Path) -> bool:
                 print("    ⚠ Data file not found")
 
         # Parameters
-        if "initial_parameters" in config:
-            params = config["initial_parameters"].get("parameter_names", [])
+        initial_parameters = config.get("initial_parameters")
+        if initial_parameters is not None:
+            params = initial_parameters.get("parameter_names", [])
             print(f"  Parameters:   {len(params)} parameters")
             print(f"                {', '.join(params)}")
 
         # Optimization method
-        if "optimization" in config:
-            method = config["optimization"].get("method", "not specified")
+        optimization = config.get("optimization")
+        if optimization is not None:
+            method = optimization.get("method", "not specified")
             print(f"  Method:       {method}")
 
         print()

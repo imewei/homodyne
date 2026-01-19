@@ -337,7 +337,7 @@ Homodyne v{__version__} - CPU-Optimized JAX Architecture
     return parser
 
 
-def validate_args(args) -> bool:
+def validate_args(args: argparse.Namespace) -> bool:
     """Validate parsed command-line arguments.
 
     Parameters

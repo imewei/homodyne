@@ -128,25 +128,30 @@ def save_nlsq_npz_file(
     """
     npz_file = output_dir / "fitted_data.npz"
 
-    np.savez_compressed(
-        npz_file,
+    # Build kwargs dict to handle optional c2_solver
+    save_dict: dict[str, Any] = {
         # Experimental data (2 arrays)
-        phi_angles=phi_angles,
-        c2_exp=c2_exp,
+        "phi_angles": phi_angles,
+        "c2_exp": c2_exp,
         # Theoretical fits (4 arrays)
-        c2_theoretical_raw=c2_raw,
-        c2_theoretical_scaled=c2_scaled,
-        c2_solver_scaled=c2_solver,
-        per_angle_scaling=per_angle_scaling,
-        per_angle_scaling_solver=per_angle_scaling_solver,
+        "c2_theoretical_raw": c2_raw,
+        "c2_theoretical_scaled": c2_scaled,
+        "per_angle_scaling": per_angle_scaling,
+        "per_angle_scaling_solver": per_angle_scaling_solver,
         # Residuals (2 arrays)
-        residuals=residuals,
-        residuals_normalized=residuals_norm,
+        "residuals": residuals,
+        "residuals_normalized": residuals_norm,
         # Coordinate arrays (3 arrays)
-        t1=t1,
-        t2=t2,
-        q=np.array([q]),  # Wrap scalar in array
-    )
+        "t1": t1,
+        "t2": t2,
+        "q": np.array([q]),  # Wrap scalar in array
+    }
+
+    # Add c2_solver only if it's not None
+    if c2_solver is not None:
+        save_dict["c2_solver_scaled"] = c2_solver
+
+    np.savez_compressed(npz_file, **save_dict)
 
     # T058a: Log file path and file size after write completion
     file_size_mb = npz_file.stat().st_size / (1024 * 1024)

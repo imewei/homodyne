@@ -13,7 +13,7 @@ from homodyne.optimization.exceptions import NLSQConvergenceError, NLSQNumerical
 
 # Error-specific recovery strategies
 # Each error type maps to a list of (strategy_name, strategy_param) tuples
-ERROR_RECOVERY_STRATEGIES = {
+ERROR_RECOVERY_STRATEGIES: dict[type[Exception], list[tuple[str, Any]]] = {
     NLSQConvergenceError: [
         ("perturb_parameters", 0.05),  # 5% random perturbation
         ("increase_iterations", 1.5),  # 50% more iterations

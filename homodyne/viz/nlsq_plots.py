@@ -163,7 +163,7 @@ def plot_simulated_data(
     )
 
     # Generate simulated C₂ for each phi angle
-    c2_simulated = []
+    c2_simulated_list = []
 
     for _i, phi_val in enumerate(phi):
         phi_array = jnp.array([phi_val])
@@ -185,9 +185,9 @@ def plot_simulated_data(
         logger.debug(
             f"  C₂ shape: {c2_result.shape}, range: [{c2_result.min():.4f}, {c2_result.max():.4f}]",
         )
-        c2_simulated.append(c2_result)
+        c2_simulated_list.append(c2_result)
 
-    c2_simulated = np.array(c2_simulated)
+    c2_simulated = np.array(c2_simulated_list)
 
     logger.info(f"Generated simulated C₂ with shape: {c2_simulated.shape}")
 
@@ -213,7 +213,7 @@ def plot_simulated_data(
 
         im = ax.imshow(
             c2_simulated[idx].T,
-            extent=[t_vals[0], t_vals[-1], t_vals[0], t_vals[-1]],
+            extent=(t_vals[0], t_vals[-1], t_vals[0], t_vals[-1]),
             aspect="equal",
             cmap="jet",
             origin="lower",
@@ -329,10 +329,7 @@ def generate_and_plot_fitted_simulations(
 
     # Apply phi filtering to data (if enabled in config)
     if angle_filter_func is not None:
-        if isinstance(config, dict):
-            config_for_filtering = ConfigManager(config_dict=config)
-        else:
-            config_for_filtering = config
+        config_for_filtering = ConfigManager(config_override=config)
         filtered_data = angle_filter_func(data, config_for_filtering)
         logger.debug(
             f"Applied phi filtering for fitted simulation plots: "

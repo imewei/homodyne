@@ -39,11 +39,11 @@ except ImportError:
 
     HAS_V2_LOGGING = False
 
-    def get_logger(name):
+    def get_logger(name: str) -> logging.Logger:
         return logging.getLogger(name)
 
-    def log_performance(*args, **kwargs):
-        def decorator(func):
+    def log_performance(*args: Any, **kwargs: Any) -> Any:
+        def decorator(func: Any) -> Any:
             return func
 
         return decorator
@@ -56,7 +56,7 @@ try:
     HAS_PHYSICS = True
 except ImportError:
     HAS_PHYSICS = False
-    PhysicsConstants = None
+    PhysicsConstants = None  # type: ignore
 
 # Data validation integration
 try:
@@ -65,7 +65,7 @@ try:
     HAS_VALIDATION = True
 except ImportError:
     HAS_VALIDATION = False
-    validate_xpcs_data = None
+    validate_xpcs_data = None  # type: ignore
 
 logger = get_logger(__name__)
 

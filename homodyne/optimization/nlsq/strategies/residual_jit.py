@@ -19,6 +19,7 @@ Version: 2.4.0 (updated with buffer donation in 2.14.0)
 from __future__ import annotations
 
 import logging
+from typing import Any, cast
 
 import jax
 import jax.numpy as jnp
@@ -54,13 +55,13 @@ class StratifiedResidualFunctionJIT:
 
     def __init__(
         self,
-        stratified_data: any,
+        stratified_data: Any,
         per_angle_scaling: bool,
         physical_param_names: list[str],
         logger: logging.Logger | None = None,
         fixed_contrast_per_angle: np.ndarray | None = None,
         fixed_offset_per_angle: np.ndarray | None = None,
-    ):
+    ) -> None:
         """
         Initialize JIT-compatible stratified residual function.
 
@@ -314,50 +315,57 @@ class StratifiedResidualFunctionJIT:
             physical_params = params_all[2:]
 
         # Compute theoretical g2 using vectorized computation
+        dt_value = self.dt if self.dt is not None else 0.001
         if self.use_fixed_scaling or self.per_angle_scaling:
             # Vectorize over phi with corresponding contrast/offset
-            compute_g2_vmap = jax.vmap(
-                lambda phi_val, contrast_val, offset_val: jnp.squeeze(
+            def compute_for_angle(
+                phi_val: float, contrast_val: float, offset_val: float
+            ) -> jnp.ndarray:
+                return jnp.squeeze(
                     compute_g2_scaled(
                         params=physical_params,
                         t1=self.t1_unique,
                         t2=self.t2_unique,
-                        phi=phi_val,
+                        phi=jnp.asarray(phi_val),
                         q=self.q,
                         L=self.L,
                         contrast=contrast_val,
                         offset=offset_val,
-                        dt=self.dt,
+                        dt=dt_value,
                     ),
                     axis=0,
-                ),
-                in_axes=(0, 0, 0),
-            )
-            g2_theory_grid = compute_g2_vmap(self.phi_unique, contrast, offset)
+                )
+
+            compute_g2_vmap = jax.vmap(compute_for_angle, in_axes=(0, 0, 0))
+            g2_theory_grid = compute_g2_vmap(self.phi_unique, contrast, offset)  # type: ignore[arg-type]
         else:
             # Legacy: single contrast/offset
-            compute_g2_vmap = jax.vmap(
-                lambda phi_val: jnp.squeeze(
+            def compute_for_angle_scalar(phi_val: float) -> jnp.ndarray:
+                # We use cast(float, ...) here to satisfy mypy, but at runtime these are JAX tracers
+                # which compute_g2_scaled handles correctly despite the float type hint.
+                from typing import cast
+
+                return jnp.squeeze(
                     compute_g2_scaled(
                         params=physical_params,
                         t1=self.t1_unique,
                         t2=self.t2_unique,
-                        phi=phi_val,
+                        phi=jnp.asarray(phi_val),
                         q=self.q,
                         L=self.L,
-                        contrast=contrast,
-                        offset=offset,
-                        dt=self.dt,
+                        contrast=cast(float, contrast),
+                        offset=cast(float, offset),
+                        dt=dt_value,
                     ),
                     axis=0,
-                ),
-                in_axes=0,
-            )
-            g2_theory_grid = compute_g2_vmap(self.phi_unique)
+                )
+
+            compute_g2_vmap_scalar = jax.vmap(compute_for_angle_scalar, in_axes=0)
+            g2_theory_grid = compute_g2_vmap_scalar(self.phi_unique)  # type: ignore[arg-type]
 
         # Apply diagonal correction (vmap over phi dimension)
         apply_diagonal_vmap = jax.vmap(apply_diagonal_correction, in_axes=0)
-        g2_theory_grid = apply_diagonal_vmap(g2_theory_grid)
+        g2_theory_grid = apply_diagonal_vmap(g2_theory_grid)  # type: ignore[assignment]
 
         # Flatten theory grid for indexing
         g2_theory_flat = g2_theory_grid.flatten()
@@ -435,7 +443,7 @@ class StratifiedResidualFunctionJIT:
         # Return full array (filtering happens in __call__ to avoid JIT boolean indexing)
         return residuals_flat
 
-    def __call__(self, params):
+    def __call__(self, params: np.ndarray | jnp.ndarray) -> jnp.ndarray:
         """
         Compute residuals (interface for NLSQ least_squares).
 
@@ -452,7 +460,7 @@ class StratifiedResidualFunctionJIT:
         """
         params_jax = jnp.asarray(params, dtype=jnp.float64)
         residuals_jax = self._residual_fn_jit(params_jax)
-        return residuals_jax  # Keep as JAX array for JIT compatibility
+        return cast(jnp.ndarray, residuals_jax)  # Keep as JAX array for JIT compatibility
 
     def validate_chunk_structure(self) -> bool:
         """
@@ -512,7 +520,7 @@ class StratifiedResidualFunctionJIT:
             "jit_compiled": True,
         }
 
-    def log_diagnostics(self):
+    def log_diagnostics(self) -> None:
         """Log diagnostic information about the residual function."""
         diag = self.get_diagnostics()
         self.logger.info("Stratified Residual Function Diagnostics:")

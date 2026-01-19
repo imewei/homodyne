@@ -22,6 +22,10 @@ Performance Comparison:
 Note: Legacy mcmc/ package removed in v3.0. CMC is the sole MCMC backend.
 """
 
+from __future__ import annotations
+
+from typing import Any
+
 # Import submodules as attributes for hasattr() checks
 # These imports expose the submodule packages even if their contents fail to import
 from homodyne.optimization import nlsq
@@ -51,21 +55,21 @@ try:
     NLSQ_AVAILABLE = True
 except ImportError as e:
     print(f"Warning: Could not import NLSQ optimization: {e}")
-    fit_nlsq_jax = None
-    fit_nlsq_multistart = None
-    MultiStartConfig = None
-    MultiStartResult = None
-    NLSQResult = None
-    NLSQWrapper = None
-    OptimizationResult = None
-    StratificationDiagnostics = None
-    create_angle_stratified_data = None
-    create_angle_stratified_indices = None
-    should_use_stratification = None
-    StratifiedResidualFunction = None
-    StratifiedResidualFunctionJIT = None
-    create_stratified_residual_function = None
-    optimize_per_angle_sequential = None
+    fit_nlsq_jax = None  # type: ignore[assignment]
+    fit_nlsq_multistart = None  # type: ignore[assignment]
+    MultiStartConfig = None  # type: ignore[assignment,misc]
+    MultiStartResult = None  # type: ignore[assignment,misc]
+    NLSQResult = None  # type: ignore[assignment,misc]
+    NLSQWrapper = None  # type: ignore[assignment,misc]
+    OptimizationResult = None  # type: ignore[assignment,misc]
+    StratificationDiagnostics = None  # type: ignore[assignment,misc]
+    create_angle_stratified_data = None  # type: ignore[assignment]
+    create_angle_stratified_indices = None  # type: ignore[assignment]
+    should_use_stratification = None  # type: ignore[assignment]
+    StratifiedResidualFunction = None  # type: ignore[assignment,misc]
+    StratifiedResidualFunctionJIT = None  # type: ignore[assignment,misc]
+    create_stratified_residual_function = None  # type: ignore[assignment]
+    optimize_per_angle_sequential = None  # type: ignore[assignment]
     NLSQ_AVAILABLE = False
 
 # Handle CMC imports (NO FALLBACK to legacy mcmc - it's removed)
@@ -96,10 +100,10 @@ try:
 
 except ImportError as e:
     print(f"Warning: Could not import CMC optimization: {e}")
-    fit_mcmc_jax = None
-    CMCConfig = None
-    CMCResult = None
-    MCMCResult = None
+    fit_mcmc_jax = None  # type: ignore[assignment]
+    CMCConfig = None  # type: ignore[assignment,misc]
+    CMCResult = None  # type: ignore[assignment,misc]
+    MCMCResult = None  # type: ignore[misc,assignment]
     MCMC_JAX_AVAILABLE = False
     NUMPYRO_AVAILABLE = False
     BLACKJAX_AVAILABLE = False
@@ -151,7 +155,7 @@ __all__ = [
 ]
 
 
-def get_optimization_info():
+def get_optimization_info() -> dict[str, Any]:
     """Get information about available optimization methods.
 
     Returns
@@ -159,7 +163,7 @@ def get_optimization_info():
     dict
         Dictionary with availability status and recommendations
     """
-    info = {
+    info: dict[str, Any] = {
         "status": OPTIMIZATION_STATUS.copy(),
         "primary_method": "nlsq" if NLSQ_AVAILABLE else None,
         "secondary_method": "cmc" if MCMC_AVAILABLE else None,

@@ -42,7 +42,7 @@ Date: 2025-11-13
 Version: 1.0.0
 """
 
-from typing import Any
+from typing import Any, Callable
 
 import jax
 import jax.numpy as jnp
@@ -57,7 +57,7 @@ def _create_residual_function(
     data: Any,
     config: Any,
     analysis_mode: str,
-) -> tuple[callable, list[str]]:
+) -> tuple[Callable, list[str]]:
     """
     Create residual function for gradient computation.
 
@@ -78,7 +78,8 @@ def _create_residual_function(
     g2_exp = jnp.asarray(data.g2)
     q = float(data.q)
     L = float(data.L)
-    dt = float(data.dt) if hasattr(data, "dt") and data.dt is not None else None
+    # Ensure dt is a float, defaulting to 1.0 if missing (consistent with other modules)
+    dt = float(data.dt) if hasattr(data, "dt") and data.dt is not None else 1.0
 
     # Get per-angle scaling parameters
     if hasattr(data, "per_angle_scaling_solver"):
@@ -157,7 +158,7 @@ def compute_gradient_norms(
     # Compute SSE function
     def sse_fn(params: jnp.ndarray) -> float:
         residuals = residual_fn(params)
-        return jnp.sum(residuals**2)
+        return float(jnp.sum(residuals**2))
 
     # Compute gradient
     grad_fn = jax.grad(sse_fn)
@@ -314,13 +315,13 @@ def diagnose_gradient_imbalance(
     imbalance_detected = max_ratio > threshold
 
     # Generate recommendations
-    recommendations = {}
+    recommendations: dict[str, Any] = {}
     if imbalance_detected:
         # Compute optimal x_scale
         x_scale_map = compute_optimal_x_scale(parameters, data, config, analysis_mode)
 
         recommendations["x_scale_map"] = x_scale_map
-        recommendations["summary"] = (
+        summary = (
             f"Gradient imbalance detected: {max_ratio:.0f}× ratio\n"
             f"Apply parameter-specific scaling by adding to config:\n"
             f"optimization:\n"
@@ -328,7 +329,8 @@ def diagnose_gradient_imbalance(
             f"    x_scale_map:\n"
         )
         for name, scale in x_scale_map.items():
-            recommendations["summary"] += f"      {name}: {scale:.2e}\n"
+            summary += f"      {name}: {scale:.2e}\n"
+        recommendations["summary"] = summary
 
         recommendations["action"] = "apply_x_scale_map"
     else:

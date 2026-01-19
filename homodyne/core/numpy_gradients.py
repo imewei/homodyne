@@ -93,9 +93,9 @@ class GradientResult:
     method_used: str = "unknown"
     function_calls: int = 0
     computation_time: float = 0.0
-    warnings: list[str] = None
+    warnings: list[str] | None = None
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         if self.warnings is None:
             self.warnings = []
 
@@ -164,7 +164,7 @@ def _estimate_optimal_step(
     optimal_h = np.maximum(optimal_h, min_step)
     optimal_h = np.minimum(optimal_h, max_step)
 
-    return optimal_h
+    return np.asarray(optimal_h)
 
 
 def _complex_step_derivative(
@@ -207,7 +207,7 @@ def _central_difference_single(
     x_plus[index] += h
     x_minus[index] -= h
 
-    return (func(x_plus) - func(x_minus)) / (2 * h)
+    return float((func(x_plus) - func(x_minus)) / (2 * h))
 
 
 def _forward_difference_single(
@@ -220,7 +220,7 @@ def _forward_difference_single(
     x_plus = x.copy()
     x_plus[index] += h
 
-    return (func(x_plus) - func(x)) / h
+    return float((func(x_plus) - func(x)) / h)
 
 
 def _backward_difference_single(
@@ -233,7 +233,7 @@ def _backward_difference_single(
     x_minus = x.copy()
     x_minus[index] -= h
 
-    return (func(x) - func(x_minus)) / h
+    return float((func(x) - func(x_minus)) / h)
 
 
 def _richardson_extrapolation(
@@ -320,7 +320,7 @@ def numpy_gradient(
         argnums = [argnums]
 
     @wraps(func)
-    def gradient_func(*args, **kwargs):
+    def gradient_func(*args: Any, **kwargs: Any) -> np.ndarray | list[np.ndarray]:
         """Compute numerical gradient."""
         start_time = time.perf_counter()
 
@@ -349,7 +349,7 @@ def numpy_gradient(
                 new_args[argnum] = param_slice.reshape(param_arrays[i].shape)
                 start_idx += param_size
 
-            return func(*new_args, **kwargs)
+            return float(func(*new_args, **kwargs))
 
         # Flatten parameters for processing
         x = np.concatenate([arr.flatten() for arr in param_arrays])
@@ -573,7 +573,8 @@ def _chunked_gradient_computation(
             error_estimates[start_idx:end_idx] = chunk_result.error_estimate
 
         total_function_calls += chunk_result.function_calls
-        warnings_list.extend(chunk_result.warnings)
+        if chunk_result.warnings is not None:
+            warnings_list.extend(chunk_result.warnings)
 
     return GradientResult(
         gradient=gradient,
@@ -853,7 +854,7 @@ def numpy_hessian(
         argnums = [argnums]
 
     @wraps(func)
-    def hessian_func(*args, **kwargs):
+    def hessian_func(*args: Any, **kwargs: Any) -> np.ndarray:
         """Compute numerical Hessian using finite differences."""
         start_time = time.perf_counter()
 
@@ -878,7 +879,7 @@ def numpy_hessian(
                 new_args[argnum] = param_slice.reshape(param_arrays[i].shape)
                 start_idx += param_size
 
-            return func(*new_args, **kwargs)
+            return float(func(*new_args, **kwargs))
 
         # Compute Hessian using finite differences
         hessian_matrix = _compute_hessian_finite_diff(eval_func, x, config)

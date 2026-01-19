@@ -979,11 +979,11 @@ def log_calls(
     def decorator(func: F) -> F:
         nonlocal resolved_logger
         if resolved_logger is None:
-            resolved_logger = get_logger(func.__module__)  # type: ignore[attr-defined]
+            resolved_logger = get_logger(func.__module__)
 
         @functools.wraps(func)
         def wrapper(*args: Any, **kwargs: Any) -> Any:
-            func_name = f"{func.__module__}.{func.__qualname__}"  # type: ignore[attr-defined]
+            func_name = f"{func.__module__}.{func.__qualname__}"
             assert resolved_logger is not None  # For type narrowing
 
             # Log function entry
@@ -1034,12 +1034,12 @@ def log_performance(
     def decorator(func: F) -> F:
         nonlocal resolved_logger
         if resolved_logger is None:
-            resolved_logger = get_logger(func.__module__)  # type: ignore[attr-defined]
+            resolved_logger = get_logger(func.__module__)
 
         @functools.wraps(func)
         def wrapper(*args: Any, **kwargs: Any) -> Any:
             start_time = time.perf_counter()
-            func_name = f"{func.__module__}.{func.__qualname__}"  # type: ignore[attr-defined]
+            func_name = f"{func.__module__}.{func.__qualname__}"
             assert resolved_logger is not None  # For type narrowing
 
             try:

@@ -94,7 +94,7 @@ class PhysicsModelBase(ABC):
         phi: jnp.ndarray,
         q: float,
         L: float,
-        dt: float = None,
+        dt: float | None = None,
     ) -> jnp.ndarray:
         """Compute g1 correlation function for this model."""
 
@@ -108,7 +108,7 @@ class PhysicsModelBase(ABC):
 
     def validate_parameters(self, params: jnp.ndarray) -> bool:
         """Validate parameter values against bounds and constraints."""
-        return validate_parameters(params, self.get_parameter_bounds())
+        return validate_parameters(params, self.get_parameter_bounds())  # type: ignore[arg-type]
 
     def get_parameter_dict(self, params: jnp.ndarray) -> dict[str, float]:
         """Convert parameter array to named dictionary."""
@@ -155,7 +155,7 @@ class DiffusionModel(PhysicsModelBase):
     - D_offset: Residual diffusion at t=0
     """
 
-    def __init__(self):
+    def __init__(self) -> None:
         super().__init__(
             name="anomalous_diffusion",
             parameter_names=["D0", "alpha", "D_offset"],
@@ -170,7 +170,7 @@ class DiffusionModel(PhysicsModelBase):
         phi: jnp.ndarray,
         q: float,
         L: float,
-        dt: float = None,
+        dt: float | None = None,
     ) -> jnp.ndarray:
         """Compute diffusion contribution to g1.
 
@@ -217,7 +217,7 @@ class ShearModel(PhysicsModelBase):
     - φ₀: Preferred flow direction angle
     """
 
-    def __init__(self):
+    def __init__(self) -> None:
         super().__init__(
             name="time_dependent_shear",
             parameter_names=["gamma_dot_t0", "beta", "gamma_dot_t_offset", "phi0"],
@@ -232,7 +232,7 @@ class ShearModel(PhysicsModelBase):
         phi: jnp.ndarray,
         q: float,
         L: float,
-        dt: float = None,
+        dt: float | None = None,
     ) -> jnp.ndarray:
         """Compute shear contribution to g1.
 
@@ -247,7 +247,7 @@ class ShearModel(PhysicsModelBase):
 
         # Create full parameter array with dummy diffusion parameters
         full_params = jnp.concatenate([jnp.array([100.0, 0.0, 10.0]), params])
-        return compute_g1_shear(full_params, t1, t2, phi, q, L, dt)
+        return compute_g1_shear(full_params, t1, t2, phi, q, L, dt)  # type: ignore[arg-type]
 
     def get_parameter_bounds(self) -> list[tuple[float, float]]:
         """Standard bounds for shear parameters."""
@@ -327,7 +327,7 @@ class CombinedModel(
         phi: jnp.ndarray,
         q: float,
         L: float,
-        dt: float = None,
+        dt: float | None = None,
     ) -> jnp.ndarray:
         """Compute total g1 = g1_diffusion × g1_shear."""
         # Skip validation inside JIT to avoid JAX tracer boolean conversion errors
@@ -351,7 +351,7 @@ class CombinedModel(
                 f"CombinedModel.compute_g1: calling compute_g1_total with params.shape={params.shape}, t1.shape={t1.shape}, t2.shape={t2.shape}, phi.shape={phi.shape}, q={q}, L={L}, dt={dt}",
             )
             try:
-                result = compute_g1_total(params, t1, t2, phi, q, L, dt)
+                result = compute_g1_total(params, t1, t2, phi, q, L, dt)  # type: ignore[arg-type]
                 # Note: Skip debug logging of result values when traced by JAX
                 # (jax.vmap/jit creates BatchTracer objects that can't be formatted)
                 if logger.isEnabledFor(10):  # DEBUG level
@@ -383,7 +383,7 @@ class CombinedModel(
         phi_batch: jnp.ndarray,
         q: float,
         L: float,
-        dt: float = None,
+        dt: float | None = None,
     ) -> jnp.ndarray:
         """Compute g1 for a batch of points using vmap.
 
@@ -415,7 +415,7 @@ class CombinedModel(
         import jax
 
         # Define single-point g1 computation
-        def compute_g1_single(t1_val, t2_val, phi_val):
+        def compute_g1_single(t1_val: jnp.ndarray, t2_val: jnp.ndarray, phi_val: jnp.ndarray) -> jnp.ndarray:
             g1 = self.compute_g1(
                 params,
                 jnp.array([t1_val]),
@@ -433,7 +433,8 @@ class CombinedModel(
             in_axes=(0, 0, 0),
         )
 
-        return compute_g1_vmap(t1_batch, t2_batch, phi_batch)
+        result: jnp.ndarray = compute_g1_vmap(t1_batch, t2_batch, phi_batch)
+        return result
 
     @log_calls(include_args=False)
     def compute_g2(
@@ -508,7 +509,7 @@ class CombinedModel(
         offset: float,
     ) -> float:
         """Compute chi-squared goodness of fit."""
-        return compute_chi_squared(
+        result: float = compute_chi_squared(
             params,
             data,
             sigma,
@@ -520,6 +521,7 @@ class CombinedModel(
             contrast,
             offset,
         )
+        return result
 
     def get_parameter_bounds(self) -> list[tuple[float, float]]:
         """Get bounds appropriate for analysis mode."""

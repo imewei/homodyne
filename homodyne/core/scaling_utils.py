@@ -21,7 +21,7 @@ import numpy as np
 from homodyne.utils.logging import get_logger
 
 if TYPE_CHECKING:
-    import logging
+    from logging import Logger, LoggerAdapter
 
 logger = get_logger(__name__)
 
@@ -128,7 +128,7 @@ def estimate_per_angle_scaling(
     n_phi: int,
     contrast_bounds: tuple[float, float],
     offset_bounds: tuple[float, float],
-    log: logging.Logger | None = None,
+    log: Logger | LoggerAdapter[Logger] | None = None,
 ) -> dict[str, float]:
     """Estimate contrast and offset initial values for each phi angle.
 
@@ -253,7 +253,7 @@ def compute_averaged_scaling(
     n_phi: int,
     contrast_bounds: tuple[float, float],
     offset_bounds: tuple[float, float],
-    log: logging.Logger | None = None,
+    log: Logger | LoggerAdapter[Logger] | None = None,
 ) -> tuple[float, float, np.ndarray, np.ndarray]:
     """Compute averaged contrast and offset for constant mode.
 

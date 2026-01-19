@@ -12,6 +12,7 @@ import numpy as np
 
 from homodyne.config.parameter_names import get_physical_param_names
 from homodyne.utils.logging import get_logger
+from typing import Literal
 
 logger = get_logger(__name__)
 
@@ -32,11 +33,16 @@ def _get_parameter_names(analysis_mode: str) -> list[str]:
     list[str]
         List of physical parameter names (without contrast/offset)
     """
-    try:
-        return get_physical_param_names(analysis_mode)
-    except ValueError:
+    mode: Literal["static_isotropic", "laminar_flow"]
+    if analysis_mode == "static":
+        mode = "static_isotropic"
+    elif analysis_mode == "laminar_flow":
+        mode = "laminar_flow"
+    else:
         logger.warning(f"Unknown analysis mode: {analysis_mode}, assuming static")
-        return get_physical_param_names("static")
+        mode = "static_isotropic"
+
+    return get_physical_param_names(mode)
 
 
 def create_mcmc_parameters_dict(result: Any) -> dict:
@@ -84,18 +90,22 @@ def create_mcmc_parameters_dict(result: Any) -> dict:
                 if v is not None and name not in deterministic_params
             ]
             if r_hat_values:
-                param_dict["convergence"]["all_chains_converged"] = bool(
+                convergence_dict = param_dict["convergence"]
+                assert isinstance(convergence_dict, dict)
+                convergence_dict["all_chains_converged"] = bool(
                     all(v < 1.1 for v in r_hat_values)
                 )
-                param_dict["convergence"]["min_r_hat"] = float(min(r_hat_values))
-                param_dict["convergence"]["max_r_hat"] = float(max(r_hat_values))
+                convergence_dict["min_r_hat"] = float(min(r_hat_values))
+                convergence_dict["max_r_hat"] = float(max(r_hat_values))
         else:
             r_hat = np.asarray(result.r_hat)
-            param_dict["convergence"]["all_chains_converged"] = bool(
+            convergence_dict = param_dict["convergence"]
+            assert isinstance(convergence_dict, dict)
+            convergence_dict["all_chains_converged"] = bool(
                 np.all(r_hat < 1.1)
             )
-            param_dict["convergence"]["min_r_hat"] = float(np.min(r_hat))
-            param_dict["convergence"]["max_r_hat"] = float(np.max(r_hat))
+            convergence_dict["min_r_hat"] = float(np.min(r_hat))
+            convergence_dict["max_r_hat"] = float(np.max(r_hat))
 
     if (
         hasattr(result, "effective_sample_size")
@@ -106,23 +116,33 @@ def create_mcmc_parameters_dict(result: Any) -> dict:
                 v for v in result.effective_sample_size.values() if v is not None
             ]
             if ess_values:
-                param_dict["convergence"]["min_ess"] = float(min(ess_values))
+                convergence_dict = param_dict["convergence"]
+                assert isinstance(convergence_dict, dict)
+                convergence_dict["min_ess"] = float(min(ess_values))
         else:
             ess = np.asarray(result.effective_sample_size)
-            param_dict["convergence"]["min_ess"] = float(np.min(ess))
+            convergence_dict = param_dict["convergence"]
+            assert isinstance(convergence_dict, dict)
+            convergence_dict["min_ess"] = float(np.min(ess))
 
     if hasattr(result, "acceptance_rate") and result.acceptance_rate is not None:
-        param_dict["convergence"]["acceptance_rate"] = float(result.acceptance_rate)
+        convergence_dict = param_dict["convergence"]
+        assert isinstance(convergence_dict, dict)
+        convergence_dict["acceptance_rate"] = float(result.acceptance_rate)
 
     # Add scaling parameters (contrast, offset)
     if hasattr(result, "mean_contrast"):
-        param_dict["parameters"]["contrast"] = {
+        parameters_dict = param_dict["parameters"]
+        assert isinstance(parameters_dict, dict)
+        parameters_dict["contrast"] = {
             "mean": float(result.mean_contrast),
             "std": float(getattr(result, "std_contrast", 0.0)),
         }
 
     if hasattr(result, "mean_offset"):
-        param_dict["parameters"]["offset"] = {
+        parameters_dict = param_dict["parameters"]
+        assert isinstance(parameters_dict, dict)
+        parameters_dict["offset"] = {
             "mean": float(result.mean_offset),
             "std": float(getattr(result, "std_offset", 0.0)),
         }
@@ -154,7 +174,7 @@ def create_mcmc_parameters_dict(result: Any) -> dict:
             std_params_arr = np.array(
                 [std_params_obj.get(name, 0.0) for name in param_names]
             )
-        elif hasattr(std_params_obj, "as_array"):
+        elif std_params_obj is not None and hasattr(std_params_obj, "as_array"):
             std_params_arr = np.asarray(std_params_obj.as_array)
         else:
             std_params_arr = (
@@ -163,9 +183,11 @@ def create_mcmc_parameters_dict(result: Any) -> dict:
                 else np.zeros_like(mean_params_arr)
             )
 
+        parameters_dict = param_dict["parameters"]
+        assert isinstance(parameters_dict, dict)
         for i, name in enumerate(param_names):
             if i < len(mean_params_arr):
-                param_dict["parameters"][name] = {
+                parameters_dict[name] = {
                     "mean": float(mean_params_arr[i]),
                     "std": float(std_params_arr[i]) if i < len(std_params_arr) else 0.0,
                 }
@@ -318,7 +340,7 @@ def create_mcmc_diagnostics_dict(result: Any) -> dict:
     dict
         Diagnostics dictionary with convergence metrics
     """
-    diagnostics_dict = {
+    diagnostics_dict: dict[str, Any] = {
         "convergence": {},
         "sampling_efficiency": {},
         "posterior_checks": {},
@@ -488,7 +510,7 @@ def create_mcmc_diagnostics_dict(result: Any) -> dict:
                     if shard.get("converged", False):
                         converged_shards += 1
 
-            shard_summary = {
+            shard_summary: dict[str, Any] = {
                 "num_shards": len(per_shard),
                 "shards_converged": converged_shards,
                 "convergence_rate": (
@@ -511,7 +533,7 @@ def create_mcmc_diagnostics_dict(result: Any) -> dict:
         if hasattr(result, "cmc_diagnostics") and result.cmc_diagnostics:
             cmc_diag = result.cmc_diagnostics
 
-            overall_metrics = {}
+            overall_metrics: dict[str, Any] = {}
 
             if isinstance(cmc_diag, dict):
                 if "combination_success" in cmc_diag:

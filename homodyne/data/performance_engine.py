@@ -23,17 +23,20 @@ Key Features:
 - Real-time performance metrics and automatic tuning
 """
 
+from __future__ import annotations
+
 import hashlib
 import os
 import pickle  # nosec B403: internal cache serialization only
 import threading
 import time
+import types
 from collections import OrderedDict, deque
 from concurrent.futures import Future, ThreadPoolExecutor, as_completed
 from contextlib import contextmanager
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable, Iterator, TypeVar
 
 import psutil
 
@@ -44,11 +47,11 @@ try:
     HAS_NUMPY = True
 except ImportError:
     HAS_NUMPY = False
-    np = None
+    np = None  # type: ignore[assignment]
 
 # Optional compression library with fallback
 try:
-    import zstd
+    import zstd  # type: ignore[import-untyped]
 
     HAS_ZSTD = True
 except ImportError:
@@ -64,6 +67,7 @@ except ImportError:
     h5py = None
 
 # JAX integration for GPU acceleration
+F = TypeVar("F", bound=Callable[..., Any])
 try:
     import jax.numpy as jnp
     from jax import device_get, device_put, jit, vmap
@@ -74,18 +78,18 @@ try:
 except ImportError:
     HAS_JAX = False
     jax_available = False
-    jnp = np
+    jnp: types.ModuleType = np  # type: ignore[no-redef]
 
-    def jit(f):
+    def jit(f: F) -> F:  # type: ignore[no-redef]
         return f
 
-    def vmap(f, **kwargs):
+    def vmap(f: F, **kwargs: Any) -> F:  # type: ignore[misc]
         return f
 
-    def device_put(x):
+    def device_put(x: Any) -> Any:  # type: ignore[misc]
         return x
 
-    def device_get(x):
+    def device_get(x: Any) -> Any:
         return x
 
 
@@ -100,16 +104,16 @@ except ImportError:
 
     HAS_V2_LOGGING = False
 
-    def get_logger(name):
+    def get_logger(name: str) -> Any:  # type: ignore[misc]
         return logging.getLogger(name)
 
-    def log_performance(*args, **kwargs):
+    def log_performance(*args: Any, **kwargs: Any) -> Callable[[F], F]:  # type: ignore[misc]
         return lambda f: f
 
-    def log_calls(*args, **kwargs):
+    def log_calls(*args: Any, **kwargs: Any) -> Callable[[F], F]:  # type: ignore[misc]
         return lambda f: f
 
-    DatasetInfo = None
+    DatasetInfo = None  # type: ignore[assignment,misc]
 
 # Import DatasetOptimizer lazily to avoid circular imports
 DatasetOptimizer = None  # Will be imported when needed
@@ -147,14 +151,14 @@ class PerformanceMetrics:
     history_size: int = field(default=100, init=False)
     _history: deque = field(default_factory=lambda: deque(maxlen=100), init=False)
 
-    def update(self, **kwargs) -> None:
+    def update(self, **kwargs: Any) -> None:
         """Update metrics and maintain history."""
         for key, value in kwargs.items():
             if hasattr(self, key):
                 setattr(self, key, value)
 
         # Add snapshot to history
-        snapshot = {
+        snapshot: dict[str, Any] = {
             "timestamp": time.time(),
             "loading_speed_mbps": self.loading_speed_mbps,
             "memory_usage_mb": self.memory_usage_mb,
@@ -175,13 +179,13 @@ class PerformanceMetrics:
         # Simple linear trend calculation
         x = np.arange(len(recent_values))
         y = np.array(recent_values)
-        slope = np.polyfit(x, y, 1)[0]
+        slope = float(np.polyfit(x, y, 1)[0])
 
         # Normalize slope to -1.0 to 1.0 range
         value_range = max(recent_values) - min(recent_values)
         if value_range > 0:
             normalized_slope = slope / value_range
-            return max(-1.0, min(1.0, normalized_slope))
+            return float(max(-1.0, min(1.0, normalized_slope)))
         return 0.0
 
 
@@ -227,7 +231,9 @@ class MemoryMapManager:
         )
 
     @contextmanager
-    def open_memory_mapped_hdf5(self, file_path: str, mode: str = "r"):
+    def open_memory_mapped_hdf5(
+        self, file_path: str, mode: str = "r"
+    ) -> Iterator[Any]:
         """Context manager for memory-mapped HDF5 file access.
 
         Args:
@@ -345,7 +351,7 @@ class AdaptiveChunker:
         self,
         total_size: int,
         data_complexity: float = 1.0,
-        available_memory_mb: float = None,
+        available_memory_mb: float | None = None,
     ) -> int:
         """Calculate optimal chunk size based on current conditions.
 
@@ -782,14 +788,14 @@ class MultiLevelCache:
     def _estimate_size_mb(self, item: Any) -> float:
         """Estimate memory size of item in MB."""
         if hasattr(item, "nbytes"):  # numpy array
-            return item.nbytes / (1024 * 1024)
+            return float(item.nbytes / (1024 * 1024))
         elif isinstance(item, (list, tuple)):
-            total_size = 0
+            total_size = 0.0
             for sub_item in item:
                 total_size += self._estimate_size_mb(sub_item)
             return total_size
         elif isinstance(item, dict):
-            total_size = 0
+            total_size = 0.0
             for key, value in item.items():
                 total_size += self._estimate_size_mb(key) + self._estimate_size_mb(
                     value,
@@ -798,8 +804,9 @@ class MultiLevelCache:
         else:
             # Rough estimate based on pickle size
             try:
-                return len(pickle.dumps(item, protocol=pickle.HIGHEST_PROTOCOL)) / (
-                    1024 * 1024
+                return float(
+                    len(pickle.dumps(item, protocol=pickle.HIGHEST_PROTOCOL))
+                    / (1024 * 1024)
                 )
             except (pickle.PicklingError, TypeError, AttributeError):
                 return 0.1  # Conservative estimate
@@ -827,7 +834,7 @@ class MultiLevelCache:
         if time_span <= 0:
             return 0.0
 
-        return (len(accesses) - 1) / (time_span / 60.0)  # accesses per minute
+        return float((len(accesses) - 1) / (time_span / 60.0))  # accesses per minute
 
     def _evict_from_memory(self) -> None:
         """Evict least valuable item from memory cache."""
@@ -1102,7 +1109,7 @@ class PerformanceEngine:
         hdf_path: str,
         data_keys: list[str],
         chunk_info: list[ChunkInfo] | None = None,
-    ) -> np.ndarray:
+    ) -> Any:  # Returns np.ndarray or jax.Array
         """Load correlation matrices with full performance optimization.
 
         Args:
@@ -1191,10 +1198,10 @@ class PerformanceEngine:
 
     def _load_matrices_chunked(
         self,
-        hdf_file,
+        hdf_file: Any,
         data_keys: list[str],
         chunk_info: list[ChunkInfo] | None = None,
-    ) -> np.ndarray:
+    ) -> Any:  # Returns np.ndarray
         """Load correlation matrices using chunked parallel processing."""
         if chunk_info is None:
             # Create chunk plan
@@ -1243,7 +1250,7 @@ class PerformanceEngine:
 
         return np.array(all_matrices)
 
-    def _load_matrices_direct(self, hdf_file, data_keys: list[str]) -> np.ndarray:
+    def _load_matrices_direct(self, hdf_file: Any, data_keys: list[str]) -> Any:  # Returns np.ndarray
         """Load correlation matrices directly without chunking."""
         matrices = []
 
@@ -1270,10 +1277,10 @@ class PerformanceEngine:
 
     def _load_matrix_chunk(
         self,
-        hdf_file,
+        hdf_file: Any,
         chunk_keys: list[str],
         chunk_info: ChunkInfo,
-    ) -> list[np.ndarray]:
+    ) -> list[Any]:  # Returns list[np.ndarray]
         """Load a chunk of correlation matrices."""
         matrices = []
 
@@ -1295,7 +1302,7 @@ class PerformanceEngine:
 
         return matrices
 
-    def _reconstruct_full_matrix(self, c2_half: np.ndarray) -> np.ndarray:
+    def _reconstruct_full_matrix(self, c2_half: Any) -> Any:  # Takes and returns np.ndarray
         """Reconstruct full correlation matrix from half matrix."""
         c2_full = c2_half + c2_half.T
         diag_indices = np.diag_indices(c2_half.shape[0])
@@ -1333,7 +1340,7 @@ class PerformanceEngine:
         """
         if not self._prefetch_enabled or not self._background_executor:
             # Return a dummy future that immediately returns None
-            dummy_future = Future()
+            dummy_future: Future[None] = Future()
             dummy_future.set_result(None)
             return dummy_future
 
@@ -1341,9 +1348,9 @@ class PerformanceEngine:
 
         # Check if already cached
         if self.cache.get(cache_key) is not None:
-            dummy_future = Future()
-            dummy_future.set_result(None)
-            return dummy_future
+            dummy_future2: Future[None] = Future()
+            dummy_future2.set_result(None)
+            return dummy_future2
 
         # Schedule for background loading
         future = self._background_executor.submit(
@@ -1439,11 +1446,11 @@ class PerformanceEngine:
 
         logger.info("Performance engine shutdown complete")
 
-    def __enter__(self):
+    def __enter__(self) -> PerformanceEngine:
         """Context manager entry."""
         return self
 
-    def __exit__(self, exc_type, exc_val, exc_tb):
+    def __exit__(self, exc_type: Any, exc_val: Any, exc_tb: Any) -> None:
         """Context manager exit."""
         self.shutdown()
 

@@ -93,7 +93,7 @@ def compute_uncertainties(covariance: np.ndarray) -> np.ndarray:
     # Handle negative diagonal elements (numerical issues)
     diagonal = np.maximum(diagonal, 0.0)
 
-    return np.sqrt(diagonal)
+    return np.asarray(np.sqrt(diagonal))
 
 
 def normalize_nlsq_result(
@@ -162,20 +162,23 @@ def normalize_nlsq_result(
 
     # Case 3: Object with attributes (CurveFitResult, OptimizeResult, etc.)
     if hasattr(result, "x") or hasattr(result, "popt"):
-        popt = getattr(result, "x", getattr(result, "popt", None))
-        if popt is None:
+        popt_raw = getattr(result, "x", getattr(result, "popt", None))
+        if popt_raw is None:
             raise AttributeError(
                 f"Result object has neither 'x' nor 'popt' attribute. "
                 f"Available attributes: {dir(result)}"
             )
+        popt = np.asarray(popt_raw)
 
-        pcov = getattr(result, "pcov", None)
-        if pcov is None:
+        pcov_raw = getattr(result, "pcov", None)
+        if pcov_raw is None:
             if logger:
                 logger.warning(
                     "No pcov attribute in result object. Using identity matrix."
                 )
             pcov = np.eye(len(popt))
+        else:
+            pcov = np.asarray(pcov_raw)
 
         info = {}
         for attr in ["message", "success", "nfev", "njev", "fun", "jac", "optimality"]:

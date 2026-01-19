@@ -26,9 +26,8 @@ try:
 
     HAS_JAX = True
 except ImportError:
-    import numpy as jnp
-
     HAS_JAX = False
+    jnp = np  # type: ignore
 
 logger = get_logger(__name__)
 
@@ -222,7 +221,7 @@ class PhiAngleFilter:
         for min_angle, max_angle in self.target_ranges:
             mask = (phi_angles_array >= min_angle) & (phi_angles_array <= max_angle)
             count = np.sum(mask)
-            angles_in_range = phi_angles_array[mask] if count > 0 else []
+            angles_in_range: np.ndarray | list[float] = phi_angles_array[mask] if count > 0 else []
 
             range_stats = {
                 "range": (min_angle, max_angle),
@@ -230,11 +229,14 @@ class PhiAngleFilter:
                 "percentage": float(count / len(phi_angles_array) * 100),
                 "angles": (
                     angles_in_range.tolist()
+                    if isinstance(angles_in_range, np.ndarray)
+                    else angles_in_range
                     if len(angles_in_range) < 20
                     else "too_many_to_list"
                 ),
             }
-            stats["angles_per_range"].append(range_stats)
+            if isinstance(stats["angles_per_range"], list):
+                stats["angles_per_range"].append(range_stats)
 
         return stats
 
