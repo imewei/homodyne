@@ -290,8 +290,12 @@ class TestErrorHandling:
             try:
                 result = fit_nlsq_jax(invalid_data, test_config)
                 # If no exception, should be a failed result (graceful degradation)
-                assert result.success is False, "Invalid data should result in failed optimization"
-                assert result.chi_squared == float("inf"), "Failed optimization should have inf chi_squared"
+                assert result.success is False, (
+                    "Invalid data should result in failed optimization"
+                )
+                assert result.chi_squared == float("inf"), (
+                    "Failed optimization should have inf chi_squared"
+                )
             except (KeyError, ValueError, TypeError, AttributeError):
                 # Early validation errors still raise exceptions
                 pass  # Expected behavior for some invalid inputs

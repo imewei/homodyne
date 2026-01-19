@@ -597,7 +597,9 @@ def test_index_based_equivalent_to_full_copy(balanced_data):
     )
 
     # Index-based approach
-    indices, _ = create_angle_stratified_indices(phi, target_chunk_size=target_chunk_size)
+    indices, _ = create_angle_stratified_indices(
+        phi, target_chunk_size=target_chunk_size
+    )
     phi_index = phi[indices]
     t1_index = t1[indices]
     t2_index = t2[indices]

@@ -136,14 +136,18 @@ class TestComputationalBenchmarks:
 
             # Warmup
             for _ in range(2):
-                result = compute_g2_scaled(param_array, t1, t2, phi, q, L, contrast, offset, dt)
+                result = compute_g2_scaled(
+                    param_array, t1, t2, phi, q, L, contrast, offset, dt
+                )
                 result.block_until_ready()
 
             # Benchmark
             times = []
             for _ in range(benchmark_config["min_rounds"]):
                 start = time.perf_counter()
-                result = compute_g2_scaled(param_array, t1, t2, phi, q, L, contrast, offset, dt)
+                result = compute_g2_scaled(
+                    param_array, t1, t2, phi, q, L, contrast, offset, dt
+                )
                 result.block_until_ready()
                 elapsed = time.perf_counter() - start
                 times.append(elapsed)
@@ -255,7 +259,9 @@ class TestComputationalBenchmarks:
             before_memory = process.memory_info().rss / (1024 * 1024)
 
             # Perform computation
-            result = compute_g2_scaled(param_array, t1, t2, phi, q, L, contrast, offset, dt)
+            result = compute_g2_scaled(
+                param_array, t1, t2, phi, q, L, contrast, offset, dt
+            )
             result.block_until_ready()
 
             # Measure memory after computation
@@ -421,7 +427,11 @@ class TestScalingBenchmarks:
             q_values = jnp.linspace(0.005, 0.02, n_q)
 
             # Vectorized computation
-            vmap_fn = vmap(lambda q: compute_g2_scaled(param_array, t1, t2, phi, q, L, contrast, offset, dt))
+            vmap_fn = vmap(
+                lambda q: compute_g2_scaled(
+                    param_array, t1, t2, phi, q, L, contrast, offset, dt
+                )
+            )
 
             # Warmup
             result_vmap = vmap_fn(q_values)
@@ -441,7 +451,9 @@ class TestScalingBenchmarks:
             for _ in range(5):
                 start = time.perf_counter()
                 for q in q_values:
-                    result_seq = compute_g2_scaled(param_array, t1, t2, phi, q, L, contrast, offset, dt)
+                    result_seq = compute_g2_scaled(
+                        param_array, t1, t2, phi, q, L, contrast, offset, dt
+                    )
                     result_seq.block_until_ready()
                 elapsed = time.perf_counter() - start
                 times_sequential.append(elapsed)
@@ -488,7 +500,9 @@ class TestScalingBenchmarks:
             ]
 
             # Compute result
-            result = compute_g2_scaled(param_array, t1, t2, phi, q, L, contrast, offset, dt)
+            result = compute_g2_scaled(
+                param_array, t1, t2, phi, q, L, contrast, offset, dt
+            )
 
             # Estimate total memory
             total_elements = sum(arr.size for arr in expected_arrays) + result.size
@@ -557,7 +571,9 @@ class TestRegressionBenchmarks:
         times = []
         for _ in range(5):
             start = time.perf_counter()
-            result = compute_g2_scaled(param_array, t1, t2, phi, q, L, contrast, offset, dt)
+            result = compute_g2_scaled(
+                param_array, t1, t2, phi, q, L, contrast, offset, dt
+            )
             result.block_until_ready()
             elapsed = time.perf_counter() - start
             times.append(elapsed)
@@ -915,7 +931,9 @@ class TestAdditionalBenchmarks:
             start = time.perf_counter()
 
             # Step 1: Model computation
-            model = compute_g2_scaled(param_array, t1, t2, phi, q, L, contrast, offset, dt)
+            model = compute_g2_scaled(
+                param_array, t1, t2, phi, q, L, contrast, offset, dt
+            )
             model.block_until_ready()
 
             # Step 2: Residual computation

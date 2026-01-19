@@ -317,7 +317,7 @@ class TestExecutorErrorHandling:
 
         logger = logging.getLogger(__name__)
 
-        with pytest.raises(Exception):
+        with pytest.raises(Exception):  # noqa: B017
             executor.execute(
                 residual_fn=bad_model,
                 xdata=np.array([1.0, 2.0]),

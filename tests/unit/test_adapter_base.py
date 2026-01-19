@@ -25,8 +25,9 @@ class TestNLSQAdapterBase:
 
     def test_prepare_data_signature(self):
         """Test that _prepare_data has expected signature."""
-        from homodyne.optimization.nlsq.adapter_base import NLSQAdapterBase
         import inspect
+
+        from homodyne.optimization.nlsq.adapter_base import NLSQAdapterBase
 
         sig = inspect.signature(NLSQAdapterBase._prepare_data)
         params = list(sig.parameters.keys())
@@ -35,8 +36,9 @@ class TestNLSQAdapterBase:
 
     def test_validate_input_signature(self):
         """Test that _validate_input has expected signature."""
-        from homodyne.optimization.nlsq.adapter_base import NLSQAdapterBase
         import inspect
+
+        from homodyne.optimization.nlsq.adapter_base import NLSQAdapterBase
 
         sig = inspect.signature(NLSQAdapterBase._validate_input)
         params = list(sig.parameters.keys())
@@ -44,8 +46,9 @@ class TestNLSQAdapterBase:
 
     def test_build_result_signature(self):
         """Test that _build_result has expected signature."""
-        from homodyne.optimization.nlsq.adapter_base import NLSQAdapterBase
         import inspect
+
+        from homodyne.optimization.nlsq.adapter_base import NLSQAdapterBase
 
         sig = inspect.signature(NLSQAdapterBase._build_result)
         params = list(sig.parameters.keys())
@@ -53,8 +56,9 @@ class TestNLSQAdapterBase:
 
     def test_handle_error_signature(self):
         """Test that _handle_error has expected signature."""
-        from homodyne.optimization.nlsq.adapter_base import NLSQAdapterBase
         import inspect
+
+        from homodyne.optimization.nlsq.adapter_base import NLSQAdapterBase
 
         sig = inspect.signature(NLSQAdapterBase._handle_error)
         params = list(sig.parameters.keys())
@@ -62,8 +66,9 @@ class TestNLSQAdapterBase:
 
     def test_setup_bounds_signature(self):
         """Test that _setup_bounds has expected signature."""
-        from homodyne.optimization.nlsq.adapter_base import NLSQAdapterBase
         import inspect
+
+        from homodyne.optimization.nlsq.adapter_base import NLSQAdapterBase
 
         sig = inspect.signature(NLSQAdapterBase._setup_bounds)
         params = list(sig.parameters.keys())
@@ -71,8 +76,9 @@ class TestNLSQAdapterBase:
 
     def test_compute_covariance_signature(self):
         """Test that _compute_covariance has expected signature."""
-        from homodyne.optimization.nlsq.adapter_base import NLSQAdapterBase
         import inspect
+
+        from homodyne.optimization.nlsq.adapter_base import NLSQAdapterBase
 
         sig = inspect.signature(NLSQAdapterBase._compute_covariance)
         params = list(sig.parameters.keys())
@@ -91,8 +97,8 @@ class TestAdapterInheritance:
 
     def test_wrapper_inherits_from_base(self):
         """Test that NLSQWrapper inherits from NLSQAdapterBase."""
-        from homodyne.optimization.nlsq.wrapper import NLSQWrapper
         from homodyne.optimization.nlsq.adapter_base import NLSQAdapterBase
+        from homodyne.optimization.nlsq.wrapper import NLSQWrapper
 
         assert issubclass(NLSQWrapper, NLSQAdapterBase)
 

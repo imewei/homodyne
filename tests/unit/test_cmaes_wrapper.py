@@ -14,6 +14,7 @@ import pytest
 # Import JAX for CMA-ES tests (required for JAX-compatible model functions)
 try:
     import jax.numpy as jnp
+
     JAX_AVAILABLE = True
 except ImportError:
     jnp = np  # Fallback to numpy for non-JAX environments

@@ -765,7 +765,7 @@ class TestAntiDegeneracyFull23Angle:
         fourier = synthetic_23angle_setup["fourier"]
         regularizer = synthetic_23angle_setup["regularizer"]
         monitor = synthetic_23angle_setup["monitor"]
-        n_phi = synthetic_23angle_setup["n_phi"]
+        synthetic_23angle_setup["n_phi"]
 
         # Create synthetic per-angle values with known pattern
         # Smooth variation (should be well-captured by Fourier)
@@ -1122,7 +1122,7 @@ class TestJAXArrayIndexingCompatibility:
     def jax_available(self):
         """Check if JAX is available."""
         try:
-            import jax.numpy as jnp
+            import jax.numpy as jnp  # noqa: F401
 
             return True
         except ImportError:

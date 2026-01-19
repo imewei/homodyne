@@ -97,7 +97,6 @@ class TestExtractParametersFromResult:
     def test_per_angle_layout_static(self):
         """Test parameter extraction with per-angle layout for static mode."""
         n_angles = 3
-        n_physical = 3
         # Parameters: [c0, c1, c2, o0, o1, o2, D0, alpha, D_offset]
         parameters = np.array([0.8, 0.85, 0.9, 1.0, 1.05, 1.1, 1e-11, 0.5, 1e-14])
 
@@ -113,7 +112,6 @@ class TestExtractParametersFromResult:
     def test_per_angle_layout_laminar_flow(self):
         """Test parameter extraction with per-angle layout for laminar flow."""
         n_angles = 2
-        n_physical = 7
         # Parameters: [c0, c1, o0, o1, D0, alpha, D_offset, gamma, beta, gamma_off, phi0]
         parameters = np.array(
             [0.8, 0.85, 1.0, 1.05, 1e-11, 0.5, 1e-14, 100.0, 0.3, 10.0, 0.0]
@@ -131,7 +129,6 @@ class TestExtractParametersFromResult:
     def test_scalar_layout_expanded(self):
         """Test that scalar layout is expanded with warning."""
         n_angles = 3
-        n_physical = 3
         # Scalar layout: [contrast, offset, D0, alpha, D_offset]
         parameters = np.array([0.8, 1.0, 1e-11, 0.5, 1e-14])
 
@@ -306,7 +303,6 @@ class TestStaticShapeCompilation:
         static_argnums for shape arguments prevents recompilation when
         calling with same shapes but different values.
         """
-        import jax
         import jax.numpy as jnp
 
         from homodyne.optimization.nlsq.fit_computation import (
@@ -339,7 +335,9 @@ class TestStaticShapeCompilation:
         )
 
         # Verify output shape
-        assert result1.shape == (n_t1, n_t2), f"Expected shape {(n_t1, n_t2)}, got {result1.shape}"
+        assert result1.shape == (n_t1, n_t2), (
+            f"Expected shape {(n_t1, n_t2)}, got {result1.shape}"
+        )
 
         # Second call with SAME shapes but DIFFERENT values - should NOT recompile
         physical_params2 = jnp.array([2e-11, 0.6, 2e-14])  # Different values
@@ -347,8 +345,17 @@ class TestStaticShapeCompilation:
         t2_2 = jnp.linspace(0, 2, n_t2)
 
         result2 = _compute_single_angle_shaped(
-            physical_params2, t1_2, t2_2, phi_val + 10, q, L, dt,
-            contrast + 0.1, offset + 0.1, n_t1, n_t2
+            physical_params2,
+            t1_2,
+            t2_2,
+            phi_val + 10,
+            q,
+            L,
+            dt,
+            contrast + 0.1,
+            offset + 0.1,
+            n_t1,
+            n_t2,
         )
 
         # Should still produce correct shape
@@ -395,7 +402,16 @@ class TestStaticShapeCompilation:
         t1_new = jnp.linspace(0, 1, n_t1_new)
         t2_new = jnp.linspace(0, 1, n_t2_new)
         result2 = _compute_single_angle_shaped(
-            physical_params, t1_new, t2_new, phi_val, q, L, dt,
-            contrast, offset, n_t1_new, n_t2_new
+            physical_params,
+            t1_new,
+            t2_new,
+            phi_val,
+            q,
+            L,
+            dt,
+            contrast,
+            offset,
+            n_t1_new,
+            n_t2_new,
         )
         assert result2.shape == (15, 15)

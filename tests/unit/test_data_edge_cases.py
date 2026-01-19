@@ -158,10 +158,10 @@ class TestFlatConfigNormalization:
         # Make a copy to verify it's not modified
         import copy
 
-        original = copy.deepcopy(nested_config)
+        copy.deepcopy(nested_config)
 
         try:
-            loader = XPCSDataLoader(config_dict=nested_config)
+            XPCSDataLoader(config_dict=nested_config)
         except Exception:
             pass  # Expected to fail without actual data file
 
@@ -789,7 +789,6 @@ class TestFrameSlicingEdgeCases:
         c2_matrices = np.ones((5, 100, 100))
         sliced = mock_loader._apply_frame_slicing_to_selected_q(c2_matrices)
         # start_frame=10 -> index 9, end_frame=90
-        expected_size = 90 - 9  # 81
         assert sliced.shape == (5, 81, 81)
 
     def test_frame_slicing_start_exceeds_matrix(self, mock_loader):

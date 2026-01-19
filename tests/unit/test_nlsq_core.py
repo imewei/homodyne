@@ -1176,7 +1176,9 @@ class TestNLSQOptimization:
         D0 = true_params["diffusion_coefficient"]
         param_array = jnp.array([D0, 0.5, 0.0])  # alpha=0.5, D_offset=0
 
-        c2_true = compute_g2_scaled(param_array, t1, t2, phi, q, L, contrast, offset, dt)
+        c2_true = compute_g2_scaled(
+            param_array, t1, t2, phi, q, L, contrast, offset, dt
+        )
 
         # Add minimal noise
         np.random.seed(42)
@@ -1304,7 +1306,9 @@ class TestNLSQOptimization:
         D0 = params_with_shear["diffusion_coefficient"]
         param_array = jnp.array([D0, 0.5, 0.0])  # alpha=0.5, D_offset=0
 
-        c2_true = compute_g2_scaled(param_array, t1, t2, phi, q, L, contrast, offset, dt)
+        c2_true = compute_g2_scaled(
+            param_array, t1, t2, phi, q, L, contrast, offset, dt
+        )
 
         # Add noise
         np.random.seed(123)
@@ -1368,7 +1372,9 @@ class TestNLSQOptimization:
 
         c2_exp_list = []
         for q in q_values:
-            c2_q = compute_g2_scaled(param_array, t1, t2, phi, q, L, contrast, offset, dt)
+            c2_q = compute_g2_scaled(
+                param_array, t1, t2, phi, q, L, contrast, offset, dt
+            )
             # Add different noise levels for each q
             noise = 0.005 * np.random.randn(*c2_q.shape)
             c2_exp_list.append(c2_q + noise)

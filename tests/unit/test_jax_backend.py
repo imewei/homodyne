@@ -33,7 +33,6 @@ from homodyne.core.jax_backend import (
 )
 from homodyne.core.jax_backend import jax_available as BACKEND_JAX_AVAILABLE
 
-
 # =============================================================================
 # Local helper functions for test compatibility
 # These replace the legacy compat imports with inline implementations
@@ -1938,7 +1937,6 @@ class TestNLSQElementwiseIntegration:
         """
         from homodyne.core.jax_backend import _compute_g1_diffusion_core
 
-        n_points = 3000
         dt = 0.1
         # Include times that may exceed typical grid bounds
         t1 = jnp.array([0.0, 0.05, 5.0] * 1000)  # 0.05 < dt could be edge case
@@ -2287,9 +2285,9 @@ class TestMeshgridCache:
         with 23 angles (SC-004).
         """
         from homodyne.core.jax_backend import (
-            get_cached_meshgrid,
             clear_meshgrid_cache,
             get_cache_stats,
+            get_cached_meshgrid,
             reset_cache_stats,
         )
 
@@ -2313,7 +2311,7 @@ class TestMeshgridCache:
             get_cached_meshgrid(t1, t2)
 
         # Simulate multi-start: access same grids repeatedly
-        for start_idx in range(n_starts):
+        for _start_idx in range(n_starts):
             for t1, t2 in angle_time_grids:
                 get_cached_meshgrid(t1, t2)
 
@@ -2342,8 +2340,8 @@ class TestMeshgridCache:
         """
         from homodyne.core.jax_backend import (
             clear_meshgrid_cache,
-            get_cached_meshgrid,
             get_cache_stats,
+            get_cached_meshgrid,
             reset_cache_stats,
         )
 
@@ -2359,7 +2357,7 @@ class TestMeshgridCache:
         mesh1_v1 = get_cached_meshgrid(t1_v1, t2_v1)
 
         # Verify cache hit on same data
-        mesh1_v1_again = get_cached_meshgrid(t1_v1, t2_v1)
+        get_cached_meshgrid(t1_v1, t2_v1)
         stats = get_cache_stats()
         assert stats["hits"] == 1, "Should have 1 cache hit"
 
@@ -2378,7 +2376,7 @@ class TestMeshgridCache:
         )
 
         # Original grids should still be in cache (LRU keeps them)
-        mesh1_v1_check = get_cached_meshgrid(t1_v1, t2_v1)
+        get_cached_meshgrid(t1_v1, t2_v1)
         stats = get_cache_stats()
         assert stats["hits"] == 2, "Original grids should still be cached"
 

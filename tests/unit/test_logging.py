@@ -330,9 +330,7 @@ class TestAnalysisSummaryLogger:
 
     def test_basic_initialization(self) -> None:
         """Summary logger initializes with run_id and mode."""
-        summary = AnalysisSummaryLogger(
-            run_id="test_run", analysis_mode="laminar_flow"
-        )
+        summary = AnalysisSummaryLogger(run_id="test_run", analysis_mode="laminar_flow")
 
         assert summary.run_id == "test_run"
         assert summary.analysis_mode == "laminar_flow"
@@ -526,9 +524,7 @@ class TestNumericalErrorLogging:
 class TestWithContextShard:
     """T042: Tests for with_context() shard ID formatting."""
 
-    def test_shard_context_adds_prefix(
-        self, caplog: pytest.LogCaptureFixture
-    ) -> None:
+    def test_shard_context_adds_prefix(self, caplog: pytest.LogCaptureFixture) -> None:
         """with_context(shard=id) adds shard prefix to log messages."""
         from homodyne.utils.logging import with_context
 
@@ -541,9 +537,7 @@ class TestWithContextShard:
         assert "[shard=42]" in caplog.text
         assert "Starting MCMC sampling" in caplog.text
 
-    def test_multiple_context_keys(
-        self, caplog: pytest.LogCaptureFixture
-    ) -> None:
+    def test_multiple_context_keys(self, caplog: pytest.LogCaptureFixture) -> None:
         """with_context supports multiple keys."""
         from homodyne.utils.logging import with_context
 
@@ -574,7 +568,7 @@ class TestWithContextShard:
         # Both messages should have shard context
         records = [r for r in caplog.records if "Message" in r.message]
         assert len(records) >= 2
-        for record in records:
+        for _record in records:
             assert "[shard=5]" in caplog.text
 
 

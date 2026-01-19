@@ -13,15 +13,17 @@ Mode semantics (same as NLSQ):
 import numpy as np
 import pytest
 
-from homodyne.optimization.cmc.config import CMCConfig
-from homodyne.optimization.cmc.model import (
+pytest.importorskip("arviz", reason="ArviZ required for CMC unit tests")
+
+from homodyne.optimization.cmc.config import CMCConfig  # noqa: E402
+from homodyne.optimization.cmc.model import (  # noqa: E402
     get_model_param_count,
     get_xpcs_model,
     xpcs_model_averaged,
     xpcs_model_constant,
     xpcs_model_scaled,
 )
-from homodyne.optimization.cmc.priors import (
+from homodyne.optimization.cmc.priors import (  # noqa: E402
     build_init_values_dict,
     get_param_names_in_order,
 )
@@ -138,7 +140,9 @@ class TestParamCountByMode:
         # laminar: 2*n_phi + 7 physical + 1 sigma
         assert get_model_param_count(1, "laminar_flow", "individual") == 10  # 2 + 7 + 1
         assert get_model_param_count(3, "laminar_flow", "individual") == 14  # 6 + 7 + 1
-        assert get_model_param_count(23, "laminar_flow", "individual") == 54  # 46 + 7 + 1
+        assert (
+            get_model_param_count(23, "laminar_flow", "individual") == 54
+        )  # 46 + 7 + 1
 
     def test_constant_mode_param_count_static(self):
         """Test constant mode parameter count for static analysis.
@@ -208,9 +212,15 @@ class TestParamNamesInOrder:
         """Test parameter names for individual mode static analysis."""
         names = get_param_names_in_order(3, "static", "individual")
         expected = [
-            "contrast_0", "contrast_1", "contrast_2",
-            "offset_0", "offset_1", "offset_2",
-            "D0", "alpha", "D_offset",
+            "contrast_0",
+            "contrast_1",
+            "contrast_2",
+            "offset_0",
+            "offset_1",
+            "offset_2",
+            "D0",
+            "alpha",
+            "D_offset",
         ]
         assert names == expected
 
@@ -218,10 +228,17 @@ class TestParamNamesInOrder:
         """Test parameter names for individual mode laminar_flow analysis."""
         names = get_param_names_in_order(2, "laminar_flow", "individual")
         expected = [
-            "contrast_0", "contrast_1",
-            "offset_0", "offset_1",
-            "D0", "alpha", "D_offset",
-            "gamma_dot_t0", "beta", "gamma_dot_t_offset", "phi0",
+            "contrast_0",
+            "contrast_1",
+            "offset_0",
+            "offset_1",
+            "D0",
+            "alpha",
+            "D_offset",
+            "gamma_dot_t0",
+            "beta",
+            "gamma_dot_t_offset",
+            "phi0",
         ]
         assert names == expected
 
@@ -233,7 +250,9 @@ class TestParamNamesInOrder:
         """
         names = get_param_names_in_order(10, "static", "constant")
         expected = [
-            "D0", "alpha", "D_offset",
+            "D0",
+            "alpha",
+            "D_offset",
         ]
         assert names == expected
 
@@ -245,8 +264,13 @@ class TestParamNamesInOrder:
         """
         names = get_param_names_in_order(23, "laminar_flow", "constant")
         expected = [
-            "D0", "alpha", "D_offset",
-            "gamma_dot_t0", "beta", "gamma_dot_t_offset", "phi0",
+            "D0",
+            "alpha",
+            "D_offset",
+            "gamma_dot_t0",
+            "beta",
+            "gamma_dot_t_offset",
+            "phi0",
         ]
         assert names == expected
 
@@ -257,8 +281,11 @@ class TestParamNamesInOrder:
         """
         names = get_param_names_in_order(10, "static", "auto")
         expected = [
-            "contrast", "offset",
-            "D0", "alpha", "D_offset",
+            "contrast",
+            "offset",
+            "D0",
+            "alpha",
+            "D_offset",
         ]
         assert names == expected
 
@@ -269,9 +296,15 @@ class TestParamNamesInOrder:
         """
         names = get_param_names_in_order(23, "laminar_flow", "auto")
         expected = [
-            "contrast", "offset",
-            "D0", "alpha", "D_offset",
-            "gamma_dot_t0", "beta", "gamma_dot_t_offset", "phi0",
+            "contrast",
+            "offset",
+            "D0",
+            "alpha",
+            "D_offset",
+            "gamma_dot_t0",
+            "beta",
+            "gamma_dot_t_offset",
+            "phi0",
         ]
         assert names == expected
 
@@ -283,6 +316,7 @@ class TestBuildInitValuesDict:
     def mock_parameter_space(self):
         """Create a mock parameter space for testing."""
         from unittest.mock import MagicMock
+
         ps = MagicMock()
         ps.get_bounds.side_effect = lambda name: {
             "contrast": (0.0, 1.0),
@@ -294,7 +328,10 @@ class TestBuildInitValuesDict:
             "beta": (-2.0, 2.0),
             "gamma_dot_t_offset": (0.0, 1e4),
             "phi0": (-180.0, 180.0),
-        }.get(name.split("_")[0] if name.startswith(("contrast_", "offset_")) else name, (0.0, 1.0))
+        }.get(
+            name.split("_")[0] if name.startswith(("contrast_", "offset_")) else name,
+            (0.0, 1.0),
+        )
         return ps
 
     def test_individual_mode_creates_per_angle_params(self, mock_parameter_space):
@@ -366,10 +403,13 @@ class TestScalingUtilsShared:
         # Simulate g1 decay and C2
         np.random.seed(42)
         g1_sq = np.exp(-delta_t)  # Exponential decay
-        c2_data = true_contrast * g1_sq + true_offset + np.random.normal(0, 0.02, n_points)
+        c2_data = (
+            true_contrast * g1_sq + true_offset + np.random.normal(0, 0.02, n_points)
+        )
 
         contrast_est, offset_est = estimate_contrast_offset_from_quantiles(
-            c2_data, delta_t,
+            c2_data,
+            delta_t,
             contrast_bounds=(0.0, 1.0),
             offset_bounds=(0.5, 1.5),
         )
@@ -401,12 +441,18 @@ class TestScalingUtilsShared:
             t2 = np.random.uniform(0, 100, n_points_per_angle)
             delta_t = np.abs(t1 - t2)
             g1_sq = np.exp(-delta_t / 10)
-            c2 = true_contrast * g1_sq + true_offset + np.random.normal(0, 0.02, n_points_per_angle)
+            c2 = (
+                true_contrast * g1_sq
+                + true_offset
+                + np.random.normal(0, 0.02, n_points_per_angle)
+            )
 
             c2_list.append(c2)
             t1_list.append(t1)
             t2_list.append(t2)
-            phi_indices_list.append(np.full(n_points_per_angle, phi_idx, dtype=np.int32))
+            phi_indices_list.append(
+                np.full(n_points_per_angle, phi_idx, dtype=np.int32)
+            )
 
         c2_data = np.concatenate(c2_list)
         t1 = np.concatenate(t1_list)

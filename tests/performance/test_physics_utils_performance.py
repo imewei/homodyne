@@ -21,7 +21,7 @@ import pytest
 # JAX imports with fallback
 try:
     import jax.numpy as jnp
-    from jax import jit
+    from jax import jit  # noqa: F401
 
     JAX_AVAILABLE = True
 except ImportError:

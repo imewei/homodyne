@@ -57,9 +57,6 @@ class TestLaminarFlow23PhiNocrash:
         Then the optimizer completes without errors.
         """
         n_phi = 23
-        n_physical = (
-            7  # D0, alpha, D_offset, gamma_dot_t0, beta, gamma_dot_offset, phi0
-        )
 
         # Create phi angles
         phi_angles = np.linspace(0, 2 * np.pi, n_phi, endpoint=False)
@@ -295,7 +292,7 @@ class TestFallbackWarning:
         with caplog.at_level(logging.WARNING):
             # Check multiple times to trigger consecutive detection
             for i in range(5):
-                status = monitor.check(grad, iteration=i)
+                monitor.check(grad, iteration=i)
 
             # After consecutive triggers, should detect collapse
             assert monitor.collapse_detected or monitor.consecutive_count >= 3

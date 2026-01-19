@@ -52,10 +52,12 @@ class TestStreamingMemoryUsage:
         estimates = []
         for n_points in dataset_sizes:
             peak_gb = estimate_peak_memory_gb(n_points, n_params)
-            estimates.append({
-                "n_points": n_points,
-                "peak_memory_gb": peak_gb,
-            })
+            estimates.append(
+                {
+                    "n_points": n_points,
+                    "peak_memory_gb": peak_gb,
+                }
+            )
 
         # Verify linear scaling (expected for full Jacobian)
         ratio_10m_1m = estimates[1]["peak_memory_gb"] / estimates[0]["peak_memory_gb"]
@@ -92,7 +94,6 @@ class TestStreamingMemoryUsage:
         Note: This test requires significant memory and time.
         """
         from homodyne.optimization.nlsq.memory import (
-            NLSQStrategy,
             select_nlsq_strategy,
         )
 
@@ -124,7 +125,7 @@ class TestMemoryTracking:
         tracemalloc.start()
 
         # Allocate some memory
-        data = np.zeros((1000, 1000), dtype=np.float64)
+        np.zeros((1000, 1000), dtype=np.float64)
 
         # Get current usage
         current, peak = tracemalloc.get_traced_memory()
@@ -135,7 +136,9 @@ class TestMemoryTracking:
         # Should have tracked the allocation
         # 1000 * 1000 * 8 = 8 MB
         expected_bytes = 1000 * 1000 * 8
-        assert current >= expected_bytes * 0.5  # At least half (accounting for overhead)
+        assert (
+            current >= expected_bytes * 0.5
+        )  # At least half (accounting for overhead)
 
     def test_gc_releases_memory(self):
         """Test that garbage collection properly releases memory."""
@@ -168,10 +171,10 @@ class TestChunkedProcessingMemory:
         chunk_size = 100_000
         peak_memories = []
 
-        for i in range(n_chunks):
+        for _i in range(n_chunks):
             # Process chunk
             chunk_data = np.random.rand(chunk_size)
-            result = np.sum(chunk_data**2)
+            np.sum(chunk_data**2)
 
             # Record peak memory
             _, peak = tracemalloc.get_traced_memory()
@@ -185,9 +188,7 @@ class TestChunkedProcessingMemory:
 
         # Peak memory should not grow significantly across chunks
         max_growth = max(peak_memories) / min(peak_memories)
-        assert max_growth < 2.0, (
-            f"Memory growth {max_growth:.2f}x exceeds 2x threshold"
-        )
+        assert max_growth < 2.0, f"Memory growth {max_growth:.2f}x exceeds 2x threshold"
 
     def test_residual_function_memory_bounded(self):
         """Test that residual function evaluation has bounded memory."""

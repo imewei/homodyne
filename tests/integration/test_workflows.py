@@ -18,7 +18,7 @@ import pytest
 
 # Handle optional dependencies
 try:
-    import h5py
+    import h5py  # noqa: F401
 
     HAS_H5PY = True
 except ImportError:

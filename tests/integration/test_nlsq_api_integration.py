@@ -333,8 +333,8 @@ class TestFullRoundtripHomodyneToNlsq:
         # Broadcast to create full dataset
         xdata_list = []
         ydata_list = []
-        for i, p in enumerate(phi):
-            for j, (t1_val, t2_val) in enumerate(zip(t1, t2)):
+        for _i, p in enumerate(phi):
+            for _j, (t1_val, t2_val) in enumerate(zip(t1, t2, strict=False)):
                 xdata_list.append([t1_val, t2_val, p])
                 # Simple g2 model: g2 = 1.0 + 0.5 * exp(-t)
                 ydata_list.append(

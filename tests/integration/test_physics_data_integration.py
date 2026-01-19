@@ -303,7 +303,7 @@ class TestEndToEndWorkflows:
         data = loader.load_experimental_data()
 
         # Step 2: Extract parameters
-        q = data["wavevector_q_list"][0]
+        data["wavevector_q_list"][0]
         phi_angles = data["phi_angles_list"]
         time_arr = jnp.array(data["t1"])
         c2_exp = jnp.array(data["c2_exp"])
@@ -398,7 +398,7 @@ class TestErrorHandlingIntegration:
         cache_path, metadata = realistic_npz_cache
 
         loader = XPCSDataLoader(config_dict=xpcs_config)
-        data = loader.load_experimental_data()
+        loader.load_experimental_data()
 
         # Test with zero-length time array
         empty_time = jnp.array([])

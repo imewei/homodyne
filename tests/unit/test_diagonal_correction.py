@@ -24,7 +24,7 @@ from numpy.testing import assert_allclose
 try:
     import jax
     import jax.numpy as jnp
-    from jax import grad, jit, vmap
+    from jax import grad, jit, vmap  # noqa: F401
 
     JAX_AVAILABLE = True
 except ImportError:
@@ -343,7 +343,9 @@ class TestDiagonalCorrectionJAX:
         from homodyne.core.diagonal_correction import _diagonal_correction_jax_core
 
         result_jit = _diagonal_correction_jax_core(correlation_matrix_1001x1001)
-        result_unified = apply_diagonal_correction(correlation_matrix_1001x1001, backend="jax")
+        result_unified = apply_diagonal_correction(
+            correlation_matrix_1001x1001, backend="jax"
+        )
 
         assert_allclose(result_jit, result_unified, rtol=1e-14, atol=1e-16)
 
@@ -568,17 +570,21 @@ class TestUnifiedModuleMethods:
 
         # Verify diagonal was corrected
         assert result[0, 0] == matrix[0, 1]  # Edge: use neighbor
-        assert_allclose(result[1, 1], (matrix[1, 0] + matrix[1, 2]) / 2)  # Middle: average
+        assert_allclose(
+            result[1, 1], (matrix[1, 0] + matrix[1, 2]) / 2
+        )  # Middle: average
         assert result[2, 2] == matrix[2, 1]  # Edge: use neighbor
 
     def test_statistical_method_median(self):
         """Test statistical method with median estimator."""
         # Create matrix with outlier in neighbors
-        matrix = np.array([
-            [999.0, 1.0, 100.0],  # 100.0 is outlier
-            [1.0, 999.0, 1.0],
-            [100.0, 1.0, 999.0],
-        ])
+        matrix = np.array(
+            [
+                [999.0, 1.0, 100.0],  # 100.0 is outlier
+                [1.0, 999.0, 1.0],
+                [100.0, 1.0, 999.0],
+            ]
+        )
 
         result = apply_diagonal_correction(
             matrix, method="statistical", backend="numpy", estimator="median"
@@ -605,15 +611,20 @@ class TestUnifiedModuleMethods:
 
     def test_interpolation_method_linear(self):
         """Test interpolation method with linear interpolation."""
-        matrix = np.array([
-            [999.0, 1.0, 2.0, 3.0],
-            [1.0, 999.0, 2.0, 3.0],
-            [2.0, 2.0, 999.0, 3.0],
-            [3.0, 3.0, 3.0, 999.0],
-        ])
+        matrix = np.array(
+            [
+                [999.0, 1.0, 2.0, 3.0],
+                [1.0, 999.0, 2.0, 3.0],
+                [2.0, 2.0, 999.0, 3.0],
+                [3.0, 3.0, 3.0, 999.0],
+            ]
+        )
 
         result = apply_diagonal_correction(
-            matrix, method="interpolation", backend="numpy", interpolation_method="linear"
+            matrix,
+            method="interpolation",
+            backend="numpy",
+            interpolation_method="linear",
         )
 
         # Edge cases should use single neighbor
@@ -626,15 +637,19 @@ class TestUnifiedModuleMethods:
     def test_methods_produce_different_results_with_outliers(self):
         """Test that different methods handle outliers differently."""
         # Matrix with outlier
-        matrix = np.array([
-            [999.0, 1.0, 1.0, 1.0, 100.0],
-            [1.0, 999.0, 1.0, 1.0, 1.0],
-            [1.0, 1.0, 999.0, 1.0, 1.0],
-            [1.0, 1.0, 1.0, 999.0, 1.0],
-            [100.0, 1.0, 1.0, 1.0, 999.0],
-        ])
+        matrix = np.array(
+            [
+                [999.0, 1.0, 1.0, 1.0, 100.0],
+                [1.0, 999.0, 1.0, 1.0, 1.0],
+                [1.0, 1.0, 999.0, 1.0, 1.0],
+                [1.0, 1.0, 1.0, 999.0, 1.0],
+                [100.0, 1.0, 1.0, 1.0, 999.0],
+            ]
+        )
 
-        result_basic = apply_diagonal_correction(matrix, method="basic", backend="numpy")
+        result_basic = apply_diagonal_correction(
+            matrix, method="basic", backend="numpy"
+        )
         result_statistical = apply_diagonal_correction(
             matrix, method="statistical", backend="numpy", estimator="median"
         )
@@ -716,7 +731,7 @@ class TestBatchProcessing:
     def test_batch_realistic_xpcs_size(self, rng):
         """Test batch processing with realistic XPCS data sizes."""
         n_phi = 23  # Typical number of angles
-        n_t = 101   # Reduced for test speed (real data ~1001)
+        n_t = 101  # Reduced for test speed (real data ~1001)
         matrices = rng.randn(n_phi, n_t, n_t) * 0.1 + 1.0
 
         # Add strong diagonal to simulate autocorrelation
@@ -788,12 +803,12 @@ class TestNLSQDiagonalMasking:
         residuals = np.ones(n_points) * 2.0  # All residuals = 2
 
         # Without mask: chi2 = sum(residuals^2) = n_points * 4
-        chi2_unmasked = np.sum(residuals ** 2)
+        chi2_unmasked = np.sum(residuals**2)
         assert chi2_unmasked == n_points * 4.0
 
         # With mask: diagonal residuals zeroed
         masked_residuals = np.where(~diagonal_mask, residuals, 0.0)
-        chi2_masked = np.sum(masked_residuals ** 2)
+        chi2_masked = np.sum(masked_residuals**2)
         assert chi2_masked == (n_points - n_diagonal) * 4.0
 
 
@@ -809,8 +824,9 @@ class TestDiagonalCorrectionPerformance:
 
     def test_jit_compilation_overhead(self, simple_matrix):
         """Measure JIT compilation vs execution time"""
-        from homodyne.core.diagonal_correction import _diagonal_correction_jax_core
         import time
+
+        from homodyne.core.diagonal_correction import _diagonal_correction_jax_core
 
         # First call - includes compilation (internal function is pre-JIT'd)
         start = time.time()

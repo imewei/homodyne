@@ -10,12 +10,13 @@ Tests cover:
 
 from __future__ import annotations
 
-import jax
 import jax.numpy as jnp
 import numpy as np
 import pytest
 
-from homodyne.optimization.nlsq.strategies.residual_jit import StratifiedResidualFunctionJIT
+from homodyne.optimization.nlsq.strategies.residual_jit import (
+    StratifiedResidualFunctionJIT,
+)
 
 
 class MockChunk:
@@ -70,12 +71,14 @@ class TestBufferDonation:
                     t2_list.append(np.random.uniform(0, 1))
                     g2_list.append(np.random.uniform(1.0, 2.0))
 
-            chunks.append(MockChunk(
-                phi=phi_list,
-                t1=t1_list,
-                t2=t2_list,
-                g2=g2_list,
-            ))
+            chunks.append(
+                MockChunk(
+                    phi=phi_list,
+                    t1=t1_list,
+                    t2=t2_list,
+                    g2=g2_list,
+                )
+            )
 
         # Create sigma array matching flattened shape
         total_points = sum(len(c.phi) for c in chunks)
@@ -120,12 +123,20 @@ class TestBufferDonation:
 
         n_phi = 3
         # Parameters: 3 contrasts + 3 offsets + 3 physical
-        n_params = 2 * n_phi + 3
-        params = np.array([
-            0.8, 0.8, 0.8,  # contrasts
-            1.0, 1.0, 1.0,  # offsets
-            1e-11, 0.5, 1e-14,  # physical: D0, alpha, D_offset
-        ])
+        2 * n_phi + 3
+        params = np.array(
+            [
+                0.8,
+                0.8,
+                0.8,  # contrasts
+                1.0,
+                1.0,
+                1.0,  # offsets
+                1e-11,
+                0.5,
+                1e-14,  # physical: D0, alpha, D_offset
+            ]
+        )
 
         # Run multiple iterations to check for memory stability
         results = []
@@ -146,19 +157,24 @@ class TestBufferDonation:
             physical_param_names=["D0", "alpha", "D_offset"],
         )
 
-        n_phi = 3
-        params = np.array([
-            0.8, 0.8, 0.8,  # contrasts
-            1.0, 1.0, 1.0,  # offsets
-            1e-11, 0.5, 1e-14,  # physical
-        ])
+        params = np.array(
+            [
+                0.8,
+                0.8,
+                0.8,  # contrasts
+                1.0,
+                1.0,
+                1.0,  # offsets
+                1e-11,
+                0.5,
+                1e-14,  # physical
+            ]
+        )
 
         result = residual_fn(params)
 
         # Shape should be (n_chunks * max_chunk_size,)
-        expected_shape = (
-            residual_fn.n_chunks * residual_fn.max_chunk_size,
-        )
+        expected_shape = (residual_fn.n_chunks * residual_fn.max_chunk_size,)
         assert result.shape == expected_shape
 
 
@@ -188,18 +204,32 @@ class TestStratifiedResidualFunctionJIT:
                 for t1_val in t1_vals[:5]:  # Half of t1 per chunk
                     for t2_val in t2_vals[:5]:  # Half of t2 per chunk
                         phi_list.append(phi_val)
-                        t1_list.append(t1_val if chunk_idx == 0 else t1_vals[5:][t1_vals[:5].tolist().index(t1_val)] if t1_val in t1_vals[:5] else t1_val)
-                        t2_list.append(t2_val if chunk_idx == 0 else t2_vals[5:][t2_vals[:5].tolist().index(t2_val)] if t2_val in t2_vals[:5] else t2_val)
+                        t1_list.append(
+                            t1_val
+                            if chunk_idx == 0
+                            else t1_vals[5:][t1_vals[:5].tolist().index(t1_val)]
+                            if t1_val in t1_vals[:5]
+                            else t1_val
+                        )
+                        t2_list.append(
+                            t2_val
+                            if chunk_idx == 0
+                            else t2_vals[5:][t2_vals[:5].tolist().index(t2_val)]
+                            if t2_val in t2_vals[:5]
+                            else t2_val
+                        )
                         g2_list.append(1.5 + 0.1 * np.random.randn())
 
-            chunks.append(MockChunk(
-                phi=phi_list,
-                t1=t1_list,
-                t2=t2_list,
-                g2=g2_list,
-            ))
+            chunks.append(
+                MockChunk(
+                    phi=phi_list,
+                    t1=t1_list,
+                    t2=t2_list,
+                    g2=g2_list,
+                )
+            )
 
-        total_points = sum(len(c.phi) for c in chunks)
+        sum(len(c.phi) for c in chunks)
         sigma = np.ones((n_phi, n_t1, n_t2)) * 0.1
 
         return MockStratifiedData(chunks, sigma)
@@ -251,11 +281,13 @@ class TestStratifiedResidualFunctionJIT:
         )
 
         n_phi = 5
-        params = np.concatenate([
-            np.full(n_phi, 0.8),  # contrasts
-            np.full(n_phi, 1.0),  # offsets
-            [1e-11, 0.5, 1e-14],  # physical
-        ])
+        params = np.concatenate(
+            [
+                np.full(n_phi, 0.8),  # contrasts
+                np.full(n_phi, 1.0),  # offsets
+                [1e-11, 0.5, 1e-14],  # physical
+            ]
+        )
 
         result = residual_fn(params)
 

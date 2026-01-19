@@ -14,8 +14,6 @@ Tests for homodyne/optimization/nlsq/adapter_base.py covering:
 Part of v2.14.0 architecture refactoring tests.
 """
 
-from unittest.mock import Mock
-
 import numpy as np
 import pytest
 
@@ -485,7 +483,7 @@ class TestComputeCovariance:
         n_params = 2
 
         # Should handle gracefully (uses pinv for ill-conditioned)
-        cov = adapter._compute_covariance(jacobian, residuals, n_params)
+        adapter._compute_covariance(jacobian, residuals, n_params)
         # May return a covariance or None depending on implementation
         # Just verify no exception is raised
 

@@ -273,9 +273,7 @@ class TestJITShearWeights:
         # Subsequent calls should be faster (use cached compiled function)
         start = time.perf_counter()
         for _ in range(100):
-            weights_cached = _compute_weights_jax(
-                jnp.array(phi_angles), phi0, min_weight, alpha, True
-            )
+            _compute_weights_jax(jnp.array(phi_angles), phi0, min_weight, alpha, True)
         cached_avg_time = (time.perf_counter() - start) / 100
 
         # Verify correctness
@@ -288,8 +286,8 @@ class TestJITShearWeights:
         # Cached calls should be at least 2x faster on average
         # (first call includes compilation, later calls don't)
         assert cached_avg_time < first_call_time, (
-            f"JIT caching not effective: first={first_call_time*1000:.2f}ms, "
-            f"cached_avg={cached_avg_time*1000:.2f}ms"
+            f"JIT caching not effective: first={first_call_time * 1000:.2f}ms, "
+            f"cached_avg={cached_avg_time * 1000:.2f}ms"
         )
 
     def test_jit_underflow_protection(self):

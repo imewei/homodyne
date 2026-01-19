@@ -23,14 +23,10 @@ Key Properties Tested:
 
 from __future__ import annotations
 
-from dataclasses import dataclass
-from unittest.mock import MagicMock, patch
-
 import numpy as np
 import pytest
 
 from homodyne.optimization.nlsq.strategies.chunking import (
-    AngleDistributionStats,
     StratificationDiagnostics,
     StratifiedIndexIterator,
     analyze_angle_distribution,
@@ -220,18 +216,14 @@ class TestNLSQOptimizationMemory:
 
     def test_jacobian_dominates(self):
         """Jacobian should be the dominant memory component."""
-        result = estimate_nlsq_optimization_memory(
-            n_points=10_000_000, n_params=53
-        )
+        result = estimate_nlsq_optimization_memory(n_points=10_000_000, n_params=53)
 
         assert result["jacobian_mb"] > result["data_mb"]
         assert result["jacobian_mb"] > result["jax_overhead_mb"]
 
     def test_memory_components_present(self):
         """All memory components should be present."""
-        result = estimate_nlsq_optimization_memory(
-            n_points=1_000_000, n_params=10
-        )
+        result = estimate_nlsq_optimization_memory(n_points=1_000_000, n_params=10)
 
         required_keys = [
             "data_mb",
@@ -246,9 +238,7 @@ class TestNLSQOptimizationMemory:
 
     def test_safety_margin_applied(self):
         """20% safety margin should be applied to total."""
-        result = estimate_nlsq_optimization_memory(
-            n_points=1_000_000, n_params=10
-        )
+        result = estimate_nlsq_optimization_memory(n_points=1_000_000, n_params=10)
 
         # Total should be ~20% higher than sum of components
         components_sum = (
@@ -259,9 +249,7 @@ class TestNLSQOptimizationMemory:
         )
         expected_with_margin = components_sum * 1.20
 
-        np.testing.assert_allclose(
-            result["total_mb"], expected_with_margin, rtol=0.01
-        )
+        np.testing.assert_allclose(result["total_mb"], expected_with_margin, rtol=0.01)
 
     @pytest.mark.parametrize(
         "n_points,n_params",
@@ -384,7 +372,7 @@ class TestAngleStratifiedData:
         phi, t1, t2, g2 = synthetic_xpcs_data
 
         # Create indices to track
-        indices = np.arange(len(phi))
+        np.arange(len(phi))
         phi_s, t1_s, t2_s, g2_s, chunk_sizes = create_angle_stratified_data(
             phi, t1, t2, g2, target_chunk_size=5000
         )

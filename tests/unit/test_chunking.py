@@ -93,7 +93,7 @@ class TestIndexBasedStratification:
         unique_angles = np.unique(multi_angle_data)
         start = 0
         for chunk_size in chunk_sizes:
-            chunk_phi = phi_stratified[start:start + chunk_size]
+            chunk_phi = phi_stratified[start : start + chunk_size]
             chunk_angles = np.unique(chunk_phi)
 
             # Each chunk should contain all angles (for balanced data)
@@ -123,10 +123,7 @@ class TestIndexBasedStratification:
 
         # Verify data integrity - should be able to reconstruct original
         reverse_indices = np.argsort(indices)
-        np.testing.assert_array_equal(
-            multi_angle_data,
-            phi_stratified[reverse_indices]
-        )
+        np.testing.assert_array_equal(multi_angle_data, phi_stratified[reverse_indices])
         np.testing.assert_array_equal(t1, t1_stratified[reverse_indices])
         np.testing.assert_array_equal(t2, t2_stratified[reverse_indices])
         np.testing.assert_array_equal(g2, g2_stratified[reverse_indices])
@@ -149,12 +146,14 @@ class TestIndexBasedStratification:
         )
 
         # Get data from data-based stratification
-        phi_data, t1_data, t2_data, g2_data, chunk_sizes_data = create_angle_stratified_data(
-            phi=jnp.array(multi_angle_data),
-            t1=jnp.array(t1),
-            t2=jnp.array(t2),
-            g2_exp=jnp.array(g2),
-            target_chunk_size=target_chunk_size,
+        phi_data, t1_data, t2_data, g2_data, chunk_sizes_data = (
+            create_angle_stratified_data(
+                phi=jnp.array(multi_angle_data),
+                t1=jnp.array(t1),
+                t2=jnp.array(t2),
+                g2_exp=jnp.array(g2),
+                target_chunk_size=target_chunk_size,
+            )
         )
 
         # Apply indices to original data
@@ -174,7 +173,7 @@ class TestIndexBasedStratification:
 
     def test_memory_overhead_is_minimal(self, multi_angle_data):
         """Test that index array memory overhead is minimal compared to data copy."""
-        n_points = len(multi_angle_data)
+        len(multi_angle_data)
 
         # Memory for index array (int64)
         indices, _ = create_angle_stratified_indices(
@@ -209,10 +208,12 @@ class TestAngleDistributionAnalysis:
     def test_multi_angle_statistics(self):
         """Test statistics for multi-angle data."""
         # Create imbalanced distribution
-        phi = np.concatenate([
-            np.zeros(1000),  # 1000 points at angle 0
-            np.ones(500),    # 500 points at angle 1
-        ])
+        phi = np.concatenate(
+            [
+                np.zeros(1000),  # 1000 points at angle 0
+                np.ones(500),  # 500 points at angle 1
+            ]
+        )
         stats = analyze_angle_distribution(phi)
 
         assert stats.n_angles == 2

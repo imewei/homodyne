@@ -31,7 +31,6 @@ import pytest
 
 from homodyne.optimization.nlsq.memory import (
     DEFAULT_MEMORY_FRACTION,
-    FALLBACK_THRESHOLD_GB,
     MAX_MEMORY_FRACTION,
     MEMORY_FRACTION_ENV_VAR,
     MIN_MEMORY_FRACTION,
@@ -171,7 +170,6 @@ class TestAdaptiveThreshold:
         """Info dict should contain all required diagnostic keys."""
         _, info = get_adaptive_memory_threshold()
 
-        required_keys = {"memory_fraction", "source", "total_memory_gb", "detection_method"}
         # detection_method only present if memory detected successfully
         assert "memory_fraction" in info
         assert "source" in info
@@ -223,9 +221,9 @@ class TestPeakMemoryEstimation:
         "n_points,n_params,expected_gb",
         [
             # Jacobian: n_points * n_params * 8 bytes * 6.5 overhead
-            (1_000_000, 10, 0.04843),     # 1M * 10 * 8 * 6.5 / 1024^3 ≈ 0.048 GB
-            (10_000_000, 53, 25.6673),    # 10M * 53 * 8 * 6.5 / 1024^3 ≈ 25.7 GB
-            (100_000_000, 53, 256.673),   # 100M * 53 * 8 * 6.5 / 1024^3 ≈ 257 GB
+            (1_000_000, 10, 0.04843),  # 1M * 10 * 8 * 6.5 / 1024^3 ≈ 0.048 GB
+            (10_000_000, 53, 25.6673),  # 10M * 53 * 8 * 6.5 / 1024^3 ≈ 25.7 GB
+            (100_000_000, 53, 256.673),  # 100M * 53 * 8 * 6.5 / 1024^3 ≈ 257 GB
         ],
     )
     def test_numerical_correctness(self, n_points, n_params, expected_gb):
@@ -315,7 +313,10 @@ class TestStrategySelection:
         decision = select_nlsq_strategy(n_points=100_000_000, n_params=100)
 
         # Should be OUT_OF_CORE or HYBRID_STREAMING depending on system
-        assert decision.strategy in (NLSQStrategy.OUT_OF_CORE, NLSQStrategy.HYBRID_STREAMING)
+        assert decision.strategy in (
+            NLSQStrategy.OUT_OF_CORE,
+            NLSQStrategy.HYBRID_STREAMING,
+        )
 
     def test_decision_order_index_first(self):
         """Index array check should happen BEFORE peak memory check.
@@ -424,7 +425,9 @@ class TestNumericalCorrectness:
         decision = select_nlsq_strategy(n_points=1_000_000, n_params=10)
 
         expected_index_gb = (1_000_000 * 8) / (1024**3)
-        np.testing.assert_allclose(decision.index_memory_gb, expected_index_gb, rtol=1e-12)
+        np.testing.assert_allclose(
+            decision.index_memory_gb, expected_index_gb, rtol=1e-12
+        )
 
     def test_threshold_calculation_consistency(self):
         """Threshold should be consistent: fraction * total_memory."""
@@ -445,7 +448,9 @@ class TestNumericalCorrectness:
 
         for n_points, n_params in test_cases:
             result = estimate_peak_memory_gb(n_points, n_params)
-            assert np.isfinite(result), f"Got non-finite result for {n_points}, {n_params}"
+            assert np.isfinite(result), (
+                f"Got non-finite result for {n_points}, {n_params}"
+            )
 
     def test_decision_metrics_internally_consistent(self):
         """Decision metrics should be internally consistent."""
@@ -460,7 +465,9 @@ class TestNumericalCorrectness:
         if decision.strategy == NLSQStrategy.HYBRID_STREAMING:
             assert "index" in decision.reason.lower()
         elif decision.strategy == NLSQStrategy.OUT_OF_CORE:
-            assert "peak" in decision.reason.lower() or "memory" in decision.reason.lower()
+            assert (
+                "peak" in decision.reason.lower() or "memory" in decision.reason.lower()
+            )
 
 
 # =============================================================================
@@ -621,10 +628,7 @@ class TestAutoStreamingMode:
         n_points = 10_000_000
         n_params = 53
 
-        decisions = [
-            select_nlsq_strategy(n_points, n_params)
-            for _ in range(5)
-        ]
+        decisions = [select_nlsq_strategy(n_points, n_params) for _ in range(5)]
 
         # All decisions should be identical
         first = decisions[0]
@@ -639,14 +643,10 @@ class TestAutoStreamingMode:
         n_params = 53
 
         # High fraction - more memory available, less likely to stream
-        high_fraction = select_nlsq_strategy(
-            n_points, n_params, memory_fraction=0.9
-        )
+        high_fraction = select_nlsq_strategy(n_points, n_params, memory_fraction=0.9)
 
         # Low fraction - less memory available, more likely to stream
-        low_fraction = select_nlsq_strategy(
-            n_points, n_params, memory_fraction=0.3
-        )
+        low_fraction = select_nlsq_strategy(n_points, n_params, memory_fraction=0.3)
 
         # Lower fraction should have lower threshold
         assert low_fraction.threshold_gb < high_fraction.threshold_gb

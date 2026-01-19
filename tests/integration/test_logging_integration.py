@@ -185,9 +185,7 @@ class TestCLIVerboseFlag:
 class TestCLIQuietFlag:
     """T016: Tests for CLI --quiet flag (User Story 1)."""
 
-    def test_quiet_shows_only_errors(
-        self, caplog: pytest.LogCaptureFixture
-    ) -> None:
+    def test_quiet_shows_only_errors(self, caplog: pytest.LogCaptureFixture) -> None:
         """--quiet flag shows only ERROR level messages."""
         with caplog.at_level(logging.DEBUG, logger="homodyne"):
             config = LogConfiguration.from_cli_args(quiet=True)
@@ -329,7 +327,6 @@ class TestLoggingPerformance:
         The 1 MB/hour target from FR-020 assumes production usage patterns,
         not artificial high-frequency logging.
         """
-        import time
 
         log_file = tmp_path / "growth_test.log"
 
@@ -377,9 +374,9 @@ class TestLoggingPerformance:
         # Estimate hourly growth at 2100 messages/hour (35/min * 60)
         # This is a generous estimate for very active logging
         estimated_hourly_messages = 2100
-        estimated_mb_per_hour = (
-            avg_bytes_per_message * estimated_hourly_messages
-        ) / (1024 * 1024)
+        estimated_mb_per_hour = (avg_bytes_per_message * estimated_hourly_messages) / (
+            1024 * 1024
+        )
 
         # Assert growth rate is reasonable
         # Allow up to 2 MB/hour since test messages may be longer than real ones

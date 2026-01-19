@@ -11,7 +11,9 @@ from dataclasses import dataclass
 import numpy as np
 import pytest
 
-from homodyne.optimization.nlsq.parameter_utils import compute_quantile_per_angle_scaling
+from homodyne.optimization.nlsq.parameter_utils import (
+    compute_quantile_per_angle_scaling,
+)
 
 
 @dataclass
@@ -146,12 +148,16 @@ class TestComputeQuantilePerAngleScaling:
         # Check recovered values are close to true values
         # Allow 20% relative error due to quantile estimation
         np.testing.assert_allclose(
-            np.mean(contrast_est), true_contrast, rtol=0.2,
-            err_msg="Mean contrast not recovered accurately"
+            np.mean(contrast_est),
+            true_contrast,
+            rtol=0.2,
+            err_msg="Mean contrast not recovered accurately",
         )
         np.testing.assert_allclose(
-            np.mean(offset_est), true_offset, rtol=0.1,
-            err_msg="Mean offset not recovered accurately"
+            np.mean(offset_est),
+            true_offset,
+            rtol=0.1,
+            err_msg="Mean offset not recovered accurately",
         )
 
     def test_varying_per_angle_recovery(self):
@@ -184,9 +190,7 @@ class TestComputeQuantilePerAngleScaling:
         np.testing.assert_allclose(
             np.mean(contrast_est), np.mean(true_contrast), rtol=0.2
         )
-        np.testing.assert_allclose(
-            np.mean(offset_est), np.mean(true_offset), rtol=0.1
-        )
+        np.testing.assert_allclose(np.mean(offset_est), np.mean(true_offset), rtol=0.1)
 
     def test_bounds_clipping(self):
         """Test that estimates are clipped to bounds."""
@@ -196,13 +200,13 @@ class TestComputeQuantilePerAngleScaling:
             n_phi=n_phi,
             n_points_per_angle=2500,
             true_contrast=0.9,  # High contrast
-            true_offset=1.4,    # High offset
+            true_offset=1.4,  # High offset
             noise_std=0.001,
         )
 
         # Use tight bounds that should clip
         contrast_bounds = (0.0, 0.5)  # Max 0.5, but true is 0.9
-        offset_bounds = (0.5, 1.0)   # Max 1.0, but true is 1.4
+        offset_bounds = (0.5, 1.0)  # Max 1.0, but true is 1.4
 
         contrast_est, offset_est = compute_quantile_per_angle_scaling(
             stratified_data=data,
@@ -219,7 +223,9 @@ class TestComputeQuantilePerAngleScaling:
     def test_insufficient_data_uses_midpoint(self):
         """Test that angles with insufficient data use midpoint defaults."""
         # Create data with very few points for some angles
-        phi_flat = np.array([0.0] * 50 + [1.0] * 200)  # Angle 0: 50 pts, Angle 1: 200 pts
+        phi_flat = np.array(
+            [0.0] * 50 + [1.0] * 200
+        )  # Angle 0: 50 pts, Angle 1: 200 pts
         t1_flat = np.concatenate([np.linspace(0, 10, 50), np.linspace(0, 100, 200)])
         t2_flat = t1_flat.copy()
         g2_flat = np.full(250, 0.9)  # Dummy values
@@ -257,7 +263,7 @@ class TestComputeQuantilePerAngleScaling:
         chunks = []
         phi_values = np.array([0.0, 1.0, 2.0])
 
-        for i in range(3):  # 3 chunks
+        for _i in range(3):  # 3 chunks
             chunk_size = n_points // 3
             phi = np.repeat(phi_values, chunk_size // 3)
             t1 = np.tile(np.linspace(0, 100, chunk_size // 3), 3)
@@ -267,12 +273,14 @@ class TestComputeQuantilePerAngleScaling:
             g1_sq = np.exp(-0.02 * delta_t)
             g2 = 0.3 * g1_sq + 0.8 + np.random.normal(0, 0.01, len(phi))
 
-            chunks.append(MockChunk(
-                phi=phi,
-                t1=t1,
-                t2=t2,
-                g2=g2,
-            ))
+            chunks.append(
+                MockChunk(
+                    phi=phi,
+                    t1=t1,
+                    t2=t2,
+                    g2=g2,
+                )
+            )
 
         data = MockChunkedData(
             chunks=chunks,

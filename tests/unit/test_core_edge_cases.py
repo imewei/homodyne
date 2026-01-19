@@ -182,7 +182,7 @@ class TestParameterValidationEdgeCases:
         @jit
         def validate_in_jit(params):
             # This would fail if validation doesn't skip JAX tracers
-            result = validate_parameters_detailed(params, bounds)
+            validate_parameters_detailed(params, bounds)
             return params[0]  # Return something to trace
 
         params = jnp.array([100.0, 0.0, 10.0])
@@ -485,13 +485,9 @@ class TestShearModelEdgeCases:
         params_phi0 = jnp.array([gamma_dot_t0, 0.0, 0.0, 0.0])  # φ₀ = 0
         t = jnp.array([0.1, 1.0])
         # Perpendicular angle: cos(0° - 90°) = 0 → no shear contribution
-        g1_perp = model.compute_g1(
-            params_phi0, t, t, jnp.array([90.0]), q=0.01, L=1e6, dt=0.1
-        )
+        model.compute_g1(params_phi0, t, t, jnp.array([90.0]), q=0.01, L=1e6, dt=0.1)
         # Parallel angle: cos(0° - 0°) = 1 → maximum shear contribution
-        g1_parallel = model.compute_g1(
-            params_phi0, t, t, jnp.array([0.0]), q=0.01, L=1e6, dt=0.1
-        )
+        model.compute_g1(params_phi0, t, t, jnp.array([0.0]), q=0.01, L=1e6, dt=0.1)
         # Perpendicular should have less decorrelation (higher g1)
         # This depends on shear rate magnitude
 

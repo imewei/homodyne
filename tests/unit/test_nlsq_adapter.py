@@ -607,7 +607,7 @@ class TestNLSQAdapterDeviceInfo:
         """Ensure NLSQ components are available for adapter tests."""
         # Check if NLSQ is available
         try:
-            from nlsq import CurveFit
+            from nlsq import CurveFit  # noqa: F401
 
             return True
         except ImportError:
@@ -680,7 +680,7 @@ class TestNLSQAdapterDeviceInfo:
         }
 
         # Need proper shapes - let's simplify
-        n_points = n_t * n_t * n_phi
+        n_t * n_t * n_phi
         data = {
             "t1": np.tile(T1.ravel(), n_phi),
             "t2": np.tile(T2.ravel(), n_phi),
@@ -693,7 +693,7 @@ class TestNLSQAdapterDeviceInfo:
         config.config = {"optimization": {"nlsq": {"max_iterations": 5}}}
 
         # Initial params: [c0, c1, c2, o0, o1, o2, D0, alpha, D_offset]
-        n_params = 2 * n_phi + 3
+        2 * n_phi + 3
         initial_params = np.array([0.5] * n_phi + [1.0] * n_phi + [1000.0, 0.5, 10.0])
         bounds = (
             np.array([0.1] * n_phi + [0.5] * n_phi + [100.0, 0.1, 1.0]),

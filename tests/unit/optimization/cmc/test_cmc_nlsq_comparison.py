@@ -259,7 +259,9 @@ class TestCMCSearchsortedIndexing:
         indices = jnp.searchsorted(time_grid, test_times, side="left")
 
         print("\nSearchsorted exact match test:")
-        for t, idx, expected in zip(test_times, indices, expected_indices):
+        for t, idx, expected in zip(
+            test_times, indices, expected_indices, strict=False
+        ):
             print(f"  t={float(t):.1f} -> idx={int(idx)} (expected={expected})")
             assert int(idx) == expected
 
@@ -275,7 +277,9 @@ class TestCMCSearchsortedIndexing:
         indices = jnp.searchsorted(time_grid, test_times, side="left")
 
         print("\nSearchsorted between-values test:")
-        for t, idx, expected in zip(test_times, indices, expected_indices):
+        for t, idx, expected in zip(
+            test_times, indices, expected_indices, strict=False
+        ):
             print(f"  t={float(t):.2f} -> idx={int(idx)} (expected={expected})")
             assert int(idx) == expected, f"Mismatch at t={t}"
 
@@ -405,7 +409,7 @@ class TestCMCPhysicsValues:
         )
 
         print("\n  D(t) values:")
-        for t, D in zip(t_samples, D_samples):
+        for t, D in zip(t_samples, D_samples, strict=False):
             print(f"    D(t={t:.0f}s) = {D:.4e} nm²/s")
 
         # Estimate integral for large time separation

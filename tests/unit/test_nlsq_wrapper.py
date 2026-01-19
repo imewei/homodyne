@@ -29,6 +29,7 @@ from unittest.mock import Mock, patch
 import numpy as np
 import pytest
 
+
 @pytest.fixture
 def mock_config():
     """Create mock configuration for NLSQWrapper.fit()."""
@@ -816,10 +817,7 @@ class TestParameterBoundsDetection:
         ]
 
         # Expected indices
-        contrast_start = 0
-        contrast_end = n_phi
-        offset_start = n_phi
-        offset_end = 2 * n_phi
+        2 * n_phi
         physical_start = 2 * n_phi
 
         # gamma_dot_t0 is the 4th physical parameter (index 3)
@@ -1004,8 +1002,8 @@ class TestConsistentPerAngleInit:
 
         # With nonzero gamma_dot_t0, per-angle values should NOT be uniform
         # Check that there's variation in the fitted values
-        contrast_variation = contrast.max() - contrast.min()
-        offset_variation = offset.max() - offset.min()
+        contrast.max() - contrast.min()
+        offset.max() - offset.min()
 
         # The variation depends on the synthetic data, but should be nonzero
         # for a properly functioning implementation

@@ -30,6 +30,7 @@ try:
 except ImportError:
     NLSQ_AVAILABLE = False
 
+
 @pytest.mark.performance
 @pytest.mark.slow
 @pytest.mark.skipif(not NLSQ_AVAILABLE, reason="NLSQ package not available")

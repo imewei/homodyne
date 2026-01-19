@@ -61,12 +61,14 @@ requires_cmc = pytest.mark.skipif(
 )
 
 # Test factory imports
-from tests.factories.config_factory import (
+from tests.factories.config_factory import (  # noqa: E402
     create_disabled_filtering_config,
     create_phi_filtering_config,
 )
-from tests.factories.data_factory import create_specific_angles_test_data
-from tests.factories.optimization_factory import (
+from tests.factories.data_factory import (  # noqa: E402
+    create_specific_angles_test_data,
+)
+from tests.factories.optimization_factory import (  # noqa: E402
     create_mock_config_manager,
     create_mock_data_dict,
     create_mock_optimization_result,

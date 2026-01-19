@@ -423,7 +423,10 @@ class TestBackwardCompatibility:
 
         # Large dataset: peak memory > threshold -> OUT_OF_CORE
         large = select_nlsq_strategy(100_000_000, n_params)
-        assert large.strategy in (NLSQStrategy.OUT_OF_CORE, NLSQStrategy.HYBRID_STREAMING)
+        assert large.strategy in (
+            NLSQStrategy.OUT_OF_CORE,
+            NLSQStrategy.HYBRID_STREAMING,
+        )
 
         # Extreme dataset: index array > threshold -> HYBRID_STREAMING
         # Index array = n_points * 8 bytes
