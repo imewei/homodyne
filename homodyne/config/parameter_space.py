@@ -107,7 +107,7 @@ class PriorDistribution:
     alpha: float | None = None
     beta: float | None = None
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         """Validate distribution parameters."""
         if self.dist_type not in [
             "Normal",

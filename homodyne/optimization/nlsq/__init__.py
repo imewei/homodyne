@@ -55,9 +55,9 @@ except ImportError:
 # - NLSQ now uses 3-preset workflows: "auto", "auto_global", "hpc"
 # - Homodyne uses its own select_nlsq_strategy() for memory-aware selection
 # - OptimizationGoal still exists in NLSQ 0.6.4 (nlsq.core.workflow)
-WorkflowSelector = None  # type: ignore[assignment, misc]  # Removed in NLSQ v0.6.0
-WorkflowTier = None  # type: ignore[assignment, misc]  # Removed in NLSQ v0.6.0
-NLSQDatasetSizeTier = None  # type: ignore[assignment, misc]  # Removed in NLSQ v0.6.0
+WorkflowSelector = None  # Removed in NLSQ v0.6.0
+WorkflowTier = None  # Removed in NLSQ v0.6.0
+NLSQDatasetSizeTier = None  # Removed in NLSQ v0.6.0
 NLSQ_WORKFLOW_AVAILABLE = False  # WorkflowSelector removed in NLSQ v0.6.0
 
 # OptimizationGoal is still available in NLSQ 0.6.4 (FAST, ROBUST, QUALITY, etc.)
@@ -66,7 +66,7 @@ try:
 
     NLSQ_GOAL_AVAILABLE = True
 except ImportError:
-    OptimizationGoal = None  # type: ignore[assignment, misc]
+    OptimizationGoal = None  # type: ignore[misc, assignment]
     NLSQ_GOAL_AVAILABLE = False
 
 # Global optimization (NLSQ v0.4+)
@@ -78,8 +78,8 @@ try:
 
     NLSQ_GLOBAL_OPT_AVAILABLE = True
 except ImportError:
-    GlobalOptimizationConfig = None  # type: ignore[assignment, misc]
-    MultiStartOrchestrator = None  # type: ignore[assignment, misc]
+    GlobalOptimizationConfig = None  # type: ignore[misc, assignment]
+    MultiStartOrchestrator = None  # type: ignore[misc, assignment]
     NLSQ_GLOBAL_OPT_AVAILABLE = False
 
 # CMA-ES Global Optimization (NLSQ v0.6.3+)
@@ -100,11 +100,11 @@ try:
     # Check if evosax is actually installed
     NLSQ_CMAES_AVAILABLE = is_evosax_available()
 except ImportError:
-    CMAES_PRESETS = None  # type: ignore[assignment, misc]
-    CMAESConfig = None  # type: ignore[assignment, misc]
-    CMAESDiagnostics = None  # type: ignore[assignment, misc]
-    CMAESOptimizer = None  # type: ignore[assignment, misc]
-    MethodSelector = None  # type: ignore[assignment, misc]
+    CMAES_PRESETS = None  # type: ignore[assignment]
+    CMAESConfig = None  # type: ignore[misc, assignment]
+    CMAESDiagnostics = None  # type: ignore[misc, assignment]
+    CMAESOptimizer = None
+    MethodSelector = None
     auto_configure_cmaes_memory = None  # type: ignore[assignment]
     compute_default_popsize = None  # type: ignore[assignment]
     estimate_cmaes_memory_gb = None  # type: ignore[assignment]
@@ -122,8 +122,8 @@ try:
 
     NLSQ_STABILITY_AVAILABLE = True
 except ImportError:
-    NumericalStabilityGuard = None  # type: ignore[assignment, misc]
-    NLSQOptimizationRecovery = None  # type: ignore[assignment, misc]
+    NumericalStabilityGuard = None  # type: ignore[misc, assignment]
+    NLSQOptimizationRecovery = None  # type: ignore[misc, assignment]
     NLSQ_STABILITY_AVAILABLE = False
 
 # Caching and memory management (NLSQ v0.4+)
@@ -133,7 +133,7 @@ try:
 
     NLSQ_CACHING_AVAILABLE = True
 except ImportError:
-    NLSQMemoryManager = None  # type: ignore[assignment, misc]
+    NLSQMemoryManager = None  # type: ignore[misc, assignment]
     get_memory_manager = None  # type: ignore[assignment]
     NLSQ_CACHING_AVAILABLE = False
 
@@ -143,7 +143,7 @@ try:
 
     NLSQ_RESULT_AVAILABLE = True
 except ImportError:
-    CurveFitResult = None  # type: ignore[assignment, misc]
+    CurveFitResult = None  # type: ignore[misc, assignment]
     NLSQ_RESULT_AVAILABLE = False
 
 # Streaming optimizer (NLSQ v0.3.2+)
@@ -152,8 +152,8 @@ try:
 
     NLSQ_STREAMING_AVAILABLE = True
 except ImportError:
-    AdaptiveHybridStreamingOptimizer = None  # type: ignore[assignment, misc]
-    HybridStreamingConfig = None  # type: ignore[assignment, misc]
+    AdaptiveHybridStreamingOptimizer = None
+    HybridStreamingConfig = None
     NLSQ_STREAMING_AVAILABLE = False
 
 # =============================================================================

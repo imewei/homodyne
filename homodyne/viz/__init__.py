@@ -4,6 +4,8 @@ This module provides high-performance visualization backends for C2 heatmap plot
 and comprehensive MCMC diagnostic plots.
 """
 
+from typing import Any
+
 try:
     from homodyne.viz.datashader_backend import (
         DatashaderRenderer,
@@ -11,9 +13,9 @@ try:
         plot_c2_heatmap_fast,
     )
 except ModuleNotFoundError:  # pragma: no cover - optional dependency
-    DatashaderRenderer = None
+    DatashaderRenderer: Any = None  # type: ignore[no-redef]
 
-    def _missing_datashader(*_args, **_kwargs):
+    def _missing_datashader(*_args: Any, **_kwargs: Any) -> Any:
         raise ImportError(
             "Datashader-based plotting requires the 'datashader' dependency. "
             "Install with `pip install datashader xarray colorcet`."

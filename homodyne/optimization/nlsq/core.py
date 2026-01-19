@@ -42,11 +42,14 @@ References:
 
 from __future__ import annotations
 
-from typing import Any
+import types
+from typing import Any, Callable, TypeVar
 
 import numpy as np
 
 # JAX imports with fallback
+F = TypeVar("F", bound=Callable[..., Any])
+
 try:
     import jax.numpy as jnp
     from jax import grad, jit, vmap
@@ -54,15 +57,15 @@ try:
     JAX_AVAILABLE = True
 except ImportError:
     JAX_AVAILABLE = False
-    jnp = np
+    jnp: types.ModuleType = np  # type: ignore[no-redef]
 
-    def jit(f):
+    def jit(f: F) -> F:  # type: ignore[no-redef]
         return f
 
-    def vmap(f, **kwargs):
+    def vmap(f: Any, **kwargs: Any) -> Any:  # type: ignore[misc]
         return f
 
-    def grad(f):
+    def grad(f: Callable[..., Any]) -> Callable[..., Any]:  # type: ignore[misc]
         return lambda x: np.zeros_like(x)
 
 
@@ -76,12 +79,20 @@ try:
 except ImportError:
     HAS_CORE_MODULES = False
     import logging
+    from collections.abc import Mapping
+    from logging import Logger, LoggerAdapter
 
-    def get_logger(name):
-        return logging.getLogger(name)
+    def get_logger(
+        name: str | None = None, *, context: Mapping[str, Any] | None = None
+    ) -> Logger | LoggerAdapter[Logger]:
+        return logging.getLogger(name or __name__)
 
-    def log_performance(*args, **kwargs):
-        def decorator(func):
+    def log_performance(
+        logger: Logger | LoggerAdapter[Logger] | None = None,
+        level: int = logging.INFO,
+        threshold: float = 0.0,
+    ) -> Callable[[F], F]:
+        def decorator(func: F) -> F:
             return func
 
         return decorator
@@ -94,17 +105,29 @@ try:
     HAS_PARAMETER_MANAGER = True
 except ImportError:
     HAS_PARAMETER_MANAGER = False
-    ParameterManager = None
+    ParameterManager = None  # type: ignore[assignment,misc]
 
 # NLSQWrapper import for legacy implementation
 try:
-    from homodyne.optimization.nlsq.wrapper import NLSQWrapper, OptimizationResult
+    from homodyne.optimization.nlsq.wrapper import NLSQWrapper
+    from homodyne.optimization.nlsq.wrapper import (
+        OptimizationResult as WrapperOptimizationResult,
+    )
 
     HAS_NLSQ_WRAPPER = True
 except ImportError:
     HAS_NLSQ_WRAPPER = False
-    NLSQWrapper = None
-    OptimizationResult = None
+    NLSQWrapper = None  # type: ignore[assignment,misc]
+    WrapperOptimizationResult = None  # type: ignore[assignment,misc]
+
+# Results module import (for return type)
+try:
+    from homodyne.optimization.nlsq.results import OptimizationResult
+
+    HAS_RESULTS_MODULE = True
+except ImportError:
+    HAS_RESULTS_MODULE = False
+    OptimizationResult = None  # type: ignore[assignment,misc]
 
 # NLSQAdapter import for new CurveFit-based implementation (v2.11.0+)
 try:
@@ -117,8 +140,8 @@ try:
     HAS_NLSQ_ADAPTER = is_adapter_available()
 except ImportError:
     HAS_NLSQ_ADAPTER = False
-    NLSQAdapter = None
-    AdapterConfig = None
+    NLSQAdapter = None  # type: ignore[assignment,misc]
+    AdapterConfig = None  # type: ignore[assignment,misc]
 
 # Multi-start optimization import (v2.6.0)
 try:
@@ -132,10 +155,10 @@ try:
     HAS_MULTISTART = True
 except ImportError:
     HAS_MULTISTART = False
-    MultiStartConfig = None
-    MultiStartResult = None
-    SingleStartResult = None
-    run_multistart_nlsq = None
+    MultiStartConfig = None  # type: ignore[assignment,misc]
+    MultiStartResult = None  # type: ignore[assignment,misc]
+    SingleStartResult = None  # type: ignore[assignment,misc]
+    run_multistart_nlsq = None  # type: ignore[assignment]
 
 # CMA-ES global optimization import (v2.15.0 / NLSQ 0.6.4+)
 try:
@@ -150,10 +173,10 @@ try:
     HAS_CMAES = CMAES_AVAILABLE
 except ImportError:
     HAS_CMAES = False
-    CMAESWrapper = None
-    CMAESWrapperConfig = None
-    CMAESResult = None
-    fit_with_cmaes = None
+    CMAESWrapper = None  # type: ignore[assignment,misc]
+    CMAESWrapperConfig = None  # type: ignore[assignment,misc]
+    CMAESResult = None  # type: ignore[assignment,misc]
+    fit_with_cmaes = None  # type: ignore[assignment]
 
 # CPU threading configuration (FR-005, T026)
 try:
@@ -162,7 +185,7 @@ try:
     HAS_CPU_CONFIG = True
 except ImportError:
     HAS_CPU_CONFIG = False
-    configure_cpu_threading = None
+    configure_cpu_threading = None  # type: ignore[assignment]
 
 # Anti-degeneracy controller import (v2.16.1+)
 try:
@@ -173,7 +196,7 @@ try:
     HAS_ANTI_DEGENERACY = True
 except ImportError:
     HAS_ANTI_DEGENERACY = False
-    AntiDegeneracyController = None
+    AntiDegeneracyController = None  # type: ignore[assignment,misc]
 
 # Export NLSQ availability for tests and external code
 NLSQ_AVAILABLE = HAS_NLSQ_WRAPPER and JAX_AVAILABLE
@@ -316,7 +339,7 @@ def fit_nlsq_jax(
     # ==========================================================================
     if not _skip_global_selection:
         # Handle both ConfigManager objects and plain dicts
-        config_dict = config.config if hasattr(config, "config") else config
+        config_dict: dict[str, Any] = config.config if hasattr(config, "config") else config  # type: ignore[assignment]
         nlsq_dict = config_dict.get("optimization", {}).get("nlsq", {})
 
         # CMA-ES has highest priority (for multi-scale problems)
@@ -342,13 +365,13 @@ def fit_nlsq_jax(
         if multi_start_dict.get("enable", False):
             if HAS_MULTISTART:
                 logger.info("Multi-start enabled, delegating to fit_nlsq_multistart")
-                result = fit_nlsq_multistart(
+                multistart_result = fit_nlsq_multistart(
                     data=data,
                     config=config,
                     initial_params=initial_params,
                     per_angle_scaling=per_angle_scaling,
                 )
-                return result.to_optimization_result()
+                return multistart_result.to_optimization_result()
             else:
                 logger.warning(
                     "[Multi-Start] Enabled in config but not available. "
@@ -376,9 +399,11 @@ def fit_nlsq_jax(
     per_angle_scaling_initial: dict[str, list[float]] | None = None
     if initial_params is None:
         # Try to load from config first (pass data for contrast/offset estimation)
-        initial_params, per_angle_scaling_initial = _load_initial_params_from_config(
-            config, analysis_mode, data
+        initial_params_temp, per_angle_scaling_initial_temp = (
+            _load_initial_params_from_config(config, analysis_mode, data)
         )
+        initial_params = initial_params_temp
+        per_angle_scaling_initial = per_angle_scaling_initial_temp
         if initial_params is None:
             # Fallback to defaults (estimate contrast/offset from data if available)
             initial_params = _get_default_initial_params(analysis_mode)
@@ -392,7 +417,11 @@ def fit_nlsq_jax(
     else:
         # Make a copy so we don't mutate caller-provided dict
         initial_params = initial_params.copy()
-        per_angle_scaling_initial = initial_params.pop("per_angle_scaling", None)
+        per_angle_scaling_initial_pop = initial_params.pop("per_angle_scaling", None)
+        if isinstance(per_angle_scaling_initial_pop, dict):
+            per_angle_scaling_initial = per_angle_scaling_initial_pop
+        else:
+            per_angle_scaling_initial = None
 
     # Convert initial params dict to array
     x0 = _params_to_array(initial_params, analysis_mode)
@@ -402,13 +431,13 @@ def fit_nlsq_jax(
     if HAS_PARAMETER_MANAGER:
         # Handle both ConfigManager objects and plain dicts
         if hasattr(config, "config"):
-            config_dict = config.config  # ConfigManager object
+            config_dict_for_pm: Any = config.config  # ConfigManager object
         else:
-            config_dict = config  # Already a dict
+            config_dict_for_pm = config  # Already a dict
 
         # Use ParameterManager to get bounds from config (properly loads custom bounds)
         param_manager = ParameterManager(
-            config_dict=config_dict, analysis_mode=analysis_mode
+            config_dict=config_dict_for_pm, analysis_mode=analysis_mode
         )
         param_names = _get_param_names(analysis_mode)
         bounds_list = param_manager.get_parameter_bounds(param_names)
@@ -463,10 +492,10 @@ def fit_nlsq_jax(
 
         # Generate default sigma (uncertainty) if missing
         if not hasattr(data_obj, "sigma") and hasattr(data_obj, "g2"):
-            g2_array = np.asarray(data_obj.g2)
+            g2_array = np.asarray(data_obj.g2)  # type: ignore[attr-defined]
             # Use 1% relative uncertainty as default
-            data_obj.sigma = 0.01 * np.ones_like(g2_array)
-            logger.debug(f"Generated default sigma: shape {data_obj.sigma.shape}")
+            data_obj.sigma = 0.01 * np.ones_like(g2_array)  # type: ignore[attr-defined]
+            logger.debug(f"Generated default sigma: shape {data_obj.sigma.shape}")  # type: ignore[attr-defined]
         _ensure_positive_sigma(data_obj)
 
         # Extract 1D time vectors from 2D meshgrids if needed
@@ -502,61 +531,61 @@ def fit_nlsq_jax(
             # Priority 4: Default 100.0 (fallback)
             try:
                 # Try analyzer_parameters.geometry.stator_rotor_gap first
-                analyzer_params = config.config.get("analyzer_parameters", {})
+                analyzer_params = config.config.get("analyzer_parameters", {})  # type: ignore[union-attr]
                 geometry = analyzer_params.get("geometry", {})
 
                 if "stator_rotor_gap" in geometry:
-                    data_obj.L = float(geometry["stator_rotor_gap"])
+                    data_obj.L = float(geometry["stator_rotor_gap"])  # type: ignore[attr-defined]
                     logger.debug(
-                        f"Using stator_rotor_gap L = {data_obj.L:.1f} Å (from config.analyzer_parameters.geometry)",
+                        f"Using stator_rotor_gap L = {data_obj.L:.1f} Å (from config.analyzer_parameters.geometry)",  # type: ignore[attr-defined]
                     )
                 else:
                     # Try experimental_data.geometry.stator_rotor_gap as alternative
-                    exp_config = config.config.get("experimental_data", {})
+                    exp_config = config.config.get("experimental_data", {})  # type: ignore[union-attr]
                     exp_geometry = exp_config.get("geometry", {})
 
                     if "stator_rotor_gap" in exp_geometry:
-                        data_obj.L = float(exp_geometry["stator_rotor_gap"])
+                        data_obj.L = float(exp_geometry["stator_rotor_gap"])  # type: ignore[attr-defined]
                         logger.debug(
-                            f"Using stator_rotor_gap L = {data_obj.L:.1f} Å (from config.experimental_data.geometry)",
+                            f"Using stator_rotor_gap L = {data_obj.L:.1f} Å (from config.experimental_data.geometry)",  # type: ignore[attr-defined]
                         )
                     # Fallback to sample_detector_distance
                     elif "sample_detector_distance" in exp_config:
-                        data_obj.L = float(exp_config["sample_detector_distance"])
+                        data_obj.L = float(exp_config["sample_detector_distance"])  # type: ignore[attr-defined]
                         logger.debug(
-                            f"Using sample_detector_distance L = {data_obj.L:.1f} Å (from config.experimental_data)",
+                            f"Using sample_detector_distance L = {data_obj.L:.1f} Å (from config.experimental_data)",  # type: ignore[attr-defined]
                         )
                     else:
-                        data_obj.L = 2000000.0  # Default: 200 µm stator-rotor gap (typical rheology-XPCS)
+                        data_obj.L = 2000000.0  # type: ignore[attr-defined]  # Default: 200 µm stator-rotor gap (typical rheology-XPCS)
                         logger.warning(
-                            f"No L parameter found in config, using default L = {data_obj.L:.1f} Å (200 µm, typical rheology-XPCS gap)",
+                            f"No L parameter found in config, using default L = {data_obj.L:.1f} Å (200 µm, typical rheology-XPCS gap)",  # type: ignore[attr-defined]
                         )
             except (AttributeError, TypeError, ValueError) as e:
-                data_obj.L = 2000000.0  # Default: 200 µm stator-rotor gap (typical rheology-XPCS)
+                data_obj.L = 2000000.0  # type: ignore[attr-defined]  # Default: 200 µm stator-rotor gap (typical rheology-XPCS)
                 logger.warning(
-                    f"Error reading L from config: {e}, using default L = {data_obj.L:.1f} Å (200 µm)",
+                    f"Error reading L from config: {e}, using default L = {data_obj.L:.1f} Å (200 µm)",  # type: ignore[attr-defined]
                 )
 
         # Get time step dt from config if available
         if not hasattr(data_obj, "dt"):
             try:
                 # Try analyzer_parameters first (preferred location)
-                analyzer_params = config.config.get("analyzer_parameters", {})
+                analyzer_params = config.config.get("analyzer_parameters", {})  # type: ignore[union-attr]
                 dt_value = analyzer_params.get("dt")
 
                 # Fallback to experimental_data section
                 if dt_value is None:
-                    exp_config = config.config.get("experimental_data", {})
+                    exp_config = config.config.get("experimental_data", {})  # type: ignore[union-attr]
                     dt_value = exp_config.get("dt")
 
                 if dt_value is not None:
-                    data_obj.dt = float(dt_value)
-                    logger.debug(f"Using time step dt = {data_obj.dt:.6f} s")
+                    data_obj.dt = float(dt_value)  # type: ignore[attr-defined]
+                    logger.debug(f"Using time step dt = {data_obj.dt:.6f} s")  # type: ignore[attr-defined]
             except (AttributeError, TypeError, ValueError) as e:
                 logger.warning(f"Error reading dt from config: {e}")
                 # dt is optional, no problem if missing
 
-        data = data_obj
+        data = data_obj  # type: ignore[assignment]
     else:
         _ensure_positive_sigma(data)
 
@@ -568,6 +597,7 @@ def fit_nlsq_jax(
     # ==========================================================================
     adapter_error: Exception | None = None
     fallback_occurred = False
+    result: Any  # Will be OptimizationResult from either adapter or wrapper
 
     # Create optimizer and run optimization
     if _use_adapter:
@@ -586,8 +616,8 @@ def fit_nlsq_jax(
             result = adapter.fit(
                 data=data,
                 config=config,
-                initial_params=x0,
-                bounds=bounds,
+                initial_params=x0,  # type: ignore[arg-type]
+                bounds=bounds,  # type: ignore[arg-type]
                 analysis_mode=analysis_mode,
                 per_angle_scaling=per_angle_scaling,
                 diagnostics_enabled=diagnostics_enabled,
@@ -618,8 +648,8 @@ def fit_nlsq_jax(
             result = wrapper.fit(
                 data=data,
                 config=config,
-                initial_params=x0,
-                bounds=bounds,
+                initial_params=x0,  # type: ignore[arg-type]
+                bounds=bounds,  # type: ignore[arg-type]
                 analysis_mode=analysis_mode,
                 per_angle_scaling=per_angle_scaling,
                 diagnostics_enabled=diagnostics_enabled,
@@ -1029,7 +1059,7 @@ def _create_residual_function(
     data: dict[str, Any],
     theory_engine: Any,
     analysis_mode: str,
-) -> callable:
+) -> Callable[..., Any]:
     """Create residual function for NLSQ least squares optimization."""
 
     # Extract q and L as concrete scalars OUTSIDE the residual function
@@ -1038,7 +1068,7 @@ def _create_residual_function(
     q_scalar = float(q_list[0]) if len(q_list) > 0 else 0.0054
     L_scalar = 2000000.0  # Default: 200 µm stator-rotor gap (typical rheology-XPCS)
 
-    def residual_fn(params_array):
+    def residual_fn(params_array: Any) -> Any:
         """Residual function: returns residuals vector."""
         params_dict = _array_to_params(params_array, analysis_mode)
 
@@ -1926,7 +1956,7 @@ def fit_nlsq_cmaes(
 
             # Create simple data container for quantile estimation
             class SimpleStratifiedData:
-                def __init__(self, g2_flat, phi_flat, t1_flat, t2_flat):
+                def __init__(self, g2_flat: Any, phi_flat: Any, t1_flat: Any, t2_flat: Any) -> None:
                     self.g2_flat = g2_flat
                     self.phi_flat = phi_flat
                     self.t1_flat = t1_flat
@@ -2098,7 +2128,7 @@ def fit_nlsq_cmaes(
             fixed_contrast_jax = jnp.asarray(fixed_contrast_per_angle)
             fixed_offset_jax = jnp.asarray(fixed_offset_per_angle)
 
-        def model_for_cmaes(xdata_unused: jnp.ndarray, *params) -> jnp.ndarray:
+        def model_for_cmaes(xdata_unused: Any, *params: Any) -> Any:
             """JAX-traceable model function wrapper for CMA-ES.
 
             Uses pure JAX operations to allow JIT compilation by NLSQ's CMAESOptimizer.

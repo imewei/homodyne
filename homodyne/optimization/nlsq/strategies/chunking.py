@@ -40,7 +40,7 @@ Issue: Per-angle scaling + NLSQ chunking incompatibility
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, Iterator
 
 import jax.numpy as jnp
 import numpy as np
@@ -927,14 +927,14 @@ class StratifiedIndexIterator:
     indices: np.ndarray
     chunk_sizes: list[int]
 
-    def __iter__(self):
+    def __iter__(self) -> Iterator[np.ndarray]:
         start = 0
         for size in self.chunk_sizes:
             end = start + size
             yield self.indices[start:end]
             start = end
 
-    def __len__(self):
+    def __len__(self) -> int:
         return len(self.chunk_sizes)
 
 

@@ -72,7 +72,7 @@ References:
 
 from collections.abc import Callable
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, cast
 
 import jax
 import jax.numpy as jnp
@@ -275,7 +275,7 @@ class FunctionEvaluationCounter:
     fn: Callable[..., Any]
     count: int = 0
 
-    def __call__(self, *args, **kwargs):
+    def __call__(self, *args: Any, **kwargs: Any) -> Any:
         self.count += 1
         return self.fn(*args, **kwargs)
 
@@ -632,7 +632,8 @@ class NLSQWrapper(NLSQAdapterBase):
         if not config_dict:
             return {}
 
-        return config_dict.get("optimization", {}).get("nlsq", {})
+        nlsq_settings = config_dict.get("optimization", {}).get("nlsq", {})
+        return cast(dict[str, Any], nlsq_settings)
 
     @staticmethod
     def _handle_nlsq_result(
@@ -739,21 +740,24 @@ class NLSQWrapper(NLSQAdapterBase):
         # Case 3: Object with attributes (CurveFitResult, OptimizeResult, etc.)
         if hasattr(result, "x") or hasattr(result, "popt"):
             # Extract popt
-            popt = getattr(result, "x", getattr(result, "popt", None))
-            if popt is None:
+            popt_raw = getattr(result, "x", getattr(result, "popt", None))
+            if popt_raw is None:
                 raise AttributeError(
                     f"Result object has neither 'x' nor 'popt' attribute. "
                     f"Available attributes: {dir(result)}"
                 )
+            popt = np.asarray(popt_raw)
 
             # Extract pcov
-            pcov = getattr(result, "pcov", None)
-            if pcov is None:
+            pcov_raw = getattr(result, "pcov", None)
+            if pcov_raw is None:
                 # No covariance available, create identity matrix
                 logger.warning(
                     "No pcov attribute in result object. Using identity matrix."
                 )
                 pcov = np.eye(len(popt))
+            else:
+                pcov = np.asarray(pcov_raw)
 
             # Extract info dict
             info = {}
@@ -1412,7 +1416,7 @@ class NLSQWrapper(NLSQAdapterBase):
                             stratified_data=chunked_data,
                             per_angle_scaling=per_angle_scaling,
                             physical_param_names=physical_param_names,
-                            logger=logger,
+                            logger=cast(logging.Logger | None, logger),
                             validate=False,
                         )
                         final_residuals = residual_fn(popt)
@@ -1500,7 +1504,7 @@ class NLSQWrapper(NLSQAdapterBase):
                     stratified_data=chunked_data,
                     per_angle_scaling=per_angle_scaling,
                     physical_param_names=physical_param_names,
-                    logger=logger,
+                    logger=cast(logging.Logger | None, logger),
                     validate=False,  # Already validated
                 )
                 final_residuals = residual_fn(popt)
@@ -1822,11 +1826,12 @@ class NLSQWrapper(NLSQAdapterBase):
                 )
 
         residual_counter: FunctionEvaluationCounter | None = None
+        wrapped_residual_fn: StratifiedResidualFunction | FunctionEvaluationCounter
         if diagnostics_enabled:
             residual_counter = FunctionEvaluationCounter(solver_residual_fn)
-            residual_fn = residual_counter
+            wrapped_residual_fn = residual_counter
         else:
-            residual_fn = solver_residual_fn
+            wrapped_residual_fn = solver_residual_fn
 
         # Step 7: Select optimization strategy using memory-based selection (v2.13.0)
         # Uses unified select_nlsq_strategy() instead of deprecated DatasetSizeStrategy
@@ -1890,7 +1895,7 @@ class NLSQWrapper(NLSQAdapterBase):
         # Step 8: Execute optimization with strategy fallback
         # Try selected strategy first, then fallback to simpler strategies if needed
         current_strategy = strategy
-        strategy_attempts = []
+        strategy_attempts: list[OptimizationStrategy] = []
 
         while current_strategy is not None:
             try:
@@ -1911,7 +1916,7 @@ class NLSQWrapper(NLSQAdapterBase):
                     )
 
                     popt, pcov, info = self._fit_with_hybrid_streaming_optimizer(
-                        residual_fn=residual_fn,
+                        residual_fn=wrapped_residual_fn,
                         xdata=xdata,
                         ydata=ydata,
                         initial_params=validated_params,
@@ -1929,7 +1934,7 @@ class NLSQWrapper(NLSQAdapterBase):
                     # Execute with automatic error recovery (T022-T024)
                     popt, pcov, info, recovery_actions, convergence_status = (
                         self._execute_with_recovery(
-                            residual_fn=residual_fn,
+                            residual_fn=wrapped_residual_fn,
                             xdata=xdata,
                             ydata=ydata,
                             initial_params=validated_params,
@@ -1946,12 +1951,12 @@ class NLSQWrapper(NLSQAdapterBase):
 
                     if use_large:
                         # Use curve_fit_large for LARGE, CHUNKED, STREAMING strategies
-                        popt, pcov, info = curve_fit_large(
-                            residual_fn,
+                        result_tuple = curve_fit_large(
+                            wrapped_residual_fn,
                             xdata,
                             ydata,
                             p0=validated_params.tolist(),
-                            bounds=nlsq_bounds,
+                            bounds=nlsq_bounds if nlsq_bounds is not None else (-np.inf, np.inf),
                             loss=loss_name,
                             x_scale=x_scale_value,
                             gtol=1e-6,
@@ -1962,10 +1967,11 @@ class NLSQWrapper(NLSQAdapterBase):
                             show_progress=strategy_info["supports_progress"],
                             stability="auto",  # Enable memory management and stability
                         )
+                        popt, pcov, info = result_tuple  # type: ignore[misc]
                     else:
                         # Use standard curve_fit for small datasets
                         popt, pcov = curve_fit(
-                            residual_fn,
+                            wrapped_residual_fn,
                             xdata,
                             ydata,
                             p0=validated_params.tolist(),
@@ -2080,7 +2086,7 @@ class NLSQWrapper(NLSQAdapterBase):
         else:
             popt = np.asarray(popt, dtype=float)
 
-        reported_nfev = info.get("nfev", -1)
+        reported_nfev: int = cast(int, info.get("nfev", -1))
         corrected_nfev = (
             residual_counter.count if residual_counter is not None else reported_nfev
         )
@@ -2111,6 +2117,7 @@ class NLSQWrapper(NLSQAdapterBase):
         execution_time = time.time() - start_time
 
         if diagnostics_enabled and diagnostics_sample_x is not None:
+            assert diagnostics_payload is not None  # Ensured by line 2095
             final_jtj, final_norms = _compute_jacobian_stats(
                 solver_residual_fn,
                 diagnostics_sample_x,
@@ -2223,13 +2230,13 @@ class NLSQWrapper(NLSQAdapterBase):
 
     def _execute_with_recovery(
         self,
-        residual_fn,
+        residual_fn: Callable[[np.ndarray], np.ndarray],
         xdata: np.ndarray,
         ydata: np.ndarray,
         initial_params: np.ndarray,
         bounds: tuple[np.ndarray, np.ndarray] | None,
         strategy: OptimizationStrategy,
-        logger,
+        logger: logging.Logger | logging.LoggerAdapter[logging.Logger],
         loss_name: str,
         x_scale_value: float | str,
     ) -> tuple[np.ndarray, np.ndarray, dict, list[str], str]:
@@ -2513,6 +2520,7 @@ class NLSQWrapper(NLSQAdapterBase):
                     )
 
                     # Note: We don't modify bounds during recovery for safety
+                    continue  # Retry optimization
                 else:
                     # Final failure - raise with comprehensive diagnostics
                     error_msg = (
@@ -3019,8 +3027,8 @@ class NLSQWrapper(NLSQAdapterBase):
         # Create a simple namespace object to hold stratified data
         class StratifiedData:
             def __init__(
-                self, phi, t1, t2, g2, original_data, diagnostics=None, chunk_sizes=None
-            ):
+                self, phi: np.ndarray, t1: np.ndarray, t2: np.ndarray, g2: np.ndarray, original_data: Any, diagnostics: Any = None, chunk_sizes: Any = None
+            ) -> None:
                 # Store flattened stratified arrays
                 self.phi_flat = phi
                 self.t1_flat = t1
@@ -3370,7 +3378,7 @@ class NLSQWrapper(NLSQAdapterBase):
             physical_param_names,
         )
 
-        transform_state = {}
+        transform_state: dict[str, Any] = {}
         if transform_cfg:
             solver_initial_params, transform_state = (
                 apply_forward_shear_transforms_to_vector(
@@ -3416,7 +3424,13 @@ class NLSQWrapper(NLSQAdapterBase):
 
         residual_debug_logged = False
 
-        def residual_func(params, phi_vals, t1_vals, t2_vals, g2_vals):
+        def residual_func(
+            params: np.ndarray,
+            phi_vals: np.ndarray,
+            t1_vals: np.ndarray,
+            t2_vals: np.ndarray,
+            g2_vals: np.ndarray,
+        ) -> np.ndarray:
             """Residual function compatible with sequential optimization."""
 
             params_np = np.asarray(params, dtype=np.float64)
@@ -3808,7 +3822,7 @@ class NLSQWrapper(NLSQAdapterBase):
         #   Static isotropic: (2*n_phi + 3) params total
         #   Laminar flow: (2*n_phi + 7) params total
 
-        def model_function(xdata: jnp.ndarray, *params_tuple) -> jnp.ndarray:
+        def model_function(xdata: jnp.ndarray, *params_tuple: float) -> jnp.ndarray:
             """Compute theoretical g2 model for NLSQ optimization with per-angle scaling.
 
             IMPORTANT: xdata contains indices into the flattened data array.
@@ -4129,7 +4143,7 @@ class NLSQWrapper(NLSQAdapterBase):
         if hasattr(residual_fn, "jax_residual"):
             # Stratified residual function
 
-            def model_fn(x, *params):
+            def model_fn(x: Any, *params: float) -> Any:
                 params_array = jnp.asarray(params)
                 residuals = residual_fn.jax_residual(params_array)
                 return ydata - residuals
@@ -4137,7 +4151,7 @@ class NLSQWrapper(NLSQAdapterBase):
         else:
             # Standard residual function
 
-            def model_fn(x, *params):
+            def model_fn(x: Any, *params: float) -> Any:
                 residuals = residual_fn(x, *params)
                 return ydata - residuals
 
@@ -4264,7 +4278,16 @@ class NLSQWrapper(NLSQAdapterBase):
 
                 # Create simple namespace object for chunk
                 class Chunk:
-                    def __init__(self, phi, t1, t2, g2, q, L, dt):
+                    def __init__(
+                        self,
+                        phi: Any,
+                        t1: Any,
+                        t2: Any,
+                        g2: Any,
+                        q: Any,
+                        L: Any,
+                        dt: Any,
+                    ) -> None:
                         self.phi = phi
                         self.t1 = t1
                         self.t2 = t2
@@ -4295,8 +4318,17 @@ class NLSQWrapper(NLSQAdapterBase):
                 start_idx = i * target_chunk_size
                 end_idx = min(start_idx + target_chunk_size, n_total)
 
-                class Chunk:
-                    def __init__(self, phi, t1, t2, g2, q, L, dt):
+                class Chunk:  # type: ignore[no-redef]
+                    def __init__(
+                        self,
+                        phi: Any,
+                        t1: Any,
+                        t2: Any,
+                        g2: Any,
+                        q: Any,
+                        L: Any,
+                        dt: Any,
+                    ) -> None:
                         self.phi = phi
                         self.t1 = t1
                         self.t2 = t2
@@ -4318,7 +4350,7 @@ class NLSQWrapper(NLSQAdapterBase):
 
         # Create object with chunks attribute and metadata
         class StratifiedChunkedData:
-            def __init__(self, chunks, sigma):
+            def __init__(self, chunks: list[Any], sigma: Any) -> None:
                 self.chunks = chunks
                 self.sigma = sigma  # Store sigma as metadata at parent level
 

@@ -21,22 +21,28 @@ Key Features:
 - Validation: Optional physics-based data quality checks
 """
 
+from __future__ import annotations
+
 import json
 import os
 import time
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any, Callable, TypeVar
 
 # Handle optional dependencies with graceful fallback
+if TYPE_CHECKING:
+    from numpy.typing import NDArray
+    from types import ModuleType
+else:
+    NDArray = Any
+
 try:
     import numpy as np
 
     HAS_NUMPY = True
-    NDArray = np.ndarray
 except ImportError:
     HAS_NUMPY = False
-    np = None
-    NDArray = Any  # Fallback type annotation
+    np = None  # type: ignore[assignment]
 
 try:
     import h5py
@@ -52,7 +58,7 @@ try:
     HAS_YAML = True
 except ImportError:
     HAS_YAML = False
-    yaml = None
+    yaml = None  # type: ignore[assignment]
 
 # JAX integration
 try:
@@ -64,72 +70,95 @@ try:
 except ImportError:
     HAS_JAX = False
     jax_available = False
-    jnp = np
+    jnp = np  # type: ignore[misc]
 
 # V2 system integration
 try:
-    from homodyne.utils.logging import get_logger, log_calls, log_performance, log_phase
+    from homodyne.utils.logging import (
+        get_logger as _get_logger,
+        log_calls as _log_calls,
+        log_performance as _log_performance,
+        log_phase as _log_phase,
+    )
 
     HAS_V2_LOGGING = True
+    get_logger = _get_logger
+    log_performance = _log_performance
+    log_calls = _log_calls
+    log_phase = _log_phase
 except ImportError:
     # Fallback to standard logging if v2 logging not available
     import logging
     from contextlib import contextmanager
+    from typing import Iterator
 
     HAS_V2_LOGGING = False
 
-    def get_logger(name):
+    F = TypeVar("F", bound=Callable[..., Any])
+
+    def get_logger(name: str | None = None, **kwargs: Any) -> logging.Logger:
         return logging.getLogger(name)
 
-    def log_performance(*args, **kwargs):
-        def decorator(func):
+    def log_performance(*args: Any, **kwargs: Any) -> Callable[[F], F]:
+        def decorator(func: F) -> F:
             return func
 
         return decorator
 
-    def log_calls(*args, **kwargs):
-        def decorator(func):
+    def log_calls(*args: Any, **kwargs: Any) -> Callable[[F], F]:
+        def decorator(func: F) -> F:
             return func
 
         return decorator
 
     @contextmanager
-    def log_phase(name, **kwargs):
+    def log_phase(name: str, **kwargs: Any) -> Iterator[Any]:
         """Fallback log_phase for environments without v2 logging."""
         yield type("PhaseContext", (), {"duration": 0.0, "memory_peak_gb": None})()
 
 
 # Physics validation integration
 try:
-    from homodyne.core.physics import PhysicsConstants, validate_experimental_setup
+    from homodyne.core.physics import (
+        PhysicsConstants as _PhysicsConstants,
+        validate_experimental_setup as _validate_experimental_setup,
+    )
 
     HAS_PHYSICS_VALIDATION = True
+    PhysicsConstants = _PhysicsConstants
+    validate_experimental_setup = _validate_experimental_setup
 except ImportError:
     HAS_PHYSICS_VALIDATION = False
-    PhysicsConstants = None
-    validate_experimental_setup = None
+    PhysicsConstants = None  # type: ignore
+    validate_experimental_setup = None  # type: ignore
 
 # Diagonal correction from unified module
 try:
-    from homodyne.core.diagonal_correction import apply_diagonal_correction_batch
+    from homodyne.core.diagonal_correction import (
+        apply_diagonal_correction_batch as _apply_diagonal_correction_batch,
+    )
 
     HAS_DIAGONAL_CORRECTION = True
+    apply_diagonal_correction_batch = _apply_diagonal_correction_batch
 except ImportError:
     HAS_DIAGONAL_CORRECTION = False
-    apply_diagonal_correction_batch = None
+    apply_diagonal_correction_batch = None  # type: ignore
 
 # Performance engine integration
 try:
-    from homodyne.data.memory_manager import AdvancedMemoryManager
-    from homodyne.data.optimization import AdvancedDatasetOptimizer
-    from homodyne.data.performance_engine import PerformanceEngine
+    from homodyne.data.memory_manager import AdvancedMemoryManager as _AdvancedMemoryManager
+    from homodyne.data.optimization import AdvancedDatasetOptimizer as _AdvancedDatasetOptimizer
+    from homodyne.data.performance_engine import PerformanceEngine as _PerformanceEngine
 
     HAS_PERFORMANCE_ENGINE = True
+    PerformanceEngine = _PerformanceEngine
+    AdvancedMemoryManager = _AdvancedMemoryManager
+    AdvancedDatasetOptimizer = _AdvancedDatasetOptimizer
 except ImportError:
     HAS_PERFORMANCE_ENGINE = False
-    PerformanceEngine = None
-    AdvancedMemoryManager = None
-    AdvancedDatasetOptimizer = None
+    PerformanceEngine = None  # type: ignore
+    AdvancedMemoryManager = None  # type: ignore
+    AdvancedDatasetOptimizer = None  # type: ignore
 
 logger = get_logger(__name__)
 
@@ -175,14 +204,14 @@ def load_xpcs_config(config_path: str | Path) -> dict[str, Any]:
 
             # Native YAML loading
             with open(config_path) as f:
-                config = yaml.safe_load(f)
+                config: dict[str, Any] = yaml.safe_load(f)
             logger.info(f"Loaded YAML configuration: {config_path}")
             return config
 
         elif config_path.suffix.lower() == ".json":
             # JSON loading with structure conversion
             with open(config_path) as f:
-                json_config = json.load(f)
+                json_config: dict[str, Any] = json.load(f)
 
             logger.info(f"Loaded JSON configuration (converted to YAML): {config_path}")
             logger.info("Consider migrating to YAML format for better readability")
@@ -474,7 +503,8 @@ class XPCSDataLoader:
 
     def _get_output_format(self) -> str:
         """Get output array format from configuration."""
-        return self.v2_config.get("output_format", "auto")
+        format_val: Any = self.v2_config.get("output_format", "auto")
+        return str(format_val)
 
     def _should_perform_validation(self) -> dict[str, bool]:
         """Get validation settings from configuration."""
@@ -809,7 +839,8 @@ class XPCSDataLoader:
                 closest_indices = np.argsort(q_distances)
                 # Take up to 10 closest q-vectors to ensure good phi angle coverage
                 n_desired = min(10, len(closest_indices))
-                q_matching_indices = closest_indices[:n_desired]
+                q_matching_indices_list = [int(i) for i in closest_indices[:n_desired]]
+                q_matching_indices = np.array(q_matching_indices_list, dtype=int)
                 logger.debug(
                     f"Expanded selection to {len(q_matching_indices)} closest q-vectors for better phi coverage",
                 )
@@ -880,7 +911,7 @@ class XPCSDataLoader:
                 )
                 selected_c2_matrices = []
                 for idx in final_indices:
-                    key = c2_keys[idx]
+                    key = c2_keys[int(idx)]
                     c2_half = c2t_group[key][()]
                     c2_full = self._reconstruct_full_matrix(c2_half)
                     selected_c2_matrices.append(c2_full)
@@ -1046,7 +1077,7 @@ class XPCSDataLoader:
                 logger.warning(
                     "No valid indices found, using first available entry as fallback",
                 )
-                final_indices = [0]
+                final_indices = np.array([0], dtype=int)
 
             # Use final indices for both (q,phi) pairs and correlation matrices
             final_dqlist = filtered_dqlist[final_indices]
@@ -1081,12 +1112,14 @@ class XPCSDataLoader:
 
         Note: Diagonal correction is now applied post-load for consistent behavior.
         """
+        if not HAS_NUMPY:
+            raise RuntimeError("NumPy is required for matrix reconstruction")
         c2_full = c2_half + c2_half.T
         # Correct diagonal (was doubled in addition)
         diag_indices = np.diag_indices(c2_half.shape[0])
         c2_full[diag_indices] /= 2
 
-        return c2_full
+        return c2_full  # type: ignore[no-any-return]
 
     def _correct_diagonal(self, c2_mat: NDArray) -> NDArray:
         """Apply diagonal correction to correlation matrix.
@@ -1098,6 +1131,8 @@ class XPCSDataLoader:
         Based on pyXPCSViewer's correct_diagonal_c2 function.
         Handles both JAX and NumPy arrays.
         """
+        if not HAS_NUMPY:
+            raise RuntimeError("NumPy is required for diagonal correction")
         size = c2_mat.shape[0]
         side_band = c2_mat[(np.arange(size - 1), np.arange(1, size))]
 
@@ -1110,8 +1145,8 @@ class XPCSDataLoader:
             norm = norm.at[1:-1].set(2)
             # Update diagonal using JAX immutable operations
             diag_indices = np.diag_indices(size)
-            c2_corrected = c2_mat.at[diag_indices].set(diag_val / norm)
-            return c2_corrected
+            c2_corrected = c2_mat.at[diag_indices].set(diag_val / norm)  # type: ignore
+            return c2_corrected  # type: ignore
         else:  # NumPy array
             diag_val = np.zeros(size)
             diag_val[:-1] += side_band
@@ -1145,13 +1180,15 @@ class XPCSDataLoader:
         Returns:
             Corrected matrices with same shape
         """
+        if not HAS_NUMPY:
+            raise RuntimeError("NumPy is required for diagonal correction")
         n_phi = c2_matrices.shape[0]
         size = c2_matrices.shape[1]
 
         # FR-006: Pre-allocate output array (avoid list append)
         if HAS_JAX and hasattr(c2_matrices, "device"):
             # JAX path: use vmap for vectorized correction (FR-006a)
-            return self._correct_diagonal_batch_jax(c2_matrices)
+            return self._correct_diagonal_batch_jax(c2_matrices)  # type: ignore
         else:
             # NumPy path: pre-allocate and direct assignment
             c2_corrected = np.empty_like(c2_matrices)
@@ -1181,7 +1218,7 @@ class XPCSDataLoader:
 
             return c2_corrected
 
-    def _correct_diagonal_batch_jax(self, c2_matrices: jnp.ndarray) -> jnp.ndarray:
+    def _correct_diagonal_batch_jax(self, c2_matrices: Any) -> Any:
         """Vectorized diagonal correction using JAX vmap.
 
         Performance Optimization (Spec 006 - FR-006a):
@@ -1194,6 +1231,8 @@ class XPCSDataLoader:
         Returns:
             Corrected matrices with same shape
         """
+        if not HAS_JAX:
+            raise RuntimeError("JAX is required for JAX diagonal correction")
         import jax
 
         size = c2_matrices.shape[1]
@@ -1204,7 +1243,7 @@ class XPCSDataLoader:
         idx_upper = jnp.arange(size - 1)
         idx_lower = jnp.arange(1, size)
 
-        def correct_single(c2_mat):
+        def correct_single(c2_mat: Any) -> Any:
             """Correct diagonal for a single matrix."""
             # Extract side band
             side_band = c2_mat[idx_upper, idx_lower]
@@ -1340,7 +1379,7 @@ class XPCSDataLoader:
         self,
         selected_indices: NDArray,
         dphilist: NDArray,
-        filtering_result,
+        filtering_result: Any,
     ) -> NDArray:
         """Integrate with existing phi filtering system for backward compatibility.
 
@@ -1402,6 +1441,8 @@ class XPCSDataLoader:
         Returns:
             Index of selected q-vector in dqlist
         """
+        if not HAS_NUMPY:
+            raise RuntimeError("NumPy is required for wavevector selection")
         # Get target q-vector from configuration
         scattering_config = self.analyzer_config.get("scattering", {})
         config_q = scattering_config.get("wavevector_q", 0.0054)
@@ -1409,7 +1450,7 @@ class XPCSDataLoader:
         logger.debug(f"Target q-vector: {config_q:.6f} Å⁻¹")
 
         # Find closest q-vector to target
-        closest_idx = np.argmin(np.abs(dqlist - config_q))
+        closest_idx = int(np.argmin(np.abs(dqlist - config_q)))
         selected_q = dqlist[closest_idx]
         deviation = abs(selected_q - config_q)
 
@@ -1487,11 +1528,13 @@ class XPCSDataLoader:
     @log_performance(threshold=0.3)
     def _save_to_cache(self, data: dict[str, Any], cache_path: str) -> None:
         """Save processed data to NPZ cache file with q-vector metadata."""
+        if not HAS_NUMPY:
+            raise RuntimeError("NumPy is required for cache saving")
         # Ensure cache directory exists
         os.makedirs(os.path.dirname(cache_path), exist_ok=True)
 
         # Convert JAX arrays back to numpy for caching
-        cache_data = {}
+        cache_data: dict[str, Any] = {}
         for key, value in data.items():
             if HAS_JAX and hasattr(value, "device"):  # JAX array
                 cache_data[key] = np.array(value)
@@ -1504,13 +1547,13 @@ class XPCSDataLoader:
 
         # Calculate actual q-vector stats from cached data
         q_values = cache_data["wavevector_q_list"]
-        actual_q = np.mean(q_values) if len(q_values) > 0 else config_q
-        q_variance = np.std(q_values) if len(q_values) > 1 else 0.0
+        actual_q = float(np.mean(q_values)) if len(q_values) > 0 else config_q
+        q_variance = float(np.std(q_values)) if len(q_values) > 1 else 0.0
 
         cache_metadata = {
             "config_wavevector_q": float(config_q),
-            "actual_wavevector_q": float(actual_q),
-            "q_variance": float(q_variance),
+            "actual_wavevector_q": actual_q,
+            "q_variance": q_variance,
             "q_count": len(q_values),
             "start_frame": self.analyzer_config.get("start_frame", 1),
             "end_frame": self.analyzer_config.get(
@@ -1591,7 +1634,7 @@ class XPCSDataLoader:
             wavevector_q=wavevector_q,
         )
 
-        return Path(cache_folder) / cache_filename
+        return Path(str(cache_folder)) / cache_filename  # type: ignore[no-any-return]
 
     @log_performance(threshold=0.1)
     def _save_text_files(self, data: dict[str, Any]) -> None:
@@ -1737,15 +1780,16 @@ class XPCSDataLoader:
                 return None
 
             # Import quality control system
-            from homodyne.data.quality_controller import DataQualityController
+            from homodyne.data.quality_controller import (
+                DataQualityController,
+                QualityControlStage,
+            )
 
             logger.info("Initializing data quality control system")
             controller = DataQualityController(self.config)
 
             # Store reference to stage enum for convenience
-            from homodyne.data.quality_controller import QualityControlStage
-
-            controller.QualityControlStage = QualityControlStage
+            controller.QualityControlStage = QualityControlStage  # type: ignore
 
             return controller
 

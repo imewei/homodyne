@@ -296,7 +296,7 @@ class ParameterManager:
         severity_priority = {"error": 3, "warning": 2, "info": 1}
         min_priority = severity_priority.get(severity_level, 2)
 
-        def add_violation(param: str, value: float, message: str, severity: str):
+        def add_violation(param: str, value: float, message: str, severity: str) -> None:
             if severity_priority.get(severity, 0) >= min_priority:
                 violations.append(f"{param} = {value:.3e}: {message} [{severity}]")
 

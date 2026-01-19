@@ -297,7 +297,7 @@ class MultiStartProgressTracker:
         # Initialize progress bar
         if enable_progress_bar:
             try:
-                from tqdm.auto import tqdm
+                from tqdm.auto import tqdm  # type: ignore[import-untyped]
 
                 self._pbar = tqdm(
                     total=n_starts,
@@ -417,11 +417,16 @@ class MultiStartProgressTracker:
             )
             logger.info(f"Timing: total={elapsed:.1f}s, avg={avg_time:.1f}s/start")
 
-    def __enter__(self):
+    def __enter__(self) -> "MultiStartProgress":
         """Context manager entry."""
         return self
 
-    def __exit__(self, exc_type, exc_val, exc_tb):
+    def __exit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc_val: BaseException | None,
+        exc_tb: Any,
+    ) -> bool:
         """Context manager exit."""
         self.close()
         return False

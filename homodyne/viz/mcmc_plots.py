@@ -29,7 +29,10 @@ Examples:
     >>> plot_cmc_summary_dashboard(result_cmc, save_path='cmc_summary.png')
 """
 
+from __future__ import annotations
+
 from pathlib import Path
+from typing import Any, cast
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -41,21 +44,24 @@ from homodyne.utils.path_validation import PathValidationError, validate_plot_sa
 logger = get_logger(__name__)
 
 # Type alias for MCMCResult (v3.0 uses CMCResult, aliased as MCMCResult for compatibility)
+MCMCResult: Any
 try:
-    from homodyne.optimization.cmc.results import CMCResult as MCMCResult
+    from homodyne.optimization.cmc.results import CMCResult as _CMCResult
+    MCMCResult = _CMCResult
 except ImportError:
     # Fallback: try legacy path
     try:
-        from homodyne.optimization import MCMCResult
+        from homodyne.optimization import MCMCResult as _LegacyMCMCResult
+        MCMCResult = _LegacyMCMCResult
     except ImportError:
         MCMCResult = None  # Will be caught at runtime
 
 
 def plot_trace_plots(
-    result: MCMCResult,
+    result: Any,  # MCMCResult type
     param_names: list[str] | None = None,
     max_params: int = 9,
-    figsize: tuple | None = None,
+    figsize: tuple[float, float] | None = None,
     show: bool = False,
     save_path: str | Path | None = None,
     dpi: int = 150,
@@ -154,7 +160,7 @@ def plot_trace_plots(
     if is_cmc and result.per_shard_diagnostics is not None:
         # CMC: Plot multiple shard traces
         num_shards = len(result.per_shard_diagnostics)
-        colors = plt.cm.tab10(np.linspace(0, 1, num_shards))
+        colors = plt.get_cmap("tab10")(np.linspace(0, 1, num_shards))
 
         for param_idx in range(num_params_to_plot):
             ax = axes[param_idx]
@@ -250,8 +256,8 @@ def plot_trace_plots(
 
 
 def plot_kl_divergence_matrix(
-    result: MCMCResult,
-    figsize: tuple = (8, 7),
+    result: Any,  # MCMCResult type
+    figsize: tuple[float, float] = (8, 7),
     cmap: str = "coolwarm",
     threshold: float = 2.0,
     show: bool = False,
@@ -407,9 +413,9 @@ def plot_kl_divergence_matrix(
 
 
 def plot_convergence_diagnostics(
-    result: MCMCResult,
+    result: Any,  # MCMCResult type
     metrics: list[str] | None = None,
-    figsize: tuple | None = None,
+    figsize: tuple[float, float] | None = None,
     rhat_threshold: float = 1.1,
     ess_threshold: float = 100.0,
     show: bool = False,
@@ -535,7 +541,7 @@ def plot_convergence_diagnostics(
     return fig
 
 
-def _plot_rhat(ax, result, param_names, threshold, is_cmc):
+def _plot_rhat(ax: Any, result: Any, param_names: list[str], threshold: float, is_cmc: bool) -> None:
     """Helper function to plot R-hat diagnostics."""
     if is_cmc and result.per_shard_diagnostics is not None:
         # CMC: Plot per-shard R-hat values
@@ -635,7 +641,7 @@ def _plot_rhat(ax, result, param_names, threshold, is_cmc):
         ax.grid(True, alpha=0.3, axis="y")
 
 
-def _plot_ess(ax, result, param_names, threshold, is_cmc):
+def _plot_ess(ax: Any, result: Any, param_names: list[str], threshold: float, is_cmc: bool) -> None:
     """Helper function to plot ESS diagnostics."""
     if is_cmc and result.per_shard_diagnostics is not None:
         # CMC: Plot per-shard ESS values
@@ -732,9 +738,9 @@ def _plot_ess(ax, result, param_names, threshold, is_cmc):
 
 
 def plot_posterior_comparison(
-    result: MCMCResult,
+    result: Any,  # MCMCResult type
     param_indices: list[int] | None = None,
-    figsize: tuple | None = None,
+    figsize: tuple[float, float] | None = None,
     bins: int = 30,
     show: bool = False,
     save_path: str | Path | None = None,
@@ -835,7 +841,7 @@ def plot_posterior_comparison(
 
         # Extract per-shard samples
         num_shards = len(result.per_shard_diagnostics)
-        colors = plt.cm.tab10(np.linspace(0, 1, num_shards))
+        colors = plt.get_cmap("tab10")(np.linspace(0, 1, num_shards))
 
         for shard_idx, shard_diag in enumerate(result.per_shard_diagnostics):
             if "trace_data" in shard_diag:
@@ -910,8 +916,8 @@ def plot_posterior_comparison(
 
 
 def plot_cmc_summary_dashboard(
-    result: MCMCResult,
-    figsize: tuple = (16, 12),
+    result: Any,  # MCMCResult type
+    figsize: tuple[float, float] = (16, 12),
     show: bool = False,
     save_path: str | Path | None = None,
     dpi: int = 150,
@@ -1040,17 +1046,17 @@ def plot_cmc_summary_dashboard(
                 param_names = [f"P{i}" for i in range(num_params)]
 
             # Collect ESS values
-            ess_matrix = []
+            ess_list: list[list[float]] = []
             for shard_diag in result.per_shard_diagnostics:
                 if "ess" in shard_diag and shard_diag["ess"] is not None:
                     ess_vals = [
                         shard_diag["ess"].get(f"param_{i}", np.nan)
                         for i in range(num_params)
                     ]
-                    ess_matrix.append(ess_vals)
+                    ess_list.append(ess_vals)
 
-            if ess_matrix:
-                ess_matrix = np.array(ess_matrix)
+            if ess_list:
+                ess_matrix = np.array(ess_list)
 
                 # Plot as box plot
                 positions = np.arange(num_params)
@@ -1106,7 +1112,7 @@ def plot_cmc_summary_dashboard(
             # Plot traces for this parameter
             if result.per_shard_diagnostics is not None:
                 num_shards = len(result.per_shard_diagnostics)
-                colors = plt.cm.tab10(np.linspace(0, 1, num_shards))
+                colors = plt.get_cmap("tab10")(np.linspace(0, 1, num_shards))
 
                 for shard_idx, shard_diag in enumerate(result.per_shard_diagnostics):
                     if "trace_data" in shard_diag:
@@ -1231,13 +1237,13 @@ def _create_empty_figure(message: str) -> Figure:
 
 
 def plot_arviz_trace(
-    result: MCMCResult,
+    result: Any,
     var_names: list[str] | None = None,
-    figsize: tuple | None = None,
+    figsize: tuple[float, float] | None = None,
     show: bool = False,
     save_path: str | Path | None = None,
     dpi: int = 150,
-    **kwargs,
+    **kwargs: Any,
 ) -> Figure:
     """Plot MCMC trace plots using ArviZ.
 
@@ -1309,18 +1315,18 @@ def plot_arviz_trace(
     if show:
         plt.show()
 
-    return fig
+    return fig  # type: ignore[return-value]
 
 
 def plot_arviz_posterior(
-    result: MCMCResult,
+    result: Any,
     var_names: list[str] | None = None,
     hdi_prob: float = 0.95,
-    figsize: tuple | None = None,
+    figsize: tuple[float, float] | None = None,
     show: bool = False,
     save_path: str | Path | None = None,
     dpi: int = 150,
-    **kwargs,
+    **kwargs: Any,
 ) -> Figure:
     """Plot posterior distributions with 95% credible intervals using ArviZ.
 
@@ -1402,13 +1408,13 @@ def plot_arviz_posterior(
 
 
 def plot_arviz_pair(
-    result: MCMCResult,
+    result: Any,
     var_names: list[str] | None = None,
-    figsize: tuple | None = None,
+    figsize: tuple[float, float] | None = None,
     show: bool = False,
     save_path: str | Path | None = None,
     dpi: int = 150,
-    **kwargs,
+    **kwargs: Any,
 ) -> Figure:
     """Plot pair plots showing parameter correlations using ArviZ.
 
@@ -1506,11 +1512,11 @@ def plot_arviz_pair(
     if show:
         plt.show()
 
-    return fig
+    return fig  # type: ignore[return-value]
 
 
 def generate_mcmc_diagnostic_report(
-    result: MCMCResult,
+    result: Any,
     output_dir: str | Path,
     prefix: str = "mcmc",
     include_heatmaps: bool = True,
@@ -1624,7 +1630,7 @@ def generate_mcmc_diagnostic_report(
     return paths
 
 
-def print_mcmc_summary(result: MCMCResult) -> None:
+def print_mcmc_summary(result: Any) -> None:  # MCMCResult type
     """Print formatted MCMC summary to console.
 
     Displays key diagnostics including:
