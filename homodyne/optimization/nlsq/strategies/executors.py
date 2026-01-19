@@ -27,7 +27,7 @@ _module_logger = get_logger(__name__)
 SLOW_OPERATION_THRESHOLD_S = 10.0
 
 # Import NLSQ functions
-from nlsq import curve_fit, curve_fit_large
+from nlsq import curve_fit, curve_fit_large  # noqa: E402
 
 # Try importing AdaptiveHybridStreamingOptimizer (available in NLSQ >= 0.3.2)
 # The old StreamingOptimizer was removed in NLSQ 0.4.0

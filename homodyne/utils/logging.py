@@ -838,7 +838,7 @@ def log_phase(
     level: int = logging.INFO,
     track_memory: bool = False,
     threshold_s: float = 0.0,
-) -> Generator[PhaseContext, None, None]:
+) -> Generator[PhaseContext]:
     """Context manager for phase-level timing with optional memory tracking.
 
     Args:
@@ -1072,7 +1072,7 @@ def log_operation(
     operation_name: str,
     logger: LoggerType | None = None,
     level: int = logging.INFO,
-) -> Generator[LoggerType, None, None]:
+) -> Generator[LoggerType]:
     """Context manager for logging operations.
 
     Args:

@@ -622,7 +622,7 @@ def generate_nlsq_plots(
     residuals_display = c2_exp - c2_fit_display
 
     color_mode = color_scale_cfg.get("mode", "legacy")
-    pin_legacy_range = color_scale_cfg.get(
+    _pin_legacy_range = color_scale_cfg.get(  # noqa: F841
         "pin_legacy_range",
         color_mode != "adaptive",
     )
@@ -632,8 +632,8 @@ def generate_nlsq_plots(
     # Color scaling configuration
     # Don't set explicit vmin/vmax here - let _resolve_color_limits compute
     # per-panel percentile-based limits to show structure in both exp and fit data
-    c2_min = min(np.min(c2_exp), np.min(c2_fit_display))
-    c2_max = max(np.max(c2_exp), np.max(c2_fit_display))
+    _c2_min = min(np.min(c2_exp), np.min(c2_fit_display))  # noqa: F841
+    _c2_max = max(np.max(c2_exp), np.max(c2_fit_display))  # noqa: F841
 
     logger.debug(
         f"C2 data range: exp=[{np.min(c2_exp):.4f}, {np.max(c2_exp):.4f}], "

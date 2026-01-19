@@ -164,7 +164,9 @@ class FourierReparameterizer:
             # based on matrix dimensions and machine precision, rather than letting numpy
             # use its default which may be overly conservative or vary between versions.
             # rcond = max(m, n) * eps is the standard recommendation.
-            self._rcond = max(self.n_phi, self.n_coeffs_per_param) * np.finfo(np.float64).eps
+            self._rcond = (
+                max(self.n_phi, self.n_coeffs_per_param) * np.finfo(np.float64).eps
+            )
 
             logger.info(
                 f"Fourier reparameterization enabled: "

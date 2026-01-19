@@ -288,7 +288,9 @@ class StratifiedResidualFunction:
         to maximize performance during optimization.
         """
         # T034: Add log_phase for JIT compilation timing
-        with log_phase("jax_jit_compilation", logger=self.logger, track_memory=True) as phase:
+        with log_phase(
+            "jax_jit_compilation", logger=self.logger, track_memory=True
+        ) as phase:
             self.compute_chunk_jit = jax.jit(self._compute_chunk_residuals_raw)
         self.logger.debug(
             f"JAX functions JIT-compiled successfully in {phase.duration:.3f}s"

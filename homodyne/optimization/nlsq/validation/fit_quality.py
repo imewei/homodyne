@@ -106,7 +106,7 @@ def _classify_parameter_status(
         Status for each parameter: "active", "at_lower_bound", or "at_upper_bound".
     """
     statuses = []
-    for i, (val, lb, ub) in enumerate(zip(values, lower, upper)):
+    for _i, (val, lb, ub) in enumerate(zip(values, lower, upper, strict=False)):
         if abs(val - lb) < atol:
             statuses.append("at_lower_bound")
         elif abs(val - ub) < atol:
@@ -258,7 +258,9 @@ def validate_fit_quality(
             report.checks_performed["convergence_status"] = passed
 
             if not passed:
-                warning = f"Optimization did not converge successfully (status: {status})."
+                warning = (
+                    f"Optimization did not converge successfully (status: {status})."
+                )
                 report.warnings.append(warning)
                 logger.warning(f"[FitQuality] {warning}")
                 report.passed = False

@@ -5,8 +5,6 @@ Extracted from wrapper.py as part of architecture refactoring.
 
 from __future__ import annotations
 
-from typing import Any
-
 import numpy as np
 
 from homodyne.utils.logging import get_logger
@@ -75,7 +73,9 @@ class ResultValidator:
 
         if self._validation_warnings:
             if self.strict_mode:
-                raise ValueError(f"Result validation failed: {'; '.join(self._validation_warnings)}")
+                raise ValueError(
+                    f"Result validation failed: {'; '.join(self._validation_warnings)}"
+                )
             else:
                 for warning in self._validation_warnings:
                     logger.warning(f"Result validation warning: {warning}")
@@ -157,7 +157,9 @@ def validate_covariance(covariance: np.ndarray, n_params: int) -> bool:
     """
     # Check shape
     if covariance.shape != (n_params, n_params):
-        logger.warning(f"Covariance shape {covariance.shape} != expected ({n_params}, {n_params})")
+        logger.warning(
+            f"Covariance shape {covariance.shape} != expected ({n_params}, {n_params})"
+        )
         return False
 
     # Check for NaN/Inf
@@ -177,7 +179,9 @@ def validate_covariance(covariance: np.ndarray, n_params: int) -> bool:
     diag = np.diag(covariance)
     if np.any(diag < 0):
         neg_indices = np.where(diag < 0)[0]
-        logger.warning(f"Covariance has negative diagonal at indices: {neg_indices.tolist()}")
+        logger.warning(
+            f"Covariance has negative diagonal at indices: {neg_indices.tolist()}"
+        )
         return False
 
     return True

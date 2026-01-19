@@ -279,7 +279,7 @@ class AdaptiveRegularizer:
 
         total_reg = jnp.array(0.0)
 
-        for group_idx, (start, end) in enumerate(self.group_indices):
+        for _group_idx, (start, end) in enumerate(self.group_indices):
             if start >= len(params) or end > len(params):
                 continue
 

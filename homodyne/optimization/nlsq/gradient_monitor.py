@@ -32,7 +32,7 @@ from typing import Literal, cast
 import numpy as np
 
 from homodyne.optimization.nlsq.config import safe_float, safe_int
-from homodyne.utils.logging import get_logger, log_exception
+from homodyne.utils.logging import get_logger
 
 logger = get_logger(__name__)
 

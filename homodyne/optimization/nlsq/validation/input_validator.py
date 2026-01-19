@@ -78,7 +78,9 @@ class InputValidator:
         # Check bounds consistency
         if bounds is not None:
             if not validate_bounds_consistency(bounds, initial_params):
-                self._validation_errors.append("Bounds are inconsistent with initial parameters")
+                self._validation_errors.append(
+                    "Bounds are inconsistent with initial parameters"
+                )
 
         # Check initial params
         if not validate_initial_params(initial_params, bounds):
@@ -86,7 +88,9 @@ class InputValidator:
 
         if self._validation_errors:
             if self.strict_mode:
-                raise ValueError(f"Input validation failed: {'; '.join(self._validation_errors)}")
+                raise ValueError(
+                    f"Input validation failed: {'; '.join(self._validation_errors)}"
+                )
             else:
                 for error in self._validation_errors:
                     logger.warning(f"Input validation warning: {error}")
@@ -202,10 +206,14 @@ def validate_bounds_consistency(
 
     # Check bounds arrays have same length as params
     if len(lower) != len(initial_params):
-        logger.warning(f"Lower bounds length {len(lower)} != params length {len(initial_params)}")
+        logger.warning(
+            f"Lower bounds length {len(lower)} != params length {len(initial_params)}"
+        )
         return False
     if len(upper) != len(initial_params):
-        logger.warning(f"Upper bounds length {len(upper)} != params length {len(initial_params)}")
+        logger.warning(
+            f"Upper bounds length {len(upper)} != params length {len(initial_params)}"
+        )
         return False
 
     # Check lower <= upper

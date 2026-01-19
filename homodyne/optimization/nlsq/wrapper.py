@@ -125,6 +125,7 @@ from homodyne.optimization.nlsq.strategies.residual_jit import (
 from homodyne.optimization.nlsq.anti_degeneracy_controller import (
     AntiDegeneracyController,
 )
+
 # Local OptimizationStrategy enum (selection.py removed in v2.13.0)
 # This is kept for backward compatibility with fallback chain logic
 from enum import Enum as _Enum
@@ -164,18 +165,19 @@ def _get_strategy_info(strategy: OptimizationStrategy) -> dict:
         },
     }
     return info.get(strategy, {"name": "Unknown", "supports_progress": False})
-from homodyne.optimization.nlsq.strategies.sequential import (
+
+
+from homodyne.optimization.nlsq.strategies.sequential import (  # noqa: E402
     JAC_SAMPLE_SIZE,
     optimize_per_angle_sequential,
 )
-from homodyne.optimization.nlsq.strategies.chunking import (
+from homodyne.optimization.nlsq.strategies.chunking import (  # noqa: E402
     calculate_adaptive_chunk_size,
     get_stratified_chunk_iterator,
-    create_angle_stratified_indices,
 )
-from homodyne.core.physics_nlsq import compute_g2_scaled
-from homodyne.core.physics_utils import apply_diagonal_correction
-from homodyne.optimization.nlsq.transforms import (
+from homodyne.core.physics_nlsq import compute_g2_scaled  # noqa: E402
+from homodyne.core.physics_utils import apply_diagonal_correction  # noqa: E402
+from homodyne.optimization.nlsq.transforms import (  # noqa: E402
     adjust_covariance_for_transforms,
     apply_forward_shear_transforms_to_bounds,
     apply_forward_shear_transforms_to_vector,
@@ -188,42 +190,42 @@ from homodyne.optimization.nlsq.transforms import (
     wrap_model_function_with_transforms,
     wrap_stratified_function_with_transforms,
 )
-from homodyne.optimization.numerical_validation import NumericalValidator
-from homodyne.optimization.recovery_strategies import RecoveryStrategyApplicator
+from homodyne.optimization.numerical_validation import NumericalValidator  # noqa: E402
+from homodyne.optimization.recovery_strategies import (  # noqa: E402
+    RecoveryStrategyApplicator,
+)
 
 # Anti-Degeneracy Defense System v2.9.0
-from homodyne.optimization.nlsq.adaptive_regularization import (
+from homodyne.optimization.nlsq.adaptive_regularization import (  # noqa: E402
     AdaptiveRegularizationConfig,
     AdaptiveRegularizer,
 )
-from homodyne.optimization.nlsq.fourier_reparam import (
+from homodyne.optimization.nlsq.fourier_reparam import (  # noqa: E402
     FourierReparamConfig,
     FourierReparameterizer,
 )
-from homodyne.optimization.nlsq.gradient_monitor import (
+from homodyne.optimization.nlsq.gradient_monitor import (  # noqa: E402
     GradientCollapseMonitor,
     GradientMonitorConfig,
 )
-from homodyne.optimization.nlsq.hierarchical import (
+from homodyne.optimization.nlsq.hierarchical import (  # noqa: E402
     HierarchicalConfig,
     HierarchicalOptimizer,
 )
-from homodyne.optimization.nlsq.shear_weighting import (
+from homodyne.optimization.nlsq.shear_weighting import (  # noqa: E402
     ShearSensitivityWeighting,
     ShearWeightingConfig,
 )
 
 # Memory management utilities (extracted to memory.py for reduced complexity)
-from homodyne.optimization.nlsq.memory import (
+from homodyne.optimization.nlsq.memory import (  # noqa: E402
     get_adaptive_memory_threshold,
-    estimate_peak_memory_gb,
-    # Unified strategy selection (v2.13.0)
     NLSQStrategy,
     select_nlsq_strategy,
 )
 
 # Parameter utilities (extracted to parameter_utils.py for reduced complexity)
-from homodyne.optimization.nlsq.parameter_utils import (
+from homodyne.optimization.nlsq.parameter_utils import (  # noqa: E402
     build_parameter_labels as _build_parameter_labels,
     classify_parameter_status as _classify_parameter_status,
     sample_xdata as _sample_xdata,
@@ -918,9 +920,9 @@ class NLSQWrapper(NLSQAdapterBase):
             nlsq_bounds = self._convert_bounds(bounds)
 
             # Default to False (User requirement: Never subsample data)
-            use_fast_mode = self.fast_mode or config.config.get(
-                "optimization", {}
-            ).get("fast_chi2_mode", False)
+            use_fast_mode = self.fast_mode or config.config.get("optimization", {}).get(
+                "fast_chi2_mode", False
+            )
 
             # Extract anti-degeneracy config (will warn that it's not supported for out-of-core)
             ooc_anti_degeneracy_config = None
@@ -1232,8 +1234,12 @@ class NLSQWrapper(NLSQAdapterBase):
                 # Extract anti-degeneracy config (will warn that it's not supported for out-of-core)
                 recheck_anti_degeneracy_config = None
                 if config is not None and hasattr(config, "config"):
-                    recheck_nlsq_config = config.config.get("optimization", {}).get("nlsq", {})
-                    recheck_anti_degeneracy_config = recheck_nlsq_config.get("anti_degeneracy", {})
+                    recheck_nlsq_config = config.config.get("optimization", {}).get(
+                        "nlsq", {}
+                    )
+                    recheck_anti_degeneracy_config = recheck_nlsq_config.get(
+                        "anti_degeneracy", {}
+                    )
 
                 popt, pcov, info = self._fit_with_out_of_core_accumulation(
                     stratified_data=stratified_data,
@@ -1855,7 +1861,9 @@ class NLSQWrapper(NLSQAdapterBase):
                 strategy = OptimizationStrategy(strategy_override)
                 logger.info(f"Using overridden strategy: {strategy.value}")
             except ValueError:
-                logger.warning(f"Invalid strategy override '{strategy_override}', using auto")
+                logger.warning(
+                    f"Invalid strategy override '{strategy_override}', using auto"
+                )
                 strategy_override = None
 
         if not strategy_override:
@@ -4404,7 +4412,9 @@ class NLSQWrapper(NLSQAdapterBase):
                 logger.info(f"  per_angle_mode: {ad_controller.per_angle_mode_actual}")
                 logger.info(f"  use_constant: {ad_controller.use_constant}")
                 logger.info(f"  use_fourier: {ad_controller.use_fourier}")
-                logger.info(f"  use_shear_weighting: {ad_controller.use_shear_weighting}")
+                logger.info(
+                    f"  use_shear_weighting: {ad_controller.use_shear_weighting}"
+                )
                 logger.info("=" * 60)
 
                 # Transform initial parameters for Fourier mode only
@@ -4423,24 +4433,40 @@ class NLSQWrapper(NLSQAdapterBase):
                         f"Transforming parameters: Fourier mode ({len(initial_params)} -> "
                         f"{ad_controller.n_per_angle_params + n_physical})"
                     )
-                    initial_params, _ = ad_controller.transform_params_to_fourier(initial_params)
+                    initial_params, _ = ad_controller.transform_params_to_fourier(
+                        initial_params
+                    )
                     if bounds is not None:
                         # Transform bounds for Fourier mode
                         lower, upper = bounds
                         n_coeffs = ad_controller.fourier.n_coeffs_per_param
                         # Use the mean of bounds for Fourier coefficients
-                        lower_fourier = np.concatenate([
-                            np.full(n_coeffs, np.mean(lower[:n_phi])),  # contrast coeffs
-                            np.full(n_coeffs, np.mean(lower[n_phi:2*n_phi])),  # offset coeffs
-                            lower[2*n_phi:],  # physical lower
-                        ])
-                        upper_fourier = np.concatenate([
-                            np.full(n_coeffs, np.mean(upper[:n_phi])),  # contrast coeffs
-                            np.full(n_coeffs, np.mean(upper[n_phi:2*n_phi])),  # offset coeffs
-                            upper[2*n_phi:],  # physical upper
-                        ])
+                        lower_fourier = np.concatenate(
+                            [
+                                np.full(
+                                    n_coeffs, np.mean(lower[:n_phi])
+                                ),  # contrast coeffs
+                                np.full(
+                                    n_coeffs, np.mean(lower[n_phi : 2 * n_phi])
+                                ),  # offset coeffs
+                                lower[2 * n_phi :],  # physical lower
+                            ]
+                        )
+                        upper_fourier = np.concatenate(
+                            [
+                                np.full(
+                                    n_coeffs, np.mean(upper[:n_phi])
+                                ),  # contrast coeffs
+                                np.full(
+                                    n_coeffs, np.mean(upper[n_phi : 2 * n_phi])
+                                ),  # offset coeffs
+                                upper[2 * n_phi :],  # physical upper
+                            ]
+                        )
                         bounds = (lower_fourier, upper_fourier)
-                        logger.debug(f"Transformed bounds to Fourier mode: {bounds[0].shape}")
+                        logger.debug(
+                            f"Transformed bounds to Fourier mode: {bounds[0].shape}"
+                        )
 
         # Convert stratified flat arrays into chunks
         logger.info(
@@ -4466,7 +4492,9 @@ class NLSQWrapper(NLSQAdapterBase):
             # CONSTANT MODE: Compute fixed per-angle scaling from quantiles
             # and use them in the residual function (not optimized)
             logger.info("=" * 60)
-            logger.info("CONSTANT MODE: Computing fixed per-angle scaling from quantiles")
+            logger.info(
+                "CONSTANT MODE: Computing fixed per-angle scaling from quantiles"
+            )
             logger.info("=" * 60)
 
             # Get contrast/offset bounds from initial bounds
@@ -4478,8 +4506,8 @@ class NLSQWrapper(NLSQAdapterBase):
                     float(np.max(bounds[1][:n_phi])),
                 )
                 offset_bounds = (
-                    float(np.min(bounds[0][n_phi:2*n_phi])),
-                    float(np.max(bounds[1][n_phi:2*n_phi])),
+                    float(np.min(bounds[0][n_phi : 2 * n_phi])),
+                    float(np.max(bounds[1][n_phi : 2 * n_phi])),
                 )
             else:
                 contrast_bounds = (0.0, 1.0)
@@ -4500,7 +4528,7 @@ class NLSQWrapper(NLSQAdapterBase):
                 # Update initial_params to contain ONLY physical parameters
                 # Original format was [contrast(n_phi), offset(n_phi), physical(n_physical)]
                 # New format is [physical(n_physical)]
-                initial_params = initial_params[2 * n_phi:]
+                initial_params = initial_params[2 * n_phi :]
                 logger.info(
                     f"Reduced initial parameters to physical only: {len(initial_params)} params"
                 )
@@ -4508,7 +4536,7 @@ class NLSQWrapper(NLSQAdapterBase):
                 # Update bounds to contain ONLY physical parameter bounds
                 if bounds is not None:
                     lower, upper = bounds
-                    bounds = (lower[2 * n_phi:], upper[2 * n_phi:])
+                    bounds = (lower[2 * n_phi :], upper[2 * n_phi :])
                     logger.info(
                         f"Reduced bounds to physical only: {len(bounds[0])} params"
                     )
@@ -4825,27 +4853,35 @@ class NLSQWrapper(NLSQAdapterBase):
 
                     # Combine fixed scaling with optimized physical parameters
                     # Output format: [contrast(n_phi), offset(n_phi), physical(n_physical)]
-                    popt_expanded = np.concatenate([
-                        fixed_contrast,
-                        fixed_offset,
-                        popt,  # popt contains only physical params
-                    ])
+                    popt_expanded = np.concatenate(
+                        [
+                            fixed_contrast,
+                            fixed_offset,
+                            popt,  # popt contains only physical params
+                        ]
+                    )
 
                     # Covariance for fixed scaling parameters is zero (they're fixed)
                     # Only physical parameters have non-zero covariance
                     pcov_expanded = np.zeros((len(popt_expanded), len(popt_expanded)))
                     # Fixed contrast/offset have zero variance (they were not optimized)
                     # Physical params covariance from optimizer
-                    pcov_expanded[2*n_phi:, 2*n_phi:] = pcov
+                    pcov_expanded[2 * n_phi :, 2 * n_phi :] = pcov
 
                     popt = popt_expanded
                     pcov = pcov_expanded
-                    logger.info(f"Expanded to {len(popt)} parameters with fixed per-angle scaling")
+                    logger.info(
+                        f"Expanded to {len(popt)} parameters with fixed per-angle scaling"
+                    )
                     anti_degeneracy_info["mode"] = "constant_fixed_quantile"
                     anti_degeneracy_info["original_n_params"] = n_physical
                     anti_degeneracy_info["expanded_n_params"] = len(popt)
-                    anti_degeneracy_info["fixed_contrast_mean"] = float(np.mean(fixed_contrast))
-                    anti_degeneracy_info["fixed_offset_mean"] = float(np.mean(fixed_offset))
+                    anti_degeneracy_info["fixed_contrast_mean"] = float(
+                        np.mean(fixed_contrast)
+                    )
+                    anti_degeneracy_info["fixed_offset_mean"] = float(
+                        np.mean(fixed_offset)
+                    )
                 else:
                     # Fallback to old constant mode (mean-based)
                     logger.info(
@@ -4860,14 +4896,24 @@ class NLSQWrapper(NLSQAdapterBase):
                     # Contrast variance: duplicate for all angles
                     pcov_expanded[:n_phi, :n_phi] = np.eye(n_phi) * pcov[0, 0]
                     # Offset variance: duplicate for all angles
-                    pcov_expanded[n_phi:2*n_phi, n_phi:2*n_phi] = np.eye(n_phi) * pcov[1, 1]
+                    pcov_expanded[n_phi : 2 * n_phi, n_phi : 2 * n_phi] = (
+                        np.eye(n_phi) * pcov[1, 1]
+                    )
                     # Physical params covariance
-                    pcov_expanded[2*n_phi:, 2*n_phi:] = pcov[2:, 2:]
+                    pcov_expanded[2 * n_phi :, 2 * n_phi :] = pcov[2:, 2:]
                     # Cross-terms (physical with constant) - approximate
-                    pcov_expanded[2*n_phi:, :n_phi] = np.tile(pcov[2:, 0:1], (1, n_phi))
-                    pcov_expanded[:n_phi, 2*n_phi:] = np.tile(pcov[0:1, 2:], (n_phi, 1))
-                    pcov_expanded[2*n_phi:, n_phi:2*n_phi] = np.tile(pcov[2:, 1:2], (1, n_phi))
-                    pcov_expanded[n_phi:2*n_phi, 2*n_phi:] = np.tile(pcov[1:2, 2:], (n_phi, 1))
+                    pcov_expanded[2 * n_phi :, :n_phi] = np.tile(
+                        pcov[2:, 0:1], (1, n_phi)
+                    )
+                    pcov_expanded[:n_phi, 2 * n_phi :] = np.tile(
+                        pcov[0:1, 2:], (n_phi, 1)
+                    )
+                    pcov_expanded[2 * n_phi :, n_phi : 2 * n_phi] = np.tile(
+                        pcov[2:, 1:2], (1, n_phi)
+                    )
+                    pcov_expanded[n_phi : 2 * n_phi, 2 * n_phi :] = np.tile(
+                        pcov[1:2, 2:], (n_phi, 1)
+                    )
 
                     popt = popt_expanded
                     pcov = pcov_expanded
@@ -4887,23 +4933,39 @@ class NLSQWrapper(NLSQAdapterBase):
                 # For Fourier mode: use chain rule with Fourier basis
                 # pcov_expanded = B @ pcov_fourier @ B.T where B is the Fourier basis
                 n_coeffs = ad_controller.fourier.n_coeffs_per_param
-                B_contrast = ad_controller.fourier.get_basis_matrix()  # (n_phi, n_coeffs)
+                B_contrast = (
+                    ad_controller.fourier.get_basis_matrix()
+                )  # (n_phi, n_coeffs)
                 B_offset = ad_controller.fourier.get_basis_matrix()
 
                 pcov_expanded = np.zeros((len(popt_expanded), len(popt_expanded)))
                 # Contrast block
                 pcov_contrast = pcov[:n_coeffs, :n_coeffs]
-                pcov_expanded[:n_phi, :n_phi] = B_contrast @ pcov_contrast @ B_contrast.T
+                pcov_expanded[:n_phi, :n_phi] = (
+                    B_contrast @ pcov_contrast @ B_contrast.T
+                )
                 # Offset block
-                pcov_offset = pcov[n_coeffs:2*n_coeffs, n_coeffs:2*n_coeffs]
-                pcov_expanded[n_phi:2*n_phi, n_phi:2*n_phi] = B_offset @ pcov_offset @ B_offset.T
+                pcov_offset = pcov[n_coeffs : 2 * n_coeffs, n_coeffs : 2 * n_coeffs]
+                pcov_expanded[n_phi : 2 * n_phi, n_phi : 2 * n_phi] = (
+                    B_offset @ pcov_offset @ B_offset.T
+                )
                 # Physical params covariance (unchanged)
-                pcov_expanded[2*n_phi:, 2*n_phi:] = pcov[2*n_coeffs:, 2*n_coeffs:]
+                pcov_expanded[2 * n_phi :, 2 * n_phi :] = pcov[
+                    2 * n_coeffs :, 2 * n_coeffs :
+                ]
                 # Cross-terms: approximate propagation
-                pcov_expanded[2*n_phi:, :n_phi] = pcov[2*n_coeffs:, :n_coeffs] @ B_contrast.T
-                pcov_expanded[:n_phi, 2*n_phi:] = B_contrast @ pcov[:n_coeffs, 2*n_coeffs:]
-                pcov_expanded[2*n_phi:, n_phi:2*n_phi] = pcov[2*n_coeffs:, n_coeffs:2*n_coeffs] @ B_offset.T
-                pcov_expanded[n_phi:2*n_phi, 2*n_phi:] = B_offset @ pcov[n_coeffs:2*n_coeffs, 2*n_coeffs:]
+                pcov_expanded[2 * n_phi :, :n_phi] = (
+                    pcov[2 * n_coeffs :, :n_coeffs] @ B_contrast.T
+                )
+                pcov_expanded[:n_phi, 2 * n_phi :] = (
+                    B_contrast @ pcov[:n_coeffs, 2 * n_coeffs :]
+                )
+                pcov_expanded[2 * n_phi :, n_phi : 2 * n_phi] = (
+                    pcov[2 * n_coeffs :, n_coeffs : 2 * n_coeffs] @ B_offset.T
+                )
+                pcov_expanded[n_phi : 2 * n_phi, 2 * n_phi :] = (
+                    B_offset @ pcov[n_coeffs : 2 * n_coeffs, 2 * n_coeffs :]
+                )
 
                 popt = popt_expanded
                 pcov = pcov_expanded
@@ -4914,7 +4976,9 @@ class NLSQWrapper(NLSQAdapterBase):
                 anti_degeneracy_info["expanded_n_params"] = len(popt)
 
             # Add diagnostics to info
-            anti_degeneracy_info["controller_diagnostics"] = ad_controller.get_diagnostics()
+            anti_degeneracy_info["controller_diagnostics"] = (
+                ad_controller.get_diagnostics()
+            )
 
         # Prepare info dict
         info = {
@@ -5051,17 +5115,19 @@ class NLSQWrapper(NLSQAdapterBase):
         import jax
         import jax.numpy as jnp
 
-        start_time = time.perf_counter()
-        logger.info("Initializing Out-of-Core Global Stratified Optimization (Full Physics)...")
-        
+        _start_time = time.perf_counter()  # noqa: F841
+        logger.info(
+            "Initializing Out-of-Core Global Stratified Optimization (Full Physics)..."
+        )
+
         # 1. Setup Chunking
         # Use StratifiedIndices if available (Zero-Copy)
-        use_index_based = False
-        # We operate on the ORIGINAL flattened data to avoid pre-materializing 
+        _use_index_based = False  # noqa: F841
+        # We operate on the ORIGINAL flattened data to avoid pre-materializing
         # a giant stratified copy (which causes OOM).
         # We assume `data` object has .phi, .t1, .t2, .g2
         # We need to flatten them carefully (using ravel/reshape to avoid copies if possible)
-        
+
         # Helper to flatten dimensions
         def _get_flat_arrays(d):
             # Same logic as _prepare_data but trying to be lazy/view-based
@@ -5069,31 +5135,35 @@ class NLSQWrapper(NLSQAdapterBase):
             t1_arr = np.asarray(d.t1)
             t2_arr = np.asarray(d.t2)
             g2_arr = np.asarray(d.g2)
-            
+
             # Extract 1D from meshgrids if needed (borrowed from _prepare_data)
-            if t1_arr.ndim == 2 and t1_arr.size > 0: t1_arr = t1_arr[:, 0]
-            if t2_arr.ndim == 2 and t2_arr.size > 0: t2_arr = t2_arr[0, :]
-                
-            phi_grid, t1_grid, t2_grid = np.meshgrid(phi_arr, t1_arr, t2_arr, indexing="ij")
-            
+            if t1_arr.ndim == 2 and t1_arr.size > 0:
+                t1_arr = t1_arr[:, 0]
+            if t2_arr.ndim == 2 and t2_arr.size > 0:
+                t2_arr = t2_arr[0, :]
+
+            phi_grid, t1_grid, t2_grid = np.meshgrid(
+                phi_arr, t1_arr, t2_arr, indexing="ij"
+            )
+
             # These flattens create copies usually, but for 25M points (200MB) it's acceptable ONCE
             # The OOM comes from creating SECOND and THIRD copies during stratification.
             return phi_grid.ravel(), t1_grid.ravel(), t2_grid.ravel(), g2_arr.ravel()
 
         phi_flat, t1_flat, t2_flat, g2_flat = _get_flat_arrays(data)
-        
+
         # Calculate optimal chunk size
         n_points = len(phi_flat)
         n_params = len(initial_params)
         n_angles = len(np.unique(phi_flat))
-        
+
         chunk_size = calculate_adaptive_chunk_size(
             total_points=n_points,
             n_params=n_params,
             n_angles=n_angles,
-            safety_factor=5.0
+            safety_factor=5.0,
         )
-        
+
         # Get iterator that yields INDICES for stratified chunks
         # This allows us to pull stratified data from the flat arrays on demand
         iterator = get_stratified_chunk_iterator(phi_flat, chunk_size)
@@ -5101,7 +5171,7 @@ class NLSQWrapper(NLSQAdapterBase):
             f"Out-of-Core Strategy: {len(iterator)} chunks of size ~{chunk_size}\n"
             f"  Pipeline: Chunk(Indices) -> Load -> JIT(Acc) -> Global Step"
         )
-        
+
         # Pre-compute unique phi for JAX mapping
         phi_unique = jnp.sort(jnp.unique(phi_flat))
 
@@ -5109,7 +5179,11 @@ class NLSQWrapper(NLSQAdapterBase):
         params_curr = jnp.array(initial_params)
         n_iter = 0
 
-        cfg_dict = config.config if hasattr(config, "config") else (config if isinstance(config, dict) else {})
+        cfg_dict = (
+            config.config
+            if hasattr(config, "config")
+            else (config if isinstance(config, dict) else {})
+        )
 
         # Extract physics constants from data (v2.14.1+: Full homodyne physics)
         q_val = float(data.q)
@@ -5126,10 +5200,10 @@ class NLSQWrapper(NLSQAdapterBase):
             f"q={q_val:.4e}, L={L_val:.4e}, dt={dt_val:.4e}"
         )
         max_iter = cfg_dict.get("optimization", {}).get("max_iterations", 50)
-        
+
         tol = 1e-4
-        lm_lambda = 0.01 # Initial damping
-        
+        lm_lambda = 0.01  # Initial damping
+
         # ====================================================================
         # JIT-compiled Chunk Kernel with FULL HOMODYNE PHYSICS (v2.14.1+)
         # ====================================================================
@@ -5171,7 +5245,9 @@ class NLSQWrapper(NLSQAdapterBase):
                         ),
                         in_axes=(0, 0, 0),
                     )
-                    g2_theory_grid = compute_g2_vmap(phi_unique, contrast_arr, offset_arr)
+                    g2_theory_grid = compute_g2_vmap(
+                        phi_unique, contrast_arr, offset_arr
+                    )
                 else:
                     # vmap over angles with single contrast/offset
                     compute_g2_vmap = jax.vmap(
@@ -5205,11 +5281,7 @@ class NLSQWrapper(NLSQAdapterBase):
                 t2_indices = jnp.searchsorted(t_unique_global, t2_c)
 
                 # Compute flat indices (C-order: phi varies slowest)
-                flat_indices = (
-                    phi_indices * (n_t * n_t) +
-                    t1_indices * n_t +
-                    t2_indices
-                )
+                flat_indices = phi_indices * (n_t * n_t) + t1_indices * n_t + t2_indices
 
                 # Extract theory values for this chunk
                 g2_theory_chunk = g2_theory_flat[flat_indices]
@@ -5223,8 +5295,8 @@ class NLSQWrapper(NLSQAdapterBase):
             J = jax.jacfwd(r_fn)(p)
             r = r_fn(p)
 
-            return J.T @ J, J.T @ r, jnp.sum(r ** 2)
-        
+            return J.T @ J, J.T @ r, jnp.sum(r**2)
+
         # JIT-compiled Chi2-only Kernel with FULL HOMODYNE PHYSICS (v2.14.1+)
         @jax.jit
         def compute_chunk_chi2(p, phi_c, t1_c, t2_c, g2_c, sigma):
@@ -5286,43 +5358,42 @@ class NLSQWrapper(NLSQAdapterBase):
             phi_indices = jnp.searchsorted(phi_unique, phi_c)
             t1_indices = jnp.searchsorted(t_unique_global, t1_c)
             t2_indices = jnp.searchsorted(t_unique_global, t2_c)
-            flat_indices = (
-                phi_indices * (n_t * n_t) +
-                t1_indices * n_t +
-                t2_indices
-            )
+            flat_indices = phi_indices * (n_t * n_t) + t1_indices * n_t + t2_indices
             g2_theory_chunk = g2_theory_flat[flat_indices]
 
             # Compute chi-squared with diagonal mask
             w = 1.0 / sigma
             res = (g2_c - g2_theory_chunk) * w
             res = jnp.where(t1_c != t2_c, res, 0.0)
-            return jnp.sum(res ** 2)
+            return jnp.sum(res**2)
 
         def evaluate_total_chi2(params_eval):
             total_c2 = 0.0
-            
+
             # Fast Mode: Subsample chunks
             # Use fixed stride of 10 (10% sample)
             stride = 10 if fast_chi2_mode else 1
-            scale_factor = float(stride)
-            
+            _scale_factor = float(stride)  # noqa: F841
+
             # Create subsampled iterator
             # StratifiedIndexIterator is iterable but not slicable usually?
             # We iterate manually to be safe
-            
+
             eval_count = 0
             for i, ind_c in enumerate(iterator):
-                if i % stride != 0: continue
-                
+                if i % stride != 0:
+                    continue
+
                 p_c = phi_flat[ind_c]
                 t1_c = t1_flat[ind_c]
                 t2_c = t2_flat[ind_c]
                 g2_c = g2_flat[ind_c]
-                c2_chunk = compute_chunk_chi2(params_eval, p_c, t1_c, t2_c, g2_c, sigma_val)
+                c2_chunk = compute_chunk_chi2(
+                    params_eval, p_c, t1_c, t2_c, g2_c, sigma_val
+                )
                 total_c2 += c2_chunk
                 eval_count += 1
-            
+
             # Correction if eval_count doesn't match stride exactly due to remainder
             # Or simpler: total_c2 * (total_chunks / eval_count)
             total_chunks = len(iterator)
@@ -5337,13 +5408,13 @@ class NLSQWrapper(NLSQAdapterBase):
         # Optimization Loop
         logger.info(f"Starting Out-of-Core Loop (Max iter: {max_iter})...")
         import time
-        
+
         for i in range(max_iter):
-            iter_start = time.perf_counter()
+            _iter_start = time.perf_counter()  # noqa: F841
             total_JtJ = jnp.zeros((n_params, n_params))
             total_Jtr = jnp.zeros(n_params)
             total_chi2 = 0.0
-            
+
             # Accumulate over chunks
             count = 0
             for indices_chunk in iterator:
@@ -5353,7 +5424,7 @@ class NLSQWrapper(NLSQAdapterBase):
                 t1_c = t1_flat[indices_chunk]
                 t2_c = t2_flat[indices_chunk]
                 g2_c = g2_flat[indices_chunk]
-                
+
                 # Compute and Accumulate (using FULL homodyne physics v2.14.1+)
                 JtJ, Jtr, chi2 = compute_chunk_accumulators(
                     params_curr, phi_c, t1_c, t2_c, g2_c, sigma_val
@@ -5363,34 +5434,41 @@ class NLSQWrapper(NLSQAdapterBase):
                 total_Jtr += Jtr
                 total_chi2 += chi2
                 count += len(indices_chunk)
-            
+
             # Robust Levenberg-Marquardt Step Loop
             step_accepted = False
-            
+
             # Check for invalid Jacobian/Residuals
             if jnp.any(jnp.isnan(total_Jtr)) or jnp.any(jnp.isinf(total_JtJ)):
-                 logger.warning("Gradient/Hessian contains NaNs/Infs. Checking params.")
-                 # If we are here, current params are bad? Or gradients near boundary are bad.
-                 # If params valid but grad inf: likely at boundary singularity (tau=0).
-                 if n_iter == 0: raise RuntimeError("Initial parameters produced invalid gradients.")
-                 # We should have rejected the previous step!
-                 # But we are here.
-                 break 
+                logger.warning("Gradient/Hessian contains NaNs/Infs. Checking params.")
+                # If we are here, current params are bad? Or gradients near boundary are bad.
+                # If params valid but grad inf: likely at boundary singularity (tau=0).
+                if n_iter == 0:
+                    raise RuntimeError("Initial parameters produced invalid gradients.")
+                # We should have rejected the previous step!
+                # But we are here.
+                break
 
             diag_idx = jnp.diag_indices_from(total_JtJ)
-            
-            for lm_iter in range(10): # Max dampings per iter
-                solver_matrix = total_JtJ.at[diag_idx].add(lm_lambda * jnp.diag(total_JtJ))
-                
+
+            for _lm_iter in range(10):  # Max dampings per iter
+                solver_matrix = total_JtJ.at[diag_idx].add(
+                    lm_lambda * jnp.diag(total_JtJ)
+                )
+
                 try:
                     # use lstsq for robustness against singular matrices
-                    step, _, _, _ = jnp.linalg.lstsq(solver_matrix, -total_Jtr, rcond=1e-5)
+                    step, _, _, _ = jnp.linalg.lstsq(
+                        solver_matrix, -total_Jtr, rcond=1e-5
+                    )
                 except Exception:
-                    step = jnp.nan # Signal fail
-                
+                    step = jnp.nan  # Signal fail
+
                 # Check step validity
                 if jnp.any(jnp.isnan(step)):
-                    logger.warning(f"Bad step (NaN). Increasing damping ({lm_lambda:.1e} -> {lm_lambda*10:.1e})")
+                    logger.warning(
+                        f"Bad step (NaN). Increasing damping ({lm_lambda:.1e} -> {lm_lambda * 10:.1e})"
+                    )
                     lm_lambda *= 10
                     continue
 
@@ -5398,9 +5476,11 @@ class NLSQWrapper(NLSQAdapterBase):
                 params_new = params_curr + step
                 # Clip
                 if bounds is not None:
-                     l, u = bounds
-                     params_new = jnp.clip(params_new, jnp.asarray(l), jnp.asarray(u))
-                
+                    lower, upper = bounds
+                    params_new = jnp.clip(
+                        params_new, jnp.asarray(lower), jnp.asarray(upper)
+                    )
+
                 # Evaluate New Cost
                 # This is expensive but necessary
                 try:
@@ -5414,33 +5494,42 @@ class NLSQWrapper(NLSQAdapterBase):
                     # Accept
                     ratio = (total_chi2 - chi2_new) / total_chi2
                     logger.info(
-                        f"Iter {i+1}: chi2={float(chi2_new):.4e} (dec {ratio:.1%}), "
+                        f"Iter {i + 1}: chi2={float(chi2_new):.4e} (dec {ratio:.1%}), "
                         f"lambda={lm_lambda:.1e}"
                     )
                     params_curr = params_new
-                    lm_lambda *= 0.1 # Decrease damping (trust more)
-                    if lm_lambda < 1e-7: lm_lambda = 1e-7
+                    lm_lambda *= 0.1  # Decrease damping (trust more)
+                    if lm_lambda < 1e-7:
+                        lm_lambda = 1e-7
                     step_accepted = True
-                    
+
                     # Update iteration metrics for outer loop
-                    rel_change = jnp.linalg.norm(step) / (jnp.linalg.norm(params_curr) + 1e-10)
+                    rel_change = jnp.linalg.norm(step) / (
+                        jnp.linalg.norm(params_curr) + 1e-10
+                    )
                     if rel_change < tol:
-                         return np.array(params_curr), np.array(total_JtJ), {
-                            "chi_squared": float(chi2_new),
-                            "iterations": i + 1,
-                            "convergence_status": "converged",
-                            "message": "Out-of-Core converged"
-                         }
-                    break # Break inner LM loop, proceed to next accumulation
+                        return (
+                            np.array(params_curr),
+                            np.array(total_JtJ),
+                            {
+                                "chi_squared": float(chi2_new),
+                                "iterations": i + 1,
+                                "convergence_status": "converged",
+                                "message": "Out-of-Core converged",
+                            },
+                        )
+                    break  # Break inner LM loop, proceed to next accumulation
                 else:
                     # Reject
-                    logger.debug(f"Reject step (chi2 {float(chi2_new):.4e} >= {float(total_chi2):.4e}). Damping up.")
+                    logger.debug(
+                        f"Reject step (chi2 {float(chi2_new):.4e} >= {float(total_chi2):.4e}). Damping up."
+                    )
                     lm_lambda *= 10
-            
+
             if not step_accepted:
                 logger.warning("Could not find better step. Stopping.")
                 break
-        
+
         info = {
             "chi_squared": float(total_chi2),
             "iterations": i + 1,
@@ -5448,6 +5537,7 @@ class NLSQWrapper(NLSQAdapterBase):
             "message": "Out-of-Core accumulation completed",
         }
         return np.array(params_curr), np.array(total_JtJ), info
+
     def _fit_with_stratified_hybrid_streaming(
         self,
         stratified_data: Any,
@@ -5619,6 +5709,7 @@ class NLSQWrapper(NLSQAdapterBase):
         # v2.18.0: Distinct semantics for auto vs explicit constant mode
         per_angle_mode = ad_config.get("per_angle_mode", "auto")
         fourier_order = ad_config.get("fourier_order", 2)
+        fourier_auto_threshold = ad_config.get("fourier_auto_threshold", 6)
         constant_scaling_threshold = ad_config.get("constant_scaling_threshold", 3)
 
         # Determine actual per-angle mode
@@ -5633,13 +5724,17 @@ class NLSQWrapper(NLSQAdapterBase):
                 # These 2 averaged values ARE OPTIMIZED along with 7 physical params
                 per_angle_mode_actual = "auto_averaged"
                 logger.info("=" * 60)
-                logger.info("ANTI-DEGENERACY DEFENSE: Auto-selected 'auto_averaged' mode")
+                logger.info(
+                    "ANTI-DEGENERACY DEFENSE: Auto-selected 'auto_averaged' mode"
+                )
                 logger.info(
                     f"  Reason: n_phi ({n_phi}) >= "
                     f"constant_scaling_threshold ({constant_scaling_threshold})"
                 )
                 logger.info("  Behavior: Quantile estimates → AVERAGED → OPTIMIZED")
-                logger.info("  Parameters: 7 physical + 2 averaged (contrast, offset) = 9 total")
+                logger.info(
+                    "  Parameters: 7 physical + 2 averaged (contrast, offset) = 9 total"
+                )
                 logger.info("=" * 60)
             else:
                 # Use individual per-angle parameters for few angles (N < 3)
@@ -5650,7 +5745,9 @@ class NLSQWrapper(NLSQAdapterBase):
                     f"  Reason: n_phi ({n_phi}) < "
                     f"constant_scaling_threshold ({constant_scaling_threshold})"
                 )
-                logger.info(f"  Parameters: 7 physical + {2 * n_phi} per-angle = {7 + 2 * n_phi} total")
+                logger.info(
+                    f"  Parameters: 7 physical + {2 * n_phi} per-angle = {7 + 2 * n_phi} total"
+                )
                 logger.info("=" * 60)
         elif per_angle_mode == "constant":
             # EXPLICIT constant mode: FIXED per-angle scaling (7 params)
@@ -5658,9 +5755,13 @@ class NLSQWrapper(NLSQAdapterBase):
             # Only 7 physical params are optimized; scaling is FIXED
             per_angle_mode_actual = "fixed_constant"
             logger.info("=" * 60)
-            logger.info("ANTI-DEGENERACY DEFENSE: Explicit 'constant' mode → fixed_constant")
+            logger.info(
+                "ANTI-DEGENERACY DEFENSE: Explicit 'constant' mode → fixed_constant"
+            )
             logger.info(f"  n_phi: {n_phi}")
-            logger.info("  Behavior: Quantile estimates → per-angle values FIXED (NOT optimized)")
+            logger.info(
+                "  Behavior: Quantile estimates → per-angle values FIXED (NOT optimized)"
+            )
             logger.info("  Parameters: 7 physical only (scaling FIXED from quantiles)")
             logger.info("=" * 60)
         else:
@@ -5728,11 +5829,17 @@ class NLSQWrapper(NLSQAdapterBase):
         ):
             # fixed_constant mode: per-angle scaling is FIXED, not optimized
             logger.info("=" * 60)
-            logger.info("ANTI-DEGENERACY DEFENSE: Layer 1 - Fixed Constant Mode (v2.18.0)")
+            logger.info(
+                "ANTI-DEGENERACY DEFENSE: Layer 1 - Fixed Constant Mode (v2.18.0)"
+            )
             logger.info(f"  Mode: {per_angle_mode_actual}")
             logger.info(f"  n_phi: {n_phi}")
-            logger.info("  Method: Quantile-based per-angle scaling (FIXED, not optimized)")
-            logger.info("  Per-angle contrast/offset will be estimated from c2 data quantiles")
+            logger.info(
+                "  Method: Quantile-based per-angle scaling (FIXED, not optimized)"
+            )
+            logger.info(
+                "  Per-angle contrast/offset will be estimated from c2 data quantiles"
+            )
             logger.info("  These values are FIXED (not optimized) during fitting")
             logger.info(f"  Parameter reduction: {2 * n_phi} -> 0 (physical only)")
             logger.info("=" * 60)
@@ -5743,12 +5850,16 @@ class NLSQWrapper(NLSQAdapterBase):
         ):
             # auto_averaged mode: averaged scaling is OPTIMIZED (9 params)
             logger.info("=" * 60)
-            logger.info("ANTI-DEGENERACY DEFENSE: Layer 1 - Auto Averaged Mode (v2.18.0)")
+            logger.info(
+                "ANTI-DEGENERACY DEFENSE: Layer 1 - Auto Averaged Mode (v2.18.0)"
+            )
             logger.info(f"  Mode: {per_angle_mode_actual}")
             logger.info(f"  n_phi: {n_phi}")
             logger.info("  Method: Quantile estimates → averaged → OPTIMIZED")
             logger.info("  Initial values: averaged from per-angle quantile estimates")
-            logger.info(f"  Parameter reduction: {2 * n_phi} -> 2 (averaged contrast + offset)")
+            logger.info(
+                f"  Parameter reduction: {2 * n_phi} -> 2 (averaged contrast + offset)"
+            )
             logger.info("=" * 60)
 
         # =====================================================================
@@ -5771,12 +5882,18 @@ class NLSQWrapper(NLSQAdapterBase):
             try:
                 # Extract bounds for clipping
                 contrast_bounds = (0.0, 1.0)  # Default
-                offset_bounds = (0.5, 1.5)    # Default
+                offset_bounds = (0.5, 1.5)  # Default
                 if bounds is not None:
                     lower_bounds, upper_bounds = bounds
                     if len(lower_bounds) >= n_phi and len(upper_bounds) >= n_phi:
-                        contrast_bounds = (float(lower_bounds[0]), float(upper_bounds[0]))
-                        offset_bounds = (float(lower_bounds[n_phi]), float(upper_bounds[n_phi]))
+                        contrast_bounds = (
+                            float(lower_bounds[0]),
+                            float(upper_bounds[0]),
+                        )
+                        offset_bounds = (
+                            float(lower_bounds[n_phi]),
+                            float(upper_bounds[n_phi]),
+                        )
 
                 # Compute quantile-based per-angle scaling
                 fixed_contrast_per_angle, fixed_offset_per_angle = (
@@ -5788,14 +5905,19 @@ class NLSQWrapper(NLSQAdapterBase):
                     )
                 )
 
-                if fixed_contrast_per_angle is not None and fixed_offset_per_angle is not None:
+                if (
+                    fixed_contrast_per_angle is not None
+                    and fixed_offset_per_angle is not None
+                ):
                     if per_angle_mode_actual == "fixed_constant":
                         # fixed_constant: Use per-angle values DIRECTLY as FIXED
                         use_fixed_scaling = True
                         fixed_contrast_jax = jnp.asarray(fixed_contrast_per_angle)
                         fixed_offset_jax = jnp.asarray(fixed_offset_per_angle)
 
-                        logger.info("Fixed per-angle scaling computed (FIXED, not optimized):")
+                        logger.info(
+                            "Fixed per-angle scaling computed (FIXED, not optimized):"
+                        )
                         logger.info(
                             f"  Contrast: mean={np.mean(fixed_contrast_per_angle):.4f}, "
                             f"range=[{np.min(fixed_contrast_per_angle):.4f}, "
@@ -5808,13 +5930,21 @@ class NLSQWrapper(NLSQAdapterBase):
                         )
                     elif per_angle_mode_actual == "auto_averaged":
                         # auto_averaged: AVERAGE per-angle values → use as INITIAL for optimization
-                        averaged_contrast_init = float(np.mean(fixed_contrast_per_angle))
+                        averaged_contrast_init = float(
+                            np.mean(fixed_contrast_per_angle)
+                        )
                         averaged_offset_init = float(np.mean(fixed_offset_per_angle))
 
-                        logger.info("Averaged scaling computed (initial values for optimization):")
-                        logger.info(f"  Averaged contrast: {averaged_contrast_init:.4f}")
+                        logger.info(
+                            "Averaged scaling computed (initial values for optimization):"
+                        )
+                        logger.info(
+                            f"  Averaged contrast: {averaged_contrast_init:.4f}"
+                        )
                         logger.info(f"  Averaged offset: {averaged_offset_init:.4f}")
-                        logger.info("  These will be OPTIMIZED along with 7 physical params (9 total)")
+                        logger.info(
+                            "  These will be OPTIMIZED along with 7 physical params (9 total)"
+                        )
 
                         # Do NOT set use_fixed_scaling = True for auto_averaged
                         # The averaged values are just initial guesses for optimization
@@ -6471,7 +6601,7 @@ class NLSQWrapper(NLSQAdapterBase):
         logger.info(f"  Dataset size: {len(y_data):,} points")
         logger.info(
             f"  Diagonal points removed: {n_diagonal_removed:,} "
-            f"({100*n_diagonal_removed/n_points_before:.1f}%)"
+            f"({100 * n_diagonal_removed / n_points_before:.1f}%)"
         )
 
         # NOTE (Dec 2025): Data is already pre-shuffled at stratification stage
@@ -6506,20 +6636,24 @@ class NLSQWrapper(NLSQAdapterBase):
             # Parameters are physical-only, contrast/offset are NOT in the param vector
             logger.info("=" * 60)
             logger.info("ANTI-DEGENERACY EXECUTION: Fixed Per-Angle Scaling (v2.17.0)")
-            physical_params = initial_params[2 * n_phi:]
+            physical_params = initial_params[2 * n_phi :]
 
             # New parameter layout: [physical_params] only
             fit_initial_params = physical_params
 
             logger.info(f"  Original params: {len(initial_params)}")
-            logger.info(f"  Fixed scaling params: {len(fit_initial_params)} (physical only)")
+            logger.info(
+                f"  Fixed scaling params: {len(fit_initial_params)} (physical only)"
+            )
             logger.info(f"  Per-angle reduction: {2 * n_phi} -> 0 (using fixed arrays)")
 
             # Transform bounds to physical only
             if bounds is not None:
                 lower_bounds, upper_bounds = bounds
-                fit_bounds = (lower_bounds[2 * n_phi:], upper_bounds[2 * n_phi:])
-                logger.info(f"  Bounds reduced to physical only: {len(fit_bounds[0])} params")
+                fit_bounds = (lower_bounds[2 * n_phi :], upper_bounds[2 * n_phi :])
+                logger.info(
+                    f"  Bounds reduced to physical only: {len(fit_bounds[0])} params"
+                )
             logger.info("=" * 60)
         elif use_averaged_scaling:
             logger.info("=" * 60)
@@ -6536,11 +6670,15 @@ class NLSQWrapper(NLSQAdapterBase):
             if averaged_contrast_init is not None and averaged_offset_init is not None:
                 contrast_mean = averaged_contrast_init
                 offset_mean = averaged_offset_init
-                logger.info("  Using quantile-based averaged initial values (OPTIMIZED)")
+                logger.info(
+                    "  Using quantile-based averaged initial values (OPTIMIZED)"
+                )
             else:
                 contrast_mean = np.mean(contrast_per_angle)
                 offset_mean = np.mean(offset_per_angle)
-                logger.info("  Using parameter-based averaged initial values (OPTIMIZED)")
+                logger.info(
+                    "  Using parameter-based averaged initial values (OPTIMIZED)"
+                )
 
             # New parameter layout: [contrast_const, offset_const, physical_params]
             fit_initial_params = np.concatenate(
@@ -6983,7 +7121,9 @@ class NLSQWrapper(NLSQAdapterBase):
         # Expand physical-only params back to per-angle format using fixed scaling arrays
         elif use_fixed_scaling:
             logger.info("=" * 60)
-            logger.info("ANTI-DEGENERACY EXECUTION: Inverse Fixed Scaling Transform (v2.17.0)")
+            logger.info(
+                "ANTI-DEGENERACY EXECUTION: Inverse Fixed Scaling Transform (v2.17.0)"
+            )
             # Layout: [physical_params] - popt contains ONLY physical parameters
             physical_params_opt = popt
 
@@ -7029,7 +7169,7 @@ class NLSQWrapper(NLSQAdapterBase):
                 try:
                     pcov_full = np.zeros((n_total_restored, n_total_restored))
                     # Physical params covariance block
-                    pcov_full[2 * n_phi:, 2 * n_phi:] = pcov_physical
+                    pcov_full[2 * n_phi :, 2 * n_phi :] = pcov_physical
                     result["pcov_transformed"] = pcov_full
                     logger.info(
                         "  Covariance expanded: per-angle=0 (fixed), physical=preserved"

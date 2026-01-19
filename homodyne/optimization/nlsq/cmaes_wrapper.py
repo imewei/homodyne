@@ -855,7 +855,9 @@ class CMAESWrapper:
             norm_scale_jax = jnp.array(norm_scale)
             norm_offset_jax = jnp.array(norm_offset)
 
-            def normalized_model_func(xdata: np.ndarray, *params_norm: float) -> np.ndarray:
+            def normalized_model_func(
+                xdata: np.ndarray, *params_norm: float
+            ) -> np.ndarray:
                 # Use jnp.stack to preserve JAX tracers during JIT tracing
                 params_norm_jax = jnp.stack(params_norm)
                 # Denormalize: x = x_norm / scale + offset = x_norm * range + lower
@@ -904,7 +906,9 @@ class CMAESWrapper:
             cmaes_covariance = _adjust_covariance_for_normalization(
                 cmaes_covariance, norm_state["range"]
             )
-            logger.debug("[CMA-ES] Parameters denormalized from [0,1] to physical space")
+            logger.debug(
+                "[CMA-ES] Parameters denormalized from [0,1] to physical space"
+            )
 
         # Build CMA-ES diagnostics
         # NLSQ 0.6.4+ stores diagnostics under 'cmaes_diagnostics' dict
@@ -915,10 +919,11 @@ class CMAESWrapper:
 
         # Calculate evaluations from restart history (each generation evaluates popsize candidates)
         restart_history = cmaes_diag.get("restart_history", [])
-        evaluations = sum(
-            r.get("generations", 0) * r.get("popsize", 0)
-            for r in restart_history
-        ) if restart_history else generations * cmaes_config.popsize
+        evaluations = (
+            sum(r.get("generations", 0) * r.get("popsize", 0) for r in restart_history)
+            if restart_history
+            else generations * cmaes_config.popsize
+        )
 
         diagnostics = {
             "generations": generations,

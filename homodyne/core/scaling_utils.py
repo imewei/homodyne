@@ -190,9 +190,7 @@ def estimate_per_angle_scaling(
 
     if n_sufficient == 0:
         # No angles have enough data - return defaults
-        log.info(
-            f"All {n_phi} angles have insufficient data, using midpoint defaults"
-        )
+        log.info(f"All {n_phi} angles have insufficient data, using midpoint defaults")
         return {
             **{f"contrast_{i}": contrast_mid for i in range(n_phi)},
             **{f"offset_{i}": offset_mid for i in range(n_phi)},

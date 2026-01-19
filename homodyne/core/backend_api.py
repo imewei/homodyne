@@ -104,7 +104,7 @@ def get_available_backends() -> dict[str, bool]:
 
     # Check JAX availability
     try:
-        import jax
+        import jax  # noqa: F401
 
         backends["jax"] = True
     except ImportError:
@@ -112,7 +112,7 @@ def get_available_backends() -> dict[str, bool]:
 
     # Check NLSQ backend
     try:
-        from homodyne.core.physics_nlsq import compute_g2_scaled
+        from homodyne.core.physics_nlsq import compute_g2_scaled  # noqa: F401
 
         backends["nlsq"] = True
     except ImportError:
@@ -120,7 +120,7 @@ def get_available_backends() -> dict[str, bool]:
 
     # Check CMC backend
     try:
-        from homodyne.core.physics_cmc import compute_g1_total
+        from homodyne.core.physics_cmc import compute_g1_total  # noqa: F401
 
         backends["cmc"] = True
     except ImportError:
@@ -128,7 +128,7 @@ def get_available_backends() -> dict[str, bool]:
 
     # Check utilities
     try:
-        from homodyne.core.physics_utils import safe_sinc
+        from homodyne.core.physics_utils import safe_sinc  # noqa: F401
 
         backends["utils"] = True
     except ImportError:

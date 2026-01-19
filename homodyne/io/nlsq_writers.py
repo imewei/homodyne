@@ -72,9 +72,7 @@ def save_nlsq_json_files(
         + analysis_file.stat().st_size
         + convergence_file.stat().st_size
     ) / 1024
-    logger.info(
-        f"Saved 3 JSON files to {output_dir} (total: {total_size_kb:.1f} KB)"
-    )
+    logger.info(f"Saved 3 JSON files to {output_dir} (total: {total_size_kb:.1f} KB)")
 
 
 def save_nlsq_npz_file(

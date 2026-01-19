@@ -370,7 +370,9 @@ class NLSQConfig:
     #
     # Requires evosax backend for JAX-accelerated evolution strategies
     enable_cmaes: bool = False  # Default OFF - user opt-in (use multi-start by default)
-    cmaes_preset: str = "cmaes"  # "cmaes-fast" (50 gen), "cmaes" (100 gen), "cmaes-global" (200 gen)
+    cmaes_preset: str = (
+        "cmaes"  # "cmaes-fast" (50 gen), "cmaes" (100 gen), "cmaes-global" (200 gen)
+    )
     cmaes_max_generations: int = 100  # Maximum CMA-ES generations
     cmaes_popsize: int | None = None  # Population size (None = auto from 4+3*ln(n))
     cmaes_sigma: float = 0.5  # Initial step size (fraction of search range)
@@ -381,13 +383,17 @@ class NLSQConfig:
     cmaes_population_batch_size: int | None = None  # Memory batching (None = auto)
     cmaes_data_chunk_size: int | None = None  # Data streaming (None = auto)
     cmaes_refine_with_nlsq: bool = True  # Refine CMA-ES solution with NLSQ TRF
-    cmaes_auto_select: bool = True  # Auto-select CMA-ES vs multi-start based on scale ratio
+    cmaes_auto_select: bool = (
+        True  # Auto-select CMA-ES vs multi-start based on scale ratio
+    )
     cmaes_scale_threshold: float = 1000.0  # Scale ratio threshold for auto-selection
     cmaes_memory_limit_gb: float = 8.0  # Memory limit for auto-configuration
     #
     # Post-CMA-ES NLSQ TRF Refinement (similar to "auto_global" workflow)
     # Uses NLSQ Trust Region Reflective for local refinement with proper covariance estimation
-    cmaes_refinement_workflow: str = "auto"  # "auto" (recommended), "standard", "streaming"
+    cmaes_refinement_workflow: str = (
+        "auto"  # "auto" (recommended), "standard", "streaming"
+    )
     cmaes_refinement_ftol: float = 1e-10  # Tighter tolerance for local refinement
     cmaes_refinement_xtol: float = 1e-10
     cmaes_refinement_gtol: float = 1e-10
@@ -970,21 +976,14 @@ class NLSQConfig:
             )
         if self.cmaes_popsize is not None and self.cmaes_popsize <= 0:
             errors.append(
-                f"cmaes_popsize must be positive or None, "
-                f"got: {self.cmaes_popsize}"
+                f"cmaes_popsize must be positive or None, got: {self.cmaes_popsize}"
             )
         if not 0 < self.cmaes_sigma <= 1:
-            errors.append(
-                f"cmaes_sigma must be in (0, 1], got: {self.cmaes_sigma}"
-            )
+            errors.append(f"cmaes_sigma must be in (0, 1], got: {self.cmaes_sigma}")
         if self.cmaes_tol_fun <= 0:
-            errors.append(
-                f"cmaes_tol_fun must be positive, got: {self.cmaes_tol_fun}"
-            )
+            errors.append(f"cmaes_tol_fun must be positive, got: {self.cmaes_tol_fun}")
         if self.cmaes_tol_x <= 0:
-            errors.append(
-                f"cmaes_tol_x must be positive, got: {self.cmaes_tol_x}"
-            )
+            errors.append(f"cmaes_tol_x must be positive, got: {self.cmaes_tol_x}")
         valid_restart_strategies = ["none", "bipop"]
         if self.cmaes_restart_strategy not in valid_restart_strategies:
             errors.append(
@@ -996,7 +995,10 @@ class NLSQConfig:
                 f"cmaes_max_restarts must be non-negative, "
                 f"got: {self.cmaes_max_restarts}"
             )
-        if self.cmaes_population_batch_size is not None and self.cmaes_population_batch_size <= 0:
+        if (
+            self.cmaes_population_batch_size is not None
+            and self.cmaes_population_batch_size <= 0
+        ):
             errors.append(
                 f"cmaes_population_batch_size must be positive or None, "
                 f"got: {self.cmaes_population_batch_size}"

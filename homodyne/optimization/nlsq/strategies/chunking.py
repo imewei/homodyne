@@ -45,7 +45,7 @@ from typing import Any
 import jax.numpy as jnp
 import numpy as np
 
-from homodyne.utils.logging import get_logger, log_phase
+from homodyne.utils.logging import get_logger
 
 logger = get_logger(__name__)
 
@@ -923,6 +923,7 @@ class StratifiedIndexIterator:
     This iterator allows processing strictly stratified chunks one by one
     without materializing the full index array or data chunks in memory.
     """
+
     indices: np.ndarray
     chunk_sizes: list[int]
 

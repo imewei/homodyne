@@ -264,8 +264,8 @@ def estimate_peak_memory_gb(
     return peak_bytes / (1024**3)
 
 
-from dataclasses import dataclass
-from enum import Enum
+from dataclasses import dataclass  # noqa: E402
+from enum import Enum  # noqa: E402
 
 
 class NLSQStrategy(Enum):

@@ -31,18 +31,18 @@ Version: 2.14.2
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any, Literal, Union
+from typing import TYPE_CHECKING, Any, Literal
 
 import numpy as np
 
 from homodyne.utils.logging import get_logger
 
 if TYPE_CHECKING:
-    from numpy.typing import ArrayLike, NDArray
+    from numpy.typing import ArrayLike
 
 # Optional imports
 try:
-    import jax
+    import jax  # noqa: F401
     import jax.numpy as jnp
     from jax import jit, vmap
 
@@ -50,7 +50,11 @@ try:
 except ImportError:
     HAS_JAX = False
     jnp = np  # type: ignore[misc]
-    jit = lambda f: f  # type: ignore[misc]
+
+    def jit(f):  # type: ignore[misc]  # noqa: E731
+        """No-op decorator when JAX is unavailable."""
+        return f
+
     vmap = None  # type: ignore[misc]
 
 try:
@@ -78,7 +82,7 @@ def apply_diagonal_correction(
     method: Method = "basic",
     backend: Backend = "auto",
     **config: Any,
-) -> Union[np.ndarray, "jnp.ndarray"]:
+) -> np.ndarray | jnp.ndarray:
     """Apply diagonal correction to a single correlation matrix.
 
     This function replaces the diagonal elements (t₁=t₂) with interpolated
@@ -144,7 +148,7 @@ def apply_diagonal_correction_batch(
     method: Method = "basic",
     backend: Backend = "auto",
     **config: Any,
-) -> Union[np.ndarray, "jnp.ndarray"]:
+) -> np.ndarray | jnp.ndarray:
     """Apply diagonal correction to a batch of correlation matrices.
 
     Efficiently processes multiple correlation matrices, using vectorized

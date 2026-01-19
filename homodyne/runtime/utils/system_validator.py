@@ -1059,7 +1059,9 @@ alias hc-iso >/dev/null 2>&1 && echo "shortcut_alias_works" || echo "shortcut_al
 
             # Test 5: Data preprocessing import
             try:
-                from homodyne.data.preprocessing import preprocess_xpcs_data  # noqa: F401
+                from homodyne.data.preprocessing import (
+                    preprocess_xpcs_data,  # noqa: F401
+                )
 
                 details["preprocessing"] = "available"
             except ImportError as e:

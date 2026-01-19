@@ -312,11 +312,10 @@ def trapezoid_cumsum(values: jnp.ndarray) -> jnp.ndarray:
 # Re-export from unified diagonal_correction module for backward compatibility.
 # See homodyne/core/diagonal_correction.py for the canonical implementation.
 
-from homodyne.core.diagonal_correction import (
+from homodyne.core.diagonal_correction import (  # noqa: E402
     apply_diagonal_correction,  # noqa: F401
     apply_diagonal_correction_batch,  # noqa: F401
 )
-
 
 # =============================================================================
 # BACKWARD COMPATIBILITY ALIASES

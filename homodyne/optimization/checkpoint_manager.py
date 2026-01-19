@@ -366,9 +366,7 @@ class CheckpointManager:
         for checkpoint_path in checkpoint_files:
             if self.validate_checkpoint(checkpoint_path):
                 # T060: Log recovery point found
-                logger.info(
-                    f"Found valid recovery checkpoint: {checkpoint_path.name}"
-                )
+                logger.info(f"Found valid recovery checkpoint: {checkpoint_path.name}")
                 return checkpoint_path
 
         logger.debug("No valid checkpoint found for recovery")

@@ -161,7 +161,7 @@ except ImportError:
 # =============================================================================
 
 # NLSQAdapter using CurveFit class (v2.11.0+)
-from homodyne.optimization.nlsq.adapter import (
+from homodyne.optimization.nlsq.adapter import (  # noqa: E402
     AdapterConfig,
     NLSQAdapter,
     clear_model_cache,
@@ -171,16 +171,30 @@ from homodyne.optimization.nlsq.adapter import (
     is_adapter_available,
 )
 
+# Architecture refactoring (v2.14.0): NLSQAdapterBase
+from homodyne.optimization.nlsq.adapter_base import NLSQAdapterBase  # noqa: E402
+
 # Anti-degeneracy defense system (v2.9.0)
-from homodyne.optimization.nlsq.anti_degeneracy_controller import (
+from homodyne.optimization.nlsq.anti_degeneracy_controller import (  # noqa: E402
     AntiDegeneracyConfig,
     AntiDegeneracyController,
 )
-from homodyne.optimization.nlsq.config import (
+
+# CMA-ES global optimization wrapper (v2.15.0 / NLSQ 0.6.4+)
+from homodyne.optimization.nlsq.cmaes_wrapper import (  # noqa: E402
+    CMAES_AVAILABLE as NLSQ_CMAES_AVAILABLE,
+)
+from homodyne.optimization.nlsq.cmaes_wrapper import (  # noqa: E402
+    CMAESResult,
+    CMAESWrapper,
+    CMAESWrapperConfig,
+    fit_with_cmaes,
+)
+from homodyne.optimization.nlsq.config import (  # noqa: E402
     HybridRecoveryConfig,
     NLSQConfig,
 )
-from homodyne.optimization.nlsq.core import (
+from homodyne.optimization.nlsq.core import (  # noqa: E402
     JAX_AVAILABLE,
     NLSQ_AVAILABLE,
     NLSQResult,
@@ -190,17 +204,8 @@ from homodyne.optimization.nlsq.core import (
     fit_nlsq_multistart,
 )
 
-# CMA-ES global optimization wrapper (v2.15.0 / NLSQ 0.6.4+)
-from homodyne.optimization.nlsq.cmaes_wrapper import (
-    CMAES_AVAILABLE as NLSQ_CMAES_AVAILABLE,
-    CMAESResult,
-    CMAESWrapper,
-    CMAESWrapperConfig,
-    fit_with_cmaes,
-)
-
 # New refactored modules (Dec 2025)
-from homodyne.optimization.nlsq.data_prep import (
+from homodyne.optimization.nlsq.data_prep import (  # noqa: E402
     ExpandedParameters,
     PreparedData,
     build_parameter_labels,
@@ -210,7 +215,7 @@ from homodyne.optimization.nlsq.data_prep import (
     validate_bounds,
     validate_initial_params,
 )
-from homodyne.optimization.nlsq.fit_computation import (
+from homodyne.optimization.nlsq.fit_computation import (  # noqa: E402
     compute_theoretical_fits,
     extract_parameters_from_result,
     get_physical_param_count,
@@ -218,7 +223,7 @@ from homodyne.optimization.nlsq.fit_computation import (
 )
 
 # Memory management utilities (extracted Jan 2026)
-from homodyne.optimization.nlsq.memory import (
+from homodyne.optimization.nlsq.memory import (  # noqa: E402
     DEFAULT_MEMORY_FRACTION,
     FALLBACK_THRESHOLD_GB,
     NLSQStrategy,
@@ -232,7 +237,7 @@ from homodyne.optimization.nlsq.memory import (
 # Multi-start optimization (v2.6.0)
 # NOTE: Subsampling is explicitly NOT supported per project requirements.
 # Numerical precision and reproducibility take priority over computational speed.
-from homodyne.optimization.nlsq.multistart import (
+from homodyne.optimization.nlsq.multistart import (  # noqa: E402
     MultiStartConfig,
     MultiStartResult,
     SingleStartResult,
@@ -245,21 +250,23 @@ from homodyne.optimization.nlsq.multistart import (
     screen_starts,
     validate_n_starts_for_lhs,
 )
-from homodyne.optimization.nlsq.parameter_index_mapper import ParameterIndexMapper
+from homodyne.optimization.nlsq.parameter_index_mapper import (  # noqa: E402
+    ParameterIndexMapper,
+)
 
 # Parameter utilities (extracted Jan 2026)
-from homodyne.optimization.nlsq.parameter_utils import (
+from homodyne.optimization.nlsq.parameter_utils import (  # noqa: E402
     build_parameter_labels as build_parameter_labels_utils,
 )
-from homodyne.optimization.nlsq.parameter_utils import (
+from homodyne.optimization.nlsq.parameter_utils import (  # noqa: E402
     classify_parameter_status as classify_parameter_status_utils,
 )
-from homodyne.optimization.nlsq.parameter_utils import (
+from homodyne.optimization.nlsq.parameter_utils import (  # noqa: E402
     compute_consistent_per_angle_init,
     compute_jacobian_stats,
     sample_xdata,
 )
-from homodyne.optimization.nlsq.result_builder import (
+from homodyne.optimization.nlsq.result_builder import (  # noqa: E402
     QualityMetrics,
     ResultBuilder,
     compute_quality_metrics,
@@ -267,13 +274,11 @@ from homodyne.optimization.nlsq.result_builder import (
     determine_convergence_status,
     normalize_nlsq_result,
 )
-from homodyne.optimization.nlsq.results import (
+from homodyne.optimization.nlsq.results import (  # noqa: E402
     FunctionEvaluationCounter,
     OptimizationResult,
 )
-# Architecture refactoring (v2.14.0): NLSQAdapterBase
-from homodyne.optimization.nlsq.adapter_base import NLSQAdapterBase
-from homodyne.optimization.nlsq.strategies.chunking import (
+from homodyne.optimization.nlsq.strategies.chunking import (  # noqa: E402
     StratificationDiagnostics,
     analyze_angle_distribution,
     compute_stratification_diagnostics,
@@ -283,7 +288,7 @@ from homodyne.optimization.nlsq.strategies.chunking import (
     format_diagnostics_report,
     should_use_stratification,
 )
-from homodyne.optimization.nlsq.strategies.executors import (
+from homodyne.optimization.nlsq.strategies.executors import (  # noqa: E402
     ExecutionResult,
     LargeDatasetExecutor,
     OptimizationExecutor,
@@ -291,20 +296,21 @@ from homodyne.optimization.nlsq.strategies.executors import (
     StreamingExecutor,
     get_executor,
 )
-from homodyne.optimization.nlsq.strategies.residual import (
+from homodyne.optimization.nlsq.strategies.residual import (  # noqa: E402
     StratifiedResidualFunction,
     create_stratified_residual_function,
 )
-from homodyne.optimization.nlsq.strategies.residual_jit import (
+from homodyne.optimization.nlsq.strategies.residual_jit import (  # noqa: E402
     StratifiedResidualFunctionJIT,
 )
+
 # NOTE: DatasetSizeStrategy, OptimizationStrategy, estimate_memory_requirements
 # removed from public API in v2.12.0. Use NLSQ's WorkflowSelector instead.
-from homodyne.optimization.nlsq.strategies.sequential import (
+from homodyne.optimization.nlsq.strategies.sequential import (  # noqa: E402
     JAC_SAMPLE_SIZE,
     optimize_per_angle_sequential,
 )
-from homodyne.optimization.nlsq.wrapper import NLSQWrapper
+from homodyne.optimization.nlsq.wrapper import NLSQWrapper  # noqa: E402
 
 __all__ = [
     # NLSQ Package Integration (v2.11.0+)

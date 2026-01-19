@@ -333,9 +333,7 @@ def get_or_create_model(
             contrast_vals = jnp.full(n_phi, c0)
             offset_vals = jnp.full(n_phi, o0)
             default_phys = jnp.array([1000.0, 0.5, 10.0])
-            physical_params = (
-                params_array[2:] if n_params_val > 2 else default_phys
-            )
+            physical_params = params_array[2:] if n_params_val > 2 else default_phys
 
         # Compute g2 for each point using vectorized computation
         # xdata columns: [t1, t2, phi_idx] where phi_idx is precomputed (v2.17.0+)

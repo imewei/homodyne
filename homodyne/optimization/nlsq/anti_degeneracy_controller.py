@@ -327,7 +327,9 @@ class AntiDegeneracyController:
                     f"  Reason: n_phi ({self.n_phi}) < "
                     f"constant_scaling_threshold ({config.constant_scaling_threshold})"
                 )
-                logger.info(f"  Parameters: 7 physical + {2 * self.n_phi} per-angle = {7 + 2 * self.n_phi} total")
+                logger.info(
+                    f"  Parameters: 7 physical + {2 * self.n_phi} per-angle = {7 + 2 * self.n_phi} total"
+                )
                 logger.info("=" * 60)
         elif config.per_angle_mode == "constant":
             # EXPLICIT constant mode: FIXED per-angle scaling (7 params)
@@ -335,9 +337,13 @@ class AntiDegeneracyController:
             # Only 7 physical params are optimized; scaling is FIXED
             self.per_angle_mode_actual = "fixed_constant"
             logger.info("=" * 60)
-            logger.info("ANTI-DEGENERACY: Using explicit 'constant' mode → fixed_constant")
+            logger.info(
+                "ANTI-DEGENERACY: Using explicit 'constant' mode → fixed_constant"
+            )
             logger.info(f"  n_phi: {self.n_phi}")
-            logger.info("  Behavior: Quantile estimates → per-angle values FIXED (NOT optimized)")
+            logger.info(
+                "  Behavior: Quantile estimates → per-angle values FIXED (NOT optimized)"
+            )
             logger.info("  Parameters: 7 physical only (scaling FIXED from quantiles)")
             logger.info("=" * 60)
         else:
@@ -854,7 +860,10 @@ class AntiDegeneracyController:
         tuple[np.ndarray, np.ndarray] | None
             (contrast_per_angle, offset_per_angle) if computed, None otherwise.
         """
-        if self._fixed_contrast_per_angle is None or self._fixed_offset_per_angle is None:
+        if (
+            self._fixed_contrast_per_angle is None
+            or self._fixed_offset_per_angle is None
+        ):
             return None
         return self._fixed_contrast_per_angle, self._fixed_offset_per_angle
 

@@ -686,7 +686,9 @@ def get_xpcs_model(per_angle_mode: str = "individual"):
         logger.info("CMC: Using auto mode model (sampled averaged scaling, 10 params)")
         return xpcs_model_averaged
     elif per_angle_mode == "constant":
-        logger.info("CMC: Using constant mode model (fixed per-angle scaling, 8 params)")
+        logger.info(
+            "CMC: Using constant mode model (fixed per-angle scaling, 8 params)"
+        )
         return xpcs_model_constant
     else:
         # Default: individual mode

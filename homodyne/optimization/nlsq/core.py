@@ -1839,17 +1839,27 @@ def fit_nlsq_cmaes(
 
                     if use_fixed_scaling:
                         logger.info("=" * 60)
-                        logger.info("ANTI-DEGENERACY: Enabled for CMA-ES (Fixed Constant Mode)")
-                        logger.info(f"  Quantile estimation: N={n_phi} contrast + N={n_phi} offset values")
+                        logger.info(
+                            "ANTI-DEGENERACY: Enabled for CMA-ES (Fixed Constant Mode)"
+                        )
+                        logger.info(
+                            f"  Quantile estimation: N={n_phi} contrast + N={n_phi} offset values"
+                        )
                         logger.info("  Per-angle values: FIXED (not optimized)")
                         logger.info("  Total parameters: 7 physical only")
                         logger.info("=" * 60)
                     else:
                         logger.info("=" * 60)
-                        logger.info("ANTI-DEGENERACY: Enabled for CMA-ES (Auto Averaged Mode)")
-                        logger.info(f"  Quantile estimation: N={n_phi} contrast + N={n_phi} offset values")
+                        logger.info(
+                            "ANTI-DEGENERACY: Enabled for CMA-ES (Auto Averaged Mode)"
+                        )
+                        logger.info(
+                            f"  Quantile estimation: N={n_phi} contrast + N={n_phi} offset values"
+                        )
                         logger.info("  Averaged to: 1 contrast + 1 offset (OPTIMIZED)")
-                        logger.info("  Total parameters: 7 physical + 2 averaged scaling = 9")
+                        logger.info(
+                            "  Total parameters: 7 physical + 2 averaged scaling = 9"
+                        )
                         logger.info("=" * 60)
 
         # Handle parameter expansion based on anti-degeneracy mode
@@ -1934,11 +1944,13 @@ def fit_nlsq_cmaes(
             offset_bounds = (float(lower_bounds[1]), float(upper_bounds[1]))
 
             # Compute per-angle scaling from quantiles
-            fixed_contrast_per_angle, fixed_offset_per_angle = compute_quantile_per_angle_scaling(
-                stratified_data=stratified_for_quantile,
-                contrast_bounds=contrast_bounds,
-                offset_bounds=offset_bounds,
-                logger=logger,
+            fixed_contrast_per_angle, fixed_offset_per_angle = (
+                compute_quantile_per_angle_scaling(
+                    stratified_data=stratified_for_quantile,
+                    contrast_bounds=contrast_bounds,
+                    offset_bounds=offset_bounds,
+                    logger=logger,
+                )
             )
 
             logger.info(
@@ -1962,7 +1974,7 @@ def fit_nlsq_cmaes(
                     logger.info(f"Reduced to physical params only: {len(x0)} params")
                 elif len(x0) == 2 * n_phi + n_physical:
                     # Per-angle format - extract physical only
-                    physical_params = x0[2 * n_phi:]
+                    physical_params = x0[2 * n_phi :]
                     x0 = physical_params.copy()
                     logger.info(f"Reduced per-angle to physical only: {len(x0)} params")
                 elif len(x0) == n_physical:
@@ -1974,28 +1986,34 @@ def fit_nlsq_cmaes(
                     lower_bounds = lower_bounds[2:]
                     upper_bounds = upper_bounds[2:]
                 elif len(lower_bounds) == 2 * n_phi + n_physical:
-                    lower_bounds = lower_bounds[2 * n_phi:]
-                    upper_bounds = upper_bounds[2 * n_phi:]
+                    lower_bounds = lower_bounds[2 * n_phi :]
+                    upper_bounds = upper_bounds[2 * n_phi :]
 
                 bounds = (lower_bounds, upper_bounds)
-                logger.info(f"CMA-ES using fixed constant mode: {len(x0)} parameters (7 physical only)")
+                logger.info(
+                    f"CMA-ES using fixed constant mode: {len(x0)} parameters (7 physical only)"
+                )
 
             else:
                 # AUTO AVERAGED MODE: Average to 2 values, optimize 9 params
                 avg_contrast = float(np.mean(fixed_contrast_per_angle))
                 avg_offset = float(np.mean(fixed_offset_per_angle))
 
-                logger.info(f"Auto averaged mode: scaling averaged to contrast={avg_contrast:.4f}, offset={avg_offset:.4f}")
+                logger.info(
+                    f"Auto averaged mode: scaling averaged to contrast={avg_contrast:.4f}, offset={avg_offset:.4f}"
+                )
 
                 # Build 9-parameter initial guess: [contrast_avg, offset_avg, *physical]
                 if len(x0) == 2 + n_physical:
                     # Already in [contrast, offset, physical] format
                     physical_params = x0[2:]
                     x0 = np.concatenate([[avg_contrast], [avg_offset], physical_params])
-                    logger.info(f"Using averaged quantile estimates for scaling: contrast={avg_contrast:.4f}, offset={avg_offset:.4f}")
+                    logger.info(
+                        f"Using averaged quantile estimates for scaling: contrast={avg_contrast:.4f}, offset={avg_offset:.4f}"
+                    )
                 elif len(x0) == 2 * n_phi + n_physical:
                     # Per-angle format: reduce to [contrast_avg, offset_avg, physical]
-                    physical_params = x0[2 * n_phi:]
+                    physical_params = x0[2 * n_phi :]
                     x0 = np.concatenate([[avg_contrast], [avg_offset], physical_params])
                     logger.info(f"Reduced per-angle to averaged: {len(x0)} params")
                 elif len(x0) == n_physical:
@@ -2009,18 +2027,24 @@ def fit_nlsq_cmaes(
                     pass
                 elif len(lower_bounds) == 2 * n_phi + n_physical:
                     # Per-angle format: reduce to single scaling bounds
-                    lower_bounds = np.concatenate([
-                        [lower_bounds[0]],  # Single contrast bound
-                        [lower_bounds[n_phi]],  # Single offset bound
-                        lower_bounds[2 * n_phi:],  # Physical bounds
-                    ])
-                    upper_bounds = np.concatenate([
-                        [upper_bounds[0]],
-                        [upper_bounds[n_phi]],
-                        upper_bounds[2 * n_phi:],
-                    ])
+                    lower_bounds = np.concatenate(
+                        [
+                            [lower_bounds[0]],  # Single contrast bound
+                            [lower_bounds[n_phi]],  # Single offset bound
+                            lower_bounds[2 * n_phi :],  # Physical bounds
+                        ]
+                    )
+                    upper_bounds = np.concatenate(
+                        [
+                            [upper_bounds[0]],
+                            [upper_bounds[n_phi]],
+                            upper_bounds[2 * n_phi :],
+                        ]
+                    )
                 bounds = (lower_bounds, upper_bounds)
-                logger.info(f"CMA-ES using auto averaged mode: {len(x0)} parameters (9 = 7 physical + 2 averaged)")
+                logger.info(
+                    f"CMA-ES using auto averaged mode: {len(x0)} parameters (9 = 7 physical + 2 averaged)"
+                )
 
             effective_per_angle_scaling = False
         else:
@@ -2169,11 +2193,13 @@ def fit_nlsq_cmaes(
             offset_val = final_params[1]
             physical_params = final_params[2:]
 
-            final_params = np.concatenate([
-                np.full(n_phi, contrast_val),  # Broadcast contrast to all angles
-                np.full(n_phi, offset_val),    # Broadcast offset to all angles
-                physical_params,               # 7 physical params as optimized
-            ])
+            final_params = np.concatenate(
+                [
+                    np.full(n_phi, contrast_val),  # Broadcast contrast to all angles
+                    np.full(n_phi, offset_val),  # Broadcast offset to all angles
+                    physical_params,  # 7 physical params as optimized
+                ]
+            )
 
             logger.info(
                 f"Expanding constant mode results: {len(cmaes_result.parameters)} -> "
@@ -2183,7 +2209,7 @@ def fit_nlsq_cmaes(
             # Expand covariance matrix if available
             # The covariance for single contrast/offset must be broadcast to per-angle
             if final_covariance is not None:
-                n_original = len(cmaes_result.parameters)
+                _n_original = len(cmaes_result.parameters)  # noqa: F841
                 n_expanded = 2 * n_phi + n_physical
                 expanded_cov = np.zeros((n_expanded, n_expanded))
 
@@ -2206,7 +2232,9 @@ def fit_nlsq_cmaes(
                     expanded_cov[idx, idx] = offset_var
                     for j in range(n_phi):
                         if i != j:
-                            expanded_cov[idx, n_phi + j] = offset_var  # Perfectly correlated
+                            expanded_cov[idx, n_phi + j] = (
+                                offset_var  # Perfectly correlated
+                            )
 
                 # Covariance between contrast and offset
                 contrast_offset_cov = final_covariance[0, 1]
@@ -2219,21 +2247,23 @@ def fit_nlsq_cmaes(
                 # Original indices [2:9] -> expanded indices [2*n_phi:]
                 for i in range(n_physical):
                     for j in range(n_physical):
-                        expanded_cov[2*n_phi + i, 2*n_phi + j] = final_covariance[2 + i, 2 + j]
+                        expanded_cov[2 * n_phi + i, 2 * n_phi + j] = final_covariance[
+                            2 + i, 2 + j
+                        ]
 
                 # Cross-covariance: contrast/offset with physical params
                 for i in range(n_physical):
                     # Contrast-physical covariance
                     contrast_phys_cov = final_covariance[0, 2 + i]
                     for k in range(n_phi):
-                        expanded_cov[k, 2*n_phi + i] = contrast_phys_cov
-                        expanded_cov[2*n_phi + i, k] = contrast_phys_cov
+                        expanded_cov[k, 2 * n_phi + i] = contrast_phys_cov
+                        expanded_cov[2 * n_phi + i, k] = contrast_phys_cov
 
                     # Offset-physical covariance
                     offset_phys_cov = final_covariance[1, 2 + i]
                     for k in range(n_phi):
-                        expanded_cov[n_phi + k, 2*n_phi + i] = offset_phys_cov
-                        expanded_cov[2*n_phi + i, n_phi + k] = offset_phys_cov
+                        expanded_cov[n_phi + k, 2 * n_phi + i] = offset_phys_cov
+                        expanded_cov[2 * n_phi + i, n_phi + k] = offset_phys_cov
 
                 final_covariance = expanded_cov
 
@@ -2249,9 +2279,7 @@ def fit_nlsq_cmaes(
                 else np.zeros(n_params)
             ),
             covariance=(
-                final_covariance
-                if final_covariance is not None
-                else np.eye(n_params)
+                final_covariance if final_covariance is not None else np.eye(n_params)
             ),
             chi_squared=cmaes_result.chi_squared,
             reduced_chi_squared=cmaes_result.chi_squared / dof,

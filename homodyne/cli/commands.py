@@ -1177,7 +1177,7 @@ def _run_optimization(args, config: ConfigManager, data: dict[str, Any]) -> Any:
         elif method == "cmc":
             # Consensus Monte Carlo - use helper for config preparation
             cmc_config = _prepare_cmc_config(args, config)
-            backend_cfg = cmc_config["backend"]
+            _backend_cfg = cmc_config["backend"]  # noqa: F841
 
             # Log CMC configuration being used
             logger.info(f"Method: {method.upper()} (Consensus Monte Carlo)")
@@ -1211,8 +1211,8 @@ def _run_optimization(args, config: ConfigManager, data: dict[str, Any]) -> Any:
             t1_pooled = pooled["t1_pooled"]
             t2_pooled = pooled["t2_pooled"]
             phi_pooled = pooled["phi_pooled"]
-            n_phi = pooled["n_phi"]
-            n_t = pooled["n_t"]
+            _n_phi = pooled["n_phi"]  # noqa: F841
+            _n_t = pooled["n_t"]  # noqa: F841
 
             # ✅ v2.1.0 BREAKING CHANGE: Removed automatic NLSQ/SVI initialization
             # Manual workflow required: Run NLSQ separately, copy results to YAML, then run MCMC
@@ -1963,7 +1963,8 @@ def _prepare_parameter_data(
                 "value": float(result.parameters[i]),
                 "uncertainty": (
                     float(result.uncertainties[i])
-                    if result.uncertainties is not None and i < len(result.uncertainties)
+                    if result.uncertainties is not None
+                    and i < len(result.uncertainties)
                     else None
                 ),
             }
@@ -2592,7 +2593,9 @@ def save_mcmc_results(
             f"  - 3 JSON files (parameters, analysis results, diagnostics) "
             f"({total_json_kb:.1f} KB total)"
         )
-    logger.info(f"  - {len(npz_files)} NPZ file(s) (posterior samples) ({total_npz_mb:.2f} MB)")
+    logger.info(
+        f"  - {len(npz_files)} NPZ file(s) (posterior samples) ({total_npz_mb:.2f} MB)"
+    )
 
 
 def _create_mcmc_parameters_dict(result: Any) -> dict:
