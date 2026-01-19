@@ -634,9 +634,9 @@ def xpcs_model_averaged(
 
     g1 = _compute_g1_total_core(
         params=params,
-        t1_flat=t1,
-        t2_flat=t2,
-        phi_flat=phi_unique[phi_indices],
+        t1=t1,
+        t2=t2,
+        phi=phi_unique[phi_indices],
         wavevector_q_squared_half_dt=wavevector_q_squared_half_dt,
         sinc_prefactor=sinc_prefactor,
         dt=dt,
