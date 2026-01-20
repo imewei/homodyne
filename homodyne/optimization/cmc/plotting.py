@@ -244,14 +244,21 @@ def plot_energy(
     Path
         Path to saved plot.
     """
-    # Energy plot requires sample_stats
-    if not hasattr(idata, "sample_stats") or idata.sample_stats is None:
+    # Energy plot requires sample_stats with energy info
+    has_energy = False
+    if hasattr(idata, "sample_stats") and idata.sample_stats is not None:
+        if hasattr(idata.sample_stats, "energy"):
+            has_energy = True
+        elif hasattr(idata.sample_stats, "potential_energy"):
+            has_energy = True
+
+    if not has_energy:
         # Create minimal figure with message
         fig, ax = plt.subplots(figsize=figsize)
         ax.text(
             0.5,
             0.5,
-            "Energy plot not available\n(sample_stats not recorded)",
+            "Energy plot not available\n(energy/potential_energy not in sample_stats)",
             ha="center",
             va="center",
             fontsize=12,

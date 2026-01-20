@@ -565,7 +565,12 @@ def fit_mcmc_jax(
 
     requested_shards = int(config.num_shards) if _int_like(config.num_shards) else None
 
-    if use_cmc and prepared.n_phi > 1:
+    sharding_mode = "random"
+    if use_cmc:
+        if prepared.n_phi > 1 and config.sharding_strategy == "stratified":
+            sharding_mode = "stratified"
+
+    if sharding_mode == "stratified":
         # Shard by phi angle (stratified)
         num_shards = (
             requested_shards
@@ -590,8 +595,8 @@ def fit_mcmc_jax(
             avg_points_per_shard=total_shard_points // len(shards),
             analysis_mode=analysis_mode,
         )
-    elif use_cmc and prepared.n_phi == 1:
-        # Single phi angle but large dataset - use random sharding
+    elif use_cmc:
+        # Random sharding (i.i.d.) - statistically correct for Consensus MC
         # shard_data_random handles num_shards calculation and capping internally
         shards = shard_data_random(
             prepared,
@@ -601,7 +606,7 @@ def fit_mcmc_jax(
         )
         total_shard_points = sum(s.n_total for s in shards)
         run_logger.info(
-            f"Using CMC with {len(shards)} shards (random split, single phi), "
+            f"Using CMC with {len(shards)} shards (random split), "
             f"{total_shard_points:,} total points"
         )
         estimated_runtime = _log_runtime_estimate(
@@ -642,6 +647,7 @@ def fit_mcmc_jax(
             f"Invalid dt provided; using inferred fallback dt={dt_used:.6g} seconds"
         )
     else:
+        # Check for mismatch between config dt and data dt
         rel_diff = (
             abs(dt_used - inferred_dt) / max(inferred_dt, 1e-12)
             if np.isfinite(inferred_dt) and inferred_dt > 0
@@ -649,10 +655,23 @@ def fit_mcmc_jax(
         )
         if dt is None:
             run_logger.info(f"Inferred dt from pooled times: dt={dt_used:.6g} seconds")
-        elif rel_diff > 1e-3:
+        elif rel_diff > 1e-2:  # >1% mismatch is significant
+            # CRITICAL FIX (Jan 2026): Prioritize DATA TRUTH over config for dt
+            # If config says dt=0.1s but data says dt=1e-5s, using dt=0.1s constructs
+            # a coarse grid that collapses all data to index 0 (g1=1.0, no decay).
+            # We MUST use the inferred_dt to match the actual data timestamps.
             run_logger.warning(
-                f"dt mismatch: provided dt={dt_used:.6g}s vs inferred {inferred_dt:.6g}s; "
-                "using provided dt for physics; results may not match NLSQ"
+                f"[CMC] CRITICAL dt mismatch detected!\n"
+                f"  Config dt:   {dt_used:.6g}s\n"
+                f"  Inferred dt: {inferred_dt:.6g}s\n"
+                f"  Mismatch:    {rel_diff:.1%} (>1%)\n"
+                f"Action: OVERRIDING config dt with Inferred dt to prevent physics collapse.\n"
+                f"Please check your configuration or data timestamps."
+            )
+            dt_used = inferred_dt
+        elif rel_diff > 1e-4:
+            run_logger.info(
+                f"[CMC] Minor dt mismatch ({rel_diff:.2%}): {dt_used:.6g}s vs {inferred_dt:.6g}s. Using config dt."
             )
 
     # CRITICAL: Construct time_grid with CORRECT dt spacing to match NLSQ physics

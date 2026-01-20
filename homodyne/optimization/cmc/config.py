@@ -110,7 +110,7 @@ class CMCConfig:
     constant_scaling_threshold: int = 3
 
     # Sharding
-    sharding_strategy: str = "stratified"
+    sharding_strategy: str = "random"
     num_shards: int | str = "auto"
     max_points_per_shard: int | str = "auto"
 

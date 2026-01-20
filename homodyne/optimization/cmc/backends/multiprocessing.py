@@ -252,6 +252,12 @@ def _run_shard_worker(
         "noise_scale": shard_data.get("noise_scale", 0.1),
     }
 
+    # Restore fixed parameters if present
+    if shard_data.get("fixed_contrast") is not None:
+        model_kwargs["fixed_contrast"] = shard_data["fixed_contrast"]
+    if shard_data.get("fixed_offset") is not None:
+        model_kwargs["fixed_offset"] = shard_data["fixed_offset"]
+
     # Heartbeat thread to emit liveness updates back to the parent.
     # Optimization: Use Event.wait(timeout) instead of busy-wait loop.
     # This reduces wake-ups by 75% (from 4 per interval to 1).
@@ -523,6 +529,9 @@ class MultiprocessingBackend(CMCBackend):
                         else None
                     ),
                     "noise_scale": shard.noise_scale,
+                    # Propagate fixed parameters for constant mode (v2.18.0+)
+                    "fixed_contrast": model_kwargs.get("fixed_contrast"),
+                    "fixed_offset": model_kwargs.get("fixed_offset"),
                 }
             )
 

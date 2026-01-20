@@ -717,6 +717,7 @@ def run_nuts_sampling(
                 "accept_prob",
                 "diverging",
                 "num_steps",
+                "potential_energy",
             ),
             **model_kwargs,
         )
