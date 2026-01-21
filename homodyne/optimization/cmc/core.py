@@ -565,13 +565,21 @@ def fit_mcmc_jax(
 
     requested_shards = int(config.num_shards) if _int_like(config.num_shards) else None
 
-    sharding_mode = "random"
-    if use_cmc:
-        if prepared.n_phi > 1 and config.sharding_strategy == "stratified":
-            sharding_mode = "stratified"
+    sharding_mode = config.sharding_strategy
+    
+    # CRITICAL FIX (Jan 2026): Force random sharding for multi-angle datasets with global parameters.
+    # Stratified sharding (by angle) creates disjoint posteriors that cannot be combined
+    # by Consensus MC for global parameters (like D0, alpha, phi0).
+    if use_cmc and prepared.n_phi > 1 and sharding_mode == "stratified":
+        run_logger.warning(
+            "Overriding sharding_strategy='stratified' -> 'random' for multi-angle data. "
+            "Stratified sharding violates Consensus MC assumptions for global parameters."
+        )
+        sharding_mode = "random"
 
     if sharding_mode == "stratified":
-        # Shard by phi angle (stratified)
+        # Shard by phi angle (stratified) - Only valid for disjoint models (no global params)
+        # or single-angle data (where n_phi=1, handled above)
         num_shards = (
             requested_shards
             if requested_shards is not None
