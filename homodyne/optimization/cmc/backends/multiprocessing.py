@@ -523,6 +523,8 @@ class MultiprocessingBackend(CMCBackend):
                     "q": model_kwargs["q"],
                     "L": model_kwargs["L"],
                     "dt": model_kwargs["dt"],
+                    "fixed_contrast": model_kwargs.get("fixed_contrast"),
+                    "fixed_offset": model_kwargs.get("fixed_offset"),
                     "time_grid": (
                         np.array(model_kwargs["time_grid"])
                         if model_kwargs.get("time_grid") is not None

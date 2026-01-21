@@ -718,6 +718,8 @@ def run_nuts_sampling(
                 "diverging",
                 "num_steps",
                 "potential_energy",
+                "adapt_state.step_size",
+                "adapt_state.inverse_mass_matrix",
             ),
             **model_kwargs,
         )

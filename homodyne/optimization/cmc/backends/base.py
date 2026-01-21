@@ -333,7 +333,18 @@ def _combine_shard_chunk(
             s.extra_fields.get(key) for s in shard_samples if key in s.extra_fields
         ]
         if all_extra:
-            combined_extra[key] = np.concatenate(all_extra, axis=0)
+            try:
+                # Handle scalar fields (zero-dimensional arrays)
+                if all_extra[0].ndim == 0:
+                    # Stack scalars into a 1D array
+                    combined_extra[key] = np.stack(all_extra, axis=0)
+                else:
+                    # Concatenate arrays along the chain dimension (axis=0)
+                    combined_extra[key] = np.concatenate(all_extra, axis=0)
+            except Exception as e:
+                # Fallback for incompatible shapes
+                logger.warning(f"Failed to combine extra field '{key}': {e}")
+                combined_extra[key] = all_extra[0]
 
     # Track total shards for correct divergence rate calculation
     total_shards = sum(getattr(s, "num_shards", 1) for s in shard_samples)

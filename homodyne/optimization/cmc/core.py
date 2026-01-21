@@ -319,6 +319,7 @@ def _infer_time_step(t1: np.ndarray, t2: np.ndarray) -> float:
     return float(np.median(positive_diffs))
 
 
+
 def fit_mcmc_jax(
     data: np.ndarray,
     t1: np.ndarray,
@@ -566,7 +567,7 @@ def fit_mcmc_jax(
     requested_shards = int(config.num_shards) if _int_like(config.num_shards) else None
 
     sharding_mode = config.sharding_strategy
-    
+
     # CRITICAL FIX (Jan 2026): Force random sharding for multi-angle datasets with global parameters.
     # Stratified sharding (by angle) creates disjoint posteriors that cannot be combined
     # by Consensus MC for global parameters (like D0, alpha, phi0).
