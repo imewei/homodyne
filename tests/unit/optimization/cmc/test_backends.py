@@ -169,7 +169,7 @@ class TestCombineShardSamples:
         """Test single shard returns unchanged."""
         shard = mock_mcmc_samples()
 
-        combined = combine_shard_samples([shard])
+        combined = combine_shard_samples([shard], method="consensus_mc")
 
         # Should return the same samples
         assert combined.n_chains == shard.n_chains
@@ -177,11 +177,12 @@ class TestCombineShardSamples:
         assert combined.param_names == shard.param_names
 
     def test_two_shards_simple_average(self, mock_mcmc_samples, sample_param_names):
-        """Test two shards with simple average."""
+        """Test two shards with simple average (deprecated)."""
         shard1 = mock_mcmc_samples(seed=42)
         shard2 = mock_mcmc_samples(seed=123)
 
-        combined = combine_shard_samples([shard1, shard2], method="simple_average")
+        with pytest.warns(DeprecationWarning, match="deprecated"):
+            combined = combine_shard_samples([shard1, shard2], method="simple_average")
 
         # Check shapes preserved
         assert combined.n_chains == shard1.n_chains
@@ -195,7 +196,7 @@ class TestCombineShardSamples:
             )
 
     def test_two_shards_weighted_gaussian(self, mock_mcmc_samples, sample_param_names):
-        """Test two shards with weighted Gaussian combination."""
+        """Test two shards with weighted Gaussian combination (deprecated)."""
         # Create shards with different variances
         np.random.seed(42)
         shard1_samples = {
@@ -219,7 +220,10 @@ class TestCombineShardSamples:
             n_samples=100,
         )
 
-        combined = combine_shard_samples([shard1, shard2], method="weighted_gaussian")
+        with pytest.warns(DeprecationWarning, match="deprecated"):
+            combined = combine_shard_samples(
+                [shard1, shard2], method="weighted_gaussian"
+            )
 
         # Lower variance shard should have higher weight
         # Combined should be closer to shard1 values
@@ -241,25 +245,29 @@ class TestCombineShardSamples:
         n_shards = 10
         shards = [mock_mcmc_samples(seed=i) for i in range(n_shards)]
 
-        combined = combine_shard_samples(shards, method="simple_average")
+        # Use consensus_mc as it's the standard
+        combined = combine_shard_samples(shards, method="consensus_mc")
 
         # Check shapes preserved
         assert combined.n_chains == shards[0].n_chains
         assert combined.n_samples == shards[0].n_samples
 
-        # Check averaging
+        # Check values are in expected range (approximate check since it's stochastic)
         for name in sample_param_names:
-            expected = np.mean([s.samples[name] for s in shards], axis=0)
-            np.testing.assert_array_almost_equal(
-                combined.samples[name], expected, decimal=10
-            )
+            all_means = [np.mean(s.samples[name]) for s in shards]
+            combined_mean = np.mean(combined.samples[name])
+            grand_mean = np.mean(all_means)
+
+            # Combined mean should be close to the grand mean of shards
+            # (since shards are randn(0, 1), they have similar precision)
+            np.testing.assert_allclose(combined_mean, grand_mean, atol=0.2)
 
     def test_extra_fields_combined(self, mock_mcmc_samples):
         """Test extra fields are properly combined."""
         shard1 = mock_mcmc_samples(seed=42)
         shard2 = mock_mcmc_samples(seed=123)
 
-        combined = combine_shard_samples([shard1, shard2])
+        combined = combine_shard_samples([shard1, shard2], method="consensus_mc")
 
         # Extra fields should be concatenated
         if "diverging" in combined.extra_fields:
@@ -270,7 +278,7 @@ class TestCombineShardSamples:
         shard1 = mock_mcmc_samples(seed=42)
         shard2 = mock_mcmc_samples(seed=123)
 
-        combined = combine_shard_samples([shard1, shard2])
+        combined = combine_shard_samples([shard1, shard2], method="consensus_mc")
 
         assert combined.param_names == sample_param_names
 
@@ -330,7 +338,10 @@ class TestBackendEdgeCases:
         )
 
         # Should not raise despite zero variance
-        combined = combine_shard_samples([shard1, shard2], method="weighted_gaussian")
+        with pytest.warns(DeprecationWarning, match="deprecated"):
+            combined = combine_shard_samples(
+                [shard1, shard2], method="weighted_gaussian"
+            )
 
         assert combined is not None
         for name in sample_param_names:
@@ -343,8 +354,8 @@ class TestBackendEdgeCases:
         shards1 = [mock_mcmc_samples(seed=i) for i in range(4)]
         shards2 = [mock_mcmc_samples(seed=i + 100) for i in range(4)]
 
-        combined1 = combine_shard_samples(shards1)
-        combined2 = combine_shard_samples(shards2)
+        combined1 = combine_shard_samples(shards1, method="consensus_mc")
+        combined2 = combine_shard_samples(shards2, method="consensus_mc")
 
         # Combinations should be different
         for name in sample_param_names:
@@ -363,7 +374,7 @@ class TestBackendEdgeCases:
             extra_fields={},  # Empty extra fields
         )
 
-        combined = combine_shard_samples([shard, shard])
+        combined = combine_shard_samples([shard, shard], method="consensus_mc")
 
         assert combined.extra_fields == {}
 
@@ -381,13 +392,13 @@ class TestBackendProperties:
         """Test that combining preserves sample shapes."""
         shards = [mock_mcmc_samples(seed=i) for i in range(n_shards)]
 
-        combined = combine_shard_samples(shards)
+        combined = combine_shard_samples(shards, method="consensus_mc")
 
         # Shapes should match original
         assert combined.n_chains == shards[0].n_chains
         assert combined.n_samples == shards[0].n_samples
 
-    @pytest.mark.parametrize("method", ["simple_average", "weighted_gaussian"])
+    @pytest.mark.parametrize("method", ["consensus_mc"])
     def test_combination_methods_produce_valid_output(
         self, mock_mcmc_samples, sample_param_names, method
     ):
@@ -400,13 +411,32 @@ class TestBackendProperties:
         for name in sample_param_names:
             assert np.all(np.isfinite(combined.samples[name]))
 
+    @pytest.mark.parametrize("method", ["simple_average", "weighted_gaussian"])
+    def test_legacy_combination_methods_produce_valid_output(
+        self, mock_mcmc_samples, sample_param_names, method
+    ):
+        """Test that legacy combination methods work (with warning)."""
+        shards = [mock_mcmc_samples(seed=i) for i in range(4)]
+
+        with pytest.warns(DeprecationWarning, match="deprecated"):
+            combined = combine_shard_samples(shards, method=method)
+
+        # All values should be finite
+        for name in sample_param_names:
+            assert np.all(np.isfinite(combined.samples[name]))
+
     def test_simple_average_is_commutative(self, mock_mcmc_samples, sample_param_names):
         """Test that simple average is order-independent."""
         shard1 = mock_mcmc_samples(seed=42)
         shard2 = mock_mcmc_samples(seed=123)
 
-        combined_12 = combine_shard_samples([shard1, shard2], method="simple_average")
-        combined_21 = combine_shard_samples([shard2, shard1], method="simple_average")
+        with pytest.warns(DeprecationWarning, match="deprecated"):
+            combined_12 = combine_shard_samples(
+                [shard1, shard2], method="simple_average"
+            )
+            combined_21 = combine_shard_samples(
+                [shard2, shard1], method="simple_average"
+            )
 
         for name in sample_param_names:
             np.testing.assert_array_almost_equal(
@@ -448,7 +478,10 @@ class TestBackendScientificProperties:
             n_samples=1000,
         )
 
-        combined = combine_shard_samples([shard1, shard2], method="weighted_gaussian")
+        with pytest.warns(DeprecationWarning, match="deprecated"):
+            combined = combine_shard_samples(
+                [shard1, shard2], method="weighted_gaussian"
+            )
 
         # Combined variance should be between the two
         for name in sample_param_names:
@@ -484,7 +517,10 @@ class TestBackendScientificProperties:
                 )
             )
 
-        combined = combine_shard_samples(shards, method="weighted_gaussian")
+        # Use consensus_mc via "auto" or explicit (default in v3+ will be consensus)
+        # But here test was calling weighted_gaussian.
+        # Let's switch to consensus_mc for this property test as it's the future.
+        combined = combine_shard_samples(shards, method="consensus_mc")
 
         # Combined mean should be close to true mean
         for name in sample_param_names:
@@ -607,10 +643,10 @@ class TestErrorCategorization:
         shards = [mock_mcmc_samples(seed=i) for i in range(4)]
 
         # Combining should work with any number of successful shards
-        combined = combine_shard_samples(shards[:2])  # Only 2 of 4
+        combined = combine_shard_samples(shards[:2], method="consensus_mc")  # Only 2 of 4
         assert combined is not None
         assert combined.n_chains == shards[0].n_chains
 
         # Single shard should also work
-        combined_single = combine_shard_samples(shards[:1])
+        combined_single = combine_shard_samples(shards[:1], method="consensus_mc")
         assert combined_single is not None

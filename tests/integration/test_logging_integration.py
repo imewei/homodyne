@@ -62,7 +62,9 @@ class TestMultiprocessingLogging:
         log_file = tmp_path / "multiprocess_test.log"
 
         # Run workers in parallel
-        with multiprocessing.Pool(2) as pool:
+        # Use spawn to avoid fork safety issues with JAX
+        ctx = multiprocessing.get_context("spawn")
+        with ctx.Pool(2) as pool:
             results = pool.starmap(
                 self.worker_function,
                 [(i, str(log_file)) for i in range(2)],
@@ -76,7 +78,9 @@ class TestMultiprocessingLogging:
     def test_worker_context_isolation(self) -> None:
         """Each worker maintains independent context."""
         # Run workers without file logging (console only)
-        with multiprocessing.Pool(2) as pool:
+        # Use spawn context
+        ctx = multiprocessing.get_context("spawn")
+        with ctx.Pool(2) as pool:
             results = pool.starmap(
                 self.worker_function,
                 [(i, None) for i in range(2)],
