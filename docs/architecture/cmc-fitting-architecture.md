@@ -2,7 +2,7 @@
 
 Complete documentation of the CMC (Consensus Monte Carlo) fitting system in homodyne.
 
-**Version:** 2.18.0
+**Version:** 2.19.0
 **Last Updated:** January 2026
 
 ## Table of Contents
@@ -876,8 +876,10 @@ CMCResult.from_mcmc_samples()
 | target_accept_prob | 0.85 | NUTS target acceptance |
 | max_r_hat | 1.1 | Convergence threshold |
 | min_ess | 100.0 | Minimum effective sample size |
+| max_divergence_rate | 0.10 | Quality filter threshold (v2.19.0) |
+| require_nlsq_warmstart | False | Enforce NLSQ warm-start (v2.19.0) |
 | combination_method | "consensus_mc" | Shard combination algorithm |
-| per_shard_timeout | 7200 | 2 hours max per shard |
+| per_shard_timeout | 3600 | 1 hour max per shard (reduced from 2h) |
 
 ---
 
@@ -924,3 +926,71 @@ CMCResult.from_mcmc_samples()
 - `dense_mass=True` is CRITICAL for NUTS
 - Learns parameter covariance during warmup
 - Handles 10⁶:1 gradient imbalance from different parameter scales
+
+### January 2026: Quality Filtering & Warm-Start
+
+**Divergence-Based Shard Quality Filter**
+
+After root cause analysis of CMC runs with 28% divergence rates, automatic quality filtering was added:
+
+```
+┌───────────────────────────────────────────────────────────────────────────┐
+│ Divergence Filtering (backends/multiprocessing.py)                        │
+│                                                                           │
+│   max_divergence_rate = config.max_divergence_rate (default: 0.10)       │
+│                                                                           │
+│   After all shards complete:                                             │
+│   1. Calculate divergence_rate = num_divergent / total_samples per shard │
+│   2. Filter out shards where divergence_rate > max_divergence_rate       │
+│   3. Log excluded shards with divergence details                         │
+│   4. Re-check post-filter success rate against min_success_rate          │
+│                                                                           │
+│   Purpose: Prevent corrupted posteriors from biasing consensus combination│
+│   Shards with >10% divergences have unreliable posterior estimates       │
+└───────────────────────────────────────────────────────────────────────────┘
+```
+
+**NLSQ Warm-Start Validation**
+
+```
+┌───────────────────────────────────────────────────────────────────────────┐
+│ NLSQ Warm-Start Advisory (core.py)                                        │
+│                                                                           │
+│   When running laminar_flow without nlsq_result or initial_values:       │
+│                                                                           │
+│   If require_nlsq_warmstart=True (from CMCConfig):                       │
+│     → Raises ValueError (hard failure)                                   │
+│                                                                           │
+│   If require_nlsq_warmstart=False (default):                             │
+│     → Logs warning explaining:                                           │
+│       • 7 parameters span 6+ orders of magnitude                         │
+│       • NUTS adaptation wastes warmup without good initial values        │
+│       • Higher divergence rates expected (~28% vs <5% with warm-start)   │
+│                                                                           │
+│   Best practice: Always run NLSQ first, pass nlsq_result to fit_mcmc_jax │
+└───────────────────────────────────────────────────────────────────────────┘
+```
+
+**Dynamic Shard Size Caps for laminar_flow**
+
+```
+┌───────────────────────────────────────────────────────────────────────────┐
+│ Dynamic max_shards by Analysis Mode (core.py)                             │
+│                                                                           │
+│   laminar_flow mode:                                                     │
+│     • max_shards = 1000 (up from 500)                                    │
+│     • Allows 3K-5K points per shard for datasets up to 5M points         │
+│     • NUTS is O(n) per step; smaller shards prevent timeout              │
+│                                                                           │
+│   static mode:                                                           │
+│     • max_shards = 500 (unchanged)                                       │
+│     • 3 parameters handle larger shards efficiently                      │
+└───────────────────────────────────────────────────────────────────────────┘
+```
+
+### New CMCConfig Fields (v2.19.0)
+
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| `max_divergence_rate` | float | 0.10 | Filter shards exceeding this divergence rate |
+| `require_nlsq_warmstart` | bool | False | Require NLSQ warm-start for laminar_flow |

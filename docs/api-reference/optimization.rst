@@ -1220,17 +1220,55 @@ Full YAML configuration for sharding:
          min_per_shard_ess: 100
 
        combination:
-         method: weighted_gaussian  # or "simple_average"
+         method: consensus_mc  # Recommended (v2.12.0+)
          min_success_rate: 0.90
 
-       per_shard_timeout: 7200  # 2 hours max per shard
+       validation:
+         max_per_shard_rhat: 1.1
+         min_per_shard_ess: 100
+         max_divergence_rate: 0.10       # Quality filter: exclude shards >10% (v2.19.0)
+         require_nlsq_warmstart: false   # Require NLSQ warm-start (v2.19.0)
+
+       per_shard_timeout: 3600  # 1 hour max per shard (reduced in v2.19.0)
        heartbeat_timeout: 600   # 10 min worker heartbeat
 
 **Critical settings for laminar_flow**:
 
-- Use ``max_points_per_shard: auto`` (resolves to 5K-20K based on size)
+- Use ``max_points_per_shard: auto`` (resolves to 3K-5K based on size)
 - Do NOT set ``max_points_per_shard: 100000`` — this causes 1-2+ hour per-shard runtimes
 - Keep ``num_warmup`` and ``num_samples`` aligned between ``mcmc`` and ``per_shard_mcmc``
+- Consider ``require_nlsq_warmstart: true`` for production runs (reduces divergences from ~28% to <5%)
+
+**Quality Filtering (v2.19.0)**:
+
+The ``max_divergence_rate`` setting automatically filters out shards with excessive
+divergent transitions before consensus combination:
+
+.. code-block:: yaml
+
+   optimization:
+     cmc:
+       validation:
+         max_divergence_rate: 0.10  # Exclude shards with >10% divergence
+
+Shards with divergence rate exceeding this threshold are excluded from the final
+posterior combination, preventing corrupted posteriors from biasing estimates.
+
+**NLSQ Warm-Start Requirement (v2.19.0)**:
+
+For laminar_flow mode with 7 parameters spanning 6+ orders of magnitude, cold-start
+CMC runs often show high divergence rates (28%+) and inflated uncertainty. Enable
+warm-start requirement for production:
+
+.. code-block:: yaml
+
+   optimization:
+     cmc:
+       validation:
+         require_nlsq_warmstart: true
+
+When enabled, ``fit_mcmc_jax()`` will raise ``ValueError`` if called without
+``nlsq_result`` or ``initial_values`` for laminar_flow mode
 
 Practical Guidelines
 ^^^^^^^^^^^^^^^^^^^^

@@ -732,6 +732,31 @@ MCMC convergence diagnostics:
 - KL divergence between shard posteriors
 - Smaller = more consistent subposteriors
 
+Quality Filtering (v2.19.0)
+^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Shard quality filtering for robust CMC results:
+
+.. code-block:: yaml
+
+    # Quality filtering settings
+    max_divergence_rate: 0.10         # Filter shards with >10% divergence rate
+    require_nlsq_warmstart: false     # Require NLSQ warm-start for laminar_flow
+
+**max_divergence_rate**: Maximum divergence rate threshold
+
+- Default: 0.10 (10%)
+- Shards with divergence rate > threshold are filtered before consensus combination
+- Prevents corrupted posteriors from biasing combined results
+- Set to 1.0 to disable filtering
+
+**require_nlsq_warmstart**: NLSQ warm-start requirement
+
+- Default: false
+- When true: Raises ValueError if laminar_flow mode lacks NLSQ warm-start
+- When false: Logs warning for laminar_flow without warm-start
+- Helps prevent high divergence rates from poor initialization
+
 Performance Section
 -------------------
 
