@@ -28,6 +28,10 @@ class TestDefenseLayersConstantMode:
         - Layer 2: Hierarchical optimizer (hierarchical_optimizer=None)
         - Layer 3: Adaptive regularizer (adaptive_regularizer=None)
         - Layer 4: Gradient monitor (gradient_monitor=None)
+
+        v2.18.0 semantics:
+        - Explicit constant mode → "fixed_constant" (scaling FIXED, not optimized)
+        - n_per_angle_params = 0 because scaling is FIXED
         """
         config = AntiDegeneracyConfig(
             per_angle_mode="constant",  # Force constant mode
@@ -43,16 +47,17 @@ class TestDefenseLayersConstantMode:
         )
         controller._initialize_components()
 
-        # Verify constant mode is active
+        # Verify fixed_constant mode is active (v2.18.0 naming)
         assert controller.use_constant is True
-        assert controller.per_angle_mode_actual == "constant"
+        assert controller.per_angle_mode_actual == "fixed_constant"
+        assert controller.use_fixed_scaling is True
 
         # Verify defense layers 1-4 are skipped (None)
         # Layer 1: Fourier should be None in constant mode
         assert controller.use_fourier is False
 
-        # The controller should have n_per_angle_params = 2 (not 2*n_phi or Fourier coeffs)
-        assert controller.n_per_angle_params == 2
+        # The controller should have n_per_angle_params = 0 (FIXED scaling, not optimized)
+        assert controller.n_per_angle_params == 0
 
     def test_shear_weighting_active_constant_mode(self):
         """T044: Test that shear weighting (Layer 5) remains active in constant mode.
@@ -164,7 +169,11 @@ class TestConstantModeAutoSelection:
     """Tests for auto-selection of constant mode based on n_phi."""
 
     def test_auto_selects_constant_above_threshold(self):
-        """Test auto mode selects constant when n_phi >= threshold."""
+        """Test auto mode selects auto_averaged when n_phi >= threshold.
+
+        v2.18.0 semantics:
+        - auto + n_phi >= threshold → "auto_averaged" (9 params, averaged scaling OPTIMIZED)
+        """
         config = AntiDegeneracyConfig(
             per_angle_mode="auto",
             constant_scaling_threshold=3,
@@ -177,8 +186,9 @@ class TestConstantModeAutoSelection:
         )
         controller._initialize_components()
 
-        assert controller.per_angle_mode_actual == "constant"
+        assert controller.per_angle_mode_actual == "auto_averaged"
         assert controller.use_constant is True
+        assert controller.use_averaged_scaling is True
 
     def test_auto_selects_individual_below_threshold(self):
         """Test auto mode selects individual when n_phi < threshold."""
@@ -315,7 +325,12 @@ class TestOutputExpansion:
         )
 
     def test_output_metadata_per_angle_mode(self):
-        """T052: Test diagnostics include per_angle_mode information."""
+        """T052: Test diagnostics include per_angle_mode information.
+
+        v2.18.0 semantics:
+        - Explicit constant mode → "fixed_constant" (scaling FIXED, not optimized)
+        - n_per_angle_params = 0 because scaling is FIXED
+        """
         config = AntiDegeneracyConfig(
             per_angle_mode="constant",
         )
@@ -331,8 +346,10 @@ class TestOutputExpansion:
 
         # Diagnostics should include mode information
         assert "per_angle_mode" in diag
-        assert diag["per_angle_mode"] == "constant"
+        assert diag["per_angle_mode"] == "constant"  # Config value
+        assert diag["per_angle_mode_actual"] == "fixed_constant"  # Resolved actual mode
         assert "use_constant" in diag
         assert diag["use_constant"] is True
+        assert diag["use_fixed_scaling"] is True
         assert "n_per_angle_params" in diag
-        assert diag["n_per_angle_params"] == 2  # Just contrast and offset
+        assert diag["n_per_angle_params"] == 0  # FIXED scaling, not optimized

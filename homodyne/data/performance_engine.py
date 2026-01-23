@@ -51,7 +51,7 @@ except ImportError:
 
 # Optional compression library with fallback
 try:
-    import zstd  # type: ignore[import-untyped]
+    import zstd
 
     HAS_ZSTD = True
 except ImportError:

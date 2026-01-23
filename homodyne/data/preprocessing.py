@@ -72,8 +72,8 @@ except ImportError:
 
 # Scipy for advanced algorithms
 try:
-    from scipy import ndimage, signal, stats  # type: ignore[import-untyped]
-    from scipy.ndimage import gaussian_filter, median_filter  # type: ignore[import-untyped]
+    from scipy import ndimage, signal, stats
+    from scipy.ndimage import gaussian_filter, median_filter
 
     HAS_SCIPY = True
 except ImportError:

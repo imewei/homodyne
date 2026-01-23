@@ -62,7 +62,7 @@ except ImportError:
     vmap = None  # type: ignore[assignment]
 
 try:
-    from scipy import stats  # type: ignore[import-untyped]
+    from scipy import stats
 
     HAS_SCIPY = True
 except ImportError:

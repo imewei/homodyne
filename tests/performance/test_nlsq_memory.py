@@ -124,8 +124,8 @@ class TestMemoryTracking:
         # Start tracking
         tracemalloc.start()
 
-        # Allocate some memory
-        np.zeros((1000, 1000), dtype=np.float64)
+        # Allocate some memory - must store in variable to prevent GC
+        data = np.zeros((1000, 1000), dtype=np.float64)
 
         # Get current usage
         current, peak = tracemalloc.get_traced_memory()
@@ -138,7 +138,10 @@ class TestMemoryTracking:
         expected_bytes = 1000 * 1000 * 8
         assert (
             current >= expected_bytes * 0.5
-        )  # At least half (accounting for overhead)
+        ), f"Expected >= {expected_bytes * 0.5} bytes, got {current}"
+
+        # Clean up (prevent unused variable warning)
+        del data
 
     def test_gc_releases_memory(self):
         """Test that garbage collection properly releases memory."""

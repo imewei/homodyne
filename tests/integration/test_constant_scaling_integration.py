@@ -37,10 +37,13 @@ class TestConstantScalingAutoSelection:
 
     @pytest.mark.integration
     def test_auto_selects_constant_for_23_phi(self):
-        """Verify auto mode selects constant for 23 phi angles (C020 dataset).
+        """Verify auto mode selects auto_averaged for 23 phi angles (C020 dataset).
 
         When n_phi=23 and constant_scaling_threshold=3 (default),
-        auto mode should select constant scaling mode.
+        auto mode should select auto_averaged scaling mode (optimized averaged scaling).
+
+        v2.18.0 semantics:
+        - auto + n_phi >= threshold → "auto_averaged" (9 params, averaged scaling OPTIMIZED)
         """
         n_phi = 23  # C020 dataset has 23 angles
         n_physical = 7  # Laminar flow has 7 physical params
@@ -58,12 +61,13 @@ class TestConstantScalingAutoSelection:
         )
         controller._initialize_components()
 
-        # Should auto-select constant mode
-        assert controller.per_angle_mode_actual == "constant"
-        assert controller.use_constant is True
+        # Should auto-select auto_averaged mode (v2.18.0 naming)
+        assert controller.per_angle_mode_actual == "auto_averaged"
+        assert controller.use_constant is True  # Both auto_averaged and fixed_constant use constant mapping
+        assert controller.use_averaged_scaling is True  # Averaged scaling is OPTIMIZED
         assert controller.use_fourier is False
 
-        # Should have 2 per-angle params (1 contrast + 1 offset)
+        # Should have 2 per-angle params (1 contrast + 1 offset - OPTIMIZED)
         assert controller.n_per_angle_params == 2
 
         # Total params: 2 + 7 = 9 (not 46 + 7 = 53)
@@ -199,7 +203,12 @@ class TestConstantScalingOutputCompatibility:
 
     @pytest.mark.integration
     def test_diagnostics_include_constant_mode_info(self):
-        """Verify diagnostics include constant mode information."""
+        """Verify diagnostics include constant mode information.
+
+        v2.18.0 semantics:
+        - Explicit constant mode → "fixed_constant" (7 params, scaling FIXED)
+        - n_per_angle_params = 0 because scaling is FIXED, not optimized
+        """
         n_phi = 23
         n_physical = 7
 
@@ -214,13 +223,15 @@ class TestConstantScalingOutputCompatibility:
 
         diag = controller.get_diagnostics()
 
-        # Should include constant mode info
+        # Should include fixed_constant mode info (v2.18.0 naming)
         assert diag["use_constant"] is True
+        assert diag["use_fixed_scaling"] is True  # Scaling is FIXED
         assert diag["use_fourier"] is False
-        assert diag["per_angle_mode"] == "constant"
-        assert diag["n_per_angle_params"] == 2
+        assert diag["per_angle_mode"] == "constant"  # Config value
+        assert diag["per_angle_mode_actual"] == "fixed_constant"  # Resolved actual mode
+        assert diag["n_per_angle_params"] == 0  # FIXED scaling, not optimized
 
         # Mapper diagnostics should reflect constant mode
-        assert diag["mapper"]["mode_name"] == "constant"
+        assert diag["mapper"]["mode_name"] == "constant"  # Mapper still uses "constant"
         assert diag["mapper"]["use_constant"] is True
         assert diag["mapper"]["n_per_group"] == 1
