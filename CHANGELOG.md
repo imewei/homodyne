@@ -84,6 +84,18 @@ inflation compared to NLSQ. This release implements comprehensive fixes across t
   - >10%: WARNING
   - >5%: ELEVATED (info)
 
+**Shard Quality Filtering:**
+
+- **feat(cmc)**: Add `max_divergence_rate` config option (default: 0.10)
+  - Filters shards with >10% divergence rate before consensus combination
+  - Prevents corrupted posteriors from biasing combined results
+  - Logs filtered shard count and reasons
+
+- **feat(cmc)**: Add `require_nlsq_warmstart` config option (default: false)
+  - When true, raises ValueError if laminar_flow mode lacks NLSQ warm-start
+  - When false (default), logs warning for laminar_flow without warm-start
+  - Helps prevent high divergence rates from poor initialization
+
 #### Changed
 
 - **refactor(cmc)**: Reduce default `per_shard_timeout` from 7200s to 3600s
@@ -106,6 +118,9 @@ optimization:
     execution:
       per_shard_timeout: 3600       # 1 hour (reduced from 2 hours)
     per_angle_mode: "constant_averaged"  # Match NLSQ "auto" behavior
+    # Quality filtering (v2.19.0)
+    max_divergence_rate: 0.10       # Filter shards with >10% divergence rate
+    require_nlsq_warmstart: false   # Require NLSQ warm-start for laminar_flow
 ```
 
 **NLSQ Warm-Start Usage:**
